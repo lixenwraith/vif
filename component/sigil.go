@@ -24,4 +24,5 @@ const (
 	SigilOrbLauncher                   // Orange orb
 	SigilOrbChain                      // Pink orb
 	SigilOrbFlash                      // White flash on fire
+	SigilWall                          // White
 )

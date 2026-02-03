@@ -359,7 +359,10 @@ func (s *DustSystem) Update() {
 			kineticComp.VelY = -kineticComp.VelY / 2
 		}
 
-		// --- Collision Traversal with Pre-computed Context ---
+		// --- Collision Traversal with Wall Check ---
+		lastSafeX, lastSafeY := dustComp.LastIntX, dustComp.LastIntY
+		hitWall := false
+
 		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
 			traverser := vmath.NewGridTraverser(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
 			destroyDust := false
@@ -367,15 +370,33 @@ func (s *DustSystem) Update() {
 			for traverser.Next() {
 				currX, currY := traverser.Pos()
 
-				// Skip cell from previous frame to avoid re-triggering logic
+				// Skip cell from previous frame
 				if currX == dustComp.LastIntX && currY == dustComp.LastIntY {
 					continue
 				}
 
-				// Check bounds (Traverser might step OOB)
+				// OOB safety (defensive, boundary reflection should handle)
 				if currX < 0 || currX >= gameWidth || currY < 0 || currY >= gameHeight {
 					continue
 				}
+
+				// Wall collision - reflect and stop (BEFORE entity checks)
+				if s.world.Positions.HasBlockingWallAtUnsafe(currX, currY, component.WallBlockParticle) {
+					dx := currX - lastSafeX
+					dy := currY - lastSafeY
+					if dx != 0 {
+						kineticComp.VelX = -kineticComp.VelX / 2
+					}
+					if dy != 0 {
+						kineticComp.VelY = -kineticComp.VelY / 2
+					}
+					kineticComp.PreciseX, kineticComp.PreciseY = vmath.CenteredFromGrid(lastSafeX, lastSafeY)
+					hitWall = true
+					break
+				}
+
+				// Update last safe position for wall reflection
+				lastSafeX, lastSafeY = currX, currY
 
 				// Early skip: no interactables in this cell
 				key := posKey(currX, currY)
@@ -495,6 +516,11 @@ func (s *DustSystem) Update() {
 				s.world.Components.Death.SetComponent(dustEntity, component.DeathComponent{})
 				destroyedCount++
 				continue
+			}
+
+			// Apply wall reflection
+			if hitWall {
+				newX, newY = lastSafeX, lastSafeY
 			}
 		}
 

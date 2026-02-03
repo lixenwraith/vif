@@ -181,9 +181,21 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midX := (posA.X + posB.X) / 2
 	midY := (posA.Y + posB.Y) / 2
 
-	// Swarm top-left from midpoint (header at offset 1,0)
-	topLeftX := midX - parameter.SwarmHeaderOffsetX
-	topLeftY := midY - parameter.SwarmHeaderOffsetY
+	// Find valid spawn position via spiral search
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		midX, midY,
+		parameter.SwarmWidth, parameter.SwarmHeight,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		return // No valid position - cancel fusion
+	}
+
+	// Update midpoint to found position's header location
+	midX = topLeftX + parameter.SwarmHeaderOffsetX
+	midY = topLeftY + parameter.SwarmHeaderOffsetY
 
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
 
@@ -226,9 +238,21 @@ func (s *FuseSystem) handleQuasarFuse() {
 		cY = config.GameHeight / 2
 	}
 
-	// Quasar top-left from centroid
-	topLeftX := cX - parameter.QuasarHeaderOffsetX
-	topLeftY := cY - parameter.QuasarHeaderOffsetY
+	// Find valid spawn position via spiral search
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		cX, cY,
+		parameter.QuasarWidth, parameter.QuasarHeight,
+		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		return // No valid position - cancel fusion
+	}
+
+	// Update centroid to found position's header location
+	cX = topLeftX + parameter.QuasarHeaderOffsetX
+	cY = topLeftY + parameter.QuasarHeaderOffsetY
 
 	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
 	s.applyEffect(event.FuseEffectSpirit, sources, area, component.SpiritCyan)

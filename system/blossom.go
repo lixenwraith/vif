@@ -179,7 +179,6 @@ func (s *BlossomSystem) updateBlossomEntities() {
 	}
 
 	gameWidth := s.world.Resources.Config.GameWidth
-	gameHeight := s.world.Resources.Config.GameHeight
 
 	blossomEntities := s.world.Components.Blossom.GetAllEntities()
 
@@ -203,18 +202,13 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		// Physics Integration (Fixed Point)
 		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
-		// 2D Boundary Check: Destroy if entity leaves the game area in any direction
-		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
-			s.world.DestroyEntity(entity)
-			continue
-		}
-
 		destroyBlossom := false
 		// Swept Traversal: Check every grid cell intersected by the movement vector
 		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
-			// Bounds safety for the DDA callback
-			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
-				return true
+			// Wall or OOB - destroy particle
+			if s.world.Positions.IsBlockedForParticle(x, y) {
+				destroyBlossom = true
+				return false
 			}
 
 			// Skip cell from previous frame (already processed)

@@ -82,6 +82,8 @@ func resolveSigilColor(color component.SigilColor) terminal.RGB {
 		return visual.RgbOrbChain
 	case component.SigilOrbFlash:
 		return visual.RgbOrbFlash
+	case component.SigilWall:
+		return visual.RgbWhite
 	default:
 		return visual.RgbBackground
 	}

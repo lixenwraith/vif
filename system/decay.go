@@ -179,7 +179,6 @@ func (s *DecaySystem) updateDecayEntities() {
 	}
 
 	gameWidth := s.world.Resources.Config.GameWidth
-	gameHeight := s.world.Resources.Config.GameHeight
 
 	decayEntities := s.world.Components.Decay.GetAllEntities()
 
@@ -205,16 +204,14 @@ func (s *DecaySystem) updateDecayEntities() {
 		// Physics Integration (Fixed Point)
 		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
-		// 2D Boundary Check
-		if curX < 0 || curX >= gameWidth || curY < 0 || curY >= gameHeight {
-			s.world.DestroyEntity(entity)
-			continue
-		}
+		destroyEntity := false
 
 		// Swept Traversal via Supercover DDA
 		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
-			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
-				return true
+			// Wall or OOB - destroy particle
+			if s.world.Positions.IsBlockedForParticle(x, y) {
+				destroyEntity = true
+				return false
 			}
 
 			// Skip cell from previous frame (already processed)
@@ -261,6 +258,11 @@ func (s *DecaySystem) updateDecayEntities() {
 			s.processedGridCells[flatIdx] = true
 			return true
 		})
+
+		if destroyEntity {
+			s.world.DestroyEntity(entity)
+			continue
+		}
 
 		// 2D Matrix Visual Effect: Update character on ANY cell entry
 		if decayComp.LastIntX != curX || decayComp.LastIntY != curY {

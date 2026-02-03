@@ -222,8 +222,21 @@ func (s *SwarmSystem) cacheCombatEntities() {
 }
 
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	// 1. Clamp position to screen bounds
-	headerX, headerY := s.clampSwarmSpawnPosition(targetX, targetY)
+	// 1. Find valid spawn position via spiral search
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		targetX, targetY,
+		parameter.SwarmWidth, parameter.SwarmHeight,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		return // No valid position
+	}
+
+	// Header position from found top-left
+	headerX := topLeftX + parameter.SwarmHeaderOffsetX
+	headerY := topLeftY + parameter.SwarmHeaderOffsetY
 
 	// 2. Clear area
 	s.clearSwarmSpawnArea(headerX, headerY)
@@ -235,30 +248,6 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
 		HeaderEntity: headerEntity,
 	})
-}
-
-// clampSwarmSpawnPosition ensures swarm fits within bounds
-func (s *SwarmSystem) clampSwarmSpawnPosition(targetX, targetY int) (int, int) {
-	config := s.world.Resources.Config
-
-	// Header at (1,0) offset, so top-left = header - offset
-	topLeftX := targetX - parameter.SwarmHeaderOffsetX
-	topLeftY := targetY - parameter.SwarmHeaderOffsetY
-
-	if topLeftX < 0 {
-		topLeftX = 0
-	}
-	if topLeftY < 0 {
-		topLeftY = 0
-	}
-	if topLeftX+parameter.SwarmWidth > config.GameWidth {
-		topLeftX = config.GameWidth - parameter.SwarmWidth
-	}
-	if topLeftY+parameter.SwarmHeight > config.GameHeight {
-		topLeftY = config.GameHeight - parameter.SwarmHeight
-	}
-
-	return topLeftX + parameter.SwarmHeaderOffsetX, topLeftY + parameter.SwarmHeaderOffsetY
 }
 
 // clearSwarmSpawnArea destroys entities within swarm footprint
@@ -277,6 +266,10 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, e := range entities {
 				if e == 0 || e == cursorEntity {
+					continue
+				}
+				// Skip walls
+				if s.world.Components.Wall.HasEntity(e) {
 					continue
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
@@ -616,8 +609,16 @@ func (s *SwarmSystem) updateChargeState(
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 
-	// Integrate and sync
-	s.integrateAndSync(headerEntity, dtFixed)
+	// Integrate and sync - Check for wall impact
+	hitWall := s.integrateAndSync(headerEntity, dtFixed)
+
+	if hitWall {
+		// Impact detected!
+		// The physics integration has already reflected the velocity.
+		// We immediately transition to decelerate to preserve this bounce
+		// and prevent the charge logic from overriding it next frame.
+		s.enterDecelerateState(swarmComp)
+	}
 }
 
 // updateDecelerateState handles rapid stop after charge
@@ -750,48 +751,67 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 }
 
 // integrateAndSync integrates physics and syncs member positions
-func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) {
+// Returns true if a wall/boundary was hit
+func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) bool {
 	config := s.world.Resources.Config
 
 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
 	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
-	// Integrate position
-	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
+	// Define Wall Query
+	wallCheck := func(topLeftX, topLeftY int) bool {
+		return s.world.Positions.HasBlockingWallInArea(
+			topLeftX, topLeftY,
+			parameter.SwarmWidth, parameter.SwarmHeight,
+			component.WallBlockKinetic,
+		)
+	}
 
-	// Boundary constraints (swarm footprint must stay in bounds)
+	// Bounds
 	minHeaderX := parameter.SwarmHeaderOffsetX
 	maxHeaderX := config.GameWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
 	minHeaderY := parameter.SwarmHeaderOffsetY
 	maxHeaderY := config.GameHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
-	physics.ReflectBoundsX(&kineticComp.Kinetic, minHeaderX, maxHeaderX)
-	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
-	newX, newY = physics.GridPos(&kineticComp.Kinetic)
+	// Restitution: 0.5 (Dampens the "Super-Knockback" significantly)
+	restitution := int64(vmath.Scale / 2)
 
-	// Soft collision with other combat entities
+	// Integrate with Bounce
+	newX, newY, hitWall := physics.IntegrateWithBounce(
+		&kineticComp.Kinetic,
+		dtFixed,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+		minHeaderX, maxHeaderX,
+		minHeaderY, maxHeaderY,
+		restitution,
+		wallCheck,
+	)
+
+	// Soft collision
 	s.applySoftCollisions(headerEntity, &kineticComp, &combatComp, newX, newY)
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 
-	// Update positions if changed
+	// Update positions
 	if newX != headerPos.X || newY != headerPos.Y {
 		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
 		s.syncMemberPositions(headerEntity, newX, newY)
 	}
+
+	return hitWall
 }
 
 // syncMemberPositions updates all member positions relative to header

@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -125,6 +126,9 @@ func (s *MetaSystem) handleDebugRequest() {
 		Title: "DEBUG",
 	}
 
+	// TODO: wall test
+	s.createWall()
+
 	// Collect all stats into groups by prefix
 	groups := make(map[string][]core.CardEntry)
 
@@ -212,6 +216,25 @@ func (s *MetaSystem) handleDebugRequest() {
 	}
 
 	s.ctx.SetOverlayContent(content)
+}
+
+func (s *MetaSystem) createWall() {
+	cfg := s.world.Resources.Config
+	for x := cfg.GameWidth/2 - 5; x < cfg.GameWidth/2+5; x++ {
+		for y := cfg.GameHeight/2 - 5; y < cfg.GameHeight/2+5; y++ {
+			entity := s.world.CreateEntity()
+			s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+			s.world.Components.Wall.SetComponent(entity, component.WallComponent{
+				BlockMask: component.WallBlockAll,
+			})
+			s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
+				Rune:  '█',
+				Color: component.SigilWall,
+			})
+		}
+	}
+
+	return
 }
 
 // splitStatKey splits "prefix.name" into prefix and name

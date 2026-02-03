@@ -194,6 +194,209 @@ func (p *Position) SetWorld(w *World) {
 	p.world = w
 }
 
+// --- Wall ---
+
+// HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
+// O(k) where k = entities at cell (typically 1-3)
+func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.world == nil {
+		return false
+	}
+
+	view := p.grid.GetAllAt(x, y)
+	for _, e := range view {
+		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
+			if wall.BlockMask.Has(mask) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasBlockingWallAtUnsafe checks wall without acquiring lock
+// Caller MUST hold Lock() or RLock()
+func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMask) bool {
+	if p.world == nil {
+		return false
+	}
+
+	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+		return false
+	}
+
+	idx := y*p.grid.Width + x
+	cell := &p.grid.Cells[idx]
+	for i := uint8(0); i < cell.Count; i++ {
+		if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
+			if wall.BlockMask.Has(mask) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasAnyWallAt returns true if any wall exists at (x, y) regardless of mask
+func (p *Position) HasAnyWallAt(x, y int) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.world == nil {
+		return false
+	}
+
+	view := p.grid.GetAllAt(x, y)
+	for _, e := range view {
+		if p.world.Components.Wall.HasEntity(e) {
+			return true
+		}
+	}
+	return false
+}
+
+// HasBlockingWallInArea returns true if any wall exists in rectangular area that blocks the given mask
+// Area defined as [x, x+width) × [y, y+height), skips out-of-bounds cells
+func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.world == nil {
+		return false
+	}
+
+	for row := y; row < y+height; row++ {
+		for col := x; col < x+width; col++ {
+			if col < 0 || col >= p.grid.Width || row < 0 || row >= p.grid.Height {
+				continue
+			}
+			idx := row*p.grid.Width + col
+			cell := &p.grid.Cells[idx]
+			for i := uint8(0); i < cell.Count; i++ {
+				if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
+					if wall.BlockMask.Has(mask) {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// SpiralSearchDirs defines direction vectors for spiral area search
+// Counter-clockwise from top: Top, Top-left, Left, Bottom-left, Bottom, Bottom-right, Right, Top-right
+var SpiralSearchDirs = [8][2]int{
+	{0, -1}, {-1, -1}, {-1, 0}, {-1, 1}, {0, 1}, {1, 1}, {1, 0}, {1, -1},
+}
+
+// FindFreeAreaSpiral searches outward from origin for an area free of blocking walls
+// Uses 45° spiral pattern, counter-clockwise from top
+// Returns (topLeftX, topLeftY, found) where found=false if no valid position exists
+//
+// Parameters:
+//   - originX, originY: search center (e.g., centroid)
+//   - width, height: area dimensions
+//   - anchorOffsetX, anchorOffsetY: offset from area top-left to anchor/header position
+//   - mask: wall block mask to check (0 = any wall)
+//   - maxRadius: maximum search distance in cells (0 = default 20)
+func (p *Position) FindFreeAreaSpiral(
+	originX, originY int,
+	width, height int,
+	anchorOffsetX, anchorOffsetY int,
+	mask component.WallBlockMask,
+	maxRadius int,
+) (int, int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.world == nil {
+		return 0, 0, false
+	}
+
+	if maxRadius <= 0 {
+		maxRadius = 20
+	}
+
+	// Check origin first (radius 0)
+	topLeftX := originX - anchorOffsetX
+	topLeftY := originY - anchorOffsetY
+	if p.isAreaFreeUnsafe(topLeftX, topLeftY, width, height, mask) {
+		return topLeftX, topLeftY, true
+	}
+
+	// Spiral outward, checking 8 directions per radius
+	// Aspect ratio: terminal cells ~1:2, halve vertical distance for visual uniformity
+	for radius := 1; radius <= maxRadius; radius++ {
+		vertRadius := (radius + 1) / 2
+		for _, dir := range SpiralSearchDirs {
+			checkX := originX + dir[0]*radius
+			checkY := originY + dir[1]*vertRadius
+
+			topLeftX = checkX - anchorOffsetX
+			topLeftY = checkY - anchorOffsetY
+
+			if p.isAreaFreeUnsafe(topLeftX, topLeftY, width, height, mask) {
+				return topLeftX, topLeftY, true
+			}
+		}
+	}
+
+	return 0, 0, false
+}
+
+// isAreaFreeUnsafe checks bounds and wall presence, caller must hold lock
+func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
+	if x < 0 || y < 0 || x+width > p.grid.Width || y+height > p.grid.Height {
+		return false
+	}
+
+	for row := y; row < y+height; row++ {
+		for col := x; col < x+width; col++ {
+			idx := row*p.grid.Width + col
+			cell := &p.grid.Cells[idx]
+			for i := uint8(0); i < cell.Count; i++ {
+				if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
+					if mask == 0 || wall.BlockMask.Has(mask) {
+						return false
+					}
+				}
+			}
+		}
+	}
+
+	return true
+}
+
+// IsOutOfBounds checks if position is outside spatial grid bounds
+func (p *Position) IsOutOfBounds(x, y int) bool {
+	return x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height
+}
+
+// IsBlockedForParticle checks if position blocks particle movement (OOB or blocking wall)
+// Use for decay, blossom, dust boundary checks
+func (p *Position) IsBlockedForParticle(x, y int) bool {
+	if p.IsOutOfBounds(x, y) {
+		return true
+	}
+	return p.HasBlockingWallAt(x, y, component.WallBlockParticle)
+}
+
+// IsBlockedForSpawn checks if position blocks entity spawn (OOB, blocking wall, or occupied)
+// Use for glyph, gold, nugget placement validation
+func (p *Position) IsBlockedForSpawn(x, y int) bool {
+	if p.IsOutOfBounds(x, y) {
+		return true
+	}
+	if p.HasBlockingWallAt(x, y, component.WallBlockSpawn) {
+		return true
+	}
+	return p.HasAnyEntityAt(x, y)
+}
+
 // --- Unsafe operation ---
 
 // Lock manually acquires the write lock for bulk operations, MUST be paired with Unlock()

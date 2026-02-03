@@ -276,6 +276,11 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 			continue
 		}
 
+		// Block spawn on walls or occupied cells
+		if s.world.Positions.IsBlockedForSpawn(x, y) {
+			continue
+		}
+
 		return x, y
 	}
 

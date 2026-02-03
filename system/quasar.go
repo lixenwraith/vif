@@ -236,8 +236,21 @@ func (s *QuasarSystem) cacheCombatEntities() {
 }
 
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	// 1. Clamp position to screen bounds
-	headerX, headerY := s.clampQuasarSpawnPosition(targetX, targetY)
+	// 1. Find valid spawn position via spiral search
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		targetX, targetY,
+		parameter.QuasarWidth, parameter.QuasarHeight,
+		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		return // No valid position
+	}
+
+	// Header position from found top-left
+	headerX := topLeftX + parameter.QuasarHeaderOffsetX
+	headerY := topLeftY + parameter.QuasarHeaderOffsetY
 
 	// 2. Clear area
 	s.clearQuasarSpawnArea(headerX, headerY)
@@ -253,40 +266,6 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		HeaderEntity: headerEntity,
 	})
-}
-
-// clampQuasarSpawnPosition ensures the Quasar fits within bounds given a target center
-// Input x, y is the desired center (or centroid)
-// Returns the Phantom Head position (Quasar header)
-func (s *QuasarSystem) clampQuasarSpawnPosition(targetX, targetY int) (int, int) {
-	config := s.world.Resources.Config
-
-	// Phantom head is at (2,1) offset relative to Quasar top-left (0,0)
-	// We want targetX, targetY to be roughly the center of the Quasar
-	// TopLeft = Center - CenterOffset
-	// Anchor = TopLeft + AnchorOffset
-	// Simplified: Anchor = Target
-
-	// However, we must ensure the entire 3x5 grid fits
-	// TopLeft = Anchor - AnchorOffset
-	topLeftX := targetX - parameter.QuasarHeaderOffsetX
-	topLeftY := targetY - parameter.QuasarHeaderOffsetY
-
-	if topLeftX < 0 {
-		topLeftX = 0
-	}
-	if topLeftY < 0 {
-		topLeftY = 0
-	}
-	if topLeftX+parameter.QuasarWidth > config.GameWidth {
-		topLeftX = config.GameWidth - parameter.QuasarWidth
-	}
-	if topLeftY+parameter.QuasarHeight > config.GameHeight {
-		topLeftY = config.GameHeight - parameter.QuasarHeight
-	}
-
-	// Return adjusted header position
-	return topLeftX + parameter.QuasarHeaderOffsetX, topLeftY + parameter.QuasarHeaderOffsetY
 }
 
 // clearQuasarSpawnArea destroys all entities within the quasar footprint
@@ -306,6 +285,11 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, e := range entities {
 				if e == 0 || e == cursorEntity {
+					continue
+				}
+				// TODO: check if works
+				// Skip walls - they block, not get cleared
+				if s.world.Components.Wall.HasEntity(e) {
 					continue
 				}
 				// Check protection
@@ -521,18 +505,37 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
 	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, parameter.QuasarMaxSpeed)
 
-	// Integrate position
-	newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
+	// Define Wall Query
+	// We use a closure to capture the specific mask and dimensions
+	wallCheck := func(topLeftX, topLeftY int) bool {
+		return s.world.Positions.HasBlockingWallInArea(
+			topLeftX, topLeftY,
+			parameter.QuasarWidth, parameter.QuasarHeight,
+			component.WallBlockKinetic,
+		)
+	}
 
-	// Boundary reflection with footprint constraints
+	// Calculate Valid Header Bounds (Header must stay within these grid coordinates)
+	// Min: OffsetX
+	// Max: Width - (QuasarWidth - OffsetX)
 	minHeaderX := parameter.QuasarHeaderOffsetX
 	maxHeaderX := config.GameWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
 	minHeaderY := parameter.QuasarHeaderOffsetY
 	maxHeaderY := config.GameHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
-	physics.ReflectBoundsX(&kineticComp.Kinetic, minHeaderX, maxHeaderX)
-	physics.ReflectBoundsY(&kineticComp.Kinetic, minHeaderY, maxHeaderY)
-	newX, newY = physics.GridPos(&kineticComp.Kinetic)
+	// Restitution: 0.9 (Light dampening, keeps it floaty)
+	restitution := vmath.FromFloat(0.9) // TODO: magic number to parameters after test
+
+	// Integrate with Bounce
+	newX, newY, _ := physics.IntegrateWithBounce(
+		&kineticComp.Kinetic,
+		dtFixed,
+		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
+		minHeaderX, maxHeaderX,
+		minHeaderY, maxHeaderY,
+		restitution,
+		wallCheck,
+	)
 
 	// Soft collision with swarms
 	combatComp, hasCombat := s.world.Components.Combat.GetComponent(headerEntity)

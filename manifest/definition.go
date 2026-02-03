@@ -31,6 +31,7 @@ var Components = []ComponentDef{
 	{"Cursor", "CursorComponent"},
 	{"Protection", "ProtectionComponent"},
 	{"Kinetic", "KineticComponent"},
+	{"Wall", "WallComponent"},
 
 	// Player state
 	{"Energy", "EnergyComponent"},

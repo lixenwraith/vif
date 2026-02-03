@@ -561,11 +561,20 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 		}
 	}
 
-	// Existing drain positions (authoritative iteration, not spatial query)
+	// Existing drain positions (component iteration, not spatial query)
 	drainEntities := s.world.Components.Drain.GetAllEntities()
 	for _, drainEntity := range drainEntities {
 		if drainPos, ok := s.world.Positions.GetPosition(drainEntity); ok {
 			key := uint64(drainPos.X)<<32 | uint64(drainPos.Y)
+			queuedPositions[key] = true
+		}
+	}
+
+	// Wall positions (area denial)
+	wallEntities := s.world.Components.Wall.GetAllEntities()
+	for _, wallEntity := range wallEntities {
+		if wallPos, ok := s.world.Positions.GetPosition(wallEntity); ok {
+			key := uint64(wallPos.X)<<32 | uint64(wallPos.Y)
 			queuedPositions[key] = true
 		}
 	}
@@ -886,6 +895,11 @@ func (s *DrainSystem) handleEntityCollisions() {
 				if _, ok := s.world.Components.Drain.GetComponent(target); ok {
 					continue
 				}
+				// TODO: the granular checks everywhere should be centralized
+				// Skip walls - handled by physics, not collision
+				if s.world.Components.Wall.HasEntity(target) {
+					continue
+				}
 				s.handleCollisionAtPosition(target)
 			}
 		}
@@ -973,6 +987,10 @@ func (s *DrainSystem) updateDrainMovement() {
 			s.applySoftCollisionWithQuasar(&kineticComp, &combatComp, newX, newY)
 		}
 
+		// Track last safe cell for wall reflection
+		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
+		hitWall := false
+
 		// Swept collision detection via Traverse
 		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
@@ -982,6 +1000,16 @@ func (s *DrainSystem) updateDrainMovement() {
 			if x == drainComp.LastIntX && y == drainComp.LastIntY {
 				return true
 			}
+
+			// Wall collision check - stop and reflect
+			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
+				hitWall = true
+				return false // Stop traversal
+			}
+
+			// Update last safe position for potential wall reflection
+			lastSafeX, lastSafeY = x, y
 
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
 			for i := 0; i < count; i++ {
@@ -998,6 +1026,11 @@ func (s *DrainSystem) updateDrainMovement() {
 			return true
 		})
 
+		// Apply wall reflection result
+		if hitWall {
+			newX, newY = lastSafeX, lastSafeY
+		}
+
 		// Grid sync on cell change
 		if newX != drainComp.LastIntX || newY != drainComp.LastIntY {
 			drainComp.LastIntX = newX
@@ -1009,6 +1042,24 @@ func (s *DrainSystem) updateDrainMovement() {
 		s.world.Components.Kinetic.SetComponent(drainEntity, kineticComp)
 		s.world.Components.Combat.SetComponent(drainEntity, combatComp)
 	}
+}
+
+// reflectOffWall reflects kinetic velocity when hitting wall at (wallX, wallY) from (fromX, fromY)
+// Snaps position back to fromX/fromY cell center
+func (s *DrainSystem) reflectOffWall(k *core.Kinetic, fromX, fromY, wallX, wallY int) {
+	dx := wallX - fromX
+	dy := wallY - fromY
+
+	// Reflect based on approach axis
+	if dx != 0 {
+		k.VelX = -k.VelX
+	}
+	if dy != 0 {
+		k.VelY = -k.VelY
+	}
+
+	// Snap back to safe cell center
+	k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(fromX, fromY)
 }
 
 // applySoftCollisionWithQuasar checks drain overlap with quasar and applies repulsion
@@ -1054,6 +1105,12 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		if protComp.Mask.Has(component.ProtectFromDrain) {
 			return
 		}
+	}
+
+	// TODO: protection should already catch this, verify
+	// Skip wall entities (defense-in-depth)
+	if s.world.Components.Wall.HasEntity(entity) {
+		return
 	}
 
 	// Skip cursor entity

@@ -67,7 +67,6 @@ func (s *MissileSystem) Update() {
 	}
 
 	dt := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	config := s.world.Resources.Config
 
 	missileEntities := s.world.Components.Missile.GetAllEntities()
 
@@ -78,56 +77,62 @@ func (s *MissileSystem) Update() {
 	}
 	var pendingSplits []splitRequest
 
-	for _, e := range missileEntities {
-		missile, ok := s.world.Components.Missile.GetComponent(e)
+	for _, missileEntity := range missileEntities {
+		missileComp, ok := s.world.Components.Missile.GetComponent(missileEntity)
 		if !ok {
 			continue
 		}
-		kinetic, ok := s.world.Components.Kinetic.GetComponent(e)
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(missileEntity)
 		if !ok {
 			continue
 		}
 
-		missile.Age++
+		missileComp.Age++
 
-		switch missile.Type {
+		switch missileComp.Type {
 		case component.MissileTypeClusterParent:
-			if s.updateParent(&missile, &kinetic, dt) {
-				pendingSplits = append(pendingSplits, splitRequest{missile, kinetic})
-				toDestroy = append(toDestroy, e)
+			if s.updateParent(&missileComp, &kineticComp, dt) {
+				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
+				toDestroy = append(toDestroy, missileEntity)
 				continue
 			}
 
 		case component.MissileTypeClusterChild:
-			if s.updateSeeker(&missile, &kinetic, dt) {
-				s.emitImpact(&missile, &kinetic)
-				toDestroy = append(toDestroy, e)
+			if s.updateSeeker(&missileComp, &kineticComp, dt) {
+				s.emitImpact(&missileComp, &kineticComp)
+				toDestroy = append(toDestroy, missileEntity)
 				continue
 			}
 		}
 
 		// OOB check - immediate destruction at boundary
-		gridX := vmath.ToInt(kinetic.PreciseX)
-		gridY := vmath.ToInt(kinetic.PreciseY)
+		gridX := vmath.ToInt(kineticComp.PreciseX)
+		gridY := vmath.ToInt(kineticComp.PreciseY)
 
-		if gridX < 0 || gridX >= config.GameWidth || gridY < 0 || gridY >= config.GameHeight {
-			toDestroy = append(toDestroy, e)
+		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
+			toDestroy = append(toDestroy, missileEntity)
+			continue
+		}
+
+		if s.world.Positions.HasBlockingWallAt(gridX, gridY, component.WallBlockKinetic) {
+			s.emitImpact(&missileComp, &kineticComp)
+			toDestroy = append(toDestroy, missileEntity)
 			continue
 		}
 
 		// Update spatial grid position
-		if pos, ok := s.world.Positions.GetPosition(e); !ok || pos.X != gridX || pos.Y != gridY {
-			s.world.Positions.SetPosition(e, component.PositionComponent{X: gridX, Y: gridY})
+		if pos, ok := s.world.Positions.GetPosition(missileEntity); !ok || pos.X != gridX || pos.Y != gridY {
+			s.world.Positions.SetPosition(missileEntity, component.PositionComponent{X: gridX, Y: gridY})
 		}
 
 		// Trail update
-		if missile.Age%parameter.MissileTrailInterval == 0 {
-			s.pushTrail(&missile, kinetic.PreciseX, kinetic.PreciseY)
+		if missileComp.Age%parameter.MissileTrailInterval == 0 {
+			s.pushTrail(&missileComp, kineticComp.PreciseX, kineticComp.PreciseY)
 		}
-		s.ageTrail(&missile)
+		s.ageTrail(&missileComp)
 
-		s.world.Components.Missile.SetComponent(e, missile)
-		s.world.Components.Kinetic.SetComponent(e, kinetic)
+		s.world.Components.Missile.SetComponent(missileEntity, missileComp)
+		s.world.Components.Kinetic.SetComponent(missileEntity, kineticComp)
 	}
 
 	for _, req := range pendingSplits {
