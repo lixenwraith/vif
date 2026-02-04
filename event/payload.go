@@ -126,14 +126,6 @@ type GoldCompletionPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
-// SplashRequestPayload creates transient visual flash
-type SplashRequestPayload struct {
-	Text    string                `toml:"text"`
-	Color   component.SplashColor `toml:"color"`
-	OriginX int                   `toml:"origin_x"`
-	OriginY int                   `toml:"origin_y"`
-}
-
 // SplashTimerPayload anchors countdown timer to sequence position
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity           `toml:"anchor_entity"`

@@ -121,7 +121,6 @@ func InitRegistry() {
 	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 
 	// Splash
-	RegisterType("EventSplashRequest", EventSplashRequest, &SplashRequestPayload{})
 	RegisterType("EventSplashTimerRequest", EventSplashTimerRequest, &SplashTimerRequestPayload{})
 	RegisterType("EventSplashTimerCancel", EventSplashTimerCancel, &SplashTimerCancelPayload{})
 

@@ -50,7 +50,6 @@ func (s *SplashSystem) Priority() int {
 // EventTypes defines the events this system subscribes to
 func (s *SplashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventSplashRequest,
 		event.EventSplashTimerRequest,
 		event.EventSplashTimerCancel,
 		event.EventCursorMoved,
@@ -79,11 +78,6 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventSplashRequest:
-		if payload, ok := ev.Payload.(*event.SplashRequestPayload); ok {
-			s.handleSplashRequest(payload)
-		}
-
 	case event.EventSplashTimerRequest:
 		if payload, ok := ev.Payload.(*event.SplashTimerRequestPayload); ok {
 			s.handleTimerSpawn(payload)
@@ -204,49 +198,6 @@ func (s *SplashSystem) Update() {
 		// Write back component (state changed)
 		s.world.Components.Splash.SetComponent(splashEntity, splashComp)
 	}
-}
-
-// handleSplashRequest creates a transient splash with smart layout
-func (s *SplashSystem) handleSplashRequest(payload *event.SplashRequestPayload) {
-	// 1. Enforce unique action slot
-	s.cleanupSplashesBySlot(component.SlotAction)
-
-	// 2. Prepare content
-	runes := []rune(payload.Text)
-	length := len(runes)
-	if length > parameter.SplashMaxLength {
-		length = parameter.SplashMaxLength
-	}
-
-	// 3. Smart layout
-	anchorX, anchorY := s.calculateSmartLayout(payload.OriginX, payload.OriginY, length)
-
-	// 4. Create component with delta timer
-	splash := component.SplashComponent{
-		Length:    length,
-		Color:     payload.Color,
-		AnchorX:   anchorX,
-		AnchorY:   anchorY,
-		Slot:      component.SlotAction,
-		Remaining: parameter.SplashDuration,
-		Duration:  parameter.SplashDuration,
-	}
-	copy(splash.Content[:], runes[:length])
-
-	// 5. Spawn
-	entity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(entity, splash)
-
-	// 6. Protection
-	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
-	})
-
-	// 7. Register with timeKeeper for destruction
-	s.world.PushEvent(event.EventTimerStart, &event.TimerStartPayload{
-		Entity:   entity,
-		Duration: parameter.SplashDuration,
-	})
 }
 
 // validateMagnifier checks if magnifier is still valid and updates content if entity changed, returns false if magnifier was destroyed
@@ -371,93 +322,6 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 			s.world.DestroyEntity(splashEntity)
 		}
 	}
-}
-
-// calculateSmartLayout determines the best position for a transient action splash
-// Uses spiral search starting at 2x radius, growing to 4x, then fallback overlap
-func (s *SplashSystem) calculateSmartLayout(cursorX, cursorY, charCount int) (int, int) {
-	config := s.world.Resources.Config
-	centerX := config.GameWidth / 2
-	centerY := config.GameHeight / 2
-
-	splashW := charCount * parameter.SplashCharWidth
-	splashH := parameter.SplashCharHeight
-
-	if splashW > config.GameWidth || splashH > config.GameHeight {
-		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
-	}
-
-	occupiedBBoxes := s.getOccupiedSplashBBoxes()
-
-	checkSplashes := func(absX, absY, w, h int) bool {
-		candidate := BBox{X: absX, Y: absY, W: w, H: h}
-		return !s.checkBBoxCollisionAny(candidate, occupiedBBoxes)
-	}
-
-	absX, absY, found := s.world.Positions.FindFreeFromPattern(
-		cursorX, cursorY,
-		splashW, splashH,
-		engine.PatternDiagonalFirst,
-		parameter.SplashMinDistance*2,
-		parameter.SplashMinDistance*4,
-		true,
-		component.WallBlockAll,
-		checkSplashes,
-	)
-
-	if found {
-		return absX, absY
-	}
-
-	anchorX := 0
-	anchorY := 0
-	if cursorX < centerX {
-		anchorX = config.GameWidth - splashW
-	}
-	if cursorY < centerY {
-		anchorY = config.GameHeight - splashH
-	}
-
-	return anchorX, anchorY
-}
-
-// getOccupiedSplashBBoxes returns bounding boxes for Timer and Magnifier splashes
-// Used by Action splash placement to avoid higher-priority splashes
-func (s *SplashSystem) getOccupiedSplashBBoxes() []BBox {
-	var boxes []BBox
-
-	splashEntities := s.world.Components.Splash.GetAllEntities()
-	for _, splashEntity := range splashEntities {
-		splashComp, ok := s.world.Components.Splash.GetComponent(splashEntity)
-		if !ok {
-			continue
-		}
-
-		if splashComp.Slot != component.SlotTimer && splashComp.Slot != component.SlotMagnifier {
-			continue
-		}
-
-		x, y := splashComp.AnchorX, splashComp.AnchorY
-		if splashComp.AnchorEntity != 0 {
-			if pos, ok := s.world.Positions.GetPosition(splashComp.AnchorEntity); ok {
-				x = pos.X + splashComp.OffsetX
-				y = pos.Y + splashComp.OffsetY
-			}
-		}
-
-		w := splashComp.Length * parameter.SplashCharWidth
-		h := parameter.SplashCharHeight
-
-		pad := parameter.SplashCollisionPadding
-		boxes = append(boxes, BBox{
-			X: x - pad,
-			Y: y - pad,
-			W: w + (pad * 2),
-			H: h + (pad * 2),
-		})
-	}
-
-	return boxes
 }
 
 // handleCursorMoved updates the magnifier splash based on cursor position

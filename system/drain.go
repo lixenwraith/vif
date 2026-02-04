@@ -638,7 +638,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventSplashRequest)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashRequest)
 	}
 }
 

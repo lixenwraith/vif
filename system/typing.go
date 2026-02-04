@@ -179,40 +179,25 @@ func (s *TypingSystem) applyUniversalRewards() {
 	}
 }
 
-// emitTypingFeedback sends visual feedback (splash + blink)
-func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType, char rune) {
-	cursorPos, _ := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
-
-	var splashColor component.SplashColor
+// emitTypingFeedback sends visual feedback
+func (s *TypingSystem) emitTypingFeedback(glyphType component.GlyphType) {
 	var blinkType int
 
 	switch glyphType {
 	case component.GlyphBlue:
-		splashColor = component.SplashColorBlue
 		blinkType = 1
 	case component.GlyphGreen:
-		splashColor = component.SplashColorGreen
 		blinkType = 2
 	case component.GlyphRed:
-		splashColor = component.SplashColorRed
 		blinkType = 3
 	case component.GlyphGold:
-		splashColor = component.SplashColorGold
 		blinkType = 4
 	default:
-		splashColor = component.SplashColorNormal
 		blinkType = 0
 	}
 
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
 		Type: blinkType,
-	})
-
-	s.world.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
-		Text:    string(char),
-		Color:   splashColor,
-		OriginX: cursorPos.X,
-		OriginY: cursorPos.Y,
 	})
 }
 
@@ -290,7 +275,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Visual feedback
-	s.emitTypingFeedback(glyph.Type, typedRune)
+	s.emitTypingFeedback(glyph.Type)
 
 	// Signal composite system
 	remaining := 0
@@ -331,8 +316,8 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	// Silent Death
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 
-	// Splash typing feedback
-	s.emitTypingFeedback(glyph.Type, typedRune)
+	// Blink typing feedback
+	s.emitTypingFeedback(glyph.Type)
 	s.moveCursorRight()
 }
 

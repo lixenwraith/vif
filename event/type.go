@@ -162,11 +162,6 @@ const (
 	// Latency: max 50ms (next tick)
 	EventCharacterTyped
 
-	// EventSplashRequest signals transient visual feedback
-	// Trigger: Character typed, command executed, nugget collected
-	// Consumer: SplashSystem | Payload: *SplashRequestPayload
-	EventSplashRequest
-
 	// EventSplashTimerRequest signals timer visual feedback
 	// Trigger: GoldSystem, QuasarSystem, ...
 	// Consumer: SplashSystem | Payload: *SplashTimerRequestPayload

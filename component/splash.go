@@ -12,7 +12,6 @@ type SplashSlot uint8
 
 const (
 	SlotTimer     SplashSlot = iota // Gold timer, entity-anchored
-	SlotAction                      // Normal mode feedback, far corner
 	SlotMagnifier                   // Typing preview, cursor-anchored
 )
 

@@ -293,7 +293,7 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -323,7 +323,7 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -364,7 +364,7 @@ func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 	return true
 }
@@ -406,7 +406,7 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -438,7 +438,7 @@ func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -472,7 +472,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -522,7 +522,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 	})
 
 	if intent.Command != "" {
-		r.setLastCommandAndSplash(intent.Command)
+		r.ctx.SetLastCommand(intent.Command)
 	}
 
 	return true
@@ -914,23 +914,6 @@ func (r *Router) ProcessMacroTick() []*input.Intent {
 }
 
 // --- Helper Methods ---
-
-func (r *Router) setLastCommandAndSplash(cmd string) {
-	r.ctx.SetLastCommand(cmd)
-
-	// Get cursor position for splash origin
-	var originX, originY int
-	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
-		originX, originY = pos.X, pos.Y
-	}
-
-	r.ctx.PushEvent(event.EventSplashRequest, &event.SplashRequestPayload{
-		Text:    cmd,
-		Color:   component.SplashColorNormal,
-		OriginX: originX,
-		OriginY: originY,
-	})
-}
 
 func isMacroControlIntent(t input.IntentType) bool {
 	switch t {

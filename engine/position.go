@@ -340,8 +340,8 @@ func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
 
 // isAreaFreeUnsafe checks bounds and wall presence, caller must hold lock
 func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
-	// Strict bounds check: Area must be completely inside the grid
-	if x < 0 || y < 0 || x+width > p.grid.Width || y+height > p.grid.Height {
+	// Strict bounds check: Area must be completely inside the game area
+	if x < 0 || y < 0 || x+width >= p.world.Resources.Config.GameWidth || y+height >= p.world.Resources.Config.GameHeight {
 		return false
 	}
 
@@ -351,7 +351,7 @@ func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.Wall
 
 // IsOutOfBounds checks if position is outside spatial grid bounds
 func (p *Position) IsOutOfBounds(x, y int) bool {
-	return x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height
+	return x < 0 || x >= p.world.Resources.Config.GameWidth || y < 0 || y >= p.world.Resources.Config.GameHeight
 }
 
 // IsBlockedForParticle checks if position blocks particle movement (OOB or blocking wall)
@@ -753,7 +753,7 @@ func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 	return 0, -1, -1, false
 }
 
-// --- Spiral search ---
+// --- Spiral search: Game area, not Spatial Grid ---
 
 // PatternType defines search pattern for FindFreeFromPattern
 type PatternType uint8
@@ -786,14 +786,22 @@ var patternDirections = [8][2]int{
 	{-1, -1}, // 7: NW
 }
 
+// var cardinalFirstCW = [8]int{0, 2, 1, 3, 4, 6, 7, 5}  // Bottom→Right→Top→Left, then BR→TR→TL→BL
+// var cardinalFirstCCW = [8]int{0, 3, 1, 2, 5, 7, 6, 4} // Bottom→Left→Top→Right, then BL→TL→TR→BR
+// var diagonalFirstCW = [8]int{1, 3, 5, 7, 0, 2, 4, 6}
+// var diagonalFirstCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2}
+
 // Angle orders for pattern searches
-var cardinalFirstCW = [8]int{0, 2, 4, 6, 1, 3, 5, 7}
-var cardinalFirstCCW = [8]int{0, 6, 4, 2, 7, 5, 3, 1}
-var diagonalFirstCW = [8]int{1, 3, 5, 7, 0, 2, 4, 6}
-var diagonalFirstCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2}
+// patternDirections index: 0=N, 1=NE, 2=E, 3=SE, 4=S, 5=SW, 6=W, 7=NW
+// Cardinals (N,E,S,W) = indices 0,2,4,6 | Diagonals (NE,SE,SW,NW) = indices 1,3,5,7
+var cardinalFirstCW = [8]int{0, 2, 4, 6, 1, 3, 5, 7}  // N→E→S→W, then NE→SE→SW→NW
+var cardinalFirstCCW = [8]int{0, 6, 4, 2, 7, 5, 3, 1} // N→W→S→E, then NW→SW→SE→NE
+var diagonalFirstCW = [8]int{1, 3, 5, 7, 0, 2, 4, 6}  // NE→SE→SW→NW, then N→E→S→W
+var diagonalFirstCCW = [8]int{7, 5, 3, 1, 0, 6, 4, 2} // NW→SW→SE→NE, then N→W→S→E
 
 // FindFreeFromPattern searches 8 directions at expanding radii for free area
-// Returns (absX, absY, found) - absolute position, not offset
+// Returns (absX, absY, found) - absolute Top-Left position of the placed rectangle
+// originX, originY: The CENTER point to search around
 // aspectCorrect: apply terminal aspect ratio (1:2) to Y offsets
 // additionalCheck: optional callback for extra validation (nil = skip), returns true if valid
 func (p *Position) FindFreeFromPattern(
@@ -809,7 +817,7 @@ func (p *Position) FindFreeFromPattern(
 	defer p.mu.RUnlock()
 
 	// Compute direction internally
-	centerX := p.grid.Width / 2
+	centerX := p.world.Resources.Config.GameWidth / 2
 	direction := getSearchDirection(originX, centerX)
 
 	var order [8]int
@@ -828,19 +836,40 @@ func (p *Position) FindFreeFromPattern(
 		for _, idx := range order {
 			dir := patternDirections[idx]
 
-			offsetX := dir[0] * radius
-			offsetY := dir[1] * radius
-			if aspectCorrect {
-				offsetY = dir[1] * ((radius + 1) / 2)
+			// Integer Circular Approximation (No Floats)
+			// Scale diagonals by 7/10 to approximate 0.707 (1/sqrt(2))
+			r := radius
+			if dir[0] != 0 && dir[1] != 0 {
+				r = (radius * 7) / 10
 			}
 
-			absX := originX + offsetX
-			absY := originY + offsetY
+			offsetX := dir[0] * r
+			offsetY := dir[1] * r
 
+			if aspectCorrect {
+				// Y-axis aspect correction (1/2 scaling for visual circularity)
+				offsetY = offsetY / 2
+			}
+
+			// Center the object on the search point
+			// absX is the Top-Left coordinate of the candidate rectangle
+			absX := originX + offsetX - (width / 2)
+			absY := originY + offsetY - (height / 2)
+
+			// Strict Bounds Check (OOB)
+			// absX must be >= 0 and absX + width must be <= Width (Strict inclusion)
+			if absX < 0 || absX+width > p.world.Resources.Config.GameWidth ||
+				absY < 0 || absY+height > p.world.Resources.Config.GameHeight {
+				continue
+			}
+
+			p.world.DebugPrint(fmt.Sprintf("%d %d %d %d", absX, absY, width, height))
+			// Wall/Grid Collision Check
 			if !p.isAreaFreeUnsafe(absX, absY, width, height, mask) {
 				continue
 			}
 
+			// External Entity Collision Check
 			if additionalCheck != nil && !additionalCheck(absX, absY, width, height) {
 				continue
 			}
@@ -856,6 +885,15 @@ func (p *Position) FindFreeFromPattern(
 type Exclusion struct {
 	Left, Right, Top, Bottom int
 }
+
+// Order relative to anchor
+// offsets array: 0=Bottom, 1=Top, 2=Right, 3=Left, 4=BR, 5=BL, 6=TR, 7=TL
+var (
+	anchorRelativeCardinalCW  = [8]int{0, 2, 1, 3, 4, 6, 7, 5} // Bottom→Right→Top→Left, then BR→TR→TL→BL
+	anchorRelativeCardinalCCW = [8]int{0, 3, 1, 2, 5, 7, 6, 4} // Bottom→Left→Top→Right, then BL→TL→TR→BR
+	anchorRelativeDiagonalCW  = [8]int{4, 6, 7, 5, 0, 2, 1, 3} // BR→TR→TL→BL, then Bottom→Right→Top→Left
+	anchorRelativeDiagonalCCW = [8]int{5, 7, 6, 4, 0, 3, 1, 2} // BL→TL→TR→BR, then
+)
 
 // FindPlacementAroundExclusion finds valid position for object outside exclusion zone
 // Returns (offsetX, offsetY, found) where offset is relative to anchor
@@ -873,7 +911,7 @@ func (p *Position) FindPlacementAroundExclusion(
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	centerX := p.grid.Width / 2
+	centerX := p.world.Resources.Config.GameWidth / 2
 	direction := getSearchDirection(anchorX, centerX)
 
 	// Compute centering offsets
@@ -897,19 +935,24 @@ func (p *Position) FindPlacementAroundExclusion(
 	var order [8]int
 	switch {
 	case pattern == PatternCardinalFirst && direction == SearchCW:
-		order = cardinalFirstCW
+		order = anchorRelativeCardinalCW
 	case pattern == PatternCardinalFirst && direction == SearchCCW:
-		order = cardinalFirstCCW
+		order = anchorRelativeCardinalCCW
 	case pattern == PatternDiagonalFirst && direction == SearchCW:
-		order = diagonalFirstCW
+		order = anchorRelativeDiagonalCW
 	default:
-		order = diagonalFirstCCW
+		order = anchorRelativeDiagonalCCW
 	}
 
 	// Primary: all 8 positions
 	for _, idx := range order {
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
+
+		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
+			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+			continue
+		}
 
 		if additionalCheck != nil && !additionalCheck(absX, absY, objectW, objectH) {
 			continue
@@ -927,6 +970,11 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]*2
 		absY := anchorY + offsets[idx][1]*2
 
+		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
+			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+			continue
+		}
+
 		if additionalCheck != nil && !additionalCheck(absX, absY, objectW, objectH) {
 			continue
 		}
@@ -943,6 +991,11 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
 
+		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
+			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+			continue
+		}
+
 		if p.isAreaFreeUnsafe(absX, absY, objectW, objectH, mask) {
 			return offsets[idx][0], offsets[idx][1], true
 		}
@@ -953,8 +1006,8 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
 
-		absX = max(0, min(absX, p.grid.Width-objectW))
-		absY = max(0, min(absY, p.grid.Height-objectH))
+		absX = max(0, min(absX, p.world.Resources.Config.GameWidth-objectW))
+		absY = max(0, min(absY, p.world.Resources.Config.GameHeight-objectH))
 
 		if p.HasBlockingWallInAreaUnsafe(absX, absY, objectW, objectH, mask) {
 			continue
@@ -966,15 +1019,15 @@ func (p *Position) FindPlacementAroundExclusion(
 	// Ultimate: force clamp first position
 	absX := anchorX + offsets[order[0]][0]
 	absY := anchorY + offsets[order[0]][1]
-	absX = max(0, min(absX, p.grid.Width-objectW))
-	absY = max(0, min(absY, p.grid.Height-objectH))
+	absX = max(0, min(absX, p.world.Resources.Config.GameWidth-objectW))
+	absY = max(0, min(absY, p.world.Resources.Config.GameHeight-objectH))
 
 	return absX - anchorX, absY - anchorY, false
 }
 
 // GetSearchDirection returns CCW if origin is right of center, CW otherwise
 func getSearchDirection(originX, centerX int) SearchDirection {
-	if originX > centerX {
+	if originX >= centerX {
 		return SearchCCW
 	}
 	return SearchCW
