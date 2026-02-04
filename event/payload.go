@@ -549,3 +549,52 @@ type MissileImpactPayload struct {
 	ImpactX      int         `toml:"impact_x"`
 	ImpactY      int         `toml:"impact_y"`
 }
+
+// WallSpawnRequestPayload contains parameters for single wall cell creation
+type WallSpawnRequestPayload struct {
+	X         int
+	Y         int
+	BlockMask component.WallBlockMask
+	Char      rune
+	FgColor   terminal.RGB
+	BgColor   terminal.RGB
+	RenderFg  bool
+	RenderBg  bool
+}
+
+// WallCompositeSpawnRequestPayload contains parameters for multi-cell wall structure
+// Uses Header/Member pattern for lifecycle management
+type WallCompositeSpawnRequestPayload struct {
+	X         int // Anchor position
+	Y         int
+	BlockMask component.WallBlockMask // Applied to all cells
+	Cells     []component.WallCellDef
+}
+
+// WallDespawnRequestPayload contains parameters for wall removal
+type WallDespawnRequestPayload struct {
+	X      int
+	Y      int
+	Width  int  // 0 = single cell
+	Height int  // 0 = single cell
+	All    bool // True = clear all walls
+}
+
+// WallMaskChangeRequestPayload modifies blocking behavior of existing walls
+type WallMaskChangeRequestPayload struct {
+	X         int
+	Y         int
+	Width     int
+	Height    int
+	BlockMask component.WallBlockMask
+}
+
+// WallSpawnedPayload notifies of wall creation completion
+type WallSpawnedPayload struct {
+	X            int
+	Y            int
+	Width        int
+	Height       int
+	Count        int
+	HeaderEntity core.Entity // 0 for single walls
+}

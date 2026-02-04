@@ -36,6 +36,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("composite", func(w any) any {
 		return system.NewCompositeSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("wall", func(w any) any {
+		return system.NewWallSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("glyph", func(w any) any {
 		return system.NewGlyphSystem(w.(*engine.World))
 	})
@@ -172,6 +175,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("swarm", func(ctx any) any {
 		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
+	registry.RegisterRenderer("wall", func(ctx any) any {
+		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityWall)
 	registry.RegisterRenderer("grayout", func(ctx any) any {
 		return renderer.NewGrayoutRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
@@ -209,6 +215,7 @@ func ActiveSystems() []string {
 		"buff",
 		"typing",
 		"composite",
+		"wall",
 		"glyph",
 		"nugget",
 		"decay",
@@ -259,6 +266,7 @@ func ActiveRenderers() []string {
 		"materialize",
 		"quasar",
 		"swarm",
+		"wall",
 		"grayout",
 		"dim",
 		"heatmeter",

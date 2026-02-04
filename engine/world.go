@@ -284,6 +284,42 @@ func (w *World) GetPingAbsoluteBounds() PingAbsoluteBounds {
 	}
 }
 
+// === Validation ===
+
+// PushEntityFromBlocked relocates entity to nearest valid position if blocked
+// Returns (newX, newY, moved) where moved=true if position changed
+// For cursor: mask=WallBlockCursor; for kinetic entities: mask=WallBlockKinetic
+func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlockMask) (int, int, bool) {
+	pos, ok := w.Positions.GetPosition(entity)
+	if !ok {
+		return 0, 0, false
+	}
+
+	if !w.Positions.IsBlocked(pos.X, pos.Y, mask) {
+		return pos.X, pos.Y, false // Not blocked
+	}
+
+	config := w.Resources.Config
+	maxRadius := max(config.GameWidth, config.GameHeight) / 2
+
+	newX, newY, found := w.Positions.FindFreeFromPattern(
+		pos.X, pos.Y,
+		1, 1, // Single cell entity
+		PatternCardinalFirst,
+		1, maxRadius,
+		true, // Aspect correct
+		mask,
+		nil, // No additional check
+	)
+
+	if !found {
+		return pos.X, pos.Y, false // No escape route (catastrophic)
+	}
+
+	w.Positions.SetPosition(entity, component.PositionComponent{X: newX, Y: newY})
+	return newX, newY, true
+}
+
 // === Debug ===
 
 // DebugPrint prints a message in status bar via meta system

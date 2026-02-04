@@ -190,6 +190,10 @@ func (ctx *GameContext) HandleResize() {
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
 		}
+		// Free cursor if blocked
+		if newX, newY, moved := ctx.World.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
+			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
+		}
 	})
 }
 

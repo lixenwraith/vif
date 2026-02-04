@@ -166,6 +166,14 @@ var (
 	RgbSearchInputText    = terminal.RGB{255, 255, 255} // White for search input
 	RgbCommandInputText   = terminal.RGB{255, 255, 255} // White for command input
 	RgbStatusMessageText  = terminal.RGB{200, 200, 200} // Light gray for status messages
+
+	// Wall colors
+	RgbWallDefault = terminal.RGB{R: 80, G: 80, B: 90}
+	RgbWallStone   = terminal.RGB{R: 100, G: 95, B: 85}
+	RgbWallMetal   = terminal.RGB{R: 140, G: 145, B: 155}
+	RgbWallEnergy  = terminal.RGB{R: 60, G: 20, B: 80}
+	RgbWallDanger  = terminal.RGB{R: 100, G: 20, B: 20}
+	RgbWallGhost   = terminal.RGB{R: 35, G: 36, B: 48}
 )
 
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type
@@ -190,3 +198,6 @@ const (
 	Missile256Body   uint8 = 220 // Gold
 	Missile256Seeker uint8 = 208 // Dark orange
 )
+
+// Wall256PaletteDefault is 256-color fallback for walls
+const Wall256PaletteDefault uint8 = 240

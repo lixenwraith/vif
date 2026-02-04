@@ -1,5 +1,9 @@
 package component
 
+import (
+	"github.com/lixenwraith/vi-fighter/terminal"
+)
+
 // WallBlockMask defines what entity types a wall blocks
 type WallBlockMask uint8
 
@@ -17,7 +21,38 @@ func (m WallBlockMask) Has(flag WallBlockMask) bool {
 	return m&flag != 0
 }
 
-// WallComponent marks an entity as a wall/obstacle
+// IsBlocking returns true if wall blocks any entity type
+func (m WallBlockMask) IsBlocking() bool {
+	return m != WallBlockNone
+}
+
+// WallComponent marks an entity as a wall/obstacle with visual properties
 type WallComponent struct {
-	BlockMask WallBlockMask // What this wall blocks
+	BlockMask WallBlockMask
+
+	// Foreground visual (character layer)
+	Char     rune // 0 = no foreground character
+	FgColor  terminal.RGB
+	RenderFg bool
+
+	// Background visual (cell fill)
+	BgColor  terminal.RGB
+	RenderBg bool
+}
+
+// NeedsRender returns true if wall has any visual component
+func (w *WallComponent) NeedsRender() bool {
+	return w.RenderFg || w.RenderBg
+}
+
+// WallCellDef defines a single cell in composite wall structure
+// Used by WallCompositeSpawnRequestPayload
+type WallCellDef struct {
+	OffsetX  int
+	OffsetY  int
+	Char     rune
+	FgColor  terminal.RGB
+	BgColor  terminal.RGB
+	RenderFg bool
+	RenderBg bool
 }

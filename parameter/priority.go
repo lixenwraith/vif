@@ -1,6 +1,6 @@
 package parameter
 
-// TODO: review and reorder
+// TODO: review and reorder, use iota? add comment for all
 // System Execution Priorities (lower runs first)
 const (
 	PriorityShield       = 10
@@ -9,12 +9,12 @@ const (
 	PriorityBoost        = 40
 	PriorityBuff         = 50
 	PriorityTyping       = 60 // After boost, before composite
-	PriorityComposite    = 70 // After boost, before spawn (position sync)
-	PriorityGlyph        = 80
-	PriorityNugget       = 90
-	PriorityGold         = 100
-	PriorityCleaner      = 110
-	PriorityVampire      = 120 // After Cleaner, before Drain, Quasar, Swarm, Lightning
+	PriorityComposite    = 70 // After boost, before spawning systems (position sync)
+	PriorityWall         = 80 // After composite
+	PriorityGlyph        = 90
+	PriorityNugget       = 100
+	PriorityGold         = 110
+	PriorityCleaner      = 120
 	PriorityFuse         = 130 // After Cleaner, before Drain
 	PrioritySpirit       = 140 // After Fuse, before Drain
 	PriorityDrain        = 150

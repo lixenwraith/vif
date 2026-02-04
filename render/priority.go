@@ -15,6 +15,7 @@ const (
 	PrioritySplash      RenderPriority = 700
 	PriorityMulti       RenderPriority = 800
 	PriorityMarker      RenderPriority = 900
+	PriorityWall        RenderPriority = 1400
 	PriorityPostProcess RenderPriority = 1500
 	PriorityUI          RenderPriority = 2000
 	PriorityOverlay     RenderPriority = 2500

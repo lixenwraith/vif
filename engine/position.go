@@ -889,10 +889,10 @@ type Exclusion struct {
 // Order relative to anchor
 // offsets array: 0=Bottom, 1=Top, 2=Right, 3=Left, 4=BR, 5=BL, 6=TR, 7=TL
 var (
-	anchorRelativeCardinalCW  = [8]int{0, 2, 1, 3, 4, 6, 7, 5} // Bottom→Right→Top→Left, then BR→TR→TL→BL
-	anchorRelativeCardinalCCW = [8]int{0, 3, 1, 2, 5, 7, 6, 4} // Bottom→Left→Top→Right, then BL→TL→TR→BR
-	anchorRelativeDiagonalCW  = [8]int{4, 6, 7, 5, 0, 2, 1, 3} // BR→TR→TL→BL, then Bottom→Right→Top→Left
-	anchorRelativeDiagonalCCW = [8]int{5, 7, 6, 4, 0, 3, 1, 2} // BL→TL→TR→BR, then
+	anchorRelativeCardinalFirstCW  = [8]int{0, 2, 1, 3, 4, 6, 7, 5} // Bottom→Right→Top→Left, then BR→TR→TL→BL
+	anchorRelativeCardinalFirstCCW = [8]int{0, 3, 1, 2, 5, 7, 6, 4} // Bottom→Left→Top→Right, then BL→TL→TR→BR
+	anchorRelativeDiagonalFirstCW  = [8]int{4, 6, 7, 5, 0, 2, 1, 3} // BR→TR→TL→BL, then Bottom→Right→Top→Left
+	anchorRelativeDiagonalFirstCCW = [8]int{5, 7, 6, 4, 0, 3, 1, 2} // BL→TL→TR→BR, then
 )
 
 // FindPlacementAroundExclusion finds valid position for object outside exclusion zone
@@ -935,13 +935,13 @@ func (p *Position) FindPlacementAroundExclusion(
 	var order [8]int
 	switch {
 	case pattern == PatternCardinalFirst && direction == SearchCW:
-		order = anchorRelativeCardinalCW
+		order = anchorRelativeCardinalFirstCW
 	case pattern == PatternCardinalFirst && direction == SearchCCW:
-		order = anchorRelativeCardinalCCW
+		order = anchorRelativeCardinalFirstCCW
 	case pattern == PatternDiagonalFirst && direction == SearchCW:
-		order = anchorRelativeDiagonalCW
+		order = anchorRelativeDiagonalFirstCW
 	default:
-		order = anchorRelativeDiagonalCCW
+		order = anchorRelativeDiagonalFirstCCW
 	}
 
 	// Primary: all 8 positions

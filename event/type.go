@@ -528,10 +528,42 @@ const (
 	// Consumer: MissileSystem | Payload: *MissileSpawnRequestPayload
 	EventMissileSpawnRequest
 
+	// TODO: missile impact is not yet wired
+
 	// EventMissileImpact signals missile reached target
 	// Trigger: MissileSystem on impact detection
 	// Consumer: CombatSystem, ExplosionSystem (future) | Payload: *MissileImpactPayload
 	EventMissileImpact
+
+	// EventWallSpawnRequest requests creation of a single wall cell
+	// Trigger: FSM, debug commands, external systems
+	// Consumer: WallSystem | Payload: *WallSpawnRequestPayload
+	EventWallSpawnRequest
+
+	// EventWallCompositeSpawnRequest requests creation of a multi-cell wall structure
+	// Trigger: FSM, level loader, procedural generators
+	// Consumer: WallSystem | Payload: *WallCompositeSpawnRequestPayload
+	EventWallCompositeSpawnRequest
+
+	// EventWallDespawnRequest requests removal of walls in specified area or globally
+	// Trigger: FSM, level transitions, debug commands
+	// Consumer: WallSystem | Payload: *WallDespawnRequestPayload
+	EventWallDespawnRequest
+
+	// EventWallMaskChangeRequest modifies blocking behavior of existing walls
+	// Trigger: FSM, dynamic maze mechanics
+	// Consumer: WallSystem | Payload: *WallMaskChangeRequestPayload
+	EventWallMaskChangeRequest
+
+	// EventWallPushCheckRequest triggers full entity displacement check for blocking walls
+	// Trigger: FSM after bulk wall operations, resize events
+	// Consumer: WallSystem | Payload: nil
+	EventWallPushCheckRequest
+
+	// EventWallSpawned notifies completion of wall creation with bounds and entity count
+	// Trigger: WallSystem after successful spawn
+	// Consumer: FSM, debug systems | Payload: *WallSpawnedPayload
+	EventWallSpawned
 )
 
 // GameEvent represents a single game event with metadata

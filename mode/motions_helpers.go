@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -52,20 +53,19 @@ func getCharacterTypeAt(ctx *engine.GameContext, x, y int) CharType {
 	return CharTypePunctuation
 }
 
-// validatePosition ensures the cursor position is within bounds
-func validatePosition(ctx *engine.GameContext, x, y int) (validX, validY int) {
-	validX, validY = x, y
-	if validX < 0 {
-		validX = 0
-	} else if validX >= ctx.World.Resources.Config.GameWidth {
-		validX = ctx.World.Resources.Config.GameWidth - 1
+// isCursorBlocked returns true if position blocks cursor movement (OOB or wall)
+func isCursorBlocked(ctx *engine.GameContext, x, y int) bool {
+	return ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor)
+}
+
+// validatePosition ensures cursor position is within bounds and not wall-blocked
+// Returns clamped position; if final position is wall-blocked, returns original
+func validatePosition(ctx *engine.GameContext, x, y int) (int, int) {
+	if ctx.World.Positions.IsBlocked(x, y, component.WallBlockCursor) {
+		return x, y
 	}
-	if validY < 0 {
-		validY = 0
-	} else if validY >= ctx.World.Resources.Config.GameHeight {
-		validY = ctx.World.Resources.Config.GameHeight - 1
-	}
-	return validX, validY
+	config := ctx.World.Resources.Config
+	return max(0, min(x, config.GameWidth-1)), max(0, min(y, config.GameHeight-1))
 }
 
 // --- Paragraph Helpers ---
