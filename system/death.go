@@ -133,6 +133,20 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 		return
 	}
 
+	// Fadeout handles its own data extraction from WallComponent
+	if effectEvent == event.EventFadeoutSpawnOne {
+		if wallComp, ok := s.world.Components.Wall.GetComponent(entity); ok {
+			s.world.PushEvent(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
+				X:       entityPos.X,
+				Y:       entityPos.Y,
+				Char:    wallComp.Char,
+				FgColor: wallComp.FgColor,
+				BgColor: wallComp.BgColor,
+			})
+		}
+		return
+	}
+
 	// Extract char: glyph first, sigil fallback
 	var char rune
 	var level component.GlyphLevel
@@ -176,9 +190,6 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 			Char:  char,
 			Level: level,
 		})
-
-		// Future: EventExplosionRequest, EventChainDeathRequest
-		// Each case extracts relevant data and builds appropriate payload
 	}
 }
 

@@ -121,8 +121,11 @@ const (
 	MissileExplosionRadiusFloat = 6.0
 )
 
-// Destruction Flash
+// Destruction
 const (
 	// DestructionFlashDuration is how long the destruction flash effect lasts in milliseconds
 	DestructionFlashDuration = 500 * time.Millisecond
+
+	// FadeoutDuration is how long the fadeout effect lasts
+	FadeoutDuration = 400 * time.Millisecond
 )

@@ -64,3 +64,29 @@ func ReleaseDustSpawnBatch(p *DustSpawnBatchRequestPayload) {
 	p.Entries = p.Entries[:0]
 	dustSpawnBatchPool.Put(p)
 }
+
+// --- Fadeout pool ---
+
+var fadeoutSpawnBatchPool = sync.Pool{
+	New: func() any {
+		return &FadeoutSpawnBatchPayload{
+			Entries: make([]FadeoutSpawnEntry, 0, 512),
+		}
+	},
+}
+
+// AcquireFadeoutSpawnBatch returns a pooled payload with reset slice
+func AcquireFadeoutSpawnBatch() *FadeoutSpawnBatchPayload {
+	p := fadeoutSpawnBatchPool.Get().(*FadeoutSpawnBatchPayload)
+	p.Entries = p.Entries[:0]
+	return p
+}
+
+// ReleaseFadeoutSpawnBatch returns payload to pool
+func ReleaseFadeoutSpawnBatch(p *FadeoutSpawnBatchPayload) {
+	if p == nil {
+		return
+	}
+	p.Entries = p.Entries[:0]
+	fadeoutSpawnBatchPool.Put(p)
+}

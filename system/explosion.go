@@ -243,40 +243,40 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 	// Update exported slice
 	ExplosionCenters = explosionBacking[:s.activeCount]
 
-	// Only dust explosions transform glyphs
-	if explosionType == event.ExplosionTypeDust {
-		s.transformGlyphs(x, y, radius)
-	}
+	// Process area effects (combat + optional glyph conversion)
+	s.processExplosionArea(x, y, radius, explosionType)
 
 	s.statTriggered.Add(1)
 }
 
-// TODO: this conversion must be done in dust system, doing it here results in no telemetry and duplicate logic
-func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
+// processExplosionArea handles entity collection and event emission for explosion effects
+// Single-pass sweep: collects combat entities (always), converts glyphs (dust only)
+func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int64, explosionType event.ExplosionType) {
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Player.Entity
 
-	// Radius is horizontal cells; Vertical is half that to maintain aspect ratio
+	// Determine behavior based on explosion type
+	var attackType component.CombatAttackType
+	convertGlyphs := false
+
+	switch explosionType {
+	case event.ExplosionTypeDust:
+		attackType = component.CombatAttackExplosion
+		convertGlyphs = true
+	case event.ExplosionTypeMissile:
+		attackType = component.CombatAttackMissile
+	default:
+		return
+	}
+
+	// Calculate bounds with aspect correction
 	radiusCells := vmath.ToInt(radius)
 	radiusCellsY := radiusCells / 2
 
-	minX := centerX - radiusCells
-	maxX := centerX + radiusCells
-	minY := centerY - radiusCellsY
-	maxY := centerY + radiusCellsY
-
-	if minX < 0 {
-		minX = 0
-	}
-	if maxX >= config.GameWidth {
-		maxX = config.GameWidth - 1
-	}
-	if minY < 0 {
-		minY = 0
-	}
-	if maxY >= config.GameHeight {
-		maxY = config.GameHeight - 1
-	}
+	minX := max(0, centerX-radiusCells)
+	maxX := min(config.GameWidth-1, centerX+radiusCells)
+	minY := max(0, centerY-radiusCellsY)
+	maxY := min(config.GameHeight-1, centerY+radiusCellsY)
 
 	radiusSq := vmath.Mul(radius, radius)
 
@@ -284,10 +284,11 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	s.entityBuf = s.entityBuf[:0]
 	s.dustEntryBuf = s.dustEntryBuf[:0]
 
-	// Track combat entities for batched event emission
+	// Combat entity collectors
 	var hitDrains []core.Entity
-	hitComposites := make(map[core.Entity][]core.Entity) // header -> hit members
+	hitComposites := make(map[core.Entity][]core.Entity)
 
+	// Single-pass area sweep
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
 			dx := vmath.FromInt(x - centerX)
@@ -301,7 +302,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 
 			entities := s.world.Positions.GetAllEntityAt(x, y)
 			for _, entity := range entities {
-				// Drain - collect for batched combat event
+				// Drain - collect for combat
 				if s.world.Components.Drain.HasEntity(entity) {
 					hitDrains = append(hitDrains, entity)
 					continue
@@ -322,32 +323,30 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 					continue
 				}
 
-				// Glyph - transform to dust
-				glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
-				if !ok {
-					continue
-				}
+				// Glyph - convert to dust (dust explosion only)
+				if convertGlyphs {
+					glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
+					if !ok || s.world.Components.Death.HasEntity(entity) {
+						continue
+					}
 
-				if s.world.Components.Death.HasEntity(entity) {
-					continue
+					s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
+					s.entityBuf = append(s.entityBuf, entity)
+					s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
+						X:     x,
+						Y:     y,
+						Char:  glyphComp.Rune,
+						Level: glyphComp.Level,
+					})
 				}
-				s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
-
-				s.entityBuf = append(s.entityBuf, entity)
-				s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
-					X:     x,
-					Y:     y,
-					Char:  glyphComp.Rune,
-					Level: glyphComp.Level,
-				})
 			}
 		}
 	}
 
-	// Emit combat events for drains (individual targets)
+	// Emit combat events for drains
 	for _, drainEntity := range hitDrains {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackExplosion,
+			AttackType:   attackType,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
 			TargetEntity: drainEntity,
@@ -360,7 +359,7 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 	// Emit combat events for composites (batched by header)
 	for headerEntity, hitMembers := range hitComposites {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackExplosion,
+			AttackType:   attackType,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
 			TargetEntity: headerEntity,
@@ -370,19 +369,15 @@ func (s *ExplosionSystem) transformGlyphs(centerX, centerY int, radius int64) {
 		})
 	}
 
-	// Glyph death and dust spawn
-	if len(s.entityBuf) == 0 {
-		return
+	// Glyph death and dust spawn (dust only)
+	if convertGlyphs && len(s.entityBuf) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf)
+
+		// TODO: refactor to single death event emit with dust batch spawn, needs death system update
+		dustBatch := event.AcquireDustSpawnBatch()
+		dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
+		s.world.PushEvent(event.EventDustSpawnBatchRequest, dustBatch)
+
+		s.statConverted.Add(int64(len(s.entityBuf)))
 	}
-
-	// Use buffered entities for death batch
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf)
-
-	// Use buffered entries for batch dust spawn
-	dustBatch := event.AcquireDustSpawnBatch()
-	dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
-
-	s.world.PushEvent(event.EventDustSpawnBatchRequest, dustBatch)
-
-	s.statConverted.Add(int64(len(s.entityBuf)))
 }

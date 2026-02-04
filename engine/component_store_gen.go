@@ -40,6 +40,7 @@ type Component struct {
 	Header      *Store[component.HeaderComponent]
 	Member      *Store[component.MemberComponent]
 	Flash       *Store[component.FlashComponent]
+	Fadeout     *Store[component.FadeoutComponent]
 	Splash      *Store[component.SplashComponent]
 	Marker      *Store[component.MarkerComponent]
 	Environment *Store[component.EnvironmentComponent]
@@ -80,6 +81,7 @@ func initComponents(w *World) {
 	w.Components.Header = NewStore[component.HeaderComponent]()
 	w.Components.Member = NewStore[component.MemberComponent]()
 	w.Components.Flash = NewStore[component.FlashComponent]()
+	w.Components.Fadeout = NewStore[component.FadeoutComponent]()
 	w.Components.Splash = NewStore[component.SplashComponent]()
 	w.Components.Marker = NewStore[component.MarkerComponent]()
 	w.Components.Environment = NewStore[component.EnvironmentComponent]()
@@ -121,6 +123,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Header.RemoveEntity(e)
 	w.Components.Member.RemoveEntity(e)
 	w.Components.Flash.RemoveEntity(e)
+	w.Components.Fadeout.RemoveEntity(e)
 	w.Components.Splash.RemoveEntity(e)
 	w.Components.Marker.RemoveEntity(e)
 	w.Components.Environment.RemoveEntity(e)
@@ -161,6 +164,7 @@ func (w *World) wipeAll() {
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()
+	w.Components.Fadeout.ClearAllComponents()
 	w.Components.Splash.ClearAllComponents()
 	w.Components.Marker.ClearAllComponents()
 	w.Components.Environment.ClearAllComponents()

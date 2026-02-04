@@ -63,6 +63,7 @@ var Components = []ComponentDef{
 
 	// Effects
 	{"Flash", "FlashComponent"},
+	{"Fadeout", "FadeoutComponent"},
 	{"Splash", "SplashComponent"},
 	{"Marker", "MarkerComponent"},
 	{"Environment", "EnvironmentComponent"},
@@ -102,6 +103,7 @@ var Systems = []SystemDef{
 	{"swarm", "NewSwarmSystem"},
 	{"dust", "NewDustSystem"},
 	{"flash", "NewFlashSystem"},
+	{"fadeout", "NewFadeoutSystem"},
 	{"marker", "NewMarkerSystem"},
 	{"explosion", "NewExplosionSystem"},
 	{"motion_marker", "NewMotionMarkerSystem"},
@@ -127,6 +129,7 @@ var Renderers = []RendererDef{
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
+	{"fadeout", "NewFadeoutRenderer", "PriorityParticle"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},
 	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},

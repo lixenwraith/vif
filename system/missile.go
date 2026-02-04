@@ -100,7 +100,12 @@ func (s *MissileSystem) Update() {
 
 		case component.MissileTypeClusterChild:
 			if s.updateSeeker(&missileComp, &kineticComp, dt) {
-				s.emitImpact(&missileComp, &kineticComp)
+				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+					X:      vmath.ToInt(kineticComp.PreciseX),
+					Y:      vmath.ToInt(kineticComp.PreciseY),
+					Radius: parameter.MissileExplosionRadius,
+					Type:   event.ExplosionTypeMissile,
+				})
 				toDestroy = append(toDestroy, missileEntity)
 				continue
 			}
@@ -112,7 +117,12 @@ func (s *MissileSystem) Update() {
 		// Destruction when OOB, explosion when hits wall
 		if s.world.Positions.IsBlocked(gridX, gridY, component.WallBlockKinetic) {
 			if !s.world.Positions.IsOutOfBounds(gridX, gridY) {
-				s.emitImpact(&missileComp, &kineticComp)
+				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+					X:      vmath.ToInt(kineticComp.PreciseX),
+					Y:      vmath.ToInt(kineticComp.PreciseY),
+					Radius: parameter.MissileExplosionRadius,
+					Type:   event.ExplosionTypeMissile,
+				})
 			}
 			toDestroy = append(toDestroy, missileEntity)
 			continue
@@ -402,30 +412,6 @@ func (s *MissileSystem) spawnChild(owner, origin core.Entity, x, y, vx, vy int64
 }
 
 // --- Helpers ---
-
-func (s *MissileSystem) emitImpact(m *component.MissileComponent, k *component.KineticComponent) {
-	ix := vmath.ToInt(k.PreciseX)
-	iy := vmath.ToInt(k.PreciseY)
-
-	// Emit combat damage event for target
-	if m.TargetEntity != 0 {
-		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-			AttackType:   component.CombatAttackMissile,
-			OwnerEntity:  m.Owner,
-			OriginEntity: m.Origin,
-			TargetEntity: m.TargetEntity,
-			HitEntity:    m.HitEntity,
-		})
-	}
-
-	// Emit visual-only missile explosion
-	s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-		X:      ix,
-		Y:      iy,
-		Radius: parameter.MissileExplosionRadius,
-		Type:   event.ExplosionTypeMissile,
-	})
-}
 
 func (s *MissileSystem) pushTrail(m *component.MissileComponent, x, y int64) {
 	m.Trail[m.TrailHead] = component.MissileTrailPoint{X: x, Y: y, Age: 0}

@@ -598,3 +598,26 @@ type WallSpawnedPayload struct {
 	Count        int
 	HeaderEntity core.Entity // 0 for single walls
 }
+
+// FadeoutSpawnPayload contains parameters for single fadeout effect
+type FadeoutSpawnPayload struct {
+	X       int
+	Y       int
+	Char    rune // 0 = bg-only
+	FgColor terminal.RGB
+	BgColor terminal.RGB
+}
+
+// FadeoutSpawnEntry is a value type for batch fadeout spawning
+type FadeoutSpawnEntry struct {
+	X       int
+	Y       int
+	Char    rune
+	FgColor terminal.RGB
+	BgColor terminal.RGB
+}
+
+// FadeoutSpawnBatchPayload contains batch fadeout spawn data
+type FadeoutSpawnBatchPayload struct {
+	Entries []FadeoutSpawnEntry
+}

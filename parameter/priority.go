@@ -30,6 +30,7 @@ const (
 	PriorityLightning    = 250 // After Quasar
 	PriorityMissile      = 260 // After Buff
 	PriorityFlash        = 270
+	PriorityFadeout      = 275
 	PriorityUI           = 280
 	PriorityEffect       = 500
 	PriorityMarker       = 510  // Before splash, after game logic

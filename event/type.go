@@ -564,6 +564,16 @@ const (
 	// Trigger: WallSystem after successful spawn
 	// Consumer: FSM, debug systems | Payload: *WallSpawnedPayload
 	EventWallSpawned
+
+	// EventFadeoutSpawnOne signals intent to spawn a single fadeout effect
+	// Trigger: DeathSystem on wall death with bg visual, WallSystem on despawn
+	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnPayload
+	EventFadeoutSpawnOne
+
+	// EventFadeoutSpawnBatch signals intent to spawn multiple fadeout effects
+	// Trigger: WallSystem on bulk despawn operations
+	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnBatchPayload
+	EventFadeoutSpawnBatch
 )
 
 // GameEvent represents a single game event with metadata

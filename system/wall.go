@@ -281,15 +281,16 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 // handleDespawn removes walls in specified area
 func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	if payload.All {
-		wallEntities := s.world.Components.Wall.GetAllEntities()
-		for _, entity := range wallEntities {
-			s.world.DestroyEntity(entity)
-		}
+		s.despawnAllWalls()
 		return
 	}
 
 	width := max(1, payload.Width)
 	height := max(1, payload.Height)
+
+	var flashTargets []core.Entity
+	var fadeoutTargets []core.Entity
+	var silentTargets []core.Entity
 
 	wallEntities := s.world.Components.Wall.GetAllEntities()
 	for _, entity := range wallEntities {
@@ -298,10 +299,80 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 			continue
 		}
 
-		if pos.X >= payload.X && pos.X < payload.X+width &&
-			pos.Y >= payload.Y && pos.Y < payload.Y+height {
-			s.world.DestroyEntity(entity)
+		if pos.X < payload.X || pos.X >= payload.X+width ||
+			pos.Y < payload.Y || pos.Y >= payload.Y+height {
+			continue
 		}
+
+		wall, ok := s.world.Components.Wall.GetComponent(entity)
+		if !ok {
+			continue
+		}
+
+		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
+	}
+
+	// Route through death system with appropriate effects
+	if len(flashTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, flashTargets)
+	}
+	if len(fadeoutTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)
+	}
+	if len(silentTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, silentTargets)
+	}
+}
+
+// despawnAllWalls handles All=true despawn with proper effects
+func (s *WallSystem) despawnAllWalls() {
+	var flashTargets []core.Entity
+	var fadeoutTargets []core.Entity
+	var silentTargets []core.Entity
+
+	wallEntities := s.world.Components.Wall.GetAllEntities()
+	for _, entity := range wallEntities {
+		wall, ok := s.world.Components.Wall.GetComponent(entity)
+		if !ok {
+			silentTargets = append(silentTargets, entity)
+			continue
+		}
+
+		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
+	}
+
+	// Route through death system with appropriate effects
+	if len(flashTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, flashTargets)
+	}
+	if len(fadeoutTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)
+	}
+	if len(silentTargets) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, silentTargets)
+	}
+}
+
+// classifyWallForDespawn routes wall entity to appropriate effect category
+func (s *WallSystem) classifyWallForDespawn(
+	entity core.Entity,
+	wall component.WallComponent,
+	flashTargets *[]core.Entity,
+	fadeoutTargets *[]core.Entity,
+	silentTargets *[]core.Entity,
+) {
+	hasFg := wall.RenderFg && wall.Char != 0
+	hasBg := wall.RenderBg
+
+	if hasFg && !hasBg {
+		// Fg-only: flash effect via death system
+		*flashTargets = append(*flashTargets, entity)
+	} else if hasBg {
+		// Bg or Fg+Bg: fadeout effect via death system
+		*fadeoutTargets = append(*fadeoutTargets, entity)
+	} else {
+		// No visual: silent destruction
+		*silentTargets = append(*silentTargets, entity)
 	}
 }
 

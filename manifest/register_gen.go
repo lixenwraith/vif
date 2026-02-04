@@ -90,6 +90,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("flash", func(w any) any {
 		return system.NewFlashSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("fadeout", func(w any) any {
+		return system.NewFadeoutSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("marker", func(w any) any {
 		return system.NewMarkerSystem(w.(*engine.World))
 	})
@@ -150,6 +153,9 @@ func RegisterRenderers() {
 	}, render.PriorityCleaner)
 	registry.RegisterRenderer("flash", func(ctx any) any {
 		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityParticle)
+	registry.RegisterRenderer("fadeout", func(ctx any) any {
+		return renderer.NewFadeoutRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
 	registry.RegisterRenderer("marker", func(ctx any) any {
 		return renderer.NewMarkerRenderer(ctx.(*engine.GameContext))
@@ -233,6 +239,7 @@ func ActiveSystems() []string {
 		"swarm",
 		"dust",
 		"flash",
+		"fadeout",
 		"marker",
 		"explosion",
 		"motion_marker",
@@ -258,6 +265,7 @@ func ActiveRenderers() []string {
 		"shield",
 		"cleaner",
 		"flash",
+		"fadeout",
 		"marker",
 		"explosion",
 		"lightning",
