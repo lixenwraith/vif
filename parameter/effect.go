@@ -78,14 +78,15 @@ const (
 	// MissileClusterLaunchSpeedFloat is parent travel speed (cells/sec)
 	MissileClusterLaunchSpeedFloat = 90.0
 
+	// TODO: use
 	// MissileClusterSplitRatio is fraction of distance to centroid before split (0.5 = halfway)
 	MissileClusterSplitRatio = 0.5
 
 	// MissileClusterMinDistanceFloat is minimum travel before split allowed (cells)
 	MissileClusterMinDistanceFloat = 8.0
 
-	// MissileParentMaxAgeFrames is safety timeout for forced split
-	MissileParentMaxAgeFrames = 60
+	// MissileParentMaxLifetime is safety timeout for forced split
+	MissileParentMaxLifetime = 1 * time.Second
 )
 
 // Cluster Missile - Child/Seeker Phase
@@ -107,15 +108,18 @@ const (
 
 	// MissileSeekerArrivalRadius is distance to begin braking (cells)
 	MissileSeekerArrivalRadiusFloat = 2.0
+
+	// MissileSeekerMaxLifetime is safety timeout for orphaned seekers
+	MissileSeekerMaxLifetime = 3 * time.Second
 )
 
 // Missile Visuals - Parent and Child
 const (
-	// MissileTrailMaxAge is frames before trail point fades completely
-	MissileTrailMaxAge = 6
+	// MissileTrailMaxAge is duration before trail point fades completely
+	MissileTrailMaxAge = 300 * time.Millisecond
 
-	// MissileTrailInterval is frames between trail point emissions
-	MissileTrailInterval = 1
+	// MissileTrailInterval is duration between trail point emissions
+	MissileTrailInterval = 50 * time.Millisecond
 
 	// MissileExplosionRadiusFloat is visual radius for impact explosion (smaller than main)
 	MissileExplosionRadiusFloat = 6.0

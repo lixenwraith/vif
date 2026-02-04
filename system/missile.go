@@ -1,6 +1,8 @@
 package system
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -66,7 +68,8 @@ func (s *MissileSystem) Update() {
 		return
 	}
 
-	dt := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	dt := s.world.Resources.Time.DeltaTime
+	dtFixed := vmath.FromFloat(dt.Seconds())
 
 	missileEntities := s.world.Components.Missile.GetAllEntities()
 
@@ -87,19 +90,30 @@ func (s *MissileSystem) Update() {
 			continue
 		}
 
-		// TODO: change age to time.Duration
-		missileComp.Age++
+		missileComp.Lifetime += dt
 
 		switch missileComp.Type {
 		case component.MissileTypeClusterParent:
-			if s.updateParent(&missileComp, &kineticComp, dt) {
+			shouldSplit, earlyImpact := s.updateParent(&missileComp, &kineticComp, dtFixed)
+			if earlyImpact {
+				// Parent hit wall or enemy before split
+				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+					X:      vmath.ToInt(kineticComp.PreciseX),
+					Y:      vmath.ToInt(kineticComp.PreciseY),
+					Radius: parameter.MissileExplosionRadius,
+					Type:   event.ExplosionTypeMissile,
+				})
+				toDestroy = append(toDestroy, missileEntity)
+				continue
+			}
+			if shouldSplit {
 				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
 				toDestroy = append(toDestroy, missileEntity)
 				continue
 			}
 
 		case component.MissileTypeClusterChild:
-			if s.updateSeeker(&missileComp, &kineticComp, dt) {
+			if s.updateSeeker(&missileComp, &kineticComp, dtFixed) {
 				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 					X:      vmath.ToInt(kineticComp.PreciseX),
 					Y:      vmath.ToInt(kineticComp.PreciseY),
@@ -114,16 +128,8 @@ func (s *MissileSystem) Update() {
 		gridX := vmath.ToInt(kineticComp.PreciseX)
 		gridY := vmath.ToInt(kineticComp.PreciseY)
 
-		// Destruction when OOB, explosion when hits wall
-		if s.world.Positions.IsBlocked(gridX, gridY, component.WallBlockKinetic) {
-			if !s.world.Positions.IsOutOfBounds(gridX, gridY) {
-				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-					X:      vmath.ToInt(kineticComp.PreciseX),
-					Y:      vmath.ToInt(kineticComp.PreciseY),
-					Radius: parameter.MissileExplosionRadius,
-					Type:   event.ExplosionTypeMissile,
-				})
-			}
+		// OOB check only (wall collision handled in traversal)
+		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
 			toDestroy = append(toDestroy, missileEntity)
 			continue
 		}
@@ -133,11 +139,12 @@ func (s *MissileSystem) Update() {
 			s.world.Positions.SetPosition(missileEntity, component.PositionComponent{X: gridX, Y: gridY})
 		}
 
-		// Trail update
-		if missileComp.Age%parameter.MissileTrailInterval == 0 {
+		// Trail emission based on elapsed time
+		if missileComp.Lifetime-missileComp.LastTrailEmit >= parameter.MissileTrailInterval {
 			s.pushTrail(&missileComp, kineticComp.PreciseX, kineticComp.PreciseY)
+			missileComp.LastTrailEmit = missileComp.Lifetime
 		}
-		s.ageTrail(&missileComp)
+		s.ageTrail(&missileComp, dt)
 
 		s.world.Components.Missile.SetComponent(missileEntity, missileComp)
 		s.world.Components.Kinetic.SetComponent(missileEntity, kineticComp)
@@ -152,19 +159,37 @@ func (s *MissileSystem) Update() {
 	}
 }
 
-func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component.KineticComponent, dt int64) bool {
-	// Linear movement toward destination (stored in Accel fields)
+func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component.KineticComponent, dt int64) (split bool, earlyImpact bool) {
+	prevX, prevY := k.PreciseX, k.PreciseY
+
+	// Linear movement toward destination
 	k.PreciseX += vmath.Mul(k.VelX, dt)
 	k.PreciseY += vmath.Mul(k.VelY, dt)
 
+	// Path traversal for wall and enemy collision
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, true)
+	if hitType != impactNone {
+		k.PreciseX = vmath.FromInt(impactX) + vmath.CellCenter
+		k.PreciseY = vmath.FromInt(impactY) + vmath.CellCenter
+		return false, true
+	}
+
+	// Split distance check (unchanged logic)
 	destX, destY := k.AccelX, k.AccelY
 	distSq := vmath.MagnitudeSq(destX-k.PreciseX, destY-k.PreciseY)
 	splitDistSq := vmath.Mul(parameter.MissileClusterMinDistance, parameter.MissileClusterMinDistance)
 
-	return distSq < splitDistSq || m.Age > parameter.MissileParentMaxAgeFrames
+	return distSq < splitDistSq || m.Lifetime > parameter.MissileParentMaxLifetime, false
 }
 
-func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component.KineticComponent, dt int64) bool {
+func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
+	// Lifetime timeout for orphaned seekers
+	if m.Lifetime > parameter.MissileSeekerMaxLifetime {
+		return true
+	}
+
+	prevX, prevY := k.PreciseX, k.PreciseY
+
 	// Resolve target
 	targetX, targetY, hasTarget := s.resolveTarget(m, k.PreciseX, k.PreciseY)
 
@@ -172,63 +197,138 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 		// Ballistic drift
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
-		return false
+	} else {
+		// Vector to target
+		dx := targetX - k.PreciseX
+		dy := targetY - k.PreciseY
+		distSq := vmath.MagnitudeSq(dx, dy)
+
+		// Impact check
+		if distSq < parameter.MissileImpactRadiusSq {
+			k.PreciseX = targetX
+			k.PreciseY = targetY
+			return true
+		}
+
+		// Homing: steer toward target
+		dist := vmath.Sqrt(distSq)
+		if dist > 0 {
+			dirX := vmath.Div(dx, dist)
+			dirY := vmath.Div(dy, dist)
+
+			accel := parameter.MissileSeekerHomingAccel
+			k.VelX += vmath.Mul(vmath.Mul(dirX, accel), dt)
+			k.VelY += vmath.Mul(vmath.Mul(dirY, accel), dt)
+		}
+
+		// Drag
+		drag := parameter.MissileSeekerDrag
+		if dist < parameter.MissileSeekerArrivalRadius && parameter.MissileSeekerArrivalRadius > 0 {
+			proximityFactor := vmath.Scale - vmath.Div(dist, parameter.MissileSeekerArrivalRadius)
+			drag += vmath.Mul(drag*2, proximityFactor)
+		}
+
+		speed := vmath.Magnitude(k.VelX, k.VelY)
+		if speed > 0 {
+			dragScale := vmath.Mul(drag, dt)
+			if dragScale > vmath.Scale {
+				dragScale = vmath.Scale
+			}
+			retain := vmath.Scale - dragScale
+			k.VelX = vmath.Mul(k.VelX, retain)
+			k.VelY = vmath.Mul(k.VelY, retain)
+		}
+
+		// Speed cap
+		speed = vmath.Magnitude(k.VelX, k.VelY)
+		if speed > parameter.MissileSeekerMaxSpeed {
+			scale := vmath.Div(parameter.MissileSeekerMaxSpeed, speed)
+			k.VelX = vmath.Mul(k.VelX, scale)
+			k.VelY = vmath.Mul(k.VelY, scale)
+		}
+
+		// Integrate
+		k.PreciseX += vmath.Mul(k.VelX, dt)
+		k.PreciseY += vmath.Mul(k.VelY, dt)
 	}
 
-	// Vector to target
-	dx := targetX - k.PreciseX
-	dy := targetY - k.PreciseY
-	distSq := vmath.MagnitudeSq(dx, dy)
-
-	// Impact check
-	if distSq < parameter.MissileImpactRadiusSq {
-		k.PreciseX = targetX
-		k.PreciseY = targetY
+	// Path traversal for wall collision only (seekers pass through enemies)
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, false)
+	if hitType == impactWall {
+		k.PreciseX = vmath.FromInt(impactX) + vmath.CellCenter
+		k.PreciseY = vmath.FromInt(impactY) + vmath.CellCenter
 		return true
 	}
 
-	// Homing: steer toward target
-	dist := vmath.Sqrt(distSq)
-	if dist > 0 {
-		dirX := vmath.Div(dx, dist)
-		dirY := vmath.Div(dy, dist)
+	return false
+}
 
-		// Acceleration toward target
-		accel := parameter.MissileSeekerHomingAccel
-		k.VelX += vmath.Mul(vmath.Mul(dirX, accel), dt)
-		k.VelY += vmath.Mul(vmath.Mul(dirY, accel), dt)
+type impactType uint8
+
+const (
+	impactNone impactType = iota
+	impactWall
+	impactEnemy
+)
+
+// traverseForImpact walks path checking for wall/enemy collisions
+// checkEnemies: true for parent (explodes on enemy), false for seeker (passes through)
+// Returns impact grid position and type
+func (s *MissileSystem) traverseForImpact(
+	fromX, fromY, toX, toY int64,
+	checkEnemies bool,
+) (x, y int, hit impactType) {
+	fromGridX, fromGridY := vmath.ToInt(fromX), vmath.ToInt(fromY)
+	toGridX, toGridY := vmath.ToInt(toX), vmath.ToInt(toY)
+
+	// No movement or same cell
+	if fromGridX == toGridX && fromGridY == toGridY {
+		return 0, 0, impactNone
 	}
 
-	// Drag (intensifies near target for clean arrival)
-	drag := parameter.MissileSeekerDrag
-	if dist < parameter.MissileSeekerArrivalRadius && parameter.MissileSeekerArrivalRadius > 0 {
-		proximityFactor := vmath.Scale - vmath.Div(dist, parameter.MissileSeekerArrivalRadius)
-		drag += vmath.Mul(drag*2, proximityFactor) // Up to 3x drag at impact
-	}
+	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
+	lastSafeX, lastSafeY := fromGridX, fromGridY
 
-	speed := vmath.Magnitude(k.VelX, k.VelY)
-	if speed > 0 {
-		dragScale := vmath.Mul(drag, dt)
-		if dragScale > vmath.Scale {
-			dragScale = vmath.Scale
+	for traverser.Next() {
+		currX, currY := traverser.Pos()
+
+		// Skip starting cell
+		if currX == fromGridX && currY == fromGridY {
+			continue
 		}
-		retain := vmath.Scale - dragScale
-		k.VelX = vmath.Mul(k.VelX, retain)
-		k.VelY = vmath.Mul(k.VelY, retain)
+
+		// Wall collision
+		if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockKinetic) {
+			return lastSafeX, lastSafeY, impactWall
+		}
+
+		// Enemy collision (parent only)
+		if checkEnemies && s.hasCombatEntityAt(currX, currY) {
+			return currX, currY, impactEnemy
+		}
+
+		lastSafeX, lastSafeY = currX, currY
 	}
 
-	// Speed cap
-	speed = vmath.Magnitude(k.VelX, k.VelY)
-	if speed > parameter.MissileSeekerMaxSpeed {
-		scale := vmath.Div(parameter.MissileSeekerMaxSpeed, speed)
-		k.VelX = vmath.Mul(k.VelX, scale)
-		k.VelY = vmath.Mul(k.VelY, scale)
+	return 0, 0, impactNone
+}
+
+// hasCombatEntityAt checks for drain or composite combat member at position
+func (s *MissileSystem) hasCombatEntityAt(x, y int) bool {
+	entities := s.world.Positions.GetAllEntityAt(x, y)
+	for _, e := range entities {
+		if s.world.Components.Drain.HasEntity(e) {
+			return true
+		}
+		if memberComp, ok := s.world.Components.Member.GetComponent(e); ok {
+			if headerComp, ok := s.world.Components.Header.GetComponent(memberComp.HeaderEntity); ok {
+				switch headerComp.Behavior {
+				case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
+					return true
+				}
+			}
+		}
 	}
-
-	// Integrate
-	k.PreciseX += vmath.Mul(k.VelX, dt)
-	k.PreciseY += vmath.Mul(k.VelY, dt)
-
 	return false
 }
 
@@ -239,6 +339,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
 			return x, y, true
 		}
+		m.HitEntity = 0 // Clear stale reference
 	}
 
 	// Secondary: target entity (header for composites)
@@ -247,6 +348,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
 			return x, y, true
 		}
+		m.TargetEntity = 0 // Clear stale reference
 	}
 
 	// Retarget: nearest enemy
@@ -267,13 +369,13 @@ func (s *MissileSystem) findNearestEnemy(fromX, fromY int64) core.Entity {
 	var best core.Entity
 	var bestDistSq int64 = -1
 
-	for _, e := range s.world.Components.Combat.GetAllEntities() {
-		combat, ok := s.world.Components.Combat.GetComponent(e)
-		if !ok || combat.CombatEntityType == component.CombatEntityCursor {
+	for _, combatEntity := range s.world.Components.Combat.GetAllEntities() {
+		combatComp, ok := s.world.Components.Combat.GetComponent(combatEntity)
+		if !ok || combatComp.CombatEntityType == component.CombatEntityCursor {
 			continue
 		}
 
-		pos, ok := s.world.Positions.GetPosition(e)
+		pos, ok := s.world.Positions.GetPosition(combatEntity)
 		if !ok {
 			continue
 		}
@@ -283,7 +385,7 @@ func (s *MissileSystem) findNearestEnemy(fromX, fromY int64) core.Entity {
 
 		if bestDistSq < 0 || distSq < bestDistSq {
 			bestDistSq = distSq
-			best = e
+			best = combatEntity
 		}
 	}
 
@@ -421,10 +523,10 @@ func (s *MissileSystem) pushTrail(m *component.MissileComponent, x, y int64) {
 	}
 }
 
-func (s *MissileSystem) ageTrail(m *component.MissileComponent) {
+func (s *MissileSystem) ageTrail(m *component.MissileComponent, dt time.Duration) {
 	for i := 0; i < m.TrailLen; i++ {
 		idx := (m.TrailHead - m.TrailLen + i + component.TrailCapacity) % component.TrailCapacity
-		m.Trail[idx].Age++
+		m.Trail[idx].Age += dt
 	}
 }
 

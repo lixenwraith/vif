@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -100,7 +102,7 @@ func (r *MissileRenderer) drawStepLine(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
 	x1, y1, x2, y2 int64,
-	age, maxAge int,
+	age, maxAge time.Duration,
 	startCol, endCol terminal.RGB,
 ) {
 	tFactor := float64(age) / float64(maxAge)

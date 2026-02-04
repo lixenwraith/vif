@@ -466,9 +466,9 @@ func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 	return MotionResult{
 		StartX: x, StartY: y,
-		EndX: x, EndY: 0,
+		EndX: x, EndY: endY,
 		Type: RangeLine, Style: StyleInclusive,
-		Valid: y != 0,
+		Valid: y != endY,
 	}
 }
 
@@ -481,7 +481,7 @@ func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, rightX, botY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			rightX, botY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, true,
+			engine.PatternCardinalFirst, 1, 20, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -508,7 +508,7 @@ func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
 		// TODO: arbitrary 20 max radius to be put in parameters
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			midX, midY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, true,
+			engine.PatternCardinalFirst, 1, 20, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {
@@ -533,7 +533,7 @@ func MotionOrigin(ctx *engine.GameContext, x, y, count int) MotionResult {
 	if isCursorBlocked(ctx, originX, originY) {
 		newX, newY, found := ctx.World.Positions.FindFreeFromPattern(
 			originX, originY, 1, 1,
-			engine.PatternCardinalFirst, 1, 20, true,
+			engine.PatternCardinalFirst, 1, 20, false,
 			component.WallBlockCursor, nil,
 		)
 		if found {

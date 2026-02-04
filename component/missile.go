@@ -2,6 +2,8 @@
 package component
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
@@ -27,8 +29,8 @@ const TrailCapacity = 24
 
 // MissileTrailPoint stores position snapshot for trail rendering
 type MissileTrailPoint struct {
-	X, Y int64 // Q32.32 precise position
-	Age  int   // Frames since creation
+	X, Y int64         // Q32.32 precise position
+	Age  time.Duration // Time since creation
 }
 
 // MissileComponent holds missile entity state (pure data)
@@ -42,8 +44,9 @@ type MissileComponent struct {
 	TargetEntity core.Entity // Header for composite, entity for single
 	HitEntity    core.Entity // Specific member to hit (same as Target for non-composite)
 
-	// Physics state
-	Age int // Frames since spawn
+	// Timing
+	Lifetime      time.Duration // Time since spawn
+	LastTrailEmit time.Duration // Lifetime at last trail emission
 
 	// Parent-specific
 	ChildCount  int           // Number of children to spawn (heat/10)
@@ -53,5 +56,5 @@ type MissileComponent struct {
 	// Trail ring buffer
 	Trail     [TrailCapacity]MissileTrailPoint
 	TrailHead int // Next write index
-	TrailLen  int // Current valid entries (0..TrailCapacity)
+	TrailLen  int // Current valid entries (0..TrailCapacity))
 }
