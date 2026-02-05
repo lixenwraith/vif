@@ -72,6 +72,8 @@ func (m *Machine) Process(ev terminal.Event) *Intent {
 		return &Intent{Type: IntentResize}
 	case terminal.EventKey:
 		return m.processKey(ev)
+	case terminal.EventMouse:
+		return m.processMouse(ev)
 	case terminal.EventClosed, terminal.EventError:
 		return &Intent{Type: IntentQuit}
 	}
@@ -90,6 +92,23 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 		return m.processCommand(ev)
 	case ModeOverlay:
 		return m.processOverlay(ev)
+	}
+	return nil
+}
+
+func (m *Machine) processMouse(ev terminal.Event) *Intent {
+	// Only handle left-click press in Normal/Visual/Insert modes
+	if ev.MouseBtn != terminal.MouseBtnLeft || ev.MouseAction != terminal.MouseActionPress {
+		return nil
+	}
+
+	switch m.mode {
+	case ModeNormal, ModeVisual, ModeInsert:
+		return &Intent{
+			Type:  IntentMouseClick,
+			Count: ev.MouseX,       // Repurpose Count for X
+			Char:  rune(ev.MouseY), // Repurpose Char for Y (terminal coords)
+		}
 	}
 	return nil
 }

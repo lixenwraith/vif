@@ -52,6 +52,11 @@ func (s *TerminalService) Init(args ...any) error {
 		return fmt.Errorf("terminal init: %w", err)
 	}
 
+	// Enable mouse click reporting
+	if err := s.term.SetMouseMode(MouseModeClick); err != nil {
+		// No-op for mouse error, continue
+	}
+
 	return nil
 }
 

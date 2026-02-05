@@ -61,6 +61,9 @@ const (
 	IntentOverlayClose    // ESC/q
 	IntentOverlayPageUp   // PgUp
 	IntentOverlayPageDown // PgDn
+
+	// Mouse
+	IntentMouseClick // Left-click to move cursor
 )
 
 // MotionOp identifies motion algorithm

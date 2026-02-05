@@ -213,6 +213,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleOverlayPageScroll(1)
 	case input.IntentOverlayClose:
 		return r.handleOverlayClose()
+
+	// Mouse
+	case input.IntentMouseClick:
+		return r.handleMouseClick(intent)
 	}
 
 	return true
@@ -843,6 +847,38 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 	}
 
 	r.ctx.SetOverlayScroll(newScroll)
+	return true
+}
+
+// --- Mouse ---
+
+func (r *Router) handleMouseClick(intent *input.Intent) bool {
+	// intent.Count = terminal X, intent.Char = terminal Y
+	termX := intent.Count
+	termY := int(intent.Char)
+
+	// Convert terminal coords to game coords
+	gameX := termX - r.ctx.GameXOffset
+	gameY := termY - r.ctx.GameYOffset
+
+	// Bounds check
+	config := r.ctx.World.Resources.Config
+	if gameX < 0 || gameX >= config.GameWidth || gameY < 0 || gameY >= config.GameHeight {
+		return true
+	}
+
+	// Block check
+	if isCursorBlocked(r.ctx, gameX, gameY) {
+		return true
+	}
+
+	// Move cursor
+	r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
+		X: gameX,
+		Y: gameY,
+	})
+	r.ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: gameX, Y: gameY})
+
 	return true
 }
 
