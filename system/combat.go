@@ -243,6 +243,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, combatProfile.CollisionProfile)
+			targetCombatComp.RemainingKineticImmunity = combatProfile.CollisionProfile.ImmunityDuration
 		}
 	}
 
@@ -331,10 +332,22 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if combatProfile.EffectMask&component.CombatEffectKinetic != 0 {
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			s.applyAreaKnockback(payload, combatProfile.CollisionProfile)
+			targetCombatComp.RemainingKineticImmunity = combatProfile.CollisionProfile.ImmunityDuration
 		}
 	}
 
-	// TODO: chain attack and other effects switch
+	// Chain attack for area attacks - emit per hit entity as direct attacks
+	if chainAttack := combatProfile.ChainAttack; chainAttack != nil {
+		for _, hitEntity := range payload.HitEntities {
+			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+				AttackType:   chainAttack.AttackType,
+				OwnerEntity:  payload.OwnerEntity,
+				OriginEntity: payload.OwnerEntity,
+				TargetEntity: payload.TargetEntity,
+				HitEntity:    hitEntity,
+			})
+		}
+	}
 
 	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 }

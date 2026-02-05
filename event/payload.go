@@ -364,6 +364,13 @@ type LightningUpdatePayload struct {
 	TargetY int         `toml:"target_y"`
 }
 
+// LightningDespawnPayload specifies lightning removal criteria
+// Owner is required; TargetEntity=0 removes all lightning from owner
+type LightningDespawnPayload struct {
+	Owner        core.Entity `toml:"owner"`
+	TargetEntity core.Entity `toml:"target_entity"` // 0 = all from owner
+}
+
 // ExplosionType differentiates visual and behavioral explosion variants
 type ExplosionType uint8
 

@@ -114,8 +114,3 @@ const (
 	// MissileImpactRadiusFloat is hit detection threshold (cells)
 	MissileImpactRadiusFloat = 1.5
 )
-
-// Knockback
-const (
-	CombatKnockbackImmunityInterval = 250 * time.Millisecond
-)

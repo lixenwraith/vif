@@ -872,35 +872,35 @@ func (s *SwarmSystem) checkDrainAbsorption(
 		}
 
 		entities := s.world.Positions.GetAllEntityAt(memberPos.X, memberPos.Y)
-		for _, e := range entities {
-			if e == 0 || e == member.Entity || e == headerEntity {
+		for _, entity := range entities {
+			if entity == 0 || entity == member.Entity || entity == headerEntity {
 				continue
 			}
 
 			// Check if it's a drain
-			drainComp, ok := s.world.Components.Drain.GetComponent(e)
+			drainComp, ok := s.world.Components.Drain.GetComponent(entity)
 			if !ok {
 				continue
 			}
 			_ = drainComp // Used for type check
 
 			// Get drain HP before destruction
-			drainCombat, ok := s.world.Components.Combat.GetComponent(e)
+			drainCombatComp, ok := s.world.Components.Combat.GetComponent(entity)
 			hpAbsorbed := 0
 			if ok {
-				hpAbsorbed = drainCombat.HitPoints
+				hpAbsorbed = drainCombatComp.HitPoints
 			}
 
 			// Absorb: add HP to swarm (no cap - overheal allowed)
 			combatComp.HitPoints += hpAbsorbed
 
 			// Destroy drain silently
-			event.EmitDeathOne(s.world.Resources.Event.Queue, e, 0)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 
 			// Emit absorption event
 			s.world.PushEvent(event.EventSwarmAbsorbedDrain, &event.SwarmAbsorbedDrainPayload{
 				SwarmEntity: headerEntity,
-				DrainEntity: e,
+				DrainEntity: entity,
 				HPAbsorbed:  hpAbsorbed,
 			})
 		}

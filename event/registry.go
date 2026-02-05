@@ -138,6 +138,7 @@ func InitRegistry() {
 	// Buff
 	RegisterType("EventBuffAddRequest", EventBuffAddRequest, &BuffAddRequestPayload{})
 	RegisterType("EventBuffFireRequest", EventBuffFireRequest, nil)
+	RegisterType("EventBuffFireMainRequest", EventBuffFireMainRequest, nil)
 
 	// Heat
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
@@ -225,20 +226,38 @@ func InitRegistry() {
 	// Lightning
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
-	// TODO: this needs to have some payload, currently designed for all
-	RegisterType("EventLightningDespawn", EventLightningDespawn, nil)
+	RegisterType("EventLightningDespawn", EventLightningDespawn, &LightningDespawnPayload{})
 
 	// Combat
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
 
+	// Missile
+	RegisterType("EventMissileSpawnRequest", EventMissileSpawnRequest, &MissileSpawnRequestPayload{})
+
 	// Marker
 	RegisterType("EventMarkerSpawnRequest", EventMarkerSpawnRequest, &MarkerSpawnRequestPayload{})
 
-	// Motion Marker (add new section)
+	// Motion Marker
 	RegisterType("EventMotionMarkerShowColored", EventMotionMarkerShowColored, &MotionMarkerShowPayload{})
 	RegisterType("EventMotionMarkerClearColored", EventMotionMarkerClearColored, nil)
 
 	// Mode
 	RegisterType("EventModeChangeNotification", EventModeChangeNotification, &ModeChangeNotificationPayload{})
+
+	// Wall
+	RegisterType("EventWallSpawnRequest", EventWallSpawnRequest, &WallSpawnRequestPayload{})
+	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest, &WallCompositeSpawnRequestPayload{})
+	RegisterType("EventWallDespawnRequest", EventWallDespawnRequest, &WallDespawnRequestPayload{})
+	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
+	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)
+	RegisterType("EventWallSpawned", EventWallSpawned, &WallSpawnedPayload{})
+
+	// Fadeout
+	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne, &FadeoutSpawnPayload{})
+	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch, &FadeoutSpawnBatchPayload{})
+
+	// Composite Integrity
+	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
+	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
 }

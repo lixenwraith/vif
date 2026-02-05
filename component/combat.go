@@ -171,7 +171,7 @@ var CombatAttackLightningToDrain = CombatAttackProfile{
 var CombatAttackLightningToQuasar = CombatAttackProfile{
 	AttackType:         CombatAttackLightning,
 	AttackerEntityType: CombatEntityCursor,
-	DefenderEntityType: CombatEntityDrain,
+	DefenderEntityType: CombatEntityQuasar,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageRod,
 	EffectMask:         CombatEffectVampireDrain,

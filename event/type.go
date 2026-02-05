@@ -418,9 +418,9 @@ const (
 	// Consumer: LightningSystem | Payload: *LightningUpdatePayload
 	EventLightningUpdate
 
-	// EventLightningDespawn signals force-removal of specific lightning entity
-	// Trigger: QuasarSystem (zap ends)
-	// Consumer: LightningSystem | Payload: core.Entity
+	// EventLightningDespawn signals force-removal of lightning entity(ies)
+	// Trigger: QuasarSystem (zap ends), future use
+	// Consumer: LightningSystem | Payload: *LightningDespawnPayload
 	EventLightningDespawn
 
 	// EventFireSpecialRequest signals player intent to fire special ability
@@ -527,13 +527,6 @@ const (
 	// Trigger: BuffSystem on launcher fire
 	// Consumer: MissileSystem | Payload: *MissileSpawnRequestPayload
 	EventMissileSpawnRequest
-
-	// TODO: missile impact is not yet wired
-
-	// EventMissileImpact signals missile reached target
-	// Trigger: MissileSystem on impact detection
-	// Consumer: CombatSystem, ExplosionSystem (future) | Payload: *MissileImpactPayload
-	EventMissileImpact
 
 	// EventWallSpawnRequest requests creation of a single wall cell
 	// Trigger: FSM, debug commands, external systems

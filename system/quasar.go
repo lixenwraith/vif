@@ -655,7 +655,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 
 // stopZapping despawns lightning
 func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	s.world.PushEvent(event.EventLightningDespawn, headerEntity)
+	s.world.PushEvent(event.EventLightningDespawn, &event.LightningDespawnPayload{Owner: headerEntity})
 
 	quasarComp.IsZapping = false
 	quasarComp.IsShielded = false // Clear shield

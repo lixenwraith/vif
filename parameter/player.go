@@ -2,6 +2,8 @@ package parameter
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // Shield Defense Costs
@@ -48,9 +50,6 @@ const (
 
 // Cleaner Entity
 const (
-	// CleanerChar is the character used to render the cleaner block
-	CleanerChar = '█'
-
 	// CleanerBaseHorizontalSpeed
 	CleanerBaseHorizontalSpeedFloat = 80.0
 	// CleanerBaseVerticalSpeed
@@ -58,4 +57,9 @@ const (
 
 	// CleanerTrailLength is the number of previous positions tracked for the fade trail effect
 	CleanerTrailLength = 10
+)
+
+var (
+	// CleanerChar is the character used to render the cleaner block
+	CleanerChar = visual.QuadrantChars[15]
 )

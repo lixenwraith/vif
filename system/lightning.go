@@ -126,8 +126,8 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventLightningDespawn:
-		if owner, ok := ev.Payload.(core.Entity); ok {
-			s.despawnLightning(owner)
+		if p, ok := ev.Payload.(*event.LightningDespawnPayload); ok {
+			s.despawnLightning(p.Owner, p.TargetEntity)
 		}
 	}
 }
@@ -179,15 +179,19 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 	}
 }
 
-func (s *LightningSystem) despawnLightning(owner core.Entity) {
-	// Find and destroy all lightning owned by this entity
-	for _, e := range s.world.Components.Lightning.GetAllEntities() {
-		lc, ok := s.world.Components.Lightning.GetComponent(e)
-		if !ok || lc.Owner != owner {
+// despawnLightning removes lightning matching criteria
+// target=0 removes all lightning from owner, otherwise only matching target
+func (s *LightningSystem) despawnLightning(owner, target core.Entity) {
+	for _, lightningEntity := range s.world.Components.Lightning.GetAllEntities() {
+		lightningComp, ok := s.world.Components.Lightning.GetComponent(lightningEntity)
+		if !ok || lightningComp.Owner != owner {
 			continue
 		}
-		s.world.Components.Lightning.RemoveEntity(e)
-		s.world.DestroyEntity(e)
+		if target != 0 && lightningComp.TargetEntity != target {
+			continue
+		}
+		s.world.Components.Lightning.RemoveEntity(lightningEntity)
+		s.world.DestroyEntity(lightningEntity)
 	}
 }
 
