@@ -17,13 +17,18 @@ import (
 type CompositeSystem struct {
 	world *engine.World
 
+	// TODO: typed -> expected
+	// Track expected deaths per header to distinguish typed from external
+	expectedDeaths map[core.Entity]int
+
 	enabled bool
 }
 
 // NewCompositeSystem creates a new composite system
 func NewCompositeSystem(world *engine.World) engine.System {
 	s := &CompositeSystem{
-		world: world,
+		world:          world,
+		expectedDeaths: make(map[core.Entity]int),
 	}
 	s.Init()
 	return s
@@ -31,6 +36,7 @@ func NewCompositeSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CompositeSystem) Init() {
+	clear(s.expectedDeaths)
 	s.enabled = true
 }
 
@@ -46,6 +52,7 @@ func (s *CompositeSystem) Priority() int {
 func (s *CompositeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMemberTyped,
+		event.EventCompositeDestroyRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -69,20 +76,20 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if ev.Type != event.EventMemberTyped {
-		return
+	switch ev.Type {
+	case event.EventMemberTyped:
+		if payload, ok := ev.Payload.(*event.MemberTypedPayload); ok {
+			s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
+			// Track as expected death (typing, not external)
+			s.expectedDeaths[payload.HeaderEntity]++
+			event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0)
+		}
+
+	case event.EventCompositeDestroyRequest:
+		if payload, ok := ev.Payload.(*event.CompositeDestroyRequestPayload); ok {
+			s.destroyComposite(payload.HeaderEntity, payload.Effect)
+		}
 	}
-
-	payload, ok := ev.Payload.(*event.MemberTypedPayload)
-	if !ok {
-		return
-	}
-
-	// 1. Mark tombstone immediately (Single Authority)
-	s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
-
-	// 2. Request death for the member entity
-	event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0)
 }
 
 func (s *CompositeSystem) Update() {
@@ -114,24 +121,93 @@ func (s *CompositeSystem) Update() {
 		// 	s.world.Positions.SetPosition(headerEntity, headerPos)
 		// }
 
-		// 3. Propagate offsets to members + liveness validation
+		// Count living members before sync
+		countBefore := s.countLiving(&headerComp)
+
+		// Sync: validate liveness, propagate positions, tombstone dead
 		s.syncMembers(&headerComp, headerPos.X, headerPos.Y)
 
-		// 4. Compact if dirty
+		// Compact tombstones
 		if headerComp.Dirty {
 			s.compactMembers(&headerComp)
 			headerComp.Dirty = false
 		}
 
-		// 5. Check composite lifecycle
-		if len(headerComp.MemberEntries) == 0 {
-			s.handleEmptyComposite(headerEntity, &headerComp)
+		// Calculate external deaths
+		countAfter := len(headerComp.MemberEntries)
+		totalDeaths := countBefore - countAfter
+		expectedDeaths := s.expectedDeaths[headerEntity]
+		externalDeaths := totalDeaths - expectedDeaths
+
+		// Emit integrity breach if external deaths detected
+		if externalDeaths > 0 {
+			s.world.PushEvent(event.EventCompositeIntegrityBreach, &event.CompositeIntegrityBreachPayload{
+				HeaderEntity:   headerEntity,
+				Behavior:       headerComp.Behavior,
+				LostCount:      externalDeaths,
+				RemainingCount: countAfter,
+			})
+		}
+
+		// Check if composite still exists after potential destruction from event handling
+		if !s.world.Components.Header.HasEntity(headerEntity) {
 			continue
 		}
 
-		// Write back headerComp
+		// Empty composite cleanup (all members gone, no owner claimed it)
+		if len(headerComp.MemberEntries) == 0 {
+			s.destroyHead(headerEntity)
+			continue
+		}
+
 		s.world.Components.Header.SetComponent(headerEntity, headerComp)
 	}
+
+	// Clear per-tick expected death tracking
+	clear(s.expectedDeaths)
+}
+
+func (s *CompositeSystem) countLiving(header *component.HeaderComponent) int {
+	count := 0
+	for _, m := range header.MemberEntries {
+		if m.Entity != 0 {
+			count++
+		}
+	}
+	return count
+}
+
+// destroyComposite handles centralized composite destruction via death system
+func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect event.EventType) {
+	header, ok := s.world.Components.Header.GetComponent(headerEntity)
+	if !ok {
+		return
+	}
+
+	// Collect living members
+	var members []core.Entity
+	for _, m := range header.MemberEntries {
+		if m.Entity != 0 {
+			s.world.Components.Member.RemoveEntity(m.Entity)
+			members = append(members, m.Entity)
+		}
+	}
+
+	// Route members through death system
+	if len(members) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, effect, members)
+	}
+
+	// Destroy phantom head
+	s.destroyHead(headerEntity)
+}
+
+// destroyHead removes protection and destroys phantom head directly
+func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
+	s.world.Components.Protection.RemoveEntity(headerEntity)
+	s.world.Components.Header.RemoveEntity(headerEntity)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, headerEntity, 0)
+	delete(s.expectedDeaths, headerEntity)
 }
 
 // markMemberTombstone internal helper for authoritative state update
@@ -218,13 +294,6 @@ func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerC
 	default:
 		s.destroyHead(headerEntity)
 	}
-}
-
-// destroyHead removes protection and destroys the phantom head
-func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	s.world.DestroyEntity(headerEntity)
 }
 
 // CreateHeader spawns an invisible head entity, returns phantom head entity

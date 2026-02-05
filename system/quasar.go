@@ -78,6 +78,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventQuasarSpawnRequest,
 		event.EventQuasarCancelRequest,
+		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -112,6 +113,13 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventQuasarCancelRequest:
 		s.terminateQuasar()
+
+	case event.EventCompositeIntegrityBreach:
+		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
+			if payload.HeaderEntity == s.headerEntity {
+				s.terminateQuasar()
+			}
+		}
 	}
 }
 
@@ -717,34 +725,26 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 			y := topLeftY + row
 
 			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, e := range entities {
-				if e == 0 || e == cursorEntity || memberSet[e] {
+			for _, entity := range entities {
+				if entity == 0 || entity == cursorEntity || memberSet[entity] {
 					continue
 				}
 
 				// Check protection
-				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask == component.ProtectAll || prot.Mask.Has(component.ProtectFromDrain) {
+				if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+					if protComp.Mask == component.ProtectAll || protComp.Mask.Has(component.ProtectFromDrain) {
 						continue
 					}
 				}
 
 				// Handle nugget collision
-				if s.world.Components.Nugget.HasEntity(e) {
+				if s.world.Components.Nugget.HasEntity(entity) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
-						Entity: e,
+						Entity: entity,
 					})
 				}
 
-				// Handle gold composite collision
-				if member, ok := s.world.Components.Member.GetComponent(e); ok {
-					if h, hOk := s.world.Components.Header.GetComponent(member.HeaderEntity); hOk && h.Behavior == component.BehaviorGold {
-						s.destroyGoldComposite(member.HeaderEntity)
-						continue
-					}
-				}
-
-				toDestroy = append(toDestroy, e)
+				toDestroy = append(toDestroy, entity)
 			}
 		}
 	}
@@ -752,36 +752,6 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	if len(toDestroy) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, toDestroy)
 	}
-}
-
-// destroyGoldComposite handles gold sequence destruction by quasar
-func (s *QuasarSystem) destroyGoldComposite(headerEntity core.Entity) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		HeaderEntity: headerEntity,
-	})
-
-	// Destroy all members
-	var toDestroy []core.Entity
-	for _, m := range headerComp.MemberEntries {
-		if m.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(m.Entity)
-			toDestroy = append(toDestroy, m.Entity)
-		}
-	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
-	}
-
-	// Destroy phantom head
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	s.world.DestroyEntity(headerEntity)
 }
 
 // handleInteractions processes shield drain and cursor collision

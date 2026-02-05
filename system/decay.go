@@ -238,8 +238,8 @@ func (s *DecaySystem) updateDecayEntities() {
 
 				// Mutual destruction: decay + blossom annihilate
 				if s.world.Components.Blossom.HasEntity(target) {
-					s.world.DestroyEntity(target)
-					s.world.DestroyEntity(entity)
+					event.EmitDeathOne(s.world.Resources.Event.Queue, target, 0)
+					event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 					break
 				}
 
@@ -260,7 +260,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		})
 
 		if destroyEntity {
-			s.world.DestroyEntity(entity)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 			continue
 		}
 

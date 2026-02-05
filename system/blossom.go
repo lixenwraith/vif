@@ -240,10 +240,12 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				// Logic: Blossom vs Decay collision
 				if s.world.Components.Decay.HasEntity(target) {
 					s.world.DestroyEntity(target)
+					event.EmitDeathOne(s.world.Resources.Event.Queue, target, 0)
 					destroyBlossom = true
 					continue
 				}
 
+				// TODO: change it so only checks if glyph of red/green/blue and continue on the rest instead of reverse filtering
 				// Logic: Passthrough checks
 				if s.world.Components.Nugget.HasEntity(target) {
 					continue
@@ -267,7 +269,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		})
 
 		if destroyBlossom {
-			s.world.DestroyEntity(entity)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 			continue
 		}
 

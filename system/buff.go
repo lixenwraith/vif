@@ -18,9 +18,6 @@ import (
 type BuffSystem struct {
 	world *engine.World
 
-	// Runtime state
-	active bool
-
 	// Telemetry
 	statRod      *atomic.Bool
 	statRodFired *atomic.Int64
@@ -202,22 +199,13 @@ func (s *BuffSystem) removeAllBuffs() {
 	if !ok {
 		return
 	}
-
-	// Destroy all orb entities
-	for _, orbEntity := range buffComp.Orbs {
-		if orbEntity != 0 {
-			s.world.Components.Orb.RemoveEntity(orbEntity)
-			s.world.Components.Kinetic.RemoveEntity(orbEntity)
-			s.world.Components.Sigil.RemoveEntity(orbEntity)
-			s.world.Positions.RemoveEntity(orbEntity)
-			s.world.DestroyEntity(orbEntity)
-		}
-	}
-
 	clear(buffComp.Active)
 	clear(buffComp.Cooldown)
 	clear(buffComp.Orbs)
 	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+
+	s.destroyAllOrbs()
+
 	s.statRod.Store(false)
 	s.statLauncher.Store(false)
 	s.statChain.Store(false)
@@ -498,12 +486,7 @@ func (s *BuffSystem) destroyOrb(orbEntity core.Entity) {
 		}
 	}
 
-	s.world.Components.Orb.RemoveEntity(orbEntity)
-	s.world.Components.Kinetic.RemoveEntity(orbEntity)
-	s.world.Components.Sigil.RemoveEntity(orbEntity)
-	s.world.Components.Protection.RemoveEntity(orbEntity)
-	s.world.Positions.RemoveEntity(orbEntity)
-	s.world.DestroyEntity(orbEntity)
+	event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
 }
 
 func (s *BuffSystem) destroyAllOrbs() {

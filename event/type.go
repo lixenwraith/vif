@@ -574,6 +574,16 @@ const (
 	// Trigger: WallSystem on bulk despawn operations
 	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnBatchPayload
 	EventFadeoutSpawnBatch
+
+	// EventCompositeIntegrityBreach signals unexpected member loss (OOB, enemy hit, etc.)
+	// Trigger: CompositeSystem on detecting external member destruction
+	// Consumer: GoldSystem, SwarmSystem, QuasarSystem | Payload: *CompositeIntegrityBreachPayload
+	EventCompositeIntegrityBreach
+
+	// EventCompositeDestroyRequest signals owner system requests full composite destruction
+	// Trigger: Owner systems (Gold, Swarm, Quasar) on lifecycle end, FSM
+	// Consumer: CompositeSystem | Payload: *CompositeDestroyRequestPayload
+	EventCompositeDestroyRequest
 )
 
 // GameEvent represents a single game event with metadata

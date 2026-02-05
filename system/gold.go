@@ -76,6 +76,7 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventGoldCancel,
 		event.EventGoldJumpRequest,
 		event.EventMemberTyped,
+		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -102,37 +103,32 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventGoldCancel:
-		s.destroyCurrentGold()
+		s.cancelGold()
 
 	case event.EventGoldJumpRequest:
 		s.handleJumpRequest()
 
 	case event.EventGoldSpawnRequest:
-		enabled := s.spawnEnabled
-		active := s.active
-
-		if !enabled || active {
+		if !s.spawnEnabled || s.active {
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 			return
 		}
-
-		if s.spawnGold() {
-			// EventGoldSpawned emitted inside spawnGold
-		} else {
+		if !s.spawnGold() {
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 		}
 
 	case event.EventMemberTyped:
-		payload, ok := ev.Payload.(*event.MemberTypedPayload)
-		if !ok {
-			return
+		if payload, ok := ev.Payload.(*event.MemberTypedPayload); ok {
+			if payload.HeaderEntity == s.headerEntity && payload.RemainingCount == 0 {
+				s.handleGoldComplete()
+			}
 		}
 
-		isGoldAnchor := payload.HeaderEntity == s.headerEntity
-
-		if isGoldAnchor {
-			if payload.RemainingCount == 0 {
-				s.handleGoldComplete()
+	case event.EventCompositeIntegrityBreach:
+		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
+			if payload.HeaderEntity == s.headerEntity {
+				// Gold: any external member loss = full destruction
+				s.handleGoldDestroyed()
 			}
 		}
 	}
@@ -146,14 +142,9 @@ func (s *GoldSystem) Update() {
 
 	now := s.world.Resources.Time.GameTime
 
-	active := s.active
-	timeoutTime := s.timeoutTime
-	headerEntity := s.headerEntity
-
-	// Publish metrics
-	s.statActive.Store(active)
-	if active {
-		remaining := timeoutTime.Sub(now)
+	s.statActive.Store(s.active)
+	if s.active {
+		remaining := s.timeoutTime.Sub(now)
 		if remaining < 0 {
 			remaining = 0
 		}
@@ -161,23 +152,11 @@ func (s *GoldSystem) Update() {
 		s.stateHeaderEntity.Store(int64(s.headerEntity))
 	} else {
 		s.statTimer.Store(0)
-	}
-
-	if !active {
 		return
 	}
 
-	// Check if composite still exists (external destruction detection)
-	if headerEntity != 0 {
-		header, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok || s.countLivingMembers(&header) == 0 {
-			s.handleGoldDestroyed()
-			return
-		}
-	}
-
-	// Timeout check
-	if now.After(timeoutTime) {
+	// Timeout check only - integrity handled via event
+	if now.After(s.timeoutTime) {
 		s.handleGoldTimeout()
 	}
 }
@@ -374,6 +353,10 @@ func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
 
 // handleGoldComplete processes successful gold sequence completion
 func (s *GoldSystem) handleGoldComplete() {
+	if !s.active {
+		return
+	}
+
 	headerEntity := s.headerEntity
 
 	// Emit completion event, FSM is the reward authority
@@ -386,41 +369,41 @@ func (s *GoldSystem) handleGoldComplete() {
 		s.world.Resources.Audio.Player.Play(core.SoundCoin)
 	}
 
-	// Destroy composite
-	s.destroyComposite(headerEntity)
+	// Silent destruction - members already dead from typing
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: headerEntity,
+		Effect:       0,
+	})
 
-	s.active = false
-	s.headerEntity = 0
-	s.startTime = time.Time{}
-	s.timeoutTime = time.Time{}
-
-	s.statActive.Store(false)
-	s.statTimer.Store(0)
-	s.stateHeaderEntity.Store(0)
+	s.clearState()
 }
 
 // handleGoldTimeout processes gold sequence expiration
 func (s *GoldSystem) handleGoldTimeout() {
+	if !s.active {
+		return
+	}
+
 	headerEntity := s.headerEntity
 
 	s.world.PushEvent(event.EventGoldTimeout, &event.GoldCompletionPayload{
 		HeaderEntity: headerEntity,
 	})
 
-	s.destroyComposite(headerEntity)
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: headerEntity,
+		Effect:       0,
+	})
 
-	s.active = false
-	s.headerEntity = 0
-	s.startTime = time.Time{}
-	s.timeoutTime = time.Time{}
-
-	s.statActive.Store(false)
-	s.statTimer.Store(0)
-	s.stateHeaderEntity.Store(0)
+	s.clearState()
 }
 
 // handleGoldDestroyed processes external gold destruction
 func (s *GoldSystem) handleGoldDestroyed() {
+	if !s.active {
+		return
+	}
+
 	headerEntity := s.headerEntity
 
 	// Emit event for FSM
@@ -428,65 +411,38 @@ func (s *GoldSystem) handleGoldDestroyed() {
 		HeaderEntity: headerEntity,
 	})
 
-	if headerEntity != 0 {
-		s.destroyComposite(headerEntity)
+	// Request centralized destruction with flash effect
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: headerEntity,
+		Effect:       event.EventFlashRequest,
+	})
+
+	s.clearState()
+}
+
+// cancelGold handles explicit cancellation
+func (s *GoldSystem) cancelGold() {
+	if !s.active || s.headerEntity == 0 {
+		return
 	}
 
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: s.headerEntity,
+		Effect:       0,
+	})
+
+	s.clearState()
+}
+
+// clearState resets gold tracking
+func (s *GoldSystem) clearState() {
 	s.active = false
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
-
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
 	s.stateHeaderEntity.Store(0)
-}
-
-// destroyCurrentGold destroys the current gold if active
-func (s *GoldSystem) destroyCurrentGold() {
-	headerEntity := s.headerEntity
-	active := s.active
-
-	if active && headerEntity != 0 {
-		s.destroyComposite(headerEntity)
-	}
-}
-
-// destroyComposite removes phantom head and all members
-func (s *GoldSystem) destroyComposite(headerEntity core.Entity) {
-	header, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Collect living members for batch death
-	var toDestroy []core.Entity
-	for _, m := range header.MemberEntries {
-		if m.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(m.Entity)
-			toDestroy = append(toDestroy, m.Entity)
-		}
-	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
-	}
-
-	// RemoveEntityAt protection and destroy phantom head
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	s.world.DestroyEntity(headerEntity)
-}
-
-// countLivingMembers returns count of non-tombstone members
-func (s *GoldSystem) countLivingMembers(header *component.HeaderComponent) int {
-	count := 0
-	for _, m := range header.MemberEntries {
-		if m.Entity != 0 {
-			count++
-		}
-	}
-	return count
 }
 
 // findValidPosition finds a valid random position for the gold sequence

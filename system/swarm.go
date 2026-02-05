@@ -79,8 +79,8 @@ func (s *SwarmSystem) Priority() int {
 func (s *SwarmSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventSwarmSpawnRequest,
-		// event.EventSwarmSpawned,
 		event.EventSwarmCancelRequest,
+		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -111,7 +111,20 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventSwarmCancelRequest:
-		s.cancelAllSwarms()
+		headerEntities := s.world.Components.Swarm.GetAllEntities()
+		for _, headerEntity := range headerEntities {
+			s.despawnSwarm(headerEntity)
+		}
+		s.statCount.Store(0)
+		s.statActive.Store(false)
+
+	case event.EventCompositeIntegrityBreach:
+		// OOB or other mechanics that have destroyed swarm member entities
+		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
+			if payload.Behavior == component.BehaviorSwarm {
+				s.despawnSwarm(payload.HeaderEntity)
+			}
+		}
 	}
 }
 
@@ -145,13 +158,13 @@ func (s *SwarmSystem) Update() {
 
 		// HP check → despawn
 		if combatComp.HitPoints <= 0 {
-			s.despawnSwarm(headerEntity, 1) // reason: HP
+			s.despawnSwarm(headerEntity)
 			continue
 		}
 
 		// Charges check → despawn
 		if swarmComp.ChargesCompleted >= parameter.SwarmMaxCharges {
-			s.despawnSwarm(headerEntity, 2) // reason: charges
+			s.despawnSwarm(headerEntity)
 			continue
 		}
 
@@ -960,47 +973,15 @@ func (s *SwarmSystem) handleCursorInteractions(
 	}
 }
 
-// despawnSwarm destroys swarm composite and emits event
-func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity, reason int) {
+// TODO: uniform names of methods among enemy entities, check if drain system needs despawn notification for genetic system
+// despawnSwarm emits events and delegates destruction to CompositeSystem
+func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
 	s.world.PushEvent(event.EventSwarmDespawned, &event.SwarmDespawnedPayload{
 		HeaderEntity: headerEntity,
-		Reason:       reason,
 	})
 
-	s.destroySwarmComposite(headerEntity)
-}
-
-// cancelAllSwarms destroys all active swarm composites
-func (s *SwarmSystem) cancelAllSwarms() {
-	headerEntities := s.world.Components.Swarm.GetAllEntities()
-	for _, headerEntity := range headerEntities {
-		s.destroySwarmComposite(headerEntity)
-	}
-	s.statCount.Store(0)
-	s.statActive.Store(false)
-}
-
-// destroySwarmComposite removes swarm entity structure
-func (s *SwarmSystem) destroySwarmComposite(headerEntity core.Entity) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Destroy all members
-	for _, m := range headerComp.MemberEntries {
-		if m.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(m.Entity)
-			s.world.DestroyEntity(m.Entity)
-		}
-	}
-
-	// RemoveEntityAt components from phantom head
-	s.world.Components.Swarm.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	s.world.Components.Combat.RemoveEntity(headerEntity)
-	s.world.Components.Kinetic.RemoveEntity(headerEntity)
-	s.world.Components.Timer.RemoveEntity(headerEntity)
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.DestroyEntity(headerEntity)
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: headerEntity,
+		Effect:       0,
+	})
 }

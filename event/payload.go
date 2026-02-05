@@ -481,7 +481,6 @@ type SwarmSpawnedPayload struct {
 // SwarmDespawnedPayload contains despawn reason
 type SwarmDespawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
-	Reason       int         `toml:"reason"` // 0=timeout, 1=hp, 2=charges
 }
 
 // SwarmAbsorbedDrainPayload contains absorption data
@@ -620,4 +619,18 @@ type FadeoutSpawnEntry struct {
 // FadeoutSpawnBatchPayload contains batch fadeout spawn data
 type FadeoutSpawnBatchPayload struct {
 	Entries []FadeoutSpawnEntry
+}
+
+// CompositeIntegrityBreachPayload notifies owner system of unexpected member loss
+type CompositeIntegrityBreachPayload struct {
+	HeaderEntity   core.Entity        `toml:"header_entity"`
+	Behavior       component.Behavior `toml:"behavior"`
+	LostCount      int                `toml:"lost_count"`
+	RemainingCount int                `toml:"remaining_count"`
+}
+
+// CompositeDestroyRequestPayload requests centralized composite destruction
+type CompositeDestroyRequestPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashRequest, etc.
 }

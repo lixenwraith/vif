@@ -1118,68 +1118,19 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		return
 	}
 
-	// Check composite membership first (handles Gold after migration)
-	if member, ok := s.world.Components.Member.GetComponent(entity); ok {
-		header, headerOk := s.world.Components.Header.GetComponent(member.HeaderEntity)
-		if headerOk && header.Behavior == component.BehaviorGold {
-			s.handleGoldCompositeCollision(member.HeaderEntity, &header)
-			return
-		}
-		// Non-gold composite member: destroy single entity
-		s.world.DestroyEntity(entity)
-		return
-	}
-
-	// Check if it's a nugget, destroy and clean up the ID
-	if s.world.Components.Nugget.HasEntity(entity) {
-		s.handleNuggetCollision(entity)
-		return
-	}
-
 	// Convert glyphs to dust
 	if s.world.Components.Glyph.HasEntity(entity) {
 		event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventDustSpawnOneRequest)
 		return
 	}
 
-	// Destroy the entity (Handles standard chars, Decay entities, etc.)
-	s.world.DestroyEntity(entity)
-}
-
-// handleGoldCompositeCollision destroys entire gold composite via anchor
-func (s *DrainSystem) handleGoldCompositeCollision(anchorEntity core.Entity, header *component.HeaderComponent) {
-	s.world.PushEvent(event.EventGoldDestroyed, &event.GoldCompletionPayload{
-		HeaderEntity: anchorEntity,
-	})
-
-	// Destroy all living members with flash
-	for _, m := range header.MemberEntries {
-		if m.Entity == 0 {
-			continue
-		}
-		if pos, ok := s.world.Positions.GetPosition(m.Entity); ok {
-			if glyph, ok := s.world.Components.Glyph.GetComponent(m.Entity); ok {
-				s.world.PushEvent(event.EventFlashRequest, &event.FlashRequestPayload{
-					X: pos.X, Y: pos.Y, Char: glyph.Rune,
-				})
-			}
-		}
-		s.world.Components.Member.RemoveEntity(m.Entity)
-		s.world.DestroyEntity(m.Entity)
+	// Check if it's a nugget, notify destruction
+	if s.world.Components.Nugget.HasEntity(entity) {
+		s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
+			Entity: entity,
+		})
 	}
 
-	// Destroy phantom head
-	s.world.Components.Protection.RemoveEntity(anchorEntity)
-	s.world.Components.Header.RemoveEntity(anchorEntity)
-	s.world.DestroyEntity(anchorEntity)
-}
-
-// handleNuggetCollision destroys the nugget entity and emits destruction event
-func (s *DrainSystem) handleNuggetCollision(entity core.Entity) {
-	s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
-		Entity: entity,
-	})
-
-	// Destroy the nugget entity
-	s.world.DestroyEntity(entity)
+	// Destroy the entity
+	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 }
