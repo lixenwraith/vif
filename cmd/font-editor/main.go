@@ -227,7 +227,7 @@ func (e *Editor) handleRuneInput(r rune) {
 	case 'G':
 		e.cursorY = GridRows - 1
 
-	// Char selection
+	// Rune selection
 	case ']':
 		if e.current < MaxChar {
 			e.current++

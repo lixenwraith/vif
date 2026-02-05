@@ -128,15 +128,15 @@ type GoldCompletionPayload struct {
 
 // SplashTimerPayload anchors countdown timer to sequence position
 type SplashTimerRequestPayload struct {
-	AnchorEntity core.Entity           `toml:"anchor_entity"`
-	Color        component.SplashColor `toml:"color"`
-	OriginX      int                   `toml:"origin_x"`
-	OriginY      int                   `toml:"origin_y"`
-	MarginLeft   int                   `toml:"margin_left"`
-	MarginRight  int                   `toml:"margin_right"`
-	MarginTop    int                   `toml:"margin_top"`
-	MarginBottom int                   `toml:"margin_bottom"`
-	Duration     time.Duration         `toml:"duration"`
+	AnchorEntity core.Entity   `toml:"anchor_entity"`
+	Color        terminal.RGB  `toml:"color"`
+	OriginX      int           `toml:"origin_x"`
+	OriginY      int           `toml:"origin_y"`
+	MarginLeft   int           `toml:"margin_left"`
+	MarginRight  int           `toml:"margin_right"`
+	MarginTop    int           `toml:"margin_top"`
+	MarginBottom int           `toml:"margin_bottom"`
+	Duration     time.Duration `toml:"duration"`
 }
 
 // SplashTimerCancelPayload anchors countdown timer to sequence position

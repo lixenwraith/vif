@@ -49,46 +49,8 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		fg := resolveGlyphColor(glyph)
+		fg := visual.GlyphColorLUT[glyph.Type][glyph.Level]
 
 		buf.SetFgOnly(screenX, screenY, glyph.Rune, fg, terminal.AttrNone)
 	}
-}
-
-// resolveGlyphColor maps GlyphType and GlyphLevel toterminal.RGB
-func resolveGlyphColor(g component.GlyphComponent) terminal.RGB {
-	switch g.Type {
-	case component.GlyphBlue:
-		switch g.Level {
-		case component.GlyphDark:
-			return visual.RgbGlyphBlueDark
-		case component.GlyphNormal:
-			return visual.RgbGlyphBlueNormal
-		case component.GlyphBright:
-			return visual.RgbGlyphBlueBright
-		}
-	case component.GlyphGreen:
-		switch g.Level {
-		case component.GlyphDark:
-			return visual.RgbGlyphGreenDark
-		case component.GlyphNormal:
-			return visual.RgbGlyphGreenNormal
-		case component.GlyphBright:
-			return visual.RgbGlyphGreenBright
-		}
-	case component.GlyphRed:
-		switch g.Level {
-		case component.GlyphDark:
-			return visual.RgbGlyphRedDark
-		case component.GlyphNormal:
-			return visual.RgbGlyphRedNormal
-		case component.GlyphBright:
-			return visual.RgbGlyphRedBright
-		}
-	case component.GlyphGold:
-		return visual.RgbGlyphGold
-	}
-
-	// Debug
-	return visual.RgbShieldBase
 }

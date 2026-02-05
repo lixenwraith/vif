@@ -101,14 +101,14 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 				// Check glyph first
 				if glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(e); ok {
 					char = glyph.Rune
-					fg = resolveGlyphColor(glyph) // Reuse from cursor renderer or extract
+					fg = visual.GlyphColorLUT[glyph.Type][glyph.Level]
 					break
 				}
 
 				// Fallback to sigil
 				if sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(e); ok {
 					char = sigil.Rune
-					fg = resolveSigilColor(sigil.Color)
+					fg = sigil.Color
 					break
 				}
 			}

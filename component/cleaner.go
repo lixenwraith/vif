@@ -18,7 +18,7 @@ type CleanerComponent struct {
 	TrailLen  int // Valid point count
 
 	// Character used to render the cleaner block
-	Char rune
+	Rune rune
 
 	// Energy polarity indicator for rendering
 	NegativeEnergy bool // Set at spawn, determines gradient color

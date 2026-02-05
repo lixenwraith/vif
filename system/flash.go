@@ -96,7 +96,7 @@ func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
 	flash := component.FlashComponent{
 		X:         x,
 		Y:         y,
-		Char:      char,
+		Rune:      char,
 		Remaining: parameter.DestructionFlashDuration,
 		Duration:  parameter.DestructionFlashDuration,
 	}

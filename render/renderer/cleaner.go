@@ -86,7 +86,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			}
 
 			// Cleaners are opaque (solid background)
-			buf.SetWithBg(screenX, screenY, cleaner.Char, gradient[gradientIndex], visual.RgbBackground)
+			buf.SetWithBg(screenX, screenY, cleaner.Rune, gradient[gradientIndex], visual.RgbBackground)
 		}
 	}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // GoldSystem manages the gold sequence mechanic autonomously
@@ -330,7 +331,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Splash timer spawn event, no need for splash cancel event, automatically cancelled when anchor is destroyed
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
-		Color:        component.SplashColorWhite,
+		Color:        visual.RgbSplashWhite,
 		MarginRight:  parameter.GoldSequenceLength,
 		MarginBottom: 1, // One line height
 		Duration:     parameter.GoldDuration,

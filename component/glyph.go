@@ -10,20 +10,21 @@ type GlyphComponent struct {
 // GlyphType represents the semantic type affecting game mechanics
 type GlyphType int
 
+// NOTE: Changing values breaks GlyphColorLUT in parameter/visual/color.go
 const (
-	GlyphGreen GlyphType = iota
-	GlyphBlue
-	GlyphRed
-	GlyphWhite
-	GlyphGold
+	GlyphGreen GlyphType = 0
+	GlyphBlue  GlyphType = 1
+	GlyphRed   GlyphType = 2
+	GlyphWhite GlyphType = 3
+	GlyphGold  GlyphType = 4
 )
 
-// GlyphLevel represents brightness (0 = dark, 1 = normal, 2 = bright)
+// GlyphLevel represents brightness
 type GlyphLevel int
 
-// Order matters
+// NOTE: Changing values breaks GlyphColorLUT in parameter/visual/color.go
 const (
-	GlyphDark   GlyphLevel = iota // x1
-	GlyphNormal                   // x2
-	GlyphBright                   // x3
+	GlyphDark   GlyphLevel = 0
+	GlyphNormal GlyphLevel = 1
+	GlyphBright GlyphLevel = 2
 )

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -240,14 +241,14 @@ func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.
 	}
 
 	// Sigil for rendering
-	var sigilColor component.SigilColor
+	var sigilColor terminal.RGB
 	switch buffType {
 	case component.BuffRod:
-		sigilColor = component.SigilOrbRod
+		sigilColor = visual.RgbOrbRod
 	case component.BuffLauncher:
-		sigilColor = component.SigilOrbLauncher
+		sigilColor = visual.RgbOrbLauncher
 	case component.BuffChain:
-		sigilColor = component.SigilOrbChain
+		sigilColor = visual.RgbOrbChain
 	}
 	sigilComp := component.SigilComponent{
 		Rune:  visual.CircleBullsEye,
@@ -324,7 +325,7 @@ func (s *BuffSystem) triggerOrbFlash(orbEntity core.Entity) {
 	// Set flash color
 	sigil, ok := s.world.Components.Sigil.GetComponent(orbEntity)
 	if ok {
-		sigil.Color = component.SigilOrbFlash
+		sigil.Color = visual.RgbOrbFlash
 		s.world.Components.Sigil.SetComponent(orbEntity, sigil)
 	}
 }
@@ -464,11 +465,11 @@ func (s *BuffSystem) restoreOrbColor(orbEntity core.Entity, buffType component.B
 
 	switch buffType {
 	case component.BuffRod:
-		sigil.Color = component.SigilOrbRod
+		sigil.Color = visual.RgbOrbRod
 	case component.BuffLauncher:
-		sigil.Color = component.SigilOrbLauncher
+		sigil.Color = visual.RgbOrbLauncher
 	case component.BuffChain:
-		sigil.Color = component.SigilOrbChain
+		sigil.Color = visual.RgbOrbChain
 	}
 
 	s.world.Components.Sigil.SetComponent(orbEntity, sigil)

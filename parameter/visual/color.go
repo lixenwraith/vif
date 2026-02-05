@@ -62,10 +62,8 @@ var (
 	RgbBoostGlow = terminal.RGB{255, 140, 200} // Vibrant pink for rotating shield glow
 
 	// Splash colors
-	RgbSplashNormal = terminal.RGB{153, 102, 0}   // Dark orange for normal mode
-	RgbSplashInsert = terminal.RGB{200, 200, 200} // Light gray for insert mode
-	RgbSplashWhite  = terminal.RGB{155, 155, 155} // White for some actions
-	RgbSplashCyan   = terminal.RGB{0, 200, 200}   // Cyan for quasar charge timer
+	RgbSplashWhite = terminal.RGB{155, 155, 155} // White for some actions
+	RgbSplashCyan  = terminal.RGB{0, 200, 200}   // Cyan for quasar charge timer
 
 	// Nugget colors
 	RgbNuggetOrange = terminal.RGB{255, 165, 0}   // Same as insert cursor
@@ -104,9 +102,6 @@ var (
 	RgbExplosionCore = terminal.RGB{240, 255, 255} // Bright White-Cyan
 	RgbExplosionMid  = terminal.RGB{0, 255, 255}   // Electric Cyan
 	RgbExplosionEdge = terminal.RGB{40, 0, 180}    // Deep Indigo/Blue
-
-	// Shield colors
-	RgbShieldBase = terminal.RGB{180, 0, 150} // Deep Magenta
 
 	// CombatColors
 	RgbCombatEnraged  = terminal.RGB{255, 60, 60} // Red tint during charge or zap phase
@@ -201,3 +196,14 @@ const (
 
 // Wall256PaletteDefault is 256-color fallback for walls
 const Wall256PaletteDefault uint8 = 240
+
+// GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB
+// Type indices: 0=Green, 1=Blue, 2=Red, 3=White, 4=Gold
+// Level indices: 0=Dark, 1=Normal, 2=Bright
+var GlyphColorLUT = [5][3]terminal.RGB{
+	{RgbGlyphGreenDark, RgbGlyphGreenNormal, RgbGlyphGreenBright}, // Green
+	{RgbGlyphBlueDark, RgbGlyphBlueNormal, RgbGlyphBlueBright},    // Blue
+	{RgbGlyphRedDark, RgbGlyphRedNormal, RgbGlyphRedBright},       // Red
+	{RgbGlyphWhite, RgbGlyphWhite, RgbGlyphWhite},                 // White
+	{RgbGlyphGold, RgbGlyphGold, RgbGlyphGold},                    // Gold
+}

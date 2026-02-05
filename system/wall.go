@@ -166,14 +166,14 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 
 	s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 		BlockMask: payload.BlockMask,
-		Char:      payload.Char,
+		Rune:      payload.Char,
 		FgColor:   payload.FgColor,
 		BgColor:   payload.BgColor,
 		RenderFg:  payload.RenderFg,
 		RenderBg:  payload.RenderBg,
 	})
 
-	if payload.BlockMask.IsBlocking() {
+	if payload.BlockMask != component.WallBlockNone {
 		s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: payload.X, Y: payload.Y})
 	}
 
@@ -222,7 +222,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 
 		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 			BlockMask: payload.BlockMask,
-			Char:      cell.Char,
+			Rune:      cell.Char,
 			FgColor:   cell.FgColor,
 			BgColor:   cell.BgColor,
 			RenderFg:  cell.RenderFg,
@@ -253,7 +253,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 			maxY = y
 		}
 
-		if payload.BlockMask.IsBlocking() {
+		if payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: x, Y: y})
 		}
 
@@ -361,7 +361,7 @@ func (s *WallSystem) classifyWallForDespawn(
 	fadeoutTargets *[]core.Entity,
 	silentTargets *[]core.Entity,
 ) {
-	hasFg := wall.RenderFg && wall.Char != 0
+	hasFg := wall.RenderFg && wall.Rune != 0
 	hasBg := wall.RenderBg
 
 	if hasFg && !hasBg {
@@ -398,11 +398,11 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 			continue
 		}
 
-		wasBlocking := wall.BlockMask.IsBlocking()
+		wasBlocking := wall.BlockMask != component.WallBlockNone
 		wall.BlockMask = payload.BlockMask
 		s.world.Components.Wall.SetComponent(entity, wall)
 
-		if !wasBlocking && payload.BlockMask.IsBlocking() {
+		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: pos.X, Y: pos.Y})
 		}
 	}
@@ -430,17 +430,17 @@ func (s *WallSystem) runFullPushCheck() {
 
 	wallEntities := s.world.Components.Wall.GetAllEntities()
 	for _, wallEntity := range wallEntities {
-		wall, ok := s.world.Components.Wall.GetComponent(wallEntity)
-		if !ok || !wall.BlockMask.IsBlocking() {
+		wallComp, ok := s.world.Components.Wall.GetComponent(wallEntity)
+		if !ok || wallComp.BlockMask == component.WallBlockNone {
 			continue
 		}
 
-		pos, ok := s.world.Positions.GetPosition(wallEntity)
+		wallPos, ok := s.world.Positions.GetPosition(wallEntity)
 		if !ok {
 			continue
 		}
 
-		pushCount += s.pushEntitiesAtPosition(pos.X, pos.Y)
+		pushCount += s.pushEntitiesAtPosition(wallPos.X, wallPos.Y)
 	}
 
 	s.statPushEvents.Add(pushCount)
@@ -499,6 +499,7 @@ func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 	s.pushCheckEveryTick = enabled
 }
 
+// TODO: remove after tests
 // --- TEST ---
 
 // generateMaze creates a test maze using recursive backtracking

@@ -9,6 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -541,11 +543,11 @@ func (s *DustSystem) Update() {
 			deathCandidates = append(deathCandidates, dustEntity)
 		}
 
-		if sigilComp.Color == component.SigilDustBright && timerComp.Remaining < parameter.DustTimerNormal {
-			sigilComp.Color = component.SigilDustNormal
+		if sigilComp.Color == visual.RgbDustBright && timerComp.Remaining < parameter.DustTimerNormal {
+			sigilComp.Color = visual.RgbDustNormal
 			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
-		} else if sigilComp.Color == component.SigilDustNormal && timerComp.Remaining < parameter.DustTimerDark {
-			sigilComp.Color = component.SigilDustDark
+		} else if sigilComp.Color == visual.RgbDustNormal && timerComp.Remaining < parameter.DustTimerDark {
+			sigilComp.Color = visual.RgbDustDark
 			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
 		}
 
@@ -816,15 +818,16 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 }
 
-func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, component.SigilColor) {
+// TODO: convert to LUT in visual/color.go for colors and timer in parameter/particle.go?
+func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, terminal.RGB) {
 	switch level {
 	case component.GlyphDark:
-		return parameter.DustTimerDark, component.SigilDustDark
+		return parameter.DustTimerDark, visual.RgbDustDark
 	case component.GlyphNormal:
-		return parameter.DustTimerNormal, component.SigilDustNormal
+		return parameter.DustTimerNormal, visual.RgbDustNormal
 	case component.GlyphBright:
-		return parameter.DustTimerBright, component.SigilDustBright
+		return parameter.DustTimerBright, visual.RgbDustBright
 	default:
-		return parameter.DustTimerNormal, component.SigilDustNormal
+		return parameter.DustTimerNormal, visual.RgbDustNormal
 	}
 }

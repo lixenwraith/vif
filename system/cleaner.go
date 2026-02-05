@@ -308,7 +308,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Char:           parameter.CleanerChar,
+			Rune:           parameter.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{
@@ -507,7 +507,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Char:           parameter.CleanerChar,
+			Rune:           parameter.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{

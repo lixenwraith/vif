@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
@@ -237,7 +238,7 @@ func (s *NuggetSystem) spawnNugget() {
 	// Render component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  randomChar,
-		Color: component.SigilNugget,
+		Color: visual.RgbNuggetOrange,
 	})
 
 	s.activeNuggetEntity = entity

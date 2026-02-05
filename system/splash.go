@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // BBox represents an axis-aligned bounding box for collision detection
@@ -233,7 +234,7 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	}
 
 	// Update if character or type changed (handles entity swap, moving entities)
-	newColor := s.glyphToSplashColor(glyph.Type)
+	newColor := visual.GlyphColorLUT[glyph.Type][component.GlyphNormal]
 	if splash.Content[0] != glyph.Rune || splash.Color != newColor {
 		splash.Content[0] = glyph.Rune
 		splash.Color = newColor
@@ -355,7 +356,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 
 	// Resolve color from glyph type
-	color := s.glyphToSplashColor(glyphComp.Type)
+	color := visual.GlyphColorLUT[glyphComp.Type][component.GlyphNormal]
 
 	// Calculate proximity anchor (between cursor and center, min 15 chars away)
 	anchorX, anchorY := s.calculateProximityAnchor(cursorX, cursorY, 1)
@@ -545,20 +546,4 @@ func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.En
 		}
 	}
 	return 0
-}
-
-// glyphToSplashColor maps GlyphType to SplashColor
-func (s *SplashSystem) glyphToSplashColor(t component.GlyphType) component.SplashColor {
-	switch t {
-	case component.GlyphGreen:
-		return component.SplashColorGreen
-	case component.GlyphBlue:
-		return component.SplashColorBlue
-	case component.GlyphRed:
-		return component.SplashColorRed
-	case component.GlyphGold:
-		return component.SplashColorGold
-	default:
-		return component.SplashColorWhite
-	}
 }

@@ -16,22 +16,12 @@ const (
 	WallBlockAll      WallBlockMask = 0xFF
 )
 
-// Has checks if specific block flag is set
-func (m WallBlockMask) Has(flag WallBlockMask) bool {
-	return m&flag != 0
-}
-
-// IsBlocking returns true if wall blocks any entity type
-func (m WallBlockMask) IsBlocking() bool {
-	return m != WallBlockNone
-}
-
 // WallComponent marks an entity as a wall/obstacle with visual properties
 type WallComponent struct {
 	BlockMask WallBlockMask
 
 	// Foreground visual (character layer)
-	Char     rune // 0 = no foreground character
+	Rune     rune // 0 = no foreground character
 	FgColor  terminal.RGB
 	RenderFg bool
 
@@ -45,8 +35,7 @@ func (w *WallComponent) NeedsRender() bool {
 	return w.RenderFg || w.RenderBg
 }
 
-// WallCellDef defines a single cell in composite wall structure
-// Used by WallCompositeSpawnRequestPayload
+// WallCellDef defines a single cell in composite wall structure (used by event payload)
 type WallCellDef struct {
 	OffsetX  int
 	OffsetY  int

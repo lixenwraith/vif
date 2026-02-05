@@ -220,7 +220,7 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 	for i := uint8(0); i < cell.Count; i++ {
 		if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
 			// If mask is 0, allow any wall. Otherwise check mask
-			if mask == 0 || wall.BlockMask.Has(mask) {
+			if mask == 0 || wall.BlockMask&mask != 0 {
 				return true
 			}
 		}
@@ -251,7 +251,7 @@ func (p *Position) HasBlockingWallInAreaUnsafe(x, y, width, height int, mask com
 
 	return p.grid.HasAnyEntityInArea(x, y, width, height, func(e core.Entity) bool {
 		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
-			return mask == 0 || wall.BlockMask.Has(mask)
+			return mask == 0 || wall.BlockMask&mask != 0
 		}
 		return false
 	})

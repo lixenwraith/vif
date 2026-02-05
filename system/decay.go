@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -137,7 +138,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		lastX, lastY = x, y
 	}
 	s.world.Components.Decay.SetComponent(entity, component.DecayComponent{
-		Char:     char,
+		Rune:     char,
 		LastIntX: lastX,
 		LastIntY: lastY,
 	})
@@ -154,7 +155,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 	// 3. Visual component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  char,
-		Color: component.SigilDecay,
+		Color: visual.RgbDecay,
 	})
 }
 
@@ -267,9 +268,9 @@ func (s *DecaySystem) updateDecayEntities() {
 		// 2D Matrix Visual Effect: Update character on ANY cell entry
 		if decayComp.LastIntX != curX || decayComp.LastIntY != curY {
 			if rand.Float64() < parameter.ParticleChangeChance {
-				decayComp.Char = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+				decayComp.Rune = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
-					sigil.Rune = decayComp.Char
+					sigil.Rune = decayComp.Rune
 					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}

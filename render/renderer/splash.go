@@ -39,8 +39,6 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 		// Resolve anchor position
 		anchorX, anchorY := r.resolveAnchor(&splash)
 
-		displayColor := r.resolveSplashColor(splash.Color)
-
 		// Use Slot for countdown detection
 		if splash.Slot == component.SlotTimer {
 			// Timer: render digits from remaining time (ceiling)
@@ -49,13 +47,13 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
 				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(gameCtx, buf, d, charX, anchorY, displayColor)
+				r.renderChar(gameCtx, buf, d, charX, anchorY, splash.Color)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
 				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(gameCtx, buf, splash.Content[i], charX, anchorY, displayColor)
+				r.renderChar(gameCtx, buf, splash.Content[i], charX, anchorY, splash.Color)
 			}
 		}
 	}
@@ -108,35 +106,5 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 
 			buf.SetBgOnly(screenX, screenY, color)
 		}
-	}
-}
-
-// resolveSplashColor maps the SplashColor enum to actual terminal.RGB
-func (r *SplashRenderer) resolveSplashColor(c component.SplashColor) terminal.RGB {
-	switch c {
-	case component.SplashColorNormal:
-		return visual.RgbSplashNormal
-	case component.SplashColorInsert:
-		return visual.RgbSplashInsert
-	case component.SplashColorGreen:
-		return visual.RgbGlyphGreenNormal
-	case component.SplashColorBlue:
-		return visual.RgbGlyphBlueNormal
-	case component.SplashColorRed:
-		return visual.RgbGlyphRedNormal
-	case component.SplashColorGold:
-		return visual.RgbGlyphGold
-	case component.SplashColorCyan:
-		return visual.RgbSplashCyan
-	case component.SplashColorNugget:
-		return visual.RgbNuggetOrange
-	case component.SplashColorWhite:
-		return visual.RgbSplashWhite
-	case component.SplashColorBlossom:
-		return visual.RgbBlossom
-	case component.SplashColorDecay:
-		return visual.RgbDecay
-	default:
-		return visual.RgbSplashWhite
 	}
 }

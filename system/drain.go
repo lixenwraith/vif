@@ -11,7 +11,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/genetic/game/species"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
+	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -353,16 +355,16 @@ func (s *DrainSystem) updateDrainSigil() {
 			continue
 		}
 
-		var targetColor component.SigilColor
+		var targetColor terminal.RGB
 
 		// Priority: hit flash > enraged > normal
 		switch {
 		case combatComp.RemainingHitFlash > 0:
-			targetColor = component.SigilHitFlash
+			targetColor = visual.RgbCombatHitFlash
 		case combatComp.IsEnraged:
-			targetColor = component.SigilEnraged
+			targetColor = visual.RgbCombatEnraged
 		default:
-			targetColor = component.SigilDrain
+			targetColor = visual.RgbDrain
 		}
 
 		if sigilComp.Color != targetColor {
@@ -732,7 +734,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Visual component for sigil renderer and death system flash extraction
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  parameter.DrainChar,
-		Color: component.SigilDrain,
+		Color: visual.RgbDrain,
 	})
 
 	// GenotypeComponent for evolution tracking

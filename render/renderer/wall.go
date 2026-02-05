@@ -36,13 +36,13 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		return
 	}
 
-	for _, entity := range wallEntities {
-		wall, ok := r.gameCtx.World.Components.Wall.GetComponent(entity)
-		if !ok || !wall.NeedsRender() {
+	for _, wallEntity := range wallEntities {
+		wallComp, ok := r.gameCtx.World.Components.Wall.GetComponent(wallEntity)
+		if !ok || !wallComp.NeedsRender() {
 			continue
 		}
 
-		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+		pos, ok := r.gameCtx.World.Positions.GetPosition(wallEntity)
 		if !ok {
 			continue
 		}
@@ -55,7 +55,7 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			continue
 		}
 
-		r.renderCell(buf, screenX, screenY, wall.Char, wall.FgColor, wall.BgColor, wall.RenderFg, wall.RenderBg)
+		r.renderCell(buf, screenX, screenY, wallComp.Rune, wallComp.FgColor, wallComp.BgColor, wallComp.RenderFg, wallComp.RenderBg)
 	}
 }
 

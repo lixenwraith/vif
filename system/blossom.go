@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -136,7 +137,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		lastX, lastY = x, y
 	}
 	s.world.Components.Blossom.SetComponent(entity, component.BlossomComponent{
-		Char:     char,
+		Rune:     char,
 		LastIntX: lastX,
 		LastIntY: lastY,
 	})
@@ -153,7 +154,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	// 3. Render component
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  char,
-		Color: component.SigilBlossom,
+		Color: visual.RgbBlossom,
 	})
 }
 
@@ -276,10 +277,10 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
 		if blossomComp.LastIntX != curX || blossomComp.LastIntY != curY {
 			if rand.Float64() < parameter.ParticleChangeChance {
-				blossomComp.Char = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+				blossomComp.Rune = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
-					sigil.Rune = blossomComp.Char
+					sigil.Rune = blossomComp.Rune
 					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}

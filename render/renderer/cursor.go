@@ -78,7 +78,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	if glyphEntity != 0 {
 		if glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(glyphEntity); ok {
 			charAtCursor = glyph.Rune
-			fg := resolveGlyphColor(glyph)
+			fg := visual.GlyphColorLUT[glyph.Type][glyph.Level]
 
 			// Cursor background takes the entity's foreground color
 			cursorBgColor = fg
@@ -95,7 +95,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(sigilEntity); ok {
 			charAtCursor = sigil.Rune
 			// Cursor background takes the sigil's color
-			cursorBgColor = resolveSigilColor(sigil.Color)
+			cursorBgColor = sigil.Color
 			charFgColor = visual.RgbBlack
 		}
 	}

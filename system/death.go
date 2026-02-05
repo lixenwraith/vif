@@ -139,7 +139,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 			s.world.PushEvent(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
 				X:       entityPos.X,
 				Y:       entityPos.Y,
-				Char:    wallComp.Char,
+				Char:    wallComp.Rune,
 				FgColor: wallComp.FgColor,
 				BgColor: wallComp.BgColor,
 			})

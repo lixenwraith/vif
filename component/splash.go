@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // SplashSlot identifies the visual purpose of a splash for uniqueness enforcement
@@ -15,30 +16,12 @@ const (
 	SlotMagnifier                   // Typing preview, cursor-anchored
 )
 
-// SplashColor defines the semantic color for splash effects (decoupling from renderer for cyclic dependency)
-type SplashColor uint8
-
-const (
-	SplashColorNone SplashColor = iota
-	SplashColorNormal
-	SplashColorInsert
-	SplashColorGreen
-	SplashColorBlue
-	SplashColorRed
-	SplashColorGold
-	SplashColorCyan
-	SplashColorNugget
-	SplashColorWhite
-	SplashColorBlossom
-	SplashColorDecay
-)
-
 // SplashComponent holds state for splash effects (typing feedback, timers)
 // Supports multiple concurrent entities
 type SplashComponent struct {
 	Content [parameter.SplashMaxLength]rune // Content buffer
 	Length  int                             // Active character count
-	Color   SplashColor                     // Render color
+	Color   terminal.RGB                    // Render color
 
 	// Positioning: AnchorEntity != 0 uses entity-relative, else absolute AnchorX/Y
 	AnchorEntity                                     core.Entity

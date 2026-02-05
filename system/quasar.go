@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -411,7 +412,7 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 
 	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
-		Color:        component.SplashColorCyan,
+		Color:        visual.RgbSplashCyan,
 		MarginRight:  parameter.QuasarHeaderOffsetX + 1, // Accounting for anchor column
 		MarginLeft:   parameter.QuasarHeaderOffsetX,
 		MarginTop:    parameter.QuasarHeaderOffsetY,
