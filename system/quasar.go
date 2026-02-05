@@ -177,8 +177,16 @@ func (s *QuasarSystem) Update() {
 		if quasarComp.IsZapping {
 			s.stopZapping(headerEntity, &quasarComp)
 		}
+		// Cancel charging when cursor re-enters range
 		if quasarComp.IsCharging {
-			s.cancelCharging(headerEntity, &quasarComp)
+			quasarComp.IsCharging = false
+			quasarComp.ChargeRemaining = 0
+
+			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+			s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+				AnchorEntity: headerEntity,
+			})
 		}
 
 		s.updateKineticMovement(headerEntity, &quasarComp)
@@ -195,7 +203,7 @@ func (s *QuasarSystem) Update() {
 		quasarComp.ChargeRemaining -= s.world.Resources.Time.DeltaTime
 
 		if quasarComp.ChargeRemaining <= 0 {
-			s.completeCharging(headerEntity, &quasarComp)
+			s.startZapping(headerEntity, &quasarComp)
 		} else {
 			// Continue homing during charge
 			s.updateKineticMovement(headerEntity, &quasarComp)
@@ -210,17 +218,15 @@ func (s *QuasarSystem) Update() {
 	// Shield and cursor interaction (all states)
 	s.handleInteractions(headerEntity, &headerComp)
 
-	// Combat update
+	// Combat update: enraged state blocks kinetic via combat system
+	isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
+	combatComp.IsEnraged = isActiveState
+
+	// Damage immunity requires explicit refresh (not handled by IsEnraged)
 	if quasarComp.IsShielded {
 		combatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-		combatComp.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
-		combatComp.IsEnraged = true
-	} else if quasarComp.IsCharging || quasarComp.IsZapping {
-		combatComp.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
-		combatComp.IsEnraged = true
-	} else {
-		combatComp.IsEnraged = false
 	}
+
 	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 
 	s.statHitPoints.Store(int64(combatComp.HitPoints))
@@ -419,30 +425,6 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 		MarginBottom: parameter.QuasarHeaderOffsetY + 1, // Accounting for anchor row
 		Duration:     parameter.QuasarChargeDuration,
 	})
-}
-
-// cancelCharging aborts the charge phase when cursor re-enters range
-func (s *QuasarSystem) cancelCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	quasarComp.IsCharging = false
-	quasarComp.ChargeRemaining = 0
-	quasarComp.IsShielded = false
-
-	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
-
-	s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
-		AnchorEntity: headerEntity,
-	})
-}
-
-// completeCharging transitions from charging to zapping
-func (s *QuasarSystem) completeCharging(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	quasarComp.IsCharging = false
-	quasarComp.ChargeRemaining = 0
-
-	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
-
-	// Transition to zapping
-	s.startZapping(headerEntity, quasarComp)
 }
 
 // updateKineticMovement handles continuous kinetic quasar movement toward cursor
@@ -648,6 +630,8 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 		Tracked:      true,
 	})
 
+	quasarComp.ChargeRemaining = 0
+	quasarComp.IsCharging = false
 	quasarComp.IsZapping = true
 	quasarComp.IsShielded = true // Shield active during zap
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
