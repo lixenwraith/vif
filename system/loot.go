@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -24,6 +25,7 @@ type lootTableState struct {
 	entries []lootEntry
 }
 
+// TODO: change this design
 // lootVisualDef maps loot type to visual properties
 type lootVisualDef struct {
 	Rune       rune
@@ -111,11 +113,6 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			s.onEnemyKilled(payload)
 		}
-
-	case event.EventWeaponAddRequest:
-		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
-			s.addToBlacklist(payload.Weapon)
-		}
 	}
 }
 
@@ -136,6 +133,7 @@ func (s *LootSystem) Update() {
 		return
 	}
 
+	config := s.world.Resources.Config
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
@@ -143,85 +141,75 @@ func (s *LootSystem) Update() {
 	}
 
 	cursorCenterX, cursorCenterY := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
-	var activeCount int64
 
-	for _, entity := range lootEntities {
-		loot, ok := s.world.Components.Loot.GetComponent(entity)
+	var activeCount int64
+	for _, lootEntity := range lootEntities {
+		lootComp, ok := s.world.Components.Loot.GetComponent(lootEntity)
 		if !ok {
 			continue
 		}
 
-		gridX := vmath.ToInt(loot.PreciseX)
-		gridY := vmath.ToInt(loot.PreciseY)
-
-		// Collection check: Chebyshev distance <= 1
-		dx := gridX - cursorPos.X
-		dy := gridY - cursorPos.Y
-		if dx < 0 {
-			dx = -dx
-		}
-		if dy < 0 {
-			dy = -dy
-		}
-		dist := dx
-		if dy > dist {
-			dist = dy
-		}
-
-		if dist <= parameter.LootCollectRadius {
-			s.collectLoot(entity, &loot)
+		kineticComp, ok := s.world.Components.Kinetic.GetComponent(lootEntity)
+		if !ok {
 			continue
 		}
 
-		// LOS check for homing activation
-		if !loot.Homing && s.world.Positions.HasLineOfSight(gridX, gridY, cursorPos.X, cursorPos.Y, component.WallBlockKinetic) {
-			loot.Homing = true
+		// Current grid pos for collection and LOS checks
+		curX, curY := vmath.ToInt(kineticComp.PreciseX), vmath.ToInt(kineticComp.PreciseY)
+
+		// 1. Collection check (Grid-based Chebyshev)
+		if vmath.IntAbs(curX-cursorPos.X) <= parameter.LootCollectRadius &&
+			vmath.IntAbs(curY-cursorPos.Y) <= parameter.LootCollectRadius {
+			s.collectLoot(lootEntity, &lootComp)
+			continue
 		}
 
-		// Homing integration
-		if loot.Homing {
-			dirX := cursorCenterX - loot.PreciseX
-			dirY := cursorCenterY - loot.PreciseY
+		// 2. Movement Logic
+		if !lootComp.Homing {
+			// Trigger homing if LOS is established
+			if s.world.Positions.HasLineOfSight(curX, curY, cursorPos.X, cursorPos.Y, component.WallBlockKinetic) {
+				lootComp.Homing = true
+				s.world.Components.Loot.SetComponent(lootEntity, lootComp)
+			}
+		}
 
-			if dirX != 0 || dirY != 0 {
-				nX, nY := vmath.Normalize2D(dirX, dirY)
-				accel := vmath.FromFloat(parameter.LootHomingAccel)
-
-				loot.VelX += vmath.Mul(vmath.Mul(nX, accel), dtFixed)
-				loot.VelY += vmath.Mul(vmath.Mul(nY, accel), dtFixed)
-
-				// Clamp speed
-				speed := vmath.DistanceApprox(loot.VelX, loot.VelY)
-				maxSpd := vmath.FromFloat(parameter.LootHomingMaxSpeed)
-				if speed > maxSpd && speed > 0 {
-					scale := vmath.Div(maxSpd, speed)
-					loot.VelX = vmath.Mul(loot.VelX, scale)
-					loot.VelY = vmath.Mul(loot.VelY, scale)
+		if lootComp.Homing {
+			// A. Update Velocity
+			if s.world.Positions.HasLineOfSight(curX, curY, cursorPos.X, cursorPos.Y, component.WallBlockKinetic) {
+				// Normal pursuit
+				physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &physics.LootHoming, dtFixed)
+			} else {
+				// Glide to a halt if LOS lost (friction only)
+				bleedFactor := vmath.FromFloat(6.0)
+				kineticComp.VelX -= vmath.Mul(vmath.Mul(kineticComp.VelX, bleedFactor), dtFixed)
+				kineticComp.VelY -= vmath.Mul(vmath.Mul(kineticComp.VelY, bleedFactor), dtFixed)
+				if vmath.Abs(kineticComp.VelX) < vmath.FromFloat(0.1) && vmath.Abs(kineticComp.VelY) < vmath.FromFloat(0.1) {
+					kineticComp.VelX, kineticComp.VelY = 0, 0
 				}
 			}
 
-			loot.PreciseX += vmath.Mul(loot.VelX, dtFixed)
-			loot.PreciseY += vmath.Mul(loot.VelY, dtFixed)
+			// B. Integrate with Bounce & Wall Detection
+			// 1x1 entity centered at PreciseX/Y means header offset is 0.
+			newGridX, newGridY, _ := physics.IntegrateWithBounce(
+				&kineticComp.Kinetic,
+				dtFixed,
+				0, 0, // No offset from center to hitbox top-left
+				0, config.GameWidth,
+				0, config.GameHeight,
+				vmath.FromFloat(0.4), // Lose 60% velocity on bounce
+				func(tx, ty int) bool {
+					return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
+				},
+			)
 
-			// Clamp to game bounds
-			config := s.world.Resources.Config
-			loot.PreciseX = max(0, min(loot.PreciseX, vmath.FromInt(config.GameWidth-1)))
-			loot.PreciseY = max(0, min(loot.PreciseY, vmath.FromInt(config.GameHeight-1)))
+			// C. Sync Components
+			s.world.Components.Kinetic.SetComponent(lootEntity, kineticComp)
+			if newGridX != curX || newGridY != curY {
+				s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
+			}
 		}
-
-		// Grid sync
-		newX := vmath.ToInt(loot.PreciseX)
-		newY := vmath.ToInt(loot.PreciseY)
-		if newX != loot.LastIntX || newY != loot.LastIntY {
-			loot.LastIntX = newX
-			loot.LastIntY = newY
-			s.world.Positions.SetPosition(entity, component.PositionComponent{X: newX, Y: newY})
-		}
-
-		s.world.Components.Loot.SetComponent(entity, loot)
 		activeCount++
 	}
-
 	s.statActive.Store(activeCount)
 }
 
@@ -243,7 +231,25 @@ func (s *LootSystem) rollTable(enemyType component.EnemyType) (component.LootTyp
 		return 0, false
 	}
 
-	// Build active rates (skip blacklisted)
+	// Dynamic Blacklist Check: Query Weapon Component
+	cursorEntity := s.world.Resources.Player.Entity
+	weaponComp, hasWeapons := s.world.Components.Weapon.GetComponent(cursorEntity)
+
+	isBlacklisted := func(lt component.LootType) bool {
+		if !hasWeapons {
+			return false
+		}
+		// Map loot type to weapon type and check active status
+		switch lt {
+		case component.LootRod:
+			return weaponComp.Active[component.WeaponRod]
+		case component.LootLauncher:
+			return weaponComp.Active[component.WeaponLauncher]
+		}
+		return false
+	}
+
+	// Build active candidates
 	type candidate struct {
 		index int
 		rate  float64
@@ -253,7 +259,7 @@ func (s *LootSystem) rollTable(enemyType component.EnemyType) (component.LootTyp
 
 	for i := range state.entries {
 		e := &state.entries[i]
-		if s.blacklist[e.Type] {
+		if isBlacklisted(e.Type) {
 			continue
 		}
 		rate := e.BaseRate * float64(1+e.Misses)
@@ -286,11 +292,14 @@ func (s *LootSystem) rollTable(enemyType component.EnemyType) (component.LootTyp
 		}
 	}
 
-	// Update miss counters
+	// Update miss counters (skip blacklisted)
 	for i := range state.entries {
+		if isBlacklisted(state.entries[i].Type) {
+			continue
+		}
 		if i == droppedIndex {
 			state.entries[i].Misses = 0
-		} else if !s.blacklist[state.entries[i].Type] {
+		} else {
 			state.entries[i].Misses++
 		}
 	}
@@ -312,22 +321,27 @@ func (s *LootSystem) spawnLoot(lootType component.LootType, x, y int) {
 	entity := s.world.CreateEntity()
 	preciseX, preciseY := vmath.CenteredFromGrid(x, y)
 
+	// 1. Metadata
 	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
-		Type:     lootType,
-		Rune:     vis.Rune,
-		PreciseX: preciseX,
-		PreciseY: preciseY,
-		LastIntX: x,
-		LastIntY: y,
+		Type: lootType,
+		Rune: vis.Rune,
 	})
 
-	// Shield component for visual halo
+	// 2. Kinetic (Initialized with zero velocity)
+	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
+		Kinetic: core.Kinetic{
+			PreciseX: preciseX,
+			PreciseY: preciseY,
+		},
+	})
+
+	// 3. Visuals & Spatial Grid
 	cfg := visual.LootShieldConfig
 	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
 		Active:        true,
 		Color:         cfg.Color,
 		Palette256:    cfg.Palette256,
-		GlowColor:     vis.GlowColor, // Use type-specific glow
+		GlowColor:     vis.GlowColor,
 		GlowIntensity: cfg.GlowIntensity,
 		GlowPeriod:    cfg.GlowPeriod,
 		MaxOpacity:    cfg.MaxOpacity,
@@ -339,7 +353,6 @@ func (s *LootSystem) spawnLoot(lootType component.LootType, x, y int) {
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-	// Sigil for center rune visualization
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  vis.Rune,
 		Color: vis.InnerColor,
@@ -382,21 +395,6 @@ func lootToWeapon(lt component.LootType) component.WeaponType {
 	default:
 		return component.WeaponLauncher
 	}
-}
-
-// --- Blacklist ---
-
-func (s *LootSystem) addToBlacklist(weapon component.WeaponType) {
-	// Map weapon type back to loot type
-	switch weapon {
-	case component.WeaponLauncher:
-		s.blacklist[component.LootLauncher] = true
-	}
-}
-
-// RemoveFromBlacklist restores a loot type to the table (called on weapon loss, future)
-func (s *LootSystem) RemoveFromBlacklist(lootType component.LootType) {
-	delete(s.blacklist, lootType)
 }
 
 // --- Table Init ---

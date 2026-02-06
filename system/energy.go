@@ -251,6 +251,7 @@ func (s *EnergySystem) setEnergy(value int64) {
 
 	if value == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
 	}
 }
 

@@ -218,3 +218,14 @@ var SwarmHoming = HomingProfile{
 	ArrivalDragBoost: 0,
 	DeadZone:         0,
 }
+
+// LootHoming defines loot attraction behavior
+// Uses aggressive arrival drag to kill orbital momentum and ensure cursor capture
+var LootHoming = HomingProfile{
+	BaseSpeed:        vmath.FromFloat(parameter.LootHomingMaxSpeed),
+	HomingAccel:      vmath.FromFloat(parameter.LootHomingAccel),
+	Drag:             vmath.FromFloat(2.0),  // Low base drag
+	ArrivalRadius:    vmath.FromFloat(5.0),  // Start braking 5 cells away
+	ArrivalDragBoost: vmath.FromFloat(25.0), // Massive drag near target
+	DeadZone:         vmath.Scale / 2,       // Snap at 0.5 cells
+}
