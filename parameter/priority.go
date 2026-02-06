@@ -3,41 +3,42 @@ package parameter
 // TODO: review and reorder, use iota? add comment for all
 // System Execution Priorities (lower runs first)
 const (
-	PriorityShield       = 10
-	PriorityHeat         = 20
-	PriorityEnergy       = 30
-	PriorityBoost        = 40
-	PriorityWeapon       = 50
-	PriorityTyping       = 60 // After boost, before composite
-	PriorityComposite    = 70 // After boost, before spawning systems (position sync)
-	PriorityWall         = 80 // After composite
-	PriorityGlyph        = 90
-	PriorityNugget       = 100
-	PriorityGold         = 110
-	PriorityCleaner      = 120
-	PriorityFuse         = 130 // After Cleaner, before Drain
-	PrioritySpirit       = 140 // After Fuse, before Drain
-	PriorityDrain        = 150
-	PriorityMaterialize  = 160 // After Drain
-	PriorityQuasar       = 170 // After Drain
-	PriorityExplosion    = 180 // After Quasar, before Dust
-	PriorityDust         = 190 // After Quasar, before Decay
-	PriorityStorm        = 200 // After Drain, before Swarm and Lightning
-	PrioritySwarm        = 210
-	PriorityCombat       = 220
-	PriorityDecay        = 230
-	PriorityBlossom      = 240
-	PriorityLightning    = 250 // After Quasar
-	PriorityMissile      = 260 // After Weapon
-	PriorityFlash        = 270
-	PriorityFadeout      = 275
-	PriorityUI           = 280
-	PriorityEffect       = 500
-	PriorityMarker       = 510  // Before splash, after game logic
-	PrioritySplash       = 800  // After game logic, before rendering
-	PriorityMotionMarker = 810  // After game logic and splash, before rendering
-	PriorityDeath        = 850  // After game logic, before TimeKeeper
-	PriorityTimekeeper   = 900  // After game logic
-	PriorityGenetic      = 950  // After death and timekeeper, observes entity lifecycle
-	PriorityDiagnostics  = 1000 // After all others, telemetry collection
+	PriorityShield int = iota
+	PriorityHeat
+	PriorityEnergy
+	PriorityBoost
+	PriorityWeapon
+	PriorityTyping    // After boost, before composite
+	PriorityComposite // After boost, before spawning systems (position sync)
+	PriorityWall      // After composite
+	PriorityGlyph
+	PriorityNugget
+	PriorityGold
+	PriorityCleaner
+	PriorityFuse   // After Cleaner, before Drain
+	PrioritySpirit // After Fuse, before Drain
+	PriorityDrain
+	PriorityMaterialize // After Drain
+	PriorityQuasar      // After Drain
+	PriorityExplosion   // After Quasar, before Dust
+	PriorityDust        // After Quasar, before Decay
+	PriorityStorm       // After Drain, before Swarm and Lightning
+	PrioritySwarm
+	PriorityCombat
+	PriorityLoot // After enemy entities and combat
+	PriorityDecay
+	PriorityBlossom
+	PriorityLightning // After Quasar
+	PriorityMissile   // After Weapon
+	PriorityFlash
+	PriorityFadeout
+	PriorityUI
+	PriorityEffect
+	PriorityMarker       // Before splash, after game logic
+	PrioritySplash       // After game logic, before rendering
+	PriorityMotionMarker // After game logic and splash, before rendering
+	PriorityDeath        // After game logic, before TimeKeeper
+	PriorityTimekeeper   // After game logic
+	PriorityGenetic      // After death and timekeeper, observes entity lifecycle
+	PriorityDiagnostics  // After all others, telemetry collection
 )

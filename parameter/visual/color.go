@@ -172,6 +172,12 @@ var (
 	RgbWallEnergy  = terminal.RGB{R: 60, G: 20, B: 80}
 	RgbWallDanger  = terminal.RGB{R: 100, G: 20, B: 20}
 	RgbWallGhost   = terminal.RGB{R: 35, G: 36, B: 48}
+
+	// Loot shield colors (defined in renderer as gradient LUT)
+	// Referenced here for consistency documentation only
+	RgbLootShieldBorder = terminal.RGB{R: 255, G: 105, B: 180} // Hot pink
+	RgbLootShieldInner  = terminal.RGB{R: 45, G: 12, B: 32}    // Dark
+	RgbLootShieldCenter = terminal.RGB{R: 12, G: 4, B: 10}     // Near black
 )
 
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type

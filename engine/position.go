@@ -369,6 +369,61 @@ func (p *Position) IsBlockedForSpawn(x, y int) bool {
 	return p.HasAnyEntityAt(x, y)
 }
 
+// HasLineOfSight checks if two grid points have unobstructed line of sight
+// Uses Bresenham traversal, checking intermediate cells for blocking walls
+// Acquires RLock once for entire traversal
+func (p *Position) HasLineOfSight(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.HasLineOfSightUnsafe(x0, y0, x1, y1, mask)
+}
+
+// HasLineOfSightUnsafe performs Bresenham LOS without acquiring lock
+// Caller MUST hold RLock() or Lock()
+func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
+	dx := x1 - x0
+	dy := y1 - y0
+	absDx, absDy := dx, dy
+	if absDx < 0 {
+		absDx = -absDx
+	}
+	if absDy < 0 {
+		absDy = -absDy
+	}
+
+	stepX, stepY := 1, 1
+	if dx < 0 {
+		stepX = -1
+	}
+	if dy < 0 {
+		stepY = -1
+	}
+
+	err := absDx - absDy
+	x, y := x0, y0
+
+	for {
+		if x == x1 && y == y1 {
+			return true
+		}
+
+		// Check intermediate cells (skip origin)
+		if (x != x0 || y != y0) && p.HasBlockingWallAtUnsafe(x, y, mask) {
+			return false
+		}
+
+		e2 := 2 * err
+		if e2 > -absDy {
+			err -= absDy
+			x += stepX
+		}
+		if e2 < absDx {
+			err += absDx
+			y += stepY
+		}
+	}
+}
+
 // --- Unsafe operation ---
 
 // Lock manually acquires the write lock for bulk operations, MUST be paired with Unlock()

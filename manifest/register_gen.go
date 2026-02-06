@@ -39,6 +39,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("wall", func(w any) any {
 		return system.NewWallSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("loot", func(w any) any {
+		return system.NewLootSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("glyph", func(w any) any {
 		return system.NewGlyphSystem(w.(*engine.World))
 	})
@@ -154,6 +157,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("cleaner", func(ctx any) any {
 		return renderer.NewCleanerRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityCleaner)
+	registry.RegisterRenderer("loot", func(ctx any) any {
+		return renderer.NewLootRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMulti)
 	registry.RegisterRenderer("flash", func(ctx any) any {
 		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
@@ -225,6 +231,7 @@ func ActiveSystems() []string {
 		"typing",
 		"composite",
 		"wall",
+		"loot",
 		"glyph",
 		"nugget",
 		"decay",
@@ -268,6 +275,7 @@ func ActiveRenderers() []string {
 		"gold",
 		"shield",
 		"cleaner",
+		"loot",
 		"flash",
 		"fadeout",
 		"marker",

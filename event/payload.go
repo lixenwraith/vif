@@ -612,3 +612,10 @@ type CompositeDestroyRequestPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
 }
+
+// EnemyKilledPayload carries entity type and death position for loot resolution
+type EnemyKilledPayload struct {
+	EnemyType component.EnemyType
+	X         int
+	Y         int
+}

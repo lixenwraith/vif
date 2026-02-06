@@ -2,15 +2,12 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -22,9 +19,6 @@ type WallSystem struct {
 
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
-
-	// Maze generation (dev/testing)
-	mazeGenerated bool
 
 	// Metrics
 	statEnabled    *atomic.Bool
@@ -51,7 +45,6 @@ func NewWallSystem(world *engine.World) engine.System {
 func (s *WallSystem) Init() {
 	s.pendingPushChecks = make([]core.Point, 0, 64)
 	s.pushCheckEveryTick = false
-	s.mazeGenerated = false
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -127,12 +120,6 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 func (s *WallSystem) Update() {
 	if !s.enabled {
 		return
-	}
-
-	// One-time maze generation for testing
-	if !s.mazeGenerated {
-		s.generateMaze()
-		s.mazeGenerated = true
 	}
 
 	// Process pending checks from this tick's spawns
@@ -497,149 +484,4 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 // SetPushCheckEveryTick enables or disables per-tick full push check
 func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 	s.pushCheckEveryTick = enabled
-}
-
-// TODO: remove after tests
-// --- TEST ---
-
-// generateMaze creates a test maze using recursive backtracking
-// Fills entire game area with ~10-cell corridors, leaves center clear for cursor spawn
-func (s *WallSystem) generateMaze() {
-	config := s.world.Resources.Config
-	gameW := config.GameWidth
-	gameH := config.GameHeight
-
-	const cellSize = 10 // 9 corridor + 1 wall
-
-	mazeW := gameW / cellSize
-	mazeH := gameH / cellSize
-
-	if mazeW < 3 || mazeH < 3 {
-		return
-	}
-
-	// Wall arrays: hWalls[y][x] = top wall of cell, vWalls[y][x] = left wall of cell
-	hWalls := make([][]bool, mazeH)
-	vWalls := make([][]bool, mazeH)
-	visited := make([][]bool, mazeH)
-	for my := 0; my < mazeH; my++ {
-		hWalls[my] = make([]bool, mazeW)
-		vWalls[my] = make([]bool, mazeW)
-		visited[my] = make([]bool, mazeW)
-		for mx := 0; mx < mazeW; mx++ {
-			hWalls[my][mx] = true
-			vWalls[my][mx] = true
-		}
-	}
-
-	// Recursive backtracking from center
-	rng := vmath.NewFastRand(uint64(time.Now().UnixNano()))
-	startMX, startMY := mazeW/2, mazeH/2
-
-	var stack [][2]int
-	visited[startMY][startMX] = true
-	stack = append(stack, [2]int{startMX, startMY})
-
-	for len(stack) > 0 {
-		mx, my := stack[len(stack)-1][0], stack[len(stack)-1][1]
-
-		// Collect unvisited neighbors
-		type dir struct {
-			nx, ny           int
-			removeH, removeV bool
-			hy, hx, vy, vx   int
-		}
-		var neighbors []dir
-
-		if my > 0 && !visited[my-1][mx] { // North
-			neighbors = append(neighbors, dir{mx, my - 1, true, false, my, mx, 0, 0})
-		}
-		if mx < mazeW-1 && !visited[my][mx+1] { // East
-			neighbors = append(neighbors, dir{mx + 1, my, false, true, 0, 0, my, mx + 1})
-		}
-		if my < mazeH-1 && !visited[my+1][mx] { // South
-			neighbors = append(neighbors, dir{mx, my + 1, true, false, my + 1, mx, 0, 0})
-		}
-		if mx > 0 && !visited[my][mx-1] { // West
-			neighbors = append(neighbors, dir{mx - 1, my, false, true, 0, 0, my, mx})
-		}
-
-		if len(neighbors) == 0 {
-			stack = stack[:len(stack)-1]
-			continue
-		}
-
-		n := neighbors[rng.Intn(len(neighbors))]
-		if n.removeH {
-			hWalls[n.hy][n.hx] = false
-		}
-		if n.removeV {
-			vWalls[n.vy][n.vx] = false
-		}
-
-		visited[n.ny][n.nx] = true
-		stack = append(stack, [2]int{n.nx, n.ny})
-	}
-
-	// Clear spawn area: 3x3 cells around center (+1 for boundary walls)
-	centerMX, centerMY := mazeW/2, mazeH/2
-	for dy := -1; dy <= 2; dy++ {
-		for dx := -1; dx <= 2; dx++ {
-			mx, my := centerMX+dx, centerMY+dy
-			if mx >= 0 && mx < mazeW && my >= 0 && my < mazeH {
-				hWalls[my][mx] = false
-				vWalls[my][mx] = false
-			}
-		}
-	}
-
-	// Render maze walls
-	for my := 0; my < mazeH; my++ {
-		for mx := 0; mx < mazeW; mx++ {
-			baseX := mx * cellSize
-			baseY := my * cellSize
-
-			if hWalls[my][mx] {
-				for wx := 0; wx < cellSize && baseX+wx < gameW; wx++ {
-					s.spawnMazeWall(baseX+wx, baseY)
-				}
-			}
-
-			if vWalls[my][mx] {
-				for wy := 0; wy < cellSize && baseY+wy < gameH; wy++ {
-					s.spawnMazeWall(baseX, baseY+wy)
-				}
-			}
-		}
-	}
-
-	// Right boundary
-	rightX := mazeW * cellSize
-	if rightX < gameW {
-		for y := 0; y < gameH; y++ {
-			s.spawnMazeWall(rightX, y)
-		}
-	}
-
-	// Bottom boundary
-	bottomY := mazeH * cellSize
-	if bottomY < gameH {
-		for x := 0; x < gameW; x++ {
-			s.spawnMazeWall(x, bottomY)
-		}
-	}
-}
-
-// spawnMazeWall creates a single maze wall cell synchronously
-func (s *WallSystem) spawnMazeWall(x, y int) {
-	s.handleSpawnSingle(&event.WallSpawnRequestPayload{
-		X:         x,
-		Y:         y,
-		BlockMask: component.WallBlockAll,
-		Char:      '█',
-		FgColor:   visual.RgbWallDefault,
-		BgColor:   visual.RgbWallDefault,
-		RenderFg:  true,
-		RenderBg:  true,
-	})
 }

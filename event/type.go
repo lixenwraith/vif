@@ -587,6 +587,11 @@ const (
 	// Trigger: Owner systems (Gold, Swarm, Quasar) on lifecycle end, FSM
 	// Consumer: CompositeSystem | Payload: *CompositeDestroyRequestPayload
 	EventCompositeDestroyRequest
+
+	// EventEnemyKilled signals an enemy entity was destroyed via combat
+	// Trigger: SwarmSystem (HP <= 0), QuasarSystem (future), etc
+	// Consumer: LootSystem | Payload: *EnemyKilledPayload
+	EventEnemyKilled
 )
 
 // GameEvent represents a single game event with metadata

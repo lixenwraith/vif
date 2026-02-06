@@ -163,6 +163,13 @@ func (s *QuasarSystem) Update() {
 		if combatComp.HitPoints <= 0 {
 			// TODO: audio effect
 
+			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
+				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+					EnemyType: component.EnemyQuasar,
+					X:         headerPos.X,
+					Y:         headerPos.Y,
+				})
+			}
 			s.terminateQuasar()
 			return
 		}

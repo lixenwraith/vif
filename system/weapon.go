@@ -37,7 +37,7 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	s.statRod = world.Resources.Status.Bools.Get("buff.rod")
 	s.statRodFired = world.Resources.Status.Ints.Get("buff.rod_fired")
 	s.statLauncher = world.Resources.Status.Bools.Get("buff.launcher")
-	s.statSpray = world.Resources.Status.Bools.Get("buff.chain")
+	s.statSpray = world.Resources.Status.Bools.Get("buff.spray")
 
 	s.Init()
 	return s
@@ -186,12 +186,14 @@ func (s *WeaponSystem) addWeapon(buff component.WeaponType) {
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
-	// TEST: AddEntityAt launcher orb for multi-orb testing
-	if buff == component.WeaponRod && !weaponComp.Active[component.WeaponLauncher] {
-		weaponComp.Active[component.WeaponLauncher] = true
-		weaponComp.Cooldown[component.WeaponLauncher] = 0 // Ready immediately
-		s.statLauncher.Store(true)
-	}
+	// NOTE: Keeping test block till loot system is functional
+	// if buff == component.WeaponRod && !weaponComp.Active[component.WeaponLauncher] {
+	// 	weaponComp.Active[component.WeaponLauncher] = true
+	// 	weaponComp.Cooldown[component.WeaponLauncher] = 0 // Ready immediately
+	// 	s.statLauncher.Store(true)
+	// }
+
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
 
 func (s *WeaponSystem) removeAllWeapons() {

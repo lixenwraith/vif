@@ -17,6 +17,7 @@ type Component struct {
 	Protection  *Store[component.ProtectionComponent]
 	Kinetic     *Store[component.KineticComponent]
 	Wall        *Store[component.WallComponent]
+	Loot        *Store[component.LootComponent]
 	Energy      *Store[component.EnergyComponent]
 	Heat        *Store[component.HeatComponent]
 	Shield      *Store[component.ShieldComponent]
@@ -58,6 +59,7 @@ func initComponents(w *World) {
 	w.Components.Protection = NewStore[component.ProtectionComponent]()
 	w.Components.Kinetic = NewStore[component.KineticComponent]()
 	w.Components.Wall = NewStore[component.WallComponent]()
+	w.Components.Loot = NewStore[component.LootComponent]()
 	w.Components.Energy = NewStore[component.EnergyComponent]()
 	w.Components.Heat = NewStore[component.HeatComponent]()
 	w.Components.Shield = NewStore[component.ShieldComponent]()
@@ -100,6 +102,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Protection.RemoveEntity(e)
 	w.Components.Kinetic.RemoveEntity(e)
 	w.Components.Wall.RemoveEntity(e)
+	w.Components.Loot.RemoveEntity(e)
 	w.Components.Energy.RemoveEntity(e)
 	w.Components.Heat.RemoveEntity(e)
 	w.Components.Shield.RemoveEntity(e)
@@ -141,6 +144,7 @@ func (w *World) wipeAll() {
 	w.Components.Protection.ClearAllComponents()
 	w.Components.Kinetic.ClearAllComponents()
 	w.Components.Wall.ClearAllComponents()
+	w.Components.Loot.ClearAllComponents()
 	w.Components.Energy.ClearAllComponents()
 	w.Components.Heat.ClearAllComponents()
 	w.Components.Shield.ClearAllComponents()

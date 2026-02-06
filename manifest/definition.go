@@ -32,6 +32,7 @@ var Components = []ComponentDef{
 	{"Protection", "ProtectionComponent"},
 	{"Kinetic", "KineticComponent"},
 	{"Wall", "WallComponent"},
+	{"Loot", "LootComponent"},
 
 	// Player state
 	{"Energy", "EnergyComponent"},
@@ -86,6 +87,7 @@ var Systems = []SystemDef{
 	{"typing", "NewTypingSystem"},
 	{"composite", "NewCompositeSystem"},
 	{"wall", "NewWallSystem"},
+	{"loot", "NewLootSystem"},
 	{"glyph", "NewGlyphSystem"},
 	{"nugget", "NewNuggetSystem"},
 	{"decay", "NewDecaySystem"},
@@ -129,6 +131,7 @@ var Renderers = []RendererDef{
 	{"gold", "NewGoldRenderer", "PriorityEntities"},
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
+	{"loot", "NewLootRenderer", "PriorityMulti"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
 	{"fadeout", "NewFadeoutRenderer", "PriorityParticle"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},

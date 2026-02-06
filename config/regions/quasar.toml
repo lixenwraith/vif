@@ -27,7 +27,7 @@ transitions = [
     { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
     { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 [states.QuasarGoldRetry]
@@ -36,7 +36,7 @@ transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
     { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 [states.QuasarGoldActive]
@@ -46,7 +46,7 @@ transitions = [
     { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 # --- DUST ALL ---
@@ -59,19 +59,10 @@ on_enter = [
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarWin" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 # --- QUASAR END ---
-
-[states.QuasarWin]
-parent = "QuasarCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventWeaponAddRequest", payload = { weapon = 0 } },
-]
-transitions = [
-    { trigger = "Tick", target = "QuasarExit" },
-]
 
 [states.QuasarFail]
 parent = "QuasarCycle"

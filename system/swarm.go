@@ -158,6 +158,14 @@ func (s *SwarmSystem) Update() {
 
 		// HP check → despawn
 		if combatComp.HitPoints <= 0 {
+			// Get position for loot before destruction
+			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
+				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+					EnemyType: component.EnemySwarm,
+					X:         headerPos.X,
+					Y:         headerPos.Y,
+				})
+			}
 			s.despawnSwarm(headerEntity)
 			continue
 		}
