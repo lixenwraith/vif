@@ -241,14 +241,17 @@ func (s *EnergySystem) setEnergy(value int64) {
 	if !ok {
 		return
 	}
+
+	currentEnergy := energyComp.Current
+	if (currentEnergy < 0 && value >= 0) || (currentEnergy >= 0 && value < 0) {
+		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+	}
 	energyComp.Current = value
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 
 	if value == 0 {
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
 	}
-
 }
 
 // handleGlyphConsumed calculates and applies energy from glyph destruction

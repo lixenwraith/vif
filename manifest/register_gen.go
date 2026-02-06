@@ -157,9 +157,6 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("cleaner", func(ctx any) any {
 		return renderer.NewCleanerRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityCleaner)
-	registry.RegisterRenderer("loot", func(ctx any) any {
-		return renderer.NewLootRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMulti)
 	registry.RegisterRenderer("flash", func(ctx any) any {
 		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
@@ -275,7 +272,6 @@ func ActiveRenderers() []string {
 		"gold",
 		"shield",
 		"cleaner",
-		"loot",
 		"flash",
 		"fadeout",
 		"marker",

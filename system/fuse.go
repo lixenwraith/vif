@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -155,7 +156,7 @@ func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, colo
 			StartY:    src.Y,
 			TargetX:   dest.X,
 			TargetY:   dest.Y,
-			Char:      parameter.DrainChar,
+			Char:      visual.DrainChar,
 			BaseColor: color,
 		})
 	}
@@ -283,7 +284,7 @@ func (s *FuseSystem) spawnConvergenceSpirit(startX, startY, targetX, targetY int
 		StartY:    startY,
 		TargetX:   targetX,
 		TargetY:   targetY,
-		Char:      parameter.DrainChar,
+		Char:      visual.DrainChar,
 		BaseColor: component.SpiritCyan,
 	})
 }

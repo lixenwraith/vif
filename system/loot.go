@@ -28,11 +28,12 @@ type lootTableState struct {
 type lootVisualDef struct {
 	Rune       rune
 	InnerColor terminal.RGB
+	GlowColor  terminal.RGB
 }
 
 var lootVisuals = map[component.LootType]lootVisualDef{
-	component.LootLauncher: {visual.CircleBullsEye, visual.RgbOrbLauncher},
-	component.LootRod:      {visual.CircleBullsEye, visual.RgbOrbRod},
+	component.LootLauncher: {'M', visual.RgbOrbLauncher, terminal.RGB{R: 180, G: 100}},
+	component.LootRod:      {'L', visual.RgbOrbRod, terminal.RGB{G: 180, B: 180}},
 }
 
 type LootSystem struct {
@@ -312,18 +313,38 @@ func (s *LootSystem) spawnLoot(lootType component.LootType, x, y int) {
 	preciseX, preciseY := vmath.CenteredFromGrid(x, y)
 
 	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
-		Type:       lootType,
-		Rune:       vis.Rune,
-		InnerColor: vis.InnerColor,
-		PreciseX:   preciseX,
-		PreciseY:   preciseY,
-		LastIntX:   x,
-		LastIntY:   y,
+		Type:     lootType,
+		Rune:     vis.Rune,
+		PreciseX: preciseX,
+		PreciseY: preciseY,
+		LastIntX: x,
+		LastIntY: y,
+	})
+
+	// Shield component for visual halo
+	cfg := visual.LootShieldConfig
+	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
+		Active:        true,
+		Color:         cfg.Color,
+		Palette256:    cfg.Palette256,
+		GlowColor:     vis.GlowColor, // Use type-specific glow
+		GlowIntensity: cfg.GlowIntensity,
+		GlowPeriod:    cfg.GlowPeriod,
+		MaxOpacity:    cfg.MaxOpacity,
+		RadiusX:       cfg.RadiusX,
+		RadiusY:       cfg.RadiusY,
+		InvRxSq:       cfg.InvRxSq,
+		InvRySq:       cfg.InvRySq,
 	})
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-	// Protected from drain, decay, delete (not from death — allows system destruction)
+	// Sigil for center rune visualization
+	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
+		Rune:  vis.Rune,
+		Color: vis.InnerColor,
+	})
+
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectFromDrain | component.ProtectFromDecay | component.ProtectFromDelete,
 	})

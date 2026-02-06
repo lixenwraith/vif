@@ -2,8 +2,6 @@ package parameter
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // Drain System
@@ -27,9 +25,6 @@ const (
 
 // Drain Entity
 const (
-	// DrainChar is the character used to render the drain entity
-	DrainChar = visual.BorderDoubleCross
-
 	// DrainEnergyDrainInterval is the duration between energy drain ticks
 	DrainEnergyDrainInterval = 1000 * time.Millisecond
 

@@ -208,6 +208,9 @@ const (
 
 	// Wall256PaletteDefault is 256-color fallback for walls
 	Wall256PaletteDefault uint8 = 240
+
+	// loot256Rim is 256-color shield palette
+	Loot256Rim uint8 = 198
 )
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB

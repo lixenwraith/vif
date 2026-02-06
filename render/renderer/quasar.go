@@ -12,48 +12,19 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// quasarShieldCellRenderer callback for per-cell shield rendering (256 vs TrueColor)
-type quasarShieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
-
-// QuasarRenderer draws the quasar boss entity with optional shield halo
+// QuasarRenderer draws the quasar boss entity components
 type QuasarRenderer struct {
 	gameCtx *engine.GameContext
-
-	// Shield rendering strategy selected at init
-	renderShieldCell quasarShieldCellRenderer
-
-	// Precomputed ellipse params for shield containment (Q32.32)
-	shieldInvRxSq int64
-	shieldInvRySq int64
-	shieldPadX    int
-	shieldPadY    int
 }
 
-// NewQuasarRenderer creates renderer with color-mode-specific shield strategy
+// NewQuasarRenderer creates the renderer
 func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
-	r := &QuasarRenderer{
+	return &QuasarRenderer{
 		gameCtx: gameCtx,
 	}
-
-	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
-		r.shieldPadX = parameter.QuasarShieldPad256X
-		r.shieldPadY = parameter.QuasarShieldPad256Y
-		r.renderShieldCell = r.shieldCell256
-	} else {
-		r.shieldPadX = parameter.QuasarShieldPadTCX
-		r.shieldPadY = parameter.QuasarShieldPadTCY
-		r.renderShieldCell = r.shieldCellTrueColor
-	}
-
-	// Precompute ellipse inverse radii for containment checks
-	rx := vmath.FromFloat(float64(parameter.QuasarWidth)/2.0 + float64(r.shieldPadX))
-	ry := vmath.FromFloat(float64(parameter.QuasarHeight)/2.0 + float64(r.shieldPadY))
-	r.shieldInvRxSq, r.shieldInvRySq = vmath.EllipseInvRadiiSq(rx, ry)
-
-	return r
 }
 
-// Render draws quasar composite with shield halo when zapping
+// Render draws quasar composite parts (zap range and members)
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	headerEntities := r.gameCtx.World.Components.Quasar.GetAllEntities()
 	if len(headerEntities) == 0 {
@@ -83,13 +54,8 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Zap range border renders first (background layer)
+		// Zap range border renders (background layer)
 		r.renderZapRange(ctx, buf, headerPos.X, headerPos.Y, &quasarComp)
-
-		// Shield renders to background layer when active
-		if quasarComp.IsShielded {
-			r.renderShield(ctx, buf, headerPos.X, headerPos.Y)
-		}
 
 		// Member characters render to foreground layer
 		r.renderMembers(ctx, buf, &headerComp, &combatComp)
@@ -110,7 +76,6 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	borderHalfWidth := vmath.FromFloat(parameter.QuasarZapBorderWidthCells / 2.0)
 
 	// Calculate delta in normalized space: visual_width / radius
-	// This ensures border stays same physical size regardless of window/radius size
 	if quasar.ZapRadius == 0 {
 		return
 	}
@@ -119,17 +84,17 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	innerThreshold := vmath.Scale - borderDelta
 	outerThreshold := vmath.Scale + borderDelta
 
-	// Dynamic bounding box in grid cells (circle in visual space = ellipse in grid): radius (fixed) -> int cells
+	// Dynamic bounding box in grid cells
 	rVisual := quasar.ZapRadius
-	// AddEntityAt padding to ensure coverage
 	rxCells := vmath.ToInt(rVisual) + parameter.QuasarBorderPaddingCells
-	ryCells := vmath.ToInt(rVisual)/2 + parameter.QuasarBorderPaddingCells // Visual Y is 2x, so grid cells = radius/2
+	ryCells := vmath.ToInt(rVisual)/2 + parameter.QuasarBorderPaddingCells
 
 	minX := headerX - rxCells
 	maxX := headerX + rxCells
 	minY := headerY - ryCells
 	maxY := headerY + ryCells
 
+	// Clamp to screen
 	if minX < 0 {
 		minX = 0
 	}
@@ -145,13 +110,11 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			// CRITICAL: Must match QuasarSystem.isCursorInZapRange exactly
 			dx := vmath.FromInt(x - headerX)
 			dy := vmath.FromInt(y - headerY)
 			dyCirc := vmath.ScaleToCircular(dy)
 			dist := vmath.MagnitudeEuclidean(dx, dyCirc)
 
-			// Normalized distance for boundary detection
 			normDist := vmath.Div(dist, quasar.ZapRadius)
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
@@ -165,66 +128,8 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	}
 }
 
-// renderShield draws elliptical halo centered on header position
-func (r *QuasarRenderer) renderShield(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int) {
-	// Bounding box relative to header (which is at center of quasar grid)
-	minDX := -r.shieldPadX - parameter.QuasarHeaderOffsetX
-	maxDX := parameter.QuasarWidth - parameter.QuasarHeaderOffsetX + r.shieldPadX - 1
-	minDY := -r.shieldPadY - parameter.QuasarHeaderOffsetY
-	maxDY := parameter.QuasarHeight - parameter.QuasarHeaderOffsetY + r.shieldPadY - 1
-
-	for dy := minDY; dy <= maxDY; dy++ {
-		screenY := ctx.GameYOffset + headerY + dy
-		if screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
-			continue
-		}
-
-		for dx := minDX; dx <= maxDX; dx++ {
-			screenX := ctx.GameXOffset + headerX + dx
-			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth {
-				continue
-			}
-
-			// Ellipse containment via normalized squared distance
-			dxFixed := vmath.FromInt(dx)
-			dyFixed := vmath.FromInt(dy)
-			normalizedDistSq := vmath.EllipseDistSq(dxFixed, dyFixed, r.shieldInvRxSq, r.shieldInvRySq)
-
-			if normalizedDistSq > vmath.Scale {
-				continue
-			}
-
-			r.renderShieldCell(buf, screenX, screenY, normalizedDistSq)
-		}
-	}
-}
-
-// shieldCellTrueColor renders gradient blend from center to edge
-func (r *QuasarRenderer) shieldCellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	// Quadratic gradient: transparent center → max opacity at edge
-	alphaFixed := vmath.Mul(normalizedDistSq, vmath.FromFloat(parameter.QuasarShieldMaxOpacity))
-	alpha := vmath.ToFloat(alphaFixed)
-
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, visual.RgbQuasarShield, render.BlendScreen, alpha, terminal.AttrNone)
-}
-
-// quasarShield256ThresholdSq defines inner edge of solid rim (0.4 in Q32.32 squared)
-var quasarShield256ThresholdSq = vmath.FromFloat(0.16)
-
-// shieldCell256 renders solid rim for outer portion of ellipse
-func (r *QuasarRenderer) shieldCell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	// Skip center region, only render outer rim
-	if normalizedDistSq < quasarShield256ThresholdSq {
-		return
-	}
-
-	buf.SetBg256(screenX, screenY, parameter.QuasarShield256Palette)
-}
-
 // renderMembers draws quasar character grid with state-based coloring
 func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
-
-	// Determine color: flash > enraged > normal
 	var color terminal.RGB
 	if combatComp.RemainingHitFlash > 0 {
 		color = r.calculateFlashColor(combatComp.RemainingHitFlash)
@@ -244,7 +149,6 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 			continue
 		}
 
-		// Resolve rune from QuasarChars using member offset
 		row := int(member.OffsetY) + parameter.QuasarHeaderOffsetY
 		col := int(member.OffsetX) + parameter.QuasarHeaderOffsetX
 		ch := visual.QuasarChars[row][col]
@@ -261,17 +165,17 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 	}
 }
 
-// calculateFlashColor returns yellow with pulse effect (low→high→low)
+// calculateFlashColor returns yellow with pulse effect
 func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
 	if progress > 0.67 {
-		intensity = 0.6 // Phase 1: low
+		intensity = 0.6
 	} else if progress > 0.33 {
-		intensity = 1.0 // Phase 2: high
+		intensity = 1.0
 	} else {
-		intensity = 0.6 // Phase 3: low
+		intensity = 0.6
 	}
 
 	return render.Scale(visual.RgbCombatHitFlash, intensity)

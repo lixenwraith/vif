@@ -771,7 +771,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Visual component for sigil renderer and death system flash extraction
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
-		Rune:  parameter.DrainChar,
+		Rune:  visual.DrainChar,
 		Color: visual.RgbDrain,
 	})
 

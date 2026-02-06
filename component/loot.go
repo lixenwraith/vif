@@ -1,7 +1,5 @@
 package component
 
-import "github.com/lixenwraith/vi-fighter/terminal"
-
 type EnemyType int
 
 const (
@@ -20,9 +18,10 @@ const (
 
 // LootComponent represents a collectible loot drop entity
 type LootComponent struct {
-	Type       LootType
-	Rune       rune
-	InnerColor terminal.RGB
+	Type LootType
+
+	// Visual
+	Rune rune
 
 	// Homing state
 	Homing   bool

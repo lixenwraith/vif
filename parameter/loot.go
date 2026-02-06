@@ -1,10 +1,10 @@
 package parameter
 
-const (
-	// Loot entity visual dimensions (renderer-only, not composite)
-	LootShieldWidth  = 5
-	LootShieldHeight = 3
+import (
+	"time"
+)
 
+const (
 	// Drop rates (base probability per kill)
 	LootDropRateLauncher = 0.10 // 10%
 	LootDropRateRod      = 1.00 // 100% guaranteed from quasar
@@ -20,6 +20,14 @@ const (
 	LootCollectRadius = 1
 
 	// Shield ellipse radii (float, converted to Q32.32 in renderer init)
-	LootShieldRadiusX = 2.0
-	LootShieldRadiusY = 1.0
+	LootShieldRadiusX = 2.5
+	LootShieldRadiusY = 1.5
+
+	// Shield opacity (lower than player to avoid saturation and allow glow visibility)
+	LootShieldMaxOpacity = 0.5
+
+	// Rotating glow indicator
+	LootGlowRotationPeriod = 500 * time.Millisecond // 2 rotations/sec
+	LootGlowEdgeThreshold  = 0.25                   // Broad rim for small ellipse
+	LootGlowIntensity      = 0.7
 )

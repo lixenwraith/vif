@@ -350,6 +350,22 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		SpeedMultiplier: vmath.Scale,
 	})
 
+	// Add ShieldComponent (inactive by default), uses pre-calculated config
+	cfg := visual.QuasarShieldConfig
+	s.world.Components.Shield.SetComponent(headerEntity, component.ShieldComponent{
+		Active:        false,
+		Color:         cfg.Color,
+		Palette256:    cfg.Palette256,
+		GlowColor:     cfg.GlowColor,
+		GlowIntensity: cfg.GlowIntensity,
+		GlowPeriod:    cfg.GlowPeriod,
+		MaxOpacity:    cfg.MaxOpacity,
+		RadiusX:       cfg.RadiusX,
+		RadiusY:       cfg.RadiusY,
+		InvRxSq:       cfg.InvRxSq,
+		InvRySq:       cfg.InvRySq,
+	})
+
 	// Set combat component
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
 		OwnerEntity:      headerEntity,
@@ -640,7 +656,14 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	quasarComp.ChargeRemaining = 0
 	quasarComp.IsCharging = false
 	quasarComp.IsZapping = true
+
 	quasarComp.IsShielded = true // Shield active during zap
+	// Activate visual shield component
+	if shield, ok := s.world.Components.Shield.GetComponent(headerEntity); ok {
+		shield.Active = true
+		s.world.Components.Shield.SetComponent(headerEntity, shield)
+	}
+
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 
@@ -649,7 +672,14 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawn, &event.LightningDespawnPayload{Owner: headerEntity})
 
 	quasarComp.IsZapping = false
+
 	quasarComp.IsShielded = false // Clear shield
+	// Deactivate visual shield component
+	if shield, ok := s.world.Components.Shield.GetComponent(headerEntity); ok {
+		shield.Active = false
+		s.world.Components.Shield.SetComponent(headerEntity, shield)
+	}
+
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 

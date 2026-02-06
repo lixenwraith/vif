@@ -1,99 +1,162 @@
 package renderer
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// Boost glow parameters (Q32.32)
-var (
-	// boostGlowRotationSpeed is 2 rotations/sec in Q32.32 (Scale = full rotation)
-	boostGlowRotationSpeed int64 = vmath.Scale * 2
+// ShieldStyle configures per-invocation shield rendering parameters
+type ShieldStyle struct {
+	// Halo appearance
+	Color      terminal.RGB
+	Palette256 uint8
+	MaxOpacity int64 // Q32.32 peak alpha at ellipse edge
 
-	// boostGlowEdgeThreshold is 0.6² in Q32.32 for rim detection
-	boostGlowEdgeThreshold = vmath.FromFloat(0.36) // 0.6²
+	// Precomputed ellipse containment
+	InvRxSq    int64
+	InvRySq    int64
+	RadiusXInt int // Integer bounding box half-width
+	RadiusYInt int // Integer bounding box half-height
 
-	// boostGlowIntensityFixed is 0.7 peak alpha in Q32.32
-	boostGlowIntensityFixed = vmath.FromFloat(0.7)
+	// 256-color rim threshold (Q32.32, cells below this are transparent)
+	Threshold256 int64
 
-	// cell256ThresholdSq is 0.8² in Q32.32 for rim detection
-	cell256ThresholdSq = vmath.FromFloat(0.64) // 0.8²
-)
+	// Game-space position to skip (-1 = disabled)
+	SkipX, SkipY int
 
-// shieldCellRenderer is the callback type for per-cell shield rendering
-// Defines the interface for rendering strategy (256-color vs TrueColor) selected at initialization
-// normalizedDistSq is Q32.32 squared distance where Scale = edge of ellipse
-type shieldCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
+	// Rotating glow overlay (disabled if Period == 0)
+	GlowColor         terminal.RGB
+	GlowEdgeThreshold int64         // Q32.32 distSq below which glow is suppressed
+	GlowIntensity     int64         // Q32.32 peak glow alpha
+	GlowPeriod        time.Duration // Full rotation duration (0 = disabled)
+}
 
-// ShieldRenderer renders active shields with dynamic color from GameState
+// shieldCellFunc renders a single cell within the shield ellipse
+type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
+
+// ShieldPainter is a reusable shield halo renderer supporting TrueColor gradient
+// and 256-color rim modes with optional rotating glow overlay
+type ShieldPainter struct {
+	renderCell shieldCellFunc
+
+	// Per-Paint transient state
+	style            *ShieldStyle
+	glowActive       bool
+	rotDirX, rotDirY int64
+	cellDx, cellDy   int64
+}
+
+// NewShieldPainter creates a painter dispatching to the appropriate color mode
+func NewShieldPainter(colorMode terminal.ColorMode) *ShieldPainter {
+	p := &ShieldPainter{}
+	if colorMode == terminal.ColorMode256 {
+		p.renderCell = shieldCell256
+	} else {
+		p.renderCell = shieldCellTrueColor
+	}
+	return p
+}
+
+// Paint renders a shield halo centered at (centerX, centerY) in game-space
+// Caller must set write mask before invocation
+func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style *ShieldStyle) {
+	p.style = style
+
+	p.glowActive = style.GlowPeriod > 0
+	if p.glowActive {
+		period := int64(style.GlowPeriod)
+		phase := ctx.GameTime.UnixNano() % period
+		angle := (phase * vmath.Scale) / period
+		p.rotDirX = vmath.Cos(angle)
+		p.rotDirY = vmath.Sin(angle)
+	}
+
+	startX := max(0, centerX-style.RadiusXInt)
+	endX := min(ctx.GameWidth-1, centerX+style.RadiusXInt)
+	startY := max(0, centerY-style.RadiusYInt)
+	endY := min(ctx.GameHeight-1, centerY+style.RadiusYInt)
+
+	for y := startY; y <= endY; y++ {
+		for x := startX; x <= endX; x++ {
+			if x == style.SkipX && y == style.SkipY {
+				continue
+			}
+
+			dx := vmath.FromInt(x - centerX)
+			dy := vmath.FromInt(y - centerY)
+			normalizedDistSq := vmath.EllipseDistSq(dx, dy, style.InvRxSq, style.InvRySq)
+			if normalizedDistSq > vmath.Scale {
+				continue
+			}
+
+			p.cellDx = dx
+			p.cellDy = dy
+			p.renderCell(p, buf, ctx.GameXOffset+x, ctx.GameYOffset+y, normalizedDistSq)
+		}
+	}
+}
+
+// shieldCellTrueColor renders quadratic gradient with optional rotating glow
+func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
+	s := p.style
+
+	alphaFixed := vmath.Mul(normalizedDistSq, s.MaxOpacity)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, s.Color, render.BlendScreen, vmath.ToFloat(alphaFixed), terminal.AttrNone)
+
+	if !p.glowActive || normalizedDistSq <= s.GlowEdgeThreshold {
+		return
+	}
+
+	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
+	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
+	if dot <= 0 {
+		return
+	}
+
+	edgeFactor := vmath.Div(normalizedDistSq-s.GlowEdgeThreshold, vmath.Scale-s.GlowEdgeThreshold)
+	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), s.GlowIntensity)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, s.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
+}
+
+// shieldCell256 renders discrete rim for 256-color terminals
+func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
+	if normalizedDistSq < p.style.Threshold256 {
+		return
+	}
+	buf.SetBg256(screenX, screenY, p.style.Palette256)
+}
+
+// --- Cursor Shield Renderer (SystemRenderer) ---
+
+// ShieldRenderer renders active player shields with dynamic energy-based coloring
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
-
-	renderCell shieldCellRenderer
-
-	// Per-frame state (Q32.32 fixed-point for performance)
-	frameColor           terminal.RGB
-	framePalette         uint8
-	frameMaxOpacityFixed int64 // Q32.32 max opacity for gradient calculation
-
-	// Boost glow per-frame state
-	boostGlowActive  bool
-	rotDirX, rotDirY int64 // Rotation direction unit vector
-
-	// TODO: find a better way to handle the state (no renderer arg)
-	// Current cell state (set before renderCell callback)
-	cellDx, cellDy int64
+	painter *ShieldPainter
 }
 
-// NewShieldRenderer creates a new shield renderer
+// NewShieldRenderer creates the cursor shield system renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
-	r := &ShieldRenderer{
+	return &ShieldRenderer{
 		gameCtx: gameCtx,
+		painter: NewShieldPainter(gameCtx.World.Resources.Render.ColorMode),
 	}
-
-	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
-		r.renderCell = r.cell256
-	} else {
-		r.renderCell = r.cellTrueColor
-	}
-
-	return r
 }
 
-// Render draws all active shields with quadratic falloff gradient
+// Render draws all active player shields
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskField)
+
 	shieldEntities := r.gameCtx.World.Components.Shield.GetAllEntities()
 	if len(shieldEntities) == 0 {
 		return
 	}
 
-	// Energy-based shield color: positive/zero → yellow, negative → purple
-	r.frameColor = visual.RgbCleanerBasePositive
-	r.framePalette = visual.Shield256Positive
-	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok {
-		if energyComp.Current < 0 {
-			r.frameColor = visual.RgbCleanerBaseNegative
-			r.framePalette = visual.Shield256Negative
-		}
-	}
-
-	// Boost glow frame state
-	r.boostGlowActive = false
-	if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && boost.Active {
-		r.boostGlowActive = true
-		// rotations/sec calculation
-		nanos := ctx.GameTime.UnixNano()
-		period := int64(parameter.ShieldBoostRotationDuration)
-		phase := nanos % period
-		angle := (phase * int64(vmath.Scale)) / period
-		r.rotDirX = vmath.Cos(angle)
-		r.rotDirY = vmath.Sin(angle)
-	}
+	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 
 	for _, shieldEntity := range shieldEntities {
 		shieldComp, ok := r.gameCtx.World.Components.Shield.GetComponent(shieldEntity)
@@ -106,94 +169,31 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Cache max opacity as Q32.32 for fixed-point gradient calculation
-		r.frameMaxOpacityFixed = vmath.FromFloat(shieldComp.MaxOpacity)
-
-		// Bounding box - integer radii from Q32.32
-		radiusXInt := vmath.ToInt(shieldComp.RadiusX)
-		radiusYInt := vmath.ToInt(shieldComp.RadiusY)
-
-		// Render area with OOB clamp
-		startX := max(0, shieldPos.X-radiusXInt)
-		endX := min(ctx.GameWidth-1, shieldPos.X+radiusXInt)
-		startY := max(0, shieldPos.Y-radiusYInt)
-		endY := min(ctx.GameHeight-1, shieldPos.Y+radiusYInt)
-
-		for y := startY; y <= endY; y++ {
-			for x := startX; x <= endX; x++ {
-				// Skip cursor position
-				if x == ctx.CursorX && y == ctx.CursorY {
-					continue
-				}
-
-				dx := vmath.FromInt(x - shieldPos.X)
-				dy := vmath.FromInt(y - shieldPos.Y)
-
-				// Ellipse containment check (Q32.32)
-				// Returns squared normalized distance: <= Scale means inside
-				normalizedDistSq := vmath.EllipseDistSq(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq)
-
-				if normalizedDistSq > vmath.Scale {
-					continue
-				}
-
-				// Store for callback access
-				r.cellDx = dx
-				r.cellDy = dy
-
-				// Pass Q32.32 distance squared directly to cell renderer
-				r.renderCell(buf, ctx.GameXOffset+x, ctx.GameYOffset+y, normalizedDistSq)
-			}
+		// Determine skip logic (only player shields skip the center to show cursor)
+		skipX, skipY := -1, -1
+		if shieldEntity == cursorEntity {
+			skipX = shieldPos.X
+			skipY = shieldPos.Y
 		}
+
+		// Construct style from component
+		style := ShieldStyle{
+			Color:             shieldComp.Color,
+			Palette256:        shieldComp.Palette256,
+			MaxOpacity:        vmath.FromFloat(shieldComp.MaxOpacity),
+			InvRxSq:           shieldComp.InvRxSq,
+			InvRySq:           shieldComp.InvRySq,
+			RadiusXInt:        vmath.ToInt(shieldComp.RadiusX),
+			RadiusYInt:        vmath.ToInt(shieldComp.RadiusY),
+			Threshold256:      vmath.FromFloat(0.64), // Standard rim threshold (0.8^2)
+			SkipX:             skipX,
+			SkipY:             skipY,
+			GlowColor:         shieldComp.GlowColor,
+			GlowEdgeThreshold: vmath.FromFloat(0.36), // Standard glow threshold (0.6^2)
+			GlowIntensity:     vmath.FromFloat(shieldComp.GlowIntensity),
+			GlowPeriod:        shieldComp.GlowPeriod,
+		}
+
+		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
 	}
-}
-
-// cellTrueColor renders a single shield cell with smooth gradient (TrueColor mode)
-// Uses pure fixed-point math until final alpha conversion for ~17% performance gain
-func (r *ShieldRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	// Simple quadratic gradient: Dark center -> Bright edge
-	// normalizedDistSq ranges from 0 (center) to Scale (edge) in Q32.32
-	// Squared curve keeps the center transparent/dark for text visibility,
-	// while ramping up smoothly to maximum intensity at the very edge
-	// This eliminates the "blocky" fade-out and ensures the rim is the brightest part
-
-	// Pure fixed-point: alpha = (distSq / Scale) * maxOpacity
-	// Since distSq is already normalized to Scale, just multiply directly
-	alphaFixed := vmath.Mul(normalizedDistSq, r.frameMaxOpacityFixed)
-
-	// Single float conversion at final blend step only
-	alpha := vmath.ToFloat(alphaFixed)
-
-	// Use BlendScreen for glowing effect on dark backgrounds
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, r.frameColor, render.BlendScreen, alpha, terminal.AttrNone)
-
-	// Boost glow on outer rim
-	if !r.boostGlowActive || normalizedDistSq <= boostGlowEdgeThreshold {
-		return
-	}
-
-	cellDirX, cellDirY := vmath.Normalize2D(r.cellDx, r.cellDy)
-	dot := vmath.DotProduct(cellDirX, cellDirY, r.rotDirX, r.rotDirY)
-
-	if dot <= 0 {
-		return
-	}
-
-	edgeFactor := vmath.Div(normalizedDistSq-boostGlowEdgeThreshold, vmath.Scale-boostGlowEdgeThreshold)
-	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), boostGlowIntensityFixed)
-
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, visual.RgbBoostGlow, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
-}
-
-// cell256 renders a single shield cell with discrete zones (256-color mode)
-func (r *ShieldRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	// In 256-color mode, center is transparent to ensure text legibility
-	// normalizedDistSq ranges from 0 (center) to Scale (edge)
-	// Threshold at 0.64 (0.8²) to match original dist < 0.8 check
-	if normalizedDistSq < cell256ThresholdSq {
-		return // Transparent center: Don't touch the buffer
-	}
-
-	// Draw rim using Screen blend
-	buf.SetBg256(screenX, screenY, r.framePalette)
 }

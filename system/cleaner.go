@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -308,7 +309,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Rune:           parameter.CleanerChar,
+			Rune:           visual.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{
@@ -507,7 +508,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			TrailRing:      trailRing,
 			TrailHead:      0,
 			TrailLen:       1,
-			Rune:           parameter.CleanerChar,
+			Rune:           visual.CleanerChar,
 			NegativeEnergy: negativeEnergy,
 		}
 		kinetic := core.Kinetic{

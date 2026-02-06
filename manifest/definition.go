@@ -131,7 +131,6 @@ var Renderers = []RendererDef{
 	{"gold", "NewGoldRenderer", "PriorityEntities"},
 	{"shield", "NewShieldRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
-	{"loot", "NewLootRenderer", "PriorityMulti"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
 	{"fadeout", "NewFadeoutRenderer", "PriorityParticle"},
 	{"marker", "NewMarkerRenderer", "PriorityMarker"},

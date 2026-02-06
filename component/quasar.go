@@ -13,7 +13,7 @@ type QuasarComponent struct {
 	// Quasar state
 	IsZapping  bool // True if zapping cursor outside range
 	IsCharging bool // True if charging to zap with cursor outside range
-	IsShielded bool // True if shielded, equal to IsZapping, for render and future potential use
+	IsShielded bool // True if shielded, indicates damage immunity, is in sync with quasar's shield component active state
 
 	// Charge phase state (delay before zapping)
 	ChargeRemaining time.Duration
