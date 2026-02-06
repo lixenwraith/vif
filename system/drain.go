@@ -293,7 +293,7 @@ func (s *DrainSystem) processDrainStates() {
 
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashRequest)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
 			continue
 		}
 
@@ -334,7 +334,7 @@ func (s *DrainSystem) detectSwarmFusions() {
 		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
 			DrainB: drainB,
-			Effect: event.FuseEffectMaterialize,
+			Effect: event.FuseEffectSpirit,
 		})
 	}
 }
@@ -640,7 +640,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	for i := 0; i < toRemove; i++ {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashRequest)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashSpawnOneRequest)
 	}
 }
 
@@ -845,7 +845,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Delta: -parameter.DrainHeatReductionAmount,
 			})
-			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashRequest)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashSpawnOneRequest)
 		}
 	}
 
@@ -872,7 +872,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 	for _, drainEntitiesAtPosition := range drainPositions {
 		if len(drainEntitiesAtPosition) > 1 {
 			for _, colocatedDrainEntity := range drainEntitiesAtPosition {
-				event.EmitDeathOne(s.world.Resources.Event.Queue, colocatedDrainEntity, event.EventFlashRequest)
+				event.EmitDeathOne(s.world.Resources.Event.Queue, colocatedDrainEntity, event.EventFlashSpawnOneRequest)
 			}
 		}
 	}

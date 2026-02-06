@@ -254,7 +254,7 @@ type MusicTempoPayload struct {
 }
 
 // DeathRequestPayload contains batch death request
-// EffectEvent: 0 = silent death, EventFlashRequest = flash, future: explosion, chain death
+// EffectEvent: 0 = silent death, EventFlashSpawnOneRequest = flash, future: explosion, chain death
 type DeathRequestPayload struct {
 	Entities    []core.Entity `toml:"entities"`
 	EffectEvent EventType     `toml:"effect_event"`
@@ -393,21 +393,6 @@ type DustSpawnOneRequestPayload struct {
 	Y     int                  `toml:"y"`
 	Char  rune                 `toml:"char"`
 	Level component.GlyphLevel `toml:"level"`
-}
-
-// DustSpawnEntry is a value type for batch dust spawning
-// Must remain a struct (not pointer) to avoid GC pressure in pooled slices
-type DustSpawnEntry struct {
-	X     int                  `toml:"x"`
-	Y     int                  `toml:"y"`
-	Char  rune                 `toml:"char"`
-	Level component.GlyphLevel `toml:"level"`
-}
-
-// DustSpawnBatchRequestPayload contains batch dust spawn data
-// Use AcquireDustSpawnBatch/ReleaseDustSpawnBatch for pooled allocation
-type DustSpawnBatchRequestPayload struct {
-	Entries []DustSpawnEntry `toml:"entries"`
 }
 
 // MetaStatusMessagePayload contains message to be displayed in status bar
@@ -614,20 +599,6 @@ type FadeoutSpawnPayload struct {
 	BgColor terminal.RGB
 }
 
-// FadeoutSpawnEntry is a value type for batch fadeout spawning
-type FadeoutSpawnEntry struct {
-	X       int
-	Y       int
-	Char    rune
-	FgColor terminal.RGB
-	BgColor terminal.RGB
-}
-
-// FadeoutSpawnBatchPayload contains batch fadeout spawn data
-type FadeoutSpawnBatchPayload struct {
-	Entries []FadeoutSpawnEntry
-}
-
 // CompositeIntegrityBreachPayload notifies owner system of unexpected member loss
 type CompositeIntegrityBreachPayload struct {
 	HeaderEntity   core.Entity        `toml:"header_entity"`
@@ -639,5 +610,5 @@ type CompositeIntegrityBreachPayload struct {
 // CompositeDestroyRequestPayload requests centralized composite destruction
 type CompositeDestroyRequestPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
-	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashRequest, etc.
+	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
 }

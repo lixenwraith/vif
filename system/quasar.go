@@ -735,7 +735,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, toDestroy)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy)
 	}
 }
 

@@ -34,11 +34,11 @@ func EmitDeathBatch(q *EventQueue, effect EventType, entities []core.Entity) {
 // event.EmitDeathOne(s.res.Event.Queue, entity, 0)
 //
 // Pattern 2: Individual Kill with Flash Effect (e.g., Typing correct char)
-// event.EmitDeathOne(s.res.Event.Queue, entity, event.EventFlashRequest)
+// event.EmitDeathOne(s.res.Event.Queue, entity, event.EventFlashSpawnOneRequest)
 //
 // Pattern 3: Batch Kill (e.g., Cleaner sweep, Decay row)
 // 'toDestroy' is prepared []core.Entity slice
-// event.EmitDeathBatch(s.res.Event.Queue, event.EventFlashRequest, toDestroy)
+// event.EmitDeathBatch(s.res.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy)
 //
 // **Pattern 4: Silent Batch (e.g., Range delete)**
 // event.EmitDeathBatch(s.res.Event.Queue, 0, toDestroy)

@@ -255,7 +255,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 	cY = topLeftY + parameter.QuasarHeaderOffsetY
 
 	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
-	s.applyEffect(event.FuseEffectSpirit, sources, area, component.SpiritCyan)
+	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
 
 	// Cleanup materializers and drains
 	mats := s.world.Components.Materialize.GetAllEntities()

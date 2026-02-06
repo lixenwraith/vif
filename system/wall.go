@@ -314,7 +314,7 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 
 	// Route through death system with appropriate effects
 	if len(flashTargets) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, flashTargets)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets)
 	}
 	if len(fadeoutTargets) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)
@@ -343,7 +343,7 @@ func (s *WallSystem) despawnAllWalls() {
 
 	// Route through death system with appropriate effects
 	if len(flashTargets) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, flashTargets)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets)
 	}
 	if len(fadeoutTargets) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)

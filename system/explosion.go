@@ -373,10 +373,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	if convertGlyphs && len(s.entityBuf) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf)
 
-		// TODO: refactor to single death event emit with dust batch spawn, needs death system update
-		dustBatch := event.AcquireDustSpawnBatch()
-		dustBatch.Entries = append(dustBatch.Entries, s.dustEntryBuf...)
-		s.world.PushEvent(event.EventDustSpawnBatchRequest, dustBatch)
+		event.EmitBatch(s.world.Resources.Event.Queue, event.DustBatchPool, event.EventDustSpawnBatchRequest, s.dustEntryBuf)
 
 		s.statConverted.Add(int64(len(s.entityBuf)))
 	}

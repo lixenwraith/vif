@@ -68,6 +68,7 @@ func (s *BlossomSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventBlossomWave,
 		event.EventBlossomSpawnOne,
+		event.EventBlossomSpawnBatch,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -95,9 +96,19 @@ func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventBlossomWave:
 		s.spawnBlossomWave()
+
 	case event.EventBlossomSpawnOne:
 		if payload, ok := ev.Payload.(*event.BlossomSpawnPayload); ok {
 			s.spawnSingleBlossom(payload.X, payload.Y, payload.Char, payload.SkipStartCell)
+		}
+
+	case event.EventBlossomSpawnBatch:
+		if batch, ok := ev.Payload.(*event.BatchPayload[event.BlossomSpawnEntry]); ok {
+			for i := range batch.Entries {
+				e := &batch.Entries[i]
+				s.spawnSingleBlossom(e.X, e.Y, e.Char, e.SkipStartCell)
+			}
+			event.BlossomBatchPool.Release(batch)
 		}
 	}
 }

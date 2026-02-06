@@ -168,20 +168,23 @@ func InitRegistry() {
 	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest, &MaterializeAreaRequestPayload{})
 
 	// Effects
-	RegisterType("EventFlashRequest", EventFlashRequest, &FlashRequestPayload{})
+	RegisterType("EventFlashSpawnOneRequest", EventFlashSpawnOneRequest, &FlashRequestPayload{})
+	RegisterType("EventFlashBatchRequest", EventFlashSpawnBatchRequest, nil) // Generic BatchPayload, no TOML decode
 	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
 
 	// Dust
 	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
-	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, &DustSpawnBatchRequestPayload{})
+	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, nil) // Generic BatchPayload, no TOML decode
 	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)
 
 	// Blossom
 	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
+	RegisterType("EventBlossomSpawnBatch", EventBlossomSpawnBatch, nil) // Generic BatchPayload, no TOML decode
 	RegisterType("EventBlossomWave", EventBlossomWave, nil)
 
 	// Decay
 	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})
+	RegisterType("EventDecaySpawnBatch", EventDecaySpawnBatch, nil) // Generic BatchPayload, no TOML decode
 	RegisterType("EventDecayWave", EventDecayWave, nil)
 
 	// Death
@@ -255,7 +258,7 @@ func InitRegistry() {
 
 	// Fadeout
 	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne, &FadeoutSpawnPayload{})
-	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch, &FadeoutSpawnBatchPayload{})
+	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch, nil) // Generic BatchPayload, no TOML decode
 
 	// Composite Integrity
 	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})

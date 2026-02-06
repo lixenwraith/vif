@@ -68,6 +68,7 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDecayWave,
 		event.EventDecaySpawnOne,
+		event.EventDecaySpawnBatch,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -99,6 +100,15 @@ func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
 	case event.EventDecaySpawnOne:
 		if payload, ok := ev.Payload.(*event.DecaySpawnPayload); ok {
 			s.spawnSingleDecay(payload.X, payload.Y, payload.Char, payload.SkipStartCell)
+		}
+
+	case event.EventDecaySpawnBatch:
+		if batch, ok := ev.Payload.(*event.BatchPayload[event.DecaySpawnEntry]); ok {
+			for i := range batch.Entries {
+				e := &batch.Entries[i]
+				s.spawnSingleDecay(e.X, e.Y, e.Char, e.SkipStartCell)
+			}
+			event.DecayBatchPool.Release(batch)
 		}
 	}
 }
@@ -246,7 +256,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 				if s.world.Components.Nugget.HasEntity(target) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-					event.EmitDeathOne(s.world.Resources.Event.Queue, target, event.EventFlashRequest)
+					event.EmitDeathOne(s.world.Resources.Event.Queue, target, event.EventFlashSpawnOneRequest)
 				} else if s.shouldDieByDecay(target) {
 					deathCandidates = append(deathCandidates, target)
 				} else {
@@ -286,7 +296,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 	// Emit single batch event instead of scalar events per hit
 	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
 	}
 }
 
@@ -333,7 +343,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 		default:
 			// Fallback: Red or other: destroy
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventFlashRequest)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventFlashSpawnOneRequest)
 		}
 	}
 

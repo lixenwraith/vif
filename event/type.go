@@ -302,15 +302,25 @@ const (
 	// Consumer: MaterializeSystem | Payload: *MaterializeAreaRequestPayload
 	EventMaterializeAreaRequest
 
-	// EventFlashRequest signals a request to spawn a destruction flash effect
+	// EventFlashSpawnOneRequest signals a request to spawn a destruction flash effect
 	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
 	// Consumer: FlashSystem | Payload: *FlashRequestPayload
-	EventFlashRequest
+	EventFlashSpawnOneRequest
+
+	// EventFlashSpawnBatchRequest signals batch spawn of destruction flash effects
+	// Trigger: DeathSystem on batch death with flash effect
+	// Consumer: FlashSystem | Payload: *BatchPayload[FlashSpawnEntry]
+	EventFlashSpawnBatchRequest
 
 	// EventBlossomSpawnOne signals intent to spawn a single blossom entity
 	// Trigger: DeathSystem on death with blossom effect (cleaner + positive energy)
 	// Consumer: BlossomSystem | Payload: *BlossomSpawnPayload
 	EventBlossomSpawnOne
+
+	// EventBlossomSpawnBatch signals batch spawn of blossom entities
+	// Trigger: DeathSystem on batch death with blossom effect
+	// Consumer: BlossomSystem | Payload: *BatchPayload[BlossomSpawnEntry]
+	EventBlossomSpawnBatch
 
 	// EventBlossomWave signals start of a full width rising blossom wave
 	// Trigger: FSM
@@ -321,6 +331,11 @@ const (
 	// Trigger: DeathSystem on death with decay effect (cleaner + negative energy)
 	// Consumer: DecaySystem | Payload: *DecaySpawnPayload
 	EventDecaySpawnOne
+
+	// EventDecaySpawnBatch signals batch spawn of decay entities
+	// Trigger: DeathSystem on batch death with decay effect
+	// Consumer: DecaySystem | Payload: *BatchPayload[DecaySpawnEntry]
+	EventDecaySpawnBatch
 
 	// EventDecayWave signals start of a full width falling decay wave
 	// Trigger: FSM

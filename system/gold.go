@@ -415,7 +415,7 @@ func (s *GoldSystem) handleGoldDestroyed() {
 	// Request centralized destruction with flash effect
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
-		Effect:       event.EventFlashRequest,
+		Effect:       event.EventFlashSpawnOneRequest,
 	})
 
 	s.clearState()

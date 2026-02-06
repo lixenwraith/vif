@@ -143,17 +143,17 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventDustSpawnBatchRequest:
 		// Optimized batch handling with CommitForce and shared logic
-		if p, ok := ev.Payload.(*event.DustSpawnBatchRequestPayload); ok {
+		if p, ok := ev.Payload.(*event.BatchPayload[event.DustSpawnEntry]); ok {
 			count := len(p.Entries)
 			if count == 0 {
-				event.ReleaseDustSpawnBatch(p)
+				event.DustBatchPool.Release(p)
 				return
 			}
 
 			cursorEntity := s.world.Resources.Player.Entity
 			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 			if !ok {
-				event.ReleaseDustSpawnBatch(p)
+				event.DustBatchPool.Release(p)
 				return
 			}
 
@@ -176,7 +176,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			posBatch.CommitForce()
 
 			s.statCreated.Add(int64(count))
-			event.ReleaseDustSpawnBatch(p)
+			event.DustBatchPool.Release(p)
 		}
 
 	case event.EventDustAllRequest:
@@ -559,7 +559,7 @@ func (s *DustSystem) Update() {
 	s.applyAccumulatedImpulses(collisionCtx)
 
 	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, deathCandidates)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
 	}
 
 	s.statActive.Store(int64(len(dustEntities)))
@@ -716,7 +716,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	// Emit batch death with flash effect (no transform)
 	if len(toFlashKill) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashRequest, toFlashKill)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toFlashKill)
 	}
 
 	if len(toTransform) == 0 {

@@ -38,7 +38,8 @@ func (s *FlashSystem) Priority() int {
 
 func (s *FlashSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventFlashRequest,
+		event.EventFlashSpawnOneRequest,
+		event.EventFlashSpawnBatchRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -62,9 +63,19 @@ func (s *FlashSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if ev.Type == event.EventFlashRequest {
+	if ev.Type == event.EventFlashSpawnOneRequest {
 		if payload, ok := ev.Payload.(*event.FlashRequestPayload); ok {
 			s.spawnDestructionFlash(payload.X, payload.Y, payload.Char)
+		}
+	}
+
+	if ev.Type == event.EventFlashSpawnBatchRequest {
+		if batch, ok := ev.Payload.(*event.BatchPayload[event.FlashSpawnEntry]); ok {
+			for i := range batch.Entries {
+				e := &batch.Entries[i]
+				s.spawnDestructionFlash(e.X, e.Y, e.Char)
+			}
+			event.FlashBatchPool.Release(batch)
 		}
 	}
 }

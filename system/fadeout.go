@@ -70,11 +70,12 @@ func (s *FadeoutSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventFadeoutSpawnBatch:
-		if payload, ok := ev.Payload.(*event.FadeoutSpawnBatchPayload); ok {
-			for _, entry := range payload.Entries {
-				s.spawnFadeout(entry.X, entry.Y, entry.Char, entry.FgColor, entry.BgColor)
+		if batch, ok := ev.Payload.(*event.BatchPayload[event.FadeoutSpawnEntry]); ok {
+			for i := range batch.Entries {
+				e := &batch.Entries[i]
+				s.spawnFadeout(e.X, e.Y, e.Char, e.FgColor, e.BgColor)
 			}
-			event.ReleaseFadeoutSpawnBatch(payload)
+			event.FadeoutBatchPool.Release(batch)
 		}
 	}
 }
