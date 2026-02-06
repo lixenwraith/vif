@@ -543,7 +543,7 @@ func (r *Router) handleGoldJump() bool {
 }
 
 func (r *Router) handleFireMain() bool {
-	r.ctx.PushEvent(event.EventBuffFireMainRequest, nil)
+	r.ctx.PushEvent(event.EventWeaponFireMainRequest, nil)
 	return true
 }
 

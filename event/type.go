@@ -184,7 +184,7 @@ const (
 
 	// EventEnergyCrossedZeroNotification signals energy crossing zero
 	// Trigger: EnergySystem
-	// Consumer: BuffSystem | Payload: nil
+	// Consumer: WeaponSystem | Payload: nil
 	EventEnergyCrossedZeroNotification
 
 	// EventEnergyGlyphConsumed signals glyph destruction for energy calculation
@@ -488,33 +488,28 @@ const (
 	// Consumer: SwarmSystem | Payload: nil
 	EventSwarmCancelRequest
 
-	// EventVampireDrainRequest signals energy drain from target hit
-	// Trigger: CleanerSystem
-	// Consumer: VampireSystem | Payload: *VampireDrainRequestPayload
-	EventVampireDrainRequest
-
-	// EventBuffAddRequest signals activating buff for cursor
+	// EventWeaponAddRequest signals activating buff for cursor
 	// Trigger: FSM
-	// Consumer: BuffSystem | Payload: *BuffAddRequestPayload
-	EventBuffAddRequest
+	// Consumer: WeaponSystem | Payload: *WeaponAddRequestPayload
+	EventWeaponAddRequest
 
-	// EventBuffFireRequest signals activating buff for cursor
+	// EventWeaponFireRequest signals activating buff for cursor
 	// Trigger: Enter in Normal, Visual, Insert modes
-	// Consumer: BuffSystem | Payload: nil
-	EventBuffFireRequest
+	// Consumer: WeaponSystem | Payload: nil
+	EventWeaponFireRequest
 
-	// EventBuffFireMainRequest signals player intent to fire main weapon (cleaner + buffs)
+	// EventWeaponFireMainRequest signals player intent to fire main weapon (cleaner + buffs)
 	// Trigger: Router (Player Input)
-	// Consumer: BuffSystem | Payload: nil
-	EventBuffFireMainRequest
+	// Consumer: WeaponSystem | Payload: nil
+	EventWeaponFireMainRequest
 
 	// EventCombatAttackDirectRequest signals applying knockback
-	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
+	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, WeaponSystem
 	// Consumer: CombatSystem | Payload: *CombatAttackDirectRequestPayload
 	EventCombatAttackDirectRequest
 
 	// EventCombatAttackAreaRequest signals applying knockback
-	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, BuffSystem
+	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, WeaponSystem
 	// Consumer: CombatSystem | Payload: *CombatAttackAreaRequestPayload
 	EventCombatAttackAreaRequest
 
@@ -539,7 +534,7 @@ const (
 	EventModeChangeNotification
 
 	// EventMissileSpawnRequest signals launcher buff firing a cluster missile
-	// Trigger: BuffSystem on launcher fire
+	// Trigger: WeaponSystem on launcher fire
 	// Consumer: MissileSystem | Payload: *MissileSpawnRequestPayload
 	EventMissileSpawnRequest
 

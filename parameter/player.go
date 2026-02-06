@@ -22,15 +22,15 @@ const (
 	ShieldBoostRotationDuration = 500 * time.Millisecond
 )
 
-// Buff Cooldowns
+// Weapon Cooldowns
 const (
-	BuffCooldownMainFire = 150 * time.Millisecond
-	BuffCooldownRod      = 500 * time.Millisecond
-	BuffCooldownLauncher = 1000 * time.Millisecond
-	BuffCooldownChain    = 2000 * time.Millisecond
+	WeaponCooldownMain     = 150 * time.Millisecond
+	WeaponCooldownRod      = 500 * time.Millisecond
+	WeaponCooldownLauncher = 1000 * time.Millisecond
+	WeaponCooldownSpray    = 2000 * time.Millisecond
 )
 
-// Buff Orb Configuration
+// Weapon Orb Configuration
 const (
 	// OrbOrbitRadiusXFloat is horizontal orbital radius in cells
 	OrbOrbitRadiusXFloat = 12.0

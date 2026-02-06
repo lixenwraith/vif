@@ -6,9 +6,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// OrbComponent tracks orbital state for buff visualization orbs
+// OrbComponent tracks orbital state for weapon visualization orbs
 type OrbComponent struct {
-	BuffType    BuffType    // Which buff this orb represents
+	WeaponType  WeaponType  // Which weapon this orb represents
 	OwnerEntity core.Entity // Cursor entity that owns this orb
 
 	// Orbital state (Q32.32)

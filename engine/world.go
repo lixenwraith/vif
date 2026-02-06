@@ -221,9 +221,9 @@ func (w *World) CreateCursorEntity() {
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 
 	// 10. AddEntityAt buff component
-	w.Components.Buff.SetComponent(cursorEntity, component.BuffComponent{
-		Active:   make(map[component.BuffType]bool),
-		Cooldown: make(map[component.BuffType]time.Duration),
+	w.Components.Weapon.SetComponent(cursorEntity, component.WeaponComponent{
+		Active:   make(map[component.WeaponType]bool),
+		Cooldown: make(map[component.WeaponType]time.Duration),
 	})
 
 	// 11. AddEntityAt combat component

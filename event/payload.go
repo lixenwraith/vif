@@ -412,9 +412,9 @@ type VampireDrainRequestPayload struct {
 	Delta        int         `toml:"delta"`
 }
 
-// BuffAddRequestPayload
-type BuffAddRequestPayload struct {
-	Buff component.BuffType `toml:"buff"` // 0=rod, 1=launcher, 2=chain
+// WeaponAddRequestPayload
+type WeaponAddRequestPayload struct {
+	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
 }
 
 // CombatAttackDirectRequestPayload

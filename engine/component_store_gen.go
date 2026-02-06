@@ -21,7 +21,7 @@ type Component struct {
 	Heat        *Store[component.HeatComponent]
 	Shield      *Store[component.ShieldComponent]
 	Boost       *Store[component.BoostComponent]
-	Buff        *Store[component.BuffComponent]
+	Weapon      *Store[component.WeaponComponent]
 	Orb         *Store[component.OrbComponent]
 	Ping        *Store[component.PingComponent]
 	Decay       *Store[component.DecayComponent]
@@ -62,7 +62,7 @@ func initComponents(w *World) {
 	w.Components.Heat = NewStore[component.HeatComponent]()
 	w.Components.Shield = NewStore[component.ShieldComponent]()
 	w.Components.Boost = NewStore[component.BoostComponent]()
-	w.Components.Buff = NewStore[component.BuffComponent]()
+	w.Components.Weapon = NewStore[component.WeaponComponent]()
 	w.Components.Orb = NewStore[component.OrbComponent]()
 	w.Components.Ping = NewStore[component.PingComponent]()
 	w.Components.Decay = NewStore[component.DecayComponent]()
@@ -104,7 +104,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Heat.RemoveEntity(e)
 	w.Components.Shield.RemoveEntity(e)
 	w.Components.Boost.RemoveEntity(e)
-	w.Components.Buff.RemoveEntity(e)
+	w.Components.Weapon.RemoveEntity(e)
 	w.Components.Orb.RemoveEntity(e)
 	w.Components.Ping.RemoveEntity(e)
 	w.Components.Decay.RemoveEntity(e)
@@ -145,7 +145,7 @@ func (w *World) wipeAll() {
 	w.Components.Heat.ClearAllComponents()
 	w.Components.Shield.ClearAllComponents()
 	w.Components.Boost.ClearAllComponents()
-	w.Components.Buff.ClearAllComponents()
+	w.Components.Weapon.ClearAllComponents()
 	w.Components.Orb.ClearAllComponents()
 	w.Components.Ping.ClearAllComponents()
 	w.Components.Decay.ClearAllComponents()

@@ -67,7 +67,7 @@ transitions = [
 [states.QuasarWin]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventBuffAddRequest", payload = { buff = 0 } },
+    { action = "EmitEvent", event = "EventWeaponAddRequest", payload = { weapon = 0 } },
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarExit" },

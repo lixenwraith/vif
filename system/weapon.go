@@ -15,64 +15,64 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// BuffSystem manages the cursor gained effects and abilities, it resets on energy getting to or crossing zero
-type BuffSystem struct {
+// WeaponSystem manages the cursor gained effects and abilities, it resets on energy getting to or crossing zero
+type WeaponSystem struct {
 	world *engine.World
 
 	// Telemetry
 	statRod      *atomic.Bool
 	statRodFired *atomic.Int64
 	statLauncher *atomic.Bool
-	statChain    *atomic.Bool
+	statSpray    *atomic.Bool
 
 	enabled bool
 }
 
-// NewBuffSystem creates a new quasar system
-func NewBuffSystem(world *engine.World) engine.System {
-	s := &BuffSystem{
+// NewWeaponSystem creates a new quasar system
+func NewWeaponSystem(world *engine.World) engine.System {
+	s := &WeaponSystem{
 		world: world,
 	}
 
 	s.statRod = world.Resources.Status.Bools.Get("buff.rod")
 	s.statRodFired = world.Resources.Status.Ints.Get("buff.rod_fired")
 	s.statLauncher = world.Resources.Status.Bools.Get("buff.launcher")
-	s.statChain = world.Resources.Status.Bools.Get("buff.chain")
+	s.statSpray = world.Resources.Status.Bools.Get("buff.chain")
 
 	s.Init()
 	return s
 }
 
-func (s *BuffSystem) Init() {
+func (s *WeaponSystem) Init() {
 	s.destroyAllOrbs()
 	s.statRod.Store(false)
 	s.statRodFired.Store(0)
 	s.statLauncher.Store(false)
-	s.statChain.Store(false)
+	s.statSpray.Store(false)
 	s.enabled = true
 }
 
 // Name returns system's name
-func (s *BuffSystem) Name() string {
+func (s *WeaponSystem) Name() string {
 	return "buff"
 }
 
-func (s *BuffSystem) Priority() int {
-	return parameter.PriorityBuff
+func (s *WeaponSystem) Priority() int {
+	return parameter.PriorityWeapon
 }
 
-func (s *BuffSystem) EventTypes() []event.EventType {
+func (s *WeaponSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventBuffAddRequest,
+		event.EventWeaponAddRequest,
 		event.EventEnergyCrossedZeroNotification,
-		event.EventBuffFireRequest,
-		event.EventBuffFireMainRequest,
+		event.EventWeaponFireRequest,
+		event.EventWeaponFireMainRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
 }
 
-func (s *BuffSystem) HandleEvent(ev event.GameEvent) {
+func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
@@ -91,29 +91,29 @@ func (s *BuffSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventBuffAddRequest:
-		if payload, ok := ev.Payload.(*event.BuffAddRequestPayload); ok {
-			s.addBuff(payload.Buff)
+	case event.EventWeaponAddRequest:
+		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
+			s.addWeapon(payload.Weapon)
 		}
 
 	case event.EventEnergyCrossedZeroNotification:
-		s.removeAllBuffs()
+		s.removeAllWeapons()
 
-	case event.EventBuffFireMainRequest:
+	case event.EventWeaponFireMainRequest:
 		s.handleFireMain()
 
-	case event.EventBuffFireRequest:
-		s.fireAllBuffs()
+	case event.EventWeaponFireRequest:
+		s.fireAllWeapons()
 	}
 }
 
-func (s *BuffSystem) Update() {
+func (s *WeaponSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
 	cursorEntity := s.world.Resources.Player.Entity
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
@@ -121,25 +121,25 @@ func (s *BuffSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 
 	// Update main fire cooldown
-	if buffComp.MainFireCooldown > 0 {
-		buffComp.MainFireCooldown -= dt
-		if buffComp.MainFireCooldown < 0 {
-			buffComp.MainFireCooldown = 0
+	if weaponComp.MainFireCooldown > 0 {
+		weaponComp.MainFireCooldown -= dt
+		if weaponComp.MainFireCooldown < 0 {
+			weaponComp.MainFireCooldown = 0
 		}
 	}
 
 	// Update buff cooldowns
-	for buff, active := range buffComp.Active {
+	for buff, active := range weaponComp.Active {
 		if !active {
 			continue
 		}
-		buffComp.Cooldown[buff] -= dt
-		if buffComp.Cooldown[buff] < 0 {
-			buffComp.Cooldown[buff] = 0
+		weaponComp.Cooldown[buff] -= dt
+		if weaponComp.Cooldown[buff] < 0 {
+			weaponComp.Cooldown[buff] = 0
 		}
 	}
 
-	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	// Ensure orbs exist for active buffs (self-healing after resize/destruction)
 	s.ensureOrbs(cursorEntity)
@@ -148,72 +148,72 @@ func (s *BuffSystem) Update() {
 	s.updateOrbs()
 }
 
-func (s *BuffSystem) addBuff(buff component.BuffType) {
+func (s *WeaponSystem) addWeapon(buff component.WeaponType) {
 	cursorEntity := s.world.Resources.Player.Entity
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 
 	// Initialize maps if nil
-	if buffComp.Active == nil {
-		buffComp.Active = make(map[component.BuffType]bool)
+	if weaponComp.Active == nil {
+		weaponComp.Active = make(map[component.WeaponType]bool)
 	}
-	if buffComp.Cooldown == nil {
-		buffComp.Cooldown = make(map[component.BuffType]time.Duration)
+	if weaponComp.Cooldown == nil {
+		weaponComp.Cooldown = make(map[component.WeaponType]time.Duration)
 	}
-	if buffComp.Orbs == nil {
-		buffComp.Orbs = make(map[component.BuffType]core.Entity)
+	if weaponComp.Orbs == nil {
+		weaponComp.Orbs = make(map[component.WeaponType]core.Entity)
 	}
 
 	// Skip if already active
-	if buffComp.Active[buff] {
+	if weaponComp.Active[buff] {
 		return
 	}
 
-	buffComp.Active[buff] = true
-	buffComp.Cooldown[buff] = 0 // Ready to fire immediately
+	weaponComp.Active[buff] = true
+	weaponComp.Cooldown[buff] = 0 // Ready to fire immediately
 	switch buff {
-	case component.BuffRod:
+	case component.WeaponRod:
 		s.statRod.Store(true)
-	case component.BuffLauncher:
+	case component.WeaponLauncher:
 		s.statLauncher.Store(true)
-	case component.BuffChain:
-		s.statChain.Store(true)
+	case component.WeaponSpray:
+		s.statSpray.Store(true)
 	default:
 		return
 	}
 
-	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	// TEST: AddEntityAt launcher orb for multi-orb testing
-	if buff == component.BuffRod && !buffComp.Active[component.BuffLauncher] {
-		buffComp.Active[component.BuffLauncher] = true
-		buffComp.Cooldown[component.BuffLauncher] = 0 // Ready immediately
+	if buff == component.WeaponRod && !weaponComp.Active[component.WeaponLauncher] {
+		weaponComp.Active[component.WeaponLauncher] = true
+		weaponComp.Cooldown[component.WeaponLauncher] = 0 // Ready immediately
 		s.statLauncher.Store(true)
 	}
 }
 
-func (s *BuffSystem) removeAllBuffs() {
+func (s *WeaponSystem) removeAllWeapons() {
 	cursorEntity := s.world.Resources.Player.Entity
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
-	clear(buffComp.Active)
-	clear(buffComp.Cooldown)
-	clear(buffComp.Orbs)
-	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+	clear(weaponComp.Active)
+	clear(weaponComp.Cooldown)
+	clear(weaponComp.Orbs)
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	s.destroyAllOrbs()
 
 	s.statRod.Store(false)
 	s.statLauncher.Store(false)
-	s.statChain.Store(false)
+	s.statSpray.Store(false)
 }
 
 // spawnOrbEntity creates an orb entity for a buff type
-func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.BuffType) core.Entity {
+func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.WeaponType) core.Entity {
 	ownerPos, ok := s.world.Positions.GetPosition(ownerEntity)
 	if !ok {
 		return 0
@@ -223,7 +223,7 @@ func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.
 
 	// Initial angle will be set by redistribution
 	orbComp := component.OrbComponent{
-		BuffType:     buffType,
+		WeaponType:   buffType,
 		OwnerEntity:  ownerEntity,
 		OrbitAngle:   0,
 		OrbitRadiusX: parameter.OrbOrbitRadiusX,
@@ -243,12 +243,12 @@ func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.
 	// Sigil for rendering
 	var sigilColor terminal.RGB
 	switch buffType {
-	case component.BuffRod:
+	case component.WeaponRod:
 		sigilColor = visual.RgbOrbRod
-	case component.BuffLauncher:
+	case component.WeaponLauncher:
 		sigilColor = visual.RgbOrbLauncher
-	case component.BuffChain:
-		sigilColor = visual.RgbOrbChain
+	case component.WeaponSpray:
+		sigilColor = visual.RgbOrbSpray
 	}
 	sigilComp := component.SigilComponent{
 		Rune:  visual.CircleBullsEye,
@@ -275,15 +275,15 @@ func (s *BuffSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.
 }
 
 // redistributeOrbs triggers angle redistribution for all orbs owned by cursor
-func (s *BuffSystem) redistributeOrbs(cursorEntity core.Entity) {
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+func (s *WeaponSystem) redistributeOrbs(cursorEntity core.Entity) {
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 
 	// Collect active orb entities
 	var activeOrbs []core.Entity
-	for _, orbEntity := range buffComp.Orbs {
+	for _, orbEntity := range weaponComp.Orbs {
 		if orbEntity != 0 {
 			activeOrbs = append(activeOrbs, orbEntity)
 		}
@@ -313,7 +313,7 @@ func (s *BuffSystem) redistributeOrbs(cursorEntity core.Entity) {
 }
 
 // triggerOrbFlash activates flash effect on specified orb
-func (s *BuffSystem) triggerOrbFlash(orbEntity core.Entity) {
+func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
 	if !ok {
 		return
@@ -331,39 +331,39 @@ func (s *BuffSystem) triggerOrbFlash(orbEntity core.Entity) {
 }
 
 // ensureOrbs creates missing orbs for active buffs and triggers redistribution if needed
-func (s *BuffSystem) ensureOrbs(cursorEntity core.Entity) {
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 
-	if buffComp.Orbs == nil {
-		buffComp.Orbs = make(map[component.BuffType]core.Entity)
+	if weaponComp.Orbs == nil {
+		weaponComp.Orbs = make(map[component.WeaponType]core.Entity)
 	}
 
 	changed := false
-	for buff, active := range buffComp.Active {
+	for buff, active := range weaponComp.Active {
 		if !active {
 			continue
 		}
 
-		orbEntity := buffComp.Orbs[buff]
+		orbEntity := weaponComp.Orbs[buff]
 		// Check if orb exists and is valid
 		if orbEntity == 0 || !s.world.Components.Orb.HasEntity(orbEntity) {
 			newOrb := s.spawnOrbEntity(cursorEntity, buff)
-			buffComp.Orbs[buff] = newOrb
+			weaponComp.Orbs[buff] = newOrb
 			changed = true
 		}
 	}
 
 	if changed {
-		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 		s.redistributeOrbs(cursorEntity)
 	}
 }
 
 // updateOrbs handles orbital motion, boundary clamping (slide), and flash decay
-func (s *BuffSystem) updateOrbs() {
+func (s *WeaponSystem) updateOrbs() {
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	config := s.world.Resources.Config
@@ -448,7 +448,7 @@ func (s *BuffSystem) updateOrbs() {
 			orbComp.FlashRemaining -= dt
 			if orbComp.FlashRemaining <= 0 {
 				orbComp.FlashRemaining = 0
-				s.restoreOrbColor(orbEntity, orbComp.BuffType)
+				s.restoreOrbColor(orbEntity, orbComp.WeaponType)
 			}
 		}
 
@@ -457,32 +457,32 @@ func (s *BuffSystem) updateOrbs() {
 }
 
 // restoreOrbColor sets orb sigil back to normal color after flash
-func (s *BuffSystem) restoreOrbColor(orbEntity core.Entity, buffType component.BuffType) {
+func (s *WeaponSystem) restoreOrbColor(orbEntity core.Entity, buffType component.WeaponType) {
 	sigil, ok := s.world.Components.Sigil.GetComponent(orbEntity)
 	if !ok {
 		return
 	}
 
 	switch buffType {
-	case component.BuffRod:
+	case component.WeaponRod:
 		sigil.Color = visual.RgbOrbRod
-	case component.BuffLauncher:
+	case component.WeaponLauncher:
 		sigil.Color = visual.RgbOrbLauncher
-	case component.BuffChain:
-		sigil.Color = visual.RgbOrbChain
+	case component.WeaponSpray:
+		sigil.Color = visual.RgbOrbSpray
 	}
 
 	s.world.Components.Sigil.SetComponent(orbEntity, sigil)
 }
 
-// destroyOrb removes an orb entity and clears its reference from owner's BuffComponent
-func (s *BuffSystem) destroyOrb(orbEntity core.Entity) {
+// destroyOrb removes an orb entity and clears its reference from owner's WeaponComponent
+func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
 	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
 	if ok {
-		if buffComp, ok := s.world.Components.Buff.GetComponent(orbComp.OwnerEntity); ok {
-			if buffComp.Orbs != nil && buffComp.Orbs[orbComp.BuffType] == orbEntity {
-				buffComp.Orbs[orbComp.BuffType] = 0
-				s.world.Components.Buff.SetComponent(orbComp.OwnerEntity, buffComp)
+		if weaponComp, ok := s.world.Components.Weapon.GetComponent(orbComp.OwnerEntity); ok {
+			if weaponComp.Orbs != nil && weaponComp.Orbs[orbComp.WeaponType] == orbEntity {
+				weaponComp.Orbs[orbComp.WeaponType] = 0
+				s.world.Components.Weapon.SetComponent(orbComp.OwnerEntity, weaponComp)
 			}
 		}
 	}
@@ -490,27 +490,27 @@ func (s *BuffSystem) destroyOrb(orbEntity core.Entity) {
 	event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
 }
 
-func (s *BuffSystem) destroyAllOrbs() {
+func (s *WeaponSystem) destroyAllOrbs() {
 	orbEntities := s.world.Components.Orb.GetAllEntities()
 	for _, orbEntity := range orbEntities {
 		s.destroyOrb(orbEntity)
 	}
 }
 
-func (s *BuffSystem) handleFireMain() {
+func (s *WeaponSystem) handleFireMain() {
 	cursorEntity := s.world.Resources.Player.Entity
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 
-	if buffComp.MainFireCooldown > 0 {
+	if weaponComp.MainFireCooldown > 0 {
 		return
 	}
 
 	// Reset cooldown
-	buffComp.MainFireCooldown = parameter.BuffCooldownMainFire
-	s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+	weaponComp.MainFireCooldown = parameter.WeaponCooldownMain
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	// 1. Fire Main Weapon (Cleaner)
 	// Origin is current cursor position
@@ -521,11 +521,11 @@ func (s *BuffSystem) handleFireMain() {
 		})
 	}
 
-	// 2. Fire Auxiliary Buffs
-	s.fireAllBuffs()
+	// 2. Fire buffs
+	s.fireAllWeapons()
 }
 
-func (s *BuffSystem) fireAllBuffs() {
+func (s *WeaponSystem) fireAllWeapons() {
 	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
@@ -539,37 +539,37 @@ func (s *BuffSystem) fireAllBuffs() {
 	if shots == 0 {
 		return
 	}
-	buffComp, ok := s.world.Components.Buff.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
 	}
 
 	// Resolve targets once
-	assignments := resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+	assignments := resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 
 	// GUARD: If no targets are visible, don't waste energy/cooldowns
 	if len(assignments) == 0 {
 		return
 	}
 
-	for buff, active := range buffComp.Active {
-		if !active || buffComp.Cooldown[buff] > 0 {
+	for buff, active := range weaponComp.Active {
+		if !active || weaponComp.Cooldown[buff] > 0 {
 			continue
 		}
 
 		switch buff {
-		case component.BuffRod:
-			buffComp.Cooldown[buff] = parameter.BuffCooldownRod
+		case component.WeaponRod:
+			weaponComp.Cooldown[buff] = parameter.WeaponCooldownRod
 
 			// Get rod orb entity and position for lightning origin
-			rodOrbEntity := buffComp.Orbs[component.BuffRod]
+			rodOrbEntity := weaponComp.Orbs[component.WeaponRod]
 			if rodOrbEntity != 0 {
 				s.triggerOrbFlash(rodOrbEntity)
 			}
 
 			// Lazy resolve targets
 			if assignments == nil {
-				assignments = resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+				assignments = resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 			}
 
 			// Fire lightning to targets
@@ -583,10 +583,10 @@ func (s *BuffSystem) fireAllBuffs() {
 				})
 			}
 
-		case component.BuffLauncher:
+		case component.WeaponLauncher:
 			// 1. Resolve targets based on current cursor position to determine if launcher should fire
 			if assignments == nil {
-				assignments = resolveBuffTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+				assignments = resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 			}
 
 			// Do not fire and waste cooldown if no target
@@ -595,8 +595,8 @@ func (s *BuffSystem) fireAllBuffs() {
 			}
 
 			// 2. Consume cooldown and handle orb-specific origin
-			buffComp.Cooldown[buff] = parameter.BuffCooldownLauncher
-			launcherOrbEntity := buffComp.Orbs[component.BuffLauncher]
+			weaponComp.Cooldown[buff] = parameter.WeaponCooldownLauncher
+			launcherOrbEntity := weaponComp.Orbs[component.WeaponLauncher]
 
 			// Origin of fire at launcher orb with cursor fallback
 			originX, originY := cursorPos.X, cursorPos.Y
@@ -656,7 +656,7 @@ func (s *BuffSystem) fireAllBuffs() {
 			})
 		}
 		// Update the component with new cooldowns and potentially updated orb states
-		s.world.Components.Buff.SetComponent(cursorEntity, buffComp)
+		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 	}
 }
 
@@ -667,11 +667,11 @@ type targetAssignment struct {
 	dist   int64       // Distance from origin (for overflow distribution)
 }
 
-// resolveBuffTargets returns prioritized target assignments for buff abilities
+// resolveWeaponTargets returns prioritized target assignments for weapon abilities
 // Composites first (closest member per header), then distance-sorted singles
 // count: maximum assignments needed
 // Returns slice of assignments, may be shorter than count if insufficient targets
-func resolveBuffTargets(
+func resolveWeaponTargets(
 	world *engine.World,
 	originX, originY int,
 	count int,

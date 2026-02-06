@@ -7,7 +7,7 @@ const (
 	PriorityHeat         = 20
 	PriorityEnergy       = 30
 	PriorityBoost        = 40
-	PriorityBuff         = 50
+	PriorityWeapon       = 50
 	PriorityTyping       = 60 // After boost, before composite
 	PriorityComposite    = 70 // After boost, before spawning systems (position sync)
 	PriorityWall         = 80 // After composite
@@ -28,7 +28,7 @@ const (
 	PriorityDecay        = 230
 	PriorityBlossom      = 240
 	PriorityLightning    = 250 // After Quasar
-	PriorityMissile      = 260 // After Buff
+	PriorityMissile      = 260 // After Weapon
 	PriorityFlash        = 270
 	PriorityFadeout      = 275
 	PriorityUI           = 280

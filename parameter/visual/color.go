@@ -116,7 +116,7 @@ var (
 	// Orb colors
 	RgbOrbRod      = terminal.RGB{0, 220, 220}   // Cyan
 	RgbOrbLauncher = terminal.RGB{255, 140, 0}   // Orange
-	RgbOrbChain    = terminal.RGB{255, 105, 180} // Hot pink
+	RgbOrbSpray    = terminal.RGB{105, 255, 180} //
 	RgbOrbFlash    = terminal.RGB{255, 255, 255} // White flash
 
 	// Parent Missile: Chrome/White

@@ -38,7 +38,7 @@ var Components = []ComponentDef{
 	{"Heat", "HeatComponent"},
 	{"Shield", "ShieldComponent"},
 	{"Boost", "BoostComponent"},
-	{"Buff", "BuffComponent"},
+	{"Weapon", "WeaponComponent"},
 	{"Orb", "OrbComponent"},
 	{"Ping", "PingComponent"},
 
@@ -82,7 +82,7 @@ var Systems = []SystemDef{
 	{"shield", "NewShieldSystem"},
 	{"heat", "NewHeatSystem"},
 	{"boost", "NewBoostSystem"},
-	{"buff", "NewBuffSystem"},
+	{"weapon", "NewWeaponSystem"},
 	{"typing", "NewTypingSystem"},
 	{"composite", "NewCompositeSystem"},
 	{"wall", "NewWallSystem"},
