@@ -390,15 +390,37 @@ func (s *DrainSystem) hasPendingSpawns() bool {
 	return len(s.pendingSpawns) > 0
 }
 
-// processPendingSpawns starts materialization for spawns whose scheduled tick has arrived
+// processPendingSpawns starts materialization for spawns whose scheduled tick has arrived, and purges stale spawns that failed to complete within timeout
 func (s *DrainSystem) processPendingSpawns() {
 	if len(s.pendingSpawns) == 0 {
 		return
 	}
 
 	currentTick := s.world.Resources.Game.State.GetGameTicks()
-	for i := range s.pendingSpawns {
+	config := s.world.Resources.Config
+
+	// Process in reverse to allow safe removal during iteration
+	for i := len(s.pendingSpawns) - 1; i >= 0; i-- {
 		spawn := &s.pendingSpawns[i]
+
+		// Stale spawn detection: started but not completed within timeout
+		// ~5 seconds at 20 ticks/sec = 100 ticks (materialize animation is ~0.5s)
+		const staleThreshold = 100
+		if spawn.materializeStarted && currentTick > spawn.scheduledTick+staleThreshold {
+			// Remove stale spawn
+			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
+			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
+			continue
+		}
+
+		// Validate coordinates still in bounds (handles resize after queue)
+		if spawn.targetX >= config.GameWidth || spawn.targetY >= config.GameHeight {
+			// Remove invalid spawn
+			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
+			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
+			continue
+		}
+
 		if !spawn.materializeStarted && currentTick >= spawn.scheduledTick {
 			s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
 				X:    spawn.targetX,
@@ -410,10 +432,26 @@ func (s *DrainSystem) processPendingSpawns() {
 	}
 }
 
-// queueDrainSpawn adds a drain materialize spawn to the pending queue with stagger timing
+// queueDrainSpawn adds a drain spawn to the pending queue with stagger timing
+// Coordinates are clamped to current game bounds to prevent mismatch with materialize system (e.g. window resize in between materialize and spawn)
 func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
+	config := s.world.Resources.Config
 	currentTick := s.world.Resources.Game.State.GetGameTicks()
 	scheduledTick := currentTick + uint64(staggerIndex)*uint64(parameter.DrainSpawnStaggerTicks)
+
+	// Clamp to current bounds (prevents coordinate mismatch if resize occurs)
+	if targetX < 0 {
+		targetX = 0
+	}
+	if targetX >= config.GameWidth {
+		targetX = config.GameWidth - 1
+	}
+	if targetY < 0 {
+		targetY = 0
+	}
+	if targetY >= config.GameHeight {
+		targetY = config.GameHeight - 1
+	}
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
 		targetX:       targetX,
