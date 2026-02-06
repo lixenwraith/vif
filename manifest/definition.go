@@ -122,6 +122,7 @@ var Systems = []SystemDef{
 // Generator produces: RegisterRenderers(), ActiveRenderers()
 var Renderers = []RendererDef{
 	{"ping", "NewPingRenderer", "PriorityGrid"},
+	{"chargeline", "NewChargeLineRenderer", "PriorityChargeLine"},
 	{"splash", "NewSplashRenderer", "PrioritySplash"},
 	{"glyph", "NewGlyphRenderer", "PriorityEntities"},
 	{"sigil", "NewSigilRenderer", "PriorityEntities"},

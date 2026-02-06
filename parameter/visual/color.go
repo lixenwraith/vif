@@ -110,6 +110,9 @@ var (
 	// Quasar colors
 	RgbQuasarShield = terminal.RGB{0, 200, 200} // Cyan for clean shield halo and quasar indication
 
+	// Swarm charge line pulse color (light orchid/pink-violet)
+	RgbSwarmChargeLine = terminal.RGB{R: 200, G: 130, B: 210}
+
 	// Orb colors
 	RgbOrbRod      = terminal.RGB{0, 220, 220}   // Cyan
 	RgbOrbLauncher = terminal.RGB{255, 140, 0}   // Orange
@@ -187,15 +190,19 @@ var LightningTrueColorLUT = [5][2]terminal.RGB{
 	{{120, 40, 180}, {220, 180, 255}},
 }
 
-// 256-color palette indices for missile rendering
+// 256-colors
 const (
+	// 256-color palette indices for missile rendering
 	Missile256Trail  uint8 = 214 // Orange
 	Missile256Body   uint8 = 220 // Gold
 	Missile256Seeker uint8 = 208 // Dark orange
-)
 
-// Wall256PaletteDefault is 256-color fallback for walls
-const Wall256PaletteDefault uint8 = 240
+	// SwarmChargeLine256Palette is xterm-256 index for charge line (light orchid)
+	SwarmChargeLine256Palette uint8 = 176
+
+	// Wall256PaletteDefault is 256-color fallback for walls
+	Wall256PaletteDefault uint8 = 240
+)
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB
 // Type indices: 0=Green, 1=Blue, 2=Red, 3=White, 4=Gold

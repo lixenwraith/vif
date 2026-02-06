@@ -123,7 +123,7 @@ func (s *SplashSystem) Update() {
 			anchorEntity := splashComp.AnchorEntity
 			if anchorEntity != 0 && !s.world.Components.Header.HasEntity(anchorEntity) {
 				// Anchored to entity and anchor entity destroyed
-				s.world.DestroyEntity(splashEntity)
+				event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 				continue
 			}
 
@@ -131,8 +131,8 @@ func (s *SplashSystem) Update() {
 			remainingSec := int(math.Ceil(splashComp.Remaining.Seconds()))
 
 			if remainingSec <= 0 {
-				// Timer expired - mark for destruction
-				s.world.DestroyEntity(splashEntity)
+				// Timer expired - destroy splash
+				event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 				continue
 			}
 
@@ -140,7 +140,7 @@ func (s *SplashSystem) Update() {
 			digits := strconv.Itoa(remainingSec)
 			newLength := len(digits)
 
-			// TODO: Defensive, trace if necessary
+			// Defensive check
 			if newLength > parameter.SplashMaxLength {
 				newLength = parameter.SplashMaxLength
 			}
@@ -205,7 +205,7 @@ func (s *SplashSystem) Update() {
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
 	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 	if !ok {
-		s.world.DestroyEntity(splashEntity)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 		return false
 	}
 
@@ -223,13 +223,13 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	}
 
 	if glyphEntity == 0 {
-		s.world.DestroyEntity(splashEntity)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 		return false
 	}
 
 	glyph, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
 	if !ok {
-		s.world.DestroyEntity(splashEntity)
+		event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 		return false
 	}
 
@@ -291,8 +291,8 @@ func (s *SplashSystem) handleTimerCancel(anchorEntity core.Entity) {
 			continue
 		}
 		if splashComp.Slot == component.SlotTimer && splashComp.AnchorEntity == anchorEntity {
-			s.world.DestroyEntity(splashEntity)
-			return // Found it
+			event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
+			return
 		}
 	}
 }
@@ -306,7 +306,7 @@ func (s *SplashSystem) cleanupSplashesBySlot(slot component.SplashSlot) {
 			continue
 		}
 		if splashComp.Slot == slot {
-			s.world.DestroyEntity(splashEntity)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 		}
 	}
 }
@@ -320,7 +320,7 @@ func (s *SplashSystem) cleanupSplashesBySlotAndAnchor(slot component.SplashSlot,
 			continue
 		}
 		if splashComp.Slot == slot && splashComp.AnchorEntity == anchor {
-			s.world.DestroyEntity(splashEntity)
+			event.EmitDeathOne(s.world.Resources.Event.Queue, splashEntity, 0)
 		}
 	}
 }

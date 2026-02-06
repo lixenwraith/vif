@@ -7,6 +7,7 @@ type RenderPriority int
 const (
 	PriorityBackground  RenderPriority = 0
 	PriorityGrid        RenderPriority = 100
+	PriorityChargeLine  RenderPriority = 150
 	PriorityEntities    RenderPriority = 200
 	PriorityCleaner     RenderPriority = 300
 	PriorityField       RenderPriority = 400

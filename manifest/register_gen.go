@@ -133,6 +133,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("ping", func(ctx any) any {
 		return renderer.NewPingRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityGrid)
+	registry.RegisterRenderer("chargeline", func(ctx any) any {
+		return renderer.NewChargeLineRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityChargeLine)
 	registry.RegisterRenderer("splash", func(ctx any) any {
 		return renderer.NewSplashRenderer(ctx.(*engine.GameContext))
 	}, render.PrioritySplash)
@@ -258,6 +261,7 @@ func ActiveSystems() []string {
 func ActiveRenderers() []string {
 	return []string{
 		"ping",
+		"chargeline",
 		"splash",
 		"glyph",
 		"sigil",

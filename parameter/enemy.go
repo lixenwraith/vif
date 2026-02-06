@@ -143,6 +143,21 @@ const (
 	// SwarmDecelerationDuration is rapid stop after charge
 	SwarmDecelerationDuration = 100 * time.Millisecond
 
+	// Swarm Charge Line (warning pulse before charge)
+	// Number of visual pulses during lock phase (3rd = actual charge)
+	SwarmChargeLinePulseCount = 2
+	// Delay before first pulse = LockDuration - PulseCount * ChargeDuration
+	// Negative value means pulses extend before lock (clamp to 0 at runtime)
+	SwarmChargeLineShowDelay = SwarmLockDuration - SwarmChargeLinePulseCount*SwarmChargeDuration
+	// Trail fade length as fraction of total line distance
+	SwarmChargeLineTrailFloat = 0.25
+	// Peak bg alpha for first pulse
+	SwarmChargeLineAlpha1Float = 0.25
+	// Peak bg alpha for second pulse (escalation)
+	SwarmChargeLineAlpha2Float = 0.40
+	// 256-color visibility threshold
+	SwarmChargeLine256Threshold = 0.15
+
 	// SwarmLifetime is maximum swarm lifespan
 	SwarmLifetime = 35 * time.Second
 	// SwarmMaxCharges is charge count before despawn

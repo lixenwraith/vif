@@ -94,7 +94,7 @@ func (s *TimeKeeperSystem) Update() {
 		timer.Remaining -= dt
 
 		if timer.Remaining <= 0 {
-			// Timer expired - Default action is destruction
+			// Timer expired
 			s.world.Components.Timer.RemoveEntity(entity)
 			s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
 		} else {
