@@ -573,34 +573,23 @@ func (s *QuasarSystem) applySoftCollisionWithSwarm(
 	combatComp *component.CombatComponent,
 	headerX, headerY int,
 ) {
-	if combatComp.RemainingKineticImmunity > 0 {
-		return
-	}
-
 	for _, sc := range s.swarmCache {
-		// Check if quasar overlaps swarm collision ellipse
-		if !vmath.EllipseContainsPoint(headerX, headerY, sc.x, sc.y,
-			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq) {
-			continue
-		}
-
-		// Repulsion direction: swarm center → quasar (push outward)
-		radialX := vmath.FromInt(headerX - sc.x)
-		radialY := vmath.FromInt(headerY - sc.y)
-
-		if radialX == 0 && radialY == 0 {
-			radialX = vmath.Scale
-		}
-
-		physics.ApplyCollision(
-			&kineticComp.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionQuasarToSwarm,
-			s.rng,
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			headerX, headerY, sc.x, sc.y,
+			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq,
 		)
 
-		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-		return // One collision per tick
+		if hit {
+			physics.ApplyCollision(
+				&kineticComp.Kinetic,
+				radialX, radialY,
+				&physics.SoftCollisionQuasarToSwarm,
+				s.rng,
+			)
+
+			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+			return // One collision per tick
+		}
 	}
 }
 
@@ -669,7 +658,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 
 // stopZapping despawns lightning
 func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	s.world.PushEvent(event.EventLightningDespawn, &event.LightningDespawnPayload{Owner: headerEntity})
+	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{Owner: headerEntity})
 
 	quasarComp.IsZapping = false
 
@@ -839,36 +828,20 @@ func (s *QuasarSystem) terminateQuasar() {
 		return
 	}
 
-	// Stop zapping via event (LightningSystem handles cleanup)
-	s.world.PushEvent(event.EventLightningDespawn, s.headerEntity)
+	// Stop zapping or tracked lightning lingers after quasar death
+	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{
+		Owner:        s.headerEntity,
+		TargetEntity: 0, // 0 = all lightning from this owner
+	})
 
-	// Destroy composite
-	s.destroyQuasarComposite(s.headerEntity)
+	// Delegate composite destruction to CompositeSystem
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: s.headerEntity,
+		Effect:       0,
+	})
 
 	s.world.PushEvent(event.EventQuasarDestroyed, nil)
 
 	s.headerEntity = 0
 	s.statActive.Store(false)
-}
-
-// destroyQuasarComposite removes the quasar entity structure
-func (s *QuasarSystem) destroyQuasarComposite(headerEntity core.Entity) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Destroy all members
-	for _, m := range headerComp.MemberEntries {
-		if m.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(m.Entity)
-			s.world.DestroyEntity(m.Entity)
-		}
-	}
-
-	// RemoveEntityAt components from phantom head
-	s.world.Components.Quasar.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.DestroyEntity(headerEntity)
 }

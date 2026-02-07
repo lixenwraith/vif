@@ -89,7 +89,7 @@ func (s *LightningSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventLightningSpawnRequest,
 		event.EventLightningUpdate,
-		event.EventLightningDespawn,
+		event.EventLightningDespawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -125,7 +125,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 			s.updateTarget(p)
 		}
 
-	case event.EventLightningDespawn:
+	case event.EventLightningDespawnRequest:
 		if p, ok := ev.Payload.(*event.LightningDespawnPayload); ok {
 			s.despawnLightning(p.Owner, p.TargetEntity)
 		}

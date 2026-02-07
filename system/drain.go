@@ -1109,30 +1109,22 @@ func (s *DrainSystem) applySoftCollisionWithQuasar(
 	drainX, drainY int,
 ) {
 	for _, qc := range s.quasarCache {
-		// Check if drain is inside quasar collision ellipse
-		if !vmath.EllipseContainsPoint(drainX, drainY, qc.x, qc.y,
-			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq) {
-			continue
-		}
-
-		// Calculate repulsion direction: quasar center → drain (push outward)
-		radialX := vmath.FromInt(drainX - qc.x)
-		radialY := vmath.FromInt(drainY - qc.y)
-
-		// Zero vector fallback (drain exactly at quasar center)
-		if radialX == 0 && radialY == 0 {
-			radialX = vmath.Scale
-		}
-
-		physics.ApplyCollision(
-			&kineticComp.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionDrainToQuasar,
-			s.rng,
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			drainX, drainY, qc.x, qc.y,
+			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
 		)
 
-		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-		return // One collision per tick
+		if hit {
+			physics.ApplyCollision(
+				&kineticComp.Kinetic,
+				radialX, radialY,
+				&physics.SoftCollisionQuasarToDrain,
+				s.rng,
+			)
+
+			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+			return // One collision per tick
+		}
 	}
 }
 

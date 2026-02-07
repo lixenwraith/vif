@@ -97,3 +97,24 @@ func ApplyOffsetCollision(
 		SetImpulse(k, impulseX, impulseY)
 	}
 }
+
+// CheckSoftCollision tests ellipse containment and computes radial direction
+// Returns (radialX, radialY, true) if collision detected, (0, 0, false) otherwise
+func CheckSoftCollision(
+	entityX, entityY int,
+	sourceX, sourceY int,
+	invRxSq, invRySq int64,
+) (radialX, radialY int64, hit bool) {
+	if !vmath.EllipseContainsPoint(entityX, entityY, sourceX, sourceY, invRxSq, invRySq) {
+		return 0, 0, false
+	}
+
+	radialX = vmath.FromInt(entityX - sourceX)
+	radialY = vmath.FromInt(entityY - sourceY)
+
+	if radialX == 0 && radialY == 0 {
+		radialX = vmath.Scale
+	}
+
+	return radialX, radialY, true
+}

@@ -226,7 +226,7 @@ func InitRegistry() {
 	// Lightning
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
 	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
-	RegisterType("EventLightningDespawn", EventLightningDespawn, &LightningDespawnPayload{})
+	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest, &LightningDespawnPayload{})
 
 	// Combat
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})

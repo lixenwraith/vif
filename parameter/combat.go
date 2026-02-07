@@ -113,4 +113,7 @@ const (
 const (
 	// MissileImpactRadiusFloat is hit detection threshold (cells)
 	MissileImpactRadiusFloat = 1.5
+
+	// MissileSplitTravelFractionFloat: parent splits after traveling this fraction (0.3 = 30%)
+	MissileSplitTravelFractionFloat = 0.3
 )

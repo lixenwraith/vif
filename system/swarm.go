@@ -480,58 +480,46 @@ func (s *SwarmSystem) applySoftCollisions(
 	combatComp *component.CombatComponent,
 	headerX, headerY int,
 ) {
-	if combatComp.RemainingKineticImmunity > 0 {
-		return
-	}
-
 	// Check collision with other swarms
 	for _, sc := range s.swarmCache {
 		if sc.entity == headerEntity {
 			continue
 		}
 
-		if !vmath.EllipseContainsPoint(headerX, headerY, sc.x, sc.y,
-			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq) {
-			continue
-		}
-
-		radialX := vmath.FromInt(headerX - sc.x)
-		radialY := vmath.FromInt(headerY - sc.y)
-		if radialX == 0 && radialY == 0 {
-			radialX = vmath.Scale
-		}
-
-		physics.ApplyCollision(
-			&kineticComp.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionSwarmToSwarm,
-			s.rng,
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			headerX, headerY, sc.x, sc.y,
+			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq,
 		)
-		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-		return
+
+		if hit {
+			physics.ApplyCollision(
+				&kineticComp.Kinetic,
+				radialX, radialY,
+				&physics.SoftCollisionSwarmToSwarm,
+				s.rng,
+			)
+			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+			return
+		}
 	}
 
 	// Check collision with quasar
 	for _, qc := range s.quasarCache {
-		if !vmath.EllipseContainsPoint(headerX, headerY, qc.x, qc.y,
-			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq) {
-			continue
-		}
-
-		radialX := vmath.FromInt(headerX - qc.x)
-		radialY := vmath.FromInt(headerY - qc.y)
-		if radialX == 0 && radialY == 0 {
-			radialX = vmath.Scale
-		}
-
-		physics.ApplyCollision(
-			&kineticComp.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionSwarmToQuasar,
-			s.rng,
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			headerX, headerY, qc.x, qc.y,
+			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
 		)
-		combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-		return
+
+		if hit {
+			physics.ApplyCollision(
+				&kineticComp.Kinetic,
+				radialX, radialY,
+				&physics.SoftCollisionSwarmToQuasar,
+				s.rng,
+			)
+			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+			return
+		}
 	}
 }
 

@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -94,9 +95,10 @@ func (s *MissileSystem) Update() {
 
 		switch missileComp.Type {
 		case component.MissileTypeClusterParent:
-			shouldSplit, earlyImpact := s.updateParent(&missileComp, &kineticComp, dtFixed)
-			if earlyImpact {
-				// Parent hit wall or enemy before split
+			shouldSplit, hitEnemy, hitWall := s.updateParent(&missileComp, &kineticComp, dtFixed)
+
+			if hitWall {
+				// Wall hit: explode without split
 				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 					X:      vmath.ToInt(kineticComp.PreciseX),
 					Y:      vmath.ToInt(kineticComp.PreciseY),
@@ -106,6 +108,14 @@ func (s *MissileSystem) Update() {
 				toDestroy = append(toDestroy, missileEntity)
 				continue
 			}
+
+			if hitEnemy {
+				// Enemy hit: perform split then destroy
+				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
+				toDestroy = append(toDestroy, missileEntity)
+				continue
+			}
+
 			if shouldSplit {
 				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
 				toDestroy = append(toDestroy, missileEntity)
@@ -159,7 +169,7 @@ func (s *MissileSystem) Update() {
 	}
 }
 
-func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component.KineticComponent, dt int64) (split bool, earlyImpact bool) {
+func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component.KineticComponent, dt int64) (split bool, hitEnemy bool, hitWall bool) {
 	prevX, prevY := k.PreciseX, k.PreciseY
 
 	// Linear movement toward destination
@@ -168,18 +178,27 @@ func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component
 
 	// Path traversal for wall and enemy collision
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, true)
-	if hitType != impactNone {
-		k.PreciseX = vmath.FromInt(impactX) + vmath.CellCenter
-		k.PreciseY = vmath.FromInt(impactY) + vmath.CellCenter
-		return false, true
+	if hitType == impactWall {
+		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
+		return false, false, true
+	}
+	if hitType == impactEnemy {
+		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
+		return false, true, false
 	}
 
-	// Split distance check (unchanged logic)
+	// Split check: traveled fraction of original distance
+	// Split when: (original - remaining) / original >= splitFraction
+	// Equivalent: remaining² <= original² * (1 - splitFraction)²
 	destX, destY := k.AccelX, k.AccelY
-	distSq := vmath.MagnitudeSq(destX-k.PreciseX, destY-k.PreciseY)
-	splitDistSq := vmath.Mul(parameter.MissileClusterMinDistance, parameter.MissileClusterMinDistance)
+	remainingDistSq := vmath.MagnitudeSq(destX-k.PreciseX, destY-k.PreciseY)
 
-	return distSq < splitDistSq || m.Lifetime > parameter.MissileParentMaxLifetime, false
+	// Threshold = originalDist² * (1 - splitFraction)²
+	remainFraction := vmath.Scale - parameter.MissileSplitTravelFraction
+	thresholdSq := vmath.Mul(m.OriginalDistSq, vmath.Mul(remainFraction, remainFraction))
+
+	shouldSplit := remainingDistSq <= thresholdSq || m.Lifetime > parameter.MissileParentMaxLifetime
+	return shouldSplit, false, false
 }
 
 func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
@@ -198,65 +217,38 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	} else {
-		// Vector to target
+		// Impact check before homing
 		dx := targetX - k.PreciseX
 		dy := targetY - k.PreciseY
-		distSq := vmath.MagnitudeSq(dx, dy)
-
-		// Impact check
-		if distSq < parameter.MissileImpactRadiusSq {
+		if vmath.MagnitudeSq(dx, dy) < parameter.MissileImpactRadiusSq {
 			k.PreciseX = targetX
 			k.PreciseY = targetY
 			return true
 		}
 
-		// Homing: steer toward target
-		dist := vmath.Sqrt(distSq)
-		if dist > 0 {
-			dirX := vmath.Div(dx, dist)
-			dirY := vmath.Div(dy, dist)
+		// Homing via physics
+		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &physics.MissileSeekerHoming, dt)
+		physics.CapSpeed(&k.VelX, &k.VelY, parameter.MissileSeekerMaxSpeed)
 
-			accel := parameter.MissileSeekerHomingAccel
-			k.VelX += vmath.Mul(vmath.Mul(dirX, accel), dt)
-			k.VelY += vmath.Mul(vmath.Mul(dirY, accel), dt)
-		}
-
-		// Drag
-		drag := parameter.MissileSeekerDrag
-		if dist < parameter.MissileSeekerArrivalRadius && parameter.MissileSeekerArrivalRadius > 0 {
-			proximityFactor := vmath.Scale - vmath.Div(dist, parameter.MissileSeekerArrivalRadius)
-			drag += vmath.Mul(drag*2, proximityFactor)
-		}
-
-		speed := vmath.Magnitude(k.VelX, k.VelY)
-		if speed > 0 {
-			dragScale := vmath.Mul(drag, dt)
-			if dragScale > vmath.Scale {
-				dragScale = vmath.Scale
-			}
-			retain := vmath.Scale - dragScale
-			k.VelX = vmath.Mul(k.VelX, retain)
-			k.VelY = vmath.Mul(k.VelY, retain)
-		}
-
-		// Speed cap
-		speed = vmath.Magnitude(k.VelX, k.VelY)
-		if speed > parameter.MissileSeekerMaxSpeed {
-			scale := vmath.Div(parameter.MissileSeekerMaxSpeed, speed)
-			k.VelX = vmath.Mul(k.VelX, scale)
-			k.VelY = vmath.Mul(k.VelY, scale)
-		}
-
-		// Integrate
+		// Integrate position
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	}
 
-	// Path traversal for wall collision only (seekers pass through enemies)
-	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, false)
+	// Enable enemy collision check if we have NO target (Ballistic Mode)
+	// If we have a target, we ignore intermediate enemies to reach the specific target
+	checkEnemies := !hasTarget
+
+	// Path traversal for wall and enemy collision (if no target)
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, checkEnemies)
 	if hitType == impactWall {
-		k.PreciseX = vmath.FromInt(impactX) + vmath.CellCenter
-		k.PreciseY = vmath.FromInt(impactY) + vmath.CellCenter
+		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
+		return true
+	}
+
+	// Handle collision in ballistic mode
+	if hitType == impactEnemy {
+		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
 		return true
 	}
 
@@ -375,6 +367,14 @@ func (s *MissileSystem) findNearestEnemy(fromX, fromY int64) core.Entity {
 			continue
 		}
 
+		// Strict allowlist to properly filter out Cleaner projectiles, Cursor, and other non-enemy combat entities
+		switch combatComp.CombatEntityType {
+		case component.CombatEntityDrain, component.CombatEntityQuasar, component.CombatEntitySwarm, component.CombatEntityStorm:
+			// Valid enemy target
+		default:
+			continue
+		}
+
 		pos, ok := s.world.Positions.GetPosition(combatEntity)
 		if !ok {
 			continue
@@ -418,16 +418,20 @@ func (s *MissileSystem) spawnClusterParent(p *event.MissileSpawnRequestPayload) 
 
 	dirX, dirY := vmath.Normalize2D(targetX-startX, targetY-startY)
 
+	// Calculate original distance squared for split calculation
+	originalDistSq := vmath.MagnitudeSq(targetX-startX, targetY-startY)
+
 	e := s.world.CreateEntity()
 
 	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
-		Type:        component.MissileTypeClusterParent,
-		Phase:       component.MissilePhaseFlying,
-		Owner:       p.OwnerEntity,
-		Origin:      p.OriginEntity,
-		ChildCount:  p.ChildCount,
-		Targets:     p.Targets,
-		HitEntities: p.HitEntities,
+		Type:           component.MissileTypeClusterParent,
+		Phase:          component.MissilePhaseFlying,
+		Owner:          p.OwnerEntity,
+		Origin:         p.OriginEntity,
+		ChildCount:     p.ChildCount,
+		Targets:        p.Targets,
+		HitEntities:    p.HitEntities,
+		OriginalDistSq: originalDistSq,
 	})
 
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{

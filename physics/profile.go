@@ -187,8 +187,7 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 
 // Homing profiles
 
-// TODO: wire in unused profiles
-
+// NOTE: Unused due to genetic integration, keeping for potential future use
 // DrainHoming defines drain entity homing behavior
 var DrainHoming = HomingProfile{
 	BaseSpeed:        parameter.DrainBaseSpeed,
@@ -222,10 +221,21 @@ var SwarmHoming = HomingProfile{
 // LootHoming defines loot attraction behavior
 // Uses aggressive arrival drag to kill orbital momentum and ensure cursor capture
 var LootHoming = HomingProfile{
-	BaseSpeed:        vmath.FromFloat(parameter.LootHomingMaxSpeed),
-	HomingAccel:      vmath.FromFloat(parameter.LootHomingAccel),
+	BaseSpeed:        parameter.LootChaseSpeed,
+	HomingAccel:      parameter.LootHomingAccel,
 	Drag:             vmath.FromFloat(2.0),  // Low base drag
 	ArrivalRadius:    vmath.FromFloat(5.0),  // Start braking 5 cells away
 	ArrivalDragBoost: vmath.FromFloat(25.0), // Massive drag near target
 	DeadZone:         vmath.Scale / 2,       // Snap at 0.5 cells
+}
+
+// MissileSeekerHoming: continuous drag, maintains full accel in arrival zone
+var MissileSeekerHoming = HomingProfile{
+	BaseSpeed:        0, // Continuous drag (overspeed always true)
+	HomingAccel:      parameter.MissileSeekerHomingAccel,
+	Drag:             parameter.MissileSeekerDrag,
+	ArrivalRadius:    parameter.MissileSeekerArrivalRadius,
+	ArrivalDragBoost: vmath.FromFloat(2.0), // 3x drag at target
+	ArrivalAccelMin:  vmath.Scale,          // Maintain full accel
+	DeadZone:         vmath.Scale / 10,     // Very small; impact check handles arrival
 }

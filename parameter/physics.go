@@ -128,4 +128,11 @@ var (
 	MissileImpactRadius        = vmath.FromFloat(MissileImpactRadiusFloat)
 	MissileImpactRadiusSq      = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
 	MissileExplosionRadius     = vmath.FromFloat(MissileExplosionRadiusFloat)
+	MissileSplitTravelFraction = vmath.FromFloat(MissileSplitTravelFractionFloat)
+)
+
+// Loot physics
+var (
+	LootChaseSpeed  = vmath.FromFloat(LootHomingMaxSpeedFloat)
+	LootHomingAccel = vmath.FromFloat(LootHomingAccelFloat)
 )

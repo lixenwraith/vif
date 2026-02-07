@@ -49,9 +49,10 @@ type MissileComponent struct {
 	LastTrailEmit time.Duration // Lifetime at last trail emission
 
 	// Parent-specific
-	ChildCount  int           // Number of children to spawn (heat/10)
-	Targets     []core.Entity // Pre-assigned targets for children
-	HitEntities []core.Entity // Corresponding hit entities
+	ChildCount     int           // Number of children to spawn
+	Targets        []core.Entity // Pre-assigned targets for children
+	HitEntities    []core.Entity // Corresponding hit entities
+	OriginalDistSq int64         // Squared distance to target at spawn (for split calculation)
 
 	// Trail ring buffer
 	Trail     [TrailCapacity]MissileTrailPoint

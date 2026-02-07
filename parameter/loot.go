@@ -13,8 +13,8 @@ const (
 	// Formula: currentRate = baseRate * (1 + missCount)
 
 	// Homing
-	LootHomingAccel    = 120.0 // cells/sec²
-	LootHomingMaxSpeed = 60.0  // cells/sec
+	LootHomingAccelFloat    = 120.0 // cells/sec²
+	LootHomingMaxSpeedFloat = 60.0  // cells/sec
 
 	// Collection: Chebyshev distance <= 1 from cursor
 	LootCollectRadius = 1

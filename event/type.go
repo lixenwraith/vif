@@ -433,10 +433,10 @@ const (
 	// Consumer: LightningSystem | Payload: *LightningUpdatePayload
 	EventLightningUpdate
 
-	// EventLightningDespawn signals force-removal of lightning entity(ies)
+	// EventLightningDespawnRequest signals force-removal of lightning entity(ies)
 	// Trigger: QuasarSystem (zap ends), future use
 	// Consumer: LightningSystem | Payload: *LightningDespawnPayload
-	EventLightningDespawn
+	EventLightningDespawnRequest
 
 	// EventFireSpecialRequest signals player intent to fire special ability
 	// Trigger: InputHandler (\ key)

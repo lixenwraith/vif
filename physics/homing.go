@@ -14,6 +14,7 @@ type HomingProfile struct {
 	// Arrival steering (0 = disabled)
 	ArrivalRadius    int64 // Distance at which arrival steering begins (Q32.32)
 	ArrivalDragBoost int64 // Max drag multiplier at target (Q32.32, Scale = 1x)
+	ArrivalAccelMin  int64 // Minimum accel factor at target (0 = scale to zero, Scale = no scaling)
 
 	// Dead zone snap (0 = use default settling)
 	DeadZone int64 // Snap-to-target threshold (Q32.32)
@@ -62,7 +63,7 @@ func applyHomingInternal(
 	// Dead zone snap: if configured, snap to target when very close
 	deadZone := profile.DeadZone
 	if deadZone == 0 {
-		deadZone = vmath.Scale / 4 // Default: 0.25 cells
+		deadZone = vmath.Scale / 2 // Default: 0.5 cells
 	}
 
 	speed := vmath.Magnitude(k.VelX, k.VelY)
@@ -86,8 +87,11 @@ func applyHomingInternal(
 		// Factor: 0 at target, Scale at edge of arrival radius
 		factor := vmath.Div(dist, profile.ArrivalRadius)
 
+		// Accel scaling: lerp from ArrivalAccelMin (at target) to Scale (at edge)
+		accelFactor := vmath.Lerp(profile.ArrivalAccelMin, vmath.Scale, factor)
+
 		// Ramp down acceleration
-		effectiveAccel = vmath.Mul(effectiveAccel, factor)
+		effectiveAccel = vmath.Mul(effectiveAccel, accelFactor)
 
 		// Ramp up drag: base + boost * (1 - factor)
 		if profile.ArrivalDragBoost > 0 {
