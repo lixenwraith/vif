@@ -592,6 +592,11 @@ const (
 	// Trigger: SwarmSystem (HP <= 0), QuasarSystem (future), etc
 	// Consumer: LootSystem | Payload: *EnemyKilledPayload
 	EventEnemyKilled
+
+	// EventLootSpawnRequest requests direct loot spawn at position
+	// Trigger: FSM, game scripts, debug commands
+	// Consumer: LootSystem | Payload: *LootSpawnRequestPayload
+	EventLootSpawnRequest
 )
 
 // GameEvent represents a single game event with metadata

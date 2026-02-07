@@ -92,7 +92,7 @@ func initLootShield() {
 		Color:      RgbLootShieldBorder,
 		Palette256: Loot256Rim,
 		MaxOpacity: parameter.LootShieldMaxOpacity,
-		// Loot has a specific glow definition
+		// Loot has specific glow definition
 		GlowIntensity: parameter.LootGlowIntensity,
 		GlowPeriod:    parameter.LootGlowRotationPeriod,
 		// GlowColor is dynamic per loot type, set at spawn time by logic

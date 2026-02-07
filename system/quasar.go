@@ -165,7 +165,7 @@ func (s *QuasarSystem) Update() {
 
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					EnemyType: component.EnemyQuasar,
+					EnemyType: component.CombatEntityQuasar,
 					X:         headerPos.X,
 					Y:         headerPos.Y,
 				})

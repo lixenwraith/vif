@@ -17,6 +17,7 @@ const (
 	CombatEntityQuasar
 	CombatEntitySwarm
 	CombatEntityStorm
+	CombatEntityCount
 )
 
 // Damage Types

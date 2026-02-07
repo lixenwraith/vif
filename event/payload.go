@@ -615,7 +615,14 @@ type CompositeDestroyRequestPayload struct {
 
 // EnemyKilledPayload carries entity type and death position for loot resolution
 type EnemyKilledPayload struct {
-	EnemyType component.EnemyType
+	EnemyType component.CombatEntityType
 	X         int
 	Y         int
+}
+
+// LootSpawnRequestPayload requests direct loot spawn (bypasses drop tables)
+type LootSpawnRequestPayload struct {
+	Type component.LootType `toml:"type"`
+	X    int                `toml:"x"`
+	Y    int                `toml:"y"`
 }

@@ -178,6 +178,10 @@ var (
 	RgbLootShieldBorder = terminal.RGB{R: 255, G: 105, B: 180} // Hot pink
 	RgbLootShieldInner  = terminal.RGB{R: 45, G: 12, B: 32}    // Dark
 	RgbLootShieldCenter = terminal.RGB{R: 12, G: 4, B: 10}     // Near black
+
+	// Loot glow colors
+	RgbLootRodGlow      = terminal.RGB{R: 200, G: 255, B: 255} // Bright cyan-white
+	RgbLootLauncherGlow = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
 )
 
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type

@@ -4,30 +4,31 @@ import (
 	"time"
 )
 
+// Drop rate constants
 const (
-	// Drop rates (base probability per kill)
-	LootDropRateLauncher = 0.10 // 10%
-	LootDropRateRod      = 1.00 // 100% guaranteed from quasar
+	LootDropRateLauncher = 0.10
+	LootDropRateRod      = 1.00
+)
 
-	// Pity: rate += baseRate per consecutive miss
-	// Formula: currentRate = baseRate * (1 + missCount)
+// Homing physics
+const (
+	LootHomingAccelFloat    = 120.0
+	LootHomingMaxSpeedFloat = 60.0
+)
 
-	// Homing
-	LootHomingAccelFloat    = 120.0 // cells/sec²
-	LootHomingMaxSpeedFloat = 60.0  // cells/sec
+// Collection radius (Chebyshev)
+const LootCollectRadius = 1
 
-	// Collection: Chebyshev distance <= 1 from cursor
-	LootCollectRadius = 1
-
-	// Shield ellipse radii (float, converted to Q32.32 in renderer init)
-	LootShieldRadiusX = 2.5
-	LootShieldRadiusY = 1.5
-
-	// Shield opacity (lower than player to avoid saturation and allow glow visibility)
+// Shield geometry (shared across all loot types)
+const (
+	LootShieldRadiusX    = 2.5
+	LootShieldRadiusY    = 1.5
 	LootShieldMaxOpacity = 0.5
+)
 
-	// Rotating glow indicator
-	LootGlowRotationPeriod = 500 * time.Millisecond // 2 rotations/sec
-	LootGlowEdgeThreshold  = 0.25                   // Broad rim for small ellipse
+// Glow effect
+const (
+	LootGlowRotationPeriod = 500 * time.Millisecond
+	LootGlowEdgeThreshold  = 0.25
 	LootGlowIntensity      = 0.7
 )
