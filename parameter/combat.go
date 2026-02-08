@@ -16,7 +16,7 @@ const (
 	CombatInitialHPSwarm = 20
 
 	// CombatInitialHPStorm is drain starting hit points
-	CombatInitialHPStorm = 1000
+	CombatInitialHPStorm = 100_000_000
 )
 
 // Damage

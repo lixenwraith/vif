@@ -626,3 +626,15 @@ type LootSpawnRequestPayload struct {
 	X    int                `toml:"x"`
 	Y    int                `toml:"y"`
 }
+
+// StormCircleDiedPayload contains individual circle death data
+type StormCircleDiedPayload struct {
+	CircleEntity core.Entity
+	RootEntity   core.Entity
+	Index        int
+}
+
+// StormDiedPayload contains storm death data
+type StormDiedPayload struct {
+	RootEntity core.Entity
+}

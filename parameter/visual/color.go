@@ -184,6 +184,14 @@ var (
 	RgbLootLauncherGlow = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
 )
 
+// StormCircleColors defines base colors for each storm circle
+// Neon palette: Cyan, Magenta, Lime (matching three-sandbox aesthetic)
+var StormCircleColors = [3]terminal.RGB{
+	{R: 40, G: 180, B: 255}, // Cyan
+	{R: 255, G: 60, B: 120}, // Magenta
+	{R: 120, G: 255, B: 80}, // Lime
+}
+
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type
 // Index by LightningColorType to get (core, hot) RGB pair
 // Core = base color at end of life, Hot = bright color at full life
@@ -200,21 +208,27 @@ var LightningTrueColorLUT = [5][2]terminal.RGB{
 	{{120, 40, 180}, {220, 180, 255}},
 }
 
-// 256-colors
+// 256-colors palette indices
 const (
-	// 256-color palette indices for missile rendering
+	// Missile
 	Missile256Trail  uint8 = 214 // Orange
 	Missile256Body   uint8 = 220 // Gold
 	Missile256Seeker uint8 = 208 // Dark orange
 
-	// SwarmChargeLine256Palette is xterm-256 index for charge line (light orchid)
-	SwarmChargeLine256Palette uint8 = 176
+	// Swarm charge line
+	SwarmChargeLine256Palette uint8 = 176 // Light orchid
 
-	// Wall256PaletteDefault is 256-color fallback for walls
+	// Wall fallback
 	Wall256PaletteDefault uint8 = 240
 
-	// loot256Rim is 256-color shield palette
+	// Loot shield
 	Loot256Rim uint8 = 198
+
+	// Storm rendering palette indices
+	Storm256Bright uint8 = 51 // Bright cyan
+	Storm256Normal uint8 = 38 // Medium cyan
+	Storm256Dark   uint8 = 30 // Dark cyan
+
 )
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB

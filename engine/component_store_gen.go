@@ -28,16 +28,18 @@ type Component struct {
 	Decay       *Store[component.DecayComponent]
 	Blossom     *Store[component.BlossomComponent]
 	Cleaner     *Store[component.CleanerComponent]
+	Dust        *Store[component.DustComponent]
 	Combat      *Store[component.CombatComponent]
 	Genotype    *Store[component.GenotypeComponent]
-	Drain       *Store[component.DrainComponent]
-	Quasar      *Store[component.QuasarComponent]
-	Swarm       *Store[component.SwarmComponent]
-	Dust        *Store[component.DustComponent]
 	Lightning   *Store[component.LightningComponent]
 	Missile     *Store[component.MissileComponent]
 	Spirit      *Store[component.SpiritComponent]
 	Materialize *Store[component.MaterializeComponent]
+	Drain       *Store[component.DrainComponent]
+	Quasar      *Store[component.QuasarComponent]
+	Swarm       *Store[component.SwarmComponent]
+	Storm       *Store[component.StormComponent]
+	StormCircle *Store[component.StormCircleComponent]
 	Header      *Store[component.HeaderComponent]
 	Member      *Store[component.MemberComponent]
 	Flash       *Store[component.FlashComponent]
@@ -70,16 +72,18 @@ func initComponents(w *World) {
 	w.Components.Decay = NewStore[component.DecayComponent]()
 	w.Components.Blossom = NewStore[component.BlossomComponent]()
 	w.Components.Cleaner = NewStore[component.CleanerComponent]()
+	w.Components.Dust = NewStore[component.DustComponent]()
 	w.Components.Combat = NewStore[component.CombatComponent]()
 	w.Components.Genotype = NewStore[component.GenotypeComponent]()
-	w.Components.Drain = NewStore[component.DrainComponent]()
-	w.Components.Quasar = NewStore[component.QuasarComponent]()
-	w.Components.Swarm = NewStore[component.SwarmComponent]()
-	w.Components.Dust = NewStore[component.DustComponent]()
 	w.Components.Lightning = NewStore[component.LightningComponent]()
 	w.Components.Missile = NewStore[component.MissileComponent]()
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
 	w.Components.Materialize = NewStore[component.MaterializeComponent]()
+	w.Components.Drain = NewStore[component.DrainComponent]()
+	w.Components.Quasar = NewStore[component.QuasarComponent]()
+	w.Components.Swarm = NewStore[component.SwarmComponent]()
+	w.Components.Storm = NewStore[component.StormComponent]()
+	w.Components.StormCircle = NewStore[component.StormCircleComponent]()
 	w.Components.Header = NewStore[component.HeaderComponent]()
 	w.Components.Member = NewStore[component.MemberComponent]()
 	w.Components.Flash = NewStore[component.FlashComponent]()
@@ -113,16 +117,18 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Decay.RemoveEntity(e)
 	w.Components.Blossom.RemoveEntity(e)
 	w.Components.Cleaner.RemoveEntity(e)
+	w.Components.Dust.RemoveEntity(e)
 	w.Components.Combat.RemoveEntity(e)
 	w.Components.Genotype.RemoveEntity(e)
-	w.Components.Drain.RemoveEntity(e)
-	w.Components.Quasar.RemoveEntity(e)
-	w.Components.Swarm.RemoveEntity(e)
-	w.Components.Dust.RemoveEntity(e)
 	w.Components.Lightning.RemoveEntity(e)
 	w.Components.Missile.RemoveEntity(e)
 	w.Components.Spirit.RemoveEntity(e)
 	w.Components.Materialize.RemoveEntity(e)
+	w.Components.Drain.RemoveEntity(e)
+	w.Components.Quasar.RemoveEntity(e)
+	w.Components.Swarm.RemoveEntity(e)
+	w.Components.Storm.RemoveEntity(e)
+	w.Components.StormCircle.RemoveEntity(e)
 	w.Components.Header.RemoveEntity(e)
 	w.Components.Member.RemoveEntity(e)
 	w.Components.Flash.RemoveEntity(e)
@@ -155,16 +161,18 @@ func (w *World) wipeAll() {
 	w.Components.Decay.ClearAllComponents()
 	w.Components.Blossom.ClearAllComponents()
 	w.Components.Cleaner.ClearAllComponents()
+	w.Components.Dust.ClearAllComponents()
 	w.Components.Combat.ClearAllComponents()
 	w.Components.Genotype.ClearAllComponents()
-	w.Components.Drain.ClearAllComponents()
-	w.Components.Quasar.ClearAllComponents()
-	w.Components.Swarm.ClearAllComponents()
-	w.Components.Dust.ClearAllComponents()
 	w.Components.Lightning.ClearAllComponents()
 	w.Components.Missile.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
+	w.Components.Drain.ClearAllComponents()
+	w.Components.Quasar.ClearAllComponents()
+	w.Components.Swarm.ClearAllComponents()
+	w.Components.Storm.ClearAllComponents()
+	w.Components.StormCircle.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()

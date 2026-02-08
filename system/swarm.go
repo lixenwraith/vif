@@ -29,6 +29,9 @@ type SwarmSystem struct {
 	// Runtime state
 	active bool
 
+	// Storm spawn tracking - counts swarms killed by player damage
+	playerKillCount int
+
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
 
@@ -39,6 +42,8 @@ type SwarmSystem struct {
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
+	// TODO: this is in sync with playerKillCount, to be changed
+	statPlayerKills *atomic.Int64
 
 	enabled bool
 }
@@ -54,6 +59,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("swarm.active")
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
+	s.statPlayerKills = world.Resources.Status.Ints.Get("swarm.player_kills")
 
 	s.Init()
 	return s
@@ -64,6 +70,7 @@ func (s *SwarmSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.statPlayerKills.Store(0)
 	s.enabled = true
 }
 
@@ -156,7 +163,7 @@ func (s *SwarmSystem) Update() {
 			continue
 		}
 
-		// HP check → despawn
+		// HP check → player kill, despawn
 		if combatComp.HitPoints <= 0 {
 			// Get position for loot before destruction
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
@@ -166,6 +173,18 @@ func (s *SwarmSystem) Update() {
 					Y:         headerPos.Y,
 				})
 			}
+
+			// Track player damage kill for storm spawn
+			s.playerKillCount++
+			s.statPlayerKills.Store(int64(s.playerKillCount))
+
+			// Check storm spawn threshold
+			if s.playerKillCount >= parameter.SwarmKillsForStorm {
+				s.playerKillCount = 0
+				s.statPlayerKills.Store(0)
+				s.world.PushEvent(event.EventStormSpawnRequest, nil)
+			}
+
 			s.despawnSwarm(headerEntity)
 			continue
 		}

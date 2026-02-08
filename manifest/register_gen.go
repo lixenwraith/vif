@@ -87,6 +87,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("swarm", func(w any) any {
 		return system.NewSwarmSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("storm", func(w any) any {
+		return system.NewStormSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("dust", func(w any) any {
 		return system.NewDustSystem(w.(*engine.World))
 	})
@@ -190,6 +193,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("swarm", func(ctx any) any {
 		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
+	registry.RegisterRenderer("storm", func(ctx any) any {
+		return renderer.NewStormRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMulti)
 	registry.RegisterRenderer("wall", func(ctx any) any {
 		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityWall)
@@ -247,6 +253,7 @@ func ActiveSystems() []string {
 		"drain",
 		"quasar",
 		"swarm",
+		"storm",
 		"dust",
 		"flash",
 		"fadeout",
@@ -286,6 +293,7 @@ func ActiveRenderers() []string {
 		"materialize",
 		"quasar",
 		"swarm",
+		"storm",
 		"wall",
 		"grayout",
 		"dim",

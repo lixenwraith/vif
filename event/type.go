@@ -597,6 +597,21 @@ const (
 	// Trigger: FSM, game scripts, debug commands
 	// Consumer: LootSystem | Payload: *LootSpawnRequestPayload
 	EventLootSpawnRequest
+
+	// EventStormSpawnRequest triggers storm spawn
+	// Trigger: SwarmSystem on player-damage kill threshold
+	// Consumer: StormSystem | Payload: nil
+	EventStormSpawnRequest
+
+	// EventStormCircleDied signals individual circle destruction
+	// Trigger: StormSystem on circle health <= 0
+	// Consumer: StormSystem (internal), future loot | Payload: *StormCircleDiedPayload
+	EventStormCircleDied
+
+	// EventStormDied signals all storm circles destroyed
+	// Trigger: StormSystem when last circle dies
+	// Consumer: Future loot/progression | Payload: *StormDiedPayload
+	EventStormDied
 )
 
 // GameEvent represents a single game event with metadata

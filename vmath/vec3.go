@@ -1,0 +1,64 @@
+package vmath
+
+// Vec3 is a 3D vector in Q32.32 fixed-point
+// Used by storm system for 3D orbital physics
+type Vec3 struct {
+	X, Y, Z int64
+}
+
+func V3Add(a, b Vec3) Vec3 {
+	return Vec3{a.X + b.X, a.Y + b.Y, a.Z + b.Z}
+}
+
+func V3Sub(a, b Vec3) Vec3 {
+	return Vec3{a.X - b.X, a.Y - b.Y, a.Z - b.Z}
+}
+
+func V3Scale(v Vec3, s int64) Vec3 {
+	return Vec3{Mul(v.X, s), Mul(v.Y, s), Mul(v.Z, s)}
+}
+
+func V3Dot(a, b Vec3) int64 {
+	return Mul(a.X, b.X) + Mul(a.Y, b.Y) + Mul(a.Z, b.Z)
+}
+
+func V3MagSq(v Vec3) int64 {
+	return Mul(v.X, v.X) + Mul(v.Y, v.Y) + Mul(v.Z, v.Z)
+}
+
+func V3Mag(v Vec3) int64 {
+	return Sqrt(V3MagSq(v))
+}
+
+func V3Normalize(v Vec3) Vec3 {
+	m := V3Mag(v)
+	if m == 0 {
+		return Vec3{}
+	}
+	return Vec3{Div(v.X, m), Div(v.Y, m), Div(v.Z, m)}
+}
+
+// V3XY extracts X,Y components as separate values for 2D projection
+func V3XY(v Vec3) (x, y int64) {
+	return v.X, v.Y
+}
+
+// V3From2D creates Vec3 from separate x,y with specified z
+func V3From2D(x, y, z int64) Vec3 {
+	return Vec3{X: x, Y: y, Z: z}
+}
+
+// V3ClampMagnitude limits vector magnitude
+func V3ClampMagnitude(v Vec3, maxMag int64) Vec3 {
+	magSq := V3MagSq(v)
+	maxMagSq := Mul(maxMag, maxMag)
+	if magSq <= maxMagSq {
+		return v
+	}
+	return V3Scale(V3Normalize(v), maxMag)
+}
+
+// V3Damp reduces vector magnitude by factor (Scale = no damp, 0 = full damp)
+func V3Damp(v Vec3, factor int64) Vec3 {
+	return Vec3{Mul(v.X, factor), Mul(v.Y, factor), Mul(v.Z, factor)}
+}

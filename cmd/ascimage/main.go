@@ -18,6 +18,8 @@ func main() {
 	var (
 		modeStr   string
 		colorStr  string
+		width     int
+		output    string
 		fitMode   bool
 		noStatus  bool
 		zoomLevel int
@@ -25,9 +27,11 @@ func main() {
 
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
 	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
-	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode")
-	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar")
-	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level (percent)")
+	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
+	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
+	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
+	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
+	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level percent (interactive only)")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -37,7 +41,6 @@ func main() {
 
 	imagePath := flag.Arg(0)
 
-	// Load image
 	img, err := loadImage(imagePath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading image: %v\n", err)
@@ -47,66 +50,31 @@ func main() {
 	bounds := img.Bounds()
 	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d)\n", imagePath, bounds.Dx(), bounds.Dy())
 
-	// Create viewer
-	viewer := ascimage.NewViewer(img)
+	renderMode := parseRenderMode(modeStr)
+	colorMode := parseColorMode(colorStr)
 
-	// Apply CLI options
-	switch modeStr {
-	case "bg", "background":
-		viewer.RenderMode = ascimage.ModeBackgroundOnly
-	case "quadrant", "q":
-		viewer.RenderMode = ascimage.ModeQuadrant
-	default:
-		fmt.Fprintf(os.Stderr, "Unknown mode: %s\n", modeStr)
-		os.Exit(1)
-	}
-
-	// Detect or set color mode
-	colorMode := terminal.DetectColorMode()
-	switch colorStr {
-	case "auto":
-		// Use detected
-	case "true", "truecolor", "24":
-		colorMode = terminal.ColorModeTrueColor
-	case "256", "8":
-		colorMode = terminal.ColorMode256
-	}
-	viewer.ColorMode = colorMode
-
-	if !fitMode {
-		viewer.ViewMode = ascimage.ViewActual
-	}
-
-	if zoomLevel != 100 {
-		viewer.ViewMode = ascimage.ViewCustom
-		viewer.ZoomLevel = zoomLevel
-	}
-
-	viewer.ShowStatus = !noStatus
-
-	// Run interactive viewer
-	if err := runViewer(viewer, colorMode); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+	if output != "" {
+		runFileOutput(img, renderMode, colorMode, width, output)
+	} else {
+		runInteractive(img, renderMode, colorMode, fitMode, noStatus, zoomLevel)
 	}
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: asc-image-viewer [options] <image>")
+	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image>")
 	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF")
 	fmt.Fprintln(os.Stderr, "\nOptions:")
 	flag.PrintDefaults()
-	fmt.Fprintln(os.Stderr, "\nControls:")
+	fmt.Fprintln(os.Stderr, "\nModes:")
+	fmt.Fprintln(os.Stderr, "  Interactive (default): view image with zoom/pan controls")
+	fmt.Fprintln(os.Stderr, "  File output (-o):      write ANSI sequences to file")
+	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
 	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")
 	fmt.Fprintln(os.Stderr, "  f                 Toggle fit/actual size")
-	fmt.Fprintln(os.Stderr, "  m                 Toggle render mode (bg/quadrant)")
-	fmt.Fprintln(os.Stderr, "  c                 Toggle color mode (24bit/256)")
-	fmt.Fprintln(os.Stderr, "  +, =              Zoom in")
-	fmt.Fprintln(os.Stderr, "  -, _              Zoom out")
-	fmt.Fprintln(os.Stderr, "  0                 Reset zoom to 100%")
+	fmt.Fprintln(os.Stderr, "  m                 Toggle render mode")
+	fmt.Fprintln(os.Stderr, "  c                 Toggle color mode")
+	fmt.Fprintln(os.Stderr, "  +/-               Zoom in/out")
 	fmt.Fprintln(os.Stderr, "  Arrow keys, hjkl  Pan viewport")
-	fmt.Fprintln(os.Stderr, "  PgUp/PgDn         Pan vertically (large step)")
-	fmt.Fprintln(os.Stderr, "  Home/End          Jump to left/right edge")
 	fmt.Fprintln(os.Stderr, "  s                 Toggle status bar")
 }
 
@@ -121,6 +89,66 @@ func loadImage(path string) (image.Image, error) {
 	return img, err
 }
 
+func parseRenderMode(s string) ascimage.RenderMode {
+	switch s {
+	case "bg", "background":
+		return ascimage.ModeBackgroundOnly
+	case "quadrant", "q":
+		return ascimage.ModeQuadrant
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown mode: %s, using quadrant\n", s)
+		return ascimage.ModeQuadrant
+	}
+}
+
+func parseColorMode(s string) terminal.ColorMode {
+	switch s {
+	case "auto":
+		return terminal.DetectColorMode()
+	case "true", "truecolor", "24":
+		return terminal.ColorModeTrueColor
+	case "256", "8":
+		return terminal.ColorMode256
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown color mode: %s, using auto\n", s)
+		return terminal.DetectColorMode()
+	}
+}
+
+func runFileOutput(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, width int, output string) {
+	if width <= 0 {
+		width = 80
+	}
+
+	converted := ascimage.ConvertImage(img, width, renderMode, colorMode)
+	fmt.Fprintf(os.Stderr, "Output: %dx%d cells\n", converted.Width, converted.Height)
+
+	if err := ascimage.WriteANSI(converted, output, colorMode); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runInteractive(img image.Image, renderMode ascimage.RenderMode, colorMode terminal.ColorMode, fitMode, noStatus bool, zoomLevel int) {
+	viewer := ascimage.NewViewer(img)
+	viewer.RenderMode = renderMode
+	viewer.ColorMode = colorMode
+	viewer.ShowStatus = !noStatus
+
+	if !fitMode {
+		viewer.ViewMode = ascimage.ViewActual
+	}
+	if zoomLevel != 100 {
+		viewer.ViewMode = ascimage.ViewCustom
+		viewer.ZoomLevel = zoomLevel
+	}
+
+	if err := runViewer(viewer, colorMode); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func runViewer(viewer *ascimage.Viewer, colorMode terminal.ColorMode) error {
 	term := terminal.New(colorMode)
 
@@ -132,11 +160,9 @@ func runViewer(viewer *ascimage.Viewer, colorMode terminal.ColorMode) error {
 	termW, termH := term.Size()
 	buf := render.NewRenderBuffer(colorMode, termW, termH)
 
-	// Initial conversion and render
 	viewer.Update(termW, termH)
 	renderFrame(viewer, buf, term, termW, termH)
 
-	// Event loop
 	for {
 		ev := term.PollEvent()
 
@@ -172,41 +198,29 @@ const (
 )
 
 func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) keyAction {
-	// Pan step sizes
 	smallStep := 1
 	largeStep := 10
 	pageStep := termH / 2
 
 	switch ev.Key {
-	// Quit
 	case terminal.KeyEscape, terminal.KeyCtrlC, terminal.KeyCtrlD:
 		return actionQuit
 	case terminal.KeyRune:
 		switch ev.Rune {
 		case 'q', 'Q':
 			return actionQuit
-
-		// View mode
 		case 'f', 'F':
 			viewer.ToggleViewMode()
 			return actionRedraw
-
-		// Render mode
 		case 'm', 'M':
 			viewer.ToggleRenderMode()
 			return actionRedraw
-
-		// Color mode
 		case 'c', 'C':
 			viewer.ToggleColorMode()
 			return actionRedraw
-
-		// Status toggle
 		case 's', 'S':
 			viewer.ShowStatus = !viewer.ShowStatus
 			return actionNone
-
-		// Zoom
 		case '+', '=':
 			viewer.AdjustZoom(10)
 			return actionRedraw
@@ -217,8 +231,6 @@ func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) key
 			viewer.ZoomLevel = 100
 			viewer.ViewMode = ascimage.ViewCustom
 			return actionRedraw
-
-		// Vim-style navigation
 		case 'h':
 			viewer.Pan(-smallStep, 0, termW, termH)
 		case 'l':
@@ -235,15 +247,12 @@ func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) key
 			viewer.Pan(0, largeStep, termW, termH)
 		case 'K':
 			viewer.Pan(0, -largeStep, termW, termH)
-
-		// Jump to edges
 		case 'g':
 			viewer.PanTo(0, 0, termW, termH)
 		case 'G':
-			viewer.PanTo(0, 999999, termW, termH) // clamp handles max
+			viewer.PanTo(0, 999999, termW, termH)
 		}
 
-	// Arrow keys
 	case terminal.KeyLeft:
 		step := smallStep
 		if ev.Modifiers&terminal.ModShift != 0 {
@@ -268,8 +277,6 @@ func handleKey(ev terminal.Event, viewer *ascimage.Viewer, termW, termH int) key
 			step = largeStep
 		}
 		viewer.Pan(0, step, termW, termH)
-
-	// Page navigation
 	case terminal.KeyPageUp:
 		viewer.Pan(0, -pageStep, termW, termH)
 	case terminal.KeyPageDown:

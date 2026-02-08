@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/genetic/game/species"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
@@ -687,6 +686,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	cursorEntity := s.world.Resources.Player.Entity
 	now := s.world.Resources.Time.GameTime
 
+	// TODO: refactor to Position bound check
 	// Clamp to bounds
 	if spawnX < 0 {
 		spawnX = 0
@@ -718,20 +718,6 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Increment and assign materialize spawn order for LIFO tracking
 	s.nextSpawnOrder++
 
-	// Sample genotype from GA population
-	var homingAccel, aggressionMult int64 = parameter.DrainHomingAccel, vmath.Scale
-	var genotype []float64
-	var evalID uint64
-
-	if genetic := s.world.Resources.Genetic; genetic != nil && genetic.Provider != nil {
-		genotype, evalID = genetic.Provider.Sample(component.SpeciesDrain)
-		phenotypeRaw := genetic.Provider.Decode(component.SpeciesDrain, genotype)
-		if phenotype, ok := phenotypeRaw.(species.DrainPhenotype); ok {
-			homingAccel = phenotype.HomingAccel
-			aggressionMult = phenotype.AggressionMult
-		}
-	}
-
 	// Initialize Kinetic with centered spawn position, zero velocity
 	preciseX, preciseY := vmath.CenteredFromGrid(spawnX, spawnY)
 	drainComp := component.DrainComponent{
@@ -739,8 +725,8 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		SpawnOrder:     s.nextSpawnOrder,
 		LastIntX:       spawnX,
 		LastIntY:       spawnY,
-		HomingAccel:    homingAccel,
-		AggressionMult: aggressionMult,
+		HomingAccel:    parameter.DrainHomingAccel,
+		AggressionMult: vmath.Scale,
 	}
 	kinetic := core.Kinetic{
 		PreciseX: preciseX,
@@ -774,16 +760,6 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		Rune:  visual.DrainChar,
 		Color: visual.RgbDrain,
 	})
-
-	// GenotypeComponent for evolution tracking
-	if evalID != 0 {
-		s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
-			Genes:     genotype,
-			EvalID:    evalID,
-			Species:   component.SpeciesDrain,
-			SpawnTime: now,
-		})
-	}
 }
 
 // requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn

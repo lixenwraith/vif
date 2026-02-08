@@ -156,6 +156,17 @@ var CombatAttackCleanerToSwarm = CombatAttackProfile{
 	CollisionProfile:   &physics.CleanerToSwarm,
 }
 
+var CombatAttackCleanerToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCleaner,
+	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageCleaner,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        &CombatAttackLightningToStorm,
+	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
+}
+
 // Lightning attack profiles
 
 var CombatAttackLightningToDrain = CombatAttackProfile{
@@ -184,6 +195,17 @@ var CombatAttackLightningToSwarm = CombatAttackProfile{
 	AttackType:         CombatAttackLightning,
 	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageRod,
+	EffectMask:         CombatEffectVampireDrain,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
+var CombatAttackLightningToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityStorm,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageRod,
 	EffectMask:         CombatEffectVampireDrain,
@@ -226,6 +248,16 @@ var CombatAttackShieldToSwarm = CombatAttackProfile{
 	CollisionProfile:   &physics.ShieldToSwarm,
 }
 
+var CombatAttackShieldToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectKinetic,
+	CollisionProfile:   &physics.ShieldToQuasar, // Reuse quasar profile
+}
+
 // Explosion attack profiles
 
 var CombatAttackExplosionToDrain = CombatAttackProfile{
@@ -261,6 +293,17 @@ var CombatAttackExplosionToSwarm = CombatAttackProfile{
 	CollisionProfile:   &physics.ExplosionToSwarm,
 }
 
+var CombatAttackExplosionToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageExplosion,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToQuasar, // Reuse quasar profile
+}
+
 // Missile attack profiles
 
 var CombatAttackMissileToDrain = CombatAttackProfile{
@@ -294,4 +337,15 @@ var CombatAttackMissileToSwarm = CombatAttackProfile{
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
 	CollisionProfile:   &physics.ExplosionToSwarm,
+}
+
+var CombatAttackMissileToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackMissile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageMissile,
+	EffectMask:         CombatEffectNone,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToQuasar,
 }
