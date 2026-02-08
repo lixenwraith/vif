@@ -157,8 +157,6 @@ func (m *Machine) processNormal(ev terminal.Event) *Intent {
 		return m.processMacroPlayAwait(ev.Rune)
 	case StateMacroInfiniteAwait:
 		return m.processMacroInfiniteAwait(ev.Rune)
-	case StateMacroStopAwait:
-		return m.processMacroStopAwait(ev.Rune)
 	}
 	return nil
 }
@@ -413,6 +411,16 @@ func (m *Machine) processMarkerAwaitColor(key rune) *Intent {
 func (m *Machine) processMacroRecordAwait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
+	// q@ -> stop all macros (new: accessible from record-await too)
+	if key == '@' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroStopAll,
+			Command: cmd,
+		}
+	}
+
 	if key >= 'a' && key <= 'z' {
 		cmd := m.captureCommand()
 		m.Reset()
@@ -457,6 +465,17 @@ func (m *Machine) processMacroPlayAwait(key rune) *Intent {
 func (m *Machine) processMacroInfiniteAwait(key rune) *Intent {
 	m.cmdBuffer = append(m.cmdBuffer, key)
 
+	// @@@ -> play all macros infinitely
+	if key == '@' {
+		cmd := m.captureCommand()
+		m.Reset()
+		return &Intent{
+			Type:    IntentMacroPlayAll,
+			Command: cmd,
+		}
+	}
+
+	// @@ -> play macro infinitely
 	if key >= 'a' && key <= 'z' {
 		cmd := m.captureCommand()
 		m.Reset()

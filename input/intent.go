@@ -38,6 +38,7 @@ const (
 	IntentMacroRecordStop   // q while recording - stop recording
 	IntentMacroPlay         // [count]@label - play macro
 	IntentMacroPlayInfinite // @@label - play indefinitely
+	IntentMacroPlayAll      // @@@ - play all recorded macros indefinitely
 	IntentMacroStopOne      // q + label while playing - stop that macro
 	IntentMacroStopAll      // q@ while playing - stop all macros
 	IntentMacroRecordToggle // q key - placeholder, Router interprets based on context
@@ -155,13 +156,14 @@ const (
 // Intent represents a parsed semantic action
 // Pure data struct with no function pointers or engine dependencies
 type Intent struct {
-	Type       IntentType
-	Motion     MotionOp
-	Operator   OperatorOp
-	Special    SpecialOp
-	ModeTarget ModeTarget
-	ScrollDir  ScrollDir
-	Count      int    // Effective count (minimum 1)
-	Char       rune   // Target char for f/t motions or typed char
-	Command    string // Captured sequence for visual feedback
+	Type          IntentType
+	Motion        MotionOp
+	Operator      OperatorOp
+	Special       SpecialOp
+	ModeTarget    ModeTarget
+	ScrollDir     ScrollDir
+	Count         int    // Effective count (minimum 1)
+	Char          rune   // Target char for f/t motions or typed char
+	Command       string // Captured sequence for visual feedback
+	MacroPlayback bool   // True if intent originated from macro playback
 }

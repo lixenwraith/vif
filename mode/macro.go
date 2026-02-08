@@ -7,6 +7,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
+// `qa` ... `q` : Record to 'a'
+// `qa` `q` : Clear macro 'a' (empty recording)
+// `@a` : Play 'a' once
+// `3@a` : Play 'a' 3 times
+// `@@a` : Play 'a' infinitely
+// `@@@` : Play all recorded macros infinitely
+// `q@` : Stop all playback
+// `Ctrl+@` : Stop all playback (alternative)
+
 // PlaybackState tracks a single macro's playback progress
 type PlaybackState struct {
 	label         rune
@@ -98,6 +107,32 @@ func (m *MacroManager) StartPlayback(label rune, count int, now time.Time) bool 
 	return true
 }
 
+// StartAllPlayback begins infinite playback of all non-empty macros
+// Returns count of macros started
+func (m *MacroManager) StartAllPlayback(now time.Time) int {
+	started := 0
+	for label, buffer := range m.buffers {
+		if len(buffer) == 0 {
+			continue
+		}
+		// Skip if already playing
+		if _, playing := m.active[label]; playing {
+			continue
+		}
+		m.startCounter++
+		m.active[label] = &PlaybackState{
+			label:         label,
+			index:         0,
+			repeatTarget:  0, // Infinite
+			repeatCurrent: 0,
+			lastPlayTime:  now.Add(-parameter.MacroPlaybackInterval),
+			startOrder:    m.startCounter,
+		}
+		started++
+	}
+	return started
+}
+
 // StopPlayback halts playback of specific label
 func (m *MacroManager) StopPlayback(label rune) {
 	delete(m.active, label)
@@ -144,7 +179,9 @@ func (m *MacroManager) Tick(now time.Time) []*input.Intent {
 			state.index = 0
 		}
 
+		// Copy intent and mark as playback-originated
 		intent := buffer[state.index]
+		intent.MacroPlayback = true
 		state.index++
 		state.lastPlayTime = now
 

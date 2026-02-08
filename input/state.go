@@ -18,16 +18,15 @@ const (
 type InputState uint8
 
 const (
-	StateIdle InputState = iota
-	StateCount
-	StateCharWait
-	StateOperatorWait
-	StateOperatorCharWait
-	StatePrefixG
-	StateOperatorPrefixG
-	StateMarkerAwaitColor   // After g+direction, awaiting r/g/b or repeat direction
-	StateMacroRecordAwait   // after 'q' (not recording, not playing), awaiting label
-	StateMacroPlayAwait     // after '@', awaiting label or '@'
-	StateMacroInfiniteAwait // after '@@', awaiting label
-	StateMacroStopAwait     // after 'q' (while playing), awaiting label or '@'
+	StateIdle               InputState = iota // Default state, awaiting initial key
+	StateCount                                // Accumulating numeric prefix (1-9 start, 0 continues)
+	StateCharWait                             // After f/F/t/T, awaiting target character
+	StateOperatorWait                         // After operator (d), awaiting motion or second operator
+	StateOperatorCharWait                     // After operator + f/F/t/T, awaiting target character
+	StatePrefixG                              // After 'g' prefix, awaiting second key (g/G/l/h/k/j)
+	StateOperatorPrefixG                      // After operator + 'g', awaiting motion (e.g., dgg)
+	StateMarkerAwaitColor                     // After g+direction, awaiting color (r/g/b) or repeat direction
+	StateMacroRecordAwait                     // After 'q', awaiting label [a-z] or '@' (stop-all)
+	StateMacroPlayAwait                       // After '@', awaiting label [a-z] or '@' (infinite prefix)
+	StateMacroInfiniteAwait                   // After '@@', awaiting label [a-z] for infinite playback
 )

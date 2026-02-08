@@ -98,27 +98,23 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	r.ctx.State.RecordAction()
 
 	// === Macro Context Interception ===
-	// IntentMacroRecordToggle is placeholder from 'q' key; route based on context
+
 	if intent.Type == input.IntentMacroRecordToggle {
 		if r.macro.IsRecording() {
-			// q while recording -> stop
+			// q while recording -> stop recording
 			r.macro.StopRecording()
 			r.ctx.MacroRecording.Store(false)
 			r.ctx.MacroRecordingLabel.Store(0)
 			return true
 		}
-		if r.macro.IsPlaying() {
-			// q while playing -> transition to stop-await state
-			r.machine.SetState(input.StateMacroStopAwait)
-			return true
-		}
-		// q while idle -> transition to record-await state
+		// q while idle OR playing -> transition to record-await
+		// Recording takes priority; specific label's playback stops in handleMacroRecordStart
 		r.machine.SetState(input.StateMacroRecordAwait)
 		return true
 	}
 
 	// Record intent if recording (exclude macro control intents and playback-originated)
-	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) {
+	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) && !intent.MacroPlayback {
 		r.macro.Record(*intent)
 	}
 
@@ -197,6 +193,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleMacroPlay(intent)
 	case input.IntentMacroPlayInfinite:
 		return r.handleMacroPlayInfinite(intent)
+	case input.IntentMacroPlayAll:
+		return r.handleMacroPlayAll()
 	case input.IntentMacroStopOne:
 		return r.handleMacroStopOne(intent)
 	case input.IntentMacroStopAll:
@@ -235,21 +233,16 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
 		r.ctx.SetPaused(false)
-	case core.ModeVisual:
-		// Exit to Normal mode
-	case core.ModeInsert:
-		// Exit to Normal mode
 	case core.ModeNormal:
-		// Trigger ping grid
+		// ESC in Normal mode triggers ping grid, no mode change
 		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
 			Duration: parameter.PingGridDuration,
 		})
-		return true // Stay in Normal mode
+		return true
 	}
 
-	// Return to Normal mode
-	r.ctx.SetMode(core.ModeNormal)
-	r.machine.SetMode(input.ModeNormal)
+	// Return to Normal mode via centralized transition
+	r.transitionMode(core.ModeNormal)
 
 	return true
 }
@@ -556,52 +549,35 @@ func (r *Router) handleFireSpecial() bool {
 
 func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 	var newMode core.GameMode
-	var inputMode input.InputMode
 
 	switch intent.ModeTarget {
 	case input.ModeTargetInsert:
 		newMode = core.ModeInsert
-		inputMode = input.ModeInsert
 	case input.ModeTargetSearch:
 		newMode = core.ModeSearch
-		inputMode = input.ModeSearch
 		r.ctx.SetSearchText("")
 	case input.ModeTargetCommand:
 		newMode = core.ModeCommand
-		inputMode = input.ModeCommand
 		r.ctx.SetCommandText("")
 		r.ctx.SetPaused(true)
 	case input.ModeTargetVisual:
 		if r.ctx.IsVisualMode() {
-			// Toggle off
-			newMode = core.ModeNormal
-			inputMode = input.ModeNormal
+			newMode = core.ModeNormal // Toggle off
 		} else {
 			newMode = core.ModeVisual
-			inputMode = input.ModeVisual
 		}
 	case input.ModeTargetNormal:
 		newMode = core.ModeNormal
-		inputMode = input.ModeNormal
 	default:
 		return true
 	}
 
-	// Update GameContext
-	r.ctx.SetMode(newMode)
-	r.ctx.World.UpdateBoundsRadius()
-
-	// Notify world of mode change
-	r.ctx.PushEvent(event.EventModeChangeNotification, &event.ModeChangeNotificationPayload{Mode: newMode})
-
-	// Sync input.Machine
-	r.machine.SetMode(inputMode)
-
+	r.transitionMode(newMode)
 	return true
 }
 
 func (r *Router) handleAppend() bool {
-	// 1. Move Cursor Right
+	// 1. Move cursor right
 	r.ctx.World.RunSafe(func() {
 		if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 			result := MotionRight(r.ctx, pos.X, pos.Y, 1)
@@ -609,11 +585,40 @@ func (r *Router) handleAppend() bool {
 		}
 	})
 
-	// 2. Switch to Insert Mode
-	r.ctx.SetMode(core.ModeInsert)
-	r.machine.SetMode(input.ModeInsert)
+	// 2. Switch to Insert mode via centralized transition
+	r.transitionMode(core.ModeInsert)
 
 	return true
+}
+
+// transitionMode handles all mode changes with consistent side-effects
+func (r *Router) transitionMode(newMode core.GameMode) {
+	// 1. Update game mode
+	r.ctx.SetMode(newMode)
+
+	// 2. Update ping bounds (recomputes based on new mode)
+	r.ctx.World.UpdateBoundsRadius()
+
+	// 3. Emit mode change event
+	r.ctx.PushEvent(event.EventModeChangeNotification, &event.ModeChangeNotificationPayload{Mode: newMode})
+
+	// 4. Sync input machine
+	var inputMode input.InputMode
+	switch newMode {
+	case core.ModeNormal:
+		inputMode = input.ModeNormal
+	case core.ModeVisual:
+		inputMode = input.ModeVisual
+	case core.ModeInsert:
+		inputMode = input.ModeInsert
+	case core.ModeSearch:
+		inputMode = input.ModeSearch
+	case core.ModeCommand:
+		inputMode = input.ModeCommand
+	case core.ModeOverlay:
+		inputMode = input.ModeOverlay
+	}
+	r.machine.SetMode(inputMode)
 }
 
 // --- Text Entry Handlers ---
@@ -807,9 +812,8 @@ func (r *Router) handleInsertDeleteBack() bool {
 
 func (r *Router) handleOverlayClose() bool {
 	r.ctx.SetOverlayContent(nil)
-	r.ctx.SetMode(core.ModeNormal)
-	r.machine.SetMode(input.ModeNormal)
 	r.ctx.SetPaused(false)
+	r.transitionMode(core.ModeNormal)
 	return true
 }
 
@@ -887,11 +891,11 @@ func (r *Router) handleMouseClick(intent *input.Intent) bool {
 func (r *Router) handleMacroRecordStart(intent *input.Intent) bool {
 	label := intent.Char
 
-	// If this label is playing, stop it first (DP2: first press stops)
+	// If this label is playing, stop it first
 	if r.macro.IsLabelPlaying(label) {
 		r.macro.StopPlayback(label)
 		r.updateMacroPlayingState()
-		return true
+		// Continue to start recording
 	}
 
 	r.macro.StartRecording(label)
@@ -918,6 +922,14 @@ func (r *Router) handleMacroPlay(intent *input.Intent) bool {
 func (r *Router) handleMacroPlayInfinite(intent *input.Intent) bool {
 	now := r.ctx.PausableClock.Now()
 	if r.macro.StartPlayback(intent.Char, 0, now) { // 0 = infinite
+		r.ctx.MacroPlaying.Store(true)
+	}
+	return true
+}
+
+func (r *Router) handleMacroPlayAll() bool {
+	now := r.ctx.PausableClock.Now()
+	if r.macro.StartAllPlayback(now) > 0 {
 		r.ctx.MacroPlaying.Store(true)
 	}
 	return true
