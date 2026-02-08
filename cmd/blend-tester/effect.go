@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -224,9 +225,9 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 		case ShieldGray:
 			shieldColor = render.RGB{128, 128, 128}
 		case ShieldBlue:
-			shieldColor = render.RgbGlyphBlueNormal
+			shieldColor = visual.RgbGlyphBlueNormal
 		case ShieldGreen:
-			shieldColor = render.RgbGlyphGreenNormal
+			shieldColor = visual.RgbGlyphGreenNormal
 		}
 	}
 
@@ -323,10 +324,10 @@ func drawTrailEffect(startY int, fg, bg render.RGB) {
 	startY += 2
 
 	typeName := "Cleaner"
-	baseColor := render.RgbCleanerBasePositive
+	baseColor := visual.RgbCleanerBasePositive
 	if state.trailType == 1 {
 		typeName = "Materialize"
-		baseColor = render.RgbMaterialize
+		baseColor = visual.RgbMaterialize
 	}
 	if state.trailColorIdx > 0 && state.trailColorIdx < len(gamePalette) {
 		baseColor = gamePalette[state.trailColorIdx].Color
@@ -377,7 +378,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	drawText(1, startY, "↑↓:Frame ←→:Duration C:Color", render.RGB{100, 100, 100}, bg)
 	startY += 2
 
-	baseColor := render.RgbRemovalFlash
+	baseColor := visual.RgbRemovalFlash
 	if state.flashColorIdx > 0 && state.flashColorIdx < len(gamePalette) {
 		baseColor = gamePalette[state.flashColorIdx].Color
 	}
@@ -409,7 +410,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	// Show add blend result on sample char
 	drawText(1, startY, "AddEntityAt blend on char 'A' (green):", fg, bg)
 	startY++
-	charFg := render.RgbGlyphGreenNormal
+	charFg := visual.RgbGlyphGreenNormal
 	addedTC := render.Add(charFg, flashColor, 1.0)
 	idx := terminal.RGBTo256(addedTC)
 	added256 := Get256PaletteRGB(idx)

@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -163,10 +164,10 @@ func main() {
 		flashDuration: 10,
 		heatValue:     50,
 		// Default analyze color to RgbPingNormal
-		diagInputRGB: render.RgbPingLineNormal,
+		diagInputRGB: visual.RgbPingLineNormal,
 		diagInputHex: "996600",
 	}
-	buf = render.NewRenderBuffer(w, h)
+	buf = render.NewRenderBuffer(colorMode, w, h)
 
 	mainLoop()
 }

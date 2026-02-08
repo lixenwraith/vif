@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -16,83 +17,83 @@ type PaletteEntry struct {
 
 var gamePalette = []PaletteEntry{
 	// Sequences - Green
-	{"SeqGreenDark", render.RgbGlyphGreenDark, "Sequence"},
-	{"SeqGreenNormal", render.RgbGlyphGreenNormal, "Sequence"},
-	{"SeqGreenBright", render.RgbGlyphGreenBright, "Sequence"},
+	{"SeqGreenDark", visual.RgbGlyphGreenDark, "Sequence"},
+	{"SeqGreenNormal", visual.RgbGlyphGreenNormal, "Sequence"},
+	{"SeqGreenBright", visual.RgbGlyphGreenBright, "Sequence"},
 	// Sequences - Red
-	{"SeqRedDark", render.RgbGlyphRedDark, "Sequence"},
-	{"SeqRedNormal", render.RgbGlyphRedNormal, "Sequence"},
-	{"SeqRedBright", render.RgbGlyphRedBright, "Sequence"},
+	{"SeqRedDark", visual.RgbGlyphRedDark, "Sequence"},
+	{"SeqRedNormal", visual.RgbGlyphRedNormal, "Sequence"},
+	{"SeqRedBright", visual.RgbGlyphRedBright, "Sequence"},
 	// Sequences - Blue
-	{"SeqBlueDark", render.RgbGlyphBlueDark, "Sequence"},
-	{"SeqBlueNormal", render.RgbGlyphBlueNormal, "Sequence"},
-	{"SeqBlueBright", render.RgbGlyphBlueBright, "Sequence"},
+	{"SeqBlueDark", visual.RgbGlyphBlueDark, "Sequence"},
+	{"SeqBlueNormal", visual.RgbGlyphBlueNormal, "Sequence"},
+	{"SeqBlueBright", visual.RgbGlyphBlueBright, "Sequence"},
 	// Sequences - Special
-	{"SeqGold", render.RgbGlyphGold, "Sequence"},
+	{"SeqGold", visual.RgbGlyphGold, "Sequence"},
 
 	// Effects
-	{"Decay", render.RgbDecay, "Effect"},
-	{"Blossom", render.RgbBlossom, "Effect"},
-	{"Drain", render.RgbDrain, "Effect"},
-	{"Materialize", render.RgbMaterialize, "Effect"},
-	{"RemovalFlash", render.RgbRemovalFlash, "Effect"},
-	{"CleanerBase", render.RgbCleanerBasePositive, "Effect"},
-	{"ShieldBase", render.RgbShieldBase, "Effect"},
+	{"Decay", visual.RgbDecay, "Effect"},
+	{"Blossom", visual.RgbBlossom, "Effect"},
+	{"Drain", visual.RgbDrain, "Effect"},
+	{"Materialize", visual.RgbMaterialize, "Effect"},
+	{"RemovalFlash", visual.RgbRemovalFlash, "Effect"},
+	{"CleanerBase", visual.RgbCleanerBasePositive, "Effect"},
+	{"ShieldBase", visual.RgbQuasarShield, "Effect"},
 
 	// Cursor/Ping
-	{"PingHighlight", render.RgbPingHighlight, "Cursor"},
-	{"PingNormal", render.RgbPingLineNormal, "Cursor"},
-	{"PingOrange", render.RgbPingOrange, "Cursor"},
-	{"PingGreen", render.RgbPingGreen, "Cursor"},
-	{"PingRed", render.RgbPingRed, "Cursor"},
-	{"PingBlue", render.RgbPingBlue, "Cursor"},
-	{"CursorNormal", render.RgbCursorNormal, "Cursor"},
-	{"CursorInsert", render.RgbCursorInsert, "Cursor"},
-	{"CursorError", render.RgbCursorError, "Cursor"},
+	{"PingHighlight", visual.RgbPingHighlight, "Cursor"},
+	{"PingNormal", visual.RgbPingLineNormal, "Cursor"},
+	{"PingOrange", visual.RgbPingOrange, "Cursor"},
+	{"PingGreen", visual.RgbPingGreen, "Cursor"},
+	{"PingRed", visual.RgbPingRed, "Cursor"},
+	{"PingBlue", visual.RgbPingBlue, "Cursor"},
+	{"CursorNormal", visual.RgbCursorNormal, "Cursor"},
+	{"CursorInsert", visual.RgbCursorInsert, "Cursor"},
+	{"CursorError", visual.RgbCursorError, "Cursor"},
 
 	// UI
-	{"LineNumbers", render.RgbRowIndicator, "UI"},
-	{"StatusBar", render.RgbStatusBar, "UI"},
-	{"ColumnIndicator", render.RgbColumnIndicator, "UI"},
-	{"Background", render.RgbBackground, "UI"},
-	{"StatusText", render.RgbStatusText, "UI"},
+	{"LineNumbers", visual.RgbRowIndicator, "UI"},
+	{"StatusBar", visual.RgbStatusBar, "UI"},
+	{"ColumnIndicator", visual.RgbColumnIndicator, "UI"},
+	{"Background", visual.RgbBackground, "UI"},
+	{"StatusText", visual.RgbStatusText, "UI"},
 
 	// Nugget
-	{"NuggetOrange", render.RgbNuggetOrange, "Nugget"},
-	{"NuggetDark", render.RgbNuggetDark, "Nugget"},
-	{"TrailGray", render.RgbTrailGray, "Nugget"},
+	{"NuggetOrange", visual.RgbNuggetOrange, "Nugget"},
+	{"NuggetDark", visual.RgbNuggetDark, "Nugget"},
+	{"TrailGray", visual.RgbTrailGray, "Nugget"},
 
 	// Mode Backgrounds
-	{"ModeNormalBg", render.RgbModeNormalBg, "ModeBg"},
-	{"ModeInsertBg", render.RgbModeInsertBg, "ModeBg"},
-	{"ModeSearchBg", render.RgbModeSearchBg, "ModeBg"},
-	{"ModeCommandBg", render.RgbModeCommandBg, "ModeBg"},
+	{"ModeNormalBg", visual.RgbModeNormalBg, "ModeBg"},
+	{"ModeInsertBg", visual.RgbModeInsertBg, "ModeBg"},
+	{"ModeSearchBg", visual.RgbModeSearchBg, "ModeBg"},
+	{"ModeCommandBg", visual.RgbModeCommandBg, "ModeBg"},
 
 	// Energy
-	{"EnergyBg", render.RgbEnergyBg, "Energy"},
-	{"EnergyBlinkBlue", render.RgbEnergyBlinkBlue, "Energy"},
-	{"EnergyBlinkGreen", render.RgbEnergyBlinkGreen, "Energy"},
-	{"EnergyBlinkRed", render.RgbEnergyBlinkRed, "Energy"},
-	{"EnergyBlinkWhite", render.RgbEnergyBlinkWhite, "Energy"},
+	{"EnergyBg", visual.RgbEnergyBg, "Energy"},
+	{"EnergyBlinkBlue", visual.RgbEnergyBlinkBlue, "Energy"},
+	{"EnergyBlinkGreen", visual.RgbEnergyBlinkGreen, "Energy"},
+	{"EnergyBlinkRed", visual.RgbEnergyBlinkRed, "Energy"},
+	{"EnergyBlinkWhite", visual.RgbEnergyBlinkWhite, "Energy"},
 
 	// Timer Backgrounds
-	{"BoostBg", render.RgbBoostBg, "Timer"},
-	{"FpsBg", render.RgbFpsBg, "Timer"},
-	{"GtBg", render.RgbGtBg, "Timer"},
-	{"ApmBg", render.RgbApmBg, "Timer"},
+	{"BoostBg", visual.RgbBoostBg, "Timer"},
+	{"FpsBg", visual.RgbFpsBg, "Timer"},
+	{"GtBg", visual.RgbGtBg, "Timer"},
+	{"ApmBg", visual.RgbApmBg, "Timer"},
 
 	// Audio
-	{"AudioMuted", render.RgbAudioMuted, "Audio"},
-	{"AudioUnmuted", render.RgbAudioUnmuted, "Audio"},
+	{"AudioMuted", visual.RgbAudioBothOff, "Audio"},
+	{"AudioUnmuted", visual.RgbAudioBothOn, "Audio"},
 
 	// Overlay
-	{"OverlayBorder", render.RgbOverlayBorder, "Overlay"},
-	{"OverlayBg", render.RgbOverlayBg, "Overlay"},
-	{"OverlayText", render.RgbOverlayText, "Overlay"},
-	{"OverlayTitle", render.RgbOverlayTitle, "Overlay"},
+	{"OverlayBorder", visual.RgbOverlayBorder, "Overlay"},
+	{"OverlayBg", visual.RgbOverlayBg, "Overlay"},
+	{"OverlayText", visual.RgbOverlayText, "Overlay"},
+	{"OverlayTitle", visual.RgbOverlayTitle, "Overlay"},
 
 	// General
-	{"Black", render.RgbBlack, "General"},
+	{"Black", visual.RgbBlack, "General"},
 }
 
 func handlePaletteInput(ev terminal.Event) {
