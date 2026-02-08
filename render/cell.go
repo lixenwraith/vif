@@ -9,7 +9,6 @@ import (
 // Attributes are preserved directly
 type Cell = terminal.Cell
 type Attr = terminal.Attr
-type RGB = terminal.RGB
 
 // DefaultBgRGB is the default background color (Tokyo Night)
 var DefaultBgRGB = visual.RgbBackground

@@ -4,14 +4,13 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // PaletteEntry represents a named color from the game
 type PaletteEntry struct {
 	Name  string
-	Color render.RGB
+	Color terminal.RGB
 	Group string
 }
 
@@ -127,20 +126,20 @@ func handlePaletteInput(ev terminal.Event) {
 
 func drawPaletteMode() {
 	startY := 2
-	fg := render.RGB{180, 180, 180}
-	bg := render.RGB{20, 20, 30}
-	dimFg := render.RGB{120, 120, 120}
+	fg := terminal.RGB{180, 180, 180}
+	bg := terminal.RGB{20, 20, 30}
+	dimFg := terminal.RGB{120, 120, 120}
 
 	// Keys help
-	drawText(1, startY, "↑↓:Select PgUp/Dn:Jump Home/End:First/Last", render.RGB{100, 100, 100}, bg)
+	drawText(1, startY, "↑↓:Select PgUp/Dn:Jump Home/End:First/Last", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	// Column headers
 	drawText(1, startY, "##", dimFg, bg)
 	drawText(5, startY, "Group", dimFg, bg)
 	drawText(16, startY, "Name", dimFg, bg)
-	drawText(35, startY, "TC", render.RGB{100, 180, 100}, bg)
-	drawText(40, startY, "256", render.RGB{180, 180, 100}, bg)
+	drawText(35, startY, "TC", terminal.RGB{100, 180, 100}, bg)
+	drawText(40, startY, "256", terminal.RGB{180, 180, 100}, bg)
 	drawText(45, startY, "RGB (decimal)", dimFg, bg)
 	drawText(60, startY, "Hex", dimFg, bg)
 	drawText(69, startY, "256 idx", dimFg, bg)
@@ -148,7 +147,7 @@ func drawPaletteMode() {
 
 	// Separator line
 	for x := 1; x < 80; x++ {
-		drawSwatchChar(x, startY, '─', render.RGB{60, 60, 60}, bg)
+		drawSwatchChar(x, startY, '─', terminal.RGB{60, 60, 60}, bg)
 	}
 	startY++
 
@@ -175,7 +174,7 @@ func drawPaletteMode() {
 		// Selection highlight
 		rowBg := bg
 		if idx == state.paletteIdx {
-			rowBg = render.RGB{60, 60, 80}
+			rowBg = terminal.RGB{60, 60, 80}
 		}
 
 		// Clear row
@@ -184,10 +183,10 @@ func drawPaletteMode() {
 		}
 
 		// Index
-		drawText(1, y, fmt.Sprintf("%2d", idx), render.RGB{100, 100, 100}, rowBg)
+		drawText(1, y, fmt.Sprintf("%2d", idx), terminal.RGB{100, 100, 100}, rowBg)
 
 		// Group
-		drawText(5, y, fmt.Sprintf("%-10s", entry.Group), render.RGB{120, 120, 120}, rowBg)
+		drawText(5, y, fmt.Sprintf("%-10s", entry.Group), terminal.RGB{120, 120, 120}, rowBg)
 
 		// Name
 		drawText(16, y, fmt.Sprintf("%-18s", entry.Name), fg, rowBg)
@@ -201,32 +200,32 @@ func drawPaletteMode() {
 		drawSwatch(40, y, 4, rgb256)
 
 		// RGB values
-		drawText(45, y, fmt.Sprintf("(%3d,%3d,%3d)", entry.Color.R, entry.Color.G, entry.Color.B), render.RGB{150, 150, 150}, rowBg)
+		drawText(45, y, fmt.Sprintf("(%3d,%3d,%3d)", entry.Color.R, entry.Color.G, entry.Color.B), terminal.RGB{150, 150, 150}, rowBg)
 
 		// Hex
-		drawText(60, y, fmt.Sprintf("#%02X%02X%02X", entry.Color.R, entry.Color.G, entry.Color.B), render.RGB{150, 150, 150}, rowBg)
+		drawText(60, y, fmt.Sprintf("#%02X%02X%02X", entry.Color.R, entry.Color.G, entry.Color.B), terminal.RGB{150, 150, 150}, rowBg)
 
 		// 256 index
-		drawText(69, y, fmt.Sprintf("%3d", idx256), render.RGB{130, 130, 130}, rowBg)
+		drawText(69, y, fmt.Sprintf("%3d", idx256), terminal.RGB{130, 130, 130}, rowBg)
 
 		// Delta indicator (small visual if significant difference)
 		delta := absDelta(entry.Color, rgb256)
 		if delta > 50 {
-			drawText(77, y, "!", render.RGB{255, 100, 100}, rowBg)
+			drawText(77, y, "!", terminal.RGB{255, 100, 100}, rowBg)
 		} else if delta > 25 {
-			drawText(77, y, "~", render.RGB{255, 200, 100}, rowBg)
+			drawText(77, y, "~", terminal.RGB{255, 200, 100}, rowBg)
 		}
 	}
 
 	// Scroll indicator
 	if len(gamePalette) > listHeight {
 		scrollInfo := fmt.Sprintf("[%d/%d]", state.paletteIdx+1, len(gamePalette))
-		drawText(state.width-len(scrollInfo)-2, startY-2, scrollInfo, render.RGB{100, 100, 100}, bg)
+		drawText(state.width-len(scrollInfo)-2, startY-2, scrollInfo, terminal.RGB{100, 100, 100}, bg)
 	}
 
 	// Detailed info for selected color
 	infoY := startY + listHeight + 1
-	drawBox(0, infoY, 80, 8, " Selected Color Analysis ", render.RGB{80, 80, 80}, bg)
+	drawBox(0, infoY, 80, 8, " Selected Color Analysis ", terminal.RGB{80, 80, 80}, bg)
 
 	if state.paletteIdx < len(gamePalette) {
 		entry := gamePalette[state.paletteIdx]
@@ -240,11 +239,11 @@ func drawPaletteMode() {
 		} else {
 			lutNote = fmt.Sprintf("≈ Approximated (Δ=%d)", absDelta(info.RGB, info.Redmean256Bg))
 		}
-		drawText(2, infoY+5, lutNote, render.RGB{180, 180, 100}, bg)
+		drawText(2, infoY+5, lutNote, terminal.RGB{180, 180, 100}, bg)
 	}
 }
 
-func absDelta(a, b render.RGB) int {
+func absDelta(a, b terminal.RGB) int {
 	dr := int(a.R) - int(b.R)
 	dg := int(a.G) - int(b.G)
 	db := int(a.B) - int(b.B)

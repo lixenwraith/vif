@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
@@ -60,15 +59,15 @@ func updateDiagHex() {
 
 func drawDiagMode() {
 	startY := 2
-	fg := render.RGB{180, 180, 180}
-	bg := render.RGB{20, 20, 30}
-	dimFg := render.RGB{120, 120, 120}
+	fg := terminal.RGB{180, 180, 180}
+	bg := terminal.RGB{20, 20, 30}
+	dimFg := terminal.RGB{120, 120, 120}
 
-	drawText(1, startY, "H:Hex input  ↑↓:R±1  ←→:G±1  PgUp/Dn:B±1", render.RGB{100, 100, 100}, bg)
+	drawText(1, startY, "H:Hex input  ↑↓:R±1  ←→:G±1  PgUp/Dn:B±1", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	// Current color display
-	drawBox(0, startY, 78, 7, " Color Analysis ", render.RGB{80, 80, 80}, bg)
+	drawBox(0, startY, 78, 7, " Color Analysis ", terminal.RGB{80, 80, 80}, bg)
 
 	drawText(2, startY+1, fmt.Sprintf("Input: #%s  RGB: (%3d, %3d, %3d)",
 		state.diagInputHex, state.diagInputRGB.R, state.diagInputRGB.G, state.diagInputRGB.B), fg, bg)
@@ -96,52 +95,52 @@ func drawDiagMode() {
 
 	// Winner indicator
 	if redmeanDelta < naiveDelta {
-		drawText(63, startY+4, "◀ closer", render.RGB{100, 255, 100}, bg)
+		drawText(63, startY+4, "◀ closer", terminal.RGB{100, 255, 100}, bg)
 	} else if naiveDelta < redmeanDelta {
-		drawText(63, startY+5, "◀ closer", render.RGB{100, 255, 100}, bg)
+		drawText(63, startY+5, "◀ closer", terminal.RGB{100, 255, 100}, bg)
 	} else {
-		drawText(63, startY+4, "= equal", render.RGB{200, 200, 100}, bg)
+		drawText(63, startY+4, "= equal", terminal.RGB{200, 200, 100}, bg)
 	}
 
 	startY += 8
 
 	// Quantization trace
-	drawBox(0, startY, 78, 8, " Redmean LUT Trace ", render.RGB{80, 80, 80}, bg)
+	drawBox(0, startY, 78, 8, " Redmean LUT Trace ", terminal.RGB{80, 80, 80}, bg)
 	r6 := state.diagInputRGB.R >> 2
 	g6 := state.diagInputRGB.G >> 2
 	b6 := state.diagInputRGB.B >> 2
 	lutIdx := int(r6)<<12 | int(g6)<<6 | int(b6)
 
-	drawText(2, startY+1, fmt.Sprintf("1. Input RGB:    (%3d, %3d, %3d)", state.diagInputRGB.R, state.diagInputRGB.G, state.diagInputRGB.B), render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+2, fmt.Sprintf("2. Quantize >>2: (%3d, %3d, %3d)  [6-bit per channel]", r6, g6, b6), render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+3, fmt.Sprintf("3. LUT index:    %d<<12 | %d<<6 | %d = %d", r6, g6, b6, lutIdx), render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+4, fmt.Sprintf("4. LUT[%d] → palette index %d", lutIdx, info.Redmean256), render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+5, fmt.Sprintf("5. Palette[%d] → RGB (%3d, %3d, %3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), render.RGB{200, 200, 100}, bg)
+	drawText(2, startY+1, fmt.Sprintf("1. Input RGB:    (%3d, %3d, %3d)", state.diagInputRGB.R, state.diagInputRGB.G, state.diagInputRGB.B), terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, fmt.Sprintf("2. Quantize >>2: (%3d, %3d, %3d)  [6-bit per channel]", r6, g6, b6), terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+3, fmt.Sprintf("3. LUT index:    %d<<12 | %d<<6 | %d = %d", r6, g6, b6, lutIdx), terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+4, fmt.Sprintf("4. LUT[%d] → palette index %d", lutIdx, info.Redmean256), terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+5, fmt.Sprintf("5. Palette[%d] → RGB (%3d, %3d, %3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), terminal.RGB{200, 200, 100}, bg)
 	startY += 9
 
 	// Naive cube trace
-	drawBox(0, startY, 78, 5, " Naive Cube Trace ", render.RGB{80, 80, 80}, bg)
+	drawBox(0, startY, 78, 5, " Naive Cube Trace ", terminal.RGB{80, 80, 80}, bg)
 	ri := snapToCube(int(state.diagInputRGB.R))
 	gi := snapToCube(int(state.diagInputRGB.G))
 	bi := snapToCube(int(state.diagInputRGB.B))
-	drawText(2, startY+1, fmt.Sprintf("1. Snap R=%3d → cube[%d]=%3d", state.diagInputRGB.R, ri, cubeValues[ri]), render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+2, fmt.Sprintf("2. Snap G=%3d → cube[%d]=%3d", state.diagInputRGB.G, gi, cubeValues[gi]), render.RGB{200, 200, 100}, bg)
+	drawText(2, startY+1, fmt.Sprintf("1. Snap R=%3d → cube[%d]=%3d", state.diagInputRGB.R, ri, cubeValues[ri]), terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, fmt.Sprintf("2. Snap G=%3d → cube[%d]=%3d", state.diagInputRGB.G, gi, cubeValues[gi]), terminal.RGB{200, 200, 100}, bg)
 	drawText(2, startY+3, fmt.Sprintf("3. Snap B=%3d → cube[%d]=%3d   idx = 16 + %d*36 + %d*6 + %d = %d",
-		state.diagInputRGB.B, bi, cubeValues[bi], ri, gi, bi, info.Naive256), render.RGB{200, 200, 100}, bg)
+		state.diagInputRGB.B, bi, cubeValues[bi], ri, gi, bi, info.Naive256), terminal.RGB{200, 200, 100}, bg)
 
 	// Hex input overlay
 	if state.hexInputActive && state.hexInputTarget == 1 {
-		drawBox(20, 10, 30, 5, " Hex Input ", render.RGB{255, 255, 0}, render.RGB{40, 40, 60})
-		drawText(22, 12, "#"+state.hexInputBuffer+"_", render.RGB{255, 255, 255}, render.RGB{40, 40, 60})
-		drawText(22, 13, "Enter:Apply Esc:Cancel", render.RGB{100, 100, 100}, render.RGB{40, 40, 60})
+		drawBox(20, 10, 30, 5, " Hex Input ", terminal.RGB{255, 255, 0}, terminal.RGB{40, 40, 60})
+		drawText(22, 12, "#"+state.hexInputBuffer+"_", terminal.RGB{255, 255, 255}, terminal.RGB{40, 40, 60})
+		drawText(22, 13, "Enter:Apply Esc:Cancel", terminal.RGB{100, 100, 100}, terminal.RGB{40, 40, 60})
 	}
 }
 
-func deltaColor(delta int) render.RGB {
+func deltaColor(delta int) terminal.RGB {
 	if delta < 15 {
-		return render.RGB{100, 255, 100} // Green - good
+		return terminal.RGB{100, 255, 100} // Green - good
 	} else if delta < 40 {
-		return render.RGB{255, 255, 100} // Yellow - ok
+		return terminal.RGB{255, 255, 100} // Yellow - ok
 	}
-	return render.RGB{255, 100, 100} // Red - poor
+	return terminal.RGB{255, 100, 100} // Red - poor
 }

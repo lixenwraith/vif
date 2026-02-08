@@ -24,7 +24,7 @@ type Entity struct {
 	X, Y       float64
 	DX, DY     float64
 	Radius     float64
-	Color      render.RGB
+	Color      terminal.RGB
 	RenderType int
 	Phase      float64
 }
@@ -61,19 +61,19 @@ func main() {
 		// 1. "The Sun" - Additive blending, hot core
 		{
 			X: 20, Y: 10, DX: 0.8, DY: 0.4, Radius: 14,
-			Color:      render.RGB{R: 255, G: 160, B: 60}, // Orange
+			Color:      terminal.RGB{R: 255, G: 160, B: 60}, // Orange
 			RenderType: 0,
 		},
 		// 2. "The Bubble" - SoftLight/Overlay, distinct rim
 		{
 			X: 60, Y: 20, DX: -0.6, DY: 0.7, Radius: 18,
-			Color:      render.RGB{R: 60, G: 220, B: 255}, // Cyan
+			Color:      terminal.RGB{R: 60, G: 220, B: 255}, // Cyan
 			RenderType: 1,
 		},
 		// 3. "The Pulse" - Screen blending, interference pattern
 		{
 			X: 40, Y: 30, DX: 0.4, DY: -0.5, Radius: 22,
-			Color:      render.RGB{R: 200, G: 60, B: 255}, // Purple
+			Color:      terminal.RGB{R: 200, G: 60, B: 255}, // Purple
 			RenderType: 2,
 		},
 	}
@@ -161,10 +161,10 @@ func main() {
 				brite := s.Brightness * (0.8 + 0.2*math.Sin(currTime*5.0+s.X))
 				val := uint8(255 * brite)
 
-				// Convert terminal.RGB -> render.RGB -> terminal.RGB
-				bgRender := render.RGB{R: bg.R, G: bg.G, B: bg.B}
+				// Convert terminal.RGB -> terminal.RGB -> terminal.RGB
+				bgRender := terminal.RGB{R: bg.R, G: bg.G, B: bg.B}
 				// Explicit alpha 1.0 for additive blend
-				res := render.Add(bgRender, render.RGB{R: val, G: val, B: val}, 1.0)
+				res := render.Add(bgRender, terminal.RGB{R: val, G: val, B: val}, 1.0)
 				cells[idx].Bg = terminal.RGB{R: res.R, G: res.G, B: res.B}
 			}
 		}
@@ -211,9 +211,9 @@ func main() {
 					dist := math.Sqrt(distSq)
 					normDist := dist / e.Radius
 					idx := rowOff + x
-					bg := render.RGB{R: cells[idx].Bg.R, G: cells[idx].Bg.G, B: cells[idx].Bg.B}
+					bg := terminal.RGB{R: cells[idx].Bg.R, G: cells[idx].Bg.G, B: cells[idx].Bg.B}
 
-					var finalColor render.RGB
+					var finalColor terminal.RGB
 
 					switch e.RenderType {
 					case 0: // "The Sun" - Additive Core + Corona
@@ -229,7 +229,7 @@ func main() {
 						// AddEntityAt white core
 						if core > 0 {
 							// Explicit alpha 1.0
-							val = render.Add(val, render.Scale(render.RGB{R: 255, G: 255, B: 255}, core), 1.0)
+							val = render.Add(val, render.Scale(terminal.RGB{R: 255, G: 255, B: 255}, core), 1.0)
 						}
 						// Explicit alpha 1.0
 						finalColor = render.Add(bg, val, 1.0)
@@ -250,7 +250,7 @@ func main() {
 						// AddEntityAt distinct rim highlight
 						if normDist > 0.85 {
 							// Explicit alpha 1.0
-							finalColor = render.Add(finalColor, render.Scale(render.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
+							finalColor = render.Add(finalColor, render.Scale(terminal.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
 						}
 
 					case 2: // "The Pulse" - Screen Interference

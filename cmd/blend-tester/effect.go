@@ -158,18 +158,18 @@ func handleHeatInput(ev terminal.Event) {
 
 func drawEffectMode() {
 	startY := 2
-	fg := render.RGB{180, 180, 180}
-	bg := render.RGB{20, 20, 30}
+	fg := terminal.RGB{180, 180, 180}
+	bg := terminal.RGB{20, 20, 30}
 
 	// Sub-mode tabs
 	subModes := []string{"1:Shield", "2:Trail", "3:Flash", "4:Heat"}
 	x := 1
 	for i, m := range subModes {
-		tabFg := render.RGB{150, 150, 150}
-		tabBg := render.RGB{40, 40, 40}
+		tabFg := terminal.RGB{150, 150, 150}
+		tabBg := terminal.RGB{40, 40, 40}
 		if EffectSubMode(i) == state.effectSub {
-			tabFg = render.RGB{0, 0, 0}
-			tabBg = render.RGB{0, 200, 200}
+			tabFg = terminal.RGB{0, 0, 0}
+			tabBg = terminal.RGB{0, 200, 200}
 		}
 		drawText(x, startY, " "+m+" ", tabFg, tabBg)
 		x += len(m) + 3
@@ -188,9 +188,9 @@ func drawEffectMode() {
 	}
 }
 
-func drawShieldEffect(startY int, fg, bg render.RGB) {
+func drawShieldEffect(startY int, fg, bg terminal.RGB) {
 	// Keys line - updated
-	drawText(1, startY, "←→:RadX ↑↓:RadY O/P:Opacity C:Color B:Bg H:HexColor", render.RGB{100, 100, 100}, bg)
+	drawText(1, startY, "←→:RadX ↑↓:RadY O/P:Opacity C:Color B:Bg H:HexColor", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	// Parameters - updated to show color mode
@@ -217,13 +217,13 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 	startY += 2
 
 	// Determine shield color
-	var shieldColor render.RGB
+	var shieldColor terminal.RGB
 	if state.shieldColorMode == 1 {
 		shieldColor = state.shieldCustomColor
 	} else {
 		switch state.shieldState {
 		case ShieldGray:
-			shieldColor = render.RGB{128, 128, 128}
+			shieldColor = terminal.RGB{128, 128, 128}
 		case ShieldBlue:
 			shieldColor = visual.RgbGlyphBlueNormal
 		case ShieldGreen:
@@ -257,20 +257,20 @@ func drawShieldEffect(startY int, fg, bg render.RGB) {
 
 	// Formula
 	startY += previewH + 2
-	drawBox(0, startY, 70, 5, " Shield Blend (Screen) ", render.RGB{80, 80, 80}, bg)
-	drawText(2, startY+1, "falloff = (1 - dist)²", render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+2, "alpha = falloff × maxOpacity", render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+3, "Screen: 255 - (255-Dst)*(255-Src)/255", render.RGB{200, 200, 100}, bg)
+	drawBox(0, startY, 70, 5, " Shield Blend (Screen) ", terminal.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "falloff = (1 - dist)²", terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, "alpha = falloff × maxOpacity", terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+3, "Screen: 255 - (255-Dst)*(255-Src)/255", terminal.RGB{200, 200, 100}, bg)
 
 	// Hex input overlay for shield
 	if state.hexInputActive && state.hexInputTarget == 2 {
-		drawBox(20, 10, 30, 5, " Shield Color ", render.RGB{255, 255, 0}, render.RGB{40, 40, 60})
-		drawText(22, 12, "#"+state.hexInputBuffer+"_", render.RGB{255, 255, 255}, render.RGB{40, 40, 60})
-		drawText(22, 13, "Enter:Apply Esc:Cancel", render.RGB{100, 100, 100}, render.RGB{40, 40, 60})
+		drawBox(20, 10, 30, 5, " Shield Color ", terminal.RGB{255, 255, 0}, terminal.RGB{40, 40, 60})
+		drawText(22, 12, "#"+state.hexInputBuffer+"_", terminal.RGB{255, 255, 255}, terminal.RGB{40, 40, 60})
+		drawText(22, 13, "Enter:Apply Esc:Cancel", terminal.RGB{100, 100, 100}, terminal.RGB{40, 40, 60})
 	}
 }
 
-func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor render.RGB, trueColor bool) {
+func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor terminal.RGB, trueColor bool) {
 	invRxSq := 1.0 / (state.shieldRadiusX * state.shieldRadiusX)
 	invRySq := 1.0 / (state.shieldRadiusY * state.shieldRadiusY)
 
@@ -286,7 +286,7 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor re
 
 			if normalizedDistSq > 1.0 {
 				// Outside shield
-				buf.SetWithBg(screenX, screenY, '·', render.RGB{60, 60, 60}, bgColor)
+				buf.SetWithBg(screenX, screenY, '·', terminal.RGB{60, 60, 60}, bgColor)
 				continue
 			}
 
@@ -294,7 +294,7 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor re
 
 			// Center marker
 			if x == cx && y == cy {
-				buf.SetWithBg(screenX, screenY, '+', render.RGB{255, 255, 255}, bgColor)
+				buf.SetWithBg(screenX, screenY, '+', terminal.RGB{255, 255, 255}, bgColor)
 				continue
 			}
 
@@ -319,8 +319,8 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor re
 	}
 }
 
-func drawTrailEffect(startY int, fg, bg render.RGB) {
-	drawText(1, startY, "↑↓:Length C:Color T:Type(Cleaner/Materialize)", render.RGB{100, 100, 100}, bg)
+func drawTrailEffect(startY int, fg, bg terminal.RGB) {
+	drawText(1, startY, "↑↓:Length C:Color T:Type(Cleaner/Materialize)", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	typeName := "Cleaner"
@@ -370,12 +370,12 @@ func drawTrailEffect(startY int, fg, bg render.RGB) {
 	startY += 2
 
 	// Formula
-	drawBox(0, startY, 50, 3, " Trail Formula ", render.RGB{80, 80, 80}, bg)
-	drawText(2, startY+1, "opacity = 1.0 - (idx / length)", render.RGB{200, 200, 100}, bg)
+	drawBox(0, startY, 50, 3, " Trail Formula ", terminal.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "opacity = 1.0 - (idx / length)", terminal.RGB{200, 200, 100}, bg)
 }
 
-func drawFlashEffect(startY int, fg, bg render.RGB) {
-	drawText(1, startY, "↑↓:Frame ←→:Duration C:Color", render.RGB{100, 100, 100}, bg)
+func drawFlashEffect(startY int, fg, bg terminal.RGB) {
+	drawText(1, startY, "↑↓:Frame ←→:Duration C:Color", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	baseColor := visual.RgbRemovalFlash
@@ -394,7 +394,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	}
 
 	// Flash uses AddEntityAt blend on foreground
-	flashColor := render.RGB{
+	flashColor := terminal.RGB{
 		R: uint8(float64(baseColor.R) * opacity),
 		G: uint8(float64(baseColor.G) * opacity),
 		B: uint8(float64(baseColor.B) * opacity),
@@ -404,7 +404,7 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 	startY++
 	drawText(1, startY, "Flash contribution:", fg, bg)
 	drawSwatch(22, startY, 6, flashColor)
-	drawText(29, startY, fmt.Sprintf("(%3d,%3d,%3d)", flashColor.R, flashColor.G, flashColor.B), render.RGB{150, 150, 150}, bg)
+	drawText(29, startY, fmt.Sprintf("(%3d,%3d,%3d)", flashColor.R, flashColor.G, flashColor.B), terminal.RGB{150, 150, 150}, bg)
 	startY += 2
 
 	// Show add blend result on sample char
@@ -417,22 +417,22 @@ func drawFlashEffect(startY int, fg, bg render.RGB) {
 
 	drawText(1, startY, "TC:", fg, bg)
 	buf.SetWithBg(5, startY, 'A', addedTC, bg)
-	drawText(7, startY, fmt.Sprintf("(%3d,%3d,%3d)", addedTC.R, addedTC.G, addedTC.B), render.RGB{150, 150, 150}, bg)
+	drawText(7, startY, fmt.Sprintf("(%3d,%3d,%3d)", addedTC.R, addedTC.G, addedTC.B), terminal.RGB{150, 150, 150}, bg)
 
 	drawText(30, startY, "256:", fg, bg)
 	buf.SetWithBg(35, startY, 'A', added256, bg)
-	drawText(37, startY, fmt.Sprintf("idx=%3d", idx), render.RGB{150, 150, 150}, bg)
+	drawText(37, startY, fmt.Sprintf("idx=%3d", idx), terminal.RGB{150, 150, 150}, bg)
 	startY += 2
 
 	// Formula
-	drawBox(0, startY, 55, 4, " Flash Formula (BlendAddFg) ", render.RGB{80, 80, 80}, bg)
-	drawText(2, startY+1, "opacity = 1.0 - (elapsed / duration)", render.RGB{200, 200, 100}, bg)
-	drawText(2, startY+2, "result = min(charFg + flashColor*opacity, 255)", render.RGB{200, 200, 100}, bg)
+	drawBox(0, startY, 55, 4, " Flash Formula (BlendAddFg) ", terminal.RGB{80, 80, 80}, bg)
+	drawText(2, startY+1, "opacity = 1.0 - (elapsed / duration)", terminal.RGB{200, 200, 100}, bg)
+	drawText(2, startY+2, "result = min(charFg + flashColor*opacity, 255)", terminal.RGB{200, 200, 100}, bg)
 }
 
-func drawHeatEffect(startY int, fg, bg render.RGB) {
+func drawHeatEffect(startY int, fg, bg terminal.RGB) {
 	// Updated keys line
-	drawText(1, startY, "←→ ↑↓:Value B:Background", render.RGB{100, 100, 100}, bg)
+	drawText(1, startY, "←→ ↑↓:Value B:Background", terminal.RGB{100, 100, 100}, bg)
 	startY += 2
 
 	// Show background selection
@@ -473,17 +473,17 @@ func drawHeatEffect(startY int, fg, bg render.RGB) {
 	drawSwatch(18, startY, 6, currentColor)
 
 	info := AnalyzeColor(currentColor)
-	drawText(25, startY, fmt.Sprintf("TC: (%3d,%3d,%3d)", currentColor.R, currentColor.G, currentColor.B), render.RGB{150, 150, 150}, bgColor)
+	drawText(25, startY, fmt.Sprintf("TC: (%3d,%3d,%3d)", currentColor.R, currentColor.G, currentColor.B), terminal.RGB{150, 150, 150}, bgColor)
 	startY++
-	drawText(25, startY, fmt.Sprintf("256: idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), render.RGB{150, 150, 150}, bgColor)
+	drawText(25, startY, fmt.Sprintf("256: idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), terminal.RGB{150, 150, 150}, bgColor)
 	startY += 2
 
 	// Segment markers
-	drawText(1, startY, "Segments: 0  10  20  30  40  50  60  70  80  90 100", render.RGB{120, 120, 120}, bgColor)
+	drawText(1, startY, "Segments: 0  10  20  30  40  50  60  70  80  90 100", terminal.RGB{120, 120, 120}, bgColor)
 }
 
 // getHeatColor retrieves gradient color from LUT, mapping progress to index
-func getHeatColor(progress float64) render.RGB {
+func getHeatColor(progress float64) terminal.RGB {
 	if progress < 0 {
 		progress = 0
 	}
