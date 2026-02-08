@@ -62,3 +62,19 @@ func V3ClampMagnitude(v Vec3, maxMag int64) Vec3 {
 func V3Damp(v Vec3, factor int64) Vec3 {
 	return Vec3{Mul(v.X, factor), Mul(v.Y, factor), Mul(v.Z, factor)}
 }
+
+// V3DampDt applies frame-rate independent damping: v * factor^dt
+// factor: decay rate per second (Q32.32, Scale = no decay)
+// dt: delta time in Q32.32 seconds
+// Uses linear approximation: v * (1 - (1-factor)*dt) for small dt
+func V3DampDt(v Vec3, factor, dt int64) Vec3 {
+	// Linear approximation valid for dt << 1 second
+	decay := Scale - Mul(Scale-factor, dt)
+	if decay < 0 {
+		decay = 0
+	}
+	if decay > Scale {
+		decay = Scale
+	}
+	return Vec3{Mul(v.X, decay), Mul(v.Y, decay), Mul(v.Z, decay)}
+}

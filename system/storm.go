@@ -156,30 +156,31 @@ func (s *StormSystem) spawnStorm() {
 	stormComp := component.StormComponent{}
 
 	// Create 3 circle headers in equilateral triangle, staggered Z
-	// Initial offsets from center for equilateral triangle
 	angleOffsets := [3]float64{0, 2 * math.Pi / 3, 4 * math.Pi / 3}
 	zOffsets := [3]float64{-1.0, 0.0, 1.0}
-	initialRadius := 4.0 // Cells from center
+	initialRadius := parameter.StormInitialRadiusFloat
+	initialSpeed := parameter.StormInitialSpeedFloat
+
+	// Base Z in middle of depth range
+	baseZ := (parameter.StormZMinFloat + parameter.StormZMaxFloat) / 2
 
 	for i := 0; i < component.StormCircleCount; i++ {
-		// Calculate initial 3D position
 		angle := angleOffsets[i]
 		offsetX := initialRadius * math.Cos(angle)
-		offsetY := initialRadius * math.Sin(angle) * 0.5 // Account for terminal aspect ratio
-		offsetZ := zOffsets[i] * vmath.ToFloat(parameter.StormZSpawnOffset)
+		offsetY := initialRadius * math.Sin(angle) * 0.5 // Terminal aspect ratio
+		offsetZ := zOffsets[i] * parameter.StormZSpawnOffsetFloat
 
 		pos3D := vmath.Vec3{
 			X: vmath.FromFloat(float64(centerX) + offsetX),
 			Y: vmath.FromFloat(float64(centerY) + offsetY),
-			Z: vmath.FromFloat(10.0 + offsetZ), // Base Z in middle of range
+			Z: vmath.FromFloat(baseZ + offsetZ),
 		}
 
-		// Initial velocity: tangential for orbital motion
-		speed := 3.0
+		// Tangential velocity for orbital motion + random Z component
 		vel3D := vmath.Vec3{
-			X: vmath.FromFloat(-speed * math.Sin(angle)),
-			Y: vmath.FromFloat(speed * math.Cos(angle) * 0.5),
-			Z: vmath.FromFloat(float64(s.rng.Intn(4)-2) * 0.5),
+			X: vmath.FromFloat(-initialSpeed * math.Sin(angle)),
+			Y: vmath.FromFloat(initialSpeed * math.Cos(angle) * 0.5),
+			Z: vmath.FromFloat(float64(s.rng.Intn(6)-3) * 0.8),
 		}
 
 		circleEntity := s.createCircleHeader(rootEntity, i, pos3D, vel3D)
@@ -249,10 +250,13 @@ func (s *StormSystem) createCircleHeader(
 		HitPoints:        parameter.CombatInitialHPStorm,
 	})
 
+	// Generate members
+	members := s.createCircleMembers(circleEntity, gridX, gridY)
+
 	// Header component linking back to root
 	s.world.Components.Header.SetComponent(circleEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorStorm,
-		MemberEntries: nil, // Circles have no members themselves for now
+		MemberEntries: members,
 		ParentHeader:  parentEntity,
 	})
 
@@ -262,6 +266,56 @@ func (s *StormSystem) createCircleHeader(
 	})
 
 	return circleEntity
+}
+
+// createCircleMembers builds a single circle's member entities
+func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, headerY int) []component.MemberEntry {
+	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
+
+	// Pre-calculate ellipse constants for this circle size
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, parameter.StormCircleRadiusY)
+
+	var members []component.MemberEntry
+
+	// Iterate bounding box
+	for y := -radiusY; y <= radiusY; y++ {
+		for x := -radiusX; x <= radiusX; x++ {
+			// Check if cell is inside ellipse
+			dx := vmath.FromInt(x)
+			dy := vmath.FromInt(y)
+
+			if vmath.EllipseDistSq(dx, dy, invRxSq, invRySq) <= vmath.Scale {
+
+				// Create the member entity
+				memberEntity := s.world.CreateEntity()
+
+				// Set member position
+				s.world.Positions.SetPosition(memberEntity, component.PositionComponent{
+					X: headerX + x,
+					Y: headerY + y,
+				})
+
+				// Member protection
+				s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
+					Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
+				})
+
+				// Backlink
+				s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
+					HeaderEntity: headerEntity,
+				})
+
+				members = append(members, component.MemberEntry{
+					Entity:  memberEntity,
+					OffsetX: x,
+					OffsetY: y,
+					Layer:   component.LayerGlyph,
+				})
+			}
+		}
+	}
+	return members
 }
 
 // updateCirclePhysics handles 3D gravitational orbits and inter-circle collision
@@ -296,7 +350,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		return
 	}
 
-	// Accumulate gravitational acceleration from other circles
+	// Accumulate gravitational acceleration with repulsion from other circles
 	for i := range circles {
 		var accelX, accelY, accelZ int64
 
@@ -304,11 +358,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			if i == j {
 				continue
 			}
-			accel := vmath.GravitationalAccel3D(
+			accel := vmath.GravitationalAccelWithRepulsion3D(
 				circles[i].circle.Pos3D,
 				circles[j].circle.Pos3D,
 				parameter.StormCircleMass,
 				parameter.StormGravity,
+				parameter.StormRepulsionRadius,
+				parameter.StormRepulsionStrength,
 			)
 			accelX += accel.X
 			accelY += accel.Y
@@ -320,8 +376,8 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		circles[i].circle.Vel3D.Y += vmath.Mul(accelY, dtFixed)
 		circles[i].circle.Vel3D.Z += vmath.Mul(accelZ, dtFixed)
 
-		// Apply damping
-		circles[i].circle.Vel3D = vmath.V3Damp(circles[i].circle.Vel3D, parameter.StormDamping)
+		// Apply dt-dependent damping
+		circles[i].circle.Vel3D = vmath.V3DampDt(circles[i].circle.Vel3D, parameter.StormDamping, dtFixed)
 
 		// Clamp velocity
 		circles[i].circle.Vel3D = vmath.V3ClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
@@ -333,22 +389,37 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		)
 	}
 
-	// Boundary reflection (XY game bounds, Z depth bounds)
-	gameMinX := vmath.FromInt(0)
-	gameMaxX := vmath.FromInt(config.GameWidth - 1)
-	gameMinY := vmath.FromInt(0)
-	gameMaxY := vmath.FromInt(config.GameHeight - 1)
+	// Boundary reflection with insets for visual radius
+	insetX := parameter.StormBoundaryInsetX
+	insetY := parameter.StormBoundaryInsetY
+	gameMinX := vmath.FromInt(insetX)
+	gameMaxX := vmath.FromInt(config.GameWidth - 1 - insetX)
+	gameMinY := vmath.FromInt(insetY)
+	gameMaxY := vmath.FromInt(config.GameHeight - 1 - insetY)
 
 	for i := range circles {
+		// XY boundary reflection
 		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.X, &circles[i].circle.Vel3D.X,
 			gameMinX, gameMaxX, parameter.StormRestitution)
 		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.Y, &circles[i].circle.Vel3D.Y,
 			gameMinY, gameMaxY, parameter.StormRestitution)
+
+		// Z depth bounds
 		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
 			parameter.StormZMin, parameter.StormZMax, parameter.StormRestitution)
+
+		// Wall collision check at circle center
+		gridX := vmath.ToInt(circles[i].circle.Pos3D.X)
+		gridY := vmath.ToInt(circles[i].circle.Pos3D.Y)
+
+		if s.world.Positions.HasBlockingWallAt(gridX, gridY, component.WallBlockKinetic) {
+			// Reverse velocity on wall hit
+			circles[i].circle.Vel3D.X = -circles[i].circle.Vel3D.X
+			circles[i].circle.Vel3D.Y = -circles[i].circle.Vel3D.Y
+		}
 	}
 
-	// Inter-circle collision
+	// Inter-circle collision (kept for hard overlaps, but repulsion reduces frequency)
 	for i := 0; i < len(circles); i++ {
 		for j := i + 1; j < len(circles); j++ {
 			s.resolveCircleCollision(circles[i].circle, circles[j].circle)

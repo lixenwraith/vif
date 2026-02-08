@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"sort"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -21,37 +22,39 @@ type stormCircleRender struct {
 	index  int   // Circle index for color selection
 }
 
-// stormCellFunc renders a single cell within the storm circle ellipse
-type stormCellFunc func(r *StormRenderer, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq, brightness int64, baseColor terminal.RGB)
-
 // StormRenderer draws the storm boss entity with depth-based rendering
 type StormRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Color mode dispatch
-	renderCell stormCellFunc
+	// Precomputed lighting (fixed directional light)
+	lightX, lightY, lightZ float64
+	halfX, halfY, halfZ    float64
 
-	// Reusable slice for sorting (avoids allocation per frame)
+	// Reusable slice for sorting
 	sortBuffer []stormCircleRender
 }
 
-// NewStormRenderer creates a new storm renderer
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 	r := &StormRenderer{
 		gameCtx:    gameCtx,
 		sortBuffer: make([]stormCircleRender, 0, component.StormCircleCount),
 	}
-
-	if gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
-		r.renderCell = stormCell256
-	} else {
-		r.renderCell = stormCellTrueColor
-	}
-
+	r.initLighting()
 	return r
 }
 
-// Render draws all storm circles sorted by depth (back-to-front)
+func (r *StormRenderer) initLighting() {
+	// Fixed directional light from upper-left-front
+	lx, ly, lz := -0.35, -0.55, 0.75
+	m := math.Sqrt(lx*lx + ly*ly + lz*lz)
+	r.lightX, r.lightY, r.lightZ = lx/m, ly/m, lz/m
+
+	// Blinn-Phong half vector: normalize(light + view), view = (0,0,1)
+	hx, hy, hz := r.lightX, r.lightY, r.lightZ+1.0
+	m = math.Sqrt(hx*hx + hy*hy + hz*hz)
+	r.halfX, r.halfY, r.halfZ = hx/m, hy/m, hz/m
+}
+
 func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	stormEntities := r.gameCtx.World.Components.Storm.GetAllEntities()
 	if len(stormEntities) == 0 {
@@ -65,14 +68,11 @@ func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		if !ok {
 			continue
 		}
-
 		r.renderStorm(ctx, buf, &stormComp)
 	}
 }
 
-// renderStorm draws a single storm entity's circles
 func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.RenderBuffer, stormComp *component.StormComponent) {
-	// Collect alive circles for sorting
 	r.sortBuffer = r.sortBuffer[:0]
 
 	for i := 0; i < component.StormCircleCount; i++ {
@@ -104,161 +104,187 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 		return
 	}
 
-	// Sort by Z descending (far objects first, low Z = far = render first)
+	// Sort by Z descending (far first)
 	sort.Slice(r.sortBuffer, func(i, j int) bool {
 		return r.sortBuffer[i].z < r.sortBuffer[j].z
 	})
 
-	// Render back-to-front
 	for _, circle := range r.sortBuffer {
 		r.renderCircle(ctx, buf, circle)
 	}
 }
 
-// renderCircle draws a single storm circle with depth-based brightness
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle stormCircleRender) {
-	// Calculate brightness from Z position
-	// Z range: StormZMin (near, bright) to StormZMax (far, dark)
-	// Map Z to [0, Scale] where 0 = far (dark), Scale = near (bright)
+	// Depth factor: 0 = far, 1 = near
 	zRange := parameter.StormZMax - parameter.StormZMin
 	if zRange <= 0 {
 		zRange = vmath.Scale
 	}
-
-	// Invert: higher Z = farther = darker
-	// brightness = 1 - ((z - zMin) / zRange)
-	zNormalized := vmath.Div(circle.z-parameter.StormZMin, zRange)
-	if zNormalized < 0 {
-		zNormalized = 0
+	zNorm := vmath.Div(circle.z-parameter.StormZMin, zRange)
+	if zNorm < 0 {
+		zNorm = 0
 	}
-	if zNormalized > vmath.Scale {
-		zNormalized = vmath.Scale
+	if zNorm > vmath.Scale {
+		zNorm = vmath.Scale
 	}
-	brightness := vmath.Scale - zNormalized
+	depthFactor := vmath.ToFloat(vmath.Scale - zNorm)
 
-	// Clamp brightness to [0.3, 1.0] range for visibility
-	minBrightness := vmath.FromFloat(0.3)
-	brightness = minBrightness + vmath.Mul(brightness, vmath.Scale-minBrightness)
+	// Depth brightness: 0.6 to 1.0
+	depthBright := 0.6 + depthFactor*0.4
 
-	// Get base color for this circle
+	// Base color with saturation boost
 	baseColor := visual.StormCircleColors[circle.index%len(visual.StormCircleColors)]
+	baseR := math.Min(255, float64(baseColor.R)*1.3)
+	baseG := math.Min(255, float64(baseColor.G)*1.3)
+	baseB := math.Min(255, float64(baseColor.B)*1.3)
 
-	// Calculate ellipse bounds
-	radiusXInt := vmath.ToInt(parameter.StormCircleRadiusX)
-	radiusYInt := vmath.ToInt(parameter.StormCircleRadiusY)
+	// Convex (near) vs concave (far)
+	isConvex := depthFactor > 0.5
 
-	startX := max(0, circle.x-radiusXInt)
-	endX := min(ctx.GameWidth-1, circle.x+radiusXInt)
-	startY := max(0, circle.y-radiusYInt)
-	endY := min(ctx.GameHeight-1, circle.y+radiusYInt)
+	// Radii for normalization
+	radiusX := vmath.ToFloat(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToFloat(parameter.StormCircleRadiusY)
 
-	// Render ellipse
+	// Render halo first (background glow)
+	r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
+
+	// Render members (sphere body)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(circle.entity)
+	if !ok {
+		return
+	}
+
+	for _, member := range headerComp.MemberEntries {
+		if member.Entity == 0 {
+			continue
+		}
+
+		screenX := ctx.GameXOffset + circle.x + member.OffsetX
+		screenY := ctx.GameYOffset + circle.y + member.OffsetY
+
+		if screenX < 0 || screenX >= ctx.ScreenWidth || screenY < 0 || screenY >= ctx.ScreenHeight {
+			continue
+		}
+
+		// Normalized position within ellipse
+		nx := float64(member.OffsetX) / radiusX
+		ny := float64(member.OffsetY) / radiusY
+		distSq := nx*nx + ny*ny
+
+		if distSq > 1.0 {
+			continue
+		}
+
+		// Sphere surface normal
+		nz := math.Sqrt(1.0 - distSq)
+		if !isConvex {
+			nz = -nz
+		}
+
+		// Rim glow - bright at edges
+		rim := 1.0 - math.Abs(nz)
+		rim = rim * rim * 0.8
+
+		// Core glow - white center
+		coreDist := math.Sqrt(distSq) / 0.7
+		coreGlow := 0.0
+		if coreDist < 1.0 {
+			coreGlow = (1.0 - coreDist) * 0.6
+		}
+
+		// Blinn-Phong specular
+		spec := nx*r.halfX + ny*r.halfY + nz*r.halfZ
+		if spec < 0 {
+			spec = 0
+		}
+		spec = math.Pow(spec, 20.0) * 0.9
+
+		// Lambertian diffuse
+		diff := nx*r.lightX + ny*r.lightY + nz*r.lightZ
+		if diff < 0 {
+			diff = 0
+		}
+
+		// Combined intensity
+		intensity := (0.3 + diff*0.3 + rim*0.4) * depthBright
+
+		red := baseR*intensity + coreGlow*255 + spec*255
+		green := baseG*intensity + coreGlow*255 + spec*255
+		blue := baseB*intensity + coreGlow*255 + spec*255
+
+		// Clamp
+		if red > 255 {
+			red = 255
+		}
+		if green > 255 {
+			green = 255
+		}
+		if blue > 255 {
+			blue = 255
+		}
+
+		color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+		buf.SetBgOnly(screenX, screenY, color)
+	}
+}
+
+func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer,
+	circle stormCircleRender, depthBright, baseR, baseG, baseB, radiusX, radiusY float64) {
+
+	// Halo extends beyond body, aspect-corrected for terminal 2:1 character ratio
+	haloExtendX := 4.0
+	haloExtendY := haloExtendX * (radiusY / radiusX)
+	haloRadiusX := radiusX + haloExtendX
+	haloRadiusY := radiusY + haloExtendY
+
+	startX := max(0, circle.x-int(haloRadiusX)-1)
+	endX := min(ctx.GameWidth-1, circle.x+int(haloRadiusX)+1)
+	startY := max(0, circle.y-int(haloRadiusY)-1)
+	endY := min(ctx.GameHeight-1, circle.y+int(haloRadiusY)+1)
+
 	for y := startY; y <= endY; y++ {
 		for x := startX; x <= endX; x++ {
-			dx := vmath.FromInt(x - circle.x)
-			dy := vmath.FromInt(y - circle.y)
+			// Normalized position
+			nx := float64(x-circle.x) / radiusX
+			ny := float64(y-circle.y) / radiusY
+			distSq := nx*nx + ny*ny
 
-			normalizedDistSq := vmath.EllipseDistSq(dx, dy,
-				parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq)
+			// Skip inside main body (rendered by members)
+			if distSq <= 1.0 {
+				continue
+			}
 
-			if normalizedDistSq > vmath.Scale {
+			// Skip outside halo
+			haloNx := float64(x-circle.x) / haloRadiusX
+			haloNy := float64(y-circle.y) / haloRadiusY
+			if haloNx*haloNx+haloNy*haloNy > 1.0 {
+				continue
+			}
+
+			// Exponential falloff from body edge
+			dist := math.Sqrt(distSq)
+			glowDist := dist - 1.0
+			glowFalloff := math.Exp(-glowDist*3.0) * 0.5 * depthBright
+
+			red := baseR * glowFalloff
+			green := baseG * glowFalloff
+			blue := baseB * glowFalloff
+
+			if red < 1 && green < 1 && blue < 1 {
 				continue
 			}
 
 			screenX := ctx.GameXOffset + x
 			screenY := ctx.GameYOffset + y
 
-			r.renderCell(r, buf, screenX, screenY, normalizedDistSq, brightness, baseColor)
+			if screenX < 0 || screenX >= ctx.ScreenWidth || screenY < 0 || screenY >= ctx.ScreenHeight {
+				continue
+			}
+
+			color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+
+			// BlendAdd for glow on black background
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
-
-	// Render halo (outer glow)
-	r.renderHalo(ctx, buf, circle, brightness, baseColor)
-}
-
-// renderHalo draws a soft glow around the circle
-func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer, circle stormCircleRender, brightness int64, baseColor terminal.RGB) {
-	// Halo extends beyond main radius
-	haloExtend := 2
-	radiusXInt := vmath.ToInt(parameter.StormCircleRadiusX) + haloExtend
-	radiusYInt := vmath.ToInt(parameter.StormCircleRadiusY) + haloExtend
-
-	// Precompute halo ellipse inverse radii
-	haloRadiusX := parameter.StormCircleRadiusX + vmath.FromInt(haloExtend)
-	haloRadiusY := parameter.StormCircleRadiusY + vmath.FromInt(haloExtend)
-	haloInvRxSq, haloInvRySq := vmath.EllipseInvRadiiSq(haloRadiusX, haloRadiusY)
-
-	startX := max(0, circle.x-radiusXInt)
-	endX := min(ctx.GameWidth-1, circle.x+radiusXInt)
-	startY := max(0, circle.y-radiusYInt)
-	endY := min(ctx.GameHeight-1, circle.y+radiusYInt)
-
-	for y := startY; y <= endY; y++ {
-		for x := startX; x <= endX; x++ {
-			dx := vmath.FromInt(x - circle.x)
-			dy := vmath.FromInt(y - circle.y)
-
-			// Check if inside main circle (already rendered)
-			mainDistSq := vmath.EllipseDistSq(dx, dy,
-				parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq)
-			if mainDistSq <= vmath.Scale {
-				continue
-			}
-
-			// Check if inside halo region
-			haloDistSq := vmath.EllipseDistSq(dx, dy, haloInvRxSq, haloInvRySq)
-			if haloDistSq > vmath.Scale {
-				continue
-			}
-
-			// Halo alpha: fade from inner edge to outer edge
-			// mainDistSq > Scale, haloDistSq <= Scale
-			// t = (haloDistSq - Scale) / (mainDistSq - Scale) inverted
-			haloAlpha := vmath.Scale - haloDistSq
-			haloAlpha = vmath.Mul(haloAlpha, brightness)
-			haloAlpha = vmath.Mul(haloAlpha, vmath.FromFloat(0.4)) // Max halo opacity
-
-			if haloAlpha <= 0 {
-				continue
-			}
-
-			screenX := ctx.GameXOffset + x
-			screenY := ctx.GameYOffset + y
-
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, baseColor,
-				render.BlendAdd, vmath.ToFloat(haloAlpha), terminal.AttrNone)
-		}
-	}
-}
-
-// stormCellTrueColor renders a cell with gradient based on distance from center
-func stormCellTrueColor(r *StormRenderer, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq, brightness int64, baseColor terminal.RGB) {
-	// Apply brightness to base color
-	scaledColor := render.Scale(baseColor, vmath.ToFloat(brightness))
-
-	// Inner gradient: brighter at center, base color at edge
-	// t = sqrt(normalizedDistSq) for linear falloff
-	edgeFactor := normalizedDistSq // Use squared for faster falloff
-	centerBoost := vmath.Scale - edgeFactor
-	centerBoost = vmath.Mul(centerBoost, vmath.FromFloat(0.3)) // 30% brighter at center
-
-	finalColor := render.Add(scaledColor, scaledColor, vmath.ToFloat(centerBoost))
-
-	buf.SetBgOnly(screenX, screenY, finalColor)
-}
-
-// stormCell256 renders a cell using 256-color palette
-func stormCell256(r *StormRenderer, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq, brightness int64, baseColor terminal.RGB) {
-	// Use fixed palette index based on brightness threshold
-	// Brighter circles use lighter palette colors
-	var paletteIdx uint8
-	if brightness > vmath.FromFloat(0.7) {
-		paletteIdx = visual.Storm256Bright
-	} else if brightness > vmath.FromFloat(0.5) {
-		paletteIdx = visual.Storm256Normal
-	} else {
-		paletteIdx = visual.Storm256Dark
-	}
-
-	buf.SetBg256(screenX, screenY, paletteIdx)
 }

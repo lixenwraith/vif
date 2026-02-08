@@ -154,7 +154,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 		}
 		for x := 0; x < ctx.GameWidth; x++ {
 			if !r.isExcluded(x, y) {
-				buf.Set(ctx.GameXOffset+x, screenY, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(ctx.GameXOffset+x, screenY, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
@@ -171,7 +171,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 				continue
 			}
 			if !r.isExcluded(x, y) {
-				buf.Set(screenX, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(screenX, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
@@ -190,7 +190,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for y := 0; y < ctx.GameHeight; y++ {
 				if !r.isExcluded(colRight, y) {
-					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -198,7 +198,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for y := 0; y < ctx.GameHeight; y++ {
 				if !r.isExcluded(colLeft, y) {
-					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+y, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -219,7 +219,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for x := 0; x < ctx.GameWidth; x++ {
 				if !r.isExcluded(x, rowDown) {
-					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowDown, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -227,7 +227,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for x := 0; x < ctx.GameWidth; x++ {
 				if !r.isExcluded(x, rowUp) {
-					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowUp, ' ', render.DefaultBgRGB, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}

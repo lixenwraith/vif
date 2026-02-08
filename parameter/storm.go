@@ -13,22 +13,36 @@ const (
 	StormCircleRadiusYFloat = 5.0
 )
 
-// Storm combat (same as quasar baseline)
+// Storm combat
 const (
 	StormCircleHealth               = 1000.0
-	StormCircleMassFloat            = 150.0 // Same as quasar
-	StormCircleRadiusCollisionFloat = 7.5   // Geometric mean for collision
+	StormCircleMassFloat            = 150.0
+	StormCircleRadiusCollisionFloat = 7.5
 )
 
-// Storm 3D physics
+// Storm spawn geometry
 const (
-	StormGravityFloat      = 500.0
-	StormDampingFloat      = 0.998 // Per-tick velocity decay
-	StormMaxVelocityFloat  = 50.0
-	StormRestitutionFloat  = 0.8
-	StormZMinFloat         = 3.0  // Near plane
-	StormZMaxFloat         = 30.0 // Far plane
-	StormZSpawnOffsetFloat = 8.0  // Initial Z spread
+	StormInitialRadiusFloat = 20.0
+	StormInitialSpeedFloat  = 8.0
+)
+
+// Storm 3D physics (tuned for three-body chaos)
+const (
+	StormGravityFloat           = 80.0
+	StormRepulsionRadiusFloat   = 18.0
+	StormRepulsionStrengthFloat = 250.0
+	StormDampingFloat           = 0.92
+	StormMaxVelocityFloat       = 45.0
+	StormRestitutionFloat       = 1.0
+	StormZMinFloat              = 3.0
+	StormZMaxFloat              = 30.0
+	StormZSpawnOffsetFloat      = 10.0
+)
+
+// Storm boundary insets (account for visual radius)
+const (
+	StormBoundaryInsetXFloat = 11.0
+	StormBoundaryInsetYFloat = 6.0
 )
 
 // Pre-computed Q32.32 values
@@ -36,13 +50,19 @@ var (
 	StormCircleRadiusX = vmath.FromFloat(StormCircleRadiusXFloat)
 	StormCircleRadiusY = vmath.FromFloat(StormCircleRadiusYFloat)
 	StormCircleMass    = vmath.FromFloat(StormCircleMassFloat)
-	StormGravity       = vmath.FromFloat(StormGravityFloat)
-	StormDamping       = vmath.FromFloat(StormDampingFloat)
-	StormMaxVelocity   = vmath.FromFloat(StormMaxVelocityFloat)
-	StormRestitution   = vmath.FromFloat(StormRestitutionFloat)
-	StormZMin          = vmath.FromFloat(StormZMinFloat)
-	StormZMax          = vmath.FromFloat(StormZMaxFloat)
-	StormZSpawnOffset  = vmath.FromFloat(StormZSpawnOffsetFloat)
+
+	StormGravity           = vmath.FromFloat(StormGravityFloat)
+	StormRepulsionRadius   = vmath.FromFloat(StormRepulsionRadiusFloat)
+	StormRepulsionStrength = vmath.FromFloat(StormRepulsionStrengthFloat)
+	StormDamping           = vmath.FromFloat(StormDampingFloat)
+	StormMaxVelocity       = vmath.FromFloat(StormMaxVelocityFloat)
+	StormRestitution       = vmath.FromFloat(StormRestitutionFloat)
+	StormZMin              = vmath.FromFloat(StormZMinFloat)
+	StormZMax              = vmath.FromFloat(StormZMaxFloat)
+	StormZSpawnOffset      = vmath.FromFloat(StormZSpawnOffsetFloat)
+
+	StormBoundaryInsetX = int(StormBoundaryInsetXFloat)
+	StormBoundaryInsetY = int(StormBoundaryInsetYFloat)
 
 	StormCollisionRadius = vmath.FromFloat(StormCircleRadiusCollisionFloat)
 	StormCollisionInvRxSq,

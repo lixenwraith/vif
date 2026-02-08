@@ -184,9 +184,8 @@ var (
 	RgbLootLauncherGlow = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
 )
 
-// StormCircleColors defines base colors for each storm circle
-// Neon palette: Cyan, Magenta, Lime (matching three-sandbox aesthetic)
-var StormCircleColors = [3]terminal.RGB{
+// StormCircleColors - neon base colors (saturated 1.3x in renderer)
+var StormCircleColors = []terminal.RGB{
 	{R: 40, G: 180, B: 255}, // Cyan
 	{R: 255, G: 60, B: 120}, // Magenta
 	{R: 120, G: 255, B: 80}, // Lime
@@ -225,10 +224,9 @@ const (
 	Loot256Rim uint8 = 198
 
 	// Storm rendering palette indices
-	Storm256Bright uint8 = 51 // Bright cyan
-	Storm256Normal uint8 = 38 // Medium cyan
-	Storm256Dark   uint8 = 30 // Dark cyan
-
+	Storm256Bright = 87
+	Storm256Normal = 44
+	Storm256Dark   = 23
 )
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB

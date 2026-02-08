@@ -107,3 +107,43 @@ func ReflectAxis3D(pos, vel *int64, lo, hi, restitution int64) bool {
 	}
 	return false
 }
+
+// GravitationalAccelWithRepulsion3D returns acceleration combining gravity and soft repulsion
+// Beyond repulsionRadius: gravitational attraction (inverse square)
+// Within repulsionRadius: linear repulsion (strongest at center)
+func GravitationalAccelWithRepulsion3D(posA, posB Vec3, massB, G, repulsionRadius, repulsionStrength int64) Vec3 {
+	delta := V3Sub(posB, posA)
+	dist := V3Mag(delta)
+
+	if dist == 0 {
+		return Vec3{}
+	}
+
+	// Normalized direction (A toward B)
+	dirX := Div(delta.X, dist)
+	dirY := Div(delta.Y, dist)
+	dirZ := Div(delta.Z, dist)
+
+	var accelMag int64
+
+	if dist < repulsionRadius {
+		// Repulsion zone: linear falloff from center
+		// accel = -strength * (1 - dist/radius)
+		factor := Scale - Div(dist, repulsionRadius)
+		accelMag = -Mul(repulsionStrength, factor)
+	} else {
+		// Gravity zone: inverse square attraction
+		distSq := Mul(dist, dist)
+		minDistSq := int64(Scale)
+		if distSq < minDistSq {
+			distSq = minDistSq
+		}
+		accelMag = Div(Mul(G, massB), distSq)
+	}
+
+	return Vec3{
+		Mul(dirX, accelMag),
+		Mul(dirY, accelMag),
+		Mul(dirZ, accelMag),
+	}
+}
