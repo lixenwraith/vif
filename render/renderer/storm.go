@@ -26,33 +26,34 @@ type stormCircleRender struct {
 type StormRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Precomputed lighting (fixed directional light)
-	lightX, lightY, lightZ float64
-	halfX, halfY, halfZ    float64
-
 	// Reusable slice for sorting
 	sortBuffer []stormCircleRender
 }
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
-	r := &StormRenderer{
+	return &StormRenderer{
 		gameCtx:    gameCtx,
 		sortBuffer: make([]stormCircleRender, 0, component.StormCircleCount),
 	}
-	r.initLighting()
-	return r
 }
 
-func (r *StormRenderer) initLighting() {
-	// Fixed directional light from upper-left-front
-	lx, ly, lz := -0.35, -0.55, 0.75
-	m := math.Sqrt(lx*lx + ly*ly + lz*lz)
-	r.lightX, r.lightY, r.lightZ = lx/m, ly/m, lz/m
+// cursorLighting computes per-circle light and half vectors so that the light
+// appears to come from the cursor direction, making each sphere resemble an
+// eye that tracks the cursor. The fixed lightZ keeps intensity stable while
+// only the angle changes.
+func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lightZ, halfX, halfY, halfZ float64) {
+	const lightZ0 = 35.0 // fixed depth – controls tracking sensitivity
+
+	lx := float64(cursorX - circleX)
+	ly := float64(cursorY - circleY)
+	m := math.Sqrt(lx*lx + ly*ly + lightZ0*lightZ0)
+	lightX, lightY, lightZ = lx/m, ly/m, lightZ0/m
 
 	// Blinn-Phong half vector: normalize(light + view), view = (0,0,1)
-	hx, hy, hz := r.lightX, r.lightY, r.lightZ+1.0
+	hx, hy, hz := lightX, lightY, lightZ+1.0
 	m = math.Sqrt(hx*hx + hy*hy + hz*hz)
-	r.halfX, r.halfY, r.halfZ = hx/m, hy/m, hz/m
+	halfX, halfY, halfZ = hx/m, hy/m, hz/m
+	return
 }
 
 func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
@@ -148,6 +149,9 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	// Render halo first (background glow)
 	r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
 
+	// Per-circle lighting aimed at cursor position
+	lightX, lightY, lightZ, halfX, halfY, halfZ := cursorLighting(ctx.CursorX, ctx.CursorY, circle.x, circle.y)
+
 	// Render members (sphere body)
 	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(circle.entity)
 	if !ok {
@@ -193,14 +197,14 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		}
 
 		// Blinn-Phong specular
-		spec := nx*r.halfX + ny*r.halfY + nz*r.halfZ
+		spec := nx*halfX + ny*halfY + nz*halfZ
 		if spec < 0 {
 			spec = 0
 		}
 		spec = math.Pow(spec, 20.0) * 0.9
 
 		// Lambertian diffuse
-		diff := nx*r.lightX + ny*r.lightY + nz*r.lightZ
+		diff := nx*lightX + ny*lightY + nz*lightZ
 		if diff < 0 {
 			diff = 0
 		}
