@@ -39,5 +39,5 @@ func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		return
 	}
 
-	buf.MutateGrayscale(intensity, visual.GrayoutMask, visual.MaskPing|visual.MaskField|visual.MaskTransient|visual.MaskComposite|visual.MaskUI)
+	buf.MutateGrayscale(intensity, visual.GrayoutMask, visual.MaskPing|visual.MaskField|visual.MaskTransient|visual.MaskComposite|visual.MaskHealthBar|visual.MaskUI)
 }

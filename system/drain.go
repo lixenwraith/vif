@@ -3,7 +3,6 @@ package system
 import (
 	"math/rand"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -765,8 +764,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Combat component for interactions
 	s.world.Components.Combat.SetComponent(entity,
 		component.CombatComponent{
-			HitPoints:                parameter.CombatInitialHPDrain,
-			RemainingKineticImmunity: time.Duration(0),
+			OwnerEntity:      entity,
+			CombatEntityType: component.CombatEntityDrain,
+			HitPoints:        parameter.CombatInitialHPDrain,
 		})
 
 	// Visual component for sigil renderer and death system flash extraction

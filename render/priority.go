@@ -8,6 +8,8 @@ const (
 	PriorityBackground RenderPriority = iota
 	PriorityGrid
 	PriorityChargeLine
+	PriorityGlyph
+	PriorityHealthBar
 	PriorityEntities
 	PriorityCleaner
 	PriorityField

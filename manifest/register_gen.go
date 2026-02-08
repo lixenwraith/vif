@@ -144,7 +144,10 @@ func RegisterRenderers() {
 	}, render.PrioritySplash)
 	registry.RegisterRenderer("glyph", func(ctx any) any {
 		return renderer.NewGlyphRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEntities)
+	}, render.PriorityGlyph)
+	registry.RegisterRenderer("healthbar", func(ctx any) any {
+		return renderer.NewHealthBarRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityHealthBar)
 	registry.RegisterRenderer("sigil", func(ctx any) any {
 		return renderer.NewSigilRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityEntities)
@@ -268,6 +271,7 @@ func ActiveRenderers() []string {
 		"chargeline",
 		"splash",
 		"glyph",
+		"healthbar",
 		"sigil",
 		"gold",
 		"shield",
