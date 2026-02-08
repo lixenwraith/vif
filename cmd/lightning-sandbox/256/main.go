@@ -56,7 +56,7 @@ func main() {
 	defer term.Fini()
 
 	w, h := term.Size()
-	buf := render.NewRenderBuffer(w, h)
+	buf := render.NewRenderBuffer(terminal.ColorMode256, w, h)
 
 	boltStart := time.Now()
 
@@ -93,7 +93,7 @@ func main() {
 
 		// Draw background chars with 256-color
 		for _, bg := range bgChars {
-			buf.SetFgOnly(bg.x, bg.y, bg.c, render.RGB{R: 245}, terminal.AttrFg256)
+			buf.SetFgOnly(bg.x, bg.y, bg.c, terminal.RGB{R: 245}, terminal.AttrFg256)
 		}
 
 		elapsed := now.Sub(boltStart)
@@ -144,7 +144,7 @@ func main() {
 					}
 
 					// SetFgOnly with 256-color palette index in R channel
-					buf.SetFgOnly(cx, cy, char, render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+					buf.SetFgOnly(cx, cy, char, terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
 				}
 			}
 
@@ -153,19 +153,19 @@ func main() {
 
 		// Character reference display
 		drawText256(buf, 2, h-4, "Characters used:")
-		buf.SetFgOnly(20, h-4, '\u2584', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(20, h-4, '\u2584', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
 		drawText256(buf, 21, h-4, "(bottom)")
-		buf.SetFgOnly(30, h-4, '\u2580', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(30, h-4, '\u2580', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
 		drawText256(buf, 31, h-4, "(top)")
-		buf.SetFgOnly(37, h-4, '\u2588', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(37, h-4, '\u2588', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
 		drawText256(buf, 38, h-4, "(full)")
 
 		// Density chars reference
 		drawText256(buf, 2, h-3, "Density chars:")
-		buf.SetFgOnly(17, h-3, '\u2591', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
-		buf.SetFgOnly(18, h-3, '\u2592', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
-		buf.SetFgOnly(19, h-3, '\u2593', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
-		buf.SetFgOnly(20, h-3, '\u2588', render.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(17, h-3, '\u2591', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(18, h-3, '\u2592', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(19, h-3, '\u2593', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
+		buf.SetFgOnly(20, h-3, '\u2588', terminal.RGB{R: paletteIdxCyan}, terminal.AttrFg256)
 		drawText256(buf, 22, h-3, "(light->full)")
 
 		// Debug footer
@@ -289,6 +289,6 @@ func traceSubPixelLineHalf(hits map[uint64]uint8, sx0, sy0, sx1, sy1 int) {
 func drawText256(buf *render.RenderBuffer, x, y int, text string) {
 	// Use 256-color light gray (250) for text
 	for i, r := range text {
-		buf.SetFgOnly(x+i, y, r, render.RGB{R: 250}, terminal.AttrFg256)
+		buf.SetFgOnly(x+i, y, r, terminal.RGB{R: 250}, terminal.AttrFg256)
 	}
 }
