@@ -2,16 +2,19 @@ package tui
 
 import "github.com/lixenwraith/vi-fighter/terminal"
 
+// FormField pairs a label with an editable text field
 type FormField struct {
 	Label string
 	State *TextFieldState
 }
 
+// FormState holds state for a multi-field form with focus tracking
 type FormState struct {
 	Fields []FormField
 	Focus  int
 }
 
+// NewFormState creates a form with labeled fields initialized to empty values
 func NewFormState(labels ...string) *FormState {
 	fields := make([]FormField, len(labels))
 	for i, label := range labels {
@@ -23,6 +26,7 @@ func NewFormState(labels ...string) *FormState {
 	return &FormState{Fields: fields}
 }
 
+// Value returns the text value of the field at idx
 func (f *FormState) Value(idx int) string {
 	if idx >= 0 && idx < len(f.Fields) {
 		return f.Fields[idx].State.Value()
@@ -30,30 +34,35 @@ func (f *FormState) Value(idx int) string {
 	return ""
 }
 
+// SetValue replaces the text of the field at idx
 func (f *FormState) SetValue(idx int, val string) {
 	if idx >= 0 && idx < len(f.Fields) {
 		f.Fields[idx].State.SetValue(val)
 	}
 }
 
+// Clear empties all fields in the form
 func (f *FormState) Clear() {
 	for i := range f.Fields {
 		f.Fields[i].State.Clear()
 	}
 }
 
+// FocusNext moves focus to the next field, wrapping around
 func (f *FormState) FocusNext() {
 	if len(f.Fields) > 0 {
 		f.Focus = (f.Focus + 1) % len(f.Fields)
 	}
 }
 
+// FocusPrev moves focus to the previous field, wrapping around
 func (f *FormState) FocusPrev() {
 	if len(f.Fields) > 0 {
 		f.Focus = (f.Focus - 1 + len(f.Fields)) % len(f.Fields)
 	}
 }
 
+// CurrentField returns the TextFieldState of the focused field, or nil
 func (f *FormState) CurrentField() *TextFieldState {
 	if f.Focus >= 0 && f.Focus < len(f.Fields) {
 		return f.Fields[f.Focus].State
@@ -61,6 +70,7 @@ func (f *FormState) CurrentField() *TextFieldState {
 	return nil
 }
 
+// HandleKey processes keyboard input for form navigation and field editing, returns true if state changed
 func (f *FormState) HandleKey(key terminal.Key, r rune, mod terminal.Modifier) bool {
 	switch key {
 	case terminal.KeyTab:
@@ -84,12 +94,14 @@ func (f *FormState) HandleKey(key terminal.Key, r rune, mod terminal.Modifier) b
 	return false
 }
 
+// FormOpts configures form rendering
 type FormOpts struct {
 	LabelWidth int
 	Spacing    int
 	Style      FormStyle
 }
 
+// FormStyle defines form colors
 type FormStyle struct {
 	LabelFg  terminal.RGB
 	FieldFg  terminal.RGB
@@ -100,6 +112,7 @@ type FormStyle struct {
 	Bg       terminal.RGB
 }
 
+// DefaultFormStyle returns default form colors
 func DefaultFormStyle() FormStyle {
 	return FormStyle{
 		LabelFg:  terminal.RGB{R: 150, G: 150, B: 180},
@@ -112,6 +125,7 @@ func DefaultFormStyle() FormStyle {
 	}
 }
 
+// Form renders a multi-field form with labels and editable text fields, returns height used
 func (r Region) Form(state *FormState, opts FormOpts) int {
 	if len(state.Fields) == 0 || r.H < 1 {
 		return 0

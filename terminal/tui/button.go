@@ -2,18 +2,21 @@ package tui
 
 import "github.com/lixenwraith/vi-fighter/terminal"
 
+// Button defines a single button in a button bar
 type Button struct {
 	Label   string
 	Key     string // Keyboard hint (e.g., "Ctrl+S")
 	Focused bool
 }
 
+// ButtonBarOpts configures button bar rendering
 type ButtonBarOpts struct {
 	Align BarAlign
 	Gap   int
 	Style ButtonStyle
 }
 
+// ButtonStyle defines button bar colors
 type ButtonStyle struct {
 	LabelFg terminal.RGB
 	LabelBg terminal.RGB
@@ -23,10 +26,12 @@ type ButtonStyle struct {
 	Bg      terminal.RGB
 }
 
+// DefaultButtonStyle returns default button colors with dark background
 func DefaultButtonStyle() ButtonStyle {
 	return DefaultButtonStyleFrom(terminal.RGB{R: 25, G: 25, B: 35})
 }
 
+// DefaultButtonStyleFrom returns default button colors using the given background
 func DefaultButtonStyleFrom(bg terminal.RGB) ButtonStyle {
 	return ButtonStyle{
 		LabelFg: terminal.RGB{R: 200, G: 200, B: 200},
@@ -38,6 +43,7 @@ func DefaultButtonStyleFrom(bg terminal.RGB) ButtonStyle {
 	}
 }
 
+// ButtonBar renders a row of buttons with labels and keyboard hints at row y
 func (r Region) ButtonBar(y int, buttons []Button, opts ButtonBarOpts) {
 	if len(buttons) == 0 || y < 0 || y >= r.H {
 		return

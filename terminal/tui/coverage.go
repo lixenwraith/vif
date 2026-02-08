@@ -6,18 +6,22 @@ type Coverage struct {
 	Total int
 }
 
+// IsAll returns true if count equals total and total is positive
 func (c Coverage) IsAll() bool {
 	return c.Count == c.Total && c.Total > 0
 }
 
+// IsPartial returns true if count is between zero and total (exclusive)
 func (c Coverage) IsPartial() bool {
 	return c.Count > 0 && c.Count < c.Total
 }
 
+// IsNone returns true if count is zero
 func (c Coverage) IsNone() bool {
 	return c.Count == 0
 }
 
+// String returns coverage as "[count/total]", "[ALL]", or empty string if total is zero
 func (c Coverage) String() string {
 	if c.Total == 0 {
 		return ""

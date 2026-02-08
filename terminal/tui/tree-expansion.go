@@ -12,14 +12,14 @@ func NewTreeExpansion() *TreeExpansion {
 	}
 }
 
-// --- GameState queries ---
+// --- State queries ---
 
 // IsExpanded returns expansion state for key
 func (e *TreeExpansion) IsExpanded(key string) bool {
 	return e.State[key]
 }
 
-// --- GameState modification ---
+// --- State modification ---
 
 // SetExpanded sets expansion state for key
 func (e *TreeExpansion) SetExpanded(key string, expanded bool) {

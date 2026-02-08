@@ -58,7 +58,7 @@ func (s *ScrollState) PageDown() {
 	s.ScrollBy(PageDelta(s.Visible))
 }
 
-// --- GameState updates ---
+// --- State updates ---
 
 // SetTotal updates total count and reclamps
 func (s *ScrollState) SetTotal(total int) {
