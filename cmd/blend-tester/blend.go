@@ -116,7 +116,7 @@ func drawBlendMode() {
 		result = srcColor
 	case 1: // Alpha
 		result = render.Blend(dstColor, srcColor, state.blendAlpha)
-	case 2: // AddEntityAt
+	case 2: // Set
 		result = render.Add(dstColor, srcColor, state.blendAlpha)
 	case 3: // Max
 		result = render.Max(dstColor, srcColor, state.blendAlpha)

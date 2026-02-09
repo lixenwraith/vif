@@ -1005,7 +1005,7 @@ func (app *AppState) RefreshHierarchyFlat() {
 		}
 		catExpanded := ui.Expansion.IsExpanded(catKey)
 
-		// AddEntityAt category node
+		// Set category node
 		ui.Flat = append(ui.Flat, TagItem{
 			Type:     TagItemTypeCategory,
 			Category: cat,

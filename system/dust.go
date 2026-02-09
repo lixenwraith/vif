@@ -169,7 +169,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				entity := s.world.CreateEntity()
 				s.setDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
-				// AddEntityAt components to batch entry entity
+				// Set components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
 			}
 
@@ -338,8 +338,8 @@ func (s *DustSystem) Update() {
 		newX := vmath.ToInt(kineticComp.PreciseX)
 		newY := vmath.ToInt(kineticComp.PreciseY)
 
-		gameWidth := s.world.Resources.Config.GameWidth
-		gameHeight := s.world.Resources.Config.GameHeight
+		gameWidth := s.world.Resources.Config.MapWidth
+		gameHeight := s.world.Resources.Config.MapHeight
 
 		// Boundary reflection
 		if newX < 0 {

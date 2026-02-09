@@ -136,8 +136,8 @@ func (s *WallSystem) Update() {
 // handleSpawnSingle creates a single wall entity
 func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 	config := s.world.Resources.Config
-	if payload.X < 0 || payload.X >= config.GameWidth ||
-		payload.Y < 0 || payload.Y >= config.GameHeight {
+	if payload.X < 0 || payload.X >= config.MapWidth ||
+		payload.Y < 0 || payload.Y >= config.MapHeight {
 		return
 	}
 
@@ -189,14 +189,14 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 
 	members := make([]component.MemberEntry, 0, len(payload.Cells))
 	count := 0
-	minX, minY := config.GameWidth, config.GameHeight
+	minX, minY := config.MapWidth, config.MapHeight
 	maxX, maxY := 0, 0
 
 	for _, cell := range payload.Cells {
 		x := payload.X + cell.OffsetX
 		y := payload.Y + cell.OffsetY
 
-		if x < 0 || x >= config.GameWidth || y < 0 || y >= config.GameHeight {
+		if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 			continue
 		}
 

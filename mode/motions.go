@@ -39,7 +39,7 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endY := y
-	maxY := ctx.World.Resources.Config.GameHeight - 1
+	maxY := ctx.World.Resources.Config.MapHeight - 1
 
 	for i := 0; i < count && endY < maxY; i++ {
 		r := max(bounds.MaxY-y, y-bounds.MinY)
@@ -96,7 +96,7 @@ func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX := x
-	maxX := ctx.World.Resources.Config.GameWidth - 1
+	maxX := ctx.World.Resources.Config.MapWidth - 1
 
 	for i := 0; i < count && endX < maxX; i++ {
 		r := max(bounds.MaxX-x, x-bounds.MinX)
@@ -258,7 +258,7 @@ func MotionLineStart(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endX := 0
 
 	// Scan rightward to find first unblocked position
-	maxX := ctx.World.Resources.Config.GameWidth - 1
+	maxX := ctx.World.Resources.Config.MapWidth - 1
 	for endX < x && isCursorBlocked(ctx, endX, y) {
 		endX++
 		if endX > maxX {
@@ -300,7 +300,7 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	// 1. No entities found (lastEntityX == -1)
 	// 2. Already at the last entity (x == lastEntityX)
 	if lastEntityX == -1 || x == lastEntityX {
-		endX = ctx.World.Resources.Config.GameWidth - 1
+		endX = ctx.World.Resources.Config.MapWidth - 1
 	} else {
 		endX = lastEntityX
 	}
@@ -320,12 +320,12 @@ func MotionLineEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionScreenVerticalMid implements 'M' motion
 func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
-	midY := ctx.World.Resources.Config.GameHeight / 2
+	midY := ctx.World.Resources.Config.MapHeight / 2
 
 	if isCursorBlocked(ctx, x, midY) {
 		// Search both directions from midY
 		upY, downY := midY-1, midY+1
-		maxY := ctx.World.Resources.Config.GameHeight - 1
+		maxY := ctx.World.Resources.Config.MapHeight - 1
 		for upY >= 0 || downY <= maxY {
 			if upY >= 0 && !isCursorBlocked(ctx, x, upY) {
 				midY = upY
@@ -350,12 +350,12 @@ func MotionScreenVerticalMid(ctx *engine.GameContext, x, y, count int) MotionRes
 
 // MotionScreenHorizontalMid implements 'm' motion
 func MotionScreenHorizontalMid(ctx *engine.GameContext, x, y, count int) MotionResult {
-	midX := ctx.World.Resources.Config.GameWidth / 2
+	midX := ctx.World.Resources.Config.MapWidth / 2
 
 	if isCursorBlocked(ctx, midX, y) {
 		// Search both directions from midX
 		leftX, rightX := midX-1, midX+1
-		maxX := ctx.World.Resources.Config.GameWidth - 1
+		maxX := ctx.World.Resources.Config.MapWidth - 1
 		for leftX >= 0 || rightX <= maxX {
 			if leftX >= 0 && !isCursorBlocked(ctx, leftX, y) {
 				midX = leftX
@@ -435,7 +435,7 @@ func MotionMatchBracket(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionScreenBottom implements 'G' motion
 func MotionScreenBottom(ctx *engine.GameContext, x, y, count int) MotionResult {
-	endY := ctx.World.Resources.Config.GameHeight - 1
+	endY := ctx.World.Resources.Config.MapHeight - 1
 
 	// Scan upward to find first unblocked position
 	for endY > y && isCursorBlocked(ctx, x, endY) {
@@ -455,7 +455,7 @@ func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := 0
 
 	// Scan downward to find first unblocked position
-	maxY := ctx.World.Resources.Config.GameHeight - 1
+	maxY := ctx.World.Resources.Config.MapHeight - 1
 	for endY < y && isCursorBlocked(ctx, x, endY) {
 		endY++
 		if endY > maxY {
@@ -472,10 +472,10 @@ func MotionScreenTop(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionEnd implements 'g$' motion (GameWidth-1,GameHeight-1)
+// MotionEnd implements 'g$' motion (MapWidth-1,MapHeight-1)
 func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
-	rightX := ctx.World.Resources.Config.GameWidth - 1
-	botY := ctx.World.Resources.Config.GameHeight - 1
+	rightX := ctx.World.Resources.Config.MapWidth - 1
+	botY := ctx.World.Resources.Config.MapHeight - 1
 
 	// Check if target is blocked, find nearest valid
 	if isCursorBlocked(ctx, rightX, botY) {
@@ -499,10 +499,10 @@ func MotionEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionCenter implements 'gm' motion (GameWidth/2,GameHeight/2)
+// MotionCenter implements 'gm' motion (MapWidth/2,MapHeight/2)
 func MotionCenter(ctx *engine.GameContext, x, y, count int) MotionResult {
-	midX := ctx.World.Resources.Config.GameWidth / 2
-	midY := ctx.World.Resources.Config.GameHeight / 2
+	midX := ctx.World.Resources.Config.MapWidth / 2
+	midY := ctx.World.Resources.Config.MapHeight / 2
 
 	if isCursorBlocked(ctx, midX, midY) {
 		// TODO: arbitrary 20 max radius to be put in parameters
@@ -625,7 +625,7 @@ func MotionTillForward(ctx *engine.GameContext, x, y, count int, char rune) Moti
 				Valid: false,
 			}
 		}
-		endX = ctx.World.Resources.Config.GameWidth - 1
+		endX = ctx.World.Resources.Config.MapWidth - 1
 	}
 
 	// Check we actually moved
@@ -663,7 +663,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 
 	// Till: stop one position after target (moving backward)
 	endX++
-	if endX >= ctx.World.Resources.Config.GameWidth {
+	if endX >= ctx.World.Resources.Config.MapWidth {
 		endY++
 		if endY > bounds.MaxY {
 			return MotionResult{
@@ -696,7 +696,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 
 // MotionHalfPageLeft implements 'H' motion
 func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfWidth := ctx.World.Resources.Config.GameWidth / 2
+	halfWidth := ctx.World.Resources.Config.MapWidth / 2
 	endX := x - (halfWidth * count)
 	if endX < 0 {
 		endX = 0
@@ -717,10 +717,10 @@ func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionHalfPageRight implements 'L' motion
 func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfWidth := ctx.World.Resources.Config.GameWidth / 2
+	halfWidth := ctx.World.Resources.Config.MapWidth / 2
 	endX := x + (halfWidth * count)
-	if endX >= ctx.World.Resources.Config.GameWidth {
-		endX = ctx.World.Resources.Config.GameWidth - 1
+	if endX >= ctx.World.Resources.Config.MapWidth {
+		endX = ctx.World.Resources.Config.MapWidth - 1
 	}
 
 	// Scan backward to find last unblocked position
@@ -738,7 +738,7 @@ func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult 
 
 // MotionHalfPageUp implements 'K' and PgUp motion
 func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.World.Resources.Config.GameHeight / 2
+	halfHeight := ctx.World.Resources.Config.MapHeight / 2
 	endY := y - (halfHeight * count)
 	if endY < 0 {
 		endY = 0
@@ -759,10 +759,10 @@ func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionHalfPageDown implements 'J' and PgDown motion
 func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.World.Resources.Config.GameHeight / 2
+	halfHeight := ctx.World.Resources.Config.MapHeight / 2
 	endY := y + (halfHeight * count)
-	if endY >= ctx.World.Resources.Config.GameHeight {
-		endY = ctx.World.Resources.Config.GameHeight - 1
+	if endY >= ctx.World.Resources.Config.MapHeight {
+		endY = ctx.World.Resources.Config.MapHeight - 1
 	}
 
 	// Scan backward to find last unblocked position

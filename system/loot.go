@@ -175,8 +175,8 @@ func (s *LootSystem) Update() {
 				&kineticComp.Kinetic,
 				dtFixed,
 				0, 0,
-				0, config.GameWidth,
-				0, config.GameHeight,
+				0, config.MapWidth,
+				0, config.MapHeight,
 				vmath.FromFloat(0.4),
 				func(tx, ty int) bool {
 					return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)

@@ -274,8 +274,8 @@ func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
 // spawnStorm creates the root header and 3 circle sub-headers
 func (s *StormSystem) spawnStorm() {
 	config := s.world.Resources.Config
-	centerX := config.GameWidth / 2
-	centerY := config.GameHeight / 2
+	centerX := config.MapWidth / 2
+	centerY := config.MapHeight / 2
 
 	// Create root phantom header
 	rootEntity := s.world.CreateEntity()
@@ -525,9 +525,9 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 	insetX := parameter.StormBoundaryInsetX
 	insetY := parameter.StormBoundaryInsetY
 	gameMinX := vmath.FromInt(insetX)
-	gameMaxX := vmath.FromInt(config.GameWidth - 1 - insetX)
+	gameMaxX := vmath.FromInt(config.MapWidth - 1 - insetX)
 	gameMinY := vmath.FromInt(insetY)
-	gameMaxY := vmath.FromInt(config.GameHeight - 1 - insetY)
+	gameMaxY := vmath.FromInt(config.MapHeight - 1 - insetY)
 
 	for i := range circles {
 		// XY boundary reflection

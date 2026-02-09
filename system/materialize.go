@@ -143,14 +143,14 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, 
 	if targetX < 0 {
 		targetX = 0
 	}
-	if targetX >= config.GameWidth {
-		targetX = config.GameWidth - 1
+	if targetX >= config.MapWidth {
+		targetX = config.MapWidth - 1
 	}
 	if targetY < 0 {
 		targetY = 0
 	}
-	if targetY >= config.GameHeight {
-		targetY = config.GameHeight - 1
+	if targetY >= config.MapHeight {
+		targetY = config.MapHeight - 1
 	}
 
 	entity := s.world.CreateEntity()

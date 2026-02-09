@@ -45,8 +45,8 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 		gameCtx: ctx,
 	}
 
-	r.bufWidth = r.gameCtx.World.Resources.Config.GameWidth
-	r.bufHeight = r.gameCtx.World.Resources.Config.GameHeight
+	r.bufWidth = r.gameCtx.World.Resources.Config.MapWidth
+	r.bufHeight = r.gameCtx.World.Resources.Config.MapHeight
 	r.bufCapacity = r.bufWidth * r.bufHeight
 	if r.bufCapacity < 1 {
 		r.bufCapacity = 1
@@ -221,7 +221,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 ) {
 	palette := explosionPalettes[explosionType]
 
-	// Missile uses Screen blend for brighter flash, dust uses AddEntityAt for glow buildup
+	// Missile uses Screen blend for brighter flash, dust uses Set for glow buildup
 	blendMode := render.BlendAdd
 	if explosionType == event.ExplosionTypeMissile {
 		blendMode = render.BlendScreen

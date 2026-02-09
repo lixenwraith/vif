@@ -346,7 +346,7 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 		cx := int(int32(key >> 32))
 		cy := int(int32(key & 0xFFFFFFFF))
 		if bits != 0 {
-			// AddEntityAt background glow - use Max to not darken existing bg
+			// Set background glow - use Max to not darken existing bg
 			buf.Set(cx, cy, 0, terminal.RGBBlack, glowColor, render.BlendMax, alpha, terminal.AttrNone)
 		}
 	}

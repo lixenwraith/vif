@@ -171,7 +171,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 
 // spawnDecayWave creates a screen-wide falling decay wave
 func (s *DecaySystem) spawnDecayWave() {
-	gameWidth := s.world.Resources.Config.GameWidth
+	gameWidth := s.world.Resources.Config.MapWidth
 
 	// Spawn one decay entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
@@ -189,7 +189,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		dtFixed = dtCap
 	}
 
-	gameWidth := s.world.Resources.Config.GameWidth
+	gameWidth := s.world.Resources.Config.MapWidth
 
 	decayEntities := s.world.Components.Decay.GetAllEntities()
 

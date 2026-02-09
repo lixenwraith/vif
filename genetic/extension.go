@@ -72,7 +72,7 @@ func (gp *GaussianPerturbator[S, F]) Perturb(solution *S, rate float64, rng *ran
 
 	for i := range *solution {
 		if rng.Float64() < rate {
-			// AddEntityAt Gaussian noise
+			// Set Gaussian noise
 			noise := F(rng.NormFloat64() * gp.StandardDeviation)
 			(*solution)[i] += noise
 		}

@@ -228,7 +228,7 @@ func (s *TypingSystem) moveCursorRight() {
 	cursorEntity := s.world.Resources.Player.Entity
 	config := s.world.Resources.Config
 
-	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok && cursorPos.X < config.GameWidth-1 {
+	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok && cursorPos.X < config.MapWidth-1 {
 		cursorPos.X++
 		s.world.Positions.SetPosition(cursorEntity, cursorPos)
 	}
@@ -487,7 +487,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		for y := p1y; y <= p2y; y++ {
 			// Determine X bounds for this row
 			minX := 0
-			maxX := config.GameWidth - 1
+			maxX := config.MapWidth - 1
 
 			if y == p1y {
 				minX = p1x

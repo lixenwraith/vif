@@ -29,9 +29,9 @@ func NewSpatialGrid(width, height int) *SpatialGrid {
 	}
 }
 
-// AddEntityAt inserts an entity into the grid at (x, y)
+// Set inserts an entity into the grid at (x, y)
 // O(1), Returns false if bounds invalid or cell full (soft clip)
-func (g *SpatialGrid) AddEntityAt(e core.Entity, x, y int) bool {
+func (g *SpatialGrid) Set(e core.Entity, x, y int) bool {
 	if x < 0 || x >= g.Width || y < 0 || y >= g.Height {
 		return false
 	}

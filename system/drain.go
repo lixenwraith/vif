@@ -412,7 +412,7 @@ func (s *DrainSystem) processPendingSpawns() {
 		}
 
 		// Validate coordinates still in bounds (handles resize after queue)
-		if spawn.targetX >= config.GameWidth || spawn.targetY >= config.GameHeight {
+		if spawn.targetX >= config.MapWidth || spawn.targetY >= config.MapHeight {
 			// Remove invalid spawn
 			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
 			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
@@ -441,14 +441,14 @@ func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 	if targetX < 0 {
 		targetX = 0
 	}
-	if targetX >= config.GameWidth {
-		targetX = config.GameWidth - 1
+	if targetX >= config.MapWidth {
+		targetX = config.MapWidth - 1
 	}
 	if targetY < 0 {
 		targetY = 0
 	}
-	if targetY >= config.GameHeight {
-		targetY = config.GameHeight - 1
+	if targetY >= config.MapHeight {
+		targetY = config.MapHeight - 1
 	}
 
 	s.pendingSpawns = append(s.pendingSpawns, pendingDrainSpawn{
@@ -517,8 +517,8 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	config := s.world.Resources.Config
 	maxRetries := parameter.DrainSpawnMaxRetries
 	radius := parameter.DrainSpawnOffsetMax
-	width := config.GameWidth
-	height := config.GameHeight
+	width := config.MapWidth
+	height := config.MapHeight
 
 	// Calculate materialize spawn range with boundary stretching
 	// X axis: maintain 2*radius+1 cell range by extending opposite side
@@ -691,14 +691,14 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	if spawnX < 0 {
 		spawnX = 0
 	}
-	if spawnX >= config.GameWidth {
-		spawnX = config.GameWidth - 1
+	if spawnX >= config.MapWidth {
+		spawnX = config.MapWidth - 1
 	}
 	if spawnY < 0 {
 		spawnY = 0
 	}
-	if spawnY >= config.GameHeight {
-		spawnY = config.GameHeight - 1
+	if spawnY >= config.MapHeight {
+		spawnY = config.MapHeight - 1
 	}
 
 	// Check for existing drain
@@ -939,8 +939,8 @@ func (s *DrainSystem) updateDrainMovement() {
 		dtFixed = dtCap
 	}
 
-	gameWidth := config.GameWidth
-	gameHeight := config.GameHeight
+	gameWidth := config.MapWidth
+	gameHeight := config.MapHeight
 
 	// Target cursor center
 	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)

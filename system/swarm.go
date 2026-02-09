@@ -808,9 +808,9 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 
 	// Bounds
 	minHeaderX := parameter.SwarmHeaderOffsetX
-	maxHeaderX := config.GameWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.SwarmWidth - parameter.SwarmHeaderOffsetX)
 	minHeaderY := parameter.SwarmHeaderOffsetY
-	maxHeaderY := config.GameHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
 	// TODO: magic number
 	// Restitution: 0.5 (Dampens the "Super-Knockback" significantly)

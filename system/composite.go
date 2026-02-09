@@ -251,7 +251,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		newY := headerY + int(memberEntry.OffsetY)
 
 		// Bounds check - destroy before tombstoning
-		if newX < 0 || newX >= config.GameWidth || newY < 0 || newY >= config.GameHeight {
+		if newX < 0 || newX >= config.MapWidth || newY < 0 || newY >= config.MapHeight {
 			s.world.DestroyEntity(memberEntry.Entity)
 			memberEntry.Entity = 0
 			headerComp.Dirty = true

@@ -945,7 +945,7 @@ func (e *Editor) drawHelp(cells []terminal.Cell) {
 	}
 
 	help := []string{
-		"MoveEntity: WASD/HJKL/Arrows  │  Toggle: SPACE  │  AddEntityAt: o/ENTER  │  Clear: x/DEL  │  Char: [/]",
+		"MoveEntity: WASD/HJKL/Arrows  │  Toggle: SPACE  │  Set: o/ENTER  │  Clear: x/DEL  │  Char: [/]",
 		"Shift: <>/^v  │  Flip: |/_  │  Clear: c  │  Invert: i  │  Reset: r  │  Glyph: Y=copy p=paste",
 		"Row: X=clear F=fill R=yank P=paste O=ins↑ N=ins↓ Z=del  │  Preview: t  │  Jump: /",
 		"Export: y (char) E (all)  │  Quit: q/ESC",

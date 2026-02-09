@@ -65,7 +65,7 @@ func validatePosition(ctx *engine.GameContext, x, y int) (int, int) {
 		return x, y
 	}
 	config := ctx.World.Resources.Config
-	return max(0, min(x, config.GameWidth-1)), max(0, min(y, config.GameHeight-1))
+	return max(0, min(x, config.MapWidth-1)), max(0, min(y, config.MapHeight-1))
 }
 
 // --- Paragraph Helpers ---
@@ -80,7 +80,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 	for y := cursorY - 1; y >= 0; y-- {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
-		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
+		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -103,10 +103,10 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 
 	glyphStore := ctx.World.Components.Glyph
 
-	for y := cursorY + 1; y < ctx.World.Resources.Config.GameHeight; y++ {
+	for y := cursorY + 1; y < ctx.World.Resources.Config.MapHeight; y++ {
 		rowEmpty := true
 		// Scan row; stop early if any interactable entity is found
-		for x := 0; x < ctx.World.Resources.Config.GameWidth && rowEmpty; x++ {
+		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -119,7 +119,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 			return y
 		}
 	}
-	return ctx.World.Resources.Config.GameHeight - 1
+	return ctx.World.Resources.Config.MapHeight - 1
 }
 
 // --- Bracket Helpers ---
@@ -171,13 +171,13 @@ func findMatchingBracketForward(ctx *engine.GameContext, startX, startY int, ope
 	depth := 0
 	x, y := startX+1, startY
 
-	if x >= ctx.World.Resources.Config.GameWidth {
+	if x >= ctx.World.Resources.Config.MapWidth {
 		x = 0
 		y++
 	}
 
-	for y < ctx.World.Resources.Config.GameHeight {
-		for x < ctx.World.Resources.Config.GameWidth {
+	for y < ctx.World.Resources.Config.MapHeight {
+		for x < ctx.World.Resources.Config.MapWidth {
 			ch := getCharAt(ctx, x, y)
 			if ch == openChar {
 				depth++
@@ -202,7 +202,7 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 	if x < 0 {
 		y--
 		if y >= 0 {
-			x = ctx.World.Resources.Config.GameWidth - 1
+			x = ctx.World.Resources.Config.MapWidth - 1
 		}
 	}
 
@@ -221,7 +221,7 @@ func findMatchingBracketBackward(ctx *engine.GameContext, startX, startY int, cl
 		}
 		y--
 		if y >= 0 {
-			x = ctx.World.Resources.Config.GameWidth - 1
+			x = ctx.World.Resources.Config.MapWidth - 1
 		}
 	}
 	return -1, -1
@@ -281,7 +281,7 @@ func findCharInBounds(ctx *engine.GameContext, startX, startY int, target rune, 
 	}
 
 	if forward {
-		for x := startX; x < ctx.World.Resources.Config.GameWidth; x++ {
+		for x := startX; x < ctx.World.Resources.Config.MapWidth; x++ {
 			for y := bounds.MinY; y <= bounds.MaxY; y++ {
 				if x == startX && y <= startY {
 					continue
@@ -326,7 +326,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 	rightmost := -1
 
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := ctx.World.Resources.Config.GameWidth - 1; x >= 0; x-- {
+		for x := ctx.World.Resources.Config.MapWidth - 1; x >= 0; x-- {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
 			for i := 0; i < count; i++ {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
@@ -345,7 +345,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 // findFirstNonWhitespaceInBounds returns leftmost non-whitespace position in bounds
 func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := 0; x < ctx.World.Resources.Config.GameWidth; x++ {
+		for x := 0; x < ctx.World.Resources.Config.MapWidth; x++ {
 			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
 				return x, y
 			}
@@ -415,7 +415,7 @@ func isWordEndAt(ctx *engine.GameContext, x, y int) bool {
 	if current == CharTypeSpace {
 		return false
 	}
-	if x >= ctx.World.Resources.Config.GameWidth-1 {
+	if x >= ctx.World.Resources.Config.MapWidth-1 {
 		return true
 	}
 	right := getCharacterTypeAt(ctx, x+1, y)
@@ -442,7 +442,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 	if current == CharTypeSpace {
 		return false
 	}
-	if x >= ctx.World.Resources.Config.GameWidth-1 {
+	if x >= ctx.World.Resources.Config.MapWidth-1 {
 		return true
 	}
 	return getCharacterTypeAt(ctx, x+1, y) == CharTypeSpace
@@ -451,7 +451,7 @@ func isWORDEndAt(ctx *engine.GameContext, x, y int) bool {
 // scanBoundsForward scans column-first (left-to-right, top-to-bottom) for predicate match
 // Skips cursor position, returns first match or original position if none found
 func scanBoundsForward(ctx *engine.GameContext, cursorX, cursorY int, bounds engine.PingAbsoluteBounds, predicate func(*engine.GameContext, int, int) bool) (int, int) {
-	for x := cursorX; x < ctx.World.Resources.Config.GameWidth; x++ {
+	for x := cursorX; x < ctx.World.Resources.Config.MapWidth; x++ {
 		for y := bounds.MinY; y <= bounds.MaxY; y++ {
 			// Skip cursor position and anything before it in scan order
 			if x == cursorX && y <= cursorY {

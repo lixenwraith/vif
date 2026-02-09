@@ -418,9 +418,9 @@ func (s *WeaponSystem) updateOrbs() {
 
 		// Clamp to game bounds (slide along edge)
 		minX := int64(vmath.CellCenter)
-		maxX := vmath.FromInt(config.GameWidth-1) + vmath.CellCenter
+		maxX := vmath.FromInt(config.MapWidth-1) + vmath.CellCenter
 		minY := int64(vmath.CellCenter)
-		maxY := vmath.FromInt(config.GameHeight-1) + vmath.CellCenter
+		maxY := vmath.FromInt(config.MapHeight-1) + vmath.CellCenter
 
 		if idealX < minX {
 			idealX = minX
@@ -640,8 +640,8 @@ func (s *WeaponSystem) fireAllWeapons() {
 			} else {
 				// Fallback to screen center
 				config := s.world.Resources.Config
-				targetX = config.GameWidth / 2
-				targetY = config.GameHeight / 2
+				targetX = config.MapWidth / 2
+				targetY = config.MapHeight / 2
 			}
 
 			// 5. Fire the request

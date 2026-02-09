@@ -46,8 +46,8 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	// Update component
 	p.components[e] = pos
 
-	// AddEntityAt to new grid location
-	_ = p.grid.AddEntityAt(e, pos.X, pos.Y)
+	// Set to new grid location
+	_ = p.grid.Set(e, pos.X, pos.Y)
 }
 
 // RemoveEntity deletes an entity from the store and grid
@@ -89,9 +89,9 @@ func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent)
 	// Update component
 	p.components[e] = newPos
 
-	// AddEntityAt to new grid pos
+	// Set to new grid pos
 	// Explicit ignore for OOB and Cell full
-	_ = p.grid.AddEntityAt(e, newPos.X, newPos.Y)
+	_ = p.grid.Set(e, newPos.X, newPos.Y)
 
 	return nil
 }
@@ -141,7 +141,7 @@ func (p *Position) ResizeGrid(width, height int) {
 	// This ensures consistency even if grid size changes
 	for e, pos := range p.components {
 		// Explicit ignore for OOB and Cell full
-		_ = p.grid.AddEntityAt(e, pos.X, pos.Y)
+		_ = p.grid.Set(e, pos.X, pos.Y)
 	}
 }
 
@@ -211,7 +211,9 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 		return false
 	}
 
-	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+	// Check against Map bounds
+	config := p.world.Resources.Config
+	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 		return false
 	}
 
@@ -333,8 +335,9 @@ func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
 
 // isAreaFreeUnsafe checks bounds and wall presence, caller must hold lock
 func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
-	// Strict bounds check: Area must be completely inside the game area
-	if x < 0 || y < 0 || x+width >= p.world.Resources.Config.GameWidth || y+height >= p.world.Resources.Config.GameHeight {
+	config := p.world.Resources.Config
+	// Strict bounds: area must be completely inside map
+	if x < 0 || y < 0 || x+width > config.MapWidth || y+height > config.MapHeight {
 		return false
 	}
 
@@ -344,7 +347,7 @@ func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.Wall
 
 // IsOutOfBounds checks if position is outside spatial grid bounds
 func (p *Position) IsOutOfBounds(x, y int) bool {
-	return x < 0 || x >= p.world.Resources.Config.GameWidth || y < 0 || y >= p.world.Resources.Config.GameHeight
+	return x < 0 || x >= p.world.Resources.Config.MapWidth || y < 0 || y >= p.world.Resources.Config.MapHeight
 }
 
 // HasLineOfSight checks if two grid points have unobstructed line of sight
@@ -429,7 +432,7 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
 	p.components[e] = newPos
 	// Explicit ignore for OOB and Cell full
-	_ = p.grid.AddEntityAt(e, newPos.X, newPos.Y)
+	_ = p.grid.Set(e, newPos.X, newPos.Y)
 }
 
 // GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking, caller MUST hold Lock/RLock, returns number of entities copied
@@ -522,7 +525,7 @@ func (pb *PositionBatch) Commit() error {
 
 		pb.store.components[add.entity] = add.pos
 		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.AddEntityAt(add.entity, add.pos.X, add.pos.Y)
+		_ = pb.store.grid.Set(add.entity, add.pos.X, add.pos.Y)
 	}
 
 	return nil
@@ -549,7 +552,7 @@ func (pb *PositionBatch) CommitForce() {
 
 		pb.store.components[add.entity] = add.pos
 		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.AddEntityAt(add.entity, add.pos.X, add.pos.Y)
+		_ = pb.store.grid.Set(add.entity, add.pos.X, add.pos.Y)
 	}
 }
 
@@ -850,7 +853,7 @@ func (p *Position) FindFreeFromPattern(
 	defer p.mu.RUnlock()
 
 	// Compute direction internally
-	centerX := p.world.Resources.Config.GameWidth / 2
+	centerX := p.world.Resources.Config.MapWidth / 2
 	direction := getSearchDirection(originX, centerX)
 
 	var order [8]int
@@ -891,12 +894,11 @@ func (p *Position) FindFreeFromPattern(
 
 			// Strict Bounds Check (OOB)
 			// absX must be >= 0 and absX + width must be <= Width (Strict inclusion)
-			if absX < 0 || absX+width > p.world.Resources.Config.GameWidth ||
-				absY < 0 || absY+height > p.world.Resources.Config.GameHeight {
+			if absX < 0 || absX+width > p.world.Resources.Config.MapWidth ||
+				absY < 0 || absY+height > p.world.Resources.Config.MapHeight {
 				continue
 			}
 
-			p.world.DebugPrint(fmt.Sprintf("%d %d %d %d", absX, absY, width, height))
 			// Wall/Grid Collision Check
 			if !p.isAreaFreeUnsafe(absX, absY, width, height, mask) {
 				continue
@@ -944,7 +946,8 @@ func (p *Position) FindPlacementAroundExclusion(
 	p.mu.RLock()
 	defer p.mu.RUnlock()
 
-	centerX := p.world.Resources.Config.GameWidth / 2
+	config := p.world.Resources.Config
+	centerX := config.MapWidth / 22
 	direction := getSearchDirection(anchorX, centerX)
 
 	// Compute centering offsets
@@ -982,8 +985,8 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
 
-		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
-			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+		if absX < 0 || absX+objectW > p.world.Resources.Config.MapWidth ||
+			absY < 0 || absY+objectH > p.world.Resources.Config.MapHeight {
 			continue
 		}
 
@@ -1003,8 +1006,8 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]*2
 		absY := anchorY + offsets[idx][1]*2
 
-		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
-			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+		if absX < 0 || absX+objectW > config.MapWidth ||
+			absY < 0 || absY+objectH > config.MapHeight {
 			continue
 		}
 
@@ -1024,8 +1027,8 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
 
-		if absX < 0 || absX+objectW > p.world.Resources.Config.GameWidth ||
-			absY < 0 || absY+objectH > p.world.Resources.Config.GameHeight {
+		if absX < 0 || absX+objectW > config.MapWidth ||
+			absY < 0 || absY+objectH > config.MapHeight {
 			continue
 		}
 
@@ -1039,8 +1042,8 @@ func (p *Position) FindPlacementAroundExclusion(
 		absX := anchorX + offsets[idx][0]
 		absY := anchorY + offsets[idx][1]
 
-		absX = max(0, min(absX, p.world.Resources.Config.GameWidth-objectW))
-		absY = max(0, min(absY, p.world.Resources.Config.GameHeight-objectH))
+		absX = max(0, min(absX, config.MapWidth-objectW))
+		absY = max(0, min(absY, config.MapHeight-objectH))
 
 		if p.HasBlockingWallInAreaUnsafe(absX, absY, objectW, objectH, mask) {
 			continue
@@ -1052,8 +1055,8 @@ func (p *Position) FindPlacementAroundExclusion(
 	// Ultimate: force clamp first position
 	absX := anchorX + offsets[order[0]][0]
 	absY := anchorY + offsets[order[0]][1]
-	absX = max(0, min(absX, p.world.Resources.Config.GameWidth-objectW))
-	absY = max(0, min(absY, p.world.Resources.Config.GameHeight-objectH))
+	absX = max(0, min(absX, config.MapWidth-objectW))
+	absY = max(0, min(absY, config.MapHeight-objectH))
 
 	return absX - anchorX, absY - anchorY, false
 }

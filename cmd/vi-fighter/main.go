@@ -88,7 +88,7 @@ func main() {
 	ctx := engine.NewGameContext(world, width, height)
 
 	// 9. Systems Instantiation
-	// AddEntityAt active systems to ECS world
+	// Set active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
 		if !ok {

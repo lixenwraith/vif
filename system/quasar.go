@@ -426,8 +426,8 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 // calculateZapRadius compute zap range from game dimensions
 func (s *QuasarSystem) calculateZapRadius() int64 {
-	width := s.world.Resources.Config.GameWidth
-	height := s.world.Resources.Config.GameHeight
+	width := s.world.Resources.Config.MapWidth
+	height := s.world.Resources.Config.MapHeight
 	// Visual radius = max(width/2, height) since height cells = height*2 visual units
 	return vmath.FromInt(max(width/2, height))
 }
@@ -533,9 +533,9 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// Min: OffsetX
 	// Max: Width - (QuasarWidth - OffsetX)
 	minHeaderX := parameter.QuasarHeaderOffsetX
-	maxHeaderX := config.GameWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
+	maxHeaderX := config.MapWidth - (parameter.QuasarWidth - parameter.QuasarHeaderOffsetX)
 	minHeaderY := parameter.QuasarHeaderOffsetY
-	maxHeaderY := config.GameHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
+	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
 	// Restitution: 0.9 (Light dampening, keeps it floaty)
 	restitution := vmath.FromFloat(0.9) // TODO: magic number to parameters after test

@@ -31,8 +31,8 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResou
 		CursorY:      cursorY,
 		GameXOffset:  ctx.GameXOffset,
 		GameYOffset:  ctx.GameYOffset,
-		GameWidth:    ctx.World.Resources.Config.GameWidth,
-		GameHeight:   ctx.World.Resources.Config.GameHeight,
+		GameWidth:    ctx.World.Resources.Config.MapWidth,
+		GameHeight:   ctx.World.Resources.Config.MapHeight,
 		ScreenWidth:  ctx.Width,
 		ScreenHeight: ctx.Height,
 	}

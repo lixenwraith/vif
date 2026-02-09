@@ -83,7 +83,8 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	}
 
 	// Calculate game area
-	gameWidth, gameHeight := ctx.updateGameArea()
+	// gameWidth, gameHeight := ctx.updateGameArea()
+	viewportWidth, viewportHeight := ctx.updateGameArea()
 
 	// -- Initialize Resources --
 
@@ -91,9 +92,15 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	world.Resources.Status = status.NewRegistry()
 
 	// 2. Config Resource
+	// Initial: Map = Viewport, CropOnResize enabled for backward compat
 	world.Resources.Config = &ConfigResource{
-		GameWidth:  gameWidth,
-		GameHeight: gameHeight,
+		MapWidth:       viewportWidth,
+		MapHeight:      viewportHeight,
+		ViewportWidth:  viewportWidth,
+		ViewportHeight: viewportHeight,
+		CameraX:        0,
+		CameraY:        0,
+		CropOnResize:   true,
 	}
 
 	// 3. Time Resource (Initial state)
@@ -163,33 +170,40 @@ func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 // HandleResize handles terminal resize events
 func (ctx *GameContext) HandleResize() {
 	// New Height and Width already set in context by main
-	gameWidth, gameHeight := ctx.updateGameArea()
+	viewportWidth, viewportHeight := ctx.updateGameArea()
 
 	ctx.World.RunSafe(func() {
-		// Update existing ConfigResource in-place
-		configRes := ctx.World.Resources.Config
-		configRes.GameWidth = gameWidth
-		configRes.GameHeight = gameHeight
+		config := ctx.World.Resources.Config
+		config.ViewportWidth = viewportWidth
+		config.ViewportHeight = viewportHeight
 
-		// TODO: Optional disable (world.crop)
-		// Cleanup entities outside new bounds to prevent ghosting/resource usage
-		// Uses GameWidth/Height as valid coordinate space for entities, resizes Spatial Grid
-		ctx.cleanupOutOfBoundsEntities(gameWidth, gameHeight)
+		if config.CropOnResize {
+			// Resize map to match viewport, cleanup OOB entities
+			config.MapWidth = viewportWidth
+			config.MapHeight = viewportHeight
+			ctx.cleanupOutOfBoundsEntities(config.MapWidth, config.MapHeight)
+			// Reset camera
+			config.CameraX = 0
+			config.CameraY = 0
+		} else {
+			// Map persists, clamp camera to valid range
+			ctx.clampCamera(config)
+		}
 
+		// Clamp cursor to Map bounds
 		cursorEntity := ctx.World.Resources.Player.Entity
-		// Clamp cursor position
 		if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
-			newX := max(0, min(pos.X, gameWidth-1))
-			newY := max(0, min(pos.Y, gameHeight-1))
+			newX := max(0, min(pos.X, config.MapWidth-1))
+			newY := max(0, min(pos.Y, config.MapHeight-1))
 
 			if newX != pos.X || newY != pos.Y {
 				pos.X = newX
 				pos.Y = newY
 				ctx.World.Positions.SetPosition(cursorEntity, pos)
-				// Signal cursor movement if clamped due to resize
 				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
 		}
+
 		// Free cursor if blocked
 		if newX, newY, moved := ctx.World.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
 			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
@@ -197,7 +211,27 @@ func (ctx *GameContext) HandleResize() {
 	})
 }
 
-// cleanupOutOfBoundsEntities tags entities that are outside the valid game area
+// clampCamera constrains camera position to valid range
+// TODO: renderer handling viewport larger than map
+// When Viewport >= Map on an axis, camera is 0 (renderer handles centering)
+func (ctx *GameContext) clampCamera(config *ConfigResource) {
+	maxCameraX := config.MapWidth - config.ViewportWidth
+	maxCameraY := config.MapHeight - config.ViewportHeight
+
+	if maxCameraX <= 0 {
+		config.CameraX = 0
+	} else {
+		config.CameraX = max(0, min(config.CameraX, maxCameraX))
+	}
+
+	if maxCameraY <= 0 {
+		config.CameraY = 0
+	} else {
+		config.CameraY = max(0, min(config.CameraY, maxCameraY))
+	}
+}
+
+// cleanupOutOfBoundsEntities tags entities outside valid map area for destruction
 func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	deathStore := ctx.World.Components.Death
 
@@ -217,8 +251,9 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 		}
 	}
 
+	// TODO: re-evaluate grid resize. do we need very large grids?
 	// Resize spatial grid to match new dimensions
-	ctx.World.Positions.ResizeGrid(width, height)
+	// ctx.World.Positions.ResizeGrid(width, height)
 }
 
 // === Frame Number Accessories ===

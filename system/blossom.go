@@ -171,8 +171,8 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 
 // spawnBlossomWave creates a screen-wide rising blossom wave
 func (s *BlossomSystem) spawnBlossomWave() {
-	gameWidth := s.world.Resources.Config.GameWidth
-	gameHeight := s.world.Resources.Config.GameHeight
+	gameWidth := s.world.Resources.Config.MapWidth
+	gameHeight := s.world.Resources.Config.MapHeight
 
 	// Spawn one blossom entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
@@ -190,7 +190,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		dtFixed = dtCap
 	}
 
-	gameWidth := s.world.Resources.Config.GameWidth
+	gameWidth := s.world.Resources.Config.MapWidth
 
 	blossomEntities := s.world.Components.Blossom.GetAllEntities()
 

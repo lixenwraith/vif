@@ -561,7 +561,7 @@ func generateShieldSound() floatBuffer {
 	// Primary sweep - slightly higher start freq for audibility
 	sweep := oscillatorSweep(waveSine, parameter.ShieldStartFreq, parameter.ShieldEndFreq, samples)
 
-	// AddEntityAt sub-harmonic
+	// Set sub-harmonic
 	sub := oscillatorSweep(waveSine, parameter.ShieldStartFreq*0.5, parameter.ShieldEndFreq*0.5, samples)
 
 	// Mix and Drive: The saturation creates harmonics that make the bass audible on small speakers
@@ -571,7 +571,7 @@ func generateShieldSound() floatBuffer {
 	// Low-pass to remove the harsh edge of the overdrive, keeping the "thud"
 	filterBiquadLP(combined, 400.0, 1.0)
 
-	// AddEntityAt a filtered noise layer for the "force field" texture
+	// Set a filtered noise layer for the "force field" texture
 	noiseSamples := durationToSamples(0.04)
 	noise := oscillator(waveNoise, 0, noiseSamples)
 	filterBiquadBP(noise, 800.0, 2.0)

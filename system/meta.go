@@ -132,7 +132,7 @@ func (s *MetaSystem) handleDebugRequest() {
 	groups["context"] = []core.CardEntry{
 		{Key: "frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
 		{Key: "screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
-		{Key: "game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.GameWidth, s.ctx.World.Resources.Config.GameHeight)},
+		{Key: "game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.MapWidth, s.ctx.World.Resources.Config.MapHeight)},
 		{Key: "paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
 	}
 
@@ -291,8 +291,8 @@ func (s *MetaSystem) handleHelpRequest() {
 		Entries: []core.CardEntry{
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
-			{Key: ":energy N", Value: "AddEntityAt energy"},
-			{Key: ":heat N", Value: "AddEntityAt heat"},
+			{Key: ":energy N", Value: "Set energy"},
+			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},
 			{Key: ":spawn on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},

@@ -261,8 +261,8 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 	}
 
 	for attempt := 0; attempt < parameter.NuggetMaxAttempts; attempt++ {
-		x := rand.Intn(config.GameWidth)
-		y := rand.Intn(config.GameHeight)
+		x := rand.Intn(config.MapWidth)
+		y := rand.Intn(config.MapHeight)
 
 		dx := x - cursorPos.X
 		if dx < 0 {

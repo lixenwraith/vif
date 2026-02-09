@@ -179,8 +179,8 @@ func (w *World) CreateCursorEntity() {
 	// 1. Create cursor entity at the center of the screen
 	cursorEntity := w.CreateEntity()
 	w.Positions.SetPosition(cursorEntity, component.PositionComponent{
-		X: w.Resources.Config.GameWidth / 2,
-		Y: w.Resources.Config.GameHeight / 2,
+		X: w.Resources.Config.MapWidth / 2,
+		Y: w.Resources.Config.MapHeight / 2,
 	})
 
 	// 2. Setup cursor resource
@@ -188,28 +188,28 @@ func (w *World) CreateCursorEntity() {
 		Entity: cursorEntity,
 	}
 
-	// 3. AddEntityAt cursor component
+	// 3. Set cursor component
 	w.Components.Cursor.SetComponent(cursorEntity, component.CursorComponent{})
 
-	// 4. AddEntityAt protection component, make cursor indestructible
+	// 4. Set protection component, make cursor indestructible
 	w.Components.Protection.SetComponent(cursorEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// 5. AddEntityAt position component
+	// 5. Set position component
 	w.Components.Ping.SetComponent(cursorEntity, component.PingComponent{
 		ShowCrosshair: true,
 		GridActive:    false,
 		GridRemaining: 0,
 	})
 
-	// 6. AddEntityAt heat component
+	// 6. Set heat component
 	w.Components.Heat.SetComponent(cursorEntity, component.HeatComponent{})
 
-	// 7. AddEntityAt energy component
+	// 7. Set energy component
 	w.Components.Energy.SetComponent(cursorEntity, component.EnergyComponent{})
 
-	// 8. AddEntityAt shield component
+	// 8. Set shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusX),
 		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusY),
@@ -217,16 +217,16 @@ func (w *World) CreateCursorEntity() {
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 
-	// 9. AddEntityAt boost component
+	// 9. Set boost component
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 
-	// 10. AddEntityAt buff component
+	// 10. Set weapon component
 	w.Components.Weapon.SetComponent(cursorEntity, component.WeaponComponent{
 		Active:   make(map[component.WeaponType]bool),
 		Cooldown: make(map[component.WeaponType]time.Duration),
 	})
 
-	// 11. AddEntityAt combat component
+	// 11. Set combat component
 	w.Components.Combat.SetComponent(cursorEntity, component.CombatComponent{
 		OwnerEntity:      cursorEntity,
 		CombatEntityType: component.CombatEntityCursor,
@@ -278,9 +278,9 @@ func (w *World) GetPingAbsoluteBounds() PingAbsoluteBounds {
 
 	return PingAbsoluteBounds{
 		MinX:   max(0, cursorPos.X-bounds.RadiusX),
-		MaxX:   min(config.GameWidth-1, cursorPos.X+bounds.RadiusX),
+		MaxX:   min(config.MapWidth-1, cursorPos.X+bounds.RadiusX),
 		MinY:   max(0, cursorPos.Y-bounds.RadiusY),
-		MaxY:   min(config.GameHeight-1, cursorPos.Y+bounds.RadiusY),
+		MaxY:   min(config.MapHeight-1, cursorPos.Y+bounds.RadiusY),
 		Active: true,
 	}
 }
@@ -301,7 +301,7 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	}
 
 	config := w.Resources.Config
-	maxRadius := max(config.GameWidth, config.GameHeight) / 2
+	maxRadius := max(config.MapWidth, config.MapHeight) / 2
 
 	newX, newY, found := w.Positions.FindFreeFromPattern(
 		pos.X, pos.Y,

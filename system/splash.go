@@ -404,7 +404,7 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 	splashW := charCount * parameter.SplashCharWidth
 	splashH := parameter.SplashCharHeight
 
-	if splashW > config.GameWidth || splashH > config.GameHeight {
+	if splashW > config.MapWidth || splashH > config.MapHeight {
 		return max(0, cursorX-splashW/2), max(0, cursorY-splashH/2)
 	}
 
@@ -430,8 +430,8 @@ func (s *SplashSystem) calculateProximityAnchor(cursorX, cursorY, charCount int)
 		return absX, absY
 	}
 
-	anchorX := max(0, min(cursorX-splashW/2, config.GameWidth-splashW))
-	anchorY := max(0, min(cursorY-splashH/2, config.GameHeight-splashH))
+	anchorX := max(0, min(cursorX-splashW/2, config.MapWidth-splashW))
+	anchorY := max(0, min(cursorY-splashH/2, config.MapHeight-splashH))
 	return anchorX, anchorY
 }
 
@@ -458,8 +458,8 @@ func (s *SplashSystem) calculateTimerOffset(splashComp *component.SplashComponen
 			anchorY = pos.Y
 		}
 	} else {
-		anchorX = s.world.Resources.Config.GameWidth / 2
-		anchorY = s.world.Resources.Config.GameHeight / 2
+		anchorX = s.world.Resources.Config.MapWidth / 2
+		anchorY = s.world.Resources.Config.MapHeight / 2
 	}
 
 	checkTimers := func(absX, absY, w, h int) bool {

@@ -417,13 +417,13 @@ func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 		}
 
 		endY := pos.Y + intent.Count - 1
-		if endY >= r.ctx.World.Resources.Config.GameHeight {
-			endY = r.ctx.World.Resources.Config.GameHeight - 1
+		if endY >= r.ctx.World.Resources.Config.MapHeight {
+			endY = r.ctx.World.Resources.Config.MapHeight - 1
 		}
 
 		result := MotionResult{
 			StartX: 0, StartY: pos.Y,
-			EndX: r.ctx.World.Resources.Config.GameWidth - 1, EndY: endY,
+			EndX: r.ctx.World.Resources.Config.MapWidth - 1, EndY: endY,
 			Type: RangeLine, Style: StyleInclusive,
 			Valid: true,
 		}
@@ -488,8 +488,8 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 		case input.SpecialDeleteChar:
 			// x = delete chars forward
 			endX := pos.X + intent.Count - 1
-			if endX >= r.ctx.World.Resources.Config.GameWidth {
-				endX = r.ctx.World.Resources.Config.GameWidth - 1
+			if endX >= r.ctx.World.Resources.Config.MapWidth {
+				endX = r.ctx.World.Resources.Config.MapWidth - 1
 			}
 			result := MotionResult{
 				StartX: pos.X, StartY: pos.Y,
@@ -867,7 +867,7 @@ func (r *Router) handleMouseClick(intent *input.Intent) bool {
 
 	// Bounds check
 	config := r.ctx.World.Resources.Config
-	if gameX < 0 || gameX >= config.GameWidth || gameY < 0 || gameY >= config.GameHeight {
+	if gameX < 0 || gameX >= config.MapWidth || gameY < 0 || gameY >= config.MapHeight {
 		return true
 	}
 

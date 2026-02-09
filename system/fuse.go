@@ -235,8 +235,8 @@ func (s *FuseSystem) handleQuasarFuse() {
 		cY = sumY / len(sources)
 	} else {
 		config := s.world.Resources.Config
-		cX = config.GameWidth / 2
-		cY = config.GameHeight / 2
+		cX = config.MapWidth / 2
+		cY = config.MapHeight / 2
 	}
 
 	// Find valid spawn position via spiral search

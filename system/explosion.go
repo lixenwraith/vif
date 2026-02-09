@@ -274,9 +274,9 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	radiusCellsY := radiusCells / 2
 
 	minX := max(0, centerX-radiusCells)
-	maxX := min(config.GameWidth-1, centerX+radiusCells)
+	maxX := min(config.MapWidth-1, centerX+radiusCells)
 	minY := max(0, centerY-radiusCellsY)
-	maxY := min(config.GameHeight-1, centerY+radiusCellsY)
+	maxY := min(config.MapHeight-1, centerY+radiusCellsY)
 
 	radiusSq := vmath.Mul(radius, radius)
 

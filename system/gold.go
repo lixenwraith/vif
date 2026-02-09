@@ -456,8 +456,8 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 	}
 
 	for attempt := 0; attempt < parameter.GoldSpawnMaxAttempts; attempt++ {
-		x := rand.Intn(config.GameWidth)
-		y := rand.Intn(config.GameHeight)
+		x := rand.Intn(config.MapWidth)
+		y := rand.Intn(config.MapHeight)
 
 		// Check if far enough from cursor
 		if math.Abs(float64(x-cursorPos.X)) <= parameter.CursorExclusionX ||
@@ -466,7 +466,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		}
 
 		// Check if sequence fits within game width
-		if x+seqLength > config.GameWidth {
+		if x+seqLength > config.MapWidth {
 			continue
 		}
 

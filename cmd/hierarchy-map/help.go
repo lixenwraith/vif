@@ -105,7 +105,7 @@ var helpEditor = HelpColumn{
 		{"PgUp/Dn", "Page scroll"},
 		{"", ""},
 		{"─── RAW PANE ───", ""},
-		{"Enter", "AddEntityAt tag"},
+		{"Enter", "Set tag"},
 		{"(text input)", ""},
 		{"", ""},
 		{"─── FILES PANE ───", ""},

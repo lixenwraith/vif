@@ -154,7 +154,7 @@ func (s *GlyphSystem) Update() {
 
 	// Calculate current density and update rate multiplier
 	glyphCount := s.world.Components.Glyph.CountEntities()
-	screenCapacity := config.GameWidth * config.GameHeight
+	screenCapacity := config.MapWidth * config.MapHeight
 	density := s.calculateDensity(glyphCount, screenCapacity)
 	s.updateRateMultiplier(density)
 
@@ -315,7 +315,7 @@ func (s *GlyphSystem) spawnGlyphs() {
 }
 
 // placeLine attempts to place a single line on the screen
-// Lines exceeding GameWidth are cropped to fit available space
+// Lines exceeding MapWidth are cropped to fit available space
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Player.Entity
@@ -328,25 +328,25 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 
 	// Crop line if it exceeds game width
-	if lineLength > config.GameWidth {
-		lineRunes = lineRunes[:config.GameWidth]
-		lineLength = config.GameWidth
+	if lineLength > config.MapWidth {
+		lineRunes = lineRunes[:config.MapWidth]
+		lineLength = config.MapWidth
 	}
 
 	// Try up to MaxPlacementTries times to find a valid position
 	for attempt := 0; attempt < parameter.MaxPlacementTries; attempt++ {
 		// Random row selection
 		// TODO: convert to fast rand
-		row := rand.Intn(config.GameHeight)
+		row := rand.Intn(config.MapHeight)
 
 		// Check if line fits and find available columns
-		if lineLength > config.GameWidth {
+		if lineLength > config.MapWidth {
 			// Line too long for screen, skip
 			continue
 		}
 
 		// Random column selection (must have room for full line)
-		maxStartCol := config.GameWidth - lineLength
+		maxStartCol := config.MapWidth - lineLength
 		if maxStartCol < 0 {
 			// Line still too long after crop, skip
 			return false

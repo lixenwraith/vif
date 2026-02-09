@@ -137,8 +137,8 @@ func (s *CleanerSystem) Update() {
 	}
 
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	gameWidth := config.GameWidth
-	gameHeight := config.GameHeight
+	gameWidth := config.MapWidth
+	gameHeight := config.MapHeight
 
 	for _, cleanerEntity := range cleanerEntities {
 		cleanerComp, ok := s.world.Components.Cleaner.GetComponent(cleanerEntity)
@@ -275,7 +275,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		negativeEnergy = energyComp.Current < 0
 	}
 
-	gameWidthFixed := vmath.FromInt(config.GameWidth)
+	gameWidthFixed := vmath.FromInt(config.MapWidth)
 	trailLenFixed := parameter.CleanerTrailLenFixed
 	baseSpeed := parameter.CleanerBaseHorizontalSpeed
 
@@ -469,8 +469,8 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		negativeEnergy = energyComp.Current < 0
 	}
 
-	gameWidthFixed := vmath.FromInt(config.GameWidth)
-	gameHeightFixed := vmath.FromInt(config.GameHeight)
+	gameWidthFixed := vmath.FromInt(config.MapWidth)
+	gameHeightFixed := vmath.FromInt(config.MapHeight)
 	trailLenFixed := parameter.CleanerTrailLenFixed
 
 	horizontalSpeed := parameter.CleanerBaseHorizontalSpeed
@@ -541,7 +541,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 // Returns rows with TypeRed (energy >= 0) or TypeBlue (energy < 0)
 func (s *CleanerSystem) scanTargetRows() []int {
 	config := s.world.Resources.Config
-	gameHeight := config.GameHeight
+	gameHeight := config.MapHeight
 
 	// Determine target type based on energy polarity
 	targetType := component.GlyphRed
