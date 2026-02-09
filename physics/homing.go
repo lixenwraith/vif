@@ -67,7 +67,7 @@ func applyHomingInternal(
 	}
 
 	speed := vmath.Magnitude(k.VelX, k.VelY)
-	settleSpeedThreshold := int64(vmath.Scale) / 2 // 0.5 cells/sec
+	settleSpeedThreshold := vmath.Scale / 2 // 0.5 cells/sec
 
 	if dist < deadZone && speed < settleSpeedThreshold {
 		// Snap to exact target

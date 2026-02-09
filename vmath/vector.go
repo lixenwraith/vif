@@ -1,30 +1,70 @@
 package vmath
 
+import (
+	"math"
+)
+
 // Normalize2D returns unit vector in Q32.32, zero-safe
-// Uses DistanceApprox for performance (~4% error acceptable for game physics)
 func Normalize2D(x, y int64) (nx, ny int64) {
-	mag := DistanceApprox(x, y)
+	// Avoid multiple Div calls, convert to float, math, convert back
+	fx, fy := float64(x), float64(y)
+	mag := math.Sqrt(fx*fx + fy*fy)
 	if mag == 0 {
 		return 0, 0
 	}
-	return Div(x, mag), Div(y, mag)
+
+	// Multiply by ScaleF/mag to get back to fixed point
+	inv := ScaleF / mag
+	return int64(fx * inv), int64(fy * inv)
 }
 
-// Magnitude returns vector length using DistanceApprox
+// Magnitude returns exact vector length using hardware sqrt - true Euclidean distance sqrt(x² + y²)
+// Optimization: Manually inline the square calculation to avoid Mul call overhead
 func Magnitude(x, y int64) int64 {
-	return DistanceApprox(x, y)
+	// Convert to float immediately to use hardware SQRT
+	fx, fy := float64(x), float64(y)
+	// sqrt(x² + y²) where x,y are Q32.32 yields Q32.32 directly
+	return int64(math.Sqrt(fx*fx + fy*fy))
 }
 
 // MagnitudeSq returns squared magnitude without sqrt
-// Returns int64 to prevent overflow for large vectors
 func MagnitudeSq(x, y int64) int64 {
 	return Mul(x, x) + Mul(y, y)
 }
 
 // ClampMagnitude limits vector to maxMag while preserving direction
-// Returns unchanged vector if magnitude <= maxMag
 func ClampMagnitude(x, y, maxMag int64) (cx, cy int64) {
-	mag := Magnitude(x, y)
+	// 1. Check squared magnitude in float to avoid Sqrt if possible
+	// (Float check is faster than int Mul+Mul check due to overflow handling in Mul)
+	fx, fy := float64(x), float64(y)
+	magSq := fx*fx + fy*fy
+	fMax := float64(maxMag)
+
+	if magSq <= fMax*fMax {
+		return x, y
+	}
+
+	// 2. Slow path: Calculate scale factor
+	mag := math.Sqrt(magSq)
+	if mag == 0 {
+		return x, y
+	}
+
+	// scale = maxMag / mag
+	scale := fMax / mag
+	return int64(fx * scale), int64(fy * scale)
+}
+
+// MagnitudeApprox returns approximate vector length (~4% error)
+// Uses alpha-max-beta-min; faster than Sqrt and Magnitude for non-critical paths
+func MagnitudeApprox(x, y int64) int64 {
+	return DistanceApprox(x, y)
+}
+
+// ClampMagnitudeApprox limits vector using approximate magnitude (~4% error)
+// Faster than ClampMagnitude for non-critical physics
+func ClampMagnitudeApprox(x, y, maxMag int64) (cx, cy int64) {
+	mag := MagnitudeApprox(x, y)
 	if mag <= maxMag || mag == 0 {
 		return x, y
 	}
@@ -77,10 +117,4 @@ func ReflectAxisX(velX, velY int64) (int64, int64) {
 // Use for top/bottom screen edge collision
 func ReflectAxisY(velX, velY int64) (int64, int64) {
 	return velX, -velY
-}
-
-// MagnitudeEuclidean returns true Euclidean distance sqrt(x² + y²)
-// Use for visual accuracy; DistanceApprox for physics where ~4% error is acceptable
-func MagnitudeEuclidean(x, y int64) int64 {
-	return Sqrt(Mul(x, x) + Mul(y, y))
 }

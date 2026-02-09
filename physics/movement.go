@@ -1,27 +1,26 @@
 package physics
 
 import (
+	"math"
+
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// CapSpeed limits the velocity vector magnitude to maxSpeed, returns true if velocity was clamped
-func CapSpeed(velX, velY *int64, maxSpeed int64) bool {
-	magSq := vmath.MagnitudeSq(*velX, *velY)
-	maxSq := vmath.Mul(maxSpeed, maxSpeed)
+// CapSpeedVal limits velocity magnitude, returns clamped values
+// Optimization: Pass-by-value enables inlining, avoids pointer chase
+func CapSpeedVal(velX, velY, maxSpeed int64) (int64, int64) {
+	fvx, fvy := float64(velX), float64(velY)
+	magSq := fvx*fvx + fvy*fvy
+	fMax := float64(maxSpeed)
+	maxSq := fMax * fMax
 
-	if magSq > maxSq {
-		// Use Scale/Mag ratio to downscale
-		mag := vmath.Sqrt(magSq)
-		if mag == 0 {
-			return false
-		}
-		scale := vmath.Div(maxSpeed, mag)
-		*velX = vmath.Mul(*velX, scale)
-		*velY = vmath.Mul(*velY, scale)
-		return true
+	if magSq <= maxSq {
+		return velX, velY
 	}
-	return false
+
+	scale := fMax / math.Sqrt(magSq)
+	return int64(fvx * scale), int64(fvy * scale)
 }
 
 // WallQueryFunc returns true if the footprint at the given top-left coordinates is blocked

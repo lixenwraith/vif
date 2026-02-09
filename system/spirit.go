@@ -138,7 +138,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 
 	// Calculate Spin: ~1.5 rotations (Scale * 1.5)
 	// Alternating direction based on position parity to create chaotic implosion
-	spinMag := int64(vmath.Scale*3) / 2
+	spinMag := vmath.Scale * 3 / 2
 	if (p.StartX^p.StartY)&1 != 0 {
 		spinMag = -spinMag
 	}

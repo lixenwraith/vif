@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -300,14 +301,14 @@ func (s *DustSystem) Update() {
 			}
 
 			dyCirc := vmath.ScaleToCircular(dy)
-			ax, ayCirc := vmath.OrbitalEquilibrium(dx, dyCirc, dustComp.OrbitRadius, stiffness)
+			ax, ayCirc := physics.OrbitalEquilibrium(dx, dyCirc, dustComp.OrbitRadius, stiffness)
 
 			kineticComp.VelX += vmath.Mul(ax, dtFixed)
 			kineticComp.VelY += vmath.Mul(vmath.ScaleFromCircular(ayCirc), dtFixed)
 
 			// Orbital damping (converts radial velocity to tangential)
 			velYCirc := vmath.ScaleToCircular(kineticComp.VelY)
-			kineticComp.VelX, velYCirc = vmath.OrbitalDamp(
+			kineticComp.VelX, velYCirc = physics.OrbitalDamp(
 				kineticComp.VelX, velYCirc,
 				dx, dyCirc,
 				parameter.DustDamping, dtFixed,
@@ -423,9 +424,10 @@ func (s *DustSystem) Update() {
 					// --- Drain (flag bit 0) ---
 					if flags&cellFlagDrain != 0 && s.world.Components.Drain.HasEntity(target) {
 						// Accumulate impulse instead of immediate apply
-						impulseX, impulseY := vmath.ApplyCollisionImpulse(
+						// TODO: change this to use collision profile instead
+						impulseX, impulseY := physics.ApplyCollisionImpulse(
 							kineticComp.VelX, kineticComp.VelY,
-							vmath.MassRatioDustToDrain,
+							vmath.Div(physics.MassDust, physics.MassDrain),
 							parameter.DrainDeflectAngleVar,
 							parameter.CollisionKineticImpulseMin,
 							parameter.CollisionKineticImpulseMax,
@@ -439,9 +441,10 @@ func (s *DustSystem) Update() {
 					if flags&cellFlagCombatComposite != 0 {
 						if member, ok := s.world.Components.Member.GetComponent(target); ok {
 							if collisionCtx.combatHeaders[member.HeaderEntity] {
-								impulseX, impulseY := vmath.ApplyCollisionImpulse(
+								// TODO: change collision usage
+								impulseX, impulseY := physics.ApplyCollisionImpulse(
 									kineticComp.VelX, kineticComp.VelY,
-									vmath.MassRatioDustToQuasar, // Same mass ratio for all large composites
+									vmath.Div(physics.MassDust, physics.MassQuasar),
 									parameter.DrainDeflectAngleVar,
 									parameter.CollisionKineticImpulseMin,
 									parameter.CollisionKineticImpulseMax,
@@ -761,7 +764,7 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 	// Initial tangential velocity for orbit, random direction
 	clockwise := s.rng.Intn(2) == 0
-	vx, vy := vmath.OrbitalInsert(dx, dy, parameter.DustAttractionBase, clockwise)
+	vx, vy := physics.OrbitalInsert(dx, dy, parameter.DustAttractionBase, clockwise)
 
 	// Scale to initial speed
 	mag := vmath.Magnitude(vx, vy)

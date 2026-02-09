@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/physics"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -358,7 +359,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			if i == j {
 				continue
 			}
-			accel := vmath.GravitationalAccelWithRepulsion3D(
+			accel := physics.GravitationalAccelWithRepulsion3D(
 				circles[i].circle.Pos3D,
 				circles[j].circle.Pos3D,
 				parameter.StormCircleMass,
@@ -399,13 +400,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 	for i := range circles {
 		// XY boundary reflection
-		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.X, &circles[i].circle.Vel3D.X,
+		physics.ReflectAxis3D(&circles[i].circle.Pos3D.X, &circles[i].circle.Vel3D.X,
 			gameMinX, gameMaxX, parameter.StormRestitution)
-		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.Y, &circles[i].circle.Vel3D.Y,
+		physics.ReflectAxis3D(&circles[i].circle.Pos3D.Y, &circles[i].circle.Vel3D.Y,
 			gameMinY, gameMaxY, parameter.StormRestitution)
 
 		// Z depth bounds
-		vmath.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
+		physics.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
 			parameter.StormZMin, parameter.StormZMax, parameter.StormRestitution)
 
 		// Wall collision check at circle center
@@ -444,7 +445,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	}
 
 	// Separate overlap
-	newPosA, newPosB, separated := vmath.SeparateOverlap3D(
+	newPosA, newPosB, separated := physics.SeparateOverlap3D(
 		a.Pos3D, b.Pos3D,
 		parameter.StormCollisionRadius, parameter.StormCollisionRadius,
 		parameter.StormCircleMass, parameter.StormCircleMass,
@@ -454,18 +455,14 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 		b.Pos3D = newPosB
 	}
 
-	// Elastic collision response
-	newVelA, newVelB, collided := vmath.ElasticCollision3D(
-		a.Pos3D, b.Pos3D,
-		a.Vel3D, b.Vel3D,
+	// Elastic collision response (in-place modification)
+	collided := physics.ElasticCollision3DInPlace(
+		&a.Pos3D, &b.Pos3D,
+		&a.Vel3D, &b.Vel3D,
 		parameter.StormCircleMass, parameter.StormCircleMass,
 		parameter.StormRestitution,
 	)
 	if collided {
-		a.Vel3D = newVelA
-		b.Vel3D = newVelB
-
-		// Emit dust effect on collision
 		s.world.PushEvent(event.EventDustAllRequest, nil)
 	}
 }

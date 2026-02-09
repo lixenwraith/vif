@@ -5,11 +5,31 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// Entity mass constants (Q32.32, relative units)
+// Baseline: single-cell entity = Scale (1.0)
+const (
+	MassDust      = vmath.Scale / 10
+	MassCursor    = vmath.Scale
+	MassCleaner   = vmath.Scale
+	MassExplosion = vmath.Scale * 10
+
+	MassDrain  = vmath.Scale
+	MassSwarm  = vmath.Scale * 2
+	MassQuasar = vmath.Scale * 10
+	MassStorm  = vmath.Scale * 100
+
+	MassRatioEqual = vmath.Scale
+)
+
+// OffsetInfluenceDefault is standard blend factor for offset-based impulse
+// Scale/3 ≈ 0.33 - offset contributes 1/3 to final direction
+const OffsetInfluenceDefault = vmath.Scale / 3
+
 // Collision profiles - pre-defined for zero allocation in hot path
 
 // CleanerToDrain defines cleaner-to-drain collision (equal mass, additive)
 var CleanerToDrain = CollisionProfile{
-	MassRatio:        vmath.MassRatioEqual,
+	MassRatio:        vmath.Div(MassCleaner, MassDrain),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -20,18 +40,18 @@ var CleanerToDrain = CollisionProfile{
 
 // CleanerToQuasar defines cleaner-to-quasar collision (override for stun)
 var CleanerToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToQuasar,
+	MassRatio:        vmath.Div(MassCleaner, MassQuasar),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
 	Mode:             ImpulseOverride,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
-	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
 // ShieldToDrain defines shield-to-drain knockback (radial repulsion)
 var ShieldToDrain = CollisionProfile{
-	MassRatio:        vmath.MassRatioEqual,
+	MassRatio:        vmath.Div(MassCursor, MassDrain),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -42,18 +62,19 @@ var ShieldToDrain = CollisionProfile{
 
 // ShieldToQuasar defines shield-to-quasar knockback (centroid-based)
 var ShieldToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToQuasar,
+	MassRatio:        vmath.Div(MassCursor, MassQuasar),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
 	Mode:             ImpulseOverride,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
-	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
+// TODO: unused
 // DustToDrain defines dust-to-drain collision (light impactor, cumulative)
 var DustToDrain = CollisionProfile{
-	MassRatio:        vmath.MassRatioDustToDrain,
+	MassRatio:        vmath.Div(MassDust, MassDrain),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -64,7 +85,7 @@ var DustToDrain = CollisionProfile{
 
 // ExplosionToDrain defines explosion-to-drain collision (severe impactor, cumulative)
 var ExplosionToDrain = CollisionProfile{
-	MassRatio:        vmath.MassRatioExplosionToDrain,
+	MassRatio:        vmath.Div(MassExplosion, MassDrain),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -75,7 +96,7 @@ var ExplosionToDrain = CollisionProfile{
 
 // ExplosionToQuasar defines explosion-to-drain collision (severe impactor, cumulative)
 var ExplosionToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioExplosionToQuasar,
+	MassRatio:        vmath.Div(MassExplosion, MassQuasar),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -84,9 +105,10 @@ var ExplosionToQuasar = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// TODO: unused
 // DustToQuasar defines dust-to-quasar collision (very light impactor, cumulative)
 var DustToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioDustToQuasar,
+	MassRatio:        vmath.Div(MassDust, MassQuasar),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -97,29 +119,29 @@ var DustToQuasar = CollisionProfile{
 
 // CleanerToSwarm defines cleaner-to-swarm collision
 var CleanerToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToSwarm, // Swarm is heavy like quasar
+	MassRatio:        vmath.Div(MassCleaner, MassSwarm),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.SwarmDeflectAngleVar,
 	Mode:             ImpulseOverride,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
-	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
 // ShieldToSwarm defines shield-to-swarm knockback
 var ShieldToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToQuasar,
+	MassRatio:        vmath.Div(MassCursor, MassQuasar),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.SwarmDeflectAngleVar,
 	Mode:             ImpulseOverride,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
-	OffsetInfluence:  vmath.OffsetInfluenceDefault,
+	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
 // ExplosionToSwarm defines explosion-to-swarm collision
 var ExplosionToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioExplosionToSwarm,
+	MassRatio:        vmath.Div(MassExplosion, MassSwarm),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.SwarmDeflectAngleVar,
@@ -130,9 +152,10 @@ var ExplosionToSwarm = CollisionProfile{
 
 // Soft-collision profiles
 
+// TODO: unused
 // SoftCollisionDrainToQuasar defines drain-to-quasar soft repulsion
 var SoftCollisionDrainToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioEqual,
+	MassRatio:        vmath.Div(MassDrain, MassQuasar),
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -143,7 +166,7 @@ var SoftCollisionDrainToQuasar = CollisionProfile{
 
 // SoftCollisionSwarmToSwarm defines swarm-to-swarm soft repulsion
 var SoftCollisionSwarmToSwarm = CollisionProfile{
-	MassRatio:        vmath.MassRatioEqual,
+	MassRatio:        MassRatioEqual,
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -154,7 +177,7 @@ var SoftCollisionSwarmToSwarm = CollisionProfile{
 
 // SoftCollisionSwarmToQuasar defines swarm-to-quasar soft repulsion
 var SoftCollisionSwarmToQuasar = CollisionProfile{
-	MassRatio:        vmath.MassRatioBaseToQuasar, // Quasar is heavier
+	MassRatio:        vmath.Div(MassSwarm, MassQuasar),
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -163,9 +186,10 @@ var SoftCollisionSwarmToQuasar = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// TODO: check why we need both directions swarm-quasar
 // SoftCollisionQuasarToSwarm defines quasar-to-swarm soft repulsion
 var SoftCollisionQuasarToSwarm = CollisionProfile{
-	MassRatio:        vmath.Scale * 10, // Quasar pushes swarm harder
+	MassRatio:        vmath.Div(MassQuasar, MassSwarm),
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -176,7 +200,7 @@ var SoftCollisionQuasarToSwarm = CollisionProfile{
 
 // SoftCollisionQuasarToDrain defines quasar-to-drain soft repulsion
 var SoftCollisionQuasarToDrain = CollisionProfile{
-	MassRatio:        vmath.Scale * 10, // Quasar pushes drain harder
+	MassRatio:        vmath.Div(MassQuasar, MassDrain),
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -187,7 +211,7 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 
 // Homing profiles
 
-// NOTE: Unused due to genetic integration, keeping for potential future use
+// TODO: unused
 // DrainHoming defines drain entity homing behavior
 var DrainHoming = HomingProfile{
 	BaseSpeed:        parameter.DrainBaseSpeed,

@@ -517,7 +517,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
-	physics.CapSpeed(&kineticComp.VelX, &kineticComp.VelY, parameter.QuasarMaxSpeed)
+	kineticComp.VelX, kineticComp.VelY = physics.CapSpeedVal(kineticComp.VelX, kineticComp.VelY, parameter.QuasarMaxSpeed)
 
 	// Define Wall Query
 	// We use a closure to capture the specific mask and dimensions
@@ -612,7 +612,7 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 
 	// Inside visual circle = in range (no zap)
 	dyCirc := vmath.ScaleToCircular(dy) // Aspect correction: dy * 2
-	dist := vmath.MagnitudeEuclidean(dx, dyCirc)
+	dist := vmath.Magnitude(dx, dyCirc)
 	return dist <= quasarComp.ZapRadius
 }
 

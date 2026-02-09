@@ -1,5 +1,9 @@
 package vmath
 
+import (
+	"math"
+)
+
 // Vec3 is a 3D vector in Q32.32 fixed-point
 // Used by storm system for 3D orbital physics
 type Vec3 struct {
@@ -30,12 +34,23 @@ func V3Mag(v Vec3) int64 {
 	return Sqrt(V3MagSq(v))
 }
 
+// V3Normalize normalizes a 3D vector
+// Optimization: Calculates inverse magnitude once in float, multiplies 3 times
 func V3Normalize(v Vec3) Vec3 {
-	m := V3Mag(v)
-	if m == 0 {
+	fx, fy, fz := float64(v.X), float64(v.Y), float64(v.Z)
+	mag := math.Sqrt(fx*fx + fy*fy + fz*fz)
+
+	if mag == 0 {
 		return Vec3{}
 	}
-	return Vec3{Div(v.X, m), Div(v.Y, m), Div(v.Z, m)}
+
+	// One division, three multiplies
+	inv := ScaleF / mag
+	return Vec3{
+		int64(fx * inv),
+		int64(fy * inv),
+		int64(fz * inv),
+	}
 }
 
 // V3XY extracts X,Y components as separate values for 2D projection

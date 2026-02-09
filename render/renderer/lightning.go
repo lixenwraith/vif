@@ -118,7 +118,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	// Octave 1: Coherent spine offset (single random value for whole path)
 	// Creates gentle arc, prevents "straight bundle" appearance
 	spineRand := rng.Next()
-	spineOffset := int64(spineRand>>32) - int64(vmath.Scale>>1)
+	spineOffset := int64(spineRand>>32) - vmath.Scale>>1
 	spineOffset <<= 1                  // [-1.0, 1.0) in Q32.32
 	spineMagnitude := vmath.FromInt(4) // Max 4 sub-pixel spine curve
 	spineFixed := vmath.Mul(spineOffset, spineMagnitude)
@@ -166,7 +166,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 
 		// Detail contribution: random per-segment, modulated by envelope
 		detailRand := rng.Next()
-		detailFrac := int64(detailRand>>32) - int64(vmath.Scale>>1)
+		detailFrac := int64(detailRand>>32) - vmath.Scale>>1
 		detailFrac <<= 1
 		detailJitter := vmath.Mul(vmath.Mul(detailFrac, detailMagnitude), envelope)
 

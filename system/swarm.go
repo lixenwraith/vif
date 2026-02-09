@@ -812,8 +812,9 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 	minHeaderY := parameter.SwarmHeaderOffsetY
 	maxHeaderY := config.GameHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
+	// TODO: magic number
 	// Restitution: 0.5 (Dampens the "Super-Knockback" significantly)
-	restitution := int64(vmath.Scale / 2)
+	restitution := vmath.Scale / 2
 
 	// Integrate with Bounce
 	newX, newY, hitWall := physics.IntegrateWithBounce(

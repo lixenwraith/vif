@@ -8,14 +8,14 @@ func init() {
 	// Sin/Cos LUT calculation
 	for i := 0; i < LUTSize; i++ {
 		rad := 2.0 * math.Pi * float64(i) / LUTSize
-		SinLUT[i] = int64(math.Sin(rad) * Scale)
-		CosLUT[i] = int64(math.Cos(rad) * Scale)
+		SinLUT[i] = int64(math.Sin(rad) * ScaleF)
+		CosLUT[i] = int64(math.Cos(rad) * ScaleF)
 	}
 
 	// Exp LUT calculation
 	for i := 0; i < ExpLUTSize; i++ {
 		x := float64(i) * ExpLUTMaxInput / float64(ExpLUTSize-1)
-		ExpDecayLUT[i] = int64(math.Exp(-x/ExpLUTDecayK) * Scale)
+		ExpDecayLUT[i] = int64(math.Exp(-x/ExpLUTDecayK) * ScaleF)
 	}
 }
 

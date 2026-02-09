@@ -717,7 +717,7 @@ func resolveWeaponTargets(
 				if !ok {
 					continue
 				}
-				d := vmath.MagnitudeEuclidean(
+				d := vmath.Magnitude(
 					vmath.FromInt(originX-pos.X),
 					vmath.FromInt(originY-pos.Y),
 				)
@@ -739,7 +739,7 @@ func resolveWeaponTargets(
 			if !ok {
 				continue
 			}
-			d := vmath.MagnitudeEuclidean(
+			d := vmath.Magnitude(
 				vmath.FromInt(originX-pos.X),
 				vmath.FromInt(originY-pos.Y),
 			)
