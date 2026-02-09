@@ -28,6 +28,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	// TODO: move to parameter
 	// Configuration for the trail effect
 	const (
 		trailSteps = 10               // Number of segments (Head + 9 trail segments)
@@ -70,12 +71,14 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			rotY := vmath.ScaleFromCircular(rotYCirc)
 
 			// 5. Map to screen space
-			screenX := ctx.GameXOffset + vmath.ToInt(spiritComp.TargetX+rotX)
-			screenY := ctx.GameYOffset + vmath.ToInt(spiritComp.TargetY+rotY)
 
-			// Bounds check
-			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-				screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+			// Compute map position
+			mapX := vmath.ToInt(spiritComp.TargetX + rotX)
+			mapY := vmath.ToInt(spiritComp.TargetY + rotY)
+
+			// Transform to screen coords
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
 				continue
 			}
 
@@ -102,7 +105,6 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				trailPos := float64(i) / float64(trailSteps)
 
 				fade := 1.0 - trailPos
-				// TODO: review and compare old method, deprecate if new is acceptable
 				// fade = fade * fade // Quadratic falloff: (1 - x)^2
 				fade = fade * 1.3 // Boost instead of quadratic squash
 				if fade > 1.0 {

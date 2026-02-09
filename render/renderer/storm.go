@@ -133,12 +133,22 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
 	}
 
+	// Cursor position in viewport coords for lighting
+	cursorVX, cursorVY := ctx.CursorViewportPos()
+
+	// Circle center in viewport coords
+	circleVX, circleVY, circleVisible := ctx.MapToViewport(circle.x, circle.y)
+	if !circleVisible {
+		// Circle center off-screen; skip detailed rendering
+		return
+	}
+
 	// Per-circle lighting aimed at cursor position
 	// If Convex: Track cursor (expensive)
 	// If Concave: Use fixed frontal light (cheap) to ensure visibility without calculation cost
 	var lightX, lightY, lightZ, halfX, halfY, halfZ float64
 	if isConvex {
-		lightX, lightY, lightZ, halfX, halfY, halfZ = cursorLighting(ctx.CursorX, ctx.CursorY, circle.x, circle.y)
+		lightX, lightY, lightZ, halfX, halfY, halfZ = cursorLighting(cursorVX, cursorVY, circleVX, circleVY)
 	} else {
 		// Fixed light from viewer direction (0,0,1)
 		lightX, lightY, lightZ = 0.0, 0.0, 1.0
@@ -252,16 +262,22 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 	haloRadiusX := radiusX + haloExtendX
 	haloRadiusY := radiusY + haloExtendY
 
-	startX := max(0, circle.x-int(haloRadiusX)-1)
-	endX := min(ctx.GameWidth-1, circle.x+int(haloRadiusX)+1)
-	startY := max(0, circle.y-int(haloRadiusY)-1)
-	endY := min(ctx.GameHeight-1, circle.y+int(haloRadiusY)+1)
+	// Bounding box in map coords
+	mapStartX := max(0, circle.x-int(haloRadiusX)-1)
+	mapEndX := min(ctx.MapWidth-1, circle.x+int(haloRadiusX)+1)
+	mapStartY := max(0, circle.y-int(haloRadiusY)-1)
+	mapEndY := min(ctx.MapHeight-1, circle.y+int(haloRadiusY)+1)
 
-	for y := startY; y <= endY; y++ {
-		for x := startX; x <= endX; x++ {
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
 			// Normalized position
-			nx := float64(x-circle.x) / radiusX
-			ny := float64(y-circle.y) / radiusY
+			nx := float64(mapX-circle.x) / radiusX
+			ny := float64(mapY-circle.y) / radiusY
 			distSq := nx*nx + ny*ny
 
 			// Skip inside main body (rendered by members)
@@ -270,8 +286,8 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 			}
 
 			// Skip outside halo
-			haloNx := float64(x-circle.x) / haloRadiusX
-			haloNy := float64(y-circle.y) / haloRadiusY
+			haloNx := float64(mapX-circle.x) / haloRadiusX
+			haloNy := float64(mapY-circle.y) / haloRadiusY
 			if haloNx*haloNx+haloNy*haloNy > 1.0 {
 				continue
 			}
@@ -286,13 +302,6 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 			blue := baseB * glowFalloff
 
 			if red < 1 && green < 1 && blue < 1 {
-				continue
-			}
-
-			screenX := ctx.GameXOffset + x
-			screenY := ctx.GameYOffset + y
-
-			if screenX < 0 || screenX >= ctx.ScreenWidth || screenY < 0 || screenY >= ctx.ScreenHeight {
 				continue
 			}
 

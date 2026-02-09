@@ -41,8 +41,10 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	buf.SetWriteMask(visual.MaskPing)
 
-	// 1. Compute Shield Exclusion Mask
-	r.computeExclusionMask(r.gameCtx.World, ctx.GameWidth, ctx.GameHeight)
+	// 1. Compute shield exclusion mask sized to viewport
+	r.computeExclusionMask(r.gameCtx.World, ctx)
+	// Get cursor position in viewport coordinates
+	cursorVX, cursorVY := ctx.CursorViewportPos()
 
 	// 2. Draw Crosshair (Row/Column Highlights)
 	if pingComp.ShowCrosshair {
@@ -52,21 +54,21 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 		} else {
 			lineColor = visual.RgbPingLineNormal
 		}
-		r.drawCrosshair(ctx, buf, lineColor)
+		r.drawCrosshair(ctx, buf, cursorVX, cursorVY, lineColor)
 	}
 
 	// 3. Draw Grid Lines
 	if pingComp.GridActive {
-		r.drawGrid(ctx, buf, visual.RgbPingGridNormal)
+		r.drawGrid(ctx, buf, cursorVX, cursorVY, visual.RgbPingGridNormal)
 	}
 }
 
-// computeExclusionMask builds a 1-bit mask of all active shields
+// computeExclusionMask builds a 1-bit mask of all active shields in viewport space
 // O(Shields * ShieldArea), usually very small
-func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
+func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.RenderContext) {
+	w, h := ctx.ViewportWidth, ctx.ViewportHeight
+
 	// Resize mask if dimensions changed
-	// Need (w*h + 63) / 64 uint64s
-	// TODO: fix this magic
 	needed := (w*h + 63) / 64
 	if len(r.exclusionMask) < needed || r.maskWidth != w || r.maskHeight != h {
 		r.exclusionMask = make([]uint64, needed)
@@ -92,15 +94,25 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 			continue
 		}
 
-		// Bounding box from Q32.32 radii
+		// Shield center in viewport coords
+		shieldVX, shieldVY, shieldVisible := ctx.MapToViewport(shieldPos.X, shieldPos.Y)
+		if !shieldVisible {
+			// Shield center off-screen, but edges might be visible
+			// For simplicity, skip entirely; can refine later if needed
+			continue
+		}
+
+		// Bounding box
 		rx := vmath.ToInt(shieldComp.RadiusX)
 		ry := vmath.ToInt(shieldComp.RadiusY)
-		startX := shieldPos.X - rx
-		endX := shieldPos.X + rx
-		startY := shieldPos.Y - ry
-		endY := shieldPos.Y + ry
 
-		// Clamp
+		// Bounding box in viewport coords
+		startX := shieldVX - rx
+		endX := shieldVX + rx
+		startY := shieldVY - ry
+		endY := shieldVY + ry
+
+		// Clamp to viewport
 		if startX < 0 {
 			startX = 0
 		}
@@ -115,12 +127,12 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 		}
 
 		for y := startY; y <= endY; y++ {
-			dy := vmath.FromInt(y - shieldPos.Y)
+			dy := vmath.FromInt(y - shieldVY)
 			dySq := vmath.Mul(dy, dy)
 			rowOffset := y * w
 
 			for x := startX; x <= endX; x++ {
-				dx := vmath.FromInt(x - shieldPos.X)
+				dx := vmath.FromInt(x - shieldVX)
 				dxSq := vmath.Mul(dx, dx)
 
 				// Ellipse containment: (dx²*invRxSq + dy²*invRySq) <= 1.0
@@ -133,72 +145,84 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, w, h int) {
 	}
 }
 
-// isExcluded checks if a cell is inside a shield
-func (r *PingRenderer) isExcluded(x, y int) bool {
-	if x < 0 || x >= r.maskWidth || y < 0 || y >= r.maskHeight {
+// isExcluded checks if a viewport coordinate is inside a shield
+func (r *PingRenderer) isExcluded(vx, vy int) bool {
+	if vx < 0 || vx >= r.maskWidth || vy < 0 || vy >= r.maskHeight {
 		return false
 	}
-	idx := y*r.maskWidth + x
+	idx := vy*r.maskWidth + vx
 	return (r.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
 }
 
-// drawCrosshair draws the crosshair lines respecting shield exclusion
-func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, color terminal.RGB) {
+// drawCrosshair draws the crosshair lines in viewport space
+func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color terminal.RGB) {
 	pingBounds := r.gameCtx.World.GetPingAbsoluteBounds()
 
-	// Draw horizontal band (rows from minY to maxY, full width)
-	for y := pingBounds.MinY; y <= pingBounds.MaxY; y++ {
-		screenY := ctx.GameYOffset + y
-		if screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
-			continue
-		}
-		for x := 0; x < ctx.GameWidth; x++ {
-			if !r.isExcluded(x, y) {
-				buf.Set(ctx.GameXOffset+x, screenY, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+	// Convert ping bounds from map coords to viewport coords
+	minVX, minVY, _ := ctx.MapToViewport(pingBounds.MinX, pingBounds.MinY)
+	maxVX, maxVY, _ := ctx.MapToViewport(pingBounds.MaxX, pingBounds.MaxY)
+
+	// Clamp to viewport
+	if minVX < 0 {
+		minVX = 0
+	}
+	if minVY < 0 {
+		minVY = 0
+	}
+	if maxVX >= ctx.ViewportWidth {
+		maxVX = ctx.ViewportWidth - 1
+	}
+	if maxVY >= ctx.ViewportHeight {
+		maxVY = ctx.ViewportHeight - 1
+	}
+
+	// Draw horizontal band (rows from minVY to maxVY, full viewport width)
+	for vy := minVY; vy <= maxVY; vy++ {
+		screenY := ctx.GameYOffset + vy
+		for vx := 0; vx < ctx.ViewportWidth; vx++ {
+			if !r.isExcluded(vx, vy) {
+				buf.Set(ctx.GameXOffset+vx, screenY, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 
-	// Draw vertical band (columns from minX to maxX, full height)
-	for x := pingBounds.MinX; x <= pingBounds.MaxX; x++ {
-		screenX := ctx.GameXOffset + x
-		if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth {
-			continue
-		}
-		for y := 0; y < ctx.GameHeight; y++ {
+	// Draw vertical band (columns from minVX to maxVX, full viewport height)
+	for vx := minVX; vx <= maxVX; vx++ {
+		screenX := ctx.GameXOffset + vx
+		for vy := 0; vy < ctx.ViewportHeight; vy++ {
 			// Skip cells already drawn by horizontal band
-			if y >= pingBounds.MinY && y <= pingBounds.MaxY {
+			if vy >= minVY && vy <= maxVY {
 				continue
 			}
-			if !r.isExcluded(x, y) {
-				buf.Set(screenX, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			if !r.isExcluded(vx, vy) {
+				buf.Set(screenX, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 }
 
-// drawGrid draws the 5-cell grid respecting shield exclusion
-func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, color terminal.RGB) {
-	// Vertical lines at ±5, ±10, etc.
+// drawGrid draws the 5-cell grid in viewport space
+func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color terminal.RGB) {
+	// Vertical lines at ±5, ±10, etc. from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
-		colRight := ctx.CursorX + offset
-		colLeft := ctx.CursorX - offset
+		colRight := cursorVX + offset
+		colLeft := cursorVX - offset
 		inBounds := false
 
-		if colRight < ctx.GameWidth {
+		if colRight < ctx.ViewportWidth {
 			inBounds = true
-			for y := 0; y < ctx.GameHeight; y++ {
-				if !r.isExcluded(colRight, y) {
-					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			for vy := 0; vy < ctx.ViewportHeight; vy++ {
+				if !r.isExcluded(colRight, vy) {
+					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
 		if colLeft >= 0 {
 			inBounds = true
-			for y := 0; y < ctx.GameHeight; y++ {
-				if !r.isExcluded(colLeft, y) {
-					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+y, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			for vy := 0; vy < ctx.ViewportHeight; vy++ {
+				if !r.isExcluded(colLeft, vy) {
+					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -208,26 +232,26 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		}
 	}
 
-	// Horizontal lines
+	// Horizontal lines at ±5, ±10, etc. from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
-		rowDown := ctx.CursorY + offset
-		rowUp := ctx.CursorY - offset
+		rowDown := cursorVY + offset
+		rowUp := cursorVY - offset
 		inBounds := false
 
-		if rowDown < ctx.GameHeight {
+		if rowDown < ctx.ViewportHeight {
 			inBounds = true
-			for x := 0; x < ctx.GameWidth; x++ {
-				if !r.isExcluded(x, rowDown) {
-					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			for vx := 0; vx < ctx.ViewportWidth; vx++ {
+				if !r.isExcluded(vx, rowDown) {
+					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
 		if rowUp >= 0 {
 			inBounds = true
-			for x := 0; x < ctx.GameWidth; x++ {
-				if !r.isExcluded(x, rowUp) {
-					buf.Set(ctx.GameXOffset+x, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+			for vx := 0; vx < ctx.ViewportWidth; vx++ {
+				if !r.isExcluded(vx, rowUp) {
+					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}

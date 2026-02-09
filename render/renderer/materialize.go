@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// TODO: move to parameter
 // Phase thresholds in Q32.32
 var (
 	matFillEnd      = vmath.FromFloat(parameter.MaterializeFillEnd)
@@ -52,40 +53,43 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 			continue
 		}
 
-		r.renderBeam(ctx, buf, &mat, dirUp)
-		r.renderBeam(ctx, buf, &mat, dirDown)
-		r.renderBeam(ctx, buf, &mat, dirLeft)
-		r.renderBeam(ctx, buf, &mat, dirRight)
+		// Transform target area to viewport coords
+		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
+
+		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirUp)
+		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirDown)
+		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirLeft)
+		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirRight)
 	}
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
 	switch dir {
 	case dirUp:
 		edgePos = 0
-		distance = mat.TargetY
-		spanStart = mat.TargetX
-		spanEnd = mat.TargetX + mat.AreaWidth - 1
+		distance = targetVY
+		spanStart = targetVX
+		spanEnd = targetVX + mat.AreaWidth - 1
 	case dirDown:
-		edgePos = ctx.GameHeight - 1
-		targetBottom := mat.TargetY + mat.AreaHeight - 1
-		distance = ctx.GameHeight - 1 - targetBottom
-		spanStart = mat.TargetX
-		spanEnd = mat.TargetX + mat.AreaWidth - 1
+		edgePos = ctx.ViewportHeight - 1
+		targetBottom := targetVY + mat.AreaHeight - 1
+		distance = ctx.ViewportHeight - 1 - targetBottom
+		spanStart = targetVX
+		spanEnd = targetVX + mat.AreaWidth - 1
 	case dirLeft:
 		edgePos = 0
-		distance = mat.TargetX
-		spanStart = mat.TargetY
-		spanEnd = mat.TargetY + mat.AreaHeight - 1
+		distance = targetVX
+		spanStart = targetVY
+		spanEnd = targetVY + mat.AreaHeight - 1
 	case dirRight:
-		edgePos = ctx.GameWidth - 1
-		targetRight := mat.TargetX + mat.AreaWidth - 1
-		distance = ctx.GameWidth - 1 - targetRight
-		spanStart = mat.TargetY
-		spanEnd = mat.TargetY + mat.AreaHeight - 1
+		edgePos = ctx.ViewportWidth - 1
+		targetRight := targetVX + mat.AreaWidth - 1
+		distance = ctx.ViewportWidth - 1 - targetRight
+		spanStart = targetVY
+		spanEnd = targetVY + mat.AreaHeight - 1
 	}
 
 	if distance <= 0 {
@@ -126,29 +130,30 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
 		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
-			r.renderBeamCellSpan(ctx, buf, mat, dir, edgePos, cellOffset, spanPos, intensity)
+			r.renderBeamCellSpan(ctx, buf, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
 }
 
-func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, dir beamDir, edgePos, cellOffset, spanPos int, intensity int64) {
-	var cellX, cellY int
+func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, dir beamDir, edgePos, cellOffset, spanPos int, intensity int64) {
+	var vx, vy int
 	switch dir {
 	case dirUp:
-		cellX = spanPos
-		cellY = edgePos + cellOffset
+		vx = spanPos
+		vy = edgePos + cellOffset
 	case dirDown:
-		cellX = spanPos
-		cellY = edgePos - cellOffset
+		vx = spanPos
+		vy = edgePos - cellOffset
 	case dirLeft:
-		cellX = edgePos + cellOffset
-		cellY = spanPos
+		vx = edgePos + cellOffset
+		vy = spanPos
 	case dirRight:
-		cellX = edgePos - cellOffset
-		cellY = spanPos
+		vx = edgePos - cellOffset
+		vy = spanPos
 	}
 
-	if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
+	// Bounds check in viewport space
+	if vx < 0 || vx >= ctx.ViewportWidth || vy < 0 || vy >= ctx.ViewportHeight {
 		return
 	}
 
@@ -161,8 +166,7 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 	}
 
 	scaledColor := render.Scale(visual.RgbMaterialize, intensityFloat)
-	screenX := ctx.GameXOffset + cellX
-	screenY := ctx.GameYOffset + cellY
+	screenX, screenY := ctx.ViewportToScreen(vx, vy)
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
 }

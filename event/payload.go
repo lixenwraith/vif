@@ -406,12 +406,6 @@ type MetaSystemCommandPayload struct {
 	Enabled    bool   `toml:"enabled"`
 }
 
-// VampireDrainRequestPayload
-type VampireDrainRequestPayload struct {
-	TargetEntity core.Entity `toml:"target_entity"`
-	Delta        int         `toml:"delta"`
-}
-
 // WeaponAddRequestPayload
 type WeaponAddRequestPayload struct {
 	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
@@ -532,15 +526,6 @@ type MissileSpawnRequestPayload struct {
 	HitEntities  []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
 }
 
-// MissileImpactPayload contains impact event data
-type MissileImpactPayload struct {
-	OwnerEntity  core.Entity `toml:"owner_entity"`
-	TargetEntity core.Entity `toml:"target_entity"`
-	HitEntity    core.Entity `toml:"hit_entity"`
-	ImpactX      int         `toml:"impact_x"`
-	ImpactY      int         `toml:"impact_y"`
-}
-
 // WallSpawnRequestPayload contains parameters for single wall cell creation
 type WallSpawnRequestPayload struct {
 	X         int
@@ -629,12 +614,26 @@ type LootSpawnRequestPayload struct {
 
 // StormCircleDiedPayload contains individual circle death data
 type StormCircleDiedPayload struct {
-	CircleEntity core.Entity
-	RootEntity   core.Entity
-	Index        int
+	CircleEntity core.Entity `toml:"circle_entity"`
+	RootEntity   core.Entity `toml:"root_entity"`
+	Index        int         `toml:"index"`
 }
 
 // StormDiedPayload contains storm death data
 type StormDiedPayload struct {
-	RootEntity core.Entity
+	RootEntity core.Entity `toml:"root_entity"`
+}
+
+// LevelSetupPayload configures map dimensions and entity lifecycle
+type LevelSetupPayload struct {
+	Width         int  `toml:"width"`          // New map width in grid cells
+	Height        int  `toml:"height"`         // New map height in grid cells
+	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+}
+
+// MazeSpawnRequestPayload configures maze generation
+type MazeSpawnRequestPayload struct {
+	CellWidth  int     `toml:"cell_width"`  // Grid cells per maze cell (horizontal)
+	CellHeight int     `toml:"cell_height"` // Grid cells per maze cell (vertical)
+	Braiding   float64 `toml:"braiding"`    // 0.0 = perfect maze, 1.0 = no dead ends
 }

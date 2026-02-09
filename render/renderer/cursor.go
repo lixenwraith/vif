@@ -29,11 +29,10 @@ func (r *CursorRenderer) IsVisible() bool {
 // Render draws the cursor
 func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
-	screenX := ctx.GameXOffset + ctx.CursorX
-	screenY := ctx.GameYOffset + ctx.CursorY
 
-	// Bounds check
-	if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth || screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+	// Transform cursor position to screen coords
+	screenX, screenY, visible := ctx.MapToScreen(ctx.CursorX, ctx.CursorY)
+	if !visible {
 		return
 	}
 

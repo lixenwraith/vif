@@ -23,8 +23,11 @@ func NewRowIndicatorRenderer(gameCtx *engine.GameContext) *RowIndicatorRenderer 
 func (r *RowIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
 
-	for y := 0; y < ctx.GameHeight; y++ {
-		relativeNum := y - ctx.CursorY
+	// Get cursor position in viewport coordinates
+	_, cursorVY := ctx.CursorViewportPos()
+
+	for y := 0; y < ctx.ViewportHeight; y++ {
+		relativeNum := y - cursorVY
 		absRelative := relativeNum
 		if absRelative < 0 {
 			absRelative = -absRelative

@@ -7,7 +7,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/maze"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -66,6 +68,7 @@ func (s *WallSystem) EventTypes() []event.EventType {
 		event.EventWallDespawnRequest,
 		event.EventWallMaskChangeRequest,
 		event.EventWallPushCheckRequest,
+		event.EventMazeSpawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -114,6 +117,11 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventWallPushCheckRequest:
 		s.runFullPushCheck()
+
+	case event.EventMazeSpawnRequest:
+		if payload, ok := ev.Payload.(*event.MazeSpawnRequestPayload); ok {
+			s.handleMazeSpawn(payload)
+		}
 	}
 }
 
@@ -484,4 +492,72 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 // SetPushCheckEveryTick enables or disables per-tick full push check
 func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 	s.pushCheckEveryTick = enabled
+}
+
+// handleMazeSpawn generates maze and spawns wall blocks
+func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
+	config := s.world.Resources.Config
+
+	// Calculate maze dimensions from map size
+	mazeWidth := config.MapWidth / payload.CellWidth
+	mazeHeight := config.MapHeight / payload.CellHeight
+
+	if mazeWidth < 3 || mazeHeight < 3 {
+		return // Too small for valid maze
+	}
+
+	// Generate maze
+	cfg := maze.Config{
+		Width:         mazeWidth,
+		Height:        mazeHeight,
+		Braiding:      payload.Braiding,
+		RemoveBorders: true, // Allow movement at edges
+	}
+	result := maze.Generate(cfg)
+
+	// Spawn walls for each maze wall cell
+	for my, row := range result.Grid {
+		for mx, isWall := range row {
+			if isWall {
+				s.spawnMazeBlock(
+					mx*payload.CellWidth,
+					my*payload.CellHeight,
+					payload.CellWidth,
+					payload.CellHeight,
+				)
+			}
+		}
+	}
+}
+
+// spawnMazeBlock creates a rectangular wall block
+func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
+	config := s.world.Resources.Config
+
+	for dy := 0; dy < height; dy++ {
+		for dx := 0; dx < width; dx++ {
+			px, py := x+dx, y+dy
+
+			// Bounds check
+			if px < 0 || px >= config.MapWidth || py < 0 || py >= config.MapHeight {
+				continue
+			}
+
+			// Skip if already blocked
+			if s.world.Positions.IsBlocked(px, py, component.WallBlockAll) {
+				continue
+			}
+
+			entity := s.world.CreateEntity()
+			s.world.Positions.SetPosition(entity, component.PositionComponent{X: px, Y: py})
+
+			s.world.Components.Wall.SetComponent(entity, component.WallComponent{
+				BlockMask: component.WallBlockAll,
+				Rune:      visual.QuadrantChars[15],
+				FgColor:   visual.RgbWallStone,
+				RenderFg:  true,
+				RenderBg:  false,
+			})
+		}
+	}
 }

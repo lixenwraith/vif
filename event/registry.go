@@ -215,9 +215,18 @@ func InitRegistry() {
 	RegisterType("EventSwarmAbsorbedDrain", EventSwarmAbsorbedDrain, &SwarmAbsorbedDrainPayload{})
 	RegisterType("EventSwarmCancelRequest", EventSwarmCancelRequest, nil)
 
+	// Storm
+	RegisterType("EventStormSpawnRequest", EventStormSpawnRequest, nil)
+	RegisterType("EventStormCircleDied", EventStormCircleDied, &StormCircleDiedPayload{})
+	RegisterType("EventStormDied", EventStormDied, &StormDiedPayload{})
+
 	// Environment
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
+
+	// Level
+	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})
+	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest, &MazeSpawnRequestPayload{})
 
 	// Spirit
 	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnRequestPayload{})
@@ -231,6 +240,8 @@ func InitRegistry() {
 	// Combat
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
+	RegisterType("EventEnemyKilled", EventEnemyKilled, &EnemyKilledPayload{})
+	RegisterType("EventLootSpawnRequest", EventLootSpawnRequest, &LootSpawnRequestPayload{})
 
 	// Missile
 	RegisterType("EventMissileSpawnRequest", EventMissileSpawnRequest, &MissileSpawnRequestPayload{})

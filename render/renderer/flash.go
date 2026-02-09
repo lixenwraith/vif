@@ -34,11 +34,13 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		if flash.Y < 0 || flash.Y >= ctx.GameHeight || flash.X < 0 || flash.X >= ctx.GameWidth {
+		if flash.Remaining <= 0 {
 			continue
 		}
 
-		if flash.Remaining <= 0 {
+		// Transform map coords to screen coords with visibility check
+		screenX, screenY, visible := ctx.MapToScreen(flash.X, flash.Y)
+		if !visible {
 			continue
 		}
 
@@ -49,9 +51,6 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		flashColor := render.Scale(visual.RgbRemovalFlash, opacity)
-
-		screenX := ctx.GameXOffset + flash.X
-		screenY := ctx.GameYOffset + flash.Y
 
 		// Additive blend on foreground only, preserves background
 		buf.Set(screenX, screenY, flash.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)

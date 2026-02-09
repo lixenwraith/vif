@@ -54,7 +54,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			continue
 		}
 
-		// Resolve origin position from entity or use static
+		// Resolve origin position (map coords)
 		originX, originY := l.OriginX, l.OriginY
 		if l.OriginEntity != 0 {
 			if pos, ok := r.gameCtx.World.Positions.GetPosition(l.OriginEntity); ok {
@@ -62,7 +62,7 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 
-		// Resolve target position from entity or use static
+		// Resolve target position (map coords)
 		targetX, targetY := l.TargetX, l.TargetY
 		if l.TargetEntity != 0 {
 			if pos, ok := r.gameCtx.World.Positions.GetPosition(l.TargetEntity); ok {
@@ -205,16 +205,12 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 	// Render accumulated quadrants with screen blend foreground
 	for key, bits := range cellHits {
 		// Unpack cell coordinates from map key
-		cx := int(int64(key >> 32))
-		cy := int(int64(key & 0xFFFFFFFF))
+		mapX := int(int64(key >> 32))
+		mapY := int(int64(key & 0xFFFFFFFF))
 
-		// Map to screen coordinates
-		screenX := ctx.GameXOffset + cx
-		screenY := ctx.GameYOffset + cy
-
-		// Bounds check against game area
-		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		// Transform to screen with visibility check
+		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		if !visible {
 			continue
 		}
 
@@ -309,16 +305,12 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 	// Render accumulated half-blocks with foreground-only write
 	for key, bits := range cellHits {
 		// Unpack cell coordinates from map key
-		cx := int(int64(key >> 32))
-		cy := int(int64(key & 0xFFFFFFFF))
+		mapX := int(int64(key >> 32))
+		mapY := int(int64(key & 0xFFFFFFFF))
 
-		// Map to screen coordinates
-		screenX := ctx.GameXOffset + cx
-		screenY := ctx.GameYOffset + cy
-
-		// Bounds check against game area
-		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		// Transform to screen with visibility check
+		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		if !visible {
 			continue
 		}
 

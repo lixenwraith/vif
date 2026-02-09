@@ -50,6 +50,7 @@ func (s *MetaSystem) Priority() int {
 func (s *MetaSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaStatusMessageRequest,
+		event.EventLevelSetup,
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
 		event.EventGameReset,
@@ -61,12 +62,20 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventGameReset:
 		s.handleGameReset()
+
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
 			s.handleMessageRequest(payload)
 		}
+
+	case event.EventLevelSetup:
+		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+			s.handleLevelSetup(payload)
+		}
+
 	case event.EventMetaDebugRequest:
 		s.handleDebugRequest()
+
 	case event.EventMetaHelpRequest:
 		s.handleHelpRequest()
 	}
@@ -96,17 +105,26 @@ func (s *MetaSystem) handleGameReset() {
 	// 3. GameState reset (counters, NextID → 1)
 	s.ctx.State.Reset()
 
-	// 4. Cursor recreation
+	// 4. Config reset (map dimensions to viewport)
+	config := s.ctx.World.Resources.Config
+	config.MapWidth = config.ViewportWidth
+	config.MapHeight = config.ViewportHeight
+	config.CameraX = 0
+	config.CameraY = 0
+	config.CropOnResize = true
+
+	// 5. Cursor recreation
 	s.ctx.World.CreateCursorEntity()
 
-	// 5. Reset mode and status
+	// 6. Reset mode and status
 	s.ctx.SetMode(core.ModeNormal)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
 	s.ctx.SetStatusMessage("")
 	s.ctx.SetOverlayContent(nil)
 
-	// 5. Signal FSM reset - Non-blocking
+	// 7. Signal FSM reset - Non-blocking
+
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
 	case s.ctx.ResetChan <- struct{}{}:
@@ -117,6 +135,20 @@ func (s *MetaSystem) handleGameReset() {
 // handleMessageRequest displays a message in status bar
 func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
 	s.ctx.SetStatusMessage(payload.Message)
+}
+
+// handleLevelSetup reconfigures map dimensions and clears entities
+func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
+	width := payload.Width
+	height := payload.Height
+
+	// Zero dimensions = reset to viewport
+	if width <= 0 || height <= 0 {
+		width = s.world.Resources.Config.ViewportWidth
+		height = s.world.Resources.Config.ViewportHeight
+	}
+
+	s.world.SetupLevel(width, height, payload.ClearEntities)
 }
 
 // handleDebugRequest shows debug information overlay with auto-discovered stats

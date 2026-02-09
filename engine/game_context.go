@@ -200,8 +200,10 @@ func (ctx *GameContext) HandleResize() {
 				pos.X = newX
 				pos.Y = newY
 				ctx.World.Positions.SetPosition(cursorEntity, pos)
-				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 			}
+
+			// Always emit cursor moved after resize to trigger camera adjustment
+			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: pos.X, Y: pos.Y})
 		}
 
 		// Free cursor if blocked
@@ -209,6 +211,10 @@ func (ctx *GameContext) HandleResize() {
 			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 		}
 	})
+
+	// TODO: re-evaluate grid resize. do we need very large grids?
+	// Resize spatial grid to match new dimensions
+	// ctx.World.Positions.ResizeGrid(width, height)
 }
 
 // clampCamera constrains camera position to valid range
@@ -250,10 +256,6 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 			deathStore.SetComponent(e, component.DeathComponent{})
 		}
 	}
-
-	// TODO: re-evaluate grid resize. do we need very large grids?
-	// Resize spatial grid to match new dimensions
-	// ctx.World.Positions.ResizeGrid(width, height)
 }
 
 // === Frame Number Accessories ===

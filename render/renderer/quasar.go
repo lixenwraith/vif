@@ -89,38 +89,27 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	rxCells := vmath.ToInt(rVisual) + parameter.QuasarBorderPaddingCells
 	ryCells := vmath.ToInt(rVisual)/2 + parameter.QuasarBorderPaddingCells
 
-	minX := headerX - rxCells
-	maxX := headerX + rxCells
-	minY := headerY - ryCells
-	maxY := headerY + ryCells
+	// Bounding box in map coords
+	mapMinX := headerX - rxCells
+	mapMaxX := headerX + rxCells
+	mapMinY := headerY - ryCells
+	mapMaxY := headerY + ryCells
 
-	// Clamp to screen
-	if minX < 0 {
-		minX = 0
-	}
-	if maxX >= ctx.GameWidth {
-		maxX = ctx.GameWidth - 1
-	}
-	if minY < 0 {
-		minY = 0
-	}
-	if maxY >= ctx.GameHeight {
-		maxY = ctx.GameHeight - 1
-	}
+	for mapY := mapMinY; mapY <= mapMaxY; mapY++ {
+		for mapX := mapMinX; mapX <= mapMaxX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
 
-	for y := minY; y <= maxY; y++ {
-		for x := minX; x <= maxX; x++ {
-			dx := vmath.FromInt(x - headerX)
-			dy := vmath.FromInt(y - headerY)
+			dx := vmath.FromInt(mapX - headerX)
+			dy := vmath.FromInt(mapY - headerY)
 			dyCirc := vmath.ScaleToCircular(dy)
 			dist := vmath.Magnitude(dx, dyCirc)
 
 			normDist := vmath.Div(dist, quasar.ZapRadius)
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
-				screenX := ctx.GameXOffset + x
-				screenY := ctx.GameYOffset + y
-
 				buf.Set(screenX, screenY, 0, visual.RgbBlack, borderColor,
 					render.BlendScreen, 0.4, terminal.AttrNone)
 			}
@@ -149,17 +138,14 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 			continue
 		}
 
+		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+		if !visible {
+			continue
+		}
+
 		row := int(member.OffsetY) + parameter.QuasarHeaderOffsetY
 		col := int(member.OffsetX) + parameter.QuasarHeaderOffsetX
 		ch := visual.QuasarChars[row][col]
-
-		screenX := ctx.GameXOffset + pos.X
-		screenY := ctx.GameYOffset + pos.Y
-
-		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
-			continue
-		}
 
 		buf.SetFgOnly(screenX, screenY, ch, color, terminal.AttrNone)
 	}

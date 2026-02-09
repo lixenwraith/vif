@@ -3,7 +3,8 @@ package parameter
 // TODO: review and reorder, use iota? add comment for all
 // System Execution Priorities (lower runs first)
 const (
-	PriorityShield int = iota
+	PriorityCamera int = iota
+	PriorityShield
 	PriorityHeat
 	PriorityEnergy
 	PriorityBoost

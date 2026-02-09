@@ -39,11 +39,8 @@ func (r *SigilRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		screenX := ctx.GameXOffset + sigilPos.X
-		screenY := ctx.GameYOffset + sigilPos.Y
-
-		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		screenX, screenY, visible := ctx.MapToScreen(sigilPos.X, sigilPos.Y)
+		if !visible {
 			continue
 		}
 

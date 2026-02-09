@@ -64,14 +64,14 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Resize check
-	requiredSize := ctx.GameWidth * ctx.GameHeight
+	requiredSize := ctx.ViewportWidth * ctx.ViewportHeight
 	if requiredSize > r.bufCapacity {
 		r.bufCapacity = requiredSize
 		r.accBufferDust = make([]int64, r.bufCapacity)
 		r.accBufferMissile = make([]int64, r.bufCapacity)
 	}
-	r.bufWidth = ctx.GameWidth
-	r.bufHeight = ctx.GameHeight
+	r.bufWidth = ctx.ViewportWidth
+	r.bufHeight = ctx.ViewportHeight
 
 	// Clear buffers and reset dirty rects
 	clear(r.accBufferDust[:requiredSize])
@@ -86,7 +86,7 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	for i := range centers {
 		c := &centers[i]
-		r.accumulateCenter(c, durationNano)
+		r.accumulateCenter(ctx, c, durationNano)
 	}
 
 	// Render both types
@@ -110,7 +110,14 @@ func (r *ExplosionRenderer) resetDirtyRects() {
 	r.missileMaxX, r.missileMaxY = -1, -1
 }
 
-func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, durationNano int64) {
+func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *system.ExplosionCenter, durationNano int64) {
+	// Transform center from map coords to viewport coords
+	centerVX, centerVY, visible := ctx.MapToViewport(c.X, c.Y)
+	if !visible {
+		// Center off-screen but explosion might still be visible at edges
+		// Continue with clamped bounds
+	}
+
 	// Time decay via LUT
 	ageIndex := int(c.Age * 100 / durationNano)
 	if ageIndex > 100 {
@@ -122,10 +129,10 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	radiusCells := vmath.ToInt(c.Radius)
 	radiusCellsY := radiusCells / 2
 
-	minX := c.X - radiusCells
-	maxX := c.X + radiusCells
-	minY := c.Y - radiusCellsY
-	maxY := c.Y + radiusCellsY
+	minX := centerVX - radiusCells
+	maxX := centerVX + radiusCells
+	minY := centerVY - radiusCellsY
+	maxY := centerVY + radiusCellsY
 
 	// Clamp to buffer bounds
 	if minX < 0 {
@@ -139,6 +146,11 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 	}
 	if maxY >= r.bufHeight {
 		maxY = r.bufHeight - 1
+	}
+
+	// Skip if entirely outside
+	if minX > maxX || minY > maxY {
+		return
 	}
 
 	// Select buffer and update dirty rect based on type
@@ -178,17 +190,17 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 		return
 	}
 
-	centerXFixed := vmath.FromInt(c.X)
-	centerYFixed := vmath.FromInt(c.Y)
+	centerVXFixed := vmath.FromInt(centerVX)
+	centerVYFixed := vmath.FromInt(centerVY)
 
-	for y := minY; y <= maxY; y++ {
-		rowOffset := y * r.bufWidth
-		dy := vmath.FromInt(y) - centerYFixed
+	for vy := minY; vy <= maxY; vy++ {
+		rowOffset := vy * r.bufWidth
+		dy := vmath.FromInt(vy) - centerVYFixed
 		dyCirc := vmath.ScaleToCircular(dy)
 		dyCircSq := vmath.Mul(dyCirc, dyCirc)
 
-		for x := minX; x <= maxX; x++ {
-			dx := vmath.FromInt(x) - centerXFixed
+		for vx := minX; vx <= maxX; vx++ {
+			dx := vmath.FromInt(vx) - centerVXFixed
 			distSq := vmath.Mul(dx, dx) + dyCircSq
 
 			if distSq > radiusSq {
@@ -207,7 +219,7 @@ func (r *ExplosionRenderer) accumulateCenter(c *system.ExplosionCenter, duration
 			}
 
 			cellIntensity := vmath.Mul(vmath.Mul(c.Intensity, timeDecay), distFalloff)
-			accBuffer[rowOffset+x] += cellIntensity
+			accBuffer[rowOffset+vx] += cellIntensity
 		}
 	}
 }
@@ -227,12 +239,12 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 		blendMode = render.BlendScreen
 	}
 
-	for y := minY; y <= maxY; y++ {
-		rowOffset := y * r.bufWidth
-		screenY := ctx.GameYOffset + y
+	for vy := minY; vy <= maxY; vy++ {
+		rowOffset := vy * r.bufWidth
+		screenY := ctx.GameYOffset + vy
 
-		for x := minX; x <= maxX; x++ {
-			intensity := accBuffer[rowOffset+x]
+		for vx := minX; vx <= maxX; vx++ {
+			intensity := accBuffer[rowOffset+vx]
 
 			if intensity < parameter.ExplosionEdgeThreshold {
 				continue
@@ -262,7 +274,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 				alphaFixed = parameter.ExplosionAlphaMin
 			}
 
-			screenX := ctx.GameXOffset + x
+			screenX := ctx.GameXOffset + vx
 			alphaFloat := vmath.ToFloat(alphaFixed)
 
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, blendMode, alphaFloat, terminal.AttrNone)

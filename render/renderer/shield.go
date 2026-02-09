@@ -62,8 +62,8 @@ func NewShieldPainter(colorMode terminal.ColorMode) *ShieldPainter {
 	return p
 }
 
-// Paint renders a shield halo centered at (centerX, centerY) in game-space
-// Caller must set write mask before invocation
+// Paint renders a shield halo centered at (centerX, centerY) in map coordinates
+// Caller must set write mask
 func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style *ShieldStyle) {
 	p.style = style
 
@@ -76,19 +76,25 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 		p.rotDirY = vmath.Sin(angle)
 	}
 
-	startX := max(0, centerX-style.RadiusXInt)
-	endX := min(ctx.GameWidth-1, centerX+style.RadiusXInt)
-	startY := max(0, centerY-style.RadiusYInt)
-	endY := min(ctx.GameHeight-1, centerY+style.RadiusYInt)
+	// Bounding box in map coords
+	mapStartX := max(0, centerX-style.RadiusXInt)
+	mapEndX := min(ctx.MapWidth-1, centerX+style.RadiusXInt)
+	mapStartY := max(0, centerY-style.RadiusYInt)
+	mapEndY := min(ctx.MapHeight-1, centerY+style.RadiusYInt)
 
-	for y := startY; y <= endY; y++ {
-		for x := startX; x <= endX; x++ {
-			if x == style.SkipX && y == style.SkipY {
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			if mapX == style.SkipX && mapY == style.SkipY {
 				continue
 			}
 
-			dx := vmath.FromInt(x - centerX)
-			dy := vmath.FromInt(y - centerY)
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			dx := vmath.FromInt(mapX - centerX)
+			dy := vmath.FromInt(mapY - centerY)
 			normalizedDistSq := vmath.EllipseDistSq(dx, dy, style.InvRxSq, style.InvRySq)
 			if normalizedDistSq > vmath.Scale {
 				continue
@@ -96,7 +102,7 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 			p.cellDx = dx
 			p.cellDy = dy
-			p.renderCell(p, buf, ctx.GameXOffset+x, ctx.GameYOffset+y, normalizedDistSq)
+			p.renderCell(p, buf, screenX, screenY, normalizedDistSq)
 		}
 	}
 }
@@ -169,7 +175,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Determine skip logic (only player shields skip the center to show cursor)
+		// Skip position in map coords (only for cursor)
 		skipX, skipY := -1, -1
 		if shieldEntity == cursorEntity {
 			skipX = shieldPos.X
@@ -194,6 +200,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			GlowPeriod:        shieldComp.GlowPeriod,
 		}
 
+		// Pass map coords; Paint handles transform internally
 		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
 	}
 }

@@ -50,11 +50,8 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			screenX := ctx.GameXOffset + pos.X
-			screenY := ctx.GameYOffset + pos.Y
-
-			if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-				screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+			screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+			if !visible {
 				continue
 			}
 

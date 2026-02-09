@@ -612,6 +612,16 @@ const (
 	// Trigger: StormSystem when last circle dies
 	// Consumer: Future loot/progression | Payload: *StormDiedPayload
 	EventStormDied
+
+	// EventLevelSetup signals map dimension change and optional entity clear
+	// Trigger: FSM on phase transition
+	// Consumer: MetaSystem | Payload: *LevelSetupPayload
+	EventLevelSetup
+
+	// EventMazeSpawnRequest signals maze generation and wall spawning
+	// Trigger: FSM after level setup
+	// Consumer: WallSystem | Payload: *MazeSpawnRequestPayload
+	EventMazeSpawnRequest
 )
 
 // GameEvent represents a single game event with metadata

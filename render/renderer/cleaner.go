@@ -73,12 +73,11 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			idx := (cleaner.TrailHead - i + parameter.CleanerTrailLength) % parameter.CleanerTrailLength
 			point := cleaner.TrailRing[idx]
 
-			if point.X < 0 || point.X >= ctx.GameWidth || point.Y < 0 || point.Y >= ctx.GameHeight {
+			// Transform map coords to screen coords with visibility check
+			screenX, screenY, visible := ctx.MapToScreen(point.X, point.Y)
+			if !visible {
 				continue
 			}
-
-			screenX := ctx.GameXOffset + point.X
-			screenY := ctx.GameYOffset + point.Y
 
 			gradientIndex := i
 			if gradientIndex > maxGradientIdx {

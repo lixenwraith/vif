@@ -57,6 +57,7 @@ func (r *MissileRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 
 // --- TrueColor ---
 
+// TODO: merge these 3 functions, too many args with pointers and may not get inlined
 func (r *MissileRenderer) renderMissileTrueColor(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
@@ -112,9 +113,12 @@ func (r *MissileRenderer) drawStepLine(
 	// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
 	traverser := vmath.NewGridTraverser(x1, y1, x2, y2)
 	for traverser.Next() {
-		gx, gy := traverser.Pos()
-		screenX := ctx.GameXOffset + gx
-		screenY := ctx.GameYOffset + gy
+		mapX, mapY := traverser.Pos()
+
+		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		if !visible {
+			continue
+		}
 
 		buf.Set(screenX, screenY, visual.MissileTrailChar, color, visual.RgbBackground,
 			render.BlendAddFg, alpha, terminal.AttrNone)
@@ -130,8 +134,13 @@ func (r *MissileRenderer) renderBody(
 	kinetic *component.KineticComponent,
 	trueColor bool,
 ) {
-	screenX := ctx.GameXOffset + vmath.ToInt(kinetic.PreciseX)
-	screenY := ctx.GameYOffset + vmath.ToInt(kinetic.PreciseY)
+	mapX := vmath.ToInt(kinetic.PreciseX)
+	mapY := vmath.ToInt(kinetic.PreciseY)
+
+	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+	if !visible {
+		return
+	}
 
 	var char rune
 	var color terminal.RGB
@@ -232,11 +241,11 @@ func (r *MissileRenderer) renderTrail256(
 			continue
 		}
 
-		screenX := ctx.GameXOffset + vmath.ToInt(pt.X)
-		screenY := ctx.GameYOffset + vmath.ToInt(pt.Y)
+		mapX := vmath.ToInt(pt.X)
+		mapY := vmath.ToInt(pt.Y)
 
-		if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		if !visible {
 			continue
 		}
 
@@ -254,11 +263,11 @@ func (r *MissileRenderer) renderBody256(
 	missile *component.MissileComponent,
 	kinetic *component.KineticComponent,
 ) {
-	screenX := ctx.GameXOffset + vmath.ToInt(kinetic.PreciseX)
-	screenY := ctx.GameYOffset + vmath.ToInt(kinetic.PreciseY)
+	mapX := vmath.ToInt(kinetic.PreciseX)
+	mapY := vmath.ToInt(kinetic.PreciseY)
 
-	if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth ||
-		screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+	if !visible {
 		return
 	}
 

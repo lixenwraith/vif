@@ -7,6 +7,7 @@ type RenderPriority int
 const (
 	PriorityBackground RenderPriority = iota
 	PriorityGrid
+	PriorityWall
 	PriorityChargeLine
 	PriorityGlyph
 	PriorityHealthBar
@@ -18,7 +19,6 @@ const (
 	PrioritySplash
 	PriorityMulti
 	PriorityMarker
-	PriorityWall
 	PriorityPostProcess
 	PriorityUI
 	PriorityOverlay

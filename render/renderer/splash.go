@@ -26,7 +26,7 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 }
 
 // Render draws all splash effects to background channel
-func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.RenderBuffer) {
+func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskTransient)
 
 	entities := r.gameCtx.World.Components.Splash.GetAllEntities()
@@ -36,7 +36,7 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 			continue
 		}
 
-		// Resolve anchor position
+		// Resolve anchor position (map coords)
 		anchorX, anchorY := r.resolveAnchor(&splash)
 
 		// Use Slot for countdown detection
@@ -47,13 +47,13 @@ func (r *SplashRenderer) Render(gameCtx render.RenderContext, buf *render.Render
 			digits := strconv.Itoa(remainingSec)
 			for i, d := range digits {
 				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(gameCtx, buf, d, charX, anchorY, splash.Color)
+				r.renderChar(ctx, buf, d, charX, anchorY, splash.Color)
 			}
 		} else {
 			// Transient: render content directly
 			for i := 0; i < splash.Length; i++ {
 				charX := anchorX + i*parameter.SplashCharWidth
-				r.renderChar(gameCtx, buf, splash.Content[i], charX, anchorY, splash.Color)
+				r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
 			}
 		}
 	}
@@ -77,7 +77,7 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 }
 
 // renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color terminal.RGB) {
+func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color terminal.RGB) {
 	var bitmap [12]uint16
 	// Bounds check and fallback for missing glyphs
 	if char < 32 || char > 126 {
@@ -87,10 +87,8 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 	}
 
 	for row := 0; row < parameter.SplashCharHeight; row++ {
-		screenY := gameCtx.GameYOffset + gameY + row
-		if screenY < gameCtx.GameYOffset || screenY >= gameCtx.GameYOffset+gameCtx.GameHeight {
-			continue
-		}
+		// Map coord for this row
+		mapY := gameY + row
 
 		rowBits := bitmap[row]
 		for col := 0; col < parameter.SplashCharWidth; col++ {
@@ -99,8 +97,12 @@ func (r *SplashRenderer) renderChar(gameCtx render.RenderContext, buf *render.Re
 				continue
 			}
 
-			screenX := gameCtx.GameXOffset + gameX + col
-			if screenX < gameCtx.GameXOffset || screenX >= gameCtx.GameXOffset+gameCtx.GameWidth {
+			// Map coord for this column
+			mapX := gameX + col
+
+			// Transform to screen with visibility check
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
 				continue
 			}
 

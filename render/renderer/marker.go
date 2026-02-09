@@ -5,7 +5,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -55,15 +54,13 @@ func (r *MarkerRenderer) renderRectangle(ctx render.RenderContext, buf *render.R
 
 	for dy := 0; dy < marker.Height; dy++ {
 		for dx := 0; dx < marker.Width; dx++ {
-			cellX := marker.X + dx
-			cellY := marker.Y + dy
+			mapX := marker.X + dx
+			mapY := marker.Y + dy
 
-			if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
 				continue
 			}
-
-			screenX := ctx.GameXOffset + cellX
-			screenY := ctx.GameYOffset + cellY
 
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, marker.Color, render.BlendMaxBg, alpha, 0)
 		}
@@ -77,21 +74,19 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 
 	for dy := 0; dy < marker.Height; dy++ {
 		for dx := 0; dx < marker.Width; dx++ {
-			cellX := marker.X + dx
-			cellY := marker.Y + dy
+			mapX := marker.X + dx
+			mapY := marker.Y + dy
 
-			if cellX < 0 || cellX >= ctx.GameWidth || cellY < 0 || cellY >= ctx.GameHeight {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
 				continue
 			}
 
-			screenX := ctx.GameXOffset + cellX
-			screenY := ctx.GameYOffset + cellY
-
 			// Query world for entity at position
-			entities := r.gameCtx.World.Positions.GetAllEntityAt(cellX, cellY)
+			entities := r.gameCtx.World.Positions.GetAllEntityAt(mapX, mapY)
 
 			var char rune
-			var fg, bg terminal.RGB = visual.RgbWhite, visual.RgbBackground
+			var fg, bg = visual.RgbWhite, visual.RgbBackground
 
 			for _, e := range entities {
 				if e == 0 {

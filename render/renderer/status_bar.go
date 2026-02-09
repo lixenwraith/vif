@@ -62,7 +62,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 // Render implements SystemRenderer
 func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
-	statusY := ctx.GameYOffset + ctx.GameHeight + 1
+	statusY := ctx.GameYOffset + ctx.ViewportHeight + 1
 
 	// Bounds check: skip if status row outside screen
 	if statusY >= ctx.ScreenHeight {

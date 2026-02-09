@@ -32,12 +32,13 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			continue
 		}
 
-		if fadeout.X < 0 || fadeout.X >= ctx.GameWidth ||
-			fadeout.Y < 0 || fadeout.Y >= ctx.GameHeight {
+		if fadeout.Remaining <= 0 {
 			continue
 		}
 
-		if fadeout.Remaining <= 0 {
+		// Transform map coords to screen coords with visibility check
+		screenX, screenY, visible := ctx.MapToScreen(fadeout.X, fadeout.Y)
+		if !visible {
 			continue
 		}
 
@@ -46,9 +47,6 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		if opacity < 0.0 {
 			opacity = 0.0
 		}
-
-		screenX := ctx.GameXOffset + fadeout.X
-		screenY := ctx.GameYOffset + fadeout.Y
 
 		// Scale colors by opacity
 		scaledBg := render.Scale(fadeout.BgColor, opacity)

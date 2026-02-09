@@ -321,6 +321,70 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	return newX, newY, true
 }
 
+// === Level ===
+
+// SetupLevel reconfigures map dimensions and optionally clears entities
+// Respects Protection component - entities with ProtectAll survive
+// Repositions cursor if outside new bounds
+func (w *World) SetupLevel(width, height int, clearEntities bool) {
+	config := w.Resources.Config
+
+	// Update map dimensions
+	config.MapWidth = width
+	config.MapHeight = height
+
+	// Set crop mode based on map vs viewport relationship
+	// If map matches viewport, enable crop (normal mode)
+	// If map exceeds viewport, disable crop (level mode)
+	config.CropOnResize = (width <= config.ViewportWidth && height <= config.ViewportHeight)
+
+	// Reset camera to origin
+	config.CameraX = 0
+	config.CameraY = 0
+
+	if clearEntities {
+		w.clearNonProtectedEntities()
+	}
+
+	// Reposition cursor if OOB
+	cursorEntity := w.Resources.Player.Entity
+	if pos, ok := w.Positions.GetPosition(cursorEntity); ok {
+		newX := max(0, min(pos.X, width-1))
+		newY := max(0, min(pos.Y, height-1))
+		if newX != pos.X || newY != pos.Y {
+			w.Positions.SetPosition(cursorEntity, component.PositionComponent{X: newX, Y: newY})
+		}
+
+		// Emit cursor moved to trigger camera adjustment for new level
+		w.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
+	}
+}
+
+// TODO: process through death, new mask for combat entity persistence
+// clearNonProtectedEntities destroys all entities except those with ProtectAll
+func (w *World) clearNonProtectedEntities() {
+	// Collect entities to destroy (avoid mutation during iteration)
+	var toDestroy []core.Entity
+
+	allEntities := w.Positions.AllEntities()
+	for _, e := range allEntities {
+		// Check protection
+		if prot, ok := w.Components.Protection.GetComponent(e); ok {
+			if prot.Mask == component.ProtectAll {
+				continue
+			}
+		}
+		toDestroy = append(toDestroy, e)
+	}
+
+	// Destroy collected entities
+	for _, e := range toDestroy {
+		w.removeEntity(e)
+	}
+
+	w.destroyedCount.Add(int64(len(toDestroy)))
+}
+
 // === Debug ===
 
 // DebugPrint prints a message in status bar via meta system

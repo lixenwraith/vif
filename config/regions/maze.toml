@@ -1,0 +1,76 @@
+# === Maze region states ===
+# Spawned dynamically from quasar region on heat burst
+# Exits on subsequent heat burst, returns directly to main
+
+[states.MazeCycle]
+parent = "Root"
+
+# --- MAZE SETUP ---
+
+[states.MazeSetup]
+parent = "MazeCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventDustAllRequest" },
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 301, height = 198, clear_entities = true } },
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 10, cell_height = 5, braiding = 0.3 } },
+]
+transitions = [
+    { trigger = "Tick", target = "MazeActive", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# --- MAZE GOLD CYCLE ---
+
+[states.MazeActive]
+parent = "MazeCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
+]
+transitions = [
+    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
+    { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventGoldComplete", target = "MazeGoldRespawn" },
+    { trigger = "EventGoldTimeout", target = "MazeGoldRespawn" },
+    { trigger = "EventGoldDestroyed", target = "MazeGoldRespawn" },
+]
+
+[states.MazeGoldRespawn]
+parent = "MazeCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
+]
+transitions = [
+    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
+    { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventGoldSpawned", target = "MazeActive" },
+    { trigger = "EventGoldSpawnFailed", target = "MazeGoldRetry" },
+]
+
+[states.MazeGoldRetry]
+parent = "MazeCycle"
+transitions = [
+    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
+    { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "Tick", target = "MazeGoldRespawn", guard = "StateTimeExceeds", guard_args = { ms = 200 } },
+]
+
+# --- MAZE END ---
+
+[states.MazeFail]
+parent = "MazeCycle"
+transitions = [
+    { trigger = "Tick", target = "MazeExit" },
+]
+
+# --- MAIN HANDOFF ---
+
+[states.MazeExit]
+parent = "MazeCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true } },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "TerminateRegion", region = "quasar" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "maze" },
+]

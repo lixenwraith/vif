@@ -56,6 +56,11 @@ transitions = [
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventDustAllRequest"},
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "SpawnRegion", region = "maze", initial_state = "MazeSetup" },
+    { action = "PauseRegion", region = "quasar" },
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },

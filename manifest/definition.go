@@ -121,6 +121,7 @@ var Systems = []SystemDef{
 	{"genetic", "NewGeneticSystem"},
 	{"audio", "NewAudioSystem"},
 	{"music", "NewMusicSystem"},
+	{"camera", "NewCameraSystem"},
 	{"diag", "NewDiagSystem"},
 }
 

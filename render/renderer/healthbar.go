@@ -177,29 +177,21 @@ func (r *HealthBarRenderer) calculateBar(entityX, entityY, width, height int, ra
 func (r *HealthBarRenderer) isBarOOB(ctx render.RenderContext, barX, barY, barLength int, position visual.HealthBarPosition) bool {
 	isVertical := position == visual.HealthBarLeft || position == visual.HealthBarRight
 
-	// Check start position
-	screenX := ctx.GameXOffset + barX
-	screenY := ctx.GameYOffset + barY
-
-	if screenX < ctx.GameXOffset || screenY < ctx.GameYOffset {
+	// Check start position visibility
+	_, _, startVisible := ctx.MapToScreen(barX, barY)
+	if !startVisible {
 		return true
 	}
 
-	// Check end position
+	// Check end position visibility
 	if isVertical {
-		endY := screenY + barLength - 1
-		if endY >= ctx.GameYOffset+ctx.GameHeight {
-			return true
-		}
-		if screenX >= ctx.GameXOffset+ctx.GameWidth {
+		_, _, endVisible := ctx.MapToScreen(barX, barY+barLength-1)
+		if !endVisible {
 			return true
 		}
 	} else {
-		endX := screenX + barLength - 1
-		if endX >= ctx.GameXOffset+ctx.GameWidth {
-			return true
-		}
-		if screenY >= ctx.GameYOffset+ctx.GameHeight {
+		_, _, endVisible := ctx.MapToScreen(barX+barLength-1, barY)
+		if !endVisible {
 			return true
 		}
 	}
@@ -213,18 +205,17 @@ func (r *HealthBarRenderer) renderHealthBar(ctx render.RenderContext, buf *rende
 	ch := r.charLUT[position]
 
 	for i := 0; i < length; i++ {
-		var screenX, screenY int
+		var mapX, mapY int
 		if isVertical {
-			screenX = ctx.GameXOffset + startX
-			screenY = ctx.GameYOffset + startY + i
+			mapX = startX
+			mapY = startY + i
 		} else {
-			screenX = ctx.GameXOffset + startX + i
-			screenY = ctx.GameYOffset + startY
+			mapX = startX + i
+			mapY = startY
 		}
 
-		// Bounds check
-		if screenX < ctx.GameXOffset || screenX >= ctx.GameXOffset+ctx.GameWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+		if !visible {
 			continue
 		}
 

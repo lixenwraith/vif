@@ -41,11 +41,8 @@ func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			continue
 		}
 
-		screenX := ctx.GameXOffset + pos.X
-		screenY := ctx.GameYOffset + pos.Y
-
-		if screenX < ctx.GameXOffset || screenX >= ctx.ScreenWidth ||
-			screenY < ctx.GameYOffset || screenY >= ctx.GameYOffset+ctx.GameHeight {
+		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+		if !visible {
 			continue
 		}
 

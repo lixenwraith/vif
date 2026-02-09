@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// TODO: merge row and column indicator renderers
 // ColumnIndicatorRenderer draws relative column numbers
 type ColumnIndicatorRenderer struct {
 	gameCtx *engine.GameContext
@@ -22,11 +23,14 @@ func NewColumnIndicatorRenderer(gameCtx *engine.GameContext) *ColumnIndicatorRen
 // Render implements SystemRenderer
 func (r *ColumnIndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
-	indicatorY := ctx.GameYOffset + ctx.GameHeight
+	indicatorY := ctx.GameYOffset + ctx.ViewportHeight
 
-	for x := 0; x < ctx.GameWidth; x++ {
+	// Get cursor position in viewport coordinates
+	cursorVX, _ := ctx.CursorViewportPos()
+
+	for x := 0; x < ctx.ViewportWidth; x++ {
 		screenX := ctx.GameXOffset + x
-		relativeCol := x - ctx.CursorX
+		relativeCol := x - cursorVX
 
 		var ch rune
 		var fg, bg terminal.RGB

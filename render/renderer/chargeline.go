@@ -111,27 +111,19 @@ func (r *ChargeLineRenderer) tracePulse(
 	invSteps := 1.0 / float64(totalSteps)
 	trailLen := parameter.SwarmChargeLineTrailFloat
 
-	gameMinX := ctx.GameXOffset
-	gameMaxX := ctx.GameXOffset + ctx.GameWidth
-	gameMinY := ctx.GameYOffset
-	gameMaxY := ctx.GameYOffset + ctx.GameHeight
-
 	err := absDx - absDy
-	x, y := x0, y0
+	mapX, mapY := x0, y0
 
 	for step := 0; step <= totalSteps; step++ {
 		// Skip cells inside swarm body
-		inBox := x >= bboxMinX && x <= bboxMaxX && y >= bboxMinY && y <= bboxMaxY
+		inBox := mapX >= bboxMinX && mapX <= bboxMaxX && mapY >= bboxMinY && mapY <= bboxMaxY
 		if !inBox {
 			t := float64(step) * invSteps
 			if t <= headT {
 				trailDist := headT - t
 				if trailDist <= trailLen {
-					screenX := ctx.GameXOffset + x
-					screenY := ctx.GameYOffset + y
-
-					if screenX >= gameMinX && screenX < gameMaxX &&
-						screenY >= gameMinY && screenY < gameMaxY {
+					screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+					if visible {
 						cellAlpha := baseAlpha * (1.0 - trailDist/trailLen)
 						if r.is256 {
 							if cellAlpha > parameter.SwarmChargeLine256Threshold {
@@ -151,11 +143,11 @@ func (r *ChargeLineRenderer) tracePulse(
 			e2 := 2 * err
 			if e2 > -absDy {
 				err -= absDy
-				x += stepX
+				mapX += stepX
 			}
 			if e2 < absDx {
 				err += absDx
-				y += stepY
+				mapY += stepY
 			}
 		}
 	}
