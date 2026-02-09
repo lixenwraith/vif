@@ -97,8 +97,6 @@ var (
 	ExplosionRadiusBoost      = vmath.FromFloat(ExplosionRadiusBoostFloat)
 	ExplosionIntensityCap     = vmath.FromFloat(ExplosionIntensityCapFloat)
 	ExplosionRadiusCapFixed   = vmath.Mul(ExplosionFieldRadius, vmath.FromFloat(ExplosionRadiusCapMultiplier))
-	ExplosionCoreThreshold    = vmath.FromFloat(ExplosionCoreThresholdFloat)
-	ExplosionBodyThreshold    = vmath.FromFloat(ExplosionBodyThresholdFloat)
 	ExplosionEdgeThreshold    = vmath.FromFloat(ExplosionEdgeThresholdFloat)
 
 	// Visual fixed-point constants

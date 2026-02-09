@@ -37,25 +37,6 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 	}
 }
 
-// cursorLighting computes per-circle light and half vectors so that the light
-// appears to come from the cursor direction, making each sphere resemble an
-// eye that tracks the cursor. The fixed lightZ keeps intensity stable while
-// only the angle changes.
-func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lightZ, halfX, halfY, halfZ float64) {
-	const lightZ0 = 35.0 // fixed depth – controls tracking sensitivity
-
-	lx := float64(cursorX - circleX)
-	ly := float64(cursorY - circleY)
-	m := math.Sqrt(lx*lx + ly*ly + lightZ0*lightZ0)
-	lightX, lightY, lightZ = lx/m, ly/m, lightZ0/m
-
-	// Blinn-Phong half vector: normalize(light + view), view = (0,0,1)
-	hx, hy, hz := lightX, lightY, lightZ+1.0
-	m = math.Sqrt(hx*hx + hy*hy + hz*hz)
-	halfX, halfY, halfZ = hx/m, hy/m, hz/m
-	return
-}
-
 func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	stormEntities := r.gameCtx.World.Components.Storm.GetAllEntities()
 	if len(stormEntities) == 0 {
@@ -105,9 +86,9 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 		return
 	}
 
-	// Sort by Z descending (far first)
+	// Sort by Z descending (Far first, Near last) so near circles overlay far ones
 	sort.Slice(r.sortBuffer, func(i, j int) bool {
-		return r.sortBuffer[i].z < r.sortBuffer[j].z
+		return r.sortBuffer[i].z > r.sortBuffer[j].z
 	})
 
 	for _, circle := range r.sortBuffer {
@@ -146,11 +127,24 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	radiusX := vmath.ToFloat(parameter.StormCircleRadiusX)
 	radiusY := vmath.ToFloat(parameter.StormCircleRadiusY)
 
-	// Render halo first (background glow)
-	r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
+	// Render halo (background glow) only if NOT convex (Far/Concave)
+	// Front/Convex circles are vulnerable and show no shield halo
+	if !isConvex {
+		r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
+	}
 
 	// Per-circle lighting aimed at cursor position
-	lightX, lightY, lightZ, halfX, halfY, halfZ := cursorLighting(ctx.CursorX, ctx.CursorY, circle.x, circle.y)
+	// If Convex: Track cursor (expensive)
+	// If Concave: Use fixed frontal light (cheap) to ensure visibility without calculation cost
+	var lightX, lightY, lightZ, halfX, halfY, halfZ float64
+	if isConvex {
+		lightX, lightY, lightZ, halfX, halfY, halfZ = cursorLighting(ctx.CursorX, ctx.CursorY, circle.x, circle.y)
+	} else {
+		// Fixed light from viewer direction (0,0,1)
+		lightX, lightY, lightZ = 0.0, 0.0, 1.0
+		// Half vector for specular (View 0,0,1 + Light 0,0,1) -> 0,0,1
+		halfX, halfY, halfZ = 0.0, 0.0, 1.0
+	}
 
 	// Render members (sphere body)
 	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(circle.entity)
@@ -230,6 +224,23 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 		buf.SetBgOnly(screenX, screenY, color)
 	}
+}
+
+// cursorLighting computes per-circle light and half vectors so that the light appears to come from the cursor direction, making each sphere resemble an eye that tracks the cursor
+// The fixed lightZ keeps intensity stable while only the angle changes
+func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lightZ, halfX, halfY, halfZ float64) {
+	const lightZ0 = 35.0 // fixed depth – controls tracking sensitivity
+
+	lx := float64(cursorX - circleX)
+	ly := float64(cursorY - circleY)
+	m := math.Sqrt(lx*lx + ly*ly + lightZ0*lightZ0)
+	lightX, lightY, lightZ = lx/m, ly/m, lightZ0/m
+
+	// Blinn-Phong half vector: normalize(light + view), view = (0,0,1)
+	hx, hy, hz := lightX, lightY, lightZ+1.0
+	m = math.Sqrt(hx*hx + hy*hy + hz*hz)
+	halfX, halfY, halfZ = hx/m, hy/m, hz/m
+	return
 }
 
 func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer,

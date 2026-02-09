@@ -13,6 +13,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// stormCacheEntry holds cached position for soft collision checks
+type stormCacheEntry struct {
+	entity core.Entity
+	x, y   int
+}
+
 // StormSystem manages the storm boss entity lifecycle
 // Storm is a 3-part composite boss with 3D orbital physics
 // Each circle is an independent sub-header that can be destroyed individually
@@ -25,6 +31,10 @@ type StormSystem struct {
 
 	// Random source
 	rng *vmath.FastRand
+
+	// Per-tick cache for soft collision (push other enemies away)
+	swarmCache  []swarmCacheEntry
+	quasarCache []quasarCacheEntry
 
 	// Telemetry
 	statActive      *atomic.Bool
@@ -48,6 +58,8 @@ func NewStormSystem(world *engine.World) engine.System {
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.swarmCache = make([]swarmCacheEntry, 0, 10)
+	s.quasarCache = make([]quasarCacheEntry, 0, 1)
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
 	s.enabled = true
@@ -125,6 +137,9 @@ func (s *StormSystem) Update() {
 		return
 	}
 
+	// Cache other combat entities for soft collision
+	s.cacheCombatEntities()
+
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
@@ -136,8 +151,124 @@ func (s *StormSystem) Update() {
 	s.checkCircleCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
 
+	// Apply soft collision per circle (push other enemies away)
+	for i := 0; i < component.StormCircleCount; i++ {
+		if !stormComp.CirclesAlive[i] {
+			continue
+		}
+		circlePos, ok := s.world.Positions.GetPosition(stormComp.Circles[i])
+		if !ok {
+			continue
+		}
+		s.applySoftCollisions(circlePos.X, circlePos.Y)
+	}
+
 	s.world.Components.Storm.SetComponent(s.rootEntity, stormComp)
 	s.statCircleCount.Store(int64(aliveCount))
+}
+
+// cacheCombatEntities populates caches for soft collision detection
+func (s *StormSystem) cacheCombatEntities() {
+	s.swarmCache = s.swarmCache[:0]
+	s.quasarCache = s.quasarCache[:0]
+
+	// Cache all swarm headers
+	swarmEntities := s.world.Components.Swarm.GetAllEntities()
+	for _, entity := range swarmEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.swarmCache = append(s.swarmCache, swarmCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
+	}
+
+	// Cache quasar header
+	quasarEntities := s.world.Components.Quasar.GetAllEntities()
+	for _, entity := range quasarEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
+	}
+}
+
+// applySoftCollisions pushes other combat entities away from storm circle
+// Storm acts as immovable repulsion source; applies impulse to OTHER entities
+func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
+	// Push swarms away from this circle
+	for _, sc := range s.swarmCache {
+		// Check if swarm overlaps with storm circle collision area
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			sc.x, sc.y,
+			circleX, circleY,
+			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
+		)
+		if !hit {
+			continue
+		}
+
+		swarmKinetic, ok := s.world.Components.Kinetic.GetComponent(sc.entity)
+		if !ok {
+			continue
+		}
+		swarmCombat, ok := s.world.Components.Combat.GetComponent(sc.entity)
+		if !ok || swarmCombat.RemainingKineticImmunity > 0 || swarmCombat.IsEnraged {
+			continue
+		}
+
+		// Apply collision impulse to swarm (push away from storm)
+		physics.ApplyCollision(
+			&swarmKinetic.Kinetic,
+			radialX, radialY,
+			&physics.SoftCollisionQuasarToSwarm, // Reuse quasar profile as placeholder
+			s.rng,
+		)
+		swarmCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+
+		s.world.Components.Kinetic.SetComponent(sc.entity, swarmKinetic)
+		s.world.Components.Combat.SetComponent(sc.entity, swarmCombat)
+	}
+
+	// Push quasar away from this circle
+	for _, qc := range s.quasarCache {
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			qc.x, qc.y,
+			circleX, circleY,
+			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
+		)
+		if !hit {
+			continue
+		}
+
+		quasarKinetic, ok := s.world.Components.Kinetic.GetComponent(qc.entity)
+		if !ok {
+			continue
+		}
+		quasarCombat, ok := s.world.Components.Combat.GetComponent(qc.entity)
+		if !ok || quasarCombat.RemainingKineticImmunity > 0 || quasarCombat.IsEnraged {
+			continue
+		}
+
+		physics.ApplyCollision(
+			&quasarKinetic.Kinetic,
+			radialX, radialY,
+			&physics.SoftCollisionSwarmToQuasar, // Reversed: storm pushing quasar
+			s.rng,
+		)
+		quasarCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+
+		s.world.Components.Kinetic.SetComponent(qc.entity, quasarKinetic)
+		s.world.Components.Combat.SetComponent(qc.entity, quasarCombat)
+	}
 }
 
 // spawnStorm creates the root header and 3 circle sub-headers
@@ -362,7 +493,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			accel := physics.GravitationalAccelWithRepulsion3D(
 				circles[i].circle.Pos3D,
 				circles[j].circle.Pos3D,
-				parameter.StormCircleMass,
+				physics.MassStorm,
 				parameter.StormGravity,
 				parameter.StormRepulsionRadius,
 				parameter.StormRepulsionStrength,
@@ -448,7 +579,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	newPosA, newPosB, separated := physics.SeparateOverlap3D(
 		a.Pos3D, b.Pos3D,
 		parameter.StormCollisionRadius, parameter.StormCollisionRadius,
-		parameter.StormCircleMass, parameter.StormCircleMass,
+		physics.MassStorm, physics.MassStorm,
 	)
 	if separated {
 		a.Pos3D = newPosA
@@ -459,7 +590,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	collided := physics.ElasticCollision3DInPlace(
 		&a.Pos3D, &b.Pos3D,
 		&a.Vel3D, &b.Vel3D,
-		parameter.StormCircleMass, parameter.StormCircleMass,
+		physics.MassStorm, physics.MassStorm,
 		parameter.StormRestitution,
 	)
 	if collided {

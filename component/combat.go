@@ -95,26 +95,31 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCleaner, CombatEntityDrain}:  &CombatAttackCleanerToDrain,
 		{CombatEntityCleaner, CombatEntityQuasar}: &CombatAttackCleanerToQuasar,
 		{CombatEntityCleaner, CombatEntitySwarm}:  &CombatAttackCleanerToSwarm,
+		{CombatEntityCleaner, CombatEntityStorm}:  &CombatAttackCleanerToStorm,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackShieldToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackShieldToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackShieldToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackShieldToStorm,
 	},
 	CombatAttackLightning: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackLightningToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackLightningToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackLightningToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackLightningToStorm,
 	},
 	CombatAttackExplosion: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackExplosionToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackExplosionToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackExplosionToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackExplosionToStorm,
 	},
 	CombatAttackMissile: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackMissileToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackMissileToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackMissileToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackMissileToStorm,
 	},
 }
 

@@ -15,8 +15,6 @@ const (
 
 // Storm combat
 const (
-	StormCircleHealth               = 1000.0
-	StormCircleMassFloat            = 150.0
 	StormCircleRadiusCollisionFloat = 7.5
 )
 
@@ -49,7 +47,6 @@ const (
 var (
 	StormCircleRadiusX = vmath.FromFloat(StormCircleRadiusXFloat)
 	StormCircleRadiusY = vmath.FromFloat(StormCircleRadiusYFloat)
-	StormCircleMass    = vmath.FromFloat(StormCircleMassFloat)
 
 	StormGravity           = vmath.FromFloat(StormGravityFloat)
 	StormRepulsionRadius   = vmath.FromFloat(StormRepulsionRadiusFloat)

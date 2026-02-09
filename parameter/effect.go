@@ -63,8 +63,6 @@ const (
 	ExplosionRadiusCapMultiplier = 1.5
 
 	// Render intensity thresholds (0.0-1.0, mapped to Scale)
-	ExplosionCoreThresholdFloat = 0.4
-	ExplosionBodyThresholdFloat = 0.15
 	ExplosionEdgeThresholdFloat = 0.03
 
 	// Explosion Visual Parameters (0.0-1.0)

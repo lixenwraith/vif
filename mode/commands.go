@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -190,6 +191,8 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: parameter.GodEnergyAmount})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponRod})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponLauncher})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
