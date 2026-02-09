@@ -220,7 +220,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		// Swept Traversal via Supercover DDA
 		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			// Wall or OOB - destroy particle
-			if s.world.Positions.IsBlockedForParticle(x, y) {
+			if s.world.Positions.IsBlocked(x, y, component.WallBlockSpawn) {
 				destroyEntity = true
 				return false
 			}

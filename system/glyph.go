@@ -357,7 +357,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		// Check for overlaps
 		hasOverlap := false
 		for i := 0; i < lineLength; i++ {
-			if s.world.Positions.IsBlockedForSpawn(startCol+i, row) {
+			if s.world.Positions.IsBlocked(startCol+i, row, component.WallBlockSpawn) {
 				hasOverlap = true
 				break
 			}

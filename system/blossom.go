@@ -218,7 +218,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		// Swept Traversal: Check every grid cell intersected by the movement vector
 		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			// Wall or OOB - destroy particle
-			if s.world.Positions.IsBlockedForParticle(x, y) {
+			if s.world.Positions.IsBlocked(x, y, component.WallBlockParticle) {
 				destroyBlossom = true
 				return false
 			}

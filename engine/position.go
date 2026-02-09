@@ -228,13 +228,6 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 	return false
 }
 
-// HasAnyWallAt returns true if any wall exists at (x, y) regardless of mask
-func (p *Position) HasAnyWallAt(x, y int) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	return p.HasBlockingWallAtUnsafe(x, y, 0)
-}
-
 // HasBlockingWallInArea returns true if any wall exists in rectangular area that blocks the given mask
 // Area defined as [x, x+width) × [y, y+height), skips out-of-bounds cells
 func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component.WallBlockMask) bool {
@@ -352,21 +345,6 @@ func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.Wall
 // IsOutOfBounds checks if position is outside spatial grid bounds
 func (p *Position) IsOutOfBounds(x, y int) bool {
 	return x < 0 || x >= p.world.Resources.Config.GameWidth || y < 0 || y >= p.world.Resources.Config.GameHeight
-}
-
-// IsBlockedForParticle checks if position blocks particle movement (OOB or blocking wall)
-// Use for decay, blossom, dust boundary checks
-func (p *Position) IsBlockedForParticle(x, y int) bool {
-	return p.IsBlocked(x, y, component.WallBlockParticle)
-}
-
-// IsBlockedForSpawn checks if position blocks entity spawn (OOB, blocking wall, or occupied)
-// Use for glyph, gold, nugget placement validation
-func (p *Position) IsBlockedForSpawn(x, y int) bool {
-	if p.IsBlocked(x, y, component.WallBlockSpawn) {
-		return true
-	}
-	return p.HasAnyEntityAt(x, y)
 }
 
 // HasLineOfSight checks if two grid points have unobstructed line of sight

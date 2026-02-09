@@ -141,7 +141,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		return
 	}
 
-	if s.world.Positions.HasAnyWallAt(payload.X, payload.Y) {
+	if s.world.Positions.IsBlocked(payload.X, payload.Y, component.WallBlockAll) {
 		return
 	}
 
@@ -200,7 +200,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 			continue
 		}
 
-		if s.world.Positions.HasAnyWallAt(x, y) {
+		if s.world.Positions.IsBlocked(x, y, component.WallBlockAll) {
 			continue
 		}
 
