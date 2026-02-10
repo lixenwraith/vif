@@ -46,7 +46,9 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		return
 	}
 
-	buf.SetWriteMask(visual.MaskTransient)
+	// Use MaskNone for fg-only rendering - prevents OcclusionDim from dimming underlying bg
+	// Works for 256, if any issue, branch and switch 256 back to MaskTransient
+	buf.SetWriteMask(visual.MaskNone)
 
 	for _, e := range entities {
 		l, ok := r.gameCtx.World.Components.Lightning.GetComponent(e)
@@ -284,7 +286,6 @@ func (r *LightningRenderer) traceSubPixelLineQuadrant(hits map[uint64]uint8, sx0
 // Uses SetFgOnly to preserve theme background during finalize
 func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
-
 	// Skip rendering if nearly faded out
 	// No alpha blending in 256-color mode - binary visibility threshold
 	if alpha < 0.1 {

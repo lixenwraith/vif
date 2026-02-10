@@ -12,12 +12,12 @@ const (
 	PriorityGlyph
 	PriorityHealthBar
 	PriorityEntities
-	PriorityCleaner
-	PriorityField
-	PriorityMaterialize
 	PriorityParticle
-	PrioritySplash
 	PriorityMulti
+	PriorityCleaner
+	PriorityMaterialize
+	PriorityField
+	PrioritySplash
 	PriorityMarker
 	PriorityPostProcess
 	PriorityUI

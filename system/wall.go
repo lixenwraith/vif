@@ -546,12 +546,10 @@ func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
 		for dx := 0; dx < width; dx++ {
 			px, py := x+dx, y+dy
 
-			// Bounds check
 			if px < 0 || px >= config.MapWidth || py < 0 || py >= config.MapHeight {
 				continue
 			}
 
-			// Skip if already blocked
 			if s.world.Positions.IsBlocked(px, py, component.WallBlockAll) {
 				continue
 			}
@@ -561,10 +559,9 @@ func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
 
 			s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 				BlockMask: component.WallBlockAll,
-				Rune:      visual.QuadrantChars[15],
-				FgColor:   visual.RgbWallStone,
-				RenderFg:  true,
-				RenderBg:  false,
+				BgColor:   visual.RgbWallStone,
+				RenderFg:  false,
+				RenderBg:  true,
 			})
 		}
 	}
