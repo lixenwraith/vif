@@ -1068,3 +1068,53 @@ func getSearchDirection(originX, centerX int) SearchDirection {
 	}
 	return SearchCW
 }
+
+// FindLastFreeOnRay returns the last unblocked cell on a ray from (startX, startY) toward (endX, endY)
+// Useful for finding safe position before wall collision
+// Returns (x, y, reachedEnd) where reachedEnd=true if entire path is free
+func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask component.WallBlockMask) (int, int, bool) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	// Start must be free (caller's responsibility to ensure valid origin)
+	lastFreeX, lastFreeY := startX, startY
+
+	dx := endX - startX
+	dy := endY - startY
+	absDx, absDy := vmath.IntAbs(dx), vmath.IntAbs(dy)
+
+	stepX, stepY := 1, 1
+	if dx < 0 {
+		stepX = -1
+	}
+	if dy < 0 {
+		stepY = -1
+	}
+
+	err := absDx - absDy
+	x, y := startX, startY
+
+	for {
+		// Check current cell (skip origin)
+		if (x != startX || y != startY) && p.HasBlockingWallAtUnsafe(x, y, mask) {
+			return lastFreeX, lastFreeY, false
+		}
+
+		// Update last free position
+		lastFreeX, lastFreeY = x, y
+
+		if x == endX && y == endY {
+			return lastFreeX, lastFreeY, true
+		}
+
+		e2 := 2 * err
+		if e2 > -absDy {
+			err -= absDy
+			x += stepX
+		}
+		if e2 < absDx {
+			err += absDx
+			y += stepY
+		}
+	}
+}

@@ -13,6 +13,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventDustAllRequest" },
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 301, height = 198, clear_entities = true } },
     { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 10, cell_height = 5, braiding = 0.3 } },
+    { action = "EmitEvent", event = "EventWallPushCheckRequest" },
 ]
 transitions = [
     { trigger = "Tick", target = "MazeActive", guard = "StateTimeExceeds", guard_args = { ms = 100 } },

@@ -364,7 +364,7 @@ func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 	}
 }
 
-// updateOrbs handles orbital motion, boundary clamping (slide), and flash decay
+// updateOrbs handles orbital motion, wall exclusion, shield boundary, and flash decay
 func (s *WeaponSystem) updateOrbs() {
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
@@ -377,7 +377,7 @@ func (s *WeaponSystem) updateOrbs() {
 			continue
 		}
 
-		// Get owner cursor position (centered)
+		// Get owner position
 		ownerPos, ok := s.world.Positions.GetPosition(orbComp.OwnerEntity)
 		if !ok {
 			s.destroyOrb(orbEntity)
@@ -401,7 +401,6 @@ func (s *WeaponSystem) updateOrbs() {
 			// Normal orbital motion
 			angleAdvance := vmath.Mul(orbComp.OrbitSpeed, dtFixed)
 			orbComp.OrbitAngle += angleAdvance
-			// Wrap angle to [0, Scale)
 			for orbComp.OrbitAngle >= vmath.Scale {
 				orbComp.OrbitAngle -= vmath.Scale
 			}
@@ -416,10 +415,10 @@ func (s *WeaponSystem) updateOrbs() {
 		idealX := ownerCenterX + vmath.Mul(cosA, orbComp.OrbitRadiusX)
 		idealY := ownerCenterY + vmath.Mul(sinA, orbComp.OrbitRadiusY)
 
-		// Clamp to game bounds (slide along edge)
-		minX := int64(vmath.CellCenter)
+		// Clamp to map bounds
+		minX := vmath.CellCenter
 		maxX := vmath.FromInt(config.MapWidth-1) + vmath.CellCenter
-		minY := int64(vmath.CellCenter)
+		minY := vmath.CellCenter
 		maxY := vmath.FromInt(config.MapHeight-1) + vmath.CellCenter
 
 		if idealX < minX {
@@ -433,16 +432,57 @@ func (s *WeaponSystem) updateOrbs() {
 			idealY = maxY
 		}
 
+		gridX, gridY := vmath.ToInt(idealX), vmath.ToInt(idealY)
+
+		// Wall collision: trace ray from owner to orbital position
+		// Always check path, not just destination
+		freeX, freeY, reachedEnd := s.world.Positions.FindLastFreeOnRay(
+			ownerPos.X, ownerPos.Y,
+			gridX, gridY,
+			component.WallBlockKinetic,
+		)
+		if !reachedEnd {
+			gridX, gridY = freeX, freeY
+			idealX, idealY = vmath.CenteredFromGrid(gridX, gridY)
+		}
+
+		// Shield exclusion: orbs exist only when shield active (game invariant)
+		// Keep orb outside shield boundary
+		shieldComp, _ := s.world.Components.Shield.GetComponent(orbComp.OwnerEntity)
+		dx := idealX - ownerCenterX
+		dy := idealY - ownerCenterY
+
+		if vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq) {
+			// Project radially outward to shield edge + margin
+			dirX, dirY := vmath.Normalize2D(dx, dy)
+			if dirX == 0 && dirY == 0 {
+				dirX = vmath.Scale // Default: push right
+			}
+			margin := vmath.CellCenter
+			idealX = ownerCenterX + vmath.Mul(dirX, shieldComp.RadiusX+margin)
+			idealY = ownerCenterY + vmath.Mul(dirY, shieldComp.RadiusY+margin)
+			gridX, gridY = vmath.ToInt(idealX), vmath.ToInt(idealY)
+
+			// Re-check wall after projection
+			freeX, freeY, reachedEnd = s.world.Positions.FindLastFreeOnRay(
+				ownerPos.X, ownerPos.Y,
+				gridX, gridY,
+				component.WallBlockKinetic,
+			)
+			if !reachedEnd {
+				gridX, gridY = freeX, freeY
+				idealX, idealY = vmath.CenteredFromGrid(gridX, gridY)
+			}
+		}
+
 		// Update Kinetic position
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(orbEntity)
-		if ok {
+		if kineticComp, ok := s.world.Components.Kinetic.GetComponent(orbEntity); ok {
 			kineticComp.PreciseX = idealX
 			kineticComp.PreciseY = idealY
 			s.world.Components.Kinetic.SetComponent(orbEntity, kineticComp)
 		}
 
 		// Sync grid position
-		gridX, gridY := vmath.ToInt(idealX), vmath.ToInt(idealY)
 		s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: gridX, Y: gridY})
 
 		// Handle flash decay

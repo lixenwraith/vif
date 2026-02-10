@@ -11,13 +11,13 @@ import (
 const (
 	Shift       = 32
 	Scale int64 = 1 << Shift
-	Mask        = Scale - 1
-	Half        = 1 << (Shift - 1)
+	Mask  int64 = Scale - 1
+	Half  int64 = 1 << (Shift - 1)
 
 	ScaleF = float64(Scale) // Helper for float ops
 
 	// CellCenter is the fixed-point offset to the center of a grid cell (0.5 in Q32.32)
-	CellCenter = Half
+	CellCenter int64 = Half
 )
 
 const (
