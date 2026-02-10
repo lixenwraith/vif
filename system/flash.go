@@ -104,14 +104,15 @@ func (s *FlashSystem) Update() {
 
 // spawnDestructionFlash creates a flash effect at the given position
 func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
-	flash := component.FlashComponent{
-		X:         x,
-		Y:         y,
-		Rune:      char,
-		Remaining: parameter.DestructionFlashDuration,
-		Duration:  parameter.DestructionFlashDuration,
-	}
-
 	entity := s.world.CreateEntity()
-	s.world.Components.Flash.SetComponent(entity, flash)
+	s.world.Components.Flash.SetComponent(entity,
+		component.FlashComponent{
+			Rune:      char,
+			Remaining: parameter.DestructionFlashDuration,
+			Duration:  parameter.DestructionFlashDuration,
+		})
+	s.world.Positions.SetPosition(entity,
+		component.PositionComponent{X: x, Y: y})
+	s.world.Components.Protection.SetComponent(entity,
+		component.ProtectionComponent{Mask: component.ProtectFromDecay | component.ProtectFromDelete})
 }

@@ -1,8 +1,6 @@
 package renderer
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -57,23 +55,13 @@ func (r *MissileRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 
 // --- TrueColor ---
 
-// TODO: merge these 3 functions, too many args with pointers and may not get inlined
 func (r *MissileRenderer) renderMissileTrueColor(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
 	missile *component.MissileComponent,
 	kinetic *component.KineticComponent,
 ) {
-	r.renderTrailTrueColor(ctx, buf, missile, kinetic) // Pass kinetic for current pos
-	r.renderBody(ctx, buf, missile, kinetic, true)
-}
-
-func (r *MissileRenderer) renderTrailTrueColor(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	missile *component.MissileComponent,
-	currentKinetic *component.KineticComponent,
-) {
+	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 
 	// Determine palette based on missile type
@@ -82,7 +70,7 @@ func (r *MissileRenderer) renderTrailTrueColor(
 		startCol, endCol = visual.RgbMissileParentTrailStart, visual.RgbMissileParentTrailEnd
 	}
 
-	prevX, prevY := currentKinetic.PreciseX, currentKinetic.PreciseY
+	prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 
 	for i := 0; i < missile.TrailLen; i++ {
 		idx := (missile.TrailHead - 1 - i + component.TrailCapacity) % component.TrailCapacity
@@ -92,37 +80,29 @@ func (r *MissileRenderer) renderTrailTrueColor(
 			break
 		}
 
-		// Pass specific colors to drawLine
-		r.drawStepLine(ctx, buf, prevX, prevY, pt.X, pt.Y, pt.Age, maxAge, startCol, endCol)
+		tFactor := float64(pt.Age) / float64(maxAge)
+		alpha := 1.0 - tFactor
+		color := render.LerpRGBFixed(startCol, endCol, vmath.FromFloat(tFactor))
+
+		// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
+		traverser := vmath.NewGridTraverser(prevX, prevY, pt.X, pt.Y)
+		for traverser.Next() {
+			mapX, mapY := traverser.Pos()
+
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			buf.Set(screenX, screenY, visual.MissileTrailChar, color, visual.RgbBackground,
+				render.BlendAddFg, alpha, terminal.AttrNone)
+		}
 
 		prevX, prevY = pt.X, pt.Y
 	}
-}
 
-func (r *MissileRenderer) drawStepLine(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	x1, y1, x2, y2 int64,
-	age, maxAge time.Duration,
-	startCol, endCol terminal.RGB,
-) {
-	tFactor := float64(age) / float64(maxAge)
-	alpha := 1.0 - tFactor
-	color := render.LerpRGBFixed(startCol, endCol, vmath.FromFloat(tFactor))
-
-	// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
-	traverser := vmath.NewGridTraverser(x1, y1, x2, y2)
-	for traverser.Next() {
-		mapX, mapY := traverser.Pos()
-
-		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-		if !visible {
-			continue
-		}
-
-		buf.Set(screenX, screenY, visual.MissileTrailChar, color, visual.RgbBackground,
-			render.BlendAddFg, alpha, terminal.AttrNone)
-	}
+	// === Body ===
+	r.renderBody(ctx, buf, missile, kinetic, true)
 }
 
 // --- Body Rendering (Shared) ---
@@ -219,18 +199,7 @@ func (r *MissileRenderer) renderMissile256(
 	missile *component.MissileComponent,
 	kinetic *component.KineticComponent,
 ) {
-	// Render trail
-	r.renderTrail256(ctx, buf, missile)
-
-	// Render body
-	r.renderBody256(ctx, buf, missile, kinetic)
-}
-
-func (r *MissileRenderer) renderTrail256(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	missile *component.MissileComponent,
-) {
+	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 
 	for i := 0; i < missile.TrailLen; i++ {
@@ -255,14 +224,8 @@ func (r *MissileRenderer) renderTrail256(
 				terminal.RGB{R: visual.Missile256Trail}, terminal.AttrFg256)
 		}
 	}
-}
 
-func (r *MissileRenderer) renderBody256(
-	ctx render.RenderContext,
-	buf *render.RenderBuffer,
-	missile *component.MissileComponent,
-	kinetic *component.KineticComponent,
-) {
+	// === Body ===
 	mapX := vmath.ToInt(kinetic.PreciseX)
 	mapY := vmath.ToInt(kinetic.PreciseY)
 

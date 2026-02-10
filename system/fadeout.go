@@ -106,12 +106,13 @@ func (s *FadeoutSystem) Update() {
 func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor terminal.RGB) {
 	entity := s.world.CreateEntity()
 	s.world.Components.Fadeout.SetComponent(entity, component.FadeoutComponent{
-		X:         x,
-		Y:         y,
 		Char:      char,
 		FgColor:   fgColor,
 		BgColor:   bgColor,
 		Remaining: parameter.FadeoutDuration,
 		Duration:  parameter.FadeoutDuration,
 	})
+	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	s.world.Components.Protection.SetComponent(entity,
+		component.ProtectionComponent{Mask: component.ProtectFromDecay | component.ProtectFromDelete})
 }

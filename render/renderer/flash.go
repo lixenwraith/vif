@@ -21,31 +21,36 @@ func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 
 // Render draws brief flash effects when characters are removed
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Flash.GetAllEntities()
-	if len(entities) == 0 {
+	flashEntities := r.gameCtx.World.Components.Flash.GetAllEntities()
+	if len(flashEntities) == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, entity := range entities {
-		flash, ok := r.gameCtx.World.Components.Flash.GetComponent(entity)
+	for _, flashEntity := range flashEntities {
+		flashComp, ok := r.gameCtx.World.Components.Flash.GetComponent(flashEntity)
 		if !ok {
 			continue
 		}
 
-		if flash.Remaining <= 0 {
+		if flashComp.Remaining <= 0 {
+			continue
+		}
+
+		posComp, ok := r.gameCtx.World.Positions.GetPosition(flashEntity)
+		if !ok {
 			continue
 		}
 
 		// Transform map coords to screen coords with visibility check
-		screenX, screenY, visible := ctx.MapToScreen(flash.X, flash.Y)
+		screenX, screenY, visible := ctx.MapToScreen(posComp.X, posComp.Y)
 		if !visible {
 			continue
 		}
 
 		// Opacity fades from 1.0 to 0.0 over duration (bright to transparent)
-		opacity := (float64(flash.Remaining) / float64(flash.Duration))
+		opacity := (float64(flashComp.Remaining) / float64(flashComp.Duration))
 		if opacity < 0.0 {
 			opacity = 0.0
 		}
@@ -53,6 +58,6 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		flashColor := render.Scale(visual.RgbRemovalFlash, opacity)
 
 		// Additive blend on foreground only, preserves background
-		buf.Set(screenX, screenY, flash.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
+		buf.Set(screenX, screenY, flashComp.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
 	}
 }
