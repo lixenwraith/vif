@@ -8,19 +8,23 @@ import (
 
 // OrbComponent tracks orbital state for weapon visualization orbs
 type OrbComponent struct {
-	WeaponType  WeaponType  // Which weapon this orb represents
-	OwnerEntity core.Entity // Cursor entity that owns this orb
+	WeaponType  WeaponType
+	OwnerEntity core.Entity
 
-	// Orbital state (Q32.32)
-	OrbitAngle   int64 // Current angle, Scale = full rotation (2π)
-	OrbitRadiusX int64 // Horizontal radius
-	OrbitRadiusY int64 // Vertical radius
-	OrbitSpeed   int64 // Rotations per second, Scale = 1 rot/sec
+	// Current angle on orbit (Q32.32, Scale = full rotation)
+	OrbitAngle int64
 
-	// Redistribution animation
-	StartAngle            int64         // Angle at redistribution start
-	TargetAngle           int64         // Target angle after redistribution
-	RedistributeRemaining time.Duration // 0 = not redistributing
+	// Assigned target angle from distribution (Q32.32)
+	TargetAngle int64
+
+	// Orbit parameters (Q32.32)
+	OrbitRadiusX int64
+	OrbitRadiusY int64
+	OrbitSpeed   int64 // Rotation speed when orbiting freely
+
+	// Animation state
+	RedistributeRemaining time.Duration
+	StartAngle            int64 // Angle at redistribution start
 
 	// Fire flash effect
 	FlashRemaining time.Duration

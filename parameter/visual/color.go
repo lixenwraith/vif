@@ -43,10 +43,9 @@ var (
 	RgbDustNormal = terminal.RGB{R: 128, G: 128, B: 128} // Mid-gray dust
 	RgbDustBright = terminal.RGB{R: 200, G: 200, B: 200} // Light gray dust
 
-	RgbRowIndicator    = terminal.RGB{180, 180, 180} // Brighter gray
-	RgbColumnIndicator = terminal.RGB{180, 180, 180} // Brighter gray
-	RgbStatusBar       = terminal.RGB{255, 255, 255} // White
-	RgbBackground      = terminal.RGB{26, 27, 38}    // Tokyo Night background
+	RgbIndicator  = terminal.RGB{180, 180, 180} // Brighter gray
+	RgbStatusBar  = terminal.RGB{255, 255, 255} // White
+	RgbBackground = terminal.RGB{26, 27, 38}    // Tokyo Night background
 
 	RgbPingHighlight  = terminal.RGB{55, 55, 55}    // Gray for INSERT mode ping
 	RgbPingLineNormal = terminal.RGB{5, 5, 5}       // Almost Black for NORMAL and VISUAL modes ping lines

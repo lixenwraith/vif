@@ -34,10 +34,10 @@ func NewWeaponSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statRod = world.Resources.Status.Bools.Get("buff.rod")
-	s.statRodFired = world.Resources.Status.Ints.Get("buff.rod_fired")
-	s.statLauncher = world.Resources.Status.Bools.Get("buff.launcher")
-	s.statSpray = world.Resources.Status.Bools.Get("buff.spray")
+	s.statRod = world.Resources.Status.Bools.Get("weapon.rod")
+	s.statRodFired = world.Resources.Status.Ints.Get("weapon.rod_fired")
+	s.statLauncher = world.Resources.Status.Bools.Get("weapon.launcher")
+	s.statSpray = world.Resources.Status.Bools.Get("weapon.spray")
 
 	s.Init()
 	return s
@@ -54,7 +54,7 @@ func (s *WeaponSystem) Init() {
 
 // Name returns system's name
 func (s *WeaponSystem) Name() string {
-	return "buff"
+	return "weapon"
 }
 
 func (s *WeaponSystem) Priority() int {
@@ -128,27 +128,27 @@ func (s *WeaponSystem) Update() {
 		}
 	}
 
-	// Update buff cooldowns
-	for buff, active := range weaponComp.Active {
+	// Update weapon cooldowns
+	for weapon, active := range weaponComp.Active {
 		if !active {
 			continue
 		}
-		weaponComp.Cooldown[buff] -= dt
-		if weaponComp.Cooldown[buff] < 0 {
-			weaponComp.Cooldown[buff] = 0
+		weaponComp.Cooldown[weapon] -= dt
+		if weaponComp.Cooldown[weapon] < 0 {
+			weaponComp.Cooldown[weapon] = 0
 		}
 	}
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
-	// Ensure orbs exist for active buffs (self-healing after resize/destruction)
+	// Ensure orbs exist for active weapons (self-healing after resize/destruction)
 	s.ensureOrbs(cursorEntity)
 
 	// Update orb motion
 	s.updateOrbs()
 }
 
-func (s *WeaponSystem) addWeapon(buff component.WeaponType) {
+func (s *WeaponSystem) addWeapon(weapon component.WeaponType) {
 	cursorEntity := s.world.Resources.Player.Entity
 	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
@@ -167,13 +167,13 @@ func (s *WeaponSystem) addWeapon(buff component.WeaponType) {
 	}
 
 	// Skip if already active
-	if weaponComp.Active[buff] {
+	if weaponComp.Active[weapon] {
 		return
 	}
 
-	weaponComp.Active[buff] = true
-	weaponComp.Cooldown[buff] = 0 // Ready to fire immediately
-	switch buff {
+	weaponComp.Active[weapon] = true
+	weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately
+	switch weapon {
 	case component.WeaponRod:
 		s.statRod.Store(true)
 	case component.WeaponLauncher:
@@ -185,13 +185,6 @@ func (s *WeaponSystem) addWeapon(buff component.WeaponType) {
 	}
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
-
-	// NOTE: Keeping test block till loot system is functional
-	// if buff == component.WeaponRod && !weaponComp.Active[component.WeaponLauncher] {
-	// 	weaponComp.Active[component.WeaponLauncher] = true
-	// 	weaponComp.Cooldown[component.WeaponLauncher] = 0 // Ready immediately
-	// 	s.statLauncher.Store(true)
-	// }
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
@@ -214,106 +207,6 @@ func (s *WeaponSystem) removeAllWeapons() {
 	s.statSpray.Store(false)
 }
 
-// spawnOrbEntity creates an orb entity for a buff type
-func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, buffType component.WeaponType) core.Entity {
-	ownerPos, ok := s.world.Positions.GetPosition(ownerEntity)
-	if !ok {
-		return 0
-	}
-
-	orbEntity := s.world.CreateEntity()
-
-	// Initial angle will be set by redistribution
-	orbComp := component.OrbComponent{
-		WeaponType:   buffType,
-		OwnerEntity:  ownerEntity,
-		OrbitAngle:   0,
-		OrbitRadiusX: parameter.OrbOrbitRadiusX,
-		OrbitRadiusY: parameter.OrbOrbitRadiusY,
-		OrbitSpeed:   parameter.OrbOrbitSpeed,
-	}
-
-	// Kinetic for position tracking
-	ownerCenterX, ownerCenterY := vmath.CenteredFromGrid(ownerPos.X, ownerPos.Y)
-	kineticComp := component.KineticComponent{
-		Kinetic: core.Kinetic{
-			PreciseX: ownerCenterX + orbComp.OrbitRadiusX, // Start at angle 0
-			PreciseY: ownerCenterY,
-		},
-	}
-
-	// Sigil for rendering
-	var sigilColor terminal.RGB
-	switch buffType {
-	case component.WeaponRod:
-		sigilColor = visual.RgbOrbRod
-	case component.WeaponLauncher:
-		sigilColor = visual.RgbOrbLauncher
-	case component.WeaponSpray:
-		sigilColor = visual.RgbOrbSpray
-	}
-	sigilComp := component.SigilComponent{
-		Rune:  visual.CircleBullsEye,
-		Color: sigilColor,
-	}
-
-	// Position component for grid-based queries
-	gridX := vmath.ToInt(kineticComp.PreciseX)
-	gridY := vmath.ToInt(kineticComp.PreciseY)
-	posComp := component.PositionComponent{X: gridX, Y: gridY}
-
-	// Protect orb from game interactions (drain, decay, etc.)
-	protComp := component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDecay | component.ProtectFromDelete,
-	}
-
-	s.world.Components.Protection.SetComponent(orbEntity, protComp)
-	s.world.Components.Orb.SetComponent(orbEntity, orbComp)
-	s.world.Components.Kinetic.SetComponent(orbEntity, kineticComp)
-	s.world.Components.Sigil.SetComponent(orbEntity, sigilComp)
-	s.world.Positions.SetPosition(orbEntity, posComp)
-
-	return orbEntity
-}
-
-// redistributeOrbs triggers angle redistribution for all orbs owned by cursor
-func (s *WeaponSystem) redistributeOrbs(cursorEntity core.Entity) {
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	// Collect active orb entities
-	var activeOrbs []core.Entity
-	for _, orbEntity := range weaponComp.Orbs {
-		if orbEntity != 0 {
-			activeOrbs = append(activeOrbs, orbEntity)
-		}
-	}
-
-	orbCount := len(activeOrbs)
-	if orbCount == 0 {
-		return
-	}
-
-	// Calculate evenly distributed target angles
-	angleStep := vmath.Scale / int64(orbCount)
-
-	for i, orbEntity := range activeOrbs {
-		orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
-		if !ok {
-			continue
-		}
-
-		targetAngle := int64(i) * angleStep
-		orbComp.StartAngle = orbComp.OrbitAngle
-		orbComp.TargetAngle = targetAngle
-		orbComp.RedistributeRemaining = parameter.OrbRedistributeDuration
-
-		s.world.Components.Orb.SetComponent(orbEntity, orbComp)
-	}
-}
-
 // triggerOrbFlash activates flash effect on specified orb
 func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
@@ -332,7 +225,7 @@ func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 	}
 }
 
-// ensureOrbs creates missing orbs for active buffs and triggers redistribution if needed
+// ensureOrbs creates missing orbs for active weapons and triggers redistribution if needed
 func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
@@ -344,16 +237,15 @@ func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 	}
 
 	changed := false
-	for buff, active := range weaponComp.Active {
+	for weapon, active := range weaponComp.Active {
 		if !active {
 			continue
 		}
 
-		orbEntity := weaponComp.Orbs[buff]
-		// Check if orb exists and is valid
+		orbEntity := weaponComp.Orbs[weapon]
 		if orbEntity == 0 || !s.world.Components.Orb.HasEntity(orbEntity) {
-			newOrb := s.spawnOrbEntity(cursorEntity, buff)
-			weaponComp.Orbs[buff] = newOrb
+			newOrb := s.spawnOrbEntity(cursorEntity, weapon)
+			weaponComp.Orbs[weapon] = newOrb
 			changed = true
 		}
 	}
@@ -364,148 +256,265 @@ func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 	}
 }
 
-// updateOrbs handles orbital motion, wall exclusion, shield boundary, and flash decay
+// spawnOrbEntity creates an orb entity for a weapon type
+func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType component.WeaponType) core.Entity {
+	ownerPos, ok := s.world.Positions.GetPosition(ownerEntity)
+	if !ok {
+		return 0
+	}
+
+	orbEntity := s.world.CreateEntity()
+
+	orbComp := component.OrbComponent{
+		WeaponType:   weaponType,
+		OwnerEntity:  ownerEntity,
+		OrbitAngle:   0,
+		TargetAngle:  0,
+		OrbitRadiusX: parameter.OrbOrbitRadiusX,
+		OrbitRadiusY: parameter.OrbOrbitRadiusY,
+		OrbitSpeed:   parameter.OrbOrbitSpeed,
+	}
+
+	// Initial position at angle 0
+	gridX, gridY := vmath.AngleToGridPos(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
+	preciseX, preciseY := vmath.CenteredFromGrid(gridX, gridY)
+
+	kineticComp := component.KineticComponent{
+		Kinetic: core.Kinetic{
+			PreciseX: preciseX,
+			PreciseY: preciseY,
+		},
+	}
+
+	var sigilColor terminal.RGB
+	switch weaponType {
+	case component.WeaponRod:
+		sigilColor = visual.RgbOrbRod
+	case component.WeaponLauncher:
+		sigilColor = visual.RgbOrbLauncher
+	case component.WeaponSpray:
+		sigilColor = visual.RgbOrbSpray
+	}
+
+	sigilComp := component.SigilComponent{
+		Rune:  visual.CircleBullsEye,
+		Color: sigilColor,
+	}
+
+	protComp := component.ProtectionComponent{
+		Mask: component.ProtectFromDrain | component.ProtectFromDecay | component.ProtectFromDelete,
+	}
+
+	s.world.Components.Protection.SetComponent(orbEntity, protComp)
+	s.world.Components.Orb.SetComponent(orbEntity, orbComp)
+	s.world.Components.Kinetic.SetComponent(orbEntity, kineticComp)
+	s.world.Components.Sigil.SetComponent(orbEntity, sigilComp)
+	s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: gridX, Y: gridY})
+
+	return orbEntity
+}
+
+// redistributeOrbs triggers angle redistribution for all orbs
+// Called when orb added/removed - actual redistribution happens in updateOrbs()
+func (s *WeaponSystem) redistributeOrbs(cursorEntity core.Entity) {
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	// Mark all orbs for redistribution by invalidating their target angles
+	// The next updateOrbs() call will calculate proper distribution
+	for _, orbEntity := range weaponComp.Orbs {
+		if orbEntity == 0 {
+			continue
+		}
+		if orb, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
+			orb.TargetAngle = -1 // Invalid angle forces recalculation
+			s.world.Components.Orb.SetComponent(orbEntity, orb)
+		}
+	}
+}
+
+// updateOrbs handles orbital motion with arc-aware collision avoidance
 func (s *WeaponSystem) updateOrbs() {
 	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
 	config := s.world.Resources.Config
+	cursorEntity := s.world.Resources.Player.Entity
 
-	orbEntities := s.world.Components.Orb.GetAllEntities()
-	for _, orbEntity := range orbEntities {
-		orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
-		if !ok {
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	if !ok {
+		return
+	}
+
+	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+	if !ok {
+		return
+	}
+
+	// Collect active orbs in STABLE order (sort by weapon type)
+	type orbEntry struct {
+		entity core.Entity
+		comp   component.OrbComponent
+		weapon component.WeaponType
+	}
+	var entries []orbEntry
+	for weapon, orbEntity := range weaponComp.Orbs {
+		if orbEntity == 0 {
 			continue
 		}
-
-		// Get owner position
-		ownerPos, ok := s.world.Positions.GetPosition(orbComp.OwnerEntity)
-		if !ok {
-			s.destroyOrb(orbEntity)
-			continue
+		if orb, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
+			entries = append(entries, orbEntry{entity: orbEntity, comp: orb, weapon: weapon})
 		}
-		ownerCenterX, ownerCenterY := vmath.CenteredFromGrid(ownerPos.X, ownerPos.Y)
+	}
 
-		// Handle redistribution animation
-		if orbComp.RedistributeRemaining > 0 {
-			orbComp.RedistributeRemaining -= dt
-			if orbComp.RedistributeRemaining <= 0 {
-				orbComp.RedistributeRemaining = 0
-				orbComp.OrbitAngle = orbComp.TargetAngle
+	if len(entries) == 0 {
+		return
+	}
+
+	// Sort by weapon type for deterministic index assignment
+	slices.SortFunc(entries, func(a, b orbEntry) int {
+		return int(a.weapon) - int(b.weapon)
+	})
+
+	// Use first orb's radius (all orbs share same orbit)
+	radiusX := entries[0].comp.OrbitRadiusX
+	radiusY := entries[0].comp.OrbitRadiusY
+
+	// Sample orbital ellipse for blockage
+	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
+	blocked := make([]bool, len(samplePoints))
+	for i, pt := range samplePoints {
+		blocked[i] = !s.world.Positions.IsPointValidForOrbit(pt[0], pt[1], component.WallBlockKinetic)
+	}
+
+	// Find available arcs
+	arcs := vmath.FindUnblockedArcs(blocked)
+	fullCircle := vmath.IsFullCircle(arcs)
+
+	// Distribute target angles
+	targetAngles := vmath.DistributeAngles(arcs, len(entries))
+	if targetAngles == nil {
+		// Fully blocked - orbs stay in place
+		return
+	}
+
+	// Hysteresis threshold to prevent jitter (~11 degrees)
+	const angleThreshold = vmath.Scale / 32
+
+	// Update each orb
+	for i := range entries {
+		orbEntity := entries[i].entity
+		orb := entries[i].comp
+		targetAngle := targetAngles[i]
+
+		// Check if redistribution needed (with hysteresis)
+		angleDiff := vmath.Abs(vmath.AngleDiff(orb.TargetAngle, targetAngle))
+		if angleDiff > angleThreshold || orb.TargetAngle < 0 {
+			orb.StartAngle = orb.OrbitAngle
+			orb.TargetAngle = targetAngle
+			orb.RedistributeRemaining = parameter.OrbRedistributeDuration
+		}
+
+		// Handle movement based on arc availability
+		if fullCircle && orb.RedistributeRemaining <= 0 {
+			// Free orbit - advance angle
+			dtFixed := vmath.FromFloat(dt.Seconds())
+			angleAdvance := vmath.Mul(orb.OrbitSpeed, dtFixed)
+			orb.OrbitAngle = vmath.NormalizeAngle(orb.OrbitAngle + angleAdvance)
+		} else if orb.RedistributeRemaining > 0 {
+			// Animating to new position
+			orb.RedistributeRemaining -= dt
+			if orb.RedistributeRemaining <= 0 {
+				orb.RedistributeRemaining = 0
+				orb.OrbitAngle = orb.TargetAngle
 			} else {
-				totalDuration := parameter.OrbRedistributeDuration
-				elapsed := totalDuration - orbComp.RedistributeRemaining
-				t := vmath.FromFloat(elapsed.Seconds() / totalDuration.Seconds())
-				orbComp.OrbitAngle = vmath.Lerp(orbComp.StartAngle, orbComp.TargetAngle, t)
+				t := vmath.FromFloat(1.0 - orb.RedistributeRemaining.Seconds()/parameter.OrbRedistributeDuration.Seconds())
+				// Use shortest path interpolation
+				diff := vmath.AngleDiff(orb.StartAngle, orb.TargetAngle)
+				orb.OrbitAngle = vmath.NormalizeAngle(orb.StartAngle + vmath.Mul(diff, t))
 			}
 		} else {
-			// Normal orbital motion
-			angleAdvance := vmath.Mul(orbComp.OrbitSpeed, dtFixed)
-			orbComp.OrbitAngle += angleAdvance
-			for orbComp.OrbitAngle >= vmath.Scale {
-				orbComp.OrbitAngle -= vmath.Scale
+			// Partial arc, stationary - snap to target
+			orb.OrbitAngle = orb.TargetAngle
+		}
+
+		// Calculate world position from angle
+		targetGridX, targetGridY := vmath.AngleToGridPos(orb.OrbitAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+
+		// Get current position
+		currentPos, hasPos := s.world.Positions.GetPosition(orbEntity)
+
+		// Validate target cell is actually free (sample resolution may miss edge cases)
+		targetValid := s.world.Positions.IsPointValidForOrbit(targetGridX, targetGridY, component.WallBlockKinetic)
+		if !targetValid {
+			// Target blocked - stay at current if valid
+			if hasPos && s.world.Positions.IsPointValidForOrbit(currentPos.X, currentPos.Y, component.WallBlockKinetic) {
+				targetGridX, targetGridY = currentPos.X, currentPos.Y
+			} else {
+				// Both invalid - skip position update, keep component state
+				s.world.Components.Orb.SetComponent(orbEntity, orb)
+				continue
 			}
-			for orbComp.OrbitAngle < 0 {
-				orbComp.OrbitAngle += vmath.Scale
-			}
-		}
-
-		// Compute ideal orbital position
-		cosA := vmath.Cos(orbComp.OrbitAngle)
-		sinA := vmath.Sin(orbComp.OrbitAngle)
-		idealX := ownerCenterX + vmath.Mul(cosA, orbComp.OrbitRadiusX)
-		idealY := ownerCenterY + vmath.Mul(sinA, orbComp.OrbitRadiusY)
-
-		// Clamp to map bounds
-		minX := vmath.CellCenter
-		maxX := vmath.FromInt(config.MapWidth-1) + vmath.CellCenter
-		minY := vmath.CellCenter
-		maxY := vmath.FromInt(config.MapHeight-1) + vmath.CellCenter
-
-		if idealX < minX {
-			idealX = minX
-		} else if idealX > maxX {
-			idealX = maxX
-		}
-		if idealY < minY {
-			idealY = minY
-		} else if idealY > maxY {
-			idealY = maxY
-		}
-
-		gridX, gridY := vmath.ToInt(idealX), vmath.ToInt(idealY)
-
-		// Wall collision: trace ray from owner to orbital position
-		// Always check path, not just destination
-		freeX, freeY, reachedEnd := s.world.Positions.FindLastFreeOnRay(
-			ownerPos.X, ownerPos.Y,
-			gridX, gridY,
-			component.WallBlockKinetic,
-		)
-		if !reachedEnd {
-			gridX, gridY = freeX, freeY
-			idealX, idealY = vmath.CenteredFromGrid(gridX, gridY)
-		}
-
-		// Shield exclusion: orbs exist only when shield active (game invariant)
-		// Keep orb outside shield boundary
-		shieldComp, _ := s.world.Components.Shield.GetComponent(orbComp.OwnerEntity)
-		dx := idealX - ownerCenterX
-		dy := idealY - ownerCenterY
-
-		if vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq) {
-			// Project radially outward to shield edge + margin
-			dirX, dirY := vmath.Normalize2D(dx, dy)
-			if dirX == 0 && dirY == 0 {
-				dirX = vmath.Scale // Default: push right
-			}
-			margin := vmath.CellCenter
-			idealX = ownerCenterX + vmath.Mul(dirX, shieldComp.RadiusX+margin)
-			idealY = ownerCenterY + vmath.Mul(dirY, shieldComp.RadiusY+margin)
-			gridX, gridY = vmath.ToInt(idealX), vmath.ToInt(idealY)
-
-			// Re-check wall after projection
-			freeX, freeY, reachedEnd = s.world.Positions.FindLastFreeOnRay(
-				ownerPos.X, ownerPos.Y,
-				gridX, gridY,
+		} else if hasPos && (currentPos.X != targetGridX || currentPos.Y != targetGridY) {
+			// Check if orb is isolated (can't reach target)
+			pathBlocked := s.world.Positions.IsPathBlocked(
+				currentPos.X, currentPos.Y,
+				targetGridX, targetGridY,
 				component.WallBlockKinetic,
 			)
-			if !reachedEnd {
-				gridX, gridY = freeX, freeY
-				idealX, idealY = vmath.CenteredFromGrid(gridX, gridY)
+			if pathBlocked {
+				// Isolated - teleport to target (no flash, reserved for firing)
+				orb.OrbitAngle = targetAngle
+				orb.RedistributeRemaining = 0
+				targetGridX, targetGridY = vmath.AngleToGridPos(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+
+				// Re-validate teleport destination
+				if !s.world.Positions.IsPointValidForOrbit(targetGridX, targetGridY, component.WallBlockKinetic) {
+					// Teleport destination also blocked - stay put
+					if hasPos {
+						targetGridX, targetGridY = currentPos.X, currentPos.Y
+					} else {
+						s.world.Components.Orb.SetComponent(orbEntity, orb)
+						continue
+					}
+				}
 			}
 		}
 
-		// Update Kinetic position
-		if kineticComp, ok := s.world.Components.Kinetic.GetComponent(orbEntity); ok {
-			kineticComp.PreciseX = idealX
-			kineticComp.PreciseY = idealY
-			s.world.Components.Kinetic.SetComponent(orbEntity, kineticComp)
+		// Clamp to map bounds
+		targetGridX = max(0, min(targetGridX, config.MapWidth-1))
+		targetGridY = max(0, min(targetGridY, config.MapHeight-1))
+
+		// Update kinetic position
+		if kinetic, ok := s.world.Components.Kinetic.GetComponent(orbEntity); ok {
+			kinetic.PreciseX, kinetic.PreciseY = vmath.CenteredFromGrid(targetGridX, targetGridY)
+			s.world.Components.Kinetic.SetComponent(orbEntity, kinetic)
 		}
 
-		// Sync grid position
-		s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: gridX, Y: gridY})
+		// Update grid position
+		s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: targetGridX, Y: targetGridY})
 
-		// Handle flash decay
-		if orbComp.FlashRemaining > 0 {
-			orbComp.FlashRemaining -= dt
-			if orbComp.FlashRemaining <= 0 {
-				orbComp.FlashRemaining = 0
-				s.restoreOrbColor(orbEntity, orbComp.WeaponType)
+		// Handle flash decay (flash triggered only by firing, not movement)
+		if orb.FlashRemaining > 0 {
+			orb.FlashRemaining -= dt
+			if orb.FlashRemaining <= 0 {
+				orb.FlashRemaining = 0
+				s.restoreOrbColor(orbEntity, orb.WeaponType)
 			}
 		}
 
-		s.world.Components.Orb.SetComponent(orbEntity, orbComp)
+		s.world.Components.Orb.SetComponent(orbEntity, orb)
 	}
 }
 
 // restoreOrbColor sets orb sigil back to normal color after flash
-func (s *WeaponSystem) restoreOrbColor(orbEntity core.Entity, buffType component.WeaponType) {
+func (s *WeaponSystem) restoreOrbColor(orbEntity core.Entity, weaponType component.WeaponType) {
 	sigil, ok := s.world.Components.Sigil.GetComponent(orbEntity)
 	if !ok {
 		return
 	}
 
-	switch buffType {
+	switch weaponType {
 	case component.WeaponRod:
 		sigil.Color = visual.RgbOrbRod
 	case component.WeaponLauncher:
@@ -563,7 +572,7 @@ func (s *WeaponSystem) handleFireMain() {
 		})
 	}
 
-	// 2. Fire buffs
+	// 2. Fire weapons
 	s.fireAllWeapons()
 }
 
@@ -594,14 +603,14 @@ func (s *WeaponSystem) fireAllWeapons() {
 		return
 	}
 
-	for buff, active := range weaponComp.Active {
-		if !active || weaponComp.Cooldown[buff] > 0 {
+	for weapon, active := range weaponComp.Active {
+		if !active || weaponComp.Cooldown[weapon] > 0 {
 			continue
 		}
 
-		switch buff {
+		switch weapon {
 		case component.WeaponRod:
-			weaponComp.Cooldown[buff] = parameter.WeaponCooldownRod
+			weaponComp.Cooldown[weapon] = parameter.WeaponCooldownRod
 
 			// Get rod orb entity and position for lightning origin
 			rodOrbEntity := weaponComp.Orbs[component.WeaponRod]
@@ -614,14 +623,21 @@ func (s *WeaponSystem) fireAllWeapons() {
 				assignments = resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 			}
 
-			// Fire lightning to targets
-			for i := 0; i < min(shots, len(assignments)); i++ {
+			// Rod fires at unique targets only - no cycling
+			// Count unique targets (assignments may have duplicates from overflow distribution)
+			seen := make(map[core.Entity]bool, len(assignments))
+			for _, a := range assignments {
+				if seen[a.target] {
+					continue
+				}
+				seen[a.target] = true
+
 				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursorEntity,
 					OriginEntity: rodOrbEntity,
-					TargetEntity: assignments[i].target,
-					HitEntity:    assignments[i].hit,
+					TargetEntity: a.target,
+					HitEntity:    a.hit,
 				})
 			}
 
@@ -637,7 +653,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 			}
 
 			// 2. Consume cooldown and handle orb-specific origin
-			weaponComp.Cooldown[buff] = parameter.WeaponCooldownLauncher
+			weaponComp.Cooldown[weapon] = parameter.WeaponCooldownLauncher
 			launcherOrbEntity := weaponComp.Orbs[component.WeaponLauncher]
 
 			// Origin of fire at launcher orb with cursor fallback

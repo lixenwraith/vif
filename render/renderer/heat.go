@@ -7,8 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// HeatMeterRenderer draws the heat meter bar at the top of the screen
-type HeatMeterRenderer struct {
+// HeatRenderer draws the heat meter bar at the top of the screen
+type HeatRenderer struct {
 	gameCtx *engine.GameContext
 
 	burstBlink bool
@@ -20,9 +20,9 @@ type HeatMeterRenderer struct {
 // Defines the interface for rendering strategy (256-color vs TrueColor) selected initialization
 type heatCellRenderer func(buf *render.RenderBuffer, x, width int, fillRune rune)
 
-// NewHeatMeterRenderer creates a heat meter renderer
-func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
-	r := &HeatMeterRenderer{
+// NewHeatRenderer creates a heat meter renderer
+func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
+	r := &HeatRenderer{
 		gameCtx: ctx,
 	}
 
@@ -35,7 +35,7 @@ func NewHeatMeterRenderer(ctx *engine.GameContext) *HeatMeterRenderer {
 }
 
 // Render implements SystemRenderer
-func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	buf.SetWriteMask(visual.MaskUI)
 
 	// Calculate Fill Limit from HeatComponent
@@ -75,7 +75,7 @@ func (r *HeatMeterRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 }
 
 // cellTrueColor renders with smooth gradient
-func (r *HeatMeterRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int, fillRune rune) {
+func (r *HeatRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int, fillRune rune) {
 	lutIdx := (x * 255) / (width - 1)
 	color := render.HeatGradientLUT[lutIdx]
 
@@ -98,7 +98,7 @@ func (r *HeatMeterRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int
 }
 
 // cell256 renders with fixed 10-segment palette colors
-func (r *HeatMeterRenderer) cell256(buf *render.RenderBuffer, x, width int, fillRune rune) {
+func (r *HeatRenderer) cell256(buf *render.RenderBuffer, x, width int, fillRune rune) {
 	if fillRune != 0 {
 		buf.SetFgOnly(x, 0, fillRune, visual.RgbWhite, terminal.AttrNone)
 	} else {

@@ -1118,3 +1118,70 @@ func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask compon
 		}
 	}
 }
+
+// IsPathBlocked checks if straight line from (x0,y0) to (x1,y1) intersects any blocking wall
+// Uses Bresenham traversal, returns true if ANY intermediate cell is blocked
+// Endpoints are NOT checked - only path between them
+func (p *Position) IsPathBlocked(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if x0 == x1 && y0 == y1 {
+		return false
+	}
+
+	dx := x1 - x0
+	dy := y1 - y0
+	absDx, absDy := dx, dy
+	if absDx < 0 {
+		absDx = -absDx
+	}
+	if absDy < 0 {
+		absDy = -absDy
+	}
+
+	stepX, stepY := 1, 1
+	if dx < 0 {
+		stepX = -1
+	}
+	if dy < 0 {
+		stepY = -1
+	}
+
+	err := absDx - absDy
+	x, y := x0, y0
+
+	for {
+		e2 := 2 * err
+		if e2 > -absDy {
+			err -= absDy
+			x += stepX
+		}
+		if e2 < absDx {
+			err += absDx
+			y += stepY
+		}
+
+		// Reached destination - path clear
+		if x == x1 && y == y1 {
+			return false
+		}
+
+		// Check intermediate cell
+		if p.HasBlockingWallAtUnsafe(x, y, mask) {
+			return true
+		}
+	}
+}
+
+// IsPointValidForOrbit checks if grid point is within bounds and not wall-blocked
+func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	config := p.world.Resources.Config
+	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
+		return false
+	}
+	return !p.HasBlockingWallAtUnsafe(x, y, mask)
+}

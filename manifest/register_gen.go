@@ -208,14 +208,11 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("dim", func(ctx any) any {
 		return renderer.NewDimRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
-	registry.RegisterRenderer("heatmeter", func(ctx any) any {
-		return renderer.NewHeatMeterRenderer(ctx.(*engine.GameContext))
+	registry.RegisterRenderer("heat", func(ctx any) any {
+		return renderer.NewHeatRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
-	registry.RegisterRenderer("rowindicator", func(ctx any) any {
-		return renderer.NewRowIndicatorRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
-	registry.RegisterRenderer("columnindicator", func(ctx any) any {
-		return renderer.NewColumnIndicatorRenderer(ctx.(*engine.GameContext))
+	registry.RegisterRenderer("indicator", func(ctx any) any {
+		return renderer.NewIndicatorRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityUI)
 	registry.RegisterRenderer("statusbar", func(ctx any) any {
 		return renderer.NewStatusBarRenderer(ctx.(*engine.GameContext))
@@ -301,9 +298,8 @@ func ActiveRenderers() []string {
 		"wall",
 		"grayout",
 		"dim",
-		"heatmeter",
-		"rowindicator",
-		"columnindicator",
+		"heat",
+		"indicator",
 		"statusbar",
 		"cursor",
 		"overlay",

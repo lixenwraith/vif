@@ -53,7 +53,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 				bg = visual.RgbCursorNormal
 			}
 		} else {
-			fg = visual.RgbRowIndicator
+			fg = visual.RgbIndicator
 			bg = visual.RgbBackground
 
 			if absRelative%10 == 0 {
@@ -99,7 +99,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			} else {
 				ch = ' '
 			}
-			fg = visual.RgbColumnIndicator
+			fg = visual.RgbIndicator
 			bg = visual.RgbBackground
 		}
 		buf.SetWithBg(screenX, indicatorY, ch, fg, bg)
