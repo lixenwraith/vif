@@ -277,45 +277,70 @@ func (s *StormSystem) spawnStorm() {
 	centerX := config.MapWidth / 2
 	centerY := config.MapHeight / 2
 
-	// Create root phantom header
+	// Pre-calculate circle spawn parameters
+	angleOffsets := [3]float64{0, 2 * math.Pi / 3, 4 * math.Pi / 3}
+	zOffsets := [3]float64{-1.0, 0.0, 1.0}
+	initialRadius := parameter.StormInitialRadiusFloat
+	initialSpeed := parameter.StormInitialSpeedFloat
+	baseZ := (parameter.StormZMinFloat + parameter.StormZMaxFloat) / 2
+
+	type circleSpawnInfo struct {
+		gridX, gridY int
+		angle        float64
+		pos3D        vmath.Vec3
+		vel3D        vmath.Vec3
+	}
+
+	var circleInfos [component.StormCircleCount]circleSpawnInfo
+
+	// 1. Calculate target positions and validate all circles
+	for i := 0; i < component.StormCircleCount; i++ {
+		angle := angleOffsets[i]
+		offsetX := initialRadius * math.Cos(angle)
+		offsetY := initialRadius * math.Sin(angle) * 0.5 // Terminal aspect ratio
+
+		targetX := int(float64(centerX) + offsetX)
+		targetY := int(float64(centerY) + offsetY)
+
+		// Find valid position via spiral search
+		foundX, foundY, found := s.findCirclePosition(targetX, targetY)
+		if !found {
+			return // Abort entire spawn - one circle failed
+		}
+
+		circleInfos[i] = circleSpawnInfo{
+			gridX: foundX,
+			gridY: foundY,
+			angle: angle,
+			pos3D: vmath.Vec3{
+				X: vmath.FromInt(foundX),
+				Y: vmath.FromInt(foundY),
+				Z: vmath.FromFloat(baseZ + zOffsets[i]*parameter.StormZSpawnOffsetFloat),
+			},
+			vel3D: vmath.Vec3{
+				X: vmath.FromFloat(-initialSpeed * math.Sin(angle)),
+				Y: vmath.FromFloat(initialSpeed * math.Cos(angle) * 0.5),
+				Z: vmath.FromFloat(float64(s.rng.Intn(6)-3) * 0.8),
+			},
+		}
+	}
+
+	// 2. Clear all spawn areas (validation passed)
+	for i := 0; i < component.StormCircleCount; i++ {
+		s.clearCircleSpawnArea(circleInfos[i].gridX, circleInfos[i].gridY)
+	}
+
+	// 3. Create entities
 	rootEntity := s.world.CreateEntity()
 	s.world.Positions.SetPosition(rootEntity, component.PositionComponent{X: centerX, Y: centerY})
 	s.world.Components.Protection.SetComponent(rootEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll,
 	})
 
-	// Initialize storm component
 	stormComp := component.StormComponent{}
 
-	// Create 3 circle headers in equilateral triangle, staggered Z
-	angleOffsets := [3]float64{0, 2 * math.Pi / 3, 4 * math.Pi / 3}
-	zOffsets := [3]float64{-1.0, 0.0, 1.0}
-	initialRadius := parameter.StormInitialRadiusFloat
-	initialSpeed := parameter.StormInitialSpeedFloat
-
-	// Base Z in middle of depth range
-	baseZ := (parameter.StormZMinFloat + parameter.StormZMaxFloat) / 2
-
 	for i := 0; i < component.StormCircleCount; i++ {
-		angle := angleOffsets[i]
-		offsetX := initialRadius * math.Cos(angle)
-		offsetY := initialRadius * math.Sin(angle) * 0.5 // Terminal aspect ratio
-		offsetZ := zOffsets[i] * parameter.StormZSpawnOffsetFloat
-
-		pos3D := vmath.Vec3{
-			X: vmath.FromFloat(float64(centerX) + offsetX),
-			Y: vmath.FromFloat(float64(centerY) + offsetY),
-			Z: vmath.FromFloat(baseZ + offsetZ),
-		}
-
-		// Tangential velocity for orbital motion + random Z component
-		vel3D := vmath.Vec3{
-			X: vmath.FromFloat(-initialSpeed * math.Sin(angle)),
-			Y: vmath.FromFloat(initialSpeed * math.Cos(angle) * 0.5),
-			Z: vmath.FromFloat(float64(s.rng.Intn(6)-3) * 0.8),
-		}
-
-		circleEntity := s.createCircleHeader(rootEntity, i, pos3D, vel3D)
+		circleEntity := s.createCircleHeader(rootEntity, i, circleInfos[i].pos3D, circleInfos[i].vel3D)
 		stormComp.Circles[i] = circleEntity
 		stormComp.CirclesAlive[i] = true
 	}
@@ -341,6 +366,115 @@ func (s *StormSystem) spawnStorm() {
 	s.rootEntity = rootEntity
 	s.statActive.Store(true)
 	s.statCircleCount.Store(component.StormCircleCount)
+}
+
+// findCirclePosition searches for valid position for circle's elliptical footprint
+// Returns (gridX, gridY, found) where gridX/gridY is the circle center
+func (s *StormSystem) findCirclePosition(targetX, targetY int) (int, int, bool) {
+	const maxSearchRadius = 20
+
+	// Check target position first (radius 0)
+	if s.isCirclePositionValid(targetX, targetY) {
+		return targetX, targetY, true
+	}
+
+	// Spiral outward
+	for radius := 1; radius <= maxSearchRadius; radius++ {
+		vertRadius := (radius + 1) / 2 // Aspect correction for terminal cells
+
+		for _, dir := range engine.SpiralSearchDirs {
+			checkX := targetX + dir[0]*radius
+			checkY := targetY + dir[1]*vertRadius
+
+			if s.isCirclePositionValid(checkX, checkY) {
+				return checkX, checkY, true
+			}
+		}
+	}
+
+	return 0, 0, false
+}
+
+// isCirclePositionValid checks if all ellipse member cells at this center are valid
+func (s *StormSystem) isCirclePositionValid(centerX, centerY int) bool {
+	config := s.world.Resources.Config
+	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, parameter.StormCircleRadiusY)
+
+	for y := -radiusY; y <= radiusY; y++ {
+		for x := -radiusX; x <= radiusX; x++ {
+			dx := vmath.FromInt(x)
+			dy := vmath.FromInt(y)
+
+			// Skip cells outside ellipse
+			if vmath.EllipseDistSq(dx, dy, invRxSq, invRySq) > vmath.Scale {
+				continue
+			}
+
+			cellX := centerX + x
+			cellY := centerY + y
+
+			// Bounds check
+			if cellX < 0 || cellX >= config.MapWidth || cellY < 0 || cellY >= config.MapHeight {
+				return false
+			}
+
+			// Wall check
+			if s.world.Positions.HasBlockingWallAt(cellX, cellY, component.WallBlockSpawn) {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+// clearCircleSpawnArea destroys entities within circle's elliptical footprint
+func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
+	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, parameter.StormCircleRadiusY)
+
+	cursorEntity := s.world.Resources.Player.Entity
+	var toDestroy []core.Entity
+
+	for y := -radiusY; y <= radiusY; y++ {
+		for x := -radiusX; x <= radiusX; x++ {
+			dx := vmath.FromInt(x)
+			dy := vmath.FromInt(y)
+
+			// Skip cells outside ellipse
+			if vmath.EllipseDistSq(dx, dy, invRxSq, invRySq) > vmath.Scale {
+				continue
+			}
+
+			cellX := centerX + x
+			cellY := centerY + y
+
+			entities := s.world.Positions.GetAllEntityAt(cellX, cellY)
+			for _, e := range entities {
+				if e == 0 || e == cursorEntity {
+					continue
+				}
+				// Skip walls - they block, not get cleared
+				if s.world.Components.Wall.HasEntity(e) {
+					continue
+				}
+				// Check protection
+				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+					if prot.Mask&component.ProtectFromDrain != 0 {
+						continue
+					}
+				}
+				toDestroy = append(toDestroy, e)
+			}
+		}
+	}
+
+	if len(toDestroy) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+	}
 }
 
 // createCircleHeader builds a single circle sub-header entity
@@ -598,6 +732,73 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	}
 }
 
+// processCircleCollisions destroys non-protected entities at circle's elliptical footprint
+// Called when circle grid position changes
+func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX, newGridY int) {
+	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, parameter.StormCircleRadiusY)
+
+	cursorEntity := s.world.Resources.Player.Entity
+
+	// Build member exclusion set
+	headerComp, hasHeader := s.world.Components.Header.GetComponent(circleEntity)
+	memberSet := make(map[core.Entity]bool)
+	memberSet[circleEntity] = true
+	if hasHeader {
+		for _, m := range headerComp.MemberEntries {
+			if m.Entity != 0 {
+				memberSet[m.Entity] = true
+			}
+		}
+	}
+
+	var toDestroy []core.Entity
+
+	for y := -radiusY; y <= radiusY; y++ {
+		for x := -radiusX; x <= radiusX; x++ {
+			dx := vmath.FromInt(x)
+			dy := vmath.FromInt(y)
+
+			if vmath.EllipseDistSq(dx, dy, invRxSq, invRySq) > vmath.Scale {
+				continue
+			}
+
+			cellX := newGridX + x
+			cellY := newGridY + y
+
+			entities := s.world.Positions.GetAllEntityAt(cellX, cellY)
+			for _, e := range entities {
+				if e == 0 || e == cursorEntity || memberSet[e] {
+					continue
+				}
+
+				if s.world.Components.Wall.HasEntity(e) {
+					continue
+				}
+
+				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+					if prot.Mask&component.ProtectFromDrain != 0 || prot.Mask == component.ProtectAll {
+						continue
+					}
+				}
+
+				if s.world.Components.Nugget.HasEntity(e) {
+					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
+						Entity: e,
+					})
+				}
+
+				toDestroy = append(toDestroy, e)
+			}
+		}
+	}
+
+	if len(toDestroy) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy)
+	}
+}
+
 // syncCircleTo2D updates grid position and kinetic component from 3D state
 func (s *StormSystem) syncCircleTo2D(entity core.Entity, circle *component.StormCircleComponent) {
 	newGridX := vmath.ToInt(circle.Pos3D.X)
@@ -606,6 +807,7 @@ func (s *StormSystem) syncCircleTo2D(entity core.Entity, circle *component.Storm
 	// Update grid position
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
 		if pos.X != newGridX || pos.Y != newGridY {
+			s.processCircleCollisions(entity, newGridX, newGridY)
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 	}
