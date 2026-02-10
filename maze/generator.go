@@ -1,6 +1,7 @@
 package maze
 
 import (
+	"math"
 	"math/rand"
 	"time"
 )
@@ -15,35 +16,63 @@ type Point struct {
 	X, Y int
 }
 
+// RoomSpec defines an explicitly positioned room
+// CenterX, CenterY specify the room center in grid coordinates
+type RoomSpec struct {
+	CenterX int
+	CenterY int
+	Width   int
+	Height  int
+}
+
+// RoomResult describes a generated room
+type RoomResult struct {
+	X, Y          int     // Top-left corner
+	Width, Height int     // Dimensions
+	Entries       []Point // Entry points connecting to maze
+}
+
+// resolvedRoom is internal representation with top-left coords
+type resolvedRoom struct {
+	x, y, w, h int
+}
+
 type Config struct {
 	Width, Height int
 
-	// Braiding: 0.0 (Perfect Maze/Tree) to 1.0 (No dead ends/Graph).
+	// Braiding: 0.0 (Perfect Maze/Tree) to 1.0 (No dead ends/Graph)
 	// Higher values add cycles. Constraints (No Plazas/Pillars) take precedence.
 	Braiding float64
 
-	// If true, the outer boundary is set to Passage.
+	// If true, the outer boundary is set to Passage
 	RemoveBorders bool
 
 	StartPos *Point // Optional (nil = Automatic)
 	EndPos   *Point // Optional (nil = Automatic)
 	Seed     int64  // Optional (0 = Random)
+
+	// Room generation
+	// RoomCount specifies total rooms to generate (0 = no rooms)
+	// Rooms slice provides explicit positions for first len(Rooms) rooms
+	// Remaining rooms (RoomCount - len(Rooms)) are placed randomly
+	RoomCount         int
+	Rooms             []RoomSpec // Explicit room specifications
+	DefaultRoomWidth  int        // Width for random rooms (0 = 15)
+	DefaultRoomHeight int        // Height for random rooms (0 = 11)
 }
 
 type Result struct {
 	Grid         [][]bool
 	Start, End   Point
 	SolutionPath []Point
+	Rooms        []RoomResult
 }
 
-// Generate creates a stochastic topological maze.
+// Generate creates a stochastic topological maze with optional rooms
 func Generate(cfg Config) Result {
-	// 1. Setup Topology
-	// We round DOWN to the nearest odd number to stay within requested bounds.
 	rows := ensureOdd(cfg.Height)
 	cols := ensureOdd(cfg.Width)
 
-	// 2. Initialize Grid (Filled with Walls)
 	grid := make([][]bool, rows)
 	for i := range grid {
 		grid[i] = make([]bool, cols)
@@ -52,19 +81,21 @@ func Generate(cfg Config) Result {
 		}
 	}
 
-	// 3. RNG Setup
 	seed := cfg.Seed
 	if seed == 0 {
 		seed = time.Now().UnixNano()
 	}
 	rng := rand.New(rand.NewSource(seed))
 
-	// 4. Resolve Start/End Logic
+	// Resolve and reserve rooms before maze generation
+	resolved := resolveRooms(cfg, cols, rows, rng)
+	reserveRooms(grid, resolved)
+
+	// Resolve Start/End
 	startDefX, startDefY := 1, 1
 	endDefX, endDefY := cols-2, rows-2
 
 	if cfg.RemoveBorders {
-		// Jailbreak: Start Center, End Right Edge
 		startDefX, startDefY = (cols/2)|1, (rows/2)|1
 		endDefX, endDefY = cols-1, (rows/2)|1
 	}
@@ -72,35 +103,30 @@ func Generate(cfg Config) Result {
 	start := resolvePoint(rows, cols, cfg.StartPos, startDefX, startDefY)
 	end := resolvePoint(rows, cols, cfg.EndPos, endDefX, endDefY)
 
-	// 5. Core Generation (Recursive Backtracker)
-	// Generates a Uniform Spanning Tree (UST).
+	// Ensure start is not inside a room
+	start = adjustStartForRooms(start, resolved, cols, rows)
+
 	recursiveBacktracker(grid, start, rng)
 
-	// 6. Mode: Remove Borders (Jailbreak)
-	// Must be done BEFORE braiding so the braiding algo detects external connections
-	// and doesn't try to force internal loops for edge nodes.
 	if cfg.RemoveBorders {
 		stripBorders(grid)
 	}
 
-	// 7. Apply Braiding (Homological Complexity)
-	// Introduces cycles while preventing Plazas and Pillars.
 	if cfg.Braiding > 0 {
 		applySmartBraiding(grid, cfg.Braiding, rng)
 	}
 
-	// 8. Final Connectivity Enforcement
+	// Connect rooms to maze passages
+	roomResults := connectRooms(grid, resolved, rng)
+
 	if cfg.RemoveBorders {
-		// Ensure Start/End are open if they land on the cleared border
 		grid[start.Y][start.X] = Passage
 		grid[end.Y][end.X] = Passage
 	} else {
-		// Standard Mode: Ensure Start/End are walkable
 		forceOpen(grid, start)
 		forceOpen(grid, end)
 	}
 
-	// 9. Calculate Solution Path (BFS)
 	path := solveBFS(grid, start, end)
 
 	return Result{
@@ -108,7 +134,372 @@ func Generate(cfg Config) Result {
 		Start:        start,
 		End:          end,
 		SolutionPath: path,
+		Rooms:        roomResults,
 	}
+}
+
+// resolveRooms converts config to concrete room bounds
+// Uses explicit specs first, then generates random rooms for remainder
+// Dynamic sizing: when defaults not specified, scales inversely with sqrt(roomCount)
+func resolveRooms(cfg Config, cols, rows int, rng *rand.Rand) []resolvedRoom {
+	if cfg.RoomCount <= 0 {
+		return nil
+	}
+
+	resolved := make([]resolvedRoom, 0, cfg.RoomCount)
+
+	// Calculate default dimensions based on room count if not specified, improved by scaling and odd-parity enforcement
+	defaultW := ensureOdd(cfg.DefaultRoomWidth)
+	defaultH := ensureOdd(cfg.DefaultRoomHeight)
+
+	if defaultW <= 0 || defaultH <= 0 {
+		divisor := 1.0 + math.Sqrt(float64(cfg.RoomCount))
+		if defaultW <= 0 {
+			defaultW = ensureOdd(int(float64(cols) / divisor))
+		}
+		if defaultH <= 0 {
+			defaultH = ensureOdd(int(float64(rows) / divisor))
+		}
+	}
+
+	// Ensure minimums for connectivity
+	if defaultW < 3 {
+		defaultW = 3
+	}
+	if defaultH < 3 {
+		defaultH = 3
+	}
+
+	explicitCount := len(cfg.Rooms)
+	if explicitCount > cfg.RoomCount {
+		explicitCount = cfg.RoomCount
+	}
+
+	for i := 0; i < explicitCount; i++ {
+		spec := cfg.Rooms[i]
+		w, h := ensureOdd(spec.Width), ensureOdd(spec.Height)
+		if w <= 0 {
+			w = defaultW
+		}
+		if h <= 0 {
+			h = defaultH
+		}
+
+		if spec.CenterX == 0 && spec.CenterY == 0 {
+			// Random placement for explicit size
+			room, ok := resolveRandomRoom(w, h, cols, rows, resolved, rng)
+			if ok {
+				resolved = append(resolved, room)
+			}
+		} else {
+			room, ok := resolveExplicitRoom(spec.CenterX, spec.CenterY, w, h, cols, rows, resolved)
+			if ok {
+				resolved = append(resolved, room)
+			}
+		}
+	}
+
+	// Generate random rooms for remainder
+	randomCount := cfg.RoomCount - len(resolved)
+	curW, curH := defaultW, defaultH
+
+	for i := 0; i < randomCount; i++ {
+		// Adaptive shrinking. If we can't place a room, shrink it and try again.
+		placed := false
+		for attempt := 0; attempt < 3; attempt++ {
+			room, ok := resolveRandomRoom(curW, curH, cols, rows, resolved, rng)
+			if ok {
+				resolved = append(resolved, room)
+				placed = true
+				break
+			}
+			// Shrink and try again
+			curW = ensureOdd(curW - 2)
+			curH = ensureOdd(curH - 2)
+			if curW < 3 || curH < 3 {
+				break
+			}
+		}
+		if !placed {
+			continue // Skip this room if it simply won't fit
+		}
+	}
+
+	return resolved
+}
+
+// resolveExplicitRoom converts explicit center coordinates and dimensions to resolved bounds
+func resolveExplicitRoom(centerX, centerY, width, height, cols, rows int, existing []resolvedRoom) (resolvedRoom, bool) {
+	if width <= 0 || height <= 0 {
+		return resolvedRoom{}, false
+	}
+
+	w := ensureOdd(width)
+	h := ensureOdd(height)
+
+	// Convert center to top-left
+	x := centerX - w/2
+	y := centerY - h/2
+
+	// Clamp to valid bounds and preventing edge placement
+	x, y, w, h = clampRoomBounds(x, y, w, h, cols, rows)
+
+	if w < 3 || h < 3 {
+		return resolvedRoom{}, false
+	}
+
+	room := resolvedRoom{x: x, y: y, w: w, h: h}
+	if roomOverlaps(room, existing) {
+		return resolvedRoom{}, false
+	}
+
+	return room, true
+}
+
+// resolveRandomRoom finds a valid random position for a room
+func resolveRandomRoom(width, height, cols, rows int, existing []resolvedRoom, rng *rand.Rand) (resolvedRoom, bool) {
+	w := ensureOdd(width)
+	h := ensureOdd(height)
+
+	// Margin (3) to ensure rooms don't touch borders and align with the recursive backtracker's passage grid (odd indices)
+	minX, minY := 3, 3
+	maxX := (cols - 3 - w)
+	maxY := (rows - 3 - h)
+
+	if maxX < minX || maxY < minY {
+		return resolvedRoom{}, false
+	}
+
+	const maxAttempts = 100
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		// Pick odd coordinates to align with maze nodes
+		x := minX + rng.Intn((maxX-minX)/2+1)*2
+		y := minY + rng.Intn((maxY-minY)/2+1)*2
+
+		room := resolvedRoom{x: x, y: y, w: w, h: h}
+		if !roomOverlaps(room, existing) {
+			return room, true
+		}
+	}
+
+	return resolvedRoom{}, false
+}
+
+// clampRoomBounds ensures room fits within maze boundaries with a margin
+func clampRoomBounds(x, y, w, h, cols, rows int) (int, int, int, int) {
+	// Enforce a minimum 2-cell buffer from absolute edges to protect room walls in Jailbreak mode
+	margin := 2
+
+	if x < margin {
+		x = margin
+	}
+	if y < margin {
+		y = margin
+	}
+
+	// Ensure x, y are odd for grid alignment
+	if x%2 == 0 {
+		x++
+	}
+	if y%2 == 0 {
+		y++
+	}
+
+	if x+w > cols-margin {
+		w = ensureOdd(cols - margin - x)
+	}
+	if y+h > rows-margin {
+		h = ensureOdd(rows - margin - y)
+	}
+
+	return x, y, w, h
+}
+
+// roomOverlaps checks if room intersects any existing room (with 2-cell gap)
+func roomOverlaps(room resolvedRoom, existing []resolvedRoom) bool {
+	const gap = 2
+	for _, r := range existing {
+		if room.x < r.x+r.w+gap && room.x+room.w+gap > r.x &&
+			room.y < r.y+r.h+gap && room.y+room.h+gap > r.y {
+			return true
+		}
+	}
+	return false
+}
+
+// reserveRooms marks room interiors as Passage before maze generation
+func reserveRooms(grid [][]bool, rooms []resolvedRoom) {
+	for _, room := range rooms {
+		for y := room.y; y < room.y+room.h; y++ {
+			for x := room.x; x < room.x+room.w; x++ {
+				grid[y][x] = Passage
+			}
+		}
+	}
+}
+
+// adjustStartForRooms moves start point outside rooms if necessary
+func adjustStartForRooms(start Point, rooms []resolvedRoom, cols, rows int) Point {
+	for _, room := range rooms {
+		if start.X >= room.x && start.X < room.x+room.w &&
+			start.Y >= room.y && start.Y < room.y+room.h {
+			// Start is inside room; move to nearest valid odd cell outside
+			// Try below room first
+			newY := room.y + room.h
+			if newY|1 < rows-1 {
+				return Point{X: start.X | 1, Y: newY | 1}
+			}
+			// Try above room
+			newY = room.y - 2
+			if newY > 0 {
+				return Point{X: start.X | 1, Y: newY | 1}
+			}
+			// Fallback to corner
+			return Point{X: 1, Y: 1}
+		}
+	}
+	return start
+}
+
+// connectRooms creates entry points from room boundaries to adjacent maze passages
+func connectRooms(grid [][]bool, rooms []resolvedRoom, rng *rand.Rand) []RoomResult {
+	rows, cols := len(grid), len(grid[0])
+	results := make([]RoomResult, 0, len(rooms))
+
+	for _, room := range rooms {
+		result := RoomResult{
+			X:       room.x,
+			Y:       room.y,
+			Width:   room.w,
+			Height:  room.h,
+			Entries: make([]Point, 0, 4),
+		}
+
+		// Collect candidate entry points (walls adjacent to room that border passages)
+		type candidate struct {
+			wallX, wallY   int // Wall cell to remove
+			checkX, checkY int // Adjacent cell to verify is passage
+		}
+		var candidates []candidate
+
+		// Top edge
+		for x := room.x; x < room.x+room.w; x++ {
+			wy := room.y - 1
+			cy := room.y - 2
+			if wy > 0 && cy >= 0 && grid[wy][x] == Wall && grid[cy][x] == Passage {
+				candidates = append(candidates, candidate{x, wy, x, cy})
+			}
+		}
+
+		// Bottom edge
+		for x := room.x; x < room.x+room.w; x++ {
+			wy := room.y + room.h
+			cy := room.y + room.h + 1
+			if wy < rows && cy < rows && grid[wy][x] == Wall && grid[cy][x] == Passage {
+				candidates = append(candidates, candidate{x, wy, x, cy})
+			}
+		}
+
+		// Left edge
+		for y := room.y; y < room.y+room.h; y++ {
+			wx := room.x - 1
+			cx := room.x - 2
+			if wx > 0 && cx >= 0 && grid[y][wx] == Wall && grid[y][cx] == Passage {
+				candidates = append(candidates, candidate{wx, y, cx, y})
+			}
+		}
+
+		// Right edge
+		for y := room.y; y < room.y+room.h; y++ {
+			wx := room.x + room.w
+			cx := room.x + room.w + 1
+			if wx < cols && cx < cols && grid[y][wx] == Wall && grid[y][cx] == Passage {
+				candidates = append(candidates, candidate{wx, y, cx, y})
+			}
+		}
+
+		// Create entries (at least 1, up to 4)
+		if len(candidates) > 0 {
+			// Shuffle candidates
+			rng.Shuffle(len(candidates), func(i, j int) {
+				candidates[i], candidates[j] = candidates[j], candidates[i]
+			})
+
+			// Determine entry count: 1-4, biased toward fewer
+			maxEntries := len(candidates)
+			if maxEntries > 4 {
+				maxEntries = 4
+			}
+			entryCount := 1 + rng.Intn(maxEntries)
+
+			for i := 0; i < entryCount && i < len(candidates); i++ {
+				c := candidates[i]
+				grid[c.wallY][c.wallX] = Passage
+				result.Entries = append(result.Entries, Point{X: c.wallX, Y: c.wallY})
+			}
+		}
+
+		// Fallback: force at least one entry by carving toward nearest passage
+		if len(result.Entries) == 0 {
+			entry := forceRoomEntry(grid, room)
+			if entry.X >= 0 {
+				result.Entries = append(result.Entries, entry)
+			}
+		}
+
+		results = append(results, result)
+	}
+
+	return results
+}
+
+// forceRoomEntry carves a path from room edge to nearest passage
+func forceRoomEntry(grid [][]bool, room resolvedRoom) Point {
+	rows, cols := len(grid), len(grid[0])
+
+	type dir struct {
+		dx, dy         int
+		startX, startY int
+	}
+
+	dirs := []dir{
+		{0, -1, room.x + room.w/2, room.y - 1},     // Up
+		{0, 1, room.x + room.w/2, room.y + room.h}, // Down
+		{-1, 0, room.x - 1, room.y + room.h/2},     // Left
+		{1, 0, room.x + room.w, room.y + room.h/2}, // Right
+	}
+
+	for _, d := range dirs {
+		x, y := d.startX, d.startY
+
+		for steps := 0; steps < 20; steps++ {
+			if x < 0 || x >= cols || y < 0 || y >= rows {
+				break
+			}
+
+			if grid[y][x] == Passage {
+				// Found passage; carve back to room
+				for cx, cy := x-d.dx, y-d.dy; ; cx, cy = cx-d.dx, cy-d.dy {
+					if cx < 0 || cx >= cols || cy < 0 || cy >= rows {
+						break
+					}
+					if cx >= room.x && cx < room.x+room.w &&
+						cy >= room.y && cy < room.y+room.h {
+						// Reached room interior
+						return Point{X: cx + d.dx, Y: cy + d.dy}
+					}
+					grid[cy][cx] = Passage
+				}
+				break
+			}
+
+			grid[y][x] = Passage
+			x += d.dx
+			y += d.dy
+		}
+	}
+
+	return Point{X: -1, Y: -1}
 }
 
 // --- Core Algorithms ---
@@ -116,7 +507,6 @@ func Generate(cfg Config) Result {
 func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 	rows, cols := len(grid), len(grid[0])
 
-	// Ensure start is within bounds before beginning
 	if start.X < 0 || start.X >= cols || start.Y < 0 || start.Y >= rows {
 		start = Point{1, 1}
 	}
@@ -132,7 +522,6 @@ func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 
 		for _, d := range dirs {
 			nx, ny := curr.X+d.X, curr.Y+d.Y
-			// Check Bounds (Leave 1 cell border for walls)
 			if nx > 0 && nx < cols-1 && ny > 0 && ny < rows-1 {
 				if grid[ny][nx] == Wall {
 					candidates = append(candidates, d)
@@ -158,38 +547,30 @@ func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 func applySmartBraiding(grid [][]bool, probability float64, rng *rand.Rand) {
 	rows, cols := len(grid), len(grid[0])
 
-	// Iterate over odd nodes (Rooms)
 	for y := 1; y < rows-1; y += 2 {
 		for x := 1; x < cols-1; x += 2 {
 			if grid[y][x] == Wall {
 				continue
 			}
 
-			// 1. Identify Dead End
-			// A node is a dead end if it has exactly 1 Passage neighbor.
 			exits := 0
 			checkDirs := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 			for _, d := range checkDirs {
-				// Bounds check included for safety, though loop ignores edges
 				if grid[y+d.Y][x+d.X] == Passage {
 					exits++
 				}
 			}
 
 			if exits == 1 && rng.Float64() < probability {
-				// 2. Find valid walls to remove to create a loop
 				candidates := make([]Point, 0, 4)
 
-				// Look at orthogonal neighbors (distance 2)
 				jumpDirs := []Point{{0, -2}, {0, 2}, {-2, 0}, {2, 0}}
 				for _, jd := range jumpDirs {
-					nx, ny := x+jd.X, y+jd.Y     // Target Neighbor
-					wx, wy := x+jd.X/2, y+jd.Y/2 // The intervening Wall
+					nx, ny := x+jd.X, y+jd.Y
+					wx, wy := x+jd.X/2, y+jd.Y/2
 
 					if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
-						// Connect if neighbor is Passage and the wall is currently blocking
 						if grid[ny][nx] == Passage && grid[wy][wx] == Wall {
-							// 3. TOPOLOGY CHECK: Plazas & Pillars
 							if canSafelyRemoveWall(grid, wx, wy) {
 								candidates = append(candidates, Point{wx, wy})
 							}
@@ -207,59 +588,42 @@ func applySmartBraiding(grid [][]bool, probability float64, rng *rand.Rand) {
 }
 
 // canSafelyRemoveWall checks if removing grid[y][x] creates prohibited topology:
-// 1. Plazas (2x2 Passages).
-// 2. Pillars (Isolated Walls).
+// 1. Plazas (2x2 Passages)
+// 2. Pillars (Isolated Walls)
 func canSafelyRemoveWall(grid [][]bool, x, y int) bool {
 	rows, cols := len(grid), len(grid[0])
 
-	// Helper for bounds-safe read
 	isP := func(tx, ty int) bool {
 		if tx < 0 || tx >= cols || ty < 0 || ty >= rows {
-			return false // Treat out of bounds as Wall for plaza checking purposes
+			return false
 		}
 		return grid[ty][tx] == Passage
 	}
 
-	// --- Check 1: No Plazas (2x2 Open Space) ---
-	// If we turn (x,y) to passage, check the 4 quadrants around it.
-
-	// Top-Left quadrant containing (x,y)
+	// Check 1: No Plazas (2x2 Open Space)
 	if isP(x-1, y-1) && isP(x, y-1) && isP(x-1, y) {
 		return false
 	}
-	// Top-Right quadrant
 	if isP(x, y-1) && isP(x+1, y-1) && isP(x+1, y) {
 		return false
 	}
-	// Bottom-Left quadrant
 	if isP(x-1, y) && isP(x-1, y+1) && isP(x, y+1) {
 		return false
 	}
-	// Bottom-Right quadrant
 	if isP(x+1, y) && isP(x, y+1) && isP(x+1, y+1) {
 		return false
 	}
 
-	// --- Check 2: No Pillars (Isolated Walls) ---
-	// Removing this wall might isolate an adjacent wall node.
-	// We must check the orthogonal neighbors of (x,y).
-	// If a neighbor is a Wall, ensure it has at least one other Wall connection.
-
+	// Check 2: No Pillars (Isolated Walls)
 	ortho := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 
 	for _, d := range ortho {
 		nx, ny := x+d.X, y+d.Y
-		// Check bounds
 		if nx >= 0 && nx < cols && ny >= 0 && ny < rows {
 			if grid[ny][nx] == Wall {
-				// Check if this wall (nx, ny) would become isolated.
-				// It is isolated if ALL its neighbors are Passages.
-				// Note: (x,y) is currently Wall in memory, but conceptually Passage for this check.
-
 				wallConnections := 0
 				for _, d2 := range ortho {
 					nnx, nny := nx+d2.X, ny+d2.Y
-					// If the neighbor is (x,y), it's GOING to be a passage, so don't count it as a wall connection.
 					if nnx == x && nny == y {
 						continue
 					}
@@ -272,7 +636,7 @@ func canSafelyRemoveWall(grid [][]bool, x, y int) bool {
 				}
 
 				if wallConnections == 0 {
-					return false // Removing (x,y) creates a pillar at (nx, ny)
+					return false
 				}
 			}
 		}
@@ -283,12 +647,10 @@ func canSafelyRemoveWall(grid [][]bool, x, y int) bool {
 
 func stripBorders(grid [][]bool) {
 	rows, cols := len(grid), len(grid[0])
-	// Set Top/Bottom rows to Passage
 	for x := 0; x < cols; x++ {
 		grid[0][x] = Passage
 		grid[rows-1][x] = Passage
 	}
-	// Set Left/Right cols to Passage
 	for y := 0; y < rows; y++ {
 		grid[y][0] = Passage
 		grid[y][cols-1] = Passage
@@ -302,7 +664,7 @@ func ensureOdd(n int) int {
 		return 3
 	}
 	if n%2 == 0 {
-		return n - 1 // Round down to stay within bounds
+		return n - 1
 	}
 	return n
 }
@@ -312,7 +674,6 @@ func resolvePoint(h, w int, p *Point, defX, defY int) Point {
 		return Point{defX, defY}
 	}
 	x, y := p.X, p.Y
-	// Clamp
 	if x < 0 {
 		x = 0
 	}
@@ -334,7 +695,6 @@ func forceOpen(grid [][]bool, p Point) {
 	}
 	grid[p.Y][p.X] = Passage
 
-	// Simple check: if isolated, connect to nearest neighbor
 	dirs := []Point{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 	hasPassage := false
 	for _, d := range dirs {
@@ -359,7 +719,6 @@ func forceOpen(grid [][]bool, p Point) {
 }
 
 func solveBFS(grid [][]bool, start, end Point) []Point {
-	// Quick validity check
 	if start.X < 0 || start.Y < 0 || end.X < 0 || end.Y < 0 {
 		return nil
 	}
@@ -382,7 +741,6 @@ func solveBFS(grid [][]bool, start, end Point) []Point {
 		queue = queue[1:]
 
 		if curr == end {
-			// Reconstruct Path
 			path := []Point{}
 			for curr != start {
 				path = append([]Point{curr}, path...)

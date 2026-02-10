@@ -25,11 +25,53 @@ func main() {
 		jailStr, _ := reader.ReadString('\n')
 		jailMode := strings.ToLower(strings.TrimSpace(jailStr)) == "y"
 
+		// CHANGED: 0 values now trigger auto-scaling logic in the generator
+		roomCount := getInt(reader, "Room Count (default 0): ", 0)
+		roomW := getInt(reader, "Default Room Width (0 = Auto): ", 0)
+		roomH := getInt(reader, "Default Room Height (0 = Auto): ", 0)
+
+		var startPos, endPos *maze.Point
+		fmt.Print("Specify custom Start/End positions? [y/N]: ")
+		customStr, _ := reader.ReadString('\n')
+		if strings.ToLower(strings.TrimSpace(customStr)) == "y" {
+			startPos = &maze.Point{
+				X: getInt(reader, "  Start X: ", 1),
+				Y: getInt(reader, "  Start Y: ", 1),
+			}
+			endPos = &maze.Point{
+				X: getInt(reader, "  End X: ", w-2),
+				Y: getInt(reader, "  End Y: ", h-2),
+			}
+		}
+
 		cfg := maze.Config{
-			Width:         w,
-			Height:        h,
-			Braiding:      braid,
-			RemoveBorders: jailMode,
+			Width:             w,
+			Height:            h,
+			Braiding:          braid,
+			RemoveBorders:     jailMode,
+			RoomCount:         roomCount,
+			DefaultRoomWidth:  roomW,
+			DefaultRoomHeight: roomH,
+			StartPos:          startPos,
+			EndPos:            endPos,
+		}
+
+		// ADDED: Support for partially random RoomSpecs (0 = random for that field)
+		if roomCount > 0 {
+			fmt.Print("Define explicit room specs? (0 for random field) [y/N]: ")
+			exStr, _ := reader.ReadString('\n')
+			if strings.ToLower(strings.TrimSpace(exStr)) == "y" {
+				numSpecs := getInt(reader, "  How many specs?: ", 1)
+				for i := 0; i < numSpecs; i++ {
+					fmt.Printf("  --- Room Spec %d ---\n", i+1)
+					cfg.Rooms = append(cfg.Rooms, maze.RoomSpec{
+						CenterX: getInt(reader, "    Center X (0=rnd): ", 0),
+						CenterY: getInt(reader, "    Center Y (0=rnd): ", 0),
+						Width:   getInt(reader, "    Width    (0=auto): ", 0),
+						Height:  getInt(reader, "    Height   (0=auto): ", 0),
+					})
+				}
+			}
 		}
 
 		fmt.Println("\nGenerating...")
@@ -38,7 +80,7 @@ func main() {
 		dur := time.Since(startT)
 
 		fmt.Printf("Done in %v\n", dur)
-		fmt.Printf("Grid Dimensions: %dx%d\n", len(res.Grid[0]), len(res.Grid))
+		fmt.Printf("Rooms placed: %d/%d\n", len(res.Rooms), roomCount)
 
 		if res.SolutionPath != nil {
 			fmt.Printf("Solution Path Length: %d steps\n", len(res.SolutionPath))
@@ -62,7 +104,19 @@ func draw(res maze.Result) {
 		pathMap[p] = true
 	}
 
-	// Double buffering for string builder can be faster, but direct print is fine for terminal
+	roomMap := make(map[maze.Point]bool)
+	entryMap := make(map[maze.Point]bool)
+	for _, r := range res.Rooms {
+		for y := r.Y; y < r.Y+r.Height; y++ {
+			for x := r.X; x < r.X+r.Width; x++ {
+				roomMap[maze.Point{X: x, Y: y}] = true
+			}
+		}
+		for _, e := range r.Entries {
+			entryMap[e] = true
+		}
+	}
+
 	for y, row := range res.Grid {
 		for x, isWall := range row {
 			p := maze.Point{X: x, Y: y}
@@ -73,9 +127,12 @@ func draw(res maze.Result) {
 				fmt.Print("E")
 			} else if isWall {
 				fmt.Print("█")
+			} else if entryMap[p] {
+				fmt.Print("+")
 			} else if pathMap[p] {
-				// Use a distinct but lighter char for path
 				fmt.Print("•")
+			} else if roomMap[p] {
+				fmt.Print(".")
 			} else {
 				fmt.Print(" ")
 			}
@@ -83,8 +140,6 @@ func draw(res maze.Result) {
 		fmt.Println()
 	}
 }
-
-// --- Input Helpers ---
 
 func getInt(r *bufio.Reader, prompt string, def int) int {
 	fmt.Print(prompt)
@@ -111,7 +166,6 @@ func getFloat(r *bufio.Reader, prompt string, def float64) float64 {
 	if err != nil {
 		return def
 	}
-	// Clamp
 	if v < 0.0 {
 		return 0.0
 	}
