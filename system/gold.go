@@ -306,7 +306,6 @@ func (s *GoldSystem) spawnGold() bool {
 			Entity:  ed.entity,
 			OffsetX: ed.offset,
 			OffsetY: 0,
-			Layer:   component.LayerGlyph,
 		})
 	}
 

@@ -743,29 +743,30 @@ func resolveWeaponTargets(
 	// Collect all combat entities except cursor-owned
 	combatEntities := world.Components.Combat.GetAllEntities()
 	candidates := make([]core.Entity, 0, len(combatEntities))
+
 	for _, e := range combatEntities {
 		combat, ok := world.Components.Combat.GetComponent(e)
 		if !ok || combat.OwnerEntity == cursorEntity {
 			continue
 		}
 
-		// Filter members: skip simple members, allow sub-headers with combat behavior
-		// Circle Headers have both Member (→Root) and Header components
-		if world.Components.Member.HasEntity(e) {
-			headerComp, isHeader := world.Components.Header.GetComponent(e)
-			if !isHeader {
-				continue // Simple member, not targetable
-			}
-			// TODO: defensive approach, generalize later
-			// Sub-header: allow only combat behaviors
-			switch headerComp.Behavior {
-			case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
-				// Valid combat sub-header
-			default:
+		// Header Logic
+		if headerComp, isHeader := world.Components.Header.GetComponent(e); isHeader {
+			// Skip logic-only containers (e.g. Storm Root)
+			if headerComp.Type == component.CompositeTypeContainer {
 				continue
 			}
+			// Allow Unit (Swarm) and Ablative (Storm Circle)
+			candidates = append(candidates, e)
+			continue
 		}
 
+		// Member Logic: Skip, we target the Header
+		if world.Components.Member.HasEntity(e) {
+			continue
+		}
+
+		// Simple Entity (Drain)
 		candidates = append(candidates, e)
 	}
 
@@ -778,28 +779,39 @@ func resolveWeaponTargets(
 	singles := make([]targetAssignment, 0)
 
 	for _, e := range candidates {
-		if world.Components.Header.HasEntity(e) {
-			// Composite: find closest member
-			header, ok := world.Components.Header.GetComponent(e)
-			if !ok {
-				continue
-			}
+		if header, isHeader := world.Components.Header.GetComponent(e); isHeader {
+			// Composite: find closest member for visual snap
 			var bestMember core.Entity
 			var bestDist int64 = 1 << 62
+
+			// Fallback to header if no members
+			if len(header.MemberEntries) == 0 {
+				pos, ok := world.Positions.GetPosition(e)
+				if !ok {
+					continue
+				}
+				d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
+				composites = append(composites, targetAssignment{target: e, hit: e, dist: d})
+				continue
+			}
+
 			for _, member := range header.MemberEntries {
+				if member.Entity == 0 {
+					continue
+				}
+
 				pos, ok := world.Positions.GetPosition(member.Entity)
 				if !ok {
 					continue
 				}
-				d := vmath.Magnitude(
-					vmath.FromInt(originX-pos.X),
-					vmath.FromInt(originY-pos.Y),
-				)
+
+				d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
 				if d < bestDist {
 					bestDist = d
 					bestMember = member.Entity
 				}
 			}
+
 			if bestMember != 0 {
 				composites = append(composites, targetAssignment{
 					target: e,
@@ -813,10 +825,7 @@ func resolveWeaponTargets(
 			if !ok {
 				continue
 			}
-			d := vmath.Magnitude(
-				vmath.FromInt(originX-pos.X),
-				vmath.FromInt(originY-pos.Y),
-			)
+			d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
 			singles = append(singles, targetAssignment{
 				target: e,
 				hit:    e,
@@ -830,25 +839,23 @@ func resolveWeaponTargets(
 		return int(a.dist - b.dist)
 	})
 
-	// Build result: composites first, then singles
+	// Build result: composites first (priority), then singles
 	result := make([]targetAssignment, 0, count)
 	result = append(result, composites...)
 	result = append(result, singles...)
 
-	// Distribute overflow: if count > len(result), cycle through by distance priority
 	if len(result) == 0 {
 		return nil
 	}
 
+	// Distribute overflow: if count > len(result), cycle through targets
 	if len(result) >= count {
 		return result[:count]
 	}
 
-	// Overflow: repeat targets, prioritize composites then closest
 	final := make([]targetAssignment, count)
 	copy(final, result)
 	for i := len(result); i < count; i++ {
-		// Cycle through existing targets
 		final[i] = result[i%len(result)]
 	}
 	return final

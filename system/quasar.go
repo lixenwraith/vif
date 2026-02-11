@@ -410,7 +410,6 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 				Entity:  entity,
 				OffsetX: offsetX,
 				OffsetY: offsetY,
-				Layer:   component.LayerEffect,
 			})
 		}
 	}
@@ -418,6 +417,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	// Set composite header on phantom head
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorQuasar,
+		Type:          component.CompositeTypeUnit,
 		MemberEntries: members,
 	})
 

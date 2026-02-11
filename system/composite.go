@@ -324,7 +324,6 @@ func (s *CompositeSystem) AddMember(headerEntity, memberEntity core.Entity, offs
 		Entity:  memberEntity,
 		OffsetX: offsetX,
 		OffsetY: offsetY,
-		Layer:   layer,
 	})
 	s.world.Components.Header.SetComponent(headerEntity, headerComp)
 

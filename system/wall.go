@@ -232,7 +232,6 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 			Entity:  entity,
 			OffsetX: cell.OffsetX,
 			OffsetY: cell.OffsetY,
-			Layer:   component.LayerGlyph,
 		})
 
 		if x < minX {

@@ -60,8 +60,8 @@ func initPlayerShield() {
 
 func initQuasarShield() {
 	// Calculate dimensions including padding (Logic ported from QuasarRenderer)
-	padX := parameter.QuasarShieldPadTCX
-	padY := parameter.QuasarShieldPadTCY
+	padX := parameter.QuasarShieldPadX
+	padY := parameter.QuasarShieldPadY
 
 	rx := vmath.FromFloat(float64(parameter.QuasarWidth)/2.0 + float64(padX))
 	ry := vmath.FromFloat(float64(parameter.QuasarHeight)/2.0 + float64(padY))

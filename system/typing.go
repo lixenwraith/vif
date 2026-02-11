@@ -258,7 +258,8 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 	}
 
 	// Validate composite typing order
-	if !s.validateTypingOrder(entity, &header) {
+
+	if !s.isLeftmostMember(entity, &header) {
 		s.emitTypingError()
 		return
 	}
@@ -321,25 +322,6 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	s.moveCursorRight()
 }
 
-// === TYPING ORDER VALIDATION ===
-
-// validateTypingOrder checks if the entity is the next valid target based on Behavior heuristic
-func (s *TypingSystem) validateTypingOrder(entity core.Entity, header *component.HeaderComponent) bool {
-	switch header.Behavior {
-	case component.BehaviorGold:
-		// Gold: strict left-to-right ordering (X→Y→EntityID)
-		return s.isLeftmostMember(entity, header)
-
-	case component.BehaviorBoss:
-		// Boss: Layer 0 (Core) must be typed in order, Layer 1+ (Shield) any order
-		return s.validateBossOrder(entity, header)
-
-	default:
-		// Default: spatial order (left-to-right)
-		return s.isLeftmostMember(entity, header)
-	}
-}
-
 // isLeftmostMember returns true if entity is the leftmost living member
 // Ordering: X ascending → Y ascending → EntityID ascending
 // O(n) single pass, zero allocation
@@ -350,60 +332,6 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 
 	for _, m := range header.MemberEntries {
 		if m.Entity == 0 {
-			continue
-		}
-		pos, ok := s.world.Positions.GetPosition(m.Entity)
-		if !ok {
-			continue
-		}
-
-		better := false
-		if pos.X < leftmostX {
-			better = true
-		} else if pos.X == leftmostX {
-			if pos.Y < leftmostY {
-				better = true
-			} else if pos.Y == leftmostY && m.Entity < leftmost {
-				better = true
-			}
-		}
-
-		if better {
-			leftmost = m.Entity
-			leftmostX = pos.X
-			leftmostY = pos.Y
-		}
-	}
-
-	return leftmost == entity
-}
-
-// validateBossOrder checks boss-specific typing rules
-// Shield layer (1+): any order allowed
-// Core layer (0): must be leftmost core member
-// O(n) single pass, zero allocation
-func (s *TypingSystem) validateBossOrder(entity core.Entity, header *component.HeaderComponent) bool {
-	// Find entity's layer
-	var entityLayer uint8
-	for _, m := range header.MemberEntries {
-		if m.Entity == entity {
-			entityLayer = m.Layer
-			break
-		}
-	}
-
-	// Shield layer: any order
-	if entityLayer > component.LayerGlyph {
-		return true
-	}
-
-	// Core layer: find leftmost core member
-	var leftmost core.Entity
-	leftmostX := math.MaxInt
-	leftmostY := math.MaxInt
-
-	for _, m := range header.MemberEntries {
-		if m.Entity == 0 || m.Layer != component.LayerGlyph {
 			continue
 		}
 		pos, ok := s.world.Positions.GetPosition(m.Entity)

@@ -387,12 +387,12 @@ func (s *StormSystem) spawnStorm() {
 			Entity:  stormComp.Circles[i],
 			OffsetX: 0,
 			OffsetY: 0,
-			Layer:   component.LayerEffect,
 		}
 	}
 
 	s.world.Components.Header.SetComponent(rootEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorStorm,
+		Type:          component.CompositeTypeContainer,
 		MemberEntries: rootMembers,
 	})
 
@@ -544,6 +544,7 @@ func (s *StormSystem) createCircleHeader(
 		},
 	})
 
+	// TODO: remove logic using sentinel value 0 now that type is identified with header field
 	// Combat component
 	s.world.Components.Combat.SetComponent(circleEntity, component.CombatComponent{
 		OwnerEntity:      circleEntity,
@@ -557,6 +558,7 @@ func (s *StormSystem) createCircleHeader(
 	// Header component linking back to root
 	s.world.Components.Header.SetComponent(circleEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorStorm,
+		Type:          component.CompositeTypeAblative,
 		MemberEntries: members,
 		ParentHeader:  parentEntity,
 	})
@@ -618,7 +620,6 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 					Entity:  memberEntity,
 					OffsetX: x,
 					OffsetY: y,
-					Layer:   component.LayerGlyph,
 				})
 			}
 		}

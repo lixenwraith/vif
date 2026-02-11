@@ -98,14 +98,10 @@ const (
 	QuasarZapBorderWidthCells = 2
 	// QuasarBorderPaddingCells is the padding to ensure continuous visual border in small window sizes
 	QuasarBorderPaddingCells = 2
-	// QuasarShieldPad256X is horizontal cell padding for 256-color solid rim
-	QuasarShieldPad256X = 2
-	// QuasarShieldPad256Y is vertical cell padding for 256-color solid rim
-	QuasarShieldPad256Y = 1
-	// QuasarShieldPadTCX is horizontal cell padding for TrueColor gradient
-	QuasarShieldPadTCX = 4
-	// QuasarShieldPadTCY is vertical cell padding for TrueColor gradient
-	QuasarShieldPadTCY = 2
+	// QuasarShieldPadX is horizontal cell padding
+	QuasarShieldPadX = 4
+	// QuasarShieldPadY is vertical cell padding
+	QuasarShieldPadY = 2
 	// QuasarShieldMaxOpacity is peak alpha at ellipse edge (TrueColor)
 	QuasarShieldMaxOpacity = 0.3
 	// QuasarShield256Palette is xterm-256 index for solid rim (light gray)
@@ -171,11 +167,3 @@ const (
 	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
 	SwarmDeflectAngleVarFloat = 0.25
 )
-
-// SwarmPatternActive defines which cells are collision-active, keeping it simple and make the whole box collide
-var SwarmPatternActive = [2][2][4]bool{
-	// Pattern 0: All Active
-	{{true, true, true, true}, {true, true, true, true}},
-	// Pattern 1: All Active
-	{{true, true, true, true}, {true, true, true, true}},
-}

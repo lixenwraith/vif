@@ -392,23 +392,17 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 				HeaderEntity: headerEntity,
 			})
 
-			// Layer determined by pattern visibility (LayerGlyph = active, LayerEffect = inactive)
-			layer := component.LayerGlyph
-			if !parameter.SwarmPatternActive[0][row][col] {
-				layer = component.LayerEffect
-			}
-
 			members = append(members, component.MemberEntry{
 				Entity:  entity,
 				OffsetX: offsetX,
 				OffsetY: offsetY,
-				Layer:   layer,
 			})
 		}
 	}
 
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorSwarm,
+		Type:          component.CompositeTypeUnit,
 		MemberEntries: members,
 	})
 
@@ -877,11 +871,6 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			continue
 		}
 
-		// Skip inactive pattern cells
-		if member.Layer != component.LayerGlyph {
-			continue
-		}
-
 		memberPos, ok := s.world.Positions.GetPosition(member.Entity)
 		if !ok {
 			continue
@@ -947,10 +936,6 @@ func (s *SwarmSystem) handleCursorInteractions(
 
 	// Check each active member
 	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 || member.Layer != component.LayerGlyph {
-			continue
-		}
-
 		memberPos, ok := s.world.Positions.GetPosition(member.Entity)
 		if !ok {
 			continue
