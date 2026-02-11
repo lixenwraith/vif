@@ -36,6 +36,9 @@ type StormSystem struct {
 	swarmCache  []swarmCacheEntry
 	quasarCache []quasarCacheEntry
 
+	// Precomputed ellipse cell offsets for wall collision
+	ellipseOffsets []struct{ X, Y int }
+
 	// Telemetry
 	statActive      *atomic.Bool
 	statCircleCount *atomic.Int64
@@ -47,6 +50,9 @@ func NewStormSystem(world *engine.World) engine.System {
 	s := &StormSystem{
 		world: world,
 	}
+
+	// Precompute ellipse cell offsets for wall collision checks
+	s.buildEllipseOffsets()
 
 	s.statActive = world.Resources.Status.Bools.Get("storm.active")
 	s.statCircleCount = world.Resources.Status.Ints.Get("storm.circle_count")
@@ -165,6 +171,28 @@ func (s *StormSystem) Update() {
 
 	s.world.Components.Storm.SetComponent(s.rootEntity, stormComp)
 	s.statCircleCount.Store(int64(aliveCount))
+}
+
+// buildEllipseOffsets populates the LUT of cell offsets inside the circle ellipse
+func (s *StormSystem) buildEllipseOffsets() {
+	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
+	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(parameter.StormCircleRadiusX, parameter.StormCircleRadiusY)
+
+	// Preallocate approximate capacity: Ï€ * rx * ry
+	capacity := int(3.2 * float64(radiusX) * float64(radiusY))
+	s.ellipseOffsets = make([]struct{ X, Y int }, 0, capacity)
+
+	for y := -radiusY; y <= radiusY; y++ {
+		for x := -radiusX; x <= radiusX; x++ {
+			dx := vmath.FromInt(x)
+			dy := vmath.FromInt(y)
+
+			if vmath.EllipseDistSq(dx, dy, invRxSq, invRySq) <= vmath.Scale {
+				s.ellipseOffsets = append(s.ellipseOffsets, struct{ X, Y int }{x, y})
+			}
+		}
+	}
 }
 
 // cacheCombatEntities populates caches for soft collision detection
@@ -584,6 +612,16 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 	return members
 }
 
+// hasWallInEllipse checks if any cell in the ellipse footprint contains a blocking wall
+func (s *StormSystem) hasWallInEllipse(centerX, centerY int) bool {
+	for _, off := range s.ellipseOffsets {
+		if s.world.Positions.HasBlockingWallAt(centerX+off.X, centerY+off.Y, component.WallBlockKinetic) {
+			return true
+		}
+	}
+	return false
+}
+
 // updateCirclePhysics handles 3D gravitational orbits and inter-circle collision
 func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, dtFixed int64) {
 	config := s.world.Resources.Config
@@ -616,10 +654,17 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		return
 	}
 
-	// Accumulate gravitational acceleration with repulsion from other circles
-	for i := range circles {
-		var accelX, accelY, accelZ int64
+	// Precompute boundary limits accounting for ellipse radius
+	insetX := parameter.StormBoundaryInsetX
+	insetY := parameter.StormBoundaryInsetY
+	boundMinX := vmath.FromInt(insetX)
+	boundMaxX := vmath.FromInt(config.MapWidth - 1 - insetX)
+	boundMinY := vmath.FromInt(insetY)
+	boundMaxY := vmath.FromInt(config.MapHeight - 1 - insetY)
 
+	for i := range circles {
+		// 1. Accumulate gravitational acceleration with repulsion
+		var accelX, accelY, accelZ int64
 		for j := range circles {
 			if i == j {
 				continue
@@ -637,55 +682,77 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			accelZ += accel.Z
 		}
 
-		// Integrate velocity
+		// 2. Integrate velocity
 		circles[i].circle.Vel3D.X += vmath.Mul(accelX, dtFixed)
 		circles[i].circle.Vel3D.Y += vmath.Mul(accelY, dtFixed)
 		circles[i].circle.Vel3D.Z += vmath.Mul(accelZ, dtFixed)
 
-		// Apply dt-dependent damping
+		// 3. Apply damping
 		circles[i].circle.Vel3D = vmath.V3DampDt(circles[i].circle.Vel3D, parameter.StormDamping, dtFixed)
 
-		// Clamp velocity
+		// 4. Clamp velocity
 		circles[i].circle.Vel3D = vmath.V3ClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
 
-		// Integrate position
-		circles[i].circle.Pos3D = vmath.V3Add(
-			circles[i].circle.Pos3D,
-			vmath.V3Scale(circles[i].circle.Vel3D, dtFixed),
-		)
-	}
+		// 5. Axis-separated position integration with collision
+		// Pattern from IntegrateWithBounce: handle each axis independently
 
-	// Boundary reflection with insets for visual radius
-	insetX := parameter.StormBoundaryInsetX
-	insetY := parameter.StormBoundaryInsetY
-	gameMinX := vmath.FromInt(insetX)
-	gameMaxX := vmath.FromInt(config.MapWidth - 1 - insetX)
-	gameMinY := vmath.FromInt(insetY)
-	gameMaxY := vmath.FromInt(config.MapHeight - 1 - insetY)
+		// --- X Axis ---
+		oldPosX := circles[i].circle.Pos3D.X
+		circles[i].circle.Pos3D.X += vmath.Mul(circles[i].circle.Vel3D.X, dtFixed)
 
-	for i := range circles {
-		// XY boundary reflection
-		physics.ReflectAxis3D(&circles[i].circle.Pos3D.X, &circles[i].circle.Vel3D.X,
-			gameMinX, gameMaxX, parameter.StormRestitution)
-		physics.ReflectAxis3D(&circles[i].circle.Pos3D.Y, &circles[i].circle.Vel3D.Y,
-			gameMinY, gameMaxY, parameter.StormRestitution)
+		// Boundary check X
+		if circles[i].circle.Pos3D.X < boundMinX {
+			circles[i].circle.Pos3D.X = boundMinX
+			if circles[i].circle.Vel3D.X < 0 {
+				circles[i].circle.Vel3D.X = -vmath.Mul(circles[i].circle.Vel3D.X, parameter.StormRestitution)
+			}
+		} else if circles[i].circle.Pos3D.X > boundMaxX {
+			circles[i].circle.Pos3D.X = boundMaxX
+			if circles[i].circle.Vel3D.X > 0 {
+				circles[i].circle.Vel3D.X = -vmath.Mul(circles[i].circle.Vel3D.X, parameter.StormRestitution)
+			}
+		} else {
+			// Wall check X (only if within bounds)
+			gridX := vmath.ToInt(circles[i].circle.Pos3D.X)
+			gridY := vmath.ToInt(circles[i].circle.Pos3D.Y)
+			if s.hasWallInEllipse(gridX, gridY) {
+				circles[i].circle.Pos3D.X = oldPosX
+				circles[i].circle.Vel3D.X = -vmath.Mul(circles[i].circle.Vel3D.X, parameter.StormRestitution)
+			}
+		}
 
-		// Z depth bounds
+		// --- Y Axis ---
+		oldPosY := circles[i].circle.Pos3D.Y
+		circles[i].circle.Pos3D.Y += vmath.Mul(circles[i].circle.Vel3D.Y, dtFixed)
+
+		// Boundary check Y
+		if circles[i].circle.Pos3D.Y < boundMinY {
+			circles[i].circle.Pos3D.Y = boundMinY
+			if circles[i].circle.Vel3D.Y < 0 {
+				circles[i].circle.Vel3D.Y = -vmath.Mul(circles[i].circle.Vel3D.Y, parameter.StormRestitution)
+			}
+		} else if circles[i].circle.Pos3D.Y > boundMaxY {
+			circles[i].circle.Pos3D.Y = boundMaxY
+			if circles[i].circle.Vel3D.Y > 0 {
+				circles[i].circle.Vel3D.Y = -vmath.Mul(circles[i].circle.Vel3D.Y, parameter.StormRestitution)
+			}
+		} else {
+			// Wall check Y (uses potentially updated X position)
+			gridX := vmath.ToInt(circles[i].circle.Pos3D.X)
+			gridY := vmath.ToInt(circles[i].circle.Pos3D.Y)
+			if s.hasWallInEllipse(gridX, gridY) {
+				circles[i].circle.Pos3D.Y = oldPosY
+				circles[i].circle.Vel3D.Y = -vmath.Mul(circles[i].circle.Vel3D.Y, parameter.StormRestitution)
+			}
+		}
+
+		// --- Z Axis (depth bounds only, no walls) ---
+		circles[i].circle.Pos3D.Z += vmath.Mul(circles[i].circle.Vel3D.Z, dtFixed)
 		physics.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
 			parameter.StormZMin, parameter.StormZMax, parameter.StormRestitution)
-
-		// Wall collision check at circle center
-		gridX := vmath.ToInt(circles[i].circle.Pos3D.X)
-		gridY := vmath.ToInt(circles[i].circle.Pos3D.Y)
-
-		if s.world.Positions.HasBlockingWallAt(gridX, gridY, component.WallBlockKinetic) {
-			// Reverse velocity on wall hit
-			circles[i].circle.Vel3D.X = -circles[i].circle.Vel3D.X
-			circles[i].circle.Vel3D.Y = -circles[i].circle.Vel3D.Y
-		}
 	}
 
-	// Inter-circle collision (kept for hard overlaps, but repulsion reduces frequency)
+	// Inter-circle collision
 	for i := 0; i < len(circles); i++ {
 		for j := i + 1; j < len(circles); j++ {
 			s.resolveCircleCollision(circles[i].circle, circles[j].circle)
