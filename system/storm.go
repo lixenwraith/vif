@@ -170,6 +170,7 @@ func (s *StormSystem) Update() {
 
 	// Process each alive circle
 	s.updateCirclePhysics(&stormComp, dtFixed)
+	s.updateCircleDamageImmunity(&stormComp)
 	s.processCircleMemberCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
 
@@ -850,7 +851,6 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 }
 
 // processCircleCollisions destroys non-protected entities at circle's elliptical footprint
-// Called when circle grid position changes
 func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX, newGridY int) {
 	radiusX := vmath.ToInt(parameter.StormCircleRadiusX)
 	radiusY := vmath.ToInt(parameter.StormCircleRadiusY)
@@ -916,8 +916,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 	}
 }
 
-// processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem
-// StormSystem remains sole authority for circle lifecycle
+// processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem, storm system it the combat-based lifecycle authority
 func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormComponent) {
 	for i := 0; i < component.StormCircleCount; i++ {
 		if !stormComp.CirclesAlive[i] {
@@ -961,7 +960,6 @@ func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormCompon
 		}
 
 		// Circle destruction: trigger when no living members remain
-		// Uses CirclesAlive guard instead of MemberEntries length to handle race with CompositeSystem compaction (runs before StormSystem)
 		if livingCount == 0 && stormComp.CirclesAlive[i] {
 			s.destroyCircle(stormComp, i)
 		}
@@ -1060,41 +1058,95 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 		}
 
 		circleEntity := stormComp.Circles[i]
-		circlePos, ok := s.world.Positions.GetPosition(circleEntity)
+
+		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
 		if !ok {
 			continue
 		}
 
-		// Check direct cursor collision
-		if circlePos.X == cursorPos.X && circlePos.Y == cursorPos.Y {
-			if !shieldActive {
-				// Reset heat on direct collision without shield
-				s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-					Delta: -parameter.HeatMax,
-				})
+		// Check cursor collision across all member positions
+		anyOnCursor := false
+		var hitEntities []core.Entity
+
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
 			}
+			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+			if !ok {
+				continue
+			}
+
+			if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
+				anyOnCursor = true
+			}
+
+			if shieldActive && vmath.EllipseContainsPoint(
+				memberPos.X, memberPos.Y,
+				cursorPos.X, cursorPos.Y,
+				shieldComp.InvRxSq, shieldComp.InvRySq,
+			) {
+				hitEntities = append(hitEntities, member.Entity)
+			}
+		}
+
+		// Shield interaction
+		if len(hitEntities) > 0 {
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Value: parameter.QuasarShieldDrain,
+			})
+
+			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  cursorEntity,
+				OriginEntity: cursorEntity,
+				TargetEntity: circleEntity,
+				HitEntities:  hitEntities,
+			})
+		} else if anyOnCursor && !shieldActive {
+			// Direct cursor collision without shield - reset heat
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Delta: -parameter.HeatMax,
+			})
+		}
+	}
+}
+
+// updateCircleDamageImmunity sets immunity for concave (invulnerable) circles
+func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent) {
+	zMid := parameter.StormZMin + (parameter.StormZMax-parameter.StormZMin)/2
+
+	for i := 0; i < component.StormCircleCount; i++ {
+		if !stormComp.CirclesAlive[i] {
 			continue
 		}
 
-		// Check shield overlap (ellipse containment)
-		if shieldActive {
-			dx := vmath.FromInt(circlePos.X - cursorPos.X)
-			dy := vmath.FromInt(circlePos.Y - cursorPos.Y)
-			if vmath.EllipseContains(dx, dy, shieldComp.InvRxSq, shieldComp.InvRySq) {
-				// Shield drain
-				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-					Value: parameter.QuasarShieldDrain, // Use quasar drain rate for now
-				})
+		circleEntity := stormComp.Circles[i]
+		circleComp, ok := s.world.Components.StormCircle.GetComponent(circleEntity)
+		if !ok {
+			continue
+		}
 
-				// Knockback via combat system
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-					AttackType:   component.CombatAttackShield,
-					OwnerEntity:  cursorEntity,
-					OriginEntity: cursorEntity,
-					TargetEntity: circleEntity,
-					HitEntities:  []core.Entity{circleEntity},
-				})
+		// Concave (invulnerable): z >= zMid, matches renderer's depthFactor <= 0.5
+		if circleComp.Pos3D.Z < zMid {
+			continue
+		}
+
+		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+		if !ok {
+			continue
+		}
+
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
 			}
+			memberCombat, ok := s.world.Components.Combat.GetComponent(member.Entity)
+			if !ok {
+				continue
+			}
+			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			s.world.Components.Combat.SetComponent(member.Entity, memberCombat)
 		}
 	}
 }

@@ -193,8 +193,8 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		}
 
 		// Normalized position within ellipse
-		nx := float64(member.OffsetX) / r.radiusX
-		ny := float64(member.OffsetY) / r.radiusY
+		nx := float64(member.OffsetX) * r.invRadiusX
+		ny := float64(member.OffsetY) * r.invRadiusY
 		distSq := nx*nx + ny*ny
 
 		if distSq > 1.0 {

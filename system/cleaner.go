@@ -13,13 +13,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// directionalSpawnKey uniquely identifies a directional cleaner spawn request
-type directionalSpawnKey struct {
-	frame   int64
-	originX int
-	originY int
-}
-
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
 	world *engine.World
@@ -352,38 +345,38 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 			continue
 		}
 
-		if s.world.Components.Combat.HasEntity(entity) {
-			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				AttackType:   component.CombatAttackProjectile,
-				OwnerEntity:  cursorEntity,
-				OriginEntity: selfEntity,
-				TargetEntity: entity,
-				HitEntity:    entity,
-			})
-			continue
-		}
-
+		// Check Member first because of complex composites that have both combat and member
 		if s.world.Components.Member.HasEntity(entity) {
 			memberComp, ok := s.world.Components.Member.GetComponent(entity)
 			if !ok {
 				continue
 			}
 			headerEntity := memberComp.HeaderEntity
-			// Ignore non-combat composites
 			if !s.world.Components.Combat.HasEntity(headerEntity) {
 				continue
 			}
-			// Dedup hits
-			if lastCleaner, exists := s.collidedHeaders[memberComp.HeaderEntity]; exists && lastCleaner == selfEntity {
+			if lastCleaner, exists := s.collidedHeaders[headerEntity]; exists && lastCleaner == selfEntity {
 				continue
 			}
-			s.collidedHeaders[memberComp.HeaderEntity] = selfEntity
+			s.collidedHeaders[headerEntity] = selfEntity
 
 			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   component.CombatAttackProjectile,
 				OwnerEntity:  cursorEntity,
 				OriginEntity: selfEntity,
 				TargetEntity: headerEntity,
+				HitEntity:    entity,
+			})
+			continue
+		}
+
+		// Simple combat entities (drain, non-composite headers)
+		if s.world.Components.Combat.HasEntity(entity) {
+			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+				AttackType:   component.CombatAttackProjectile,
+				OwnerEntity:  cursorEntity,
+				OriginEntity: selfEntity,
+				TargetEntity: entity,
 				HitEntity:    entity,
 			})
 			continue
