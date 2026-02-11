@@ -748,6 +748,24 @@ func resolveWeaponTargets(
 		if !ok || combat.OwnerEntity == cursorEntity {
 			continue
 		}
+
+		// Filter members: skip simple members, allow sub-headers with combat behavior
+		// Circle Headers have both Member (→Root) and Header components
+		if world.Components.Member.HasEntity(e) {
+			headerComp, isHeader := world.Components.Header.GetComponent(e)
+			if !isHeader {
+				continue // Simple member, not targetable
+			}
+			// TODO: defensive approach, generalize later
+			// Sub-header: allow only combat behaviors
+			switch headerComp.Behavior {
+			case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
+				// Valid combat sub-header
+			default:
+				continue
+			}
+		}
+
 		candidates = append(candidates, e)
 	}
 

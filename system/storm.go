@@ -136,6 +136,13 @@ func (s *StormSystem) Update() {
 		return
 	}
 
+	// Check liveness via Header existence (CompositeSystem authority)
+	for i := 0; i < component.StormCircleCount; i++ {
+		if stormComp.CirclesAlive[i] && !s.world.Components.Header.HasEntity(stormComp.Circles[i]) {
+			stormComp.CirclesAlive[i] = false
+		}
+	}
+
 	// Check if all circles dead
 	aliveCount := stormComp.AliveCount()
 	if aliveCount == 0 {
@@ -154,7 +161,7 @@ func (s *StormSystem) Update() {
 
 	// Process each alive circle
 	s.updateCirclePhysics(&stormComp, dtFixed)
-	s.checkCircleCombat(&stormComp)
+	s.processCircleMemberCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
 
 	// Apply soft collision per circle (push other enemies away)
@@ -541,7 +548,7 @@ func (s *StormSystem) createCircleHeader(
 	s.world.Components.Combat.SetComponent(circleEntity, component.CombatComponent{
 		OwnerEntity:      circleEntity,
 		CombatEntityType: component.CombatEntityStorm,
-		HitPoints:        parameter.CombatInitialHPStorm,
+		HitPoints:        0, // Damage routed to members via ablative model
 	})
 
 	// Generate members
@@ -593,6 +600,13 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 				// Member protection
 				s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
 					Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
+				})
+
+				// Ablative health: per-member HP for combat damage
+				s.world.Components.Combat.SetComponent(memberEntity, component.CombatComponent{
+					OwnerEntity:      headerEntity,
+					CombatEntityType: component.CombatEntityStorm,
+					HitPoints:        parameter.CombatInitialHPStormMember,
 				})
 
 				// Backlink
@@ -889,20 +903,53 @@ func (s *StormSystem) syncCircleTo2D(entity core.Entity, circle *component.Storm
 	}
 }
 
-// checkCircleCombat processes HP checks for each circle
-func (s *StormSystem) checkCircleCombat(stormComp *component.StormComponent) {
+// processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem
+// StormSystem remains sole authority for circle lifecycle
+func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormComponent) {
 	for i := 0; i < component.StormCircleCount; i++ {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
 
 		circleEntity := stormComp.Circles[i]
-		combatComp, ok := s.world.Components.Combat.GetComponent(circleEntity)
+		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
 		if !ok {
 			continue
 		}
 
-		if combatComp.HitPoints <= 0 {
+		// Scan members for combat deaths
+		var deadMembers []core.Entity
+		livingCount := 0
+
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
+			}
+
+			combatComp, ok := s.world.Components.Combat.GetComponent(member.Entity)
+			if !ok {
+				// Storm members always have CombatComponent; absence = dead
+				continue
+			}
+
+			if combatComp.HitPoints <= 0 {
+				deadMembers = append(deadMembers, member.Entity)
+			} else {
+				livingCount++
+			}
+		}
+
+		// Emit deaths for members with HP<=0
+		for _, memberEntity := range deadMembers {
+			s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+				HeaderEntity: circleEntity,
+				MemberEntity: memberEntity,
+			})
+		}
+
+		// Circle destruction: trigger when no living members remain
+		// Uses CirclesAlive guard instead of MemberEntries length to handle race with CompositeSystem compaction (runs before StormSystem)
+		if livingCount == 0 && stormComp.CirclesAlive[i] {
 			s.destroyCircle(stormComp, i)
 		}
 	}
@@ -928,13 +975,6 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 		Index:        index,
 	})
 
-	// Emit enemy killed for potential loot
-	s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-		EnemyType: component.CombatEntityStorm,
-		X:         posX,
-		Y:         posY,
-	})
-
 	// Destroy circle header via composite system
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: circleEntity,
@@ -945,6 +985,13 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	if stormComp.AliveCount() == 0 {
 		s.world.PushEvent(event.EventStormDied, &event.StormDiedPayload{
 			RootEntity: s.rootEntity,
+		})
+
+		// Emit enemy killed
+		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+			EnemyType: component.CombatEntityStorm,
+			X:         posX,
+			Y:         posY,
 		})
 	}
 }

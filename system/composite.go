@@ -110,17 +110,6 @@ func (s *CompositeSystem) Update() {
 			continue
 		}
 
-		// TODO: proper integration with kinetic (internal kinetic fields removed)
-		// // 1. Fixed-point movement integration
-		// deltaX, deltaY := s.integrateMovement(&headerComp)
-		//
-		// // 2. Update phantom head position if integer delta occurred
-		// if deltaX != 0 || deltaY != 0 {
-		// 	headerPos.X += deltaX
-		// 	headerPos.Y += deltaY
-		// 	s.world.Positions.SetPosition(headerEntity, headerPos)
-		// }
-
 		// Count living members before sync
 		countBefore := s.countLiving(&headerComp)
 
@@ -154,8 +143,14 @@ func (s *CompositeSystem) Update() {
 			continue
 		}
 
-		// Empty composite cleanup (all members gone, no owner claimed it)
+		// Generic ablative detection via Header HP=0 for header destruction
+		// Ablative composites: Header HP=0, authoritative system handles destruction
+		// Non-ablative composites: Header HP>0, CompositeSystem destroys when empty
 		if len(headerComp.MemberEntries) == 0 {
+			if combat, ok := s.world.Components.Combat.GetComponent(headerEntity); ok && combat.HitPoints == 0 {
+				s.world.Components.Header.SetComponent(headerEntity, headerComp)
+				continue
+			}
 			s.destroyHead(headerEntity)
 			continue
 		}

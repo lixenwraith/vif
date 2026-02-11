@@ -206,21 +206,39 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		return
 	}
 
-	// Apply damage hit
-	var targetDead bool
-	if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
+	// Ablative: member has CombatComponent, receives damage directly
+	// Non-ablative: damage applied to header's CombatComponent
+	isAblative := false
+	if payload.TargetEntity != payload.HitEntity {
+		isAblative = s.world.Components.Combat.HasEntity(payload.HitEntity)
+	}
 
-		targetCombatComp.HitPoints -= combatProfile.DamageValue
-		if targetCombatComp.HitPoints < 0 {
-			targetCombatComp.HitPoints = 0
+	var damageTargetDead bool
+
+	if isAblative {
+		// Ablative path: damage member, header unchanged (kinetic only)
+		memberCombat, _ := s.world.Components.Combat.GetComponent(payload.HitEntity)
+
+		if memberCombat.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
+			memberCombat.HitPoints -= combatProfile.DamageValue
+			if memberCombat.HitPoints < 0 {
+				memberCombat.HitPoints = 0
+			}
+			memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
+			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			damageTargetDead = memberCombat.HitPoints == 0
 		}
-
-		targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-		targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-
-		if targetCombatComp.HitPoints == 0 {
-			// Not killing to let the chain attack to trigger
-			targetDead = true
+		s.world.Components.Combat.SetComponent(payload.HitEntity, memberCombat)
+	} else {
+		// Non-ablative path: damage header directly
+		if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
+			targetCombatComp.HitPoints -= combatProfile.DamageValue
+			if targetCombatComp.HitPoints < 0 {
+				targetCombatComp.HitPoints = 0
+			}
+			targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+			targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			damageTargetDead = targetCombatComp.HitPoints == 0
 		}
 	}
 
@@ -241,12 +259,14 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	case combatProfile.EffectMask&component.CombatEffectVampireDrain != 0:
 		s.applyVampireDrain(payload.OwnerEntity, payload.OriginEntity, payload.HitEntity)
 	case combatProfile.EffectMask&component.CombatEffectKinetic != 0:
-		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
+		// Kinetic applies to header (composite moves as unit), check header immunity
+		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, combatProfile.CollisionProfile)
 			targetCombatComp.RemainingKineticImmunity = combatProfile.CollisionProfile.ImmunityDuration
 		}
 	}
 
+	// Save header (kinetic immunity; non-ablative damage already applied to targetCombatComp)
 	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 }
 
@@ -311,20 +331,47 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Apply damage
+	// Detect ablative mode: hit entities differ from target AND have CombatComponent
+	isAblative := false
+	if len(payload.HitEntities) > 0 && payload.HitEntities[0] != payload.TargetEntity {
+		isAblative = s.world.Components.Combat.HasEntity(payload.HitEntities[0])
+	}
+
 	var targetDead bool
-	if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
-		damageValue := combatProfile.DamageValue * len(payload.HitEntities)
-		targetCombatComp.HitPoints -= damageValue
-		if targetCombatComp.HitPoints < 0 {
-			targetCombatComp.HitPoints = 0
+
+	if isAblative && combatProfile.DamageValue != 0 {
+		// Ablative path: damage each hit member individually
+		for _, hitEntity := range payload.HitEntities {
+			memberCombat, ok := s.world.Components.Combat.GetComponent(hitEntity)
+			if !ok || memberCombat.RemainingDamageImmunity > 0 {
+				continue
+			}
+
+			memberCombat.HitPoints -= combatProfile.DamageValue
+			if memberCombat.HitPoints < 0 {
+				memberCombat.HitPoints = 0
+			}
+			memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
+			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+
+			s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
 		}
+		// Death detection delegated to owning system (e.g. StormSystem)
+	} else {
+		// Non-ablative path: damage header directly
+		if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
+			damageValue := combatProfile.DamageValue * len(payload.HitEntities)
+			targetCombatComp.HitPoints -= damageValue
+			if targetCombatComp.HitPoints < 0 {
+				targetCombatComp.HitPoints = 0
+			}
 
-		targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
-		targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
+			targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 
-		if targetCombatComp.HitPoints == 0 {
-			targetDead = true
+			if targetCombatComp.HitPoints == 0 {
+				targetDead = true
+			}
 		}
 	}
 

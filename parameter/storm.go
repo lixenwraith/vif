@@ -16,6 +16,9 @@ const (
 // Storm combat
 const (
 	StormCircleRadiusCollisionFloat = 7.5
+
+	// CombatInitialHPStormMember is baseline HP for each Storm circle member
+	CombatInitialHPStormMember = 10
 )
 
 // Storm spawn geometry
