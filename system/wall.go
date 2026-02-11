@@ -514,12 +514,46 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		return // Too small for valid maze
 	}
 
+	// Convert event rooms to maze.RoomSpec
+	var rooms []maze.RoomSpec
+	for _, r := range payload.Rooms {
+		// Calculate center and force to nearest odd grid index for perfect maze alignment
+		mCX := r.CenterX / payload.CellWidth
+		if mCX%2 == 0 {
+			if r.CenterX%payload.CellWidth > payload.CellWidth/2 {
+				mCX++
+			} else {
+				mCX--
+			}
+		}
+		mCY := r.CenterY / payload.CellHeight
+		if mCY%2 == 0 {
+			if r.CenterY%payload.CellHeight > payload.CellHeight/2 {
+				mCY++
+			} else {
+				mCY--
+			}
+		}
+
+		// Convert game coords to maze coords
+		rooms = append(rooms, maze.RoomSpec{
+			CenterX: r.CenterX / payload.CellWidth,
+			CenterY: r.CenterY / payload.CellHeight,
+			Width:   r.Width / payload.CellWidth,
+			Height:  r.Height / payload.CellHeight,
+		})
+	}
+
 	// Generate maze
 	cfg := maze.Config{
-		Width:         mazeWidth,
-		Height:        mazeHeight,
-		Braiding:      payload.Braiding,
-		RemoveBorders: true, // Allow movement at edges
+		Width:             mazeWidth,
+		Height:            mazeHeight,
+		Braiding:          payload.Braiding,
+		RemoveBorders:     true,
+		RoomCount:         payload.RoomCount,
+		Rooms:             rooms,
+		DefaultRoomWidth:  payload.DefaultRoomWidth / payload.CellWidth,
+		DefaultRoomHeight: payload.DefaultRoomHeight / payload.CellHeight,
 	}
 	result := maze.Generate(cfg)
 

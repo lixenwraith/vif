@@ -631,9 +631,22 @@ type LevelSetupPayload struct {
 	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
 }
 
+// MazeRoomSpec defines an explicit room in maze
+type MazeRoomSpec struct {
+	CenterX int `toml:"center_x"` // 0 = random placement
+	CenterY int `toml:"center_y"` // 0 = random placement
+	Width   int `toml:"width"`    // 0 = use default
+	Height  int `toml:"height"`   // 0 = use default
+}
+
 // MazeSpawnRequestPayload configures maze generation
 type MazeSpawnRequestPayload struct {
-	CellWidth  int     `toml:"cell_width"`  // Grid cells per maze cell (horizontal)
-	CellHeight int     `toml:"cell_height"` // Grid cells per maze cell (vertical)
-	Braiding   float64 `toml:"braiding"`    // 0.0 = perfect maze, 1.0 = no dead ends
+	CellWidth  int     `toml:"cell_width"`
+	CellHeight int     `toml:"cell_height"`
+	Braiding   float64 `toml:"braiding"`
+	// Room generation
+	RoomCount         int            `toml:"room_count"`
+	Rooms             []MazeRoomSpec `toml:"rooms"`
+	DefaultRoomWidth  int            `toml:"default_room_width"`
+	DefaultRoomHeight int            `toml:"default_room_height"`
 }

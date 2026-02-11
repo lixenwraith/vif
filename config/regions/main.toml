@@ -54,18 +54,6 @@ transitions = [
     { trigger = "EventCleanerSweepingFinished", target = "DecayWait" },
 ]
 
-# --- QUASAR HANDOFF ---
-
-[states.QuasarHandoff]
-parent = "Gameplay"
-on_enter = [
-    { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
-    { action = "PauseRegion", region = "main" },
-]
-transitions = [
-    { trigger = "Tick", target = "DecayWait" },
-]
-
 # --- DECAY WAVES ---
 
 [states.DecayWait]
@@ -83,4 +71,16 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "SpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
     { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+]
+
+# --- QUASAR HANDOFF ---
+
+[states.QuasarHandoff]
+parent = "Gameplay"
+on_enter = [
+    { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
+    { action = "PauseRegion", region = "main" },
+]
+transitions = [
+    { trigger = "Tick", target = "DecayWait" },
 ]

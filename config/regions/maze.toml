@@ -10,16 +10,14 @@ parent = "Root"
 [states.MazeSetup]
 parent = "MazeCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDustAllRequest" },
-    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 301, height = 198, clear_entities = true } },
-    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 20, cell_height = 10, braiding = 0.5 } },
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 500, height = 250, clear_entities = true } },
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 20, cell_height = 10, braiding = 0.5, room_count = 1, rooms = [{ center_x = 250, center_y = 125, width = 200, height = 100 }] } },
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
+    { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
     { trigger = "Tick", target = "MazeActive", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
-
-# --- MAZE GOLD CYCLE ---
 
 [states.MazeActive]
 parent = "MazeCycle"
@@ -27,8 +25,9 @@ on_enter = [
     { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
-    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
+    { trigger = "EventHeatBurstNotification", target = "MainHandoff" },
     { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventStormDied", target = "MazeVictory" },
     { trigger = "EventGoldComplete", target = "MazeGoldRespawn" },
     { trigger = "EventGoldTimeout", target = "MazeGoldRespawn" },
     { trigger = "EventGoldDestroyed", target = "MazeGoldRespawn" },
@@ -40,31 +39,32 @@ on_enter = [
     { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
-    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
+    { trigger = "EventHeatBurstNotification", target = "MainHandoff" },
     { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
+    { trigger = "EventStormDied", target = "MazeVictory" },
     { trigger = "EventGoldSpawned", target = "MazeActive" },
-    { trigger = "EventGoldSpawnFailed", target = "MazeGoldRetry" },
-]
-
-[states.MazeGoldRetry]
-parent = "MazeCycle"
-transitions = [
-    { trigger = "EventHeatBurstNotification", target = "MazeExit" },
-    { trigger = "Tick", target = "MazeFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "Tick", target = "MazeGoldRespawn", guard = "StateTimeExceeds", guard_args = { ms = 200 } },
 ]
 
 # --- MAZE END ---
 
+[states.MazeVictory]
+parent = "MazeCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Storm Died!" } },
+]
+transitions = [
+    { trigger = "Tick", target = "MainHandoff", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
 [states.MazeFail]
 parent = "MazeCycle"
 transitions = [
-    { trigger = "Tick", target = "MazeExit" },
+    { trigger = "Tick", target = "MainHandoff" },
 ]
 
 # --- MAIN HANDOFF ---
 
-[states.MazeExit]
+[states.MainHandoff]
 parent = "MazeCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true } },

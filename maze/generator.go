@@ -237,9 +237,17 @@ func resolveExplicitRoom(centerX, centerY, width, height, cols, rows int, existi
 	w := ensureOdd(width)
 	h := ensureOdd(height)
 
-	// Convert center to top-left
-	x := centerX - w/2
-	y := centerY - h/2
+	// Calculate top-left such that the resulting range [x, x+w) is centered on centerX/Y, since w/h are odd, (w-1)/2 is the radius
+	x := centerX - (w-1)/2
+	y := centerY - (h-1)/2
+
+	// Ensure x, y are odd to align with the passage grid (prevents clampRoomBounds from shifting center)
+	if x%2 == 0 {
+		x-- // Shift left to keep center priority
+	}
+	if y%2 == 0 {
+		y-- // Shift up to keep center priority
+	}
 
 	// Clamp to valid bounds and preventing edge placement
 	x, y, w, h = clampRoomBounds(x, y, w, h, cols, rows)
@@ -315,9 +323,9 @@ func clampRoomBounds(x, y, w, h, cols, rows int) (int, int, int, int) {
 	return x, y, w, h
 }
 
-// roomOverlaps checks if room intersects any existing room (with 2-cell gap)
+// roomOverlaps checks if room intersects any existing room (with 3-cell gap)
 func roomOverlaps(room resolvedRoom, existing []resolvedRoom) bool {
-	const gap = 2
+	const gap = 3
 	for _, r := range existing {
 		if room.x < r.x+r.w+gap && room.x+room.w+gap > r.x &&
 			room.y < r.y+r.h+gap && room.y+room.h+gap > r.y {

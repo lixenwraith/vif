@@ -9,6 +9,7 @@ parent = "Root"
 [states.QuasarFuse]
 parent = "QuasarCycle"
 on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
@@ -43,28 +44,34 @@ transitions = [
 parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
-    { trigger = "EventGoldTimeout", target = "QuasarGoldSpawn" },
-    { trigger = "EventGoldDestroyed", target = "QuasarGoldSpawn" },
+    { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
+    { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
+    { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 # --- DUST ALL ---
-# Overheat burst
 
 [states.QuasarDustAll]
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventDustAllRequest"},
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
-    { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "SpawnRegion", region = "maze", initial_state = "MazeSetup" },
-    { action = "PauseRegion", region = "quasar" },
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "Tick", target = "QuasarGoldSpawn"},
+]
+
+# --- MAZE HANDOFF ---
+# Overheat burst
+
+[states.MazeHandoff]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "SpawnRegion", region = "maze", initial_state = "MazeSetup" },
+    { action = "TerminateRegion", region = "quasar" },
 ]
 
 # --- QUASAR END ---
@@ -83,9 +90,9 @@ transitions = [
 [states.QuasarExit]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "quasar" },
 ]

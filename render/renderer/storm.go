@@ -136,12 +136,8 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	// Cursor position in viewport coords for lighting
 	cursorVX, cursorVY := ctx.CursorViewportPos()
 
-	// Circle center in viewport coords
-	circleVX, circleVY, circleVisible := ctx.MapToViewport(circle.x, circle.y)
-	if !circleVisible {
-		// Circle center off-screen; skip detailed rendering
-		return
-	}
+	// Circle center in viewport coords, member loop handles visibility check
+	circleVX, circleVY, _ := ctx.MapToViewport(circle.x, circle.y)
 
 	// Per-circle lighting aimed at cursor position
 	// If Convex: Track cursor (expensive)
@@ -167,10 +163,12 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 			continue
 		}
 
-		screenX := ctx.GameXOffset + circle.x + member.OffsetX
-		screenY := ctx.GameYOffset + circle.y + member.OffsetY
+		// Calculate member's map position from circle center + offset
+		memberMapX := circle.x + member.OffsetX
+		memberMapY := circle.y + member.OffsetY
 
-		if screenX < 0 || screenX >= ctx.ScreenWidth || screenY < 0 || screenY >= ctx.ScreenHeight {
+		screenX, screenY, visible := ctx.MapToScreen(memberMapX, memberMapY)
+		if !visible {
 			continue
 		}
 
