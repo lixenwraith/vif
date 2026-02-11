@@ -184,7 +184,7 @@ func separateParts(a, b *Part, n Vec3, overlap int64) {
 	if overlap <= 0 {
 		return
 	}
-	margin := vmath.Scale / 16)
+	margin := vmath.Scale / 16
 
 	if a.Frozen {
 		b.Pos = v3Add(b.Pos, v3Scale(n, overlap+margin))
@@ -639,3 +639,4 @@ func startInputReader(term terminal.Terminal) chan terminal.Event {
 	}()
 	return ch
 }
+

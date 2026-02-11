@@ -18,7 +18,8 @@ const (
 	StormCircleRadiusCollisionFloat = 7.5
 
 	// CombatInitialHPStormMember is baseline HP for each Storm circle member
-	CombatInitialHPStormMember = 10
+	CombatInitialHPStormMember = 1
+	// CombatInitialHPStormMember = 10
 )
 
 // Storm spawn geometry
@@ -44,6 +45,18 @@ const (
 const (
 	StormBoundaryInsetXFloat = 11.0
 	StormBoundaryInsetYFloat = 6.0
+)
+
+// Storm glow (near/convex/vulnerable state) and halo (far/concave/vulnerable state)
+const (
+	StormConcaveHaloExtendFloat = 4.0 // Cell extension beyond body
+
+	StormConvexGlowExtendFloat      = 2.0 // Cell extension beyond body
+	StormConvexGlowPeriodMs         = 942 // Pulse period in milliseconds (~150ms/radian * 2π)
+	StormConvexGlowIntensityMin     = 0.5 // Base intensity at pulse trough
+	StormConvexGlowIntensityMax     = 1.2 // Peak intensity (0.5 + 0.7)
+	StormConvexGlowOuterDistSqFloat = 1.6 // Cutoff normalized distance squared
+	StormConvexGlowFalloffMult      = 4.0 // Alpha falloff multiplier
 )
 
 // Pre-computed Q32.32 values

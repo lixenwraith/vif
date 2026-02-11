@@ -28,12 +28,33 @@ type StormRenderer struct {
 
 	// Reusable slice for sorting
 	sortBuffer []stormCircleRender
+
+	// Precomputed constants
+	radiusX, radiusY               float64
+	invRadiusX, invRadiusY         float64
+	haloRadiusX, haloRadiusY       float64
+	glowMaxRadiusX, glowMaxRadiusY float64
 }
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
+	rx := parameter.StormCircleRadiusXFloat
+	ry := parameter.StormCircleRadiusYFloat
+	haloExtendX := parameter.StormConcaveHaloExtendFloat
+	haloExtendY := haloExtendX * (ry / rx)
+	glowExtend := parameter.StormConvexGlowExtendFloat
+
 	return &StormRenderer{
 		gameCtx:    gameCtx,
 		sortBuffer: make([]stormCircleRender, 0, component.StormCircleCount),
+
+		radiusX:        rx,
+		radiusY:        ry,
+		invRadiusX:     1.0 / rx,
+		invRadiusY:     1.0 / ry,
+		haloRadiusX:    rx + haloExtendX,
+		haloRadiusY:    ry + haloExtendY,
+		glowMaxRadiusX: rx + glowExtend,
+		glowMaxRadiusY: ry + glowExtend*(ry/rx),
 	}
 }
 
@@ -92,11 +113,11 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 	})
 
 	for _, circle := range r.sortBuffer {
-		r.renderCircle(ctx, buf, circle)
+		r.renderCircle(ctx, buf, &circle)
 	}
 }
 
-func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle stormCircleRender) {
+func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
 	// Depth factor: 0 = far, 1 = near
 	zRange := parameter.StormZMax - parameter.StormZMin
 	if zRange <= 0 {
@@ -123,14 +144,13 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	// Convex (near) vs concave (far)
 	isConvex := depthFactor > 0.5
 
-	// Radii for normalization
-	radiusX := vmath.ToFloat(parameter.StormCircleRadiusX)
-	radiusY := vmath.ToFloat(parameter.StormCircleRadiusY)
-
 	// Render halo (background glow) only if NOT convex (Far/Concave)
 	// Front/Convex circles are vulnerable and show no shield halo
 	if !isConvex {
-		r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB, radiusX, radiusY)
+		r.renderHalo(ctx, buf, circle, depthBright, baseR, baseG, baseB)
+	} else {
+		// Render narrow glowing ring for convex (vulnerable) state
+		r.renderConvexGlow(ctx, buf, circle, depthBright, baseR, baseG, baseB)
 	}
 
 	// Cursor position in viewport coords for lighting
@@ -173,8 +193,8 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		}
 
 		// Normalized position within ellipse
-		nx := float64(member.OffsetX) / radiusX
-		ny := float64(member.OffsetY) / radiusY
+		nx := float64(member.OffsetX) / r.radiusX
+		ny := float64(member.OffsetY) / r.radiusY
 		distSq := nx*nx + ny*ny
 
 		if distSq > 1.0 {
@@ -251,20 +271,12 @@ func cursorLighting(cursorX, cursorY, circleX, circleY int) (lightX, lightY, lig
 	return
 }
 
-func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer,
-	circle stormCircleRender, depthBright, baseR, baseG, baseB, radiusX, radiusY float64) {
-
-	// Halo extends beyond body, aspect-corrected for terminal 2:1 character ratio
-	haloExtendX := 4.0
-	haloExtendY := haloExtendX * (radiusY / radiusX)
-	haloRadiusX := radiusX + haloExtendX
-	haloRadiusY := radiusY + haloExtendY
-
+func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
 	// Bounding box in map coords
-	mapStartX := max(0, circle.x-int(haloRadiusX)-1)
-	mapEndX := min(ctx.MapWidth-1, circle.x+int(haloRadiusX)+1)
-	mapStartY := max(0, circle.y-int(haloRadiusY)-1)
-	mapEndY := min(ctx.MapHeight-1, circle.y+int(haloRadiusY)+1)
+	mapStartX := max(0, circle.x-int(r.haloRadiusX)-1)
+	mapEndX := min(ctx.MapWidth-1, circle.x+int(r.haloRadiusX)+1)
+	mapStartY := max(0, circle.y-int(r.haloRadiusY)-1)
+	mapEndY := min(ctx.MapHeight-1, circle.y+int(r.haloRadiusY)+1)
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
@@ -274,8 +286,8 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 			}
 
 			// Normalized position
-			nx := float64(mapX-circle.x) / radiusX
-			ny := float64(mapY-circle.y) / radiusY
+			nx := float64(mapX-circle.x) / r.radiusX
+			ny := float64(mapY-circle.y) / r.radiusY
 			distSq := nx*nx + ny*ny
 
 			// Skip inside main body (rendered by members)
@@ -284,8 +296,8 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 			}
 
 			// Skip outside halo
-			haloNx := float64(mapX-circle.x) / haloRadiusX
-			haloNy := float64(mapY-circle.y) / haloRadiusY
+			haloNx := float64(mapX-circle.x) / r.haloRadiusX
+			haloNy := float64(mapY-circle.y) / r.haloRadiusY
 			if haloNx*haloNx+haloNy*haloNy > 1.0 {
 				continue
 			}
@@ -306,6 +318,68 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 			color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 
 			// BlendAdd for glow on black background
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+		}
+	}
+}
+
+func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, depthBright, baseR, baseG, baseB float64) {
+	mapStartX := max(0, circle.x-int(r.glowMaxRadiusX)-1)
+	mapEndX := min(ctx.MapWidth-1, circle.x+int(r.glowMaxRadiusX)+1)
+	mapStartY := max(0, circle.y-int(r.glowMaxRadiusY)-1)
+	mapEndY := min(ctx.MapHeight-1, circle.y+int(r.glowMaxRadiusY)+1)
+
+	// Pulse via GameTime and vmath.Sin LUT
+	// angle ∈ [0, Scale) maps to [0, 2π), Sin returns [-Scale, Scale]
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	periodMs := int64(parameter.StormConvexGlowPeriodMs)
+	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
+	sinVal := vmath.Sin(angleFixed)          // Q32.32 in [-Scale, Scale]
+	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal) // Normalized to [0, 1]
+
+	glowIntensity := depthBright * (parameter.StormConvexGlowIntensityMin +
+		(parameter.StormConvexGlowIntensityMax-parameter.StormConvexGlowIntensityMin)*pulse)
+
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			nx := float64(mapX-circle.x) * r.invRadiusX
+			ny := float64(mapY-circle.y) * r.invRadiusY
+			distSq := nx*nx + ny*ny
+
+			if distSq <= 1.0 || distSq > parameter.StormConvexGlowOuterDistSqFloat {
+				continue
+			}
+
+			dist := math.Sqrt(distSq)
+			alpha := 1.0 - (dist-1.0)*parameter.StormConvexGlowFalloffMult
+			if alpha <= 0 {
+				continue
+			}
+
+			factor := glowIntensity * alpha
+			rVal := baseR * factor
+			gVal := baseG * factor
+			bVal := baseB * factor
+
+			if rVal > 255 {
+				rVal = 255
+			}
+			if gVal > 255 {
+				gVal = 255
+			}
+			if bVal > 255 {
+				bVal = 255
+			}
+			if rVal < 1 && gVal < 1 && bVal < 1 {
+				continue
+			}
+
+			color := terminal.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
