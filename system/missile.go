@@ -209,7 +209,7 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 
 	prevX, prevY := k.PreciseX, k.PreciseY
 
-	// Resolve target
+	// Resolve target for homing
 	targetX, targetY, hasTarget := s.resolveTarget(m, k.PreciseX, k.PreciseY)
 
 	if !hasTarget {
@@ -217,7 +217,7 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	} else {
-		// Impact check before homing
+		// Impact check before homing (specific target proximity)
 		dx := targetX - k.PreciseX
 		dy := targetY - k.PreciseY
 		if vmath.MagnitudeSq(dx, dy) < parameter.MissileImpactRadiusSq {
@@ -235,18 +235,13 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	}
 
-	// Enable enemy collision check if we have NO target (Ballistic Mode)
-	// If we have a target, we ignore intermediate enemies to reach the specific target
-	checkEnemies := !hasTarget
-
-	// Path traversal for wall and enemy collision (if no target)
-	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, checkEnemies)
+	// General Enemy Collision: seeker detonates on ANY combatant contact
+	// Always check enemies regardless of target state (Impact-on-Contact)
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, true)
 	if hitType == impactWall {
 		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
 		return true
 	}
-
-	// Handle collision in ballistic mode
 	if hitType == impactEnemy {
 		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
 		return true
@@ -331,24 +326,50 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
 			return x, y, true
 		}
-		m.HitEntity = 0 // Clear stale reference
+		// HitEntity stale - clear and attempt composite retarget
+		m.HitEntity = 0
 	}
 
-	// Secondary: target entity (header for composites)
-	if m.TargetEntity != 0 && m.TargetEntity != m.HitEntity {
-		if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
-			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+	// Secondary: if TargetEntity is a composite Header, resolve closest member
+	if m.TargetEntity != 0 {
+		if s.world.Components.Header.HasEntity(m.TargetEntity) {
+			member, x, y, ok := s.resolveClosestMember(m.TargetEntity, missileX, missileY)
+			if ok {
+				m.HitEntity = member
+				return x, y, true
+			}
+			// Header exists but no living members - clear and retarget
+			m.TargetEntity = 0
+		} else {
+			// Non-composite target entity
+			if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
+				x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+				m.HitEntity = m.TargetEntity
+				return x, y, true
+			}
+			m.TargetEntity = 0
+		}
+	}
+
+	// Tertiary: find nearest enemy globally
+	newTarget := s.findNearestEnemy(missileX, missileY)
+	if newTarget == 0 {
+		return 0, 0, false
+	}
+
+	// Check if new target is a composite
+	if s.world.Components.Header.HasEntity(newTarget) {
+		member, x, y, ok := s.resolveClosestMember(newTarget, missileX, missileY)
+		if ok {
+			m.TargetEntity = newTarget
+			m.HitEntity = member
 			return x, y, true
 		}
-		m.TargetEntity = 0 // Clear stale reference
-	}
-
-	// Retarget: nearest enemy
-	newTarget := s.findNearestEnemy(missileX, missileY)
-	if newTarget != 0 {
-		m.TargetEntity = newTarget
-		m.HitEntity = newTarget
+	} else {
+		// Non-composite
 		if pos, ok := s.world.Positions.GetPosition(newTarget); ok {
+			m.TargetEntity = newTarget
+			m.HitEntity = newTarget
 			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
 			return x, y, true
 		}
@@ -390,6 +411,43 @@ func (s *MissileSystem) findNearestEnemy(fromX, fromY int64) core.Entity {
 	}
 
 	return best
+}
+
+// resolveClosestMember finds the closest living member of a composite Header
+// Returns member entity and precise position, or (0, 0, 0, false) if no valid member
+func (s *MissileSystem) resolveClosestMember(headerEntity core.Entity, fromX, fromY int64) (core.Entity, int64, int64, bool) {
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	if !ok {
+		return 0, 0, 0, false
+	}
+
+	var bestMember core.Entity
+	var bestX, bestY int64
+	var bestDistSq int64 = -1
+
+	for _, member := range headerComp.MemberEntries {
+		if member.Entity == 0 {
+			continue
+		}
+		pos, ok := s.world.Positions.GetPosition(member.Entity)
+		if !ok {
+			continue
+		}
+
+		mx, my := vmath.CenteredFromGrid(pos.X, pos.Y)
+		distSq := vmath.MagnitudeSq(mx-fromX, my-fromY)
+
+		if bestDistSq < 0 || distSq < bestDistSq {
+			bestDistSq = distSq
+			bestMember = member.Entity
+			bestX, bestY = mx, my
+		}
+	}
+
+	if bestMember == 0 {
+		return 0, 0, 0, false
+	}
+	return bestMember, bestX, bestY, true
 }
 
 // --- Spawning ---
