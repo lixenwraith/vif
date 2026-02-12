@@ -342,7 +342,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 	// Phantom head is indestructible through lifecycle
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	// Set quasar components
@@ -517,7 +517,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
-	kineticComp.VelX, kineticComp.VelY = physics.CapSpeedVal(kineticComp.VelX, kineticComp.VelY, parameter.QuasarMaxSpeed)
+	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.QuasarMaxSpeed)
 
 	// Define Wall Query
 	// We use a closure to capture the specific mask and dimensions

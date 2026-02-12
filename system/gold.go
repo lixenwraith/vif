@@ -279,7 +279,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// 4. Set Phantom Head to Positions AFTER batch success
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	// 5. Set components to members

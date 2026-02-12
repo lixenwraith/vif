@@ -144,7 +144,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 	}
 
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{

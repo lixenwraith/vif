@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 
@@ -8,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/genetic/game/species"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
@@ -184,6 +186,7 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
+	// TODO: old logic, refactor
 	currentTick := s.world.Resources.Game.State.GetGameTicks()
 
 	// Process pending materialize spawn queue first
@@ -205,7 +208,6 @@ func (s *DrainSystem) Update() {
 			// Apply backoff if we couldn't queue all needed spawns
 			if queued < needed {
 				// Exponential backoff: 8 ticks base, doubles on consecutive failures
-				// Capped at ~1 second (assuming 60 ticks/sec)
 				backoff := uint64(8)
 				if s.spawnCooldownUntil > 0 {
 					// Already had a recent failure, increase backoff
@@ -701,6 +703,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		spawnY = config.MapHeight - 1
 	}
 
+	// TODO: early defensive implementation due to flash flood, test if still needed
 	// Check for existing drain
 	if s.hasDrainAt(spawnX, spawnY) {
 		// Collision with moved drain - re-queue at alternate position
@@ -721,12 +724,10 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	// Initialize Kinetic with centered spawn position, zero velocity
 	preciseX, preciseY := vmath.CenteredFromGrid(spawnX, spawnY)
 	drainComp := component.DrainComponent{
-		LastDrainTime:  now,
-		SpawnOrder:     s.nextSpawnOrder,
-		LastIntX:       spawnX,
-		LastIntY:       spawnY,
-		HomingAccel:    parameter.DrainHomingAccel,
-		AggressionMult: vmath.Scale,
+		LastDrainTime: now,
+		SpawnOrder:    s.nextSpawnOrder,
+		LastIntX:      spawnX,
+		LastIntY:      spawnY,
 	}
 	kinetic := core.Kinetic{
 		PreciseX: preciseX,
@@ -747,6 +748,27 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Components.Drain.SetComponent(entity, drainComp)
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
+	// Navigation component with GA-sampled cornering parameters
+	navComp := component.NavigationComponent{
+		TurnThreshold:  vmath.FromFloat(parameter.GADrainTurnThresholdDefault),
+		BrakeIntensity: vmath.FromFloat(parameter.GADrainBrakeIntensityDefault),
+		FlowLookahead:  vmath.FromFloat(parameter.GADrainFlowLookaheadDefault),
+	}
+
+	// Sample from GA if available
+	if s.world.Resources.Genetic != nil && s.world.Resources.Genetic.Provider != nil {
+		genes, _ := s.world.Resources.Genetic.Provider.Sample(component.SpeciesDrain)
+		if phenotype := s.world.Resources.Genetic.Provider.Decode(component.SpeciesDrain, genes); phenotype != nil {
+			if p, ok := phenotype.(species.DrainPhenotype); ok {
+				navComp.TurnThreshold = p.TurnThreshold
+				navComp.BrakeIntensity = p.BrakeIntensity
+				navComp.FlowLookahead = p.FlowLookahead
+			}
+		}
+	}
+
+	s.world.Components.Navigation.SetComponent(entity, navComp)
+
 	// Combat component for interactions
 	s.world.Components.Combat.SetComponent(entity,
 		component.CombatComponent{
@@ -762,8 +784,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	})
 }
 
-// requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn
-// Called when target position blocked by drain that moved into it
+// requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn when target position has become occupied since initial acquisition (e.g. another drain moved into it)
 func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	cursorEntity := s.world.Resources.Player.Entity
 
@@ -911,7 +932,6 @@ func (s *DrainSystem) handleEntityCollisions() {
 				if _, ok := s.world.Components.Drain.GetComponent(target); ok {
 					continue
 				}
-				// TODO: the granular checks everywhere should be centralized
 				// Skip walls - handled by physics, not collision
 				if s.world.Components.Wall.HasEntity(target) {
 					continue
@@ -962,33 +982,86 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
-		// Build per-entity homing profile using evolved parameters
-		homingProfile := physics.HomingProfile{
-			BaseSpeed:        vmath.Mul(parameter.DrainBaseSpeed, drainComp.AggressionMult),
-			HomingAccel:      drainComp.HomingAccel,
-			Drag:             parameter.DrainDrag,
-			ArrivalRadius:    0,
-			ArrivalDragBoost: 0,
-			DeadZone:         0,
+		// 1. Navigation & Targeting
+		targetX, targetY := cursorXFixed, cursorYFixed
+		navComp, hasNav := s.world.Components.Navigation.GetComponent(drainEntity)
+
+		if hasNav {
+			// TODO: remove
+			s.world.DebugPrint(DebugGeneString(&navComp))
+
+			if navComp.HasDirectPath {
+				// Open Space: Ignore grid, fly straight to cursor (Euclidean), fixing "Curve/Pinball" artifacts in open areas if only done based on flow field (at some process expense)
+				targetX, targetY = cursorXFixed, cursorYFixed
+			} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
+				// Blocked: Use Flow Field
+				targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
+				targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+			} else {
+				// Flow is zero (Lost/Stuck). Snap to cursor if very close to prevent wall grinding
+				distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
+				if distToCursor < vmath.FromInt(2) {
+					targetX, targetY = cursorXFixed, cursorYFixed
+				}
+			}
+		} else {
+			// No navigation component: Direct Homing
+			targetX, targetY = cursorXFixed, cursorYFixed
 		}
 
-		// Homing only when not in kinetic immunity
+		// 2. Physics with GA-optimized cornering
 		if combatComp.RemainingKineticImmunity == 0 {
-			physics.ApplyHoming(
+			appliedDrag := parameter.DrainDrag
+
+			// Cornering drag: check turn alignment when moving
+			currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+			if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
+				// Normalized velocity
+				nx := vmath.Div(kineticComp.VelX, currentSpeed)
+				ny := vmath.Div(kineticComp.VelY, currentSpeed)
+
+				// Direction to target
+				dx := targetX - kineticComp.PreciseX
+				dy := targetY - kineticComp.PreciseY
+				dnx, dny := vmath.Normalize2D(dx, dy)
+
+				// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
+				alignment := vmath.DotProduct(nx, ny, dnx, dny)
+
+				// Apply cornering drag using GA parameters from navigation component
+				if alignment < navComp.TurnThreshold {
+					turnSeverity := navComp.TurnThreshold - alignment
+					brakeMult := vmath.Scale + vmath.Mul(turnSeverity, navComp.BrakeIntensity)
+					appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
+				}
+			}
+
+			physics.ApplyHomingScaled(
 				&kineticComp.Kinetic,
-				cursorXFixed, cursorYFixed,
-				&homingProfile,
+				targetX, targetY,
+				&physics.DrainHoming,
+				vmath.Scale,
 				dtFixed,
+				true,
 			)
+
+			// Apply cornering drag separately if higher than base
+			if appliedDrag > parameter.DrainDrag {
+				extraDrag := appliedDrag - parameter.DrainDrag
+				dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
+				if dragFactor < 0 {
+					dragFactor = 0
+				}
+				kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
+				kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+			}
 		}
 
-		// Store previous position for traversal
+		// 3. Integration & Collision
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
-
-		// Integrate position
 		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
-		// Boundary handling: reflect velocity on edge contact (pool table physics) via Kinetic.ReflectBoundsX/Y
+		// Boundary Reflection
 		if newX < 0 || newX >= gameWidth {
 			physics.ReflectBoundsX(&kineticComp.Kinetic, 0, gameWidth)
 			newX = vmath.ToInt(kineticComp.PreciseX)
@@ -998,42 +1071,38 @@ func (s *DrainSystem) updateDrainMovement() {
 			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
-		// Soft collision with quasar (only when not immune)
+		// Soft Collision (Quasar)
 		if combatComp.RemainingKineticImmunity == 0 {
 			s.applySoftCollisionWithQuasar(&kineticComp, &combatComp, newX, newY)
 		}
 
-		// Track last safe cell for wall reflection
+		// Wall Collision (Traversal)
 		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
 		hitWall := false
 
-		// Swept collision detection via Traverse
 		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
 				return true
 			}
-			// Skip previous cell (already processed)
 			if x == drainComp.LastIntX && y == drainComp.LastIntY {
 				return true
 			}
 
-			// Wall collision check - stop and reflect
 			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
 				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
 				hitWall = true
-				return false // Stop traversal
+				return false
 			}
 
-			// Update last safe position for potential wall reflection
 			lastSafeX, lastSafeY = x, y
 
+			// Entity-Entity Collision
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
 			for i := 0; i < count; i++ {
 				target := collisionBuf[i]
 				if target == 0 || target == drainEntity || target == cursorEntity {
 					continue
 				}
-				// Skip other drains - handled by handleDrainDrainCollisions
 				if s.world.Components.Drain.HasEntity(target) {
 					continue
 				}
@@ -1042,12 +1111,11 @@ func (s *DrainSystem) updateDrainMovement() {
 			return true
 		})
 
-		// Apply wall reflection result
 		if hitWall {
 			newX, newY = lastSafeX, lastSafeY
 		}
 
-		// Grid sync on cell change
+		// Update Position Component
 		if newX != drainComp.LastIntX || newY != drainComp.LastIntY {
 			drainComp.LastIntX = newX
 			drainComp.LastIntY = newY
@@ -1115,12 +1183,6 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		}
 	}
 
-	// TODO: protection should already catch this, verify
-	// Skip wall entities (defense-in-depth)
-	if s.world.Components.Wall.HasEntity(entity) {
-		return
-	}
-
 	// Skip cursor entity
 	if entity == cursorEntity {
 		return
@@ -1141,4 +1203,15 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Destroy the entity
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+}
+
+// DebugGeneString returns formatted GA gene string for status bar
+// Format: [GA: T=0.80 B=3.0 L=12]
+func DebugGeneString(nav *component.NavigationComponent) string {
+	// Convert Q32.32 to float for display
+	turnThresh := float64(nav.TurnThreshold) / float64(1<<32)
+	brakeInt := float64(nav.BrakeIntensity) / float64(1<<32)
+	flowLook := float64(nav.FlowLookahead) / float64(1<<32)
+
+	return fmt.Sprintf("[GA: T=%.2f B=%.1f L=%.0f]", turnThresh, brakeInt, flowLook)
 }

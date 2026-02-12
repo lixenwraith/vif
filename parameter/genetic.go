@@ -43,17 +43,20 @@ const (
 
 // Genetic Algorithm - Drain Evolution Bounds
 const (
-	// Homing acceleration (cells/sec²)
-	GADrainHomingAccelMin = 1.0
-	GADrainHomingAccelMax = 8.0
+	// TurnThreshold: alignment below which cornering drag activates
+	GADrainTurnThresholdMin     = 0.5
+	GADrainTurnThresholdMax     = 0.95
+	GADrainTurnThresholdDefault = 0.8
 
-	// Shield approach angle (radians, reserved)
-	GADrainShieldApproachMin = 0.0
-	GADrainShieldApproachMax = 6.28
+	// BrakeIntensity: drag multiplier during turns
+	GADrainBrakeIntensityMin     = 1.0
+	GADrainBrakeIntensityMax     = 6.0
+	GADrainBrakeIntensityDefault = 3.0
 
-	// Aggression multiplier (speed factor)
-	GADrainAggressionMin = 0.8
-	GADrainAggressionMax = 2.0
+	// FlowLookahead
+	GADrainFlowLookaheadMin     = 4.0
+	GADrainFlowLookaheadMax     = 40.0
+	GADrainFlowLookaheadDefault = 12.0
 
 	// Perturbation standard deviation for drain genes
 	GADrainPerturbationStdDev = 0.15

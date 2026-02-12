@@ -48,6 +48,7 @@ var Components = []ComponentDef{
 	{"Blossom", "BlossomComponent"},
 	{"Cleaner", "CleanerComponent"},
 	{"Dust", "DustComponent"},
+	{"Navigation", "NavigationComponent"},
 	{"Combat", "CombatComponent"},
 	{"Genotype", "GenotypeComponent"},
 	{"Lightning", "LightningComponent"},
@@ -103,6 +104,7 @@ var Systems = []SystemDef{
 	{"spirit", "NewSpiritSystem"},
 	{"lightning", "NewLightningSystem"},
 	{"missile", "NewMissileSystem"},
+	{"navigation", "NewNavigationSystem"},
 	{"combat", "NewCombatSystem"},
 	{"drain", "NewDrainSystem"},
 	{"quasar", "NewQuasarSystem"},
@@ -158,4 +160,6 @@ var Renderers = []RendererDef{
 	{"statusbar", "NewStatusBarRenderer", "PriorityUI"},
 	{"cursor", "NewCursorRenderer", "PriorityUI"},
 	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
+
+	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityUI"},
 }

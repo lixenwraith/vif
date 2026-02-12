@@ -3,7 +3,6 @@ package component
 import "time"
 
 // SpeciesType identifies the entity type for genetic routing
-// Matches registry.SpeciesID for type compatibility
 type SpeciesType uint8
 
 const (

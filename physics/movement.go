@@ -7,9 +7,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// CapSpeedVal limits velocity magnitude, returns clamped values
+// CapSpeed limits velocity magnitude, returns clamped values
 // Optimization: Pass-by-value enables inlining, avoids pointer chase
-func CapSpeedVal(velX, velY, maxSpeed int64) (int64, int64) {
+func CapSpeed(velX, velY, maxSpeed int64) (int64, int64) {
 	fvx, fvy := float64(velX), float64(velY)
 	magSq := fvx*fvx + fvy*fvy
 	fMax := float64(maxSpeed)

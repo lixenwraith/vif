@@ -340,7 +340,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 	// Phantom head is indestructible
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	// Initialize swarm component

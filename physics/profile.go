@@ -211,7 +211,6 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 
 // Homing profiles
 
-// TODO: unused
 // DrainHoming defines drain entity homing behavior
 var DrainHoming = HomingProfile{
 	BaseSpeed:        parameter.DrainBaseSpeed,

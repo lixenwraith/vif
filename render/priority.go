@@ -10,10 +10,10 @@ const (
 	PriorityWall
 	PriorityChargeLine
 	PriorityGlyph
-	PriorityHealthBar
-	PriorityEntities
 	PriorityParticle
+	PriorityEntities
 	PriorityMulti
+	PriorityHealthBar
 	PriorityCleaner
 	PriorityMaterialize
 	PriorityField

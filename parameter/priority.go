@@ -16,15 +16,16 @@ const (
 	PriorityNugget
 	PriorityGold
 	PriorityCleaner
-	PriorityFuse   // After Cleaner, before Drain
-	PrioritySpirit // After Fuse, before Drain
+	PriorityDust       // Before Explosion
+	PriorityExplosion  // After Dust
+	PriorityFuse       // After Cleaner, before Drain
+	PrioritySpirit     // After Fuse, before Drain
+	PriorityNavigation // Before systems that move entities
 	PriorityDrain
 	PriorityMaterialize // After Drain
 	PriorityQuasar      // After Drain
-	PriorityExplosion   // After Quasar, before Dust
-	PriorityDust        // After Quasar, before Decay
-	PriorityStorm       // After Drain, before Swarm and Lightning
-	PrioritySwarm
+	PrioritySwarm       // After Drain
+	PriorityStorm       // After Swarm
 	PriorityCombat
 	PriorityLoot // After enemy entities and combat
 	PriorityDecay

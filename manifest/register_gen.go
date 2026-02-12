@@ -75,6 +75,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("missile", func(w any) any {
 		return system.NewMissileSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("navigation", func(w any) any {
+		return system.NewNavigationSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("combat", func(w any) any {
 		return system.NewCombatSystem(w.(*engine.World))
 	})
@@ -226,6 +229,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("overlay", func(ctx any) any {
 		return renderer.NewOverlayRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityOverlay)
+	registry.RegisterRenderer("flowfield", func(ctx any) any {
+		return renderer.NewFlowFieldDebugRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityUI)
 }
 
 // ActiveSystems returns the ordered list of systems to instantiate
@@ -252,6 +258,7 @@ func ActiveSystems() []string {
 		"spirit",
 		"lightning",
 		"missile",
+		"navigation",
 		"combat",
 		"drain",
 		"quasar",
@@ -307,5 +314,6 @@ func ActiveRenderers() []string {
 		"statusbar",
 		"cursor",
 		"overlay",
+		"flowfield",
 	}
 }

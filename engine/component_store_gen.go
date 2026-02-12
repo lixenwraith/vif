@@ -29,6 +29,7 @@ type Component struct {
 	Blossom     *Store[component.BlossomComponent]
 	Cleaner     *Store[component.CleanerComponent]
 	Dust        *Store[component.DustComponent]
+	Navigation  *Store[component.NavigationComponent]
 	Combat      *Store[component.CombatComponent]
 	Genotype    *Store[component.GenotypeComponent]
 	Lightning   *Store[component.LightningComponent]
@@ -73,6 +74,7 @@ func initComponents(w *World) {
 	w.Components.Blossom = NewStore[component.BlossomComponent]()
 	w.Components.Cleaner = NewStore[component.CleanerComponent]()
 	w.Components.Dust = NewStore[component.DustComponent]()
+	w.Components.Navigation = NewStore[component.NavigationComponent]()
 	w.Components.Combat = NewStore[component.CombatComponent]()
 	w.Components.Genotype = NewStore[component.GenotypeComponent]()
 	w.Components.Lightning = NewStore[component.LightningComponent]()
@@ -118,6 +120,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Blossom.RemoveEntity(e)
 	w.Components.Cleaner.RemoveEntity(e)
 	w.Components.Dust.RemoveEntity(e)
+	w.Components.Navigation.RemoveEntity(e)
 	w.Components.Combat.RemoveEntity(e)
 	w.Components.Genotype.RemoveEntity(e)
 	w.Components.Lightning.RemoveEntity(e)
@@ -162,6 +165,7 @@ func (w *World) wipeAll() {
 	w.Components.Blossom.ClearAllComponents()
 	w.Components.Cleaner.ClearAllComponents()
 	w.Components.Dust.ClearAllComponents()
+	w.Components.Navigation.ClearAllComponents()
 	w.Components.Combat.ClearAllComponents()
 	w.Components.Genotype.ClearAllComponents()
 	w.Components.Lightning.ClearAllComponents()

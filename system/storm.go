@@ -384,7 +384,7 @@ func (s *StormSystem) spawnStorm() {
 	// 3. Create entities
 	rootEntity := s.world.CreateEntity()
 	s.world.Components.Protection.SetComponent(rootEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	stormComp := component.StormComponent{}
@@ -538,7 +538,7 @@ func (s *StormSystem) createCircleHeader(
 
 	// Circle headers are protected
 	s.world.Components.Protection.SetComponent(circleEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	// Storm circle component (3D physics state)

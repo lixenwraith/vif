@@ -306,7 +306,7 @@ func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) 
 
 	// Phantom heads are protected from all destruction except explicit removal
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	return entity

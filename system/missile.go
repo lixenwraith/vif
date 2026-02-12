@@ -227,7 +227,7 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 
 		// Homing via physics
 		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &physics.MissileSeekerHoming, dt)
-		k.VelX, k.VelY = physics.CapSpeedVal(k.VelX, k.VelY, parameter.MissileSeekerMaxSpeed)
+		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileSeekerMaxSpeed)
 
 		// Integrate position
 		k.PreciseX += vmath.Mul(k.VelX, dt)

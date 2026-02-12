@@ -192,7 +192,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 		Y: payload.Y,
 	})
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
 	members := make([]component.MemberEntry, 0, len(payload.Cells))

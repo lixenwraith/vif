@@ -75,8 +75,8 @@ transitions = [
 parent = "MazeCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true } },
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "TerminateRegion", region = "quasar" },
     { action = "ResumeRegion", region = "main" },

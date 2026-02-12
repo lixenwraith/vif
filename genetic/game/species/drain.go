@@ -14,15 +14,17 @@ const DrainSpeciesID registry.SpeciesID = 1
 
 // Genotype indices
 const (
-	DrainGeneHomingAccel = iota
-	DrainGeneAggressionMult
+	DrainGeneTurnThreshold = iota
+	DrainGeneBrakeIntensity
+	DrainGeneFlowLookahead
 	DrainGeneCount
 )
 
 // DrainBounds defines evolution parameter ranges
 var DrainBounds = []genetic.ParameterBounds{
-	{Min: parameter.GADrainHomingAccelMin, Max: parameter.GADrainHomingAccelMax},
-	{Min: parameter.GADrainAggressionMin, Max: parameter.GADrainAggressionMax},
+	{Min: parameter.GADrainTurnThresholdMin, Max: parameter.GADrainTurnThresholdMax},
+	{Min: parameter.GADrainBrakeIntensityMin, Max: parameter.GADrainBrakeIntensityMax},
+	{Min: parameter.GADrainFlowLookaheadMin, Max: parameter.GADrainFlowLookaheadMax},
 }
 
 // DrainConfig is the species configuration for drain entities
@@ -37,21 +39,24 @@ var DrainConfig = registry.SpeciesConfig{
 
 // DrainPhenotype is the decoded phenotype for drain entities
 type DrainPhenotype struct {
-	HomingAccel    int64 // Q32.32
-	AggressionMult int64 // Q32.32
+	TurnThreshold  int64 // Q32.32, alignment below which cornering drag activates
+	BrakeIntensity int64 // Q32.32, drag multiplier during turns
+	FlowLookahead  int64 // Q32.32, field projection cells
 }
 
 // DecodeDrain converts genotype to phenotype
 func DecodeDrain(genes []float64) any {
 	if len(genes) < DrainGeneCount {
 		return DrainPhenotype{
-			HomingAccel:    parameter.DrainHomingAccel,
-			AggressionMult: vmath.Scale,
+			TurnThreshold:  vmath.FromFloat(parameter.GADrainTurnThresholdDefault),
+			BrakeIntensity: vmath.FromFloat(parameter.GADrainBrakeIntensityDefault),
+			FlowLookahead:  vmath.FromFloat(parameter.GADrainFlowLookaheadDefault),
 		}
 	}
 	return DrainPhenotype{
-		HomingAccel:    vmath.FromFloat(genes[DrainGeneHomingAccel]),
-		AggressionMult: vmath.FromFloat(genes[DrainGeneAggressionMult]),
+		TurnThreshold:  vmath.FromFloat(genes[DrainGeneTurnThreshold]),
+		BrakeIntensity: vmath.FromFloat(genes[DrainGeneBrakeIntensity]),
+		FlowLookahead:  vmath.FromFloat(genes[DrainGeneFlowLookahead]),
 	}
 }
 
@@ -72,10 +77,10 @@ var DrainFitnessWeights = map[string]float64{
 
 // DrainNormalizers for fitness calculation
 var DrainNormalizers = map[string]fitness.NormalizeFunc{
-	"time_" + DrainMetricInShield: fitness.NormalizeCap(30.0), // 30s = excellent
+	"time_" + DrainMetricInShield: fitness.NormalizeCap(30.0),
 	tracking.MetricTicksAlive:     fitness.NormalizeCap(parameter.GAFitnessMaxTicksDefault),
-	DrainMetricPositioning:        fitness.NormalizeInverse(100.0), // Closer = better
-	tracking.MetricDeathAtTarget:  nil,                             // Raw 0/1
+	DrainMetricPositioning:        fitness.NormalizeInverse(100.0),
+	tracking.MetricDeathAtTarget:  nil,
 }
 
 // NewDrainAggregator creates the fitness aggregator for drains
@@ -98,7 +103,6 @@ func NewDrainAggregator() fitness.Aggregator {
 				adjusted[k] = v
 			}
 
-			// Skilled player: reward survival; weaker player: reward drain
 			if threat > 0.7 {
 				adjusted[tracking.MetricTicksAlive] *= 1.2
 				adjusted[DrainMetricPositioning] *= 1.1

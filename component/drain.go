@@ -3,17 +3,14 @@ package component
 import "time"
 
 // DrainComponent represents the drain entity that moves toward the cursor, drains energy when inside a shield and destroys itself upon collision and removing heat from cursor
-// Drain count is based on Heat (floor(Heat/10)). Drains despawn when:
-// - Heat drops (excess drains removed LIFO)
-// - Cursor collision without active shield reduces heat and colliding drain despawns
-// - Drain-drain collision (all involved despawn)
 type DrainComponent struct {
-	LastDrainTime time.Time // Last time energy was drained (DrainEnergyDrainInterval)
-	SpawnOrder    int64     // Monotonic counter for LIFO despawn ordering (higher = newer)
-	LastIntX      int       // Cell-entry detection
-	LastIntY      int       // Cell-entry detection
+	// Last time energy was drained
+	LastDrainTime time.Time
 
-	// Evolved phenotype parameters (Q32.32), applied at spawn from genotype
-	HomingAccel    int64 // Overrides parameter.DrainHomingAccel
-	AggressionMult int64 // Speed multiplier (Scale = 1.0)
+	// Monotonic counter for LIFO despawn ordering (higher = newer)
+	SpawnOrder int64
+
+	// Cell-entry detection for interaction dedup
+	LastIntX int
+	LastIntY int
 }

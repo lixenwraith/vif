@@ -223,7 +223,7 @@ func benchCapSpeed() {
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
 		vx, vy := vmath.FromFloat(100.0), vmath.FromFloat(100.0)
-		vx, vy = physics.CapSpeedVal(vx, vy, maxSpeed)
+		vx, vy = physics.CapSpeed(vx, vy, maxSpeed)
 	}
 	q32Time := time.Since(start)
 
