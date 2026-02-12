@@ -167,3 +167,16 @@ const (
 	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
 	SwarmDeflectAngleVarFloat = 0.25
 )
+
+// Swarm Teleport
+const (
+	// SwarmTeleportDuration is visual effect duration before instant move
+	SwarmTeleportDuration = 400 * time.Millisecond
+
+	// SwarmTeleportBeamAlphaFloat is peak beam opacity
+	SwarmTeleportBeamAlphaFloat = 0.5
+	// SwarmTeleportBeamTrailFloat is trail length fraction
+	SwarmTeleportBeamTrailFloat = 0.3
+	// SwarmTeleport256Threshold for 256-color visibility
+	SwarmTeleport256Threshold = 0.15
+)

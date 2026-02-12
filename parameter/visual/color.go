@@ -111,6 +111,7 @@ var (
 
 	// Swarm charge line pulse color (light orchid/pink-violet)
 	RgbSwarmChargeLine = terminal.RGB{R: 200, G: 130, B: 210}
+	RgbSwarmTeleport   = terminal.RGB{R: 220, G: 150, B: 230}
 
 	// Orb colors
 	RgbOrbRod      = terminal.RGB{0, 220, 220}   // Cyan

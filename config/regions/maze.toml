@@ -11,11 +11,12 @@ parent = "Root"
 parent = "MazeCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
+    #{ action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 500, height = 250, clear_entities = true } },
     { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 20, cell_height = 10, braiding = 0.5, room_count = 1, rooms = [{ center_x = 250, center_y = 125, width = 100, height = 40 }] } },
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
+    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [

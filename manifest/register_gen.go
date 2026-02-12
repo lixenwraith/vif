@@ -190,6 +190,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("materialize", func(ctx any) any {
 		return renderer.NewMaterializeRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMaterialize)
+	registry.RegisterRenderer("teleportline", func(ctx any) any {
+		return renderer.NewTeleportLineRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMaterialize)
 	registry.RegisterRenderer("quasar", func(ctx any) any {
 		return renderer.NewQuasarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMulti)
@@ -292,6 +295,7 @@ func ActiveRenderers() []string {
 		"missile",
 		"spirit",
 		"materialize",
+		"teleportline",
 		"quasar",
 		"swarm",
 		"storm",

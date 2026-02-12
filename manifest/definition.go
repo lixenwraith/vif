@@ -146,6 +146,7 @@ var Renderers = []RendererDef{
 	{"missile", "NewMissileRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
 	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},
+	{"teleportline", "NewTeleportLineRenderer", "PriorityMaterialize"},
 	{"quasar", "NewQuasarRenderer", "PriorityMulti"},
 	{"swarm", "NewSwarmRenderer", "PriorityMulti"},
 	{"storm", "NewStormRenderer", "PriorityMulti"},

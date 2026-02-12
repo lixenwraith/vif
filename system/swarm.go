@@ -206,6 +206,8 @@ func (s *SwarmSystem) Update() {
 			s.updateLockState(headerEntity, &swarmComp, &combatComp, dt)
 		case component.SwarmStateCharge:
 			s.updateChargeState(headerEntity, &swarmComp, &combatComp, dtFixed, dt)
+		case component.SwarmStateTeleport:
+			s.updateTeleportState(headerEntity, &swarmComp, &combatComp, dt)
 		case component.SwarmStateDecelerate:
 			s.updateDecelerateState(headerEntity, &swarmComp, &combatComp, dtFixed, dt)
 		}
@@ -701,8 +703,26 @@ func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *compon
 	}
 }
 
-// enterChargeState transitions to charge phase
+// enterChargeState transitions to charge phase, or teleport if LOS blocked
 func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
+	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
+	if !ok {
+		return
+	}
+
+	// Check LOS to locked target
+	hasLOS := s.world.Positions.HasLineOfSight(
+		headerPos.X, headerPos.Y,
+		swarmComp.LockedTargetX, swarmComp.LockedTargetY,
+		component.WallBlockKinetic,
+	)
+
+	if !hasLOS {
+		s.enterTeleportState(headerEntity, swarmComp, headerPos.X, headerPos.Y)
+		return
+	}
+
+	// Normal charge
 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
 	if !ok {
 		return
@@ -711,7 +731,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	swarmComp.State = component.SwarmStateCharge
 	swarmComp.ChargeRemaining = parameter.SwarmChargeDuration
 
-	// Store charge start and target positions (target is centered)
+	// Store charge start and target positions
 	swarmComp.ChargeStartX = kineticComp.PreciseX
 	swarmComp.ChargeStartY = kineticComp.PreciseY
 	swarmComp.ChargeTargetX, swarmComp.ChargeTargetY = vmath.CenteredFromGrid(swarmComp.LockedTargetX, swarmComp.LockedTargetY)
@@ -725,6 +745,73 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	kineticComp.VelY = vmath.Div(dy, vmath.FromFloat(chargeSec))
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+}
+
+// enterTeleportState initiates teleport to locked target
+func (s *SwarmSystem) enterTeleportState(headerEntity core.Entity, swarmComp *component.SwarmComponent, fromX, fromY int) {
+	// Find valid landing near locked target
+	targetX, targetY, found := s.world.Positions.FindFreeAreaSpiral(
+		swarmComp.LockedTargetX, swarmComp.LockedTargetY,
+		parameter.SwarmWidth, parameter.SwarmHeight,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		// Fallback: skip to decelerate, counts as failed charge
+		s.enterDecelerateState(swarmComp)
+		return
+	}
+
+	headerTargetX := targetX + parameter.SwarmHeaderOffsetX
+	headerTargetY := targetY + parameter.SwarmHeaderOffsetY
+
+	swarmComp.State = component.SwarmStateTeleport
+	swarmComp.TeleportRemaining = parameter.SwarmTeleportDuration
+	swarmComp.TeleportStartX = fromX
+	swarmComp.TeleportStartY = fromY
+	swarmComp.TeleportTargetX = headerTargetX
+	swarmComp.TeleportTargetY = headerTargetY
+
+	// Zero velocity
+	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
+		kineticComp.VelX = 0
+		kineticComp.VelY = 0
+		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+	}
+}
+
+// updateTeleportState handles teleport visual duration then instant reposition
+func (s *SwarmSystem) updateTeleportState(
+	headerEntity core.Entity,
+	swarmComp *component.SwarmComponent,
+	combatComp *component.CombatComponent,
+	dt time.Duration,
+) {
+	combatComp.IsEnraged = true
+
+	swarmComp.TeleportRemaining -= dt
+	if swarmComp.TeleportRemaining > 0 {
+		return
+	}
+
+	// Teleport complete
+	newX := swarmComp.TeleportTargetX
+	newY := swarmComp.TeleportTargetY
+
+	s.clearSwarmSpawnArea(newX, newY)
+
+	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
+		kineticComp.PreciseX, kineticComp.PreciseY = vmath.CenteredFromGrid(newX, newY)
+		kineticComp.VelX = 0
+		kineticComp.VelY = 0
+		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
+	}
+
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
+	s.syncMemberPositions(headerEntity, newX, newY)
+
+	s.enterDecelerateState(swarmComp)
 }
 
 // enterDecelerateState transitions to deceleration phase

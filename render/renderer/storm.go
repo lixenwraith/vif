@@ -197,8 +197,9 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		ny := float64(member.OffsetY) * r.invRadiusY
 		distSq := nx*nx + ny*ny
 
+		// Members validated at creation via Q32.32; clamp for shading math only
 		if distSq > 1.0 {
-			continue
+			distSq = 1.0
 		}
 
 		// Sphere surface normal
