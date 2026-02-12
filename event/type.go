@@ -603,6 +603,11 @@ const (
 	// Consumer: StormSystem | Payload: nil
 	EventStormSpawnRequest
 
+	// EventStormCancelRequest signals destruction of all storm entities
+	// Trigger: FSM on phase transition (maze exit, quasar exit)
+	// Consumer: StormSystem | Payload: nil
+	EventStormCancelRequest
+
 	// EventStormCircleDied signals individual circle destruction
 	// Trigger: StormSystem on circle health <= 0
 	// Consumer: StormSystem (internal), future loot | Payload: *StormCircleDiedPayload

@@ -217,6 +217,7 @@ func InitRegistry() {
 
 	// Storm
 	RegisterType("EventStormSpawnRequest", EventStormSpawnRequest, nil)
+	RegisterType("EventStormCancelRequest", EventStormCancelRequest, nil)
 	RegisterType("EventStormCircleDied", EventStormCircleDied, &StormCircleDiedPayload{})
 	RegisterType("EventStormDied", EventStormDied, &StormDiedPayload{})
 

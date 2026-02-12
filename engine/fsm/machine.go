@@ -87,7 +87,17 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 
 // Update advances the FSM by delta time for all active regions
 func (m *Machine[T]) Update(ctx T, dt time.Duration) {
-	for _, region := range m.regions {
+	// Snapshot region names to prevent map mutation during iteration
+	regionNames := make([]string, 0, len(m.regions))
+	for name := range m.regions {
+		regionNames = append(regionNames, name)
+	}
+
+	for _, name := range regionNames {
+		region, ok := m.regions[name]
+		if !ok {
+			continue // Region terminated during this update
+		}
 		if region.Paused {
 			continue
 		}

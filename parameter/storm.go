@@ -1,6 +1,8 @@
 package parameter
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -18,8 +20,7 @@ const (
 	StormCircleRadiusCollisionFloat = 7.5
 
 	// CombatInitialHPStormMember is baseline HP for each Storm circle member
-	CombatInitialHPStormMember = 1
-	// CombatInitialHPStormMember = 10
+	CombatInitialHPStormMember = 10
 )
 
 // Storm spawn geometry
@@ -38,7 +39,21 @@ const (
 	StormRestitutionFloat       = 1.0
 	StormZMinFloat              = 3.0
 	StormZMaxFloat              = 30.0
+	StormZMidFloat              = (StormZMinFloat + StormZMaxFloat) / 2
 	StormZSpawnOffsetFloat      = 10.0
+)
+
+// Storm Z-axis stability (anti-deadlock)
+const (
+	// StormZEquilibriumStiffnessFloat is spring constant toward zMid (cells/sec²)
+	// Higher = faster oscillation, lower = gentler correction
+	StormZEquilibriumStiffnessFloat = 12.0
+
+	// StormInvulnerabilityMaxDurationMs is max continuous invulnerability before nudge (ms)
+	StormInvulnerabilityMaxDurationMs = 3000
+
+	// StormInvulnerabilityNudgeFloat is downward velocity impulse on timeout (cells/sec)
+	StormInvulnerabilityNudgeFloat = 8.0
 )
 
 // Storm boundary insets (account for visual radius)
@@ -80,4 +95,11 @@ var (
 	StormCollisionRadius = vmath.FromFloat(StormCircleRadiusCollisionFloat)
 	StormCollisionInvRxSq,
 	StormCollisionInvRySq = vmath.EllipseInvRadiiSq(StormCircleRadiusX, StormCircleRadiusY)
+
+	StormZEquilibriumStiffness      = vmath.FromFloat(StormZEquilibriumStiffnessFloat)
+	StormInvulnerabilityMaxDuration = time.Duration(StormInvulnerabilityMaxDurationMs) * time.Millisecond
+	StormInvulnerabilityNudge       = vmath.FromFloat(StormInvulnerabilityNudgeFloat)
+
+	// Precompute zMid for physics
+	StormZMid = (StormZMin + StormZMax) / 2
 )

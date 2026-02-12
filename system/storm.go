@@ -4,6 +4,7 @@ package system
 import (
 	"math"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -91,6 +92,7 @@ func (s *StormSystem) Priority() int {
 func (s *StormSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventStormSpawnRequest,
+		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -122,6 +124,11 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventStormSpawnRequest:
 		if s.rootEntity == 0 {
 			s.spawnStorm()
+		}
+
+	case event.EventStormCancelRequest:
+		if s.rootEntity != 0 {
+			s.terminateStorm()
 		}
 
 	case event.EventCompositeIntegrityBreach:
@@ -326,7 +333,7 @@ func (s *StormSystem) spawnStorm() {
 	zOffsets := [3]float64{-1.0, 0.0, 1.0}
 	initialRadius := parameter.StormInitialRadiusFloat
 	initialSpeed := parameter.StormInitialSpeedFloat
-	baseZ := (parameter.StormZMinFloat + parameter.StormZMaxFloat) / 2
+	baseZ := parameter.StormZMidFloat
 
 	type circleSpawnInfo struct {
 		gridX, gridY int
@@ -711,6 +718,11 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			accelZ += accel.Z
 		}
 
+		// 1b. Z-axis equilibrium spring: accelZ += stiffness * (zMid - z)
+		// Provides restoring force toward vulnerability boundary
+		zDelta := parameter.StormZMid - circles[i].circle.Pos3D.Z
+		accelZ += vmath.Mul(parameter.StormZEquilibriumStiffness, zDelta)
+
 		// 2. Integrate velocity
 		circles[i].circle.Vel3D.X += vmath.Mul(accelX, dtFixed)
 		circles[i].circle.Vel3D.Y += vmath.Mul(accelY, dtFixed)
@@ -723,7 +735,6 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		circles[i].circle.Vel3D = vmath.V3ClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
 
 		// 5. Axis-separated position integration with collision
-		// Pattern from IntegrateWithBounce: handle each axis independently
 
 		// --- X Axis ---
 		oldPosX := circles[i].circle.Pos3D.X
@@ -1112,9 +1123,9 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 	}
 }
 
-// updateCircleDamageImmunity sets immunity for concave (invulnerable) circles
+// updateCircleDamageImmunity sets immunity for concave circles and handles anti-deadlock nudge
 func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent) {
-	zMid := parameter.StormZMin + (parameter.StormZMax-parameter.StormZMin)/2
+	nowNano := s.world.Resources.Time.GameTime.UnixNano()
 
 	for i := 0; i < component.StormCircleCount; i++ {
 		if !stormComp.CirclesAlive[i] {
@@ -1127,27 +1138,48 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			continue
 		}
 
-		// Concave (invulnerable): z >= zMid, matches renderer's depthFactor <= 0.5
-		if circleComp.Pos3D.Z < zMid {
-			continue
-		}
+		isInvulnerable := circleComp.Pos3D.Z >= parameter.StormZMid
 
-		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
-		if !ok {
-			continue
-		}
+		if isInvulnerable {
+			// Track invulnerability duration
+			if circleComp.InvulnerableSince == 0 {
+				circleComp.InvulnerableSince = nowNano
+			} else {
+				// Check for timeout - apply nudge if stuck too long
+				elapsed := time.Duration(nowNano - circleComp.InvulnerableSince)
+				if elapsed > parameter.StormInvulnerabilityMaxDuration {
+					// Apply downward nudge
+					circleComp.Vel3D.Z -= parameter.StormInvulnerabilityNudge
+					circleComp.InvulnerableSince = nowNano // Reset timer
 
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
+					// Telemetry (optional)
+					s.world.Resources.Status.Ints.Get("storm.nudge_count").Add(1)
+				}
 			}
-			memberCombat, ok := s.world.Components.Combat.GetComponent(member.Entity)
+
+			// Set immunity on members
+			headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
 			if !ok {
 				continue
 			}
-			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-			s.world.Components.Combat.SetComponent(member.Entity, memberCombat)
+
+			for _, member := range headerComp.MemberEntries {
+				if member.Entity == 0 {
+					continue
+				}
+				memberCombat, ok := s.world.Components.Combat.GetComponent(member.Entity)
+				if !ok {
+					continue
+				}
+				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				s.world.Components.Combat.SetComponent(member.Entity, memberCombat)
+			}
+		} else {
+			// Reset invulnerability tracking when vulnerable
+			circleComp.InvulnerableSince = 0
 		}
+
+		s.world.Components.StormCircle.SetComponent(circleEntity, circleComp)
 	}
 }
 
