@@ -196,15 +196,18 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("teleportline", func(ctx any) any {
 		return renderer.NewTeleportLineRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMaterialize)
+	registry.RegisterRenderer("drain", func(ctx any) any {
+		return renderer.NewDrainRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySpecies)
 	registry.RegisterRenderer("quasar", func(ctx any) any {
 		return renderer.NewQuasarRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMulti)
+	}, render.PrioritySpecies)
 	registry.RegisterRenderer("swarm", func(ctx any) any {
 		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMulti)
+	}, render.PrioritySpecies)
 	registry.RegisterRenderer("storm", func(ctx any) any {
 		return renderer.NewStormRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMulti)
+	}, render.PrioritySpecies)
 	registry.RegisterRenderer("wall", func(ctx any) any {
 		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityWall)
@@ -303,6 +306,7 @@ func ActiveRenderers() []string {
 		"spirit",
 		"materialize",
 		"teleportline",
+		"drain",
 		"quasar",
 		"swarm",
 		"storm",

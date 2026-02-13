@@ -12,7 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
-	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -229,7 +228,6 @@ func (s *DrainSystem) Update() {
 	if s.world.Components.Drain.CountEntities() > 0 {
 		s.updateDrainMovement()
 		s.handleDrainInteractions()
-		s.updateDrainSigil()
 	}
 
 	s.statCount.Store(int64(s.world.Components.Drain.CountEntities()))
@@ -355,41 +353,6 @@ func (s *DrainSystem) detectSwarmFusions() {
 			DrainB: drainB,
 			Effect: event.FuseEffectSpirit,
 		})
-	}
-}
-
-// updateDrainSigil updates visual state based on combat state
-func (s *DrainSystem) updateDrainSigil() {
-	for i := range s.drainCache {
-		entry := &s.drainCache[i]
-
-		sigilComp, ok := s.world.Components.Sigil.GetComponent(entry.entity)
-		if !ok {
-			continue
-		}
-
-		// Re-fetch combat component as it may have been updated
-		combatComp, ok := s.world.Components.Combat.GetComponent(entry.entity)
-		if !ok {
-			continue
-		}
-
-		var targetColor terminal.RGB
-
-		// Priority: hit flash > enraged > normal
-		switch {
-		case combatComp.RemainingHitFlash > 0:
-			targetColor = visual.RgbCombatHitFlash
-		case combatComp.IsEnraged:
-			targetColor = visual.RgbCombatEnraged
-		default:
-			targetColor = visual.RgbDrain
-		}
-
-		if sigilComp.Color != targetColor {
-			sigilComp.Color = targetColor
-			s.world.Components.Sigil.SetComponent(entry.entity, sigilComp)
-		}
 	}
 }
 
@@ -783,7 +746,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 			HitPoints:        parameter.CombatInitialHPDrain,
 		})
 
-	// Visual component for sigil renderer and death system flash extraction
+	// Sigil component for death system flash extraction, drain renderer renders on top
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  visual.DrainChar,
 		Color: visual.RgbDrain,

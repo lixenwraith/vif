@@ -12,7 +12,7 @@ const (
 	PriorityGlyph
 	PriorityParticle
 	PriorityEntities
-	PriorityMulti
+	PrioritySpecies
 	PriorityHealthBar
 	PriorityCleaner
 	PriorityMaterialize
