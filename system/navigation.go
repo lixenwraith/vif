@@ -29,6 +29,7 @@ func init() {
 
 // TODO: debug
 var DebugFlow *navigation.FlowFieldCache
+var DebugShowFlow bool
 
 // NavigationSystem calculates flow field and wall avoidance for kinetic entities
 type NavigationSystem struct {
@@ -40,8 +41,12 @@ type NavigationSystem struct {
 	cursorX, cursorY int
 	cursorValid      bool
 
+	// Per-tick entity position buffer (reused to avoid allocations)
+	entityPosBuf [][2]int
+
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
+	statROICells   *atomic.Int64 // Track ROI size for telemetry
 
 	enabled bool
 }
@@ -60,6 +65,7 @@ func NewNavigationSystem(world *engine.World) engine.System {
 
 	s.statEntities = world.Resources.Status.Ints.Get("nav.entities")
 	s.statRecomputes = world.Resources.Status.Ints.Get("nav.recomputes")
+	s.statROICells = world.Resources.Status.Ints.Get("nav.roi_cells")
 
 	s.Init()
 	return s
@@ -136,13 +142,12 @@ func (s *NavigationSystem) Update() {
 		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
 	}
 
-	if s.flowCache.Update(s.cursorX, s.cursorY, isBlocked) {
-		s.statRecomputes.Add(1)
-	}
-
-	// Process navigation entities
+	// 1. Pre-filter entities and collect ROI contributors
 	entities := s.world.Components.Navigation.GetAllEntities()
 	s.statEntities.Store(int64(len(entities)))
+
+	// Reset position buffer
+	s.entityPosBuf = s.entityPosBuf[:0]
 
 	for _, entity := range entities {
 		navComp, ok := s.world.Components.Navigation.GetComponent(entity)
@@ -150,7 +155,51 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// Use Kinetic precise position for smooth interpolation
+		// Get entity position
+		var gridX, gridY int
+		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
+			gridX, gridY = vmath.GridFromCentered(kinetic.PreciseX, kinetic.PreciseY)
+		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
+			gridX, gridY = pos.X, pos.Y
+		} else {
+			continue
+		}
+
+		// LOS check first - if clear, entity doesn't need flow field
+		if s.world.Positions.HasLineOfSight(gridX, gridY, s.cursorX, s.cursorY, component.WallBlockKinetic) {
+			navComp.HasDirectPath = true
+			navComp.FlowX = 0
+			navComp.FlowY = 0
+			s.world.Components.Navigation.SetComponent(entity, navComp)
+			continue
+		}
+
+		// No LOS - entity needs flow field, add to ROI
+		navComp.HasDirectPath = false
+		s.world.Components.Navigation.SetComponent(entity, navComp)
+		s.entityPosBuf = append(s.entityPosBuf, [2]int{gridX, gridY})
+
+		// Store entity for second pass (after flow field update)
+		// We'll update flow direction below
+	}
+
+	// 2. Update flow field with ROI
+	recomputed := s.flowCache.Update(s.cursorX, s.cursorY, isBlocked, s.entityPosBuf)
+	if recomputed {
+		s.statRecomputes.Add(1)
+		if roi := s.flowCache.GetROI(); roi != nil {
+			roiCells := (roi.MaxX - roi.MinX + 1) * (roi.MaxY - roi.MinY + 1)
+			s.statROICells.Store(int64(roiCells))
+		}
+	}
+
+	// 3. Update flow directions for entities without LOS
+	for _, entity := range entities {
+		navComp, ok := s.world.Components.Navigation.GetComponent(entity)
+		if !ok || navComp.HasDirectPath {
+			continue // Skip entities with direct path (already updated)
+		}
+
 		var preciseX, preciseY int64
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
 			preciseX, preciseY = kinetic.PreciseX, kinetic.PreciseY
@@ -160,24 +209,14 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// Calculate bilinear interpolated flow direction always in case LOS fails
+		// Calculate bilinear interpolated flow direction
 		navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY)
-
-		// LOS check with direct raycast to cursor, if clear use pure Euclidean homing
-		gridX, gridY := vmath.GridFromCentered(preciseX, preciseY)
-		if s.world.Positions.HasLineOfSight(gridX, gridY, s.cursorX, s.cursorY, component.WallBlockKinetic) {
-			navComp.HasDirectPath = true
-		} else {
-			navComp.HasDirectPath = false
-		}
-
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 }
 
 // getInterpolatedFlowDirection performs bilinear interpolation masking out blocked cells
 func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64) (int64, int64) {
-	// Shift coordinates to align integer grid with cell centers
 	sampleX := preciseX - vmath.CellCenter
 	sampleY := preciseY - vmath.CellCenter
 

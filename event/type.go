@@ -627,6 +627,8 @@ const (
 	// Trigger: FSM after level setup
 	// Consumer: WallSystem | Payload: *MazeSpawnRequestPayload
 	EventMazeSpawnRequest
+
+	EventDebugFlowToggle
 )
 
 // GameEvent represents a single game event with metadata

@@ -34,6 +34,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 
 	// Execute based on command
 	switch cmd {
+	case "flow":
+		ctx.World.PushEvent(event.EventDebugFlowToggle, nil)
+		return CommandResult{Continue: true, KeepPaused: false}
 	case "q", "quit":
 		return handleQuitCommand(ctx)
 	case "n", "new":

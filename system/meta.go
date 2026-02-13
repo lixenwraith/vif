@@ -49,6 +49,7 @@ func (s *MetaSystem) Priority() int {
 // EventTypes returns the event types MetaSystem handles
 func (s *MetaSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventDebugFlowToggle,
 		event.EventMetaStatusMessageRequest,
 		event.EventLevelSetup,
 		event.EventMetaDebugRequest,
@@ -72,6 +73,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
 			s.handleLevelSetup(payload)
 		}
+
+	case event.EventDebugFlowToggle:
+		DebugShowFlow = !DebugShowFlow
 
 	case event.EventMetaDebugRequest:
 		s.handleDebugRequest()

@@ -26,7 +26,10 @@ func NewFlowFieldDebugRenderer(gameCtx *engine.GameContext) *FlowFieldDebugRende
 }
 
 func (r *FlowFieldDebugRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	return
+	if !system.DebugShowFlow {
+		return
+	}
+
 	if r.flowCache == nil || !r.flowCache.IsValid() {
 		return
 	}
