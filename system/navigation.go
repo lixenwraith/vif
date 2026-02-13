@@ -67,6 +67,11 @@ func NewNavigationSystem(world *engine.World) engine.System {
 
 func (s *NavigationSystem) Init() {
 	s.enabled = true
+	// Resize to current map dimensions at startup/new game
+	config := s.world.Resources.Config
+	if config.MapWidth > 0 && config.MapHeight > 0 {
+		s.flowCache.Resize(config.MapWidth, config.MapHeight)
+	}
 	if s.flowCache != nil {
 		s.flowCache.Field.Invalidate()
 	}
@@ -114,9 +119,10 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventLevelSetup:
-		// Resize flow field on level change
-		config := s.world.Resources.Config
-		s.flowCache.Resize(config.MapWidth, config.MapHeight)
+		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+			// Resize flow field on level change
+			s.flowCache.Resize(payload.Width, payload.Height)
+		}
 	}
 }
 

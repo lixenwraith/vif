@@ -9,6 +9,9 @@ type FlowFieldCache struct {
 	TicksSinceCompute        int // Ticks since last computation
 	MinTicksBetweenCompute   int // Minimum ticks between recomputes
 	DirtyDistance            int // Target must move this many cells to trigger immediate recompute
+
+	// PendingUpdate latches true on any state change, cleared after compute
+	PendingUpdate bool
 }
 
 // NewFlowFieldCache creates a cache with default throttling
@@ -20,6 +23,7 @@ func NewFlowFieldCache(width, height, minTicks, dirtyDist int) *FlowFieldCache {
 		TicksSinceCompute:      minTicks, // Allow immediate first compute
 		MinTicksBetweenCompute: minTicks,
 		DirtyDistance:          dirtyDist,
+		PendingUpdate:          true, // Force initial compute
 	}
 }
 
@@ -28,6 +32,7 @@ func (c *FlowFieldCache) Resize(width, height int) {
 	c.Field.Resize(width, height)
 	c.LastTargetX = -1
 	c.LastTargetY = -1
+	c.PendingUpdate = true
 }
 
 // Update checks if recomputation needed and performs it if so
@@ -35,31 +40,37 @@ func (c *FlowFieldCache) Resize(width, height int) {
 func (c *FlowFieldCache) Update(targetX, targetY int, isBlocked WallChecker) bool {
 	c.TicksSinceCompute++
 
-	// Check if target moved significantly (Manhattan distance)
-	dx := targetX - c.LastTargetX
-	dy := targetY - c.LastTargetY
-	if dx < 0 {
-		dx = -dx
+	// Detect target movement
+	if targetX != c.LastTargetX || targetY != c.LastTargetY {
+		dx := targetX - c.LastTargetX
+		dy := targetY - c.LastTargetY
+		if dx < 0 {
+			dx = -dx
+		}
+		if dy < 0 {
+			dy = -dy
+		}
+		targetMoved := dx + dy
+
+		// Latch pending update on any movement
+		c.PendingUpdate = true
+
+		// Immediate recompute if moved far
+		if targetMoved >= c.DirtyDistance {
+			c.TicksSinceCompute = c.MinTicksBetweenCompute
+		}
 	}
-	if dy < 0 {
-		dy = -dy
-	}
-	targetMoved := dx + dy
 
 	needsCompute := false
 
-	// Immediate recompute if target moved far
-	if targetMoved >= c.DirtyDistance {
+	// Compute if pending AND cooldown expired
+	if c.PendingUpdate && c.TicksSinceCompute >= c.MinTicksBetweenCompute {
 		needsCompute = true
 	}
 
-	// Throttled recompute if target moved at all and cooldown elapsed
-	if targetMoved > 0 && c.TicksSinceCompute >= c.MinTicksBetweenCompute {
-		needsCompute = true
-	}
-
-	// First computation
+	// First computation / invalidated field
 	if !c.Field.Valid {
+		c.PendingUpdate = true
 		needsCompute = true
 	}
 
@@ -68,10 +79,20 @@ func (c *FlowFieldCache) Update(targetX, targetY int, isBlocked WallChecker) boo
 		c.LastTargetX = targetX
 		c.LastTargetY = targetY
 		c.TicksSinceCompute = 0
+		c.PendingUpdate = false
 		return true
 	}
 
+	// Incremental patch: fill newly-free cells from neighbors
+	c.Field.IncrementalUpdate(isBlocked)
+
 	return false
+}
+
+// TODO: unused, remove or integrate for wall updates
+// MarkDirty forces recomputation on next eligible tick
+func (c *FlowFieldCache) MarkDirty() {
+	c.PendingUpdate = true
 }
 
 // GetDirection returns cached flow direction

@@ -276,3 +276,70 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
 	f.TargetY = targetY
 	f.Valid = true
 }
+
+// IncrementalUpdate patches newly-free cells without full recompute
+// Detects cells that are free but have no direction and propagates from neighbors
+func (f *FlowField) IncrementalUpdate(isBlocked WallChecker) {
+	if !f.Valid {
+		return
+	}
+
+	w := f.Width
+
+	for y := 0; y < f.Height; y++ {
+		for x := 0; x < w; x++ {
+			idx := y*w + x
+
+			// Skip if already has valid direction
+			if f.Directions[idx] != DirNone {
+				continue
+			}
+
+			// Skip if still blocked
+			if isBlocked(x, y) {
+				continue
+			}
+
+			// Cell is free but has no direction - find best neighbor
+			bestDir := DirNone
+			bestDist := costUnreachable
+
+			for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
+				nx := x + DirVectors[dirIdx][0]
+				ny := y + DirVectors[dirIdx][1]
+
+				if nx < 0 || ny < 0 || nx >= w || ny >= f.Height {
+					continue
+				}
+
+				nIdx := ny*w + nx
+				nDist := f.Distances[nIdx]
+
+				// Neighbor must have valid distance
+				if nDist >= costUnreachable {
+					continue
+				}
+
+				// Diagonal corner-cutting check
+				if DirVectors[dirIdx][0] != 0 && DirVectors[dirIdx][1] != 0 {
+					if isBlocked(x+DirVectors[dirIdx][0], y) || isBlocked(x, y+DirVectors[dirIdx][1]) {
+						continue
+					}
+				}
+
+				cost := nDist + dirCosts[dirIdx]
+				if cost < bestDist {
+					bestDist = cost
+					bestDir = dirIdx
+				}
+			}
+
+			if bestDir != DirNone {
+				f.Directions[idx] = bestDir
+				f.Distances[idx] = bestDist
+			}
+		}
+	}
+
+	return
+}
