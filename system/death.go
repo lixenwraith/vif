@@ -99,10 +99,7 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventDeathBatch:
 		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
-			for _, entity := range p.Entities {
-				s.markForDeath(entity, p.EffectEvent)
-			}
-			event.ReleaseDeathRequest(p)
+			s.processBatch(p)
 		}
 	}
 }
@@ -241,15 +238,27 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 	}
 }
 
-// processBatchSilent destroys entities without effect emission
+// processBatchSilent destroys entities without effect emission using batch API
 func (s *DeathSystem) processBatchSilent(entities []core.Entity) {
-	for _, entity := range entities {
-		if entity == 0 || s.isProtected(entity) {
+	if len(entities) == 0 {
+		return
+	}
+
+	// Filter protected entities
+	toDestroy := make([]core.Entity, 0, len(entities))
+	for _, e := range entities {
+		if e == 0 || s.isProtected(e) {
 			continue
 		}
-		s.world.DestroyEntity(entity)
-		s.statKilled.Add(1)
+		toDestroy = append(toDestroy, e)
 	}
+
+	if len(toDestroy) == 0 {
+		return
+	}
+
+	s.world.DestroyEntitiesBatch(toDestroy)
+	s.statKilled.Add(int64(len(toDestroy)))
 }
 
 // processBatchWith is the generic two-pass batch processor
@@ -371,10 +380,11 @@ func (s *DeathSystem) extractCharData(entity core.Entity) (char rune, level comp
 	return 0, 0, false
 }
 
-// destroyCollected destroys all entities in destroyBuf and increments stat
+// destroyCollected destroys all entities in destroyBuf using batch API
 func (s *DeathSystem) destroyCollected() {
-	for _, entity := range s.destroyBuf {
-		s.world.DestroyEntity(entity)
+	if len(s.destroyBuf) == 0 {
+		return
 	}
+	s.world.DestroyEntitiesBatch(s.destroyBuf)
 	s.statKilled.Add(int64(len(s.destroyBuf)))
 }

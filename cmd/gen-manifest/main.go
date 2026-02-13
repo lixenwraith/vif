@@ -192,6 +192,14 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Positions.RemoveEntity(e)
 }
 
+// removeEntitiesBatch removes entities from all stores using batch operations
+func (w *World) removeEntitiesBatch(entities []core.Entity) {
+{{- range .Components }}
+	w.Components.{{ .Field }}.RemoveBatch(entities)
+{{- end }}
+	w.Positions.RemoveBatch(entities)
+}
+
 // wipeAll clears all component stores
 func (w *World) wipeAll() {
 {{- range .Components }}

@@ -570,6 +570,40 @@ func (p *Position) GridDimensions() (width, height int) {
 	return p.grid.Width, p.grid.Height
 }
 
+// RemoveBatch deletes multiple entities in a single pass
+func (p *Position) RemoveBatch(entities []core.Entity) {
+	if len(entities) == 0 {
+		return
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	// Build removal set, remove from grid and map
+	toRemove := make(map[core.Entity]struct{}, len(entities))
+	for _, e := range entities {
+		if pos, exists := p.components[e]; exists {
+			toRemove[e] = struct{}{}
+			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
+			delete(p.components, e)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return
+	}
+
+	// Single pass compaction
+	writeIdx := 0
+	for _, e := range p.entities {
+		if _, remove := toRemove[e]; !remove {
+			p.entities[writeIdx] = e
+			writeIdx++
+		}
+	}
+	p.entities = p.entities[:writeIdx]
+}
+
 // --- Range Operations ---
 
 // ScanLineResult holds entities found during line scan

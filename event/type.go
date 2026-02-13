@@ -568,6 +568,11 @@ const (
 	// Consumer: FSM, debug systems | Payload: *WallSpawnedPayload
 	EventWallSpawned
 
+	// EventWallDespawnAll signals silent destruction of all wall entities
+	// Trigger: FSM before level transitions
+	// Consumer: WallSystem | Payload: nil
+	EventWallDespawnAll
+
 	// EventFadeoutSpawnOne signals intent to spawn a single fadeout effect
 	// Trigger: DeathSystem on wall death with bg visual, WallSystem on despawn
 	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnPayload

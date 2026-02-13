@@ -264,6 +264,7 @@ func InitRegistry() {
 	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
 	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)
 	RegisterType("EventWallSpawned", EventWallSpawned, &WallSpawnedPayload{})
+	RegisterType("EventWallDespawnAll", EventWallDespawnAll, nil)
 
 	// Fadeout
 	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne, &FadeoutSpawnPayload{})

@@ -54,14 +54,18 @@ func (w *World) CreateEntity() core.Entity {
 
 // DestroyEntity removes all components associated with an entity
 func (w *World) DestroyEntity(e core.Entity) {
-	// TODO: remove protection check, if something coming through here, they mean to destroy
-	if prot, ok := w.Components.Protection.GetComponent(e); ok {
-		if prot.Mask == component.ProtectAll {
-			return
-		}
-	}
 	w.removeEntity(e)
 	w.destroyedCount.Add(1)
+}
+
+// DestroyEntitiesBatch removes entities without protection checks
+// Caller guarantees no entity has ProtectAll - use for known-safe bulk operations
+func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
+	if len(entities) == 0 {
+		return
+	}
+	w.removeEntitiesBatch(entities)
+	w.destroyedCount.Add(int64(len(entities)))
 }
 
 // Clear removes all entities and components from the world

@@ -69,6 +69,7 @@ func (s *WallSystem) EventTypes() []event.EventType {
 		event.EventWallMaskChangeRequest,
 		event.EventWallPushCheckRequest,
 		event.EventMazeSpawnRequest,
+		event.EventWallDespawnAll,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -122,6 +123,9 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.MazeSpawnRequestPayload); ok {
 			s.handleMazeSpawn(payload)
 		}
+
+	case event.EventWallDespawnAll:
+		s.handleDespawnAllSilent()
 	}
 }
 
@@ -598,4 +602,14 @@ func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
 			})
 		}
 	}
+}
+
+// handleDespawnAllSilent destroys all walls bypassing death system
+func (s *WallSystem) handleDespawnAllSilent() {
+	wallEntities := s.world.Components.Wall.GetAllEntities()
+	if len(wallEntities) == 0 {
+		return
+	}
+	// Direct destruction without protection check - death pipeline freezes on large map clears
+	s.world.DestroyEntitiesBatch(wallEntities)
 }

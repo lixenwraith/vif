@@ -90,3 +90,41 @@ func (s *Store[T]) ClearAllComponents() {
 	s.components = make(map[core.Entity]T)
 	s.entities = make([]core.Entity, 0, 64)
 }
+
+// RemoveBatch deletes multiple entities in a single pass - O(n+m) vs O(n*m) for individual removes
+func (s *Store[T]) RemoveBatch(entities []core.Entity) {
+	if len(entities) == 0 {
+		return
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Early exit if store is empty
+	if len(s.components) == 0 {
+		return
+	}
+
+	// Build removal set and delete from map
+	toRemove := make(map[core.Entity]struct{}, len(entities))
+	for _, e := range entities {
+		if _, exists := s.components[e]; exists {
+			toRemove[e] = struct{}{}
+			delete(s.components, e)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return
+	}
+
+	// Single pass compaction of entities slice
+	writeIdx := 0
+	for _, e := range s.entities {
+		if _, remove := toRemove[e]; !remove {
+			s.entities[writeIdx] = e
+			writeIdx++
+		}
+	}
+	s.entities = s.entities[:writeIdx]
+}
