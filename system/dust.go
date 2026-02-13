@@ -43,6 +43,12 @@ func posKey(x, y int) uint64 {
 	return uint64(x)<<32 | uint64(uint32(y))
 }
 
+func posFromKey(pk uint64) (x, y int) {
+	x = int(pk >> 32)
+	y = int(pk & 0xFFFFFFFF)
+	return
+}
+
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {

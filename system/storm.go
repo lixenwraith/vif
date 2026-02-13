@@ -416,6 +416,12 @@ func (s *StormSystem) spawnStorm() {
 	s.rootEntity = rootEntity
 	s.statActive.Store(true)
 	s.statCircleCount.Store(component.StormCircleCount)
+
+	// Emit storm creation
+	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+		Entity:  rootEntity,
+		Species: component.SpeciesStorm,
+	})
 }
 
 // findCirclePosition searches for valid position for circle's elliptical footprint
@@ -1011,9 +1017,9 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 
 		// Emit enemy killed
 		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-			EnemyType: component.CombatEntityStorm,
-			X:         posX,
-			Y:         posY,
+			Species: component.SpeciesStorm,
+			X:       posX,
+			Y:       posY,
 		})
 	}
 }

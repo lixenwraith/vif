@@ -23,7 +23,7 @@ type LootSystem struct {
 	world *engine.World
 
 	// Pity tracking per enemy type
-	pity map[component.CombatEntityType]*pityState
+	pity map[component.SpeciesType]*pityState
 
 	// Telemetry
 	statDrops    *atomic.Int64
@@ -47,7 +47,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
-	s.pity = make(map[component.CombatEntityType]*pityState)
+	s.pity = make(map[component.SpeciesType]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
@@ -196,7 +196,7 @@ func (s *LootSystem) Update() {
 // --- Drop Resolution ---
 
 func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
-	lootType, dropped := s.rollDropTable(payload.EnemyType)
+	lootType, dropped := s.rollDropTable(payload.Species)
 	if !dropped {
 		return
 	}
@@ -205,21 +205,21 @@ func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
 	s.statDrops.Add(1)
 }
 
-func (s *LootSystem) rollDropTable(enemyType component.CombatEntityType) (component.LootType, bool) {
-	if int(enemyType) >= len(component.EnemyDropTables) {
+func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component.LootType, bool) {
+	if int(speciesType) >= len(component.EnemyDropTables) {
 		return 0, false
 	}
 
-	dropTable := component.EnemyDropTables[enemyType]
+	dropTable := component.EnemyDropTables[speciesType]
 	if len(dropTable) == 0 {
 		return 0, false
 	}
 
 	// Get or create pity state for this enemy type
-	state := s.pity[enemyType]
+	state := s.pity[speciesType]
 	if state == nil {
 		state = &pityState{}
-		s.pity[enemyType] = state
+		s.pity[speciesType] = state
 	}
 
 	// Dynamic blacklist: skip loot types player already has

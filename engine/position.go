@@ -1185,3 +1185,98 @@ func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) 
 	}
 	return !p.HasBlockingWallAtUnsafe(x, y, mask)
 }
+
+// HasAreaLineOfSight checks if rectangular entity can traverse unobstructed from (x0,y0) to (x1,y1)
+// Entity bounding box (width×height) is centered at each intermediate path cell
+// Returns false if any intermediate position causes wall collision or exits map bounds
+// For 1×1 entities, delegates to point-based HasLineOfSight
+func (p *Position) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height, mask)
+}
+
+// HasAreaLineOfSightUnsafe performs area LOS check without acquiring lock
+// Caller MUST hold RLock() or Lock()
+func (p *Position) HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
+	// Degenerate case: point entity
+	if width <= 1 && height <= 1 {
+		return p.HasLineOfSightUnsafe(x0, y0, x1, y1, mask)
+	}
+
+	config := p.world.Resources.Config
+	halfW := width / 2
+	halfH := height / 2
+
+	dx := x1 - x0
+	dy := y1 - y0
+	absDx, absDy := dx, dy
+	if absDx < 0 {
+		absDx = -absDx
+	}
+	if absDy < 0 {
+		absDy = -absDy
+	}
+
+	stepX, stepY := 1, 1
+	if dx < 0 {
+		stepX = -1
+	}
+	if dy < 0 {
+		stepY = -1
+	}
+
+	err := absDx - absDy
+	x, y := x0, y0
+
+	for {
+		if x == x1 && y == y1 {
+			return true
+		}
+
+		// Skip origin, check intermediate cells
+		if x != x0 || y != y0 {
+			boxX := x - halfW
+			boxY := y - halfH
+
+			// Bounds check: entity bbox must fit entirely within map
+			if boxX < 0 || boxY < 0 || boxX+width > config.MapWidth || boxY+height > config.MapHeight {
+				return false
+			}
+
+			// Wall collision
+			if p.HasBlockingWallInAreaUnsafe(boxX, boxY, width, height, mask) {
+				return false
+			}
+		}
+
+		e2 := 2 * err
+		if e2 > -absDy {
+			err -= absDy
+			x += stepX
+		}
+		if e2 < absDx {
+			err += absDx
+			y += stepY
+		}
+	}
+}
+
+// HasAreaLineOfSightRotatable checks LOS with optional 90° rotation
+// Tries width×height first, then height×width if blocked
+// Heuristic for elongated entities that may rotate to fit through corridors
+func (p *Position) HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	if p.HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height, mask) {
+		return true
+	}
+
+	// Square entities cannot benefit from rotation
+	if width == height {
+		return false
+	}
+
+	return p.HasAreaLineOfSightUnsafe(x0, y0, x1, y1, height, width, mask)
+}

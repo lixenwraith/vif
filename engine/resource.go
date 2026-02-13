@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/status"
@@ -14,13 +13,12 @@ import (
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {
 	// World Resource
-	Time    *TimeResource
-	Config  *ConfigResource
-	Game    *GameStateResource
-	Player  *PlayerResource
-	Event   *EventQueueResource
-	Render  *RenderConfig
-	Genetic *GeneticResource
+	Time   *TimeResource
+	Config *ConfigResource
+	Game   *GameStateResource
+	Player *PlayerResource
+	Event  *EventQueueResource
+	Render *RenderConfig
 
 	// Telemetry
 	Status *status.Registry
@@ -135,23 +133,6 @@ func (pr *PlayerResource) GetBounds() PingBounds {
 // SetBounds atomically updates bounds
 func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
-}
-
-// GeneticResource wraps GA engines for ECS access
-type GeneticResource struct {
-	Provider GeneticProvider
-}
-
-// GeneticProvider defines interface for genetic algorithm access
-type GeneticProvider interface {
-	Start()
-	Stop()
-	Reset()
-
-	Sample(species component.SpeciesType) (genotype []float64, evalID uint64)
-	Decode(species component.SpeciesType, genotype []float64) any
-	Complete(species component.SpeciesType, evalID uint64, fitness float64)
-	Stats(species component.SpeciesType) component.GeneticStats
 }
 
 // === Bridged Resources from Service ===

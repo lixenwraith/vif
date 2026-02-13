@@ -88,10 +88,11 @@ type DropEntry struct {
 }
 
 // EnemyDropTables indexed by EnemyType
-var EnemyDropTables = [CombatEntityCount][]DropEntry{
-	CombatEntitySwarm:  {{LootLauncher, parameter.LootDropRateLauncher}},
-	CombatEntityQuasar: {{LootRod, parameter.LootDropRateRod}},
-	CombatEntityDrain:  {}, // No drops
+var EnemyDropTables = [SpeciesCount][]DropEntry{
+	SpeciesDrain:  {}, // No drops
+	SpeciesSwarm:  {{LootLauncher, parameter.LootDropRateLauncher}},
+	SpeciesQuasar: {{LootRod, parameter.LootDropRateRod}},
+	SpeciesStorm:  {}, // No drops
 }
 
 // LootVisualDef defines rendering properties for a loot type

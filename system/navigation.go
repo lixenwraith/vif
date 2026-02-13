@@ -165,8 +165,25 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// LOS check first - if clear, entity doesn't need flow field
-		if s.world.Positions.HasLineOfSight(gridX, gridY, s.cursorX, s.cursorY, component.WallBlockKinetic) {
+		// Area LOS check using entity dimensions
+		width, height := navComp.Width, navComp.Height
+		if width == 0 {
+			width = 1
+		}
+		if height == 0 {
+			height = 1
+		}
+
+		hasLOS := false
+		if width == 1 && height == 1 {
+			// Point entity: use fast point LOS
+			hasLOS = s.world.Positions.HasLineOfSight(gridX, gridY, s.cursorX, s.cursorY, component.WallBlockKinetic)
+		} else {
+			// Area entity: use swept bbox LOS with rotation fallback
+			hasLOS = s.world.Positions.HasAreaLineOfSightRotatable(gridX, gridY, s.cursorX, s.cursorY, width, height, component.WallBlockKinetic)
+		}
+
+		if hasLOS {
 			navComp.HasDirectPath = true
 			navComp.FlowX = 0
 			navComp.FlowY = 0

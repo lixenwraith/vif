@@ -165,9 +165,9 @@ func (s *QuasarSystem) Update() {
 
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					EnemyType: component.CombatEntityQuasar,
-					X:         headerPos.X,
-					Y:         headerPos.Y,
+					Species: component.SpeciesQuasar,
+					X:       headerPos.X,
+					Y:       headerPos.Y,
 				})
 			}
 			s.terminateQuasar()
@@ -419,6 +419,12 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		Behavior:      component.BehaviorQuasar,
 		Type:          component.CompositeTypeUnit,
 		MemberEntries: members,
+	})
+
+	// Emit quasar creation
+	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+		Entity:  headerEntity,
+		Species: component.SpeciesQuasar,
 	})
 
 	return headerEntity

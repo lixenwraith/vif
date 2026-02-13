@@ -588,9 +588,14 @@ const (
 	// Consumer: CompositeSystem | Payload: *CompositeDestroyRequestPayload
 	EventCompositeDestroyRequest
 
+	// EventEnemyCreated signals enemy entity creation via its system
+	// Trigger: DrainSystem, SwarmSystem, ...
+	// Consumer: GeneticSystem | Payload: *EnemyCreatedPayload
+	EventEnemyCreated
+
 	// EventEnemyKilled signals an enemy entity was destroyed via combat
-	// Trigger: SwarmSystem (HP <= 0), QuasarSystem (future), etc
-	// Consumer: LootSystem | Payload: *EnemyKilledPayload
+	// Trigger: SwarmSystem, QuasarSystem, ...
+	// Consumer: GeneticSystem, LootSystem | Payload: *EnemyKilledPayload
 	EventEnemyKilled
 
 	// EventLootSpawnRequest requests direct loot spawn at position

@@ -9,6 +9,8 @@ const (
 	SpeciesDrain SpeciesType = iota + 1
 	SpeciesSwarm
 	SpeciesQuasar
+	SpeciesStorm
+	SpeciesCount
 )
 
 // GenotypeComponent stores evolution data for tracked entities

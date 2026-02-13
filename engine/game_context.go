@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/genetic/game"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
@@ -117,15 +116,11 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.State = NewGameState()
 	world.Resources.Game = &GameStateResource{State: ctx.State}
 
-	// 6. Initialize Genetic Resource (GA engines)
-	geneticProvider := game.NewGeneticResource()
-	world.Resources.Genetic = &GeneticResource{Provider: geneticProvider}
-
-	// 7. Environment and Cursor Entity
+	// 6. Environment and Cursor Entity
 	ctx.World.CreateEnvironment()
 	ctx.World.CreateCursorEntity()
 
-	// 8. Initialize atomic string pointers to empty strings
+	// 7. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
@@ -133,13 +128,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 9. Initialize audio muted
+	// 8. Initialize audio muted
 	ctx.IsMuted.Store(true)
 
-	// 10. Initialize pause state
+	// 9. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 11. Initialize FPS tracking
+	// 10. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 

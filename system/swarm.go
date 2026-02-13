@@ -168,9 +168,9 @@ func (s *SwarmSystem) Update() {
 			// Get position for loot before destruction
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					EnemyType: component.CombatEntitySwarm,
-					X:         headerPos.X,
-					Y:         headerPos.Y,
+					Species: component.SpeciesSwarm,
+					X:       headerPos.X,
+					Y:       headerPos.Y,
 				})
 			}
 
@@ -406,6 +406,12 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		Behavior:      component.BehaviorSwarm,
 		Type:          component.CompositeTypeUnit,
 		MemberEntries: members,
+	})
+
+	// Emit swarm creation
+	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+		Entity:  headerEntity,
+		Species: component.SpeciesSwarm,
 	})
 
 	return headerEntity

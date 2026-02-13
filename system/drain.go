@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/genetic/game/species"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
@@ -294,6 +293,14 @@ func (s *DrainSystem) processDrainStates() {
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
 			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
+
+			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+				Entity:  entry.entity,
+				Species: component.SpeciesDrain,
+				X:       entry.pos.X,
+				Y:       entry.pos.Y,
+			})
+
 			continue
 		}
 
@@ -330,6 +337,18 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainA := enragedDrains[0]
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
+
+		// Notify genetic system before fusion consumes drains
+		for _, drainEntity := range []core.Entity{drainA, drainB} {
+			if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
+				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+					Entity:  drainEntity,
+					Species: component.SpeciesDrain,
+					X:       pos.X,
+					Y:       pos.Y,
+				})
+			}
+		}
 
 		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
@@ -748,25 +767,12 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Components.Drain.SetComponent(entity, drainComp)
 	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 
-	// Navigation component with GA-sampled cornering parameters
+	// Navigation component with defaults (GA will override via event)
 	navComp := component.NavigationComponent{
 		TurnThreshold:  vmath.FromFloat(parameter.GADrainTurnThresholdDefault),
 		BrakeIntensity: vmath.FromFloat(parameter.GADrainBrakeIntensityDefault),
 		FlowLookahead:  vmath.FromFloat(parameter.GADrainFlowLookaheadDefault),
 	}
-
-	// Sample from GA if available
-	if s.world.Resources.Genetic != nil && s.world.Resources.Genetic.Provider != nil {
-		genes, _ := s.world.Resources.Genetic.Provider.Sample(component.SpeciesDrain)
-		if phenotype := s.world.Resources.Genetic.Provider.Decode(component.SpeciesDrain, genes); phenotype != nil {
-			if p, ok := phenotype.(species.DrainPhenotype); ok {
-				navComp.TurnThreshold = p.TurnThreshold
-				navComp.BrakeIntensity = p.BrakeIntensity
-				navComp.FlowLookahead = p.FlowLookahead
-			}
-		}
-	}
-
 	s.world.Components.Navigation.SetComponent(entity, navComp)
 
 	// Combat component for interactions
@@ -781,6 +787,12 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
 		Rune:  visual.DrainChar,
 		Color: visual.RgbDrain,
+	})
+
+	// Emit drain creation
+	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+		Entity:  entity,
+		Species: component.SpeciesDrain,
 	})
 }
 
@@ -899,15 +911,23 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 		if !ok {
 			continue
 		}
-		posKey := uint64(drainPos.X)<<32 | uint64(drainPos.Y)
-		drainPositions[posKey] = append(drainPositions[posKey], drainEntity)
+		pk := posKey(drainPos.X, drainPos.Y)
+		drainPositions[pk] = append(drainPositions[pk], drainEntity)
 	}
 
 	// Find and destroy all drains at cells with multiple drains
-	for _, drainEntitiesAtPosition := range drainPositions {
+	for drainPos, drainEntitiesAtPosition := range drainPositions {
 		if len(drainEntitiesAtPosition) > 1 {
 			for _, colocatedDrainEntity := range drainEntitiesAtPosition {
 				event.EmitDeathOne(s.world.Resources.Event.Queue, colocatedDrainEntity, event.EventFlashSpawnOneRequest)
+
+				x, y := posFromKey(drainPos)
+				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+					Entity:  colocatedDrainEntity,
+					Species: component.SpeciesDrain,
+					X:       x,
+					Y:       y,
+				})
 			}
 		}
 	}
