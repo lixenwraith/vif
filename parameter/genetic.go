@@ -73,18 +73,11 @@ const (
 
 // Genetic Algorithm - Fitness Normalization Defaults
 const (
-	GAFitnessMaxEnergyDefault = 1000
-	GAFitnessMaxTicksDefault  = 600
+	GAFitnessMaxTicksDefault = 600
 )
 
 // Set persistence path constant after existing constants
 const (
 	// GeneticPersistencePath is the directory for population save files
 	GeneticPersistencePath = "./config/genetic"
-)
-
-// Set energy/heat max for normalization (if not already present elsewhere)
-const (
-	// EnergyMax for player model normalization, it's NOT the real max heat
-	EnergyMax int64 = 10000
 )

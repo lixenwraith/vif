@@ -598,7 +598,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 	// Resolve targets once
 	assignments := resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
 
-	// GUARD: If no targets are visible, don't waste energy/cooldowns
+	// GUARD: If no targets are visible, don't waste cooldowns
 	if len(assignments) == 0 {
 		return
 	}
@@ -665,40 +665,47 @@ func (s *WeaponSystem) fireAllWeapons() {
 				}
 			}
 
-			// 3. Prepare target metadata and calculate Centroid
+			// 3. Prepare target metadata
 			targets := make([]core.Entity, len(assignments))
 			hits := make([]core.Entity, len(assignments))
-
-			sumX, sumY := 0, 0
-			validPosCount := 0
 
 			for i, a := range assignments {
 				targets[i] = a.target
 				hits[i] = a.hit
+			}
 
-				// Accumulate positions for centroid calculation
-				if tPos, ok := s.world.Positions.GetPosition(a.target); ok {
-					sumX += tPos.X
-					sumY += tPos.Y
-					validPosCount++
+			// 4. Determine Target Direction (Most Open Space)
+			// Scan 8 directions to find the path with longest free distance
+			// This prevents immediate wall collisions in tight spaces
+			directions := [8][2]int{
+				{0, -1}, {1, -1}, {1, 0}, {1, 1},
+				{0, 1}, {-1, 1}, {-1, 0}, {-1, -1},
+			}
+
+			bestDirX, bestDirY := 0, 0
+			maxFreeDistSq := int64(-1)
+			scanDist := parameter.MissileClusterScanDistance
+
+			for _, dir := range directions {
+				checkX := originX + dir[0]*scanDist
+				checkY := originY + dir[1]*scanDist
+
+				endX, endY, _ := s.world.Positions.FindLastFreeOnRay(originX, originY, checkX, checkY, component.WallBlockKinetic)
+
+				dx := vmath.FromInt(endX - originX)
+				dy := vmath.FromInt(endY - originY)
+				distSq := vmath.MagnitudeSq(dx, dy)
+
+				if distSq > maxFreeDistSq {
+					maxFreeDistSq = distSq
+					bestDirX = dir[0]
+					bestDirY = dir[1]
 				}
 			}
 
-			// 4. Determine TargetX/Y (The "Split Point")
-			var targetX, targetY int
-			if validPosCount > 0 {
-				// The parent missile aims for the geometric center of its intended targets
-				centroidX := sumX / validPosCount
-				centroidY := sumY / validPosCount
-				// Split point is HALFWAY between origin and centroid for single boss target
-				targetX = originX + (centroidX-originX)/2
-				targetY = originY + (centroidY-originY)/2
-			} else {
-				// Fallback to screen center
-				config := s.world.Resources.Config
-				targetX = config.MapWidth / 2
-				targetY = config.MapHeight / 2
-			}
+			// Set target point far in the open direction to guide velocity
+			targetX := originX + bestDirX*scanDist
+			targetY := originY + bestDirY*scanDist
 
 			// 5. Fire the request
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{

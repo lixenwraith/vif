@@ -74,17 +74,16 @@ const (
 // Cluster Missile - Parent Phase
 const (
 	// MissileClusterLaunchSpeedFloat is parent travel speed (cells/sec)
-	MissileClusterLaunchSpeedFloat = 90.0
-
-	// TODO: use
-	// MissileClusterSplitRatio is fraction of distance to centroid before split (0.5 = halfway)
-	MissileClusterSplitRatio = 0.5
+	MissileClusterLaunchSpeedFloat = 10.0
 
 	// MissileClusterMinDistanceFloat is minimum travel before split allowed (cells)
 	MissileClusterMinDistanceFloat = 8.0
 
-	// MissileParentMaxLifetime is safety timeout for forced split
-	MissileParentMaxLifetime = 1 * time.Second
+	// MissileClusterSplitDelay is the fixed duration before automatic split
+	MissileClusterSplitDelay = 500 * time.Millisecond
+
+	// MissileClusterScanDistance is the distance cluster missile checks to find open space for its flight direction, to avoid obstacles and premature impact
+	MissileClusterScanDistance = 20
 )
 
 // Cluster Missile - Child/Seeker Phase

@@ -97,20 +97,13 @@ func (s *MissileSystem) Update() {
 		case component.MissileTypeClusterParent:
 			shouldSplit, hitEnemy, hitWall := s.updateParent(&missileComp, &kineticComp, dtFixed)
 
-			if hitWall {
-				// Wall hit: explode without split
+			if hitWall || hitEnemy {
 				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 					X:      vmath.ToInt(kineticComp.PreciseX),
 					Y:      vmath.ToInt(kineticComp.PreciseY),
 					Radius: parameter.MissileExplosionRadius,
 					Type:   event.ExplosionTypeMissile,
 				})
-				toDestroy = append(toDestroy, missileEntity)
-				continue
-			}
-
-			if hitEnemy {
-				// Enemy hit: perform split then destroy
 				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
 				toDestroy = append(toDestroy, missileEntity)
 				continue
@@ -187,16 +180,8 @@ func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component
 		return false, true, false
 	}
 
-	// Split check: traveled fraction of original distance
-	// Split when: (original - remaining) / original >= splitFraction
-	destX, destY := k.AccelX, k.AccelY
-	remainingDistSq := vmath.MagnitudeSq(destX-k.PreciseX, destY-k.PreciseY)
-
-	// Threshold = originalDist² * (1 - splitFraction)²
-	remainFraction := vmath.Scale - parameter.MissileSplitTravelFraction
-	thresholdSq := vmath.Mul(m.OriginalDistSq, vmath.Mul(remainFraction, remainFraction))
-
-	shouldSplit := remainingDistSq <= thresholdSq || m.Lifetime > parameter.MissileParentMaxLifetime
+	// Split check: Time based
+	shouldSplit := m.Lifetime >= parameter.MissileClusterSplitDelay
 	return shouldSplit, false, false
 }
 

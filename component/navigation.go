@@ -34,18 +34,10 @@ type SpeciesDimensions struct {
 
 // speciesDimensionsLUT indexed by SpeciesType for O(1) lookup
 // Index 0 unused (SpeciesType starts at 1)
-var speciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
+var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
 	{1, 1}, // 0: unused
 	{1, 1}, // 1: SpeciesDrain
 	{parameter.SwarmWidth, parameter.SwarmHeight},   // 2: SpeciesSwarm
 	{parameter.QuasarWidth, parameter.QuasarHeight}, // 3: SpeciesQuasar
 	{1, 1}, // 4: SpeciesStorm
-}
-
-// Dimensions returns collision dimensions for species (O(1) lookup)
-func (s SpeciesType) Dimensions() SpeciesDimensions {
-	if s == 0 || s >= SpeciesCount {
-		return SpeciesDimensions{1, 1}
-	}
-	return speciesDimensionsLUT[s]
 }

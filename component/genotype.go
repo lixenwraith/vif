@@ -6,7 +6,8 @@ import "time"
 type SpeciesType uint8
 
 const (
-	SpeciesDrain SpeciesType = iota + 1
+	SpeciesNone SpeciesType = iota
+	SpeciesDrain
 	SpeciesSwarm
 	SpeciesQuasar
 	SpeciesStorm

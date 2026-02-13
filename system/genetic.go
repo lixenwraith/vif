@@ -288,7 +288,10 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 	}
 
 	// Get species dimensions for area LOS
-	dims := speciesType.Dimensions()
+	if speciesType >= component.SpeciesCount {
+		speciesType = component.SpeciesNone
+	}
+	dims := component.SpeciesDimensionsLUT[speciesType]
 
 	// Apply genes and dimensions to NavigationComponent
 	if navComp, hasNav := s.world.Components.Navigation.GetComponent(entity); hasNav {
