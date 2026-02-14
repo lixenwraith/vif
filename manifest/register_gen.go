@@ -93,6 +93,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("storm", func(w any) any {
 		return system.NewStormSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("bullet", func(w any) any {
+		return system.NewBulletSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("dust", func(w any) any {
 		return system.NewDustSystem(w.(*engine.World))
 	})
@@ -187,6 +190,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("missile", func(ctx any) any {
 		return renderer.NewMissileRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
+	registry.RegisterRenderer("bullet", func(ctx any) any {
+		return renderer.NewBulletRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityField)
 	registry.RegisterRenderer("spirit", func(ctx any) any {
 		return renderer.NewSpiritRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityParticle)
@@ -267,6 +273,7 @@ func ActiveSystems() []string {
 		"quasar",
 		"swarm",
 		"storm",
+		"bullet",
 		"dust",
 		"flash",
 		"fadeout",
@@ -303,6 +310,7 @@ func ActiveRenderers() []string {
 		"explosion",
 		"lightning",
 		"missile",
+		"bullet",
 		"spirit",
 		"materialize",
 		"teleportline",

@@ -657,3 +657,12 @@ type MazeSpawnRequestPayload struct {
 	DefaultRoomWidth  int            `toml:"default_room_width"`
 	DefaultRoomHeight int            `toml:"default_room_height"`
 }
+
+// BulletSpawnRequestPayload requests creation of a linear projectile
+type BulletSpawnRequestPayload struct {
+	OriginX, OriginY int64 // Q32.32 spawn position
+	VelX, VelY       int64 // Q32.32 velocity
+	Owner            core.Entity
+	MaxLifetime      time.Duration
+	Damage           component.BulletDamage
+}

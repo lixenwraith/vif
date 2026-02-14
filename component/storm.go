@@ -77,5 +77,6 @@ func (c *StormCircleComponent) CircleType() StormCircleType {
 
 // IsConvex returns true if circle is in vulnerable/attack-capable state
 func (c *StormCircleComponent) IsConvex() bool {
-	return c.Pos3D.Z < parameter.StormZMid
+	// If attacking, override physics to stay in convex
+	return c.Pos3D.Z < parameter.StormZMid || c.AttackState == StormCircleAttackActive
 }

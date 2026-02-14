@@ -186,6 +186,15 @@ var (
 	// Storm attack effect colors
 	RgbStormGreenPulse = terminal.RGB{R: 60, G: 220, B: 100} // Bright green pulse
 	RgbStormRedCone    = terminal.RGB{R: 255, G: 80, B: 40}  // Bright orange-red cone
+
+	// Bullet colors
+	// RgbBulletStormRed    = terminal.RGB{R: 255, G: 80, B: 60}
+	RgbBulletStormRed    = terminal.RGB{R: 255, G: 60, B: 120}
+	RgbBulletStormRedDim = terminal.RGB{R: 140, G: 35, B: 25}
+
+	// Muzzle flash colors
+	RgbMuzzleFlashBase = terminal.RGB{R: 255, G: 120, B: 50}
+	RgbMuzzleFlashTip  = terminal.RGB{R: 90, G: 25, B: 15}
 )
 
 // StormCircleColors - neon base colors (saturated 1.3x in renderer)
@@ -231,6 +240,8 @@ const (
 	Storm256Bright = 87
 	Storm256Normal = 44
 	Storm256Dark   = 23
+
+	Bullet256StormRed uint8 = 196 // Bright red
 )
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB

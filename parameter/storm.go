@@ -114,23 +114,27 @@ const (
 	StormGreenDamageHeat       = 10
 
 	// Red circle: cone projectile attack
-	StormRedInitialCooldown = 1 * time.Second
-	StormRedTravelDuration  = 2 * time.Second
-	StormRedPostAttackDelay = 1 * time.Second // Wait after travel before next shot
-	StormRedConeWidthCells  = 40
-	StormRedConeHeightCells = 60
-	StormRedDamageEnergy    = 10000
-	StormRedDamageHeat      = 10
-	// Two-phase visual: cone body travels then dissipates
-	StormRedConeTailFraction = 0.4 // Cone body length as fraction of total travel
-	StormRedConeFadeStart    = 0.5 // Tail distance fraction where alpha fade begins
+	StormRedInitialCooldown    = 1 * time.Second
+	StormRedTravelDuration     = 2 * time.Second
+	StormRedPostAttackDelay    = 1 * time.Second // Wait after travel before next shot
+	StormRedConeWidthCells     = 40
+	StormRedConeHeightCells    = 60
+	StormRedDamageEnergy       = 10000
+	StormRedDamageHeat         = 10
+	StormRedDamageBulletEnergy = 100
 
-	StormCyanInitialCooldown    = 5 * time.Second
-	StormCyanRepeatCooldown     = 5 * time.Second
-	StormCyanEffectDuration     = 2500 * time.Millisecond // 2s glow + 0.5s overlap with materialize
-	StormCyanMaterializeAt      = 0.80                    // Emit materialize at 80% progress (2s mark)
-	StormCyanGlowRotationPeriod = 400 * time.Millisecond  // ms per full rotation (5 rotations in 2s)
-	StormCyanSpawnDistanceFloat = 20.0
+	StormRedBulletSpeedFloat      = 50.0 // cells/sec
+	StormRedBulletSpreadHalfAngle = 0.32 // radians (~18°)
+	StormRedBulletSpawnMargin     = 1.15 // multiplier outside ellipse boundary
+	StormRedBulletMaxLifetime     = 4 * time.Second
+
+	// Blue circle: swarm spawn
+	StormBlueInitialCooldown    = 5 * time.Second
+	StormBlueRepeatCooldown     = 5 * time.Second
+	StormBlueEffectDuration     = 2500 * time.Millisecond // 2s glow + 0.5s overlap with materialize
+	StormBlueMaterializeAt      = 0.80                    // Emit materialize at 80% progress (2s mark)
+	StormBlueGlowRotationPeriod = 400 * time.Millisecond  // ms per full rotation (5 rotations in 2s)
+	StormBlueSpawnDistanceFloat = 20.0
 )
 
 // Pre-computed green attack radii (2× circle radius)

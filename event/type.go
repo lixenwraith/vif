@@ -638,6 +638,11 @@ const (
 	// Consumer: WallSystem | Payload: *MazeSpawnRequestPayload
 	EventMazeSpawnRequest
 
+	// EventBulletSpawnRequest signals maze generation and wall spawning
+	// Trigger: Species systems
+	// Consumer: BulletSystem | Payload: *MazeSpawnRequestPayload
+	EventBulletSpawnRequest
+
 	EventDebugFlowToggle
 )
 
