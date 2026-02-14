@@ -10,13 +10,17 @@ import (
 // NewMachine creates a new FSM instance
 func NewMachine[T any]() *Machine[T] {
 	m := &Machine[T]{
-		nodes:           make(map[StateID]*Node[T]),
-		regionInitials:  make(map[string]StateID),
-		regions:         make(map[string]*RegionState),
+		nodes:          make(map[StateID]*Node[T]),
+		regionInitials: make(map[string]StateID),
+		regionConfigs:  make(map[string]*RegionConfig),
+		regions:        make(map[string]*RegionState),
+		variables:      make(map[string]int64),
+		delayedActions: make(map[string][]DelayedAction[T]),
+
 		guardReg:        make(map[string]GuardFunc[T]),
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
-		// Pre-allocate path slice to avoid resize during typical depth operations
+
 		StateDurations: make(map[StateID]time.Duration),
 		StateIndices:   make(map[StateID]int),
 		StateCount:     0,
@@ -45,6 +49,10 @@ func (m *Machine[T]) Init(ctx T) error {
 		return fmt.Errorf("FSM has no defined regions to initialize")
 	}
 
+	// Clear variables on init
+	m.variables = make(map[string]int64)
+	m.delayedActions = make(map[string][]DelayedAction[T])
+
 	// Multi-region initialization
 	for regionName, regionInitial := range m.regionInitials {
 		if err := m.initRegion(ctx, regionName, regionInitial); err != nil {
@@ -72,13 +80,12 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 	copy(region.ActivePath, node.Path)
 
 	m.regions[regionName] = region
+	m.delayedActions[regionName] = nil
 
 	// Execute OnEnter for the entire chain from Root to Initial
 	for _, id := range region.ActivePath {
 		if n, exists := m.nodes[id]; exists {
-			for _, action := range n.OnEnter {
-				action.Func(ctx, action.Args)
-			}
+			m.executeActions(ctx, region, n.OnEnter)
 		}
 	}
 
@@ -113,11 +120,12 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 
 	region.TimeInState += dt
 
+	// Process delayed actions
+	m.processDelayedActions(ctx, region)
+
 	// Execute OnUpdate actions for current leaf state
 	leaf := m.nodes[region.ActiveStateID]
-	for _, action := range leaf.OnUpdate {
-		action.Func(ctx, action.Args)
-	}
+	m.executeActions(ctx, region, leaf.OnUpdate)
 
 	// Evaluate Tick Transitions (Event == 0), bubble up
 	currID := region.ActiveStateID
@@ -133,6 +141,62 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 		}
 		currID = node.ParentID
 	}
+}
+
+// ExecuteAction runs a registered action by name
+// Used for initialization hooks like ApplyGlobalSystemConfig
+func (m *Machine[T]) ExecuteAction(ctx T, actionName string, args any) bool {
+	fn, ok := m.actionReg[actionName]
+	if !ok {
+		return false
+	}
+	fn(ctx, args)
+	return true
+}
+
+// executeActions runs a slice of actions, respecting guards and delays
+func (m *Machine[T]) executeActions(ctx T, region *RegionState, actions []Action[T]) {
+	for _, action := range actions {
+		// Check guard
+		if action.Guard != nil && !action.Guard(ctx, region) {
+			continue
+		}
+
+		// Handle delay
+		if action.DelayMs > 0 {
+			delayed := DelayedAction[T]{
+				ExecuteAt: region.TimeInState + time.Duration(action.DelayMs)*time.Millisecond,
+				Action: Action[T]{
+					Func:  action.Func,
+					Args:  action.Args,
+					Guard: nil, // Guard already evaluated
+				},
+			}
+			m.delayedActions[region.Name] = append(m.delayedActions[region.Name], delayed)
+			continue
+		}
+
+		// Execute immediately
+		action.Func(ctx, action.Args)
+	}
+}
+
+// processDelayedActions executes actions whose delay has elapsed
+func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState) {
+	delayed := m.delayedActions[region.Name]
+	if len(delayed) == 0 {
+		return
+	}
+
+	remaining := delayed[:0]
+	for _, da := range delayed {
+		if region.TimeInState >= da.ExecuteAt {
+			da.Action.Func(ctx, da.Action.Args)
+		} else {
+			remaining = append(remaining, da)
+		}
+	}
+	m.delayedActions[region.Name] = remaining
 }
 
 // HandleEvent routes an external event through all active regions
@@ -209,25 +273,26 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	for i := len(currentPath) - 1; i > lcaIndex; i-- {
 		nodeID := currentPath[i]
 		if node, exists := m.nodes[nodeID]; exists {
-			for _, action := range node.OnExit {
-				action.Func(ctx, action.Args)
-			}
+			m.executeActions(ctx, region, node.OnExit)
 		}
 	}
 
+	// Clear delayed actions on state exit
+	m.delayedActions[region.Name] = nil
+
 	// Enter Phase: walk DOWN from LCA (exclusive) to target leaf
+	// Reset TimeInState before entering new state
+	region.TimeInState = 0
+
 	for i := lcaIndex + 1; i < len(targetPath); i++ {
 		nodeID := targetPath[i]
 		if node, exists := m.nodes[nodeID]; exists {
-			for _, action := range node.OnEnter {
-				action.Func(ctx, action.Args)
-			}
+			m.executeActions(ctx, region, node.OnEnter)
 		}
 	}
 
 	// Update region state
 	region.ActiveStateID = targetID
-	region.TimeInState = 0
 
 	if cap(region.ActivePath) >= len(targetPath) {
 		region.ActivePath = region.ActivePath[:len(targetPath)]
@@ -245,19 +310,49 @@ func (m *Machine[T]) Reset(ctx T) error {
 		if region.ActiveStateID != StateNone {
 			for i := len(region.ActivePath) - 1; i >= 0; i-- {
 				if node, ok := m.nodes[region.ActivePath[i]]; ok {
-					for _, action := range node.OnExit {
-						action.Func(ctx, action.Args)
-					}
+					m.executeActions(ctx, region, node.OnExit)
 				}
 			}
 		}
 	}
 
-	// Clear regions
+	// Clear regions and variables
 	m.regions = make(map[string]*RegionState)
+	m.variables = make(map[string]int64)
+	m.delayedActions = make(map[string][]DelayedAction[T])
 
 	// Re-initialize using loaded config
 	return m.Init(ctx)
+}
+
+// === Variable Methods ===
+
+// GetVar returns the value of a variable (0 if not set)
+func (m *Machine[T]) GetVar(name string) int64 {
+	return m.variables[name]
+}
+
+// SetVar sets a variable value
+func (m *Machine[T]) SetVar(name string, value int64) {
+	m.variables[name] = value
+}
+
+// IncrementVar adds delta to a variable and returns the new value
+func (m *Machine[T]) IncrementVar(name string, delta int64) int64 {
+	m.variables[name] += delta
+	return m.variables[name]
+}
+
+// === System Configuration ===
+
+// GetSystemsConfig returns the loaded systems configuration
+func (m *Machine[T]) GetSystemsConfig() *SystemsConfig {
+	return m.systemsConfig
+}
+
+// GetRegionConfig returns the configuration for a region
+func (m *Machine[T]) GetRegionConfig(regionName string) *RegionConfig {
+	return m.regionConfigs[regionName]
 }
 
 // === Region Lifecycle Methods ===
@@ -280,13 +375,12 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	// Execute OnExit for entire path
 	for i := len(region.ActivePath) - 1; i >= 0; i-- {
 		if node, exists := m.nodes[region.ActivePath[i]]; exists {
-			for _, action := range node.OnExit {
-				action.Func(ctx, action.Args)
-			}
+			m.executeActions(ctx, region, node.OnExit)
 		}
 	}
 
 	delete(m.regions, regionName)
+	delete(m.delayedActions, regionName)
 	return nil
 }
 

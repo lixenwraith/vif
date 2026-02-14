@@ -155,6 +155,9 @@ func (cs *ClockScheduler) LoadFSMAuto(embeddedFallback string, registerComponent
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 
+	// Apply global system configuration
+	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+
 	return nil
 }
 

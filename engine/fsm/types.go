@@ -30,10 +30,20 @@ type Machine[T any] struct {
 	nodes map[StateID]*Node[T]
 
 	// Region Configuration (from config)
-	regionInitials map[string]StateID // Region name -> initial state ID
+	regionInitials map[string]StateID       // Region name -> initial state ID
+	regionConfigs  map[string]*RegionConfig // Region name -> config (for system toggles)
 
 	// Runtime State (per-region)
 	regions map[string]*RegionState
+
+	// FSM Variables (runtime state)
+	variables map[string]int64
+
+	// Delayed Actions Queue (per-region)
+	delayedActions map[string][]DelayedAction[T]
+
+	// System Configuration
+	systemsConfig *SystemsConfig
 
 	// Dependency Injection
 	guardReg        map[string]GuardFunc[T]
@@ -74,8 +84,16 @@ type Transition[T any] struct {
 
 // Action represents a side-effect
 type Action[T any] struct {
-	Func ActionFunc[T]
-	Args any // Pre-compiled struct/payload
+	Func    ActionFunc[T]
+	Args    any          // Pre-compiled struct/payload
+	Guard   GuardFunc[T] // Conditional execution (nil = always)
+	DelayMs int          // Delay before execution (0 = immediate)
+}
+
+// DelayedAction holds a scheduled action for later execution
+type DelayedAction[T any] struct {
+	ExecuteAt time.Duration // TimeInState threshold
+	Action    Action[T]
 }
 
 // GuardFunc returns true if the transition should occur
@@ -91,12 +109,26 @@ type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) GuardFunc[
 // EmitEventArgs holds pre-compiled event data for the EmitEvent action
 // Type identifies the event; Payload is the decoded struct (or nil)
 type EmitEventArgs struct {
-	Type    event.EventType
-	Payload any
+	Type        event.EventType
+	Payload     any
+	PayloadVars map[string]string // Field name -> variable name
 }
 
 // RegionControlArgs holds args for region control actions
 type RegionControlArgs struct {
 	RegionName   string
 	InitialState string // For SpawnRegion
+}
+
+// VariableArgs holds args for variable manipulation actions
+type VariableArgs struct {
+	Name  string
+	Value int64
+	Delta int64
+}
+
+// SystemControlArgs holds args for system enable/disable actions
+type SystemControlArgs struct {
+	SystemName string
+	Enabled    bool
 }

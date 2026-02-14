@@ -1,9 +1,23 @@
 # === Root FSM configuration ===
 # External state files are merged before parsing
 
-[regions]
-main = { initial = "SpawnGold", file = "regions/main.toml" }
-# Quasar region spawned dynamically via SpawnRegion action; states loaded via file
-quasar = { file = "regions/quasar.toml" }
+# Global system configuration
+# Systems listed here are disabled at FSM init
+[systems]
+# disabled = ["drain", "swarm", "quasar", "storm"]  # Uncomment for typing-focused mode
+
+[regions.main]
+initial = "SpawnGold"
+file = "regions/main.toml"
+
+# Quasar region spawned dynamically from main
+[regions.quasar]
+file = "regions/quasar.toml"
+# Ensure quasar system active when region spawns
+enabled_systems = ["quasar"]
+
 # Maze region spawned dynamically from quasar
-maze = { file = "regions/maze.toml" }
+[regions.maze]
+file = "regions/maze.toml"
+# Storm system required for maze gameplay
+enabled_systems = ["storm"]

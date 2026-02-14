@@ -39,8 +39,14 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 	m.nodes = make(map[StateID]*Node[T])
 	m.regions = make(map[string]*RegionState)
 	m.regionInitials = make(map[string]StateID)
+	m.regionConfigs = make(map[string]*RegionConfig)
+	m.variables = make(map[string]int64)
+	m.delayedActions = make(map[string][]DelayedAction[T])
 
-	// 3. First Pass: Create State IDs and Nodes/Root node
+	// 3. Store systems config
+	m.systemsConfig = config.Systems
+
+	// 4. First Pass: Create State IDs and Nodes/Root node
 	m.nodes[StateRoot] = m.AddState(StateRoot, "Root", StateNone)
 	nameToID := make(map[string]StateID)
 	nameToID["Root"] = StateRoot
@@ -66,7 +72,7 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		nextID++
 	}
 
-	// 4. Second Pass: Build Nodes and resolve relationships
+	// 5. Second Pass: Build Nodes and resolve relationships
 	for name, cfg := range config.States {
 		id := nameToID[name]
 
@@ -104,12 +110,12 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		}
 	}
 
-	// 5. Finalize: Compile Paths for LCA
+	// 6. Finalize: Compile Paths for LCA
 	if err := m.CompilePaths(); err != nil {
 		return err
 	}
 
-	// 6. Build state metadata for telemetry
+	// 7. Build state metadata for telemetry
 	m.StateDurations = make(map[StateID]time.Duration)
 	m.StateIndices = make(map[StateID]int)
 	m.StateCount = len(stateNames) // Excludes Root
@@ -137,8 +143,12 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		}
 	}
 
-	// 7. Handle regions initial state
+	// 8. Handle regions initial state and store configs
 	for regionName, regionCfg := range config.Regions {
+		// Store region config for system toggles
+		cfgCopy := regionCfg
+		m.regionConfigs[regionName] = &cfgCopy
+
 		// Skip regions without initial (states-only, spawned dynamically)
 		if regionCfg.Initial == "" {
 			continue
@@ -189,8 +199,9 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 				}
 			}
 			args = &EmitEventArgs{
-				Type:    et,
-				Payload: payload,
+				Type:        et,
+				Payload:     payload,
+				PayloadVars: cfg.PayloadVars,
 			}
 
 		case "SpawnRegion", "TerminateRegion", "PauseRegion", "ResumeRegion":
@@ -207,11 +218,43 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 				rcArgs.InitialState = cfg.InitialState
 			}
 			args = rcArgs
+
+		case "SetVar", "IncrementVar", "DecrementVar":
+			varArgs := &VariableArgs{}
+			if cfg.Payload != nil {
+				if err := toml.Decode(cfg.Payload, varArgs); err != nil {
+					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
+				}
+			}
+			args = varArgs
+
+		case "EnableSystem", "DisableSystem":
+			sysArgs := &SystemControlArgs{}
+			if cfg.Payload != nil {
+				if err := toml.Decode(cfg.Payload, sysArgs); err != nil {
+					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
+				}
+			}
+			args = sysArgs
+		}
+
+		// Compile action guard
+		var guard GuardFunc[T]
+		if cfg.Guard != "" {
+			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
+				guard = factory(m, cfg.GuardArgs)
+			} else if g, ok := m.guardReg[cfg.Guard]; ok {
+				guard = g
+			} else {
+				return nil, fmt.Errorf("unknown guard '%s' for action", cfg.Guard)
+			}
 		}
 
 		actions = append(actions, Action[T]{
-			Func: fn,
-			Args: args,
+			Func:    fn,
+			Args:    args,
+			Guard:   guard,
+			DelayMs: cfg.DelayMs,
 		})
 	}
 	return actions, nil
