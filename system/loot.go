@@ -205,28 +205,33 @@ func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
 	s.statDrops.Add(1)
 }
 
+// candidate holds entry with pity-adjusted rate
+type candidate struct {
+	entry *component.DropEntry
+	rate  float64
+}
+
+// rollDropTable processes tiered drop tables with pity
 func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component.LootType, bool) {
-	if int(speciesType) >= len(component.EnemyDropTables) {
+	table, ok := component.DropTables[speciesType]
+	if !ok || len(table.Tiers) == 0 {
 		return 0, false
 	}
 
-	dropTable := component.EnemyDropTables[speciesType]
-	if len(dropTable) == 0 {
-		return 0, false
-	}
-
-	// Get or create pity state for this enemy type
 	state := s.pity[speciesType]
 	if state == nil {
 		state = &pityState{}
 		s.pity[speciesType] = state
 	}
 
-	// Dynamic blacklist: skip loot types player already has
+	activeLoot := s.getActiveLootTypes()
 	cursorEntity := s.world.Resources.Player.Entity
 	weaponComp, hasWeapons := s.world.Components.Weapon.GetComponent(cursorEntity)
 
-	isBlacklisted := func(lt component.LootType) bool {
+	isOwned := func(lt component.LootType) bool {
+		if activeLoot[lt] {
+			return true
+		}
 		if !hasWeapons {
 			return false
 		}
@@ -237,66 +242,96 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component
 		return weaponComp.Active[profile.Reward.WeaponType]
 	}
 
-	// Build candidates with pity-adjusted rates
-	type candidate struct {
-		entry *component.DropEntry
-		rate  float64
-	}
-	var candidates []candidate
-	var totalRate float64
+	// Process tiers in order
+	for _, tier := range table.Tiers {
+		// Unique tier: skip if all entries owned
+		if tier.Unique {
+			allOwned := true
+			for _, entry := range tier.Entries {
+				if !isOwned(entry.Loot) {
+					allOwned = false
+					break
+				}
+			}
+			if allOwned {
+				continue
+			}
+		}
 
-	for i := range dropTable {
-		entry := &dropTable[i]
-		if isBlacklisted(entry.Loot) {
+		// Build eligible candidates
+		var candidates []candidate
+		var totalRate float64
+
+		for i := range tier.Entries {
+			entry := &tier.Entries[i]
+			if tier.Unique && isOwned(entry.Loot) {
+				continue
+			}
+			rate := entry.BaseRate * float64(1+state.misses[entry.Loot])
+			candidates = append(candidates, candidate{entry, rate})
+			totalRate += rate
+		}
+
+		if len(candidates) == 0 {
 			continue
 		}
-		rate := entry.BaseRate * float64(1+state.misses[entry.Loot])
-		candidates = append(candidates, candidate{entry, rate})
-		totalRate += rate
-	}
 
-	if len(candidates) == 0 {
-		return 0, false
-	}
-
-	// Normalize if exceeds 1.0
-	if totalRate >= 1.0 {
-		for i := range candidates {
-			candidates[i].rate /= totalRate
+		// Normalize if exceeds 1.0
+		if totalRate >= 1.0 {
+			for i := range candidates {
+				candidates[i].rate /= totalRate
+			}
+			totalRate = 1.0
 		}
-		totalRate = 1.0
-	}
 
-	// Roll
-	roll := rand.Float64()
-	var cumulative float64
-	var dropped *component.DropEntry
+		// Roll
+		roll := rand.Float64()
+		var cumulative float64
+		var dropped *component.DropEntry
 
-	for _, c := range candidates {
-		cumulative += c.rate
-		if roll < cumulative {
-			dropped = c.entry
+		for _, c := range candidates {
+			cumulative += c.rate
+			if roll < cumulative {
+				dropped = c.entry
+				break
+			}
+		}
+
+		// Update pity for candidates in this tier
+		for _, c := range candidates {
+			if dropped != nil && c.entry.Loot == dropped.Loot {
+				state.misses[c.entry.Loot] = 0
+			} else {
+				state.misses[c.entry.Loot]++
+			}
+		}
+
+		if dropped != nil {
+			return dropped.Loot, true
+		}
+
+		// Unique tier miss: continue to next tier (fallthrough)
+		// Non-unique tier: stop processing
+		if !tier.Unique {
 			break
 		}
 	}
 
-	// Update pity counters
-	for i := range dropTable {
-		entry := &dropTable[i]
-		if isBlacklisted(entry.Loot) {
+	return 0, false
+}
+
+// getActiveLootTypes returns set of loot types currently on map
+func (s *LootSystem) getActiveLootTypes() map[component.LootType]bool {
+	active := make(map[component.LootType]bool)
+	lootEntities := s.world.Components.Loot.GetAllEntities()
+	for _, entity := range lootEntities {
+		lootComp, ok := s.world.Components.Loot.GetComponent(entity)
+		if !ok {
 			continue
 		}
-		if dropped != nil && entry.Loot == dropped.Loot {
-			state.misses[entry.Loot] = 0
-		} else {
-			state.misses[entry.Loot]++
-		}
+		active[lootComp.Type] = true
 	}
-
-	if dropped != nil {
-		return dropped.Loot, true
-	}
-	return 0, false
+	return active
 }
 
 // --- Spawn ---

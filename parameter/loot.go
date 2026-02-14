@@ -4,11 +4,8 @@ import (
 	"time"
 )
 
-// Drop rate constants
-const (
-	LootDropRateLauncher = 0.10
-	LootDropRateRod      = 1.00
-)
+// Energy loot reward value
+const LootEnergyRewardValue = 100000
 
 // Homing physics
 const (

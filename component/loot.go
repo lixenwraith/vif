@@ -6,6 +6,33 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// DropTier represents a priority level in the drop table
+type DropTier struct {
+	Unique  bool // If true, skip tier when all entries owned/active
+	Entries []DropEntry
+}
+
+// SpeciesDropTable defines ordered tiers for a species
+type SpeciesDropTable struct {
+	Tiers []DropTier
+}
+
+// DropTables defines drop behavior per species
+var DropTables = map[SpeciesType]SpeciesDropTable{
+	SpeciesQuasar: {
+		Tiers: []DropTier{
+			{Unique: true, Entries: []DropEntry{{LootRod, 1.0}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0}}},
+		},
+	},
+	SpeciesSwarm: {
+		Tiers: []DropTier{
+			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.10}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.20}}},
+		},
+	},
+}
+
 // LootType identifies collectible loot drops
 type LootType uint8
 
@@ -13,6 +40,7 @@ const (
 	LootRod LootType = iota
 	LootLauncher
 	LootSpray
+	LootEnergy
 	// Future loot types here
 	LootCount // Sentinel for array sizing
 )
@@ -70,6 +98,11 @@ var (
 		Type:       RewardWeapon,
 		WeaponType: WeaponLauncher,
 	}
+
+	rewardEnergy = RewardProfile{
+		Type:  RewardEnergy,
+		Delta: parameter.LootEnergyRewardValue,
+	}
 )
 
 // LootProfiles indexed by LootType
@@ -77,6 +110,7 @@ var LootProfiles = [LootCount]LootProfile{
 	LootRod:      {Reward: &rewardRod},
 	LootLauncher: {Reward: &rewardLauncher},
 	LootSpray:    {Reward: &rewardLauncher}, // TODO: placeholder
+	LootEnergy:   {Reward: &rewardEnergy},
 }
 
 // --- Drop Tables ---
@@ -85,14 +119,6 @@ var LootProfiles = [LootCount]LootProfile{
 type DropEntry struct {
 	Loot     LootType
 	BaseRate float64
-}
-
-// EnemyDropTables indexed by EnemyType
-var EnemyDropTables = [SpeciesCount][]DropEntry{
-	SpeciesDrain:  {}, // No drops
-	SpeciesSwarm:  {{LootLauncher, parameter.LootDropRateLauncher}},
-	SpeciesQuasar: {{LootRod, parameter.LootDropRateRod}},
-	SpeciesStorm:  {}, // No drops
 }
 
 // LootVisualDef defines rendering properties for a loot type
@@ -114,5 +140,10 @@ var LootVisuals = map[LootType]LootVisualDef{
 		Rune:       'M',
 		InnerColor: visual.RgbOrbLauncher,
 		GlowColor:  visual.RgbLootLauncherGlow,
+	},
+	LootEnergy: {
+		Rune:       'E',
+		InnerColor: visual.RgbOrbEnergy,
+		GlowColor:  visual.RgbLootEnergyGlow,
 	},
 }

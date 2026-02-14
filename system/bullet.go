@@ -18,12 +18,12 @@ type BulletSystem struct {
 
 func NewBulletSystem(world *engine.World) engine.System {
 	s := &BulletSystem{world: world}
+
 	s.Init()
 	return s
 }
 
 func (s *BulletSystem) Init() {
-	s.destroyAll()
 	s.enabled = true
 }
 
@@ -45,6 +45,7 @@ func (s *BulletSystem) HandleEvent(ev event.GameEvent) {
 		s.Init()
 		return
 	}
+
 	if ev.Type == event.EventMetaSystemCommandRequest {
 		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
 			if payload.SystemName == s.Name() {
@@ -53,9 +54,11 @@ func (s *BulletSystem) HandleEvent(ev event.GameEvent) {
 		}
 		return
 	}
+
 	if !s.enabled {
 		return
 	}
+
 	if ev.Type == event.EventBulletSpawnRequest {
 		if p, ok := ev.Payload.(*event.BulletSpawnRequestPayload); ok {
 			s.spawnBullet(p)
@@ -205,9 +208,4 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 		X: vmath.ToInt(p.OriginX),
 		Y: vmath.ToInt(p.OriginY),
 	})
-}
-
-func (s *BulletSystem) destroyAll() {
-	bulletEntities := s.world.Components.Bullet.GetAllEntities()
-	s.world.DestroyEntitiesBatch(bulletEntities)
 }
