@@ -16,9 +16,6 @@ type HealthBarRenderer struct {
 	gameCtx  *engine.GameContext
 	position visual.HealthBarPosition
 
-	// Pre-computed characters indexed by HealthBarPosition
-	charLUT [visual.HealthBarPositionCount]rune
-
 	// Rendering strategy selected at init
 	renderBar healthBarCellRenderer
 }
@@ -35,22 +32,8 @@ func NewHealthBarRenderer(gameCtx *engine.GameContext) *HealthBarRenderer {
 
 	if gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
 		r.renderBar = r.renderCell256
-		// 256-color: all positions use fallback
-		r.charLUT = [visual.HealthBarPositionCount]rune{
-			visual.HealthBarCharFallback,
-			visual.HealthBarCharFallback,
-			visual.HealthBarCharFallback,
-			visual.HealthBarCharFallback,
-		}
 	} else {
 		r.renderBar = r.renderCellTrueColor
-		// TrueColor: position-specific half-blocks
-		r.charLUT = [visual.HealthBarPositionCount]rune{
-			visual.HealthBarCharAbove,
-			visual.HealthBarCharBelow,
-			visual.HealthBarCharLeft,
-			visual.HealthBarCharRight,
-		}
 	}
 
 	return r
@@ -202,7 +185,6 @@ func (r *HealthBarRenderer) isBarOOB(ctx render.RenderContext, barX, barY, barLe
 // renderHealthBar draws the health bar cells
 func (r *HealthBarRenderer) renderHealthBar(ctx render.RenderContext, buf *render.RenderBuffer, startX, startY, length int, ratio float64, position visual.HealthBarPosition) {
 	isVertical := position == visual.HealthBarLeft || position == visual.HealthBarRight
-	ch := r.charLUT[position]
 
 	for i := 0; i < length; i++ {
 		var mapX, mapY int
@@ -219,7 +201,7 @@ func (r *HealthBarRenderer) renderHealthBar(ctx render.RenderContext, buf *rende
 			continue
 		}
 
-		r.renderBar(buf, screenX, screenY, ch, ratio)
+		r.renderBar(buf, screenX, screenY, visual.HealthBarChar, ratio)
 	}
 }
 

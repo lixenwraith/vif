@@ -125,9 +125,7 @@ func (s *BulletSystem) Update() {
 		s.world.Components.Kinetic.SetComponent(e, kinetic)
 	}
 
-	for _, e := range toDestroy {
-		s.destroyBullet(e)
-	}
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 // traverseAndCollide walks the bullet path checking for wall, boundary, shield, and cursor collisions
@@ -209,15 +207,7 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 	})
 }
 
-func (s *BulletSystem) destroyBullet(e core.Entity) {
-	s.world.Components.Bullet.RemoveEntity(e)
-	s.world.Components.Kinetic.RemoveEntity(e)
-	s.world.Positions.RemoveEntity(e)
-	s.world.DestroyEntity(e)
-}
-
 func (s *BulletSystem) destroyAll() {
-	for _, e := range s.world.Components.Bullet.GetAllEntities() {
-		s.destroyBullet(e)
-	}
+	bulletEntities := s.world.Components.Bullet.GetAllEntities()
+	s.world.DestroyEntitiesBatch(bulletEntities)
 }

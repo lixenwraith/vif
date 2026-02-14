@@ -6,11 +6,11 @@ package parameter
 const (
 	// CameraDeadZoneMarginX is horizontal margin in cells from viewport edge
 	// Cursor entering this margin triggers horizontal camera shift
-	CameraDeadZoneMarginX = 12
+	CameraDeadZoneMarginX = 30
 
 	// CameraDeadZoneMarginY is vertical margin in cells from viewport edge
 	// Cursor entering this margin triggers vertical camera shift
-	CameraDeadZoneMarginY = 6
+	CameraDeadZoneMarginY = 15
 
 	// CameraEnabled controls whether camera following is active
 	// When false, camera stays at (0,0) regardless of cursor position

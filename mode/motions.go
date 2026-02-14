@@ -21,7 +21,16 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if nextX < 0 {
 			nextX = 0
 		}
+
+		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, nextX, y) {
+			// Find closest unblocked cell between nextX and endX (exclusive)
+			for scanX := nextX + 1; scanX < endX; scanX++ {
+				if !isCursorBlocked(ctx, scanX, y) {
+					endX = scanX
+					break
+				}
+			}
 			break
 		}
 		endX = nextX
@@ -50,7 +59,15 @@ func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if nextY > maxY {
 			nextY = maxY
 		}
+
+		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, x, nextY) {
+			for scanY := nextY - 1; scanY > endY; scanY-- {
+				if !isCursorBlocked(ctx, x, scanY) {
+					endY = scanY
+					break
+				}
+			}
 			break
 		}
 		endY = nextY
@@ -78,7 +95,15 @@ func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if nextY < 0 {
 			nextY = 0
 		}
+
+		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, x, nextY) {
+			for scanY := nextY + 1; scanY < endY; scanY++ {
+				if !isCursorBlocked(ctx, x, scanY) {
+					endY = scanY
+					break
+				}
+			}
 			break
 		}
 		endY = nextY
@@ -107,7 +132,15 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if nextX > maxX {
 			nextX = maxX
 		}
+
+		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, nextX, y) {
+			for scanX := nextX - 1; scanX > endX; scanX-- {
+				if !isCursorBlocked(ctx, scanX, y) {
+					endX = scanX
+					break
+				}
+			}
 			break
 		}
 		endX = nextX
@@ -696,13 +729,13 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 
 // MotionHalfPageLeft implements 'H' motion
 func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfWidth := ctx.World.Resources.Config.MapWidth / 2
+	halfWidth := ctx.World.Resources.Config.ViewportWidth / 2
 	endX := x - (halfWidth * count)
 	if endX < 0 {
 		endX = 0
 	}
 
-	// Scan backward to find last unblocked position
+	// Scan forward to find last unblocked position
 	for endX < x && isCursorBlocked(ctx, endX, y) {
 		endX++
 	}
@@ -717,10 +750,11 @@ func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionHalfPageRight implements 'L' motion
 func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfWidth := ctx.World.Resources.Config.MapWidth / 2
+	config := ctx.World.Resources.Config
+	halfWidth := config.ViewportWidth / 2
 	endX := x + (halfWidth * count)
-	if endX >= ctx.World.Resources.Config.MapWidth {
-		endX = ctx.World.Resources.Config.MapWidth - 1
+	if endX >= config.MapWidth {
+		endX = config.MapWidth - 1
 	}
 
 	// Scan backward to find last unblocked position
@@ -738,7 +772,7 @@ func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult 
 
 // MotionHalfPageUp implements 'K' and PgUp motion
 func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.World.Resources.Config.MapHeight / 2
+	halfHeight := ctx.World.Resources.Config.ViewportHeight / 2
 	endY := y - (halfHeight * count)
 	if endY < 0 {
 		endY = 0
@@ -759,10 +793,11 @@ func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 
 // MotionHalfPageDown implements 'J' and PgDown motion
 func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
-	halfHeight := ctx.World.Resources.Config.MapHeight / 2
+	config := ctx.World.Resources.Config
+	halfHeight := config.ViewportHeight / 2
 	endY := y + (halfHeight * count)
-	if endY >= ctx.World.Resources.Config.MapHeight {
-		endY = ctx.World.Resources.Config.MapHeight - 1
+	if endY >= config.MapHeight {
+		endY = config.MapHeight - 1
 	}
 
 	// Scan backward to find last unblocked position

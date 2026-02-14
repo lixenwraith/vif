@@ -9,7 +9,6 @@ const (
 	HealthBarBelow
 	HealthBarLeft
 	HealthBarRight
-	HealthBarPositionCount
 )
 
 // Health bar configuration
@@ -20,13 +19,9 @@ const (
 	HealthBarMinLength    = 1    // Never shrink below 1 char
 )
 
-// Health bar characters
+// Health bar character
 const (
-	HealthBarCharAbove    = '▄' // Lower half-block (renders at bottom of cell above entity)
-	HealthBarCharBelow    = '▀' // Upper half-block
-	HealthBarCharLeft     = '▐' // Right half-block (renders at right edge, adjacent to entity)
-	HealthBarCharRight    = '▌' // Left half-block
-	HealthBarCharFallback = '■' // ASCII fallback for 256-color
+	HealthBarChar = '■' // ASCII fallback for 256-color
 )
 
 // Health256LUT maps health percentage segments to xterm-256 palette indices

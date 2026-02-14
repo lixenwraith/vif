@@ -737,7 +737,8 @@ func (s *DustSystem) transformGlyphsToDust() {
 	for i, gd := range toTransform {
 		deathEntities[i] = gd.entity
 	}
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, deathEntities)
+	s.world.DestroyEntitiesBatch(deathEntities)
+	// event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, deathEntities)
 
 	// Use batch creation for transformation dust
 	posBatch := s.world.Positions.BeginBatch()
