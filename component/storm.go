@@ -1,7 +1,10 @@
 package component
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -24,6 +27,24 @@ func (c *StormComponent) AliveCount() int {
 	return count
 }
 
+// StormCircleAttackState represents attack phase for a storm circle
+type StormCircleAttackState uint8
+
+const (
+	StormCircleAttackIdle StormCircleAttackState = iota
+	StormCircleAttackCooldown
+	StormCircleAttackActive
+)
+
+// StormCircleType derives circle behavior from index
+type StormCircleType uint8
+
+const (
+	StormCircleGreen StormCircleType = iota // Index 0: area pulse
+	StormCircleRed                          // Index 1: cone projectile
+	StormCircleBlue                         // Index 2: TBD/no-op
+)
+
 // StormCircleComponent holds per-circle 3D physics state, attached to each circle header entity
 type StormCircleComponent struct {
 	Pos3D vmath.Vec3
@@ -32,4 +53,29 @@ type StormCircleComponent struct {
 
 	// Anti-deadlock: tracks continuous invulnerability duration
 	InvulnerableSince int64 // Unix nano timestamp, 0 if vulnerable
+
+	// Attack state machine
+	AttackState       StormCircleAttackState
+	CooldownRemaining time.Duration
+	AttackRemaining   time.Duration
+
+	// Red cone targeting (locked at attack start)
+	LockedTargetX int
+	LockedTargetY int
+
+	// Visual data for renderer (0.0-1.0 progress)
+	AttackProgress float64
+}
+
+// CircleType returns the attack behavior type based on index
+func (c *StormCircleComponent) CircleType() StormCircleType {
+	if c.Index >= int(StormCircleBlue) {
+		return StormCircleBlue
+	}
+	return StormCircleType(c.Index)
+}
+
+// IsConvex returns true if circle is in vulnerable/attack-capable state
+func (c *StormCircleComponent) IsConvex() bool {
+	return c.Pos3D.Z < parameter.StormZMid
 }

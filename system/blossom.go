@@ -252,7 +252,6 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				// Logic: Blossom vs Decay collision
 				if s.world.Components.Decay.HasEntity(target) {
 					s.world.DestroyEntity(target)
-					event.EmitDeathOne(s.world.Resources.Event.Queue, target, 0)
 					destroyBlossom = true
 					continue
 				}
@@ -281,7 +280,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		})
 
 		if destroyBlossom {
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+			s.world.DestroyEntity(entity)
 			continue
 		}
 

@@ -1,4 +1,3 @@
-// Refactored
 package system
 
 import (
@@ -19,6 +18,13 @@ import (
 type stormCacheEntry struct {
 	entity core.Entity
 	x, y   int
+}
+
+// pendingCyanSpawn tracks storm-initiated swarm spawns waiting for visual completion
+type pendingCyanSpawn struct {
+	TargetX int
+	TargetY int
+	Timer   time.Duration
 }
 
 // StormSystem manages the storm boss entity lifecycle
@@ -44,9 +50,15 @@ type StormSystem struct {
 	// Reusable map
 	memberExcludeSet map[core.Entity]struct{}
 
+	// Pending cyan attack spawns (waiting for materialize completion)
+	pendingCyanSpawns []pendingCyanSpawn
+
 	// Telemetry
-	statActive      *atomic.Bool
-	statCircleCount *atomic.Int64
+	statActive           *atomic.Bool
+	statCircleCount      *atomic.Int64
+	statGreenActiveFrame *atomic.Int64
+	statRedActiveFrame   *atomic.Int64
+	statCyanActiveFrame  *atomic.Int64
 
 	enabled bool
 }
@@ -59,12 +71,16 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.swarmCache = make([]swarmCacheEntry, 0, 10)
 	s.quasarCache = make([]quasarCacheEntry, 0, 1)
 	s.memberExcludeSet = make(map[core.Entity]struct{}, 256)
+	s.pendingCyanSpawns = make([]pendingCyanSpawn, 0, 4)
 
 	// Precompute ellipse cell offsets for wall collision checks
 	s.buildEllipseOffsets()
 
 	s.statActive = world.Resources.Status.Bools.Get("storm.active")
 	s.statCircleCount = world.Resources.Status.Ints.Get("storm.circle_count")
+	s.statGreenActiveFrame = world.Resources.Status.Ints.Get("storm.green_active_frames")
+	s.statRedActiveFrame = world.Resources.Status.Ints.Get("storm.red_active_frames")
+	s.statCyanActiveFrame = world.Resources.Status.Ints.Get("storm.cyan_active_frames")
 
 	s.Init()
 	return s
@@ -76,8 +92,12 @@ func (s *StormSystem) Init() {
 	s.swarmCache = s.swarmCache[:0]
 	s.quasarCache = s.quasarCache[:0]
 	clear(s.memberExcludeSet)
+	s.pendingCyanSpawns = s.pendingCyanSpawns[:0]
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
+	s.statGreenActiveFrame.Store(0)
+	s.statRedActiveFrame.Store(0)
+	s.statCyanActiveFrame.Store(0)
 	s.enabled = true
 }
 
@@ -145,6 +165,9 @@ func (s *StormSystem) Update() {
 		return
 	}
 
+	// Process pending cyan spawns regardless of root entity state
+	s.processPendingCyanSpawns()
+
 	stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity)
 	if !ok {
 		s.rootEntity = 0
@@ -178,6 +201,7 @@ func (s *StormSystem) Update() {
 	// Process each alive circle
 	s.updateCirclePhysics(&stormComp, dtFixed)
 	s.updateCircleDamageImmunity(&stormComp)
+	s.updateCircleAttacks(&stormComp, dt)
 	s.processCircleMemberCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
 
@@ -527,7 +551,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+		s.world.DestroyEntitiesBatch(toDestroy)
 	}
 }
 
@@ -544,14 +568,16 @@ func (s *StormSystem) createCircleHeader(
 
 	// Circle headers are protected
 	s.world.Components.Protection.SetComponent(circleEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll ^ component.ProtectFromDeath,
+		// Mask: component.ProtectAll ^ component.ProtectFromDeath,
+		Mask: component.ProtectAll,
 	})
 
-	// Storm circle component (3D physics state)
+	// Storm circle component (3D physics + attack state)
 	s.world.Components.StormCircle.SetComponent(circleEntity, component.StormCircleComponent{
-		Pos3D: pos3D,
-		Vel3D: vel3D,
-		Index: index,
+		Pos3D:       pos3D,
+		Vel3D:       vel3D,
+		Index:       index,
+		AttackState: component.StormCircleAttackIdle,
 	})
 
 	// Kinetic component for 2D collision compatibility
@@ -1187,6 +1213,399 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 
 		s.world.Components.StormCircle.SetComponent(circleEntity, circleComp)
 	}
+}
+
+// updateCircleAttacks manages attack state machine for each circle
+func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, dt time.Duration) {
+	cursorEntity := s.world.Resources.Player.Entity
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	if !ok {
+		return
+	}
+
+	for i := 0; i < component.StormCircleCount; i++ {
+		if !stormComp.CirclesAlive[i] {
+			continue
+		}
+
+		circleEntity := stormComp.Circles[i]
+		circleComp, ok := s.world.Components.StormCircle.GetComponent(circleEntity)
+		if !ok {
+			continue
+		}
+
+		circlePos, ok := s.world.Positions.GetPosition(circleEntity)
+		if !ok {
+			continue
+		}
+
+		circleType := circleComp.CircleType()
+		isConvex := circleComp.IsConvex()
+
+		switch circleComp.AttackState {
+		case component.StormCircleAttackIdle:
+			// Transition to cooldown when convex
+			if isConvex {
+				circleComp.AttackState = component.StormCircleAttackCooldown
+				circleComp.CooldownRemaining = s.getInitialCooldown(circleType)
+			}
+
+		case component.StormCircleAttackCooldown:
+			circleComp.CooldownRemaining -= dt
+			if circleComp.CooldownRemaining <= 0 {
+				// Fire attack if still convex
+				if isConvex {
+					circleComp.AttackState = component.StormCircleAttackActive
+					circleComp.AttackRemaining = s.getAttackDuration(circleType)
+					circleComp.AttackProgress = 0
+
+					// Lock target for red cone
+					if circleType == component.StormCircleRed {
+						circleComp.LockedTargetX = cursorPos.X
+						circleComp.LockedTargetY = cursorPos.Y
+					}
+
+					// Cyan: init attack (calculate target, trigger spawn)
+					if circleType == component.StormCircleBlue {
+						s.initCyanAttack(&circleComp, circlePos.X, circlePos.Y)
+					}
+				} else {
+					// Went concave during cooldown, return to idle
+					circleComp.AttackState = component.StormCircleAttackIdle
+				}
+			}
+
+		case component.StormCircleAttackActive:
+			// Process active attack (continues even if concave)
+			s.processCircleAttack(&circleComp, circlePos.X, circlePos.Y, cursorEntity, cursorPos, dt)
+
+			circleComp.AttackRemaining -= dt
+			if circleComp.AttackRemaining <= 0 {
+				// Attack complete
+				if isConvex {
+					// Start cooldown for next attack
+					circleComp.AttackState = component.StormCircleAttackCooldown
+					circleComp.CooldownRemaining = s.getRepeatCooldown(circleType)
+				} else {
+					circleComp.AttackState = component.StormCircleAttackIdle
+				}
+				circleComp.AttackProgress = 0
+			}
+		}
+
+		s.world.Components.StormCircle.SetComponent(circleEntity, circleComp)
+	}
+}
+
+// getInitialCooldown returns the first cooldown when entering convex
+func (s *StormSystem) getInitialCooldown(circleType component.StormCircleType) time.Duration {
+	switch circleType {
+	case component.StormCircleGreen:
+		return parameter.StormGreenInitialCooldown
+	case component.StormCircleRed:
+		return parameter.StormRedInitialCooldown
+	case component.StormCircleBlue:
+		return parameter.StormCyanInitialCooldown
+	default:
+		return 0
+	}
+}
+
+// getAttackDuration returns how long the attack phase lasts
+func (s *StormSystem) getAttackDuration(circleType component.StormCircleType) time.Duration {
+	switch circleType {
+	case component.StormCircleGreen:
+		return parameter.StormGreenRepeatInterval
+	case component.StormCircleRed:
+		return parameter.StormRedTravelDuration
+	case component.StormCircleBlue:
+		return parameter.StormCyanEffectDuration
+	default:
+		return 0
+	}
+}
+
+// getRepeatCooldown returns cooldown between repeated attacks
+func (s *StormSystem) getRepeatCooldown(circleType component.StormCircleType) time.Duration {
+	switch circleType {
+	case component.StormCircleGreen:
+		return parameter.StormGreenRepeatInterval
+	case component.StormCircleRed:
+		return parameter.StormRedPostAttackDelay
+	case component.StormCircleBlue:
+		return parameter.StormCyanRepeatCooldown
+	default:
+		return 0
+	}
+}
+
+// processCircleAttack handles per-tick damage for active attacks
+func (s *StormSystem) processCircleAttack(
+	circleComp *component.StormCircleComponent,
+	circleX, circleY int,
+	cursorEntity core.Entity,
+	cursorPos component.PositionComponent,
+	dt time.Duration,
+) {
+	circleType := circleComp.CircleType()
+
+	switch circleType {
+	case component.StormCircleGreen:
+		s.processGreenAttack(circleComp, circleX, circleY, cursorEntity, cursorPos)
+	case component.StormCircleRed:
+		s.processRedAttack(circleComp, circleX, circleY, cursorEntity, cursorPos, dt)
+	case component.StormCircleBlue:
+		s.processCyanAttack(circleComp, circleX, circleY)
+	}
+}
+
+// processGreenAttack handles area pulse damage around green circle
+func (s *StormSystem) processGreenAttack(
+	circleComp *component.StormCircleComponent,
+	circleX, circleY int,
+	cursorEntity core.Entity,
+	cursorPos component.PositionComponent,
+) {
+	// Update visual progress unconditionally
+	attackDuration := parameter.StormGreenRepeatInterval.Seconds()
+	remaining := circleComp.AttackRemaining.Seconds()
+	circleComp.AttackProgress = 1.0 - (remaining / attackDuration)
+
+	// Telemetry
+	s.statGreenActiveFrame.Add(1)
+
+	// Check cursor in attack area
+	dx := vmath.FromInt(cursorPos.X - circleX)
+	dy := vmath.FromInt(cursorPos.Y - circleY)
+
+	if vmath.EllipseDistSq(dx, dy, parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq) > vmath.Scale {
+		return
+	}
+
+	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldActive := shieldOK && shieldComp.Active
+
+	if shieldActive {
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: parameter.StormGreenDamageEnergy,
+		})
+	} else {
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			Delta: -parameter.StormGreenDamageHeat,
+		})
+	}
+}
+
+// processRedAttack handles cone projectile damage toward locked target
+func (s *StormSystem) processRedAttack(
+	circleComp *component.StormCircleComponent,
+	circleX, circleY int,
+	cursorEntity core.Entity,
+	cursorPos component.PositionComponent,
+	dt time.Duration,
+) {
+	totalDuration := parameter.StormRedTravelDuration.Seconds()
+	remaining := circleComp.AttackRemaining.Seconds()
+	progress := 1.0 - (remaining / totalDuration)
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	circleComp.AttackProgress = progress
+
+	// Telemetry
+	s.statRedActiveFrame.Add(1)
+
+	targetX := circleComp.LockedTargetX
+	targetY := circleComp.LockedTargetY
+
+	dirX := float64(targetX - circleX)
+	dirY := float64(targetY - circleY)
+	dist := math.Sqrt(dirX*dirX + dirY*dirY)
+	if dist < 1 {
+		return
+	}
+	dirX /= dist
+	dirY /= dist
+
+	coneHeight := float64(parameter.StormRedConeHeightCells)
+	halfWidth := float64(parameter.StormRedConeWidthCells) / 2.0
+
+	// Two-phase: compute tail and front distances
+	var tailDist, frontDist float64
+	tailFrac := parameter.StormRedConeTailFraction
+	if progress < tailFrac {
+		tailDist = 0
+		frontDist = coneHeight * progress / tailFrac
+	} else {
+		tailDist = coneHeight * (progress - tailFrac) / (1.0 - tailFrac)
+		frontDist = coneHeight
+	}
+
+	toCursorX := float64(cursorPos.X - circleX)
+	toCursorY := float64(cursorPos.Y - circleY)
+
+	// Projection along cone axis
+	projDist := toCursorX*dirX + toCursorY*dirY
+
+	// Check if cursor is between tail and front
+	if projDist < tailDist || projDist > frontDist {
+		return
+	}
+
+	// Aspect-corrected lateral distance
+	// Visual perpendicular distance formula accounting for 2:1 terminal aspect
+	crossProduct := toCursorX*dirY - toCursorY*dirX
+	visualDirMag := math.Sqrt(dirX*dirX + 4.0*dirY*dirY)
+	lateralDist := 2.0 * math.Abs(crossProduct) / visualDirMag
+
+	// Width at cursor's depth along cone
+	widthAtDepth := halfWidth * projDist / coneHeight
+	if widthAtDepth < 1.0 {
+		widthAtDepth = 1.0
+	}
+
+	if lateralDist > widthAtDepth {
+		return
+	}
+
+	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldActive := shieldOK && shieldComp.Active
+
+	if shieldActive {
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: parameter.StormRedDamageEnergy,
+		})
+	} else {
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			Delta: -parameter.StormRedDamageHeat,
+		})
+	}
+}
+
+// initCyanAttack calculates target position at attack start
+func (s *StormSystem) initCyanAttack(
+	circleComp *component.StormCircleComponent,
+	circleX, circleY int,
+) {
+	config := s.world.Resources.Config
+
+	angle := (float64(s.rng.Intn(100)) / 100.0) * 2 * math.Pi
+	distance := parameter.StormCyanSpawnDistanceFloat
+
+	targetX := circleX + int(distance*math.Cos(angle))
+	targetY := circleY + int(distance*math.Sin(angle)*0.5)
+
+	if targetX < 0 {
+		targetX = 0
+	}
+	if targetX >= config.MapWidth {
+		targetX = config.MapWidth - 1
+	}
+	if targetY < 0 {
+		targetY = 0
+	}
+	if targetY >= config.MapHeight {
+		targetY = config.MapHeight - 1
+	}
+
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		targetX, targetY,
+		parameter.SwarmWidth, parameter.SwarmHeight,
+		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+		component.WallBlockSpawn,
+		0,
+	)
+	if !found {
+		circleComp.LockedTargetX = 0
+		circleComp.LockedTargetY = 0
+		return
+	}
+
+	spawnX := topLeftX + parameter.SwarmHeaderOffsetX
+	spawnY := topLeftY + parameter.SwarmHeaderOffsetY
+	circleComp.LockedTargetX = spawnX
+	circleComp.LockedTargetY = spawnY
+}
+
+// processPendingCyanSpawns handles swarm spawns after materialize animation completes
+func (s *StormSystem) processPendingCyanSpawns() {
+	if len(s.pendingCyanSpawns) == 0 {
+		return
+	}
+
+	dt := s.world.Resources.Time.DeltaTime
+
+	for i := len(s.pendingCyanSpawns) - 1; i >= 0; i-- {
+		s.pendingCyanSpawns[i].Timer -= dt
+
+		if s.pendingCyanSpawns[i].Timer <= 0 {
+			spawn := s.pendingCyanSpawns[i]
+
+			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+				SpawnX: spawn.TargetX,
+				SpawnY: spawn.TargetY,
+			})
+
+			// Remove completed spawn (swap-remove)
+			s.pendingCyanSpawns[i] = s.pendingCyanSpawns[len(s.pendingCyanSpawns)-1]
+			s.pendingCyanSpawns = s.pendingCyanSpawns[:len(s.pendingCyanSpawns)-1]
+		}
+	}
+}
+
+// processCyanAttack updates visual progress and triggers materialize at threshold
+func (s *StormSystem) processCyanAttack(
+	circleComp *component.StormCircleComponent,
+	circleX, circleY int,
+) {
+	s.statCyanActiveFrame.Add(1)
+
+	totalDuration := parameter.StormCyanEffectDuration.Seconds()
+	remaining := circleComp.AttackRemaining.Seconds()
+	progress := 1.0 - (remaining / totalDuration)
+	if progress < 0 {
+		progress = 0
+	}
+	if progress > 1 {
+		progress = 1
+	}
+	circleComp.AttackProgress = progress
+
+	// Trigger materialize at 80% (one-shot via pending spawn check)
+	if progress >= parameter.StormCyanMaterializeAt &&
+		circleComp.LockedTargetX != 0 &&
+		!s.hasPendingCyanSpawn(circleComp.LockedTargetX, circleComp.LockedTargetY) {
+
+		topLeftX := circleComp.LockedTargetX - parameter.SwarmHeaderOffsetX
+		topLeftY := circleComp.LockedTargetY - parameter.SwarmHeaderOffsetY
+
+		s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+			X:          topLeftX,
+			Y:          topLeftY,
+			AreaWidth:  parameter.SwarmWidth,
+			AreaHeight: parameter.SwarmHeight,
+			Type:       component.SpawnTypeSwarm,
+		})
+
+		s.pendingCyanSpawns = append(s.pendingCyanSpawns, pendingCyanSpawn{
+			TargetX: circleComp.LockedTargetX,
+			TargetY: circleComp.LockedTargetY,
+			Timer:   parameter.MaterializeAnimationDuration,
+		})
+	}
+}
+
+// hasPendingCyanSpawn checks if spawn is already pending for target
+func (s *StormSystem) hasPendingCyanSpawn(targetX, targetY int) bool {
+	for _, p := range s.pendingCyanSpawns {
+		if p.TargetX == targetX && p.TargetY == targetY {
+			return true
+		}
+	}
+	return false
 }
 
 // terminateStorm destroys the entire storm entity

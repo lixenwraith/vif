@@ -34,6 +34,9 @@ type StormRenderer struct {
 	invRadiusX, invRadiusY         float64
 	haloRadiusX, haloRadiusY       float64
 	glowMaxRadiusX, glowMaxRadiusY float64
+
+	// Attack effect radii
+	greenAttackRadiusX, greenAttackRadiusY float64
 }
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
@@ -55,6 +58,9 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 		haloRadiusY:    ry + haloExtendY,
 		glowMaxRadiusX: rx + glowExtend,
 		glowMaxRadiusY: ry + glowExtend*(ry/rx),
+
+		greenAttackRadiusX: rx * parameter.StormGreenRadiusMultiplier,
+		greenAttackRadiusY: ry * parameter.StormGreenRadiusMultiplier,
 	}
 }
 
@@ -118,6 +124,20 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 }
 
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
+
+	// Render attack effects before body (background layer)
+	circleComp, ok := r.gameCtx.World.Components.StormCircle.GetComponent(circle.entity)
+	if ok && circleComp.AttackState == component.StormCircleAttackActive {
+		switch circle.index {
+		case 0: // Green - area pulse
+			r.renderGreenPulse(ctx, buf, circle, &circleComp)
+		case 1: // Red - cone projectile
+			r.renderRedCone(ctx, buf, circle, &circleComp)
+		case 2: // Cyan - orbiting glow
+			r.renderCyanGlow(ctx, buf, circle, &circleComp)
+		}
+	}
+
 	// Depth factor: 0 = far, 1 = near
 	zRange := parameter.StormZMax - parameter.StormZMin
 	if zRange <= 0 {
@@ -382,6 +402,266 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 
 			color := terminal.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+		}
+	}
+}
+
+// renderGreenPulse draws expanding green pulse effect
+func (r *StormRenderer) renderGreenPulse(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
+	progress := circleComp.AttackProgress
+	if progress <= 0 {
+		return
+	}
+
+	// Pulse expands then fades
+	pulsePhase := progress * 2.0
+	var radiusMult, alpha float64
+	if pulsePhase < 1.0 {
+		radiusMult = 0.5 + 0.5*pulsePhase
+		alpha = 0.7 * pulsePhase
+	} else {
+		radiusMult = 1.0
+		alpha = 0.7 * (2.0 - pulsePhase)
+	}
+
+	if alpha <= 0.02 {
+		return
+	}
+
+	effectRadiusX := r.greenAttackRadiusX * radiusMult
+	effectRadiusY := r.greenAttackRadiusY * radiusMult
+	invRx := 1.0 / effectRadiusX
+	invRy := 1.0 / effectRadiusY
+
+	mapStartX := max(0, circle.x-int(effectRadiusX)-1)
+	mapEndX := min(ctx.MapWidth-1, circle.x+int(effectRadiusX)+1)
+	mapStartY := max(0, circle.y-int(effectRadiusY)-1)
+	mapEndY := min(ctx.MapHeight-1, circle.y+int(effectRadiusY)+1)
+
+	pulseColor := visual.RgbStormGreenPulse
+
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			nx := float64(mapX-circle.x) * invRx
+			ny := float64(mapY-circle.y) * invRy
+			distSq := nx*nx + ny*ny
+
+			if distSq > 1.0 {
+				continue
+			}
+
+			dist := math.Sqrt(distSq)
+			edgeFalloff := 1.0 - dist*dist
+			cellAlpha := alpha * edgeFalloff
+
+			if cellAlpha < 0.03 {
+				continue
+			}
+
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseColor, render.BlendAdd, cellAlpha, terminal.AttrNone)
+		}
+	}
+}
+
+// renderRedCone draws traveling cone projectile effect with aspect correction
+func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
+	progress := circleComp.AttackProgress
+	if progress <= 0 {
+		return
+	}
+
+	targetX := circleComp.LockedTargetX
+	targetY := circleComp.LockedTargetY
+
+	dx := float64(targetX - circle.x)
+	dy := float64(targetY - circle.y)
+	dist := math.Sqrt(dx*dx + dy*dy)
+	if dist < 1 {
+		return
+	}
+	dirX, dirY := dx/dist, dy/dist
+
+	coneHeight := float64(parameter.StormRedConeHeightCells)
+	halfWidth := float64(parameter.StormRedConeWidthCells) / 2.0
+
+	// Two-phase tail/front calculation
+	var tailDist, frontDist float64
+	tailFrac := parameter.StormRedConeTailFraction
+	if progress < tailFrac {
+		tailDist = 0
+		frontDist = coneHeight * progress / tailFrac
+	} else {
+		tailDist = coneHeight * (progress - tailFrac) / (1.0 - tailFrac)
+		frontDist = coneHeight
+	}
+
+	if frontDist <= tailDist {
+		return
+	}
+
+	coneColor := visual.RgbStormRedCone
+
+	// Grid perpendicular direction
+	perpX, perpY := -dirY, dirX
+	// Visual magnitude for uniform stepping (terminal 2:1 aspect)
+	perpVisualMag := math.Sqrt(perpX*perpX + 4.0*perpY*perpY)
+	if perpVisualMag < 0.001 {
+		perpVisualMag = 1.0
+	}
+
+	// Fade parameters
+	tailFadeStart := parameter.StormRedConeFadeStart
+	frontFadeZone := 0.15 // Front 15% of cone length fades toward tip
+
+	coneLength := frontDist - tailDist
+	if coneLength < 1 {
+		coneLength = 1
+	}
+
+	// Sample along cone length from tail to front
+	steps := int(frontDist-tailDist) + 1
+	for step := 0; step <= steps; step++ {
+		stepDist := tailDist + float64(step)
+		if stepDist > frontDist {
+			stepDist = frontDist
+		}
+
+		axisX := float64(circle.x) + dirX*stepDist
+		axisY := float64(circle.y) + dirY*stepDist
+
+		// Width at this depth (linear expansion from cone origin)
+		widthRatio := stepDist / coneHeight
+		currentHalfWidth := halfWidth * widthRatio
+		if currentHalfWidth < 1.0 {
+			currentHalfWidth = 1.0
+		}
+
+		// Position within current cone segment [0=tail, 1=front]
+		posInCone := (stepDist - tailDist) / coneLength
+
+		// Base alpha with tail fade
+		stepAlpha := 0.7
+		tailRatio := 1.0 - posInCone // 1 at tail, 0 at front
+		if tailRatio > tailFadeStart {
+			fadeAmount := (tailRatio - tailFadeStart) / (1.0 - tailFadeStart)
+			stepAlpha *= 1.0 - fadeAmount*0.6
+		}
+
+		// Front-tip fade: reduce alpha near the leading edge
+		frontRatio := posInCone // 0 at tail, 1 at front
+		if frontRatio > (1.0 - frontFadeZone) {
+			fadeAmount := (frontRatio - (1.0 - frontFadeZone)) / frontFadeZone
+			stepAlpha *= 1.0 - fadeAmount*0.5
+		}
+
+		// Sample across width in visual-uniform units
+		for vOff := -currentHalfWidth; vOff <= currentHalfWidth; vOff += 1.0 {
+			gridOff := vOff / perpVisualMag
+			mapX := int(math.Round(axisX + perpX*gridOff))
+			mapY := int(math.Round(axisY + perpY*gridOff))
+
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			// Lateral falloff from axis
+			axisDist := math.Abs(vOff) / (currentHalfWidth + 0.1)
+			alpha := stepAlpha * (1.0 - axisDist*axisDist*0.4)
+			if alpha < 0.03 {
+				continue
+			}
+
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, coneColor, render.BlendAdd, alpha, terminal.AttrNone)
+		}
+	}
+}
+
+// renderCyanBeam renamed and rewritten - replace entire function
+func (r *StormRenderer) renderCyanGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
+	progress := circleComp.AttackProgress
+	if progress <= 0.01 {
+		return
+	}
+
+	// Fade out during materialize phase (last 20%)
+	intensityMult := 1.0
+	if progress > 0.8 {
+		intensityMult = (1.0 - progress) / 0.2
+	}
+	if intensityMult <= 0.05 {
+		return
+	}
+
+	// Fast rotation via game time
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	periodMs := parameter.StormCyanGlowRotationPeriod.Milliseconds()
+	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
+	cosA := vmath.Cos(angleFixed)
+	sinA := vmath.Sin(angleFixed)
+
+	// Warm amber glow contrasting cyan body
+	glowColor := terminal.RGB{R: 255, G: 190, B: 70}
+
+	// Render ring around circle edge
+	outerRx := r.radiusX + parameter.StormConvexGlowExtendFloat + 1.0
+	outerRy := r.radiusY + (parameter.StormConvexGlowExtendFloat+1.0)*(r.radiusY/r.radiusX)
+
+	mapStartX := max(0, circle.x-int(outerRx)-1)
+	mapEndX := min(ctx.MapWidth-1, circle.x+int(outerRx)+1)
+	mapStartY := max(0, circle.y-int(outerRy)-1)
+	mapEndY := min(ctx.MapHeight-1, circle.y+int(outerRy)+1)
+
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			nx := float64(mapX-circle.x) * r.invRadiusX
+			ny := float64(mapY-circle.y) * r.invRadiusY
+			distSq := nx*nx + ny*ny
+
+			// Ring zone: 0.6 to 1.5 normalized radius
+			if distSq < 0.36 || distSq > 2.25 {
+				continue
+			}
+
+			dist := math.Sqrt(distSq)
+			cellDirX := nx / dist
+			cellDirY := ny / dist
+
+			dirXFixed := vmath.FromFloat(cellDirX)
+			dirYFixed := vmath.FromFloat(cellDirY)
+
+			// Double glow: dot with both opposite directions
+			dot1 := vmath.ToFloat(vmath.DotProduct(dirXFixed, dirYFixed, cosA, sinA))
+			dot2 := vmath.ToFloat(vmath.DotProduct(dirXFixed, dirYFixed, -cosA, -sinA))
+
+			dot := math.Max(dot1, dot2)
+			if dot <= 0.1 {
+				continue
+			}
+
+			// Edge proximity: strongest near edge (dist=1.0)
+			edgeFactor := 1.0 - math.Abs(dist-1.0)*1.5
+			if edgeFactor <= 0 {
+				continue
+			}
+
+			// Tight glow with power curve
+			alpha := math.Pow(dot, 1.5) * edgeFactor * intensityMult * 0.85
+			if alpha < 0.05 {
+				continue
+			}
+
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, glowColor, render.BlendAdd, alpha, terminal.AttrNone)
 		}
 	}
 }

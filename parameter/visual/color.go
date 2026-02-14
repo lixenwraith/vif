@@ -182,13 +182,17 @@ var (
 	// Loot glow colors
 	RgbLootRodGlow      = terminal.RGB{R: 200, G: 255, B: 255} // Bright cyan-white
 	RgbLootLauncherGlow = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
+
+	// Storm attack effect colors
+	RgbStormGreenPulse = terminal.RGB{R: 60, G: 220, B: 100} // Bright green pulse
+	RgbStormRedCone    = terminal.RGB{R: 255, G: 80, B: 40}  // Bright orange-red cone
 )
 
 // StormCircleColors - neon base colors (saturated 1.3x in renderer)
 var StormCircleColors = []terminal.RGB{
-	{R: 40, G: 180, B: 255}, // Cyan
-	{R: 255, G: 60, B: 120}, // Magenta
 	{R: 120, G: 255, B: 80}, // Lime
+	{R: 255, G: 60, B: 120}, // Magenta
+	{R: 40, G: 180, B: 255}, // Cyan
 }
 
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type

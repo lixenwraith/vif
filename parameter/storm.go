@@ -103,3 +103,40 @@ var (
 	// Precompute zMid for physics
 	StormZMid = (StormZMin + StormZMax) / 2
 )
+
+// Storm circle attack parameters
+const (
+	// Green circle: area pulse attack
+	StormGreenInitialCooldown  = 1 * time.Second
+	StormGreenRepeatInterval   = 1 * time.Second
+	StormGreenRadiusMultiplier = 3.0 // Multiplier to circle radius in each dimension
+	StormGreenDamageEnergy     = 10000
+	StormGreenDamageHeat       = 10
+
+	// Red circle: cone projectile attack
+	StormRedInitialCooldown = 1 * time.Second
+	StormRedTravelDuration  = 2 * time.Second
+	StormRedPostAttackDelay = 1 * time.Second // Wait after travel before next shot
+	StormRedConeWidthCells  = 40
+	StormRedConeHeightCells = 60
+	StormRedDamageEnergy    = 10000
+	StormRedDamageHeat      = 10
+	// Two-phase visual: cone body travels then dissipates
+	StormRedConeTailFraction = 0.4 // Cone body length as fraction of total travel
+	StormRedConeFadeStart    = 0.5 // Tail distance fraction where alpha fade begins
+
+	StormCyanInitialCooldown    = 5 * time.Second
+	StormCyanRepeatCooldown     = 5 * time.Second
+	StormCyanEffectDuration     = 2500 * time.Millisecond // 2s glow + 0.5s overlap with materialize
+	StormCyanMaterializeAt      = 0.80                    // Emit materialize at 80% progress (2s mark)
+	StormCyanGlowRotationPeriod = 400 * time.Millisecond  // ms per full rotation (5 rotations in 2s)
+	StormCyanSpawnDistanceFloat = 20.0
+)
+
+// Pre-computed green attack radii (2× circle radius)
+var (
+	StormGreenRadiusX = vmath.FromFloat(StormCircleRadiusXFloat * StormGreenRadiusMultiplier)
+	StormGreenRadiusY = vmath.FromFloat(StormCircleRadiusYFloat * StormGreenRadiusMultiplier)
+	StormGreenInvRxSq,
+	StormGreenInvRySq = vmath.EllipseInvRadiiSq(StormGreenRadiusX, StormGreenRadiusY)
+)
