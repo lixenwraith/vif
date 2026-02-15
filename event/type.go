@@ -498,11 +498,6 @@ const (
 	// Consumer: WeaponSystem | Payload: nil
 	EventWeaponFireRequest
 
-	// EventWeaponFireMainRequest signals player intent to fire main weapon (cleaner + buffs)
-	// Trigger: Router (Player Input)
-	// Consumer: WeaponSystem | Payload: nil
-	EventWeaponFireMainRequest
-
 	// EventCombatAttackDirectRequest signals applying knockback
 	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, WeaponSystem
 	// Consumer: CombatSystem | Payload: *CombatAttackDirectRequestPayload

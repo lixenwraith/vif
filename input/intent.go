@@ -64,7 +64,12 @@ const (
 	IntentOverlayPageDown // PgDn
 
 	// Mouse
-	IntentMouseClick // Left-click to move cursor
+	IntentMouseLeftDown  // Left press: move cursor + fire main
+	IntentMouseLeftUp    // Left release
+	IntentMouseRightDown // Right press: fire special (no cursor move)
+	IntentMouseRightUp   // Right release
+	IntentMouseDrag      // Drag: update cursor if left held
+	IntentMouseWheelMove // Wheel: move cursor only
 )
 
 // MotionOp identifies motion algorithm

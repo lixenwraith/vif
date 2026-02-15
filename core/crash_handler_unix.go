@@ -16,20 +16,16 @@ func HandleCrash(r any) {
 		return
 	}
 
-	// Restore terminal to sane state immediately
-	terminal.EmergencyReset(os.Stdout)
+	// Terminal cleanup if available
+	if crashTerminal != nil {
+		crashTerminal.Fini()
+	} else {
+		// Fallback for edge cases
+		terminal.EmergencyReset(os.Stdout)
+	}
 
-	// TODO: Though cleaner now, still zig-zags in stack trace print, add more '\r\n' and sync/flushes to test
-	// Force flush stdout/stderr before printing to stderr
-	os.Stdout.Sync()
-	os.Stderr.Sync()
-
-	// Print error and stack trace to stderr
-	fmt.Fprintf(os.Stderr, "\r\n\x1b[31mCRASH DETECTED: %v\x1b[0m\r\n", r)
-	fmt.Fprintf(os.Stderr, "Stack Trace:\r\n%s\r\n", debug.Stack())
-
-	// Sync stderr before exit
-	os.Stderr.Sync()
+	fmt.Fprintf(os.Stderr, "\n\x1b[31mCRASH DETECTED: %v\x1b[0m\n", r)
+	fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
 
 	os.Exit(1)
 }

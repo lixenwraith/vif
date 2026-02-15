@@ -97,17 +97,44 @@ func (m *Machine) processKey(ev terminal.Event) *Intent {
 }
 
 func (m *Machine) processMouse(ev terminal.Event) *Intent {
-	// Only handle left-click press in Normal/Visual/Insert modes
-	if ev.MouseBtn != terminal.MouseBtnLeft || ev.MouseAction != terminal.MouseActionPress {
-		return nil
-	}
-
 	switch m.mode {
 	case ModeNormal, ModeVisual, ModeInsert:
-		return &Intent{
-			Type:  IntentMouseClick,
-			Count: ev.MouseX,       // Repurpose Count for X
-			Char:  rune(ev.MouseY), // Repurpose Char for Y (terminal coords)
+		switch ev.MouseBtn {
+		case terminal.MouseBtnLeft:
+			switch ev.MouseAction {
+			case terminal.MouseActionPress:
+				return &Intent{
+					Type:  IntentMouseLeftDown,
+					Count: ev.MouseX,
+					Char:  rune(ev.MouseY),
+				}
+			case terminal.MouseActionRelease:
+				return &Intent{Type: IntentMouseLeftUp}
+			case terminal.MouseActionDrag:
+				return &Intent{
+					Type:  IntentMouseDrag,
+					Count: ev.MouseX,
+					Char:  rune(ev.MouseY),
+				}
+			}
+
+		case terminal.MouseBtnRight:
+			switch ev.MouseAction {
+			case terminal.MouseActionPress:
+				return &Intent{Type: IntentMouseRightDown}
+			case terminal.MouseActionRelease:
+				return &Intent{Type: IntentMouseRightUp}
+			}
+			// Right drag intentionally ignored
+
+		case terminal.MouseBtnWheelUp, terminal.MouseBtnWheelDown:
+			if ev.MouseAction == terminal.MouseActionPress {
+				return &Intent{
+					Type:  IntentMouseWheelMove,
+					Count: ev.MouseX,
+					Char:  rune(ev.MouseY),
+				}
+			}
 		}
 	}
 	return nil

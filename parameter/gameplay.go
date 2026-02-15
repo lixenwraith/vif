@@ -88,8 +88,11 @@ const (
 	GoldSpawnMaxAttempts = 100
 )
 
-// Macro
+// Macro and Mouse
 const (
 	// MacroPlaybackInterval is delay between each macro intent during playback
-	MacroPlaybackInterval = 500 * time.Millisecond
+	MacroPlaybackInterval = WeaponCooldownMain
+
+	// MouseRepeatInterval is the delay between mouse events when click button is held
+	MouseRepeatInterval = WeaponCooldownMain
 )

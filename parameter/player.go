@@ -22,7 +22,7 @@ const (
 
 // Weapon Cooldowns
 const (
-	WeaponCooldownMain     = 150 * time.Millisecond
+	WeaponCooldownMain     = 250 * time.Millisecond
 	WeaponCooldownRod      = 500 * time.Millisecond
 	WeaponCooldownLauncher = 1000 * time.Millisecond
 	WeaponCooldownSpray    = 2000 * time.Millisecond

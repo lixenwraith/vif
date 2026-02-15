@@ -66,7 +66,7 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 		event.EventWeaponAddRequest,
 		event.EventEnergyCrossedZeroNotification,
 		event.EventWeaponFireRequest,
-		event.EventWeaponFireMainRequest,
+		event.EventWeaponFireRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -99,11 +99,8 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnergyCrossedZeroNotification:
 		s.removeAllWeapons()
 
-	case event.EventWeaponFireMainRequest:
-		s.handleFireMain()
-
 	case event.EventWeaponFireRequest:
-		s.fireAllWeapons()
+		s.handleFireMain()
 	}
 }
 

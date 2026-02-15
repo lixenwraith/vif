@@ -14,6 +14,11 @@ func HandleCrash(r any) {
 		return
 	}
 
+	// Clean up xterm.js state if terminal registered
+	if crashTerminal != nil {
+		crashTerminal.Fini()
+	}
+
 	console := js.Global().Get("console")
 	console.Call("error", fmt.Sprintf("CRASH: %v", r))
 	console.Call("error", fmt.Sprintf("Stack:\n%s", debug.Stack()))

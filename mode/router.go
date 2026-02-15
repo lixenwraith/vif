@@ -1,6 +1,8 @@
 package mode
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -22,6 +24,12 @@ type Router struct {
 	lastFindChar    rune   // Target character for f/F/t/T
 	lastFindForward bool   // true for f/t, false for F/T
 	lastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
+
+	// Mouse hold state for repeat firing
+	mouseLeftHeld     bool
+	mouseRightHeld    bool
+	mouseLastFireMain time.Time
+	mouseLastFireSpec time.Time
 
 	// Look-up tables: OpCode → Function
 	motionLUT map[input.MotionOp]MotionFunc
@@ -213,8 +221,18 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleOverlayClose()
 
 	// Mouse
-	case input.IntentMouseClick:
-		return r.handleMouseClick(intent)
+	case input.IntentMouseLeftDown:
+		return r.handleMouseLeftDown(intent)
+	case input.IntentMouseLeftUp:
+		return r.handleMouseLeftUp()
+	case input.IntentMouseRightDown:
+		return r.handleMouseRightDown()
+	case input.IntentMouseRightUp:
+		return r.handleMouseRightUp()
+	case input.IntentMouseDrag:
+		return r.handleMouseDrag(intent)
+	case input.IntentMouseWheelMove:
+		return r.handleMouseWheelMove(intent)
 	}
 
 	return true
@@ -536,7 +554,7 @@ func (r *Router) handleGoldJump() bool {
 }
 
 func (r *Router) handleFireMain() bool {
-	r.ctx.PushEvent(event.EventWeaponFireMainRequest, nil)
+	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
 	return true
 }
 
@@ -856,24 +874,88 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 
 // --- Mouse ---
 
-func (r *Router) handleMouseClick(intent *input.Intent) bool {
-	// intent.Count = terminal X, intent.Char = terminal Y
+func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
+	r.moveMouseCursor(intent)
+	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
+	r.mouseLeftHeld = true
+	r.mouseLastFireMain = r.ctx.PausableClock.Now()
+	return true
+}
+
+func (r *Router) handleMouseLeftUp() bool {
+	r.mouseLeftHeld = false
+	return true
+}
+
+func (r *Router) handleMouseRightDown() bool {
+	// Fire special at current cursor position, no movement
+	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+	r.mouseRightHeld = true
+	r.mouseLastFireSpec = r.ctx.PausableClock.Now()
+	return true
+}
+
+func (r *Router) handleMouseRightUp() bool {
+	r.mouseRightHeld = false
+	return true
+}
+
+func (r *Router) handleMouseDrag(intent *input.Intent) bool {
+	if r.mouseLeftHeld {
+		r.moveMouseCursor(intent)
+	}
+	return true
+}
+
+func (r *Router) handleMouseWheelMove(intent *input.Intent) bool {
+	r.moveMouseCursor(intent)
+	return true
+}
+
+// ProcessMouseTick handles repeat firing for held mouse buttons
+// Called from main loop each frame
+func (r *Router) ProcessMouseTick() {
+	now := r.ctx.PausableClock.Now()
+
+	if r.mouseLeftHeld && now.Sub(r.mouseLastFireMain) >= parameter.MouseRepeatInterval {
+		r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
+		r.mouseLastFireMain = now
+	}
+
+	if r.mouseRightHeld && now.Sub(r.mouseLastFireSpec) >= parameter.MouseRepeatInterval {
+		r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+		r.mouseLastFireSpec = now
+	}
+}
+
+// moveMouseCursor handles coordinate conversion, bounds check, and cursor movement
+// Returns true if cursor was moved successfully
+func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 	termX := intent.Count
 	termY := int(intent.Char)
 
-	// Convert terminal coords to game coords
-	gameX := termX - r.ctx.GameXOffset
-	gameY := termY - r.ctx.GameYOffset
+	// Convert terminal coords to viewport coords
+	viewportX := termX - r.ctx.GameXOffset
+	viewportY := termY - r.ctx.GameYOffset
 
-	// Bounds check
+	// Viewport bounds check
 	config := r.ctx.World.Resources.Config
+	if viewportX < 0 || viewportX >= config.ViewportWidth || viewportY < 0 || viewportY >= config.ViewportHeight {
+		return false
+	}
+
+	// Convert viewport coords to map coords
+	gameX := viewportX + config.CameraX
+	gameY := viewportY + config.CameraY
+
+	// Map bounds check (defensive, should not exceed given viewport clamp)
 	if gameX < 0 || gameX >= config.MapWidth || gameY < 0 || gameY >= config.MapHeight {
-		return true
+		return false
 	}
 
 	// Block check
 	if isCursorBlocked(r.ctx, gameX, gameY) {
-		return true
+		return false
 	}
 
 	// Move cursor

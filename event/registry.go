@@ -135,7 +135,7 @@ func InitRegistry() {
 	// Weapon
 	RegisterType("EventWeaponAddRequest", EventWeaponAddRequest, &WeaponAddRequestPayload{})
 	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, nil)
-	RegisterType("EventWeaponFireMainRequest", EventWeaponFireMainRequest, nil)
+	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, nil)
 
 	// Heat
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})

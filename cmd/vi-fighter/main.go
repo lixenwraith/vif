@@ -83,6 +83,8 @@ func main() {
 	// 7. Terminal extraction (orchestrator needs direct interface)
 	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
 	term := termSvc.Terminal()
+	core.SetCrashTerminal(term)
+	term.SetMouseMode(terminal.MouseModeClick | terminal.MouseModeDrag)
 	width, height := term.Size()
 
 	// 8. GameContext Creation
@@ -215,6 +217,9 @@ func main() {
 		case <-frameTicker.C:
 			// Increment frame number at the start of the frame cycle
 			ctx.IncrementFrameNumber()
+
+			// Process mouse hold repeat events
+			router.ProcessMouseTick()
 
 			// Process macro playback tick (may return multiple intents)
 			macroIntents := router.ProcessMacroTick()
