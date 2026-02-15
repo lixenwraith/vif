@@ -320,7 +320,7 @@ func registerSystemActions(m *fsm.Machine[*engine.World]) {
 			return
 		}
 
-		for _, sysName := range cfg.Disabled {
+		for _, sysName := range cfg.DisabledSystems {
 			world.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
 				SystemName: sysName,
 				Enabled:    false,

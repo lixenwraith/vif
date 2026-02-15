@@ -548,6 +548,14 @@ type WallCompositeSpawnRequestPayload struct {
 	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Applied to all cells
 }
 
+// WallPatternSpawnRequestPayload contains parameters for pattern-based wall creation
+type WallPatternSpawnRequestPayload struct {
+	Path      string                  `toml:"path"`       // Path to .vfimg file
+	X         int                     `toml:"x"`          // Anchor X position
+	Y         int                     `toml:"y"`          // Anchor Y position
+	BlockMask component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+}
+
 // WallDespawnRequestPayload contains parameters for wall removal
 type WallDespawnRequestPayload struct {
 	X      int  `toml:"x"`

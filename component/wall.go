@@ -49,13 +49,9 @@ func (w *WallComponent) NeedsRender() bool {
 
 // WallCellDef defines a single cell in composite wall structure (used by event payload)
 type WallCellDef struct {
-	OffsetX  int
-	OffsetY  int
-	Char     rune // Ignored if BoxStyle set on parent payload
-	FgColor  terminal.RGB
-	BgColor  terminal.RGB
-	RenderFg bool
-	RenderBg bool
+	OffsetX int
+	OffsetY int
+	WallVisualConfig
 }
 
 // WallVisualConfig defines visual properties for wall rendering

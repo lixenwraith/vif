@@ -30,7 +30,7 @@ const (
 
 	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
 	// Equivalent to previous 1 cell per DrainMoveInterval
-	DrainBaseSpeedFloat = 5.0
+	DrainBaseSpeedFloat = 2.0
 
 	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
 	// Higher values = snappier homing, lower = more floaty

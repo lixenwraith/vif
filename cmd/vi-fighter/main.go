@@ -28,6 +28,7 @@ var (
 	flagAudioUnmute = flag.Bool("au", false, "Start with audio unmuted")
 	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
 	flagGameScript  = flag.String("g", "", "Game FSM script path (TOML)")
+	flagGameDefault = flag.Bool("gd", false, "Force embedded default FSM script")
 )
 
 func main() {
@@ -139,9 +140,15 @@ func main() {
 	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
-	// Load FSM Config: CLI path > external config > embedded fallback
-	if err := clockScheduler.LoadFSMAuto(*flagGameScript, asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
-		panic(fmt.Sprintf("failed to load FSM: %v", err))
+	// Load FSM Config: CLI path > external config > embedded fallback (unless forced)
+	if *flagGameDefault {
+		if err := clockScheduler.LoadFSM(asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+			panic(fmt.Sprintf("failed to load FSM: %v", err))
+		}
+	} else {
+		if err := clockScheduler.LoadFSMAuto(*flagGameScript, asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+			panic(fmt.Sprintf("failed to load FSM: %v", err))
+		}
 	}
 
 	// 13. Event Handlers

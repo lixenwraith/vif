@@ -219,7 +219,7 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			}
 			args = rcArgs
 
-		case "SetVar", "IncrementVar", "DecrementVar":
+		case "SetVar", "IncrementVar", "DecrementVar", "MultiplyVar", "DivideVar", "ModuloVar", "ClampVar", "CopyVar":
 			varArgs := &VariableArgs{}
 			if cfg.Payload != nil {
 				if err := toml.Decode(cfg.Payload, varArgs); err != nil {

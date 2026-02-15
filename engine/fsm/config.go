@@ -16,7 +16,7 @@ type RootConfig struct {
 
 // SystemsConfig defines global system enable/disable
 type SystemsConfig struct {
-	Disabled []string `toml:"disabled,omitempty"`
+	DisabledSystems []string `toml:"disabled_systems,omitempty"`
 }
 
 // RegionConfig defines a parallel region

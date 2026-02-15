@@ -69,15 +69,27 @@ func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, sc
 	}
 }
 
+// renderCell256 updated to use per-cell colors with fallback
 func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY int,
 	char rune, fg, bg terminal.RGB, renderFg, renderBg bool) {
 
 	if renderBg {
-		buf.SetBg256(screenX, screenY, visual.Wall256PaletteDefault)
+		// Use per-cell palette index if set, otherwise fallback to default
+		// In 256 mode, palette index stored in RGB.R
+		paletteIdx := bg.R
+		if paletteIdx == 0 && bg.G == 0 && bg.B == 0 {
+			paletteIdx = visual.Wall256PaletteDefault
+		}
+		buf.SetBg256(screenX, screenY, paletteIdx)
 	}
 
 	if renderFg && char != 0 {
+		// Use per-cell fg palette index if set
+		fgIdx := fg.R
+		if fgIdx == 0 && fg.G == 0 && fg.B == 0 {
+			fgIdx = visual.Wall256PaletteDefault
+		}
 		buf.SetFgOnly(screenX, screenY, char,
-			terminal.RGB{R: visual.Wall256PaletteDefault}, terminal.AttrFg256)
+			terminal.RGB{R: fgIdx}, terminal.AttrFg256)
 	}
 }

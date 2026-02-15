@@ -5,7 +5,7 @@ import (
 )
 
 // Energy loot reward value
-const LootEnergyRewardValue = 100000
+const LootEnergyRewardValue = 10000
 
 // Homing physics
 const (
@@ -14,7 +14,7 @@ const (
 )
 
 // Collection radius (Chebyshev)
-const LootCollectRadius = 1
+const LootCollectRadius = 2
 
 // Shield geometry (shared across all loot types)
 const (

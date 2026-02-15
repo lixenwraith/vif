@@ -548,6 +548,11 @@ const (
 	// Consumer: WallSystem | Payload: *WallCompositeSpawnRequestPayload
 	EventWallCompositeSpawnRequest
 
+	// EventWallPatternSpawnRequest requests creation of wall structure from .vfimg pattern file
+	// Trigger: FSM, level loader
+	// Consumer: WallSystem | Payload: *WallPatternSpawnRequestPayload
+	EventWallPatternSpawnRequest
+
 	// EventWallDespawnRequest requests removal of walls in specified area or globally
 	// Trigger: FSM, level transitions, debug commands
 	// Consumer: WallSystem | Payload: *WallDespawnRequestPayload

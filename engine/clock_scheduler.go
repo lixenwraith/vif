@@ -124,7 +124,6 @@ func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 	cs.eventRouter.Register(handler)
 }
 
-// TODO: for tests without file detection, not used in main path
 // LoadFSM initializes HFSM with provided config and registry bridge, must be called before Start()
 func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Machine[*World])) error {
 	// Register Actions/Guards
@@ -139,6 +138,9 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 	if err := cs.fsm.Init(cs.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
+
+	// Apply global system configuration
+	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
 
 	return nil
 }

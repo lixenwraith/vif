@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/maze"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/pattern"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -65,6 +66,7 @@ func (s *WallSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWallSpawnRequest,
 		event.EventWallCompositeSpawnRequest,
+		event.EventWallPatternSpawnRequest,
 		event.EventWallDespawnRequest,
 		event.EventWallMaskChangeRequest,
 		event.EventWallPushCheckRequest,
@@ -104,6 +106,11 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventWallCompositeSpawnRequest:
 		if payload, ok := ev.Payload.(*event.WallCompositeSpawnRequestPayload); ok {
 			s.handleSpawnComposite(payload)
+		}
+
+	case event.EventWallPatternSpawnRequest:
+		if payload, ok := ev.Payload.(*event.WallPatternSpawnRequestPayload); ok {
+			s.handlePatternSpawn(payload)
 		}
 
 	case event.EventWallDespawnRequest:
@@ -234,17 +241,30 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 
-		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
+		wallComp := component.WallComponent{
 			BlockMask: payload.BlockMask,
 			Rune:      cell.Char,
 			FgColor:   cell.FgColor,
 			BgColor:   cell.BgColor,
 			RenderFg:  cell.RenderFg,
 			RenderBg:  cell.RenderBg,
-		})
+		}
+
+		// Compute box char if box-drawing enabled at payload level
+		if payload.BoxStyle != component.BoxDrawNone {
+			wallComp.Rune = s.computeBoxChar(x, y, payload.BoxStyle)
+			wallComp.BoxStyle = payload.BoxStyle
+		}
+
+		s.world.Components.Wall.SetComponent(entity, wallComp)
 
 		s.world.Components.Member.SetComponent(entity, component.MemberComponent{
 			HeaderEntity: headerEntity,
+		})
+
+		// Members protected from destruction except OOB/death
+		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+			Mask: component.ProtectAll ^ component.ProtectFromDeath,
 		})
 
 		members = append(members, component.MemberEntry{
@@ -274,6 +294,116 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 	}
 
 	if count == 0 {
+		s.world.DestroyEntity(headerEntity)
+		return
+	}
+
+	// Post-spawn box char computation for composites
+	if payload.BoxStyle != component.BoxDrawNone && maxX >= minX && maxY >= minY {
+		s.computeBoxCharsInArea(minX, minY, maxX-minX+1, maxY-minY+1, payload.BoxStyle)
+	}
+
+	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
+		Behavior:      component.BehaviorNone,
+		MemberEntries: members,
+	})
+
+	s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
+		X: minX, Y: minY,
+		Width: maxX - minX + 1, Height: maxY - minY + 1,
+		Count:        count,
+		HeaderEntity: headerEntity,
+	})
+}
+
+// handlePatternSpawn loads .vfimg pattern and spawns as composite wall
+func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPayload) {
+	colorMode := s.world.Resources.Config.ColorMode
+
+	patternResult, err := pattern.LoadDualModePattern(payload.Path, colorMode)
+	if err != nil {
+		s.world.DebugPrint("pattern load failed: " + err.Error())
+		return
+	}
+
+	if patternResult.Empty() {
+		return
+	}
+
+	config := s.world.Resources.Config
+
+	// Create phantom head
+	headerEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{
+		X: payload.X,
+		Y: payload.Y,
+	})
+	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+		Mask: component.ProtectAll ^ component.ProtectFromDeath,
+	})
+
+	members := make([]component.MemberEntry, 0, len(patternResult.Cells))
+	count := 0
+	minX, minY := config.MapWidth, config.MapHeight
+	maxX, maxY := 0, 0
+
+	for _, cell := range patternResult.Cells {
+		x := payload.X + cell.OffsetX
+		y := payload.Y + cell.OffsetY
+
+		if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
+			continue
+		}
+
+		if s.world.Positions.IsBlocked(x, y, component.WallBlockAll) {
+			continue
+		}
+
+		entity := s.world.CreateEntity()
+		s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+
+		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
+			BlockMask: payload.BlockMask,
+			Rune:      cell.Rune,
+			FgColor:   cell.Fg,
+			BgColor:   cell.Bg,
+			RenderFg:  cell.RenderFg,
+			RenderBg:  cell.RenderBg,
+		})
+
+		s.world.Components.Member.SetComponent(entity, component.MemberComponent{
+			HeaderEntity: headerEntity,
+		})
+
+		// Members protected from destruction except OOB/death
+		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+			Mask: component.ProtectAll ^ component.ProtectFromDeath,
+		})
+
+		members = append(members, component.MemberEntry{
+			Entity:  entity,
+			OffsetX: cell.OffsetX,
+			OffsetY: cell.OffsetY,
+		})
+
+		if x < minX {
+			minX = x
+		}
+		if x > maxX {
+			maxX = x
+		}
+		if y < minY {
+			minY = y
+		}
+		if y > maxY {
+			maxY = y
+		}
+
+		count++
+	}
+
+	if count == 0 {
+		s.world.Components.Protection.RemoveEntity(headerEntity)
 		s.world.DestroyEntity(headerEntity)
 		return
 	}

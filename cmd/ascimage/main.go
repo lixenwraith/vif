@@ -16,18 +16,20 @@ import (
 
 func main() {
 	var (
-		modeStr   string
-		colorStr  string
-		width     int
-		output    string
-		fitMode   bool
-		noStatus  bool
-		zoomLevel int
+		modeStr    string
+		colorStr   string
+		width      int
+		output     string
+		dualOutput string
+		fitMode    bool
+		noStatus   bool
+		zoomLevel  int
 	)
 
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
 	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
 	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
+	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vfimg file for vi-fighter pattern system")
 	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
 	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
 	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
@@ -53,7 +55,10 @@ func main() {
 	renderMode := parseRenderMode(modeStr)
 	colorMode := parseColorMode(colorStr)
 
-	if output != "" {
+	if dualOutput != "" {
+		runDualOutput(img, renderMode, width, dualOutput)
+		return
+	} else if output != "" {
 		runFileOutput(img, renderMode, colorMode, width, output)
 	} else {
 		runInteractive(img, renderMode, colorMode, fitMode, noStatus, zoomLevel)
@@ -66,8 +71,9 @@ func printUsage() {
 	fmt.Fprintln(os.Stderr, "\nOptions:")
 	flag.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "\nModes:")
-	fmt.Fprintln(os.Stderr, "  Interactive (default): view image with zoom/pan controls")
+	fmt.Fprintln(os.Stderr, "  Dual-mode (-dual): write .vfimg for vi-fighter pattern system")
 	fmt.Fprintln(os.Stderr, "  File output (-o):      write ANSI sequences to file")
+	fmt.Fprintln(os.Stderr, "  Interactive (default): view image with zoom/pan controls")
 	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
 	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")
 	fmt.Fprintln(os.Stderr, "  f                 Toggle fit/actual size")
@@ -112,6 +118,21 @@ func parseColorMode(s string) terminal.ColorMode {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown color mode: %s, using auto\n", s)
 		return terminal.DetectColorMode()
+	}
+}
+
+func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string) {
+	if width <= 0 {
+		width = 80
+	}
+
+	dual := ascimage.ConvertImageDual(img, width, renderMode)
+	fmt.Fprintf(os.Stderr, "Dual-mode output: %dx%d cells (%d bytes)\n",
+		dual.Width, dual.Height, len(dual.Cells)*12+11)
+
+	if err := ascimage.SaveDualMode(output, dual); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing dual-mode output: %v\n", err)
+		os.Exit(1)
 	}
 }
 

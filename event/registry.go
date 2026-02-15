@@ -260,6 +260,7 @@ func InitRegistry() {
 	// Wall
 	RegisterType("EventWallSpawnRequest", EventWallSpawnRequest, &WallSpawnRequestPayload{})
 	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest, &WallCompositeSpawnRequestPayload{})
+	RegisterType("EventWallPatternSpawnRequest", EventWallPatternSpawnRequest, &WallPatternSpawnRequestPayload{})
 	RegisterType("EventWallDespawnRequest", EventWallDespawnRequest, &WallDespawnRequestPayload{})
 	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
 	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)

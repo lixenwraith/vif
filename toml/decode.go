@@ -103,9 +103,9 @@ func decodeValue(data any, val reflect.Value) error {
 		val.Set(reflect.ValueOf(data))
 
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-		// Try direct int conversion first to preserve precision
-		if i, ok := data.(int); ok {
-			val.SetInt(int64(i))
+		i, ok := toInt64(data)
+		if ok {
+			val.SetInt(i)
 		} else if f, ok := data.(float64); ok {
 			val.SetInt(int64(f))
 		} else {
