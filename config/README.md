@@ -82,6 +82,41 @@ transitions = [...]                 # Transition rules
 
 `delta` defaults to 1 if omitted.
 
+### Arithmetic Actions
+
+```toml
+{ action = "MultiplyVar", payload = { name = "var_name", delta = 2 } }
+{ action = "DivideVar", payload = { name = "var_name", delta = 2 } }
+{ action = "ModuloVar", payload = { name = "var_name", delta = 10 } }
+{ action = "ClampVar", payload = { name = "var_name", min = 0, max = 100 } }
+{ action = "CopyVar", payload = { name = "dest_var", source_var = "src_var" } }
+```
+
+Division/modulo by zero is a no-op.
+
+### Variable-to-Variable Operations
+
+Use `source_var` to reference another variable's value instead of a literal:
+
+```toml
+# Add wave_bonus to score
+{ action = "IncrementVar", payload = { name = "score", source_var = "wave_bonus" } }
+
+# Set damage to base_damage * multiplier (two steps)
+{ action = "CopyVar", payload = { name = "damage", source_var = "base_damage" } }
+{ action = "MultiplyVar", payload = { name = "damage", source_var = "multiplier" } }
+```
+
+### Clamped Operations
+
+Apply bounds with `min`/`max` (optional, independent):
+
+```toml
+{ action = "IncrementVar", payload = { name = "heat", delta = 10, max = 100 } }
+{ action = "DecrementVar", payload = { name = "energy", delta = 5, min = 0 } }
+{ action = "SetVar", payload = { name = "level", source_var = "raw_level", min = 1, max = 99 } }
+```
+
 ### System Control
 ```toml
 { action = "EnableSystem", payload = { system_name = "name" } }
@@ -112,6 +147,7 @@ transitions = [...]                 # Transition rules
 | `VarCompare`        | `var`, `op`, `value`   | FSM variable comparison              |
 | `ConfigIntCompare`  | `field`, `op`, `value` | ConfigResource int field comparison  |
 | `ConfigBoolCompare` | `field`, `value`       | ConfigResource bool field comparison |
+| `VarCompareVar`     | `var_a`, `op`, `var_b` | Compare two FSM variables            |
 
 **Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
 
@@ -156,6 +192,12 @@ Available fields for `ConfigBoolCompare`:
 | Field            | Description          |
 |------------------|----------------------|
 | `crop_on_resize` | Resize behavior flag |
+
+### Variable-to-Variable Guard
+
+```toml
+{ trigger = "Tick", target = "Victory", guard = "VarCompareVar", guard_args = { var_a = "kills", op = "gte", var_b = "target_kills" } }
+```
 
 ---
 

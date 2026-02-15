@@ -122,9 +122,12 @@ type RegionControlArgs struct {
 
 // VariableArgs holds args for variable manipulation actions
 type VariableArgs struct {
-	Name  string
-	Value int64
-	Delta int64
+	Name      string
+	Value     int64
+	Delta     int64
+	SourceVar string // If set, use this var's value instead of Value/Delta
+	Min       *int64 // Optional clamp lower bound
+	Max       *int64 // Optional clamp upper bound
 }
 
 // SystemControlArgs holds args for system enable/disable actions

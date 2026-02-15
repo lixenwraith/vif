@@ -163,7 +163,9 @@ func registerVariableActions(m *fsm.Machine[*engine.World]) {
 		if !ok || varArgs.Name == "" {
 			return
 		}
-		m.SetVar(varArgs.Name, varArgs.Value)
+		value := resolveVarValue(m, varArgs.Value, varArgs.SourceVar)
+		value = clampValue(value, varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, value)
 	})
 
 	m.RegisterAction("IncrementVar", func(world *engine.World, args any) {
@@ -172,10 +174,14 @@ func registerVariableActions(m *fsm.Machine[*engine.World]) {
 			return
 		}
 		delta := varArgs.Delta
-		if delta == 0 {
-			delta = 1 // Default increment
+		if delta == 0 && varArgs.SourceVar == "" {
+			delta = 1
 		}
-		m.IncrementVar(varArgs.Name, delta)
+		delta = resolveVarValue(m, delta, varArgs.SourceVar)
+		result := m.IncrementVar(varArgs.Name, delta)
+		if varArgs.Min != nil || varArgs.Max != nil {
+			m.SetVar(varArgs.Name, clampValue(result, varArgs.Min, varArgs.Max))
+		}
 	})
 
 	m.RegisterAction("DecrementVar", func(world *engine.World, args any) {
@@ -184,11 +190,101 @@ func registerVariableActions(m *fsm.Machine[*engine.World]) {
 			return
 		}
 		delta := varArgs.Delta
-		if delta == 0 {
-			delta = 1 // Default decrement
+		if delta == 0 && varArgs.SourceVar == "" {
+			delta = 1
 		}
-		m.IncrementVar(varArgs.Name, -delta)
+		delta = resolveVarValue(m, delta, varArgs.SourceVar)
+		result := m.IncrementVar(varArgs.Name, -delta)
+		if varArgs.Min != nil || varArgs.Max != nil {
+			m.SetVar(varArgs.Name, clampValue(result, varArgs.Min, varArgs.Max))
+		}
 	})
+
+	m.RegisterAction("MultiplyVar", func(world *engine.World, args any) {
+		varArgs, ok := args.(*fsm.VariableArgs)
+		if !ok || varArgs.Name == "" {
+			return
+		}
+		multiplier := varArgs.Delta
+		if multiplier == 0 && varArgs.SourceVar == "" {
+			multiplier = 1
+		}
+		multiplier = resolveVarValue(m, multiplier, varArgs.SourceVar)
+		result := m.GetVar(varArgs.Name) * multiplier
+		result = clampValue(result, varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, result)
+	})
+
+	m.RegisterAction("DivideVar", func(world *engine.World, args any) {
+		varArgs, ok := args.(*fsm.VariableArgs)
+		if !ok || varArgs.Name == "" {
+			return
+		}
+		divisor := varArgs.Delta
+		if divisor == 0 && varArgs.SourceVar == "" {
+			divisor = 1
+		}
+		divisor = resolveVarValue(m, divisor, varArgs.SourceVar)
+		if divisor == 0 {
+			return // No-op on division by zero
+		}
+		result := m.GetVar(varArgs.Name) / divisor
+		result = clampValue(result, varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, result)
+	})
+
+	m.RegisterAction("ModuloVar", func(world *engine.World, args any) {
+		varArgs, ok := args.(*fsm.VariableArgs)
+		if !ok || varArgs.Name == "" {
+			return
+		}
+		divisor := varArgs.Delta
+		divisor = resolveVarValue(m, divisor, varArgs.SourceVar)
+		if divisor == 0 {
+			return // No-op on modulo by zero
+		}
+		result := m.GetVar(varArgs.Name) % divisor
+		result = clampValue(result, varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, result)
+	})
+
+	m.RegisterAction("ClampVar", func(world *engine.World, args any) {
+		varArgs, ok := args.(*fsm.VariableArgs)
+		if !ok || varArgs.Name == "" {
+			return
+		}
+		result := clampValue(m.GetVar(varArgs.Name), varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, result)
+	})
+
+	m.RegisterAction("CopyVar", func(world *engine.World, args any) {
+		varArgs, ok := args.(*fsm.VariableArgs)
+		if !ok || varArgs.Name == "" || varArgs.SourceVar == "" {
+			return
+		}
+		value := m.GetVar(varArgs.SourceVar)
+		value = clampValue(value, varArgs.Min, varArgs.Max)
+		m.SetVar(varArgs.Name, value)
+	})
+}
+
+// resolveVarValue returns source var value if sourceVar is set, otherwise returns literal
+func resolveVarValue(m *fsm.Machine[*engine.World], literal int64, sourceVar string) int64 {
+	if sourceVar != "" {
+		return m.GetVar(sourceVar)
+	}
+	return literal
+}
+
+// clampValue applies optional min/max bounds
+func clampValue(value int64, minVal, maxVal *int64) int64 {
+	if minVal != nil && value < *minVal {
+		value = *minVal
+	}
+	if maxVal != nil && value > *maxVal {
+		value = *maxVal
+	}
+	return value
 }
 
 // === System Control Actions ===
@@ -313,6 +409,17 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
 			return compareInt(machine.GetVar(varName), op, value)
+		}
+	})
+
+	// VarCompareVar - compares two FSM variables
+	m.RegisterGuardFactory("VarCompareVar", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		varA, _ := args["var_a"].(string)
+		varB, _ := args["var_b"].(string)
+		op, _ := args["op"].(string)
+
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			return compareInt(machine.GetVar(varA), op, machine.GetVar(varB))
 		}
 	})
 
