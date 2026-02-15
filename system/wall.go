@@ -172,6 +172,21 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		RenderBg:  payload.RenderBg,
 	})
 
+	// Compute box char if box-drawing enabled
+	if payload.BoxStyle != component.BoxDrawNone {
+		wallComp := component.WallComponent{
+			BlockMask: payload.BlockMask,
+			Rune:      s.computeBoxChar(payload.X, payload.Y, payload.BoxStyle),
+			FgColor:   payload.FgColor,
+			BgColor:   payload.BgColor,
+			RenderFg:  payload.RenderFg,
+			RenderBg:  payload.RenderBg,
+			BoxStyle:  payload.BoxStyle,
+		}
+		s.world.Components.Wall.SetComponent(entity, wallComp)
+		s.invalidateBoxNeighbors(payload.X, payload.Y)
+	}
+
 	if payload.BlockMask != component.WallBlockNone {
 		s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: payload.X, Y: payload.Y})
 	}
@@ -517,6 +532,15 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		return // Too small for valid maze
 	}
 
+	// Resolve visual config (apply defaults if zero-value)
+	vis := payload.Visual
+	if vis.IsZero() {
+		vis = component.WallVisualConfig{
+			BgColor:  visual.RgbWallStone,
+			RenderBg: true,
+		}
+	}
+
 	// Convert event rooms to maze.RoomSpec
 	var rooms []maze.RoomSpec
 	for _, r := range payload.Rooms {
@@ -560,23 +584,43 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	}
 	result := maze.Generate(cfg)
 
+	// Track spawn bounds for box char computation
+	minX, minY := config.MapWidth, config.MapHeight
+	maxX, maxY := 0, 0
+
 	// Spawn walls for each maze wall cell
 	for my, row := range result.Grid {
 		for mx, isWall := range row {
 			if isWall {
-				s.spawnMazeBlock(
-					mx*payload.CellWidth,
-					my*payload.CellHeight,
-					payload.CellWidth,
-					payload.CellHeight,
-				)
+				bx := mx * payload.CellWidth
+				by := my * payload.CellHeight
+				s.spawnMazeBlock(bx, by, payload.CellWidth, payload.CellHeight, payload.BlockMask, &vis)
+
+				// Track bounds
+				if bx < minX {
+					minX = bx
+				}
+				if bx+payload.CellWidth > maxX {
+					maxX = bx + payload.CellWidth
+				}
+				if by < minY {
+					minY = by
+				}
+				if by+payload.CellHeight > maxY {
+					maxY = by + payload.CellHeight
+				}
 			}
 		}
 	}
+
+	// Post-spawn box char computation
+	if vis.BoxStyle != component.BoxDrawNone && maxX > minX && maxY > minY {
+		s.computeBoxCharsInArea(minX, minY, maxX-minX, maxY-minY, vis.BoxStyle)
+	}
 }
 
-// spawnMazeBlock creates a rectangular wall block
-func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
+// spawnMazeBlock creates a rectangular wall block with visual config
+func (s *WallSystem) spawnMazeBlock(x, y, width, height int, mask component.WallBlockMask, vis *component.WallVisualConfig) {
 	config := s.world.Resources.Config
 
 	for dy := 0; dy < height; dy++ {
@@ -595,11 +639,55 @@ func (s *WallSystem) spawnMazeBlock(x, y, width, height int) {
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: px, Y: py})
 
 			s.world.Components.Wall.SetComponent(entity, component.WallComponent{
-				BlockMask: component.WallBlockAll,
-				BgColor:   visual.RgbWallStone,
-				RenderFg:  false,
-				RenderBg:  true,
+				BlockMask: mask,
+				Rune:      vis.Char, // Will be overwritten by computeBoxCharsInArea if BoxStyle set
+				FgColor:   vis.FgColor,
+				BgColor:   vis.BgColor,
+				RenderFg:  vis.RenderFg,
+				RenderBg:  vis.RenderBg,
+				BoxStyle:  vis.BoxStyle,
 			})
+		}
+	}
+}
+
+// computeBoxCharsInArea recomputes box-drawing characters for walls in rectangular area
+// Called after bulk wall spawns to resolve neighbor topology
+func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style component.BoxDrawStyle) {
+	if style == component.BoxDrawNone {
+		return
+	}
+
+	config := s.world.Resources.Config
+
+	// Clamp to map bounds
+	endX := x + width
+	endY := y + height
+	if x < 0 {
+		x = 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	if endX > config.MapWidth {
+		endX = config.MapWidth
+	}
+	if endY > config.MapHeight {
+		endY = config.MapHeight
+	}
+
+	// Iterate cells in area
+	for cy := y; cy < endY; cy++ {
+		for cx := x; cx < endX; cx++ {
+			entities := s.world.Positions.GetAllEntityAt(cx, cy)
+			for _, e := range entities {
+				wall, ok := s.world.Components.Wall.GetComponent(e)
+				if !ok || wall.BoxStyle != style {
+					continue
+				}
+				wall.Rune = s.computeBoxChar(cx, cy, style)
+				s.world.Components.Wall.SetComponent(e, wall)
+			}
 		}
 	}
 }
@@ -612,4 +700,168 @@ func (s *WallSystem) handleDespawnAllSilent() {
 	}
 	// Direct destruction without protection check - death pipeline freezes on large map clears
 	s.world.DestroyEntitiesBatch(wallEntities)
+}
+
+// --- Box ---
+
+// Box-drawing neighbor bitmask: N=1, E=2, S=4, W=8
+const (
+	boxNeighborN uint8 = 1
+	boxNeighborE uint8 = 2
+	boxNeighborS uint8 = 4
+	boxNeighborW uint8 = 8
+)
+
+// computeBoxChar returns appropriate box character based on neighbor topology
+// Uses void-aware arm selection:
+// - Edges (1 cardinal void): arms parallel to boundary
+// - Corners (2 adjacent voids): arms toward interior walls
+// - Inner corners (all cardinals wall, diagonal void): arms toward cardinal neighbors adjacent to void
+func (s *WallSystem) computeBoxChar(x, y int, style component.BoxDrawStyle) rune {
+	if style == component.BoxDrawNone {
+		return 0
+	}
+
+	// Identify cardinal voids and walls
+	// Unrolled for performance
+	var voidBits, wallBits uint8
+
+	// North (0, -1)
+	if s.hasWallWithStyle(x, y-1, style) {
+		wallBits |= boxNeighborN
+	} else {
+		voidBits |= boxNeighborN
+	}
+	// East (1, 0)
+	if s.hasWallWithStyle(x+1, y, style) {
+		wallBits |= boxNeighborE
+	} else {
+		voidBits |= boxNeighborE
+	}
+	// South (0, 1)
+	if s.hasWallWithStyle(x, y+1, style) {
+		wallBits |= boxNeighborS
+	} else {
+		voidBits |= boxNeighborS
+	}
+	// West (-1, 0)
+	if s.hasWallWithStyle(x-1, y, style) {
+		wallBits |= boxNeighborW
+	} else {
+		voidBits |= boxNeighborW
+	}
+
+	// Outer perimeter: at least one cardinal void
+	if voidBits != 0 {
+		var mask uint8
+		voidCount := popCount8(voidBits)
+
+		if voidCount == 1 {
+			// Edge: arms perpendicular to the single void
+			switch voidBits {
+			case boxNeighborN, boxNeighborS:
+				mask = (boxNeighborE | boxNeighborW) & wallBits
+			case boxNeighborE, boxNeighborW:
+				mask = (boxNeighborN | boxNeighborS) & wallBits
+			}
+		} else {
+			// Corner (2 adjacent), corridor (2 opposite), peninsula (3): arms toward all walls
+			mask = wallBits
+		}
+
+		if style == component.BoxDrawDouble {
+			return visual.BoxDrawDoubleLUT[mask]
+		}
+		return visual.BoxDrawSingleLUT[mask]
+	}
+
+	// Inner corner: all cardinals are walls, check diagonals for voids
+	// To preserve wall continuity, we must connect the two cardinal neighbors
+	// that border the diagonal void.
+	var mask uint8
+
+	// NE Void (1, -1) -> Neighbors N and E are adjacent -> Connect N|E
+	if !s.hasWallWithStyle(x+1, y-1, style) {
+		mask |= boxNeighborN | boxNeighborE
+	}
+	// SE Void (1, 1) -> Neighbors S and E are adjacent -> Connect S|E
+	if !s.hasWallWithStyle(x+1, y+1, style) {
+		mask |= boxNeighborS | boxNeighborE
+	}
+	// SW Void (-1, 1) -> Neighbors S and W are adjacent -> Connect S|W
+	if !s.hasWallWithStyle(x-1, y+1, style) {
+		mask |= boxNeighborS | boxNeighborW
+	}
+	// NW Void (-1, -1) -> Neighbors N and W are adjacent -> Connect N|W
+	if !s.hasWallWithStyle(x-1, y-1, style) {
+		mask |= boxNeighborN | boxNeighborW
+	}
+
+	if mask == 0 {
+		return 0 // True interior (all 8 neighbors are walls)
+	}
+
+	if style == component.BoxDrawDouble {
+		return visual.BoxDrawDoubleLUT[mask]
+	}
+	return visual.BoxDrawSingleLUT[mask]
+}
+
+// popCount8 returns number of set bits in uint8
+func popCount8(b uint8) int {
+	b = b - ((b >> 1) & 0x55)
+	b = (b & 0x33) + ((b >> 2) & 0x33)
+	return int((b + (b >> 4)) & 0x0F)
+}
+
+// hasWallWithStyle checks if position contains wall entity with matching BoxStyle
+func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bool {
+	config := s.world.Resources.Config
+	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
+		return false
+	}
+
+	entities := s.world.Positions.GetAllEntityAt(x, y)
+	for _, e := range entities {
+		if wall, ok := s.world.Components.Wall.GetComponent(e); ok {
+			if wall.BoxStyle == style {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isPerimeterWall returns true if wall at (x,y) has at least one non-wall neighbor
+func (s *WallSystem) isPerimeterWall(x, y int, style component.BoxDrawStyle) bool {
+	offsets := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
+	for _, off := range offsets {
+		if !s.hasWallWithStyle(x+off[0], y+off[1], style) {
+			return true
+		}
+	}
+	return false
+}
+
+// invalidateBoxNeighbors recomputes box chars for adjacent walls
+func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
+	config := s.world.Resources.Config
+	offsets := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
+
+	for _, off := range offsets {
+		nx, ny := x+off[0], y+off[1]
+		if nx < 0 || nx >= config.MapWidth || ny < 0 || ny >= config.MapHeight {
+			continue
+		}
+
+		entities := s.world.Positions.GetAllEntityAt(nx, ny)
+		for _, e := range entities {
+			wall, ok := s.world.Components.Wall.GetComponent(e)
+			if !ok || wall.BoxStyle == component.BoxDrawNone {
+				continue
+			}
+			wall.Rune = s.computeBoxChar(nx, ny, wall.BoxStyle)
+			s.world.Components.Wall.SetComponent(e, wall)
+		}
+	}
 }

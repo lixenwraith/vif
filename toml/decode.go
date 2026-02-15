@@ -112,6 +112,16 @@ func decodeValue(data any, val reflect.Value) error {
 			return fmt.Errorf("cannot convert %T to int", data)
 		}
 
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		i, ok := toInt64(data)
+		if !ok {
+			return fmt.Errorf("cannot convert %T to uint", data)
+		}
+		if i < 0 {
+			return fmt.Errorf("cannot convert negative value %d to uint", i)
+		}
+		val.SetUint(uint64(i))
+
 	case reflect.Float32, reflect.Float64:
 		f, ok := toFloat(data)
 		if ok {
@@ -168,6 +178,35 @@ func decodeStruct(data map[string]any, val reflect.Value) error {
 		}
 	}
 	return nil
+}
+
+// toInt64 converts numeric types to int64
+func toInt64(v any) (int64, bool) {
+	switch i := v.(type) {
+	case int:
+		return int64(i), true
+	case int8:
+		return int64(i), true
+	case int16:
+		return int64(i), true
+	case int32:
+		return int64(i), true
+	case int64:
+		return i, true
+	case uint:
+		return int64(i), true
+	case uint8:
+		return int64(i), true
+	case uint16:
+		return int64(i), true
+	case uint32:
+		return int64(i), true
+	case uint64:
+		return int64(i), true
+	case float64:
+		return int64(i), true
+	}
+	return 0, false
 }
 
 func toFloat(v any) (float64, bool) {

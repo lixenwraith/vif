@@ -528,58 +528,59 @@ type MissileSpawnRequestPayload struct {
 
 // WallSpawnRequestPayload contains parameters for single wall cell creation
 type WallSpawnRequestPayload struct {
-	X         int
-	Y         int
-	BlockMask component.WallBlockMask
-	Char      rune
-	FgColor   terminal.RGB
-	BgColor   terminal.RGB
-	RenderFg  bool
-	RenderBg  bool
+	X         int                     `toml:"x"`
+	Y         int                     `toml:"y"`
+	BlockMask component.WallBlockMask `toml:"block_mask"`
+	Char      rune                    `toml:"char"`
+	FgColor   terminal.RGB            `toml:"fg_color"`
+	BgColor   terminal.RGB            `toml:"bg_color"`
+	RenderFg  bool                    `toml:"render_fg"`
+	RenderBg  bool                    `toml:"render_bg"`
+	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 }
 
 // WallCompositeSpawnRequestPayload contains parameters for multi-cell wall structure
-// Uses Header/Member pattern for lifecycle management
 type WallCompositeSpawnRequestPayload struct {
-	X         int // Anchor position
-	Y         int
-	BlockMask component.WallBlockMask // Applied to all cells
-	Cells     []component.WallCellDef
+	X         int                     `toml:"x"` // Anchor position
+	Y         int                     `toml:"y"`
+	BlockMask component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+	Cells     []component.WallCellDef `toml:"cells"`
+	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Applied to all cells
 }
 
 // WallDespawnRequestPayload contains parameters for wall removal
 type WallDespawnRequestPayload struct {
-	X      int
-	Y      int
-	Width  int  // 0 = single cell
-	Height int  // 0 = single cell
-	All    bool // True = clear all walls
+	X      int  `toml:"x"`
+	Y      int  `toml:"y"`
+	Width  int  `toml:"width"`  // 0 = single cell
+	Height int  `toml:"height"` // 0 = single cell
+	All    bool `toml:"all"`    // True = clear all walls
 }
 
 // WallMaskChangeRequestPayload modifies blocking behavior of existing walls
 type WallMaskChangeRequestPayload struct {
-	X         int
-	Y         int
-	Width     int
-	Height    int
-	BlockMask component.WallBlockMask
+	X         int                     `toml:"x"`
+	Y         int                     `toml:"y"`
+	Width     int                     `toml:"width"`
+	Height    int                     `toml:"height"`
+	BlockMask component.WallBlockMask `toml:"block_mask"`
 }
 
 // WallSpawnedPayload notifies of wall creation completion
 type WallSpawnedPayload struct {
-	X            int
-	Y            int
-	Width        int
-	Height       int
-	Count        int
-	HeaderEntity core.Entity // 0 for single walls
+	X            int         `toml:"x"`
+	Y            int         `toml:"y"`
+	Width        int         `toml:"width"`
+	Height       int         `toml:"height"`
+	Count        int         `toml:"count"`
+	HeaderEntity core.Entity `toml:"header_entity"` // 0 for single walls
 }
 
 // FadeoutSpawnPayload contains parameters for single fadeout effect
 type FadeoutSpawnPayload struct {
-	X       int
-	Y       int
-	Char    rune // 0 = bg-only
+	X       int  `toml:"x"`
+	Y       int  `toml:"y"`
+	Char    rune `toml:"char"` // 0 = bg-only
 	FgColor terminal.RGB
 	BgColor terminal.RGB
 }
@@ -648,9 +649,11 @@ type MazeRoomSpec struct {
 
 // MazeSpawnRequestPayload configures maze generation
 type MazeSpawnRequestPayload struct {
-	CellWidth  int     `toml:"cell_width"`
-	CellHeight int     `toml:"cell_height"`
-	Braiding   float64 `toml:"braiding"`
+	CellWidth  int                        `toml:"cell_width"`
+	CellHeight int                        `toml:"cell_height"`
+	Braiding   float64                    `toml:"braiding"`
+	BlockMask  component.WallBlockMask    `toml:"block_mask"`
+	Visual     component.WallVisualConfig `toml:"visual"`
 	// Room generation
 	RoomCount         int            `toml:"room_count"`
 	Rooms             []MazeRoomSpec `toml:"rooms"`
@@ -660,9 +663,11 @@ type MazeSpawnRequestPayload struct {
 
 // BulletSpawnRequestPayload requests creation of a linear projectile
 type BulletSpawnRequestPayload struct {
-	OriginX, OriginY int64 // Q32.32 spawn position
-	VelX, VelY       int64 // Q32.32 velocity
-	Owner            core.Entity
-	MaxLifetime      time.Duration
-	Damage           component.BulletDamage
+	OriginX     int64                  `toml:"origin_x"` // Q32.32 spawn position
+	OriginY     int64                  `toml:"origin_y"`
+	VelX        int64                  `toml:"vel_x"`
+	VelY        int64                  `toml:"vel_y"` // Q32.32 velocity
+	Owner       core.Entity            `toml:"owner"`
+	MaxLifetime time.Duration          `toml:"max_lifetime"`
+	Damage      component.BulletDamage `toml:"damage"`
 }

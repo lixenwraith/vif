@@ -10,7 +10,9 @@ const (
 
 // RGB represents a 24-bit color
 type RGB struct {
-	R, G, B uint8
+	R uint8 `toml:"r"`
+	G uint8 `toml:"g"`
+	B uint8 `toml:"b"`
 }
 
 // RGBBlack is the zero value black color

@@ -16,6 +16,15 @@ const (
 	WallBlockAll      WallBlockMask = 0xFF
 )
 
+// BoxDrawStyle defines box-drawing character set
+type BoxDrawStyle uint8
+
+const (
+	BoxDrawNone   BoxDrawStyle = 0
+	BoxDrawSingle BoxDrawStyle = 1
+	BoxDrawDouble BoxDrawStyle = 2
+)
+
 // WallComponent marks an entity as a wall/obstacle with visual properties
 type WallComponent struct {
 	BlockMask WallBlockMask
@@ -28,6 +37,9 @@ type WallComponent struct {
 	// Background visual (cell fill)
 	BgColor  terminal.RGB
 	RenderBg bool
+
+	// Box-drawing: when non-zero, Rune is computed from neighbor topology
+	BoxStyle BoxDrawStyle
 }
 
 // NeedsRender returns true if wall has any visual component
@@ -39,9 +51,30 @@ func (w *WallComponent) NeedsRender() bool {
 type WallCellDef struct {
 	OffsetX  int
 	OffsetY  int
-	Char     rune
+	Char     rune // Ignored if BoxStyle set on parent payload
 	FgColor  terminal.RGB
 	BgColor  terminal.RGB
 	RenderFg bool
 	RenderBg bool
+}
+
+// WallVisualConfig defines visual properties for wall rendering
+// Zero value struct signals use of system defaults
+type WallVisualConfig struct {
+	Char     rune         `toml:"char"`
+	FgColor  terminal.RGB `toml:"fg_color"`
+	BgColor  terminal.RGB `toml:"bg_color"`
+	RenderFg bool         `toml:"render_fg"`
+	RenderBg bool         `toml:"render_bg"`
+	BoxStyle BoxDrawStyle `toml:"box_style"`
+}
+
+// IsZero returns true if no visual properties are explicitly set
+func (c WallVisualConfig) IsZero() bool {
+	return c.Char == 0 &&
+		c.FgColor == (terminal.RGB{}) &&
+		c.BgColor == (terminal.RGB{}) &&
+		!c.RenderFg &&
+		!c.RenderBg &&
+		c.BoxStyle == BoxDrawNone
 }

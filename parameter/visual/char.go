@@ -125,3 +125,43 @@ const (
 	BorderDoubleHorizontalUp   = '╩' // U+2569
 	BorderDoubleCross          = '╬' // U+256C
 )
+
+// BoxDrawSingleLUT maps neighbor mask to single-line box character
+var BoxDrawSingleLUT = [16]rune{
+	0:  '┼', // Isolated
+	1:  '│', // N
+	2:  '─', // E
+	3:  '└', // N+E
+	4:  '│', // S
+	5:  '│', // N+S
+	6:  '┌', // E+S
+	7:  '├', // N+E+S
+	8:  '─', // W
+	9:  '┘', // N+W
+	10: '─', // E+W
+	11: '┴', // N+E+W
+	12: '┐', // S+W
+	13: '┤', // N+S+W
+	14: '┬', // E+S+W
+	15: '┼', // All
+}
+
+// BoxDrawDoubleLUT maps neighbor mask to double-line box character
+var BoxDrawDoubleLUT = [16]rune{
+	0:  '╬', // Isolated
+	1:  '║', // N
+	2:  '═', // E
+	3:  '╚', // N+E
+	4:  '║', // S
+	5:  '║', // N+S
+	6:  '╔', // E+S
+	7:  '╠', // N+E+S
+	8:  '═', // W
+	9:  '╝', // N+W
+	10: '═', // E+W
+	11: '╩', // N+E+W
+	12: '╗', // S+W
+	13: '╣', // N+S+W
+	14: '╦', // E+S+W
+	15: '╬', // All
+}
