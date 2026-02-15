@@ -27,6 +27,7 @@ var (
 	flagAudioMute   = flag.Bool("am", false, "Start with audio muted")
 	flagAudioUnmute = flag.Bool("au", false, "Start with audio unmuted")
 	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
+	flagGameScript  = flag.String("g", "", "Game FSM script path (TOML)")
 )
 
 func main() {
@@ -138,8 +139,8 @@ func main() {
 	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
-	// Load FSM Config: external config with embedded fallback
-	if err := clockScheduler.LoadFSMAuto(asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+	// Load FSM Config: CLI path > external config > embedded fallback
+	if err := clockScheduler.LoadFSMAuto(*flagGameScript, asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
 		panic(fmt.Sprintf("failed to load FSM: %v", err))
 	}
 

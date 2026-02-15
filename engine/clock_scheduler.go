@@ -143,14 +143,14 @@ func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Ma
 	return nil
 }
 
-// LoadFSMAuto initializes HFSM with auto-detection of external config
-// Falls back to embedded config if external not found
-func (cs *ClockScheduler) LoadFSMAuto(embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
+// LoadFSMAuto initializes HFSM with priority: customPath > external detection > embedded
+// customPath is used if non-empty, otherwise falls back to auto-detection
+func (cs *ClockScheduler) LoadFSMAuto(customPath, embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
 	// Register Actions/Guards
 	registerComponents(cs.fsm)
 
-	// Load with auto-detection
-	if err := fsm.LoadConfigAuto(cs.fsm, embeddedFallback); err != nil {
+	// Load with priority resolution
+	if err := fsm.LoadConfigAuto(cs.fsm, customPath, embeddedFallback); err != nil {
 		return fmt.Errorf("failed to load FSM: %w", err)
 	}
 

@@ -14,7 +14,9 @@ import (
 
 // World contains all entities and their components using typed stores
 type World struct {
-	mu           sync.RWMutex
+	_ sync.RWMutex
+	// mu           sync.RWMutex
+	mu           WorldMutex
 	nextEntityID core.Entity
 
 	Resources *Resource
@@ -22,8 +24,9 @@ type World struct {
 	Components Component
 	Positions  *Position
 
-	systems     []System
-	updateMutex sync.Mutex
+	systems []System
+	// updateMutex sync.Mutex
+	updateMutex WorldMutex
 
 	// Stats
 	destroyedCount atomic.Int64

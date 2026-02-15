@@ -8,12 +8,39 @@ import (
 	"github.com/lixenwraith/vi-fighter/toml"
 )
 
-// LoadConfigAuto tries external config from DefaultConfigPath, falls back to embedded
-func LoadConfigAuto[T any](m *Machine[T], embeddedFallback string) error {
+// LoadConfigAuto loads FSM config with priority: customPath > DefaultConfigPath > embedded
+func LoadConfigAuto[T any](m *Machine[T], customPath, embeddedFallback string) error {
+	// Priority 1: Custom path from CLI
+	if customPath != "" {
+		return LoadConfigFromPath(m, customPath)
+	}
+
+	// Priority 2: Default external config
 	if fileExists(DefaultConfigPath) {
 		return LoadConfigFromDir(m, DefaultConfigDir)
 	}
+
+	// Priority 3: Embedded fallback
 	return m.LoadConfig([]byte(embeddedFallback))
+}
+
+// LoadConfigFromPath loads FSM config from an arbitrary file path
+// Region file includes are resolved relative to the config file's directory
+func LoadConfigFromPath[T any](m *Machine[T], configPath string) error {
+	if !fileExists(configPath) {
+		return fmt.Errorf("config file not found: %s", configPath)
+	}
+
+	// Extract directory and filename for include resolution
+	configDir := path.Dir(configPath)
+	configFile := path.Base(configPath)
+
+	visited := make(map[string]bool)
+	merged, err := loadAndResolve(configDir, configFile, visited)
+	if err != nil {
+		return fmt.Errorf("failed to load FSM config from %s: %w", configPath, err)
+	}
+	return m.LoadConfigFromMap(merged)
 }
 
 // LoadConfigFromDir loads game.toml from configDir and resolves all file includes
