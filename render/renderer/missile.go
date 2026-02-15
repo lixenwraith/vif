@@ -25,7 +25,7 @@ type missileRenderFunc func(
 
 func NewMissileRenderer(ctx *engine.GameContext) *MissileRenderer {
 	r := &MissileRenderer{gameCtx: ctx}
-	if ctx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderMissile = r.renderMissile256
 	} else {
 		r.renderMissile = r.renderMissileTrueColor

@@ -325,7 +325,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 		s.world.Components.Combat.SetComponent(entity, combatComp)
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
+			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
 		})
 	}
 }
@@ -525,7 +525,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		s.world.Components.Combat.SetComponent(entity, combatComp)
 		// TODO: centralize protection via entity factory
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-			Mask: component.ProtectFromDrain | component.ProtectFromDeath,
+			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
 		})
 	}
 }

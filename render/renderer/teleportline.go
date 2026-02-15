@@ -27,7 +27,7 @@ type TeleportLineRenderer struct {
 func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
 	return &TeleportLineRenderer{
 		gameCtx: ctx,
-		is256:   ctx.World.Resources.Render.ColorMode == terminal.ColorMode256,
+		is256:   ctx.World.Resources.Config.ColorMode == terminal.ColorMode256,
 	}
 }
 

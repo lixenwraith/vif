@@ -30,7 +30,7 @@ func NewHealthBarRenderer(gameCtx *engine.GameContext) *HealthBarRenderer {
 		position: visual.HealthBarPosDefault,
 	}
 
-	if gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderBar = r.renderCell256
 	} else {
 		r.renderBar = r.renderCellTrueColor

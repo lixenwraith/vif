@@ -315,7 +315,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 					continue
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromDrain != 0 {
+					if prot.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}
 				}
@@ -387,7 +387,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
 			})
 
 			s.world.Components.Member.SetComponent(entity, component.MemberComponent{

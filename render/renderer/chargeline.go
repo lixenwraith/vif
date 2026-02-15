@@ -20,7 +20,7 @@ type ChargeLineRenderer struct {
 func NewChargeLineRenderer(ctx *engine.GameContext) *ChargeLineRenderer {
 	return &ChargeLineRenderer{
 		gameCtx: ctx,
-		is256:   ctx.World.Resources.Render.ColorMode == terminal.ColorMode256,
+		is256:   ctx.World.Resources.Config.ColorMode == terminal.ColorMode256,
 	}
 }
 

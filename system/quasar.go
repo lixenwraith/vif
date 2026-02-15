@@ -316,7 +316,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 				}
 				// Check protection
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromDrain != 0 {
+					if prot.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}
 				}
@@ -398,7 +398,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 			// MemberEntries protected from decay/delete but not from death (composite manages lifecycle)
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
+				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
 			})
 
 			// Backlink to header
@@ -749,7 +749,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 
 				// Check protection
 				if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-					if protComp.Mask == component.ProtectAll || protComp.Mask.Has(component.ProtectFromDrain) {
+					if protComp.Mask == component.ProtectAll || protComp.Mask.Has(component.ProtectFromSpecies) {
 						continue
 					}
 				}

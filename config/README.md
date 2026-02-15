@@ -102,23 +102,25 @@ transitions = [...]                 # Transition rules
 
 ### Factory Guards (parameterized)
 
-| Guard | Args | Description |
-|-------|------|-------------|
-| `StateTimeExceeds` | `ms` | Time in current state ≥ ms |
-| `StatusBoolEquals` | `key`, `value` | Status registry bool equals value |
-| `StatusIntCompare` | `key`, `op`, `value` | Status registry int comparison |
-| `RegionExists` | `region` | Region is currently active |
-| `VarEquals` | `var`, `value` | FSM variable equals value |
-| `VarCompare` | `var`, `op`, `value` | FSM variable comparison |
+| Guard               | Args                   | Description                          |
+|---------------------|------------------------|--------------------------------------|
+| `StateTimeExceeds`  | `ms`                   | Time in current state ≥ ms           |
+| `StatusBoolEquals`  | `key`, `value`         | Status registry bool equals value    |
+| `StatusIntCompare`  | `key`, `op`, `value`   | Status registry int comparison       |
+| `RegionExists`      | `region`               | Region is currently active           |
+| `VarEquals`         | `var`, `value`         | FSM variable equals value            |
+| `VarCompare`        | `var`, `op`, `value`   | FSM variable comparison              |
+| `ConfigIntCompare`  | `field`, `op`, `value` | ConfigResource int field comparison  |
+| `ConfigBoolCompare` | `field`, `value`       | ConfigResource bool field comparison |
 
 **Operators (`op`):** `eq`, `neq`, `gt`, `gte`, `lt`, `lte`
 
 ### Static Guards
 
-| Guard | Description |
-|-------|-------------|
-| `AlwaysTrue` | Always passes |
-| `StateTimeExceeds2s` | Time in state > 2s |
+| Guard                 | Description         |
+|-----------------------|---------------------|
+| `AlwaysTrue`          | Always passes       |
+| `StateTimeExceeds2s`  | Time in state > 2s  |
 | `StateTimeExceeds10s` | Time in state > 10s |
 
 ---
@@ -132,6 +134,38 @@ Inject FSM variable values into event payloads:
 ```
 
 Supported field types: `int`, `int64`, `uint`, `float64`
+
+---
+
+## Config Fields
+
+Available fields for `ConfigIntCompare`:
+
+| Field             | Description                            |
+|-------------------|----------------------------------------|
+| `color_mode`      | Render mode (0=256-color, 1=TrueColor) |
+| `map_width`       | Simulation bounds width                |
+| `map_height`      | Simulation bounds height               |
+| `viewport_width`  | Terminal visible width                 |
+| `viewport_height` | Terminal visible height                |
+| `camera_x`        | Camera X offset                        |
+| `camera_y`        | Camera Y offset                        |
+
+Available fields for `ConfigBoolCompare`:
+
+| Field            | Description          |
+|------------------|----------------------|
+| `crop_on_resize` | Resize behavior flag |
+
+---
+
+## Game Time
+
+`time.game_elapsed_ms` available via `StatusIntCompare` (resets each game session):
+
+```toml
+{ trigger = "Tick", target = "LateGame", guard = "StatusIntCompare", guard_args = { key = "time.game_elapsed_ms", op = "gte", value = 60000 } }
+```
 
 ---
 

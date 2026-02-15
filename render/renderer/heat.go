@@ -26,7 +26,7 @@ func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
 		gameCtx: ctx,
 	}
 
-	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderCell = r.cell256
 	} else {
 		r.renderCell = r.cellTrueColor

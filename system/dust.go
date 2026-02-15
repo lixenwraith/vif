@@ -800,7 +800,7 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 	// Protection component
 	protComp := component.ProtectionComponent{
-		Mask: component.ProtectFromDrain,
+		Mask: component.ProtectFromSpecies,
 	}
 
 	// Sigil for rendering

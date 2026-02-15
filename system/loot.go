@@ -384,7 +384,7 @@ func (s *LootSystem) spawnLoot(lootType component.LootType, x, y int) {
 
 	// Protection
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDecay | component.ProtectFromDelete,
+		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
 	})
 }
 

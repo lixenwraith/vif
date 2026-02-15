@@ -149,7 +149,7 @@ type ShieldRenderer struct {
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	return &ShieldRenderer{
 		gameCtx: gameCtx,
-		painter: NewShieldPainter(gameCtx.World.Resources.Render.ColorMode),
+		painter: NewShieldPainter(gameCtx.World.Resources.Config.ColorMode),
 	}
 }
 

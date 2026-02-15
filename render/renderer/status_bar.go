@@ -43,7 +43,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 	return &StatusBarRenderer{
 		gameCtx: gameCtx,
 
-		colorMode: gameCtx.World.Resources.Render.ColorMode,
+		colorMode: gameCtx.World.Resources.Config.ColorMode,
 
 		statFPS:        statusReg.Ints.Get("engine.fps"),
 		statAPM:        statusReg.Ints.Get("engine.apm"),

@@ -101,7 +101,7 @@ func main() {
 	// 10. Render Orchestrator
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
-	ctx.World.Resources.Render = &engine.RenderConfig{ColorMode: colorMode}
+	ctx.World.Resources.Config.ColorMode = colorMode
 
 	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
 

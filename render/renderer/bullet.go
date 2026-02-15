@@ -23,7 +23,7 @@ type BulletRenderer struct {
 
 func NewBulletRenderer(gameCtx *engine.GameContext) *BulletRenderer {
 	r := &BulletRenderer{gameCtx: gameCtx}
-	if gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderBullet = r.renderBullet256
 	} else {
 		r.renderBullet = r.renderBulletTrueColor

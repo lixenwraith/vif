@@ -30,7 +30,7 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 		gameCtx: ctx,
 	}
 
-	if r.gameCtx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if r.gameCtx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderLightning = r.renderLightning256
 	} else {
 		r.renderLightning = r.renderLightningTrueColor

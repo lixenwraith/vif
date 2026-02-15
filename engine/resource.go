@@ -18,7 +18,6 @@ type Resource struct {
 	Game   *GameStateResource
 	Player *PlayerResource
 	Event  *EventQueueResource
-	Render *RenderConfig
 
 	// Telemetry
 	Status *status.Registry
@@ -66,30 +65,28 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 type ConfigResource struct {
 	// Map Dimensions (simulation bounds)
 	// Defines playable area within the fixed spatial grid
-	MapWidth  int
-	MapHeight int
+	MapWidth  int `toml:"map_width"`
+	MapHeight int `toml:"map_height"`
 
 	// Viewport Dimensions (render window)
 	// Terminal-derived visible area; may differ from Map
-	ViewportWidth  int
-	ViewportHeight int
+	ViewportWidth  int `toml:"viewport_width"`
+	ViewportHeight int `toml:"viewport_height"`
 
 	// Camera Position (top-left corner of viewport in map coordinates)
 	// When Map > Viewport: scrollable, clamped to [0, Map - Viewport]
 	// When Map <= Viewport: fixed at 0, map centered by renderer
-	CameraX int
-	CameraY int
+	CameraX int `toml:"camera_x"`
+	CameraY int `toml:"camera_y"`
 
 	// CropOnResize controls terminal resize behavior
 	// true: Map resizes to match Viewport, OOB entities destroyed
 	// false: Map persists, Viewport/Camera updated, entities preserved
-	CropOnResize bool
-}
+	CropOnResize bool `toml:"crop_on_resize"`
 
-// RenderConfig holds configuration for the rendering pipeline
-type RenderConfig struct {
-	// Color Configuration
-	ColorMode terminal.ColorMode // 0=256, 1=TrueColor
+	// ColorMode for rendering pipeline (256-color vs TrueColor)
+	// Set after terminal initialization
+	ColorMode terminal.ColorMode `toml:"color_mode"`
 }
 
 // EventQueueResource wraps the event queue for systems access

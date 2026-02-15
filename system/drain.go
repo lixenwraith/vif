@@ -1161,7 +1161,7 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Check protection before any collision handling
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		if protComp.Mask.Has(component.ProtectFromDrain) {
+		if protComp.Mask.Has(component.ProtectFromSpecies) {
 			return
 		}
 	}

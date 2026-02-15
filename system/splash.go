@@ -277,7 +277,7 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	entity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(entity, splashComp)
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
+		Mask: component.ProtectFromSpecies | component.ProtectFromDelete,
 	})
 }
 
@@ -391,7 +391,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	newEntity := s.world.CreateEntity()
 	s.world.Components.Splash.SetComponent(newEntity, splashComp)
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDelete,
+		Mask: component.ProtectFromSpecies | component.ProtectFromDelete,
 	})
 }
 

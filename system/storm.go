@@ -541,7 +541,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 				}
 				// Check protection
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromDrain != 0 {
+					if prot.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}
 				}
@@ -642,7 +642,7 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 
 				// Member protection
 				s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-					Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromDrain,
+					Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
 				})
 
 				// Ablative health: per-member HP for combat damage
@@ -954,7 +954,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 				}
 
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromDrain != 0 || prot.Mask == component.ProtectAll {
+					if prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll {
 						continue
 					}
 				}

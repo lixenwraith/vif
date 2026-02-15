@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"fmt"
 	"reflect"
 	"time"
 
@@ -275,43 +276,14 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	m.RegisterGuardFactory("StatusIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		key, _ := args["key"].(string)
 		op, _ := args["op"].(string)
-		var value int64
-		switch v := args["value"].(type) {
-		case float64:
-			value = int64(v)
-		case int64:
-			value = v
-		case int:
-			value = int64(v)
-		case string:
-			// Allow string "0" for TOML compatibility
-			if v == "0" {
-				value = 0
-			}
-		}
+		value := parseIntArg(args, "value")
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
 			if !world.Resources.Status.Ints.Has(key) {
 				return false
 			}
 			current := world.Resources.Status.Ints.Get(key).Load()
-
-			switch op {
-			case "eq":
-				return current == value
-			case "neq":
-				return current != value
-			case "gt":
-				return current > value
-			case "gte":
-				return current >= value
-			case "lt":
-				return current < value
-			case "lte":
-				return current <= value
-			default:
-				return current == value
-			}
+			return compareInt(current, op, value)
 		}
 	})
 
@@ -326,15 +298,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	// VarEquals - checks if FSM variable equals value
 	m.RegisterGuardFactory("VarEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		varName, _ := args["var"].(string)
-		var value int64
-		switch v := args["value"].(type) {
-		case float64:
-			value = int64(v)
-		case int64:
-			value = v
-		case int:
-			value = int64(v)
-		}
+		value := parseIntArg(args, "value")
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
 			return machine.GetVar(varName) == value
@@ -345,35 +309,77 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	m.RegisterGuardFactory("VarCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		varName, _ := args["var"].(string)
 		op, _ := args["op"].(string)
-		var value int64
-		switch v := args["value"].(type) {
-		case float64:
-			value = int64(v)
-		case int64:
-			value = v
-		case int:
-			value = int64(v)
+		value := parseIntArg(args, "value")
+
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			return compareInt(machine.GetVar(varName), op, value)
+		}
+	})
+
+	// ConfigIntCompare - compares ConfigResource int fields
+	m.RegisterGuardFactory("ConfigIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		field, _ := args["field"].(string)
+		op, _ := args["op"].(string)
+		value := parseIntArg(args, "value")
+
+		// Validate field at registration time
+		validFields := map[string]bool{
+			"map_width": true, "map_height": true,
+			"viewport_width": true, "viewport_height": true,
+			"camera_x": true, "camera_y": true,
+			"color_mode": true,
+		}
+		if !validFields[field] {
+			panic(fmt.Sprintf("ConfigIntCompare: unknown field '%s'", field))
 		}
 
 		return func(world *engine.World, region *fsm.RegionState) bool {
-			current := machine.GetVar(varName)
-
-			switch op {
-			case "eq":
-				return current == value
-			case "neq":
-				return current != value
-			case "gt":
-				return current > value
-			case "gte":
-				return current >= value
-			case "lt":
-				return current < value
-			case "lte":
-				return current <= value
-			default:
-				return current == value
+			cfg := world.Resources.Config
+			var current int64
+			switch field {
+			case "map_width":
+				current = int64(cfg.MapWidth)
+			case "map_height":
+				current = int64(cfg.MapHeight)
+			case "viewport_width":
+				current = int64(cfg.ViewportWidth)
+			case "viewport_height":
+				current = int64(cfg.ViewportHeight)
+			case "camera_x":
+				current = int64(cfg.CameraX)
+			case "camera_y":
+				current = int64(cfg.CameraY)
+			case "color_mode":
+				current = int64(cfg.ColorMode)
 			}
+			return compareInt(current, op, value)
+		}
+	})
+
+	// ConfigBoolCompare - compares ConfigResource bool fields
+	m.RegisterGuardFactory("ConfigBoolCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		field, _ := args["field"].(string)
+		expected := true
+		if v, ok := args["value"].(bool); ok {
+			expected = v
+		}
+
+		// Validate field at registration time
+		validFields := map[string]bool{
+			"crop_on_resize": true,
+		}
+		if !validFields[field] {
+			panic(fmt.Sprintf("ConfigBoolCompare: unknown field '%s'", field))
+		}
+
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			cfg := world.Resources.Config
+			var current bool
+			switch field {
+			case "crop_on_resize":
+				current = cfg.CropOnResize
+			}
+			return current == expected
 		}
 	})
 }
@@ -392,4 +398,48 @@ func registerStaticGuards(m *fsm.Machine[*engine.World]) {
 	m.RegisterGuard("StateTimeExceeds2s", func(world *engine.World, region *fsm.RegionState) bool {
 		return region.TimeInState > 2*time.Second
 	})
+}
+
+// --- Helpers ---
+
+// parseIntArg extracts int64 value from guard args map
+// Handles TOML numeric types: float64, int64, int, and string "0"
+func parseIntArg(args map[string]any, key string) int64 {
+	v, ok := args[key]
+	if !ok {
+		return 0
+	}
+	switch val := v.(type) {
+	case float64:
+		return int64(val)
+	case int64:
+		return val
+	case int:
+		return int64(val)
+	case string:
+		if val == "0" {
+			return 0
+		}
+	}
+	return 0
+}
+
+// compareInt performs comparison operation between two int64 values
+func compareInt(current int64, op string, value int64) bool {
+	switch op {
+	case "eq":
+		return current == value
+	case "neq":
+		return current != value
+	case "gt":
+		return current > value
+	case "gte":
+		return current >= value
+	case "lt":
+		return current < value
+	case "lte":
+		return current <= value
+	default:
+		return current == value
+	}
 }

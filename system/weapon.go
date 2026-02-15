@@ -302,7 +302,7 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	}
 
 	protComp := component.ProtectionComponent{
-		Mask: component.ProtectFromDrain | component.ProtectFromDecay | component.ProtectFromDelete,
+		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
 	}
 
 	s.world.Components.Protection.SetComponent(orbEntity, protComp)

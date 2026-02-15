@@ -25,6 +25,7 @@ type ClockScheduler struct {
 	// Tick configuration
 	tickInterval     time.Duration
 	lastGameTickTime time.Time // Last tick in game time
+	gameStartTime    time.Time // Game session start for elapsed calculation
 	nextTickDeadline time.Time // Next tick deadline for drift correction
 
 	// Control channels
@@ -49,12 +50,13 @@ type ClockScheduler struct {
 	eventLoopBackoffMax int
 
 	// Cached metric pointers
-	statusReg        *status.Registry
-	statTicks        *atomic.Int64
-	statEvBackoffs   *atomic.Int64
-	statEvDispatches *atomic.Int64
-	statEntityCount  *atomic.Int64
-	statQueueLen     *atomic.Int64
+	statusReg         *status.Registry
+	statTicks         *atomic.Int64
+	statEvBackoffs    *atomic.Int64
+	statEvDispatches  *atomic.Int64
+	statEntityCount   *atomic.Int64
+	statQueueLen      *atomic.Int64
+	statGameElapsedMs *atomic.Int64
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -86,6 +88,7 @@ func NewClockScheduler(
 		tickInterval:  tickInterval,
 
 		lastGameTickTime: pausableClock.Now(),
+		gameStartTime:    pausableClock.Now(),
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -99,11 +102,12 @@ func NewClockScheduler(
 		eventLoopInterval:   parameter.EventLoopInterval,
 		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
-		statTicks:        statusReg.Ints.Get("engine.ticks"),
-		statEvBackoffs:   statusReg.Ints.Get("event.backoffs"),
-		statEvDispatches: statusReg.Ints.Get("event.dispatches"),
-		statEntityCount:  statusReg.Ints.Get("entity.count"),
-		statQueueLen:     statusReg.Ints.Get("event.queue_len"),
+		statTicks:         statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:    statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches:  statusReg.Ints.Get("event.dispatches"),
+		statEntityCount:   statusReg.Ints.Get("entity.count"),
+		statQueueLen:      statusReg.Ints.Get("event.queue_len"),
+		statGameElapsedMs: statusReg.Ints.Get("time.game_elapsed_ms"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -372,6 +376,7 @@ func (cs *ClockScheduler) executeReset() {
 	// 3. Reset Scheduler internal timing
 	cs.lastGameTickTime = cs.pausableClock.Now()
 	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
+	cs.gameStartTime = cs.lastGameTickTime
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
 	if err := cs.fsm.Reset(cs.world); err != nil {
@@ -410,14 +415,18 @@ func (cs *ClockScheduler) processTick() {
 			cs.tickInterval,
 		)
 
-		// 2. Initial Settling: Resolve everything accumulated during game tick
+		// 2. Update game elapsed time status
+		elapsedMs := now.Sub(cs.gameStartTime).Milliseconds()
+		cs.statGameElapsedMs.Store(elapsedMs)
+
+		// 3. Initial Settling: Resolve everything accumulated during game tick
 		// Ensures FSM and Systems start with a consistent, settled world
 		cs.dispatchAndProcessEvents()
 
-		// 3. FSM Update: Advance state machine (may emit new events via Actions)
+		// 4. FSM Update: Advance state machine (may emit new events via Actions)
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
-		// 4. FSM Telemetry (after update, before post-settling)
+		// 5. FSM Telemetry (after update, before post-settling)
 		// TODO: modify hard-coded main region to multi-region for complete telemetry
 		cs.statFSMName.Store(cs.fsm.GetRegionState("main"))
 		cs.statFSMElapsed.Store(int64(cs.fsm.RegionTimeInState("main")))
@@ -433,10 +442,10 @@ func (cs *ClockScheduler) processTick() {
 		}
 		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
 
-		// 5. Post-FSM Settling: Resolve events emitted by FSM state transitions
+		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
 		cs.dispatchAndProcessEvents()
 
-		// 6. System Execution: Systems run on the final, settled state for this tick
+		// 7. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()
 	})
 

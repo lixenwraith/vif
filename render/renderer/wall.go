@@ -21,7 +21,7 @@ func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
 		gameCtx: ctx,
 	}
 
-	if ctx.World.Resources.Render.ColorMode == terminal.ColorMode256 {
+	if ctx.World.Resources.Config.ColorMode == terminal.ColorMode256 {
 		r.renderCell = r.renderCell256
 	} else {
 		r.renderCell = r.renderCellTrueColor
