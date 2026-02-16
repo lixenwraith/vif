@@ -134,7 +134,7 @@ const (
 	StormBlueEffectDuration     = 2500 * time.Millisecond // 2s glow + 0.5s overlap with materialize
 	StormBlueMaterializeAt      = 0.80                    // Emit materialize at 80% progress (2s mark)
 	StormBlueGlowRotationPeriod = 400 * time.Millisecond  // ms per full rotation (5 rotations in 2s)
-	StormBlueSpawnDistanceFloat = 15.0
+	StormBlueSpawnDistanceFloat = 10.0
 )
 
 // Pre-computed green attack radii (2× circle radius)

@@ -325,6 +325,40 @@ func (m *Machine[T]) Reset(ctx T) error {
 	return m.Init(ctx)
 }
 
+// GetActiveRegionTelemetry returns telemetry data for display purposes
+// Prioritizes unpaused regions; falls back to any region if all paused
+// Returns state name, state ID, and time spent in current state
+func (m *Machine[T]) GetActiveRegionTelemetry() (stateName string, stateID StateID, timeInState time.Duration) {
+	var activeRegion *RegionState
+
+	// Find first unpaused region
+	for _, region := range m.regions {
+		if !region.Paused {
+			activeRegion = region
+			break
+		}
+	}
+
+	// Fallback: any region
+	if activeRegion == nil {
+		for _, region := range m.regions {
+			activeRegion = region
+			break
+		}
+	}
+
+	if activeRegion == nil {
+		return "", StateNone, 0
+	}
+
+	// Resolve state name from node
+	if node, ok := m.nodes[activeRegion.ActiveStateID]; ok {
+		return node.Name, activeRegion.ActiveStateID, activeRegion.TimeInState
+	}
+
+	return "", activeRegion.ActiveStateID, activeRegion.TimeInState
+}
+
 // === Variable Methods ===
 
 // GetVar returns the value of a variable (0 if not set)

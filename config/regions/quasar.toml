@@ -45,6 +45,7 @@ parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
     { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
+    { trigger = "EventGoldComplete", target = "QuasarGoldSpawn" },
     { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
     { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" },

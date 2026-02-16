@@ -425,6 +425,7 @@ func (cs *ClockScheduler) processTick() {
 		cs.statGameElapsedMs.Store(elapsedMs)
 
 		// 3. Initial Settling: Resolve everything accumulated during game tick
+
 		// Ensures FSM and Systems start with a consistent, settled world
 		cs.dispatchAndProcessEvents()
 
@@ -432,15 +433,15 @@ func (cs *ClockScheduler) processTick() {
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
 		// 5. FSM Telemetry (after update, before post-settling)
-		// TODO: modify hard-coded main region to multi-region for complete telemetry
-		cs.statFSMName.Store(cs.fsm.GetRegionState("main"))
-		cs.statFSMElapsed.Store(int64(cs.fsm.RegionTimeInState("main")))
-		if maxDur, ok := cs.fsm.StateDurations[cs.fsm.RegionStateID("main")]; ok {
+		stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
+		cs.statFSMName.Store(stateName)
+		cs.statFSMElapsed.Store(int64(timeInState))
+		if maxDur, ok := cs.fsm.StateDurations[stateID]; ok {
 			cs.statFSMMaxDur.Store(int64(maxDur))
 		} else {
 			cs.statFSMMaxDur.Store(0)
 		}
-		if idx, ok := cs.fsm.StateIndices[cs.fsm.RegionStateID("main")]; ok {
+		if idx, ok := cs.fsm.StateIndices[stateID]; ok {
 			cs.statFSMIndex.Store(int64(idx))
 		} else {
 			cs.statFSMIndex.Store(0)

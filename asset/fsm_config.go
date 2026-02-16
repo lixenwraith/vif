@@ -2,17 +2,13 @@ package asset
 
 // DefaultGameplayFSMConfig is the embedded fallback FSM TOML configuration
 const DefaultGameplayFSMConfig = `
-# === Root FSM configuration ===
-# Simplified WASM-friendly gameplay script
-
-# Global system configuration
-[systems]
-disabled_systems = ["wall", "fadeout", "navigation", "genetic", "music", "audio"]
-
 [regions.main]
 initial = "SpawnGold"
 
 [regions.quasar]
+
+[regions.storm]
+enabled_systems = ["storm"]
 
 
 # === Main gameplay region states ===
@@ -68,10 +64,7 @@ transitions = [
 [states.WaveEmit]
 parent = "Gameplay"
 on_enter = [
-    { action = "EmitEvent", event = "EventDecayWave", guard = "VarEquals", guard_args = { var = "wave_type", value = 0 } },
-    { action = "EmitEvent", event = "EventBlossomWave", guard = "VarEquals", guard_args = { var = "wave_type", value = 1 } },
-    { action = "IncrementVar", payload = { name = "wave_type", delta = 1 } },
-    { action = "ModuloVar", payload = { name = "wave_type", delta = 2 } },
+    { action = "EmitEvent", event = "EventDecayWave" },
 ]
 transitions = [
     { trigger = "Tick", target = "SpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
@@ -100,38 +93,84 @@ parent = "Root"
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
-    { action = "SetVar", payload = { name = "qwave_type", value = 0 } },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarWait" },
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },
 ]
 
-# --- QUASAR WAVE CYCLE ---
+# --- QUASAR GOLD CYCLE ---
 
-[states.QuasarWait]
-parent = "QuasarCycle"
-transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarBurstExit" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
-    { trigger = "Tick", target = "QuasarWaveEmit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
-]
-
-[states.QuasarWaveEmit]
+[states.QuasarGoldSpawn]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDecayWave", guard = "VarEquals", guard_args = { var = "qwave_type", value = 0 } },
-    { action = "EmitEvent", event = "EventBlossomWave", guard = "VarEquals", guard_args = { var = "qwave_type", value = 1 } },
-    { action = "IncrementVar", payload = { name = "qwave_type", delta = 1 } },
-    { action = "ModuloVar", payload = { name = "qwave_type", delta = 2 } },
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarBurstExit" },
+    { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
+    { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
+    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
-    { trigger = "Tick", target = "QuasarWait", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+]
+
+[states.QuasarGoldRetry]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
+    { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
+    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+]
+
+[states.QuasarGoldActive]
+parent = "QuasarCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
+    { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
+    { trigger = "EventGoldComplete", target = "GoldReward" },
+    { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
+    { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
+    { trigger = "EventQuasarDestroyed", target = "StormHandoff" },
+]
+
+# --- QUASAR REWARD ---
+
+[states.GoldReward]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, percentage = false, type = 1 } },
+]
+transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
+    { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
+    { trigger = "EventQuasarDestroyed", target = "StormHandoff" },
+    { trigger = "Tick", target = "QuasarGoldSpawn" },
+]
+
+# --- DUST ALL ---
+
+[states.QuasarDustAll]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventDustAllRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "QuasarGoldSpawn" },
+]
+
+# --- STORM HANDOFF ---
+
+[states.StormHandoff]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "SpawnRegion", region = "storm", initial_state = "StormSetup" },
+    { action = "TerminateRegion", region = "quasar" },
 ]
 
 # --- QUASAR END ---
@@ -145,20 +184,61 @@ transitions = [
     { trigger = "Tick", target = "QuasarExit" },
 ]
 
-[states.QuasarBurstExit]
+[states.QuasarExit]
 parent = "QuasarCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
+    { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "quasar" },
 ]
 
-[states.QuasarExit]
-parent = "QuasarCycle"
+
+# === Storm region states ===
+
+[states.StormCycle]
+parent = "Root"
+
+[states.StormSetup]
+parent = "StormCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventStormSpawnRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "StormActive", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.StormActive]
+parent = "StormCycle"
+transitions = [
+    { trigger = "Tick", target = "StormFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
+    { trigger = "EventStormDied", target = "StormVictory" },
+]
+
+[states.StormVictory]
+parent = "StormCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Storm Defeated!" } },
+]
+transitions = [
+    { trigger = "Tick", target = "MainHandoff", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
+[states.StormFail]
+parent = "StormCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventStormCancelRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "MainHandoff" },
+]
+
+[states.MainHandoff]
+parent = "StormCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
-    { action = "TerminateRegion", region = "quasar" },
+    { action = "TerminateRegion", region = "storm" },
 ]
 `
