@@ -696,9 +696,10 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 	// Collect alive circles
 	type circleState struct {
-		entity core.Entity
-		circle *component.StormCircleComponent
-		index  int
+		entity  core.Entity
+		circle  *component.StormCircleComponent
+		index   int
+		stunned bool
 	}
 
 	var circles []circleState
@@ -711,10 +712,16 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			stormComp.CirclesAlive[i] = false
 			continue
 		}
+		// Check stun state on circle header
+		stunned := false
+		if combatComp, ok := s.world.Components.Combat.GetComponent(stormComp.Circles[i]); ok {
+			stunned = combatComp.StunnedRemaining > 0
+		}
 		circles = append(circles, circleState{
-			entity: stormComp.Circles[i],
-			circle: &circleComp,
-			index:  i,
+			entity:  stormComp.Circles[i],
+			circle:  &circleComp,
+			index:   i,
+			stunned: stunned,
 		})
 	}
 
@@ -731,6 +738,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 	boundMaxY := vmath.FromInt(config.MapHeight - 1 - insetY)
 
 	for i := range circles {
+		// 0. Stunned circles: skip physics, velocity already zeroed by combat system
+		if circles[i].stunned {
+			// Still need to sync position to 2D components
+			s.world.Components.StormCircle.SetComponent(circles[i].entity, *circles[i].circle)
+			continue
+		}
+
 		// 1. Accumulate gravitational acceleration with repulsion
 		var accelX, accelY, accelZ int64
 		for j := range circles {
@@ -840,9 +854,22 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		}
 	}
 
-	// Inter-circle collision
+	// // Inter-circle collision
+	// for i := 0; i < len(circles); i++ {
+	// 	for j := i + 1; j < len(circles); j++ {
+	// 		s.resolveCircleCollision(circles[i].circle, circles[j].circle)
+	// 	}
+	// }
+
+	// Inter-circle collision (skip stunned circles)
 	for i := 0; i < len(circles); i++ {
+		if circles[i].stunned {
+			continue
+		}
 		for j := i + 1; j < len(circles); j++ {
+			if circles[j].stunned {
+				continue
+			}
 			s.resolveCircleCollision(circles[i].circle, circles[j].circle)
 		}
 	}

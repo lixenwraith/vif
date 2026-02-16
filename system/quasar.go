@@ -159,20 +159,39 @@ func (s *QuasarSystem) Update() {
 
 	// Combat sync: termination if zero hitpoints
 	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
-	if ok {
-		if combatComp.HitPoints <= 0 {
-			// TODO: audio effect
+	if !ok {
+		return
+	}
 
-			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Species: component.SpeciesQuasar,
-					X:       headerPos.X,
-					Y:       headerPos.Y,
-				})
-			}
-			s.terminateQuasar()
-			return
+	// Hitpoint check
+	if combatComp.HitPoints <= 0 {
+		// TODO: audio effect
+
+		if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
+			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+				Species: component.SpeciesQuasar,
+				X:       headerPos.X,
+				Y:       headerPos.Y,
+			})
 		}
+		s.terminateQuasar()
+		return
+	}
+
+	// Stun check: skip movement, reset charging state
+	if combatComp.StunnedRemaining > 0 {
+		// Cancel charging if active
+		if quasarComp.IsCharging {
+			quasarComp.IsCharging = false
+			quasarComp.ChargeRemaining = 0
+			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+			s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+				AnchorEntity: headerEntity,
+			})
+		}
+		// Note: IsZapping + IsShielded prevents stun, so no zap handling needed, until unshielded zap is implemented
+		return
 	}
 
 	// Check if cursor is within zap range

@@ -960,6 +960,14 @@ func (s *DrainSystem) updateDrainMovement() {
 		if !ok {
 			continue
 		}
+		// Stun check: skip movement if stunned
+		if combatComp.RemainingKineticImmunity > 0 || combatComp.StunnedRemaining > 0 {
+			// Still need position sync but skip homing/physics
+			if combatComp.StunnedRemaining > 0 {
+				continue
+			}
+		}
+
 		kineticComp, ok := s.world.Components.Kinetic.GetComponent(drainEntity)
 		if !ok {
 			continue
@@ -971,7 +979,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		if hasNav {
 			// TODO: remove
-			s.world.DebugPrint(DebugGeneString(&navComp))
+			// s.world.DebugPrint(DebugGeneString(&navComp))
 
 			if navComp.HasDirectPath {
 				// Open Space: Ignore grid, fly straight to cursor (Euclidean), fixing "Curve/Pinball" artifacts in open areas if only done based on flow field (at some process expense)

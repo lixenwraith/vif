@@ -39,6 +39,7 @@ const (
 	CombatAttackLightning
 	CombatAttackExplosion
 	CombatAttackMissile
+	CombatAttackPulse
 )
 
 // Effect Types
@@ -73,6 +74,9 @@ type CombatComponent struct {
 
 	// RemainingKineticImmunity is remaining immunity time for collision knockback
 	RemainingKineticImmunity time.Duration
+
+	// StunnedRemaining is remaining stun duration (movement suppressed)
+	StunnedRemaining time.Duration
 }
 
 type CombatAttackProfile struct {
@@ -120,6 +124,12 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackMissileToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackMissileToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackMissileToStorm,
+	},
+	CombatAttackPulse: {
+		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackPulseToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackPulseToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackPulseToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackPulseToStorm,
 	},
 }
 
@@ -353,4 +363,41 @@ var CombatAttackMissileToStorm = CombatAttackProfile{
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
 	CollisionProfile:   &physics.ExplosionToQuasar,
+}
+
+// Pulse weapon attack profiles (stun + minimal damage)
+var CombatAttackPulseToDrain = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityDrain,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+}
+
+var CombatAttackPulseToQuasar = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityQuasar,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+}
+
+var CombatAttackPulseToSwarm = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySwarm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+}
+
+var CombatAttackPulseToStorm = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
 }

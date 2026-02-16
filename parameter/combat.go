@@ -32,6 +32,9 @@ const (
 
 	// CombatDamageMissile is damage per missile impact
 	CombatDamageMissile = 2
+
+	// CombatDamagePulse is damage per pulse stun hit
+	CombatDamagePulse = 1
 )
 
 // Timers
@@ -116,4 +119,19 @@ const (
 
 	// MissileSplitTravelFractionFloat: parent splits after traveling this fraction (0.3 = 30%)
 	MissileSplitTravelFractionFloat = 0.3
+)
+
+// Pulse
+const (
+	// PulseStunDuration is the duration of disruptor weapon stun effect
+	PulseStunDuration = 1000 * time.Millisecond
+
+	// PulseRadiusXFloat is disruptor weapon horizontal radius (2× shield)
+	PulseRadiusXFloat = ShieldRadiusXFloat * 3.5
+
+	// PulseRadiusYFloat is disruptor weapon vertical radius (2× shield, aspect corrected)
+	PulseRadiusYFloat = ShieldRadiusYFloat * 3.5
+
+	// PulseEffectDuration is pulse visual effect duration
+	PulseEffectDuration = 250 * time.Millisecond
 )

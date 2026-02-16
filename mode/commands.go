@@ -196,6 +196,7 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: parameter.GodEnergyAmount})
 	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponRod})
 	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponLauncher})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -204,6 +205,9 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: -parameter.GodEnergyAmount})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponRod})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponLauncher})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

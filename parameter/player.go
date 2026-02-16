@@ -6,9 +6,9 @@ import (
 
 // Shield Defense Costs
 const (
-	ShieldRadiusX    = 10
-	ShieldRadiusY    = 5
-	ShieldMaxOpacity = 0.3
+	ShieldRadiusXFloat = 10.0
+	ShieldRadiusYFloat = 5.0
+	ShieldMaxOpacity   = 0.3
 
 	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active
 	ShieldPassiveEnergyPercentDrain = 1
@@ -22,10 +22,10 @@ const (
 
 // Weapon Cooldowns
 const (
-	WeaponCooldownMain     = 250 * time.Millisecond
-	WeaponCooldownRod      = 500 * time.Millisecond
-	WeaponCooldownLauncher = 1000 * time.Millisecond
-	WeaponCooldownSpray    = 2000 * time.Millisecond
+	WeaponCooldownMain      = 250 * time.Millisecond
+	WeaponCooldownRod       = 500 * time.Millisecond
+	WeaponCooldownLauncher  = 1000 * time.Millisecond
+	WeaponCooldownDisruptor = 2000 * time.Millisecond
 )
 
 // Weapon Orb Configuration

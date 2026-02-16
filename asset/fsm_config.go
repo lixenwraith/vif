@@ -133,7 +133,7 @@ transitions = [
     { trigger = "EventGoldComplete", target = "QuasarGoldReward" },
     { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
     { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
-    { trigger = "EventQuasarDestroyed", target = "StormHandoff" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
 ]
 
 # --- QUASAR GOLD REWARD ---

@@ -12,7 +12,7 @@ type WeaponType int
 const (
 	WeaponRod WeaponType = iota
 	WeaponLauncher
-	WeaponSpray
+	WeaponDisruptor
 )
 
 // WeaponComponent tracks cursor active weapons

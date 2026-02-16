@@ -190,6 +190,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("missile", func(ctx any) any {
 		return renderer.NewMissileRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
+	registry.RegisterRenderer("pulse", func(ctx any) any {
+		return renderer.NewPulseRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityField)
 	registry.RegisterRenderer("bullet", func(ctx any) any {
 		return renderer.NewBulletRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
@@ -310,6 +313,7 @@ func ActiveRenderers() []string {
 		"explosion",
 		"lightning",
 		"missile",
+		"pulse",
 		"bullet",
 		"spirit",
 		"materialize",

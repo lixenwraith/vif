@@ -34,6 +34,7 @@ type Component struct {
 	Genotype    *Store[component.GenotypeComponent]
 	Lightning   *Store[component.LightningComponent]
 	Missile     *Store[component.MissileComponent]
+	Pulse       *Store[component.PulseComponent]
 	Spirit      *Store[component.SpiritComponent]
 	Materialize *Store[component.MaterializeComponent]
 	Drain       *Store[component.DrainComponent]
@@ -80,6 +81,7 @@ func initComponents(w *World) {
 	w.Components.Genotype = NewStore[component.GenotypeComponent]()
 	w.Components.Lightning = NewStore[component.LightningComponent]()
 	w.Components.Missile = NewStore[component.MissileComponent]()
+	w.Components.Pulse = NewStore[component.PulseComponent]()
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
 	w.Components.Materialize = NewStore[component.MaterializeComponent]()
 	w.Components.Drain = NewStore[component.DrainComponent]()
@@ -127,6 +129,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Genotype.RemoveEntity(e)
 	w.Components.Lightning.RemoveEntity(e)
 	w.Components.Missile.RemoveEntity(e)
+	w.Components.Pulse.RemoveEntity(e)
 	w.Components.Spirit.RemoveEntity(e)
 	w.Components.Materialize.RemoveEntity(e)
 	w.Components.Drain.RemoveEntity(e)
@@ -173,6 +176,7 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.Genotype.RemoveBatch(entities)
 	w.Components.Lightning.RemoveBatch(entities)
 	w.Components.Missile.RemoveBatch(entities)
+	w.Components.Pulse.RemoveBatch(entities)
 	w.Components.Spirit.RemoveBatch(entities)
 	w.Components.Materialize.RemoveBatch(entities)
 	w.Components.Drain.RemoveBatch(entities)
@@ -219,6 +223,7 @@ func (w *World) wipeAll() {
 	w.Components.Genotype.ClearAllComponents()
 	w.Components.Lightning.ClearAllComponents()
 	w.Components.Missile.ClearAllComponents()
+	w.Components.Pulse.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
 	w.Components.Drain.ClearAllComponents()

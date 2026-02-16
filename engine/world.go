@@ -216,8 +216,8 @@ func (w *World) CreateCursorEntity() {
 
 	// 8. Set shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
-		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusX),
-		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusY),
+		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusXFloat),
+		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusYFloat),
 		MaxOpacity:    parameter.ShieldMaxOpacity,
 		LastDrainTime: w.Resources.Time.GameTime,
 	})

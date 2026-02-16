@@ -38,8 +38,8 @@ func init() {
 }
 
 func initPlayerShield() {
-	rx := vmath.FromFloat(parameter.ShieldRadiusX)
-	ry := vmath.FromFloat(parameter.ShieldRadiusY)
+	rx := vmath.FromFloat(parameter.ShieldRadiusXFloat)
+	ry := vmath.FromFloat(parameter.ShieldRadiusYFloat)
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
 	PlayerShieldConfig = ShieldConfig{

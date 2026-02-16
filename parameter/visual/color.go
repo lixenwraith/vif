@@ -17,6 +17,9 @@ var (
 	RgbBlue    = terminal.RGB{0, 0, 255}
 	RgbMagenta = terminal.RGB{255, 0, 255}
 
+	RgbSoftGold       = terminal.RGB{R: 255, G: 200, B: 100} // Soft gold
+	RgbElectricViolet = terminal.RGB{R: 180, G: 130, B: 255} // Electric Violet
+
 	RgbBackground = terminal.RGB{26, 27, 38} // Tokyo Night background
 
 	// terminal.RGB color definitions for glyphs - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
@@ -119,10 +122,10 @@ var (
 	RgbSwarmTeleport   = terminal.RGB{R: 220, G: 150, B: 230}
 
 	// Orb colors
-	RgbOrbRod      = terminal.RGB{0, 220, 220}   // Cyan
-	RgbOrbLauncher = terminal.RGB{255, 140, 0}   // Orange
-	RgbOrbSpray    = terminal.RGB{105, 255, 180} //
-	RgbOrbFlash    = terminal.RGB{255, 255, 255} // White flash
+	RgbOrbRod       = terminal.RGB{0, 220, 220}   // Cyan
+	RgbOrbLauncher  = terminal.RGB{255, 140, 0}   // Orange
+	RgbOrbDisruptor = terminal.RGB{100, 220, 130} // Green
+	RgbOrbFlash     = terminal.RGB{255, 255, 255} // White flash
 
 	// Parent Missile: Chrome/White
 	RgbMissileParentBody       = terminal.RGB{255, 255, 255}
@@ -138,6 +141,10 @@ var (
 	RgbMissileExplosionCore = terminal.RGB{R: 255, G: 255, B: 220} // Bright white-yellow
 	RgbMissileExplosionMid  = terminal.RGB{R: 255, G: 140, B: 40}  // Warm orange
 	RgbMissileExplosionEdge = terminal.RGB{R: 180, G: 60, B: 20}   // Dark orange-red
+
+	// Pulse effect colors (polarity-based)
+	RgbPulsePositive = terminal.RGB{R: 255, G: 250, B: 150} // Pale Yellow
+	RgbPulseNegative = terminal.RGB{R: 200, G: 120, B: 220} // Orchid
 
 	// Audio indicator colors
 	RgbAudioBothOff     = terminal.RGB{R: 180, G: 60, B: 60}  // Red: both off
@@ -179,6 +186,7 @@ var (
 	RgbWallGhost   = terminal.RGB{R: 35, G: 36, B: 48}
 
 	// Loot shield colors (defined in renderer as gradient LUT)
+
 	// Referenced here for consistency documentation only
 	RgbLootShieldBorder = terminal.RGB{R: 255, G: 105, B: 180} // Hot pink
 	RgbLootShieldInner  = terminal.RGB{R: 45, G: 12, B: 32}    // Dark

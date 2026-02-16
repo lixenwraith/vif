@@ -134,3 +134,10 @@ var (
 	LootChaseSpeed  = vmath.FromFloat(LootHomingMaxSpeedFloat)
 	LootHomingAccel = vmath.FromFloat(LootHomingAccelFloat)
 )
+
+// Pulse physics
+var (
+	PulseRadiusX                           = vmath.FromFloat(PulseRadiusXFloat)
+	PulseRadiusY                           = vmath.FromFloat(PulseRadiusYFloat)
+	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSq(PulseRadiusX, PulseRadiusY)
+)

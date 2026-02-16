@@ -53,6 +53,7 @@ var Components = []ComponentDef{
 	{"Genotype", "GenotypeComponent"},
 	{"Lightning", "LightningComponent"},
 	{"Missile", "MissileComponent"},
+	{"Pulse", "PulseComponent"},
 	{"Spirit", "SpiritComponent"},
 	{"Materialize", "MaterializeComponent"},
 
@@ -148,6 +149,7 @@ var Renderers = []RendererDef{
 	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
 	{"lightning", "NewLightningRenderer", "PriorityField"},
 	{"missile", "NewMissileRenderer", "PriorityField"},
+	{"pulse", "NewPulseRenderer", "PriorityField"},
 	{"bullet", "NewBulletRenderer", "PriorityField"},
 	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
 	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},

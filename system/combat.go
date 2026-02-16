@@ -109,6 +109,14 @@ func (s *CombatSystem) Update() {
 			continue
 		}
 
+		// Update stun timer
+		if combatComp.StunnedRemaining > 0 {
+			combatComp.StunnedRemaining -= dt
+			if combatComp.StunnedRemaining < 0 {
+				combatComp.StunnedRemaining = 0
+			}
+		}
+
 		// Update kinetic immunity timer
 		if combatComp.RemainingKineticImmunity > 0 {
 			combatComp.RemainingKineticImmunity -= dt
@@ -406,6 +414,13 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		}
 	}
 
+	// Apply stun effect
+	if combatProfile.EffectMask&component.CombatEffectStun != 0 {
+		if !targetDead {
+			s.applyStunEffect(targetEntity, &targetCombatComp)
+		}
+	}
+
 	// Chain attack for area attacks - emit per hit entity as direct attacks
 	if chainAttack := combatProfile.ChainAttack; chainAttack != nil {
 		for _, hitEntity := range payload.HitEntities {
@@ -587,4 +602,37 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	}
 
 	s.world.Components.Kinetic.SetComponent(payload.TargetEntity, targetKineticComp)
+}
+
+// applyStunEffect applies stun to target entity
+// Returns false if target is immune to stun
+func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatComp *component.CombatComponent) bool {
+	// Quasar immunity: shielded state
+	if quasarComp, ok := s.world.Components.Quasar.GetComponent(targetEntity); ok {
+		if quasarComp.IsShielded {
+			return false
+		}
+	}
+
+	// Storm circle immunity: concave (invulnerable) state
+	if circleComp, ok := s.world.Components.StormCircle.GetComponent(targetEntity); ok {
+		if !circleComp.IsConvex() {
+			return false
+		}
+	}
+
+	// Apply stun
+	targetCombatComp.StunnedRemaining = parameter.PulseStunDuration
+
+	// Clear enrage state
+	targetCombatComp.IsEnraged = false
+
+	// Zero velocity
+	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity); ok {
+		kineticComp.VelX = 0
+		kineticComp.VelY = 0
+		s.world.Components.Kinetic.SetComponent(targetEntity, kineticComp)
+	}
+
+	return true
 }

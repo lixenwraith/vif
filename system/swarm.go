@@ -162,6 +162,16 @@ func (s *SwarmSystem) Update() {
 		if !ok {
 			continue
 		}
+		// Stun check: skip movement, reset state machine
+		if combatComp.StunnedRemaining > 0 {
+			// Reset state machine on first stunned tick
+			if swarmComp.State != component.SwarmStateChase {
+				s.resetSwarmState(&swarmComp)
+			}
+			// Animation frozen during stun - no pattern cycle update via updatePatternCycle
+			s.world.Components.Swarm.SetComponent(headerEntity, swarmComp)
+			continue
+		}
 
 		// HP check → player kill, despawn
 		if combatComp.HitPoints <= 0 {
@@ -1078,4 +1088,13 @@ func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
 		HeaderEntity: headerEntity,
 		Effect:       0,
 	})
+}
+
+// resetSwarmState resets swarm to Chase state (called on stun detection)
+func (s *SwarmSystem) resetSwarmState(swarmComp *component.SwarmComponent) {
+	swarmComp.State = component.SwarmStateChase
+	swarmComp.ChargeIntervalRemaining = parameter.SwarmChargeInterval
+	swarmComp.LockRemaining = 0
+	swarmComp.ChargeRemaining = 0
+	swarmComp.DecelRemaining = 0
 }

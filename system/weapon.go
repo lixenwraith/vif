@@ -20,10 +20,10 @@ type WeaponSystem struct {
 	world *engine.World
 
 	// Telemetry
-	statRod      *atomic.Bool
-	statRodFired *atomic.Int64
-	statLauncher *atomic.Bool
-	statSpray    *atomic.Bool
+	statRod       *atomic.Bool
+	statRodFired  *atomic.Int64
+	statLauncher  *atomic.Bool
+	statDisruptor *atomic.Bool
 
 	enabled bool
 }
@@ -37,7 +37,7 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	s.statRod = world.Resources.Status.Bools.Get("weapon.rod")
 	s.statRodFired = world.Resources.Status.Ints.Get("weapon.rod_fired")
 	s.statLauncher = world.Resources.Status.Bools.Get("weapon.launcher")
-	s.statSpray = world.Resources.Status.Bools.Get("weapon.spray")
+	s.statDisruptor = world.Resources.Status.Bools.Get("weapon.disruptor")
 
 	s.Init()
 	return s
@@ -48,7 +48,7 @@ func (s *WeaponSystem) Init() {
 	s.statRod.Store(false)
 	s.statRodFired.Store(0)
 	s.statLauncher.Store(false)
-	s.statSpray.Store(false)
+	s.statDisruptor.Store(false)
 	s.enabled = true
 }
 
@@ -138,6 +138,16 @@ func (s *WeaponSystem) Update() {
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
+	// Update pulse effect timer
+	if pulseComp, ok := s.world.Components.Pulse.GetComponent(cursorEntity); ok {
+		pulseComp.Remaining -= dt
+		if pulseComp.Remaining <= 0 {
+			s.world.Components.Pulse.RemoveEntity(cursorEntity)
+		} else {
+			s.world.Components.Pulse.SetComponent(cursorEntity, pulseComp)
+		}
+	}
+
 	// Ensure orbs exist for active weapons (self-healing after resize/destruction)
 	s.ensureOrbs(cursorEntity)
 
@@ -175,13 +185,11 @@ func (s *WeaponSystem) addWeapon(weapon component.WeaponType) {
 		s.statRod.Store(true)
 	case component.WeaponLauncher:
 		s.statLauncher.Store(true)
-	case component.WeaponSpray:
-		s.statSpray.Store(true)
+	case component.WeaponDisruptor:
+		s.statDisruptor.Store(true)
 	default:
 		return
 	}
-
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
@@ -201,7 +209,7 @@ func (s *WeaponSystem) removeAllWeapons() {
 
 	s.statRod.Store(false)
 	s.statLauncher.Store(false)
-	s.statSpray.Store(false)
+	s.statDisruptor.Store(false)
 }
 
 // triggerOrbFlash activates flash effect on specified orb
@@ -289,8 +297,8 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 		sigilColor = visual.RgbOrbRod
 	case component.WeaponLauncher:
 		sigilColor = visual.RgbOrbLauncher
-	case component.WeaponSpray:
-		sigilColor = visual.RgbOrbSpray
+	case component.WeaponDisruptor:
+		sigilColor = visual.RgbOrbDisruptor
 	}
 
 	sigilComp := component.SigilComponent{
@@ -516,8 +524,8 @@ func (s *WeaponSystem) restoreOrbColor(orbEntity core.Entity, weaponType compone
 		sigil.Color = visual.RgbOrbRod
 	case component.WeaponLauncher:
 		sigil.Color = visual.RgbOrbLauncher
-	case component.WeaponSpray:
-		sigil.Color = visual.RgbOrbSpray
+	case component.WeaponDisruptor:
+		sigil.Color = visual.RgbOrbDisruptor
 	}
 
 	s.world.Components.Sigil.SetComponent(orbEntity, sigil)
@@ -716,6 +724,12 @@ func (s *WeaponSystem) fireAllWeapons() {
 				Targets:      targets,
 				HitEntities:  hits,
 			})
+
+		case component.WeaponDisruptor:
+			if weaponComp.Cooldown[weapon] > 0 {
+				continue
+			}
+			s.fireDisruptorWeapon(cursorEntity, cursorPos, &weaponComp)
 		}
 		// Update the component with new cooldowns and potentially updated orb states
 		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
@@ -863,4 +877,153 @@ func resolveWeaponTargets(
 		final[i] = result[i%len(result)]
 	}
 	return final
+}
+
+// pulseTarget holds header entity and hit members for pulse attack
+type pulseTarget struct {
+	header  core.Entity
+	members []core.Entity
+}
+
+// findPulseTargets finds all enemies within disruptor radius of cursor
+func (s *WeaponSystem) findPulseTargets(cx, cy int) []pulseTarget {
+	var results []pulseTarget
+
+	// Check drains (single entities)
+	for _, entity := range s.world.Components.Drain.GetAllEntities() {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		if vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+			results = append(results, pulseTarget{header: entity, members: []core.Entity{entity}})
+		}
+	}
+
+	// Check swarms (composite entities)
+	for _, headerEntity := range s.world.Components.Swarm.GetAllEntities() {
+		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+		if !ok {
+			continue
+		}
+
+		var hitMembers []core.Entity
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
+			}
+			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+			if !ok {
+				continue
+			}
+			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+				hitMembers = append(hitMembers, member.Entity)
+			}
+		}
+		if len(hitMembers) > 0 {
+			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
+		}
+	}
+
+	// Check quasar (composite entity)
+	for _, headerEntity := range s.world.Components.Quasar.GetAllEntities() {
+		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+		if !ok {
+			continue
+		}
+
+		var hitMembers []core.Entity
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
+			}
+			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+			if !ok {
+				continue
+			}
+			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+				hitMembers = append(hitMembers, member.Entity)
+			}
+		}
+		if len(hitMembers) > 0 {
+			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
+		}
+	}
+
+	// Check storm circles (each circle is independent header with StormCircleComponent)
+	for _, rootEntity := range s.world.Components.Storm.GetAllEntities() {
+		stormComp, ok := s.world.Components.Storm.GetComponent(rootEntity)
+		if !ok {
+			continue
+		}
+
+		for i := 0; i < component.StormCircleCount; i++ {
+			if !stormComp.CirclesAlive[i] {
+				continue
+			}
+
+			circleEntity := stormComp.Circles[i]
+			headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+			if !ok {
+				continue
+			}
+
+			var hitMembers []core.Entity
+			for _, member := range headerComp.MemberEntries {
+				if member.Entity == 0 {
+					continue
+				}
+				memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+				if !ok {
+					continue
+				}
+				if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+					hitMembers = append(hitMembers, member.Entity)
+				}
+			}
+			if len(hitMembers) > 0 {
+				results = append(results, pulseTarget{header: circleEntity, members: hitMembers})
+			}
+		}
+	}
+
+	return results
+}
+
+// fireDisruptorWeapon fires the disruptor pulse stun weapon
+func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {
+	// Find targets in radius
+	targets := s.findPulseTargets(cursorPos.X, cursorPos.Y)
+	if len(targets) == 0 {
+		return
+	}
+
+	// Consume cooldown
+	weaponComp.Cooldown[component.WeaponDisruptor] = parameter.WeaponCooldownDisruptor
+
+	// Visual orb flash
+	if disruptorOrbEntity := weaponComp.Orbs[component.WeaponDisruptor]; disruptorOrbEntity != 0 {
+		s.triggerOrbFlash(disruptorOrbEntity)
+	}
+
+	// Emit area attack per target
+	for _, target := range targets {
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackPulse,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: target.header,
+			HitEntities:  target.members,
+			OriginX:      cursorPos.X,
+			OriginY:      cursorPos.Y,
+		})
+	}
+
+	// Set pulse effect on cursor for visual feedback
+	s.world.Components.Pulse.SetComponent(cursorEntity, component.PulseComponent{
+		OriginX:   cursorPos.X,
+		OriginY:   cursorPos.Y,
+		Duration:  parameter.PulseEffectDuration,
+		Remaining: parameter.PulseEffectDuration,
+	})
 }
