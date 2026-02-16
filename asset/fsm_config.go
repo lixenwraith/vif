@@ -7,7 +7,7 @@ const DefaultGameplayFSMConfig = `
 
 # Global system configuration
 [systems]
-disabled_systems = ["storm", "dust", "bullet", "wall", "fadeout", "navigation", "genetic", "music", "audio"]
+disabled_systems = ["wall", "fadeout", "navigation", "genetic", "music", "audio"]
 
 [regions.main]
 initial = "SpawnGold"

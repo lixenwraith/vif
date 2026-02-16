@@ -150,6 +150,13 @@
             }
         }
 
+        // Prevent context menu on terminal to ensure right-click release events reach xterm
+        const container = document.getElementById('terminal');
+        container.addEventListener('contextmenu', function(e) {
+            e.preventDefault();
+            return false;
+        });
+
         window.addEventListener('resize', handleResize);
         setTimeout(handleResize, 100);
     }

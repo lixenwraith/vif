@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,10 +13,9 @@ import (
 
 // World contains all entities and their components using typed stores
 type World struct {
-	_ sync.RWMutex
-	// mu           sync.RWMutex
-	mu           WorldMutex
 	nextEntityID core.Entity
+	// mu           sync.RWMutex
+	mu WorldMutex
 
 	Resources *Resource
 
@@ -26,7 +24,7 @@ type World struct {
 
 	systems []System
 	// updateMutex sync.Mutex
-	updateMutex WorldMutex
+	updateMutex UpdateMutex
 
 	// Stats
 	destroyedCount atomic.Int64

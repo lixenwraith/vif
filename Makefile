@@ -1,8 +1,9 @@
 BINARY := vi-fighter
 SRC := ./cmd/vi-fighter
 BIN_DIR := bin
+GOFLAGS := -trimpath
+LDFLAGS := -s -w
 
-# Default to help if no target is specified
 .DEFAULT_GOAL := help
 
 .PHONY: help generate dev release wasm run clean check-go
@@ -58,10 +59,10 @@ dev: generate | $(BIN_DIR)
 	go build -race -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 release: generate | $(BIN_DIR)
-	go build -ldflags="-s -w" -trimpath -o $(BIN_DIR)/$(BINARY) $(SRC)
+	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 wasm: generate | $(BIN_DIR)
-	GOOS=js GOARCH=wasm go build -o $(BIN_DIR)/$(BINARY).wasm $(SRC)
+	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).wasm $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)

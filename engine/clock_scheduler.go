@@ -385,7 +385,10 @@ func (cs *ClockScheduler) executeReset() {
 		panic(fmt.Errorf("FSM reset failed: %v", err))
 	}
 
-	// 5. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world BEFORE unpause
+	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
+	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+
+	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world BEFORE unpause
 	cs.dispatchAndProcessEvents()
 
 	// 6. Transition to Running state

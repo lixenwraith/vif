@@ -33,6 +33,7 @@ var (
 
 func main() {
 	// 0. Config
+
 	// Parse CLI flags
 	flag.Parse()
 
@@ -72,6 +73,7 @@ func main() {
 	world := engine.NewWorld()
 
 	// TODO: check moving it up since no world dependency
+
 	// 5.: Service Initialization
 	if err := hub.InitAll(); err != nil {
 		panic(fmt.Sprintf("service init failed: %v", err))
@@ -88,10 +90,12 @@ func main() {
 	width, height := term.Size()
 
 	// 8. GameContext Creation
+
 	// World resources are initialized in GameContext
 	ctx := engine.NewGameContext(world, width, height)
 
 	// 9. Systems Instantiation
+
 	// Set active systems to ECS world
 	for _, name := range manifest.ActiveSystems() {
 		factory, ok := registry.GetSystem(name)
@@ -103,6 +107,7 @@ func main() {
 	}
 
 	// 10. Render Orchestrator
+
 	// Resolve color mode for RenderConfig
 	colorMode := term.ColorMode()
 	ctx.World.Resources.Config.ColorMode = colorMode
@@ -119,6 +124,7 @@ func main() {
 	}
 
 	// 11. Input & Clock Scheduler
+
 	// Create input handler
 	inputMachine := input.NewMachine()
 	router := mode.NewRouter(ctx, inputMachine)
@@ -139,6 +145,7 @@ func main() {
 	ctx.ResetChan = resetChan
 
 	// 12. Engine (FSM) Setup
+
 	// Initialize Event Registry for payload reflection
 	event.InitRegistry()
 
@@ -154,12 +161,6 @@ func main() {
 	}
 
 	// 13. Event Handlers
-	// Auto-register event handlers from World systems
-	for _, sys := range world.Systems() {
-		if handler, ok := sys.(event.Handler); ok {
-			clockScheduler.RegisterEventHandler(handler)
-		}
-	}
 
 	// Meta/Audio systems (not in World.Systems - event-only, no Update logic)
 	metaSystem := system.NewMetaSystem(ctx)
@@ -167,6 +168,13 @@ func main() {
 
 	audioSystem := system.NewAudioSystem(world)
 	clockScheduler.RegisterEventHandler(audioSystem.(event.Handler))
+
+	// Auto-register event handlers from World systems
+	for _, sys := range world.Systems() {
+		if handler, ok := sys.(event.Handler); ok {
+			clockScheduler.RegisterEventHandler(handler)
+		}
+	}
 
 	// 14. Start Services
 	if err := hub.StartAll(); err != nil {
