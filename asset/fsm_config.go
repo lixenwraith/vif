@@ -130,15 +130,15 @@ parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
     { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
-    { trigger = "EventGoldComplete", target = "GoldReward" },
+    { trigger = "EventGoldComplete", target = "QuasarGoldReward" },
     { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
     { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
     { trigger = "EventQuasarDestroyed", target = "StormHandoff" },
 ]
 
-# --- QUASAR REWARD ---
+# --- QUASAR GOLD REWARD ---
 
-[states.GoldReward]
+[states.QuasarGoldReward]
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
@@ -147,7 +147,7 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
     { trigger = "EventHeatBurstNotification", target = "StormHandoff" },
-    { trigger = "EventQuasarDestroyed", target = "StormHandoff" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
     { trigger = "Tick", target = "QuasarGoldSpawn" },
 ]
 
@@ -222,7 +222,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Storm Defeated!" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainHandoff", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+    { trigger = "Tick", target = "MainHandoff" },
 ]
 
 [states.StormFail]

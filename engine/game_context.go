@@ -14,6 +14,7 @@ import (
 // GameContext holds all game state including the ECS world
 type GameContext struct {
 	// === Immutable After Init ===
+
 	// Set once in NewGameContext, and pointers/values never modified, safe for concurrent read without sync
 
 	World         *World         // ECS world; has internal lock
@@ -21,7 +22,6 @@ type GameContext struct {
 	PausableClock *PausableClock // Pausable time source; has internal sync
 
 	// === Channels ===
-	// Inherently thread-safe for send operations
 
 	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
 
@@ -38,13 +38,14 @@ type GameContext struct {
 	MacroClearFlag      atomic.Bool  // Set by :new to signal macro reset
 
 	// === Main-Loop Exclusive ===
-	// Accessed only from main goroutine (input, resize, render)
-	// No sync required
+
+	// Accessed only from main goroutine (input, resize, render), no sync required
 
 	Width, Height            int // Terminal dimensions
 	GameXOffset, GameYOffset int // Game area offset from terminal origin
 
 	// === Context Exclusive ===
+
 	// No sync required
 	lastFPSUpdate time.Time
 	frameCountFPS int64
@@ -56,6 +57,8 @@ type GameContext struct {
 	searchText    atomic.Pointer[string]
 	statusMessage atomic.Pointer[string]
 	lastCommand   atomic.Pointer[string]
+	// Status message expiry (Unix nano timestamp, 0 = no expiry)
+	statusMessageExpiry atomic.Int64
 
 	// Overlay state (atomic for lock-free access)
 	overlayActive  atomic.Bool
@@ -347,6 +350,25 @@ func (ctx *GameContext) SetSearchText(text string) {
 	ctx.searchText.Store(&text)
 }
 
+// SetStatusMessage sets status message with optional duration and override
+func (ctx *GameContext) SetStatusMessage(msg string, duration time.Duration, override bool) {
+	now := ctx.PausableClock.RealTime().UnixNano()
+	currentExpiry := ctx.statusMessageExpiry.Load()
+
+	// Reject write if current message has unexpired duration and no override
+	if !override && currentExpiry > 0 && currentExpiry > now && msg != "" {
+		return
+	}
+
+	ctx.statusMessage.Store(&msg)
+	if duration > 0 {
+		ctx.statusMessageExpiry.Store(now + duration.Nanoseconds())
+	} else {
+		ctx.statusMessageExpiry.Store(0)
+	}
+}
+
+// GetStatusMessage returns current status message
 func (ctx *GameContext) GetStatusMessage() string {
 	if p := ctx.statusMessage.Load(); p != nil {
 		return *p
@@ -354,8 +376,16 @@ func (ctx *GameContext) GetStatusMessage() string {
 	return ""
 }
 
-func (ctx *GameContext) SetStatusMessage(msg string) {
-	ctx.statusMessage.Store(&msg)
+// GetStatusMessageExpiry returns the expiry timestamp (Unix nano), 0 if none
+func (ctx *GameContext) GetStatusMessageExpiry() int64 {
+	return ctx.statusMessageExpiry.Load()
+}
+
+// ClearStatusMessage forcibly clears the status message and expiry
+func (ctx *GameContext) ClearStatusMessage() {
+	empty := ""
+	ctx.statusMessage.Store(&empty)
+	ctx.statusMessageExpiry.Store(0)
 }
 
 func (ctx *GameContext) GetLastCommand() string {

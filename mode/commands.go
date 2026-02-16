@@ -74,7 +74,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 // setCommandError sets an error message in the status message
 // This string will be cleared by InputHandler on the next keystroke
 func setCommandError(ctx *engine.GameContext, message string) {
-	ctx.SetStatusMessage(message)
+	ctx.SetStatusMessage(message, 0, false)
 }
 
 // handleQuitCommand exits the game

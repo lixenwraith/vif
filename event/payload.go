@@ -397,7 +397,9 @@ type DustSpawnOneRequestPayload struct {
 
 // MetaStatusMessagePayload contains message to be displayed in status bar
 type MetaStatusMessagePayload struct {
-	Message string `toml:"message"`
+	Message          string        `toml:"message"`
+	Duration         time.Duration `toml:"duration"`
+	DurationOverride bool          `toml:"duration_override"`
 }
 
 // MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)

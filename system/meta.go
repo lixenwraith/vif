@@ -124,7 +124,7 @@ func (s *MetaSystem) handleGameReset() {
 	s.ctx.SetMode(core.ModeNormal)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
-	s.ctx.SetStatusMessage("")
+	s.ctx.SetStatusMessage("", 0, false)
 	s.ctx.SetOverlayContent(nil)
 
 	// 7. Signal FSM reset - Non-blocking
@@ -138,7 +138,10 @@ func (s *MetaSystem) handleGameReset() {
 
 // handleMessageRequest displays a message in status bar
 func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
-	s.ctx.SetStatusMessage(payload.Message)
+	if payload.Duration < 0 {
+		payload.Duration = 0
+	}
+	s.ctx.SetStatusMessage(payload.Message, payload.Duration, payload.DurationOverride)
 }
 
 // handleLevelSetup reconfigures map dimensions and clears entities

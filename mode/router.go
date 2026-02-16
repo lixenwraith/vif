@@ -101,7 +101,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 
 	// Clear status message on any action
 	if r.ctx.GetStatusMessage() != "" {
-		r.ctx.SetStatusMessage("")
+		r.ctx.SetStatusMessage("", 0, false)
 	}
 	r.ctx.State.RecordAction()
 

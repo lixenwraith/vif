@@ -17,6 +17,8 @@ var (
 	RgbBlue    = terminal.RGB{0, 0, 255}
 	RgbMagenta = terminal.RGB{255, 0, 255}
 
+	RgbBackground = terminal.RGB{26, 27, 38} // Tokyo Night background
+
 	// terminal.RGB color definitions for glyphs - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
 	RgbGlyphBlueDark   = terminal.RGB{50, 80, 200} // Floor R/G
 	RgbGlyphBlueNormal = terminal.RGB{80, 130, 255}
@@ -43,9 +45,12 @@ var (
 	RgbDustNormal = terminal.RGB{R: 128, G: 128, B: 128} // Mid-gray dust
 	RgbDustBright = terminal.RGB{R: 200, G: 200, B: 200} // Light gray dust
 
-	RgbIndicator  = terminal.RGB{180, 180, 180} // Brighter gray
-	RgbStatusBar  = terminal.RGB{255, 255, 255} // White
-	RgbBackground = terminal.RGB{26, 27, 38}    // Tokyo Night background
+	RgbIndicator           = terminal.RGB{180, 180, 180}        // Brighter gray
+	RgbStatusBar           = terminal.RGB{255, 255, 255}        // White
+	RgbTruncateIndicator   = terminal.RGB{R: 0, G: 0, B: 0}     // Black text
+	RgbTruncateIndicatorBg = terminal.RGB{R: 255, G: 165, B: 0} // Orange background
+	RgbStatusCursor        = terminal.RGB{R: 255, G: 165, B: 0} // Orange cursor
+	RgbStatusCursorBg      = terminal.RGB{R: 0, G: 0, B: 0}     // Black background
 
 	RgbPingHighlight  = terminal.RGB{55, 55, 55}    // Gray for INSERT mode ping
 	RgbPingLineNormal = terminal.RGB{5, 5, 5}       // Almost Black for NORMAL and VISUAL modes ping lines

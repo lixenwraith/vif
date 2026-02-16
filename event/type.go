@@ -257,7 +257,7 @@ const (
 	// Consumer: MetaSystem | Payload: nil
 	EventMetaHelpRequest
 
-	// EventMetaHelpRequest signals a request to show help overlay
+	// EventMetaStatusMessageRequest signals a request to display a message in status bar
 	// Trigger: Systems
 	// Consumer: MetaSystem | Payload: *MetaStatusMessagePayload
 	EventMetaStatusMessageRequest

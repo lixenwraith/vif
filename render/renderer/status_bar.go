@@ -34,6 +34,10 @@ type StatusBarRenderer struct {
 	statFSMMaxDur  *atomic.Int64
 	statFSMIndex   *atomic.Int64
 	statFSMTotal   *atomic.Int64
+
+	// Cursor blink state
+	cursorBlinkOn   bool
+	lastBlinkToggle time.Time
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -74,10 +78,144 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		buf.SetWithBg(x, statusY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 
-	// Track current x position for status bar elements
+	// Update cursor blink state (250ms cycle, uses real time - continues during pause)
+	realNow := r.gameCtx.PausableClock.RealTime()
+	if realNow.Sub(r.lastBlinkToggle) >= parameter.StatusCursorBlinkDuration {
+		r.cursorBlinkOn = !r.cursorBlinkOn
+		r.lastBlinkToggle = realNow
+	}
+
+	// === BUILD RIGHT-SIDE ITEMS ===
+	type statusItem struct {
+		text string
+		fg   terminal.RGB
+		bg   terminal.RGB
+	}
+	var rightItems []statusItem
+
+	// Priority 1: FSM Phase
+	phaseName := r.statFSMName.Load()
+	if phaseName != "" {
+		elapsed := time.Duration(r.statFSMElapsed.Load())
+		maxDur := time.Duration(r.statFSMMaxDur.Load())
+		phaseIdx := r.statFSMIndex.Load()
+		phaseTotal := r.statFSMTotal.Load()
+
+		var timerVal float64
+		if maxDur > 0 {
+			remaining := maxDur - elapsed
+			if remaining < 0 {
+				remaining = 0
+			}
+			timerVal = remaining.Seconds()
+		} else {
+			timerVal = elapsed.Seconds()
+		}
+
+		phaseBg := render.RainbowIndexColor(phaseIdx, phaseTotal, visual.RgbModeNormalBg)
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal),
+			fg:   visual.RgbBlack,
+			bg:   phaseBg,
+		})
+	}
+
+	// Priority 2: Energy
+	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Player.Entity)
+	energyVal := energyComp.Current
+	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
+
+	var energyFg, energyBg terminal.RGB
+	if energyVal < 0 {
+		energyFg, energyBg = visual.RgbEnergyBg, visual.RgbBlack
+	} else {
+		energyFg, energyBg = visual.RgbBlack, visual.RgbEnergyBg
+	}
+
+	blinkRemaining := energyComp.BlinkRemaining
+	if energyComp.BlinkActive && blinkRemaining > 0 {
+		typeCode := energyComp.BlinkType
+		if typeCode == 0 {
+			energyFg = visual.RgbCursorError
+		} else {
+			var blinkColor terminal.RGB
+			switch typeCode {
+			case 1:
+				blinkColor = visual.RgbEnergyBlinkBlue
+			case 2:
+				blinkColor = visual.RgbEnergyBlinkGreen
+			case 3:
+				blinkColor = visual.RgbEnergyBlinkRed
+			case 4:
+				blinkColor = visual.RgbGlyphGold
+			default:
+				blinkColor = visual.RgbEnergyBlinkWhite
+			}
+			energyFg, energyBg = visual.RgbBlack, blinkColor
+		}
+	}
+	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
+
+	// Priority 3: Boost (conditional)
+	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity)
+	if boostOk && boost.Active {
+		remaining := boost.Remaining.Seconds()
+		if remaining < 0 {
+			remaining = 0
+		}
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" Boost: %.1fs ", remaining),
+			fg:   visual.RgbStatusText,
+			bg:   visual.RgbBoostBg,
+		})
+	}
+
+	// Priority 4: Grid (conditional)
+	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && ping.GridActive {
+		gridRemaining := ping.GridRemaining.Seconds()
+		if gridRemaining < 0 {
+			gridRemaining = 0
+		}
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" Grid: %.1fs ", gridRemaining),
+			fg:   visual.RgbGridTimerFg,
+			bg:   visual.RgbBackground,
+		})
+	}
+
+	// Priority 5-8: Metrics (lowest priority, dropped first)
+	rightItems = append(rightItems, statusItem{
+		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbApmBg,
+	})
+	rightItems = append(rightItems, statusItem{
+		text: fmt.Sprintf(" GT: %d ", r.statTicks.Load()),
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbGtBg,
+	})
+	rightItems = append(rightItems, statusItem{
+		text: fmt.Sprintf(" FPS: %d ", r.statFPS.Load()),
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbFpsBg,
+	})
+
+	var colorModeStr string
+	if r.colorMode == terminal.ColorModeTrueColor {
+		colorModeStr = " TC "
+	} else {
+		colorModeStr = " 256 "
+	}
+	rightItems = append(rightItems, statusItem{
+		text: colorModeStr,
+		fg:   visual.RgbBlack,
+		bg:   visual.RgbColorModeIndicator,
+	})
+
+	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
 	x := 0
 
-	// Audio state indicator - combined effects + music state
+	// Audio state indicator
 	if player := r.gameCtx.GetAudioPlayer(); player != nil {
 		effectMuted := player.IsEffectMuted()
 		musicMuted := player.IsMusicMuted()
@@ -85,17 +223,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		var audioBgColor terminal.RGB
 		switch {
 		case effectMuted && musicMuted:
-			audioBgColor = visual.RgbAudioBothOff // Red
+			audioBgColor = visual.RgbAudioBothOff
 		case effectMuted && !musicMuted:
-			audioBgColor = visual.RgbAudioMusicOnly // Yellow
+			audioBgColor = visual.RgbAudioMusicOnly
 		case !effectMuted && musicMuted:
-			audioBgColor = visual.RgbAudioEffectsOnly // Green
+			audioBgColor = visual.RgbAudioEffectsOnly
 		default:
-			audioBgColor = visual.RgbAudioBothOn // Blue
+			audioBgColor = visual.RgbAudioBothOn
 		}
 		for _, ch := range parameter.AudioStr {
 			if x >= ctx.ScreenWidth {
-				return // No space left
+				return
 			}
 			buf.SetWithBg(x, statusY, ch, visual.RgbBlack, audioBgColor)
 			x++
@@ -129,12 +267,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		x++
 	}
 
-	// Macro recording indicator (overrides mode display)
+	// Macro recording indicator
 	if r.gameCtx.MacroRecording.Load() {
-		// Overwrite mode section with RECORD indicator
 		label := r.gameCtx.MacroRecordingLabel.Load()
 		recText := fmt.Sprintf("%s: %c ", parameter.ModeTextRecord, label)
-		recX := x - len(modeText) // Start where mode text started
+		recX := x - len(modeText)
 		for i, ch := range recText {
 			if recX+i < ctx.ScreenWidth {
 				buf.SetWithBg(recX+i, statusY, ch, visual.RgbBlack, visual.RgbCursorError)
@@ -142,11 +279,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	// Last command indicator
+	// Last command indicator (only in normal/visual/insert modes)
+	leftEndX := x + 1 // 1 char gap after mode indicator
 	lastCommand := r.gameCtx.GetLastCommand()
-	leftEndX := x
 	if lastCommand != "" && !r.gameCtx.IsSearchMode() && !r.gameCtx.IsCommandMode() {
-		leftEndX++
 		for _, ch := range lastCommand {
 			if leftEndX >= ctx.ScreenWidth {
 				return
@@ -154,201 +290,93 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbLastCommandText, visual.RgbBackground)
 			leftEndX++
 		}
-		leftEndX++
-	} else {
-		leftEndX++
+		leftEndX++ // gap after last command
 	}
 
-	// Search, command, or status text
-	searchText := r.gameCtx.GetSearchText()
+	// === DETERMINE TEXT CONTENT AND NEEDED WIDTH ===
+	var textContent string
+	var textFg terminal.RGB
+	var isInputMode bool // search or command mode (needs cursor)
+
 	if r.gameCtx.IsSearchMode() {
-		searchText = "/" + searchText
-		for _, ch := range searchText {
-			if leftEndX >= ctx.ScreenWidth {
-				return
-			}
-			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbSearchInputText, visual.RgbBackground)
-			leftEndX++
-		}
+		textContent = "/" + r.gameCtx.GetSearchText()
+		textFg = visual.RgbSearchInputText
+		isInputMode = true
 	} else if r.gameCtx.IsCommandMode() {
-		commandText := r.gameCtx.GetCommandText()
-		commandText = ":" + commandText
-		for _, ch := range commandText {
-			if leftEndX >= ctx.ScreenWidth {
-				return
-			}
-			buf.SetWithBg(leftEndX, statusY, ch, visual.RgbCommandInputText, visual.RgbBackground)
-			leftEndX++
-		}
+		textContent = ":" + r.gameCtx.GetCommandText()
+		textFg = visual.RgbCommandInputText
+		isInputMode = true
 	} else {
-		statusMessage := r.gameCtx.GetStatusMessage()
-		if statusMessage != "" {
-			for _, ch := range statusMessage {
-				if leftEndX >= ctx.ScreenWidth {
-					return
-				}
-				buf.SetWithBg(leftEndX, statusY, ch, visual.RgbStatusMessageText, visual.RgbBackground)
-				leftEndX++
-			}
-		}
+		textContent = r.getActiveStatusMessage(realNow)
+		textFg = visual.RgbStatusMessageText
+		isInputMode = false
 	}
 
-	// --- RIGHT SIDE METRICS ---
-	// Build items in priority order (highest priority first)
-	// Items are dropped from right (lowest priority) when space is limited
-
-	type statusItem struct {
-		text string
-		fg   terminal.RGB
-		bg   terminal.RGB
-	}
-	var rightItems []statusItem
-
-	// Priority 1: FSM Phase (replaces Decay timer)
-	phaseName := r.statFSMName.Load()
-	if phaseName != "" {
-		elapsed := time.Duration(r.statFSMElapsed.Load())
-		maxDur := time.Duration(r.statFSMMaxDur.Load())
-		phaseIdx := r.statFSMIndex.Load()
-		phaseTotal := r.statFSMTotal.Load()
-
-		// Calculate timer text
-		var timerVal float64
-		if maxDur > 0 {
-			remaining := maxDur - elapsed
-			if remaining < 0 {
-				remaining = 0
-			}
-			timerVal = remaining.Seconds()
-		} else {
-			timerVal = elapsed.Seconds()
-		}
-
-		// Calculate phase color from rainbow gradient
-		phaseBg := render.RainbowIndexColor(phaseIdx, phaseTotal, visual.RgbModeNormalBg)
-
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" %s: %.1fs ", phaseName, timerVal),
-			fg:   visual.RgbBlack,
-			bg:   phaseBg,
-		})
+	textNeeded := utf8.RuneCountInString(textContent)
+	if isInputMode && !r.gameCtx.IsOverlayActive() {
+		textNeeded++ // Reserve space for cursor
 	}
 
-	// Priority 2: Energy
-	energyComp, _ := r.gameCtx.World.Components.Energy.GetComponent(r.gameCtx.World.Resources.Player.Entity)
-	energyVal := energyComp.Current
-	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
-
-	// Base colors based on energy polarity
-	var energyFg, energyBg terminal.RGB
-	if energyVal < 0 {
-		energyFg, energyBg = visual.RgbEnergyBg, visual.RgbBlack // white fg, black bg
-	} else {
-		energyFg, energyBg = visual.RgbBlack, visual.RgbEnergyBg // black fg, white bg
+	// === DYNAMIC RIGHT-SIDE ALLOCATION ===
+	// Calculate widths for all right items
+	itemWidths := make([]int, len(rightItems))
+	for i, item := range rightItems {
+		itemWidths[i] = utf8.RuneCountInString(item.text)
 	}
 
-	blinkRemaining := energyComp.BlinkRemaining
-	if energyComp.BlinkActive && blinkRemaining > 0 {
-		typeCode := energyComp.BlinkType
-		if typeCode == 0 {
-			// Error: red text, keep polarity background
-			energyFg = visual.RgbCursorError
-		} else {
-			var blinkColor terminal.RGB
-			switch typeCode {
-			case 1:
-				blinkColor = visual.RgbEnergyBlinkBlue
-			case 2:
-				blinkColor = visual.RgbEnergyBlinkGreen
-			case 3:
-				blinkColor = visual.RgbEnergyBlinkRed
-			case 4:
-				blinkColor = visual.RgbGlyphGold
-			default:
-				blinkColor = visual.RgbEnergyBlinkWhite
-			}
-			energyFg, energyBg = visual.RgbBlack, blinkColor
-		}
-	}
-	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
+	availableTotal := ctx.ScreenWidth - leftEndX
 
-	// Priority 3: Boost (conditional)
-	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity)
-
-	if boostOk && boost.Active {
-		remaining := boost.Remaining.Seconds()
-		if remaining < 0 {
-			remaining = 0
-		}
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" Boost: %.1fs ", remaining),
-			fg:   visual.RgbStatusText,
-			bg:   visual.RgbBoostBg,
-		})
-	}
-
-	// Priority 4: Grid (conditional)
-	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && ping.GridActive {
-		gridRemaining := ping.GridRemaining.Seconds()
-		if gridRemaining < 0 {
-			gridRemaining = 0
-		}
-		rightItems = append(rightItems, statusItem{
-			text: fmt.Sprintf(" Grid: %.1fs ", gridRemaining),
-			fg:   visual.RgbGridTimerFg,
-			bg:   visual.RgbBackground,
-		})
-	}
-
-	// Priority 5-7: Metrics from registry (direct atomic reads)
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbApmBg,
-	})
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" GT: %d ", r.statTicks.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbGtBg,
-	})
-	rightItems = append(rightItems, statusItem{
-		text: fmt.Sprintf(" FPS: %d ", r.statFPS.Load()),
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbFpsBg,
-	})
-
-	// Priority 8: Color Mode Indicator
-	var colorModeStr string
-	if r.colorMode == terminal.ColorModeTrueColor {
-		colorModeStr = " TC "
-	} else {
-		colorModeStr = " 256 "
-	}
-	rightItems = append(rightItems, statusItem{
-		text: colorModeStr,
-		fg:   visual.RgbBlack,
-		bg:   visual.RgbColorModeIndicator,
-	})
-
-	// Calculate which items fit, dropping from end (lowest priority)
-	availableWidth := ctx.ScreenWidth - leftEndX
-	totalWidth := 0
+	// Start with max items that could fit (ignoring text needs)
 	fitCount := 0
-	for _, item := range rightItems {
-		// utf8.RuneCountInString() for correct width calculation versus len()
-		// e.g. "Energy: 100" vs "♫"
-		itemWidth := utf8.RuneCountInString(item.text)
-		if totalWidth+itemWidth <= availableWidth {
-			totalWidth += itemWidth
-			fitCount++
+	rightFitWidth := 0
+	for i, w := range itemWidths {
+		if rightFitWidth+w <= availableTotal {
+			rightFitWidth += w
+			fitCount = i + 1
 		} else {
 			break
 		}
 	}
 
-	// Render items that fit, right-aligned
+	// Drop items from end (lowest priority) until text fits
+	for fitCount > 0 && textNeeded > 0 {
+		textAvailable := availableTotal - rightFitWidth
+		if textAvailable >= textNeeded {
+			break
+		}
+		// Drop last item
+		fitCount--
+		rightFitWidth = 0
+		for i := 0; i < fitCount; i++ {
+			rightFitWidth += itemWidths[i]
+		}
+	}
+
+	textAvailableWidth := availableTotal - rightFitWidth
+	if textAvailableWidth < 0 {
+		textAvailableWidth = 0
+	}
+
+	// === RENDER TEXT CONTENT ===
+	var textEndX int
+	if isInputMode {
+		textEndX = r.renderInputText(buf, statusY, leftEndX, textAvailableWidth, textContent, textFg)
+	} else if textContent != "" {
+		r.renderStatusMessage(buf, statusY, leftEndX, textAvailableWidth, textContent)
+		textEndX = leftEndX + min(utf8.RuneCountInString(textContent), textAvailableWidth)
+	}
+
+	// === RENDER CURSOR (search/command modes only, not during overlay) ===
+	if isInputMode && !r.gameCtx.IsOverlayActive() && r.cursorBlinkOn {
+		cursorX := textEndX
+		if cursorX < ctx.ScreenWidth-rightFitWidth {
+			buf.SetWithBg(cursorX, statusY, parameter.StatusCursorChar, visual.RgbStatusCursor, visual.RgbStatusCursorBg)
+		}
+	}
+
+	// === RENDER RIGHT-SIDE ITEMS ===
 	if fitCount > 0 {
-		startX := ctx.ScreenWidth - totalWidth
+		startX := ctx.ScreenWidth - rightFitWidth
 		for i := 0; i < fitCount; i++ {
 			item := rightItems[i]
 			for _, ch := range item.text {
@@ -357,4 +385,79 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 	}
+}
+
+// getActiveStatusMessage returns status message if not expired
+func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
+	msg := r.gameCtx.GetStatusMessage()
+	if msg == "" {
+		return ""
+	}
+
+	expiry := r.gameCtx.GetStatusMessageExpiry()
+	if expiry > 0 && now.UnixNano() > expiry {
+		// Expired - clear it
+		r.gameCtx.ClearStatusMessage()
+		return ""
+	}
+
+	return msg
+}
+
+// renderInputText renders search/command input with left-truncation (shows end of text)
+// Returns X position after last rendered character (for cursor placement)
+func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg terminal.RGB) int {
+	if maxWidth <= 0 {
+		return startX
+	}
+
+	runes := []rune(text)
+	textLen := len(runes)
+
+	if textLen <= maxWidth {
+		for i, ch := range runes {
+			buf.SetWithBg(startX+i, y, ch, fg, visual.RgbBackground)
+		}
+		return startX + textLen
+	}
+
+	// Truncate from left: show '<' + end of text
+	if maxWidth == 1 {
+		buf.SetWithBg(startX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
+		return startX + 1
+	}
+
+	buf.SetWithBg(startX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
+	visibleStart := textLen - (maxWidth - 1)
+	for i := 0; i < maxWidth-1; i++ {
+		buf.SetWithBg(startX+1+i, y, runes[visibleStart+i], fg, visual.RgbBackground)
+	}
+	return startX + maxWidth
+}
+
+// renderStatusMessage renders status message with right-truncation (shows start of text)
+func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, startX, maxWidth int, text string) {
+	if maxWidth <= 0 {
+		return
+	}
+
+	runes := []rune(text)
+	textLen := len(runes)
+
+	if textLen <= maxWidth {
+		for i, ch := range runes {
+			buf.SetWithBg(startX+i, y, ch, visual.RgbStatusMessageText, visual.RgbBackground)
+		}
+		return
+	}
+
+	if maxWidth == 1 {
+		buf.SetWithBg(startX, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
+		return
+	}
+
+	for i := 0; i < maxWidth-1; i++ {
+		buf.SetWithBg(startX+i, y, runes[i], visual.RgbStatusMessageText, visual.RgbBackground)
+	}
+	buf.SetWithBg(startX+maxWidth-1, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
 }

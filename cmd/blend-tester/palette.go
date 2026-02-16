@@ -51,9 +51,9 @@ var gamePalette = []PaletteEntry{
 	{"CursorError", visual.RgbCursorError, "Cursor"},
 
 	// UI
-	{"LineNumbers", visual.RgbRowIndicator, "UI"},
+	{"LineNumbers", visual.RgbIndicator, "UI"},
 	{"StatusBar", visual.RgbStatusBar, "UI"},
-	{"ColumnIndicator", visual.RgbColumnIndicator, "UI"},
+	{"ColumnIndicator", visual.RgbIndicator, "UI"},
 	{"Background", visual.RgbBackground, "UI"},
 	{"StatusText", visual.RgbStatusText, "UI"},
 
