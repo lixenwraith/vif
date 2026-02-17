@@ -192,19 +192,18 @@ var (
 	RgbWallDanger  = terminal.RGB{R: 100, G: 20, B: 20}
 	RgbWallGhost   = terminal.RGB{R: 35, G: 36, B: 48}
 
-	// Loot shield colors (defined in renderer as gradient LUT)
-
-	// Referenced here for consistency documentation only
-	RgbLootShieldBorder = terminal.RGB{R: 255, G: 105, B: 180} // Hot pink
-	RgbLootShieldInner  = terminal.RGB{R: 45, G: 12, B: 32}    // Dark
-	RgbLootShieldCenter = terminal.RGB{R: 12, G: 4, B: 10}     // Near black
+	// Shield
+	// RgbLootShieldBorder = terminal.RGB{R: 255, G: 105, B: 180} // Hot pink
+	RgbLootShieldBorder = terminal.RGB{R: 255, G: 145, B: 220} // Pale pink
 
 	// Loot glow colors
 	RgbLootRodGlow       = terminal.RGB{R: 200, G: 255, B: 255} // Bright cyan-white
 	RgbLootLauncherGlow  = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
 	RgbLootDisruptorGlow = terminal.RGB{R: 150, G: 255, B: 180} // Bright green-white glow
 	RgbLootEnergyGlow    = terminal.RGB{R: 255, G: 60, B: 200}  // Magenta-pink glow
-	RgbOrbEnergy         = terminal.RGB{R: 255, G: 240, B: 60}  // Bright yellow sigil
+	RgbLootEnergySigil   = terminal.RGB{R: 255, G: 240, B: 60}  // Bright yellow sigil
+	RgbLootHeatSigil     = terminal.RGB{255, 80, 80}            // Bright red sigil
+	RgbLootHeatGlow      = terminal.RGB{255, 150, 150}          // Red-white glow
 
 	// Storm attack effect colors
 	RgbStormGreenPulse = terminal.RGB{R: 60, G: 220, B: 100} // Bright green pulse

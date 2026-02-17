@@ -266,6 +266,18 @@ func (s *FuseSystem) handleQuasarFuse() {
 		}
 	}
 
+	// Emit EventEnemyKilled for each drain (enables loot drops)
+	for _, e := range drains {
+		if pos, ok := s.world.Positions.GetPosition(e); ok {
+			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+				Entity:  e,
+				Species: component.SpeciesDrain,
+				X:       pos.X,
+				Y:       pos.Y,
+			})
+		}
+	}
+
 	if len(drains) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drains)
 	}

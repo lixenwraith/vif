@@ -152,7 +152,7 @@ var ExplosionToSwarm = CollisionProfile{
 
 // Soft-collision profiles
 
-// TODO: unused
+// NOTE: Unused due little effect to quasar from lower mass drains, if masses change, can be used in quasar system implementation
 // SoftCollisionDrainToQuasar defines drain-to-quasar soft repulsion
 var SoftCollisionDrainToQuasar = CollisionProfile{
 	MassRatio:        vmath.Div(MassDrain, MassQuasar),
@@ -186,7 +186,6 @@ var SoftCollisionSwarmToQuasar = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
-// TODO: check why we need both directions swarm-quasar
 // SoftCollisionQuasarToSwarm defines quasar-to-swarm soft repulsion
 var SoftCollisionQuasarToSwarm = CollisionProfile{
 	MassRatio:        vmath.Div(MassQuasar, MassSwarm),

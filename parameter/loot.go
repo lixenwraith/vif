@@ -4,6 +4,9 @@ import (
 	"time"
 )
 
+// Heat loot reward value
+const LootHeatRewardValue = 10
+
 // Energy loot reward value
 const LootEnergyRewardValue = 10000
 

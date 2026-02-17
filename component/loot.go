@@ -27,6 +27,11 @@ type SpeciesDropTable struct {
 
 // DropTables defines drop behavior per species
 var DropTables = map[SpeciesType]SpeciesDropTable{
+	SpeciesDrain: {
+		Tiers: []DropTier{
+			{Unique: false, Entries: []DropEntry{{LootHeat, 0.05, 1, 0}}},
+		},
+	},
 	SpeciesQuasar: {
 		Tiers: []DropTier{
 			{Unique: true, Entries: []DropEntry{{LootRod, 1.0, 1, 2}}},
@@ -54,6 +59,7 @@ const (
 	LootRod LootType = iota
 	LootLauncher
 	LootDisruptor
+	LootHeat
 	LootEnergy
 	// Future loot types here
 	LootCount // Sentinel for array sizing
@@ -65,8 +71,8 @@ type RewardType uint8
 const (
 	RewardNone RewardType = iota
 	RewardWeapon
-	RewardEnergy
 	RewardHeat
+	RewardEnergy
 	RewardEvent
 )
 
@@ -118,6 +124,11 @@ var (
 		WeaponType: WeaponDisruptor,
 	}
 
+	rewardHeat = RewardProfile{
+		Type:  RewardHeat,
+		Delta: parameter.LootHeatRewardValue,
+	}
+
 	rewardEnergy = RewardProfile{
 		Type:  RewardEnergy,
 		Delta: parameter.LootEnergyRewardValue,
@@ -129,6 +140,7 @@ var LootProfiles = [LootCount]LootProfile{
 	LootRod:       {Reward: &rewardRod},
 	LootLauncher:  {Reward: &rewardLauncher},
 	LootDisruptor: {Reward: &rewardDisruptor},
+	LootHeat:      {Reward: &rewardHeat},
 	LootEnergy:    {Reward: &rewardEnergy},
 }
 
@@ -159,9 +171,14 @@ var LootVisuals = map[LootType]LootVisualDef{
 		InnerColor: visual.RgbOrbDisruptor,
 		GlowColor:  visual.RgbLootDisruptorGlow,
 	},
+	LootHeat: {
+		Rune:       'H',
+		InnerColor: visual.RgbLootHeatSigil,
+		GlowColor:  visual.RgbLootHeatGlow,
+	},
 	LootEnergy: {
 		Rune:       'E',
-		InnerColor: visual.RgbOrbEnergy,
+		InnerColor: visual.RgbLootEnergySigil,
 		GlowColor:  visual.RgbLootEnergyGlow,
 	},
 }
