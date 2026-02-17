@@ -209,6 +209,17 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// SoftCollisionQuasarToQuasar defines quasar-to-quasar soft repulsion
+var SoftCollisionQuasarToQuasar = CollisionProfile{
+	MassRatio:        MassRatioEqual,
+	ImpulseMin:       parameter.SoftCollisionImpulseMin,
+	ImpulseMax:       parameter.SoftCollisionImpulseMax,
+	AngleVariance:    parameter.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
 // Homing profiles
 
 // DrainHoming defines drain entity homing behavior

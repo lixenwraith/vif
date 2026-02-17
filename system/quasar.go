@@ -20,25 +20,21 @@ type quasarCacheEntry struct {
 	x, y   int // Grid position of header
 }
 
-// QuasarSystem manages the quasar boss entity lifecycle
-// Quasar is a 3x5 composite that tracks cursor at 2x drain speed
-// Drains 1000 energy/tick when any part overlaps shield
-// Resets heat to 0 on direct cursor collision without shield
+// QuasarSystem manages quasar boss entity lifecycle
+// Quasar is a 3x5 composite that tracks cursor, zaps when cursor exits range
 type QuasarSystem struct {
 	world *engine.World
-
-	// Runtime state
-	headerEntity core.Entity
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
 
 	// Per-tick cache for soft collision
-	swarmCache []swarmCacheEntry
+	swarmCache  []swarmCacheEntry
+	quasarCache []quasarCacheEntry
 
 	// Telemetry
-	statActive    *atomic.Bool
-	statHitPoints *atomic.Int64
+	statActive *atomic.Bool
+	statCount  *atomic.Int64
 
 	enabled bool
 }
@@ -50,19 +46,21 @@ func NewQuasarSystem(world *engine.World) engine.System {
 	}
 
 	s.swarmCache = make([]swarmCacheEntry, 0, 10)
+	s.quasarCache = make([]quasarCacheEntry, 0, 4)
 
 	s.statActive = world.Resources.Status.Bools.Get("quasar.active")
-	s.statHitPoints = world.Resources.Status.Ints.Get("quasar.hit_points")
+	s.statCount = world.Resources.Status.Ints.Get("quasar.count")
 
 	s.Init()
 	return s
 }
 
 func (s *QuasarSystem) Init() {
-	s.headerEntity = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	clear(s.swarmCache)
+	clear(s.quasarCache)
 	s.statActive.Store(false)
-	s.statHitPoints.Store(0)
+	s.statCount.Store(0)
 	s.enabled = true
 }
 
@@ -87,9 +85,6 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 
 func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
-		if s.headerEntity != 0 {
-			s.terminateQuasar()
-		}
 		s.Init()
 		return
 	}
@@ -113,12 +108,15 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventQuasarCancelRequest:
-		s.terminateQuasar()
+		// Cancel all quasars
+		for _, entity := range s.world.Components.Quasar.GetAllEntities() {
+			s.terminateQuasar(entity)
+		}
 
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
-			if payload.HeaderEntity == s.headerEntity {
-				s.terminateQuasar()
+			if s.world.Components.Quasar.HasEntity(payload.HeaderEntity) {
+				s.terminateQuasar(payload.HeaderEntity)
 			}
 		}
 	}
@@ -129,139 +127,144 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	headerEntity := s.headerEntity
-
-	if headerEntity == 0 {
-		return
-	}
-
 	// Cache combat entities for soft collision
 	s.cacheCombatEntities()
 
-	// Verify composite still exists
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		s.terminateQuasar()
-		return
-	}
+	quasarEntities := s.world.Components.Quasar.GetAllEntities()
+	activeCount := 0
 
-	quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity)
-	if !ok {
-		s.terminateQuasar()
-		return
-	}
+	// Zap range calculations, dynamic resize based on map
+	width := s.world.Resources.Config.MapWidth
+	height := s.world.Resources.Config.MapHeight
+	currentRadius := vmath.FromInt(max(width/2, height))
 
-	// Dynamic resize check: ensure radius is up to date with current screen dimensions
-	currentRadius := s.calculateZapRadius()
-	if quasarComp.ZapRadius != currentRadius {
-		quasarComp.ZapRadius = currentRadius
-	}
-
-	// Combat sync: termination if zero hitpoints
-	combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Hitpoint check
-	if combatComp.HitPoints <= 0 {
-		// TODO: audio effect
-
-		if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-				Species: component.SpeciesQuasar,
-				X:       headerPos.X,
-				Y:       headerPos.Y,
-			})
-		}
-		s.terminateQuasar()
-		return
-	}
-
-	// Stun check: skip movement, reset charging state
-	if combatComp.StunnedRemaining > 0 {
-		// Cancel charging if active
-		if quasarComp.IsCharging {
-			quasarComp.IsCharging = false
-			quasarComp.ChargeRemaining = 0
-			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-
-			s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
-				AnchorEntity: headerEntity,
-			})
-		}
-		// Note: IsZapping + IsShielded prevents stun, so no zap handling needed, until unshielded zap is implemented
-		return
-	}
-
-	// Check if cursor is within zap range
-	cursorInRange := s.isCursorInZapRange(headerEntity, &quasarComp)
-
-	// State machine: InRange ←→ Charging → Zapping
-	if cursorInRange {
-		// Cursor in range: cancel any active state, return to homing
-		if quasarComp.IsZapping {
-			s.stopZapping(headerEntity, &quasarComp)
-		}
-		// Cancel charging when cursor re-enters range
-		if quasarComp.IsCharging {
-			quasarComp.IsCharging = false
-			quasarComp.ChargeRemaining = 0
-
-			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
-
-			s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
-				AnchorEntity: headerEntity,
-			})
+	for _, headerEntity := range quasarEntities {
+		// Verify composite still exists
+		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+		if !ok {
+			s.terminateQuasar(headerEntity)
+			continue
 		}
 
-		s.updateKineticMovement(headerEntity, &quasarComp)
-		s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+		quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity)
+		if !ok {
+			s.terminateQuasar(headerEntity)
+			continue
+		}
 
-	} else if quasarComp.IsZapping {
-		// Already zapping: continue zap, update target
-		s.updateZapTarget(headerEntity)
-		s.applyZapDamage()
-		s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+		if quasarComp.ZapRadius != currentRadius {
+			quasarComp.ZapRadius = currentRadius
+		}
 
-	} else if quasarComp.IsCharging {
-		// Charging: decrement timer, check completion
-		quasarComp.ChargeRemaining -= s.world.Resources.Time.DeltaTime
+		// Combat sync
+		combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+		if !ok {
+			continue
+		}
 
-		if quasarComp.ChargeRemaining <= 0 {
-			s.startZapping(headerEntity, &quasarComp)
-		} else {
-			// Continue homing during charge
+		// Hitpoint check
+		if combatComp.HitPoints <= 0 {
+			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
+				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+					Entity:  headerEntity,
+					Species: component.SpeciesQuasar,
+					X:       headerPos.X,
+					Y:       headerPos.Y,
+				})
+			}
+			s.terminateQuasar(headerEntity)
+			continue
+		}
+
+		// Stun check: skip movement, reset charging state
+		if combatComp.StunnedRemaining > 0 {
+			if quasarComp.IsCharging {
+				quasarComp.IsCharging = false
+				quasarComp.ChargeRemaining = 0
+				s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+				s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+					AnchorEntity: headerEntity,
+				})
+			}
+			// Note: IsZapping + IsShielded prevents stun, so no zap handling needed, until unshielded zap is implemented
+			activeCount++
+			continue
+		}
+
+		// Check if cursor is within zap range
+		cursorInRange := s.isCursorInZapRange(headerEntity, &quasarComp)
+
+		// State machine: InRange ←→ Charging → Zapping
+		if cursorInRange {
+			// Cursor in range: cancel any active state, return to homing
+			if quasarComp.IsZapping {
+				s.stopZapping(headerEntity, &quasarComp)
+			}
+			// Cancel charging when cursor re-enters range
+			if quasarComp.IsCharging {
+				quasarComp.IsCharging = false
+				quasarComp.ChargeRemaining = 0
+				s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+				s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+					AnchorEntity: headerEntity,
+				})
+			}
+
 			s.updateKineticMovement(headerEntity, &quasarComp)
 			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+		} else if quasarComp.IsZapping {
+			// Already zapping: continue zap, update target
+			s.updateZapTarget(headerEntity)
+			s.applyZapDamage()
+			s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+
+		} else if quasarComp.IsCharging {
+			// Charging: decrement timer, check completion
+			quasarComp.ChargeRemaining -= s.world.Resources.Time.DeltaTime
+
+			if quasarComp.ChargeRemaining <= 0 {
+				s.startZapping(headerEntity, &quasarComp)
+			} else {
+				// Continue homing during charge
+				s.updateKineticMovement(headerEntity, &quasarComp)
+				s.world.Components.Quasar.SetComponent(headerEntity, quasarComp)
+			}
+
+		} else {
+			// Cursor out of range, not charging, not zapping: start charging
+			s.startCharging(headerEntity, &quasarComp)
 		}
 
-	} else {
-		// Cursor out of range, not charging, not zapping: start charging
-		s.startCharging(headerEntity, &quasarComp)
+		// Shield and cursor interaction (all states)
+		s.handleInteractions(headerEntity, &headerComp)
+
+		// Combat update: enraged state blocks kinetic via combat system
+		isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
+		combatComp.IsEnraged = isActiveState
+
+		// Damage immunity requires explicit refresh (not handled by IsEnraged)
+		if quasarComp.IsShielded {
+			combatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+		}
+
+		s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+
+		activeCount++
 	}
 
-	// Shield and cursor interaction (all states)
-	s.handleInteractions(headerEntity, &headerComp)
-
-	// Combat update: enraged state blocks kinetic via combat system
-	isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
-	combatComp.IsEnraged = isActiveState
-
-	// Damage immunity requires explicit refresh (not handled by IsEnraged)
-	if quasarComp.IsShielded {
-		combatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-	}
-
-	s.world.Components.Combat.SetComponent(headerEntity, combatComp)
-
-	s.statHitPoints.Store(int64(combatComp.HitPoints))
+	s.statCount.Store(int64(activeCount))
+	s.statActive.Store(activeCount > 0)
 }
 
 // cacheCombatEntities populates cache for soft collision detection
 func (s *QuasarSystem) cacheCombatEntities() {
 	s.swarmCache = s.swarmCache[:0]
+	s.quasarCache = s.quasarCache[:0]
 
+	// Cache swarms
 	swarmEntities := s.world.Components.Swarm.GetAllEntities()
 	for _, entity := range swarmEntities {
 		pos, ok := s.world.Positions.GetPosition(entity)
@@ -274,15 +277,24 @@ func (s *QuasarSystem) cacheCombatEntities() {
 			y:      pos.Y,
 		})
 	}
+
+	// Cache quasars
+	quasarEntities := s.world.Components.Quasar.GetAllEntities()
+	for _, entity := range quasarEntities {
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
+			entity: entity,
+			x:      pos.X,
+			y:      pos.Y,
+		})
+	}
 }
 
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	// Defensive: only one quasar allowed
-	if s.headerEntity != 0 {
-		return
-	}
-
-	// 1. Find valid spawn position via spiral search
+	// Find valid spawn position via spiral search
 	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
 		targetX, targetY,
 		parameter.QuasarWidth, parameter.QuasarHeight,
@@ -291,24 +303,17 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 		0,
 	)
 	if !found {
-		return // No valid position
+		return // No valid position, abort
 	}
 
 	// Header position from found top-left
 	headerX := topLeftX + parameter.QuasarHeaderOffsetX
 	headerY := topLeftY + parameter.QuasarHeaderOffsetY
 
-	// 2. Clear area
+	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)
-
-	// 3. Create composite entity
 	headerEntity := s.createQuasarComposite(headerX, headerY)
 
-	// 4. Update internal state
-	s.headerEntity = headerEntity
-	s.statActive.Store(true)
-
-	// 5. Notify world
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		HeaderEntity: headerEntity,
 	})
@@ -333,7 +338,6 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 				if e == 0 || e == cursorEntity {
 					continue
 				}
-				// TODO: check if works
 				// Skip walls - they block, not get cleared
 				if s.world.Components.Wall.HasEntity(e) {
 					continue
@@ -420,7 +424,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 			entity := s.world.CreateEntity()
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
-			// MemberEntries protected from decay/delete but not from death (composite manages lifecycle)
+			// MemberEntries are not from death, composite system manages lifecycle
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
 			})
@@ -452,14 +456,6 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	return headerEntity
-}
-
-// calculateZapRadius compute zap range from game dimensions
-func (s *QuasarSystem) calculateZapRadius() int64 {
-	width := s.world.Resources.Config.MapWidth
-	height := s.world.Resources.Config.MapHeight
-	// Visual radius = max(width/2, height) since height cells = height*2 visual units
-	return vmath.FromInt(max(width/2, height))
 }
 
 // startCharging initiates the charge phase before zapping
@@ -510,9 +506,9 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// Periodic speed scaling with cap (game logic, not physics)
 	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * parameter.GameUpdateInterval
 	if now.Sub(quasarComp.LastSpeedIncreaseAt) >= speedIncreaseInterval {
-		newMultiplier := vmath.Mul(quasarComp.SpeedMultiplier, vmath.FromFloat(1.0+parameter.QuasarSpeedIncreasePercent))
-		if newMultiplier > int64(parameter.QuasarSpeedMultiplierMaxFixed) {
-			newMultiplier = int64(parameter.QuasarSpeedMultiplierMaxFixed)
+		newMultiplier := vmath.Mul(quasarComp.SpeedMultiplier, parameter.QuasarSpeedIncreasePercent)
+		if newMultiplier > parameter.QuasarSpeedMultiplierMaxFixed {
+			newMultiplier = parameter.QuasarSpeedMultiplierMaxFixed
 		}
 		quasarComp.SpeedMultiplier = newMultiplier
 		quasarComp.LastSpeedIncreaseAt = now
@@ -549,8 +545,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// Cap velocity before integration to prevent runaway from cumulative dust hits
 	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.QuasarMaxSpeed)
 
-	// Define Wall Query
-	// We use a closure to capture the specific mask and dimensions
+	// Wall query to capture the specific mask and dimensions
 	wallCheck := func(topLeftX, topLeftY int) bool {
 		return s.world.Positions.HasBlockingWallInArea(
 			topLeftX, topLeftY,
@@ -567,9 +562,6 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	minHeaderY := parameter.QuasarHeaderOffsetY
 	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
-	// Restitution: 0.9 (Light dampening, keeps it floaty)
-	restitution := vmath.FromFloat(0.9) // TODO: magic number to parameters after test
-
 	// Integrate with Bounce
 	newX, newY, _ := physics.IntegrateWithBounce(
 		&kineticComp.Kinetic,
@@ -577,14 +569,14 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
 		minHeaderX, maxHeaderX,
 		minHeaderY, maxHeaderY,
-		restitution,
+		parameter.QuasarRestitution,
 		wallCheck,
 	)
 
-	// Soft collision with swarms
+	// Soft collision with other species
 	combatComp, hasCombat := s.world.Components.Combat.GetComponent(headerEntity)
 	if hasCombat {
-		s.applySoftCollisionWithSwarm(&kineticComp, &combatComp, newX, newY)
+		s.applySoftCollisions(headerEntity, &kineticComp, &combatComp, newX, newY)
 		s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 	}
 
@@ -597,12 +589,14 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
-// applySoftCollisionWithSwarm checks quasar overlap with swarms and applies repulsion
-func (s *QuasarSystem) applySoftCollisionWithSwarm(
+// applySoftCollisions checks quasar overlap with swarms and other quasars
+func (s *QuasarSystem) applySoftCollisions(
+	headerEntity core.Entity,
 	kineticComp *component.KineticComponent,
 	combatComp *component.CombatComponent,
 	headerX, headerY int,
 ) {
+	// Check collision with swarms
 	for _, sc := range s.swarmCache {
 		radialX, radialY, hit := physics.CheckSoftCollision(
 			headerX, headerY, sc.x, sc.y,
@@ -616,9 +610,31 @@ func (s *QuasarSystem) applySoftCollisionWithSwarm(
 				&physics.SoftCollisionQuasarToSwarm,
 				s.rng,
 			)
-
 			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-			return // One collision per tick
+			return
+		}
+	}
+
+	// Check collision with other quasars
+	for _, qc := range s.quasarCache {
+		if qc.entity == headerEntity {
+			continue
+		}
+
+		radialX, radialY, hit := physics.CheckSoftCollision(
+			headerX, headerY, qc.x, qc.y,
+			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
+		)
+
+		if hit {
+			physics.ApplyCollision(
+				&kineticComp.Kinetic,
+				radialX, radialY,
+				&physics.SoftCollisionQuasarToQuasar,
+				s.rng,
+			)
+			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
+			return
 		}
 	}
 }
@@ -675,8 +691,8 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 	quasarComp.ChargeRemaining = 0
 	quasarComp.IsCharging = false
 	quasarComp.IsZapping = true
+	quasarComp.IsShielded = true
 
-	quasarComp.IsShielded = true // Shield active during zap
 	// Activate visual shield component
 	if shield, ok := s.world.Components.Shield.GetComponent(headerEntity); ok {
 		shield.Active = true
@@ -691,9 +707,8 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{Owner: headerEntity})
 
 	quasarComp.IsZapping = false
+	quasarComp.IsShielded = false
 
-	quasarComp.IsShielded = false // Clear shield
-	// Deactivate visual shield component
 	if shield, ok := s.world.Components.Shield.GetComponent(headerEntity); ok {
 		shield.Active = false
 		s.world.Components.Shield.SetComponent(headerEntity, shield)
@@ -702,7 +717,7 @@ func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *compone
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 }
 
-// Update lightning target to track cursor
+// updateZapTarget lightning target to track cursor
 func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) {
 	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
@@ -717,7 +732,7 @@ func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) {
 	})
 }
 
-// Apply zap damage - same rate as shield overlap
+// applyZapDamage applies zap damage
 func (s *QuasarSystem) applyZapDamage() {
 	cursorEntity := s.world.Resources.Player.Entity
 
@@ -730,8 +745,7 @@ func (s *QuasarSystem) applyZapDamage() {
 			Value: parameter.QuasarShieldDrain,
 		})
 	} else {
-		// Direct hit - reduce 100 heat
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.HeatMax})
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.QuasarDamageHeat})
 	}
 }
 
@@ -741,13 +755,12 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 
 	header, ok := s.world.Components.Header.GetComponent(headerEntity)
 	if !ok {
-		s.terminateQuasar()
 		return
 	}
 
 	// Build set of member entity IDs for exclusion
 	memberSet := make(map[core.Entity]bool, len(header.MemberEntries)+1)
-	memberSet[s.headerEntity] = true
+	memberSet[headerEntity] = true
 	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
 			memberSet[m.Entity] = true
@@ -807,9 +820,9 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	shieldActive := ok && shieldComp.Active
 
-	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
 	anyOnCursor := false
 
+	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
 	var hitEntities []core.Entity
 
 	for _, memberEntry := range headerComp.MemberEntries {
@@ -847,31 +860,31 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *
 			Value: parameter.QuasarShieldDrain,
 		})
 	} else if anyOnCursor && !shieldActive {
-		// Direct cursor collision without shieldComp → reset heat
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.HeatMax})
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.QuasarDamageHeat})
 	}
 }
 
-// terminateQuasar ends quasar phase
-func (s *QuasarSystem) terminateQuasar() {
-	if s.headerEntity == 0 {
+// terminateQuasar ends a specific quasar
+func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
+	if headerEntity == 0 {
+		return
+	}
+
+	if !s.world.Components.Quasar.HasEntity(headerEntity) {
 		return
 	}
 
 	// Stop zapping or tracked lightning lingers after quasar death
 	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{
-		Owner:        s.headerEntity,
+		Owner:        headerEntity,
 		TargetEntity: 0, // 0 = all lightning from this owner
 	})
 
 	// Delegate composite destruction to CompositeSystem
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-		HeaderEntity: s.headerEntity,
+		HeaderEntity: headerEntity,
 		Effect:       0,
 	})
 
 	s.world.PushEvent(event.EventQuasarDestroyed, nil)
-
-	s.headerEntity = 0
-	s.statActive.Store(false)
 }

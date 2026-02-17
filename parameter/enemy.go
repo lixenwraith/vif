@@ -2,6 +2,8 @@ package parameter
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // Drain System
@@ -67,7 +69,7 @@ const (
 
 	// QuasarSpeedIncreasePercent is the speed multiplier increase per move (10% = 0.10)
 	// Applied as: newSpeed = oldSpeed * (1.0 + QuasarSpeedIncreasePercent)
-	QuasarSpeedIncreasePercent = 0.10
+	QuasarSpeedIncreasePercentFloat = 0.10
 
 	// QuasarZapDuration is the visual duration for zap lightning effect
 	// Set long since it's continuously refreshed while zapping
@@ -90,6 +92,16 @@ const (
 
 	// QuasarChargeDuration is the delay before zapping starts when cursor exits range
 	QuasarChargeDuration = 3 * time.Second
+
+	QuasarRestitutionFloat = 0.9
+
+	QuasarDamageHeat = 10
+)
+
+var (
+	QuasarSpeedIncreasePercent = vmath.FromFloat(1.0 + QuasarSpeedIncreasePercentFloat)
+
+	QuasarRestitution = vmath.FromFloat(QuasarRestitutionFloat)
 )
 
 // Quasar Visual

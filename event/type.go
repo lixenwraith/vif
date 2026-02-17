@@ -369,12 +369,12 @@ const (
 	EventFuseQuasarRequest
 
 	// EventDrainPause signals DrainSystem to stop spawning
-	// Trigger: FuseSystem before destroying drains
+	// Trigger: FSM
 	// Consumer: DrainSystem | Payload: nil
 	EventDrainPause
 
 	// EventDrainResume signals DrainSystem to resume spawning
-	// Trigger: QuasarSystem on quasar termination
+	// Trigger: FSM
 	// Consumer: DrainSystem | Payload: nil
 	EventDrainResume
 
@@ -404,12 +404,12 @@ const (
 	EventQuasarCancelRequest
 
 	// EventGrayoutStart signals persistent grayout activation
-	// Trigger: FSM on Quasar
+	// Trigger: FSM
 	// Consumer: GameState | Payload: nil
 	EventGrayoutStart
 
 	// EventGrayoutEnd signals persistent grayout deactivation
-	// Trigger: QuasarSystem on termination
+	// Trigger: FSM
 	// Consumer: GameState | Payload: nil
 	EventGrayoutEnd
 
