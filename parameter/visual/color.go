@@ -129,6 +129,11 @@ var (
 	RgbOrbDisruptor = terminal.RGB{100, 220, 130} // Green
 	RgbOrbFlash     = terminal.RGB{255, 255, 255} // White flash
 
+	// Orb corona colors (dimmer than sigil for glow effect)
+	RgbOrbCoronaRod       = terminal.RGB{0, 160, 160}  // Dim cyan
+	RgbOrbCoronaLauncher  = terminal.RGB{200, 110, 0}  // Dim orange
+	RgbOrbCoronaDisruptor = terminal.RGB{70, 170, 100} // Dim green
+
 	// Parent Missile: Chrome/White
 	RgbMissileParentBody       = terminal.RGB{255, 255, 255}
 	RgbMissileParentTrailStart = terminal.RGB{250, 250, 250}

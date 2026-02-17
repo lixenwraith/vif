@@ -10,8 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -221,13 +219,6 @@ func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 
 	orbComp.FlashRemaining = parameter.OrbFlashDuration
 	s.world.Components.Orb.SetComponent(orbEntity, orbComp)
-
-	// Set flash color
-	sigil, ok := s.world.Components.Sigil.GetComponent(orbEntity)
-	if ok {
-		sigil.Color = visual.RgbOrbFlash
-		s.world.Components.Sigil.SetComponent(orbEntity, sigil)
-	}
 }
 
 // ensureOrbs creates missing orbs for active weapons and triggers redistribution if needed
@@ -291,21 +282,6 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 		},
 	}
 
-	var sigilColor terminal.RGB
-	switch weaponType {
-	case component.WeaponRod:
-		sigilColor = visual.RgbOrbRod
-	case component.WeaponLauncher:
-		sigilColor = visual.RgbOrbLauncher
-	case component.WeaponDisruptor:
-		sigilColor = visual.RgbOrbDisruptor
-	}
-
-	sigilComp := component.SigilComponent{
-		Rune:  visual.CircleBullsEye,
-		Color: sigilColor,
-	}
-
 	protComp := component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
 	}
@@ -313,7 +289,6 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	s.world.Components.Protection.SetComponent(orbEntity, protComp)
 	s.world.Components.Orb.SetComponent(orbEntity, orbComp)
 	s.world.Components.Kinetic.SetComponent(orbEntity, kineticComp)
-	s.world.Components.Sigil.SetComponent(orbEntity, sigilComp)
 	s.world.Positions.SetPosition(orbEntity, component.PositionComponent{X: gridX, Y: gridY})
 
 	return orbEntity
@@ -504,31 +479,11 @@ func (s *WeaponSystem) updateOrbs() {
 			orb.FlashRemaining -= dt
 			if orb.FlashRemaining <= 0 {
 				orb.FlashRemaining = 0
-				s.restoreOrbColor(orbEntity, orb.WeaponType)
 			}
 		}
 
 		s.world.Components.Orb.SetComponent(orbEntity, orb)
 	}
-}
-
-// restoreOrbColor sets orb sigil back to normal color after flash
-func (s *WeaponSystem) restoreOrbColor(orbEntity core.Entity, weaponType component.WeaponType) {
-	sigil, ok := s.world.Components.Sigil.GetComponent(orbEntity)
-	if !ok {
-		return
-	}
-
-	switch weaponType {
-	case component.WeaponRod:
-		sigil.Color = visual.RgbOrbRod
-	case component.WeaponLauncher:
-		sigil.Color = visual.RgbOrbLauncher
-	case component.WeaponDisruptor:
-		sigil.Color = visual.RgbOrbDisruptor
-	}
-
-	s.world.Components.Sigil.SetComponent(orbEntity, sigil)
 }
 
 // destroyOrb removes an orb entity and clears its reference from owner's WeaponComponent

@@ -44,6 +44,24 @@ const (
 
 	// OrbFlashDuration is visual flash duration when orb fires
 	OrbFlashDuration = 100 * time.Millisecond
+
+	// OrbCoronaRadiusXFloat is horizontal glow radius in cells
+	OrbCoronaRadiusXFloat = 3.0
+
+	// OrbCoronaRadiusYFloat is vertical glow radius in cells (2:1 aspect)
+	OrbCoronaRadiusYFloat = 1.5
+
+	// OrbBurstRadiusXFloat is horizontal burst radius in cells
+	OrbBurstRadiusXFloat = 3.0
+
+	// OrbBurstRadiusYFloat is vertical burst radius in cells
+	OrbBurstRadiusYFloat = 1.5
+
+	// OrbCoronaPeriodMs is corona rotation period (ms)
+	OrbCoronaPeriodMs = int64(500)
+
+	// OrbCoronaIntensity is peak corona glow alpha
+	OrbCoronaIntensity = 0.6
 )
 
 // Cleaner Entity
