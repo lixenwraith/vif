@@ -33,12 +33,6 @@ var navGeneBounds = []genetic.ParameterBounds{
 	{Min: parameter.GADrainFlowLookaheadMin, Max: parameter.GADrainFlowLookaheadMax},
 }
 
-var navGeneDefaults = []float64{
-	parameter.GADrainTurnThresholdDefault,
-	parameter.GADrainBrakeIntensityDefault,
-	parameter.GADrainFlowLookaheadDefault,
-}
-
 // --- Fitness Metric Keys ---
 
 const (
@@ -303,9 +297,9 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 			navComp.BrakeIntensity = vmath.FromFloat(genes[geneNavBrakeIntensity])
 			navComp.FlowLookahead = vmath.FromFloat(genes[geneNavFlowLookahead])
 		} else {
-			navComp.TurnThreshold = vmath.FromFloat(navGeneDefaults[geneNavTurnThreshold])
-			navComp.BrakeIntensity = vmath.FromFloat(navGeneDefaults[geneNavBrakeIntensity])
-			navComp.FlowLookahead = vmath.FromFloat(navGeneDefaults[geneNavFlowLookahead])
+			navComp.TurnThreshold = parameter.NavTurnThresholdDefault
+			navComp.BrakeIntensity = parameter.NavBrakeIntensityDefault
+			navComp.FlowLookahead = parameter.NavFlowLookaheadDefault
 		}
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}

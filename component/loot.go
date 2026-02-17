@@ -6,6 +6,14 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// DropEntry defines a single drop possibility
+type DropEntry struct {
+	Loot          LootType
+	BaseRate      float64
+	Count         int // Items dropped on success (0 treated as 1)
+	FallbackCount int // Bonus added to next tier when unique entry skipped
+}
+
 // DropTier represents a priority level in the drop table
 type DropTier struct {
 	Unique  bool // If true, skip tier when all entries owned/active
@@ -21,20 +29,20 @@ type SpeciesDropTable struct {
 var DropTables = map[SpeciesType]SpeciesDropTable{
 	SpeciesQuasar: {
 		Tiers: []DropTier{
-			{Unique: true, Entries: []DropEntry{{LootRod, 1.0}}},
-			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0}}},
+			{Unique: true, Entries: []DropEntry{{LootRod, 1.0, 1, 2}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0, 1, 0}}},
 		},
 	},
 	SpeciesSwarm: {
 		Tiers: []DropTier{
-			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.10}}},
-			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.20}}},
+			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.10, 1, 0}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.20, 1, 0}}},
 		},
 	},
 	SpeciesStorm: {
 		Tiers: []DropTier{
-			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0}}},
-			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0}}},
+			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0, 1, 2}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0, 3, 0}}},
 		},
 	},
 }
@@ -125,12 +133,6 @@ var LootProfiles = [LootCount]LootProfile{
 }
 
 // --- Drop Tables ---
-
-// DropEntry defines a single drop possibility
-type DropEntry struct {
-	Loot     LootType
-	BaseRate float64
-}
 
 // LootVisualDef defines rendering properties for a loot type
 type LootVisualDef struct {

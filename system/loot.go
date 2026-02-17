@@ -14,6 +14,22 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// DropResult holds a single drop outcome
+type DropResult struct {
+	Loot  component.LootType
+	Count int
+}
+
+// spawnOffsets defines deterministic scatter patterns by count
+var spawnOffsets = [][]struct{ dx, dy int }{
+	{},                                 // 0: unused
+	{{0, 0}},                           // 1: center
+	{{-1, 0}, {1, 0}},                  // 2: horizontal
+	{{-1, 0}, {1, 0}, {0, -1}},         // 3: T-shape
+	{{-1, 0}, {1, 0}, {0, -1}, {0, 1}}, // 4: cross
+	{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {0, 0}}, // 5: cross + center
+}
+
 // pityState tracks consecutive misses per loot type for an enemy type
 type pityState struct {
 	misses [component.LootCount]int
@@ -98,8 +114,7 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventLootSpawnRequest:
 		if payload, ok := ev.Payload.(*event.LootSpawnRequestPayload); ok {
-			s.spawnLoot(payload.Type, payload.X, payload.Y)
-			s.statDrops.Add(1)
+			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y)
 		}
 	}
 }
@@ -151,43 +166,45 @@ func (s *LootSystem) Update() {
 			continue
 		}
 
-		// Movement logic
-		if !lootComp.Homing {
-			if s.world.Positions.HasLineOfSight(curX, curY, cursorPos.X, cursorPos.Y, component.WallBlockKinetic) {
-				lootComp.Homing = true
-				s.world.Components.Loot.SetComponent(lootEntity, lootComp)
+		// Movement logic - always process, navigation handles LOS internally
+		navComp, hasNav := s.world.Components.Navigation.GetComponent(lootEntity)
+
+		if hasNav && navComp.HasDirectPath {
+			// Direct LOS: standard homing
+			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &physics.LootHoming, dtFixed)
+		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
+			// No LOS but have flow field: follow flow with lookahead
+			lookahead := vmath.FromFloat(5.0)
+			targetX := kineticComp.PreciseX + vmath.Mul(navComp.FlowX, lookahead)
+			targetY := kineticComp.PreciseY + vmath.Mul(navComp.FlowY, lookahead)
+			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &physics.LootHoming, dtFixed)
+		} else {
+			// No nav or no flow: velocity bleed (stuck/lost)
+			bleedFactor := vmath.FromFloat(6.0)
+			kineticComp.VelX -= vmath.Mul(vmath.Mul(kineticComp.VelX, bleedFactor), dtFixed)
+			kineticComp.VelY -= vmath.Mul(vmath.Mul(kineticComp.VelY, bleedFactor), dtFixed)
+			if vmath.Abs(kineticComp.VelX) < vmath.FromFloat(0.1) && vmath.Abs(kineticComp.VelY) < vmath.FromFloat(0.1) {
+				kineticComp.VelX, kineticComp.VelY = 0, 0
 			}
 		}
 
-		if lootComp.Homing {
-			if s.world.Positions.HasLineOfSight(curX, curY, cursorPos.X, cursorPos.Y, component.WallBlockKinetic) {
-				physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &physics.LootHoming, dtFixed)
-			} else {
-				bleedFactor := vmath.FromFloat(6.0)
-				kineticComp.VelX -= vmath.Mul(vmath.Mul(kineticComp.VelX, bleedFactor), dtFixed)
-				kineticComp.VelY -= vmath.Mul(vmath.Mul(kineticComp.VelY, bleedFactor), dtFixed)
-				if vmath.Abs(kineticComp.VelX) < vmath.FromFloat(0.1) && vmath.Abs(kineticComp.VelY) < vmath.FromFloat(0.1) {
-					kineticComp.VelX, kineticComp.VelY = 0, 0
-				}
-			}
+		newGridX, newGridY, _ := physics.IntegrateWithBounce(
+			&kineticComp.Kinetic,
+			dtFixed,
+			0, 0,
+			0, config.MapWidth,
+			0, config.MapHeight,
+			vmath.FromFloat(0.4),
+			func(tx, ty int) bool {
+				return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
+			},
+		)
 
-			newGridX, newGridY, _ := physics.IntegrateWithBounce(
-				&kineticComp.Kinetic,
-				dtFixed,
-				0, 0,
-				0, config.MapWidth,
-				0, config.MapHeight,
-				vmath.FromFloat(0.4),
-				func(tx, ty int) bool {
-					return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
-				},
-			)
-
-			s.world.Components.Kinetic.SetComponent(lootEntity, kineticComp)
-			if newGridX != curX || newGridY != curY {
-				s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
-			}
+		s.world.Components.Kinetic.SetComponent(lootEntity, kineticComp)
+		if newGridX != curX || newGridY != curY {
+			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
+
 		activeCount++
 	}
 	s.statActive.Store(activeCount)
@@ -195,27 +212,169 @@ func (s *LootSystem) Update() {
 
 // --- Drop Resolution ---
 
+// onEnemyKilled processes multi-drop loot spawning
 func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
-	lootType, dropped := s.rollDropTable(payload.Species)
-	if !dropped {
+	results := s.rollDropTable(payload.Species)
+	if len(results) == 0 {
 		return
 	}
 
-	s.spawnLoot(lootType, payload.X, payload.Y)
-	s.statDrops.Add(1)
+	// Flatten results into spawn list
+	var spawns []component.LootType
+	for _, r := range results {
+		for i := 0; i < r.Count; i++ {
+			spawns = append(spawns, r.Loot)
+		}
+	}
+
+	if len(spawns) == 0 {
+		return
+	}
+
+	// Spawn with offset pattern
+	s.spawnLootMulti(spawns, payload.X, payload.Y)
 }
 
-// candidate holds entry with pity-adjusted rate
-type candidate struct {
-	entry *component.DropEntry
-	rate  float64
+// --- Spawn ---
+
+// spawnLootMulti spawns multiple loot items with scatter pattern and initial burst velocity
+func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int) {
+	count := len(loots)
+	if count == 0 {
+		return
+	}
+
+	// Clamp to pattern table size
+	patternIdx := count
+	if patternIdx >= len(spawnOffsets) {
+		patternIdx = len(spawnOffsets) - 1
+	}
+	pattern := spawnOffsets[patternIdx]
+
+	for i, lootType := range loots {
+		// Cycle through pattern if more items than offsets
+		offset := pattern[i%len(pattern)]
+		spawnX, spawnY := cx+offset.dx, cy+offset.dy
+
+		// Calculate burst direction from offset (before validation may change position)
+		burstDirX, burstDirY := offset.dx, offset.dy
+
+		// Validate position, fallback to center
+		if !s.isValidSpawnPos(spawnX, spawnY) {
+			spawnX, spawnY = cx, cy
+			if !s.isValidSpawnPos(spawnX, spawnY) {
+				// Last resort: find any free cell nearby
+				if freeX, freeY, found := s.world.Positions.FindFreeFromPattern(
+					cx, cy, 1, 1,
+					engine.PatternCardinalFirst,
+					1, 5, true,
+					component.WallBlockKinetic, nil,
+				); found {
+					spawnX, spawnY = freeX, freeY
+					// Update burst direction based on fallback position
+					burstDirX, burstDirY = freeX-cx, freeY-cy
+				} else {
+					continue // Skip this loot if no valid position
+				}
+			}
+		}
+
+		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY)
+		s.statDrops.Add(1)
+	}
 }
 
-// rollDropTable processes tiered drop tables with pity
-func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component.LootType, bool) {
+// spawnLootWithBurst creates loot entity with initial velocity in burst direction
+func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int) {
+	vis, ok := component.LootVisuals[lootType]
+	if !ok {
+		return
+	}
+
+	entity := s.world.CreateEntity()
+	preciseX, preciseY := vmath.CenteredFromGrid(x, y)
+
+	// Calculate initial burst velocity
+	var velX, velY int64
+	if burstDirX != 0 || burstDirY != 0 {
+		dirX, dirY := vmath.Normalize2D(vmath.FromInt(burstDirX), vmath.FromInt(burstDirY))
+		burstSpeed := vmath.FromFloat(8.0) // 8 cells/sec initial burst
+		velX = vmath.Mul(dirX, burstSpeed)
+		velY = vmath.Mul(dirY, burstSpeed)
+	}
+
+	// Loot component
+	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
+		Type:     lootType,
+		LastIntX: x,
+		LastIntY: y,
+	})
+
+	// Kinetic with initial burst velocity
+	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
+		Kinetic: core.Kinetic{
+			PreciseX: preciseX,
+			PreciseY: preciseY,
+			VelX:     velX,
+			VelY:     velY,
+		},
+	})
+
+	// Shield
+	cfg := visual.LootShieldConfig
+	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
+		Active:        true,
+		Color:         cfg.Color,
+		Palette256:    cfg.Palette256,
+		GlowColor:     vis.GlowColor,
+		GlowIntensity: cfg.GlowIntensity,
+		GlowPeriod:    cfg.GlowPeriod,
+		MaxOpacity:    cfg.MaxOpacity,
+		RadiusX:       cfg.RadiusX,
+		RadiusY:       cfg.RadiusY,
+		InvRxSq:       cfg.InvRxSq,
+		InvRySq:       cfg.InvRySq,
+	})
+
+	// Position
+	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+
+	// Sigil
+	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
+		Rune:  vis.Rune,
+		Color: vis.InnerColor,
+	})
+
+	// Protection
+	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
+	})
+
+	// Navigation for wall-aware pathfinding (no GA tracking - loot doesn't emit EnemyCreated)
+	s.world.Components.Navigation.SetComponent(entity, component.NavigationComponent{
+		Width:          1,
+		Height:         1,
+		TurnThreshold:  parameter.NavTurnThresholdDefault,  // Unused by loot, default value
+		BrakeIntensity: parameter.NavBrakeIntensityDefault, // Unused by loot, default value
+		FlowLookahead:  parameter.NavFlowLookaheadDefault,  // Unused by loot, default value
+	})
+}
+
+// isValidSpawnPos checks if position is within bounds and not blocked
+func (s *LootSystem) isValidSpawnPos(x, y int) bool {
+	config := s.world.Resources.Config
+	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
+		return false
+	}
+	return !s.world.Positions.IsBlocked(x, y, component.WallBlockKinetic)
+}
+
+// rollDropTable processes tiered drop tables with pity and fallback accumulation
+// Returns slice of drop results (may be empty)
+func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResult {
 	table, ok := component.DropTables[speciesType]
 	if !ok || len(table.Tiers) == 0 {
-		return 0, false
+		return nil
 	}
 
 	state := s.pity[speciesType]
@@ -242,9 +401,11 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component
 		return weaponComp.Active[profile.Reward.WeaponType]
 	}
 
-	// Process tiers in order
+	var results []DropResult
+	fallbackBonus := 0
+
 	for _, tier := range table.Tiers {
-		// Unique tier: skip if all entries owned
+		// Unique tier: skip if all entries owned, accumulate fallback
 		if tier.Unique {
 			allOwned := true
 			for _, entry := range tier.Entries {
@@ -254,7 +415,11 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component
 				}
 			}
 			if allOwned {
-				continue
+				// Accumulate fallback from all entries
+				for _, entry := range tier.Entries {
+					fallbackBonus += entry.FallbackCount
+				}
+				continue // Next tier
 			}
 		}
 
@@ -307,17 +472,42 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) (component
 		}
 
 		if dropped != nil {
-			return dropped.Loot, true
+			count := dropped.Count
+			if count <= 0 {
+				count = 1
+			}
+			// Apply fallback bonus to non-unique tiers
+			if !tier.Unique {
+				count += fallbackBonus
+			}
+			results = append(results, DropResult{Loot: dropped.Loot, Count: count})
+
+			// Unique tier dropped: continue to next tier (no fallback accumulation)
+			if tier.Unique {
+				continue
+			}
 		}
 
-		// Unique tier miss: continue to next tier (fallthrough)
-		// Non-unique tier: stop processing
+		// Non-unique tier: stop processing regardless of outcome
 		if !tier.Unique {
 			break
 		}
+
+		// Unique tier miss: accumulate fallback, continue
+		if dropped == nil {
+			for _, c := range candidates {
+				fallbackBonus += c.entry.FallbackCount
+			}
+		}
 	}
 
-	return 0, false
+	return results
+}
+
+// candidate holds entry with pity-adjusted rate
+type candidate struct {
+	entry *component.DropEntry
+	rate  float64
 }
 
 // getActiveLootTypes returns set of loot types currently on map
@@ -332,60 +522,6 @@ func (s *LootSystem) getActiveLootTypes() map[component.LootType]bool {
 		active[lootComp.Type] = true
 	}
 	return active
-}
-
-// --- Spawn ---
-
-func (s *LootSystem) spawnLoot(lootType component.LootType, x, y int) {
-	vis, ok := component.LootVisuals[lootType]
-	if !ok {
-		return
-	}
-	entity := s.world.CreateEntity()
-	preciseX, preciseY := vmath.CenteredFromGrid(x, y)
-
-	// Loot component
-	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
-		Type: lootType,
-	})
-
-	// Kinetic
-	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
-		Kinetic: core.Kinetic{
-			PreciseX: preciseX,
-			PreciseY: preciseY,
-		},
-	})
-
-	// Shield (uses shared config, loot-specific glow color)
-	cfg := visual.LootShieldConfig
-	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
-		Active:        true,
-		Color:         cfg.Color,
-		Palette256:    cfg.Palette256,
-		GlowColor:     vis.GlowColor,
-		GlowIntensity: cfg.GlowIntensity,
-		GlowPeriod:    cfg.GlowPeriod,
-		MaxOpacity:    cfg.MaxOpacity,
-		RadiusX:       cfg.RadiusX,
-		RadiusY:       cfg.RadiusY,
-		InvRxSq:       cfg.InvRxSq,
-		InvRySq:       cfg.InvRySq,
-	})
-
-	// Position
-	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
-
-	// Sigil
-	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
-		Rune:  vis.Rune,
-		Color: vis.InnerColor,
-	})
-
-	// Protection
-	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
-	})
 }
 
 // --- Collection ---

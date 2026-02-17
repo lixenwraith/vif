@@ -732,9 +732,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Navigation component with defaults (GA will override via event)
 	navComp := component.NavigationComponent{
-		TurnThreshold:  vmath.FromFloat(parameter.GADrainTurnThresholdDefault),
-		BrakeIntensity: vmath.FromFloat(parameter.GADrainBrakeIntensityDefault),
-		FlowLookahead:  vmath.FromFloat(parameter.GADrainFlowLookaheadDefault),
+		TurnThreshold:  parameter.NavTurnThresholdDefault,
+		BrakeIntensity: parameter.NavBrakeIntensityDefault,
+		FlowLookahead:  parameter.NavFlowLookaheadDefault,
 	}
 	s.world.Components.Navigation.SetComponent(entity, navComp)
 
