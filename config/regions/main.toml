@@ -30,6 +30,7 @@ transitions = [
 [states.PreSweepCheck]
 parent = "Gameplay"
 transitions = [
+    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
     { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
     { trigger = "Tick", target = "SweepingNormal" },
 ]
@@ -40,6 +41,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
 ]
 transitions = [
+    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
     { trigger = "EventCleanerSweepingFinished", target = "QuasarHandoff" },
 ]
 
@@ -51,6 +53,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
 ]
 transitions = [
+    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
     { trigger = "EventCleanerSweepingFinished", target = "DecayWait" },
 ]
 

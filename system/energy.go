@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -16,6 +17,17 @@ type EnergySystem struct {
 	lastCorrect    time.Time
 	errorCursorSet bool
 
+	// Cycle difficulty scaling
+	damageMultiplier int64
+
+	// Telemetry
+	statCurrent          *atomic.Int64
+	statDamageMultiplier *atomic.Int64
+	statPenaltyCount     *atomic.Int64
+	statRewardCount      *atomic.Int64
+	statSpendCount       *atomic.Int64
+	statCrossedZeroCount *atomic.Int64
+
 	enabled bool
 }
 
@@ -24,6 +36,14 @@ func NewEnergySystem(world *engine.World) engine.System {
 	s := &EnergySystem{
 		world: world,
 	}
+
+	s.statCurrent = s.world.Resources.Status.Ints.Get("energy.current")
+	s.statDamageMultiplier = s.world.Resources.Status.Ints.Get("energy.damage_multiplier")
+	s.statPenaltyCount = s.world.Resources.Status.Ints.Get("energy.penalty_count")
+	s.statRewardCount = s.world.Resources.Status.Ints.Get("energy.reward_count")
+	s.statSpendCount = s.world.Resources.Status.Ints.Get("energy.spend_count")
+	s.statCrossedZeroCount = s.world.Resources.Status.Ints.Get("energy.crossed_zero_count")
+
 	s.Init()
 	return s
 }
@@ -32,6 +52,15 @@ func NewEnergySystem(world *engine.World) engine.System {
 func (s *EnergySystem) Init() {
 	s.lastCorrect = time.Time{}
 	s.errorCursorSet = false
+	s.damageMultiplier = 1
+
+	s.statCurrent.Store(0)
+	s.statDamageMultiplier.Store(1)
+	s.statPenaltyCount.Store(0)
+	s.statRewardCount.Store(0)
+	s.statSpendCount.Store(0)
+	s.statCrossedZeroCount.Store(0)
+
 	s.enabled = true
 }
 
@@ -53,6 +82,8 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
+		event.EventCycleDamageMultiplierIncrease,
+		event.EventCycleDamageMultiplierReset,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -100,6 +131,14 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyBlinkStop:
 		s.stopBlink()
+
+	case event.EventCycleDamageMultiplierIncrease:
+		s.damageMultiplier *= 2
+		s.statDamageMultiplier.Store(s.damageMultiplier)
+
+	case event.EventCycleDamageMultiplierReset:
+		s.damageMultiplier = 1
+		s.statDamageMultiplier.Store(1)
 	}
 }
 
@@ -172,6 +211,11 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 		absDelta = -absDelta
 	}
 
+	// Apply cycle damage multiplier to penalties
+	if deltaType == event.EnergyDeltaPenalty {
+		absDelta *= s.damageMultiplier
+	}
+
 	negativeEnergy := currentEnergy < 0
 
 	var newEnergy int64
@@ -204,6 +248,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 			}
 		}
 	case event.EnergyDeltaSpend:
+		s.statSpendCount.Add(1)
 		// Convergent to zero, can cross zero
 		if negativeEnergy {
 			newEnergy = currentEnergy + absDelta
@@ -220,17 +265,20 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 
 	energyComp.Current = newEnergy
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+	s.statCurrent.Store(newEnergy)
 
 	// Preventing one frame flickering of shield at zero energy
 	if newEnergy == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
 		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.statCrossedZeroCount.Add(1)
 		return
 	}
 
 	// Signal to remove buffs
 	if crossedZero {
 		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.statCrossedZeroCount.Add(1)
 	}
 }
 
@@ -243,16 +291,19 @@ func (s *EnergySystem) setEnergy(value int64) {
 	}
 
 	currentEnergy := energyComp.Current
-	if (currentEnergy < 0 && value >= 0) || (currentEnergy >= 0 && value < 0) {
+	if (currentEnergy < 0 && value > 0) || (currentEnergy >= 0 && value < 0) {
 		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.statCrossedZeroCount.Add(1)
 	}
-	energyComp.Current = value
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
-
 	if value == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
 		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.statCurrent.Store(value)
 	}
+
+	energyComp.Current = value
+	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+	s.statCurrent.Store(value)
 }
 
 // handleGlyphConsumed calculates and applies energy from glyph destruction

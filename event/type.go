@@ -643,6 +643,16 @@ const (
 	// Consumer: BulletSystem | Payload: *MazeSpawnRequestPayload
 	EventBulletSpawnRequest
 
+	// EventCycleDamageMultiplierIncrease signals cycle completion, doubles damage multiplier
+	// Trigger: FSM on region/level cycle end
+	// Consumer: EnergySystem | Payload: nil
+	EventCycleDamageMultiplierIncrease
+
+	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
+	// Trigger: FSM on region/level fail
+	// Consumer: EnergySystem | Payload: nil
+	EventCycleDamageMultiplierReset
+
 	EventDebugFlowToggle
 )
 

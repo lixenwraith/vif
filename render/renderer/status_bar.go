@@ -35,6 +35,9 @@ type StatusBarRenderer struct {
 	statFSMIndex   *atomic.Int64
 	statFSMTotal   *atomic.Int64
 
+	// Energy telemetry
+	statDamageMultiplier *atomic.Int64
+
 	// Cursor blink state
 	cursorBlinkOn   bool
 	lastBlinkToggle time.Time
@@ -60,6 +63,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statFSMMaxDur:  statusReg.Ints.Get("fsm.max_duration"),
 		statFSMIndex:   statusReg.Ints.Get("fsm.state_index"),
 		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
+
+		statDamageMultiplier: statusReg.Ints.Get("energy.damage_multiplier"),
 	}
 }
 
@@ -156,7 +161,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 	rightItems = append(rightItems, statusItem{text: energyText, fg: energyFg, bg: energyBg})
 
-	// Priority 3: Boost (conditional)
+	// Priority 3: Damage Multiplier (cycle scaling)
+	dmgMult := r.statDamageMultiplier.Load()
+	if dmgMult > 1 {
+		rightItems = append(rightItems, statusItem{
+			text: fmt.Sprintf(" x%d ", dmgMult),
+			fg:   visual.RgbBlack,
+			bg:   visual.RgbCursorError, // Red background
+		})
+	}
+
+	// Priority 4: Boost (conditional)
 	boost, boostOk := r.gameCtx.World.Components.Boost.GetComponent(r.gameCtx.World.Resources.Player.Entity)
 	if boostOk && boost.Active {
 		remaining := boost.Remaining.Seconds()
@@ -170,7 +185,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		})
 	}
 
-	// Priority 4: Grid (conditional)
+	// Priority 5: Grid (conditional)
 	if ping, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity); ok && ping.GridActive {
 		gridRemaining := ping.GridRemaining.Seconds()
 		if gridRemaining < 0 {
@@ -183,7 +198,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		})
 	}
 
-	// Priority 5-8: Metrics (lowest priority, dropped first)
+	// Priority 6-9: Metrics (lowest priority, dropped first)
 	rightItems = append(rightItems, statusItem{
 		text: fmt.Sprintf(" APM: %d ", r.statAPM.Load()),
 		fg:   visual.RgbBlack,

@@ -29,9 +29,6 @@ type SwarmSystem struct {
 	// Runtime state
 	active bool
 
-	// Storm spawn tracking - counts swarms killed by player damage
-	playerKillCount int
-
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
 
@@ -40,9 +37,8 @@ type SwarmSystem struct {
 	quasarCache []quasarCacheEntry
 
 	// Telemetry
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
-	// TODO: this is in sync with playerKillCount, to be changed
+	statActive      *atomic.Bool
+	statCount       *atomic.Int64
 	statPlayerKills *atomic.Int64
 
 	enabled bool
@@ -184,16 +180,8 @@ func (s *SwarmSystem) Update() {
 				})
 			}
 
-			// Track player damage kill for storm spawn
-			s.playerKillCount++
-			s.statPlayerKills.Store(int64(s.playerKillCount))
-
-			// Check storm spawn threshold
-			if s.playerKillCount >= parameter.SwarmKillsForStorm {
-				s.playerKillCount = 0
-				s.statPlayerKills.Store(0)
-				s.world.PushEvent(event.EventStormSpawnRequest, nil)
-			}
+			// Track player damage kills
+			s.statPlayerKills.Add(1)
 
 			s.despawnSwarm(headerEntity)
 			continue

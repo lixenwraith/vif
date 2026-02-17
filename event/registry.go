@@ -274,4 +274,8 @@ func InitRegistry() {
 	// Composite Integrity
 	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
 	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
+
+	// FSM
+	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
+	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
 }

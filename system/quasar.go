@@ -277,6 +277,11 @@ func (s *QuasarSystem) cacheCombatEntities() {
 }
 
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
+	// Defensive: only one quasar allowed
+	if s.headerEntity != 0 {
+		return
+	}
+
 	// 1. Find valid spawn position via spiral search
 	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
 		targetX, targetY,

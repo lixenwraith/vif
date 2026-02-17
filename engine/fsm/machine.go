@@ -202,9 +202,19 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState) {
 // HandleEvent routes an external event through all active regions
 // Returns true if the event triggered a transition or was consumed
 func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
+	// Snapshot region names to prevent dispatch to regions spawned by this event
+	regionNames := make([]string, 0, len(m.regions))
+	for name := range m.regions {
+		regionNames = append(regionNames, name)
+	}
+
 	handled := false
 
-	for _, region := range m.regions {
+	for _, name := range regionNames {
+		region, ok := m.regions[name]
+		if !ok {
+			continue // Region terminated during this event's handling
+		}
 		if region.Paused {
 			continue
 		}

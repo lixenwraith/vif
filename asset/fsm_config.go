@@ -193,6 +193,7 @@ on_enter = [
 [states.QuasarFail]
 parent = "QuasarCycle"
 on_enter = [
+	{ action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
 ]
 transitions = [
@@ -234,6 +235,7 @@ transitions = [
 [states.StormVictory]
 parent = "StormCycle"
 on_enter = [
+	{ action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Storm Defeated!" } },
 ]
 transitions = [
@@ -243,6 +245,7 @@ transitions = [
 [states.StormFail]
 parent = "StormCycle"
 on_enter = [
+	{ action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
 ]
 transitions = [
