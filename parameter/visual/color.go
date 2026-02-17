@@ -96,6 +96,8 @@ var (
 	// Cleaner colors
 	RgbCleanerBasePositive = terminal.RGB{255, 255, 0}   // Bright yellow for positive energy cleaners
 	RgbCleanerBaseNegative = terminal.RGB{170, 100, 210} // Violet for negative energy cleaners
+	// RgbCleanerBaseNugget   = terminal.RGB{255, 80, 40}   // Vermillion for nugget spawn cleaners
+	RgbCleanerBaseNugget = terminal.RGB{227, 66, 82} // Vermilion for nugget spawn cleaners
 
 	// Flash colors
 	RgbRemovalFlash = terminal.RGB{255, 255, 200} // Bright yellow-white flash

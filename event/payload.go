@@ -48,8 +48,9 @@ type ShieldDrainRequestPayload struct {
 
 // DirectionalCleanerPayload contains origin for 4-way cleaner spawn
 type DirectionalCleanerPayload struct {
-	OriginX int `toml:"origin_x"`
-	OriginY int `toml:"origin_y"`
+	OriginX   int                        `toml:"origin_x"`
+	OriginY   int                        `toml:"origin_y"`
+	ColorType component.CleanerColorType `toml:"color_type"`
 }
 
 // CharacterTypedPayload captures keypress and cursor state when character is typed

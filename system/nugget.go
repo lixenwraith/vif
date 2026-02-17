@@ -136,7 +136,7 @@ func (s *NuggetSystem) Update() {
 		cursorPos, cursorOk := s.world.Positions.GetPosition(cursorEntity)
 		nuggetPos, nuggetOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
 		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
-			s.collectNugget(nuggetPos.X, nuggetPos.Y)
+			s.collectNugget()
 		}
 	}
 
@@ -197,7 +197,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	})
 
 	// 5. Collect nugget that overlaps with cursor
-	s.collectNugget(nuggetPos.X, nuggetPos.Y)
+	s.collectNugget()
 
 	// 5. Update stats
 	s.statJumps.Add(1)
@@ -247,8 +247,9 @@ func (s *NuggetSystem) spawnNugget() {
 
 	// Emit directional cleaners on spawn
 	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-		OriginX: x,
-		OriginY: y,
+		OriginX:   x,
+		OriginY:   y,
+		ColorType: component.CleanerColorNugget,
 	})
 }
 
@@ -289,32 +290,13 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 }
 
 // collectNugget handles auto-collection when cursor overlaps nugget
-func (s *NuggetSystem) collectNugget(nuggetPosX, nuggetPosY int) {
-	// 1. Play Sound
+func (s *NuggetSystem) collectNugget() {
 	s.world.Resources.Audio.Player.Play(core.SoundBell)
 
-	// 2. Emit directional cleaner and nugget death events
-	event.EmitDeathOne(s.world.Resources.Event.Queue, s.activeNuggetEntity, 0)
-	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-		OriginX: nuggetPosX,
-		OriginY: nuggetPosY,
-	})
+	s.world.DestroyEntity(s.activeNuggetEntity)
 
-	// heatComp, ok := s.world.Components.Heat.GetComponent(s.world.Resources.Cursor.Entity)
-	// if ok {
-	// 	if heatComp.Current == parameter.HeatMax {
-	// 		s.nuggetOverload++
-	// 		if s.nuggetOverload >= parameter.NuggetOverloadCount {
-	// 			s.world.PushEvent(event.EventNuggetOverloadNotification, nil)
-	// 			s.nuggetOverload = 0
-	// 		}
-	// 	} else {
-	// 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: parameter.NuggetHeatIncrease})
-	// 	}
-	// }
 	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: parameter.NuggetHeatIncrease})
 
-	// 3. Update system state and stats
 	s.activeNuggetEntity = 0
 	s.statCollected.Add(1)
 }

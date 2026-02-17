@@ -568,16 +568,24 @@ func (s *WeaponSystem) handleFireMain() {
 	weaponComp.MainFireCooldown = parameter.WeaponCooldownMain
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
-	// 1. Fire Main Weapon (Cleaner)
-	// Origin is current cursor position
+	// Determine color type from energy polarity
+	colorType := component.CleanerColorPositive
+	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
+		if energyComp.Current < 0 {
+			colorType = component.CleanerColorNegative
+		}
+	}
+
+	// Fire Main Weapon (Cleaner)
 	if pos, ok := s.world.Positions.GetPosition(cursorEntity); ok {
 		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-			OriginX: pos.X,
-			OriginY: pos.Y,
+			OriginX:   pos.X,
+			OriginY:   pos.Y,
+			ColorType: colorType,
 		})
 	}
 
-	// 2. Fire weapons
+	// Fire weapons
 	s.fireAllWeapons()
 }
 

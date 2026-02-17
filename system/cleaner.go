@@ -94,8 +94,7 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
-			// Positions-aware deduplication for directional cleaners
-			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY)
+			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY, payload.ColorType)
 		}
 	}
 }
@@ -174,7 +173,7 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed rows for collisions (with self-exclusion)
 			if startY <= endY {
 				for y := startY; y <= endY; y++ {
-					s.checkCollisions(oldPos.X, y, cleanerEntity)
+					s.checkCollisions(oldPos.X, y, cleanerEntity, cleanerComp.ColorType)
 				}
 			}
 		} else if kineticComp.VelX != 0 {
@@ -196,7 +195,7 @@ func (s *CleanerSystem) Update() {
 			// Check all traversed columns for collisions (with self-exclusion)
 			if startX <= endX {
 				for x := startX; x <= endX; x++ {
-					s.checkCollisions(x, oldPos.Y, cleanerEntity)
+					s.checkCollisions(x, oldPos.Y, cleanerEntity, cleanerComp.ColorType)
 				}
 			}
 		}
@@ -262,10 +261,12 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		SoundType: core.SoundWhoosh,
 	})
 
-	// Determine energy polarity once for entire batch
-	negativeEnergy := false
+	// Determine color type from energy polarity
+	colorType := component.CleanerColorPositive
 	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok {
-		negativeEnergy = energyComp.Current < 0
+		if energyComp.Current < 0 {
+			colorType = component.CleanerColorNegative
+		}
 	}
 
 	gameWidthFixed := vmath.FromInt(config.MapWidth)
@@ -297,13 +298,13 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
-			TargetX:        targetX,
-			TargetY:        rowFixed,
-			TrailRing:      trailRing,
-			TrailHead:      0,
-			TrailLen:       1,
-			Rune:           visual.CleanerChar,
-			NegativeEnergy: negativeEnergy,
+			TargetX:   targetX,
+			TargetY:   rowFixed,
+			TrailRing: trailRing,
+			TrailHead: 0,
+			TrailLen:  1,
+			Rune:      visual.CleanerChar,
+			ColorType: colorType,
 		}
 		kinetic := core.Kinetic{
 			PreciseX: startX,
@@ -331,7 +332,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 }
 
 // checkCollisions handles collision logic with self-exclusion
-func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
+func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorType component.CleanerColorType) {
 	cursorEntity := s.world.Resources.Player.Entity
 	// Query all entities at position (includes cleaner)
 	entities := s.world.Positions.GetAllEntityAt(x, y)
@@ -339,7 +340,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 		return
 	}
 
-	// Deflect drains and quasar (energy-independent, cleaner passes through)
+	// Deflect species (energy-independent, cleaner passes through)
 	for _, entity := range entities {
 		if entity == 0 || entity == selfEntity {
 			continue
@@ -384,17 +385,16 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity) {
 
 	}
 
-	// Determine mode based on energy polarity
-	// TODO: migrate to status?
-	negativeEnergy := false
-	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
-		negativeEnergy = energyComp.Current < 0
-	}
-
-	if negativeEnergy {
-		s.processNegativeEnergy(x, y, entities, selfEntity)
-	} else {
+	// Route glyph processing based on color type
+	switch colorType {
+	case component.CleanerColorPositive:
 		s.processPositiveEnergy(entities, selfEntity)
+	case component.CleanerColorNegative:
+		s.processNegativeEnergy(x, y, entities, selfEntity)
+	case component.CleanerColorNugget:
+		s.processNuggetEnergy(entities, selfEntity)
+	default:
+		return
 	}
 }
 
@@ -448,19 +448,35 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 	}
 }
 
+// processNuggetEnergy handles Green destruction with Blossom spawn
+func (s *CleanerSystem) processNuggetEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
+	var toDestroy []core.Entity
+
+	for _, targetEntity := range targetEntities {
+		if targetEntity == 0 || targetEntity == selfEntity {
+			continue
+		}
+		if glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity); ok {
+			if glyphComp.Type == component.GlyphGreen {
+				toDestroy = append(toDestroy, targetEntity)
+			}
+		}
+	}
+
+	if len(toDestroy) == 0 {
+		return
+	}
+
+	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy)
+}
+
 // spawnDirectionalCleaners generates 4 cleaner entities from origin position
-func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
+func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType component.CleanerColorType) {
 	config := s.world.Resources.Config
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		SoundType: core.SoundWhoosh,
 	})
-
-	// Determine energy polarity once for entire batch
-	negativeEnergy := false
-	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok {
-		negativeEnergy = energyComp.Current < 0
-	}
 
 	gameWidthFixed := vmath.FromInt(config.MapWidth)
 	gameHeightFixed := vmath.FromInt(config.MapHeight)
@@ -496,13 +512,13 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
-			TargetX:        dir.targetX,
-			TargetY:        dir.targetY,
-			TrailRing:      trailRing,
-			TrailHead:      0,
-			TrailLen:       1,
-			Rune:           visual.CleanerChar,
-			NegativeEnergy: negativeEnergy,
+			TargetX:   dir.targetX,
+			TargetY:   dir.targetY,
+			TrailRing: trailRing,
+			TrailHead: 0,
+			TrailLen:  1,
+			Rune:      visual.CleanerChar,
+			ColorType: colorType,
 		}
 		kinetic := core.Kinetic{
 			PreciseX: dir.startX,
@@ -517,7 +533,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int) {
 			HitPoints:        1,
 		}
 
-		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
+		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)

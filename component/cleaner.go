@@ -5,8 +5,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
+// CleanerColorType determines cleaner visual gradient
+type CleanerColorType uint8
+
+const (
+	CleanerColorPositive CleanerColorType = iota // Yellow (energy >= 0)
+	CleanerColorNegative                         // Violet (energy < 0)
+	CleanerColorNugget                           // Green, targets green glyphs
+)
+
 // CleanerComponent tracks cleaner entity movement and trail
-// Grid position managed by PositionComponent
 type CleanerComponent struct {
 	// Destruction target (tail must clear screen) - Q32.32
 	TargetX int64
@@ -20,6 +28,6 @@ type CleanerComponent struct {
 	// Character used to render the cleaner block
 	Rune rune
 
-	// Energy polarity indicator for rendering
-	NegativeEnergy bool // Set at spawn, determines gradient color
+	// Color type for renderer gradient selection
+	ColorType CleanerColorType
 }
