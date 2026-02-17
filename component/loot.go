@@ -31,6 +31,12 @@ var DropTables = map[SpeciesType]SpeciesDropTable{
 			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.20}}},
 		},
 	},
+	SpeciesStorm: {
+		Tiers: []DropTier{
+			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0}}},
+		},
+	},
 }
 
 // LootType identifies collectible loot drops
@@ -39,7 +45,7 @@ type LootType uint8
 const (
 	LootRod LootType = iota
 	LootLauncher
-	LootSpray
+	LootDisruptor
 	LootEnergy
 	// Future loot types here
 	LootCount // Sentinel for array sizing
@@ -99,6 +105,11 @@ var (
 		WeaponType: WeaponLauncher,
 	}
 
+	rewardDisruptor = RewardProfile{
+		Type:       RewardWeapon,
+		WeaponType: WeaponDisruptor,
+	}
+
 	rewardEnergy = RewardProfile{
 		Type:  RewardEnergy,
 		Delta: parameter.LootEnergyRewardValue,
@@ -107,10 +118,10 @@ var (
 
 // LootProfiles indexed by LootType
 var LootProfiles = [LootCount]LootProfile{
-	LootRod:      {Reward: &rewardRod},
-	LootLauncher: {Reward: &rewardLauncher},
-	LootSpray:    {Reward: &rewardLauncher}, // TODO: placeholder
-	LootEnergy:   {Reward: &rewardEnergy},
+	LootRod:       {Reward: &rewardRod},
+	LootLauncher:  {Reward: &rewardLauncher},
+	LootDisruptor: {Reward: &rewardDisruptor},
+	LootEnergy:    {Reward: &rewardEnergy},
 }
 
 // --- Drop Tables ---
@@ -140,6 +151,11 @@ var LootVisuals = map[LootType]LootVisualDef{
 		Rune:       'M',
 		InnerColor: visual.RgbOrbLauncher,
 		GlowColor:  visual.RgbLootLauncherGlow,
+	},
+	LootDisruptor: {
+		Rune:       'D',
+		InnerColor: visual.RgbOrbDisruptor,
+		GlowColor:  visual.RgbLootDisruptorGlow,
 	},
 	LootEnergy: {
 		Rune:       'E',

@@ -25,22 +25,38 @@ on_enter = [
 ]
 transitions = [
     { trigger = "EventGoldSpawned", target = "GoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "WaveWait" },
+    { trigger = "EventGoldSpawnFailed", target = "DecayWait" },
     { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
 ]
 
 [states.GoldActive]
 parent = "Gameplay"
 transitions = [
-    { trigger = "EventGoldComplete", target = "Sweeping" },
-    { trigger = "EventGoldTimeout", target = "WaveWait" },
-    { trigger = "EventGoldDestroyed", target = "WaveWait" },
+    { trigger = "EventGoldComplete", target = "PreSweepCheck" },
+    { trigger = "EventGoldTimeout", target = "DecayWait" },
+    { trigger = "EventGoldDestroyed", target = "DecayWait" },
     { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
 ]
 
 # --- SWEEPING ---
 
-[states.Sweeping]
+[states.PreSweepCheck]
+parent = "Gameplay"
+transitions = [
+    { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
+    { trigger = "Tick", target = "SweepingNormal" },
+]
+
+[states.SweepingHot]
+parent = "Gameplay"
+on_enter = [
+    { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
+]
+transitions = [
+    { trigger = "EventCleanerSweepingFinished", target = "QuasarHandoff" },
+]
+
+[states.SweepingNormal]
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
@@ -48,20 +64,19 @@ on_enter = [
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
 ]
 transitions = [
-    { trigger = "EventCleanerSweepingFinished", target = "WaveWait" },
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+    { trigger = "EventCleanerSweepingFinished", target = "DecayWait" },
 ]
 
 # --- WAVE CYCLE ---
 
-[states.WaveWait]
+[states.DecayWait]
 parent = "Gameplay"
 transitions = [
-    { trigger = "Tick", target = "WaveEmit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+    { trigger = "Tick", target = "DecayWave", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
     { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
 ]
 
-[states.WaveEmit]
+[states.DecayWave]
 parent = "Gameplay"
 on_enter = [
     { action = "EmitEvent", event = "EventDecayWave" },
@@ -80,7 +95,7 @@ on_enter = [
     { action = "PauseRegion", region = "main" },
 ]
 transitions = [
-    { trigger = "Tick", target = "WaveWait" },
+    { trigger = "Tick", target = "DecayWait" },
 ]
 
 
@@ -93,8 +108,8 @@ parent = "Root"
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
+    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [

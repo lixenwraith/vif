@@ -10,8 +10,8 @@ parent = "Root"
 parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
+    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [
@@ -45,10 +45,23 @@ parent = "QuasarCycle"
 transitions = [
     { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
     { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
-    { trigger = "EventGoldComplete", target = "QuasarGoldSpawn" },
+    { trigger = "EventGoldComplete", target = "QuasarGoldReward" },
     { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
     { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+]
+
+[states.QuasarGoldReward]
+parent = "QuasarCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, percentage = false, type = 1 } },
+]
+transitions = [
+    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
+    { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "Tick", target = "QuasarGoldSpawn" },
 ]
 
 # --- DUST ALL ---

@@ -7,9 +7,10 @@ import (
 )
 
 type wasmBackend struct {
-	width, height int
-	inputCh       chan []byte
-	jsCallbacks   []js.Func
+	width, height   int
+	inputCh         chan []byte
+	jsCallbacks     []js.Func
+	returnEmptyNext bool // Signal to return empty on next Read() for standalone ESC
 }
 
 const escapeTimeoutMs = 10
@@ -84,6 +85,12 @@ func (b *wasmBackend) Write(p []byte) error {
 }
 
 func (b *wasmBackend) Read(stopCh <-chan struct{}) ([]byte, error) {
+	// After standalone ESC timeout, return empty to trigger readLoop's ESC emission
+	if b.returnEmptyNext {
+		b.returnEmptyNext = false
+		return nil, nil
+	}
+
 	select {
 	case data := <-b.inputCh:
 		// If we received exactly ESC, wait briefly for more data
@@ -110,7 +117,9 @@ func (b *wasmBackend) Read(stopCh <-chan struct{}) ([]byte, error) {
 				// More data arrived, combine
 				return append(data, more...), nil
 			case <-moreCh:
-				// Timeout, return standalone ESC
+				// Timeout, standalone ESC confirmed
+				// Signal next Read() to return empty (triggers readLoop standalone ESC logic)
+				b.returnEmptyNext = true
 				return data, nil
 			case <-stopCh:
 				return nil, nil

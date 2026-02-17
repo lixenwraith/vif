@@ -159,6 +159,15 @@
 
         window.addEventListener('resize', handleResize);
         setTimeout(handleResize, 100);
+
+        // Focus terminal for keyboard capture
+        // Works for full-page; iframe may require user interaction first
+        term.focus();
+
+        // Re-focus on click (handles iframe activation)
+        container.addEventListener('click', function() {
+            term.focus();
+        });
     }
 
     function showError(msg) {

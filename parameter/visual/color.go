@@ -200,10 +200,11 @@ var (
 	RgbLootShieldCenter = terminal.RGB{R: 12, G: 4, B: 10}     // Near black
 
 	// Loot glow colors
-	RgbLootRodGlow      = terminal.RGB{R: 200, G: 255, B: 255} // Bright cyan-white
-	RgbLootLauncherGlow = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
-	RgbLootEnergyGlow   = terminal.RGB{R: 255, G: 60, B: 200}  // Magenta-pink glow
-	RgbOrbEnergy        = terminal.RGB{R: 255, G: 240, B: 60}  // Bright yellow sigil
+	RgbLootRodGlow       = terminal.RGB{R: 200, G: 255, B: 255} // Bright cyan-white
+	RgbLootLauncherGlow  = terminal.RGB{R: 255, G: 255, B: 100} // Bright yellow
+	RgbLootDisruptorGlow = terminal.RGB{R: 150, G: 255, B: 180} // Bright green-white glow
+	RgbLootEnergyGlow    = terminal.RGB{R: 255, G: 60, B: 200}  // Magenta-pink glow
+	RgbOrbEnergy         = terminal.RGB{R: 255, G: 240, B: 60}  // Bright yellow sigil
 
 	// Storm attack effect colors
 	RgbStormGreenPulse = terminal.RGB{R: 60, G: 220, B: 100} // Bright green pulse
