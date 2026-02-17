@@ -172,13 +172,6 @@ func (w *World) DestroyedCount() int64 {
 
 // === Base Entities ===
 
-// CreateEnvironment creates environment entity and component and wires environment resource
-func (w *World) CreateEnvironment() {
-	// 1. Create initial environment entity and component
-	envEntity := w.CreateEntity()
-	w.Components.Environment.SetComponent(envEntity, component.EnvironmentComponent{})
-}
-
 // CreateCursorEntity handles cursor entity and resource creation, and components attachment to cursor entity
 func (w *World) CreateCursorEntity() {
 	// 1. Create cursor entity at the center of the screen

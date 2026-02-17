@@ -49,7 +49,6 @@ type Component struct {
 	Fadeout     *Store[component.FadeoutComponent]
 	Splash      *Store[component.SplashComponent]
 	Marker      *Store[component.MarkerComponent]
-	Environment *Store[component.EnvironmentComponent]
 	Death       *Store[component.DeathComponent]
 	Timer       *Store[component.TimerComponent]
 }
@@ -96,7 +95,6 @@ func initComponents(w *World) {
 	w.Components.Fadeout = NewStore[component.FadeoutComponent]()
 	w.Components.Splash = NewStore[component.SplashComponent]()
 	w.Components.Marker = NewStore[component.MarkerComponent]()
-	w.Components.Environment = NewStore[component.EnvironmentComponent]()
 	w.Components.Death = NewStore[component.DeathComponent]()
 	w.Components.Timer = NewStore[component.TimerComponent]()
 	w.Positions = NewPosition()
@@ -144,7 +142,6 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Fadeout.RemoveEntity(e)
 	w.Components.Splash.RemoveEntity(e)
 	w.Components.Marker.RemoveEntity(e)
-	w.Components.Environment.RemoveEntity(e)
 	w.Components.Death.RemoveEntity(e)
 	w.Components.Timer.RemoveEntity(e)
 	w.Positions.RemoveEntity(e)
@@ -191,7 +188,6 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.Fadeout.RemoveBatch(entities)
 	w.Components.Splash.RemoveBatch(entities)
 	w.Components.Marker.RemoveBatch(entities)
-	w.Components.Environment.RemoveBatch(entities)
 	w.Components.Death.RemoveBatch(entities)
 	w.Components.Timer.RemoveBatch(entities)
 	w.Positions.RemoveBatch(entities)
@@ -238,7 +234,6 @@ func (w *World) wipeAll() {
 	w.Components.Fadeout.ClearAllComponents()
 	w.Components.Splash.ClearAllComponents()
 	w.Components.Marker.ClearAllComponents()
-	w.Components.Environment.ClearAllComponents()
 	w.Components.Death.ClearAllComponents()
 	w.Components.Timer.ClearAllComponents()
 	w.Positions.ClearAllComponents()

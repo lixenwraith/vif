@@ -14,12 +14,15 @@ import (
 type EnvironmentSystem struct {
 	world *engine.World
 
-	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
 
+	WindActive bool
+	// Global wind velocity in Q32.32
+	WindVelX int64
+	WindVelY int64
+
 	// Telemetry
-	statGrayoutActive    *atomic.Bool
-	statGrayoutTotalTime *atomic.Int64
+	statWindActive *atomic.Bool
 
 	enabled bool
 }
@@ -30,8 +33,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statGrayoutActive = world.Resources.Status.Bools.Get("environment.grayout_active")
-	s.statGrayoutTotalTime = world.Resources.Status.Ints.Get("environment.grayout_total_time")
+	s.statWindActive = world.Resources.Status.Bools.Get("environment.wind_active")
 
 	s.Init()
 	return s
@@ -39,7 +41,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 
 func (s *EnvironmentSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	s.statGrayoutActive.Store(false)
+	s.statWindActive.Store(false)
 	s.enabled = true
 }
 
@@ -54,8 +56,6 @@ func (s *EnvironmentSystem) Priority() int {
 
 func (s *EnvironmentSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGrayoutStart,
-		event.EventGrayoutEnd,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -80,11 +80,7 @@ func (s *EnvironmentSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventGrayoutStart:
-		s.StartGrayout()
 
-	case event.EventGrayoutEnd:
-		s.EndGrayout()
 	}
 }
 
@@ -93,53 +89,4 @@ func (s *EnvironmentSystem) Update() {
 		return
 	}
 
-	envEntities := s.world.Components.Environment.GetAllEntities()
-	if len(envEntities) == 0 {
-		return
-	}
-	envEntity := envEntities[0]
-	envComp, _ := s.world.Components.Environment.GetComponent(envEntity)
-
-	if envComp.GrayoutActive {
-		dt := s.world.Resources.Time.DeltaTime
-		envComp.GrayoutDuration += dt
-		s.world.Components.Environment.GetComponent(envEntity)
-		s.statGrayoutTotalTime.Add(int64(dt))
-	}
-}
-
-// StartGrayout activates persistent grayscale effect
-func (s *EnvironmentSystem) StartGrayout() {
-	envEntities := s.world.Components.Environment.GetAllEntities()
-	if len(envEntities) == 0 {
-		return
-	}
-	// TODO: multi env profile selection, active flag in component?
-	envEntity := envEntities[0]
-	envComp, ok := s.world.Components.Environment.GetComponent(envEntity)
-	if !ok {
-		return
-	}
-
-	envComp.GrayoutActive = true
-	envComp.GrayoutIntensity = 1.0
-	s.world.Components.Environment.SetComponent(envEntity, envComp)
-	s.statGrayoutActive.Store(true)
-}
-
-// EndGrayout deactivates persistent grayscale effect
-func (s *EnvironmentSystem) EndGrayout() {
-	envEntities := s.world.Components.Environment.GetAllEntities()
-	if len(envEntities) == 0 {
-		return
-	}
-	envEntity := envEntities[0]
-	envComp, ok := s.world.Components.Environment.GetComponent(envEntity)
-	if !ok {
-		return
-	}
-
-	envComp.GrayoutActive = false
-	s.world.Components.Environment.SetComponent(envEntity, envComp)
-	s.statGrayoutActive.Store(false)
 }

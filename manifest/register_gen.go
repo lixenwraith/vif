@@ -15,6 +15,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("ping", func(w any) any {
 		return system.NewPingSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("transient", func(w any) any {
+		return system.NewTransientSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("energy", func(w any) any {
 		return system.NewEnergySystem(w.(*engine.World))
 	})
@@ -253,6 +256,7 @@ func RegisterRenderers() {
 func ActiveSystems() []string {
 	return []string{
 		"ping",
+		"transient",
 		"energy",
 		"shield",
 		"heat",

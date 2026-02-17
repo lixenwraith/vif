@@ -20,24 +20,11 @@ func NewGrayoutRenderer(ctx *engine.GameContext) *GrayoutRenderer {
 
 // Render applies grayscale with intensity from game state
 func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	envEntities := r.gameCtx.World.Components.Environment.GetAllEntities()
-	if len(envEntities) == 0 {
-		return
-	}
-	envEntity := envEntities[0]
-	envComp, ok := r.gameCtx.World.Components.Environment.GetComponent(envEntity)
-	if !ok {
+	grayout := r.gameCtx.World.Resources.Transient.Grayout
+
+	if !grayout.Active || grayout.Intensity <= 0 {
 		return
 	}
 
-	if !envComp.GrayoutActive {
-		return
-	}
-
-	intensity := envComp.GrayoutIntensity
-	if intensity <= 0 {
-		return
-	}
-
-	buf.MutateGrayscale(intensity, visual.GrayoutMask, visual.MaskPing|visual.MaskField|visual.MaskTransient|visual.MaskComposite|visual.MaskHealthBar|visual.MaskUI)
+	buf.MutateGrayscale(grayout.Intensity, visual.GrayoutMask, visual.MaskPing|visual.MaskField|visual.MaskTransient|visual.MaskComposite|visual.MaskHealthBar|visual.MaskUI)
 }

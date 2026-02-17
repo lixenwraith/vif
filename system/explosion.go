@@ -11,30 +11,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// ExplosionCenter represents a single explosion for rendering
-type ExplosionCenter struct {
-	X, Y      int
-	Radius    int64               // Q32.32 cells
-	Intensity int64               // Q32.32, Scale = 1.0 base
-	Age       int64               // Nanoseconds since spawn
-	Type      event.ExplosionType // Explosion variant for palette selection
-}
-
-// State for renderer access, System writes, renderer reads - no sync needed
-// TODO: this couples renderer to system, to be refactored
-var (
-	ExplosionCenters      []ExplosionCenter                             // Active slice view
-	ExplosionDurationNano int64                                         // For decay calculation
-	explosionBacking      [parameter.ExplosionCenterCap]ExplosionCenter // Pre-allocated storage
-)
-
 // ExplosionSystem handles explosion triggering and glyph-to-dust transformation
 type ExplosionSystem struct {
 	world *engine.World
 
-	activeCount int   // Number of active centers
-	baseRadius  int64 // Default radius Q32.32
-	radiusCap   int64 // Maximum radius after merges Q32.32
+	baseRadius int64 // Default radius Q32.32
+	radiusCap  int64 // Maximum radius after merges Q32.32
 
 	// Reusable buffers to avoid allocation in hot path
 	entityBuf    []core.Entity
@@ -64,13 +46,8 @@ func NewExplosionSystem(world *engine.World) engine.System {
 }
 
 func (s *ExplosionSystem) Init() {
-	s.activeCount = 0
 	s.baseRadius = parameter.ExplosionFieldRadius
 	s.radiusCap = parameter.ExplosionRadiusCapFixed
-
-	// Initialize package-level state
-	ExplosionDurationNano = parameter.ExplosionFieldDuration.Nanoseconds()
-	ExplosionCenters = explosionBacking[:0]
 
 	// Reset buffers
 	s.entityBuf = make([]core.Entity, 0, 256)
@@ -136,24 +113,28 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *ExplosionSystem) Update() {
-	if !s.enabled || s.activeCount == 0 {
+	if !s.enabled {
+		return
+	}
+
+	transRes := s.world.Resources.Transient
+	if transRes.ExplosionCount == 0 {
 		return
 	}
 
 	dtNano := s.world.Resources.Time.DeltaTime.Nanoseconds()
 
 	write := 0
-	for i := 0; i < s.activeCount; i++ {
-		explosionBacking[i].Age += dtNano
-		if explosionBacking[i].Age < ExplosionDurationNano {
+	for i := 0; i < transRes.ExplosionCount; i++ {
+		transRes.ExplosionBacking[i].Age += dtNano
+		if transRes.ExplosionBacking[i].Age < transRes.ExplosionDurNano {
 			if write != i {
-				explosionBacking[write] = explosionBacking[i]
+				transRes.ExplosionBacking[write] = transRes.ExplosionBacking[i]
 			}
 			write++
 		}
 	}
-	s.activeCount = write
-	ExplosionCenters = explosionBacking[:s.activeCount]
+	transRes.ExplosionCount = write
 }
 
 func (s *ExplosionSystem) fireFromDust() {
@@ -179,12 +160,13 @@ func (s *ExplosionSystem) fireFromDust() {
 }
 
 func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.ExplosionType) {
+	transRes := s.world.Resources.Transient
 	centerX := vmath.FromInt(x)
 	centerY := vmath.FromInt(y)
 
 	// Merge check - only merge same type
-	for i := 0; i < s.activeCount; i++ {
-		c := &explosionBacking[i]
+	for i := 0; i < transRes.ExplosionCount; i++ {
+		c := &transRes.ExplosionBacking[i]
 		if c.Type != explosionType {
 			continue
 		}
@@ -216,22 +198,22 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 
 	// No merge - add new center
 	var idx int
-	if s.activeCount < parameter.ExplosionCenterCap {
-		idx = s.activeCount
-		s.activeCount++
+	if transRes.ExplosionCount < parameter.ExplosionCenterCap {
+		idx = transRes.ExplosionCount
+		transRes.ExplosionCount++
 	} else {
 		// Overflow: overwrite oldest
 		idx = 0
-		maxAge := explosionBacking[0].Age
+		maxAge := transRes.ExplosionBacking[0].Age
 		for i := 1; i < parameter.ExplosionCenterCap; i++ {
-			if explosionBacking[i].Age > maxAge {
-				maxAge = explosionBacking[i].Age
+			if transRes.ExplosionBacking[i].Age > maxAge {
+				maxAge = transRes.ExplosionBacking[i].Age
 				idx = i
 			}
 		}
 	}
 
-	explosionBacking[idx] = ExplosionCenter{
+	transRes.ExplosionBacking[idx] = engine.ExplosionCenter{
 		X:         x,
 		Y:         y,
 		Radius:    radius,
@@ -239,9 +221,6 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 		Age:       0,
 		Type:      explosionType,
 	}
-
-	// Update exported slice
-	ExplosionCenters = explosionBacking[:s.activeCount]
 
 	// Process area effects (combat + optional glyph conversion)
 	s.processExplosionArea(x, y, radius, explosionType)

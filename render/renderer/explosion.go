@@ -6,7 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/system"
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -58,7 +57,8 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 }
 
 func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	centers := system.ExplosionCenters
+	transRes := r.gameCtx.World.Resources.Transient
+	centers := transRes.ExplosionCenters()
 	if len(centers) == 0 {
 		return
 	}
@@ -79,7 +79,7 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	r.resetDirtyRects()
 
 	// Accumulation pass: rasterize centers into type-specific buffers
-	durationNano := system.ExplosionDurationNano
+	durationNano := transRes.ExplosionDurNano
 	if durationNano <= 0 {
 		durationNano = 1
 	}
@@ -110,7 +110,7 @@ func (r *ExplosionRenderer) resetDirtyRects() {
 	r.missileMaxX, r.missileMaxY = -1, -1
 }
 
-func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *system.ExplosionCenter, durationNano int64) {
+func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine.ExplosionCenter, durationNano int64) {
 	// Transform center from map coords to viewport coords
 	centerVX, centerVY, visible := ctx.MapToViewport(c.X, c.Y)
 	if !visible {

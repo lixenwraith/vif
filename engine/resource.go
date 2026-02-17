@@ -19,6 +19,9 @@ type Resource struct {
 	Player *PlayerResource
 	Event  *EventQueueResource
 
+	// Transient visual effects
+	Transient *TransientResource
+
 	// Telemetry
 	Status *status.Registry
 

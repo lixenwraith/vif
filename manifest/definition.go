@@ -74,7 +74,6 @@ var Components = []ComponentDef{
 	{"Fadeout", "FadeoutComponent"},
 	{"Splash", "SplashComponent"},
 	{"Marker", "MarkerComponent"},
-	{"Environment", "EnvironmentComponent"},
 
 	// Lifecycle
 	{"Death", "DeathComponent"},
@@ -86,6 +85,7 @@ var Components = []ComponentDef{
 // Generator produces: RegisterSystems(), ActiveSystems()
 var Systems = []SystemDef{
 	{"ping", "NewPingSystem"},
+	{"transient", "NewTransientSystem"},
 	{"energy", "NewEnergySystem"},
 	{"shield", "NewShieldSystem"},
 	{"heat", "NewHeatSystem"},

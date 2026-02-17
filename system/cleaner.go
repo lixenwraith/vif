@@ -250,7 +250,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	rows := s.scanTargetRows()
 
 	spawnCount := len(rows)
-	// No rows to clean, trigger fuse drains if not in grayout
+	// No rows to clean
 	if spawnCount == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
