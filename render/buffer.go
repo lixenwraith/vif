@@ -5,21 +5,30 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
+// backgroundOverlay holds deferred background effect state
+type backgroundOverlay struct {
+	active    bool
+	color     terminal.RGB
+	intensity float64
+}
+
 // RenderBuffer is a compositor backed by terminal.Cell array with dirty tracking
 type RenderBuffer struct {
-	colorMode   terminal.ColorMode
-	cells       []terminal.Cell
-	touched     []bool
-	masks       []uint8
-	currentMask uint8
-	width       int
-	height      int
+	colorMode    terminal.ColorMode
+	cells        []terminal.Cell
+	touched      []bool
+	masks        []uint8
+	currentMask  uint8
+	width        int
+	height       int
+	bgOverlay    backgroundOverlay
+	finalizeFunc func(*RenderBuffer)
 }
 
 // NewRenderBuffer creates a buffer with the specified dimensions
 func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuffer {
 	size := width * height
-	return &RenderBuffer{
+	b := &RenderBuffer{
 		colorMode:   colorMode,
 		cells:       make([]terminal.Cell, size),
 		touched:     make([]bool, size),
@@ -28,6 +37,12 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 		width:       width,
 		height:      height,
 	}
+	if colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled {
+		b.finalizeFunc = finalizeTrueColorOcclusion
+	} else {
+		b.finalizeFunc = finalizeSimple
+	}
+	return b
 }
 
 // Resize adjusts buffer dimensions, reallocates only if capacity insufficient
@@ -57,11 +72,22 @@ func (b *RenderBuffer) Clear() {
 	clear(b.touched)
 	clear(b.masks)
 	b.currentMask = visual.MaskNone
+	b.bgOverlay = backgroundOverlay{}
 }
 
 // SetWriteMask sets the mask for subsequent draw operations
 func (b *RenderBuffer) SetWriteMask(mask uint8) {
 	b.currentMask = mask
+}
+
+// SetBackgroundOverlay configures overlay for untouched cells applied in finalize()
+// Intensity is pre-computed by caller (envelope already applied)
+func (b *RenderBuffer) SetBackgroundOverlay(color terminal.RGB, intensity float64) {
+	b.bgOverlay = backgroundOverlay{
+		active:    true,
+		color:     color,
+		intensity: intensity,
+	}
 }
 
 // inBounds returns true if coordinates are within buffer
@@ -265,16 +291,41 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 
 // === OUTPUT ===
 
-// finalize sets default background to untouched cells and applies occlusion dimming
+// finalize delegates to the appropriate implementation selected at init
 func (b *RenderBuffer) finalize() {
+	b.finalizeFunc(b)
+}
+
+// finalizeTrueColorOcclusion handles untouched backgrounds and occlusion dimming
+func finalizeTrueColorOcclusion(b *RenderBuffer) {
+	// Pre-compute untouched background once
+	untouchedBg := visual.RgbBackground
+	if b.bgOverlay.active {
+		untouchedBg = Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+	}
+
 	for i := range b.cells {
 		if !b.touched[i] {
-			b.cells[i].Bg = visual.RgbBackground
-		} else if b.colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled && b.cells[i].Rune != 0 {
-			// Dim background when foreground character present
-			if b.masks[i]&(visual.OcclusionDimMask) != 0 {
-				b.cells[i].Bg = Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
-			}
+			b.cells[i].Bg = untouchedBg
+			continue
+		}
+		// Occlusion dimming for touched cells with foreground
+		if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 {
+			b.cells[i].Bg = Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
+		}
+	}
+}
+
+// finalizeSimple handles untouched backgrounds only (256-color or no occlusion)
+func finalizeSimple(b *RenderBuffer) {
+	untouchedBg := visual.RgbBackground
+	if b.bgOverlay.active {
+		untouchedBg = Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+	}
+
+	for i := range b.cells {
+		if !b.touched[i] {
+			b.cells[i].Bg = untouchedBg
 		}
 	}
 }

@@ -14,6 +14,7 @@ type TransientSystem struct {
 	world *engine.World
 
 	statGrayoutActive *atomic.Bool
+	statStrobeActive  *atomic.Bool
 
 	enabled bool
 }
@@ -24,6 +25,7 @@ func NewTransientSystem(world *engine.World) engine.System {
 	}
 
 	s.statGrayoutActive = world.Resources.Status.Bools.Get("effects.grayout_active")
+	s.statStrobeActive = world.Resources.Status.Bools.Get("effects.strobe_active")
 
 	s.Init()
 	return s
@@ -32,6 +34,7 @@ func NewTransientSystem(world *engine.World) engine.System {
 func (s *TransientSystem) Init() {
 	s.world.Resources.Transient.Reset()
 	s.statGrayoutActive.Store(false)
+	s.statStrobeActive.Store(false)
 	s.enabled = true
 }
 
@@ -47,6 +50,7 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGrayoutStart,
 		event.EventGrayoutEnd,
+		event.EventStrobeRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -82,6 +86,11 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGrayoutEnd:
 		s.world.Resources.Transient.Grayout.Active = false
 		s.statGrayoutActive.Store(false)
+
+	case event.EventStrobeRequest:
+		if payload, ok := ev.Payload.(*event.StrobeRequestPayload); ok {
+			s.handleStrobeRequest(payload)
+		}
 	}
 }
 
@@ -90,7 +99,7 @@ func (s *TransientSystem) Update() {
 		return
 	}
 
-	// // Decay logic:
+	// // Decay logic: to be wired in if required
 	// grayout := &s.world.Resources.Transient.Grayout
 	// if grayout.Active && grayout.Intensity > 0 {
 	// 	dt := s.world.Resources.Time.DeltaTime.Seconds()
@@ -102,4 +111,38 @@ func (s *TransientSystem) Update() {
 	// 		s.statGrayoutActive.Store(false)
 	// 	}
 	// }
+
+	strobe := &s.world.Resources.Transient.Strobe
+	if !strobe.Active {
+		return
+	}
+
+	dt := s.world.Resources.Time.DeltaTime
+	strobe.Remaining -= dt
+
+	if strobe.Remaining <= 0 {
+		strobe.Active = false
+		s.statStrobeActive.Store(false)
+	}
+}
+
+func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
+	current := &s.world.Resources.Transient.Strobe
+
+	// Max stacking: compare intensity * remaining seconds
+	if current.Active {
+		currentWeight := current.Intensity * current.Remaining.Seconds()
+		incomingWeight := req.Intensity * req.Duration.Seconds()
+		if currentWeight >= incomingWeight {
+			return // Keep current
+		}
+	}
+
+	current.Active = true
+	current.Color = req.Color
+	current.Intensity = req.Intensity
+	current.InitialDuration = req.Duration
+	current.Remaining = req.Duration
+
+	s.statStrobeActive.Store(true)
 }

@@ -221,9 +221,10 @@ func InitRegistry() {
 	RegisterType("EventStormCircleDied", EventStormCircleDied, &StormCircleDiedPayload{})
 	RegisterType("EventStormDied", EventStormDied, &StormDiedPayload{})
 
-	// Environment
+	// Post-Process
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
+	RegisterType("EventStrobeRequest", EventStrobeRequest, &StrobeRequestPayload{})
 
 	// Level
 	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})

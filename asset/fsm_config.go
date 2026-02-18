@@ -103,6 +103,7 @@ parent = "QuasarCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
+#    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration = 100000 } },
     { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]

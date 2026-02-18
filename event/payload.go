@@ -682,3 +682,10 @@ type BulletSpawnRequestPayload struct {
 	MaxLifetime time.Duration          `toml:"max_lifetime"`
 	Damage      component.BulletDamage `toml:"damage"`
 }
+
+// StrobeRequestPayload configures screen flash effect
+type StrobeRequestPayload struct {
+	Color     terminal.RGB  `toml:"color"`
+	Intensity float64       `toml:"intensity"` // Base intensity 0.0-1.0
+	Duration  time.Duration `toml:"duration"`  // 0 = single frame flash
+}

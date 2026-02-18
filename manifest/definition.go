@@ -161,6 +161,7 @@ var Renderers = []RendererDef{
 	{"storm", "NewStormRenderer", "PrioritySpecies"},
 	{"wall", "NewWallRenderer", "PriorityWall"},
 	{"grayout", "NewGrayoutRenderer", "PriorityPostProcess"},
+	{"strobe", "NewStrobeRenderer", "PriorityPostProcess"},
 	{"dim", "NewDimRenderer", "PriorityPostProcess"},
 	{"heat", "NewHeatRenderer", "PriorityUI"},
 	{"indicator", "NewIndicatorRenderer", "PriorityUI"},

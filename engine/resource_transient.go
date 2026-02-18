@@ -29,10 +29,11 @@ type GrayoutState struct {
 
 // StrobeState controls screen flash overlay
 type StrobeState struct {
-	Active    bool
-	Color     terminal.RGB
-	Intensity float64
-	Remaining time.Duration
+	Active          bool
+	Color           terminal.RGB
+	Intensity       float64       // Base intensity (0.0-1.0)
+	InitialDuration time.Duration // Original duration for envelope calculation
+	Remaining       time.Duration // Time until auto-deactivate
 }
 
 // ExplosionCenter represents a single explosion for rendering

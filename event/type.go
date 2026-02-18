@@ -653,6 +653,11 @@ const (
 	// Consumer: EnergySystem | Payload: nil
 	EventCycleDamageMultiplierReset
 
+	// EventStrobeRequest triggers screen flash effect
+	// Trigger: Combat, FSM, Systems
+	// Consumer: TransientSystem | Payload: *StrobeRequestPayload
+	EventStrobeRequest
+
 	EventDebugFlowToggle
 )
 

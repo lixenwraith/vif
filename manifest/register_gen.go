@@ -229,6 +229,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("grayout", func(ctx any) any {
 		return renderer.NewGrayoutRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
+	registry.RegisterRenderer("strobe", func(ctx any) any {
+		return renderer.NewStrobeRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityPostProcess)
 	registry.RegisterRenderer("dim", func(ctx any) any {
 		return renderer.NewDimRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPostProcess)
@@ -332,6 +335,7 @@ func ActiveRenderers() []string {
 		"storm",
 		"wall",
 		"grayout",
+		"strobe",
 		"dim",
 		"heat",
 		"indicator",
