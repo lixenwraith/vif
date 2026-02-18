@@ -420,6 +420,15 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	}
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{kinetic})
 
+	// Navigation component for flow field guidance around obstacles
+	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
+		Width:          parameter.QuasarWidth,
+		Height:         parameter.QuasarHeight,
+		TurnThreshold:  parameter.NavTurnThresholdDefault,
+		BrakeIntensity: parameter.NavBrakeIntensityDefault,
+		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+	})
+
 	// Build member entities
 	members := make([]component.MemberEntry, 0, parameter.QuasarWidth*parameter.QuasarHeight)
 
@@ -525,18 +534,69 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		quasarComp.LastSpeedIncreaseAt = now
 	}
 
-	// Target cursor center
+	// Default target: cursor center
 	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+	targetX, targetY := cursorXFixed, cursorYFixed
 
-	// Homing with arrival steering, drag only when not immune
+	// Navigation: use flow field when LOS blocked
+	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
+	if hasNav {
+		if navComp.HasDirectPath {
+			// Direct LOS available
+			targetX, targetY = cursorXFixed, cursorYFixed
+		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
+			// Blocked: follow flow field
+			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
+			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+		} else {
+			// Flow zero (trapped): snap to cursor if very close
+			distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
+			if distToCursor < vmath.FromInt(2) {
+				targetX, targetY = cursorXFixed, cursorYFixed
+			}
+		}
+	}
+
+	// Cornering drag: slow down during sharp turns
+	var extraDrag int64
+	if hasNav {
+		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+		if currentSpeed > vmath.Scale {
+			nx := vmath.Div(kineticComp.VelX, currentSpeed)
+			ny := vmath.Div(kineticComp.VelY, currentSpeed)
+
+			dx := targetX - kineticComp.PreciseX
+			dy := targetY - kineticComp.PreciseY
+			dnx, dny := vmath.Normalize2D(dx, dy)
+
+			alignment := vmath.DotProduct(nx, ny, dnx, dny)
+
+			if alignment < navComp.TurnThreshold {
+				turnSeverity := navComp.TurnThreshold - alignment
+				extraDrag = vmath.Mul(turnSeverity, navComp.BrakeIntensity)
+			}
+		}
+	}
+
+	// Homing with arrival steering
 	settled := physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
-		cursorXFixed, cursorYFixed,
+		targetX, targetY,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
 		true, // Always apply drag regardless of kinetic immunity
 	)
+
+	// Apply cornering drag
+	if extraDrag > 0 {
+		dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
+		if dragFactor < 0 {
+			dragFactor = 0
+		}
+		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
+		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+	}
 
 	if settled {
 		// Snap to exact cursor center

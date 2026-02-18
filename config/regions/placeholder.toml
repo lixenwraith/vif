@@ -3,8 +3,11 @@
 [states.PlaceholderSetup]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainPause" },
+#    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "EmitEvent", event = "EventWallDespawnAll" },
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 10, cell_height = 5, braiding = 0.3, block_mask = 255, visual = { bg_color = { r = 40, g = 40, b = 45 }, render_bg = true } } },
 ]
 transitions = [
     { trigger = "Tick", target = "PlaceholderActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
@@ -14,7 +17,7 @@ transitions = [
 parent = "Root"
 # Placeholder: add gameplay transitions here
 transitions = [
-    { trigger = "Tick", target = "PlaceholderExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+    { trigger = "Tick", target = "PlaceholderExit", guard = "StateTimeExceeds", guard_args = { ms = 50000 } }
 ]
 
 [states.PlaceholderExit]

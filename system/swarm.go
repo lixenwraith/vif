@@ -369,6 +369,15 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	}
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{Kinetic: kinetic})
 
+	// Navigation component for flow field guidance around obstacles
+	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
+		Width:          parameter.SwarmWidth,
+		Height:         parameter.SwarmHeight,
+		TurnThreshold:  parameter.NavTurnThresholdDefault,
+		BrakeIntensity: parameter.NavBrakeIntensityDefault,
+		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+	})
+
 	// Initialize combat
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
 		OwnerEntity:      headerEntity,
@@ -854,15 +863,66 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 		return
 	}
 
-	// Target cursor center
+	// Default target: cursor center
 	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+	targetX, targetY := cursorXFixed, cursorYFixed
+
+	// Navigation: use flow field when LOS blocked
+	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
+	if hasNav {
+		if navComp.HasDirectPath {
+			// Direct LOS available
+			targetX, targetY = cursorXFixed, cursorYFixed
+		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
+			// Blocked: follow flow field
+			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
+			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+		} else {
+			// Flow zero (trapped): snap to cursor if very close
+			distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
+			if distToCursor < vmath.FromInt(2) {
+				targetX, targetY = cursorXFixed, cursorYFixed
+			}
+		}
+	}
+
+	// Cornering drag: slow down during sharp turns
+	var extraDrag int64
+	if hasNav {
+		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+		if currentSpeed > vmath.Scale {
+			nx := vmath.Div(kineticComp.VelX, currentSpeed)
+			ny := vmath.Div(kineticComp.VelY, currentSpeed)
+
+			dx := targetX - kineticComp.PreciseX
+			dy := targetY - kineticComp.PreciseY
+			dnx, dny := vmath.Normalize2D(dx, dy)
+
+			alignment := vmath.DotProduct(nx, ny, dnx, dny)
+
+			if alignment < navComp.TurnThreshold {
+				turnSeverity := navComp.TurnThreshold - alignment
+				extraDrag = vmath.Mul(turnSeverity, navComp.BrakeIntensity)
+			}
+		}
+	}
 
 	physics.ApplyHoming(
 		&kineticComp.Kinetic,
-		cursorXFixed, cursorYFixed,
+		targetX, targetY,
 		&physics.SwarmHoming,
 		dtFixed,
 	)
+
+	// Apply cornering drag
+	if extraDrag > 0 {
+		dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
+		if dragFactor < 0 {
+			dragFactor = 0
+		}
+		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
+		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+	}
 
 	// Apply flocking separation acceleration
 	sepX, sepY := s.calculateFlockingSeparation(headerEntity, headerPos.X, headerPos.Y)
