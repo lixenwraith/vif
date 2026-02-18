@@ -5,9 +5,11 @@ import "time"
 // Strobe envelope configuration
 const (
 	// StrobeRiseRatio is the fraction of duration spent rising to peak intensity
-	StrobeRiseRatio = 0.3
+	StrobeRiseRatio = 0.2
 	// StrobeDecayRatio is the fraction of duration spent decaying from peak
-	StrobeDecayRatio = 0.7
+	StrobeDecayRatio = 0.8
+	// StrobeDefaultDuration is the default value used if no duration supplied in payload (not 0)
+	StrobeDefaultDuration = 500 * time.Millisecond
 )
 
 // Grayout configuration

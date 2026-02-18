@@ -2,10 +2,12 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // TransientSystem manages short-lived visual effects (grayout, flash)
@@ -129,10 +131,15 @@ func (s *TransientSystem) Update() {
 func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 	current := &s.world.Resources.Transient.Strobe
 
+	duration := time.Duration(req.DurationMs) * time.Millisecond
+	if duration == 0 {
+		duration = visual.StrobeDefaultDuration
+	}
+
 	// Max stacking: compare intensity * remaining seconds
 	if current.Active {
 		currentWeight := current.Intensity * current.Remaining.Seconds()
-		incomingWeight := req.Intensity * req.Duration.Seconds()
+		incomingWeight := req.Intensity * duration.Seconds()
 		if currentWeight >= incomingWeight {
 			return // Keep current
 		}
@@ -141,8 +148,8 @@ func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 	current.Active = true
 	current.Color = req.Color
 	current.Intensity = req.Intensity
-	current.InitialDuration = req.Duration
-	current.Remaining = req.Duration
+	current.InitialDuration = duration
+	current.Remaining = duration
 
 	s.statStrobeActive.Store(true)
 }
