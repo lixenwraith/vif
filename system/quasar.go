@@ -294,21 +294,32 @@ func (s *QuasarSystem) cacheCombatEntities() {
 }
 
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
-	// Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		targetX, targetY,
-		parameter.QuasarWidth, parameter.QuasarHeight,
-		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
-		component.WallBlockSpawn,
-		0,
-	)
-	if !found {
-		return // No valid position, abort
-	}
+	// Trust fuse-validated position, cheap verification only
+	headerX, headerY := targetX, targetY
+	topLeftX := headerX - parameter.QuasarHeaderOffsetX
+	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
-	// Header position from found top-left
-	headerX := topLeftX + parameter.QuasarHeaderOffsetX
-	headerY := topLeftY + parameter.QuasarHeaderOffsetY
+	// O(15) wall overlap check - fuse already validated, this catches edge cases
+	if s.world.Positions.HasBlockingWallInArea(
+		topLeftX, topLeftY,
+		parameter.QuasarWidth, parameter.QuasarHeight,
+		component.WallBlockSpawn,
+	) {
+		// Rare: wall appeared during animation, fallback to spiral
+		var found bool
+		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
+			headerX, headerY,
+			parameter.QuasarWidth, parameter.QuasarHeight,
+			parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
+			component.WallBlockSpawn,
+			0,
+		)
+		if !found {
+			return
+		}
+		headerX = topLeftX + parameter.QuasarHeaderOffsetX
+		headerY = topLeftY + parameter.QuasarHeaderOffsetY
+	}
 
 	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)

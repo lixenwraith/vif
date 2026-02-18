@@ -336,18 +336,6 @@ func (s *DrainSystem) detectSwarmFusions() {
 		drainB := enragedDrains[1]
 		enragedDrains = enragedDrains[2:]
 
-		// Notify genetic system before fusion consumes drains
-		for _, drainEntity := range []core.Entity{drainA, drainB} {
-			if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:  drainEntity,
-					Species: component.SpeciesDrain,
-					X:       pos.X,
-					Y:       pos.Y,
-				})
-			}
-		}
-
 		s.world.PushEvent(event.EventFuseSwarmRequest, &event.FuseSwarmRequestPayload{
 			DrainA: drainA,
 			DrainB: drainB,

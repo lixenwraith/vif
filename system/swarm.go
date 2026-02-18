@@ -20,7 +20,7 @@ type swarmCacheEntry struct {
 }
 
 // SwarmSystem manages the elite enemy entity lifecycle
-// Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage
+// Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage, teleports to target location if charge LOS blocked
 // Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
 // Does not pause drain spawn, absorbs drains to increase its health (fused and absorbed drains are respawned by drain system)
 type SwarmSystem struct {
@@ -262,29 +262,40 @@ func (s *SwarmSystem) cacheCombatEntities() {
 }
 
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
-	// 1. Find valid spawn position via spiral search
-	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
-		targetX, targetY,
+	// Trust fuse-validated position, cheap verification only
+	headerX, headerY := targetX, targetY
+	topLeftX := headerX - parameter.SwarmHeaderOffsetX
+	topLeftY := headerY - parameter.SwarmHeaderOffsetY
+
+	// O(8) wall overlap check - fuse already validated, this catches edge cases
+	if s.world.Positions.HasBlockingWallInArea(
+		topLeftX, topLeftY,
 		parameter.SwarmWidth, parameter.SwarmHeight,
-		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		component.WallBlockSpawn,
-		0,
-	)
-	if !found {
-		return // No valid position
+	) {
+		// Rare: wall appeared during animation, fallback to spiral
+		var found bool
+		topLeftX, topLeftY, found = s.world.Positions.FindFreeAreaSpiral(
+			headerX, headerY,
+			parameter.SwarmWidth, parameter.SwarmHeight,
+			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
+			component.WallBlockSpawn,
+			0,
+		)
+		if !found {
+			return
+		}
+		headerX = topLeftX + parameter.SwarmHeaderOffsetX
+		headerY = topLeftY + parameter.SwarmHeaderOffsetY
 	}
 
-	// Header position from found top-left
-	headerX := topLeftX + parameter.SwarmHeaderOffsetX
-	headerY := topLeftY + parameter.SwarmHeaderOffsetY
-
-	// 2. Clear area
+	// Clear area (retained as defensive measure)
 	s.clearSwarmSpawnArea(headerX, headerY)
 
-	// 3. Create Entity
+	// Create entity
 	headerEntity := s.createSwarmComposite(headerX, headerY)
 
-	// 4. Notify world
+	// Notify world
 	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
 		HeaderEntity: headerEntity,
 	})

@@ -198,6 +198,18 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midX = topLeftX + parameter.SwarmHeaderOffsetX
 	midY = topLeftY + parameter.SwarmHeaderOffsetY
 
+	// Emit death drain events
+	for _, drainEntity := range []core.Entity{drainA, drainB} {
+		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
+			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+				Entity:  drainEntity,
+				Species: component.SpeciesDrain,
+				X:       pos.X,
+				Y:       pos.Y,
+			})
+		}
+	}
+
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
 
 	sources := []core.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
@@ -257,14 +269,6 @@ func (s *FuseSystem) handleQuasarFuse() {
 
 	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
 	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
-
-	// Cleanup materializers and drains
-	mats := s.world.Components.Materialize.GetAllEntities()
-	for _, e := range mats {
-		if m, ok := s.world.Components.Materialize.GetComponent(e); ok && m.Type == component.SpawnTypeDrain {
-			s.world.DestroyEntity(e)
-		}
-	}
 
 	// Emit EventEnemyKilled for each drain (enables loot drops)
 	for _, e := range drains {
