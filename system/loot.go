@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"math/rand"
 	"sync/atomic"
 
@@ -46,6 +47,11 @@ type LootSystem struct {
 	statActive   *atomic.Int64
 	statCollects *atomic.Int64
 
+	statDrainKills  *atomic.Int64
+	statSwarmKills  *atomic.Int64
+	statQuasarKills *atomic.Int64
+	statStormKills  *atomic.Int64
+
 	enabled bool
 }
 
@@ -58,6 +64,12 @@ func NewLootSystem(world *engine.World) engine.System {
 	s.statActive = world.Resources.Status.Ints.Get("loot.active")
 	s.statCollects = world.Resources.Status.Ints.Get("loot.collects")
 
+	// Piggyback telemetry for FSM
+	s.statDrainKills = s.world.Resources.Status.Ints.Get("kills.drain")
+	s.statSwarmKills = s.world.Resources.Status.Ints.Get("kills.swarm")
+	s.statQuasarKills = s.world.Resources.Status.Ints.Get("kills.quasar")
+	s.statStormKills = s.world.Resources.Status.Ints.Get("kills.storm")
+
 	s.Init()
 	return s
 }
@@ -67,6 +79,12 @@ func (s *LootSystem) Init() {
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
+
+	s.statDrainKills.Store(0)
+	s.statSwarmKills.Store(0)
+	s.statQuasarKills.Store(0)
+	s.statStormKills.Store(0)
+
 	s.enabled = true
 }
 
@@ -123,6 +141,8 @@ func (s *LootSystem) Update() {
 	if !s.enabled {
 		return
 	}
+
+	s.world.DebugPrint(fmt.Sprintf("D:%d S:%d Q:%d ST:%d", s.statDrainKills.Load(), s.statSwarmKills.Load(), s.statQuasarKills.Load(), s.statStormKills.Load()))
 
 	lootEntities := s.world.Components.Loot.GetAllEntities()
 	if len(lootEntities) == 0 {
@@ -214,6 +234,17 @@ func (s *LootSystem) Update() {
 
 // onEnemyKilled processes multi-drop loot spawning
 func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
+	switch payload.Species {
+	case component.SpeciesDrain:
+		s.statDrainKills.Add(1)
+	case component.SpeciesSwarm:
+		s.statSwarmKills.Add(1)
+	case component.SpeciesQuasar:
+		s.statQuasarKills.Add(1)
+	case component.SpeciesStorm:
+		s.statStormKills.Add(1)
+	}
+
 	results := s.rollDropTable(payload.Species)
 	if len(results) == 0 {
 		return

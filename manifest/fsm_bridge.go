@@ -327,6 +327,29 @@ func registerSystemActions(m *fsm.Machine[*engine.World]) {
 			})
 		}
 	})
+
+	m.RegisterAction("SetStatusInt", func(world *engine.World, args any) {
+		statusArgs, ok := args.(*fsm.StatusIntArgs)
+		if !ok || statusArgs.Key == "" {
+			return
+		}
+		world.Resources.Status.Ints.Get(statusArgs.Key).Store(statusArgs.Value)
+	})
+
+	m.RegisterAction("ResetStatusInt", func(world *engine.World, args any) {
+		statusArgs, ok := args.(*fsm.StatusIntArgs)
+		if !ok || statusArgs.Key == "" {
+			return
+		}
+		world.Resources.Status.Ints.Get(statusArgs.Key).Store(0)
+	})
+
+	m.RegisterAction("ResetKillVars", func(world *engine.World, args any) {
+		world.Resources.Status.Ints.Get("kills.drain").Store(0)
+		world.Resources.Status.Ints.Get("kills.swarm").Store(0)
+		world.Resources.Status.Ints.Get("kills.quasar").Store(0)
+		world.Resources.Status.Ints.Get("kills.storm").Store(0)
+	})
 }
 
 // === Guard Factories ===

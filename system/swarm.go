@@ -1068,7 +1068,7 @@ func (s *SwarmSystem) handleCursorInteractions(
 // TODO: uniform names of methods among enemy entities, check if drain system needs despawn notification for genetic system
 // despawnSwarm emits events and delegates destruction to CompositeSystem
 func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
-	s.world.PushEvent(event.EventSwarmDespawned, &event.SwarmDespawnedPayload{
+	s.world.PushEvent(event.EventSwarmDestroyed, &event.SwarmDestroyedPayload{
 		HeaderEntity: headerEntity,
 	})
 

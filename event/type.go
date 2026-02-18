@@ -105,30 +105,33 @@ const (
 	EventNuggetJumpRequest
 
 	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
-	// Trigger: FSM GameState Action
+	// Trigger: FSM
 	// Consumer: GoldSystem | Payload: nil
 	EventGoldSpawnRequest
 
 	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
 	// Trigger: GoldSystem
-	// Consumer: FSM (to return to Normal/Wait) | Payload: nil
+	// Consumer: FSM | Payload: nil
 	EventGoldSpawnFailed
 
 	// EventGoldSpawned signals gold sequence creation
-	// Trigger: GoldSystem spawns sequence in PhaseNormal
+	// Trigger: GoldSystem
 	// Consumer: SplashSystem (timer) | Payload: *GoldSpawnedPayload
 	EventGoldSpawned
 
 	// EventGoldComplete signals successful gold sequence completion
-	// Trigger: Final gold character typed
+	// Trigger: GoldSystem (Final gold character typed)
 	// Consumer: SplashSystem (destroy timer) | Payload: *GoldCompletionPayload
 	EventGoldComplete
 
 	// EventGoldTimeout signals gold sequence expiration
-	// Trigger: GoldSystem timeout | Payload: *GoldCompletionPayload
+	// Trigger: GoldSystem timeout
+	// Consumer: FSM | Payload: *GoldCompletionPayload
 	EventGoldTimeout
 
 	// EventGoldDestroyed signals external gold destruction (e.g., Drain)
+	// Trigger: GoldSystem
+	// Consumer: FSM
 	// Payload: *GoldCompletionPayload
 	EventGoldDestroyed
 
@@ -148,12 +151,12 @@ const (
 	EventCleanerDirectionalRequest
 
 	// EventCleanerSweepingRequest spawns cleaners on rows with Red(positive energy) or Blue(negative energy) glyphs
-	// Trigger: Gold sequence completed at max heat
+	// Trigger: FSM
 	// Consumer: CleanerSystem | Payload: nil
 	EventCleanerSweepingRequest
 
 	// EventCleanerSweepingFinished marks cleaner animation completion
-	// Trigger: GetAllEntities cleaner entities destroyed | Payload: nil
+	// Trigger: FSM if required | Payload: nil
 	EventCleanerSweepingFinished
 
 	// EventCharacterTyped signals Insert mode keypress
@@ -383,11 +386,6 @@ const (
 	// Consumer: QuasarSystem | Payload: *QuasarSpawnRequestPayload
 	EventQuasarSpawnRequest
 
-	// EventSwarmSpawnRequest signals SwarmSystem to create the entity at location
-	// Trigger: FuseSystem (after animation)
-	// Consumer: SwarmSystem | Payload: *SwarmSpawnRequestPayload
-	EventSwarmSpawnRequest
-
 	// EventQuasarSpawned signals quasar composite creation
 	// Trigger: FuseSystem after creating quasar
 	// Consumer: QuasarSystem | Payload: *QuasarSpawnedPayload
@@ -395,7 +393,7 @@ const (
 
 	// EventQuasarDestroyed signals quasar termination
 	// Trigger: QuasarSystem on lifecycle end
-	// Consumer: (future: audio/effects) | Payload: nil
+	// Consumer: FSM | Payload: nil
 	EventQuasarDestroyed
 
 	// EventQuasarCancelRequest signals manual termination of the quasar phase
@@ -405,12 +403,12 @@ const (
 
 	// EventGrayoutStart signals persistent grayout activation
 	// Trigger: FSM
-	// Consumer: GameState | Payload: nil
+	// Consumer: TransientSystem | Payload: nil
 	EventGrayoutStart
 
 	// EventGrayoutEnd signals persistent grayout deactivation
 	// Trigger: FSM
-	// Consumer: GameState | Payload: nil
+	// Consumer: TransientSystem | Payload: nil
 	EventGrayoutEnd
 
 	// EventSpiritSpawn signals intent to spawn a spirit entity
@@ -468,15 +466,20 @@ const (
 	// Consumer: FuseSystem | Payload: *FuseSwarmRequestPayload
 	EventFuseSwarmRequest
 
+	// EventSwarmSpawnRequest signals SwarmSystem to create the entity at location
+	// Trigger: FuseSystem (after animation)
+	// Consumer: SwarmSystem | Payload: *SwarmSpawnRequestPayload
+	EventSwarmSpawnRequest
+
 	// EventSwarmSpawned signals swarm composite creation
 	// Trigger: FuseSystem after convergence animation
 	// Consumer: SwarmSystem | Payload: *SwarmSpawnedPayload
 	EventSwarmSpawned
 
-	// EventSwarmDespawned signals swarm termination
+	// EventSwarmDestroyed signals swarm termination
 	// Trigger: SwarmSystem on lifecycle end
-	// Consumer: (future: audio/FSM) | Payload: *SwarmDespawnedPayload
-	EventSwarmDespawned
+	// Consumer: (future: audio/FSM) | Payload: *SwarmDestroyedPayload
+	EventSwarmDestroyed
 
 	// EventSwarmAbsorbedDrain signals drain absorbed by swarm
 	// Trigger: SwarmSystem on drain collision
@@ -618,15 +621,15 @@ const (
 	// Consumer: StormSystem | Payload: nil
 	EventStormCancelRequest
 
-	// EventStormCircleDied signals individual circle destruction
+	// EventStormCircleDestroyed signals individual circle destruction
 	// Trigger: StormSystem on circle health <= 0
-	// Consumer: StormSystem (internal), future loot | Payload: *StormCircleDiedPayload
-	EventStormCircleDied
+	// Consumer: future loot | Payload: *StormCircleDestroyedPayload
+	EventStormCircleDestroyed
 
-	// EventStormDied signals all storm circles destroyed
+	// EventStormDestroyed signals all storm circles destroyed
 	// Trigger: StormSystem when last circle dies
-	// Consumer: Future loot/progression | Payload: *StormDiedPayload
-	EventStormDied
+	// Consumer: Loot system/FSM | Payload: *StormDestroyedPayload
+	EventStormDestroyed
 
 	// EventLevelSetup signals map dimension change and optional entity clear
 	// Trigger: FSM on phase transition

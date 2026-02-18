@@ -1,112 +1,108 @@
-# === Quasar region states ===
-# spawned dynamically via SpawnRegion action
-
-# --- QUASAR CYCLE ---
-
-[states.QuasarCycle]
-parent = "Root"
+# Quasar region: gold cycle during quasar with escalation to storm
 
 [states.QuasarFuse]
-parent = "QuasarCycle"
+parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutStart" },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200 } },
     { action = "EmitEvent", event = "EventDrainPause" },
-    { action = "EmitEvent", event = "EventFuseQuasarRequest" },
+    { action = "EmitEvent", event = "EventFuseQuasarRequest" }
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
 ]
+
+# --- Gold Cycle Parent ---
+
+[states.QuasarGoldCycle]
+parent = "Root"
+on_exit = [
+    { action = "EmitEvent", event = "EventGoldCancel" }
+]
+transitions = [
+    { trigger = "EventQuasarDestroyed", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
+    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } }
+]
+
+# --- Gold Spawn ---
 
 [states.QuasarGoldSpawn]
-parent = "QuasarCycle"
+parent = "QuasarGoldCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldRetry" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldSpawnRetry" }
 ]
 
-[states.QuasarGoldRetry]
-parent = "QuasarCycle"
+[states.QuasarGoldSpawnRetry]
+parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarDustAll" },
-    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
 ]
+
+# --- Gold Active ---
 
 [states.QuasarGoldActive]
-parent = "QuasarCycle"
+parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = "0" } },
-    { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
-    { trigger = "EventGoldComplete", target = "QuasarGoldReward" },
-    { trigger = "EventGoldTimeout", target = "QuasarDustAll" },
-    { trigger = "EventGoldDestroyed", target = "QuasarDustAll" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    { trigger = "EventGoldComplete", target = "QuasarGoldComplete" },
+    { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
+    { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" }
 ]
 
-[states.QuasarGoldReward]
-parent = "QuasarCycle"
+[states.QuasarGoldComplete]
+parent = "QuasarGoldCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, percentage = false, type = 1 } },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } }
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarFail", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "eq", value = 0 } },
-    { trigger = "EventHeatBurstNotification", target = "MazeHandoff" },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
-    { trigger = "Tick", target = "QuasarGoldSpawn" },
+    { trigger = "Tick", target = "QuasarDustAll" }
 ]
 
-# --- DUST ALL ---
+[states.QuasarGoldTimeout]
+parent = "QuasarGoldCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarDustAll" }
+]
+
+[states.QuasarGoldDestroyed]
+parent = "QuasarGoldCycle"
+transitions = [
+    { trigger = "Tick", target = "QuasarDustAll" }
+]
+
+# --- Dust ---
 
 [states.QuasarDustAll]
-parent = "QuasarCycle"
+parent = "QuasarGoldCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDustAllRequest"},
+    { action = "EmitEvent", event = "EventDustAllRequest" }
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarGoldSpawn"},
+    { trigger = "Tick", target = "QuasarGoldSpawn" }
 ]
 
-# --- MAZE HANDOFF ---
-# Overheat burst
-
-[states.MazeHandoff]
-parent = "QuasarCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventGoldCancel" },
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
-    { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "SpawnRegion", region = "maze", initial_state = "MazeSetup" },
-    { action = "TerminateRegion", region = "quasar" },
-]
-
-# --- QUASAR END ---
-
-[states.QuasarFail]
-parent = "QuasarCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
-]
-transitions = [
-    { trigger = "Tick", target = "QuasarExit" },
-]
-
-# --- MAIN HANDOFF ---
+# --- Exit Conditions ---
 
 [states.QuasarExit]
-parent = "QuasarCycle"
+parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
-    { action = "TerminateRegion", region = "quasar" },
+    { action = "TerminateRegion", region = "quasar" }
+]
+
+[states.QuasarEscalate]
+parent = "Root"
+on_enter = [
+    { action = "ResetStatusInt", payload = { key = "kills.quasar" } },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
+    { action = "SpawnRegion", region = "storm", initial_state = "StormSetup" },
+    { action = "TerminateRegion", region = "quasar" }
 ]

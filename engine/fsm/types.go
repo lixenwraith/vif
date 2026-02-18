@@ -42,6 +42,11 @@ type Machine[T any] struct {
 	// Delayed Actions Queue (per-region)
 	delayedActions map[string][]DelayedAction[T]
 
+	// Telemetry cache (preserves last foreground state during transitions)
+	lastTelemetryRegion  string
+	lastTelemetryStateID StateID
+	lastTelemetryTime    time.Duration
+
 	// System Configuration
 	systemsConfig *SystemsConfig
 
@@ -134,4 +139,10 @@ type VariableArgs struct {
 type SystemControlArgs struct {
 	SystemName string `toml:"system_name"`
 	Enabled    bool   `toml:"enabled"`
+}
+
+// StatusIntArgs holds args for status registry int manipulation
+type StatusIntArgs struct {
+	Key   string `toml:"key"`
+	Value int64  `toml:"value"`
 }

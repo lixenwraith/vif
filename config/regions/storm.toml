@@ -1,0 +1,55 @@
+# Storm region: final escalation phase
+
+[states.StormSetup]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventStormSpawnRequest" }
+]
+transitions = [
+    { trigger = "Tick", target = "StormActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } }
+]
+
+[states.StormActive]
+parent = "Root"
+transitions = [
+    { trigger = "EventStormDestroyed", target = "StormDecision" }
+]
+
+[states.StormDecision]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
+]
+transitions = [
+    { trigger = "Tick", target = "StormEscalatePlaceholderOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
+    { trigger = "Tick", target = "StormEscalatePlaceholderTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "StormVictory" }
+]
+
+[states.StormEscalatePlaceholderOne]
+parent = "Root"
+on_enter = [
+    { action = "ResetStatusInt", payload = { key = "kills.swarm" } },
+    { action = "EmitEvent", event = "EventStormCancelRequest" },
+    { action = "SpawnRegion", region = "placeholder", initial_state = "PlaceholderSetup" },
+    { action = "TerminateRegion", region = "storm" }
+]
+
+[states.StormEscalatePlaceholderTwo]
+parent = "Root"
+on_enter = [
+    { action = "ResetStatusInt", payload = { key = "kills.storm" } },
+    { action = "EmitEvent", event = "EventStormCancelRequest" },
+    { action = "SpawnRegion", region = "placeholder", initial_state = "PlaceholderSetup" },
+    { action = "TerminateRegion", region = "storm" }
+]
+
+[states.StormVictory]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "storm" }
+]

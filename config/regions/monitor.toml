@@ -1,0 +1,58 @@
+# Parallel region for global state and reset
+
+[states.MonitorWarmup]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "MonitorActive", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "gt", value = 0 } },
+]
+
+[states.MonitorActive]
+parent = "Root"
+transitions = [
+    { trigger = "EventHeatBurstNotification", target = "MonitorHeatBurst" },
+    { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "lte", value = 0 } },
+]
+
+[states.MonitorHeatBurst]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "MonitorActive" },
+]
+
+[states.MonitorGlobalReset]
+parent = "Root"
+on_enter = [
+    # Cancel active sequences
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    # Cancel enemy entities
+    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
+    { action = "EmitEvent", event = "EventStormCancelRequest" },
+    { action = "EmitEvent", event = "EventSwarmCancelRequest" },
+    # Reset tracking
+    { action = "ResetKillVars" },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
+    # Terminate all gameplay regions
+    { action = "TerminateRegion", region = "quasar" },
+    { action = "TerminateRegion", region = "storm" },
+    { action = "TerminateRegion", region = "placeholder" },
+    { action = "TerminateRegion", region = "main" },
+    # Reset visual cue
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 250 } },
+]
+transitions = [
+    { trigger = "Tick", target = "MonitorRespawn" },
+]
+
+[states.MonitorRespawn]
+parent = "Root"
+on_enter = [
+    { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
+]
+transitions = [
+    { trigger = "Tick", target = "MonitorWarmup" },
+]

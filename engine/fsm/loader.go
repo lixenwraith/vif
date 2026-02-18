@@ -236,6 +236,15 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 				}
 			}
 			args = sysArgs
+
+		case "SetStatusInt", "ResetStatusInt":
+			statusArgs := &StatusIntArgs{}
+			if cfg.Payload != nil {
+				if err := toml.Decode(cfg.Payload, statusArgs); err != nil {
+					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
+				}
+			}
+			args = statusArgs
 		}
 
 		// Compile action guard

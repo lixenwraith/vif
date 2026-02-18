@@ -23,6 +23,7 @@ type SystemsConfig struct {
 type RegionConfig struct {
 	Initial         string   `toml:"initial"`
 	File            string   `toml:"file,omitempty"`             // External file path, relative to config dir
+	Background      bool     `toml:"background,omitempty"`       // Excluded from telemetry
 	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Systems to enable when region spawns
 	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Systems to disable when region spawns
 }

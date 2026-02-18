@@ -331,42 +331,53 @@ func (m *Machine[T]) Reset(ctx T) error {
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
 
+	// Clear telemetry cache
+	m.lastTelemetryRegion = ""
+	m.lastTelemetryStateID = StateNone
+	m.lastTelemetryTime = 0
+
 	// Re-initialize using loaded config
 	return m.Init(ctx)
 }
 
 // GetActiveRegionTelemetry returns telemetry data for display purposes
-// Prioritizes unpaused regions; falls back to any region if all paused
+// Skips background regions; caches last foreground state for transition periods
 // Returns state name, state ID, and time spent in current state
 func (m *Machine[T]) GetActiveRegionTelemetry() (stateName string, stateID StateID, timeInState time.Duration) {
 	var activeRegion *RegionState
 
-	// Find first unpaused region
-	for _, region := range m.regions {
-		if !region.Paused {
-			activeRegion = region
-			break
+	// Find first unpaused foreground region
+	for name, region := range m.regions {
+		if region.Paused {
+			continue
+		}
+		if cfg := m.regionConfigs[name]; cfg != nil && cfg.Background {
+			continue
+		}
+		activeRegion = region
+		break
+	}
+
+	// Update cache if foreground region found
+	if activeRegion != nil {
+		m.lastTelemetryRegion = activeRegion.Name
+		m.lastTelemetryStateID = activeRegion.ActiveStateID
+		m.lastTelemetryTime = activeRegion.TimeInState
+
+		if node, ok := m.nodes[activeRegion.ActiveStateID]; ok {
+			return node.Name, activeRegion.ActiveStateID, activeRegion.TimeInState
+		}
+		return "", activeRegion.ActiveStateID, activeRegion.TimeInState
+	}
+
+	// No foreground region: return cached values
+	if m.lastTelemetryStateID != StateNone {
+		if node, ok := m.nodes[m.lastTelemetryStateID]; ok {
+			return node.Name, m.lastTelemetryStateID, m.lastTelemetryTime
 		}
 	}
 
-	// Fallback: any region
-	if activeRegion == nil {
-		for _, region := range m.regions {
-			activeRegion = region
-			break
-		}
-	}
-
-	if activeRegion == nil {
-		return "", StateNone, 0
-	}
-
-	// Resolve state name from node
-	if node, ok := m.nodes[activeRegion.ActiveStateID]; ok {
-		return node.Name, activeRegion.ActiveStateID, activeRegion.TimeInState
-	}
-
-	return "", activeRegion.ActiveStateID, activeRegion.TimeInState
+	return "", StateNone, 0
 }
 
 // === Variable Methods ===

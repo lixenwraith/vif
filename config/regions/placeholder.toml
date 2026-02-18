@@ -1,0 +1,26 @@
+# Placeholder region: triggered from storm escalation
+
+[states.PlaceholderSetup]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlaceholderActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.PlaceholderActive]
+parent = "Root"
+# Placeholder: add gameplay transitions here
+transitions = [
+    { trigger = "Tick", target = "PlaceholderExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+]
+
+[states.PlaceholderExit]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "placeholder" },
+]

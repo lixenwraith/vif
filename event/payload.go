@@ -467,8 +467,8 @@ type SwarmSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
-// SwarmDespawnedPayload contains despawn reason
-type SwarmDespawnedPayload struct {
+// SwarmDestroyedPayload contains despawn reason
+type SwarmDestroyedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
@@ -631,15 +631,15 @@ type LootSpawnRequestPayload struct {
 	Y    int                `toml:"y"`
 }
 
-// StormCircleDiedPayload contains individual circle death data
-type StormCircleDiedPayload struct {
+// StormCircleDestroyedPayload contains individual circle death data
+type StormCircleDestroyedPayload struct {
 	CircleEntity core.Entity `toml:"circle_entity"`
 	RootEntity   core.Entity `toml:"root_entity"`
 	Index        int         `toml:"index"`
 }
 
-// StormDiedPayload contains storm death data
-type StormDiedPayload struct {
+// StormDestroyedPayload contains storm death data
+type StormDestroyedPayload struct {
 	RootEntity core.Entity `toml:"root_entity"`
 }
 

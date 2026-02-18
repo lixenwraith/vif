@@ -211,15 +211,15 @@ func InitRegistry() {
 	// Swarm
 	RegisterType("EventSwarmSpawnRequest", EventSwarmSpawnRequest, &SwarmSpawnRequestPayload{})
 	RegisterType("EventSwarmSpawned", EventSwarmSpawned, &SwarmSpawnedPayload{})
-	RegisterType("EventSwarmDespawned", EventSwarmDespawned, &SwarmDespawnedPayload{})
+	RegisterType("EventSwarmDestroyed", EventSwarmDestroyed, &SwarmDestroyedPayload{})
 	RegisterType("EventSwarmAbsorbedDrain", EventSwarmAbsorbedDrain, &SwarmAbsorbedDrainPayload{})
 	RegisterType("EventSwarmCancelRequest", EventSwarmCancelRequest, nil)
 
 	// Storm
 	RegisterType("EventStormSpawnRequest", EventStormSpawnRequest, nil)
 	RegisterType("EventStormCancelRequest", EventStormCancelRequest, nil)
-	RegisterType("EventStormCircleDied", EventStormCircleDied, &StormCircleDiedPayload{})
-	RegisterType("EventStormDied", EventStormDied, &StormDiedPayload{})
+	RegisterType("EventStormCircleDestroyed", EventStormCircleDestroyed, &StormCircleDestroyedPayload{})
+	RegisterType("EventStormDestroyed", EventStormDestroyed, &StormDestroyedPayload{})
 
 	// Post-Process
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)

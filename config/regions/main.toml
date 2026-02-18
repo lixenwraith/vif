@@ -1,89 +1,90 @@
-# === Main gameplay region states ===
+# Main region: gold cycle with escalation to quasar
 
-[states.Gameplay]
+[states.MainCycle]
 parent = "Root"
+on_exit = [
+    { action = "EmitEvent", event = "EventGoldCancel" }
+]
+transitions = [
+    { trigger = "Tick", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } }
+]
 
-# --- GOLD SPAWN CYCLE ---
+# --- Gold Spawn ---
 
-[states.SpawnGold]
-parent = "Gameplay"
+[states.MainSpawnGold]
+parent = "MainCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
 ]
 transitions = [
-    { trigger = "EventGoldSpawned", target = "GoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "DecayWait" },
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+    { trigger = "EventGoldSpawned", target = "MainGoldActive" },
+    { trigger = "EventGoldSpawnFailed", target = "MainSpawnGoldRetry" }
 ]
 
-[states.GoldActive]
-parent = "Gameplay"
+[states.MainSpawnGoldRetry]
+parent = "MainCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "PreSweepCheck" },
-    { trigger = "EventGoldTimeout", target = "DecayWait" },
-    { trigger = "EventGoldDestroyed", target = "DecayWait" },
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
 ]
 
-# --- SWEEPING EVALUATION ---
+# --- Gold Active ---
 
-[states.PreSweepCheck]
-parent = "Gameplay"
+[states.MainGoldActive]
+parent = "MainCycle"
 transitions = [
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
-    { trigger = "Tick", target = "SweepingHot", guard = "StatusBoolEquals", guard_args = { key = "heat.at_max", value = true } },
-    { trigger = "Tick", target = "SweepingNormal" },
+    { trigger = "EventGoldComplete", target = "MainGoldComplete" },
+    { trigger = "EventGoldTimeout", target = "MainGoldTimeout" },
+    { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" }
 ]
 
-[states.SweepingHot]
-parent = "Gameplay"
-on_enter = [
-    { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
-]
-transitions = [
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
-    { trigger = "EventCleanerSweepingFinished", target = "QuasarHandoff" },
-]
-
-[states.SweepingNormal]
-parent = "Gameplay"
+[states.MainGoldComplete]
+parent = "MainCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, percentage = false, type = 1 } },
-    { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } }
 ]
 transitions = [
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
-    { trigger = "EventCleanerSweepingFinished", target = "DecayWait" },
+    { trigger = "Tick", target = "MainDecayWait" }
 ]
 
-# --- DECAY WAVES ---
-
-[states.DecayWait]
-parent = "Gameplay"
+[states.MainGoldTimeout]
+parent = "MainCycle"
 transitions = [
-    { trigger = "Tick", target = "DecayAnimation", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+    { trigger = "Tick", target = "MainDecayWait" }
 ]
 
-[states.DecayAnimation]
-parent = "Gameplay"
+[states.MainGoldDestroyed]
+parent = "MainCycle"
+transitions = [
+    { trigger = "Tick", target = "MainDecayWait" }
+]
+
+# --- Decay Cycle ---
+
+[states.MainDecayWait]
+parent = "MainCycle"
+transitions = [
+    { trigger = "Tick", target = "MainDecayWave", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+]
+
+[states.MainDecayWave]
+parent = "MainCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDecayWave" },
+    { action = "EmitEvent", event = "EventDecayWave" }
 ]
 transitions = [
-    { trigger = "Tick", target = "SpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 3000 } },
-    { trigger = "EventHeatBurstNotification", target = "QuasarHandoff" },
+    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
 ]
 
-# --- QUASAR HANDOFF ---
+# --- Escalation ---
 
-[states.QuasarHandoff]
-parent = "Gameplay"
+[states.MainEscalate]
+parent = "Root"
 on_enter = [
+    { action = "ResetStatusInt", payload = { key = "kills.drain" } },
     { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
-    { action = "PauseRegion", region = "main" },
+    { action = "PauseRegion", region = "main" }
 ]
 transitions = [
-    { trigger = "Tick", target = "DecayWait" },
+    { trigger = "Tick", target = "MainSpawnGold" }
 ]

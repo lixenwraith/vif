@@ -1066,7 +1066,7 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	stormComp.CirclesAlive[index] = false
 
 	// Emit circle death event
-	s.world.PushEvent(event.EventStormCircleDied, &event.StormCircleDiedPayload{
+	s.world.PushEvent(event.EventStormCircleDestroyed, &event.StormCircleDestroyedPayload{
 		CircleEntity: circleEntity,
 		RootEntity:   s.rootEntity,
 		Index:        index,
@@ -1080,7 +1080,7 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 
 	// Check if all dead
 	if stormComp.AliveCount() == 0 {
-		s.world.PushEvent(event.EventStormDied, &event.StormDiedPayload{
+		s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 			RootEntity: s.rootEntity,
 		})
 
@@ -1109,14 +1109,14 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 		if stormComp.Circles[i] == headerEntity && stormComp.CirclesAlive[i] {
 			stormComp.CirclesAlive[i] = false
 
-			s.world.PushEvent(event.EventStormCircleDied, &event.StormCircleDiedPayload{
+			s.world.PushEvent(event.EventStormCircleDestroyed, &event.StormCircleDestroyedPayload{
 				CircleEntity: headerEntity,
 				RootEntity:   s.rootEntity,
 				Index:        i,
 			})
 
 			if stormComp.AliveCount() == 0 {
-				s.world.PushEvent(event.EventStormDied, &event.StormDiedPayload{
+				s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 					RootEntity: s.rootEntity,
 				})
 			}
