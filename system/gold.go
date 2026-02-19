@@ -207,8 +207,8 @@ func (s *GoldSystem) handleJumpRequest() {
 
 	// 3. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      parameter.GoldJumpCost,
-		Percentage: false,
+		Delta:      parameter.GoldJumpCostPercent,
+		Percentage: true,
 		Type:       event.EnergyDeltaSpend,
 	})
 

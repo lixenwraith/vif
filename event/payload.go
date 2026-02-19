@@ -72,6 +72,7 @@ const (
 	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
 	EnergyDeltaReward                         // Reward from actions, absolute value increase
 	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
+	EnergyDeltaPassive                        // Passive drain, bypasses ember/boost, convergent clamp to zero
 )
 
 // EnergyAddPayload contains energy delta

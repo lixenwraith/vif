@@ -12,8 +12,8 @@ const (
 	// GoldSequenceLength is the number of characters in the gold sequence
 	GoldSequenceLength = 10
 
-	// GoldJumpCost is the energy cost to jump to gold
-	GoldJumpCost = 1000
+	// GoldJumpCostPercent is the energy cost to jump to gold
+	GoldJumpCostPercent = 10
 )
 
 // Nugget System
@@ -27,8 +27,8 @@ const (
 	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
 	NuggetMaxAttempts = 100
 
-	// NuggetJumpCost is the energy cost to jump to a nugget
-	NuggetJumpCost = 100
+	// NuggetJumpCostPercent is the energy cost to jump to a nugget
+	NuggetJumpCostPercent = 1
 
 	// NuggetBeaconInterval is the interval between directional cleaner emissions
 	NuggetBeaconInterval = 2 * time.Second

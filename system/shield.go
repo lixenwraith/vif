@@ -174,7 +174,7 @@ func (s *ShieldSystem) Update() {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 			Delta:      parameter.ShieldPassiveEnergyPercentDrain,
 			Percentage: true,
-			Type:       event.EnergyDeltaPenalty,
+			Type:       event.EnergyDeltaPassive,
 		})
 		shieldComp.LastDrainTime = now
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)

@@ -197,8 +197,10 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 	currentEnergy := energyComp.Current
 
 	if percentage {
-		// Letting low energy and low percentage to fall to zero
 		delta = (delta * currentEnergy) / 100
+		if delta == 0 {
+			delta = 1 // Min value clamp
+		}
 	}
 
 	if delta == 0 {
@@ -228,6 +230,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 		} else {
 			newEnergy = currentEnergy + absDelta
 		}
+
 	case event.EnergyDeltaPenalty:
 		// Boost protects from penalties
 		if boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok && boostComp.Active {
@@ -251,6 +254,23 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 				newEnergy = 0
 			}
 		}
+
+	case event.EnergyDeltaPassive:
+		// Bypasses ember/boost, convergent clamp to zero
+		if negativeEnergy {
+			newEnergy = currentEnergy + absDelta
+			if newEnergy > 0 {
+				crossedZero = true
+				newEnergy = 0
+			}
+		} else {
+			newEnergy = currentEnergy - absDelta
+			if newEnergy < 0 {
+				crossedZero = true
+				newEnergy = 0
+			}
+		}
+
 	case event.EnergyDeltaSpend:
 		s.statSpendCount.Add(1)
 		// Convergent to zero, can cross zero

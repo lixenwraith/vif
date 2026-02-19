@@ -202,8 +202,8 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 	// 4. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-		Delta:      parameter.NuggetJumpCost,
-		Percentage: false,
+		Delta:      parameter.NuggetJumpCostPercent,
+		Percentage: true,
 		Type:       event.EnergyDeltaSpend,
 	})
 
