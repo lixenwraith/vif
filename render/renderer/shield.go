@@ -3,7 +3,9 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
@@ -76,7 +78,7 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 		p.rotDirY = vmath.Sin(angle)
 	}
 
-	// Bounding box in map coords
+	// Bounding box uses visual radius (includes feather zone)
 	mapStartX := max(0, centerX-style.RadiusXInt)
 	mapEndX := min(ctx.MapWidth-1, centerX+style.RadiusXInt)
 	mapStartY := max(0, centerY-style.RadiusYInt)
@@ -96,7 +98,9 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
 			normalizedDistSq := vmath.EllipseDistSq(dx, dy, style.InvRxSq, style.InvRySq)
-			if normalizedDistSq > vmath.Scale {
+
+			// Extended threshold for feather zone
+			if normalizedDistSq > visual.ShieldFeatherEnd {
 				continue
 			}
 
@@ -107,18 +111,42 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 	}
 }
 
-// shieldCellTrueColor renders quadratic gradient with optional rotating glow
+// shieldCellTrueColor renders linear gradient with feather fade
 func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
 	s := p.style
 
-	alphaFixed := vmath.Mul(normalizedDistSq, s.MaxOpacity)
+	// Linear distance for smoother falloff
+	normDist := vmath.Sqrt(normalizedDistSq)
+
+	// Compute alpha with feather fade
+	var alphaFixed int64
+	if normalizedDistSq <= visual.ShieldFeatherStart {
+		// Core zone: linear falloff based on distance
+		alphaFixed = vmath.Mul(normDist, s.MaxOpacity)
+	} else {
+		// Feather zone: fade from edge alpha to zero
+		edgeAlpha := vmath.Mul(vmath.Sqrt(visual.ShieldFeatherStart), s.MaxOpacity)
+		fadeRange := visual.ShieldFeatherEnd - visual.ShieldFeatherStart
+		fadeProgress := vmath.Div(normalizedDistSq-visual.ShieldFeatherStart, fadeRange)
+		alphaFixed = vmath.Mul(edgeAlpha, vmath.Scale-fadeProgress)
+	}
+
+	if alphaFixed <= 0 {
+		return
+	}
+
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, s.Color, render.BlendScreen, vmath.ToFloat(alphaFixed), terminal.AttrNone)
 
+	// Glow overlay (unchanged logic, uses distSq threshold)
 	if !p.glowActive || normalizedDistSq <= s.GlowEdgeThreshold {
 		return
 	}
 
-	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
+	// Use Atan2 for cell direction
+	theta := vmath.Atan2(p.cellDy, p.cellDx)
+	cellDirX := vmath.Cos(theta)
+	cellDirY := vmath.Sin(theta)
+
 	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
 	if dot <= 0 {
 		return
@@ -170,7 +198,7 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
-		// Skip shield render when ember is active (ember replaces shield visual)
+		// Skip shield render when ember is active
 		if heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity); ok && heatComp.EmberActive {
 			continue
 		}
@@ -180,6 +208,8 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
+		cfg := &visual.ShieldConfigs[shieldComp.Type]
+
 		// Skip position in map coords (only for cursor)
 		skipX, skipY := -1, -1
 		if shieldEntity == cursorEntity {
@@ -187,25 +217,52 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			skipY = shieldPos.Y
 		}
 
-		// Construct style from component
-		style := ShieldStyle{
-			Color:             shieldComp.Color,
-			Palette256:        shieldComp.Palette256,
-			MaxOpacity:        vmath.FromFloat(shieldComp.MaxOpacity),
-			InvRxSq:           shieldComp.InvRxSq,
-			InvRySq:           shieldComp.InvRySq,
-			RadiusXInt:        vmath.ToInt(shieldComp.RadiusX),
-			RadiusYInt:        vmath.ToInt(shieldComp.RadiusY),
-			Threshold256:      vmath.FromFloat(0.64), // Standard rim threshold (0.8^2)
-			SkipX:             skipX,
-			SkipY:             skipY,
-			GlowColor:         shieldComp.GlowColor,
-			GlowEdgeThreshold: vmath.FromFloat(0.36), // Standard glow threshold (0.6^2)
-			GlowIntensity:     vmath.FromFloat(shieldComp.GlowIntensity),
-			GlowPeriod:        shieldComp.GlowPeriod,
+		// Resolve runtime-variable visuals
+		color := cfg.Color
+		palette := cfg.Palette256
+		glowColor := cfg.GlowColor
+		glowPeriod := cfg.GlowPeriod
+
+		switch shieldComp.Type {
+		case component.ShieldTypePlayer:
+			// Color based on energy polarity
+			if energy, ok := r.gameCtx.World.Components.Energy.GetComponent(shieldEntity); ok && energy.Current < 0 {
+				color = cfg.ColorAlt
+				palette = cfg.Palette256Alt
+			}
+			// Glow based on boost state
+			if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(shieldEntity); ok && boost.Active {
+				glowPeriod = parameter.ShieldBoostRotationDuration
+			} else {
+				glowPeriod = 0
+			}
+
+		case component.ShieldTypeLoot:
+			// GlowColor from loot visual definition
+			if loot, ok := r.gameCtx.World.Components.Loot.GetComponent(shieldEntity); ok {
+				if vis, exists := visual.LootVisuals[loot.Type]; exists {
+					glowColor = vis.GlowColor
+				}
+			}
 		}
 
-		// Pass map coords; Paint handles transform internally
+		style := ShieldStyle{
+			Color:             color,
+			Palette256:        palette,
+			MaxOpacity:        vmath.FromFloat(cfg.MaxOpacity),
+			InvRxSq:           cfg.InvRxSq,
+			InvRySq:           cfg.InvRySq,
+			RadiusXInt:        cfg.VisualRadiusXInt,
+			RadiusYInt:        cfg.VisualRadiusYInt,
+			Threshold256:      vmath.FromFloat(0.64),
+			SkipX:             skipX,
+			SkipY:             skipY,
+			GlowColor:         glowColor,
+			GlowEdgeThreshold: vmath.FromFloat(0.36),
+			GlowIntensity:     vmath.FromFloat(cfg.GlowIntensity),
+			GlowPeriod:        glowPeriod,
+		}
+
 		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
 	}
 }

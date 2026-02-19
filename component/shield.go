@@ -2,31 +2,29 @@ package component
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// ShieldComponent represents a circular/elliptical energy shield or halo
-// It serves as both a visual definition for the ShieldRenderer and a logic marker for physics systems
+// ShieldType distinguishes shield configurations for visual lookup
+type ShieldType uint8
+
+const (
+	ShieldTypePlayer ShieldType = iota
+	ShieldTypeQuasar
+	ShieldTypeLoot
+)
+
+// ShieldComponent holds runtime state for game mechanics
+// Visual parameters looked up via Type in visual.ShieldConfigs
 type ShieldComponent struct {
 	Active bool
+	Type   ShieldType
 
-	// Visual Configuration
-	Color      terminal.RGB
-	Palette256 uint8 // 256-color palette index
-
-	// Glow Effect (Optional)
-	GlowColor     terminal.RGB
-	GlowIntensity float64       // Peak glow alpha (0.0 to 1.0)
-	GlowPeriod    time.Duration // Rotation duration (0 = disabled)
-
-	// Physics/Geometry
-	MaxOpacity    float64   // Maximum opacity at center (0.0 to 1.0)
-	LastDrainTime time.Time // Last passive drain tick (for player shield)
-
-	// Q32.32 fixed-point geometry
+	// Q32.32 fixed-point geometry (game mechanics)
 	RadiusX int64
 	RadiusY int64
-	InvRxSq int64 // Precomputed 1/RadiusX^2
-	InvRySq int64 // Precomputed 1/RadiusY^2
+	InvRxSq int64
+	InvRySq int64
+
+	// Player-specific runtime state
+	LastDrainTime time.Time
 }

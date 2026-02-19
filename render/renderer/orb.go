@@ -16,41 +16,28 @@ type OrbRenderer struct {
 	colorMode terminal.ColorMode
 
 	// Precomputed ellipse containment (2:1 aspect)
-	coronaRadiusX, coronaRadiusY int64
-	coronaInvRxSq, coronaInvRySq int64
-	burstRadiusX, burstRadiusY   int64
-	burstInvRxSq, burstInvRySq   int64
-	coronaRadiusXInt             int
-	coronaRadiusYInt             int
-	burstRadiusXInt              int
-	burstRadiusYInt              int
+	effectRadiusX    int64
+	effectRadiusY    int64
+	effectInvRxSq    int64
+	effectInvRySq    int64
+	effectRadiusXInt int
+	effectRadiusYInt int
 }
 
-// NewOrbRenderer creates the orb visualization renderer
 func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
-	coronaRx := vmath.FromFloat(parameter.OrbCoronaRadiusXFloat)
-	coronaRy := vmath.FromFloat(parameter.OrbCoronaRadiusYFloat)
-	burstRx := vmath.FromFloat(parameter.OrbBurstRadiusXFloat)
-	burstRy := vmath.FromFloat(parameter.OrbBurstRadiusYFloat)
-
-	coronaInvRxSq, coronaInvRySq := vmath.EllipseInvRadiiSq(coronaRx, coronaRy)
-	burstInvRxSq, burstInvRySq := vmath.EllipseInvRadiiSq(burstRx, burstRy)
+	rx := vmath.FromFloat(parameter.OrbCoronaRadiusXFloat)
+	ry := vmath.FromFloat(parameter.OrbCoronaRadiusYFloat)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
 
 	return &OrbRenderer{
 		gameCtx:          gameCtx,
 		colorMode:        gameCtx.World.Resources.Config.ColorMode,
-		coronaRadiusX:    coronaRx,
-		coronaRadiusY:    coronaRy,
-		coronaInvRxSq:    coronaInvRxSq,
-		coronaInvRySq:    coronaInvRySq,
-		burstRadiusX:     burstRx,
-		burstRadiusY:     burstRy,
-		burstInvRxSq:     burstInvRxSq,
-		burstInvRySq:     burstInvRySq,
-		coronaRadiusXInt: vmath.ToInt(coronaRx),
-		coronaRadiusYInt: vmath.ToInt(coronaRy),
-		burstRadiusXInt:  vmath.ToInt(burstRx),
-		burstRadiusYInt:  vmath.ToInt(burstRy),
+		effectRadiusX:    rx,
+		effectRadiusY:    ry,
+		effectInvRxSq:    invRxSq,
+		effectInvRySq:    invRySq,
+		effectRadiusXInt: vmath.ToInt(rx),
+		effectRadiusYInt: vmath.ToInt(ry),
 	}
 }
 
@@ -98,18 +85,34 @@ func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY in
 	buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, color, terminal.AttrNone)
 }
 
+// renderOrbTrueColor draws corona glow with optional flash burst
+func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent) {
+	baseColor := r.baseColor(orb.WeaponType)
+
+	if orb.FlashRemaining > 0 {
+		progress := orb.FlashRemaining.Seconds() / parameter.OrbFlashDuration.Seconds()
+		r.renderBurst(ctx, buf, mapX, mapY, baseColor, progress)
+		return
+	}
+
+	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType))
+
+	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+	if visible {
+		buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, baseColor, terminal.AttrNone)
+	}
+}
+
 // renderCorona draws rotating directional glow around orb center
 func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color terminal.RGB) {
-	// Rotation angle from game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := parameter.OrbCoronaPeriodMs
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	rotDirX := vmath.Cos(angleFixed)
 	rotDirY := vmath.Sin(angleFixed)
 
-	// Bounding box
-	for dy := -r.coronaRadiusYInt; dy <= r.coronaRadiusYInt; dy++ {
-		for dx := -r.coronaRadiusXInt; dx <= r.coronaRadiusXInt; dx++ {
+	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
+		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			if dx == 0 && dy == 0 {
 				continue
 			}
@@ -122,16 +125,17 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			// Ellipse containment check
 			dxF := vmath.FromInt(dx)
 			dyF := vmath.FromInt(dy)
-			distSq := vmath.EllipseDistSq(dxF, dyF, r.coronaInvRxSq, r.coronaInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
 			if distSq > vmath.Scale || distSq == 0 {
 				continue
 			}
 
-			// Normalize direction
-			cellDirX, cellDirY := vmath.Normalize2D(dxF, dyF)
+			// Use vmath.Atan2 for cell direction
+			theta := vmath.Atan2(dyF, dxF)
+			cellDirX := vmath.Cos(theta)
+			cellDirY := vmath.Sin(theta)
 
 			// Dual-direction glow
 			dot1 := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY)
@@ -141,10 +145,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			// Edge factor: stronger at ellipse boundary (distSq approaching Scale)
 			edgeFactor := vmath.Div(distSq, vmath.Scale)
-
-			// Intensity = dot alignment × edge proximity
 			intensity := vmath.Mul(dot, edgeFactor)
 			alpha := vmath.ToFloat(intensity) * parameter.OrbCoronaIntensity
 
@@ -159,15 +160,12 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 
 // renderBurst draws radial flash burst when orb fires
 func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor terminal.RGB, progress float64) {
-	// progress: 1.0 = just fired, 0.0 = flash ending
 	expandPhase := 1.0 - progress
 	burstAlpha := progress
-
-	// Blend white with weapon color
 	burstColor := render.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
 
-	for dy := -r.burstRadiusYInt; dy <= r.burstRadiusYInt; dy++ {
-		for dx := -r.burstRadiusXInt; dx <= r.burstRadiusXInt; dx++ {
+	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
+		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			mapX := centerX + dx
 			mapY := centerY + dy
 
@@ -178,31 +176,26 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 
 			dxF := vmath.FromInt(dx)
 			dyF := vmath.FromInt(dy)
-			distSq := vmath.EllipseDistSq(dxF, dyF, r.burstInvRxSq, r.burstInvRySq)
+			distSq := vmath.EllipseDistSq(dxF, dyF, r.effectInvRxSq, r.effectInvRySq)
 
 			if distSq > vmath.Scale {
 				continue
 			}
 
-			// Normalized distance 0-1 within ellipse
 			normDist := vmath.ToFloat(distSq) / vmath.ToFloat(vmath.Scale)
 
-			// Ring effect: peak at expanding edge
 			ringTarget := expandPhase * 0.8
 			ringDist := 1.0 - (normDist-ringTarget)*(normDist-ringTarget)*4
 			if ringDist < 0 {
 				ringDist = 0
 			}
 
-			// Center glow
 			centerGlow := 1.0 - normDist
-
 			alpha := (ringDist*0.7 + centerGlow*0.3) * burstAlpha
 			if alpha < 0.05 {
 				continue
 			}
 
-			// Center cell: draw sigil
 			if dx == 0 && dy == 0 {
 				buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, burstColor, terminal.AttrNone)
 			}
@@ -237,26 +230,5 @@ func (r *OrbRenderer) coronaColor(wt component.WeaponType) terminal.RGB {
 		return visual.RgbOrbCoronaDisruptor
 	default:
 		return visual.RgbOrbFlash
-	}
-}
-
-// renderOrbTrueColor draws corona glow with optional flash burst
-func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent) {
-	baseColor := r.baseColor(orb.WeaponType)
-
-	// Flash state: radial burst
-	if orb.FlashRemaining > 0 {
-		progress := orb.FlashRemaining.Seconds() / parameter.OrbFlashDuration.Seconds()
-		r.renderBurst(ctx, buf, mapX, mapY, baseColor, progress)
-		return
-	}
-
-	// Idle state: rotating corona
-	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType))
-
-	// Center sigil
-	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-	if visible {
-		buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, baseColor, terminal.AttrNone)
 	}
 }

@@ -2,8 +2,6 @@ package component
 
 import (
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // DropEntry defines a single drop possibility
@@ -142,43 +140,4 @@ var LootProfiles = [LootCount]LootProfile{
 	LootDisruptor: {Reward: &rewardDisruptor},
 	LootHeat:      {Reward: &rewardHeat},
 	LootEnergy:    {Reward: &rewardEnergy},
-}
-
-// --- Drop Tables ---
-
-// LootVisualDef defines rendering properties for a loot type
-type LootVisualDef struct {
-	Rune       rune
-	InnerColor terminal.RGB // Sigil color
-	GlowColor  terminal.RGB // Shield glow color
-}
-
-// LootVisuals defines the visual attributes of loot
-// Can't be cleanly placed in parameters due to cyclic dependency
-var LootVisuals = map[LootType]LootVisualDef{
-	LootRod: {
-		Rune:       'L',
-		InnerColor: visual.RgbOrbRod,
-		GlowColor:  visual.RgbLootRodGlow,
-	},
-	LootLauncher: {
-		Rune:       'M',
-		InnerColor: visual.RgbOrbLauncher,
-		GlowColor:  visual.RgbLootLauncherGlow,
-	},
-	LootDisruptor: {
-		Rune:       'D',
-		InnerColor: visual.RgbOrbDisruptor,
-		GlowColor:  visual.RgbLootDisruptorGlow,
-	},
-	LootHeat: {
-		Rune:       'H',
-		InnerColor: visual.RgbLootHeatSigil,
-		GlowColor:  visual.RgbLootHeatGlow,
-	},
-	LootEnergy: {
-		Rune:       'E',
-		InnerColor: visual.RgbLootEnergySigil,
-		GlowColor:  visual.RgbLootEnergyGlow,
-	},
 }

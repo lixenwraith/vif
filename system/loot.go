@@ -317,7 +317,7 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int) {
 
 // spawnLootWithBurst creates loot entity with initial velocity in burst direction
 func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int) {
-	vis, ok := component.LootVisuals[lootType]
+	vis, ok := visual.LootVisuals[lootType]
 	if !ok {
 		return
 	}
@@ -352,19 +352,14 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	})
 
 	// Shield
-	cfg := visual.LootShieldConfig
+	cfg := &visual.ShieldConfigs[component.ShieldTypeLoot]
 	s.world.Components.Shield.SetComponent(entity, component.ShieldComponent{
-		Active:        true,
-		Color:         cfg.Color,
-		Palette256:    cfg.Palette256,
-		GlowColor:     vis.GlowColor,
-		GlowIntensity: cfg.GlowIntensity,
-		GlowPeriod:    cfg.GlowPeriod,
-		MaxOpacity:    cfg.MaxOpacity,
-		RadiusX:       cfg.RadiusX,
-		RadiusY:       cfg.RadiusY,
-		InvRxSq:       cfg.InvRxSq,
-		InvRySq:       cfg.InvRySq,
+		Active:  true,
+		Type:    component.ShieldTypeLoot,
+		RadiusX: cfg.RadiusX,
+		RadiusY: cfg.RadiusY,
+		InvRxSq: cfg.InvRxSq,
+		InvRySq: cfg.InvRySq,
 	})
 
 	// Position
@@ -587,7 +582,7 @@ func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType
 	}
 
 	// Visual feedback
-	vis := component.LootVisuals[lootType]
+	vis := visual.LootVisuals[lootType]
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
 		s.world.PushEvent(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X: pos.X, Y: pos.Y, Char: vis.Rune,

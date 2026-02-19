@@ -143,7 +143,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
 
-			theta := p.atan2Fixed(dy, dx)
+			theta := vmath.Atan2(dy, dx)
 			jaggedDisp := p.computeJaggedDisplacement(theta)
 
 			adjRx := p.radiusX + jaggedDisp
@@ -318,28 +318,6 @@ func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY in
 	}
 
 	buf.SetBg256(screenX, screenY, visual.Ember256PaletteIndex(heat))
-}
-
-// TODO: calculate LUT in vmath
-
-// atan2Fixed returns angle in [0, Scale) for dy/dx using LUT
-func (p *EmberPainter) atan2Fixed(dy, dx int64) int64 {
-	nx, ny := vmath.Normalize2D(dx, dy)
-
-	bestIdx := 0
-	bestDot := -vmath.Scale * 2
-	for i := 0; i < 256; i++ {
-		lutAngle := int64(i) * vmath.Scale / 256
-		cosA := vmath.Cos(lutAngle)
-		sinA := vmath.Sin(lutAngle)
-		dot := vmath.Mul(nx, cosA) + vmath.Mul(ny, sinA)
-		if dot > bestDot {
-			bestDot = dot
-			bestIdx = i
-		}
-	}
-
-	return int64(bestIdx) * vmath.Scale / 256
 }
 
 // powFixed approximates x^n for x in [0, Scale], n in Q32.32

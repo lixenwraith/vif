@@ -3,12 +3,12 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // ShieldSystem owns shield activation state and processes drain events
@@ -57,7 +57,6 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 		event.EventShieldActivate,
 		event.EventShieldDeactivate,
 		event.EventShieldDrainRequest,
-		event.EventEnergyCrossedZeroNotification,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -88,26 +87,13 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventShieldActivate:
 		shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 		if ok {
-			// Apply pre-calculated physics and visual defaults
-			cfg := visual.PlayerShieldConfig
+			shield.Type = component.ShieldTypePlayer
+			cfg := &visual.ShieldConfigs[shield.Type]
 			shield.RadiusX = cfg.RadiusX
 			shield.RadiusY = cfg.RadiusY
 			shield.InvRxSq = cfg.InvRxSq
 			shield.InvRySq = cfg.InvRySq
-			shield.MaxOpacity = cfg.MaxOpacity
-
-			// Apply default glow settings (Period handled dynamically by update loop)
-			shield.GlowColor = cfg.GlowColor
-			shield.GlowIntensity = cfg.GlowIntensity
-
-			// If color isn't initialized, use default positive config
-			if shield.Color == (terminal.RGB{}) {
-				shield.Color = cfg.Color
-				shield.Palette256 = cfg.Palette256
-			}
-
 			shield.Active = true
-
 			s.world.Components.Shield.SetComponent(cursorEntity, shield)
 			s.world.UpdateBoundsRadius()
 		}
@@ -134,12 +120,6 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			})
 			s.statShieldHit.Add(1)
 		}
-
-	case event.EventEnergyCrossedZeroNotification:
-		energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-		if ok {
-			s.setShieldPolarityColor(energyComp.Current >= 0)
-		}
 	}
 }
 
@@ -158,18 +138,6 @@ func (s *ShieldSystem) Update() {
 
 	now := s.world.Resources.Time.GameTime
 
-	// 1. Toggle rotating boost indicator visual glow based state
-	if boost, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok {
-		if boost.Active && shieldComp.GlowPeriod == 0 {
-			shieldComp.GlowPeriod = parameter.ShieldBoostRotationDuration
-			s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
-		} else if !boost.Active && shieldComp.GlowPeriod != 0 {
-			shieldComp.GlowPeriod = 0
-			s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
-		}
-	}
-
-	// 2. Handle Passive Drain
 	if now.Sub(shieldComp.LastDrainTime) >= parameter.ShieldPassiveDrainInterval {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 			Delta:      parameter.ShieldPassiveEnergyPercentDrain,
@@ -179,23 +147,4 @@ func (s *ShieldSystem) Update() {
 		shieldComp.LastDrainTime = now
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
 	}
-}
-
-// setShieldPolarityColor updates the shield component color based on energy polarity
-func (s *ShieldSystem) setShieldPolarityColor(isPositive bool) {
-	cursorEntity := s.world.Resources.Player.Entity
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	if isPositive {
-		shield.Color = visual.RgbCleanerBasePositive
-		shield.Palette256 = visual.Shield256Positive
-	} else {
-		shield.Color = visual.RgbCleanerBaseNegative
-		shield.Palette256 = visual.Shield256Negative
-	}
-
-	s.world.Components.Shield.SetComponent(cursorEntity, shield)
 }

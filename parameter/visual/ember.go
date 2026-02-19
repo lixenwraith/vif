@@ -1,17 +1,14 @@
 package visual
 
 import (
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
-)
-
-// Ember geometry (constant across heat levels)
-const (
-	EmberRadiusX = 12 * vmath.Scale
-	EmberRadiusY = 6 * vmath.Scale
 )
 
 // Precomputed inverse squared radii for ellipse containment
 var (
+	EmberRadiusX               = vmath.FromFloat(parameter.PlayerFieldRadiusX)
+	EmberRadiusY               = vmath.FromFloat(parameter.PlayerFieldRadiusY)
 	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSq(EmberRadiusX, EmberRadiusY)
 )
 

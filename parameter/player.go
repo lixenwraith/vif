@@ -4,12 +4,8 @@ import (
 	"time"
 )
 
-// Shield Defense Costs
+// Shield
 const (
-	ShieldRadiusXFloat = 10.0
-	ShieldRadiusYFloat = 5.0
-	ShieldMaxOpacity   = 0.3
-
 	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active
 	ShieldPassiveEnergyPercentDrain = 1
 
@@ -18,6 +14,25 @@ const (
 
 	// ShieldBoostRotationDuration is the animation speed at which the boost indicator rotates once around the shield
 	ShieldBoostRotationDuration = 500 * time.Millisecond
+)
+
+// Shield visuals
+const (
+	ShieldRadiusXFloat = 10.0
+	ShieldRadiusYFloat = 5.0
+
+	// PlayerFieldRadiusX is horizontal cell radius for shield and ember
+	PlayerFieldRadiusX = 10.0
+	// PlayerFieldRadiusY is vertical cell radius (aspect-corrected)
+	PlayerFieldRadiusY = 5.0
+
+	// ShieldMaxOpacity is peak alpha at ellipse edge
+	ShieldMaxOpacity = 0.3
+
+	// ShieldFeatherStartRatio is normalized distance where fade begins (0.85)
+	ShieldFeatherStartRatio = 0.85
+	// ShieldFeatherEndRatio is normalized distance where rendering stops (1.10)
+	ShieldFeatherEndRatio = 1.10
 )
 
 // Weapon Cooldowns

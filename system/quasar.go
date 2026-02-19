@@ -390,19 +390,14 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	// Add ShieldComponent (inactive by default), uses pre-calculated config
-	cfg := visual.QuasarShieldConfig
+	cfg := &visual.ShieldConfigs[component.ShieldTypeQuasar]
 	s.world.Components.Shield.SetComponent(headerEntity, component.ShieldComponent{
-		Active:        false,
-		Color:         cfg.Color,
-		Palette256:    cfg.Palette256,
-		GlowColor:     cfg.GlowColor,
-		GlowIntensity: cfg.GlowIntensity,
-		GlowPeriod:    cfg.GlowPeriod,
-		MaxOpacity:    cfg.MaxOpacity,
-		RadiusX:       cfg.RadiusX,
-		RadiusY:       cfg.RadiusY,
-		InvRxSq:       cfg.InvRxSq,
-		InvRySq:       cfg.InvRySq,
+		Active:  false,
+		Type:    component.ShieldTypeQuasar,
+		RadiusX: cfg.RadiusX,
+		RadiusY: cfg.RadiusY,
+		InvRxSq: cfg.InvRxSq,
+		InvRySq: cfg.InvRySq,
 	})
 
 	// Set combat component
