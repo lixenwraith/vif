@@ -32,34 +32,6 @@ type ShieldStyle struct {
 
 // Total: 8 + 3 + 3 + 8 + 1 + 1 + 2 + 2 = 28 bytes (fits in half cache line)
 
-// // ShieldStyle configures per-invocation shield rendering parameters
-// type ShieldStyle struct {
-// 	// References ShieldConfig for precomputed geometry and defaults
-// 	Config *visual.ShieldConfig
-//
-// 	// Per-entity overrides (only fields that vary at runtime)
-// 	Color      terminal.RGB
-// 	Palette256 uint8
-// 	GlowColor  terminal.RGB
-// 	GlowPeriod time.Duration
-//
-// 	// Skip position in map coords (-1 = disabled)
-// 	SkipX, SkipY int
-//
-// 	// Precomputed ellipse containment
-// 	InvRxSq    int64
-// 	InvRySq    int64
-// 	RadiusXInt int // Integer bounding box half-width
-// 	RadiusYInt int // Integer bounding box half-height
-//
-// 	// 256-color rim threshold (Q32.32, cells below this are transparent)
-// 	Threshold256 int64
-//
-// 	// Rotating glow overlay (disabled if Period == 0)
-// 	GlowEdgeThreshold int64 // Q32.32 distSq below which glow is suppressed
-// 	GlowIntensity     int64 // Q32.32 peak glow alpha
-// }
-
 // shieldCellFunc renders a single cell within the shield ellipse
 type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
@@ -165,18 +137,25 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	theta := vmath.Atan2(p.cellDy, p.cellDx)
-	cellDirX := vmath.Cos(theta)
-	cellDirY := vmath.Sin(theta)
+	// Vector normalization
+	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
 
 	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
 	if dot <= 0 {
 		return
 	}
 
-	edgeFactor := vmath.Div(normalizedDistSq-visual.ShieldGlowEdgeThreshold, vmath.Scale-visual.ShieldGlowEdgeThreshold)
-	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), cfg.GlowIntensityQ32)
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
+	// TODO: benchmark compare
+
+	// edgeFactor := vmath.Div(normalizedDistSq-visual.ShieldGlowEdgeThreshold, vmath.Scale-visual.ShieldGlowEdgeThreshold)
+	// intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), cfg.GlowIntensityQ32)
+	// buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
+
+	// Float division replaces vmath.Div for performance
+	edgeFactor := float64(normalizedDistSq-visual.ShieldGlowEdgeThreshold) / float64(vmath.Scale-visual.ShieldGlowEdgeThreshold)
+	intensity := vmath.ToFloat(dot) * edgeFactor * vmath.ToFloat(cfg.GlowIntensityQ32)
+
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, intensity, terminal.AttrNone)
 }
 
 // shieldCell256 renders discrete rim for 256-color terminals

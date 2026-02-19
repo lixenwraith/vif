@@ -67,33 +67,6 @@ type ShieldConfig struct {
 
 // Total: 64 + 8 + 9 + 5 + 2 = 88 bytes (fits in ~1.5 cache lines)
 
-// // ShieldConfig holds pre-calculated geometric and visual parameters for an entity type
-// type ShieldConfig struct {
-// 	// Geometry (copied to component for game mechanics)
-// 	RadiusX, RadiusY int64
-// 	InvRxSq, InvRySq int64
-//
-// 	// Visual iteration bounds (includes feather zone)
-// 	VisualRadiusXInt int
-// 	VisualRadiusYInt int
-//
-// 	// Visual parameters
-// 	MaxOpacity    float64
-// 	GlowIntensity float64
-//
-// 	// Visual parameters (Q32.32 precomputed)
-// 	MaxOpacityQ32    int64
-// 	GlowIntensityQ32 int64
-// 	GlowPeriod       time.Duration
-//
-// 	// Colors (Player uses Color/ColorAlt based on energy polarity)
-// 	Color         terminal.RGB
-// 	ColorAlt      terminal.RGB
-// 	Palette256    uint8
-// 	Palette256Alt uint8
-// 	GlowColor     terminal.RGB
-// }
-
 // ShieldConfigs indexed by ShieldType
 var ShieldConfigs [3]ShieldConfig
 

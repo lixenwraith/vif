@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -9,6 +10,37 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
+
+// emberLayerColors holds pre-blended intensities for cached 1D mapping
+type emberLayerColors struct {
+	Core terminal.RGB
+	Mid  terminal.RGB
+	Edge terminal.RGB
+}
+
+// emberCellFunc renders a single cell within the ember ellipse
+type emberCellFunc func(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64)
+
+// EmberPainter handles per-cell rendering with color mode dispatch
+type EmberPainter struct {
+	renderCell emberCellFunc
+
+	// Per-Paint state
+	params   visual.EmberParams
+	colors   emberColors
+	gameTime int64
+	radiusX  int64
+	radiusY  int64
+
+	// Ring rotation state (computed once per paint)
+	ringAngles [visual.EmberRingCount]int64
+
+	// Caching and Precalculation States
+	lastHeat       int
+	colorLUT       [256]emberLayerColors
+	invRadiiSqLUT  [256]struct{ invRxSq, invRySq int64 }
+	ringInvWidthSq float64
+}
 
 // EmberRenderer renders ember effect for entities with active ember state
 type EmberRenderer struct {
@@ -74,29 +106,12 @@ func interpolateEmberColors(t int64) emberColors {
 	}
 }
 
-// emberCellFunc renders a single cell within the ember ellipse
-type emberCellFunc func(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, theta int64)
-
-// EmberPainter handles per-cell rendering with color mode dispatch
-type EmberPainter struct {
-	renderCell emberCellFunc
-
-	// Per-Paint state
-	params   visual.EmberParams
-	colors   emberColors
-	gameTime int64
-	radiusX  int64
-	radiusY  int64
-
-	// Ring rotation state (computed once per paint)
-	ringAngles [visual.EmberRingCount]int64
-}
-
 // NewEmberPainter creates a painter for the specified color mode
 func NewEmberPainter(colorMode terminal.ColorMode) *EmberPainter {
 	p := &EmberPainter{
-		radiusX: visual.EmberRadiusX,
-		radiusY: visual.EmberRadiusY,
+		radiusX:  visual.EmberRadiusX,
+		radiusY:  visual.EmberRadiusY,
+		lastHeat: -1, // Force cache rebuild on first frame
 	}
 	if colorMode == terminal.ColorMode256 {
 		p.renderCell = emberCell256
@@ -108,15 +123,40 @@ func NewEmberPainter(colorMode terminal.ColorMode) *EmberPainter {
 
 // Paint renders the ember effect centered at (centerX, centerY) in map coordinates
 func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, heat int, skipX, skipY int) {
-	p.params = visual.InterpolateEmberParams(heat)
-	p.colors = interpolateEmberColors(p.params.HeatFactor)
 	p.gameTime = ctx.GameTime.UnixNano()
+
+	// 1D Cache Rebuild: Only on heat change
+	if heat != p.lastHeat {
+		p.lastHeat = heat
+		p.params = visual.InterpolateEmberParams(heat)
+		p.colors = interpolateEmberColors(p.params.HeatFactor)
+		p.buildColorLUT()
+	}
+
+	// Precalculate ring width inversion
+	widthF := vmath.ToFloat(p.params.RingWidth)
+	if widthF > 0 {
+		p.ringInvWidthSq = 1.0 / (widthF * widthF)
+	} else {
+		p.ringInvWidthSq = 0
+	}
 
 	// Compute ring rotation angles based on game time
 	for i := 0; i < visual.EmberRingCount; i++ {
 		period := time.Second.Nanoseconds()
 		phase := (p.gameTime * vmath.Mul(p.params.RingSpeed, vmath.Scale)) / period
 		p.ringAngles[i] = vmath.NormalizeAngle(phase + visual.EmberRingPhaseOffsets[i])
+	}
+
+	// Precalculate Jagged Noise & Geometric Divisions for the frame
+	for i := 0; i < 256; i++ {
+		theta := (int64(i) * vmath.Scale) / 256
+		disp := p.computeJaggedDisplacement(theta)
+		adjRx := p.radiusX + disp
+		adjRy := p.radiusY + vmath.Div(disp, 2*vmath.Scale)
+		invRxSq, invRySq := vmath.EllipseInvRadiiSq(adjRx, adjRy)
+		p.invRadiiSqLUT[i].invRxSq = invRxSq
+		p.invRadiiSqLUT[i].invRySq = invRySq
 	}
 
 	// Bounding box in map coords with margin for jagged edges
@@ -143,20 +183,53 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
 
+			// Fast geometric verification mapping direction to cached displacement inversion
 			theta := vmath.Atan2(dy, dx)
-			jaggedDisp := p.computeJaggedDisplacement(theta)
+			lutIdx := (theta >> (vmath.Shift - 8)) & 255
+			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq
+			invRySq := p.invRadiiSqLUT[lutIdx].invRySq
 
-			adjRx := p.radiusX + jaggedDisp
-			adjRy := p.radiusY + vmath.Div(jaggedDisp, 2*vmath.Scale)
-
-			invRxSq, invRySq := vmath.EllipseInvRadiiSq(adjRx, adjRy)
 			normDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
 
 			if normDistSq > vmath.Scale+vmath.Scale/4 {
 				continue
 			}
 
-			p.renderCell(p, buf, screenX, screenY, normDistSq, theta)
+			p.renderCell(p, buf, screenX, screenY, normDistSq, dx, dy)
+		}
+	}
+}
+
+// buildColorLUT populates the 1D color/power map array (invoked on heat change)
+func (p *EmberPainter) buildColorLUT() {
+	params := &p.params
+	colors := &p.colors
+
+	for i := 0; i < 256; i++ {
+		normDist := (int64(i) * vmath.Scale) / 255
+
+		coreT := vmath.Scale - vmath.Mul(normDist, params.CoreFalloff)
+		if coreT < 0 {
+			coreT = 0
+		}
+		coreInt := p.powFixed(coreT, params.CorePower)
+
+		midT := vmath.Scale - vmath.Mul(normDist, params.MidFalloff)
+		if midT < 0 {
+			midT = 0
+		}
+		midInt := vmath.Mul(p.powFixed(midT, params.MidPower), params.MidIntensity)
+
+		edgeT := vmath.Scale - normDist
+		if edgeT < 0 {
+			edgeT = 0
+		}
+		coronaInt := vmath.Mul(p.powFixed(edgeT, params.EdgePower), params.EdgeIntensity)
+
+		p.colorLUT[i] = emberLayerColors{
+			Core: scaleRGB(colors.Core, coreInt),
+			Mid:  scaleRGB(colors.Mid, midInt),
+			Edge: scaleRGB(colors.Edge, coronaInt),
 		}
 	}
 }
@@ -194,104 +267,85 @@ func (p *EmberPainter) computeJaggedDisplacement(theta int64) int64 {
 }
 
 // emberCellTrueColor renders with layered gradients and rings
-func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, theta int64) {
-	params := &p.params
-	colors := &p.colors
-
+func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64) {
 	normDist := vmath.Sqrt(normDistSq)
 	if normDist > vmath.Scale {
 		normDist = vmath.Scale
 	}
 
-	// Core intensity: sharp bright center
-	coreT := vmath.Scale - vmath.Mul(normDist, params.CoreFalloff)
-	if coreT < 0 {
-		coreT = 0
+	// Query 1D color mapping cache
+	lutIdx := (normDist * 255) >> vmath.Shift
+	if lutIdx > 255 {
+		lutIdx = 255
 	}
-	coreInt := p.powFixed(coreT, params.CorePower)
-
-	// Mid intensity: softer glow
-	midT := vmath.Scale - vmath.Mul(normDist, params.MidFalloff)
-	if midT < 0 {
-		midT = 0
-	}
-	midInt := vmath.Mul(p.powFixed(midT, params.MidPower), params.MidIntensity)
-
-	// Edge/corona intensity
-	edgeT := vmath.Scale - normDist
-	coronaInt := vmath.Mul(p.powFixed(edgeT, params.EdgePower), params.EdgeIntensity)
-
-	minThreshold := vmath.Scale / 100
-	if coreInt < minThreshold && midInt < minThreshold && coronaInt < minThreshold {
-		return
-	}
+	layerColors := &p.colorLUT[lutIdx]
 
 	// Apply corona (additive)
-	if coronaInt > minThreshold {
-		coronaColor := scaleRGB(colors.Edge, coronaInt)
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, coronaColor, render.BlendAdd, 1.0, terminal.AttrNone)
+	if layerColors.Edge.R > 0 || layerColors.Edge.G > 0 || layerColors.Edge.B > 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Edge, render.BlendAdd, 1.0, terminal.AttrNone)
 	}
 
 	// Apply mid layer (screen blend)
-	if midInt > minThreshold {
-		midColor := scaleRGB(colors.Mid, midInt)
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, midColor, render.BlendScreen, 1.0, terminal.AttrNone)
+	if layerColors.Mid.R > 0 || layerColors.Mid.G > 0 || layerColors.Mid.B > 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Mid, render.BlendScreen, 1.0, terminal.AttrNone)
 	}
 
 	// Apply core (additive)
-	if coreInt > minThreshold {
-		coreColor := scaleRGB(colors.Core, coreInt)
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, coreColor, render.BlendAdd, 1.0, terminal.AttrNone)
+	if layerColors.Core.R > 0 || layerColors.Core.G > 0 || layerColors.Core.B > 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Core, render.BlendAdd, 1.0, terminal.AttrNone)
 	}
 
 	// Render rings (only in visible region)
-	if params.RingAlpha > minThreshold && normDist < params.RingVisible {
-		ringVis := p.computeRingVisibility(normDist, theta)
-		if ringVis > minThreshold {
-			ringColor := scaleRGB(colors.Ring, ringVis)
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, ringColor, render.BlendOverlay, vmath.ToFloat(vmath.Mul(ringVis, 7*vmath.Scale/10)), terminal.AttrNone)
+	if p.params.RingAlpha > 0 && normDist < p.params.RingVisible {
+		ringVis := p.computeRingVisibility(normDist, dx, dy)
+		if ringVis > 0 {
+			ringColor := scaleRGB(p.colors.Ring, vmath.FromFloat(ringVis))
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, ringColor, render.BlendOverlay, ringVis*0.7, terminal.AttrNone)
 		}
 	}
 }
 
-// computeRingVisibility calculates combined ring visibility at a point
-func (p *EmberPainter) computeRingVisibility(normDist, theta int64) int64 {
-	params := &p.params
+// computeRingVisibility calculates combined ring visibility algebraically leveraging float math
+func (p *EmberPainter) computeRingVisibility(normDist, dx, dy int64) float64 {
+	if dx == 0 && dy == 0 {
+		return 0
+	}
 
-	edgeFade := vmath.Scale - vmath.Mul(vmath.Div(normDist, params.RingVisible), vmath.Div(normDist, params.RingVisible))
+	nx, ny := vmath.Normalize2D(dx, dy)
+	nxF := vmath.ToFloat(nx)
+	nyF := vmath.ToFloat(ny)
+
+	normDistF := vmath.ToFloat(normDist)
+	ringVisF := vmath.ToFloat(p.params.RingVisible)
+
+	edgeFade := 1.0 - (normDistF/ringVisF)*(normDistF/ringVisF)
 	if edgeFade < 0 {
 		edgeFade = 0
 	}
 
-	var maxVis int64
+	var maxVis float64
+	alphaF := vmath.ToFloat(p.params.RingAlpha)
+	dzF := math.Sqrt(math.Max(0, 1.0-normDistF*normDistF))
 
 	for i := 0; i < visual.EmberRingCount; i++ {
 		normal := visual.EmberRingNormals[i]
+		normX := vmath.ToFloat(normal[0]) // Properly extracts the X component
+		normY := vmath.ToFloat(normal[1]) // Properly extracts the Y component
+		normZ := vmath.ToFloat(normal[2]) // Properly extracts the Z component
+
 		angle := p.ringAngles[i]
+		cosA := vmath.ToFloat(vmath.Cos(angle))
+		sinA := vmath.ToFloat(vmath.Sin(angle))
 
-		cosA := vmath.Cos(angle)
-		sinA := vmath.Sin(angle)
+		rz := nxF*sinA*normX + nyF*sinA*normY + dzF*cosA*normZ
+		ringDist := math.Abs(rz)
 
-		dz := vmath.Sqrt(vmath.Scale - vmath.Mul(normDist, normDist))
-		if dz < 0 {
-			dz = 0
-		}
+		// Float math avoids two Q32 division operations per cell
+		vis := 1.0 / (1.0 + ringDist*ringDist*p.ringInvWidthSq)
+		vis *= edgeFade * alphaF
 
-		dx := vmath.Cos(theta)
-		dy := vmath.Sin(theta)
-
-		rz := vmath.Mul(vmath.Mul(dx, sinA), normal[0]) +
-			vmath.Mul(vmath.Mul(dy, sinA), normal[1]) +
-			vmath.Mul(vmath.Mul(dz, cosA), normal[2])
-
-		ringDist := vmath.Abs(rz)
-		widthSq := vmath.Mul(params.RingWidth, params.RingWidth)
-		vis := vmath.Div(vmath.Scale, vmath.Scale+vmath.Div(vmath.Mul(ringDist, ringDist), widthSq))
-		vis = vmath.Mul(vis, edgeFade)
-		vis = vmath.Mul(vis, params.RingAlpha)
-
-		if rz < -vmath.Scale/10 {
-			vis = vis / 4
+		if rz < -0.1 {
+			vis /= 4.0
 		}
 
 		if vis > maxVis {
@@ -303,7 +357,7 @@ func (p *EmberPainter) computeRingVisibility(normDist, theta int64) int64 {
 }
 
 // emberCell256 renders solid ellipse with heat-mapped color
-func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, _ int64) {
+func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, _, _ int64) {
 	if normDistSq > vmath.Scale {
 		return
 	}

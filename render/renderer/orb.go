@@ -150,11 +150,8 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			theta := vmath.Atan2(dyF, dxF)
-			cellDirX := vmath.Cos(theta)
-			cellDirY := vmath.Sin(theta)
-
-			// Dual-direction glow using precomputed rotation
+			// Dual-direction glow using vector normalization
+			cellDirX, cellDirY := vmath.Normalize2D(dxF, dyF)
 			dot1 := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY)
 			dot2 := vmath.DotProduct(cellDirX, cellDirY, -rotDirX, -rotDirY)
 			dot := max(dot1, dot2)
@@ -162,6 +159,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
+			// Division by Scale removed: distSq is already Q32.32
 			edgeFactor := vmath.Div(distSq, vmath.Scale)
 			intensity := vmath.Mul(dot, edgeFactor)
 			alpha := vmath.ToFloat(intensity) * parameter.OrbCoronaIntensity
@@ -199,7 +197,7 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 				continue
 			}
 
-			normDist := vmath.ToFloat(distSq) / vmath.ToFloat(vmath.Scale)
+			normDist := vmath.ToFloat(distSq)
 
 			ringTarget := expandPhase * 0.8
 			ringDist := 1.0 - (normDist-ringTarget)*(normDist-ringTarget)*4
