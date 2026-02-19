@@ -56,6 +56,9 @@ const (
 	IntentInsertDeleteForward // Space in Insert mode (delete + move)
 	IntentInsertDeleteBack    // Backspace in Insert mode (delete prev + move)
 
+	// Cursor movement undo (keyboard source only)
+	IntentUndo // u - motion undo, return to previous position
+
 	// Overlay mode
 	IntentOverlayScroll   // j/k/arrows
 	IntentOverlayActivate // Enter/Space (future: section toggle)
@@ -109,7 +112,7 @@ const (
 	MotionHalfPageRight                // L
 	MotionHalfPageUp                   // K, PgUp
 	MotionHalfPageDown                 // J, PgDown
-	MotionColumnUp                     // [, u
+	MotionColumnUp                     // [, O
 	MotionColumnDown                   // ], o
 	MotionColoredGlyphRight            // gl + color
 	MotionColoredGlyphLeft             // gh + color

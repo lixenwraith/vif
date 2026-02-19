@@ -813,7 +813,7 @@ func MotionHalfPageDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 	}
 }
 
-// MotionColumnUp implements [, u - jump to first non-space above in same column
+// MotionColumnUp implements [, O - jump to first non-space above in same column
 func MotionColumnUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	return motionScanDirectional(ctx, x, y, count, 0, -1)
 }

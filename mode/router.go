@@ -11,6 +11,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
+const undoStackSize = 256
+
+type undoPosition struct {
+	x, y int
+}
+
 // Router interprets Intents and executes game logic
 // Authoritative owner of game mode state
 type Router struct {
@@ -18,6 +24,10 @@ type Router struct {
 	machine *input.Machine
 
 	macro *MacroManager
+
+	undoRing  [undoStackSize]undoPosition
+	undoHead  int // next write index
+	undoCount int // valid entry count
 
 	// Input state (find/search repeat)
 	lastSearchText  string // Preserved for n/N repeat
@@ -197,6 +207,10 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentInsertDeleteBack:
 		return r.handleInsertDeleteBack()
 
+		// Undo
+	case input.IntentUndo:
+		return r.handleUndo(intent)
+
 	// Macro control
 	case input.IntentMacroRecordStart:
 		return r.handleMacroRecordStart(intent)
@@ -304,6 +318,8 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 		return true
 	}
 
+	r.captureForUndo()
+
 	r.ctx.World.RunSafe(func() {
 		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
 		if !ok {
@@ -326,6 +342,8 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	if !ok {
 		return true
 	}
+
+	r.captureForUndo()
 
 	r.ctx.World.RunSafe(func() {
 		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
@@ -364,6 +382,8 @@ func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
 func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 	// Clear colored markers
 	r.ctx.PushEvent(event.EventMotionMarkerClearColored, nil)
+
+	r.captureForUndo()
 
 	r.ctx.World.RunSafe(func() {
 		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
@@ -551,11 +571,13 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 }
 
 func (r *Router) handleNuggetJump() bool {
+	r.captureForUndo()
 	r.ctx.PushEvent(event.EventNuggetJumpRequest, nil)
 	return true
 }
 
 func (r *Router) handleGoldJump() bool {
+	r.captureForUndo()
 	r.ctx.PushEvent(event.EventGoldJumpRequest, nil)
 	return true
 }
@@ -602,6 +624,8 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 }
 
 func (r *Router) handleAppend() bool {
+	r.captureForUndo()
+
 	// 1. Move cursor right
 	r.ctx.World.RunSafe(func() {
 		if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
@@ -760,6 +784,8 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 			return true
 		}
 
+		r.captureForUndo()
+
 		r.ctx.World.RunSafe(func() {
 			pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
 			if !ok {
@@ -830,6 +856,66 @@ func (r *Router) handleInsertDeleteBack() bool {
 		moveResult := MotionLeft(r.ctx, pos.X, pos.Y, 1)
 		OpMove(r.ctx, moveResult)
 	})
+	return true
+}
+
+// --- Undo ---
+
+// captureForUndo records current cursor position before movement
+func (r *Router) captureForUndo() {
+	pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
+	if !ok {
+		return
+	}
+
+	// Deduplicate consecutive identical positions
+	if r.undoCount > 0 {
+		topIdx := (r.undoHead - 1 + undoStackSize) % undoStackSize
+		if r.undoRing[topIdx].x == pos.X && r.undoRing[topIdx].y == pos.Y {
+			return
+		}
+	}
+
+	r.undoRing[r.undoHead] = undoPosition{x: pos.X, y: pos.Y}
+	r.undoHead = (r.undoHead + 1) % undoStackSize
+	if r.undoCount < undoStackSize {
+		r.undoCount++
+	}
+}
+
+func (r *Router) handleUndo(intent *input.Intent) bool {
+	if r.undoCount == 0 {
+		return true
+	}
+
+	n := intent.Count
+	if n < 1 {
+		n = 1
+	}
+	if n > r.undoCount {
+		n = r.undoCount
+	}
+
+	var x, y int
+	for i := 0; i < n; i++ {
+		r.undoHead = (r.undoHead - 1 + undoStackSize) % undoStackSize
+		r.undoCount--
+		x, y = r.undoRing[r.undoHead].x, r.undoRing[r.undoHead].y
+	}
+
+	r.ctx.World.RunSafe(func() {
+		r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
+			X: x,
+			Y: y,
+		})
+	})
+
+	r.ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+
+	if intent.Command != "" {
+		r.ctx.SetLastCommand(intent.Command)
+	}
+
 	return true
 }
 
