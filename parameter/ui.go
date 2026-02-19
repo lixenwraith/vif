@@ -27,8 +27,8 @@ const (
 	// UI Symbols
 	AudioStr = "♫ "
 
-	// CommandStatusMessageTimeout is how long command status messages are displayed
-	CommandStatusMessageTimeout = 2 * time.Second
+	// StatusMessageDefaultTimeout is how long status message on status bar lasts
+	StatusMessageDefaultTimeout = 2 * time.Second
 
 	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
 	StatusCursorBlinkDuration = 250 * time.Millisecond

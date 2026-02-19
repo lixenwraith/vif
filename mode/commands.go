@@ -43,6 +43,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleNewCommand(ctx)
 	case "s", "system":
 		return handleSystemCommand(ctx, args)
+	case "m", "mouse":
+		return handleMouseCommand(ctx, args)
 	case "energy":
 		return handleEnergyCommand(ctx, args)
 	case "heat":
@@ -126,6 +128,58 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	})
 
 	ctx.SetLastCommand(fmt.Sprintf(":system %s %v", args[0], enabledFlag))
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) != 1 {
+		setCommandError(ctx, "Usage: :mouse free|auto|enable|disable")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	var msg string
+	switch args[0] {
+	case "free":
+		newState := !ctx.MouseFreeMode.Load()
+		ctx.MouseFreeMode.Store(newState)
+		if newState {
+			msg = "Mouse free mode enabled"
+		} else {
+			msg = "Mouse free mode disabled"
+		}
+
+	case "auto":
+		newState := !ctx.MouseAutoMode.Load()
+		ctx.MouseAutoMode.Store(newState)
+		if newState {
+			msg = "Mouse auto-fire enabled"
+		} else {
+			msg = "Mouse auto-fire disabled"
+		}
+
+	case "enable":
+		if ctx.MouseDisabled.Load() {
+			ctx.MouseDisabled.Store(false)
+			msg = "Mouse enabled"
+		} else {
+			msg = "Mouse already enabled"
+		}
+
+	case "disable":
+		if !ctx.MouseDisabled.Load() {
+			ctx.MouseDisabled.Store(true)
+			msg = "Mouse disabled"
+		} else {
+			msg = "Mouse already disabled"
+		}
+
+	default:
+		setCommandError(ctx, "Usage: :mouse free|auto|enable|disable")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
+	ctx.SetLastCommand(":mouse " + args[0])
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 

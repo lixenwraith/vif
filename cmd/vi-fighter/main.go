@@ -198,6 +198,9 @@ func main() {
 	// Track last update state for rendering
 	var updatePending bool
 
+	// Track terminal mouse mode state
+	lastMouseMode := terminal.MouseModeClick | terminal.MouseModeDrag
+
 	// 16. Main Loop
 	for {
 		select {
@@ -213,6 +216,19 @@ func main() {
 
 			// Dispatch input events immediately, bypassing game tick wait
 			clockScheduler.DispatchEventsImmediately()
+
+			// Update terminal mouse mode on state change
+			var wantMode terminal.MouseMode
+			if !ctx.MouseDisabled.Load() {
+				wantMode = terminal.MouseModeClick | terminal.MouseModeDrag
+				if ctx.MouseFreeMode.Load() {
+					wantMode |= terminal.MouseModeMotion
+				}
+			}
+			if wantMode != lastMouseMode {
+				term.SetMouseMode(wantMode)
+				lastMouseMode = wantMode
+			}
 
 			// Update orchestrator dimensions if screen resized
 			if ev.Type == terminal.EventResize {

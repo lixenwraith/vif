@@ -37,6 +37,10 @@ type GameContext struct {
 	MacroPlaying        atomic.Bool  // True when any macro is playing
 	MacroClearFlag      atomic.Bool  // Set by :new to signal macro reset
 
+	MouseFreeMode atomic.Bool // Free cursor movement (motion tracking)
+	MouseAutoMode atomic.Bool // Auto-fire (continuous weapon fire)
+	MouseDisabled atomic.Bool // All mouse input ignored
+
 	// === Main-Loop Exclusive ===
 
 	// Accessed only from main goroutine (input, resize, render), no sync required

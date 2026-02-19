@@ -126,6 +126,11 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		r.macro.Record(*intent)
 	}
 
+	// Skip mouse input when disabled
+	if r.ctx.MouseDisabled.Load() && isMouseIntent(intent.Type) {
+		return true
+	}
+
 	switch intent.Type {
 	// System
 	case input.IntentQuit:
@@ -233,6 +238,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleMouseDrag(intent)
 	case input.IntentMouseWheelMove:
 		return r.handleMouseWheelMove(intent)
+	case input.IntentMouseMove:
+		return r.handleMouseMove(intent)
 	}
 
 	return true
@@ -912,17 +919,30 @@ func (r *Router) handleMouseWheelMove(intent *input.Intent) bool {
 	return true
 }
 
+func (r *Router) handleMouseMove(intent *input.Intent) bool {
+	if !r.ctx.MouseFreeMode.Load() {
+		return true
+	}
+	r.moveMouseCursor(intent)
+	return true
+}
+
 // ProcessMouseTick handles repeat firing for held mouse buttons
 // Called from main loop each frame
 func (r *Router) ProcessMouseTick() {
-	now := r.ctx.PausableClock.Now()
+	if r.ctx.MouseDisabled.Load() {
+		return
+	}
 
-	if r.mouseLeftHeld && now.Sub(r.mouseLastFireMain) >= parameter.MouseRepeatInterval {
+	now := r.ctx.PausableClock.Now()
+	autoMode := r.ctx.MouseAutoMode.Load()
+
+	if (r.mouseLeftHeld || autoMode) && now.Sub(r.mouseLastFireMain) >= parameter.MouseRepeatInterval {
 		r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
 		r.mouseLastFireMain = now
 	}
 
-	if r.mouseRightHeld && now.Sub(r.mouseLastFireSpec) >= parameter.MouseRepeatInterval {
+	if (r.mouseRightHeld || autoMode) && now.Sub(r.mouseLastFireSpec) >= parameter.MouseRepeatInterval {
 		r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
 		r.mouseLastFireSpec = now
 	}
@@ -1051,6 +1071,17 @@ func isMacroControlIntent(t input.IntentType) bool {
 		input.IntentMacroPlay, input.IntentMacroPlayInfinite,
 		input.IntentMacroStopOne, input.IntentMacroStopAll,
 		input.IntentMacroRecordToggle:
+		return true
+	}
+	return false
+}
+
+func isMouseIntent(t input.IntentType) bool {
+	switch t {
+	case input.IntentMouseLeftDown, input.IntentMouseLeftUp,
+		input.IntentMouseRightDown, input.IntentMouseRightUp,
+		input.IntentMouseDrag, input.IntentMouseWheelMove,
+		input.IntentMouseMove:
 		return true
 	}
 	return false

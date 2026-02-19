@@ -135,6 +135,15 @@ func (m *Machine) processMouse(ev terminal.Event) *Intent {
 					Char:  rune(ev.MouseY),
 				}
 			}
+
+		case terminal.MouseBtnNone:
+			if ev.MouseAction == terminal.MouseActionMove {
+				return &Intent{
+					Type:  IntentMouseMove,
+					Count: ev.MouseX,
+					Char:  rune(ev.MouseY),
+				}
+			}
 		}
 	}
 	return nil
