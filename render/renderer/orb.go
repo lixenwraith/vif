@@ -50,6 +50,34 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	// TrueColor path: precompute corona rotation once per frame
+	if r.colorMode == terminal.ColorModeTrueColor {
+		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+		angleFixed := ((gameTimeMs % parameter.OrbCoronaPeriodMs) * vmath.Scale) / parameter.OrbCoronaPeriodMs
+		coronaRotDirX := vmath.Cos(angleFixed)
+		coronaRotDirY := vmath.Sin(angleFixed)
+
+		for _, entity := range entities {
+			orbComp, ok := r.gameCtx.World.Components.Orb.GetComponent(entity)
+			if !ok {
+				continue
+			}
+
+			pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+			if !ok {
+				continue
+			}
+
+			if !ctx.IsInViewport(pos.X, pos.Y) {
+				continue
+			}
+
+			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, &orbComp, coronaRotDirX, coronaRotDirY)
+		}
+		return
+	}
+
+	// 256-color path: simple sigil only
 	for _, entity := range entities {
 		orbComp, ok := r.gameCtx.World.Components.Orb.GetComponent(entity)
 		if !ok {
@@ -66,11 +94,7 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 			continue
 		}
 
-		if r.colorMode == terminal.ColorMode256 {
-			r.renderOrb256(buf, screenX, screenY, &orbComp)
-		} else {
-			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, &orbComp)
-		}
+		r.renderOrb256(buf, screenX, screenY, &orbComp)
 	}
 }
 
@@ -86,7 +110,7 @@ func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY in
 }
 
 // renderOrbTrueColor draws corona glow with optional flash burst
-func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent) {
+func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, rotDirX, rotDirY int64) {
 	baseColor := r.baseColor(orb.WeaponType)
 
 	if orb.FlashRemaining > 0 {
@@ -95,7 +119,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 		return
 	}
 
-	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType))
+	r.renderCorona(ctx, buf, mapX, mapY, r.coronaColor(orb.WeaponType), rotDirX, rotDirY)
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {
@@ -104,13 +128,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 }
 
 // renderCorona draws rotating directional glow around orb center
-func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color terminal.RGB) {
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
-	periodMs := parameter.OrbCoronaPeriodMs
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	rotDirX := vmath.Cos(angleFixed)
-	rotDirY := vmath.Sin(angleFixed)
-
+func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color terminal.RGB, rotDirX, rotDirY int64) {
 	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
 		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			if dx == 0 && dy == 0 {
@@ -132,12 +150,11 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			// Use vmath.Atan2 for cell direction
 			theta := vmath.Atan2(dyF, dxF)
 			cellDirX := vmath.Cos(theta)
 			cellDirY := vmath.Sin(theta)
 
-			// Dual-direction glow
+			// Dual-direction glow using precomputed rotation
 			dot1 := vmath.DotProduct(cellDirX, cellDirY, rotDirX, rotDirY)
 			dot2 := vmath.DotProduct(cellDirX, cellDirY, -rotDirX, -rotDirY)
 			dot := max(dot1, dot2)

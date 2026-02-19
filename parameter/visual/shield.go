@@ -10,38 +10,89 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
+// Shield threshold constants
+const (
+	// ShieldPlayerGlowIntensity
+	ShieldPlayerGlowIntensity = 0.7
+	// Shield256ThresholdFloat is normalized distSq below which 256-color rim is transparent
+	Shield256ThresholdFloat = 0.64
+	// ShieldGlowEdgeThresholdFloat is normalized distSq below which glow is suppressed
+	ShieldGlowEdgeThresholdFloat = 0.36
+)
+
 // Shield visual feather zone (renderer-only, does NOT affect game logic)
 // Derived from ratio constants to maintain single source of truth
 var (
 	// ShieldFeatherStart is normalized distSq where fade begins
 	ShieldFeatherStart int64
-
 	// ShieldFeatherEnd is max normalized distSq for visual rendering
 	ShieldFeatherEnd int64
+	// ShieldFeatherRange is (End - Start) for fade interpolation
+	ShieldFeatherRange int64
+
+	// Shield256Threshold is Q32.32 threshold for 256-color rim visibility
+	Shield256Threshold int64
+	// ShieldGlowEdgeThreshold is Q32.32 threshold below which glow is suppressed
+	ShieldGlowEdgeThreshold int64
 )
 
-// ShieldConfig holds pre-calculated geometric and visual parameters for an entity type
+// ShieldConfig holds pre-calculated geometric and visual parameters
+// Field order: geometry (hot), visual params (warm), colors (cold)
 type ShieldConfig struct {
-	// Geometry (copied to component for game mechanics)
-	RadiusX, RadiusY int64
-	InvRxSq, InvRySq int64
+	// Geometry - accessed per-cell for containment
+	InvRxSq int64 // 8 bytes
+	InvRySq int64 // 8 bytes
+	RadiusX int64 // 8 bytes
+	RadiusY int64 // 8 bytes
 
-	// Visual iteration bounds (includes feather zone)
-	VisualRadiusXInt int
-	VisualRadiusYInt int
+	// Visual params - accessed per-cell for alpha
+	MaxOpacityQ32    int64 // 8 bytes
+	GlowIntensityQ32 int64 // 8 bytes
 
-	// Visual parameters
-	MaxOpacity    float64
-	GlowIntensity float64
-	GlowPeriod    time.Duration
+	// Iteration bounds - accessed once per entity
+	VisualRadiusXInt int // 8 bytes
+	VisualRadiusYInt int // 8 bytes
 
-	// Colors (Player uses Color/ColorAlt based on energy polarity)
-	Color         terminal.RGB
-	ColorAlt      terminal.RGB
-	Palette256    uint8
-	Palette256Alt uint8
-	GlowColor     terminal.RGB
+	// Timing - accessed once per entity
+	GlowPeriod time.Duration // 8 bytes
+
+	// Colors - accessed once per entity or per-cell for blend
+	Color         terminal.RGB // 3 bytes
+	ColorAlt      terminal.RGB // 3 bytes
+	GlowColor     terminal.RGB // 3 bytes
+	_             [5]byte      // padding to 8-byte boundary
+	Palette256    uint8        // 1 byte
+	Palette256Alt uint8        // 1 byte
 }
+
+// Total: 64 + 8 + 9 + 5 + 2 = 88 bytes (fits in ~1.5 cache lines)
+
+// // ShieldConfig holds pre-calculated geometric and visual parameters for an entity type
+// type ShieldConfig struct {
+// 	// Geometry (copied to component for game mechanics)
+// 	RadiusX, RadiusY int64
+// 	InvRxSq, InvRySq int64
+//
+// 	// Visual iteration bounds (includes feather zone)
+// 	VisualRadiusXInt int
+// 	VisualRadiusYInt int
+//
+// 	// Visual parameters
+// 	MaxOpacity    float64
+// 	GlowIntensity float64
+//
+// 	// Visual parameters (Q32.32 precomputed)
+// 	MaxOpacityQ32    int64
+// 	GlowIntensityQ32 int64
+// 	GlowPeriod       time.Duration
+//
+// 	// Colors (Player uses Color/ColorAlt based on energy polarity)
+// 	Color         terminal.RGB
+// 	ColorAlt      terminal.RGB
+// 	Palette256    uint8
+// 	Palette256Alt uint8
+// 	GlowColor     terminal.RGB
+// }
 
 // ShieldConfigs indexed by ShieldType
 var ShieldConfigs [3]ShieldConfig
@@ -51,6 +102,10 @@ func init() {
 	endRatio := vmath.FromFloat(parameter.ShieldFeatherEndRatio)
 	ShieldFeatherStart = vmath.Mul(startRatio, startRatio)
 	ShieldFeatherEnd = vmath.Mul(endRatio, endRatio)
+	ShieldFeatherRange = ShieldFeatherEnd - ShieldFeatherStart
+
+	Shield256Threshold = vmath.FromFloat(Shield256ThresholdFloat)
+	ShieldGlowEdgeThreshold = vmath.FromFloat(ShieldGlowEdgeThresholdFloat)
 
 	// Player
 	ShieldConfigs[component.ShieldTypePlayer] = buildShieldConfig(
@@ -60,7 +115,7 @@ func init() {
 		RgbCleanerBasePositive, RgbCleanerBaseNegative,
 		Shield256Positive, Shield256Negative,
 		RgbBoostGlow,
-		0.7,
+		ShieldPlayerGlowIntensity,
 		0,
 	)
 
@@ -105,8 +160,8 @@ func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt terminal.RG
 		InvRySq:          invRySq,
 		VisualRadiusXInt: visualRxInt,
 		VisualRadiusYInt: visualRyInt,
-		MaxOpacity:       maxOpacity,
-		GlowIntensity:    glowIntensity,
+		MaxOpacityQ32:    vmath.FromFloat(maxOpacity),
+		GlowIntensityQ32: vmath.FromFloat(glowIntensity),
 		GlowPeriod:       glowPeriod,
 		Color:            color,
 		ColorAlt:         colorAlt,

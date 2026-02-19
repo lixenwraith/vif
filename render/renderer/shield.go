@@ -12,37 +12,58 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// ShieldStyle configures per-invocation shield rendering parameters
+// ShieldStyle holds per-entity overrides for shield rendering
+// Field order optimized for cache: hot fields first, cold fields last
 type ShieldStyle struct {
-	// Halo appearance
-	Color      terminal.RGB
-	Palette256 uint8
-	MaxOpacity int64 // Q32.32 peak alpha at ellipse edge
+	// Hot: accessed every cell
+	Config *visual.ShieldConfig // 8 bytes - pointer to geometry/opacity
+	Color  terminal.RGB         // 3 bytes
 
-	// Precomputed ellipse containment
-	InvRxSq    int64
-	InvRySq    int64
-	RadiusXInt int // Integer bounding box half-width
-	RadiusYInt int // Integer bounding box half-height
+	// Warm: accessed for glow cells only
+	GlowColor  terminal.RGB  // 3 bytes
+	GlowPeriod time.Duration // 8 bytes
 
-	// 256-color rim threshold (Q32.32, cells below this are transparent)
-	Threshold256 int64
-
-	// Game-space position to skip (-1 = disabled)
-	SkipX, SkipY int
-
-	// Rotating glow overlay (disabled if Period == 0)
-	GlowColor         terminal.RGB
-	GlowEdgeThreshold int64         // Q32.32 distSq below which glow is suppressed
-	GlowIntensity     int64         // Q32.32 peak glow alpha
-	GlowPeriod        time.Duration // Full rotation duration (0 = disabled)
+	// Cold: accessed once per entity
+	Palette256 uint8   // 1 byte
+	_          [1]byte // padding for alignment
+	SkipX      int16   // 2 bytes (map coords fit in int16)
+	SkipY      int16   // 2 bytes
 }
+
+// Total: 8 + 3 + 3 + 8 + 1 + 1 + 2 + 2 = 28 bytes (fits in half cache line)
+
+// // ShieldStyle configures per-invocation shield rendering parameters
+// type ShieldStyle struct {
+// 	// References ShieldConfig for precomputed geometry and defaults
+// 	Config *visual.ShieldConfig
+//
+// 	// Per-entity overrides (only fields that vary at runtime)
+// 	Color      terminal.RGB
+// 	Palette256 uint8
+// 	GlowColor  terminal.RGB
+// 	GlowPeriod time.Duration
+//
+// 	// Skip position in map coords (-1 = disabled)
+// 	SkipX, SkipY int
+//
+// 	// Precomputed ellipse containment
+// 	InvRxSq    int64
+// 	InvRySq    int64
+// 	RadiusXInt int // Integer bounding box half-width
+// 	RadiusYInt int // Integer bounding box half-height
+//
+// 	// 256-color rim threshold (Q32.32, cells below this are transparent)
+// 	Threshold256 int64
+//
+// 	// Rotating glow overlay (disabled if Period == 0)
+// 	GlowEdgeThreshold int64 // Q32.32 distSq below which glow is suppressed
+// 	GlowIntensity     int64 // Q32.32 peak glow alpha
+// }
 
 // shieldCellFunc renders a single cell within the shield ellipse
 type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
-// ShieldPainter is a reusable shield halo renderer supporting TrueColor gradient
-// and 256-color rim modes with optional rotating glow overlay
+// ShieldPainter is a reusable shield halo renderer
 type ShieldPainter struct {
 	renderCell shieldCellFunc
 
@@ -68,6 +89,7 @@ func NewShieldPainter(colorMode terminal.ColorMode) *ShieldPainter {
 // Caller must set write mask
 func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style *ShieldStyle) {
 	p.style = style
+	cfg := style.Config
 
 	p.glowActive = style.GlowPeriod > 0
 	if p.glowActive {
@@ -78,15 +100,15 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 		p.rotDirY = vmath.Sin(angle)
 	}
 
-	// Bounding box uses visual radius (includes feather zone)
-	mapStartX := max(0, centerX-style.RadiusXInt)
-	mapEndX := min(ctx.MapWidth-1, centerX+style.RadiusXInt)
-	mapStartY := max(0, centerY-style.RadiusYInt)
-	mapEndY := min(ctx.MapHeight-1, centerY+style.RadiusYInt)
+	// Bounding box uses visual radius from config (includes feather zone)
+	mapStartX := max(0, centerX-cfg.VisualRadiusXInt)
+	mapEndX := min(ctx.MapWidth-1, centerX+cfg.VisualRadiusXInt)
+	mapStartY := max(0, centerY-cfg.VisualRadiusYInt)
+	mapEndY := min(ctx.MapHeight-1, centerY+cfg.VisualRadiusYInt)
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
-			if mapX == style.SkipX && mapY == style.SkipY {
+			if int16(mapX) == style.SkipX && int16(mapY) == style.SkipY {
 				continue
 			}
 
@@ -97,9 +119,8 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
-			normalizedDistSq := vmath.EllipseDistSq(dx, dy, style.InvRxSq, style.InvRySq)
+			normalizedDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
 
-			// Extended threshold for feather zone
 			if normalizedDistSq > visual.ShieldFeatherEnd {
 				continue
 			}
@@ -113,21 +134,23 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 
 // shieldCellTrueColor renders linear gradient with feather fade
 func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	s := p.style
+	cfg := p.style.Config
 
 	// Linear distance for smoother falloff
 	normDist := vmath.Sqrt(normalizedDistSq)
+	if normDist > vmath.Scale {
+		normDist = vmath.Scale
+	}
 
 	// Compute alpha with feather fade
 	var alphaFixed int64
 	if normalizedDistSq <= visual.ShieldFeatherStart {
-		// Core zone: linear falloff based on distance
-		alphaFixed = vmath.Mul(normDist, s.MaxOpacity)
+		// Core zone: linear falloff
+		alphaFixed = vmath.Mul(normDist, cfg.MaxOpacityQ32)
 	} else {
 		// Feather zone: fade from edge alpha to zero
-		edgeAlpha := vmath.Mul(vmath.Sqrt(visual.ShieldFeatherStart), s.MaxOpacity)
-		fadeRange := visual.ShieldFeatherEnd - visual.ShieldFeatherStart
-		fadeProgress := vmath.Div(normalizedDistSq-visual.ShieldFeatherStart, fadeRange)
+		edgeAlpha := vmath.Mul(vmath.Sqrt(visual.ShieldFeatherStart), cfg.MaxOpacityQ32)
+		fadeProgress := vmath.Div(normalizedDistSq-visual.ShieldFeatherStart, visual.ShieldFeatherRange)
 		alphaFixed = vmath.Mul(edgeAlpha, vmath.Scale-fadeProgress)
 	}
 
@@ -135,14 +158,13 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, s.Color, render.BlendScreen, vmath.ToFloat(alphaFixed), terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, vmath.ToFloat(alphaFixed), terminal.AttrNone)
 
-	// Glow overlay (unchanged logic, uses distSq threshold)
-	if !p.glowActive || normalizedDistSq <= s.GlowEdgeThreshold {
+	// Glow overlay
+	if !p.glowActive || normalizedDistSq <= visual.ShieldGlowEdgeThreshold {
 		return
 	}
 
-	// Use Atan2 for cell direction
 	theta := vmath.Atan2(p.cellDy, p.cellDx)
 	cellDirX := vmath.Cos(theta)
 	cellDirY := vmath.Sin(theta)
@@ -152,14 +174,14 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	edgeFactor := vmath.Div(normalizedDistSq-s.GlowEdgeThreshold, vmath.Scale-s.GlowEdgeThreshold)
-	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), s.GlowIntensity)
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, s.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
+	edgeFactor := vmath.Div(normalizedDistSq-visual.ShieldGlowEdgeThreshold, vmath.Scale-visual.ShieldGlowEdgeThreshold)
+	intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), cfg.GlowIntensityQ32)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
 }
 
 // shieldCell256 renders discrete rim for 256-color terminals
 func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
-	if normalizedDistSq < p.style.Threshold256 {
+	if normalizedDistSq < visual.Shield256Threshold {
 		return
 	}
 	buf.SetBg256(screenX, screenY, p.style.Palette256)
@@ -210,57 +232,44 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 		cfg := &visual.ShieldConfigs[shieldComp.Type]
 
-		// Skip position in map coords (only for cursor)
-		skipX, skipY := -1, -1
-		if shieldEntity == cursorEntity {
-			skipX = shieldPos.X
-			skipY = shieldPos.Y
+		// Build minimal per-entity style
+		style := ShieldStyle{
+			Config:     cfg,
+			Color:      cfg.Color,
+			Palette256: cfg.Palette256,
+			GlowColor:  cfg.GlowColor,
+			GlowPeriod: cfg.GlowPeriod,
+			SkipX:      -1,
+			SkipY:      -1,
 		}
 
-		// Resolve runtime-variable visuals
-		color := cfg.Color
-		palette := cfg.Palette256
-		glowColor := cfg.GlowColor
-		glowPeriod := cfg.GlowPeriod
+		// Per-entity overrides
+		if shieldEntity == cursorEntity {
+			style.SkipX = int16(shieldPos.X)
+			style.SkipY = int16(shieldPos.Y)
+		}
 
 		switch shieldComp.Type {
 		case component.ShieldTypePlayer:
 			// Color based on energy polarity
 			if energy, ok := r.gameCtx.World.Components.Energy.GetComponent(shieldEntity); ok && energy.Current < 0 {
-				color = cfg.ColorAlt
-				palette = cfg.Palette256Alt
+				style.Color = cfg.ColorAlt
+				style.Palette256 = cfg.Palette256Alt
 			}
 			// Glow based on boost state
 			if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(shieldEntity); ok && boost.Active {
-				glowPeriod = parameter.ShieldBoostRotationDuration
+				style.GlowPeriod = parameter.ShieldBoostRotationDuration
 			} else {
-				glowPeriod = 0
+				style.GlowPeriod = 0
 			}
 
 		case component.ShieldTypeLoot:
 			// GlowColor from loot visual definition
 			if loot, ok := r.gameCtx.World.Components.Loot.GetComponent(shieldEntity); ok {
 				if vis, exists := visual.LootVisuals[loot.Type]; exists {
-					glowColor = vis.GlowColor
+					style.GlowColor = vis.GlowColor
 				}
 			}
-		}
-
-		style := ShieldStyle{
-			Color:             color,
-			Palette256:        palette,
-			MaxOpacity:        vmath.FromFloat(cfg.MaxOpacity),
-			InvRxSq:           cfg.InvRxSq,
-			InvRySq:           cfg.InvRySq,
-			RadiusXInt:        cfg.VisualRadiusXInt,
-			RadiusYInt:        cfg.VisualRadiusYInt,
-			Threshold256:      vmath.FromFloat(0.64),
-			SkipX:             skipX,
-			SkipY:             skipY,
-			GlowColor:         glowColor,
-			GlowEdgeThreshold: vmath.FromFloat(0.36),
-			GlowIntensity:     vmath.FromFloat(cfg.GlowIntensity),
-			GlowPeriod:        glowPeriod,
 		}
 
 		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
