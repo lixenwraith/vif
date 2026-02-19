@@ -170,6 +170,11 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			continue
 		}
 
+		// Skip shield render when ember is active (ember replaces shield visual)
+		if heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity); ok && heatComp.EmberActive {
+			continue
+		}
+
 		shieldPos, ok := r.gameCtx.World.Positions.GetPosition(shieldEntity)
 		if !ok {
 			continue

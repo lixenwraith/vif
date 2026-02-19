@@ -538,22 +538,28 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 	targetX, targetY := cursorXFixed, cursorYFixed
 
+	// Track if using direct path (affects drag behavior)
+	usingDirectPath := true
+
 	// Navigation: use flow field when LOS blocked
 	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
 	if hasNav {
 		if navComp.HasDirectPath {
 			// Direct LOS available
 			targetX, targetY = cursorXFixed, cursorYFixed
+			usingDirectPath = true
 		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
 			// Blocked: follow flow field
 			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
 			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+			usingDirectPath = false
 		} else {
 			// Flow zero (trapped): snap to cursor if very close
 			distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
 			if distToCursor < vmath.FromInt(2) {
 				targetX, targetY = cursorXFixed, cursorYFixed
 			}
+			usingDirectPath = true
 		}
 	}
 
@@ -579,13 +585,14 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	// Homing with arrival steering
+	// Disable homing drag when navigating via flow field - cornering drag handles turns
 	settled := physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
 		&physics.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
-		true, // Always apply drag regardless of kinetic immunity
+		usingDirectPath, // Only apply homing drag on direct path
 	)
 
 	// Apply cornering drag

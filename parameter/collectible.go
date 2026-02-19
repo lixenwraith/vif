@@ -30,6 +30,6 @@ const (
 	// NuggetJumpCost is the energy cost to jump to a nugget
 	NuggetJumpCost = 100
 
-	// NuggetOverloadCount is the number of nuggets that are taken at max heat to trigger nugget overload
-	NuggetOverloadCount = 10
+	// NuggetBeaconInterval is the interval between directional cleaner emissions
+	NuggetBeaconInterval = 2 * time.Second
 )

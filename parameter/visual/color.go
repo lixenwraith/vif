@@ -216,6 +216,19 @@ var (
 	// Muzzle flash colors
 	RgbMuzzleFlashBase = terminal.RGB{R: 255, G: 120, B: 50}
 	RgbMuzzleFlashTip  = terminal.RGB{R: 90, G: 25, B: 15}
+
+	// Ember colors - interpolation endpoints
+	// Low heat (ember/lava): warm orange-red
+	RgbEmberCoreLow = terminal.RGB{R: 255, G: 160, B: 60}
+	RgbEmberMidLow  = terminal.RGB{R: 240, G: 100, B: 30}
+	RgbEmberEdgeLow = terminal.RGB{R: 200, G: 60, B: 25}
+	RgbEmberRingLow = terminal.RGB{R: 60, G: 30, B: 40}
+
+	// High heat (molten/blaze): white-hot with blue tinge
+	RgbEmberCoreHigh = terminal.RGB{R: 230, G: 245, B: 255}
+	RgbEmberMidHigh  = terminal.RGB{R: 255, G: 255, B: 255}
+	RgbEmberEdgeHigh = terminal.RGB{R: 220, G: 100, B: 50}
+	RgbEmberRingHigh = terminal.RGB{R: 40, G: 45, B: 60}
 )
 
 // StormCircleColors - neon base colors (saturated 1.3x in renderer)

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // NuggetSystem manages nugget spawn and respawn logic
@@ -19,7 +20,6 @@ type NuggetSystem struct {
 
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
-	nuggetOverload     int
 
 	statActive    *atomic.Bool
 	statSpawned   *atomic.Int64
@@ -48,7 +48,6 @@ func NewNuggetSystem(world *engine.World) engine.System {
 func (s *NuggetSystem) Init() {
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
-	s.nuggetOverload = 0
 	s.statActive.Store(false)
 	s.statSpawned.Store(0)
 	s.statCollected.Store(0)
@@ -124,18 +123,17 @@ func (s *NuggetSystem) Update() {
 	}
 
 	now := s.world.Resources.Time.GameTime
-	cursorEntity := s.world.Resources.Player.Entity
+	dt := s.world.Resources.Time.DeltaTime
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
 		s.activeNuggetEntity = 0
 	}
 
-	// Check cursor overlap for auto-collection
+	// Check for auto-collection (ember/shield area or exact co-location)
 	if s.activeNuggetEntity != 0 {
-		cursorPos, cursorOk := s.world.Positions.GetPosition(cursorEntity)
-		nuggetPos, nuggetOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
-		if cursorOk && nuggetOk && cursorPos.X == nuggetPos.X && cursorPos.Y == nuggetPos.Y {
+		nuggetPos, ok := s.world.Positions.GetPosition(s.activeNuggetEntity)
+		if ok && s.isNuggetInCollectionRange(nuggetPos.X, nuggetPos.Y) {
 			s.collectNugget()
 		}
 	}
@@ -149,9 +147,22 @@ func (s *NuggetSystem) Update() {
 		return
 	}
 
-	// Validate entity still exists
-	if !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
-		s.activeNuggetEntity = 0
+	// Emit beacon when interval elapses
+	nugget, ok := s.world.Components.Nugget.GetComponent(s.activeNuggetEntity)
+	if ok {
+		nugget.BeaconRemaining -= dt
+		if nugget.BeaconRemaining <= 0 {
+			nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
+			if posOk {
+				s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+					OriginX:   nuggetPos.X,
+					OriginY:   nuggetPos.Y,
+					ColorType: component.CleanerColorNugget,
+				})
+			}
+			nugget.BeaconRemaining = parameter.NuggetBeaconInterval
+		}
+		s.world.Components.Nugget.SetComponent(s.activeNuggetEntity, nugget)
 	}
 
 	s.statActive.Store(s.activeNuggetEntity != 0)
@@ -220,8 +231,9 @@ func (s *NuggetSystem) spawnNugget() {
 
 	randomChar := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
 	nugget := component.NuggetComponent{
-		Char:      randomChar,
-		SpawnTime: now,
+		Char:            randomChar,
+		SpawnTime:       now,
+		BeaconRemaining: parameter.NuggetBeaconInterval,
 	}
 
 	// Use batch for atomic position validation
@@ -299,4 +311,36 @@ func (s *NuggetSystem) collectNugget() {
 
 	s.activeNuggetEntity = 0
 	s.statCollected.Add(1)
+}
+
+// isNuggetInCollectionRange checks if nugget position is within collection range
+// Priority: ember ellipse > shield ellipse > exact cursor co-location
+func (s *NuggetSystem) isNuggetInCollectionRange(nuggetX, nuggetY int) bool {
+	cursorEntity := s.world.Resources.Player.Entity
+
+	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	if !ok {
+		return false
+	}
+
+	// Ember takes precedence (larger radius)
+	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok && heatComp.EmberActive {
+		return vmath.EllipseContainsPoint(
+			nuggetX, nuggetY,
+			cursorPos.X, cursorPos.Y,
+			visual.EmberInvRxSq, visual.EmberInvRySq,
+		)
+	}
+
+	// Shield ellipse when active
+	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok && shieldComp.Active {
+		return vmath.EllipseContainsPoint(
+			nuggetX, nuggetY,
+			cursorPos.X, cursorPos.Y,
+			shieldComp.InvRxSq, shieldComp.InvRySq,
+		)
+	}
+
+	// Fallback: exact co-location
+	return cursorPos.X == nuggetX && cursorPos.Y == nuggetY
 }

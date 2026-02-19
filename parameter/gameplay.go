@@ -15,6 +15,9 @@ const (
 
 	// HeatBurstFlashDuration is the time burst flash indicator is shown on heat bar
 	HeatBurstFlashDuration = 150 * time.Millisecond
+
+	EmberDecayInterval = 500 * time.Millisecond
+	EmberDecayAmount   = 1
 )
 
 // Energy System

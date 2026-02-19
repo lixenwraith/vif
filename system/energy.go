@@ -233,6 +233,10 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 		if boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok && boostComp.Active {
 			return
 		}
+		// Ember protects from penalties
+		if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok && heatComp.EmberActive {
+			return
+		}
 		// Convergent to zero and clamps to zero
 		if negativeEnergy {
 			newEnergy = currentEnergy + absDelta

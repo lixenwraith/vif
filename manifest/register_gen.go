@@ -172,6 +172,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("shield", func(ctx any) any {
 		return renderer.NewShieldRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
+	registry.RegisterRenderer("ember", func(ctx any) any {
+		return renderer.NewEmberRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityField)
 	registry.RegisterRenderer("orb", func(ctx any) any {
 		return renderer.NewOrbRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityField)
@@ -316,6 +319,7 @@ func ActiveRenderers() []string {
 		"sigil",
 		"gold",
 		"shield",
+		"ember",
 		"orb",
 		"cleaner",
 		"flash",

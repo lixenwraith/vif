@@ -61,12 +61,43 @@ func (s *HeatSystem) Update() {
 		return
 	}
 
+	modified := false
+
+	// Handle burst flash timeout
 	if heatComp.BurstFlashRemaining > 0 {
 		dt := s.world.Resources.Time.DeltaTime
 		heatComp.BurstFlashRemaining -= dt
 		if heatComp.BurstFlashRemaining <= 0 {
 			heatComp.BurstFlashRemaining = 0
 		}
+		modified = true
+	}
+
+	// Handle ember decay
+	if heatComp.EmberActive {
+		now := s.world.Resources.Time.GameTime
+		if now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
+			heatComp.Current -= parameter.EmberDecayAmount
+			heatComp.EmberDecayTime = now
+
+			if heatComp.Current <= 0 {
+				heatComp.Current = 0
+				heatComp.EmberActive = false
+			}
+
+			// Enforce invariant: heat < max → no overheat
+			if heatComp.Current < parameter.HeatMax {
+				heatComp.Overheat = 0
+			}
+
+			s.statCurrent.Store(int64(heatComp.Current))
+			s.statOverheat.Store(int64(heatComp.Overheat))
+			s.statAtMax.Store(heatComp.Current >= parameter.HeatMax)
+			modified = true
+		}
+	}
+
+	if modified {
 		s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 	}
 }
@@ -144,6 +175,8 @@ func (s *HeatSystem) addHeat(delta int) {
 	if heatComp.Overheat >= parameter.HeatMaxOverheat {
 		heatComp.Overheat = 0
 		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
+		heatComp.EmberActive = true
+		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushEvent(event.EventHeatBurstNotification, nil)
 	}
 

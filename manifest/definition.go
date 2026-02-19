@@ -142,6 +142,7 @@ var Renderers = []RendererDef{
 	{"sigil", "NewSigilRenderer", "PriorityEntities"},
 	{"gold", "NewGoldRenderer", "PriorityEntities"},
 	{"shield", "NewShieldRenderer", "PriorityField"},
+	{"ember", "NewEmberRenderer", "PriorityField"},
 	{"orb", "NewOrbRenderer", "PriorityField"},
 	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
 	{"flash", "NewFlashRenderer", "PriorityParticle"},
