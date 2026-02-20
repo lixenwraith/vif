@@ -140,12 +140,13 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 	m.executeActions(ctx, region, leaf.OnUpdate)
 
 	// Evaluate Tick Transitions (Event == 0), bubble up
+	// Tick has no payload
 	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
 			if trans.Event == 0 {
-				if trans.Guard == nil || trans.Guard(ctx, region) {
+				if trans.Guard == nil || trans.Guard(ctx, region, nil) {
 					m.transitionRegion(ctx, region, trans.TargetID)
 					return
 				}
@@ -169,8 +170,8 @@ func (m *Machine[T]) ExecuteAction(ctx T, actionName string, args any) bool {
 // executeActions runs a slice of actions, respecting guards and delays
 func (m *Machine[T]) executeActions(ctx T, region *RegionState, actions []Action[T]) {
 	for _, action := range actions {
-		// Check guard
-		if action.Guard != nil && !action.Guard(ctx, region) {
+		// Check guard (action guards have no payload context)
+		if action.Guard != nil && !action.Guard(ctx, region, nil) {
 			continue
 		}
 
@@ -213,7 +214,7 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState) {
 
 // HandleEvent routes an external event through all active regions
 // Returns true if the event triggered a transition or was consumed
-func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
+func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 	// Snapshot region names to prevent dispatch to regions spawned by this event
 	regionNames := make([]string, 0, len(m.regions))
 	for name := range m.regions {
@@ -230,7 +231,7 @@ func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
 		if region.Paused {
 			continue
 		}
-		if m.handleEventInRegion(ctx, region, eventType) {
+		if m.handleEventInRegion(ctx, region, ev) {
 			handled = true
 		}
 	}
@@ -239,7 +240,7 @@ func (m *Machine[T]) HandleEvent(ctx T, eventType event.EventType) bool {
 }
 
 // handleEventInRegion processes event in a single region
-func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, eventType event.EventType) bool {
+func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.GameEvent) bool {
 	if region.ActiveStateID == StateNone {
 		return false
 	}
@@ -249,8 +250,8 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, eventType e
 	for currID != StateNone {
 		node := m.nodes[currID]
 		for _, trans := range node.Transitions {
-			if trans.Event == eventType {
-				if trans.Guard == nil || trans.Guard(ctx, region) {
+			if trans.Event == ev.Type {
+				if trans.Guard == nil || trans.Guard(ctx, region, ev.Payload) {
 					m.transitionRegion(ctx, region, trans.TargetID)
 					return true
 				}

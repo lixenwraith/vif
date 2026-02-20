@@ -341,7 +341,7 @@ func (cs *ClockScheduler) dispatchOnePass() int {
 	}
 
 	for _, ev := range eventsList {
-		cs.fsm.HandleEvent(cs.world, ev.Type)
+		cs.fsm.HandleEvent(cs.world, ev)
 
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
 			for _, h := range handlers {

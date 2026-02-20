@@ -204,6 +204,45 @@ Empty `guards` array evaluates to `true`.
 
 ---
 
+## Payload Guards
+
+Inspect event payload fields directly in guards. Field names must match Go struct field names (case-sensitive).
+
+### PayloadIntCompare
+```toml
+{ trigger = "EventEnemyKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "EntityType", op = "eq", value = 5 } }
+```
+
+### PayloadBoolEquals
+```toml
+{ trigger = "EventGoldComplete", target = "PerfectComplete", guard = "PayloadBoolEquals", guard_args = { field = "Perfect", value = true } }
+```
+
+### PayloadStringEquals
+```toml
+{ trigger = "EventNetworkEvent", target = "HandleJoin", guard = "PayloadStringEquals", guard_args = { field = "Action", value = "join" } }
+```
+
+### PayloadExists
+```toml
+{ trigger = "EventCustom", target = "HasData", guard = "PayloadExists" }
+```
+
+Payload guards return `false` if:
+- No payload present (Tick transitions, nil payload)
+- Field does not exist
+- Field type mismatch
+
+Combine with compound guards:
+```toml
+{ trigger = "EventEnemyKilled", target = "EliteBossKilled", guard = "And", guard_args = { guards = [
+    { name = "PayloadIntCompare", args = { field = "EntityType", op = "eq", value = 5 } },
+    { name = "PayloadBoolEquals", args = { field = "IsElite", value = true } }
+]}}
+```
+
+---
+
 ## Variable Payload Injection
 
 Inject FSM variable values into event payloads:

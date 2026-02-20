@@ -102,7 +102,8 @@ type DelayedAction[T any] struct {
 }
 
 // GuardFunc returns true if the transition should occur
-type GuardFunc[T any] func(ctx T, region *RegionState) bool
+// payload is the event payload (nil for Tick transitions and action guards)
+type GuardFunc[T any] func(ctx T, region *RegionState, payload any) bool
 
 // ActionFunc executes a side effect
 type ActionFunc[T any] func(ctx T, args any)

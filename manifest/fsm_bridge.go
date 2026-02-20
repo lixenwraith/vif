@@ -370,7 +370,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				}
 			}
 		}
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return region.TimeInState >= duration
 		}
 	})
@@ -383,7 +383,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			expected = v
 		}
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			if !world.Resources.Status.Bools.Has(key) {
 				return false
 			}
@@ -397,7 +397,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			if !world.Resources.Status.Ints.Has(key) {
 				return false
 			}
@@ -409,7 +409,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	// RegionExists - checks if a region is currently active
 	m.RegisterGuardFactory("RegionExists", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		regionName, _ := args["region"].(string)
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return machine.HasRegion(regionName)
 		}
 	})
@@ -419,7 +419,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 		varName, _ := args["var"].(string)
 		value := parseIntArg(args, "value")
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return machine.GetVar(varName) == value
 		}
 	})
@@ -430,7 +430,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return compareInt(machine.GetVar(varName), op, value)
 		}
 	})
@@ -441,7 +441,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 		varB, _ := args["var_b"].(string)
 		op, _ := args["op"].(string)
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return compareInt(machine.GetVar(varA), op, machine.GetVar(varB))
 		}
 	})
@@ -463,7 +463,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			panic(fmt.Sprintf("ConfigIntCompare: unknown field '%s'", field))
 		}
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			cfg := world.Resources.Config
 			var current int64
 			switch field {
@@ -502,7 +502,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			panic(fmt.Sprintf("ConfigBoolCompare: unknown field '%s'", field))
 		}
 
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			cfg := world.Resources.Config
 			var current bool
 			switch field {
@@ -517,11 +517,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	m.RegisterGuardFactory("And", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		childGuards := resolveChildGuards(machine, args)
 		if len(childGuards) == 0 {
-			return func(world *engine.World, region *fsm.RegionState) bool { return true }
+			return func(world *engine.World, region *fsm.RegionState, payload any) bool { return true }
 		}
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			for _, g := range childGuards {
-				if !g(world, region) {
+				if !g(world, region, payload) {
 					return false
 				}
 			}
@@ -533,15 +533,77 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	m.RegisterGuardFactory("Or", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
 		childGuards := resolveChildGuards(machine, args)
 		if len(childGuards) == 0 {
-			return func(world *engine.World, region *fsm.RegionState) bool { return true }
+			return func(world *engine.World, region *fsm.RegionState, payload any) bool { return true }
 		}
-		return func(world *engine.World, region *fsm.RegionState) bool {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			for _, g := range childGuards {
-				if g(world, region) {
+				if g(world, region, payload) {
 					return true
 				}
 			}
 			return false
+		}
+	})
+
+	// PayloadIntCompare - compares int field in event payload
+	m.RegisterGuardFactory("PayloadIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		field, _ := args["field"].(string)
+		op, _ := args["op"].(string)
+		value := parseIntArg(args, "value")
+
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
+			if payload == nil {
+				return false
+			}
+			fieldVal, ok := extractIntField(payload, field)
+			if !ok {
+				return false
+			}
+			return compareInt(fieldVal, op, value)
+		}
+	})
+
+	// PayloadBoolEquals - checks bool field in event payload
+	m.RegisterGuardFactory("PayloadBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		field, _ := args["field"].(string)
+		expected := true
+		if v, ok := args["value"].(bool); ok {
+			expected = v
+		}
+
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
+			if payload == nil {
+				return false
+			}
+			fieldVal, ok := extractBoolField(payload, field)
+			if !ok {
+				return false
+			}
+			return fieldVal == expected
+		}
+	})
+
+	// PayloadStringEquals - checks string field in event payload
+	m.RegisterGuardFactory("PayloadStringEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		field, _ := args["field"].(string)
+		expected, _ := args["value"].(string)
+
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
+			if payload == nil {
+				return false
+			}
+			fieldVal, ok := extractStringField(payload, field)
+			if !ok {
+				return false
+			}
+			return fieldVal == expected
+		}
+	})
+
+	// PayloadExists - checks if payload is non-nil (useful in Or guards)
+	m.RegisterGuardFactory("PayloadExists", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
+			return payload != nil
 		}
 	})
 }
@@ -549,15 +611,15 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 // === Static Guards ===
 
 func registerStaticGuards(m *fsm.Machine[*engine.World]) {
-	m.RegisterGuard("AlwaysTrue", func(world *engine.World, region *fsm.RegionState) bool {
+	m.RegisterGuard("AlwaysTrue", func(world *engine.World, region *fsm.RegionState, payload any) bool {
 		return true
 	})
 
-	m.RegisterGuard("StateTimeExceeds10s", func(world *engine.World, region *fsm.RegionState) bool {
+	m.RegisterGuard("StateTimeExceeds10s", func(world *engine.World, region *fsm.RegionState, payload any) bool {
 		return region.TimeInState > 10*time.Second
 	})
 
-	m.RegisterGuard("StateTimeExceeds2s", func(world *engine.World, region *fsm.RegionState) bool {
+	m.RegisterGuard("StateTimeExceeds2s", func(world *engine.World, region *fsm.RegionState, payload any) bool {
 		return region.TimeInState > 2*time.Second
 	})
 }
@@ -654,4 +716,74 @@ func resolveGuard(m *fsm.Machine[*engine.World], name string, args map[string]an
 		return guard
 	}
 	return nil
+}
+
+// extractIntField retrieves an int-compatible field from a struct via reflection
+func extractIntField(payload any, fieldName string) (int64, bool) {
+	v := reflect.ValueOf(payload)
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return 0, false
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return 0, false
+	}
+
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() {
+		return 0, false
+	}
+
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return field.Int(), true
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return int64(field.Uint()), true
+	case reflect.Float32, reflect.Float64:
+		return int64(field.Float()), true
+	default:
+		return 0, false
+	}
+}
+
+// extractBoolField retrieves a bool field from a struct via reflection
+func extractBoolField(payload any, fieldName string) (bool, bool) {
+	v := reflect.ValueOf(payload)
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return false, false
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return false, false
+	}
+
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() || field.Kind() != reflect.Bool {
+		return false, false
+	}
+	return field.Bool(), true
+}
+
+// extractStringField retrieves a string field from a struct via reflection
+func extractStringField(payload any, fieldName string) (string, bool) {
+	v := reflect.ValueOf(payload)
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return "", false
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return "", false
+	}
+
+	field := v.FieldByName(fieldName)
+	if !field.IsValid() || field.Kind() != reflect.String {
+		return "", false
+	}
+	return field.String(), true
 }
