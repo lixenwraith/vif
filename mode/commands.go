@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/toml"
 )
 
 // CommandResult represents the outcome of command execution
@@ -45,6 +46,14 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleSystemCommand(ctx, args)
 	case "m", "mouse":
 		return handleMouseCommand(ctx, args)
+	case "e", "emit", "event":
+		return handleEmitCommand(ctx, args)
+	case "d", "debug":
+		return handleDebugCommand(ctx)
+	case "h", "help", "?":
+		return handleHelpCommand(ctx)
+	case "a", "about":
+		return handleAboutCommand(ctx)
 	case "energy":
 		return handleEnergyCommand(ctx, args)
 	case "heat":
@@ -63,12 +72,6 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleCleanerCommand(ctx)
 	case "dust":
 		return handleDustCommand(ctx)
-	case "d", "debug":
-		return handleDebugCommand(ctx)
-	case "h", "help", "?":
-		return handleHelpCommand(ctx)
-	case "a", "about":
-		return handleAboutCommand(ctx)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
@@ -185,6 +188,103 @@ func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
+// handleEmitCommand emits an event by name with optional TOML payload (debug/testing)
+// Usage: :emit EventName
+// Usage: :emit EventName { field = value, nested = { x = 1 } }
+func handleEmitCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) < 1 {
+		setCommandError(ctx, "Usage: :emit <EventName> [{ payload }]")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	name := args[0]
+
+	// Normalize: add "Event" prefix if missing
+	if !strings.HasPrefix(name, "Event") {
+		name = "Event" + name
+	}
+
+	eventType, ok := event.GetEventType(name)
+	if !ok {
+		setCommandError(ctx, fmt.Sprintf("Unknown event: %s", name))
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	// Parse payload if provided
+	var payload any
+	if len(args) > 1 {
+		payloadStr := strings.Join(args[1:], " ")
+		var err error
+		payload, err = parseEventPayload(eventType, payloadStr)
+		if err != nil {
+			setCommandError(ctx, fmt.Sprintf("Payload error: %v", err))
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+	}
+
+	ctx.PushEvent(eventType, payload)
+	ctx.SetLastCommand(fmt.Sprintf(":emit %s", strings.Join(args, " ")))
+
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// parseEventPayload parses an inline TOML table string into the typed payload struct
+// Input: "{ field = value, ... }" or empty string
+// Returns: typed payload pointer or nil
+func parseEventPayload(et event.EventType, raw string) (any, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil, nil
+	}
+
+	// Get typed payload struct for this event
+	payload := event.NewPayloadStruct(et)
+	if payload == nil {
+		return nil, fmt.Errorf("event does not accept payload")
+	}
+
+	// Wrap inline table as TOML key-value for parser compatibility
+	wrapped := "_p = " + raw
+
+	p := toml.NewParser([]byte(wrapped))
+	parsed, err := p.Parse()
+	if err != nil {
+		return nil, err
+	}
+
+	payloadMap, ok := parsed["_p"]
+	if !ok {
+		return nil, fmt.Errorf("malformed payload")
+	}
+
+	if err := toml.Decode(payloadMap, payload); err != nil {
+		return nil, err
+	}
+
+	return payload, nil
+}
+
+// handleDebugCommand triggers debug overlay event
+func handleDebugCommand(ctx *engine.GameContext) CommandResult {
+	ctx.SetMode(core.ModeOverlay)
+	ctx.PushEvent(event.EventMetaDebugRequest, nil)
+	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleHelpCommand triggers help overlay event
+func handleHelpCommand(ctx *engine.GameContext) CommandResult {
+	ctx.SetMode(core.ModeOverlay)
+	ctx.PushEvent(event.EventMetaHelpRequest, nil)
+	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleAboutCommand triggers about overlay event
+func handleAboutCommand(ctx *engine.GameContext) CommandResult {
+	ctx.SetMode(core.ModeOverlay)
+	ctx.PushEvent(event.EventMetaAboutRequest, nil)
+	return CommandResult{Continue: true, KeepPaused: true}
+}
+
 // handleEnergyCommand sets the energy to a specified value
 func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 1 {
@@ -294,25 +394,4 @@ func handleDustCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventDustAllRequest, nil)
 	ctx.SetLastCommand(":dust")
 	return CommandResult{Continue: true, KeepPaused: false}
-}
-
-// handleDebugCommand triggers debug overlay event
-func handleDebugCommand(ctx *engine.GameContext) CommandResult {
-	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(event.EventMetaDebugRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
-}
-
-// handleHelpCommand triggers help overlay event
-func handleHelpCommand(ctx *engine.GameContext) CommandResult {
-	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(event.EventMetaHelpRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
-}
-
-// handleAboutCommand triggers about overlay event
-func handleAboutCommand(ctx *engine.GameContext) CommandResult {
-	ctx.SetMode(core.ModeOverlay)
-	ctx.PushEvent(event.EventMetaAboutRequest, nil)
-	return CommandResult{Continue: true, KeepPaused: true}
 }

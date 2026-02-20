@@ -93,6 +93,7 @@ func InitRegistry() {
 	RegisterType("EventGameReset", EventGameReset, nil)
 	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
 	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
+	RegisterType("EventMetaAboutRequest", EventMetaAboutRequest, nil)
 	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
 	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
 
@@ -242,11 +243,15 @@ func InitRegistry() {
 	// Combat
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
+	RegisterType("EventEnemyCreated", EventEnemyCreated, &EnemyCreatedPayload{})
 	RegisterType("EventEnemyKilled", EventEnemyKilled, &EnemyKilledPayload{})
 	RegisterType("EventLootSpawnRequest", EventLootSpawnRequest, &LootSpawnRequestPayload{})
 
 	// Missile
 	RegisterType("EventMissileSpawnRequest", EventMissileSpawnRequest, &MissileSpawnRequestPayload{})
+
+	// Bullet
+	RegisterType("EventBulletSpawnRequest", EventBulletSpawnRequest, &BulletSpawnRequestPayload{})
 
 	// Marker
 	RegisterType("EventMarkerSpawnRequest", EventMarkerSpawnRequest, &MarkerSpawnRequestPayload{})
@@ -279,4 +284,13 @@ func InitRegistry() {
 	// FSM
 	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
 	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
+
+	// Pylon
+	RegisterType("EventPylonSpawnRequest", EventPylonSpawnRequest, &PylonSpawnRequestPayload{})
+	RegisterType("EventPylonSpawned", EventPylonSpawned, &PylonSpawnedPayload{})
+	RegisterType("EventPylonDestroyed", EventPylonDestroyed, &PylonDestroyedPayload{})
+	RegisterType("EventPylonCancelRequest", EventPylonCancelRequest, nil)
+
+	// Debug
+	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 }

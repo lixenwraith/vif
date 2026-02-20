@@ -18,7 +18,7 @@ const (
 	// EventMusicStart begins music playback
 	// Trigger: Game start, FSM state change
 	// Consumer: MusicSystem | Payload: *MusicStartPayload
-	EventMusicStart EventType = iota + 200 // Offset to avoid collision
+	EventMusicStart
 
 	// EventMusicStop halts music playback
 	// Trigger: Game pause, exit
