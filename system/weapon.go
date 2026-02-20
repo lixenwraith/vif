@@ -950,6 +950,31 @@ func (s *WeaponSystem) findPulseTargets(cx, cy int) []pulseTarget {
 		}
 	}
 
+	// Check pylons (ablative composite entities)
+	for _, headerEntity := range s.world.Components.Pylon.GetAllEntities() {
+		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+		if !ok {
+			continue
+		}
+
+		var hitMembers []core.Entity
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
+			}
+			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+			if !ok {
+				continue
+			}
+			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+				hitMembers = append(hitMembers, member.Entity)
+			}
+		}
+		if len(hitMembers) > 0 {
+			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
+		}
+	}
+
 	return results
 }
 

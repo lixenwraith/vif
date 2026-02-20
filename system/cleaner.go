@@ -356,10 +356,19 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 			if !s.world.Components.Combat.HasEntity(headerEntity) {
 				continue
 			}
-			if lastCleaner, exists := s.collidedHeaders[headerEntity]; exists && lastCleaner == selfEntity {
-				continue
+
+			// Check composite type for dedup behavior
+			headerComp, hasHeader := s.world.Components.Header.GetComponent(headerEntity)
+			isAblative := hasHeader && headerComp.Type == component.CompositeTypeAblative
+
+			// Ablative composites: no dedup, each member takes individual damage
+			// Unit composites: dedup to prevent repeated knockback from same cleaner
+			if !isAblative {
+				if lastCleaner, exists := s.collidedHeaders[headerEntity]; exists && lastCleaner == selfEntity {
+					continue
+				}
+				s.collidedHeaders[headerEntity] = selfEntity
 			}
-			s.collidedHeaders[headerEntity] = selfEntity
 
 			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   component.CombatAttackProjectile,

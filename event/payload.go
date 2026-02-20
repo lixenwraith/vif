@@ -693,11 +693,12 @@ type StrobeRequestPayload struct {
 
 // PylonSpawnRequestPayload contains parameters for pylon creation
 type PylonSpawnRequestPayload struct {
-	X      int `toml:"x"`
-	Y      int `toml:"y"`
-	Radius int `toml:"radius"` // Disc radius in grid cells
-	MinHP  int `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
-	MaxHP  int `toml:"max_hp"` // HP at center
+	X       int `toml:"x"`
+	Y       int `toml:"y"`
+	RadiusX int `toml:"radius_x"`
+	RadiusY int `toml:"radius_y"`
+	MinHP   int `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
+	MaxHP   int `toml:"max_hp"` // HP at center
 }
 
 // PylonSpawnedPayload contains pylon spawn data

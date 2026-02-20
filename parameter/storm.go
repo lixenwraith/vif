@@ -6,9 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// Storm spawn trigger
-const SwarmKillsForStorm = 10
-
 // Storm circle dimensions (ellipse, terminal 2:1 aspect)
 const (
 	StormCircleRadiusXFloat = 10.0

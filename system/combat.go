@@ -286,6 +286,10 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
+	if len(payload.HitEntities) == 0 {
+		return
+	}
+
 	// Generate combat matrix key
 	var attackerType component.CombatEntityType
 	if payload.OriginEntity == s.world.Resources.Player.Entity {
@@ -296,13 +300,26 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	if len(payload.HitEntities) == 0 {
-		return
-	}
-
 	// Resolve Target Type via Component (More robust than payload structure check)
 	var targetCombatType component.CombatEntityType
 	headerComp, isComposite := s.world.Components.Header.GetComponent(targetEntity)
+
+	// If target is a member, resolve to its header
+	if !isComposite {
+		if memberComp, isMember := s.world.Components.Member.GetComponent(targetEntity); isMember {
+			headerEntity := memberComp.HeaderEntity
+			if hc, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
+				// Re-route: target becomes header, original target added to hit list if not present
+				headerComp = hc
+				isComposite = true
+				targetEntity = headerEntity
+				targetCombatComp, ok = s.world.Components.Combat.GetComponent(headerEntity)
+				if !ok {
+					return
+				}
+			}
+		}
+	}
 
 	if isComposite {
 		switch headerComp.Behavior {

@@ -1,7 +1,6 @@
 package system
 
 import (
-	"math"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -9,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // pylonCacheEntry holds cached entity position for soft collision
@@ -135,9 +135,13 @@ func (s *PylonSystem) Update() {
 }
 
 func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
-	radius := payload.Radius
-	if radius <= 0 {
-		radius = parameter.PylonDefaultRadius
+	radiusX := payload.RadiusX
+	radiusY := payload.RadiusY
+	if radiusX <= 0 {
+		radiusX = parameter.PylonDefaultRadiusX
+	}
+	if radiusY <= 0 {
+		radiusY = parameter.PylonDefaultRadiusY
 	}
 
 	minHP := payload.MinHP
@@ -165,11 +169,12 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 
 	// Pylon component
 	s.world.Components.Pylon.SetComponent(headerEntity, component.PylonComponent{
-		SpawnX: centerX,
-		SpawnY: centerY,
-		Radius: radius,
-		MinHP:  minHP,
-		MaxHP:  maxHP,
+		SpawnX:  centerX,
+		SpawnY:  centerY,
+		RadiusX: radiusX,
+		RadiusY: radiusY,
+		MinHP:   minHP,
+		MaxHP:   maxHP,
 	})
 
 	// Combat component on header (HP=0 for ablative, damage routes to members)
@@ -180,7 +185,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	})
 
 	// Generate disc members
-	members := s.createDiscMembers(headerEntity, centerX, centerY, radius, minHP, maxHP)
+	members := s.createDiscMembers(headerEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
 	// Header component
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
@@ -201,33 +206,41 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	})
 }
 
-// createDiscMembers generates solid disc of member entities with HP falloff
+// createDiscMembers generates elliptical disc of member entities with HP falloff
 func (s *PylonSystem) createDiscMembers(
 	headerEntity core.Entity,
-	centerX, centerY, radius, minHP, maxHP int,
+	centerX, centerY, radiusX, radiusY, minHP, maxHP int,
 ) []component.MemberEntry {
 	var members []component.MemberEntry
 
-	radiusSq := radius * radius
-	radiusF := float64(radius)
+	// Precompute inverse squared radii for ellipse containment
+	rxFixed := vmath.FromInt(radiusX)
+	ryFixed := vmath.FromInt(radiusY)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rxFixed, ryFixed)
 
-	for dy := -radius; dy <= radius; dy++ {
-		for dx := -radius; dx <= radius; dx++ {
-			distSq := dx*dx + dy*dy
-			if distSq > radiusSq {
+	// Max radius for HP falloff calculation (use larger axis)
+	maxRadius := float64(radiusX)
+	if radiusY > radiusX {
+		maxRadius = float64(radiusY)
+	}
+
+	for dy := -radiusY; dy <= radiusY; dy++ {
+		for dx := -radiusX; dx <= radiusX; dx++ {
+			// Ellipse containment check
+			dxFixed := vmath.FromInt(dx)
+			dyFixed := vmath.FromInt(dy)
+			if !vmath.EllipseContains(dxFixed, dyFixed, invRxSq, invRySq) {
 				continue
 			}
 
-			// Calculate HP based on distance from center
-			dist := 0.0
-			if distSq > 0 {
-				dist = math.Sqrt(float64(distSq))
-			}
-
-			// Linear interpolation: center=maxHP, edge=minHP
+			// Calculate HP based on normalized distance from center
+			dist := vmath.ToFloat(vmath.Magnitude(dxFixed, dyFixed))
 			var hp int
-			if radiusF > 0 {
-				ratio := dist / radiusF
+			if maxRadius > 0 {
+				ratio := dist / maxRadius
+				if ratio > 1.0 {
+					ratio = 1.0
+				}
 				hp = maxHP - int(float64(maxHP-minHP)*ratio)
 			} else {
 				hp = maxHP
@@ -273,8 +286,11 @@ func (s *PylonSystem) createDiscMembers(
 	return members
 }
 
-// processAblativeCombat scans members for HP<=0 and routes deaths through CompositeSystem
+// processAblativeCombat scans members for HP<=0 and handles death lifecycle
 func (s *PylonSystem) processAblativeCombat(headerEntity core.Entity, headerComp *component.HeaderComponent) {
+	var deadMembers []core.Entity
+	livingCount := 0
+
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity == 0 {
 			continue
@@ -286,12 +302,23 @@ func (s *PylonSystem) processAblativeCombat(headerEntity core.Entity, headerComp
 		}
 
 		if combatComp.HitPoints <= 0 {
-			// Route through CompositeSystem for proper lifecycle handling
-			s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
-				HeaderEntity: headerEntity,
-				MemberEntity: member.Entity,
-			})
+			deadMembers = append(deadMembers, member.Entity)
+		} else {
+			livingCount++
 		}
+	}
+
+	// Route deaths through CompositeSystem for proper lifecycle handling
+	for _, memberEntity := range deadMembers {
+		s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+			HeaderEntity: headerEntity,
+			MemberEntity: memberEntity,
+		})
+	}
+
+	// Self-destruct when no living members remain
+	if livingCount == 0 && len(headerComp.MemberEntries) > 0 {
+		s.handlePylonDeath(headerEntity)
 	}
 }
 

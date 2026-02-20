@@ -126,15 +126,24 @@ func (r *PylonRenderer) renderTrueColor(ctx render.RenderContext, buf *render.Re
 
 func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderBuffer, pylonComp *component.PylonComponent) {
 	centerX, centerY := pylonComp.SpawnX, pylonComp.SpawnY
-	radius := float64(pylonComp.Radius)
-	if radius < 1 {
-		radius = 1
+	radiusX := float64(pylonComp.RadiusX)
+	radiusY := float64(pylonComp.RadiusY)
+	if radiusX < 1 {
+		radiusX = 1
+	}
+	if radiusY < 1 {
+		radiusY = 1
 	}
 
-	glowOuterRadius := radius + visual.PylonGlowExtendFloat
-	invRadius := 1.0 / radius
+	glowExtend := visual.PylonGlowExtendFloat
+	glowOuterRadiusX := radiusX + glowExtend
+	glowOuterRadiusY := radiusY + glowExtend
 
-	// Pulse intensity using game time (same as storm convex glow)
+	// Precompute inverse squared for ellipse containment
+	invRxSq := 1.0 / (radiusX * radiusX)
+	invRySq := 1.0 / (radiusY * radiusY)
+
+	// Pulse intensity using game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
@@ -145,10 +154,10 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 		(visual.PylonGlowIntensityMax-visual.PylonGlowIntensityMin)*pulse
 
 	// Bounding box
-	mapStartX := max(0, centerX-int(glowOuterRadius)-1)
-	mapEndX := min(ctx.MapWidth-1, centerX+int(glowOuterRadius)+1)
-	mapStartY := max(0, centerY-int(glowOuterRadius)-1)
-	mapEndY := min(ctx.MapHeight-1, centerY+int(glowOuterRadius)+1)
+	mapStartX := max(0, centerX-int(glowOuterRadiusX)-1)
+	mapEndX := min(ctx.MapWidth-1, centerX+int(glowOuterRadiusX)+1)
+	mapStartY := max(0, centerY-int(glowOuterRadiusY)-1)
+	mapEndY := min(ctx.MapHeight-1, centerY+int(glowOuterRadiusY)+1)
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
@@ -159,14 +168,13 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 
 			dx := float64(mapX - centerX)
 			dy := float64(mapY - centerY)
-			distSq := dx*dx + dy*dy
-			dist := math.Sqrt(distSq)
 
-			// Normalized distance
-			normDist := dist * invRadius
+			// Normalized ellipse distance squared: (dx/rx)² + (dy/ry)²
+			normDistSq := dx*dx*invRxSq + dy*dy*invRySq
+			normDist := math.Sqrt(normDistSq)
 
 			// Skip inside body or outside glow
-			if normDist <= 1.0 || normDist*normDist > visual.PylonGlowOuterDistSqMax {
+			if normDist <= 1.0 || normDistSq > visual.PylonGlowOuterDistSqMax {
 				continue
 			}
 
@@ -206,10 +214,18 @@ func (r *PylonRenderer) renderMembersTrueColor(
 	pylonComp *component.PylonComponent,
 	headerComp *component.HeaderComponent,
 ) {
-	radius := float64(pylonComp.Radius)
-	if radius < 1 {
-		radius = 1
+	radiusX := float64(pylonComp.RadiusX)
+	radiusY := float64(pylonComp.RadiusY)
+	if radiusX < 1 {
+		radiusX = 1
 	}
+	if radiusY < 1 {
+		radiusY = 1
+	}
+
+	// Precompute inverse squared for normalized distance
+	invRxSq := 1.0 / (radiusX * radiusX)
+	invRySq := 1.0 / (radiusY * radiusY)
 
 	minHP := pylonComp.MinHP
 	maxHP := pylonComp.MaxHP
@@ -220,13 +236,11 @@ func (r *PylonRenderer) renderMembersTrueColor(
 			continue
 		}
 
-		// Get current HP
 		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
 
-		// Get position
 		pos, ok := r.gameCtx.World.Positions.GetPosition(member.Entity)
 		if !ok {
 			continue
@@ -237,15 +251,18 @@ func (r *PylonRenderer) renderMembersTrueColor(
 			continue
 		}
 
-		// Calculate initial HP for this member based on offset
+		// Normalized ellipse distance for HP calculation
 		dx := float64(member.OffsetX)
 		dy := float64(member.OffsetY)
-		dist := math.Sqrt(dx*dx + dy*dy)
+		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
+		normDist := math.Sqrt(normDistSq)
 
 		var initialHP int
-		if hpRange > 0 && radius > 0 {
-			ratio := dist / radius
-			initialHP = maxHP - int(float64(hpRange)*ratio)
+		if hpRange > 0 {
+			if normDist > 1.0 {
+				normDist = 1.0
+			}
+			initialHP = maxHP - int(float64(hpRange)*normDist)
 		} else {
 			initialHP = maxHP
 		}
@@ -265,8 +282,8 @@ func (r *PylonRenderer) renderMembersTrueColor(
 			healthRatio = 0.0
 		}
 
-		// Brightness factor based on position (center=1.0, edge=0.6)
-		positionBrightness := 1.0 - 0.4*(dist/radius)
+		// Brightness factor based on normalized position (center=1.0, edge=0.6)
+		positionBrightness := 1.0 - 0.4*normDist
 		if positionBrightness < 0.6 {
 			positionBrightness = 0.6
 		}
@@ -280,7 +297,6 @@ func (r *PylonRenderer) renderMembersTrueColor(
 
 		// Interpolate between bright and dark based on position
 		color := render.Lerp(entry.dark, entry.bright, positionBrightness)
-
 		buf.SetBgOnly(screenX, screenY, color)
 	}
 }
@@ -307,10 +323,17 @@ func (r *PylonRenderer) renderMembers256Color(
 	pylonComp *component.PylonComponent,
 	headerComp *component.HeaderComponent,
 ) {
-	radius := float64(pylonComp.Radius)
-	if radius < 1 {
-		radius = 1
+	radiusX := float64(pylonComp.RadiusX)
+	radiusY := float64(pylonComp.RadiusY)
+	if radiusX < 1 {
+		radiusX = 1
 	}
+	if radiusY < 1 {
+		radiusY = 1
+	}
+
+	invRxSq := 1.0 / (radiusX * radiusX)
+	invRySq := 1.0 / (radiusY * radiusY)
 
 	minHP := pylonComp.MinHP
 	maxHP := pylonComp.MaxHP
@@ -336,15 +359,17 @@ func (r *PylonRenderer) renderMembers256Color(
 			continue
 		}
 
-		// Calculate initial HP
 		dx := float64(member.OffsetX)
 		dy := float64(member.OffsetY)
-		dist := math.Sqrt(dx*dx + dy*dy)
+		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
+		normDist := math.Sqrt(normDistSq)
 
 		var initialHP int
-		if hpRange > 0 && radius > 0 {
-			ratio := dist / radius
-			initialHP = maxHP - int(float64(hpRange)*ratio)
+		if hpRange > 0 {
+			if normDist > 1.0 {
+				normDist = 1.0
+			}
+			initialHP = maxHP - int(float64(hpRange)*normDist)
 		} else {
 			initialHP = maxHP
 		}
@@ -397,10 +422,17 @@ func (r *PylonRenderer) renderMembersBasicColor(
 	pylonComp *component.PylonComponent,
 	headerComp *component.HeaderComponent,
 ) {
-	radius := float64(pylonComp.Radius)
-	if radius < 1 {
-		radius = 1
+	radiusX := float64(pylonComp.RadiusX)
+	radiusY := float64(pylonComp.RadiusY)
+	if radiusX < 1 {
+		radiusX = 1
 	}
+	if radiusY < 1 {
+		radiusY = 1
+	}
+
+	invRxSq := 1.0 / (radiusX * radiusX)
+	invRySq := 1.0 / (radiusY * radiusY)
 
 	minHP := pylonComp.MinHP
 	maxHP := pylonComp.MaxHP
@@ -426,15 +458,17 @@ func (r *PylonRenderer) renderMembersBasicColor(
 			continue
 		}
 
-		// Calculate initial HP
 		dx := float64(member.OffsetX)
 		dy := float64(member.OffsetY)
-		dist := math.Sqrt(dx*dx + dy*dy)
+		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
+		normDist := math.Sqrt(normDistSq)
 
 		var initialHP int
-		if hpRange > 0 && radius > 0 {
-			ratio := dist / radius
-			initialHP = maxHP - int(float64(hpRange)*ratio)
+		if hpRange > 0 {
+			if normDist > 1.0 {
+				normDist = 1.0
+			}
+			initialHP = maxHP - int(float64(hpRange)*normDist)
 		} else {
 			initialHP = maxHP
 		}
@@ -450,7 +484,6 @@ func (r *PylonRenderer) renderMembersBasicColor(
 			healthRatio = 1.0
 		}
 
-		// Select basic color based on health zone
 		var colorIdx uint8
 		switch {
 		case healthRatio >= visual.PylonHealthThresholdDamaged:
@@ -461,7 +494,6 @@ func (r *PylonRenderer) renderMembersBasicColor(
 			colorIdx = visual.PylonBasicCritical
 		}
 
-		// Basic colors use palette index directly with AttrBg256
 		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }

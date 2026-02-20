@@ -101,7 +101,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCleaner, CombatEntityQuasar}: &CombatAttackCleanerToQuasar,
 		{CombatEntityCleaner, CombatEntitySwarm}:  &CombatAttackCleanerToSwarm,
 		{CombatEntityCleaner, CombatEntityStorm}:  &CombatAttackCleanerToStorm,
-		{CombatEntityCursor, CombatEntityPylon}:   &CombatAttackProjectileToPylon,
+		{CombatEntityCleaner, CombatEntityPylon}:  &CombatAttackCleanerToPylon,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackShieldToDrain,
@@ -188,13 +188,14 @@ var CombatAttackCleanerToStorm = CombatAttackProfile{
 	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
 }
 
-var CombatAttackProjectileToPylon = CombatAttackProfile{
+var CombatAttackCleanerToPylon = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCursor,
+	AttackerEntityType: CombatEntityCleaner,
 	DefenderEntityType: CombatEntityPylon,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectNone,
+	ChainAttack:        &CombatAttackLightningToPylon,
 }
 
 // Lightning attack profiles

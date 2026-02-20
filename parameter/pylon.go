@@ -2,8 +2,11 @@ package parameter
 
 // Pylon Entity
 const (
-	// PylonDefaultRadius is default disc radius if not specified
-	PylonDefaultRadius = 3
+	// PylonDefaultRadiusX is default horizontal radius (cells)
+	PylonDefaultRadiusX = 6
+
+	// PylonDefaultRadiusY is default vertical radius (cells, aspect-corrected)
+	PylonDefaultRadiusY = 3
 
 	// PylonCollisionRadiusXFloat is horizontal collision zone (cells)
 	PylonCollisionRadiusXFloat = 4.0

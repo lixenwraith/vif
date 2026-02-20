@@ -296,7 +296,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 					}
 
 					switch headerComp.Behavior {
-					case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm:
+					case component.BehaviorQuasar, component.BehaviorSwarm, component.BehaviorStorm, component.BehaviorPylon:
 						hitComposites[headerEntity] = append(hitComposites[headerEntity], entity)
 					}
 					continue
