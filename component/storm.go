@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -14,17 +13,6 @@ const StormCircleCount = 3
 type StormComponent struct {
 	Circles      [StormCircleCount]core.Entity
 	CirclesAlive [StormCircleCount]bool
-}
-
-// AliveCount returns number of living circles
-func (c *StormComponent) AliveCount() int {
-	count := 0
-	for _, alive := range c.CirclesAlive {
-		if alive {
-			count++
-		}
-	}
-	return count
 }
 
 // StormCircleAttackState represents attack phase for a storm circle
@@ -51,6 +39,7 @@ type StormCircleComponent struct {
 	Vel3D vmath.Vec3
 	Index int // 0, 1, or 2 - position in parent storm
 
+	IsInvulnerable bool
 	// Anti-deadlock: tracks continuous invulnerability duration
 	InvulnerableSince int64 // Unix nano timestamp, 0 if vulnerable
 
@@ -65,18 +54,4 @@ type StormCircleComponent struct {
 
 	// Visual data for renderer (0.0-1.0 progress)
 	AttackProgress float64
-}
-
-// CircleType returns the attack behavior type based on index
-func (c *StormCircleComponent) CircleType() StormCircleType {
-	if c.Index >= int(StormCircleBlue) {
-		return StormCircleBlue
-	}
-	return StormCircleType(c.Index)
-}
-
-// IsConvex returns true if circle is in vulnerable/attack-capable state
-func (c *StormCircleComponent) IsConvex() bool {
-	// If attacking, override physics to stay in convex
-	return c.Pos3D.Z < parameter.StormZMid || c.AttackState == StormCircleAttackActive
 }

@@ -360,7 +360,7 @@ func (s *DeathSystem) isProtected(entity core.Entity) bool {
 	if !ok {
 		return false
 	}
-	if protComp.Mask.Has(component.ProtectFromDeath) || protComp.Mask == component.ProtectAll {
+	if protComp.Mask&component.ProtectFromDeath != 0 || protComp.Mask == component.ProtectAll {
 		// If immortal, remove tag to not process again in Update()
 		s.world.Components.Death.RemoveEntity(entity)
 		return true

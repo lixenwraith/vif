@@ -318,7 +318,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 	// Check protection
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-		if protComp.Mask.Has(component.ProtectFromDecay) {
+		if protComp.Mask&component.ProtectFromDecay != 0 {
 			return
 		}
 	}

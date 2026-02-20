@@ -213,12 +213,15 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity)
 		emberActive := hasHeat && heatComp.EmberActive
 
-		// Track ember transition state
-		transition := r.getOrCreateTransition(shieldEntity)
-		transitionIntensity := r.updateTransition(transition, emberActive, ctx.GameTime)
+		// Track ember transition state (player only)
+		var transitionIntensity float64
+		if shieldEntity == cursorEntity {
+			transition := r.getOrCreateTransition(shieldEntity)
+			transitionIntensity = r.updateTransition(transition, emberActive, ctx.GameTime)
+		}
 
 		// Skip shield render when ember is active
-		if heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity); ok && heatComp.EmberActive {
+		if emberActive {
 			continue
 		}
 

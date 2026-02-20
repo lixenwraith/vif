@@ -25,11 +25,6 @@ const (
 	ProtectAll ProtectionFlags = 0xFF
 )
 
-// Has checks if a specific protection flag is set
-func (p ProtectionFlags) Has(flag ProtectionFlags) bool {
-	return p&flag == flag
-}
-
 // ProtectionComponent provides immunity to game mechanics
 type ProtectionComponent struct {
 	// Mask defines which mechanics this entity is immune to

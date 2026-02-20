@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/pattern"
+	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -664,7 +665,13 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 
 	// Resolve visual config (apply defaults if zero-value)
 	vis := payload.Visual
-	if vis.IsZero() {
+	isZero := vis.Char == 0 &&
+		vis.FgColor == (terminal.RGB{}) &&
+		vis.BgColor == (terminal.RGB{}) &&
+		!vis.RenderFg &&
+		!vis.RenderBg &&
+		vis.BoxStyle == component.BoxDrawNone
+	if isZero {
 		vis = component.WallVisualConfig{
 			BgColor:  visual.RgbWallStone,
 			RenderBg: true,

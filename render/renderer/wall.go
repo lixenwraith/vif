@@ -38,7 +38,11 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	for _, wallEntity := range wallEntities {
 		wallComp, ok := r.gameCtx.World.Components.Wall.GetComponent(wallEntity)
-		if !ok || !wallComp.NeedsRender() {
+		if !ok {
+			continue
+		}
+
+		if !(wallComp.RenderFg || wallComp.RenderBg) {
 			continue
 		}
 

@@ -859,7 +859,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 
 				// Check protection
 				if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-					if protComp.Mask == component.ProtectAll || protComp.Mask.Has(component.ProtectFromSpecies) {
+					if protComp.Mask == component.ProtectAll || protComp.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}
 				}

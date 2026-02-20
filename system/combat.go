@@ -616,7 +616,7 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 
 	// Storm circle immunity: concave (invulnerable) state
 	if circleComp, ok := s.world.Components.StormCircle.GetComponent(targetEntity); ok {
-		if !circleComp.IsConvex() {
+		if circleComp.IsInvulnerable {
 			return false
 		}
 	}

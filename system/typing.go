@@ -374,7 +374,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 
 		// Check protection
 		if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
-			if prot.Mask.Has(component.ProtectFromDelete) || prot.Mask == component.ProtectAll {
+			if prot.Mask&component.ProtectFromDelete != 0 || prot.Mask == component.ProtectAll {
 				return
 			}
 		}

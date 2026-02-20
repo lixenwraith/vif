@@ -42,11 +42,6 @@ type WallComponent struct {
 	BoxStyle BoxDrawStyle
 }
 
-// NeedsRender returns true if wall has any visual component
-func (w *WallComponent) NeedsRender() bool {
-	return w.RenderFg || w.RenderBg
-}
-
 // WallCellDef defines a single cell in composite wall structure (used by event payload)
 type WallCellDef struct {
 	OffsetX int
@@ -63,14 +58,4 @@ type WallVisualConfig struct {
 	RenderFg bool         `toml:"render_fg"`
 	RenderBg bool         `toml:"render_bg"`
 	BoxStyle BoxDrawStyle `toml:"box_style"`
-}
-
-// IsZero returns true if no visual properties are explicitly set
-func (c WallVisualConfig) IsZero() bool {
-	return c.Char == 0 &&
-		c.FgColor == (terminal.RGB{}) &&
-		c.BgColor == (terminal.RGB{}) &&
-		!c.RenderFg &&
-		!c.RenderBg &&
-		c.BoxStyle == BoxDrawNone
 }

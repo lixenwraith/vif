@@ -183,7 +183,7 @@ func (s *StormSystem) Update() {
 	}
 
 	// Check if all circles dead
-	aliveCount := stormComp.AliveCount()
+	aliveCount := s.AliveCount(&stormComp)
 	if aliveCount == 0 {
 		s.terminateStorm()
 		return
@@ -274,6 +274,17 @@ func (s *StormSystem) cacheCombatEntities() {
 			y:      pos.Y,
 		})
 	}
+}
+
+// AliveCount returns number of living circles
+func (s *StormSystem) AliveCount(c *component.StormComponent) int {
+	count := 0
+	for _, alive := range c.CirclesAlive {
+		if alive {
+			count++
+		}
+	}
+	return count
 }
 
 // applySoftCollisions pushes other combat entities away from storm circle
@@ -1079,7 +1090,7 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 	})
 
 	// Check if all dead
-	if stormComp.AliveCount() == 0 {
+	if s.AliveCount(stormComp) == 0 {
 		s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 			RootEntity: s.rootEntity,
 		})
@@ -1115,7 +1126,7 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 				Index:        i,
 			})
 
-			if stormComp.AliveCount() == 0 {
+			if s.AliveCount(&stormComp) == 0 {
 				s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 					RootEntity: s.rootEntity,
 				})
@@ -1282,9 +1293,9 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			continue
 		}
 
-		circleType := circleComp.CircleType()
-		// isConvex is guaranteed true with physics override
-		isConvex := circleComp.IsConvex()
+		circleType := component.StormCircleType(circleComp.Index)
+		// Update invulnerable state, isConvex is guaranteed true with physics override
+		circleComp.IsInvulnerable = circleComp.Pos3D.Z > parameter.StormZMid && circleComp.AttackState != component.StormCircleAttackActive
 
 		switch circleComp.AttackState {
 		case component.StormCircleAttackIdle:
@@ -1297,7 +1308,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			circleComp.CooldownRemaining -= dt
 			if circleComp.CooldownRemaining <= 0 {
 				// Fire attack if in convex (natural z orbiting)
-				if isConvex {
+				if !circleComp.IsInvulnerable {
 					circleComp.AttackState = component.StormCircleAttackActive
 					circleComp.AttackRemaining = s.getAttackDuration(circleType)
 					circleComp.AttackProgress = 0
@@ -1381,7 +1392,7 @@ func (s *StormSystem) processCircleAttack(
 	cursorEntity core.Entity,
 	cursorPos component.PositionComponent,
 ) {
-	circleType := circleComp.CircleType()
+	circleType := component.StormCircleType(circleComp.Index)
 
 	switch circleType {
 	case component.StormCircleGreen:
