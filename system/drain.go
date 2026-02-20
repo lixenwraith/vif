@@ -47,9 +47,6 @@ type DrainSystem struct {
 	// Spawn failure backoff (game ticks)
 	spawnCooldownUntil uint64
 
-	// Random source for knockback impulse randomization
-	rng *vmath.FastRand
-
 	// Per-tick cache to avoid repeated queries
 	drainCache []drainCacheEntry
 
@@ -84,7 +81,6 @@ func (s *DrainSystem) Init() {
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.paused = false
@@ -160,8 +156,6 @@ func (s *DrainSystem) Update() {
 	if !s.enabled {
 		return
 	}
-
-	s.world.Resources.SpeciesCache.Refresh()
 
 	// Cache all drain data for this tick, not covered by SpeciesCache, internal drain logic use
 	s.cacheDrainData()
@@ -1027,11 +1021,6 @@ func (s *DrainSystem) updateDrainMovement() {
 			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
-		// Soft Collision (Quasar)
-		if combatComp.RemainingKineticImmunity == 0 {
-			s.applySoftCollisionWithQuasar(&kineticComp, &combatComp, newX, newY)
-		}
-
 		// Wall Collision (Traversal)
 		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
 		hitWall := false
@@ -1100,35 +1089,6 @@ func (s *DrainSystem) reflectOffWall(k *core.Kinetic, fromX, fromY, wallX, wallY
 
 	// Snap back to safe cell center
 	k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(fromX, fromY)
-}
-
-// applySoftCollisionWithQuasar checks drain overlap with quasar and applies repulsion
-func (s *DrainSystem) applySoftCollisionWithQuasar(
-	kineticComp *component.KineticComponent,
-	combatComp *component.CombatComponent,
-	drainX, drainY int,
-) {
-	cache := s.world.Resources.SpeciesCache
-
-	for i := range cache.Quasars {
-		qc := &cache.Quasars[i]
-		radialX, radialY, hit := physics.CheckSoftCollision(
-			drainX, drainY, qc.X, qc.Y,
-			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
-		)
-
-		if hit {
-			physics.ApplyCollision(
-				&kineticComp.Kinetic,
-				radialX, radialY,
-				&physics.SoftCollisionQuasarToDrain,
-				s.rng,
-			)
-
-			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-			return // One collision per tick
-		}
-	}
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position

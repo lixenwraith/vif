@@ -9,8 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/physics"
-	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // pylonCacheEntry holds cached entity position for soft collision
@@ -24,9 +22,6 @@ type pylonCacheEntry struct {
 // Pushes other enemies away via soft collision
 type PylonSystem struct {
 	world *engine.World
-
-	// Random source for collision impulse
-	rng *vmath.FastRand
 
 	// Telemetry
 	statActive *atomic.Bool
@@ -49,7 +44,6 @@ func NewPylonSystem(world *engine.World) engine.System {
 }
 
 func (s *PylonSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -121,30 +115,17 @@ func (s *PylonSystem) Update() {
 		return
 	}
 
-	// Refresh shared species cache
-	s.world.Resources.SpeciesCache.Refresh()
-
 	activeCount := 0
 
 	for _, headerEntity := range pylonEntities {
 		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
 		if !ok {
-			s.terminatePylon(headerEntity)
-			continue
-		}
-
-		pylonComp, ok := s.world.Components.Pylon.GetComponent(headerEntity)
-		if !ok {
-			s.terminatePylon(headerEntity)
 			continue
 		}
 
 		// Process member combat (HP <= 0 detection)
 		// Deaths routed through CompositeSystem; IntegrityBreach triggers handlePylonDeath
 		s.processAblativeCombat(headerEntity, &headerComp)
-
-		// Apply soft collision (push enemies away)
-		s.applySoftCollisions(pylonComp.SpawnX, pylonComp.SpawnY)
 
 		activeCount++
 	}
@@ -367,70 +348,4 @@ func (s *PylonSystem) terminateAll() {
 	for _, entity := range s.world.Components.Pylon.GetAllEntities() {
 		s.terminatePylon(entity)
 	}
-}
-
-// applySoftCollisions pushes combat entities away from pylon center
-func (s *PylonSystem) applySoftCollisions(pylonX, pylonY int) {
-	cache := s.world.Resources.SpeciesCache
-
-	// Push drains
-	for i := range cache.Drains {
-		dc := &cache.Drains[i]
-		s.applySoftCollisionToEntity(
-			dc.Entity, dc.X, dc.Y,
-			pylonX, pylonY,
-			&physics.SoftCollisionPylonToDrain,
-		)
-	}
-
-	// Push swarms
-	for i := range cache.Swarms {
-		sc := &cache.Swarms[i]
-		s.applySoftCollisionToEntity(
-			sc.Entity, sc.X, sc.Y,
-			pylonX, pylonY,
-			&physics.SoftCollisionPylonToSwarm,
-		)
-	}
-
-	// Push quasars
-	for i := range cache.Quasars {
-		qc := &cache.Quasars[i]
-		s.applySoftCollisionToEntity(
-			qc.Entity, qc.X, qc.Y,
-			pylonX, pylonY,
-			&physics.SoftCollisionPylonToQuasar,
-		)
-	}
-}
-
-func (s *PylonSystem) applySoftCollisionToEntity(
-	entity core.Entity,
-	entityX, entityY, pylonX, pylonY int,
-	profile *physics.CollisionProfile,
-) {
-	radialX, radialY, hit := physics.CheckSoftCollision(
-		entityX, entityY,
-		pylonX, pylonY,
-		parameter.PylonCollisionInvRxSq, parameter.PylonCollisionInvRySq,
-	)
-	if !hit {
-		return
-	}
-
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(entity)
-	if !ok {
-		return
-	}
-
-	combatComp, ok := s.world.Components.Combat.GetComponent(entity)
-	if !ok || combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged {
-		return
-	}
-
-	physics.ApplyCollision(&kineticComp.Kinetic, radialX, radialY, profile, s.rng)
-	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-
-	s.world.Components.Kinetic.SetComponent(entity, kineticComp)
-	s.world.Components.Combat.SetComponent(entity, combatComp)
 }

@@ -151,8 +151,6 @@ func (s *StormSystem) Update() {
 		return
 	}
 
-	s.world.Resources.SpeciesCache.Refresh()
-
 	// Process pending blue spawns regardless of root entity state
 	s.processPendingBlueSpawns()
 
@@ -190,18 +188,6 @@ func (s *StormSystem) Update() {
 	s.processCircleMemberCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
 
-	// Apply soft collision per circle (push other enemies away)
-	for i := 0; i < component.StormCircleCount; i++ {
-		if !stormComp.CirclesAlive[i] {
-			continue
-		}
-		circlePos, ok := s.world.Positions.GetPosition(stormComp.Circles[i])
-		if !ok {
-			continue
-		}
-		s.applySoftCollisions(circlePos.X, circlePos.Y)
-	}
-
 	s.world.Components.Storm.SetComponent(s.rootEntity, stormComp)
 	s.statCircleCount.Store(int64(aliveCount))
 }
@@ -236,80 +222,6 @@ func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 		}
 	}
 	return count
-}
-
-// applySoftCollisions pushes other combat entities away from storm circle
-// Storm acts as immovable repulsion source; applies impulse to OTHER entities
-func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
-	cache := s.world.Resources.SpeciesCache
-
-	// Push swarms away from this circle
-	for i := range cache.Swarms {
-		sc := &cache.Swarms[i]
-		// Check if swarm overlaps with storm circle collision area
-		radialX, radialY, hit := physics.CheckSoftCollision(
-			sc.X, sc.Y,
-			circleX, circleY,
-			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
-		)
-		if !hit {
-			continue
-		}
-
-		swarmKinetic, ok := s.world.Components.Kinetic.GetComponent(sc.Entity)
-		if !ok {
-			continue
-		}
-		swarmCombat, ok := s.world.Components.Combat.GetComponent(sc.Entity)
-		if !ok || swarmCombat.RemainingKineticImmunity > 0 || swarmCombat.IsEnraged {
-			continue
-		}
-
-		// Apply collision impulse to swarm (push away from storm)
-		physics.ApplyCollision(
-			&swarmKinetic.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionQuasarToSwarm, // Reuse quasar profile as placeholder
-			s.rng,
-		)
-		swarmCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-
-		s.world.Components.Kinetic.SetComponent(sc.Entity, swarmKinetic)
-		s.world.Components.Combat.SetComponent(sc.Entity, swarmCombat)
-	}
-
-	// Push quasar away from this circle
-	for i := range cache.Quasars {
-		qc := &cache.Quasars[i]
-		radialX, radialY, hit := physics.CheckSoftCollision(
-			qc.X, qc.Y,
-			circleX, circleY,
-			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
-		)
-		if !hit {
-			continue
-		}
-
-		quasarKinetic, ok := s.world.Components.Kinetic.GetComponent(qc.Entity)
-		if !ok {
-			continue
-		}
-		quasarCombat, ok := s.world.Components.Combat.GetComponent(qc.Entity)
-		if !ok || quasarCombat.RemainingKineticImmunity > 0 || quasarCombat.IsEnraged {
-			continue
-		}
-
-		physics.ApplyCollision(
-			&quasarKinetic.Kinetic,
-			radialX, radialY,
-			&physics.SoftCollisionSwarmToQuasar, // Reversed: storm pushing quasar
-			s.rng,
-		)
-		quasarCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-
-		s.world.Components.Kinetic.SetComponent(qc.Entity, quasarKinetic)
-		s.world.Components.Combat.SetComponent(qc.Entity, quasarCombat)
-	}
 }
 
 // spawnStorm creates the root header and 3 circle sub-headers

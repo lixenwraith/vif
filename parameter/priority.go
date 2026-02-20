@@ -21,6 +21,7 @@ const (
 	PriorityFuse       // After Cleaner, before Drain
 	PrioritySpirit     // After Fuse, before Drain
 	PriorityNavigation // Before systems that move entities
+	PrioritySoftCollision
 	PriorityDrain
 	PriorityMaterialize // After Drain
 	PriorityQuasar      // After Drain

@@ -84,6 +84,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("combat", func(w any) any {
 		return system.NewCombatSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("soft_collision", func(w any) any {
+		return system.NewSoftCollisionSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
 	})
@@ -291,6 +294,7 @@ func ActiveSystems() []string {
 		"missile",
 		"navigation",
 		"combat",
+		"soft_collision",
 		"drain",
 		"quasar",
 		"swarm",

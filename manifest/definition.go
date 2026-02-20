@@ -109,6 +109,7 @@ var Systems = []SystemDef{
 	{"missile", "NewMissileSystem"},
 	{"navigation", "NewNavigationSystem"},
 	{"combat", "NewCombatSystem"},
+	{"soft_collision", "NewSoftCollisionSystem"},
 	{"drain", "NewDrainSystem"},
 	{"quasar", "NewQuasarSystem"},
 	{"swarm", "NewSwarmSystem"},

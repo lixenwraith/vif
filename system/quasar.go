@@ -112,8 +112,6 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	s.world.Resources.SpeciesCache.Refresh()
-
 	quasarEntities := s.world.Components.Quasar.GetAllEntities()
 	activeCount := 0
 
@@ -596,13 +594,6 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		wallCheck,
 	)
 
-	// Soft collision with other species
-	combatComp, hasCombat := s.world.Components.Combat.GetComponent(headerEntity)
-	if hasCombat {
-		s.applySoftCollisions(headerEntity, &kineticComp, &combatComp, newX, newY)
-		s.world.Components.Combat.SetComponent(headerEntity, combatComp)
-	}
-
 	// Update header position if cell changed
 	if newX != headerPos.X || newY != headerPos.Y {
 		s.processCollisionsAtNewPositions(headerEntity, newX, newY)
@@ -610,60 +601,6 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
-}
-
-// applySoftCollisions checks quasar overlap with swarms and other quasars
-func (s *QuasarSystem) applySoftCollisions(
-	headerEntity core.Entity,
-	kineticComp *component.KineticComponent,
-	combatComp *component.CombatComponent,
-	headerX, headerY int,
-) {
-	cache := s.world.Resources.SpeciesCache
-
-	// Check collision with swarms
-	for i := range cache.Swarms {
-		sc := &cache.Swarms[i]
-		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, sc.X, sc.Y,
-			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq,
-		)
-
-		if hit {
-			physics.ApplyCollision(
-				&kineticComp.Kinetic,
-				radialX, radialY,
-				&physics.SoftCollisionQuasarToSwarm,
-				s.rng,
-			)
-			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-			return
-		}
-	}
-
-	// Check collision with other quasars
-	for i := range cache.Quasars {
-		qc := &cache.Quasars[i]
-		if qc.Entity == headerEntity {
-			continue
-		}
-
-		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, qc.X, qc.Y,
-			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
-		)
-
-		if hit {
-			physics.ApplyCollision(
-				&kineticComp.Kinetic,
-				radialX, radialY,
-				&physics.SoftCollisionQuasarToQuasar,
-				s.rng,
-			)
-			combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
-			return
-		}
-	}
 }
 
 // isCursorInZapRange checks if cursor is within zap ellipse centered on quasar
