@@ -67,6 +67,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDebugCommand(ctx)
 	case "h", "help", "?":
 		return handleHelpCommand(ctx)
+	case "a", "about":
+		return handleAboutCommand(ctx)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
@@ -305,5 +307,12 @@ func handleDebugCommand(ctx *engine.GameContext) CommandResult {
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetMode(core.ModeOverlay)
 	ctx.PushEvent(event.EventMetaHelpRequest, nil)
+	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleAboutCommand triggers about overlay event
+func handleAboutCommand(ctx *engine.GameContext) CommandResult {
+	ctx.SetMode(core.ModeOverlay)
+	ctx.PushEvent(event.EventMetaAboutRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }

@@ -206,7 +206,8 @@ func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg terminal.RGB) {
 	dst.Bg = bg
 	dst.Attrs = terminal.AttrNone
 	b.touched[idx] = true
-	b.masks[idx] |= b.currentMask
+	// b.masks[idx] |= b.currentMask // changed due to game leaking to overlay, test if other things break
+	b.masks[idx] = b.currentMask
 }
 
 // SetBg256 sets background using 256-color palette index directly
@@ -310,6 +311,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 			continue
 		}
 		// Occlusion dimming for touched cells with foreground
+		// if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 && b.masks[i]&visual.MaskUI == 0 {
 		if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 {
 			b.cells[i].Bg = Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
 		}

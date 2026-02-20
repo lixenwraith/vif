@@ -260,6 +260,11 @@ const (
 	// Consumer: MetaSystem | Payload: nil
 	EventMetaHelpRequest
 
+	// EventMetaAboutRequest signals a request to show about overlay
+	// Trigger: Command :about
+	// Consumer: MetaSystem | Payload: nil
+	EventMetaAboutRequest
+
 	// EventMetaStatusMessageRequest signals a request to display a message in status bar
 	// Trigger: Systems
 	// Consumer: MetaSystem | Payload: *MetaStatusMessagePayload

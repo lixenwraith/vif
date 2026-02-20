@@ -54,6 +54,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventLevelSetup,
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
+		event.EventMetaAboutRequest,
 		event.EventGameReset,
 	}
 }
@@ -82,6 +83,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMetaHelpRequest:
 		s.handleHelpRequest()
+
+	case event.EventMetaAboutRequest:
+		s.handleAboutRequest()
 	}
 }
 
@@ -336,6 +340,33 @@ func (s *MetaSystem) handleHelpRequest() {
 			{Key: ":spawn on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},
 			{Key: ":h", Value: "This help"},
+		},
+	})
+
+	s.ctx.SetOverlayContent(content)
+}
+
+// === About (placeholder) ===
+
+// handleAboutRequest shows about information overlay
+func (s *MetaSystem) handleAboutRequest() {
+	content := &core.OverlayContent{
+		Title:  "ABOUT",
+		Custom: true,
+	}
+
+	// Store info as entries for the renderer to extract
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "VI-FIGHTER",
+		Entries: []core.CardEntry{
+			{Key: "desc", Value: "A terminal-based rouge-like action typing game with vi-style keybindings. Made with love for terminal, Go, VIM, and Games :)"},
+			{Key: "version", Value: "0.1.0-alpha"},
+			{Key: "engine", Value: "Custom ECS, Data-driven HFSM, Double-buffered ANSI renderer"},
+			{Key: "go", Value: "1.25+"},
+			{Key: "github", Value: "github.com/lixenwraith/vi-fighter"},
+			{Key: "author", Value: "Lixen Wraith"},
+			{Key: "website", Value: "lixen.com"},
+			{Key: "license", Value: "BSD-3"},
 		},
 	})
 

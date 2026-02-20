@@ -2,8 +2,9 @@ package core
 
 // OverlayContent holds typed overlay data, extensible via OverlayItem interface
 type OverlayContent struct {
-	Title string
-	Items []OverlayItem
+	Title  string
+	Items  []OverlayItem
+	Custom bool // Custom rendering mode (bypasses masonry cards)
 }
 
 // OverlayItem is implemented by all overlay component types

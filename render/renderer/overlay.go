@@ -156,6 +156,12 @@ func (r *OverlayRenderer) IsVisible() bool {
 }
 
 func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.OverlayContent) {
+	// Custom rendering for special overlays
+	if data.Custom && data.Title == "ABOUT" {
+		r.renderAboutContent(outer, content, data)
+		return
+	}
+
 	padded := content.Sub(
 		parameter.OverlayPaddingX,
 		parameter.OverlayPaddingY,
@@ -318,5 +324,148 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, e
 		}
 		region.Cell(0, bottomY, '└', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
 		region.Cell(region.W-1, bottomY, '┘', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
+	}
+}
+
+func (r *OverlayRenderer) renderAboutContent(outer, content tui.Region, data *core.OverlayContent) {
+	bg := visual.RgbOverlayBg
+	fg := visual.RgbOverlayValue
+	dimFg := visual.RgbOverlayHint
+	headerFg := visual.RgbOverlayHeader
+
+	cards := data.Cards()
+	if len(cards) == 0 {
+		return
+	}
+	card := cards[0]
+
+	logoW, logoH := logoPatternW, logoPatternH
+	padX, padY := parameter.OverlayPaddingX, parameter.OverlayPaddingY
+	innerW := content.W - 2*padX
+	innerH := content.H - 2*padY - 1
+
+	if innerW < 30 || innerH < 10 {
+		region := content.Sub(padX, padY, innerW, innerH)
+		region.TextCenter(0, card.Title, headerFg, bg, terminal.AttrBold)
+		if len(card.Entries) > 0 {
+			region.TextBlock(0, 2, card.Entries[0].Value, fg, bg, terminal.AttrNone)
+		}
+		return
+	}
+
+	if innerW < 50 {
+		logoX := (innerW - logoW) / 2
+		logoRegion := content.Sub(padX+logoX, padY, logoW, logoH)
+		r.renderLogo(logoRegion, bg)
+
+		infoY := padY + logoH + 1
+		infoH := innerH - logoH - 1
+		infoRegion := content.Sub(padX, infoY, innerW, infoH)
+		r.renderAboutInfo(infoRegion, bg, fg, dimFg, headerFg, card)
+	} else {
+		logoY := (innerH - logoH) / 2
+		logoRegion := content.Sub(padX, padY+logoY, logoW, logoH)
+		r.renderLogo(logoRegion, bg)
+
+		infoX := padX + logoW + 3
+		infoW := innerW - logoW - 3
+		infoRegion := content.Sub(infoX, padY, infoW, innerH)
+		r.renderAboutInfo(infoRegion, bg, fg, dimFg, headerFg, card)
+	}
+
+	hints := "ESC close"
+	hintsX := (outer.W - tui.RuneLen(hints)) / 2
+	outer.Text(hintsX, outer.H-2, hints, visual.RgbOverlayHint, bg, terminal.AttrDim)
+}
+
+func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg terminal.RGB, card core.OverlayCard) {
+	y := 0
+
+	// Title
+	region.Text(0, y, card.Title, headerFg, bg, terminal.AttrBold)
+	y += 2
+
+	if len(card.Entries) == 0 {
+		return
+	}
+
+	// First entry as description (wrapped)
+	if y < region.H-4 {
+		lines := region.TextBlock(0, y, card.Entries[0].Value, fg, bg, terminal.AttrNone)
+		y += lines + 1
+	}
+
+	// Remaining entries as key-value pairs
+	keyStyle := tui.Style{Fg: dimFg, Bg: bg}
+	valStyle := tui.Style{Fg: fg, Bg: bg}
+
+	for i := 1; i < len(card.Entries); i++ {
+		if y >= region.H-1 {
+			break
+		}
+		e := card.Entries[i]
+		region.KeyValue(y, e.Key, e.Value, keyStyle, valStyle, ':')
+		y++
+	}
+}
+
+var logoPattern = []string{
+	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
+	"BByyBBggggggBBbbbbbbBBvvBB",
+	"BByyyBBgggggBBbbbbbBBvvvBB",
+	"BByyyyBBggggBBbbbbBBvvvvBB",
+	"BByyyyyBBgggBBbbbBBvvvvvBB",
+	"BByyyyyyBBggBBbbBBvvvvvvBB",
+	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
+	"BBooooooBBrrBBaaBBppppppBB",
+	"BBoooooBBrrrBBaaaBBpppppBB",
+	"BBooooBBrrrrBBaaaaBBppppBB",
+	"BBoooBBrrrrrBBaaaaaBBpppBB",
+	"BBooBBrrrrrrBBaaaaaaBBppBB",
+	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
+}
+
+var logoColorMap = map[rune]terminal.RGB{
+	'B': {30, 30, 40},    // Black (frame)
+	'r': {255, 60, 60},   // Red
+	'o': {255, 165, 60},  // Orange
+	'y': {255, 255, 60},  // Yellow
+	'g': {60, 180, 60},   // Green
+	'b': {60, 100, 255},  // Blue
+	'v': {100, 60, 180},  // Violet
+	'p': {220, 130, 220}, // Pink
+	'a': {160, 160, 170}, // Light gray
+}
+
+const (
+	logoPatternW = 26
+	logoPatternH = 13
+)
+
+func (r *OverlayRenderer) renderLogo(region tui.Region, bg terminal.RGB) {
+	w, h := region.W, region.H
+	if w < 1 || h < 1 {
+		return
+	}
+
+	for y := 0; y < h; y++ {
+		// Map region Y to pattern Y
+		patY := y * logoPatternH / h
+		if patY >= logoPatternH {
+			patY = logoPatternH - 1
+		}
+		row := logoPattern[patY]
+
+		for x := 0; x < w; x++ {
+			// Map region X to pattern X
+			patX := x * logoPatternW / w
+			if patX >= logoPatternW {
+				patX = logoPatternW - 1
+			}
+
+			ch := rune(row[patX])
+			color := logoColorMap[ch]
+			region.Cell(x, y, '█', color, bg, terminal.AttrNone)
+		}
 	}
 }
