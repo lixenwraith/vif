@@ -118,6 +118,97 @@ transitions = [
 	}
 }
 
+func TestUnmarshal_MultilineInlineTable(t *testing.T) {
+	input := []byte(`
+[state]
+config = {
+	name = "test",
+	nested = { a = 1, b = 2 },
+	array = [
+		{ x = 10 },
+		{ x = 20 }
+	]
+}
+`)
+
+	type Inner struct {
+		X int `toml:"x"`
+	}
+	type Config struct {
+		Name   string         `toml:"name"`
+		Nested map[string]int `toml:"nested"`
+		Array  []Inner        `toml:"array"`
+	}
+	type State struct {
+		Config Config `toml:"config"`
+	}
+	type Root struct {
+		State State `toml:"state"`
+	}
+
+	var cfg Root
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if cfg.State.Config.Name != "test" {
+		t.Errorf("Name = %q", cfg.State.Config.Name)
+	}
+	if cfg.State.Config.Nested["a"] != 1 {
+		t.Errorf("Nested.a = %d", cfg.State.Config.Nested["a"])
+	}
+	if len(cfg.State.Config.Array) != 2 || cfg.State.Config.Array[1].X != 20 {
+		t.Errorf("Array = %+v", cfg.State.Config.Array)
+	}
+}
+
+func TestUnmarshal_DeeplyNestedMultiline(t *testing.T) {
+	input := []byte(`
+transition = { trigger = "Tick", target = "Active", guard = "Or", guard_args = { guards = [
+	{ name = "Compare", args = { key = "val", op = "gt", value = 0 } },
+	{ name = "Check", args = { flag = true } }
+]} }
+`)
+
+	type Args struct {
+		Key   string `toml:"key"`
+		Op    string `toml:"op"`
+		Value int    `toml:"value"`
+		Flag  bool   `toml:"flag"`
+	}
+	type Guard struct {
+		Name string `toml:"name"`
+		Args Args   `toml:"args"`
+	}
+	type GuardArgs struct {
+		Guards []Guard `toml:"guards"`
+	}
+	type Transition struct {
+		Trigger   string    `toml:"trigger"`
+		Target    string    `toml:"target"`
+		Guard     string    `toml:"guard"`
+		GuardArgs GuardArgs `toml:"guard_args"`
+	}
+	type Root struct {
+		Transition Transition `toml:"transition"`
+	}
+
+	var cfg Root
+	if err := Unmarshal(input, &cfg); err != nil {
+		t.Fatalf("Unmarshal failed: %v", err)
+	}
+
+	if cfg.Transition.Guard != "Or" {
+		t.Errorf("Guard = %q", cfg.Transition.Guard)
+	}
+	if len(cfg.Transition.GuardArgs.Guards) != 2 {
+		t.Fatalf("Guards count = %d", len(cfg.Transition.GuardArgs.Guards))
+	}
+	if cfg.Transition.GuardArgs.Guards[0].Args.Op != "gt" {
+		t.Errorf("Guards[0].Args.Op = %q", cfg.Transition.GuardArgs.Guards[0].Args.Op)
+	}
+}
+
 // TestUnmarshal_FSMConfigExact tests the exact FSM config structure
 func TestUnmarshal_FSMConfigExact(t *testing.T) {
 	input := []byte(`

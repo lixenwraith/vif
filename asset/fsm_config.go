@@ -109,14 +109,20 @@ transitions = [
 [states.MonitorWarmup]
 parent = "Root"
 transitions = [
-    { trigger = "Tick", target = "MonitorActive", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "gt", value = 0 } },
+    { trigger = "Tick", target = "MonitorActive", guard = "Or", guard_args = { guards = [
+        { name = "StatusIntCompare", args = { key = "heat.current", op = "gt", value = 0 } },
+        { name = "StatusIntCompare", args = { key = "energy.current", op = "neq", value = 0 } },
+    ] } },
 ]
 
 [states.MonitorActive]
 parent = "Root"
 transitions = [
     { trigger = "EventHeatBurstNotification", target = "MonitorHeatBurst" },
-    { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusIntCompare", guard_args = { key = "heat.current", op = "lte", value = 0 } },
+    { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
+        { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
+        { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } }
+    ] } },
 ]
 
 [states.MonitorHeatBurst]

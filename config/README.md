@@ -123,6 +123,14 @@ Apply bounds with `min`/`max` (optional, independent):
 { action = "DisableSystem", payload = { system_name = "name" } }
 ```
 
+### Status Registry Actions
+```toml
+{ action = "SetStatusInt", payload = { key = "status.key", value = 100 } }
+{ action = "ResetStatusInt", payload = { key = "status.key" } }
+```
+
+`ResetStatusInt` sets the value to 0.
+
 ### Action Modifiers
 
 ```toml
@@ -158,6 +166,41 @@ Apply bounds with `min`/`max` (optional, independent):
 | `AlwaysTrue`          | Always passes       |
 | `StateTimeExceeds2s`  | Time in state > 2s  |
 | `StateTimeExceeds10s` | Time in state > 10s |
+
+---
+
+## Compound Guards
+
+Combine multiple guards with logical operators.
+
+### And (all must pass)
+```toml
+{ trigger = "Tick", target = "TargetState", guard = "And", guard_args = { guards = [
+    { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
+    { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } }
+]}}
+```
+
+### Or (at least one must pass)
+```toml
+{ trigger = "EventDamage", target = "Critical", guard = "Or", guard_args = { guards = [
+    { name = "StatusIntCompare", args = { key = "health", op = "lte", value = 10 } },
+    { name = "VarEquals", args = { var = "shield_broken", value = 1 } }
+]}}
+```
+
+Compound guards support nesting:
+```toml
+{ trigger = "Tick", target = "Special", guard = "And", guard_args = { guards = [
+    { name = "StateTimeExceeds", args = { ms = 1000 } },
+    { name = "Or", args = { guards = [
+        { name = "VarEquals", args = { var = "mode", value = 1 } },
+        { name = "VarEquals", args = { var = "mode", value = 2 } }
+    ]}}
+]}}
+```
+
+Empty `guards` array evaluates to `true`.
 
 ---
 

@@ -512,6 +512,38 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			return current == expected
 		}
 	})
+
+	// And - all child guards must pass
+	m.RegisterGuardFactory("And", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		childGuards := resolveChildGuards(machine, args)
+		if len(childGuards) == 0 {
+			return func(world *engine.World, region *fsm.RegionState) bool { return true }
+		}
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			for _, g := range childGuards {
+				if !g(world, region) {
+					return false
+				}
+			}
+			return true
+		}
+	})
+
+	// Or - at least one child guard must pass
+	m.RegisterGuardFactory("Or", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+		childGuards := resolveChildGuards(machine, args)
+		if len(childGuards) == 0 {
+			return func(world *engine.World, region *fsm.RegionState) bool { return true }
+		}
+		return func(world *engine.World, region *fsm.RegionState) bool {
+			for _, g := range childGuards {
+				if g(world, region) {
+					return true
+				}
+			}
+			return false
+		}
+	})
 }
 
 // === Static Guards ===
@@ -572,4 +604,54 @@ func compareInt(current int64, op string, value int64) bool {
 	default:
 		return current == value
 	}
+}
+
+// resolveChildGuards parses nested guard definitions and returns compiled guard functions
+func resolveChildGuards(m *fsm.Machine[*engine.World], args map[string]any) []fsm.GuardFunc[*engine.World] {
+	guardsRaw, ok := args["guards"]
+	if !ok {
+		return nil
+	}
+
+	guardsList, ok := guardsRaw.([]any)
+	if !ok {
+		return nil
+	}
+
+	result := make([]fsm.GuardFunc[*engine.World], 0, len(guardsList))
+	for _, item := range guardsList {
+		guardDef, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		name, _ := guardDef["name"].(string)
+		if name == "" {
+			continue
+		}
+
+		var childArgs map[string]any
+		if argsRaw, ok := guardDef["args"]; ok {
+			childArgs, _ = argsRaw.(map[string]any)
+		}
+
+		guard := resolveGuard(m, name, childArgs)
+		if guard != nil {
+			result = append(result, guard)
+		}
+	}
+	return result
+}
+
+// resolveGuard creates a guard function from name and args using registered factories/guards
+func resolveGuard(m *fsm.Machine[*engine.World], name string, args map[string]any) fsm.GuardFunc[*engine.World] {
+	// Check factory first (for parameterized guards)
+	if factory, ok := m.GetGuardFactory(name); ok {
+		return factory(m, args)
+	}
+	// Fall back to static guard
+	if guard, ok := m.GetGuard(name); ok {
+		return guard
+	}
+	return nil
 }

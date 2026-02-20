@@ -389,7 +389,6 @@ func (p *Parser) parseInlineTable() (map[string]any, error) {
 		}
 
 		// Inline tables can have dotted keys too: { a.b = 1 }
-		// Reuse assignValue but locally
 		if err := p.assignValue(m, keys, val); err != nil {
 			return nil, err
 		}
@@ -397,6 +396,10 @@ func (p *Parser) parseInlineTable() (map[string]any, error) {
 		if p.curToken.Type == TokenComma {
 			p.nextToken()
 		} else if p.curToken.Type != TokenRBrace {
+			if p.curToken.Type == TokenNewline {
+				p.nextToken()
+				continue
+			}
 			return nil, fmt.Errorf("expected comma or closing brace in inline table at line %d", p.curToken.Line)
 		}
 	}

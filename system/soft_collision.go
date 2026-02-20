@@ -160,9 +160,9 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 	}
 
 	defaultRule := FlockingRule{
-		InvRxSq:    parameter.SwarmSeparationInvRxSq,
-		InvRySq:    parameter.SwarmSeparationInvRySq,
-		MaxDist:    parameter.SwarmSeparationRadiusX,
+		InvRxSq:    parameter.FlockingSeparationInvRxSq,
+		InvRySq:    parameter.FlockingSeparationInvRySq,
+		MaxDist:    parameter.FlockingSeparationRadiusX,
 		Strength:   parameter.SwarmSeparationStrength,
 		WeightMult: vmath.Scale,
 	}

@@ -38,6 +38,18 @@ func (m *Machine[T]) RegisterGuardFactory(name string, factory GuardFactoryFunc[
 	m.guardFactoryReg[name] = factory
 }
 
+// GetGuardFactory returns a registered guard factory by name
+func (m *Machine[T]) GetGuardFactory(name string) (GuardFactoryFunc[T], bool) {
+	fn, ok := m.guardFactoryReg[name]
+	return fn, ok
+}
+
+// GetGuard returns a registered static guard by name
+func (m *Machine[T]) GetGuard(name string) (GuardFunc[T], bool) {
+	fn, ok := m.guardReg[name]
+	return fn, ok
+}
+
 // RegisterAction adds a side-effect function to the registry
 func (m *Machine[T]) RegisterAction(name string, fn ActionFunc[T]) {
 	m.actionReg[name] = fn

@@ -54,9 +54,9 @@ var (
 
 // Swarm flocking separation
 var (
-	SwarmSeparationRadiusX  = vmath.FromFloat(SwarmSeparationRadiusXFloat)
-	SwarmSeparationRadiusY  = vmath.FromFloat(SwarmSeparationRadiusYFloat)
-	SwarmSeparationStrength = vmath.FromFloat(SwarmSeparationStrengthFloat)
+	FlockingSeparationRadiusX = vmath.FromFloat(SwarmSeparationRadiusXFloat)
+	FlockingSeparationRadiusY = vmath.FromFloat(SwarmSeparationRadiusYFloat)
+	SwarmSeparationStrength   = vmath.FromFloat(SwarmSeparationStrengthFloat)
 )
 
 // Entity collision radii (ellipse semi-axes for overlap detection)
@@ -70,9 +70,9 @@ var (
 
 // Pre-computed inverse squared radii for ellipse overlap checks
 var (
-	QuasarCollisionInvRxSq, QuasarCollisionInvRySq = vmath.EllipseInvRadiiSq(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
-	SwarmCollisionInvRxSq, SwarmCollisionInvRySq   = vmath.EllipseInvRadiiSq(SwarmCollisionRadiusX, SwarmCollisionRadiusY)
-	SwarmSeparationInvRxSq, SwarmSeparationInvRySq = vmath.EllipseInvRadiiSq(SwarmSeparationRadiusX, SwarmSeparationRadiusY)
+	QuasarCollisionInvRxSq, QuasarCollisionInvRySq       = vmath.EllipseInvRadiiSq(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
+	SwarmCollisionInvRxSq, SwarmCollisionInvRySq         = vmath.EllipseInvRadiiSq(SwarmCollisionRadiusX, SwarmCollisionRadiusY)
+	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSq(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
 )
 
 // Dust physics
