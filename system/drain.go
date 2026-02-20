@@ -53,9 +53,6 @@ type DrainSystem struct {
 	// Per-tick cache to avoid repeated queries
 	drainCache []drainCacheEntry
 
-	// Per-tick cache for soft collision detection
-	quasarCache []quasarCacheEntry
-
 	// Cached metric pointers
 	statCount   *atomic.Int64
 	statPending *atomic.Int64
@@ -73,7 +70,6 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
-	s.quasarCache = make([]quasarCacheEntry, 0, 1) // Typically 0-1 quasar
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
@@ -165,16 +161,15 @@ func (s *DrainSystem) Update() {
 		return
 	}
 
-	// 1. Cache all drain data for this tick
+	s.world.Resources.SpeciesCache.Refresh()
+
+	// Cache all drain data for this tick, not covered by SpeciesCache, internal drain logic use
 	s.cacheDrainData()
 
-	// 2. Cache quasar data for soft collision
-	s.cacheQuasarData()
-
-	// 3. Process HP checks, enrage state, termination
+	// Process HP checks, enrage state, termination
 	s.processDrainStates()
 
-	// 4. Detect and trigger swarm fusions (uses cached enraged state)
+	// Detect and trigger swarm fusions (uses cached enraged state)
 	s.detectSwarmFusions()
 
 	// Skip spawn logic when paused
@@ -262,24 +257,6 @@ func (s *DrainSystem) cacheDrainData() {
 		}
 
 		s.drainCache = append(s.drainCache, entry)
-	}
-}
-
-// cacheQuasarData populates quasarCache for soft collision detection
-func (s *DrainSystem) cacheQuasarData() {
-	s.quasarCache = s.quasarCache[:0]
-
-	quasarEntities := s.world.Components.Quasar.GetAllEntities()
-	for _, entity := range quasarEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
 	}
 }
 
@@ -1131,9 +1108,12 @@ func (s *DrainSystem) applySoftCollisionWithQuasar(
 	combatComp *component.CombatComponent,
 	drainX, drainY int,
 ) {
-	for _, qc := range s.quasarCache {
+	cache := s.world.Resources.SpeciesCache
+
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			drainX, drainY, qc.x, qc.y,
+			drainX, drainY, qc.X, qc.Y,
 			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
 		)
 

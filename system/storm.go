@@ -14,12 +14,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// stormCacheEntry holds cached position for soft collision checks
-type stormCacheEntry struct {
-	entity core.Entity
-	x, y   int
-}
-
 // pendingBlueSpawn tracks storm-initiated swarm spawns waiting for visual completion
 type pendingBlueSpawn struct {
 	TargetX int
@@ -39,10 +33,6 @@ type StormSystem struct {
 
 	// Random source
 	rng *vmath.FastRand
-
-	// Per-tick cache for soft collision (push other enemies away)
-	swarmCache  []swarmCacheEntry
-	quasarCache []quasarCacheEntry
 
 	// Precomputed ellipse cell offsets for wall collision
 	ellipseOffsets []struct{ X, Y int }
@@ -68,8 +58,6 @@ func NewStormSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.swarmCache = make([]swarmCacheEntry, 0, 10)
-	s.quasarCache = make([]quasarCacheEntry, 0, 1)
 	s.memberExcludeSet = make(map[core.Entity]struct{}, 256)
 	s.pendingBlueSpawns = make([]pendingBlueSpawn, 0, 4)
 
@@ -89,8 +77,6 @@ func NewStormSystem(world *engine.World) engine.System {
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
 	clear(s.memberExcludeSet)
 	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)
@@ -165,6 +151,8 @@ func (s *StormSystem) Update() {
 		return
 	}
 
+	s.world.Resources.SpeciesCache.Refresh()
+
 	// Process pending blue spawns regardless of root entity state
 	s.processPendingBlueSpawns()
 
@@ -188,9 +176,6 @@ func (s *StormSystem) Update() {
 		s.terminateStorm()
 		return
 	}
-
-	// Cache other combat entities for soft collision
-	s.cacheCombatEntities()
 
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
@@ -242,40 +227,6 @@ func (s *StormSystem) buildEllipseOffsets() {
 	}
 }
 
-// cacheCombatEntities populates caches for soft collision detection
-func (s *StormSystem) cacheCombatEntities() {
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
-
-	// Cache all swarm headers
-	swarmEntities := s.world.Components.Swarm.GetAllEntities()
-	for _, entity := range swarmEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.swarmCache = append(s.swarmCache, swarmCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
-
-	// Cache quasar header
-	quasarEntities := s.world.Components.Quasar.GetAllEntities()
-	for _, entity := range quasarEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
-}
-
 // AliveCount returns number of living circles
 func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 	count := 0
@@ -290,11 +241,14 @@ func (s *StormSystem) AliveCount(c *component.StormComponent) int {
 // applySoftCollisions pushes other combat entities away from storm circle
 // Storm acts as immovable repulsion source; applies impulse to OTHER entities
 func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
+	cache := s.world.Resources.SpeciesCache
+
 	// Push swarms away from this circle
-	for _, sc := range s.swarmCache {
+	for i := range cache.Swarms {
+		sc := &cache.Swarms[i]
 		// Check if swarm overlaps with storm circle collision area
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			sc.x, sc.y,
+			sc.X, sc.Y,
 			circleX, circleY,
 			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
 		)
@@ -302,11 +256,11 @@ func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
 			continue
 		}
 
-		swarmKinetic, ok := s.world.Components.Kinetic.GetComponent(sc.entity)
+		swarmKinetic, ok := s.world.Components.Kinetic.GetComponent(sc.Entity)
 		if !ok {
 			continue
 		}
-		swarmCombat, ok := s.world.Components.Combat.GetComponent(sc.entity)
+		swarmCombat, ok := s.world.Components.Combat.GetComponent(sc.Entity)
 		if !ok || swarmCombat.RemainingKineticImmunity > 0 || swarmCombat.IsEnraged {
 			continue
 		}
@@ -320,14 +274,15 @@ func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
 		)
 		swarmCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 
-		s.world.Components.Kinetic.SetComponent(sc.entity, swarmKinetic)
-		s.world.Components.Combat.SetComponent(sc.entity, swarmCombat)
+		s.world.Components.Kinetic.SetComponent(sc.Entity, swarmKinetic)
+		s.world.Components.Combat.SetComponent(sc.Entity, swarmCombat)
 	}
 
 	// Push quasar away from this circle
-	for _, qc := range s.quasarCache {
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			qc.x, qc.y,
+			qc.X, qc.Y,
 			circleX, circleY,
 			parameter.StormCollisionInvRxSq, parameter.StormCollisionInvRySq,
 		)
@@ -335,11 +290,11 @@ func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
 			continue
 		}
 
-		quasarKinetic, ok := s.world.Components.Kinetic.GetComponent(qc.entity)
+		quasarKinetic, ok := s.world.Components.Kinetic.GetComponent(qc.Entity)
 		if !ok {
 			continue
 		}
-		quasarCombat, ok := s.world.Components.Combat.GetComponent(qc.entity)
+		quasarCombat, ok := s.world.Components.Combat.GetComponent(qc.Entity)
 		if !ok || quasarCombat.RemainingKineticImmunity > 0 || quasarCombat.IsEnraged {
 			continue
 		}
@@ -352,8 +307,8 @@ func (s *StormSystem) applySoftCollisions(circleX, circleY int) {
 		)
 		quasarCombat.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 
-		s.world.Components.Kinetic.SetComponent(qc.entity, quasarKinetic)
-		s.world.Components.Combat.SetComponent(qc.entity, quasarCombat)
+		s.world.Components.Kinetic.SetComponent(qc.Entity, quasarKinetic)
+		s.world.Components.Combat.SetComponent(qc.Entity, quasarCombat)
 	}
 }
 

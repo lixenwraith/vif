@@ -13,12 +13,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// swarmCacheEntry holds cached swarm data for flocking and soft collision
-type swarmCacheEntry struct {
-	entity core.Entity
-	x, y   int // Grid position of header
-}
-
 // SwarmSystem manages the elite enemy entity lifecycle
 // Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage, teleports to target location if charge LOS blocked
 // Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
@@ -31,10 +25,6 @@ type SwarmSystem struct {
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
-
-	// Per-tick cache for soft collision and flocking
-	swarmCache  []swarmCacheEntry
-	quasarCache []quasarCacheEntry
 
 	// Telemetry
 	statActive      *atomic.Bool
@@ -49,9 +39,6 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s := &SwarmSystem{
 		world: world,
 	}
-
-	s.swarmCache = make([]swarmCacheEntry, 0, 10)
-	s.quasarCache = make([]quasarCacheEntry, 0, 1)
 
 	s.statActive = world.Resources.Status.Bools.Get("swarm.active")
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
@@ -136,8 +123,7 @@ func (s *SwarmSystem) Update() {
 		return
 	}
 
-	// Cache combat entities for soft collision and flocking
-	s.cacheCombatEntities()
+	s.world.Resources.SpeciesCache.Refresh()
 
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
@@ -225,40 +211,6 @@ func (s *SwarmSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
-}
-
-// cacheCombatEntities populates caches for soft collision and flocking
-func (s *SwarmSystem) cacheCombatEntities() {
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
-
-	// Cache all swarm headers
-	swarmEntities := s.world.Components.Swarm.GetAllEntities()
-	for _, entity := range swarmEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.swarmCache = append(s.swarmCache, swarmCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
-
-	// Cache quasar header
-	quasarEntities := s.world.Components.Quasar.GetAllEntities()
-	for _, entity := range quasarEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
 }
 
 func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
@@ -437,24 +389,27 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 // calculateFlockingSeparation returns separation acceleration from nearby swarms and quasar, only used during chase state
 func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, headerX, headerY int) (sepX, sepY int64) {
+	cache := s.world.Resources.SpeciesCache
+
 	// Separation from other swarms
-	for _, sc := range s.swarmCache {
-		if sc.entity == headerEntity {
+	for i := range cache.Swarms {
+		sc := &cache.Swarms[i]
+		if sc.Entity == headerEntity {
 			continue
 		}
 
 		// Check if within separation ellipse
-		if !vmath.EllipseContainsPoint(sc.x, sc.y, headerX, headerY,
+		if !vmath.EllipseContainsPoint(sc.X, sc.Y, headerX, headerY,
 			parameter.SwarmSeparationInvRxSq, parameter.SwarmSeparationInvRySq) {
 			continue
 		}
 
 		// Calculate separation direction: other swarm → this swarm (push away)
-		dx := vmath.FromInt(headerX - sc.x)
-		dy := vmath.FromInt(headerY - sc.y)
+		dx := vmath.FromInt(headerX - sc.X)
+		dy := vmath.FromInt(headerY - sc.Y)
 
 		if dx == 0 && dy == 0 {
-			dx = vmath.Scale // Fallback direction
+			dx = vmath.Scale
 		}
 
 		// Weight inversely proportional to distance
@@ -476,14 +431,15 @@ func (s *SwarmSystem) calculateFlockingSeparation(headerEntity core.Entity, head
 	}
 
 	// Separation from quasar (weighted lower)
-	for _, qc := range s.quasarCache {
-		if !vmath.EllipseContainsPoint(qc.x, qc.y, headerX, headerY,
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
+		if !vmath.EllipseContainsPoint(qc.X, qc.Y, headerX, headerY,
 			parameter.SwarmSeparationInvRxSq, parameter.SwarmSeparationInvRySq) {
 			continue
 		}
 
-		dx := vmath.FromInt(headerX - qc.x)
-		dy := vmath.FromInt(headerY - qc.y)
+		dx := vmath.FromInt(headerX - qc.X)
+		dy := vmath.FromInt(headerY - qc.Y)
 
 		if dx == 0 && dy == 0 {
 			dx = vmath.Scale
@@ -519,14 +475,17 @@ func (s *SwarmSystem) applySoftCollisions(
 	combatComp *component.CombatComponent,
 	headerX, headerY int,
 ) {
+	cache := s.world.Resources.SpeciesCache
+
 	// Check collision with other swarms
-	for _, sc := range s.swarmCache {
-		if sc.entity == headerEntity {
+	for i := range cache.Swarms {
+		sc := &cache.Swarms[i]
+		if sc.Entity == headerEntity {
 			continue
 		}
 
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, sc.x, sc.y,
+			headerX, headerY, sc.X, sc.Y,
 			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq,
 		)
 
@@ -543,9 +502,10 @@ func (s *SwarmSystem) applySoftCollisions(
 	}
 
 	// Check collision with quasar
-	for _, qc := range s.quasarCache {
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, qc.x, qc.y,
+			headerX, headerY, qc.X, qc.Y,
 			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
 		)
 

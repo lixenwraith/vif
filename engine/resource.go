@@ -22,6 +22,9 @@ type Resource struct {
 	// Transient visual effects
 	Transient *TransientResource
 
+	// Cache to avoid per system species cache for collision checks
+	SpeciesCache *SpeciesCache
+
 	// Telemetry
 	Status *status.Registry
 

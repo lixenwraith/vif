@@ -126,10 +126,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 6. Transient Resource
 	world.Resources.Transient = NewTransientResource()
 
-	// 6. Cursor Entity
+	// 7. Species Cache (requires World reference)
+	world.Resources.SpeciesCache = NewSpeciesCache(world)
+
+	// 8. Cursor Entity
 	ctx.World.CreateCursorEntity()
 
-	// 7. Initialize atomic string pointers to empty strings
+	// 9. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
@@ -137,13 +140,13 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 8. Initialize audio muted
+	// 10. Initialize audio muted
 	ctx.IsMuted.Store(true)
 
-	// 9. Initialize pause state
+	// 11. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 10. Initialize FPS tracking
+	// 12. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 

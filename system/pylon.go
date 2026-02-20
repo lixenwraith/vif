@@ -28,11 +28,6 @@ type PylonSystem struct {
 	// Random source for collision impulse
 	rng *vmath.FastRand
 
-	// Per-tick cache for soft collision targets
-	drainCache  []pylonCacheEntry
-	swarmCache  []pylonCacheEntry
-	quasarCache []pylonCacheEntry
-
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
@@ -43,10 +38,7 @@ type PylonSystem struct {
 // NewPylonSystem creates a new pylon system
 func NewPylonSystem(world *engine.World) engine.System {
 	s := &PylonSystem{
-		world:       world,
-		drainCache:  make([]pylonCacheEntry, 0, 20),
-		swarmCache:  make([]pylonCacheEntry, 0, 10),
-		quasarCache: make([]pylonCacheEntry, 0, 4),
+		world: world,
 	}
 
 	s.statActive = world.Resources.Status.Bools.Get("pylon.active")
@@ -58,9 +50,6 @@ func NewPylonSystem(world *engine.World) engine.System {
 
 func (s *PylonSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	s.drainCache = s.drainCache[:0]
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -132,8 +121,8 @@ func (s *PylonSystem) Update() {
 		return
 	}
 
-	// Cache combat entity positions for soft collision
-	s.cacheCombatEntities()
+	// Refresh shared species cache
+	s.world.Resources.SpeciesCache.Refresh()
 
 	activeCount := 0
 
@@ -380,64 +369,35 @@ func (s *PylonSystem) terminateAll() {
 	}
 }
 
-// cacheCombatEntities populates caches for soft collision detection
-func (s *PylonSystem) cacheCombatEntities() {
-	s.drainCache = s.drainCache[:0]
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
-
-	// Cache drains
-	for _, entity := range s.world.Components.Drain.GetAllEntities() {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.drainCache = append(s.drainCache, pylonCacheEntry{entity: entity, x: pos.X, y: pos.Y})
-	}
-
-	// Cache swarms
-	for _, entity := range s.world.Components.Swarm.GetAllEntities() {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.swarmCache = append(s.swarmCache, pylonCacheEntry{entity: entity, x: pos.X, y: pos.Y})
-	}
-
-	// Cache quasars
-	for _, entity := range s.world.Components.Quasar.GetAllEntities() {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.quasarCache = append(s.quasarCache, pylonCacheEntry{entity: entity, x: pos.X, y: pos.Y})
-	}
-}
-
 // applySoftCollisions pushes combat entities away from pylon center
 func (s *PylonSystem) applySoftCollisions(pylonX, pylonY int) {
+	cache := s.world.Resources.SpeciesCache
+
 	// Push drains
-	for _, dc := range s.drainCache {
+	for i := range cache.Drains {
+		dc := &cache.Drains[i]
 		s.applySoftCollisionToEntity(
-			dc.entity, dc.x, dc.y,
+			dc.Entity, dc.X, dc.Y,
 			pylonX, pylonY,
 			&physics.SoftCollisionPylonToDrain,
 		)
 	}
 
 	// Push swarms
-	for _, sc := range s.swarmCache {
+	for i := range cache.Swarms {
+		sc := &cache.Swarms[i]
 		s.applySoftCollisionToEntity(
-			sc.entity, sc.x, sc.y,
+			sc.Entity, sc.X, sc.Y,
 			pylonX, pylonY,
 			&physics.SoftCollisionPylonToSwarm,
 		)
 	}
 
 	// Push quasars
-	for _, qc := range s.quasarCache {
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
 		s.applySoftCollisionToEntity(
-			qc.entity, qc.x, qc.y,
+			qc.Entity, qc.X, qc.Y,
 			pylonX, pylonY,
 			&physics.SoftCollisionPylonToQuasar,
 		)

@@ -14,12 +14,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// quasarCacheEntry holds cached quasar data for soft collision
-type quasarCacheEntry struct {
-	entity core.Entity
-	x, y   int // Grid position of header
-}
-
 // QuasarSystem manages quasar boss entity lifecycle
 // Quasar is a 3x5 composite that tracks cursor, zaps when cursor exits range
 type QuasarSystem struct {
@@ -27,10 +21,6 @@ type QuasarSystem struct {
 
 	// Random source for knockback impulse randomization
 	rng *vmath.FastRand
-
-	// Per-tick cache for soft collision
-	swarmCache  []swarmCacheEntry
-	quasarCache []quasarCacheEntry
 
 	// Telemetry
 	statActive *atomic.Bool
@@ -45,9 +35,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.swarmCache = make([]swarmCacheEntry, 0, 10)
-	s.quasarCache = make([]quasarCacheEntry, 0, 4)
-
 	s.statActive = world.Resources.Status.Bools.Get("quasar.active")
 	s.statCount = world.Resources.Status.Ints.Get("quasar.count")
 
@@ -57,8 +44,6 @@ func NewQuasarSystem(world *engine.World) engine.System {
 
 func (s *QuasarSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	clear(s.swarmCache)
-	clear(s.quasarCache)
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -127,8 +112,7 @@ func (s *QuasarSystem) Update() {
 		return
 	}
 
-	// Cache combat entities for soft collision
-	s.cacheCombatEntities()
+	s.world.Resources.SpeciesCache.Refresh()
 
 	quasarEntities := s.world.Components.Quasar.GetAllEntities()
 	activeCount := 0
@@ -257,40 +241,6 @@ func (s *QuasarSystem) Update() {
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
-}
-
-// cacheCombatEntities populates cache for soft collision detection
-func (s *QuasarSystem) cacheCombatEntities() {
-	s.swarmCache = s.swarmCache[:0]
-	s.quasarCache = s.quasarCache[:0]
-
-	// Cache swarms
-	swarmEntities := s.world.Components.Swarm.GetAllEntities()
-	for _, entity := range swarmEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.swarmCache = append(s.swarmCache, swarmCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
-
-	// Cache quasars
-	quasarEntities := s.world.Components.Quasar.GetAllEntities()
-	for _, entity := range quasarEntities {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		s.quasarCache = append(s.quasarCache, quasarCacheEntry{
-			entity: entity,
-			x:      pos.X,
-			y:      pos.Y,
-		})
-	}
 }
 
 func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
@@ -669,10 +619,13 @@ func (s *QuasarSystem) applySoftCollisions(
 	combatComp *component.CombatComponent,
 	headerX, headerY int,
 ) {
+	cache := s.world.Resources.SpeciesCache
+
 	// Check collision with swarms
-	for _, sc := range s.swarmCache {
+	for i := range cache.Swarms {
+		sc := &cache.Swarms[i]
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, sc.x, sc.y,
+			headerX, headerY, sc.X, sc.Y,
 			parameter.SwarmCollisionInvRxSq, parameter.SwarmCollisionInvRySq,
 		)
 
@@ -689,13 +642,14 @@ func (s *QuasarSystem) applySoftCollisions(
 	}
 
 	// Check collision with other quasars
-	for _, qc := range s.quasarCache {
-		if qc.entity == headerEntity {
+	for i := range cache.Quasars {
+		qc := &cache.Quasars[i]
+		if qc.Entity == headerEntity {
 			continue
 		}
 
 		radialX, radialY, hit := physics.CheckSoftCollision(
-			headerX, headerY, qc.x, qc.y,
+			headerX, headerY, qc.X, qc.Y,
 			parameter.QuasarCollisionInvRxSq, parameter.QuasarCollisionInvRySq,
 		)
 
