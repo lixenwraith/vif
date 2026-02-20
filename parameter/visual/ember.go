@@ -1,6 +1,8 @@
 package visual
 
 import (
+	"time"
+
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
@@ -10,6 +12,20 @@ var (
 	EmberRadiusX               = vmath.FromFloat(parameter.PlayerFieldRadiusX)
 	EmberRadiusY               = vmath.FromFloat(parameter.PlayerFieldRadiusY)
 	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSq(EmberRadiusX, EmberRadiusY)
+
+	// Precomputed constants
+	NanoPerSecond     int64   = 1_000_000_000
+	NanoPerSecondF    float64 = 1_000_000_000.0
+	ExpLUTDecayKF     float64 = float64(vmath.ExpLUTDecayK)
+	PulseFrequency    float64 = 1.8
+	PulseAmplitude    float64 = 0.05
+	BackFaceThreshold float64 = -0.1
+	BackFaceDimming   float64 = 0.25
+
+	// Ember-to-shield transition constants
+	EmberTransitionDuration     = 1000 * time.Millisecond
+	EmberTransitionRiseRatio    = 0.1 // 10% rise time
+	EmberTransitionMaxIntensity = 0.7 // Peak overlay
 )
 
 // EmberParams holds interpolated visual parameters for a given heat level
@@ -59,9 +75,9 @@ var (
 	emberEdgePower     = [2]int64{vmath.Scale / 5, vmath.Scale / 10}
 	emberEdgeIntensity = [2]int64{vmath.Scale / 5, vmath.Scale / 5}
 
-	emberRingAlpha   = [2]int64{vmath.Scale / 2, 0}
+	emberRingAlpha   = [2]int64{vmath.Scale, 0}
 	emberRingWidth   = [2]int64{vmath.Scale / 5, vmath.Scale / 50}
-	emberRingVisible = [2]int64{vmath.Scale, 3 * vmath.Scale / 10}
+	emberRingVisible = [2]int64{vmath.Scale * 70, vmath.Scale / 5}
 	emberRingSpeed   = [2]int64{3 * vmath.Scale, vmath.Scale / 5}
 )
 
@@ -69,10 +85,40 @@ var (
 // Precomputed for Dyson-sphere effect
 const EmberRingCount = 3
 
+// Ring orbital plane normals - matches sandbox calculation exactly
+// tilt = (i+0.5)*π/3.5, azimuth = i*2π/3, aspectRatio = 2.1
+// Intentionally NOT normalized to match sandbox rz magnitude behavior
 var EmberRingNormals = [EmberRingCount][3]int64{
-	{vmath.Scale * 4 / 10, vmath.Scale * 2 / 10, vmath.Scale * 9 / 10}, // ~25° tilt
-	{vmath.Scale * 7 / 10, vmath.Scale * 3 / 10, vmath.Scale * 6 / 10}, // ~50° tilt
-	{vmath.Scale * 9 / 10, vmath.Scale * 1 / 10, vmath.Scale * 4 / 10}, // ~70° tilt
+	// i=0: tilt≈25.7°, azimuth=0 → (0.434, 0, 0.901)
+	{1864135472, 0, 3869212262},
+	// i=1: tilt≈77.1°, azimuth=2π/3 → (-0.487, 0.402, 0.222)
+	{-2091652710, 1726477754, 953482739},
+	// i=2: tilt≈128.6°, azimuth=4π/3 → (-0.394, -0.324, -0.617)
+	{-1692173885, -1391679667, -2650094100},
+}
+
+// EmberRingNormalsF - precomputed float normals (avoids per-cell conversion)
+var EmberRingNormalsF [EmberRingCount][3]float64
+
+func init() {
+	for i := 0; i < EmberRingCount; i++ {
+		EmberRingNormalsF[i][0] = vmath.ToFloat(EmberRingNormals[i][0])
+		EmberRingNormalsF[i][1] = vmath.ToFloat(EmberRingNormals[i][1])
+		EmberRingNormalsF[i][2] = vmath.ToFloat(EmberRingNormals[i][2])
+	}
+}
+
+// EmberRingVelocities - per-ring rotation speed multipliers (Q32.32)
+// Creates differential rotation for interference patterns
+var EmberRingVelocities = [EmberRingCount]int64{
+	1 << 32,              // 1.0
+	1<<32 + 3*(1<<32)/10, // 1.3
+	1<<32 + 6*(1<<32)/10, // 1.6
+}
+
+// EmberRingPulsePhases - per-ring pulse phase offsets
+var EmberRingPulsePhases = [EmberRingCount]float64{
+	0.0, 0.7, 1.4,
 }
 
 // EmberRingPhaseOffsets staggers ring rotation start positions

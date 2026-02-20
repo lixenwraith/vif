@@ -18,6 +18,12 @@ type emberLayerColors struct {
 	Edge terminal.RGB
 }
 
+// emberRingState holds per-ring precomputed values for current frame
+type emberRingState struct {
+	cosA, sinA float64
+	pulseAlpha float64
+}
+
 // emberCellFunc renders a single cell within the ember ellipse
 type emberCellFunc func(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64)
 
@@ -34,12 +40,17 @@ type EmberPainter struct {
 
 	// Ring rotation state (computed once per paint)
 	ringAngles [visual.EmberRingCount]int64
+	ringStates [visual.EmberRingCount]emberRingState
+
+	// Cached float params (computed once per paint, used per cell)
+	ringAlphaF       float64
+	ringVisibleInvSq float64 // 1/ringVisible² for edge fade
+	ringInvWidthSq   float64
 
 	// Caching and Precalculation States
-	lastHeat       int
-	colorLUT       [256]emberLayerColors
-	invRadiiSqLUT  [256]struct{ invRxSq, invRySq int64 }
-	ringInvWidthSq float64
+	lastHeat      int
+	colorLUT      [256]emberLayerColors
+	invRadiiSqLUT [256]struct{ invRxSq, invRySq int64 }
 }
 
 // EmberRenderer renders ember effect for entities with active ember state
@@ -133,7 +144,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 		p.buildColorLUT()
 	}
 
-	// Precalculate ring width inversion
+	// Cache float params once per frame
 	widthF := vmath.ToFloat(p.params.RingWidth)
 	if widthF > 0 {
 		p.ringInvWidthSq = 1.0 / (widthF * widthF)
@@ -141,11 +152,27 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 		p.ringInvWidthSq = 0
 	}
 
-	// Compute ring rotation angles based on game time
+	p.ringAlphaF = vmath.ToFloat(p.params.RingAlpha)
+	ringVisF := vmath.ToFloat(p.params.RingVisible)
+	if ringVisF > 0 {
+		p.ringVisibleInvSq = 1.0 / (ringVisF * ringVisF)
+	} else {
+		p.ringVisibleInvSq = 0
+	}
+
+	// Compute ring rotation angles and cache trig values
+	gameTimeF := float64(p.gameTime) / visual.NanoPerSecondF
+	baseSpeed := p.params.RingSpeed
 	for i := 0; i < visual.EmberRingCount; i++ {
-		period := time.Second.Nanoseconds()
-		phase := (p.gameTime * vmath.Mul(p.params.RingSpeed, vmath.Scale)) / period
-		p.ringAngles[i] = vmath.NormalizeAngle(phase + visual.EmberRingPhaseOffsets[i])
+		effectiveSpeed := vmath.Mul(baseSpeed, visual.EmberRingVelocities[i])
+		phase := (p.gameTime * effectiveSpeed) / visual.NanoPerSecond
+		angle := vmath.NormalizeAngle(phase + visual.EmberRingPhaseOffsets[i])
+		p.ringAngles[i] = angle
+
+		// Cache trig and pulse for this ring
+		p.ringStates[i].cosA = vmath.ToFloat(vmath.Cos(angle))
+		p.ringStates[i].sinA = vmath.ToFloat(vmath.Sin(angle))
+		p.ringStates[i].pulseAlpha = p.ringAlphaF + visual.PulseAmplitude*math.Sin(gameTimeF*visual.PulseFrequency+visual.EmberRingPulsePhases[i])
 	}
 
 	// Precalculate Jagged Noise & Geometric Divisions for the frame
@@ -183,7 +210,6 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
 
-			// Fast geometric verification mapping direction to cached displacement inversion
 			theta := vmath.Atan2(dy, dx)
 			lutIdx := (theta >> (vmath.Shift - 8)) & 255
 			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq
@@ -234,6 +260,85 @@ func (p *EmberPainter) buildColorLUT() {
 	}
 }
 
+// computeRingVisibility calculates combined ring visibility
+func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float64 {
+	// Quadratic edge fade: 1 - (normDist/ringVisible)²
+	edgeFade := 1.0 - normDistF*normDistF*p.ringVisibleInvSq
+	if edgeFade <= 0 {
+		return 0
+	}
+
+	dzF := math.Sqrt(math.Max(0, 1.0-normDistF*normDistF))
+
+	var maxVis float64
+	for i := 0; i < visual.EmberRingCount; i++ {
+		rs := &p.ringStates[i]
+		norms := &visual.EmberRingNormalsF[i]
+
+		// Ring distance using raw dx, dy
+		rz := dxF*rs.sinA*norms[0] + dyF*rs.sinA*norms[1] + dzF*rs.cosA*norms[2]
+		ringDistSq := rz * rz
+
+		// Gaussian visibility via ExpDecay LUT
+		lutInput := int(ringDistSq * p.ringInvWidthSq * visual.ExpLUTDecayKF)
+		vis := vmath.ToFloat(vmath.ExpDecay(lutInput)) * edgeFade * rs.pulseAlpha
+
+		// Back-face dimming
+		if rz < visual.BackFaceThreshold {
+			vis *= visual.BackFaceDimming
+		}
+
+		if vis > maxVis {
+			maxVis = vis
+		}
+	}
+
+	return maxVis
+}
+
+// emberCellTrueColor renders with layered gradients and rings
+func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64) {
+	normDist := vmath.Sqrt(normDistSq)
+	if normDist > vmath.Scale {
+		normDist = vmath.Scale
+	}
+
+	// Query 1D color mapping cache
+	lutIdx := (normDist * 255) >> vmath.Shift
+	if lutIdx > 255 {
+		lutIdx = 255
+	}
+	layerColors := &p.colorLUT[lutIdx]
+
+	// Apply corona (additive)
+	if layerColors.Edge.R|layerColors.Edge.G|layerColors.Edge.B != 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Edge, render.BlendAdd, 1.0, terminal.AttrNone)
+	}
+
+	// Apply mid layer (screen blend)
+	if layerColors.Mid.R|layerColors.Mid.G|layerColors.Mid.B != 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Mid, render.BlendScreen, 1.0, terminal.AttrNone)
+	}
+
+	// Apply core (additive)
+	if layerColors.Core.R|layerColors.Core.G|layerColors.Core.B != 0 {
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Core, render.BlendAdd, 1.0, terminal.AttrNone)
+	}
+
+	// Render rings
+	if p.ringAlphaF > 0 {
+		normDistF := vmath.ToFloat(normDist)
+		dxF := vmath.ToFloat(dx)
+		dyF := vmath.ToFloat(dy)
+
+		ringVis := p.computeRingVisibility(normDistF, dxF, dyF)
+		if ringVis > 0.001 {
+			ringColor := scaleRGB(p.colors.Ring, vmath.FromFloat(ringVis))
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, ringColor, render.BlendOverlay, ringVis*0.7, terminal.AttrNone)
+		}
+	}
+}
+
 // computeJaggedDisplacement returns radius displacement for given angle
 func (p *EmberPainter) computeJaggedDisplacement(theta int64) int64 {
 	if p.params.JaggedAmp == 0 {
@@ -264,96 +369,6 @@ func (p *EmberPainter) computeJaggedDisplacement(theta int64) int64 {
 	eruption = vmath.Mul(eruption, 6*vmath.Scale/5)
 
 	return vmath.Mul(noise+eruption, p.params.JaggedAmp)
-}
-
-// emberCellTrueColor renders with layered gradients and rings
-func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64) {
-	normDist := vmath.Sqrt(normDistSq)
-	if normDist > vmath.Scale {
-		normDist = vmath.Scale
-	}
-
-	// Query 1D color mapping cache
-	lutIdx := (normDist * 255) >> vmath.Shift
-	if lutIdx > 255 {
-		lutIdx = 255
-	}
-	layerColors := &p.colorLUT[lutIdx]
-
-	// Apply corona (additive)
-	if layerColors.Edge.R > 0 || layerColors.Edge.G > 0 || layerColors.Edge.B > 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Edge, render.BlendAdd, 1.0, terminal.AttrNone)
-	}
-
-	// Apply mid layer (screen blend)
-	if layerColors.Mid.R > 0 || layerColors.Mid.G > 0 || layerColors.Mid.B > 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Mid, render.BlendScreen, 1.0, terminal.AttrNone)
-	}
-
-	// Apply core (additive)
-	if layerColors.Core.R > 0 || layerColors.Core.G > 0 || layerColors.Core.B > 0 {
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, layerColors.Core, render.BlendAdd, 1.0, terminal.AttrNone)
-	}
-
-	// Render rings (only in visible region)
-	if p.params.RingAlpha > 0 && normDist < p.params.RingVisible {
-		ringVis := p.computeRingVisibility(normDist, dx, dy)
-		if ringVis > 0 {
-			ringColor := scaleRGB(p.colors.Ring, vmath.FromFloat(ringVis))
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, ringColor, render.BlendOverlay, ringVis*0.7, terminal.AttrNone)
-		}
-	}
-}
-
-// computeRingVisibility calculates combined ring visibility algebraically leveraging float math
-func (p *EmberPainter) computeRingVisibility(normDist, dx, dy int64) float64 {
-	if dx == 0 && dy == 0 {
-		return 0
-	}
-
-	nx, ny := vmath.Normalize2D(dx, dy)
-	nxF := vmath.ToFloat(nx)
-	nyF := vmath.ToFloat(ny)
-
-	normDistF := vmath.ToFloat(normDist)
-	ringVisF := vmath.ToFloat(p.params.RingVisible)
-
-	edgeFade := 1.0 - (normDistF/ringVisF)*(normDistF/ringVisF)
-	if edgeFade < 0 {
-		edgeFade = 0
-	}
-
-	var maxVis float64
-	alphaF := vmath.ToFloat(p.params.RingAlpha)
-	dzF := math.Sqrt(math.Max(0, 1.0-normDistF*normDistF))
-
-	for i := 0; i < visual.EmberRingCount; i++ {
-		normal := visual.EmberRingNormals[i]
-		normX := vmath.ToFloat(normal[0]) // Properly extracts the X component
-		normY := vmath.ToFloat(normal[1]) // Properly extracts the Y component
-		normZ := vmath.ToFloat(normal[2]) // Properly extracts the Z component
-
-		angle := p.ringAngles[i]
-		cosA := vmath.ToFloat(vmath.Cos(angle))
-		sinA := vmath.ToFloat(vmath.Sin(angle))
-
-		rz := nxF*sinA*normX + nyF*sinA*normY + dzF*cosA*normZ
-		ringDist := math.Abs(rz)
-
-		// Float math avoids two Q32 division operations per cell
-		vis := 1.0 / (1.0 + ringDist*ringDist*p.ringInvWidthSq)
-		vis *= edgeFade * alphaF
-
-		if rz < -0.1 {
-			vis /= 4.0
-		}
-
-		if vis > maxVis {
-			maxVis = vis
-		}
-	}
-
-	return maxVis
 }
 
 // emberCell256 renders solid ellipse with heat-mapped color

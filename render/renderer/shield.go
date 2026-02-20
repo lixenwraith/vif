@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
@@ -166,19 +167,29 @@ func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY 
 	buf.SetBg256(screenX, screenY, p.style.Palette256)
 }
 
-// --- Cursor Shield Renderer (SystemRenderer) ---
+// --- Cursor Shield Renderer ---
+
+// emberTransitionState tracks per-entity ember-to-shield transition
+type emberTransitionState struct {
+	wasEmberActive  bool
+	transitionStart time.Time
+}
 
 // ShieldRenderer renders active player shields with dynamic energy-based coloring
 type ShieldRenderer struct {
 	gameCtx *engine.GameContext
 	painter *ShieldPainter
+
+	// Per-entity ember transition tracking (keyed by entity)
+	emberTransitions map[core.Entity]*emberTransitionState
 }
 
 // NewShieldRenderer creates the cursor shield system renderer
 func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 	return &ShieldRenderer{
-		gameCtx: gameCtx,
-		painter: NewShieldPainter(gameCtx.World.Resources.Config.ColorMode),
+		gameCtx:          gameCtx,
+		painter:          NewShieldPainter(gameCtx.World.Resources.Config.ColorMode),
+		emberTransitions: make(map[core.Entity]*emberTransitionState),
 	}
 }
 
@@ -198,6 +209,13 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		if !ok || !shieldComp.Active {
 			continue
 		}
+
+		heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity)
+		emberActive := hasHeat && heatComp.EmberActive
+
+		// Track ember transition state
+		transition := r.getOrCreateTransition(shieldEntity)
+		transitionIntensity := r.updateTransition(transition, emberActive, ctx.GameTime)
 
 		// Skip shield render when ember is active
 		if heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity); ok && heatComp.EmberActive {
@@ -252,5 +270,108 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		}
 
 		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
+
+		// Apply ember-to-shield transition overlay
+		if transitionIntensity > 0.001 {
+			r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, cfg, transitionIntensity)
+		}
+	}
+}
+
+// getOrCreateTransition returns existing or new transition state for entity
+func (r *ShieldRenderer) getOrCreateTransition(entity core.Entity) *emberTransitionState {
+	if t, ok := r.emberTransitions[entity]; ok {
+		return t
+	}
+	t := &emberTransitionState{}
+	r.emberTransitions[entity] = t
+	return t
+}
+
+// updateTransition handles state machine and returns current overlay intensity [0,1]
+func (r *ShieldRenderer) updateTransition(t *emberTransitionState, emberActive bool, now time.Time) float64 {
+	// Ember reactivated - cancel any transition
+	if emberActive {
+		t.wasEmberActive = true
+		t.transitionStart = time.Time{} // Zero value = no transition
+		return 0
+	}
+
+	// Ember just ended - start transition
+	if t.wasEmberActive && !emberActive {
+		t.wasEmberActive = false
+		t.transitionStart = now
+	}
+
+	// No active transition
+	if t.transitionStart.IsZero() {
+		return 0
+	}
+
+	// Calculate transition progress
+	elapsed := now.Sub(t.transitionStart)
+	if elapsed >= visual.EmberTransitionDuration {
+		t.transitionStart = time.Time{} // Transition complete
+		return 0
+	}
+
+	progress := float64(elapsed) / float64(visual.EmberTransitionDuration)
+	return r.transitionEnvelope(progress)
+}
+
+// transitionEnvelope computes intensity for strobe-like fade
+// Fast rise (10%) + slow fall (90%)
+func (r *ShieldRenderer) transitionEnvelope(progress float64) float64 {
+	rise := visual.EmberTransitionRiseRatio
+
+	if progress < rise {
+		// Fast rise: 0 → max in first 10%
+		return (progress / rise) * visual.EmberTransitionMaxIntensity
+	}
+
+	// // Slow fall: max → 0 in remaining 90%
+	fallProgress := (progress - rise) / (1.0 - rise)
+	return (1.0 - fallProgress) * visual.EmberTransitionMaxIntensity
+}
+
+// renderTransitionOverlay applies ember-colored screen blend over shield area
+func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, cfg *visual.ShieldConfig, intensity float64) {
+	// Use ember edge color for continuity
+	overlayColor := visual.RgbEmberEdgeLow
+
+	// Bounding box matches shield visual radius
+	mapStartX := max(0, centerX-cfg.VisualRadiusXInt)
+	mapEndX := min(ctx.MapWidth-1, centerX+cfg.VisualRadiusXInt)
+	mapStartY := max(0, centerY-cfg.VisualRadiusYInt)
+	mapEndY := min(ctx.MapHeight-1, centerY+cfg.VisualRadiusYInt)
+
+	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
+		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
+			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
+			if !visible {
+				continue
+			}
+
+			dx := vmath.FromInt(mapX - centerX)
+			dy := vmath.FromInt(mapY - centerY)
+			normDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
+
+			// Only within shield boundary (with small margin)
+			if normDistSq > visual.ShieldFeatherEnd {
+				continue
+			}
+
+			// Radial falloff: stronger at edges, weaker at center
+			normDist := vmath.Sqrt(normDistSq)
+			if normDist > vmath.Scale {
+				normDist = vmath.Scale
+			}
+			radialFactor := vmath.ToFloat(normDist) // 0 at center, 1 at edge
+
+			// Combine intensity with radial falloff
+			cellIntensity := intensity * (0.3 + 0.7*radialFactor)
+
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, overlayColor, render.BlendScreen, cellIntensity, terminal.AttrNone)
+		}
 	}
 }
