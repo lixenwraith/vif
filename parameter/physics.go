@@ -141,3 +141,10 @@ var (
 	PulseRadiusY                           = vmath.FromFloat(PulseRadiusYFloat)
 	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSq(PulseRadiusX, PulseRadiusY)
 )
+
+// Pylon collision
+var (
+	PylonCollisionRadiusX                        = vmath.FromFloat(PylonCollisionRadiusXFloat)
+	PylonCollisionRadiusY                        = vmath.FromFloat(PylonCollisionRadiusYFloat)
+	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSq(PylonCollisionRadiusX, PylonCollisionRadiusY)
+)

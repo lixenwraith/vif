@@ -11,6 +11,7 @@ const (
 	SpeciesSwarm
 	SpeciesQuasar
 	SpeciesStorm
+	SpeciesPylon
 	SpeciesCount
 )
 

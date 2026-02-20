@@ -666,6 +666,26 @@ const (
 	// Consumer: TransientSystem | Payload: *StrobeRequestPayload
 	EventStrobeRequest
 
+	// EventPylonSpawnRequest signals pylon creation at location
+	// Trigger: FSM
+	// Consumer: PylonSystem | Payload: *PylonSpawnRequestPayload
+	EventPylonSpawnRequest
+
+	// EventPylonSpawned signals pylon composite creation
+	// Trigger: PylonSystem after creation
+	// Consumer: FSM | Payload: *PylonSpawnedPayload
+	EventPylonSpawned
+
+	// EventPylonDestroyed signals pylon termination (all members dead)
+	// Trigger: PylonSystem on lifecycle end
+	// Consumer: FSM, LootSystem | Payload: *PylonDestroyedPayload
+	EventPylonDestroyed
+
+	// EventPylonCancelRequest signals forced destruction of all pylons
+	// Trigger: FSM on phase transition
+	// Consumer: PylonSystem | Payload: nil
+	EventPylonCancelRequest
+
 	EventDebugFlowToggle
 )
 

@@ -96,6 +96,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("storm", func(w any) any {
 		return system.NewStormSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("pylon", func(w any) any {
+		return system.NewPylonSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("bullet", func(w any) any {
 		return system.NewBulletSystem(w.(*engine.World))
 	})
@@ -226,6 +229,9 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("storm", func(ctx any) any {
 		return renderer.NewStormRenderer(ctx.(*engine.GameContext))
 	}, render.PrioritySpecies)
+	registry.RegisterRenderer("pylon", func(ctx any) any {
+		return renderer.NewPylonRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySpecies)
 	registry.RegisterRenderer("wall", func(ctx any) any {
 		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityWall)
@@ -289,6 +295,7 @@ func ActiveSystems() []string {
 		"quasar",
 		"swarm",
 		"storm",
+		"pylon",
 		"bullet",
 		"dust",
 		"flash",
@@ -337,6 +344,7 @@ func ActiveRenderers() []string {
 		"quasar",
 		"swarm",
 		"storm",
+		"pylon",
 		"wall",
 		"grayout",
 		"strobe",

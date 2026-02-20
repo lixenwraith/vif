@@ -17,6 +17,7 @@ const (
 	CombatEntityQuasar
 	CombatEntitySwarm
 	CombatEntityStorm
+	CombatEntityPylon
 	CombatEntityCount
 )
 
@@ -100,6 +101,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCleaner, CombatEntityQuasar}: &CombatAttackCleanerToQuasar,
 		{CombatEntityCleaner, CombatEntitySwarm}:  &CombatAttackCleanerToSwarm,
 		{CombatEntityCleaner, CombatEntityStorm}:  &CombatAttackCleanerToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:   &CombatAttackProjectileToPylon,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackShieldToDrain,
@@ -112,24 +114,28 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackLightningToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackLightningToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackLightningToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackLightningToPylon,
 	},
 	CombatAttackExplosion: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackExplosionToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackExplosionToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackExplosionToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackExplosionToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackExplosionToPylon,
 	},
 	CombatAttackMissile: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackMissileToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackMissileToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackMissileToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackMissileToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackMissileToPylon,
 	},
 	CombatAttackPulse: {
 		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackPulseToDrain,
 		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackPulseToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackPulseToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackPulseToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackPulseToPylon,
 	},
 }
 
@@ -182,6 +188,15 @@ var CombatAttackCleanerToStorm = CombatAttackProfile{
 	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
 }
 
+var CombatAttackProjectileToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageCleaner,
+	EffectMask:         CombatEffectNone,
+}
+
 // Lightning attack profiles
 
 var CombatAttackLightningToDrain = CombatAttackProfile{
@@ -221,6 +236,17 @@ var CombatAttackLightningToStorm = CombatAttackProfile{
 	AttackType:         CombatAttackLightning,
 	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageRod,
+	EffectMask:         CombatEffectVampireDrain,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
+var CombatAttackLightningToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageRod,
 	EffectMask:         CombatEffectVampireDrain,
@@ -319,6 +345,17 @@ var CombatAttackExplosionToStorm = CombatAttackProfile{
 	CollisionProfile:   &physics.ExplosionToQuasar, // Reuse quasar profile
 }
 
+var CombatAttackExplosionToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageExplosion,
+	EffectMask:         CombatEffectNone,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
 // Missile attack profiles
 
 var CombatAttackMissileToDrain = CombatAttackProfile{
@@ -365,7 +402,16 @@ var CombatAttackMissileToStorm = CombatAttackProfile{
 	CollisionProfile:   &physics.ExplosionToQuasar,
 }
 
-// Pulse weapon attack profiles (stun + minimal damage)
+var CombatAttackMissileToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackMissile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageMissile,
+	EffectMask:         CombatEffectNone,
+}
+
+// Pulse
 var CombatAttackPulseToDrain = CombatAttackProfile{
 	AttackType:         CombatAttackPulse,
 	AttackerEntityType: CombatEntityCursor,
@@ -397,6 +443,15 @@ var CombatAttackPulseToStorm = CombatAttackProfile{
 	AttackType:         CombatAttackPulse,
 	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityStorm,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+}
+
+var CombatAttackPulseToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
 	DamageType:         CombatDamageArea,
 	DamageValue:        parameter.CombatDamagePulse,
 	EffectMask:         CombatEffectStun,

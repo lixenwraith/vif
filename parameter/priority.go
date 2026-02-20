@@ -26,6 +26,7 @@ const (
 	PriorityQuasar      // After Drain
 	PrioritySwarm       // After Drain
 	PriorityStorm       // After Swarm
+	PriorityPylon       // After Storm
 	PriorityCombat
 	PriorityLoot // After enemy entities and combat
 	PriorityDecay

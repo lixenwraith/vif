@@ -64,6 +64,7 @@ var Components = []ComponentDef{
 	{"Storm", "StormComponent"},
 	{"StormCircle", "StormCircleComponent"},
 	{"Bullet", "BulletComponent"},
+	{"Pylon", "PylonComponent"},
 
 	// Composite
 	{"Header", "HeaderComponent"},
@@ -112,6 +113,7 @@ var Systems = []SystemDef{
 	{"quasar", "NewQuasarSystem"},
 	{"swarm", "NewSwarmSystem"},
 	{"storm", "NewStormSystem"},
+	{"pylon", "NewPylonSystem"},
 	{"bullet", "NewBulletSystem"},
 	{"dust", "NewDustSystem"},
 	{"flash", "NewFlashSystem"},
@@ -160,6 +162,7 @@ var Renderers = []RendererDef{
 	{"quasar", "NewQuasarRenderer", "PrioritySpecies"},
 	{"swarm", "NewSwarmRenderer", "PrioritySpecies"},
 	{"storm", "NewStormRenderer", "PrioritySpecies"},
+	{"pylon", "NewPylonRenderer", "PrioritySpecies"},
 	{"wall", "NewWallRenderer", "PriorityWall"},
 	{"grayout", "NewGrayoutRenderer", "PriorityPostProcess"},
 	{"strobe", "NewStrobeRenderer", "PriorityPostProcess"},

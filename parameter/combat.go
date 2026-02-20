@@ -17,6 +17,12 @@ const (
 
 	// CombatInitialHPStorm is drain starting hit points
 	CombatInitialHPStorm = 1000
+
+	// CombatInitialHPPylonMin is pylon member HP at edge (default)
+	CombatInitialHPPylonMin = 10
+
+	// CombatInitialHPPylonMax is pylon member HP at center (default)
+	CombatInitialHPPylonMax = 20
 )
 
 // Damage

@@ -17,6 +17,7 @@ const (
 	MassSwarm  = vmath.Scale * 2
 	MassQuasar = vmath.Scale * 10
 	MassStorm  = vmath.Scale * 100
+	MassPylon  = vmath.Scale * 1000 // Immovable
 
 	MassRatioEqual = vmath.Scale
 )
@@ -211,6 +212,39 @@ var SoftCollisionQuasarToDrain = CollisionProfile{
 // SoftCollisionQuasarToQuasar defines quasar-to-quasar soft repulsion
 var SoftCollisionQuasarToQuasar = CollisionProfile{
 	MassRatio:        MassRatioEqual,
+	ImpulseMin:       parameter.SoftCollisionImpulseMin,
+	ImpulseMax:       parameter.SoftCollisionImpulseMax,
+	AngleVariance:    parameter.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionPylonToDrain defines pylon-to-drain soft repulsion
+var SoftCollisionPylonToDrain = CollisionProfile{
+	MassRatio:        vmath.Div(MassPylon, MassDrain),
+	ImpulseMin:       parameter.SoftCollisionImpulseMin,
+	ImpulseMax:       parameter.SoftCollisionImpulseMax,
+	AngleVariance:    parameter.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionPylonToSwarm defines pylon-to-swarm soft repulsion
+var SoftCollisionPylonToSwarm = CollisionProfile{
+	MassRatio:        vmath.Div(MassPylon, MassSwarm),
+	ImpulseMin:       parameter.SoftCollisionImpulseMin,
+	ImpulseMax:       parameter.SoftCollisionImpulseMax,
+	AngleVariance:    parameter.SoftCollisionAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.SoftCollisionImmunityDuration,
+	OffsetInfluence:  0,
+}
+
+// SoftCollisionPylonToQuasar defines pylon-to-quasar soft repulsion
+var SoftCollisionPylonToQuasar = CollisionProfile{
+	MassRatio:        vmath.Div(MassPylon, MassQuasar),
 	ImpulseMin:       parameter.SoftCollisionImpulseMin,
 	ImpulseMax:       parameter.SoftCollisionImpulseMax,
 	AngleVariance:    parameter.SoftCollisionAngleVar,

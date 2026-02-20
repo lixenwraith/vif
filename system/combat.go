@@ -189,6 +189,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			targetCombatType = component.CombatEntitySwarm
 		case component.BehaviorStorm:
 			targetCombatType = component.CombatEntityStorm
+		case component.BehaviorPylon:
+			targetCombatType = component.CombatEntityPylon
 		default:
 			return
 		}
@@ -310,6 +312,8 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			targetCombatType = component.CombatEntitySwarm
 		case component.BehaviorStorm:
 			targetCombatType = component.CombatEntityStorm
+		case component.BehaviorPylon:
+			targetCombatType = component.CombatEntityPylon
 		default:
 			return
 		}

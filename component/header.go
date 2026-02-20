@@ -11,6 +11,7 @@ const (
 	BehaviorQuasar
 	BehaviorSwarm
 	BehaviorStorm
+	BehaviorPylon
 	BehaviorBoss // Future
 )
 
