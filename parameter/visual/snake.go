@@ -1,20 +1,18 @@
 package visual
 
-import "github.com/lixenwraith/vi-fighter/terminal"
-
 // Snake TrueColor palette
 var (
 	// Head colors
-	RgbSnakeHeadBright = terminal.RGB{R: 100, G: 220, B: 80}
-	RgbSnakeHeadDark   = terminal.RGB{R: 35, G: 90, B: 30}
+	RgbSnakeHeadBright = YellowGreen
+	RgbSnakeHeadDark   = HunterGreen
 
 	// Body colors (gradient from head toward tail)
-	RgbSnakeBodyBright = terminal.RGB{R: 70, G: 180, B: 55}
-	RgbSnakeBodyMid    = terminal.RGB{R: 50, G: 140, B: 45}
-	RgbSnakeBodyDark   = terminal.RGB{R: 30, G: 80, B: 25}
+	RgbSnakeBodyBright = GrassGreen
+	RgbSnakeBodyMid    = FernGreen
+	RgbSnakeBodyDark   = DarkFern
 
 	// Shielded state overlay
-	RgbSnakeShieldTint = terminal.RGB{R: 80, G: 200, B: 220}
+	RgbSnakeShieldTint = SkyTeal
 )
 
 // Snake 256-color fallback
