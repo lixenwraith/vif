@@ -102,6 +102,7 @@ func (s *SnakeSystem) Update() {
 		return
 	}
 
+	// TODO: review the delta-time cap
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
@@ -143,12 +144,27 @@ func (s *SnakeSystem) Update() {
 
 		// Process spawn sequence
 		if !snakeComp.SpawnComplete {
-			s.processSpawnSequence(rootEntity, &snakeComp, &headComp)
+			s.processSpawnSequence(&snakeComp, &headComp)
 		}
 
 		// Update head movement (stun check)
 		if headCombat.StunnedRemaining <= 0 {
 			s.updateHeadMovement(snakeComp.HeadEntity, &headComp, dtFixed)
+		}
+
+		// Sync head members to header position (CompositeSystem already ran this tick)
+		if headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity); ok {
+			headHeader, ok := s.world.Components.Header.GetComponent(snakeComp.HeadEntity)
+			if ok {
+				for _, member := range headHeader.MemberEntries {
+					if member.Entity == 0 {
+						continue
+					}
+					newX := headPos.X + member.OffsetX
+					newY := headPos.Y + member.OffsetY
+					s.world.Positions.MoveEntity(member.Entity, component.PositionComponent{X: newX, Y: newY})
+				}
+			}
 		}
 
 		// Update trail
@@ -158,23 +174,24 @@ func (s *SnakeSystem) Update() {
 		if snakeComp.BodyEntity != 0 && s.world.Components.Header.HasEntity(snakeComp.BodyEntity) {
 			bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
 			if ok {
+				// Resolve living members from HeaderComponent (single source of truth)
+				// and emit deaths for HP<=0 members in one pass
+				resolved := s.resolveAndProcessCombat(snakeComp.BodyEntity, len(bodyComp.Segments))
+
 				// Update segment rest positions from trail
 				s.updateSegmentRestPositions(&headComp, &bodyComp)
 
-				// Apply spring physics to body members
-				s.applyBodySpringPhysics(&bodyComp, dtFixed)
+				// Cascade disconnection from first dead segment
+				s.checkConnectivity(snakeComp.BodyEntity, &bodyComp, resolved)
 
-				// Check connectivity
-				s.checkConnectivity(&bodyComp)
+				// Apply spring physics to living connected members
+				s.applyBodySpringPhysics(&bodyComp, &headComp, resolved, dtFixed)
 
-				// Process ablative combat
-				s.processBodyCombat(rootEntity, &snakeComp, &bodyComp)
+				// Update shield state from resolved liveness
+				s.updateShieldState(&snakeComp, &bodyComp, resolved)
 
 				s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
 			}
-
-			// Update shield state
-			s.updateShieldState(rootEntity, &snakeComp, &headCombat)
 		} else {
 			// No body: unshield head
 			if snakeComp.IsShielded {
@@ -189,10 +206,10 @@ func (s *SnakeSystem) Update() {
 		}
 
 		// Process interactions
-		s.handleInteractions(rootEntity, &snakeComp)
+		s.handleInteractions(&snakeComp)
 
 		// Process growth
-		s.processGrowth(rootEntity, &snakeComp, &headComp)
+		s.processGrowth(&snakeComp, &headComp)
 
 		s.world.Components.SnakeHead.SetComponent(snakeComp.HeadEntity, headComp)
 		s.world.Components.Combat.SetComponent(snakeComp.HeadEntity, headCombat)
@@ -207,7 +224,7 @@ func (s *SnakeSystem) Update() {
 
 // spawnSnake creates the complete snake entity structure
 func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
-	headX, headY := payload.SpawnX, payload.SpawnY
+	headX, headY := payload.X, payload.Y
 	segmentCount := payload.SegmentCount
 	if segmentCount <= 0 {
 		segmentCount = parameter.SnakeDefaultSegmentCount
@@ -252,7 +269,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 	headEntity := s.createHead(rootEntity, headX, headY)
 
 	// Create body header (empty, segments added during spawn sequence)
-	bodyEntity := s.createBodyHeader(rootEntity)
+	bodyEntity := s.createBodyHeader(rootEntity, headX, headY)
 
 	// Root snake component
 	s.world.Components.Snake.SetComponent(rootEntity, component.SnakeComponent{
@@ -303,9 +320,12 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 		LastTrailX: headX,
 		LastTrailY: headY,
 	}
-	// Seed trail with current position
-	headComp.Trail[0] = core.Point{X: headX, Y: headY}
-	headComp.TrailLen = 1
+	// Seed trail with spawn point, enough copies for initial body formation
+	for i := 0; i < component.SnakeTrailCapacity; i++ {
+		headComp.Trail[i] = core.Point{X: headX, Y: headY}
+	}
+	headComp.TrailHead = 0
+	headComp.TrailLen = component.SnakeTrailCapacity
 	s.world.Components.SnakeHead.SetComponent(headEntity, headComp)
 
 	// Combat component
@@ -383,28 +403,32 @@ func (s *SnakeSystem) createHeadMembers(headEntity core.Entity, headX, headY int
 	return members
 }
 
-func (s *SnakeSystem) createBodyHeader(rootEntity core.Entity) core.Entity {
+func (s *SnakeSystem) createBodyHeader(rootEntity core.Entity, headX, headY int) core.Entity {
 	bodyEntity := s.world.CreateEntity()
+	s.world.Positions.SetPosition(bodyEntity, component.PositionComponent{X: headX, Y: headY})
 
-	// Protected header
 	s.world.Components.Protection.SetComponent(bodyEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
-	// Snake body component (empty segments initially)
 	s.world.Components.SnakeBody.SetComponent(bodyEntity, component.SnakeBodyComponent{
 		Segments: make([]component.SnakeSegment, 0, parameter.SnakeMaxSegments),
 	})
 
-	// Header component
-	s.world.Components.Header.SetComponent(bodyEntity, component.HeaderComponent{
-		Behavior:      component.BehaviorSnake,
-		Type:          component.CompositeTypeAblative,
-		MemberEntries: make([]component.MemberEntry, 0, parameter.SnakeMaxSegments*3),
-		ParentHeader:  rootEntity,
+	s.world.Components.Combat.SetComponent(bodyEntity, component.CombatComponent{
+		OwnerEntity:      rootEntity,
+		CombatEntityType: component.CombatEntitySnakeBody,
+		HitPoints:        0,
 	})
 
-	// Backlink to root
+	s.world.Components.Header.SetComponent(bodyEntity, component.HeaderComponent{
+		Behavior:         component.BehaviorSnake,
+		Type:             component.CompositeTypeAblative,
+		MemberEntries:    make([]component.MemberEntry, 0, parameter.SnakeMaxSegments*3),
+		ParentHeader:     rootEntity,
+		SkipPositionSync: true, // SnakeSystem owns body member positions via spring physics
+	})
+
 	s.world.Components.Member.SetComponent(bodyEntity, component.MemberComponent{
 		HeaderEntity: rootEntity,
 	})
@@ -412,7 +436,7 @@ func (s *SnakeSystem) createBodyHeader(rootEntity core.Entity) core.Entity {
 	return bodyEntity
 }
 
-func (s *SnakeSystem) processSpawnSequence(rootEntity core.Entity, snakeComp *component.SnakeComponent, headComp *component.SnakeHeadComponent) {
+func (s *SnakeSystem) processSpawnSequence(snakeComp *component.SnakeComponent, headComp *component.SnakeHeadComponent) {
 	if snakeComp.SpawnRemaining <= 0 {
 		snakeComp.SpawnComplete = true
 		return
@@ -424,22 +448,27 @@ func (s *SnakeSystem) processSpawnSequence(rootEntity core.Entity, snakeComp *co
 	}
 	snakeComp.SpawnTickCounter = 0
 
-	// Get body component
 	bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
 	if !ok {
 		snakeComp.SpawnComplete = true
 		return
 	}
 
-	// Spawn segment at origin
-	segment := s.createBodySegment(snakeComp.BodyEntity, snakeComp.SpawnOriginX, snakeComp.SpawnOriginY, len(bodyComp.Segments), headComp)
-	if segment.CenterMember == 0 {
-		// Failed to create segment (blocked)
+	segmentIndex := len(bodyComp.Segments)
+	totalSegments := segmentIndex + snakeComp.SpawnRemaining
+	memberHP := calculateSegmentHP(segmentIndex, totalSegments)
+
+	if !s.createBodySegmentMembers(snakeComp.BodyEntity, snakeComp.SpawnOriginX, snakeComp.SpawnOriginY, segmentIndex, headComp, memberHP) {
 		snakeComp.SpawnComplete = true
 		return
 	}
 
-	bodyComp.Segments = append(bodyComp.Segments, segment)
+	restX, restY := vmath.CenteredFromGrid(snakeComp.SpawnOriginX, snakeComp.SpawnOriginY)
+	bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
+		RestX:     restX,
+		RestY:     restY,
+		Connected: true,
+	})
 	snakeComp.SpawnRemaining--
 
 	if snakeComp.SpawnRemaining <= 0 {
@@ -449,32 +478,34 @@ func (s *SnakeSystem) processSpawnSequence(rootEntity core.Entity, snakeComp *co
 	s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
 }
 
-func (s *SnakeSystem) createBodySegment(bodyEntity core.Entity, centerX, centerY, segmentIndex int, headComp *component.SnakeHeadComponent) component.SnakeSegment {
-	restX, restY := vmath.CenteredFromGrid(centerX, centerY)
-	segment := component.SnakeSegment{
-		RestX:     restX,
-		RestY:     restY,
-		Connected: true,
+// calculateSegmentHP returns HP for segment based on position (head-adjacent = max, tail = min)
+func calculateSegmentHP(segmentIndex, totalSegments int) int {
+	if totalSegments <= 1 {
+		return parameter.CombatInitialHPSnakeMemberMax
 	}
 
-	// Calculate perpendicular direction from facing
-	perpX, perpY := s.calculatePerpendicular(headComp.FacingX, headComp.FacingY)
+	// Linear interpolation: index 0 = max HP, index N-1 = min HP
+	t := float64(segmentIndex) / float64(totalSegments-1)
+	hp := float64(parameter.CombatInitialHPSnakeMemberMax) - t*float64(parameter.CombatInitialHPSnakeMemberMax-parameter.CombatInitialHPSnakeMemberMin)
+	return int(hp)
+}
 
-	// Create 3 members: center, left (-1), right (+1)
-	offsets := []int{0, -1, 1}
-	members := []*core.Entity{&segment.CenterMember, &segment.LeftMember, &segment.RightMember}
-
+// createBodySegmentMembers creates member entities for a body segment and adds to header.
+// Returns true if at least one member was created.
+func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, centerY, segmentIndex int, headComp *component.SnakeHeadComponent, memberHP int) bool {
 	bodyHeader, ok := s.world.Components.Header.GetComponent(bodyEntity)
 	if !ok {
-		return segment
+		return false
 	}
 
-	for i, lateralOffset := range offsets {
-		// Calculate member position based on perpendicular direction
+	perpX, perpY := s.calculatePerpendicular(headComp.FacingX, headComp.FacingY)
+	createdAny := false
+
+	offsets := []int{0, -1, 1}
+	for _, lateralOffset := range offsets {
 		memberX := centerX + vmath.ToInt(vmath.Mul(perpX, vmath.FromInt(lateralOffset)))
 		memberY := centerY + vmath.ToInt(vmath.Mul(perpY, vmath.FromInt(lateralOffset)))
 
-		// Check for walls
 		if s.world.Positions.HasBlockingWallAt(memberX, memberY, component.WallBlockSpawn) {
 			continue
 		}
@@ -489,10 +520,9 @@ func (s *SnakeSystem) createBodySegment(bodyEntity core.Entity, centerX, centerY
 		s.world.Components.Combat.SetComponent(memberEntity, component.CombatComponent{
 			OwnerEntity:      bodyEntity,
 			CombatEntityType: component.CombatEntitySnakeBody,
-			HitPoints:        parameter.CombatInitialHPSnakeMember,
+			HitPoints:        memberHP,
 		})
 
-		// Kinetic for spring physics
 		preciseX, preciseY := vmath.CenteredFromGrid(memberX, memberY)
 		s.world.Components.Kinetic.SetComponent(memberEntity, component.KineticComponent{
 			Kinetic: core.Kinetic{
@@ -508,19 +538,20 @@ func (s *SnakeSystem) createBodySegment(bodyEntity core.Entity, centerX, centerY
 		s.world.Components.SnakeMember.SetComponent(memberEntity, component.SnakeMemberComponent{
 			SegmentIndex:  segmentIndex,
 			LateralOffset: lateralOffset,
+			MaxHitPoints:  memberHP,
 		})
-
-		*members[i] = memberEntity
 
 		bodyHeader.MemberEntries = append(bodyHeader.MemberEntries, component.MemberEntry{
 			Entity:  memberEntity,
-			OffsetX: memberX - centerX,
-			OffsetY: memberY - centerY,
+			OffsetX: 0, // Unused: SkipPositionSync
+			OffsetY: 0,
 		})
+
+		createdAny = true
 	}
 
 	s.world.Components.Header.SetComponent(bodyEntity, bodyHeader)
-	return segment
+	return createdAny
 }
 
 func (s *SnakeSystem) calculatePerpendicular(facingX, facingY int64) (int64, int64) {
@@ -606,7 +637,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	)
 
 	if newX != headPos.X || newY != headPos.Y {
-		s.world.Positions.SetPosition(headEntity, component.PositionComponent{X: newX, Y: newY})
+		s.world.Positions.MoveEntity(headEntity, component.PositionComponent{X: newX, Y: newY})
 	}
 
 	s.world.Components.Kinetic.SetComponent(headEntity, kineticComp)
@@ -667,15 +698,19 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 	}
 }
 
-func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, dtFixed int64) {
+func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, headComp *component.SnakeHeadComponent, resolved []resolvedSegment, dtFixed int64) {
+	perpX, perpY := s.calculatePerpendicular(headComp.FacingX, headComp.FacingY)
+
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
 		if !seg.Connected {
 			continue
 		}
 
-		members := []core.Entity{seg.CenterMember, seg.LeftMember, seg.RightMember}
-		for _, memberEntity := range members {
+		offsets := []int64{0, -vmath.Scale, vmath.Scale}
+		members := [3]core.Entity{resolved[i].Center, resolved[i].Left, resolved[i].Right}
+
+		for j, memberEntity := range members {
 			if memberEntity == 0 {
 				continue
 			}
@@ -685,33 +720,49 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 				continue
 			}
 
-			// Spring force toward rest position
-			dx := seg.RestX - kineticComp.PreciseX
-			dy := seg.RestY - kineticComp.PreciseY
+			// Per-member rest position with perpendicular offset
+			memberRestX := seg.RestX + vmath.Mul(perpX, offsets[j])
+			memberRestY := seg.RestY + vmath.Mul(perpY, offsets[j])
 
-			// F = k * displacement
-			forceX := vmath.Mul(dx, parameter.SnakeSpringStiffness)
-			forceY := vmath.Mul(dy, parameter.SnakeSpringStiffness)
+			// Check if member was knocked away (has kinetic immunity from combat hit)
+			combatComp, hasCombat := s.world.Components.Combat.GetComponent(memberEntity)
+			isDisplaced := hasCombat && combatComp.RemainingKineticImmunity > 0
 
-			// Clamp force magnitude
-			forceMag := vmath.Magnitude(forceX, forceY)
-			if forceMag > parameter.SnakeSpringMaxForce {
-				scale := vmath.Div(parameter.SnakeSpringMaxForce, forceMag)
-				forceX = vmath.Mul(forceX, scale)
-				forceY = vmath.Mul(forceY, scale)
+			if isDisplaced {
+				// Spring force toward rest position
+				dx := memberRestX - kineticComp.PreciseX
+				dy := memberRestY - kineticComp.PreciseY
+
+				// F = k * displacement
+				forceX := vmath.Mul(dx, parameter.SnakeSpringStiffness)
+				forceY := vmath.Mul(dy, parameter.SnakeSpringStiffness)
+
+				// Clamp force magnitude
+				forceMag := vmath.Magnitude(forceX, forceY)
+				if forceMag > parameter.SnakeSpringMaxForce {
+					scale := vmath.Div(parameter.SnakeSpringMaxForce, forceMag)
+					forceX = vmath.Mul(forceX, scale)
+					forceY = vmath.Mul(forceY, scale)
+				}
+
+				// Apply as acceleration
+				kineticComp.VelX += vmath.Mul(forceX, dtFixed)
+				kineticComp.VelY += vmath.Mul(forceY, dtFixed)
+
+				// Damping
+				kineticComp.VelX = vmath.Mul(kineticComp.VelX, parameter.SnakeSpringDamping)
+				kineticComp.VelY = vmath.Mul(kineticComp.VelY, parameter.SnakeSpringDamping)
+
+				// Integrate position
+				kineticComp.PreciseX += vmath.Mul(kineticComp.VelX, dtFixed)
+				kineticComp.PreciseY += vmath.Mul(kineticComp.VelY, dtFixed)
+			} else {
+				// Direct follow: snap to rest position
+				kineticComp.PreciseX = memberRestX
+				kineticComp.PreciseY = memberRestY
+				kineticComp.VelX = 0
+				kineticComp.VelY = 0
 			}
-
-			// Apply as acceleration
-			kineticComp.VelX += vmath.Mul(forceX, dtFixed)
-			kineticComp.VelY += vmath.Mul(forceY, dtFixed)
-
-			// Damping
-			kineticComp.VelX = vmath.Mul(kineticComp.VelX, parameter.SnakeSpringDamping)
-			kineticComp.VelY = vmath.Mul(kineticComp.VelY, parameter.SnakeSpringDamping)
-
-			// Integrate position
-			kineticComp.PreciseX += vmath.Mul(kineticComp.VelX, dtFixed)
-			kineticComp.PreciseY += vmath.Mul(kineticComp.VelY, dtFixed)
 
 			// Update grid position
 			newX := vmath.ToInt(kineticComp.PreciseX)
@@ -728,7 +779,7 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 	}
 }
 
-func (s *SnakeSystem) checkConnectivity(bodyComp *component.SnakeBodyComponent) {
+func (s *SnakeSystem) checkConnectivity(bodyEntity core.Entity, bodyComp *component.SnakeBodyComponent, resolved []resolvedSegment) {
 	if len(bodyComp.Segments) == 0 {
 		return
 	}
@@ -736,105 +787,102 @@ func (s *SnakeSystem) checkConnectivity(bodyComp *component.SnakeBodyComponent) 
 	// Find first dead segment from head
 	firstDeadIdx := -1
 	for i := range bodyComp.Segments {
-		if !segmentIsAlive(&bodyComp.Segments[i]) {
+		if !bodyComp.Segments[i].Connected {
+			continue
+		}
+		if !resolvedSegmentAlive(&resolved[i]) {
 			firstDeadIdx = i
 			break
 		}
 	}
 
 	if firstDeadIdx == -1 {
-		// All connected
 		return
 	}
 
-	// Mark all segments after gap as disconnected
-	var disconnectedMembers []core.Entity
+	// Cascade: disconnect all segments after gap, kill their living members
 	for i := firstDeadIdx + 1; i < len(bodyComp.Segments); i++ {
-		if bodyComp.Segments[i].Connected {
-			bodyComp.Segments[i].Connected = false
-
-			// Collect members for death
-			if bodyComp.Segments[i].CenterMember != 0 {
-				disconnectedMembers = append(disconnectedMembers, bodyComp.Segments[i].CenterMember)
-			}
-			if bodyComp.Segments[i].LeftMember != 0 {
-				disconnectedMembers = append(disconnectedMembers, bodyComp.Segments[i].LeftMember)
-			}
-			if bodyComp.Segments[i].RightMember != 0 {
-				disconnectedMembers = append(disconnectedMembers, bodyComp.Segments[i].RightMember)
-			}
+		if !bodyComp.Segments[i].Connected {
+			continue
 		}
-	}
+		bodyComp.Segments[i].Connected = false
 
-	// Emit deaths for disconnected members
-	if len(disconnectedMembers) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, disconnectedMembers)
-	}
-}
-
-func (s *SnakeSystem) processBodyCombat(rootEntity core.Entity, snakeComp *component.SnakeComponent, bodyComp *component.SnakeBodyComponent) {
-	bodyHeader, ok := s.world.Components.Header.GetComponent(snakeComp.BodyEntity)
-	if !ok {
-		return
-	}
-
-	var deadMembers []core.Entity
-
-	for i := range bodyComp.Segments {
-		seg := &bodyComp.Segments[i]
-
-		members := []*core.Entity{&seg.CenterMember, &seg.LeftMember, &seg.RightMember}
-		for _, memberPtr := range members {
-			memberEntity := *memberPtr
+		members := [3]core.Entity{resolved[i].Center, resolved[i].Left, resolved[i].Right}
+		for _, memberEntity := range members {
 			if memberEntity == 0 {
 				continue
 			}
-
-			combatComp, ok := s.world.Components.Combat.GetComponent(memberEntity)
-			if !ok {
-				continue
-			}
-
-			if combatComp.HitPoints <= 0 {
-				deadMembers = append(deadMembers, memberEntity)
-				*memberPtr = 0
-				bodyHeader.Dirty = true
-			}
-		}
-	}
-
-	if len(deadMembers) > 0 {
-		for _, memberEntity := range deadMembers {
 			s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
-				HeaderEntity: snakeComp.BodyEntity,
+				HeaderEntity: bodyEntity,
 				MemberEntity: memberEntity,
 			})
 		}
-	}
 
-	s.world.Components.Header.SetComponent(snakeComp.BodyEntity, bodyHeader)
+		// Zero resolved so physics skips this segment
+		resolved[i] = resolvedSegment{}
+	}
 }
 
-func (s *SnakeSystem) updateShieldState(rootEntity core.Entity, snakeComp *component.SnakeComponent, headCombat *component.CombatComponent) {
-	// Check if any body members alive
-	bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
+// resolveAndProcessCombat resolves living body members from HeaderComponent and emits
+// deaths for HP<=0 members. Returns per-segment resolved members excluding dead.
+// HeaderComponent.MemberEntries is the single source of truth for member liveness.
+func (s *SnakeSystem) resolveAndProcessCombat(bodyEntity core.Entity, segmentCount int) []resolvedSegment {
+	headerComp, ok := s.world.Components.Header.GetComponent(bodyEntity)
 	if !ok {
-		snakeComp.IsShielded = false
-		return
+		return make([]resolvedSegment, segmentCount)
 	}
 
+	resolved := make([]resolvedSegment, segmentCount)
+
+	for _, entry := range headerComp.MemberEntries {
+		if entry.Entity == 0 {
+			continue
+		}
+
+		sm, ok := s.world.Components.SnakeMember.GetComponent(entry.Entity)
+		if !ok {
+			continue
+		}
+		if sm.SegmentIndex >= segmentCount {
+			continue
+		}
+
+		// Combat death check
+		if combatComp, ok := s.world.Components.Combat.GetComponent(entry.Entity); ok {
+			if combatComp.HitPoints <= 0 {
+				s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+					HeaderEntity: bodyEntity,
+					MemberEntity: entry.Entity,
+				})
+				continue
+			}
+		}
+
+		switch sm.LateralOffset {
+		case 0:
+			resolved[sm.SegmentIndex].Center = entry.Entity
+		case -1:
+			resolved[sm.SegmentIndex].Left = entry.Entity
+		case 1:
+			resolved[sm.SegmentIndex].Right = entry.Entity
+		}
+	}
+
+	return resolved
+}
+
+func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bodyComp *component.SnakeBodyComponent, resolved []resolvedSegment) {
 	hasLiving := false
 	for i := range bodyComp.Segments {
-		if segmentIsAlive(&bodyComp.Segments[i]) && bodyComp.Segments[i].Connected {
+		if bodyComp.Segments[i].Connected && resolvedSegmentAlive(&resolved[i]) {
 			hasLiving = true
 			break
 		}
 	}
-
 	snakeComp.IsShielded = hasLiving
 }
 
-func (s *SnakeSystem) handleInteractions(rootEntity core.Entity, snakeComp *component.SnakeComponent) {
+func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
@@ -908,7 +956,7 @@ func (s *SnakeSystem) handleInteractions(rootEntity core.Entity, snakeComp *comp
 	}
 }
 
-func (s *SnakeSystem) processGrowth(rootEntity core.Entity, snakeComp *component.SnakeComponent, headComp *component.SnakeHeadComponent) {
+func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headComp *component.SnakeHeadComponent) {
 	if headComp.GrowthPending <= 0 {
 		return
 	}
@@ -923,7 +971,6 @@ func (s *SnakeSystem) processGrowth(rootEntity core.Entity, snakeComp *component
 		return
 	}
 
-	// Get tail position
 	var tailX, tailY int
 	if len(bodyComp.Segments) > 0 {
 		lastSeg := &bodyComp.Segments[len(bodyComp.Segments)-1]
@@ -938,10 +985,13 @@ func (s *SnakeSystem) processGrowth(rootEntity core.Entity, snakeComp *component
 		tailY = headPos.Y
 	}
 
-	// Create new segment at tail
-	segment := s.createBodySegment(snakeComp.BodyEntity, tailX, tailY, len(bodyComp.Segments), headComp)
-	if segment.CenterMember != 0 {
-		bodyComp.Segments = append(bodyComp.Segments, segment)
+	if s.createBodySegmentMembers(snakeComp.BodyEntity, tailX, tailY, len(bodyComp.Segments), headComp, parameter.CombatInitialHPSnakeMemberMin) {
+		restX, restY := vmath.CenteredFromGrid(tailX, tailY)
+		bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
+			RestX:     restX,
+			RestY:     restY,
+			Connected: true,
+		})
 		headComp.GrowthPending--
 		s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
 	}
@@ -1059,22 +1109,13 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 	}
 }
 
-// segmentIsAlive returns true if any member of the segment exists
-func segmentIsAlive(seg *component.SnakeSegment) bool {
-	return seg.CenterMember != 0 || seg.LeftMember != 0 || seg.RightMember != 0
+// resolvedSegment holds per-segment member entities resolved from HeaderComponent
+type resolvedSegment struct {
+	Center core.Entity
+	Left   core.Entity
+	Right  core.Entity
 }
 
-// segmentLivingMemberCount returns number of non-zero members
-func segmentLivingMemberCount(seg *component.SnakeSegment) int {
-	count := 0
-	if seg.CenterMember != 0 {
-		count++
-	}
-	if seg.LeftMember != 0 {
-		count++
-	}
-	if seg.RightMember != 0 {
-		count++
-	}
-	return count
+func resolvedSegmentAlive(r *resolvedSegment) bool {
+	return r.Center != 0 || r.Left != 0 || r.Right != 0
 }

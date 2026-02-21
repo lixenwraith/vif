@@ -97,7 +97,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventSwarmSpawnRequest:
 		if payload, ok := ev.Payload.(*event.SwarmSpawnRequestPayload); ok {
-			s.spawnSwarm(payload.SpawnX, payload.SpawnY)
+			s.spawnSwarm(payload.X, payload.Y)
 		}
 
 	case event.EventSwarmCancelRequest:

@@ -41,13 +41,9 @@ type SnakeHeadComponent struct {
 	LastTrailX, LastTrailY int
 }
 
-// SnakeSegment represents a 3-cell wide body segment
+// SnakeSegment represents a 3-cell wide body segment (metadata only)
+// Member entity resolution via HeaderComponent.MemberEntries + SnakeMemberComponent
 type SnakeSegment struct {
-	// Member entities (perpendicular to movement direction)
-	CenterMember core.Entity // Offset 0
-	LeftMember   core.Entity // Offset -1
-	RightMember  core.Entity // Offset +1
-
 	// Rest position from trail (Q32.32)
 	RestX, RestY int64
 
@@ -64,4 +60,5 @@ type SnakeBodyComponent struct {
 type SnakeMemberComponent struct {
 	SegmentIndex  int // Which segment (0 = closest to head)
 	LateralOffset int // -1, 0, +1 perpendicular to direction
+	MaxHitPoints  int // Initial HP for health ratio calculation
 }

@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"math/rand"
 	"sync/atomic"
 
@@ -142,7 +141,7 @@ func (s *LootSystem) Update() {
 		return
 	}
 
-	s.world.DebugPrint(fmt.Sprintf("D:%d S:%d Q:%d ST:%d", s.statDrainKills.Load(), s.statSwarmKills.Load(), s.statQuasarKills.Load(), s.statStormKills.Load()))
+	// s.world.DebugPrint(fmt.Sprintf("D:%d S:%d Q:%d ST:%d", s.statDrainKills.Load(), s.statSwarmKills.Load(), s.statQuasarKills.Load(), s.statStormKills.Load()))
 
 	lootEntities := s.world.Components.Loot.GetAllEntities()
 	if len(lootEntities) == 0 {

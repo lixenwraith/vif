@@ -89,7 +89,7 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventQuasarSpawnRequest:
 		if payload, ok := ev.Payload.(*event.QuasarSpawnRequestPayload); ok {
-			s.spawnQuasar(payload.SpawnX, payload.SpawnY)
+			s.spawnQuasar(payload.X, payload.Y)
 		}
 
 	case event.EventQuasarCancelRequest:

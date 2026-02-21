@@ -50,3 +50,12 @@ const (
 	// Visual overlap between segments (0 = touching, negative = gap, positive = overlap)
 	SnakeSegmentVisualOverlap = 0.2
 )
+
+// SnakeHeadChars defines the 5×3 head character pattern
+// Rows indexed by Y offset (0-2), columns by X offset (0-4)
+// Directional arrow shape facing right (default)
+var SnakeHeadChars = [3][5]rune{
+	{'▖', '▀', '▀', '▀', '▗'},
+	{'▌', '●', '▓', '●', '▐'},
+	{'▘', '▄', '▄', '▄', '▝'},
+}

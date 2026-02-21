@@ -1430,8 +1430,8 @@ func (s *StormSystem) processPendingBlueSpawns() {
 			spawn := s.pendingBlueSpawns[i]
 
 			s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-				SpawnX: spawn.TargetX,
-				SpawnY: spawn.TargetY,
+				X: spawn.TargetX,
+				Y: spawn.TargetY,
 			})
 
 			// Remove completed spawn (swap-remove)

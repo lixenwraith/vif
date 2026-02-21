@@ -975,6 +975,60 @@ func (s *WeaponSystem) findPulseTargets(cx, cy int) []pulseTarget {
 		}
 	}
 
+	// Check snakes (head is Unit, body is Ablative)
+	for _, rootEntity := range s.world.Components.Snake.GetAllEntities() {
+		snakeComp, ok := s.world.Components.Snake.GetComponent(rootEntity)
+		if !ok {
+			continue
+		}
+
+		// Check head (Unit composite - hit any member, damage goes to header)
+		if snakeComp.HeadEntity != 0 {
+			headerComp, ok := s.world.Components.Header.GetComponent(snakeComp.HeadEntity)
+			if ok {
+				var hitMembers []core.Entity
+				for _, member := range headerComp.MemberEntries {
+					if member.Entity == 0 {
+						continue
+					}
+					memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+					if !ok {
+						continue
+					}
+					if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+						hitMembers = append(hitMembers, member.Entity)
+					}
+				}
+				if len(hitMembers) > 0 {
+					results = append(results, pulseTarget{header: snakeComp.HeadEntity, members: hitMembers})
+				}
+			}
+		}
+
+		// Check body (Ablative composite - each member takes damage)
+		if snakeComp.BodyEntity != 0 {
+			headerComp, ok := s.world.Components.Header.GetComponent(snakeComp.BodyEntity)
+			if ok {
+				var hitMembers []core.Entity
+				for _, member := range headerComp.MemberEntries {
+					if member.Entity == 0 {
+						continue
+					}
+					memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+					if !ok {
+						continue
+					}
+					if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
+						hitMembers = append(hitMembers, member.Entity)
+					}
+				}
+				if len(hitMembers) > 0 {
+					results = append(results, pulseTarget{header: snakeComp.BodyEntity, members: hitMembers})
+				}
+			}
+		}
+	}
+
 	return results
 }
 

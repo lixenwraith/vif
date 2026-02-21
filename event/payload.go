@@ -482,14 +482,14 @@ type SwarmAbsorbedDrainPayload struct {
 
 // QuasarSpawnRequestPayload contains coordinates for creation
 type QuasarSpawnRequestPayload struct {
-	SpawnX int `toml:"spawn_x"`
-	SpawnY int `toml:"spawn_y"`
+	X int `toml:"x"`
+	Y int `toml:"y"`
 }
 
 // SwarmSpawnRequestPayload contains coordinates for creation
 type SwarmSpawnRequestPayload struct {
-	SpawnX int `toml:"spawn_x"`
-	SpawnY int `toml:"spawn_y"`
+	X int `toml:"x"`
+	Y int `toml:"y"`
 }
 
 // MarkerSpawnRequestPayload for marker creation
@@ -716,8 +716,8 @@ type PylonDestroyedPayload struct {
 
 // SnakeSpawnRequestPayload contains coordinates for snake creation
 type SnakeSpawnRequestPayload struct {
-	SpawnX       int `toml:"spawn_x"`
-	SpawnY       int `toml:"spawn_y"`
+	X            int `toml:"x"`
+	Y            int `toml:"y"`
 	SegmentCount int `toml:"segment_count"` // Body segments to spawn (0 = default)
 }
 

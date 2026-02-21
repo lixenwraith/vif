@@ -23,6 +23,7 @@ const (
 
 	// === Species (back to front) ===
 	PriorityPylon // Background species, rendered first
+	PrioritySnake
 	PriorityDrain
 	PriorityQuasar
 	PrioritySwarm

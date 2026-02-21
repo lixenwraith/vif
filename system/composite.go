@@ -82,7 +82,7 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 			s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
 			// Track as expected death (typing, not external)
 			s.expectedDeaths[payload.HeaderEntity]++
-			event.EmitDeathOne(s.world.Resources.Event.Queue, payload.MemberEntity, 0)
+			s.world.DestroyEntity(payload.MemberEntity)
 		}
 
 	case event.EventCompositeDestroyRequest:
@@ -199,9 +199,7 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect even
 
 // destroyHead removes protection and destroys phantom head directly
 func (s *CompositeSystem) destroyHead(headerEntity core.Entity) {
-	s.world.Components.Protection.RemoveEntity(headerEntity)
-	s.world.Components.Header.RemoveEntity(headerEntity)
-	event.EmitDeathOne(s.world.Resources.Event.Queue, headerEntity, 0)
+	s.world.DestroyEntity(headerEntity)
 	delete(s.expectedDeaths, headerEntity)
 }
 
@@ -238,6 +236,11 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		if !s.world.Positions.HasPosition(memberEntry.Entity) {
 			memberEntry.Entity = 0 // Tombstone
 			headerComp.Dirty = true
+			continue
+		}
+
+		// Owner system manages member positions
+		if headerComp.SkipPositionSync {
 			continue
 		}
 

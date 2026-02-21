@@ -54,8 +54,9 @@ const (
 
 // Snake combat
 const (
-	CombatInitialHPSnakeHead   = 50
-	CombatInitialHPSnakeMember = 5 // Per body cell
+	CombatInitialHPSnakeHead      = 50
+	CombatInitialHPSnakeMemberMax = 50 // Head-adjacent segment (10x base)
+	CombatInitialHPSnakeMemberMin = 5  // Tail segment (base)
 
 	SnakeHeadCollisionRadiusXFloat = 2.5  // Half of 5
 	SnakeHeadCollisionRadiusYFloat = 1.25 // Half of 3, aspect adjusted

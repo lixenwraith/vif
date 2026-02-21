@@ -191,6 +191,13 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			targetCombatType = component.CombatEntityStorm
 		case component.BehaviorPylon:
 			targetCombatType = component.CombatEntityPylon
+		case component.BehaviorSnake:
+			// Discriminate head (Unit) vs body (Ablative) via CompositeType
+			if headerComp.Type == component.CompositeTypeUnit {
+				targetCombatType = component.CombatEntitySnakeHead
+			} else {
+				targetCombatType = component.CombatEntitySnakeBody
+			}
 		default:
 			return
 		}
@@ -640,6 +647,21 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 		if circleComp.IsInvulnerable {
 			return false
 		}
+	}
+
+	// Snake immunity: head immune when shielded, body always immune to stay in sync with body
+	if s.world.Components.SnakeHead.HasEntity(targetEntity) {
+		// Head: find root and check shield state
+		if memberComp, ok := s.world.Components.Member.GetComponent(targetEntity); ok {
+			if snakeComp, ok := s.world.Components.Snake.GetComponent(memberComp.HeaderEntity); ok {
+				if snakeComp.IsShielded {
+					return false
+				}
+			}
+		}
+	} else if s.world.Components.SnakeBody.HasEntity(targetEntity) {
+		// Body: always immune (spring physics maintains connectivity)
+		return false
 	}
 
 	// Apply stun

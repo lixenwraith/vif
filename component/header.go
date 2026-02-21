@@ -43,6 +43,10 @@ type HeaderComponent struct {
 
 	// Compaction flag - set when member dies
 	Dirty bool
+
+	// SkipPositionSync: owner system manages member positions directly.
+	// CompositeSystem validates liveness but skips offset-based position propagation.
+	SkipPositionSync bool
 }
 
 // MemberEntry represents a single member in a composite group

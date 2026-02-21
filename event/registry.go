@@ -291,6 +291,12 @@ func InitRegistry() {
 	RegisterType("EventPylonDestroyed", EventPylonDestroyed, &PylonDestroyedPayload{})
 	RegisterType("EventPylonCancelRequest", EventPylonCancelRequest, nil)
 
+	// Snake
+	RegisterType("EventSnakeSpawnRequest", EventSnakeSpawnRequest, &SnakeSpawnRequestPayload{})
+	RegisterType("EventSnakeSpawned", EventSnakeSpawned, &SnakeSpawnedPayload{})
+	RegisterType("EventSnakeDestroyed", EventSnakeDestroyed, &SnakeDestroyedPayload{})
+	RegisterType("EventSnakeCancelRequest", EventSnakeCancelRequest, nil)
+
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 }

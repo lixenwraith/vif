@@ -312,15 +312,15 @@ func (s *FuseSystem) completeFusion(f pendingFusion) {
 		s.world.PushEvent(event.EventSpiritDespawn, nil) // Clean up spirits
 		// Request spawn, delegation of creation to QuasarSystem
 		s.world.PushEvent(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
-			SpawnX: f.TargetX,
-			SpawnY: f.TargetY,
+			X: f.TargetX,
+			Y: f.TargetY,
 		})
 
 	case FuseSwarm:
 		// Request spawn, delegation of creation to SwarmSystem
 		s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
-			SpawnX: f.TargetX,
-			SpawnY: f.TargetY,
+			X: f.TargetX,
+			Y: f.TargetY,
 		})
 	}
 }
