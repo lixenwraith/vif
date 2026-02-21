@@ -375,7 +375,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// === RENDER TEXT CONTENT ===
 	var textEndX int
 	if isInputMode {
-		textEndX = r.renderInputText(buf, statusY, leftEndX, textAvailableWidth, textContent, textFg)
+		cursorPos := utf8.RuneCountInString(textContent) // search: cursor at end
+		if r.gameCtx.IsCommandMode() {
+			cursorPos = r.gameCtx.GetCommandCursorPos() + 1 // +1 for ':' prefix
+		}
+		textEndX = r.renderInputText(buf, statusY, leftEndX, textAvailableWidth, textContent, textFg, cursorPos)
 	} else if textContent != "" {
 		r.renderStatusMessage(buf, statusY, leftEndX, textAvailableWidth, textContent)
 		textEndX = leftEndX + min(utf8.RuneCountInString(textContent), textAvailableWidth)
@@ -419,35 +423,116 @@ func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
 	return msg
 }
 
-// renderInputText renders search/command input with left-truncation (shows end of text)
-// Returns X position after last rendered character (for cursor placement)
-func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg terminal.RGB) int {
+// renderInputText renders search/command input with scrolling window around cursor
+// Returns screen X position where cursor should be drawn
+func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg terminal.RGB, cursorPos int) int {
 	if maxWidth <= 0 {
 		return startX
 	}
 
 	runes := []rune(text)
 	textLen := len(runes)
+	if cursorPos > textLen {
+		cursorPos = textLen
+	}
+	if cursorPos < 0 {
+		cursorPos = 0
+	}
 
-	if textLen <= maxWidth {
+	// No overflow: render all, return cursor screen position
+	if textLen < maxWidth {
 		for i, ch := range runes {
 			buf.SetWithBg(startX+i, y, ch, fg, visual.RgbBackground)
 		}
-		return startX + textLen
+		return startX + cursorPos
 	}
 
-	// Truncate from left: show '<' + end of text
-	if maxWidth == 1 {
-		buf.SetWithBg(startX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
-		return startX + 1
+	// Overflow: compute scrolling window
+	winStart, contentSlots, leftTrunc, rightTrunc := computeInputWindow(textLen, cursorPos, maxWidth)
+
+	// Render indicators and content
+	screenX := startX
+	if leftTrunc {
+		buf.SetWithBg(screenX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
+		screenX++
+	}
+	winEnd := winStart + contentSlots
+	if winEnd > textLen {
+		winEnd = textLen
+	}
+	for i := winStart; i < winEnd; i++ {
+		buf.SetWithBg(screenX, y, runes[i], fg, visual.RgbBackground)
+		screenX++
+	}
+	if rightTrunc {
+		buf.SetWithBg(screenX, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
 	}
 
-	buf.SetWithBg(startX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
-	visibleStart := textLen - (maxWidth - 1)
-	for i := 0; i < maxWidth-1; i++ {
-		buf.SetWithBg(startX+1+i, y, runes[visibleStart+i], fg, visual.RgbBackground)
+	li := 0
+	if leftTrunc {
+		li = 1
 	}
-	return startX + maxWidth
+	return startX + li + (cursorPos - winStart)
+}
+
+// computeInputWindow determines the visible rune range for scrolled input text
+// Returns window start index, content slot count, and truncation flags
+func computeInputWindow(textLen, cursorPos, maxWidth int) (winStart, contentSlots int, leftTrunc, rightTrunc bool) {
+	// Effective display length: cursor at end of text occupies one extra cell
+	displayLen := textLen
+	if cursorPos == textLen {
+		displayLen++
+	}
+
+	// Initial placement: cursor at ~1/3 from left for typing comfort
+	winStart = cursorPos - maxWidth/3
+	if winStart < 0 {
+		winStart = 0
+	}
+
+	// Iterative fit: converge indicators and cursor visibility (max 2 passes)
+	for range 3 {
+		leftTrunc = winStart > 0
+		li := 0
+		if leftTrunc {
+			li = 1
+		}
+		contentSlots = maxWidth - li
+		winEnd := winStart + contentSlots
+
+		rightTrunc = winEnd < displayLen
+		if rightTrunc {
+			contentSlots--
+			winEnd = winStart + contentSlots
+		}
+
+		// Cursor must be in [winStart, winStart+contentSlots)
+		if cursorPos < winStart {
+			winStart = cursorPos
+			continue
+		}
+		if cursorPos >= winStart+contentSlots {
+			winStart = cursorPos - contentSlots + 1
+			if winStart < 0 {
+				winStart = 0
+			}
+			continue
+		}
+
+		// Fill trailing slack: pull winStart back to maximize visible content
+		visible := contentSlots
+		if winStart+visible > displayLen {
+			visible = displayLen - winStart
+		}
+		if visible < contentSlots && winStart > 0 {
+			winStart -= min(contentSlots-visible, winStart)
+			continue
+		}
+
+		break
+	}
+
+	return
 }
 
 // renderStatusMessage renders status message with right-truncation (shows start of text)

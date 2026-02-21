@@ -61,6 +61,8 @@ type GameContext struct {
 	searchText    atomic.Pointer[string]
 	statusMessage atomic.Pointer[string]
 	lastCommand   atomic.Pointer[string]
+	// Command-mode cursor position (rune offset within command text)
+	commandCursorPos atomic.Int32
 	// Status message expiry (Unix nano timestamp, 0 = no expiry)
 	statusMessageExpiry atomic.Int64
 
@@ -403,6 +405,14 @@ func (ctx *GameContext) GetLastCommand() string {
 
 func (ctx *GameContext) SetLastCommand(cmd string) {
 	ctx.lastCommand.Store(&cmd)
+}
+
+func (ctx *GameContext) GetCommandCursorPos() int {
+	return int(ctx.commandCursorPos.Load())
+}
+
+func (ctx *GameContext) SetCommandCursorPos(pos int) {
+	ctx.commandCursorPos.Store(int32(pos))
 }
 
 // === OVERLAY ACCESSORS ===

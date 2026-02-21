@@ -17,6 +17,8 @@ type undoPosition struct {
 	x, y int
 }
 
+const cmdHistorySize = 256
+
 // Router interprets Intents and executes game logic
 // Authoritative owner of game mode state
 type Router struct {
@@ -35,6 +37,13 @@ type Router struct {
 	lastFindForward bool   // true for f/t, false for F/T
 	lastFindType    rune   // Motion type: 'f', 'F', 't', or 'T'
 
+	// Command history ring buffer
+	cmdHistory    [cmdHistorySize]string
+	cmdHistHead   int    // next write index
+	cmdHistCount  int    // valid entry count
+	cmdHistBrowse int    // -1 = live input, 0..count-1 = offset from newest
+	cmdHistSaved  string // preserves in-progress input during browsing
+
 	// Mouse hold state for repeat firing
 	mouseLeftHeld     bool
 	mouseRightHeld    bool
@@ -49,9 +58,10 @@ type Router struct {
 // NewRouter creates a router with LUTs initialized
 func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 	r := &Router{
-		ctx:     ctx,
-		machine: machine,
-		macro:   NewMacroManager(),
+		ctx:           ctx,
+		machine:       machine,
+		macro:         NewMacroManager(),
+		cmdHistBrowse: -1,
 	}
 
 	r.motionLUT = map[input.MotionOp]MotionFunc{
@@ -269,6 +279,8 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetSearchText("")
 	case core.ModeCommand:
 		r.ctx.SetCommandText("")
+		r.ctx.SetCommandCursorPos(0)
+		r.resetCommandHistoryBrowse()
 		r.ctx.SetPaused(false)
 	case core.ModeOverlay:
 		r.ctx.SetPaused(false)
@@ -606,6 +618,8 @@ func (r *Router) handleModeSwitch(intent *input.Intent) bool {
 	case input.ModeTargetCommand:
 		newMode = core.ModeCommand
 		r.ctx.SetCommandText("")
+		r.ctx.SetCommandCursorPos(0)
+		r.resetCommandHistoryBrowse()
 		r.ctx.SetPaused(true)
 	case input.ModeTargetVisual:
 		if r.ctx.IsVisualMode() {
@@ -706,8 +720,19 @@ func (r *Router) handleSearchChar(char rune) {
 }
 
 func (r *Router) handleCommandChar(char rune) {
-	commandText := r.ctx.GetCommandText()
-	r.ctx.SetCommandText(commandText + string(char))
+	text := []rune(r.ctx.GetCommandText())
+	pos := r.ctx.GetCommandCursorPos()
+	if pos > len(text) {
+		pos = len(text)
+	}
+
+	newText := make([]rune, 0, len(text)+1)
+	newText = append(newText, text[:pos]...)
+	newText = append(newText, char)
+	newText = append(newText, text[pos:]...)
+
+	r.ctx.SetCommandText(string(newText))
+	r.ctx.SetCommandCursorPos(pos + 1)
 }
 
 func (r *Router) handleTextBackspace() bool {
@@ -720,12 +745,14 @@ func (r *Router) handleTextBackspace() bool {
 			r.ctx.SetSearchText(searchText[:len(searchText)-1])
 		}
 	case core.ModeCommand:
-		commandText := r.ctx.GetCommandText()
-		if len(commandText) > 0 {
-			r.ctx.SetCommandText(commandText[:len(commandText)-1])
+		text := []rune(r.ctx.GetCommandText())
+		pos := r.ctx.GetCommandCursorPos()
+		if pos > 0 && pos <= len(text) {
+			newText := append(text[:pos-1], text[pos:]...)
+			r.ctx.SetCommandText(string(newText))
+			r.ctx.SetCommandCursorPos(pos - 1)
 		}
 	case core.ModeInsert:
-		// Backspace in Insert mode is move left and delete character
 		return r.handleInsertDeleteBack()
 	}
 
@@ -752,14 +779,18 @@ func (r *Router) handleTextConfirm() bool {
 	case core.ModeCommand:
 		commandText := r.ctx.GetCommandText()
 
+		// Push to history before execution
+		r.pushCommandHistory(commandText)
+		r.resetCommandHistoryBrowse()
+
 		var result CommandResult
 		r.ctx.World.RunSafe(func() {
 			result = ExecuteCommand(r.ctx, commandText)
 		})
 
 		r.ctx.SetCommandText("")
+		r.ctx.SetCommandCursorPos(0)
 
-		// Check if command switched to Overlay mode
 		if r.ctx.GetMode() != core.ModeOverlay {
 			r.ctx.SetMode(core.ModeNormal)
 			r.machine.SetMode(input.ModeNormal)
@@ -777,6 +808,33 @@ func (r *Router) handleTextConfirm() bool {
 }
 
 func (r *Router) handleTextNav(intent *input.Intent) bool {
+	// Command mode: cursor movement + history navigation
+	if r.ctx.GetMode() == core.ModeCommand {
+		text := r.ctx.GetCommandText()
+		pos := r.ctx.GetCommandCursorPos()
+		textLen := len([]rune(text))
+
+		switch intent.Motion {
+		case input.MotionLeft:
+			if pos > 0 {
+				r.ctx.SetCommandCursorPos(pos - 1)
+			}
+		case input.MotionRight:
+			if pos < textLen {
+				r.ctx.SetCommandCursorPos(pos + 1)
+			}
+		case input.MotionLineStart:
+			r.ctx.SetCommandCursorPos(0)
+		case input.MotionLineEnd:
+			r.ctx.SetCommandCursorPos(textLen)
+		case input.MotionUp:
+			r.commandHistoryUp()
+		case input.MotionDown:
+			r.commandHistoryDown()
+		}
+		return true
+	}
+
 	// Navigation in Insert mode moves cursor
 	if r.ctx.GetMode() == core.ModeInsert {
 		motionFn, ok := r.motionLUT[intent.Motion]
@@ -795,7 +853,6 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 			OpMove(r.ctx, result)
 		})
 	}
-	// Search/Command modes ignore arrow navigation (text is single-line, no cursor)
 
 	return true
 }
@@ -917,6 +974,70 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 	}
 
 	return true
+}
+
+// --- Command History ---
+
+// pushCommandHistory appends a command to the history ring buffer
+// Deduplicates against most recent entry
+func (r *Router) pushCommandHistory(cmd string) {
+	if cmd == "" {
+		return
+	}
+	if r.cmdHistCount > 0 {
+		prev := (r.cmdHistHead - 1 + cmdHistorySize) % cmdHistorySize
+		if r.cmdHistory[prev] == cmd {
+			return
+		}
+	}
+	r.cmdHistory[r.cmdHistHead] = cmd
+	r.cmdHistHead = (r.cmdHistHead + 1) % cmdHistorySize
+	if r.cmdHistCount < cmdHistorySize {
+		r.cmdHistCount++
+	}
+}
+
+// commandHistoryUp navigates to older history entry
+func (r *Router) commandHistoryUp() {
+	if r.cmdHistCount == 0 {
+		return
+	}
+	next := r.cmdHistBrowse + 1
+	if next >= r.cmdHistCount {
+		return
+	}
+	if r.cmdHistBrowse == -1 {
+		r.cmdHistSaved = r.ctx.GetCommandText()
+	}
+	r.cmdHistBrowse = next
+	ringIdx := (r.cmdHistHead - 1 - next + cmdHistorySize) % cmdHistorySize
+	text := r.cmdHistory[ringIdx]
+	r.ctx.SetCommandText(text)
+	r.ctx.SetCommandCursorPos(len([]rune(text)))
+}
+
+// commandHistoryDown navigates to newer history entry or restores live input
+func (r *Router) commandHistoryDown() {
+	if r.cmdHistBrowse < 0 {
+		return
+	}
+	r.cmdHistBrowse--
+	if r.cmdHistBrowse < 0 {
+		r.ctx.SetCommandText(r.cmdHistSaved)
+		r.ctx.SetCommandCursorPos(len([]rune(r.cmdHistSaved)))
+		r.cmdHistSaved = ""
+		return
+	}
+	ringIdx := (r.cmdHistHead - 1 - r.cmdHistBrowse + cmdHistorySize) % cmdHistorySize
+	text := r.cmdHistory[ringIdx]
+	r.ctx.SetCommandText(text)
+	r.ctx.SetCommandCursorPos(len([]rune(text)))
+}
+
+// resetCommandHistoryBrowse exits history browsing mode
+func (r *Router) resetCommandHistoryBrowse() {
+	r.cmdHistBrowse = -1
+	r.cmdHistSaved = ""
 }
 
 // --- Overlay Handlers ---
