@@ -218,11 +218,7 @@ func (s *PylonSystem) createDiscMembers(
 	ryFixed := vmath.FromInt(radiusY)
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rxFixed, ryFixed)
 
-	// Max radius for HP falloff calculation (use larger axis)
-	maxRadius := float64(radiusX)
-	if radiusY > radiusX {
-		maxRadius = float64(radiusY)
-	}
+	hpRange := maxHP - minHP
 
 	for dy := -radiusY; dy <= radiusY; dy++ {
 		for dx := -radiusX; dx <= radiusX; dx++ {
@@ -233,15 +229,16 @@ func (s *PylonSystem) createDiscMembers(
 				continue
 			}
 
-			// Calculate HP based on normalized distance from center
-			dist := vmath.ToFloat(vmath.Magnitude(dxFixed, dyFixed))
+			// Calculate HP based on normalized ellipse distance from center
+			// normDistSq: 0 at center, Scale at edge (ellipse boundary)
 			var hp int
-			if maxRadius > 0 {
-				ratio := dist / maxRadius
-				if ratio > 1.0 {
-					ratio = 1.0
+			if hpRange > 0 {
+				normDistSq := vmath.EllipseDistSq(dxFixed, dyFixed, invRxSq, invRySq)
+				normDist := vmath.ToFloat(vmath.Sqrt(normDistSq))
+				if normDist > 1.0 {
+					normDist = 1.0
 				}
-				hp = maxHP - int(float64(maxHP-minHP)*ratio)
+				hp = maxHP - int(float64(hpRange)*normDist)
 			} else {
 				hp = maxHP
 			}

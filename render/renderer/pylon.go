@@ -297,7 +297,10 @@ func (r *PylonRenderer) renderMembersTrueColor(
 
 		// Interpolate between bright and dark based on position
 		color := render.Lerp(entry.dark, entry.bright, positionBrightness)
-		buf.SetBgOnly(screenX, screenY, color)
+
+		// buf.SetBgOnly(screenX, screenY, color)
+		// Use BlendMax to defer to brighter existing species
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendMax, 1.0, terminal.AttrNone)
 	}
 }
 

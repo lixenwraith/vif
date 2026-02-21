@@ -130,7 +130,7 @@ const (
 // Pulse
 const (
 	// PulseStunDuration is the duration of disruptor weapon stun effect
-	PulseStunDuration = 1000 * time.Millisecond
+	PulseStunDuration = 2000 * time.Millisecond
 
 	// PulseRadiusXFloat is disruptor weapon horizontal radius (2× shield)
 	PulseRadiusXFloat = ShieldRadiusXFloat * 3.5

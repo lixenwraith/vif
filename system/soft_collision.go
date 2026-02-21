@@ -392,8 +392,27 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	// Apply collision impulse
-	physics.ApplyCollision(&kineticComp.Kinetic, radialX, radialY, rule.Profile, s.rng)
+	// // Apply collision impulse
+	// physics.ApplyCollision(&kineticComp.Kinetic, radialX, radialY, rule.Profile, s.rng)
+
+	// Dampen mass ratio using fourth root to compress extreme values
+	// Preserves proportionality: heavier still pushes harder, but not catastrophically
+	dampenedRatio := rule.Profile.MassRatio
+	if dampenedRatio > vmath.Scale {
+		dampenedRatio = vmath.Sqrt(vmath.Sqrt(dampenedRatio))
+	}
+
+	// Calculate impulse with dampened ratio
+	impulseX, impulseY := physics.ApplyCollisionImpulse(
+		radialX, radialY,
+		dampenedRatio,
+		rule.Profile.AngleVariance,
+		rule.Profile.ImpulseMin,
+		rule.Profile.ImpulseMax,
+		s.rng,
+	)
+
+	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
 
 	// Set immunity
 	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration

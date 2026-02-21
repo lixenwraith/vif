@@ -32,10 +32,6 @@ func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 	}
 }
 
-func (r *PulseRenderer) Priority() render.RenderPriority {
-	return render.PriorityField
-}
-
 func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 

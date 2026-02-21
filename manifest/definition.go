@@ -18,13 +18,13 @@ type SystemDef struct {
 type RendererDef struct {
 	Name        string // Registry key (e.g., "drain")
 	Constructor string // Constructor name without package (e.g., "NewDrainRenderer")
-	Priority    string // Priority constant without package (e.g., "PriorityField")
+	Priority    string // Priority constant without package (e.g., "PriorityDrain")
 }
 
 // Components is the authoritative component list
 // Generator produces: ComponentStore, GetComponentStore(), RegisterComponents()
 var Components = []ComponentDef{
-	// Core gameplay
+	// --- Core Gameplay ---
 	{"Glyph", "GlyphComponent"},
 	{"Sigil", "SigilComponent"},
 	{"Nugget", "NuggetComponent"},
@@ -34,7 +34,7 @@ var Components = []ComponentDef{
 	{"Wall", "WallComponent"},
 	{"Loot", "LootComponent"},
 
-	// Player state
+	// --- Player State ---
 	{"Energy", "EnergyComponent"},
 	{"Heat", "HeatComponent"},
 	{"Shield", "ShieldComponent"},
@@ -43,7 +43,7 @@ var Components = []ComponentDef{
 	{"Orb", "OrbComponent"},
 	{"Ping", "PingComponent"},
 
-	// Entity behaviors
+	// --- Entity Behaviors ---
 	{"Decay", "DecayComponent"},
 	{"Blossom", "BlossomComponent"},
 	{"Cleaner", "CleanerComponent"},
@@ -57,7 +57,7 @@ var Components = []ComponentDef{
 	{"Spirit", "SpiritComponent"},
 	{"Materialize", "MaterializeComponent"},
 
-	// Enemies
+	// --- Species ---
 	{"Drain", "DrainComponent"},
 	{"Quasar", "QuasarComponent"},
 	{"Swarm", "SwarmComponent"},
@@ -66,56 +66,78 @@ var Components = []ComponentDef{
 	{"Bullet", "BulletComponent"},
 	{"Pylon", "PylonComponent"},
 
-	// Composite
+	// --- Composite ---
 	{"Header", "HeaderComponent"},
 	{"Member", "MemberComponent"},
 
-	// Effects
+	// --- Effects ---
 	{"Flash", "FlashComponent"},
 	{"Fadeout", "FadeoutComponent"},
 	{"Splash", "SplashComponent"},
 	{"Marker", "MarkerComponent"},
 
-	// Lifecycle
+	// --- Lifecycle ---
 	{"Death", "DeathComponent"},
 	{"Timer", "TimerComponent"},
 }
 
 // Systems is the authoritative system list
-// Order determines execution priority via registration and ActiveSystems() order
+// Order determined by priority in parameters
 // Generator produces: RegisterSystems(), ActiveSystems()
 var Systems = []SystemDef{
+	// --- Core / Frame Setup ---
 	{"ping", "NewPingSystem"},
 	{"transient", "NewTransientSystem"},
+	{"camera", "NewCameraSystem"},
+
+	// --- Player State ---
 	{"energy", "NewEnergySystem"},
 	{"shield", "NewShieldSystem"},
 	{"heat", "NewHeatSystem"},
 	{"boost", "NewBoostSystem"},
 	{"weapon", "NewWeaponSystem"},
+
+	// --- Input Processing ---
 	{"typing", "NewTypingSystem"},
+
+	// --- Composite / Structure ---
 	{"composite", "NewCompositeSystem"},
 	{"wall", "NewWallSystem"},
+
+	// --- Entity Behaviors ---
 	{"loot", "NewLootSystem"},
 	{"glyph", "NewGlyphSystem"},
 	{"nugget", "NewNuggetSystem"},
 	{"decay", "NewDecaySystem"},
 	{"blossom", "NewBlossomSystem"},
 	{"gold", "NewGoldSystem"},
+
+	// --- Spawning / Materialize ---
 	{"materialize", "NewMaterializeSystem"},
 	{"cleaner", "NewCleanerSystem"},
 	{"fuse", "NewFuseSystem"},
 	{"spirit", "NewSpiritSystem"},
+
+	// --- Projectiles ---
 	{"lightning", "NewLightningSystem"},
 	{"missile", "NewMissileSystem"},
+
+	// --- Movement / Collision ---
 	{"navigation", "NewNavigationSystem"},
-	{"combat", "NewCombatSystem"},
 	{"soft_collision", "NewSoftCollisionSystem"},
+
+	// --- Combat ---
+	{"combat", "NewCombatSystem"},
+
+	// --- Species ---
 	{"drain", "NewDrainSystem"},
 	{"quasar", "NewQuasarSystem"},
 	{"swarm", "NewSwarmSystem"},
 	{"storm", "NewStormSystem"},
 	{"pylon", "NewPylonSystem"},
 	{"bullet", "NewBulletSystem"},
+
+	// --- Particles / Effects ---
 	{"dust", "NewDustSystem"},
 	{"flash", "NewFlashSystem"},
 	{"fadeout", "NewFadeoutSystem"},
@@ -123,56 +145,85 @@ var Systems = []SystemDef{
 	{"explosion", "NewExplosionSystem"},
 	{"motion_marker", "NewMotionMarkerSystem"},
 	{"splash", "NewSplashSystem"},
+
+	// --- Environment ---
 	{"environment", "NewEnvironmentSystem"},
+
+	// --- Lifecycle ---
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
 	{"genetic", "NewGeneticSystem"},
+
+	// --- Audio ---
 	{"audio", "NewAudioSystem"},
 	{"music", "NewMusicSystem"},
-	{"camera", "NewCameraSystem"},
+
+	// --- Diagnostics ---
 	{"diag", "NewDiagSystem"},
 }
 
 // Renderers is the authoritative renderer list
-// Order determines ActiveRenderers() order (visual layering)
+// Order determined by render priority
 // Generator produces: RegisterRenderers(), ActiveRenderers()
 var Renderers = []RendererDef{
-	{"ping", "NewPingRenderer", "PriorityGrid"},
+	// --- Background / Grid ---
+	{"ping", "NewPingRenderer", "PriorityPing"},
 	{"chargeline", "NewChargeLineRenderer", "PriorityChargeLine"},
-	{"splash", "NewSplashRenderer", "PrioritySplash"},
-	{"glyph", "NewGlyphRenderer", "PriorityGlyph"},
-	{"healthbar", "NewHealthBarRenderer", "PriorityHealthBar"},
-	{"sigil", "NewSigilRenderer", "PriorityEntities"},
-	{"gold", "NewGoldRenderer", "PriorityEntities"},
-	{"shield", "NewShieldRenderer", "PriorityField"},
-	{"ember", "NewEmberRenderer", "PriorityField"},
-	{"orb", "NewOrbRenderer", "PriorityField"},
-	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
-	{"flash", "NewFlashRenderer", "PriorityParticle"},
-	{"fadeout", "NewFadeoutRenderer", "PriorityParticle"},
-	{"marker", "NewMarkerRenderer", "PriorityMarker"},
-	{"explosion", "NewExplosionRenderer", "PriorityParticle"},
-	{"lightning", "NewLightningRenderer", "PriorityField"},
-	{"missile", "NewMissileRenderer", "PriorityField"},
-	{"pulse", "NewPulseRenderer", "PriorityField"},
-	{"bullet", "NewBulletRenderer", "PriorityField"},
-	{"spirit", "NewSpiritRenderer", "PriorityParticle"},
-	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},
-	{"teleportline", "NewTeleportLineRenderer", "PriorityMaterialize"},
-	{"drain", "NewDrainRenderer", "PrioritySpecies"},
-	{"quasar", "NewQuasarRenderer", "PrioritySpecies"},
-	{"swarm", "NewSwarmRenderer", "PrioritySpecies"},
-	{"storm", "NewStormRenderer", "PrioritySpecies"},
-	{"pylon", "NewPylonRenderer", "PrioritySpecies"},
-	{"wall", "NewWallRenderer", "PriorityWall"},
-	{"grayout", "NewGrayoutRenderer", "PriorityPostProcess"},
-	{"strobe", "NewStrobeRenderer", "PriorityPostProcess"},
-	{"dim", "NewDimRenderer", "PriorityPostProcess"},
-	{"heat", "NewHeatRenderer", "PriorityUI"},
-	{"indicator", "NewIndicatorRenderer", "PriorityUI"},
-	{"statusbar", "NewStatusBarRenderer", "PriorityUI"},
-	{"cursor", "NewCursorRenderer", "PriorityUI"},
-	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
 
-	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityUI"},
+	// --- Environment ---
+	{"wall", "NewWallRenderer", "PriorityWall"},
+
+	// --- Base Entities ---
+	{"glyph", "NewGlyphRenderer", "PriorityGlyph"},
+	{"sigil", "NewSigilRenderer", "PrioritySigil"},
+	{"gold", "NewGoldRenderer", "PriorityGold"},
+	{"healthbar", "NewHealthBarRenderer", "PriorityHealthBar"},
+
+	// --- Species (back to front) ---
+	{"pylon", "NewPylonRenderer", "PriorityPylon"},
+	{"drain", "NewDrainRenderer", "PriorityDrain"},
+	{"quasar", "NewQuasarRenderer", "PriorityQuasar"},
+	{"swarm", "NewSwarmRenderer", "PrioritySwarm"},
+	{"storm", "NewStormRenderer", "PriorityStorm"},
+
+	// --- Cleaner ---
+	{"cleaner", "NewCleanerRenderer", "PriorityCleaner"},
+
+	// --- Materialize ---
+	{"materialize", "NewMaterializeRenderer", "PriorityMaterialize"},
+	{"teleportline", "NewTeleportLineRenderer", "PriorityTeleportLine"},
+
+	// --- Field Effects ---
+	{"shield", "NewShieldRenderer", "PriorityShield"},
+	{"ember", "NewEmberRenderer", "PriorityEmber"},
+	{"orb", "NewOrbRenderer", "PriorityOrb"},
+	{"lightning", "NewLightningRenderer", "PriorityLightning"},
+	{"missile", "NewMissileRenderer", "PriorityMissile"},
+	{"pulse", "NewPulseRenderer", "PriorityPulse"},
+	{"bullet", "NewBulletRenderer", "PriorityBullet"},
+
+	// --- Particles ---
+	{"flash", "NewFlashRenderer", "PriorityFlash"},
+	{"fadeout", "NewFadeoutRenderer", "PriorityFadeout"},
+	{"explosion", "NewExplosionRenderer", "PriorityExplosion"},
+	{"spirit", "NewSpiritRenderer", "PrioritySpirit"},
+
+	// --- Overlays ---
+	{"splash", "NewSplashRenderer", "PrioritySplash"},
+	{"marker", "NewMarkerRenderer", "PriorityMarker"},
+
+	// --- Post-Processing ---
+	{"grayout", "NewGrayoutRenderer", "PriorityGrayout"},
+	{"strobe", "NewStrobeRenderer", "PriorityStrobe"},
+	{"dim", "NewDimRenderer", "PriorityDim"},
+
+	// --- UI ---
+	{"heat", "NewHeatRenderer", "PriorityHeat"},
+	{"indicator", "NewIndicatorRenderer", "PriorityIndicator"},
+	{"statusbar", "NewStatusBarRenderer", "PriorityStatusBar"},
+	{"cursor", "NewCursorRenderer", "PriorityCursor"},
+
+	// --- Debug ---
+	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
+	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityFlowField"},
 }

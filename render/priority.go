@@ -5,22 +5,68 @@ package render
 type RenderPriority int
 
 const (
+	// === Background Layer ===
 	PriorityBackground RenderPriority = iota
 	PriorityGrid
+	PriorityPing
+
+	// === Environment ===
 	PriorityWall
 	PriorityChargeLine
+
+	// === Base Entities ===
 	PriorityGlyph
-	PriorityParticle
-	PriorityEntities
-	PrioritySpecies
+	PrioritySigil
+	PriorityGold
+	PriorityNugget
 	PriorityHealthBar
+
+	// === Species (back to front) ===
+	PriorityPylon // Background species, rendered first
+	PriorityDrain
+	PriorityQuasar
+	PrioritySwarm
+	PriorityStorm // Foreground species with depth, rendered last
+
+	// === Cleaner ===
 	PriorityCleaner
+
+	// === Materialize Effects ===
 	PriorityMaterialize
-	PriorityField
+	PriorityTeleportLine
+
+	// === Field Effects ===
+	PriorityShield
+	PriorityEmber
+	PriorityOrb
+	PriorityLightning
+	PriorityMissile
+	PriorityPulse
+	PriorityBullet
+
+	// === Particles ===
+	PriorityFlash
+	PriorityFadeout
+	PriorityExplosion
+	PrioritySpirit
+
+	// === Overlays ===
 	PrioritySplash
 	PriorityMarker
-	PriorityPostProcess
-	PriorityUI
+
+	// === Post-Processing (order matters) ===
+	PriorityGrayout
+	PriorityStrobe
+	PriorityDim
+
+	// === UI Layer ===
+	PriorityHeat
+	PriorityIndicator
+	PriorityStatusBar
+	PriorityCursor
+
+	// === Debug/Overlay ===
 	PriorityOverlay
+	PriorityFlowField
 	PriorityDebug
 )

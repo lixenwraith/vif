@@ -18,6 +18,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("transient", func(w any) any {
 		return system.NewTransientSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("camera", func(w any) any {
+		return system.NewCameraSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("energy", func(w any) any {
 		return system.NewEnergySystem(w.(*engine.World))
 	})
@@ -81,11 +84,11 @@ func RegisterSystems() {
 	registry.RegisterSystem("navigation", func(w any) any {
 		return system.NewNavigationSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("combat", func(w any) any {
-		return system.NewCombatSystem(w.(*engine.World))
-	})
 	registry.RegisterSystem("soft_collision", func(w any) any {
 		return system.NewSoftCollisionSystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("combat", func(w any) any {
+		return system.NewCombatSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("drain", func(w any) any {
 		return system.NewDrainSystem(w.(*engine.World))
@@ -144,9 +147,6 @@ func RegisterSystems() {
 	registry.RegisterSystem("music", func(w any) any {
 		return system.NewMusicSystem(w.(*engine.World))
 	})
-	registry.RegisterSystem("camera", func(w any) any {
-		return system.NewCameraSystem(w.(*engine.World))
-	})
 	registry.RegisterSystem("diag", func(w any) any {
 		return system.NewDiagSystem(w.(*engine.World))
 	})
@@ -156,115 +156,115 @@ func RegisterSystems() {
 func RegisterRenderers() {
 	registry.RegisterRenderer("ping", func(ctx any) any {
 		return renderer.NewPingRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityGrid)
+	}, render.PriorityPing)
 	registry.RegisterRenderer("chargeline", func(ctx any) any {
 		return renderer.NewChargeLineRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityChargeLine)
-	registry.RegisterRenderer("splash", func(ctx any) any {
-		return renderer.NewSplashRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySplash)
+	registry.RegisterRenderer("wall", func(ctx any) any {
+		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityWall)
 	registry.RegisterRenderer("glyph", func(ctx any) any {
 		return renderer.NewGlyphRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityGlyph)
+	registry.RegisterRenderer("sigil", func(ctx any) any {
+		return renderer.NewSigilRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySigil)
+	registry.RegisterRenderer("gold", func(ctx any) any {
+		return renderer.NewGoldRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityGold)
 	registry.RegisterRenderer("healthbar", func(ctx any) any {
 		return renderer.NewHealthBarRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityHealthBar)
-	registry.RegisterRenderer("sigil", func(ctx any) any {
-		return renderer.NewSigilRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEntities)
-	registry.RegisterRenderer("gold", func(ctx any) any {
-		return renderer.NewGoldRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityEntities)
-	registry.RegisterRenderer("shield", func(ctx any) any {
-		return renderer.NewShieldRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("ember", func(ctx any) any {
-		return renderer.NewEmberRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("orb", func(ctx any) any {
-		return renderer.NewOrbRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
+	registry.RegisterRenderer("pylon", func(ctx any) any {
+		return renderer.NewPylonRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityPylon)
+	registry.RegisterRenderer("drain", func(ctx any) any {
+		return renderer.NewDrainRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityDrain)
+	registry.RegisterRenderer("quasar", func(ctx any) any {
+		return renderer.NewQuasarRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityQuasar)
+	registry.RegisterRenderer("swarm", func(ctx any) any {
+		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySwarm)
+	registry.RegisterRenderer("storm", func(ctx any) any {
+		return renderer.NewStormRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityStorm)
 	registry.RegisterRenderer("cleaner", func(ctx any) any {
 		return renderer.NewCleanerRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityCleaner)
-	registry.RegisterRenderer("flash", func(ctx any) any {
-		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityParticle)
-	registry.RegisterRenderer("fadeout", func(ctx any) any {
-		return renderer.NewFadeoutRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityParticle)
-	registry.RegisterRenderer("marker", func(ctx any) any {
-		return renderer.NewMarkerRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMarker)
-	registry.RegisterRenderer("explosion", func(ctx any) any {
-		return renderer.NewExplosionRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityParticle)
-	registry.RegisterRenderer("lightning", func(ctx any) any {
-		return renderer.NewLightningRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("missile", func(ctx any) any {
-		return renderer.NewMissileRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("pulse", func(ctx any) any {
-		return renderer.NewPulseRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("bullet", func(ctx any) any {
-		return renderer.NewBulletRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityField)
-	registry.RegisterRenderer("spirit", func(ctx any) any {
-		return renderer.NewSpiritRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityParticle)
 	registry.RegisterRenderer("materialize", func(ctx any) any {
 		return renderer.NewMaterializeRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityMaterialize)
 	registry.RegisterRenderer("teleportline", func(ctx any) any {
 		return renderer.NewTeleportLineRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityMaterialize)
-	registry.RegisterRenderer("drain", func(ctx any) any {
-		return renderer.NewDrainRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySpecies)
-	registry.RegisterRenderer("quasar", func(ctx any) any {
-		return renderer.NewQuasarRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySpecies)
-	registry.RegisterRenderer("swarm", func(ctx any) any {
-		return renderer.NewSwarmRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySpecies)
-	registry.RegisterRenderer("storm", func(ctx any) any {
-		return renderer.NewStormRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySpecies)
-	registry.RegisterRenderer("pylon", func(ctx any) any {
-		return renderer.NewPylonRenderer(ctx.(*engine.GameContext))
-	}, render.PrioritySpecies)
-	registry.RegisterRenderer("wall", func(ctx any) any {
-		return renderer.NewWallRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityWall)
+	}, render.PriorityTeleportLine)
+	registry.RegisterRenderer("shield", func(ctx any) any {
+		return renderer.NewShieldRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityShield)
+	registry.RegisterRenderer("ember", func(ctx any) any {
+		return renderer.NewEmberRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityEmber)
+	registry.RegisterRenderer("orb", func(ctx any) any {
+		return renderer.NewOrbRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityOrb)
+	registry.RegisterRenderer("lightning", func(ctx any) any {
+		return renderer.NewLightningRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityLightning)
+	registry.RegisterRenderer("missile", func(ctx any) any {
+		return renderer.NewMissileRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMissile)
+	registry.RegisterRenderer("pulse", func(ctx any) any {
+		return renderer.NewPulseRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityPulse)
+	registry.RegisterRenderer("bullet", func(ctx any) any {
+		return renderer.NewBulletRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityBullet)
+	registry.RegisterRenderer("flash", func(ctx any) any {
+		return renderer.NewFlashRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityFlash)
+	registry.RegisterRenderer("fadeout", func(ctx any) any {
+		return renderer.NewFadeoutRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityFadeout)
+	registry.RegisterRenderer("explosion", func(ctx any) any {
+		return renderer.NewExplosionRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityExplosion)
+	registry.RegisterRenderer("spirit", func(ctx any) any {
+		return renderer.NewSpiritRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySpirit)
+	registry.RegisterRenderer("splash", func(ctx any) any {
+		return renderer.NewSplashRenderer(ctx.(*engine.GameContext))
+	}, render.PrioritySplash)
+	registry.RegisterRenderer("marker", func(ctx any) any {
+		return renderer.NewMarkerRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityMarker)
 	registry.RegisterRenderer("grayout", func(ctx any) any {
 		return renderer.NewGrayoutRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityPostProcess)
+	}, render.PriorityGrayout)
 	registry.RegisterRenderer("strobe", func(ctx any) any {
 		return renderer.NewStrobeRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityPostProcess)
+	}, render.PriorityStrobe)
 	registry.RegisterRenderer("dim", func(ctx any) any {
 		return renderer.NewDimRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityPostProcess)
+	}, render.PriorityDim)
 	registry.RegisterRenderer("heat", func(ctx any) any {
 		return renderer.NewHeatRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
+	}, render.PriorityHeat)
 	registry.RegisterRenderer("indicator", func(ctx any) any {
 		return renderer.NewIndicatorRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
+	}, render.PriorityIndicator)
 	registry.RegisterRenderer("statusbar", func(ctx any) any {
 		return renderer.NewStatusBarRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
+	}, render.PriorityStatusBar)
 	registry.RegisterRenderer("cursor", func(ctx any) any {
 		return renderer.NewCursorRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
+	}, render.PriorityCursor)
 	registry.RegisterRenderer("overlay", func(ctx any) any {
 		return renderer.NewOverlayRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityOverlay)
 	registry.RegisterRenderer("flowfield", func(ctx any) any {
 		return renderer.NewFlowFieldDebugRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityUI)
+	}, render.PriorityFlowField)
 }
 
 // ActiveSystems returns the ordered list of systems to instantiate
@@ -272,6 +272,7 @@ func ActiveSystems() []string {
 	return []string{
 		"ping",
 		"transient",
+		"camera",
 		"energy",
 		"shield",
 		"heat",
@@ -293,8 +294,8 @@ func ActiveSystems() []string {
 		"lightning",
 		"missile",
 		"navigation",
-		"combat",
 		"soft_collision",
+		"combat",
 		"drain",
 		"quasar",
 		"swarm",
@@ -314,7 +315,6 @@ func ActiveSystems() []string {
 		"genetic",
 		"audio",
 		"music",
-		"camera",
 		"diag",
 	}
 }
@@ -324,32 +324,32 @@ func ActiveRenderers() []string {
 	return []string{
 		"ping",
 		"chargeline",
-		"splash",
+		"wall",
 		"glyph",
-		"healthbar",
 		"sigil",
 		"gold",
-		"shield",
-		"ember",
-		"orb",
-		"cleaner",
-		"flash",
-		"fadeout",
-		"marker",
-		"explosion",
-		"lightning",
-		"missile",
-		"pulse",
-		"bullet",
-		"spirit",
-		"materialize",
-		"teleportline",
+		"healthbar",
+		"pylon",
 		"drain",
 		"quasar",
 		"swarm",
 		"storm",
-		"pylon",
-		"wall",
+		"cleaner",
+		"materialize",
+		"teleportline",
+		"shield",
+		"ember",
+		"orb",
+		"lightning",
+		"missile",
+		"pulse",
+		"bullet",
+		"flash",
+		"fadeout",
+		"explosion",
+		"spirit",
+		"splash",
+		"marker",
 		"grayout",
 		"strobe",
 		"dim",
