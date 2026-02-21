@@ -1,5 +1,9 @@
 package visual
 
+import (
+	"github.com/lixenwraith/vi-fighter/terminal"
+)
+
 // Heat gradient segment thresholds (6 segments, roughly 1/6 each)
 const (
 	GradientSeg1 = 0.167 // Red to Orange
@@ -12,13 +16,13 @@ const (
 
 // Heat gradient keyframe colors (rainbow spectrum endpoints)
 var (
-	GradientDeepRed = DarkCrimson
-	GradientOrange  = OrangeRed
-	GradientYellow  = Gold
-	GradientGreen   = ForestGreen
-	GradientCyan    = DarkTurquoise
-	GradientBlue    = RoyalBlue
-	GradientPurple  = PaleVioletRed
+	GradientDeepRed = terminal.DarkCrimson
+	GradientOrange  = terminal.OrangeRed
+	GradientYellow  = terminal.Gold
+	GradientGreen   = terminal.ForestGreen
+	GradientCyan    = terminal.DarkTurquoise
+	GradientBlue    = terminal.RoyalBlue
+	GradientPurple  = terminal.PaleVioletRed
 )
 
 // Rainbow LUT index bounds for readable text backgrounds

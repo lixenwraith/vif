@@ -7,237 +7,237 @@ import (
 // terminal.RGB color definitions for all game systems
 var (
 	// General colors for various uses
-	RgbBlack   = Black
-	RgbWhite   = White
-	RgbRed     = Red
-	RgbOrange  = Amber
-	RgbYellow  = Yellow
-	RgbGreen   = Lime
-	RgbCyan    = Cyan
-	RgbBlue    = Blue
-	RgbMagenta = Magenta
+	RgbBlack   = terminal.Black
+	RgbWhite   = terminal.White
+	RgbRed     = terminal.Red
+	RgbOrange  = terminal.Amber
+	RgbYellow  = terminal.Yellow
+	RgbGreen   = terminal.Lime
+	RgbCyan    = terminal.Cyan
+	RgbBlue    = terminal.Blue
+	RgbMagenta = terminal.Magenta
 
-	RgbSoftGold       = PaleGold
-	RgbElectricViolet = ElectricViolet
+	RgbSoftGold       = terminal.PaleGold
+	RgbElectricViolet = terminal.ElectricViolet
 
-	RgbBackground = Gunmetal // Tokyo Night background
+	RgbBackground = terminal.Gunmetal // Tokyo Night background
 
 	// Glyph colors - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
-	RgbGlyphBlueDark   = CobaltBlue
-	RgbGlyphBlueNormal = Cornflower
-	RgbGlyphBlueBright = LightBlue
+	RgbGlyphBlueDark   = terminal.CobaltBlue
+	RgbGlyphBlueNormal = terminal.Cornflower
+	RgbGlyphBlueBright = terminal.LightBlue
 
-	RgbGlyphGreenDark   = DarkGreen
-	RgbGlyphGreenNormal = BrightGreen
-	RgbGlyphGreenBright = NeonGreen
+	RgbGlyphGreenDark   = terminal.DarkGreen
+	RgbGlyphGreenNormal = terminal.BrightGreen
+	RgbGlyphGreenBright = terminal.NeonGreen
 
-	RgbGlyphRedDark   = Brick
-	RgbGlyphRedNormal = BrightRed
-	RgbGlyphRedBright = Salmon
+	RgbGlyphRedDark   = terminal.Brick
+	RgbGlyphRedNormal = terminal.BrightRed
+	RgbGlyphRedBright = terminal.Salmon
 
-	RgbGlyphGold  = Yellow
-	RgbGlyphWhite = White
+	RgbGlyphGold  = terminal.Yellow
+	RgbGlyphWhite = terminal.White
 
-	RgbDecay       = Teal
-	RgbBlossom     = LightPink
-	RgbDrain       = VibrantCyan
-	RgbMaterialize = BrightCyan
+	RgbDecay       = terminal.Teal
+	RgbBlossom     = terminal.LightPink
+	RgbDrain       = terminal.VibrantCyan
+	RgbMaterialize = terminal.BrightCyan
 
-	RgbDustDark   = DarkGray
-	RgbDustNormal = MidGray
-	RgbDustBright = LightGray
+	RgbDustDark   = terminal.DarkGray
+	RgbDustNormal = terminal.MidGray
+	RgbDustBright = terminal.LightGray
 
-	RgbIndicator           = Silver
-	RgbStatusBar           = White
-	RgbTruncateIndicator   = Black
-	RgbTruncateIndicatorBg = Orange
-	RgbStatusCursor        = Orange
-	RgbStatusCursorBg      = Black
+	RgbIndicator           = terminal.Silver
+	RgbStatusBar           = terminal.White
+	RgbTruncateIndicator   = terminal.Black
+	RgbTruncateIndicatorBg = terminal.Orange
+	RgbStatusCursor        = terminal.Orange
+	RgbStatusCursorBg      = terminal.Black
 
-	RgbPingHighlight  = DimGray
-	RgbPingLineNormal = Charcoal
-	RgbPingGridNormal = DimGray
-	RgbPingOrange     = DarkAmber
-	RgbPingGreen      = BlackGreen
-	RgbPingRed        = BlackRed
-	RgbPingBlue       = DeepNavy
-	RgbCursorNormal   = Orange
-	RgbCursorInsert   = White
+	RgbPingHighlight  = terminal.DimGray
+	RgbPingLineNormal = terminal.Charcoal
+	RgbPingGridNormal = terminal.DimGray
+	RgbPingOrange     = terminal.DarkAmber
+	RgbPingGreen      = terminal.BlackGreen
+	RgbPingRed        = terminal.BlackRed
+	RgbPingBlue       = terminal.DeepNavy
+	RgbCursorNormal   = terminal.Orange
+	RgbCursorInsert   = terminal.White
 
 	// Boost glow effect
-	RgbBoostGlow = HotPink
+	RgbBoostGlow = terminal.HotPink
 
 	// Splash colors
-	RgbSplashWhite = DimSilver
-	RgbSplashCyan  = VibrantCyan
+	RgbSplashWhite = terminal.DimSilver
+	RgbSplashCyan  = terminal.VibrantCyan
 
 	// Nugget colors
-	RgbNuggetOrange = Orange
-	RgbNuggetDark   = SaddleBrown
-	RgbCursorError  = Red
-	RgbTrailGray    = LightGray
+	RgbNuggetOrange = terminal.Orange
+	RgbNuggetDark   = terminal.SaddleBrown
+	RgbCursorError  = terminal.Red
+	RgbTrailGray    = terminal.LightGray
 
 	// Status bar backgrounds
-	RgbModeNormalBg  = LightSkyBlue
-	RgbModeVisualBg  = PaleGold
-	RgbModeInsertBg  = LightGreen
-	RgbModeSearchBg  = Orange
-	RgbModeCommandBg = MutedPurple
-	RgbEnergyBg      = White
-	RgbBoostBg       = Pink
-	RgbStatusText    = Black
+	RgbModeNormalBg  = terminal.LightSkyBlue
+	RgbModeVisualBg  = terminal.PaleGold
+	RgbModeInsertBg  = terminal.LightGreen
+	RgbModeSearchBg  = terminal.Orange
+	RgbModeCommandBg = terminal.MutedPurple
+	RgbEnergyBg      = terminal.White
+	RgbBoostBg       = terminal.Pink
+	RgbStatusText    = terminal.Black
 
 	// Runtime Metrics Backgrounds
-	RgbFpsBg = Cyan
-	RgbGtBg  = PaleGold
-	RgbApmBg = LimeGreen
+	RgbFpsBg = terminal.Cyan
+	RgbGtBg  = terminal.PaleGold
+	RgbApmBg = terminal.LimeGreen
 
 	// Cleaner colors
-	RgbCleanerBasePositive = Yellow
-	RgbCleanerBaseNegative = MediumPurple
-	RgbCleanerBaseNugget   = Vermilion
+	RgbCleanerBasePositive = terminal.Yellow
+	RgbCleanerBaseNegative = terminal.MediumPurple
+	RgbCleanerBaseNugget   = terminal.Vermilion
 
 	// Flash colors
-	RgbRemovalFlash = Ivory
+	RgbRemovalFlash = terminal.Ivory
 
 	// Explosion gradient (Neon/Cyber theme)
-	RgbExplosionCore = IceCyan
-	RgbExplosionMid  = Cyan
-	RgbExplosionEdge = DeepIndigo
+	RgbExplosionCore = terminal.IceCyan
+	RgbExplosionMid  = terminal.Cyan
+	RgbExplosionEdge = terminal.DeepIndigo
 
 	// Combat
-	RgbCombatEnraged  = BrightRed
-	RgbCombatHitFlash = Yellow
+	RgbCombatEnraged  = terminal.BrightRed
+	RgbCombatHitFlash = terminal.Yellow
 
 	// Quasar
-	RgbQuasarShield = VibrantCyan
+	RgbQuasarShield = terminal.VibrantCyan
 
 	// Swarm
-	RgbSwarmChargeLine = LightOrchid
-	RgbSwarmTeleport   = SoftLavender
+	RgbSwarmChargeLine = terminal.LightOrchid
+	RgbSwarmTeleport   = terminal.SoftLavender
 
 	// Orb sigil colors
-	RgbOrbRod       = BrightCyan
-	RgbOrbLauncher  = TigerOrange
-	RgbOrbDisruptor = MintGreen
-	RgbOrbFlash     = White
+	RgbOrbRod       = terminal.BrightCyan
+	RgbOrbLauncher  = terminal.TigerOrange
+	RgbOrbDisruptor = terminal.MintGreen
+	RgbOrbFlash     = terminal.White
 
 	// Orb corona colors (dimmer than sigil for glow effect)
-	RgbOrbCoronaRod       = DimCyan
-	RgbOrbCoronaLauncher  = BurntOrange
-	RgbOrbCoronaDisruptor = SageGreen
+	RgbOrbCoronaRod       = terminal.DimCyan
+	RgbOrbCoronaLauncher  = terminal.BurntOrange
+	RgbOrbCoronaDisruptor = terminal.SageGreen
 
 	// Parent Missile: Chrome/White
-	RgbMissileParentBody       = White
-	RgbMissileParentTrailStart = NearWhite
-	RgbMissileParentTrailEnd   = SlateGray
+	RgbMissileParentBody       = terminal.White
+	RgbMissileParentTrailStart = terminal.NearWhite
+	RgbMissileParentTrailEnd   = terminal.SlateGray
 
 	// Child Missile: Deep Orange
-	RgbMissileChildBody       = TigerOrange
-	RgbMissileChildTrailStart = Bronze
-	RgbMissileChildTrailEnd   = Sienna
+	RgbMissileChildBody       = terminal.TigerOrange
+	RgbMissileChildTrailStart = terminal.Bronze
+	RgbMissileChildTrailEnd   = terminal.Sienna
 
 	// Missile impact explosion (warm palette)
-	RgbMissileExplosionCore = Ivory
-	RgbMissileExplosionMid  = WarmOrange
-	RgbMissileExplosionEdge = Rust
+	RgbMissileExplosionCore = terminal.Ivory
+	RgbMissileExplosionMid  = terminal.WarmOrange
+	RgbMissileExplosionEdge = terminal.Rust
 
 	// Pulse effect colors (polarity-based)
-	RgbPulsePositive = Buttercream
-	RgbPulseNegative = Orchid
+	RgbPulsePositive = terminal.Buttercream
+	RgbPulseNegative = terminal.Orchid
 
 	// Audio indicator colors
-	RgbAudioBothOff     = IndianRed
-	RgbAudioMusicOnly   = OliveYellow
-	RgbAudioEffectsOnly = LeafGreen
-	RgbAudioBothOn      = MediumBlue
+	RgbAudioBothOff     = terminal.IndianRed
+	RgbAudioMusicOnly   = terminal.OliveYellow
+	RgbAudioEffectsOnly = terminal.LeafGreen
+	RgbAudioBothOn      = terminal.MediumBlue
 
 	// Energy meter blink colors
-	RgbEnergyBlinkBlue  = BabyBlue
-	RgbEnergyBlinkGreen = PaleGreen
-	RgbEnergyBlinkRed   = LightCoral
-	RgbEnergyBlinkWhite = White
+	RgbEnergyBlinkBlue  = terminal.BabyBlue
+	RgbEnergyBlinkGreen = terminal.PaleGreen
+	RgbEnergyBlinkRed   = terminal.LightCoral
+	RgbEnergyBlinkWhite = terminal.White
 
 	// Overlay colors
-	RgbOverlayBorder    = Cyan
-	RgbOverlayBg        = Obsidian
-	RgbOverlayText      = White
-	RgbOverlayTitle     = Yellow
-	RgbOverlayHeader    = Gold
-	RgbOverlayKey       = Silver
-	RgbOverlayValue     = PastelGreen
-	RgbOverlayHint      = Gray
-	RgbOverlaySeparator = IronGray
+	RgbOverlayBorder    = terminal.Cyan
+	RgbOverlayBg        = terminal.Obsidian
+	RgbOverlayText      = terminal.White
+	RgbOverlayTitle     = terminal.Yellow
+	RgbOverlayHeader    = terminal.Gold
+	RgbOverlayKey       = terminal.Silver
+	RgbOverlayValue     = terminal.PastelGreen
+	RgbOverlayHint      = terminal.Gray
+	RgbOverlaySeparator = terminal.IronGray
 
 	// Status bar auxiliary colors
-	RgbColorModeIndicator = LightGray
-	RgbGridTimerFg        = White
-	RgbLastCommandText    = Yellow
-	RgbSearchInputText    = White
-	RgbCommandInputText   = White
-	RgbStatusMessageText  = LightGray
+	RgbColorModeIndicator = terminal.LightGray
+	RgbGridTimerFg        = terminal.White
+	RgbLastCommandText    = terminal.Yellow
+	RgbSearchInputText    = terminal.White
+	RgbCommandInputText   = terminal.White
+	RgbStatusMessageText  = terminal.LightGray
 
 	// Wall colors
-	RgbWallDefault = SlateGray
-	RgbWallStone   = Taupe
-	RgbWallMetal   = CoolSilver
-	RgbWallEnergy  = DeepPurple
-	RgbWallDanger  = Oxblood
-	RgbWallGhost   = DarkSlate
+	RgbWallDefault = terminal.SlateGray
+	RgbWallStone   = terminal.Taupe
+	RgbWallMetal   = terminal.CoolSilver
+	RgbWallEnergy  = terminal.DeepPurple
+	RgbWallDanger  = terminal.Oxblood
+	RgbWallGhost   = terminal.DarkSlate
 
 	// Shield
-	RgbLootShieldBorder = PalePink
+	RgbLootShieldBorder = terminal.PalePink
 
 	// Loot glow colors
-	RgbLootRodGlow       = PaleCyan
-	RgbLootLauncherGlow  = PaleLemon
-	RgbLootDisruptorGlow = PaleMint
-	RgbLootEnergyGlow    = HotMagenta
-	RgbLootEnergySigil   = LemonYellow
-	RgbLootHeatSigil     = Coral
-	RgbLootHeatGlow      = LightRose
+	RgbLootRodGlow       = terminal.PaleCyan
+	RgbLootLauncherGlow  = terminal.PaleLemon
+	RgbLootDisruptorGlow = terminal.PaleMint
+	RgbLootEnergyGlow    = terminal.HotMagenta
+	RgbLootEnergySigil   = terminal.LemonYellow
+	RgbLootHeatSigil     = terminal.Coral
+	RgbLootHeatGlow      = terminal.LightRose
 
 	// Storm attack effect colors
-	RgbStormGreenPulse = EmeraldGreen
-	RgbStormRedCone    = RedOrange
+	RgbStormGreenPulse = terminal.EmeraldGreen
+	RgbStormRedCone    = terminal.RedOrange
 
 	// Bullet colors
-	RgbBulletStormRed    = RoseRed
-	RgbBulletStormRedDim = DarkRust
+	RgbBulletStormRed    = terminal.RoseRed
+	RgbBulletStormRedDim = terminal.DarkRust
 
 	// Muzzle flash colors
-	RgbMuzzleFlashBase = Mango
-	RgbMuzzleFlashTip  = Chocolate
+	RgbMuzzleFlashBase = terminal.Mango
+	RgbMuzzleFlashTip  = terminal.Chocolate
 
 	// Ember: Low heat (warm orange-red)
-	RgbEmberCoreLow = Apricot
-	RgbEmberMidLow  = FlameOrange
-	RgbEmberEdgeLow = BurntSienna
-	RgbEmberRingLow = DarkPlum
+	RgbEmberCoreLow = terminal.Apricot
+	RgbEmberMidLow  = terminal.FlameOrange
+	RgbEmberEdgeLow = terminal.BurntSienna
+	RgbEmberRingLow = terminal.DarkPlum
 
 	// Ember: High heat (white-hot with blue tinge)
-	RgbEmberCoreHigh = AliceBlue
-	RgbEmberMidHigh  = White
-	RgbEmberEdgeHigh = Terracotta
-	RgbEmberRingHigh = BlueCharcoal
+	RgbEmberCoreHigh = terminal.AliceBlue
+	RgbEmberMidHigh  = terminal.White
+	RgbEmberEdgeHigh = terminal.Terracotta
+	RgbEmberRingHigh = terminal.BlueCharcoal
 )
 
 // StormCircleColors - neon base colors (saturated 1.3x in renderer)
 var StormCircleColors = []terminal.RGB{
-	BrightLime, // Lime
-	RoseRed,    // Magenta
-	DodgerBlue, // Cyan
+	terminal.BrightLime, // Lime
+	terminal.RoseRed,    // Magenta
+	terminal.DodgerBlue, // Cyan
 }
 
 // LightningTrueColorLUT is TrueColor gradient endpoints per lightning color type
 // Index by LightningColorType to get (core, hot) RGB pair
 // Core = base color at end of life, Hot = bright color at full life
 var LightningTrueColorLUT = [5][2]terminal.RGB{
-	{VibrantCyan, White},       // Cyan
-	{Brick, MistyRose},         // Red
-	{DarkGold, Cream},          // Gold
-	{MediumGreen, Honeydew},    // Green
-	{DarkViolet, PaleLavender}, // Purple
+	{terminal.VibrantCyan, terminal.White},       // Cyan
+	{terminal.Brick, terminal.MistyRose},         // Red
+	{terminal.DarkGold, terminal.Cream},          // Gold
+	{terminal.MediumGreen, terminal.Honeydew},    // Green
+	{terminal.DarkViolet, terminal.PaleLavender}, // Purple
 }
 
 // GlyphColorLUT maps [GlyphType][GlyphLevel] to RGB

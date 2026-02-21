@@ -1,21 +1,25 @@
 package visual
 
+import (
+	"github.com/lixenwraith/vi-fighter/terminal"
+)
+
 // Pylon health color zones (TrueColor)
 var (
 	// Healthy zone (1.0 - 0.6): Blue
-	RgbPylonHealthyBright = CeruleanBlue
-	RgbPylonHealthyDark   = NavyBlue
+	RgbPylonHealthyBright = terminal.CeruleanBlue
+	RgbPylonHealthyDark   = terminal.NavyBlue
 
 	// Damaged zone (0.6 - 0.3): Green
-	RgbPylonDamagedBright = SeaGreen
-	RgbPylonDamagedDark   = DeepForest
+	RgbPylonDamagedBright = terminal.SeaGreen
+	RgbPylonDamagedDark   = terminal.DeepForest
 
 	// Critical zone (0.3 - 0.0): Red
-	RgbPylonCriticalBright = Cinnabar
-	RgbPylonCriticalDark   = DarkBurgundy
+	RgbPylonCriticalBright = terminal.Cinnabar
+	RgbPylonCriticalDark   = terminal.DarkBurgundy
 
 	// Glow color (constant blue)
-	RgbPylonGlow = SteelBlue
+	RgbPylonGlow = terminal.SteelBlue
 )
 
 // Pylon 256-color palette indices

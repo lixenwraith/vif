@@ -1,4 +1,4 @@
-package visual
+package terminal
 
 // Generic xterm 256-color palette indices without game semantics
 // Game systems reference these via aliases in their own parameter files
