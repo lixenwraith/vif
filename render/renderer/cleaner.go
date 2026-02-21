@@ -77,6 +77,20 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			continue
 		}
 
+		// Determine visible trail length
+		visibleLen := cleaner.TrailLen
+		if cleaner.Blocked && cleaner.DrainTotal > 0 {
+			// Shrink trail proportionally to drain progress
+			ratio := float64(cleaner.DrainRemaining) / float64(cleaner.DrainTotal)
+			if ratio < 0 {
+				ratio = 0
+			}
+			visibleLen = int(float64(cleaner.TrailLen) * ratio)
+			if visibleLen < 1 {
+				visibleLen = 1
+			}
+		}
+
 		// Iterate trail ring buffer: index 0 is head (brightest), last is tail (faintest)
 		for i := 0; i < cleaner.TrailLen; i++ {
 			// Walk backwards from head in the ring buffer

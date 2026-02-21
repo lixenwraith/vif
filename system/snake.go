@@ -172,10 +172,16 @@ func (s *SnakeSystem) Update() {
 
 		// Process body if exists
 		if snakeComp.BodyEntity != 0 && s.world.Components.Header.HasEntity(snakeComp.BodyEntity) {
+			// Sync body header position to head (body header has SkipPositionSync, CompositeSystem won't update it; keep spatial queries consistent)
+			if headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity); ok {
+				s.world.Positions.MoveEntity(snakeComp.BodyEntity, component.PositionComponent{
+					X: headPos.X, Y: headPos.Y,
+				})
+			}
+
 			bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
 			if ok {
-				// Resolve living members from HeaderComponent (single source of truth)
-				// and emit deaths for HP<=0 members in one pass
+				// Resolve living members from HeaderComponent (single source of truth) and emit deaths for HP<=0 members in one pass
 				resolved := s.resolveAndProcessCombat(snakeComp.BodyEntity, len(bodyComp.Segments))
 
 				// Update segment rest positions from trail
@@ -258,9 +264,8 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 	s.clearSpawnArea(headX, headY, parameter.SnakeHeadWidth, parameter.SnakeHeadHeight,
 		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY)
 
-	// Create root entity (container)
+	// Create root entity (container) - does not have a position
 	rootEntity := s.world.CreateEntity()
-	s.world.Positions.SetPosition(rootEntity, component.PositionComponent{X: headX, Y: headY})
 	s.world.Components.Protection.SetComponent(rootEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})

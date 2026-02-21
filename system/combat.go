@@ -279,6 +279,14 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
 			s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, combatProfile.CollisionProfile)
 			targetCombatComp.RemainingKineticImmunity = combatProfile.CollisionProfile.ImmunityDuration
+
+			// Propagate kinetic immunity to hit member for displacement detection (e.g. snake body spring physics uses member RemainingKineticImmunity)
+			if payload.HitEntity != payload.TargetEntity {
+				if hitCombat, ok := s.world.Components.Combat.GetComponent(payload.HitEntity); ok {
+					hitCombat.RemainingKineticImmunity = combatProfile.CollisionProfile.ImmunityDuration
+					s.world.Components.Combat.SetComponent(payload.HitEntity, hitCombat)
+				}
+			}
 		}
 	}
 
@@ -338,6 +346,13 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			targetCombatType = component.CombatEntityStorm
 		case component.BehaviorPylon:
 			targetCombatType = component.CombatEntityPylon
+		case component.BehaviorSnake:
+			// Discriminate head (Unit) vs body (Ablative) via CompositeType
+			if headerComp.Type == component.CompositeTypeUnit {
+				targetCombatType = component.CombatEntitySnakeHead
+			} else {
+				targetCombatType = component.CombatEntitySnakeBody
+			}
 		default:
 			return
 		}
@@ -513,24 +528,33 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 }
 
 func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) {
-	// Apply kinetic hit/collision
-	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
-	if !ok {
-		return
-	}
 	originKineticComp, ok := s.world.Components.Kinetic.GetComponent(originEntity)
 	if !ok {
 		return
 	}
-
 	originVelX := originKineticComp.VelX
 	originVelY := originKineticComp.VelY
 
+	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
+	if hitEntity != targetEntity {
+		if hitKinetic, ok := s.world.Components.Kinetic.GetComponent(hitEntity); ok {
+			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
+			s.world.Components.Kinetic.SetComponent(hitEntity, hitKinetic)
+			return
+		}
+	}
+
+	// Fallback: targetEntity kinetic (header or simple entity)
+	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
+	if !ok {
+		return
+	}
+
 	if targetEntity == hitEntity {
-		// Non-composite collision
+		// Direct hit on simple entity or header itself
 		physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 	} else {
+		// Member hit, kinetic on header — offset collision for angular impulse
 		headerPos, ok := s.world.Positions.GetPosition(targetEntity)
 		if !ok {
 			return
@@ -543,7 +567,6 @@ func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core
 		offsetX := hitPos.X - headerPos.X
 		offsetY := hitPos.Y - headerPos.Y
 
-		// Composite collision
 		physics.ApplyOffsetCollision(
 			&targetKineticComp.Kinetic,
 			originVelX, originVelY,
@@ -551,9 +574,8 @@ func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core
 			collisionProfile,
 			s.rng,
 		)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
-
 	}
+	s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 }
 
 // applyAreaKnockback calculates radial knockback for area attacks

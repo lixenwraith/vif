@@ -14,7 +14,6 @@ const (
 	CleanerColorNugget                           // Green, targets green glyphs
 )
 
-// CleanerComponent tracks cleaner entity movement and trail
 type CleanerComponent struct {
 	// Destruction target (tail must clear screen) - Q32.32
 	TargetX int64
@@ -30,4 +29,10 @@ type CleanerComponent struct {
 
 	// Color type for renderer gradient selection
 	ColorType CleanerColorType
+
+	// Blocking state: head stopped, trail draining to stop point
+	Blocked        bool
+	DrainSpeed     int64 // Q32.32 absolute velocity for drain rate
+	DrainRemaining int64 // Q32.32 remaining drain distance; entity destroyed at 0
+	DrainTotal     int64 // Q32.32 initial drain distance (renderer ratio = Remaining/Total)
 }

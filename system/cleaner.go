@@ -17,8 +17,6 @@ import (
 type CleanerSystem struct {
 	world *engine.World
 
-	collidedHeaders map[core.Entity]core.Entity // anchor -> cleaner that deflected it for deduplication of large entity hits
-
 	rng *vmath.FastRand
 
 	statActive  *atomic.Int64
@@ -43,7 +41,6 @@ func NewCleanerSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
-	s.collidedHeaders = make(map[core.Entity]core.Entity, 4)
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
 	s.enabled = true
@@ -116,18 +113,6 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	// Clean dead cleaners from deflection tracking
-	for anchor, cleanerEntity := range s.collidedHeaders {
-		if !s.world.Components.Cleaner.HasEntity(cleanerEntity) {
-			delete(s.collidedHeaders, anchor)
-		}
-	}
-
-	// Early return if no cleaners
-	if len(cleanerEntities) == 0 {
-		return
-	}
-
 	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
@@ -137,86 +122,157 @@ func (s *CleanerSystem) Update() {
 		if !ok {
 			continue
 		}
+
+		// --- Drain phase: head stationary, trail shrinking ---
+		if cleanerComp.Blocked {
+			cleanerComp.DrainRemaining -= vmath.Mul(cleanerComp.DrainSpeed, dtFixed)
+			if cleanerComp.DrainRemaining <= 0 {
+				s.world.DestroyEntity(cleanerEntity)
+				continue
+			}
+			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
+			continue
+		}
+
+		// --- Active phase ---
 		kineticComp, ok := s.world.Components.Kinetic.GetComponent(cleanerEntity)
 		if !ok {
 			continue
 		}
 
-		// Read grid position from Positions (authoritative for spatial queries)
 		oldPos, ok := s.world.Positions.GetPosition(cleanerEntity)
 		if !ok {
 			continue
 		}
 
-		// Physics Update: Integrate velocity into float position (overlay state)
+		// Physics integration
 		prevPreciseX := kineticComp.PreciseX
 		prevPreciseY := kineticComp.PreciseY
 		physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
-		// Swept Collision Detection: Check all cells between previous and current position
+		// Swept collision with wall/enemy blocking
+		blocked := false
+		var blockGridX, blockGridY int
+
 		if kineticComp.VelY != 0 && kineticComp.VelX == 0 {
-			// Vertical cleaner: sweep Y axis
-			prevY := vmath.ToInt(prevPreciseY)
-			currY := vmath.ToInt(kineticComp.PreciseY)
-			startY, endY := prevY, currY
-			if startY > endY {
-				startY, endY = endY, startY
+			// Vertical sweep
+			fromY := vmath.ToInt(prevPreciseY)
+			toY := vmath.ToInt(kineticComp.PreciseY)
+			x := oldPos.X
+			step := 1
+			if kineticComp.VelY < 0 {
+				step = -1
 			}
 
-			if startY < 0 {
-				startY = 0
-			}
-			if endY >= gameHeight {
-				endY = gameHeight - 1
-			}
-
-			// Check all traversed rows for collisions (with self-exclusion)
-			if startY <= endY {
-				for y := startY; y <= endY; y++ {
-					s.checkCollisions(oldPos.X, y, cleanerEntity, cleanerComp.ColorType)
+			lastValidY := fromY
+			for y := fromY + step; (step > 0 && y <= toY) || (step < 0 && y >= toY); y += step {
+				// Skip OOB cells (cleaner flies off-screen, lifecycle handles destruction)
+				if y < 0 || y >= gameHeight {
+					continue
 				}
+
+				// Wall blocks head at previous cell
+				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					blocked = true
+					blockGridX, blockGridY = x, lastValidY
+					break
+				}
+
+				// Combat + glyph; enemy blocks head at this cell
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.ColorType) {
+					blocked = true
+					blockGridX, blockGridY = x, y
+					break
+				}
+
+				lastValidY = y
 			}
 		} else if kineticComp.VelX != 0 {
-			// Horizontal cleaner: sweep X axis
-			prevX := vmath.ToInt(prevPreciseX)
-			currX := vmath.ToInt(kineticComp.PreciseX)
-			startX, endX := prevX, currX
-			if startX > endX {
-				startX, endX = endX, startX
+			// Horizontal sweep
+			fromX := vmath.ToInt(prevPreciseX)
+			toX := vmath.ToInt(kineticComp.PreciseX)
+			y := oldPos.Y
+			step := 1
+			if kineticComp.VelX < 0 {
+				step = -1
 			}
 
-			if startX < 0 {
-				startX = 0
-			}
-			if endX >= gameWidth {
-				endX = gameWidth - 1
-			}
-
-			// Check all traversed columns for collisions (with self-exclusion)
-			if startX <= endX {
-				for x := startX; x <= endX; x++ {
-					s.checkCollisions(x, oldPos.Y, cleanerEntity, cleanerComp.ColorType)
+			lastValidX := fromX
+			for x := fromX + step; (step > 0 && x <= toX) || (step < 0 && x >= toX); x += step {
+				if x < 0 || x >= gameWidth {
+					continue
 				}
+
+				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					blocked = true
+					blockGridX, blockGridY = lastValidX, y
+					break
+				}
+
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.ColorType) {
+					blocked = true
+					blockGridX, blockGridY = x, y
+					break
+				}
+
+				lastValidX = x
 			}
 		}
 
-		// Trail Update & Grid Sync: Update trail ring buffer and sync Positions if cell changed
+		if blocked {
+			cleanerComp.Blocked = true
+
+			// Capture drain speed from current velocity (don't zero — combat events need it)
+			drainSpeed := kineticComp.VelX
+			if drainSpeed < 0 {
+				drainSpeed = -drainSpeed
+			}
+			if drainSpeed == 0 {
+				drainSpeed = kineticComp.VelY
+				if drainSpeed < 0 {
+					drainSpeed = -drainSpeed
+				}
+			}
+			cleanerComp.DrainSpeed = drainSpeed
+
+			drainDist := vmath.FromInt(cleanerComp.TrailLen)
+			cleanerComp.DrainRemaining = drainDist
+			cleanerComp.DrainTotal = drainDist
+
+			// Update precise position to block point (velocity preserved for combat resolution)
+			blockPreciseX, blockPreciseY := vmath.CenteredFromGrid(blockGridX, blockGridY)
+			kineticComp.PreciseX = blockPreciseX
+			kineticComp.PreciseY = blockPreciseY
+
+			// Trail update to block position
+			if blockGridX != oldPos.X || blockGridY != oldPos.Y {
+				cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
+				cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: blockGridX, Y: blockGridY}
+				if cleanerComp.TrailLen < parameter.CleanerTrailLength {
+					cleanerComp.TrailLen++
+				}
+			}
+
+			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: blockGridX, Y: blockGridY})
+			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
+			s.world.Components.Kinetic.SetComponent(cleanerEntity, kineticComp)
+			continue
+		}
+
+		// --- Unblocked: normal trail update and grid sync ---
 		newGridX := vmath.ToInt(kineticComp.PreciseX)
 		newGridY := vmath.ToInt(kineticComp.PreciseY)
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
-			// Update trail: add new grid position to ring buffer
 			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
 			cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: newGridX, Y: newGridY}
 			if cleanerComp.TrailLen < parameter.CleanerTrailLength {
 				cleanerComp.TrailLen++
 			}
-
-			// Sync grid position to Positions
 			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
-		// Lifecycle Check: Destroy cleaner when it reaches target position
+		// Lifecycle: destroy at target (off-screen)
 		shouldDestroy := false
 		if kineticComp.VelX > 0 && kineticComp.PreciseX >= cleanerComp.TargetX {
 			shouldDestroy = true
@@ -237,7 +293,6 @@ func (s *CleanerSystem) Update() {
 	}
 
 	cleanerEntities = s.world.Components.Cleaner.GetAllEntities()
-	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
 	if len(cleanerEntities) == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 	}
@@ -331,56 +386,73 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	}
 }
 
-// checkCollisions handles collision logic with self-exclusion
-func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorType component.CleanerColorType) {
+// checkCollisions handles combat and glyph interactions at a single cell
+// Returns true if a combat entity was hit (blocks cleaner head)
+func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorType component.CleanerColorType) bool {
 	cursorEntity := s.world.Resources.Player.Entity
-	// Query all entities at position (includes cleaner)
 	entities := s.world.Positions.GetAllEntityAt(x, y)
 	if len(entities) == 0 {
-		return
+		return false
 	}
 
-	// Deflect species (energy-independent, cleaner passes through)
+	blocked := false
+
 	for _, entity := range entities {
 		if entity == 0 || entity == selfEntity {
 			continue
 		}
 
-		// Check Member first because of complex composites that have both combat and member
-		if s.world.Components.Member.HasEntity(entity) {
-			memberComp, ok := s.world.Components.Member.GetComponent(entity)
-			if !ok {
-				continue
-			}
-			headerEntity := memberComp.HeaderEntity
-			if !s.world.Components.Combat.HasEntity(headerEntity) {
-				continue
-			}
-
-			// Check composite type for dedup behavior
-			headerComp, hasHeader := s.world.Components.Header.GetComponent(headerEntity)
-			isAblative := hasHeader && headerComp.Type == component.CompositeTypeAblative
-
-			// Ablative composites: no dedup, each member takes individual damage
-			// Unit composites: dedup to prevent repeated knockback from same cleaner
-			if !isAblative {
-				if lastCleaner, exists := s.collidedHeaders[headerEntity]; exists && lastCleaner == selfEntity {
-					continue
-				}
-				s.collidedHeaders[headerEntity] = selfEntity
-			}
-
-			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				AttackType:   component.CombatAttackProjectile,
-				OwnerEntity:  cursorEntity,
-				OriginEntity: selfEntity,
-				TargetEntity: headerEntity,
-				HitEntity:    entity,
-			})
+		// Skip other cleaners
+		if s.world.Components.Cleaner.HasEntity(entity) {
 			continue
 		}
 
-		// Simple combat entities (drain, non-composite headers)
+		// Step 2: Header entity — check CompositeType
+		if headerComp, ok := s.world.Components.Header.GetComponent(entity); ok {
+			switch headerComp.Type {
+			case component.CompositeTypeContainer:
+				continue
+			case component.CompositeTypeUnit:
+				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+					AttackType:   component.CombatAttackProjectile,
+					OwnerEntity:  cursorEntity,
+					OriginEntity: selfEntity,
+					TargetEntity: entity,
+					HitEntity:    entity,
+				})
+				blocked = true
+				continue
+			case component.CompositeTypeAblative:
+				// Ablative header not directly targetable; damage through members only
+				continue
+			}
+		}
+
+		// Step 3: Member entity (non-header, guaranteed by Step 2 catching headers first)
+		if memberComp, ok := s.world.Components.Member.GetComponent(entity); ok {
+			headerEntity := memberComp.HeaderEntity
+			headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+			if !ok {
+				continue
+			}
+
+			switch headerComp.Type {
+			case component.CompositeTypeContainer:
+				continue
+			case component.CompositeTypeUnit, component.CompositeTypeAblative:
+				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+					AttackType:   component.CombatAttackProjectile,
+					OwnerEntity:  cursorEntity,
+					OriginEntity: selfEntity,
+					TargetEntity: headerEntity,
+					HitEntity:    entity,
+				})
+				blocked = true
+				continue
+			}
+		}
+
+		// Step 4: Simple combat entity (drain, non-composite)
 		if s.world.Components.Combat.HasEntity(entity) {
 			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   component.CombatAttackProjectile,
@@ -389,12 +461,12 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 				TargetEntity: entity,
 				HitEntity:    entity,
 			})
+			blocked = true
 			continue
 		}
-
 	}
 
-	// Route glyph processing based on color type
+	// Glyph processing (always runs, non-blocking)
 	switch colorType {
 	case component.CleanerColorPositive:
 		s.processPositiveEnergy(entities, selfEntity)
@@ -402,9 +474,9 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 		s.processNegativeEnergy(x, y, entities, selfEntity)
 	case component.CleanerColorNugget:
 		s.processNuggetEnergy(entities, selfEntity)
-	default:
-		return
 	}
+
+	return blocked
 }
 
 // processPositiveEnergy handles Red destruction with Blossom spawn
