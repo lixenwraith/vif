@@ -13,11 +13,13 @@ const (
 	MassCleaner   = vmath.Scale
 	MassExplosion = vmath.Scale * 10
 
-	MassDrain  = vmath.Scale
-	MassSwarm  = vmath.Scale * 2
-	MassQuasar = vmath.Scale * 10
-	MassStorm  = vmath.Scale * 100
-	MassPylon  = vmath.Scale * 1000 // Immovable
+	MassDrain     = vmath.Scale
+	MassSwarm     = vmath.Scale * 2
+	MassQuasar    = vmath.Scale * 10
+	MassStorm     = vmath.Scale * 100
+	MassPylon     = vmath.Scale * 1000 // Immovable
+	MassSnakeHead = vmath.Scale * 8    // Similar to quasar
+	MassSnakeBody = vmath.Scale * 2    // Per-segment, similar to swarm
 
 	MassRatioEqual = vmath.Scale
 )
@@ -50,6 +52,28 @@ var CleanerToQuasar = CollisionProfile{
 	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
+// CleanerToSnakeHead defines cleaner-to-snake-head collision (override for unit composite)
+var CleanerToSnakeHead = CollisionProfile{
+	MassRatio:        vmath.Div(MassCleaner, MassSnakeHead),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  OffsetInfluenceDefault,
+}
+
+// CleanerToSnakeBody defines cleaner-to-snake-body collision (additive for segments)
+var CleanerToSnakeBody = CollisionProfile{
+	MassRatio:        vmath.Div(MassCleaner, MassSnakeBody),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  0,
+}
+
 // ShieldToDrain defines shield-to-drain knockback (radial repulsion)
 var ShieldToDrain = CollisionProfile{
 	MassRatio:        vmath.Div(MassCursor, MassDrain),
@@ -70,6 +94,28 @@ var ShieldToQuasar = CollisionProfile{
 	Mode:             ImpulseOverride,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
 	OffsetInfluence:  OffsetInfluenceDefault,
+}
+
+// ShieldToSnakeHead defines shield-to-snake-head knockback
+var ShieldToSnakeHead = CollisionProfile{
+	MassRatio:        vmath.Div(MassCursor, MassSnakeHead),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  OffsetInfluenceDefault,
+}
+
+// ShieldToSnakeBody defines shield-to-snake-body knockback
+var ShieldToSnakeBody = CollisionProfile{
+	MassRatio:        vmath.Div(MassCursor, MassSnakeBody),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  0,
 }
 
 // TODO: unused
@@ -103,6 +149,28 @@ var ExplosionToQuasar = CollisionProfile{
 	AngleVariance:    parameter.DrainDeflectAngleVar,
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: parameter.CombatHitFlashDuration, // Immunity for dedup
+	OffsetInfluence:  0,
+}
+
+// ExplosionToSnakeHead defines explosion-to-snake-head collision
+var ExplosionToSnakeHead = CollisionProfile{
+	MassRatio:        vmath.Div(MassExplosion, MassSnakeHead),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.CombatHitFlashDuration,
+	OffsetInfluence:  OffsetInfluenceDefault,
+}
+
+// ExplosionToSnakeBody defines explosion-to-snake-body collision
+var ExplosionToSnakeBody = CollisionProfile{
+	MassRatio:        vmath.Div(MassExplosion, MassSnakeBody),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.CombatHitFlashDuration,
 	OffsetInfluence:  0,
 }
 
@@ -305,4 +373,14 @@ var MissileSeekerHoming = HomingProfile{
 	ArrivalDragBoost: vmath.FromFloat(2.0), // 3x drag at target
 	ArrivalAccelMin:  vmath.Scale,          // Maintain full accel
 	DeadZone:         vmath.Scale / 10,     // Very small; impact check handles arrival
+}
+
+// SnakeHoming defines snake head homing behavior
+var SnakeHoming = HomingProfile{
+	BaseSpeed:        parameter.SnakeBaseSpeed,
+	HomingAccel:      parameter.SnakeHomingAccel,
+	Drag:             parameter.SnakeDrag,
+	ArrivalRadius:    vmath.FromFloat(2.0),
+	ArrivalDragBoost: vmath.FromFloat(2.0),
+	DeadZone:         vmath.Scale / 2,
 }

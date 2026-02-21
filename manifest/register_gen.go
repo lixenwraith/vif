@@ -105,6 +105,9 @@ func RegisterSystems() {
 	registry.RegisterSystem("pylon", func(w any) any {
 		return system.NewPylonSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("snake", func(w any) any {
+		return system.NewSnakeSystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("bullet", func(w any) any {
 		return system.NewBulletSystem(w.(*engine.World))
 	})
@@ -301,6 +304,7 @@ func ActiveSystems() []string {
 		"swarm",
 		"storm",
 		"pylon",
+		"snake",
 		"bullet",
 		"dust",
 		"flash",

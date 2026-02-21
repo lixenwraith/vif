@@ -25,6 +25,7 @@ const (
 	PriorityDrain
 	PriorityMaterialize // After Drain
 	PriorityQuasar      // After Drain
+	PrioritySnake       // After Quasar
 	PrioritySwarm       // After Drain
 	PriorityStorm       // After Swarm
 	PriorityPylon       // After Storm

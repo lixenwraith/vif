@@ -392,9 +392,6 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	// // Apply collision impulse
-	// physics.ApplyCollision(&kineticComp.Kinetic, radialX, radialY, rule.Profile, s.rng)
-
 	// Dampen mass ratio using fourth root to compress extreme values
 	// Preserves proportionality: heavier still pushes harder, but not catastrophically
 	dampenedRatio := rule.Profile.MassRatio

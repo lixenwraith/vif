@@ -44,6 +44,10 @@ type Component struct {
 	StormCircle *Store[component.StormCircleComponent]
 	Bullet      *Store[component.BulletComponent]
 	Pylon       *Store[component.PylonComponent]
+	Snake       *Store[component.SnakeComponent]
+	SnakeHead   *Store[component.SnakeHeadComponent]
+	SnakeBody   *Store[component.SnakeBodyComponent]
+	SnakeMember *Store[component.SnakeMemberComponent]
 	Header      *Store[component.HeaderComponent]
 	Member      *Store[component.MemberComponent]
 	Flash       *Store[component.FlashComponent]
@@ -91,6 +95,10 @@ func initComponents(w *World) {
 	w.Components.StormCircle = NewStore[component.StormCircleComponent]()
 	w.Components.Bullet = NewStore[component.BulletComponent]()
 	w.Components.Pylon = NewStore[component.PylonComponent]()
+	w.Components.Snake = NewStore[component.SnakeComponent]()
+	w.Components.SnakeHead = NewStore[component.SnakeHeadComponent]()
+	w.Components.SnakeBody = NewStore[component.SnakeBodyComponent]()
+	w.Components.SnakeMember = NewStore[component.SnakeMemberComponent]()
 	w.Components.Header = NewStore[component.HeaderComponent]()
 	w.Components.Member = NewStore[component.MemberComponent]()
 	w.Components.Flash = NewStore[component.FlashComponent]()
@@ -139,6 +147,10 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.StormCircle.RemoveEntity(e)
 	w.Components.Bullet.RemoveEntity(e)
 	w.Components.Pylon.RemoveEntity(e)
+	w.Components.Snake.RemoveEntity(e)
+	w.Components.SnakeHead.RemoveEntity(e)
+	w.Components.SnakeBody.RemoveEntity(e)
+	w.Components.SnakeMember.RemoveEntity(e)
 	w.Components.Header.RemoveEntity(e)
 	w.Components.Member.RemoveEntity(e)
 	w.Components.Flash.RemoveEntity(e)
@@ -186,6 +198,10 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.StormCircle.RemoveBatch(entities)
 	w.Components.Bullet.RemoveBatch(entities)
 	w.Components.Pylon.RemoveBatch(entities)
+	w.Components.Snake.RemoveBatch(entities)
+	w.Components.SnakeHead.RemoveBatch(entities)
+	w.Components.SnakeBody.RemoveBatch(entities)
+	w.Components.SnakeMember.RemoveBatch(entities)
 	w.Components.Header.RemoveBatch(entities)
 	w.Components.Member.RemoveBatch(entities)
 	w.Components.Flash.RemoveBatch(entities)
@@ -233,6 +249,10 @@ func (w *World) wipeAll() {
 	w.Components.StormCircle.ClearAllComponents()
 	w.Components.Bullet.ClearAllComponents()
 	w.Components.Pylon.ClearAllComponents()
+	w.Components.Snake.ClearAllComponents()
+	w.Components.SnakeHead.ClearAllComponents()
+	w.Components.SnakeBody.ClearAllComponents()
+	w.Components.SnakeMember.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()

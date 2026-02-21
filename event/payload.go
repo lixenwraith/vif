@@ -713,3 +713,22 @@ type PylonDestroyedPayload struct {
 	X            int         `toml:"x"`
 	Y            int         `toml:"y"`
 }
+
+// SnakeSpawnRequestPayload contains coordinates for snake creation
+type SnakeSpawnRequestPayload struct {
+	SpawnX       int `toml:"spawn_x"`
+	SpawnY       int `toml:"spawn_y"`
+	SegmentCount int `toml:"segment_count"` // Body segments to spawn (0 = default)
+}
+
+// SnakeSpawnedPayload emitted after successful spawn
+type SnakeSpawnedPayload struct {
+	RootEntity core.Entity
+	HeadEntity core.Entity
+	BodyEntity core.Entity
+}
+
+// SnakeDestroyedPayload emitted on snake death
+type SnakeDestroyedPayload struct {
+	RootEntity core.Entity
+}

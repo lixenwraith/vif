@@ -65,6 +65,10 @@ var Components = []ComponentDef{
 	{"StormCircle", "StormCircleComponent"},
 	{"Bullet", "BulletComponent"},
 	{"Pylon", "PylonComponent"},
+	{"Snake", "SnakeComponent"},
+	{"SnakeHead", "SnakeHeadComponent"},
+	{"SnakeBody", "SnakeBodyComponent"},
+	{"SnakeMember", "SnakeMemberComponent"},
 
 	// --- Composite ---
 	{"Header", "HeaderComponent"},
@@ -135,6 +139,7 @@ var Systems = []SystemDef{
 	{"swarm", "NewSwarmSystem"},
 	{"storm", "NewStormSystem"},
 	{"pylon", "NewPylonSystem"},
+	{"snake", "NewSnakeSystem"},
 	{"bullet", "NewBulletSystem"},
 
 	// --- Particles / Effects ---

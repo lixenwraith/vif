@@ -12,6 +12,7 @@ const (
 	BehaviorSwarm
 	BehaviorStorm
 	BehaviorPylon
+	BehaviorSnake
 	BehaviorBoss // Future
 )
 

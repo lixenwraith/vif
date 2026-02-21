@@ -686,6 +686,26 @@ const (
 	// Consumer: PylonSystem | Payload: nil
 	EventPylonCancelRequest
 
+	// EventSnakeSpawnRequest signals SnakeSystem to create the entity at location
+	// Trigger: FuseSystem (after animation) or FSM
+	// Consumer: SnakeSystem | Payload: *SnakeSpawnRequestPayload
+	EventSnakeSpawnRequest
+
+	// EventSnakeSpawned signals snake composite creation complete
+	// Trigger: SnakeSystem after creating snake
+	// Consumer: FSM, Telemetry | Payload: *SnakeSpawnedPayload
+	EventSnakeSpawned
+
+	// EventSnakeDestroyed signals snake termination
+	// Trigger: SnakeSystem on lifecycle end
+	// Consumer: FSM | Payload: *SnakeDestroyedPayload
+	EventSnakeDestroyed
+
+	// EventSnakeCancelRequest signals manual termination of all snakes
+	// Trigger: FSM (on phase transition)
+	// Consumer: SnakeSystem | Payload: nil
+	EventSnakeCancelRequest
+
 	EventDebugFlowToggle
 )
 

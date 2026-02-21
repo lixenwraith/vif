@@ -12,6 +12,7 @@ const (
 	SpeciesQuasar
 	SpeciesStorm
 	SpeciesPylon
+	SpeciesSnake
 	SpeciesCount
 )
 

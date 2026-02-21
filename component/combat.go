@@ -18,6 +18,8 @@ const (
 	CombatEntitySwarm
 	CombatEntityStorm
 	CombatEntityPylon
+	CombatEntitySnakeHead
+	CombatEntitySnakeBody
 	CombatEntityCount
 )
 
@@ -97,45 +99,57 @@ type combatMatrixMap map[CombatAttackType]map[CombatMatrixKey]*CombatAttackProfi
 
 var CombatMatrix = combatMatrixMap{
 	CombatAttackProjectile: {
-		{CombatEntityCleaner, CombatEntityDrain}:  &CombatAttackCleanerToDrain,
-		{CombatEntityCleaner, CombatEntityQuasar}: &CombatAttackCleanerToQuasar,
-		{CombatEntityCleaner, CombatEntitySwarm}:  &CombatAttackCleanerToSwarm,
-		{CombatEntityCleaner, CombatEntityStorm}:  &CombatAttackCleanerToStorm,
-		{CombatEntityCleaner, CombatEntityPylon}:  &CombatAttackCleanerToPylon,
+		{CombatEntityCleaner, CombatEntityDrain}:     &CombatAttackCleanerToDrain,
+		{CombatEntityCleaner, CombatEntityQuasar}:    &CombatAttackCleanerToQuasar,
+		{CombatEntityCleaner, CombatEntitySwarm}:     &CombatAttackCleanerToSwarm,
+		{CombatEntityCleaner, CombatEntityStorm}:     &CombatAttackCleanerToStorm,
+		{CombatEntityCleaner, CombatEntityPylon}:     &CombatAttackCleanerToPylon,
+		{CombatEntityCleaner, CombatEntitySnakeHead}: &CombatAttackCleanerToSnakeHead,
+		{CombatEntityCleaner, CombatEntitySnakeBody}: &CombatAttackCleanerToSnakeBody,
 	},
 	CombatAttackShield: {
-		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackShieldToDrain,
-		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackShieldToQuasar,
-		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackShieldToSwarm,
-		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackShieldToStorm,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackShieldToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackShieldToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackShieldToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackShieldToStorm,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackShieldToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackShieldToSnakeBody,
 	},
 	CombatAttackLightning: {
-		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackLightningToDrain,
-		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackLightningToQuasar,
-		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackLightningToSwarm,
-		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackLightningToStorm,
-		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackLightningToPylon,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackLightningToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackLightningToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackLightningToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackLightningToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackLightningToPylon,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackLightningToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackLightningToSnakeBody,
 	},
 	CombatAttackExplosion: {
-		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackExplosionToDrain,
-		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackExplosionToQuasar,
-		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackExplosionToSwarm,
-		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackExplosionToStorm,
-		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackExplosionToPylon,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackExplosionToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackExplosionToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackExplosionToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackExplosionToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackExplosionToPylon,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackExplosionToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackExplosionToSnakeBody,
 	},
 	CombatAttackMissile: {
-		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackMissileToDrain,
-		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackMissileToQuasar,
-		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackMissileToSwarm,
-		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackMissileToStorm,
-		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackMissileToPylon,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackMissileToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackMissileToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackMissileToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackMissileToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackMissileToPylon,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackMissileToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackMissileToSnakeBody,
 	},
 	CombatAttackPulse: {
-		{CombatEntityCursor, CombatEntityDrain}:  &CombatAttackPulseToDrain,
-		{CombatEntityCursor, CombatEntityQuasar}: &CombatAttackPulseToQuasar,
-		{CombatEntityCursor, CombatEntitySwarm}:  &CombatAttackPulseToSwarm,
-		{CombatEntityCursor, CombatEntityStorm}:  &CombatAttackPulseToStorm,
-		{CombatEntityCursor, CombatEntityPylon}:  &CombatAttackPulseToPylon,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackPulseToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackPulseToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackPulseToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackPulseToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackPulseToPylon,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackPulseToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackPulseToSnakeBody,
 	},
 }
 
@@ -198,6 +212,28 @@ var CombatAttackCleanerToPylon = CombatAttackProfile{
 	ChainAttack:        &CombatAttackLightningToPylon,
 }
 
+var CombatAttackCleanerToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCleaner,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageCleaner,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        &CombatAttackLightningToSnakeHead,
+	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
+}
+
+var CombatAttackCleanerToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCleaner,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageCleaner,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        &CombatAttackLightningToSnakeBody,
+	CollisionProfile:   &physics.CleanerToSwarm, // Reuse swarm profile for body
+}
+
 // Lightning attack profiles
 
 var CombatAttackLightningToDrain = CombatAttackProfile{
@@ -255,6 +291,28 @@ var CombatAttackLightningToPylon = CombatAttackProfile{
 	CollisionProfile:   nil,
 }
 
+var CombatAttackLightningToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageRod,
+	EffectMask:         CombatEffectVampireDrain,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
+var CombatAttackLightningToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageRod,
+	EffectMask:         CombatEffectVampireDrain,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
 // Shield attack profiles
 
 var CombatAttackShieldToDrain = CombatAttackProfile{
@@ -298,6 +356,28 @@ var CombatAttackShieldToStorm = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	CollisionProfile:   &physics.ShieldToQuasar, // Reuse quasar profile
+}
+
+var CombatAttackShieldToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ShieldToQuasar, // Reuse quasar profile
+}
+
+var CombatAttackShieldToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ShieldToSwarm, // Reuse swarm profile
 }
 
 // Explosion attack profiles
@@ -357,6 +437,28 @@ var CombatAttackExplosionToPylon = CombatAttackProfile{
 	CollisionProfile:   nil,
 }
 
+var CombatAttackExplosionToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageExplosion,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToQuasar, // Reuse quasar profile
+}
+
+var CombatAttackExplosionToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageExplosion,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToSwarm,
+}
+
 // Missile attack profiles
 
 var CombatAttackMissileToDrain = CombatAttackProfile{
@@ -412,6 +514,28 @@ var CombatAttackMissileToPylon = CombatAttackProfile{
 	EffectMask:         CombatEffectNone,
 }
 
+var CombatAttackMissileToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackMissile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageMissile,
+	EffectMask:         CombatEffectNone,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToQuasar,
+}
+
+var CombatAttackMissileToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackMissile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageMissile,
+	EffectMask:         CombatEffectNone,
+	ChainAttack:        nil,
+	CollisionProfile:   &physics.ExplosionToSwarm,
+}
+
 // Pulse
 var CombatAttackPulseToDrain = CombatAttackProfile{
 	AttackType:         CombatAttackPulse,
@@ -456,4 +580,26 @@ var CombatAttackPulseToPylon = CombatAttackProfile{
 	DamageType:         CombatDamageArea,
 	DamageValue:        parameter.CombatDamagePulse,
 	EffectMask:         CombatEffectStun,
+}
+
+var CombatAttackPulseToSnakeHead = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeHead,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
+}
+
+var CombatAttackPulseToSnakeBody = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntitySnakeBody,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
 }
