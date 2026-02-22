@@ -81,6 +81,17 @@ func (s *NavigationSystem) Init() {
 	if s.flowCache != nil {
 		s.flowCache.Field.Invalidate()
 	}
+
+	// Seed cursor position from world to prevent stale (0,0) default
+	// At app start/new game: cursor created before NavigationSystem init
+	if s.world.Resources.Player != nil {
+		if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
+			s.cursorX = pos.X
+			s.cursorY = pos.Y
+			s.cursorValid = true
+		}
+	}
+
 	// TODO: remove later
 	DebugFlow = s.flowCache
 }
