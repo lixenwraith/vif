@@ -150,70 +150,42 @@ func (s *CombatSystem) Update() {
 func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPayload) {
 	// TODO: telemetry
 
-	// Resolve attacker type: prefer OriginEntity, fallback to OwnerEntity if origin doesn't have combat component (e.g. visual-only entity like buff orb)
+	// Resolve attacker type: prefer OriginEntity, fallback to OwnerEntity
 	var attackerType component.CombatEntityType
 	if attackerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
 		attackerType = attackerCombatComp.CombatEntityType
 	} else if ownerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OwnerEntity); ok {
 		attackerType = ownerCombatComp.CombatEntityType
 	} else {
-		return // No valid attacker
+		return
 	}
 
 	targetEntity := payload.TargetEntity
 	hitEntity := payload.HitEntity
 
-	targetCombatComp, ok := s.world.Components.Combat.GetComponent(payload.TargetEntity)
+	targetCombatComp, ok := s.world.Components.Combat.GetComponent(targetEntity)
 	if !ok {
 		return
 	}
 
-	// Generate combat matrix key
-	var targetCombatType component.CombatEntityType
-	// Target type resolution using CompositeType with validation
+	// Composite type check for damage routing
 	headerComp, isComposite := s.world.Components.Header.GetComponent(targetEntity)
 
-	if isComposite {
-		// Validation: If hit entity is different from target (sub-part hit), ensure HitEntity is a member of TargetEntity
-		if hitEntity != targetEntity {
-			memberComp, isMember := s.world.Components.Member.GetComponent(hitEntity)
-			if !isMember || memberComp.HeaderEntity != targetEntity {
-				return // Safety: HitEntity is not a child of the TargetEntity
-			}
-		}
+	// Reject containers
+	if isComposite && headerComp.Type == component.CompositeTypeContainer {
+		return
+	}
 
-		switch headerComp.Behavior {
-		case component.BehaviorQuasar:
-			targetCombatType = component.CombatEntityQuasar
-		case component.BehaviorSwarm:
-			targetCombatType = component.CombatEntitySwarm
-		case component.BehaviorStorm:
-			targetCombatType = component.CombatEntityStorm
-		case component.BehaviorPylon:
-			targetCombatType = component.CombatEntityPylon
-		case component.BehaviorSnake:
-			// Discriminate head (Unit) vs body (Ablative) via CompositeType
-			if headerComp.Type == component.CompositeTypeUnit {
-				targetCombatType = component.CombatEntitySnakeHead
-			} else {
-				targetCombatType = component.CombatEntitySnakeBody
-			}
-		default:
-			return
-		}
-	} else {
-		// Non-composite logic
-		switch {
-		case targetEntity == s.world.Resources.Player.Entity:
-			targetCombatType = component.CombatEntityCursor
-		case s.world.Components.Drain.HasEntity(targetEntity):
-			targetCombatType = component.CombatEntityDrain
-		default:
+	// Validate hit-to-target relationship for composites
+	if isComposite && hitEntity != targetEntity {
+		memberComp, isMember := s.world.Components.Member.GetComponent(hitEntity)
+		if !isMember || memberComp.HeaderEntity != targetEntity {
 			return
 		}
 	}
 
-	combatMatrixKey := component.CombatMatrixKey{attackerType, targetCombatType}
+	// Combat type directly from CombatComponent
+	combatMatrixKey := component.CombatMatrixKey{attackerType, targetCombatComp.CombatEntityType}
 	combatProfile, ok := component.CombatMatrix[payload.AttackType][combatMatrixKey]
 	if !ok {
 		return
@@ -227,12 +199,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	var damageTargetDead bool
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
-		// Ablative: Damage specifically the HitEntity (Member)
-		// We already validated above that HitEntity is a member of TargetEntity or TargetEntity itself.
+		// Ablative: damage the HitEntity (member)
 		memberCombat, ok := s.world.Components.Combat.GetComponent(hitEntity)
-
-		// If the header itself was hit directly (Target == Hit), we skip damage for Ablative types
-		// (usually anchors/containers). Damage only applies to members.
 		if ok && hitEntity != targetEntity {
 			if memberCombat.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
 				memberCombat.HitPoints -= combatProfile.DamageValue
@@ -246,7 +214,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
 		}
 	} else {
-		// Unit (Swarm/Quasar) or Simple Entity: Damage the TargetEntity (Header/Self)
+		// Unit or Simple: damage the TargetEntity
 		if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
 			targetCombatComp.HitPoints -= combatProfile.DamageValue
 			if targetCombatComp.HitPoints < 0 {
@@ -305,7 +273,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Generate combat matrix key
+	// Resolve attacker type
 	var attackerType component.CombatEntityType
 	if payload.OriginEntity == s.world.Resources.Player.Entity {
 		attackerType = component.CombatEntityCursor
@@ -315,16 +283,12 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Resolve Target Type via Component (More robust than payload structure check)
-	var targetCombatType component.CombatEntityType
+	// Resolve header if target is a member
 	headerComp, isComposite := s.world.Components.Header.GetComponent(targetEntity)
-
-	// If target is a member, resolve to its header
 	if !isComposite {
 		if memberComp, isMember := s.world.Components.Member.GetComponent(targetEntity); isMember {
 			headerEntity := memberComp.HeaderEntity
 			if hc, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
-				// Re-route: target becomes header, original target added to hit list if not present
 				headerComp = hc
 				isComposite = true
 				targetEntity = headerEntity
@@ -336,39 +300,13 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		}
 	}
 
-	if isComposite {
-		switch headerComp.Behavior {
-		case component.BehaviorQuasar:
-			targetCombatType = component.CombatEntityQuasar
-		case component.BehaviorSwarm:
-			targetCombatType = component.CombatEntitySwarm
-		case component.BehaviorStorm:
-			targetCombatType = component.CombatEntityStorm
-		case component.BehaviorPylon:
-			targetCombatType = component.CombatEntityPylon
-		case component.BehaviorSnake:
-			// Discriminate head (Unit) vs body (Ablative) via CompositeType
-			if headerComp.Type == component.CompositeTypeUnit {
-				targetCombatType = component.CombatEntitySnakeHead
-			} else {
-				targetCombatType = component.CombatEntitySnakeBody
-			}
-		default:
-			return
-		}
-	} else {
-		// Single non-composite
-		switch {
-		case targetEntity == s.world.Resources.Player.Entity:
-			targetCombatType = component.CombatEntityCursor
-		case s.world.Components.Drain.HasEntity(targetEntity):
-			targetCombatType = component.CombatEntityDrain
-		default:
-			return
-		}
+	// Reject containers
+	if isComposite && headerComp.Type == component.CompositeTypeContainer {
+		return
 	}
 
-	combatMatrixKey := component.CombatMatrixKey{attackerType, targetCombatType}
+	// Combat type directly from CombatComponent
+	combatMatrixKey := component.CombatMatrixKey{attackerType, targetCombatComp.CombatEntityType}
 	combatProfile, ok := component.CombatMatrix[payload.AttackType][combatMatrixKey]
 	if !ok {
 		return
@@ -378,70 +316,54 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Logic split by CompositeType with validation
+	// Damage routing
 	var targetDead bool
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
-		// Ablative (e.g., Storm): Damage individual hit members
 		if combatProfile.DamageValue != 0 {
 			for _, hitEntity := range payload.HitEntities {
-				// 1. Don't damage the anchor/header itself in ablative mode
 				if hitEntity == targetEntity {
 					continue
 				}
-
-				// 2. Validation: ensure hit entity belongs to this target
 				memberComp, isMember := s.world.Components.Member.GetComponent(hitEntity)
 				if !isMember || memberComp.HeaderEntity != targetEntity {
 					continue
 				}
-
-				// 3. Apply Damage to Member
 				memberCombat, ok := s.world.Components.Combat.GetComponent(hitEntity)
 				if !ok || memberCombat.RemainingDamageImmunity > 0 {
 					continue
 				}
-
 				memberCombat.HitPoints -= combatProfile.DamageValue
 				if memberCombat.HitPoints < 0 {
 					memberCombat.HitPoints = 0
 				}
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-
 				s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
 			}
 		}
 	} else {
-		// Unit (e.g. Swarm) or Simple Entity: Damage Header/Self
 		if targetCombatComp.RemainingDamageImmunity == 0 && combatProfile.DamageValue != 0 {
-
-			// Validation: Filter hit entities to ensure they are valid parts of this target
 			validHitCount := 0
 			for _, hitEntity := range payload.HitEntities {
-				// Hit is valid if it is the target itself
 				if hitEntity == targetEntity {
 					validHitCount++
 					continue
 				}
-				// Valid if member of the target
 				if isComposite {
 					if member, ok := s.world.Components.Member.GetComponent(hitEntity); ok && member.HeaderEntity == targetEntity {
 						validHitCount++
 					}
 				}
 			}
-
 			if validHitCount > 0 {
 				damageValue := combatProfile.DamageValue * validHitCount
 				targetCombatComp.HitPoints -= damageValue
 				if targetCombatComp.HitPoints < 0 {
 					targetCombatComp.HitPoints = 0
 				}
-
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-
 				if targetCombatComp.HitPoints == 0 {
 					targetDead = true
 				}

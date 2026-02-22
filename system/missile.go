@@ -251,6 +251,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY int64) (x, y in
 		return 0, 0, impactNone
 	}
 
+	cursorEntity := s.world.Resources.Player.Entity
 	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
 	lastSafeX, lastSafeY := fromGridX, fromGridY
 
@@ -268,7 +269,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY int64) (x, y in
 		}
 
 		// Enemy collision
-		if s.hasCombatEntityAt(currX, currY) {
+		if HasCombatTargetAt(s.world, currX, currY, 0, cursorEntity) {
 			return currX, currY, impactEnemy
 		}
 
@@ -278,195 +279,52 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY int64) (x, y in
 	return 0, 0, impactNone
 }
 
-// hasCombatEntityAt checks for any valid enemy entity at position
-func (s *MissileSystem) hasCombatEntityAt(x, y int) bool {
-	entities := s.world.Positions.GetAllEntityAt(x, y)
-	for _, e := range entities {
-		// 1. Drains are valid targets
-		if s.world.Components.Drain.HasEntity(e) {
-			return true
-		}
-
-		// 2. Headers: Check for Unit (Swarm/Quasar) or Ablative (Storm Circle)
-		if header, ok := s.world.Components.Header.GetComponent(e); ok {
-			if header.Type == component.CompositeTypeUnit || header.Type == component.CompositeTypeAblative {
-				return true
-			}
-			continue
-		}
-
-		// 3. Members: Physical presence implies collision
-		if s.world.Components.Member.HasEntity(e) {
-			return true
-		}
-	}
-	return false
-}
-
 // resolveTarget updates target/hit entity state and returns homing coordinates
 func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, missileY int64) (int64, int64, bool) {
-	// 1. Active Hit Entity (Member or Single)
-	// Must verify existence via Positions to handle death
+	// 1. Sticky hit entity
 	if m.HitEntity != 0 {
 		if pos, ok := s.world.Positions.GetPosition(m.HitEntity); ok {
 			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
 			return x, y, true
 		}
-		// Entity died - clear and fallback to Parent Target
 		m.HitEntity = 0
 	}
 
-	// 2. Parent Target (Header for composites)
+	// 2. Parent target — resolve new closest member
 	if m.TargetEntity != 0 {
-		// Composite Target: Resolve new living member
 		if s.world.Components.Header.HasEntity(m.TargetEntity) {
-			member, x, y, ok := s.resolveClosestMember(m.TargetEntity, missileX, missileY)
+			member, x, y, ok := ResolveClosestMember(s.world, m.TargetEntity, missileX, missileY)
 			if ok {
 				m.HitEntity = member
 				return x, y, true
 			}
-			// Header invalid or empty (composite died) - clear
 			m.TargetEntity = 0
+		} else if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
+			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+			m.HitEntity = m.TargetEntity
+			return x, y, true
 		} else {
-			// Single Target: Check existence
-			if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
-				x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
-				m.HitEntity = m.TargetEntity
-				return x, y, true
-			}
-			// Single died
 			m.TargetEntity = 0
 		}
 	}
 
-	// 3. Retarget: Find nearest enemy globally
-	newTarget := s.findNearestEnemy(missileX, missileY)
-	if newTarget == 0 {
+	// 3. Retarget: nearest enemy
+	cursorEntity := s.world.Resources.Player.Entity
+	targets := FindNearestTargets(s.world, missileX, missileY, 1, cursorEntity)
+	if len(targets) == 0 {
 		return 0, 0, false
 	}
 
-	// Set new target
-	m.TargetEntity = newTarget
+	nearest := targets[0]
+	m.TargetEntity = nearest.Target
+	m.HitEntity = nearest.Hit
 
-	// Resolve specific hit entity
-	if s.world.Components.Header.HasEntity(newTarget) {
-		member, x, y, ok := s.resolveClosestMember(newTarget, missileX, missileY)
-		if ok {
-			m.HitEntity = member
-			return x, y, true
-		}
-	} else {
-		if pos, ok := s.world.Positions.GetPosition(newTarget); ok {
-			m.HitEntity = newTarget
-			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
-			return x, y, true
-		}
+	if pos, ok := s.world.Positions.GetPosition(nearest.Hit); ok {
+		x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+		return x, y, true
 	}
 
 	return 0, 0, false
-}
-
-func (s *MissileSystem) findNearestEnemy(fromX, fromY int64) core.Entity {
-	var best core.Entity
-	var bestDistSq int64 = -1
-
-	for _, e := range s.world.Components.Combat.GetAllEntities() {
-		combat, ok := s.world.Components.Combat.GetComponent(e)
-		if !ok || combat.OwnerEntity == s.world.Resources.Player.Entity {
-			continue
-		}
-
-		// 1. Header Logic: Valid target if Unit or Ablative
-		if header, isHeader := s.world.Components.Header.GetComponent(e); isHeader {
-			if header.Type == component.CompositeTypeContainer {
-				continue // Skip logic containers (Storm Root)
-			}
-
-			// Calculate distance to closest member for accurate nearest check
-			_, _, _, valid := s.resolveClosestMember(e, fromX, fromY)
-			if !valid {
-				continue
-			}
-
-			minMemberDistSq := int64(-1)
-			for _, m := range header.MemberEntries {
-				if m.Entity == 0 {
-					continue
-				}
-				if pos, ok := s.world.Positions.GetPosition(m.Entity); ok {
-					mx, my := vmath.CenteredFromGrid(pos.X, pos.Y)
-					d := vmath.MagnitudeSq(mx-fromX, my-fromY)
-					if minMemberDistSq < 0 || d < minMemberDistSq {
-						minMemberDistSq = d
-					}
-				}
-			}
-
-			if minMemberDistSq != -1 {
-				if bestDistSq < 0 || minMemberDistSq < bestDistSq {
-					bestDistSq = minMemberDistSq
-					best = e
-				}
-			}
-			continue
-		}
-
-		// 2. Member Logic: Skip, targeting Header instead
-		if s.world.Components.Member.HasEntity(e) {
-			continue
-		}
-
-		// 3. Simple Entity
-		pos, ok := s.world.Positions.GetPosition(e)
-		if !ok {
-			continue
-		}
-		tx, ty := vmath.CenteredFromGrid(pos.X, pos.Y)
-		distSq := vmath.MagnitudeSq(tx-fromX, ty-fromY)
-
-		if bestDistSq < 0 || distSq < bestDistSq {
-			bestDistSq = distSq
-			best = e
-		}
-	}
-
-	return best
-}
-
-// resolveClosestMember finds the closest living member of a composite Header
-func (s *MissileSystem) resolveClosestMember(headerEntity core.Entity, fromX, fromY int64) (core.Entity, int64, int64, bool) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return 0, 0, 0, false
-	}
-
-	var bestMember core.Entity
-	var bestX, bestY int64
-	var bestDistSq int64 = -1
-
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-		pos, ok := s.world.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		mx, my := vmath.CenteredFromGrid(pos.X, pos.Y)
-		distSq := vmath.MagnitudeSq(mx-fromX, my-fromY)
-
-		if bestDistSq < 0 || distSq < bestDistSq {
-			bestDistSq = distSq
-			bestMember = member.Entity
-			bestX, bestY = mx, my
-		}
-	}
-
-	if bestMember == 0 {
-		return 0, 0, 0, false
-	}
-	return bestMember, bestX, bestY, true
 }
 
 // --- Spawning ---

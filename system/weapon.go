@@ -563,8 +563,10 @@ func (s *WeaponSystem) fireAllWeapons() {
 		return
 	}
 
-	// Resolve targets once
-	assignments := resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
+	// Resolve targets once for all weapons
+	fromX, fromY := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+
+	assignments := FindNearestTargets(s.world, fromX, fromY, shots, cursorEntity)
 
 	// GUARD: If no targets are visible, don't waste cooldowns
 	if len(assignments) == 0 {
@@ -586,36 +588,26 @@ func (s *WeaponSystem) fireAllWeapons() {
 				s.triggerOrbFlash(rodOrbEntity)
 			}
 
-			// Lazy resolve targets
-			if assignments == nil {
-				assignments = resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
-			}
-
 			// Rod fires at unique targets only - no cycling
 			// Count unique targets (assignments may have duplicates from overflow distribution)
 			seen := make(map[core.Entity]bool, len(assignments))
 			for _, a := range assignments {
-				if seen[a.target] {
+				if seen[a.Target] {
 					continue
 				}
-				seen[a.target] = true
+				seen[a.Target] = true
 
 				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursorEntity,
 					OriginEntity: rodOrbEntity,
-					TargetEntity: a.target,
-					HitEntity:    a.hit,
+					TargetEntity: a.Target,
+					HitEntity:    a.Hit,
 				})
 			}
 
 		case component.WeaponLauncher:
-			// 1. Resolve targets based on current cursor position to determine if launcher should fire
-			if assignments == nil {
-				assignments = resolveWeaponTargets(s.world, cursorPos.X, cursorPos.Y, shots)
-			}
-
-			// Do not fire and waste cooldown if no target
+			// 1. Do not fire and waste cooldown if no target
 			if len(assignments) == 0 {
 				continue
 			}
@@ -636,10 +628,9 @@ func (s *WeaponSystem) fireAllWeapons() {
 			// 3. Prepare target metadata
 			targets := make([]core.Entity, len(assignments))
 			hits := make([]core.Entity, len(assignments))
-
 			for i, a := range assignments {
-				targets[i] = a.target
-				hits[i] = a.hit
+				targets[i] = a.Target
+				hits[i] = a.Hit
 			}
 
 			// 4. Determine Target Direction (Most Open Space)
@@ -689,353 +680,16 @@ func (s *WeaponSystem) fireAllWeapons() {
 			})
 
 		case component.WeaponDisruptor:
-			if weaponComp.Cooldown[weapon] > 0 {
-				continue
-			}
 			s.fireDisruptorWeapon(cursorEntity, cursorPos, &weaponComp)
 		}
+
 		// Update the component with new cooldowns and potentially updated orb states
 		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 	}
 }
 
-// targetAssignment holds resolved target and hit entity pair
-type targetAssignment struct {
-	target core.Entity // Header for composite, entity for single
-	hit    core.Entity // Member entity or same as target
-	dist   int64       // Distance from origin (for overflow distribution)
-}
-
-// resolveWeaponTargets returns prioritized target assignments for weapon abilities
-// Composites first (closest member per header), then distance-sorted singles
-// count: maximum assignments needed
-// Returns slice of assignments, may be shorter than count if insufficient targets
-func resolveWeaponTargets(
-	world *engine.World,
-	originX, originY int,
-	count int,
-) []targetAssignment {
-	if count <= 0 {
-		return nil
-	}
-
-	cursorEntity := world.Resources.Player.Entity
-
-	// Collect all combat entities except cursor-owned
-	combatEntities := world.Components.Combat.GetAllEntities()
-	candidates := make([]core.Entity, 0, len(combatEntities))
-
-	for _, e := range combatEntities {
-		combat, ok := world.Components.Combat.GetComponent(e)
-		if !ok || combat.OwnerEntity == cursorEntity {
-			continue
-		}
-
-		// Header Logic
-		if headerComp, isHeader := world.Components.Header.GetComponent(e); isHeader {
-			// Skip logic-only containers (e.g. Storm Root)
-			if headerComp.Type == component.CompositeTypeContainer {
-				continue
-			}
-			// Allow Unit (Swarm) and Ablative (Storm Circle)
-			candidates = append(candidates, e)
-			continue
-		}
-
-		// Member Logic: Skip, we target the Header
-		if world.Components.Member.HasEntity(e) {
-			continue
-		}
-
-		// Simple Entity (Drain)
-		candidates = append(candidates, e)
-	}
-
-	if len(candidates) == 0 {
-		return nil
-	}
-
-	// Separate composites and singles, resolve closest member for composites
-	composites := make([]targetAssignment, 0)
-	singles := make([]targetAssignment, 0)
-
-	for _, e := range candidates {
-		if header, isHeader := world.Components.Header.GetComponent(e); isHeader {
-			// Composite: find closest member for visual snap
-			var bestMember core.Entity
-			var bestDist int64 = 1 << 62
-
-			// Fallback to header if no members
-			if len(header.MemberEntries) == 0 {
-				pos, ok := world.Positions.GetPosition(e)
-				if !ok {
-					continue
-				}
-				d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
-				composites = append(composites, targetAssignment{target: e, hit: e, dist: d})
-				continue
-			}
-
-			for _, member := range header.MemberEntries {
-				if member.Entity == 0 {
-					continue
-				}
-
-				pos, ok := world.Positions.GetPosition(member.Entity)
-				if !ok {
-					continue
-				}
-
-				d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
-				if d < bestDist {
-					bestDist = d
-					bestMember = member.Entity
-				}
-			}
-
-			if bestMember != 0 {
-				composites = append(composites, targetAssignment{
-					target: e,
-					hit:    bestMember,
-					dist:   bestDist,
-				})
-			}
-		} else {
-			// Single entity
-			pos, ok := world.Positions.GetPosition(e)
-			if !ok {
-				continue
-			}
-			d := vmath.Magnitude(vmath.FromInt(originX-pos.X), vmath.FromInt(originY-pos.Y))
-			singles = append(singles, targetAssignment{
-				target: e,
-				hit:    e,
-				dist:   d,
-			})
-		}
-	}
-
-	// Sort singles by distance
-	slices.SortStableFunc(singles, func(a, b targetAssignment) int {
-		return int(a.dist - b.dist)
-	})
-
-	// Build result: composites first (priority), then singles
-	result := make([]targetAssignment, 0, count)
-	result = append(result, composites...)
-	result = append(result, singles...)
-
-	if len(result) == 0 {
-		return nil
-	}
-
-	// Distribute overflow: if count > len(result), cycle through targets
-	if len(result) >= count {
-		return result[:count]
-	}
-
-	final := make([]targetAssignment, count)
-	copy(final, result)
-	for i := len(result); i < count; i++ {
-		final[i] = result[i%len(result)]
-	}
-	return final
-}
-
-// pulseTarget holds header entity and hit members for pulse attack
-type pulseTarget struct {
-	header  core.Entity
-	members []core.Entity
-}
-
-// findPulseTargets finds all enemies within disruptor radius of cursor
-func (s *WeaponSystem) findPulseTargets(cx, cy int) []pulseTarget {
-	var results []pulseTarget
-
-	// Check drains (single entities)
-	for _, entity := range s.world.Components.Drain.GetAllEntities() {
-		pos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
-			continue
-		}
-		if vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-			results = append(results, pulseTarget{header: entity, members: []core.Entity{entity}})
-		}
-	}
-
-	// Check swarms (composite entities)
-	for _, headerEntity := range s.world.Components.Swarm.GetAllEntities() {
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
-		}
-
-		var hitMembers []core.Entity
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
-			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-				hitMembers = append(hitMembers, member.Entity)
-			}
-		}
-		if len(hitMembers) > 0 {
-			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
-		}
-	}
-
-	// Check quasar (composite entity)
-	for _, headerEntity := range s.world.Components.Quasar.GetAllEntities() {
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
-		}
-
-		var hitMembers []core.Entity
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
-			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-				hitMembers = append(hitMembers, member.Entity)
-			}
-		}
-		if len(hitMembers) > 0 {
-			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
-		}
-	}
-
-	// Check storm circles (each circle is independent header with StormCircleComponent)
-	for _, rootEntity := range s.world.Components.Storm.GetAllEntities() {
-		stormComp, ok := s.world.Components.Storm.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-
-		for i := 0; i < component.StormCircleCount; i++ {
-			if !stormComp.CirclesAlive[i] {
-				continue
-			}
-
-			circleEntity := stormComp.Circles[i]
-			headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
-			if !ok {
-				continue
-			}
-
-			var hitMembers []core.Entity
-			for _, member := range headerComp.MemberEntries {
-				if member.Entity == 0 {
-					continue
-				}
-				memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-				if !ok {
-					continue
-				}
-				if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-					hitMembers = append(hitMembers, member.Entity)
-				}
-			}
-			if len(hitMembers) > 0 {
-				results = append(results, pulseTarget{header: circleEntity, members: hitMembers})
-			}
-		}
-	}
-
-	// Check pylons (ablative composite entities)
-	for _, headerEntity := range s.world.Components.Pylon.GetAllEntities() {
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
-		}
-
-		var hitMembers []core.Entity
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
-			if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-				hitMembers = append(hitMembers, member.Entity)
-			}
-		}
-		if len(hitMembers) > 0 {
-			results = append(results, pulseTarget{header: headerEntity, members: hitMembers})
-		}
-	}
-
-	// Check snakes (head is Unit, body is Ablative)
-	for _, rootEntity := range s.world.Components.Snake.GetAllEntities() {
-		snakeComp, ok := s.world.Components.Snake.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-
-		// Check head (Unit composite - hit any member, damage goes to header)
-		if snakeComp.HeadEntity != 0 {
-			headerComp, ok := s.world.Components.Header.GetComponent(snakeComp.HeadEntity)
-			if ok {
-				var hitMembers []core.Entity
-				for _, member := range headerComp.MemberEntries {
-					if member.Entity == 0 {
-						continue
-					}
-					memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-					if !ok {
-						continue
-					}
-					if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-						hitMembers = append(hitMembers, member.Entity)
-					}
-				}
-				if len(hitMembers) > 0 {
-					results = append(results, pulseTarget{header: snakeComp.HeadEntity, members: hitMembers})
-				}
-			}
-		}
-
-		// Check body (Ablative composite - each member takes damage)
-		if snakeComp.BodyEntity != 0 {
-			headerComp, ok := s.world.Components.Header.GetComponent(snakeComp.BodyEntity)
-			if ok {
-				var hitMembers []core.Entity
-				for _, member := range headerComp.MemberEntries {
-					if member.Entity == 0 {
-						continue
-					}
-					memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-					if !ok {
-						continue
-					}
-					if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cx, cy, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq) {
-						hitMembers = append(hitMembers, member.Entity)
-					}
-				}
-				if len(hitMembers) > 0 {
-					results = append(results, pulseTarget{header: snakeComp.BodyEntity, members: hitMembers})
-				}
-			}
-		}
-	}
-
-	return results
-}
-
-// fireDisruptorWeapon fires the disruptor pulse stun weapon
 func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {
-	// Find targets in radius
-	targets := s.findPulseTargets(cursorPos.X, cursorPos.Y)
+	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, cursorEntity)
 	if len(targets) == 0 {
 		return
 	}
@@ -1054,8 +708,8 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos c
 			AttackType:   component.CombatAttackPulse,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
-			TargetEntity: target.header,
-			HitEntities:  target.members,
+			TargetEntity: target.Target,
+			HitEntities:  target.Members,
 			OriginX:      cursorPos.X,
 			OriginY:      cursorPos.Y,
 		})

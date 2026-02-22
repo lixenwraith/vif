@@ -368,18 +368,12 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			VelY:     0,
 		}
 		kineticComp := component.KineticComponent{kinetic}
-		combatComp := component.CombatComponent{
-			OwnerEntity:      s.world.Resources.Player.Entity,
-			CombatEntityType: component.CombatEntityCleaner,
-			HitPoints:        1,
-		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
-		s.world.Components.Combat.SetComponent(entity, combatComp)
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
 		})
@@ -402,68 +396,24 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 			continue
 		}
 
-		// Skip other cleaners
+		// Fast-path: skip other cleaners (frequent co-location, no combat components)
 		if s.world.Components.Cleaner.HasEntity(entity) {
 			continue
 		}
 
-		// Step 2: Header entity — check CompositeType
-		if headerComp, ok := s.world.Components.Header.GetComponent(entity); ok {
-			switch headerComp.Type {
-			case component.CompositeTypeContainer:
-				continue
-			case component.CompositeTypeUnit:
-				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-					AttackType:   component.CombatAttackProjectile,
-					OwnerEntity:  cursorEntity,
-					OriginEntity: selfEntity,
-					TargetEntity: entity,
-					HitEntity:    entity,
-				})
-				blocked = true
-				continue
-			case component.CompositeTypeAblative:
-				// Ablative header not directly targetable; damage through members only
-				continue
-			}
-		}
-
-		// Step 3: Member entity (non-header, guaranteed by Step 2 catching headers first)
-		if memberComp, ok := s.world.Components.Member.GetComponent(entity); ok {
-			headerEntity := memberComp.HeaderEntity
-			headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-			if !ok {
-				continue
-			}
-
-			switch headerComp.Type {
-			case component.CompositeTypeContainer:
-				continue
-			case component.CompositeTypeUnit, component.CompositeTypeAblative:
-				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-					AttackType:   component.CombatAttackProjectile,
-					OwnerEntity:  cursorEntity,
-					OriginEntity: selfEntity,
-					TargetEntity: headerEntity,
-					HitEntity:    entity,
-				})
-				blocked = true
-				continue
-			}
-		}
-
-		// Step 4: Simple combat entity (drain, non-composite)
-		if s.world.Components.Combat.HasEntity(entity) {
-			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				AttackType:   component.CombatAttackProjectile,
-				OwnerEntity:  cursorEntity,
-				OriginEntity: selfEntity,
-				TargetEntity: entity,
-				HitEntity:    entity,
-			})
-			blocked = true
+		target, hit, valid := ResolveTargetFromEntity(s.world, entity, selfEntity)
+		if !valid {
 			continue
 		}
+
+		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			AttackType:   component.CombatAttackProjectile,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: selfEntity,
+			TargetEntity: target,
+			HitEntity:    hit,
+		})
+		blocked = true
 	}
 
 	// Glyph processing (always runs, non-blocking)
@@ -608,18 +558,12 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 			VelY:     dir.velY,
 		}
 		kineticComp := component.KineticComponent{kinetic}
-		combatComp := component.CombatComponent{
-			OwnerEntity:      s.world.Resources.Player.Entity,
-			CombatEntityType: component.CombatEntityCleaner,
-			HitPoints:        1,
-		}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent
 		entity := s.world.CreateEntity()
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
-		s.world.Components.Combat.SetComponent(entity, combatComp)
 		// TODO: centralize protection via entity factory
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,

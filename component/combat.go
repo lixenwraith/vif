@@ -12,7 +12,6 @@ type CombatEntityType int
 
 const (
 	CombatEntityCursor CombatEntityType = iota
-	CombatEntityCleaner
 	CombatEntityDrain
 	CombatEntityQuasar
 	CombatEntitySwarm
@@ -99,13 +98,13 @@ type combatMatrixMap map[CombatAttackType]map[CombatMatrixKey]*CombatAttackProfi
 
 var CombatMatrix = combatMatrixMap{
 	CombatAttackProjectile: {
-		{CombatEntityCleaner, CombatEntityDrain}:     &CombatAttackCleanerToDrain,
-		{CombatEntityCleaner, CombatEntityQuasar}:    &CombatAttackCleanerToQuasar,
-		{CombatEntityCleaner, CombatEntitySwarm}:     &CombatAttackCleanerToSwarm,
-		{CombatEntityCleaner, CombatEntityStorm}:     &CombatAttackCleanerToStorm,
-		{CombatEntityCleaner, CombatEntityPylon}:     &CombatAttackCleanerToPylon,
-		{CombatEntityCleaner, CombatEntitySnakeHead}: &CombatAttackCleanerToSnakeHead,
-		{CombatEntityCleaner, CombatEntitySnakeBody}: &CombatAttackCleanerToSnakeBody,
+		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackCleanerToDrain,
+		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackCleanerToQuasar,
+		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackCleanerToSwarm,
+		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackCleanerToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackCleanerToPylon,
+		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackCleanerToSnakeHead,
+		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackCleanerToSnakeBody,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackShieldToDrain,
@@ -159,7 +158,7 @@ var CombatMatrix = combatMatrixMap{
 
 var CombatAttackCleanerToDrain = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityDrain,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -171,7 +170,7 @@ var CombatAttackCleanerToDrain = CombatAttackProfile{
 
 var CombatAttackCleanerToQuasar = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityQuasar,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -182,7 +181,7 @@ var CombatAttackCleanerToQuasar = CombatAttackProfile{
 
 var CombatAttackCleanerToSwarm = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntitySwarm,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -193,7 +192,7 @@ var CombatAttackCleanerToSwarm = CombatAttackProfile{
 
 var CombatAttackCleanerToStorm = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityStorm,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -204,7 +203,7 @@ var CombatAttackCleanerToStorm = CombatAttackProfile{
 
 var CombatAttackCleanerToPylon = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntityPylon,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -214,7 +213,7 @@ var CombatAttackCleanerToPylon = CombatAttackProfile{
 
 var CombatAttackCleanerToSnakeHead = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntitySnakeHead,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
@@ -225,7 +224,7 @@ var CombatAttackCleanerToSnakeHead = CombatAttackProfile{
 
 var CombatAttackCleanerToSnakeBody = CombatAttackProfile{
 	AttackType:         CombatAttackProjectile,
-	AttackerEntityType: CombatEntityCleaner,
+	AttackerEntityType: CombatEntityCursor,
 	DefenderEntityType: CombatEntitySnakeBody,
 	DamageType:         CombatDamageDirect,
 	DamageValue:        parameter.CombatDamageCleaner,
