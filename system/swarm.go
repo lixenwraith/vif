@@ -529,18 +529,18 @@ func (s *SwarmSystem) updateDecelerateState(
 	s.integrateAndSync(headerEntity, dtFixed)
 }
 
-// enterLockState transitions to lock phase
+// enterLockState transitions to lock phase, locking current target position for charge
 func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	// Resolve base target for this swarm's group (cursor or tower etc)
+	baseX, baseY, ok := resolveBaseTarget(s.world, headerEntity)
 	if !ok {
 		return
 	}
 
 	swarmComp.State = component.SwarmStateLock
 	swarmComp.LockRemaining = parameter.SwarmLockDuration
-	swarmComp.LockedTargetX = cursorPos.X
-	swarmComp.LockedTargetY = cursorPos.Y
+	swarmComp.LockedTargetX = baseX
+	swarmComp.LockedTargetY = baseY
 
 	// Zero velocity during lock
 	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
@@ -670,42 +670,18 @@ func (s *SwarmSystem) enterDecelerateState(swarmComp *component.SwarmComponent) 
 
 // applyHomingMovement applies homing physics toward cursor
 func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int64) {
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
 	if !ok {
 		return
 	}
 
-	// Default target: cursor center
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
-	targetX, targetY := cursorXFixed, cursorYFixed
-
-	// Navigation: use flow field when LOS blocked
-	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
-	if hasNav {
-		if navComp.HasDirectPath {
-			// Direct LOS available
-			targetX, targetY = cursorXFixed, cursorYFixed
-		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
-			// Blocked: follow flow field
-			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
-			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
-		} else {
-			// Flow zero (trapped): snap to cursor if very close
-			distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
-			if distToCursor < vmath.FromInt(2) {
-				targetX, targetY = cursorXFixed, cursorYFixed
-			}
-		}
-	}
+	// Group-based target resolution + navigation routing
+	// (direct path vs flow field vs stuck fallback)
+	targetX, targetY, _ := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
 
 	// Cornering drag: slow down during sharp turns
 	var extraDrag int64
+	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
 	if hasNav {
 		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 		if currentSpeed > vmath.Scale {

@@ -732,3 +732,17 @@ type SnakeSpawnedPayload struct {
 type SnakeDestroyedPayload struct {
 	RootEntity core.Entity
 }
+
+// TargetGroupUpdatePayload configures or updates a navigation target group
+type TargetGroupUpdatePayload struct {
+	GroupID uint8 // 0 = cursor (rarely set manually), 1+ = custom
+	Type    component.TargetType
+	Entity  core.Entity // For TargetEntity type
+	PosX    int         // For TargetPosition type
+	PosY    int         // For TargetPosition type
+}
+
+// TargetGroupRemovePayload removes a target group
+type TargetGroupRemovePayload struct {
+	GroupID uint8
+}

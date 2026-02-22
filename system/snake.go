@@ -565,12 +565,6 @@ func (s *SnakeSystem) calculatePerpendicular(facingX, facingY int64) (int64, int
 }
 
 func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, dtFixed int64) {
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
 	headPos, ok := s.world.Positions.GetPosition(headEntity)
 	if !ok {
 		return
@@ -581,21 +575,9 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		return
 	}
 
-	// Target calculation with navigation support
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
-	targetX, targetY := cursorXFixed, cursorYFixed
-	usingDirectPath := true
-
-	navComp, hasNav := s.world.Components.Navigation.GetComponent(headEntity)
-	if hasNav {
-		if navComp.HasDirectPath {
-			targetX, targetY = cursorXFixed, cursorYFixed
-		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
-			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
-			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
-			usingDirectPath = false
-		}
-	}
+	// Group-based target resolution + navigation routing
+	// (direct path vs flow field vs stuck fallback)
+	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, &kineticComp)
 
 	// Apply homing
 	physics.ApplyHomingScaled(

@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/status"
@@ -18,6 +19,8 @@ type Resource struct {
 	Game   *GameStateResource
 	Player *PlayerResource
 	Event  *EventQueueResource
+	// Targeting
+	Target *TargetResource
 
 	// Transient visual effects
 	Transient *TransientResource
@@ -133,6 +136,37 @@ func (pr *PlayerResource) GetBounds() PingBounds {
 // SetBounds atomically updates bounds
 func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
+}
+
+// TargetGroupState holds resolved navigation target for a group
+type TargetGroupState struct {
+	Type   component.TargetType
+	Entity core.Entity // Source entity for TargetEntity type
+	PosX   int         // Fixed position or resolved position
+	PosY   int
+	Valid  bool // False if target entity destroyed or uninitialized
+}
+
+// TargetResource provides per-group target resolution accessible by all systems
+// Written by NavigationSystem, read by species systems
+type TargetResource struct {
+	Groups [component.MaxTargetGroups]TargetGroupState
+}
+
+// GetGroup returns the resolved target state for a group
+// Group 0 is always cursor; uninitialized groups return zero-value (Valid=false)
+func (tr *TargetResource) GetGroup(groupID uint8) TargetGroupState {
+	if int(groupID) >= len(tr.Groups) {
+		return TargetGroupState{}
+	}
+	return tr.Groups[groupID]
+}
+
+// SetGroup configures a target group
+func (tr *TargetResource) SetGroup(groupID uint8, state TargetGroupState) {
+	if int(groupID) < len(tr.Groups) {
+		tr.Groups[groupID] = state
+	}
 }
 
 // === Bridged Resources from Service ===

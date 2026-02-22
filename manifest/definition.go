@@ -58,6 +58,7 @@ var Components = []ComponentDef{
 	{"Materialize", "MaterializeComponent"},
 
 	// --- Species ---
+	{"Target", "TargetComponent"},
 	{"Drain", "DrainComponent"},
 	{"Quasar", "QuasarComponent"},
 	{"Swarm", "SwarmComponent"},

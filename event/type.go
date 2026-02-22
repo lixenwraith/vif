@@ -710,6 +710,16 @@ const (
 	// Consumer: SnakeSystem | Payload: nil
 	EventSnakeCancelRequest
 
+	// EventTargetGroupUpdate configures or updates a navigation target group
+	// Trigger: Level system, game script, HFSM
+	// Consumer: NavigationSystem | Payload: *TargetGroupUpdatePayload
+	EventTargetGroupUpdate
+
+	// EventTargetGroupRemove removes a target group, entities fall back to cursor
+	// Trigger: Level system on tower destruction, game script
+	// Consumer: NavigationSystem | Payload: *TargetGroupRemovePayload
+	EventTargetGroupRemove
+
 	EventDebugFlowToggle
 )
 

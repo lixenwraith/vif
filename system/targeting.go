@@ -308,3 +308,70 @@ func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, from
 	}
 	return best, bestX, bestY, true
 }
+
+// resolveBaseTarget returns the grid-coordinate target for an entity based on its group
+// Falls back to cursor position for group 0 or uninitialized groups
+func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid bool) {
+	groupID := uint8(0)
+	if tc, ok := w.Components.Target.GetComponent(entity); ok {
+		groupID = tc.GroupID
+	}
+
+	state := w.Resources.Target.GetGroup(groupID)
+	if state.Valid {
+		return state.PosX, state.PosY, true
+	}
+
+	// Fallback: cursor
+	if pos, ok := w.Positions.GetPosition(w.Resources.Player.Entity); ok {
+		return pos.X, pos.Y, true
+	}
+	return 0, 0, false
+}
+
+// ResolveMovementTarget computes the effective homing target for a kinetic entity
+// Encapsulates the target resolution + navigation routing pattern shared by all species
+// Returns (targetX, targetY int64, usingDirectPath bool)
+func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *component.KineticComponent) (int64, int64, bool) {
+	baseX, baseY, ok := resolveBaseTarget(w, entity)
+	if !ok {
+		return kineticComp.PreciseX, kineticComp.PreciseY, true
+	}
+
+	baseXFixed, baseYFixed := vmath.CenteredFromGrid(baseX, baseY)
+
+	navComp, hasNav := w.Components.Navigation.GetComponent(entity)
+	if !hasNav {
+		return baseXFixed, baseYFixed, true
+	}
+
+	if navComp.HasDirectPath {
+		return baseXFixed, baseYFixed, true
+	}
+
+	if navComp.FlowX != 0 || navComp.FlowY != 0 {
+		tx := kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
+		ty := kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+		return tx, ty, false
+	}
+
+	// Flow zero (stuck): snap to target if close
+	dist := vmath.DistanceApprox(kineticComp.PreciseX-baseXFixed, kineticComp.PreciseY-baseYFixed)
+	if dist < vmath.FromInt(2) {
+		return baseXFixed, baseYFixed, true
+	}
+
+	return baseXFixed, baseYFixed, true
+}
+
+// ResolveBaseTargetFixed returns centered Q32.32 target coordinates for an entity
+// For use when species systems need the raw target position without navigation routing
+// (e.g. swarm lock phase, quasar zap range check, homing settled snap)
+func ResolveBaseTargetFixed(w *engine.World, entity core.Entity) (int64, int64, bool) {
+	x, y, ok := resolveBaseTarget(w, entity)
+	if !ok {
+		return 0, 0, false
+	}
+	fx, fy := vmath.CenteredFromGrid(x, y)
+	return fx, fy, true
+}

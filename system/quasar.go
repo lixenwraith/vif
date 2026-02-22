@@ -436,13 +436,7 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 // updateKineticMovement handles continuous kinetic quasar movement toward cursor
 func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
 	now := s.world.Resources.Time.GameTime
-
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
@@ -471,37 +465,13 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		quasarComp.LastSpeedIncreaseAt = now
 	}
 
-	// Default target: cursor center
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
-	targetX, targetY := cursorXFixed, cursorYFixed
-
-	// Track if using direct path (affects drag behavior)
-	usingDirectPath := true
-
-	// Navigation: use flow field when LOS blocked
-	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
-	if hasNav {
-		if navComp.HasDirectPath {
-			// Direct LOS available
-			targetX, targetY = cursorXFixed, cursorYFixed
-			usingDirectPath = true
-		} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
-			// Blocked: follow flow field
-			targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
-			targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
-			usingDirectPath = false
-		} else {
-			// Flow zero (trapped): snap to cursor if very close
-			distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
-			if distToCursor < vmath.FromInt(2) {
-				targetX, targetY = cursorXFixed, cursorYFixed
-			}
-			usingDirectPath = true
-		}
-	}
+	// Group-based target resolution + navigation routing
+	// (direct path vs flow field vs stuck fallback)
+	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
 
 	// Cornering drag: slow down during sharp turns
 	var extraDrag int64
+	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
 	if hasNav {
 		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
 		if currentSpeed > vmath.Scale {
@@ -543,15 +513,19 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	}
 
 	if settled {
-		// Snap to exact cursor center
-		kineticComp.PreciseX = cursorXFixed
-		kineticComp.PreciseY = cursorYFixed
-		kineticComp.VelX = 0
-		kineticComp.VelY = 0
-		// Sync grid position if snap crossed cell boundary
-		if headerPos.X != cursorPos.X || headerPos.Y != cursorPos.Y {
-			s.processCollisionsAtNewPositions(headerEntity, cursorPos.X, cursorPos.Y)
-			s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: cursorPos.X, Y: cursorPos.Y})
+		// Snap to exact target center
+		baseX, baseY, baseOK := resolveBaseTarget(s.world, headerEntity)
+		if baseOK {
+			baseXFixed, baseYFixed := vmath.CenteredFromGrid(baseX, baseY)
+			kineticComp.PreciseX = baseXFixed
+			kineticComp.PreciseY = baseYFixed
+			kineticComp.VelX = 0
+			kineticComp.VelY = 0
+			// Sync grid position if snap crossed cell boundary
+			if headerPos.X != baseX || headerPos.Y != baseY {
+				s.processCollisionsAtNewPositions(headerEntity, baseX, baseY)
+				s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: baseX, Y: baseY})
+			}
 		}
 		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 		return

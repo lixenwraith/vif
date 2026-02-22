@@ -863,25 +863,15 @@ func (s *DrainSystem) handleEntityCollisions() {
 // updateDrainMovement handles continuous kinetic drain movement toward cursor
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
-
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
 
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
-	// Cap delta time to prevent tunneling on lag spikes
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
 
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
-
-	// Target cursor center
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -909,56 +899,37 @@ func (s *DrainSystem) updateDrainMovement() {
 		}
 
 		// 1. Navigation & Targeting
-		targetX, targetY := cursorXFixed, cursorYFixed
-		navComp, hasNav := s.world.Components.Navigation.GetComponent(drainEntity)
-
-		if hasNav {
-			// TODO: remove
-			// s.world.DebugPrint(DebugGeneString(&navComp))
-
-			if navComp.HasDirectPath {
-				// Open Space: Ignore grid, fly straight to cursor (Euclidean), fixing "Curve/Pinball" artifacts in open areas if only done based on flow field (at some process expense)
-				targetX, targetY = cursorXFixed, cursorYFixed
-			} else if navComp.FlowX != 0 || navComp.FlowY != 0 {
-				// Blocked: Use Flow Field
-				targetX = kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
-				targetY = kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
-			} else {
-				// Flow is zero (Lost/Stuck). Snap to cursor if very close to prevent wall grinding
-				distToCursor := vmath.DistanceApprox(kineticComp.PreciseX-cursorXFixed, kineticComp.PreciseY-cursorYFixed)
-				if distToCursor < vmath.FromInt(2) {
-					targetX, targetY = cursorXFixed, cursorYFixed
-				}
-			}
-		} else {
-			// No navigation component: Direct Homing
-			targetX, targetY = cursorXFixed, cursorYFixed
-		}
+		// ResolveMovementTarget handles group-based target resolution + nav routing
+		// (direct path vs flow field vs stuck fallback)
+		targetX, targetY, _ := ResolveMovementTarget(s.world, drainEntity, &kineticComp)
 
 		// 2. Physics with GA-optimized cornering
 		if combatComp.RemainingKineticImmunity == 0 {
 			appliedDrag := parameter.DrainDrag
 
 			// Cornering drag: check turn alignment when moving
-			currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-			if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
-				// Normalized velocity
-				nx := vmath.Div(kineticComp.VelX, currentSpeed)
-				ny := vmath.Div(kineticComp.VelY, currentSpeed)
+			navComp, hasNav := s.world.Components.Navigation.GetComponent(drainEntity)
+			if hasNav {
+				currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+				if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
+					// Normalized velocity
+					nx := vmath.Div(kineticComp.VelX, currentSpeed)
+					ny := vmath.Div(kineticComp.VelY, currentSpeed)
 
-				// Direction to target
-				dx := targetX - kineticComp.PreciseX
-				dy := targetY - kineticComp.PreciseY
-				dnx, dny := vmath.Normalize2D(dx, dy)
+					// Direction to target
+					dx := targetX - kineticComp.PreciseX
+					dy := targetY - kineticComp.PreciseY
+					dnx, dny := vmath.Normalize2D(dx, dy)
 
-				// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
-				alignment := vmath.DotProduct(nx, ny, dnx, dny)
+					// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
+					alignment := vmath.DotProduct(nx, ny, dnx, dny)
 
-				// Apply cornering drag using GA parameters from navigation component
-				if alignment < navComp.TurnThreshold {
-					turnSeverity := navComp.TurnThreshold - alignment
-					brakeMult := vmath.Scale + vmath.Mul(turnSeverity, navComp.BrakeIntensity)
-					appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
+					// Apply cornering drag using GA parameters from navigation component
+					if alignment < navComp.TurnThreshold {
+						turnSeverity := navComp.TurnThreshold - alignment
+						brakeMult := vmath.Scale + vmath.Mul(turnSeverity, navComp.BrakeIntensity)
+						appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
+					}
 				}
 			}
 
@@ -1000,6 +971,9 @@ func (s *DrainSystem) updateDrainMovement() {
 		// Wall Collision (Traversal)
 		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
 		hitWall := false
+
+		// Cursor exclusion for entity-entity collision (not targeting)
+		cursorEntity := s.world.Resources.Player.Entity
 
 		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {

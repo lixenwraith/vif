@@ -37,6 +37,7 @@ type Component struct {
 	Pulse       *Store[component.PulseComponent]
 	Spirit      *Store[component.SpiritComponent]
 	Materialize *Store[component.MaterializeComponent]
+	Target      *Store[component.TargetComponent]
 	Drain       *Store[component.DrainComponent]
 	Quasar      *Store[component.QuasarComponent]
 	Swarm       *Store[component.SwarmComponent]
@@ -88,6 +89,7 @@ func initComponents(w *World) {
 	w.Components.Pulse = NewStore[component.PulseComponent]()
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
 	w.Components.Materialize = NewStore[component.MaterializeComponent]()
+	w.Components.Target = NewStore[component.TargetComponent]()
 	w.Components.Drain = NewStore[component.DrainComponent]()
 	w.Components.Quasar = NewStore[component.QuasarComponent]()
 	w.Components.Swarm = NewStore[component.SwarmComponent]()
@@ -140,6 +142,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Pulse.RemoveEntity(e)
 	w.Components.Spirit.RemoveEntity(e)
 	w.Components.Materialize.RemoveEntity(e)
+	w.Components.Target.RemoveEntity(e)
 	w.Components.Drain.RemoveEntity(e)
 	w.Components.Quasar.RemoveEntity(e)
 	w.Components.Swarm.RemoveEntity(e)
@@ -191,6 +194,7 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.Pulse.RemoveBatch(entities)
 	w.Components.Spirit.RemoveBatch(entities)
 	w.Components.Materialize.RemoveBatch(entities)
+	w.Components.Target.RemoveBatch(entities)
 	w.Components.Drain.RemoveBatch(entities)
 	w.Components.Quasar.RemoveBatch(entities)
 	w.Components.Swarm.RemoveBatch(entities)
@@ -242,6 +246,7 @@ func (w *World) wipeAll() {
 	w.Components.Pulse.ClearAllComponents()
 	w.Components.Spirit.ClearAllComponents()
 	w.Components.Materialize.ClearAllComponents()
+	w.Components.Target.ClearAllComponents()
 	w.Components.Drain.ClearAllComponents()
 	w.Components.Quasar.ClearAllComponents()
 	w.Components.Swarm.ClearAllComponents()

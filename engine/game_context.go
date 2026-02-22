@@ -131,6 +131,9 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 7. Cursor Entity
 	ctx.World.CreateCursorEntity()
 
+	// 8. Target Resource
+	world.Resources.Target = &TargetResource{}
+
 	// 8. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
