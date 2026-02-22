@@ -52,6 +52,9 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 		if !ok {
 			return 0, 0, false
 		}
+		if !w.Components.Combat.HasEntity(headerEntity) {
+			return 0, 0, false
+		}
 		switch headerComp.Type {
 		case component.CompositeTypeUnit, component.CompositeTypeAblative:
 			return headerEntity, entity, true
@@ -120,6 +123,9 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 		if !ok || headerComp.Type == component.CompositeTypeContainer {
 			continue
 		}
+		if !w.Components.Combat.HasEntity(headerEntity) {
+			continue
+		}
 		if isOwnedBy(w, headerEntity, ownerEntity) {
 			continue
 		}
@@ -183,6 +189,9 @@ func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEnt
 		headerEntity := memberComp.HeaderEntity
 		headerComp, ok := w.Components.Header.GetComponent(headerEntity)
 		if !ok || headerComp.Type == component.CompositeTypeContainer {
+			continue
+		}
+		if !w.Components.Combat.HasEntity(headerEntity) {
 			continue
 		}
 		if isOwnedBy(w, headerEntity, ownerEntity) {

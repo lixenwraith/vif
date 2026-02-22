@@ -122,12 +122,6 @@ func (s *QuasarSystem) Update() {
 
 	for _, headerEntity := range quasarEntities {
 		// Verify composite still exists
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			s.terminateQuasar(headerEntity)
-			continue
-		}
-
 		quasarComp, ok := s.world.Components.Quasar.GetComponent(headerEntity)
 		if !ok {
 			s.terminateQuasar(headerEntity)
@@ -221,7 +215,7 @@ func (s *QuasarSystem) Update() {
 		}
 
 		// Shield and cursor interaction (all states)
-		s.handleInteractions(headerEntity, &headerComp)
+		s.handleInteractions(headerEntity)
 
 		// Combat update: enraged state blocks kinetic via combat system
 		isActiveState := quasarComp.IsCharging || quasarComp.IsZapping
@@ -773,57 +767,24 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 }
 
 // handleInteractions processes shield drain and cursor collision
-func (s *QuasarSystem) handleInteractions(headerEntity core.Entity, headerComp *component.HeaderComponent) {
+func (s *QuasarSystem) handleInteractions(headerEntity core.Entity) {
 	cursorEntity := s.world.Resources.Player.Entity
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
+	overlap := CheckCursorOverlap(s.world, headerEntity)
 
-	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := ok && shieldComp.Active
-
-	anyOnCursor := false
-
-	// Stack-allocated buffer for shield overlapping member offsets (max 15 cells in 3x5 quasar)
-	var hitEntities []core.Entity
-
-	for _, memberEntry := range headerComp.MemberEntries {
-		if memberEntry.Entity == 0 {
-			continue
-		}
-
-		memberPos, ok := s.world.Positions.GetPosition(memberEntry.Entity)
-		if !ok {
-			continue
-		}
-
-		// Cursor collision check
-		if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
-			anyOnCursor = true
-		}
-
-		// Shield overlap check
-		if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-			hitEntities = append(hitEntities, memberEntry.Entity)
-		}
-	}
-	anyInShield := len(hitEntities) > 0
-
-	// Shield knockback check
-	if anyInShield {
+	// Shield knockback
+	if len(overlap.ShieldMembers) > 0 {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackShield,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
 			TargetEntity: headerEntity,
-			HitEntities:  hitEntities,
+			HitEntities:  overlap.ShieldMembers,
 		})
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 			Value: parameter.QuasarShieldDrain,
 		})
-	} else if anyOnCursor && !shieldActive {
+	} else if overlap.OnCursor && !overlap.ShieldActive {
 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: -parameter.QuasarDamageHeat})
 	}
 }

@@ -882,56 +882,23 @@ func (s *SwarmSystem) handleCursorInteractions(
 ) {
 	cursorEntity := s.world.Resources.Player.Entity
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
+	overlap := CheckCursorOverlap(s.world, headerEntity)
 
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
-	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := ok && shieldComp.Active
-
-	anyOnCursor := false
-	var hitEntities []core.Entity
-
-	// Check each active member
-	for _, member := range headerComp.MemberEntries {
-		memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		// Cursor collision check
-		if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
-			anyOnCursor = true
-		}
-
-		// Shield overlap check
-		if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-			hitEntities = append(hitEntities, member.Entity)
-		}
-	}
-
-	// Shield interaction (knockback only when not enraged)
-	if len(hitEntities) > 0 {
+	// Shield interaction (knockback via combat system; enrage immunity handled there)
+	if len(overlap.ShieldMembers) > 0 {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackShield,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
 			TargetEntity: headerEntity,
-			HitEntities:  hitEntities,
+			HitEntities:  overlap.ShieldMembers,
 		})
 
-		// Energy drain
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.QuasarShieldDrain, // Same drain rate as quasar
+			Value: parameter.QuasarShieldDrain,
 		})
-	} else if anyOnCursor && !shieldActive {
-		// Direct cursor collision without shield - reduce heat
+	} else if overlap.OnCursor && !overlap.ShieldActive {
+		// Direct cursor collision without shield
 		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 			Delta: -parameter.DrainHeatReductionAmount,
 		})

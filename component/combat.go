@@ -111,6 +111,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityQuasar}:    &CombatAttackShieldToQuasar,
 		{CombatEntityCursor, CombatEntitySwarm}:     &CombatAttackShieldToSwarm,
 		{CombatEntityCursor, CombatEntityStorm}:     &CombatAttackShieldToStorm,
+		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackShieldToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackShieldToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackShieldToSnakeBody,
 	},
@@ -377,6 +378,17 @@ var CombatAttackShieldToSnakeBody = CombatAttackProfile{
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
 	CollisionProfile:   &physics.ShieldToSwarm, // Reuse swarm profile
+}
+
+var CombatAttackShieldToPylon = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityPylon,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectNone, // Stationary, no knockback
+	ChainAttack:        nil,
+	CollisionProfile:   nil,
 }
 
 // Explosion attack profiles

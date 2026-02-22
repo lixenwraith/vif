@@ -1008,13 +1008,6 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 // handleCircleInteractions processes player collision and shield drain
 func (s *StormSystem) handleCircleInteractions(stormComp *component.StormComponent) {
 	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
-	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := shieldOK && shieldComp.Active
 
 	for i := 0; i < component.StormCircleCount; i++ {
 		if !stormComp.CirclesAlive[i] {
@@ -1023,39 +1016,10 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 
 		circleEntity := stormComp.Circles[i]
 
-		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
-		if !ok {
-			continue
-		}
-
-		// Check cursor collision across all member positions
-		anyOnCursor := false
-		var hitEntities []core.Entity
-
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
-
-			if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
-				anyOnCursor = true
-			}
-
-			if shieldActive && vmath.EllipseContainsPoint(
-				memberPos.X, memberPos.Y,
-				cursorPos.X, cursorPos.Y,
-				shieldComp.InvRxSq, shieldComp.InvRySq,
-			) {
-				hitEntities = append(hitEntities, member.Entity)
-			}
-		}
+		overlap := CheckCursorOverlap(s.world, circleEntity)
 
 		// Shield interaction
-		if len(hitEntities) > 0 {
+		if len(overlap.ShieldMembers) > 0 {
 			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Value: parameter.QuasarShieldDrain,
 			})
@@ -1065,9 +1029,9 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 				OwnerEntity:  cursorEntity,
 				OriginEntity: cursorEntity,
 				TargetEntity: circleEntity,
-				HitEntities:  hitEntities,
+				HitEntities:  overlap.ShieldMembers,
 			})
-		} else if anyOnCursor && !shieldActive {
+		} else if overlap.OnCursor && !overlap.ShieldActive {
 			// Direct cursor collision without shield - reset heat
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Delta: -parameter.HeatMax,

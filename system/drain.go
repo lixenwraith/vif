@@ -741,32 +741,10 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	// If no valid position, materialize spawn dropped (map saturated with drains)
 }
 
-// isInsideShieldEllipse checks if position is within the shield ellipse using Q32.32 fixed-point
-func (s *DrainSystem) isInsideShieldEllipse(x, y int) bool {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	if !ok {
-		return false
-	}
-
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return false
-	}
-
-	return vmath.EllipseContainsPoint(x, y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq)
-}
-
 // handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions() {
-	cursorEntity := s.world.Resources.Player.Entity
 	now := s.world.Resources.Time.GameTime
-
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
+	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions()
@@ -779,18 +757,11 @@ func (s *DrainSystem) handleDrainInteractions() {
 			continue
 		}
 
-		drainPos, ok := s.world.Positions.GetPosition(drainEntity)
-		if !ok {
-			continue
-		}
-
-		// Check shield state from component
-		shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-		shieldActive := ok && shield.Active
+		overlap := CheckCursorOverlap(s.world, drainEntity)
 
 		// Shield zone interaction
-		if shieldActive && s.isInsideShieldEllipse(drainPos.X, drainPos.Y) {
-			// Energy drain (existing timer-based)
+		if len(overlap.ShieldMembers) > 0 {
+			// Energy drain (timer-based)
 			if now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval {
 				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 					Value: parameter.DrainShieldEnergyDrainAmount,
@@ -804,16 +775,14 @@ func (s *DrainSystem) handleDrainInteractions() {
 				OwnerEntity:  cursorEntity,
 				OriginEntity: cursorEntity,
 				TargetEntity: drainEntity,
-				HitEntities:  []core.Entity{drainEntity},
+				HitEntities:  overlap.ShieldMembers,
 			})
 
 			continue
 		}
 
-		isOnCursor := drainPos.X == cursorPos.X && drainPos.Y == cursorPos.Y
-
 		// Cursor collision (shield not active or drain outside shield)
-		if isOnCursor {
+		if overlap.OnCursor {
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Delta: -parameter.DrainHeatReductionAmount,
 			})

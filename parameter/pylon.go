@@ -20,3 +20,12 @@ const (
 	// PylonSpawnSpiralMaxRadius is max search distance for spiral fallback
 	PylonSpawnSpiralMaxRadius = 30
 )
+
+// Pylon interaction
+const (
+	// PylonShieldDrain is energy drained per tick when pylon members overlap shield
+	PylonShieldDrain = 500
+
+	// PylonDamageHeat is heat removed on cursor contact without shield
+	PylonDamageHeat = 10
+)

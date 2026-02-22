@@ -889,75 +889,42 @@ func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bod
 
 func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
+
+	// Head interaction
+	headOverlap := CheckCursorOverlap(s.world, snakeComp.HeadEntity)
+
+	if headOverlap.OnCursor {
+		if headOverlap.ShieldActive {
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Value: parameter.SnakeShieldDrainPerTick,
+			})
+		} else if !snakeComp.IsShielded {
+			// Head damages cursor only when unshielded
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Delta: -parameter.SnakeDamageHeat,
+			})
+		}
+	}
+
+	// Body interaction with player shield
+	if snakeComp.BodyEntity == 0 {
 		return
 	}
 
-	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := shieldOK && shieldComp.Active
+	bodyOverlap := CheckCursorOverlap(s.world, snakeComp.BodyEntity)
 
-	// Check head collision
-	headHeader, ok := s.world.Components.Header.GetComponent(snakeComp.HeadEntity)
-	if ok {
-		for _, member := range headHeader.MemberEntries {
-			if member.Entity == 0 {
-				continue
-			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-			if !ok {
-				continue
-			}
+	if len(bodyOverlap.ShieldMembers) > 0 {
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: parameter.SnakeShieldDrainPerTick,
+		})
 
-			if memberPos.X == cursorPos.X && memberPos.Y == cursorPos.Y {
-				if shieldActive {
-					s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-						Value: parameter.SnakeShieldDrainPerTick,
-					})
-				} else if !snakeComp.IsShielded {
-					// Head damages cursor only when unshielded
-					s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-						Delta: -parameter.SnakeDamageHeat,
-					})
-				}
-				break
-			}
-		}
-	}
-
-	// Check body collision with player shield
-	if shieldActive && snakeComp.BodyEntity != 0 {
-		bodyHeader, ok := s.world.Components.Header.GetComponent(snakeComp.BodyEntity)
-		if ok {
-			var hitEntities []core.Entity
-			for _, member := range bodyHeader.MemberEntries {
-				if member.Entity == 0 {
-					continue
-				}
-				memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-				if !ok {
-					continue
-				}
-
-				if vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-					hitEntities = append(hitEntities, member.Entity)
-				}
-			}
-
-			if len(hitEntities) > 0 {
-				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-					Value: parameter.SnakeShieldDrainPerTick,
-				})
-
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-					AttackType:   component.CombatAttackShield,
-					OwnerEntity:  cursorEntity,
-					OriginEntity: cursorEntity,
-					TargetEntity: snakeComp.BodyEntity,
-					HitEntities:  hitEntities,
-				})
-			}
-		}
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackShield,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: snakeComp.BodyEntity,
+			HitEntities:  bodyOverlap.ShieldMembers,
+		})
 	}
 }
 

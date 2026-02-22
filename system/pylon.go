@@ -127,11 +127,39 @@ func (s *PylonSystem) Update() {
 		// Deaths routed through CompositeSystem; IntegrityBreach triggers handlePylonDeath
 		s.processAblativeCombat(headerEntity, &headerComp)
 
+		// Cursor/shield interaction
+		s.handleInteractions(headerEntity)
+
 		activeCount++
 	}
 
 	s.statCount.Store(int64(activeCount))
 	s.statActive.Store(activeCount > 0)
+}
+
+// handleInteractions processes shield drain and cursor collision
+func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
+	cursorEntity := s.world.Resources.Player.Entity
+
+	overlap := CheckCursorOverlap(s.world, headerEntity)
+
+	if len(overlap.ShieldMembers) > 0 {
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Value: parameter.PylonShieldDrain,
+		})
+
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackShield,
+			OwnerEntity:  cursorEntity,
+			OriginEntity: cursorEntity,
+			TargetEntity: headerEntity,
+			HitEntities:  overlap.ShieldMembers,
+		})
+	} else if overlap.OnCursor && !overlap.ShieldActive {
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			Delta: -parameter.PylonDamageHeat,
+		})
+	}
 }
 
 func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
