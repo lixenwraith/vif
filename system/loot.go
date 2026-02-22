@@ -1,8 +1,8 @@
 package system
 
 import (
-	"math/rand"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -37,6 +37,8 @@ type pityState struct {
 
 type LootSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Pity tracking per enemy type
 	pity map[component.SpeciesType]*pityState
@@ -74,6 +76,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	s.pity = make(map[component.SpeciesType]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
@@ -140,8 +143,6 @@ func (s *LootSystem) Update() {
 	if !s.enabled {
 		return
 	}
-
-	// s.world.DebugPrint(fmt.Sprintf("D:%d S:%d Q:%d ST:%d", s.statDrainKills.Load(), s.statSwarmKills.Load(), s.statQuasarKills.Load(), s.statStormKills.Load()))
 
 	lootEntities := s.world.Components.Loot.GetAllEntities()
 	if len(lootEntities) == 0 {
@@ -475,7 +476,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 		}
 
 		// Roll
-		roll := rand.Float64()
+		roll := s.rng.Float64()
 		var cumulative float64
 		var dropped *component.DropEntry
 

@@ -156,7 +156,24 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		minHP = maxHP
 	}
 
-	centerX, centerY := payload.X, payload.Y
+	var centerX, centerY int
+
+	if payload.X == 0 && payload.Y == 0 {
+		// Random placement
+		var ok bool
+		centerX, centerY, ok = s.findRandomPylonPosition(radiusX, radiusY)
+		if !ok {
+			s.world.PushEvent(event.EventPylonSpawnFailed, nil)
+			return
+		}
+	} else {
+		// Explicit placement — validate
+		centerX, centerY = payload.X, payload.Y
+		if !s.validatePylonPosition(centerX, centerY, radiusX, radiusY) {
+			s.world.PushEvent(event.EventPylonSpawnFailed, nil)
+			return
+		}
+	}
 
 	// Create header entity
 	headerEntity := s.world.CreateEntity()
@@ -204,6 +221,89 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		HeaderEntity: headerEntity,
 		MemberCount:  len(members),
 	})
+}
+
+// validatePylonPosition checks if pylon bounding rect fits in bounds and is wall-free
+func (s *PylonSystem) validatePylonPosition(centerX, centerY, radiusX, radiusY int) bool {
+	topLeftX := centerX - radiusX
+	topLeftY := centerY - radiusY
+	width := 2*radiusX + 1
+	height := 2*radiusY + 1
+
+	return s.world.Positions.IsAreaFree(topLeftX, topLeftY, width, height, component.WallBlockSpawn)
+}
+
+// findRandomPylonPosition attempts random placement, then spiral, then cursor fallback
+func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, bool) {
+	config := s.world.Resources.Config
+	width := 2*radiusX + 1
+	height := 2*radiusY + 1
+
+	cursorPos, hasCursor := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+
+	// Tier 1: Random attempts
+	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTime.UnixNano()))
+
+	// Valid center ranges: [radiusX, MapWidth-radiusX-1] and [radiusY, MapHeight-radiusY-1]
+	minCX := radiusX
+	maxCX := config.MapWidth - radiusX - 1
+	minCY := radiusY
+	maxCY := config.MapHeight - radiusY - 1
+
+	if maxCX < minCX || maxCY < minCY {
+		// Map too small for this pylon
+		return 0, 0, false
+	}
+
+	rangeX := maxCX - minCX + 1
+	rangeY := maxCY - minCY + 1
+
+	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
+
+	for attempt := 0; attempt < parameter.PylonSpawnMaxAttempts; attempt++ {
+		cx := minCX + rng.Intn(rangeX)
+		cy := minCY + rng.Intn(rangeY)
+		lastCX, lastCY = cx, cy
+
+		// Cursor exclusion
+		if hasCursor {
+			dx := cx - cursorPos.X
+			dy := cy - cursorPos.Y
+			if dx < 0 {
+				dx = -dx
+			}
+			if dy < 0 {
+				dy = -dy
+			}
+			if dx <= parameter.CursorExclusionX && dy <= parameter.CursorExclusionY {
+				continue
+			}
+		}
+
+		if s.validatePylonPosition(cx, cy, radiusX, radiusY) {
+			return cx, cy, true
+		}
+	}
+
+	// Tier 2: Spiral from last random attempt center
+	topLeftX, topLeftY, found := s.world.Positions.FindFreeAreaSpiral(
+		lastCX, lastCY,
+		width, height,
+		radiusX, radiusY, // anchor offset = radius (center to top-left)
+		component.WallBlockSpawn,
+		parameter.PylonSpawnSpiralMaxRadius,
+	)
+	if found {
+		// Convert top-left back to center
+		return topLeftX + radiusX, topLeftY + radiusY, true
+	}
+
+	// Tier 3: Last resort — try cursor position
+	if hasCursor && s.validatePylonPosition(cursorPos.X, cursorPos.Y, radiusX, radiusY) {
+		return cursorPos.X, cursorPos.Y, true
+	}
+
+	return 0, 0, false
 }
 
 // createDiscMembers generates elliptical disc of member entities with HP falloff

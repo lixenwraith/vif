@@ -1,8 +1,6 @@
 package system
 
 import (
-	"math"
-	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -14,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // GlyphKey represents a unique glyph type+level combination
@@ -32,6 +31,8 @@ var glyphSpawnLevels = []component.GlyphLevel{component.GlyphDark, component.Gly
 // GlyphSystem handles glyph sequence generation and spawning
 type GlyphSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Glyph census
 	census map[GlyphKey]int
@@ -74,6 +75,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	s.census = make(map[GlyphKey]int)
 	s.initCensus()
 
@@ -337,7 +339,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	for attempt := 0; attempt < parameter.MaxPlacementTries; attempt++ {
 		// Random row selection
 		// TODO: convert to fast rand
-		row := rand.Intn(config.MapHeight)
+		row := s.rng.Intn(config.MapHeight)
 
 		// Check if line fits and find available columns
 		if lineLength > config.MapWidth {
@@ -352,7 +354,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 			return false
 		}
 
-		startCol := rand.Intn(maxStartCol + 1)
+		startCol := s.rng.Intn(maxStartCol + 1)
 
 		// Check for overlaps
 		hasOverlap := false
@@ -370,8 +372,10 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		}
 		for i := 0; i < lineLength; i++ {
 			col := startCol + i
-			if math.Abs(float64(col-cursorPos.X)) <= parameter.CursorExclusionX &&
-				math.Abs(float64(row-cursorPos.Y)) <= parameter.CursorExclusionY {
+			// if math.Abs(float64(col-cursorPos.X)) <= parameter.CursorExclusionX &&
+			// 	math.Abs(float64(row-cursorPos.Y)) <= parameter.CursorExclusionY {
+			if vmath.IntAbs(col-cursorPos.X) <= parameter.CursorExclusionX &&
+				vmath.IntAbs(row-cursorPos.Y) <= parameter.CursorExclusionY {
 				hasOverlap = true
 				break
 			}

@@ -3,15 +3,16 @@ package content
 import (
 	"bufio"
 	"fmt"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 var (
@@ -66,6 +67,7 @@ type ContentManager struct {
 	validatedCache []validatedContent
 	cacheMu        sync.RWMutex
 	dataDir        string
+	rng            *vmath.FastRand
 }
 
 // NewContentManager creates a new content manager
@@ -81,6 +83,7 @@ func NewContentManager() *ContentManager {
 		contentFiles:   []string{},
 		validatedCache: []validatedContent{},
 		dataDir:        dataPath,
+		rng:            vmath.NewFastRand(uint64(time.Now().UnixNano())),
 	}
 }
 
@@ -561,7 +564,7 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 	}
 
 	// Select a random cached file
-	randomIndex := rand.Intn(len(cm.validatedCache))
+	randomIndex := cm.rng.Intn(len(cm.validatedCache))
 	cached := cm.validatedCache[randomIndex]
 
 	// Select a random block from the cached lines
@@ -578,7 +581,7 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 	// Select a random starting position
 	var startLine int
 	if len(cached.lines) > blockSize {
-		startLine = rand.Intn(len(cached.lines) - blockSize + 1)
+		startLine = cm.rng.Intn(len(cached.lines) - blockSize + 1)
 	}
 
 	// Extract the block
@@ -606,7 +609,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	}
 
 	// Select a random file
-	randomFileIndex := rand.Intn(len(cm.contentFiles))
+	randomFileIndex := cm.rng.Intn(len(cm.contentFiles))
 	selectedFile := cm.contentFiles[randomFileIndex]
 
 	// Open the file to count valid lines
@@ -647,7 +650,7 @@ func (cm *ContentManager) SelectRandomBlock() ([]string, string, error) {
 	}
 
 	// Select a random starting line
-	randomStartLine := rand.Intn(validLineCount)
+	randomStartLine := cm.rng.Intn(validLineCount)
 
 	// GetComponent the content block
 	block, err := cm.GetContentBlock(selectedFile, randomStartLine, parameter.ContentBlockSize)

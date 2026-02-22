@@ -1,7 +1,6 @@
 package system
 
 import (
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -17,6 +16,8 @@ import (
 // NuggetSystem manages nugget spawn and respawn logic
 type NuggetSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
@@ -46,6 +47,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)
@@ -229,7 +231,7 @@ func (s *NuggetSystem) spawnNugget() {
 		Y: y,
 	}
 
-	randomChar := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+	randomChar := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 	nugget := component.NuggetComponent{
 		Char:            randomChar,
 		SpawnTime:       now,
@@ -274,8 +276,8 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 	}
 
 	for attempt := 0; attempt < parameter.NuggetMaxAttempts; attempt++ {
-		x := rand.Intn(config.MapWidth)
-		y := rand.Intn(config.MapHeight)
+		x := s.rng.Intn(config.MapWidth)
+		y := s.rng.Intn(config.MapHeight)
 
 		dx := x - cursorPos.X
 		if dx < 0 {

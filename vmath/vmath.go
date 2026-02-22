@@ -155,7 +155,6 @@ func Sqrt(x int64) int64 {
 
 // --- Randomness ---
 
-// TODO: maybe just use sort.xorshift? it's uint64
 type FastRand struct {
 	state uint64
 }
@@ -168,12 +167,10 @@ func NewFastRand(seed uint64) *FastRand {
 }
 
 func (r *FastRand) Next() uint64 {
-	x := r.state
-	x ^= x << 13
-	x ^= x >> 17
-	x ^= x << 5
-	r.state = x
-	return x
+	r.state ^= r.state << 13
+	r.state ^= r.state >> 17
+	r.state ^= r.state << 5
+	return r.state
 }
 
 func (r *FastRand) Intn(n int) int {
@@ -181,6 +178,10 @@ func (r *FastRand) Intn(n int) int {
 		return 0
 	}
 	return int(r.Next() % uint64(n))
+}
+
+func (r *FastRand) Float64() float64 {
+	return float64(r.Next()>>11) / (1 << 53)
 }
 
 // --- Misc ---

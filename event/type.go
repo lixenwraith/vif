@@ -671,6 +671,10 @@ const (
 	// Consumer: PylonSystem | Payload: *PylonSpawnRequestPayload
 	EventPylonSpawnRequest
 
+	// EventPylonSpawnFailed signals pylon spawn could not find valid position
+	// Trigger: PylonSystem | Payload: nil
+	EventPylonSpawnFailed
+
 	// EventPylonSpawned signals pylon composite creation
 	// Trigger: PylonSystem after creation
 	// Consumer: FSM | Payload: *PylonSpawnedPayload

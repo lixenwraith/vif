@@ -2,8 +2,8 @@ package system
 
 import (
 	"fmt"
-	"math/rand"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -37,6 +37,8 @@ type drainCacheEntry struct {
 // Drains spawn materialize based on Heat only
 type DrainSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Spawn queue for staggered materialization
 	pendingSpawns []pendingDrainSpawn
@@ -77,6 +79,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *DrainSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
@@ -505,8 +508,8 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	rangeY := maxY - minY + 1
 
 	for attempt := 0; attempt < maxRetries; attempt++ {
-		x := minX + rand.Intn(rangeX)
-		y := minY + rand.Intn(rangeY)
+		x := minX + s.rng.Intn(rangeX)
+		y := minY + s.rng.Intn(rangeY)
 
 		// Check if position already queued for materialize spawn
 		key := uint64(x)<<32 | uint64(y)

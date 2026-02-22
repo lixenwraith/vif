@@ -13,4 +13,10 @@ const (
 
 	// PylonCollisionRadiusYFloat is vertical collision zone (cells, aspect-corrected)
 	PylonCollisionRadiusYFloat = 2.0
+
+	// PylonSpawnMaxAttempts is random position attempts before spiral fallback
+	PylonSpawnMaxAttempts = 30
+
+	// PylonSpawnSpiralMaxRadius is max search distance for spiral fallback
+	PylonSpawnSpiralMaxRadius = 30
 )

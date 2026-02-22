@@ -1,8 +1,8 @@
 package system
 
 import (
-	"math/rand"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -17,6 +17,8 @@ import (
 // BlossomSystem handles blossom entity movement and collision logic
 type BlossomSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Per-frame tracking
 	blossomedThisFrame map[core.Entity]bool
@@ -46,6 +48,7 @@ func NewBlossomSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *BlossomSystem) Init() {
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	clear(s.blossomedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
@@ -133,7 +136,7 @@ func (s *BlossomSystem) Update() {
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
 	// Note: Speed is converted to Q32.32. Blossom moves UP by default, so velocity is negative
-	speedFloat := parameter.ParticleMinSpeed + rand.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
+	speedFloat := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
 	velY := -vmath.FromFloat(speedFloat)
 	accelY := -vmath.FromFloat(parameter.ParticleAcceleration)
 
@@ -176,7 +179,7 @@ func (s *BlossomSystem) spawnBlossomWave() {
 
 	// Spawn one blossom entity per column for full-width coverage
 	for column := 0; column < gameWidth; column++ {
-		char := parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnSingleBlossom(column, gameHeight-1, char, false)
 	}
 }
@@ -286,8 +289,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 		// 2D Matrix Visual Effect: Randomize character when entering ANY new cell
 		if blossomComp.LastIntX != curX || blossomComp.LastIntY != curY {
-			if rand.Float64() < parameter.ParticleChangeChance {
-				blossomComp.Rune = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+			if s.rng.Float64() < parameter.ParticleChangeChance {
+				blossomComp.Rune = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 				// Must update the component used by the renderer
 				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
 					sigil.Rune = blossomComp.Rune

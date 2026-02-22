@@ -2,7 +2,6 @@ package system
 
 import (
 	"math"
-	"math/rand"
 	"sync/atomic"
 	"time"
 
@@ -12,11 +11,14 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // GoldSystem manages the gold sequence mechanic autonomously
 type GoldSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Internal state
 	active       bool
@@ -50,6 +52,7 @@ func NewGoldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
 	s.active = false
+	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
@@ -230,7 +233,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// Generate random 10-character sequence
 	sequence := make([]rune, parameter.GoldSequenceLength)
 	for i := 0; i < parameter.GoldSequenceLength; i++ {
-		sequence[i] = parameter.AlphanumericRunes[rand.Intn(len(parameter.AlphanumericRunes))]
+		sequence[i] = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 	}
 
 	// Find empty space to spawn gold
@@ -455,8 +458,8 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 	}
 
 	for attempt := 0; attempt < parameter.GoldSpawnMaxAttempts; attempt++ {
-		x := rand.Intn(config.MapWidth)
-		y := rand.Intn(config.MapHeight)
+		x := s.rng.Intn(config.MapWidth)
+		y := s.rng.Intn(config.MapHeight)
 
 		// Check if far enough from cursor
 		if math.Abs(float64(x-cursorPos.X)) <= parameter.CursorExclusionX ||
