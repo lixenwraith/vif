@@ -1,11 +1,15 @@
 package ascimage
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
 	"image"
+	"image/color"
 	"io"
 	"os"
+	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -15,22 +19,26 @@ type DualModeImage struct {
 	Width      int
 	Height     int
 	RenderMode RenderMode
+	AnchorX    int
+	AnchorY    int
 	Cells      []DualCell
 }
 
 // DualCell stores both color mode representations for one cell
 type DualCell struct {
 	Rune         rune
-	TrueFg       terminal.RGB // TrueColor foreground
-	TrueBg       terminal.RGB // TrueColor background
-	Palette256Fg uint8        // 256-color palette index for fg
-	Palette256Bg uint8        // 256-color palette index for bg
+	TrueFg       terminal.RGB
+	TrueBg       terminal.RGB
+	Palette256Fg uint8
+	Palette256Bg uint8
+	Transparent  bool
 }
 
 // File format constants
 const (
-	dualMagic   = "VFIMG"
-	dualVersion = 1
+	dualMagic                 = "VFIMG"
+	cellFlagTransparent uint8 = 1 << 0
+	cellBytes                 = 13 // rune(4) + trueFg(3) + trueBg(3) + pal256Fg(1) + pal256Bg(1) + flags(1)
 )
 
 // ConvertImageDual converts image to both color modes in single pass
@@ -86,9 +94,15 @@ func convertBackgroundDual(img image.Image, cells []DualCell, outW, outH int) {
 				sy = bounds.Max.Y - 1
 			}
 
-			rgb := colorToRGB(img.At(sx, sy))
 			idx := y*outW + x
+			c := img.At(sx, sy)
 
+			if colorIsTransparent(c) {
+				cells[idx].Transparent = true
+				continue
+			}
+
+			rgb := colorToRGB(c)
 			cells[idx].Rune = ' '
 			cells[idx].TrueBg = rgb
 			cells[idx].Palette256Bg = terminal.RGBTo256(rgb)
@@ -107,6 +121,7 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 	for y := 0; y < outH; y++ {
 		for x := 0; x < outW; x++ {
 			var pixels [4]terminal.RGB
+			allTransparent := true
 
 			gx := x * 2
 			gy := y * 2
@@ -124,12 +139,22 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 					sy = bounds.Max.Y - 1
 				}
 
-				pixels[i] = colorToRGB(img.At(sx, sy))
+				c := img.At(sx, sy)
+				if !colorIsTransparent(c) {
+					allTransparent = false
+				}
+				pixels[i] = colorToRGB(c)
+			}
+
+			idx := y*outW + x
+
+			if allTransparent {
+				cells[idx].Transparent = true
+				continue
 			}
 
 			char, fg, bg := findBestQuadrant(pixels)
 
-			idx := y*outW + x
 			cells[idx].Rune = char
 			cells[idx].TrueFg = fg
 			cells[idx].TrueBg = bg
@@ -139,11 +164,19 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 	}
 }
 
+func colorIsTransparent(c color.Color) bool {
+	_, _, _, a := c.RGBA()
+	return a == 0
+}
+
 // ToConvertedImage extracts single-mode ConvertedImage from dual representation
 func (d *DualModeImage) ToConvertedImage(colorMode terminal.ColorMode) *ConvertedImage {
 	cells := make([]terminal.Cell, len(d.Cells))
 
 	for i, dc := range d.Cells {
+		if dc.Transparent {
+			continue
+		}
 		if colorMode == terminal.ColorMode256 {
 			cells[i] = terminal.Cell{
 				Rune:  dc.Rune,
@@ -153,10 +186,9 @@ func (d *DualModeImage) ToConvertedImage(colorMode terminal.ColorMode) *Converte
 			}
 		} else {
 			cells[i] = terminal.Cell{
-				Rune:  dc.Rune,
-				Fg:    dc.TrueFg,
-				Bg:    dc.TrueBg,
-				Attrs: terminal.AttrNone,
+				Rune: dc.Rune,
+				Fg:   dc.TrueFg,
+				Bg:   dc.TrueBg,
 			}
 		}
 	}
@@ -166,6 +198,121 @@ func (d *DualModeImage) ToConvertedImage(colorMode terminal.ColorMode) *Converte
 		Width:  d.Width,
 		Height: d.Height,
 	}
+}
+
+// WriteDualMode writes dual-mode image to writer
+// Format: readable header lines terminated by blank line, followed by binary cell data
+func WriteDualMode(w io.Writer, img *DualModeImage) error {
+	bw := bufio.NewWriter(w)
+
+	fmt.Fprintf(bw, "%s\n", dualMagic)
+	fmt.Fprintf(bw, "w:%d\n", img.Width)
+	fmt.Fprintf(bw, "h:%d\n", img.Height)
+	fmt.Fprintf(bw, "m:%d\n", img.RenderMode)
+	fmt.Fprintf(bw, "ax:%d\n", img.AnchorX)
+	fmt.Fprintf(bw, "ay:%d\n", img.AnchorY)
+	fmt.Fprintf(bw, "\n")
+
+	cellBuf := make([]byte, cellBytes)
+	for _, cell := range img.Cells {
+		binary.LittleEndian.PutUint32(cellBuf[0:4], uint32(cell.Rune))
+		cellBuf[4] = cell.TrueFg.R
+		cellBuf[5] = cell.TrueFg.G
+		cellBuf[6] = cell.TrueFg.B
+		cellBuf[7] = cell.TrueBg.R
+		cellBuf[8] = cell.TrueBg.G
+		cellBuf[9] = cell.TrueBg.B
+		cellBuf[10] = cell.Palette256Fg
+		cellBuf[11] = cell.Palette256Bg
+		var flags uint8
+		if cell.Transparent {
+			flags |= cellFlagTransparent
+		}
+		cellBuf[12] = flags
+
+		if _, err := bw.Write(cellBuf); err != nil {
+			return err
+		}
+	}
+
+	return bw.Flush()
+}
+
+// ReadDualMode reads dual-mode image from reader
+func ReadDualMode(r io.Reader) (*DualModeImage, error) {
+	br := bufio.NewReader(r)
+
+	line, err := readHeaderLine(br)
+	if err != nil {
+		return nil, fmt.Errorf("read magic: %w", err)
+	}
+	if line != dualMagic {
+		return nil, fmt.Errorf("invalid magic: %q", line)
+	}
+
+	img := &DualModeImage{}
+
+	for {
+		line, err = readHeaderLine(br)
+		if err != nil {
+			return nil, fmt.Errorf("read header: %w", err)
+		}
+		if line == "" {
+			break
+		}
+
+		key, val, ok := strings.Cut(line, ":")
+		if !ok {
+			continue
+		}
+
+		switch key {
+		case "w":
+			img.Width, _ = strconv.Atoi(val)
+		case "h":
+			img.Height, _ = strconv.Atoi(val)
+		case "m":
+			m, _ := strconv.Atoi(val)
+			img.RenderMode = RenderMode(m)
+		case "ax":
+			img.AnchorX, _ = strconv.Atoi(val)
+		case "ay":
+			img.AnchorY, _ = strconv.Atoi(val)
+		}
+	}
+
+	if img.Width <= 0 || img.Height <= 0 {
+		return nil, fmt.Errorf("invalid dimensions: %dx%d", img.Width, img.Height)
+	}
+
+	cellCount := img.Width * img.Height
+	cells := make([]DualCell, cellCount)
+	cellBuf := make([]byte, cellBytes)
+
+	for i := 0; i < cellCount; i++ {
+		if _, err := io.ReadFull(br, cellBuf); err != nil {
+			return nil, fmt.Errorf("read cell %d: %w", i, err)
+		}
+		cells[i] = DualCell{
+			Rune:         rune(binary.LittleEndian.Uint32(cellBuf[0:4])),
+			TrueFg:       terminal.RGB{R: cellBuf[4], G: cellBuf[5], B: cellBuf[6]},
+			TrueBg:       terminal.RGB{R: cellBuf[7], G: cellBuf[8], B: cellBuf[9]},
+			Palette256Fg: cellBuf[10],
+			Palette256Bg: cellBuf[11],
+			Transparent:  cellBuf[12]&cellFlagTransparent != 0,
+		}
+	}
+
+	img.Cells = cells
+	return img, nil
+}
+
+func readHeaderLine(br *bufio.Reader) (string, error) {
+	line, err := br.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
 }
 
 // SaveDualMode writes dual-mode image to file
@@ -180,45 +327,6 @@ func SaveDualMode(path string, img *DualModeImage) error {
 	return WriteDualMode(f, img)
 }
 
-// WriteDualMode writes dual-mode image to writer
-func WriteDualMode(w io.Writer, img *DualModeImage) error {
-	// Magic
-	if _, err := w.Write([]byte(dualMagic)); err != nil {
-		return err
-	}
-
-	// Header: version, width, height, mode
-	header := make([]byte, 6)
-	header[0] = dualVersion
-	binary.LittleEndian.PutUint16(header[1:3], uint16(img.Width))
-	binary.LittleEndian.PutUint16(header[3:5], uint16(img.Height))
-	header[5] = uint8(img.RenderMode)
-
-	if _, err := w.Write(header); err != nil {
-		return err
-	}
-
-	// Cells: rune(4) + trueFg(3) + trueBg(3) + pal256Fg(1) + pal256Bg(1) = 12 bytes
-	cellBuf := make([]byte, 12)
-	for _, cell := range img.Cells {
-		binary.LittleEndian.PutUint32(cellBuf[0:4], uint32(cell.Rune))
-		cellBuf[4] = cell.TrueFg.R
-		cellBuf[5] = cell.TrueFg.G
-		cellBuf[6] = cell.TrueFg.B
-		cellBuf[7] = cell.TrueBg.R
-		cellBuf[8] = cell.TrueBg.G
-		cellBuf[9] = cell.TrueBg.B
-		cellBuf[10] = cell.Palette256Fg
-		cellBuf[11] = cell.Palette256Bg
-
-		if _, err := w.Write(cellBuf); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
 // LoadDualMode reads dual-mode image from file
 func LoadDualMode(path string) (*DualModeImage, error) {
 	f, err := os.Open(path)
@@ -228,56 +336,4 @@ func LoadDualMode(path string) (*DualModeImage, error) {
 	defer f.Close()
 
 	return ReadDualMode(f)
-}
-
-// ReadDualMode reads dual-mode image from reader
-func ReadDualMode(r io.Reader) (*DualModeImage, error) {
-	// Magic
-	magic := make([]byte, 5)
-	if _, err := io.ReadFull(r, magic); err != nil {
-		return nil, fmt.Errorf("read magic: %w", err)
-	}
-	if string(magic) != dualMagic {
-		return nil, fmt.Errorf("invalid magic: %s", magic)
-	}
-
-	// Header
-	header := make([]byte, 6)
-	if _, err := io.ReadFull(r, header); err != nil {
-		return nil, fmt.Errorf("read header: %w", err)
-	}
-
-	version := header[0]
-	if version != dualVersion {
-		return nil, fmt.Errorf("unsupported version: %d", version)
-	}
-
-	width := int(binary.LittleEndian.Uint16(header[1:3]))
-	height := int(binary.LittleEndian.Uint16(header[3:5]))
-	mode := RenderMode(header[5])
-
-	cellCount := width * height
-	cells := make([]DualCell, cellCount)
-
-	cellBuf := make([]byte, 12)
-	for i := 0; i < cellCount; i++ {
-		if _, err := io.ReadFull(r, cellBuf); err != nil {
-			return nil, fmt.Errorf("read cell %d: %w", i, err)
-		}
-
-		cells[i] = DualCell{
-			Rune:         rune(binary.LittleEndian.Uint32(cellBuf[0:4])),
-			TrueFg:       terminal.RGB{R: cellBuf[4], G: cellBuf[5], B: cellBuf[6]},
-			TrueBg:       terminal.RGB{R: cellBuf[7], G: cellBuf[8], B: cellBuf[9]},
-			Palette256Fg: cellBuf[10],
-			Palette256Bg: cellBuf[11],
-		}
-	}
-
-	return &DualModeImage{
-		Width:      width,
-		Height:     height,
-		RenderMode: mode,
-		Cells:      cells,
-	}, nil
 }

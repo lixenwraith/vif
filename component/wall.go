@@ -40,6 +40,10 @@ type WallComponent struct {
 
 	// Box-drawing: when non-zero, Rune is computed from neighbor topology
 	BoxStyle BoxDrawStyle
+
+	// Color mode attributes (AttrFg256/AttrBg256 from pattern pipeline)
+	// Zero value = TrueColor RGB; renderer converts to 256 at render time
+	Attrs terminal.Attr
 }
 
 // WallCellDef defines a single cell in composite wall structure (used by event payload)
@@ -47,6 +51,7 @@ type WallCellDef struct {
 	OffsetX int
 	OffsetY int
 	WallVisualConfig
+	Attrs terminal.Attr
 }
 
 // WallVisualConfig defines visual properties for wall rendering

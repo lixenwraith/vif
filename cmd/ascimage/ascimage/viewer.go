@@ -19,7 +19,9 @@ const (
 
 // Viewer manages image display with viewport and navigation
 type Viewer struct {
-	img       image.Image
+	img     image.Image
+	dualImg *DualModeImage
+
 	srcWidth  int
 	srcHeight int
 
@@ -44,6 +46,20 @@ func NewViewer(img image.Image) *Viewer {
 		srcWidth:   bounds.Dx(),
 		srcHeight:  bounds.Dy(),
 		RenderMode: ModeQuadrant,
+		ColorMode:  terminal.ColorModeTrueColor,
+		ViewMode:   ViewFit,
+		ZoomLevel:  100,
+		ShowStatus: true,
+	}
+}
+
+// NewViewerFromDual creates a viewer for a pre-converted .vfimg file
+func NewViewerFromDual(dual *DualModeImage) *Viewer {
+	return &Viewer{
+		dualImg:    dual,
+		srcWidth:   dual.Width,
+		srcHeight:  dual.Height,
+		RenderMode: dual.RenderMode,
 		ColorMode:  terminal.ColorModeTrueColor,
 		ViewMode:   ViewFit,
 		ZoomLevel:  100,
@@ -105,8 +121,16 @@ func (v *Viewer) calculateTargetWidth(termW, termH int) int {
 
 // Update reconverts the image if parameters changed
 func (v *Viewer) Update(termW, termH int) {
-	targetW := v.calculateTargetWidth(termW, termH)
+	if v.dualImg != nil {
+		if v.converted == nil {
+			v.converted = v.dualImg.ToConvertedImage(v.ColorMode)
+			v.convWidth = v.converted.Width
+		}
+		v.clampViewport(termW, termH)
+		return
+	}
 
+	targetW := v.calculateTargetWidth(termW, termH)
 	if v.converted != nil && v.convWidth == targetW {
 		return
 	}
@@ -118,6 +142,12 @@ func (v *Viewer) Update(termW, termH int) {
 
 // ForceUpdate forces reconversion
 func (v *Viewer) ForceUpdate(termW, termH int) {
+	if v.dualImg != nil {
+		v.converted = v.dualImg.ToConvertedImage(v.ColorMode)
+		v.convWidth = v.converted.Width
+		v.clampViewport(termW, termH)
+		return
+	}
 	v.converted = nil
 	v.convWidth = 0
 	v.Update(termW, termH)
@@ -175,6 +205,9 @@ func (v *Viewer) PanTo(x, y int, termW, termH int) {
 
 // ToggleViewMode cycles through view modes
 func (v *Viewer) ToggleViewMode() {
+	if v.dualImg != nil {
+		return
+	}
 	switch v.ViewMode {
 	case ViewFit:
 		v.ViewMode = ViewActual
@@ -189,6 +222,9 @@ func (v *Viewer) ToggleViewMode() {
 
 // ToggleRenderMode cycles render modes
 func (v *Viewer) ToggleRenderMode() {
+	if v.dualImg != nil {
+		return
+	}
 	if v.RenderMode == ModeBackgroundOnly {
 		v.RenderMode = ModeQuadrant
 	} else {
@@ -207,6 +243,9 @@ func (v *Viewer) ToggleColorMode() {
 
 // AdjustZoom changes zoom level by delta percent
 func (v *Viewer) AdjustZoom(delta int) {
+	if v.dualImg != nil {
+		return
+	}
 	v.ViewMode = ViewCustom
 	v.ZoomLevel += delta
 	if v.ZoomLevel < 10 {
@@ -272,32 +311,44 @@ func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 		buf.Set(x, y, ' ', statusFg, statusBg, render.BlendReplace, 1.0, terminal.AttrNone)
 	}
 
-	viewStr := "Fit"
-	if v.ViewMode == ViewActual {
-		viewStr = "1:1"
-	} else if v.ViewMode == ViewCustom {
-		viewStr = fmt.Sprintf("%d%%", v.ZoomLevel)
-	}
-
 	colorStr := "24bit"
 	if v.ColorMode == terminal.ColorMode256 {
 		colorStr = "256"
 	}
 
-	var convW, convH int
-	if v.converted != nil {
-		convW, convH = v.converted.Width, v.converted.Height
+	var status, help string
+
+	if v.dualImg != nil {
+		status = fmt.Sprintf(" %dx%d vfimg | %s | %s ",
+			v.srcWidth, v.srcHeight, v.RenderMode.String(), colorStr)
+		if v.dualImg.AnchorX != 0 || v.dualImg.AnchorY != 0 {
+			status += fmt.Sprintf("| anchor(%d,%d) ", v.dualImg.AnchorX, v.dualImg.AnchorY)
+		}
+		if v.converted != nil && (v.converted.Width > termW || v.converted.Height > termH-1) {
+			status += fmt.Sprintf("| [%d,%d] ", v.ViewportX, v.ViewportY)
+		}
+		help = " q:quit c:color arrows:pan"
+	} else {
+		viewStr := "Fit"
+		if v.ViewMode == ViewActual {
+			viewStr = "1:1"
+		} else if v.ViewMode == ViewCustom {
+			viewStr = fmt.Sprintf("%d%%", v.ZoomLevel)
+		}
+
+		var convW, convH int
+		if v.converted != nil {
+			convW, convH = v.converted.Width, v.converted.Height
+		}
+
+		status = fmt.Sprintf(" %dx%d → %dx%d | %s | %s | %s ",
+			v.srcWidth, v.srcHeight, convW, convH,
+			v.RenderMode.String(), colorStr, viewStr)
+		if v.converted != nil && (v.converted.Width > termW || v.converted.Height > termH-1) {
+			status += fmt.Sprintf("| [%d,%d] ", v.ViewportX, v.ViewportY)
+		}
+		help = " q:quit f:fit m:mode c:color ±:zoom arrows:pan"
 	}
-
-	status := fmt.Sprintf(" %dx%d → %dx%d | %s | %s | %s ",
-		v.srcWidth, v.srcHeight, convW, convH,
-		v.RenderMode.String(), colorStr, viewStr)
-
-	if v.converted != nil && (v.converted.Width > termW || v.converted.Height > termH-1) {
-		status += fmt.Sprintf("| [%d,%d] ", v.ViewportX, v.ViewportY)
-	}
-
-	help := " q:quit f:fit m:mode c:color ±:zoom arrows:pan"
 
 	x := 0
 	for _, r := range status {

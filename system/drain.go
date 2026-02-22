@@ -557,6 +557,10 @@ func (s *DrainSystem) buildQueuedPositionSet() map[uint64]bool {
 	// Wall positions (area denial)
 	wallEntities := s.world.Components.Wall.GetAllEntities()
 	for _, wallEntity := range wallEntities {
+		wall, ok := s.world.Components.Wall.GetComponent(wallEntity)
+		if !ok || wall.BlockMask&component.WallBlockSpawn == 0 {
+			continue
+		}
 		if wallPos, ok := s.world.Positions.GetPosition(wallEntity); ok {
 			key := uint64(wallPos.X)<<32 | uint64(wallPos.Y)
 			queuedPositions[key] = true

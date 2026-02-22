@@ -2,13 +2,12 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 type wallCellRenderer func(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool)
+	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr)
 
 // WallRenderer draws wall entities with fg/bg support
 type WallRenderer struct {
@@ -57,12 +56,13 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 			continue
 		}
 
-		r.renderCell(buf, screenX, screenY, wallComp.Rune, wallComp.FgColor, wallComp.BgColor, wallComp.RenderFg, wallComp.RenderBg)
+		r.renderCell(buf, screenX, screenY, wallComp.Rune, wallComp.FgColor, wallComp.BgColor,
+			wallComp.RenderFg, wallComp.RenderBg, wallComp.Attrs)
 	}
 }
 
 func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool) {
+	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
 
 	if renderFg && renderBg {
 		buf.SetWithBg(screenX, screenY, char, fg, bg)
@@ -75,23 +75,27 @@ func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, sc
 
 // renderCell256 updated to use per-cell colors with fallback
 func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool) {
+	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
 
 	if renderBg {
 		// Use per-cell palette index if set, otherwise fallback to default
 		// In 256 mode, palette index stored in RGB.R
-		paletteIdx := bg.R
-		if paletteIdx == 0 && bg.G == 0 && bg.B == 0 {
-			paletteIdx = visual.Wall256PaletteDefault
+		var paletteIdx uint8
+		if attrs&terminal.AttrBg256 != 0 {
+			paletteIdx = bg.R
+		} else {
+			paletteIdx = terminal.RGBTo256(bg)
 		}
 		buf.SetBg256(screenX, screenY, paletteIdx)
 	}
 
 	if renderFg && char != 0 {
 		// Use per-cell fg palette index if set
-		fgIdx := fg.R
-		if fgIdx == 0 && fg.G == 0 && fg.B == 0 {
-			fgIdx = visual.Wall256PaletteDefault
+		var fgIdx uint8
+		if attrs&terminal.AttrFg256 != 0 {
+			fgIdx = fg.R
+		} else {
+			fgIdx = terminal.RGBTo256(fg)
 		}
 		buf.SetFgOnly(screenX, screenY, char,
 			terminal.RGB{R: fgIdx}, terminal.AttrFg256)

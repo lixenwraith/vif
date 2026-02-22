@@ -148,6 +148,12 @@ func (s *NavigationSystem) Update() {
 		return
 	}
 
+	// Detect map dimension changes (terminal resize with CropOnResize, or other config mutations)
+	config := s.world.Resources.Config
+	if config.MapWidth != s.flowCache.Field.Width || config.MapHeight != s.flowCache.Field.Height {
+		s.flowCache.Resize(config.MapWidth, config.MapHeight)
+	}
+
 	// Update flow field (with caching/throttling)
 	isBlocked := func(x, y int) bool {
 		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)

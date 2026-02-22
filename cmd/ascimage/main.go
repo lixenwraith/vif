@@ -8,6 +8,7 @@ import (
 	_ "image/jpeg"
 	_ "image/png"
 	"os"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
 	"github.com/lixenwraith/vi-fighter/render"
@@ -24,16 +25,20 @@ func main() {
 		fitMode    bool
 		noStatus   bool
 		zoomLevel  int
+		anchorX    int
+		anchorY    int
 	)
 
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
 	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
 	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
-	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vfimg file for vi-fighter pattern system")
+	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vfimg file")
 	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
 	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
 	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
 	flag.IntVar(&zoomLevel, "z", 100, "Initial zoom level percent (interactive only)")
+	flag.IntVar(&anchorX, "ax", 0, "Anchor X offset (dual-mode output)")
+	flag.IntVar(&anchorY, "ay", 0, "Anchor Y offset (dual-mode output)")
 	flag.Parse()
 
 	if flag.NArg() < 1 {
@@ -41,23 +46,66 @@ func main() {
 		os.Exit(1)
 	}
 
-	imagePath := flag.Arg(0)
+	inputPath := flag.Arg(0)
+	colorMode := parseColorMode(colorStr)
 
-	img, err := loadImage(imagePath)
+	if isVfimg(inputPath) {
+		runVfimgInput(inputPath, colorMode, output, noStatus)
+	} else {
+		runImageInput(inputPath, modeStr, colorMode, width, output, dualOutput,
+			fitMode, noStatus, zoomLevel, anchorX, anchorY)
+	}
+}
+
+func isVfimg(path string) bool {
+	return strings.HasSuffix(strings.ToLower(path), ".vfimg")
+}
+
+func runVfimgInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
+	dual, err := ascimage.LoadDualMode(path)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading vfimg: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d, %s)\n",
+		path, dual.Width, dual.Height, dual.RenderMode.String())
+
+	if output != "" {
+		conv := dual.ToConvertedImage(colorMode)
+		if err := ascimage.WriteANSI(conv, output, colorMode); err != nil {
+			fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	viewer := ascimage.NewViewerFromDual(dual)
+	viewer.ColorMode = colorMode
+	viewer.ShowStatus = !noStatus
+
+	if err := runViewer(viewer, colorMode); err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runImageInput(path, modeStr string, colorMode terminal.ColorMode, width int,
+	output, dualOutput string, fitMode, noStatus bool, zoomLevel, anchorX, anchorY int) {
+
+	img, err := loadImage(path)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading image: %v\n", err)
 		os.Exit(1)
 	}
 
 	bounds := img.Bounds()
-	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d)\n", imagePath, bounds.Dx(), bounds.Dy())
+	fmt.Fprintf(os.Stderr, "Loaded: %s (%dx%d)\n", path, bounds.Dx(), bounds.Dy())
 
 	renderMode := parseRenderMode(modeStr)
-	colorMode := parseColorMode(colorStr)
 
 	if dualOutput != "" {
-		runDualOutput(img, renderMode, width, dualOutput)
-		return
+		runDualOutput(img, renderMode, width, dualOutput, anchorX, anchorY)
 	} else if output != "" {
 		runFileOutput(img, renderMode, colorMode, width, output)
 	} else {
@@ -65,21 +113,42 @@ func main() {
 	}
 }
 
+func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string, anchorX, anchorY int) {
+	if width <= 0 {
+		width = 80
+	}
+
+	dual := ascimage.ConvertImageDual(img, width, renderMode)
+	dual.AnchorX = anchorX
+	dual.AnchorY = anchorY
+
+	fmt.Fprintf(os.Stderr, "Dual-mode output: %dx%d cells\n", dual.Width, dual.Height)
+
+	if err := ascimage.SaveDualMode(output, dual); err != nil {
+		fmt.Fprintf(os.Stderr, "Error writing dual-mode output: %v\n", err)
+		os.Exit(1)
+	}
+}
+
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image>")
-	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF")
+	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.vfimg>")
+	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .vfimg (view/convert)")
 	fmt.Fprintln(os.Stderr, "\nOptions:")
 	flag.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "\nModes:")
-	fmt.Fprintln(os.Stderr, "  Dual-mode (-dual): write .vfimg for vi-fighter pattern system")
-	fmt.Fprintln(os.Stderr, "  File output (-o):      write ANSI sequences to file")
-	fmt.Fprintln(os.Stderr, "  Interactive (default): view image with zoom/pan controls")
+	fmt.Fprintln(os.Stderr, "  Image input:")
+	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vfimg for vi-fighter pattern system")
+	fmt.Fprintln(os.Stderr, "    File output (-o):  write ANSI sequences to file")
+	fmt.Fprintln(os.Stderr, "    Interactive:        view image with zoom/pan controls (default)")
+	fmt.Fprintln(os.Stderr, "  .vfimg input:")
+	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .vfimg to ANSI sequences")
+	fmt.Fprintln(os.Stderr, "    Interactive:        view with color mode toggle (default)")
 	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
 	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")
-	fmt.Fprintln(os.Stderr, "  f                 Toggle fit/actual size")
-	fmt.Fprintln(os.Stderr, "  m                 Toggle render mode")
+	fmt.Fprintln(os.Stderr, "  f                 Toggle fit/actual size (image only)")
+	fmt.Fprintln(os.Stderr, "  m                 Toggle render mode (image only)")
 	fmt.Fprintln(os.Stderr, "  c                 Toggle color mode")
-	fmt.Fprintln(os.Stderr, "  +/-               Zoom in/out")
+	fmt.Fprintln(os.Stderr, "  +/-               Zoom in/out (image only)")
 	fmt.Fprintln(os.Stderr, "  Arrow keys, hjkl  Pan viewport")
 	fmt.Fprintln(os.Stderr, "  s                 Toggle status bar")
 }
@@ -118,21 +187,6 @@ func parseColorMode(s string) terminal.ColorMode {
 	default:
 		fmt.Fprintf(os.Stderr, "Unknown color mode: %s, using auto\n", s)
 		return terminal.DetectColorMode()
-	}
-}
-
-func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, output string) {
-	if width <= 0 {
-		width = 80
-	}
-
-	dual := ascimage.ConvertImageDual(img, width, renderMode)
-	fmt.Fprintf(os.Stderr, "Dual-mode output: %dx%d cells (%d bytes)\n",
-		dual.Width, dual.Height, len(dual.Cells)*12+11)
-
-	if err := ascimage.SaveDualMode(output, dual); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing dual-mode output: %v\n", err)
-		os.Exit(1)
 	}
 }
 

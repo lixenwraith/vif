@@ -18,6 +18,10 @@ func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 			idx := y*img.Width + x
 			src := img.Cells[idx]
 
+			if src.Transparent {
+				continue
+			}
+
 			renderFg := src.Rune != 0 && src.Rune != ' '
 			renderBg := true
 
@@ -31,7 +35,6 @@ func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 			} else {
 				fg = src.TrueFg
 				bg = src.TrueBg
-				attrs = terminal.AttrNone
 			}
 
 			cells = append(cells, PatternCell{
@@ -48,9 +51,11 @@ func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 	}
 
 	return PatternResult{
-		Cells:  cells,
-		Width:  img.Width,
-		Height: img.Height,
+		Cells:   cells,
+		Width:   img.Width,
+		Height:  img.Height,
+		AnchorX: img.AnchorX,
+		AnchorY: img.AnchorY,
 	}
 }
 

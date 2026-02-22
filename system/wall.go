@@ -249,6 +249,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 			BgColor:   cell.BgColor,
 			RenderFg:  cell.RenderFg,
 			RenderBg:  cell.RenderBg,
+			Attrs:     cell.Attrs,
 		}
 
 		// Compute box char if box-drawing enabled at payload level
@@ -370,6 +371,7 @@ func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPa
 			BgColor:   cell.Bg,
 			RenderFg:  cell.RenderFg,
 			RenderBg:  cell.RenderBg,
+			Attrs:     cell.Attrs,
 		})
 
 		s.world.Components.Member.SetComponent(entity, component.MemberComponent{

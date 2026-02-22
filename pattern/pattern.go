@@ -41,6 +41,7 @@ func (p *PatternResult) ToWallCellDefs() []component.WallCellDef {
 				RenderFg: cell.RenderFg,
 				RenderBg: cell.RenderBg,
 			},
+			Attrs: cell.Attrs,
 		}
 	}
 	return defs
