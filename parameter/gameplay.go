@@ -2,6 +2,8 @@ package parameter
 
 import "time"
 
+const DefaultKeymapPath = "./config/keymap.toml"
+
 // Heat System
 const (
 	// HeatMax is the maximum value for the heat meter (100%)

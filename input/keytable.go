@@ -11,6 +11,7 @@ const (
 	BehaviorCharWait
 	BehaviorOperator
 	BehaviorPrefix
+	BehaviorPrefixMacro // @ prefix → StateMacroPlayAwait (decouples from key value)
 	BehaviorModeSwitch
 	BehaviorSpecial
 	BehaviorSystem
@@ -152,7 +153,7 @@ func DefaultKeyTable() *KeyTable {
 
 			// Macro
 			'q': {BehaviorAction, MotionNone, SpecialNone, ModeTargetNone, IntentMacroRecordToggle}, // Router intercepts based on context
-			'@': {BehaviorPrefix, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
+			'@': {BehaviorPrefixMacro, MotionNone, SpecialNone, ModeTargetNone, IntentNone},
 		},
 
 		OperatorMotions: map[rune]KeyEntry{
@@ -230,4 +231,33 @@ func DefaultKeyTable() *KeyTable {
 			terminal.KeyCtrlS:     {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleEffectMute},
 		},
 	}
+}
+
+// Clone returns a deep copy of the KeyTable with independent maps
+func (kt *KeyTable) Clone() *KeyTable {
+	return &KeyTable{
+		SpecialKeys:     cloneKeyMap(kt.SpecialKeys),
+		NormalRunes:     cloneRuneMap(kt.NormalRunes),
+		OperatorMotions: cloneRuneMap(kt.OperatorMotions),
+		PrefixG:         cloneRuneMap(kt.PrefixG),
+		OverlayRunes:    cloneRuneMap(kt.OverlayRunes),
+		OverlayKeys:     cloneKeyMap(kt.OverlayKeys),
+		TextNavKeys:     cloneKeyMap(kt.TextNavKeys),
+	}
+}
+
+func cloneRuneMap(m map[rune]KeyEntry) map[rune]KeyEntry {
+	c := make(map[rune]KeyEntry, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
+}
+
+func cloneKeyMap(m map[terminal.Key]KeyEntry) map[terminal.Key]KeyEntry {
+	c := make(map[terminal.Key]KeyEntry, len(m))
+	for k, v := range m {
+		c[k] = v
+	}
+	return c
 }

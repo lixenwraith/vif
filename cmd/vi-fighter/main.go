@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/asset"
@@ -29,6 +30,7 @@ var (
 	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
 	flagGameScript  = flag.String("g", "", "Game FSM script path (TOML)")
 	flagGameDefault = flag.Bool("gd", false, "Force embedded default FSM script")
+	flagKeymapPath  = flag.String("k", "", "Keymap config file path (TOML)")
 )
 
 func main() {
@@ -127,6 +129,24 @@ func main() {
 
 	// Create input handler
 	inputMachine := input.NewMachine()
+
+	keymapPath := *flagKeymapPath
+	if keymapPath == "" {
+		keymapPath = parameter.DefaultKeymapPath
+	}
+	if data, err := os.ReadFile(keymapPath); err == nil {
+		override, err := input.LoadKeyConfig(data)
+		if err != nil {
+			panic(fmt.Sprintf("keymap config: %v", err))
+		}
+		merged := input.MergeKeyTable(input.DefaultKeyTable(), override)
+		inputMachine.SetKeyTable(merged)
+	} else if *flagKeymapPath != "" {
+		// Explicit path given but unreadable — fatal
+		panic(fmt.Sprintf("keymap load: %v", err))
+	}
+	// Default path missing is silent (use defaults)
+
 	router := mode.NewRouter(ctx, inputMachine)
 
 	// Create frame synchronization channel

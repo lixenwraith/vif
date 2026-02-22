@@ -155,6 +155,11 @@ func (m *Machine) SetState(state InputState) {
 	m.cmdBuffer = m.cmdBuffer[:0]
 }
 
+// SetKeyTable replaces the active key table (call before processing starts)
+func (m *Machine) SetKeyTable(kt *KeyTable) {
+	m.keyTable = kt
+}
+
 // === Normal Mode Processing ===
 
 func (m *Machine) processNormal(ev terminal.Event) *Intent {
@@ -237,11 +242,12 @@ func (m *Machine) handleNormalEntry(entry KeyEntry, key rune) *Intent {
 
 	case BehaviorPrefix:
 		m.prefix = key
-		if key == '@' {
-			m.state = StateMacroPlayAwait
-		} else {
-			m.state = StatePrefixG
-		}
+		m.state = StatePrefixG
+		return nil
+
+	case BehaviorPrefixMacro:
+		m.prefix = key
+		m.state = StateMacroPlayAwait
 		return nil
 
 	case BehaviorModeSwitch:
@@ -300,13 +306,6 @@ func (m *Machine) processOperatorWait(key rune) *Intent {
 			Count:    count,
 			Command:  cmd,
 		}
-	}
-
-	// g prefix after operator
-	if key == 'g' {
-		m.prefix = 'g'
-		m.state = StateOperatorPrefixG
-		return nil
 	}
 
 	entry, ok := m.keyTable.OperatorMotions[key]
