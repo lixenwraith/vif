@@ -25,6 +25,11 @@ type NavigationComponent struct {
 	BrakeIntensity int64
 	// FlowLookahead is flow field projection distance (Q32.32 cells)
 	FlowLookahead int64
+
+	// Oscillation suppression: grid positions from recent ticks
+	TabuPos  [2][2]int // [index][x,y], ring buffer of last 2 grid positions
+	TabuHead uint8     // Next write index (0 or 1)
+	TabuTick uint8     // Entries written (0-2), prevents false matches before buffer fills
 }
 
 // SpeciesDimensions holds bounding box for collision detection

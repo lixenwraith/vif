@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/navigation"
@@ -243,8 +244,23 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// Calculate bilinear interpolated flow direction
-		navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY)
+		// Composite footprint sampling with wall-constraint projection
+		if navComp.Width > 1 || navComp.Height > 1 {
+			gridX, gridY := vmath.GridFromCentered(preciseX, preciseY)
+			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(entity, gridX, gridY)
+
+			// Tabu suppression: prevent 2-cycle oscillation
+			navComp.FlowX, navComp.FlowY = suppressTabuDirection(&navComp, gridX, gridY, navComp.FlowX, navComp.FlowY)
+
+			// Record current position in ring buffer
+			navComp.TabuPos[navComp.TabuHead] = [2]int{gridX, gridY}
+			navComp.TabuHead = (navComp.TabuHead + 1) % 2
+			if navComp.TabuTick < 2 {
+				navComp.TabuTick++
+			}
+		} else {
+			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY)
+		}
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 }
@@ -326,4 +342,258 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int) (int64, int64, boo
 		return 0, 0, false
 	}
 	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
+}
+
+// compositeFootprint caches bounding box derived from HeaderComponent member layout
+type compositeFootprint struct {
+	entries                            []component.MemberEntry
+	minOffX, maxOffX, minOffY, maxOffY int
+	footW, footH                       int
+}
+
+func newCompositeFootprint(entries []component.MemberEntry) (compositeFootprint, bool) {
+	if len(entries) == 0 {
+		return compositeFootprint{}, false
+	}
+
+	fp := compositeFootprint{
+		entries: entries,
+		minOffX: entries[0].OffsetX, maxOffX: entries[0].OffsetX,
+		minOffY: entries[0].OffsetY, maxOffY: entries[0].OffsetY,
+	}
+
+	for _, m := range entries[1:] {
+		if m.OffsetX < fp.minOffX {
+			fp.minOffX = m.OffsetX
+		}
+		if m.OffsetX > fp.maxOffX {
+			fp.maxOffX = m.OffsetX
+		}
+		if m.OffsetY < fp.minOffY {
+			fp.minOffY = m.OffsetY
+		}
+		if m.OffsetY > fp.maxOffY {
+			fp.maxOffY = m.OffsetY
+		}
+	}
+
+	fp.footW = fp.maxOffX - fp.minOffX + 1
+	fp.footH = fp.maxOffY - fp.minOffY + 1
+	return fp, true
+}
+
+// sampleFlowSum sums flow vectors at live footprint cells relative to (gridX, gridY)
+// Lock-free: reads from flowCache only
+func (s *NavigationSystem) sampleFlowSum(fp *compositeFootprint, gridX, gridY int) (int64, int64) {
+	var sumX, sumY int64
+	for _, m := range fp.entries {
+		if m.Entity == 0 {
+			continue
+		}
+		dir := s.flowCache.GetDirection(gridX+m.OffsetX, gridY+m.OffsetY)
+		if dir < 0 || dir >= navigation.DirCount {
+			continue
+		}
+		sumX += flowDirLUT[dir][0]
+		sumY += flowDirLUT[dir][1]
+	}
+	return sumX, sumY
+}
+
+// projectFlowAgainstWalls zeroes axis components the composite cannot physically follow
+// Caller MUST hold Position write lock
+func (s *NavigationSystem) projectFlowAgainstWalls(
+	sumX, sumY int64,
+	gridX, gridY int,
+	fp *compositeFootprint,
+) (int64, int64) {
+	topLeftX := gridX + fp.minOffX
+	topLeftY := gridY + fp.minOffY
+	mapW := s.world.Resources.Config.MapWidth
+	mapH := s.world.Resources.Config.MapHeight
+	mask := component.WallBlockKinetic
+
+	if sumX > 0 {
+		if topLeftX+fp.footW >= mapW ||
+			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX+1, topLeftY, fp.footW, fp.footH, mask) {
+			sumX = 0
+		}
+	} else if sumX < 0 {
+		if topLeftX <= 0 ||
+			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX-1, topLeftY, fp.footW, fp.footH, mask) {
+			sumX = 0
+		}
+	}
+
+	if sumY > 0 {
+		if topLeftY+fp.footH >= mapH ||
+			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX, topLeftY+1, fp.footW, fp.footH, mask) {
+			sumY = 0
+		}
+	} else if sumY < 0 {
+		if topLeftY <= 0 ||
+			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX, topLeftY-1, fp.footW, fp.footH, mask) {
+			sumY = 0
+		}
+	}
+
+	return sumX, sumY
+}
+
+// canCompositeOccupy checks if composite footprint fits at (gridX, gridY) without wall/bounds collision
+// Caller MUST hold Position write lock
+func (s *NavigationSystem) canCompositeOccupy(gridX, gridY int, fp *compositeFootprint) bool {
+	topLeftX := gridX + fp.minOffX
+	topLeftY := gridY + fp.minOffY
+	mapW := s.world.Resources.Config.MapWidth
+	mapH := s.world.Resources.Config.MapHeight
+
+	if topLeftX < 0 || topLeftY < 0 || topLeftX+fp.footW > mapW || topLeftY+fp.footH > mapH {
+		return false
+	}
+
+	return !s.world.Positions.HasBlockingWallInAreaUnsafe(
+		topLeftX, topLeftY, fp.footW, fp.footH, component.WallBlockKinetic,
+	)
+}
+
+// getCompositeFlowDirection samples flow at all footprint cells with wall-constraint projection
+// and escape probing for L-corner stuck states
+func (s *NavigationSystem) getCompositeFlowDirection(headerEntity core.Entity, gridX, gridY int) (int64, int64) {
+	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	if !ok || len(headerComp.MemberEntries) == 0 {
+		return 0, 0
+	}
+
+	fp, ok := newCompositeFootprint(headerComp.MemberEntries)
+	if !ok {
+		return 0, 0
+	}
+
+	// Phase 1: flow sum at current position (lock-free)
+	rawX, rawY := s.sampleFlowSum(&fp, gridX, gridY)
+	if rawX == 0 && rawY == 0 {
+		return 0, 0
+	}
+
+	// Phase 2+3: wall projection and escape probing under single lock
+	s.world.Positions.Lock()
+
+	projX, projY := s.projectFlowAgainstWalls(rawX, rawY, gridX, gridY, &fp)
+	if projX != 0 || projY != 0 {
+		s.world.Positions.Unlock()
+		return vmath.Normalize2D(projX, projY)
+	}
+
+	// Phase 3: escape probing — projection yielded (0,0) from non-zero raw sum
+	// Probe opposite direction of each blocked axis
+	// Order: larger-magnitude axis first (clearing dominant blocked direction is higher impact)
+	type escapeProbe struct{ dx, dy int }
+	var probes [2]escapeProbe
+	nProbes := 0
+
+	absRawX, absRawY := rawX, rawY
+	if absRawX < 0 {
+		absRawX = -absRawX
+	}
+	if absRawY < 0 {
+		absRawY = -absRawY
+	}
+
+	// Build ordered probe list
+	addProbeX := func() {
+		if rawX > 0 {
+			probes[nProbes] = escapeProbe{-1, 0}
+		} else if rawX < 0 {
+			probes[nProbes] = escapeProbe{1, 0}
+		} else {
+			return
+		}
+		nProbes++
+	}
+	addProbeY := func() {
+		if rawY > 0 {
+			probes[nProbes] = escapeProbe{0, -1}
+		} else if rawY < 0 {
+			probes[nProbes] = escapeProbe{0, 1}
+		} else {
+			return
+		}
+		nProbes++
+	}
+
+	if absRawX >= absRawY {
+		addProbeX()
+		addProbeY()
+	} else {
+		addProbeY()
+		addProbeX()
+	}
+
+	for i := 0; i < nProbes; i++ {
+		probeGridX := gridX + probes[i].dx
+		probeGridY := gridY + probes[i].dy
+
+		if !s.canCompositeOccupy(probeGridX, probeGridY, &fp) {
+			continue
+		}
+
+		// Re-sample and re-project at probed position
+		probeSumX, probeSumY := s.sampleFlowSum(&fp, probeGridX, probeGridY)
+		if probeSumX == 0 && probeSumY == 0 {
+			continue
+		}
+
+		probeProjX, probeProjY := s.projectFlowAgainstWalls(
+			probeSumX, probeSumY, probeGridX, probeGridY, &fp,
+		)
+		if probeProjX != 0 || probeProjY != 0 {
+			// Viable escape — return cardinal direction toward probe position
+			s.world.Positions.Unlock()
+			return vmath.Normalize2D(vmath.FromInt(probes[i].dx), vmath.FromInt(probes[i].dy))
+		}
+	}
+
+	s.world.Positions.Unlock()
+	return 0, 0
+}
+
+// suppressTabuDirection checks if flow would return composite to blacklisted position
+// Returns adjusted (flowX, flowY), zeroing the axis that causes regression
+func suppressTabuDirection(navComp *component.NavigationComponent, gridX, gridY int, flowX, flowY int64) (int64, int64) {
+	if navComp.TabuTick < 2 {
+		return flowX, flowY // Buffer not full
+	}
+
+	// Older entry is opposite of current write head
+	tabuIdx := (navComp.TabuHead + 1) % 2
+	tabuX := navComp.TabuPos[tabuIdx][0]
+	tabuY := navComp.TabuPos[tabuIdx][1]
+
+	// Predict next grid position from flow direction
+	nextX, nextY := gridX, gridY
+	if flowX > 0 {
+		nextX++
+	} else if flowX < 0 {
+		nextX--
+	}
+	if flowY > 0 {
+		nextY++
+	} else if flowY < 0 {
+		nextY--
+	}
+
+	if nextX != tabuX || nextY != tabuY {
+		return flowX, flowY // Not regressing
+	}
+
+	// Suppress axis that causes regression
+	if gridX != tabuX {
+		flowX = 0
+	}
+	if gridY != tabuY {
+		flowY = 0
+	}
+
+	return flowX, flowY
 }
