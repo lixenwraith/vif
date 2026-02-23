@@ -588,6 +588,15 @@ type WallSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"` // 0 for single walls
 }
 
+// WallDespawnedPayload notifies of wall destruction
+type WallDespawnedPayload struct {
+	X      int `toml:"x"`
+	Y      int `toml:"y"`
+	Width  int `toml:"width"`
+	Height int `toml:"height"`
+	Count  int `toml:"count"`
+}
+
 // FadeoutSpawnPayload contains parameters for single fadeout effect
 type FadeoutSpawnPayload struct {
 	X       int  `toml:"x"`

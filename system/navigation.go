@@ -16,45 +16,48 @@ import (
 var flowDirLUT [8][2]int64
 
 func init() {
-	// Precompute Q32.32 normalized vectors for flow directions
+	aspectY := vmath.Scale / 2
 	for i, vec := range navigation.DirVectors {
 		fx := vmath.FromInt(vec[0])
-		fy := vmath.FromInt(vec[1])
-		// Normalize diagonals
-		if vec[0] != 0 && vec[1] != 0 {
+		fy := vmath.Mul(vmath.FromInt(vec[1]), aspectY)
+		if fx != 0 || fy != 0 {
 			fx, fy = vmath.Normalize2D(fx, fy)
 		}
 		flowDirLUT[i] = [2]int64{fx, fy}
 	}
 }
 
-// targetGroupNav holds per-group flow field and entity buffer
+// targetGroupNav holds per-group flow fields and entity buffers
 type targetGroupNav struct {
-	flowCache *navigation.FlowFieldCache
-	entityBuf [][2]int // Reset each tick, positions of entities needing flow field
+	pointFlowCache     *navigation.FlowFieldCache // For point entities (1×1)
+	compositeFlowCache *navigation.FlowFieldCache // For composite entities (footprint-aware)
 }
 
-// TODO: debug
 var DebugFlow *navigation.FlowFieldCache
 var DebugShowFlow bool
 
-// NavigationSystem calculates flow field and wall avoidance for kinetic entities
+var DebugCompositeFlow *navigation.FlowFieldCache
+var DebugCompositePassability *navigation.CompositePassability
+var DebugShowCompositeNav bool // New flag for composite debug view
+
+// NavigationSystem calculates flow fields for kinetic entities
 type NavigationSystem struct {
 	world *engine.World
+	rng   *vmath.FastRand
 
 	// Per-group flow field management
 	groups map[uint8]*targetGroupNav
 
-	// Cached cursor position (updated via EventCursorMoved)
+	// Composite passability grid (shared, recomputed on wall changes)
+	compositePassability *navigation.CompositePassability
+
+	// Cached cursor position
 	cursorX, cursorY int
 	cursorValid      bool
 
-	// Per-tick entity position buffer (reused to avoid allocations)
-	entityPosBuf [][2]int
-
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
-	statROICells   *atomic.Int64 // Track ROI size for telemetry
+	statROICells   *atomic.Int64
 
 	enabled bool
 }
@@ -75,20 +78,27 @@ func NewNavigationSystem(world *engine.World) engine.System {
 
 func (s *NavigationSystem) Init() {
 	s.enabled = true
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.groups = make(map[uint8]*targetGroupNav)
 
-	// Ensure group 0 (cursor) always exists
 	s.getOrCreateGroup(0)
 
 	config := s.world.Resources.Config
 	if config.MapWidth > 0 && config.MapHeight > 0 {
+		// Initialize composite passability
+		s.compositePassability = navigation.NewCompositePassability(
+			config.MapWidth, config.MapHeight,
+			parameter.EyeWidth, parameter.EyeHeight,
+			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+		)
+		s.recomputeCompositePassability()
+
 		for _, g := range s.groups {
-			g.flowCache.Resize(config.MapWidth, config.MapHeight)
+			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
+			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
 		}
 	}
 
-	// Seed cursor position from world to prevent stale (0,0) default
-	// At app start/new game: cursor created before NavigationSystem init
 	if s.world.Resources.Player != nil {
 		if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
 			s.cursorX = pos.X
@@ -97,13 +107,16 @@ func (s *NavigationSystem) Init() {
 		}
 	}
 
-	// Initialize TargetResource group 0 as cursor
 	if s.world.Resources.Target == nil {
 		s.world.Resources.Target = &engine.TargetResource{}
 	}
 
-	// TODO: remove later
-	DebugFlow = s.groups[0].flowCache
+	// Debug exposure
+	if g, ok := s.groups[0]; ok {
+		DebugFlow = g.pointFlowCache
+		DebugCompositeFlow = g.compositeFlowCache
+	}
+	DebugCompositePassability = s.compositePassability
 }
 
 func (s *NavigationSystem) Name() string {
@@ -122,6 +135,9 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 		event.EventLevelSetup,
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,
+		event.EventNavigationRegraph,
+		event.EventWallSpawned,
+		event.EventWallDespawned,
 	}
 }
 
@@ -137,6 +153,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 				s.enabled = payload.Enabled
 			}
 		}
+		return
 	}
 
 	switch ev.Type {
@@ -149,8 +166,11 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+			s.compositePassability.Resize(payload.Width, payload.Height)
+			s.recomputeCompositePassability()
 			for _, g := range s.groups {
-				g.flowCache.Resize(payload.Width, payload.Height)
+				g.pointFlowCache.Resize(payload.Width, payload.Height)
+				g.compositeFlowCache.Resize(payload.Width, payload.Height)
 			}
 		}
 
@@ -162,10 +182,63 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventTargetGroupRemove:
 		if payload, ok := ev.Payload.(*event.TargetGroupRemovePayload); ok {
 			delete(s.groups, payload.GroupID)
-			// Entities with this GroupID will fall back to cursor via resolveBaseTarget
 			s.world.Resources.Target.SetGroup(payload.GroupID, engine.TargetGroupState{})
 		}
+
+	case event.EventWallSpawned:
+		if payload, ok := ev.Payload.(*event.WallSpawnedPayload); ok {
+			s.recomputeCompositePassabilityROI(payload.X, payload.Y, payload.Width, payload.Height)
+		}
+		for _, g := range s.groups {
+			g.compositeFlowCache.MarkDirty()
+		}
+
+	case event.EventWallDespawned:
+		if payload, ok := ev.Payload.(*event.WallDespawnedPayload); ok {
+			s.recomputeCompositePassabilityROI(payload.X, payload.Y, payload.Width, payload.Height)
+		}
+		for _, g := range s.groups {
+			g.compositeFlowCache.MarkDirty()
+		}
+
+	case event.EventNavigationRegraph:
+		s.recomputeCompositePassability()
+		for _, g := range s.groups {
+			g.compositeFlowCache.MarkDirty()
+		}
 	}
+}
+
+// recomputeCompositePassabilityROI recomputes passability for header positions
+// affected by wall changes within the given bounds
+// Expansion accounts for footprint: any header whose footprint overlaps the wall region
+func (s *NavigationSystem) recomputeCompositePassabilityROI(wallX, wallY, wallW, wallH int) {
+	if s.compositePassability == nil {
+		return
+	}
+
+	footW, footH, offX, offY := s.compositePassability.GetFootprint()
+
+	// Minkowski expansion: wall bounds → affected header positions
+	minX := wallX - footW + 1 + offX
+	minY := wallY - footH + 1 + offY
+	maxX := wallX + wallW - 1 + offX
+	maxY := wallY + wallH - 1 + offY
+
+	isWall := func(x, y int) bool {
+		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
+	}
+	s.compositePassability.ComputeROI(isWall, minX, minY, maxX, maxY)
+}
+
+func (s *NavigationSystem) recomputeCompositePassability() {
+	if s.compositePassability == nil {
+		return
+	}
+	isWall := func(x, y int) bool {
+		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
+	}
+	s.compositePassability.Compute(isWall)
 }
 
 func (s *NavigationSystem) Update() {
@@ -173,28 +246,29 @@ func (s *NavigationSystem) Update() {
 		return
 	}
 
-	// Detect map dimension changes (terminal resize with CropOnResize, or other config mutations)
 	config := s.world.Resources.Config
+
+	// Handle map resize
 	for _, g := range s.groups {
-		if config.MapWidth != g.flowCache.Field.Width || config.MapHeight != g.flowCache.Field.Height {
-			g.flowCache.Resize(config.MapWidth, config.MapHeight)
+		if config.MapWidth != g.pointFlowCache.Field.Width || config.MapHeight != g.pointFlowCache.Field.Height {
+			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
+			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
+			s.compositePassability.Resize(config.MapWidth, config.MapHeight)
+			s.recomputeCompositePassability()
 		}
 	}
 
-	// Resolve all group targets for this tick
 	s.resolveGroupTargets()
 
-	// Update flow field (with caching/throttling)
-	isBlocked := func(x, y int) bool {
+	// Wall checker for point entities
+	isBlockedPoint := func(x, y int) bool {
 		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
 	}
 
-	// Reset entity buffers
-	for _, g := range s.groups {
-		g.entityBuf = g.entityBuf[:0]
-	}
+	// Wall checker for composites (uses pre-computed passability)
+	isBlockedComposite := s.compositePassability.IsBlocked
 
-	// 1. Pre-filter entities: LOS check, assign to groups
+	// Phase 1: Classify entities, perform LOS checks
 	entities := s.world.Components.Navigation.GetAllEntities()
 	s.statEntities.Store(int64(len(entities)))
 
@@ -205,20 +279,16 @@ func (s *NavigationSystem) Update() {
 		}
 
 		groupID := s.getEntityGroup(entity)
-		group, groupExists := s.groups[groupID]
-		if !groupExists {
-			// Unknown group, fall back to cursor group
+		groupExists := false
+		if _, groupExists = s.groups[groupID]; !groupExists {
 			groupID = 0
-			group = s.groups[0]
 		}
 
 		groupState := s.world.Resources.Target.GetGroup(groupID)
 		if !groupState.Valid {
-			// Invalid target, skip navigation
 			continue
 		}
 
-		// Get entity position
 		var gridX, gridY int
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
 			gridX, gridY = vmath.GridFromCentered(kinetic.PreciseX, kinetic.PreciseY)
@@ -228,7 +298,7 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// Area LOS check using entity dimensions
+		isComposite := navComp.Width > 1 || navComp.Height > 1
 		width, height := navComp.Width, navComp.Height
 		if width == 0 {
 			width = 1
@@ -238,11 +308,9 @@ func (s *NavigationSystem) Update() {
 		}
 
 		hasLOS := false
-		if width == 1 && height == 1 {
-			// Point entity: use fast point LOS
+		if !isComposite {
 			hasLOS = s.world.Positions.HasLineOfSight(gridX, gridY, groupState.PosX, groupState.PosY, component.WallBlockKinetic)
 		} else {
-			// Area entity: use swept bbox LOS with rotation fallback
 			hasLOS = s.world.Positions.HasAreaLineOfSightRotatable(gridX, gridY, groupState.PosX, groupState.PosY, width, height, component.WallBlockKinetic)
 		}
 
@@ -250,17 +318,13 @@ func (s *NavigationSystem) Update() {
 			navComp.HasDirectPath = true
 			navComp.FlowX = 0
 			navComp.FlowY = 0
-			s.world.Components.Navigation.SetComponent(entity, navComp)
-			continue
+		} else {
+			navComp.HasDirectPath = false
 		}
-
-		// No LOS - entity needs flow field, add to ROI
-		navComp.HasDirectPath = false
 		s.world.Components.Navigation.SetComponent(entity, navComp)
-		group.entityBuf = append(group.entityBuf, [2]int{gridX, gridY})
 	}
 
-	// 2. Update flow fields per group
+	// Phase 2: Update flow fields
 	totalRecomputes := int64(0)
 	for groupID, g := range s.groups {
 		groupState := s.world.Resources.Target.GetGroup(groupID)
@@ -268,39 +332,21 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		recomputed := g.flowCache.Update(groupState.PosX, groupState.PosY, isBlocked, g.entityBuf)
-		if recomputed {
+		if recomputed := g.pointFlowCache.Update(groupState.PosX, groupState.PosY, isBlockedPoint); recomputed {
 			totalRecomputes++
-			if roi := g.flowCache.GetROI(); roi != nil {
-				roiCells := (roi.MaxX - roi.MinX + 1) * (roi.MaxY - roi.MinY + 1)
-				s.statROICells.Store(int64(roiCells))
-			}
+		}
+
+		if recomputed := g.compositeFlowCache.Update(groupState.PosX, groupState.PosY, isBlockedComposite); recomputed {
+			totalRecomputes++
 		}
 	}
 	s.statRecomputes.Store(totalRecomputes)
 
-	for groupID, g := range s.groups {
-		groupState := s.world.Resources.Target.GetGroup(groupID)
-		if !groupState.Valid {
-			continue
-		}
-
-		recomputed := g.flowCache.Update(groupState.PosX, groupState.PosY, isBlocked, g.entityBuf)
-		if recomputed {
-			totalRecomputes++
-			if roi := g.flowCache.GetROI(); roi != nil {
-				roiCells := (roi.MaxX - roi.MinX + 1) * (roi.MaxY - roi.MinY + 1)
-				s.statROICells.Store(int64(roiCells))
-			}
-		}
-	}
-	s.statRecomputes.Store(totalRecomputes)
-
-	// 3. Update flow directions for entities without LOS
+	// Phase 3: Update flow directions
 	for _, entity := range entities {
 		navComp, ok := s.world.Components.Navigation.GetComponent(entity)
 		if !ok || navComp.HasDirectPath {
-			continue // Skip entities with direct path (already updated)
+			continue
 		}
 
 		groupID := s.getEntityGroup(entity)
@@ -318,35 +364,56 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		// Composite footprint sampling with wall-constraint projection
-		if navComp.Width > 1 || navComp.Height > 1 {
-			gridX, gridY := vmath.GridFromCentered(preciseX, preciseY)
-			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(entity, gridX, gridY, group.flowCache)
+		gridX, gridY := vmath.GridFromCentered(preciseX, preciseY)
+		isComposite := navComp.Width > 1 || navComp.Height > 1
 
-			// Tabu suppression: prevent 2-cycle oscillation
-			navComp.FlowX, navComp.FlowY = suppressTabuDirection(&navComp, gridX, gridY, navComp.FlowX, navComp.FlowY)
-
-			// Record current position in ring buffer
-			navComp.TabuPos[navComp.TabuHead] = [2]int{gridX, gridY}
-			navComp.TabuHead = (navComp.TabuHead + 1) % 2
-			if navComp.TabuTick < 2 {
-				navComp.TabuTick++
+		if isComposite {
+			if pos, ok := s.world.Positions.GetPosition(entity); ok {
+				gridX, gridY = pos.X, pos.Y
 			}
+			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(gridX, gridY, group.compositeFlowCache, navComp.PathDeviation)
 		} else {
-			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.flowCache)
+			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.pointFlowCache)
+
+			// Stochastic deviation for point entities
+			if navComp.PathDeviation > 0 && int64(s.rng.Intn(int(vmath.Scale))) < navComp.PathDeviation {
+				optDir := group.pointFlowCache.GetDirection(gridX, gridY)
+				if altDir := s.pickAlternativeDirection(gridX, gridY, optDir, group.pointFlowCache); altDir >= 0 {
+					navComp.FlowX = flowDirLUT[altDir][0]
+					navComp.FlowY = flowDirLUT[altDir][1]
+				}
+			}
 		}
+
+		// FlowBlend: mix with direct-to-target direction
+		if navComp.FlowBlend > 0 {
+			groupState := s.world.Resources.Target.GetGroup(groupID)
+			if groupState.Valid {
+				directX := vmath.FromInt(groupState.PosX - gridX)
+				directY := vmath.FromInt(groupState.PosY - gridY)
+				if directX != 0 || directY != 0 {
+					dirX, dirY := vmath.Normalize2D(directX, directY)
+					navComp.FlowX = vmath.Lerp(navComp.FlowX, dirX, navComp.FlowBlend)
+					navComp.FlowY = vmath.Lerp(navComp.FlowY, dirY, navComp.FlowBlend)
+					if navComp.FlowX != 0 || navComp.FlowY != 0 {
+						navComp.FlowX, navComp.FlowY = vmath.Normalize2D(navComp.FlowX, navComp.FlowY)
+					}
+				}
+			}
+		}
+
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 
-	// Update debug reference to group 0
 	if g, ok := s.groups[0]; ok {
-		DebugFlow = g.flowCache
+		DebugFlow = g.pointFlowCache
 	}
 }
 
 func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePayload) {
 	g := s.getOrCreateGroup(payload.GroupID)
-	g.flowCache.MarkDirty()
+	g.pointFlowCache.MarkDirty()
+	g.compositeFlowCache.MarkDirty()
 
 	s.world.Resources.Target.SetGroup(payload.GroupID, engine.TargetGroupState{
 		Type:   payload.Type,
@@ -363,18 +430,21 @@ func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 	}
 	config := s.world.Resources.Config
 	g := &targetGroupNav{
-		flowCache: navigation.NewFlowFieldCache(
+		pointFlowCache: navigation.NewFlowFieldCache(
 			config.MapWidth, config.MapHeight,
 			parameter.NavFlowMinTicksBetweenCompute,
 			parameter.NavFlowDirtyDistance,
 		),
-		entityBuf: make([][2]int, 0, 16),
+		compositeFlowCache: navigation.NewFlowFieldCache(
+			config.MapWidth, config.MapHeight,
+			parameter.NavFlowMinTicksBetweenCompute,
+			parameter.NavFlowDirtyDistance,
+		),
 	}
 	s.groups[groupID] = g
 	return g
 }
 
-// getEntityGroup returns the target group for an entity (0 = cursor default)
 func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
 	if tc, ok := s.world.Components.Target.GetComponent(entity); ok {
 		return tc.GroupID
@@ -382,11 +452,9 @@ func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
 	return 0
 }
 
-// resolveGroupTargets updates TargetResource from group configurations each tick
 func (s *NavigationSystem) resolveGroupTargets() {
 	tr := s.world.Resources.Target
 
-	// Group 0: always cursor
 	if s.cursorValid {
 		tr.Groups[0] = engine.TargetGroupState{
 			Type:  component.TargetCursor,
@@ -396,7 +464,6 @@ func (s *NavigationSystem) resolveGroupTargets() {
 		}
 	}
 
-	// Other groups: resolve from config
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
 		state := tr.Groups[groupID]
 		if !state.Valid {
@@ -409,12 +476,9 @@ func (s *NavigationSystem) resolveGroupTargets() {
 				state.PosX = pos.X
 				state.PosY = pos.Y
 			} else {
-				state.Valid = false // Entity destroyed
+				state.Valid = false
 			}
 			tr.Groups[groupID] = state
-
-		case component.TargetPosition:
-			// Static, no resolution needed
 
 		case component.TargetCursor:
 			state.PosX = s.cursorX
@@ -424,7 +488,49 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	}
 }
 
-// getInterpolatedFlowDirection performs bilinear interpolation masking out blocked cells
+// getCompositeFlowDirection returns flow direction from composite-aware flow field
+// Handles case where entity's current cell is blocked in passability
+func (s *NavigationSystem) getCompositeFlowDirection(gridX, gridY int, cache *navigation.FlowFieldCache, deviation int64) (int64, int64) {
+	dir := cache.GetDirection(gridX, gridY)
+
+	// If current cell has no direction (blocked or unvisited), find best passable neighbor
+	if dir < 0 || dir >= navigation.DirCount {
+		dir = s.findBestNeighborDirection(gridX, gridY, cache)
+	}
+
+	if dir < 0 || dir >= navigation.DirCount {
+		return 0, 0
+	}
+
+	// Stochastic deviation
+	if deviation > 0 && int64(s.rng.Intn(int(vmath.Scale))) < deviation {
+		if altDir := s.pickAlternativeDirection(gridX, gridY, dir, cache); altDir >= 0 {
+			dir = altDir
+		}
+	}
+
+	return flowDirLUT[dir][0], flowDirLUT[dir][1]
+}
+
+// findBestNeighborDirection finds direction toward lowest-distance passable neighbor
+// Used when entity is at a blocked cell
+func (s *NavigationSystem) findBestNeighborDirection(x, y int, cache *navigation.FlowFieldCache) int8 {
+	bestDir := int8(-1)
+	bestDist := 1 << 30
+
+	for d := int8(0); d < navigation.DirCount; d++ {
+		nx := x + navigation.DirVectors[d][0]
+		ny := y + navigation.DirVectors[d][1]
+		dist := cache.GetDistance(nx, ny)
+		if dist >= 0 && dist < bestDist {
+			bestDist = dist
+			bestDir = d
+		}
+	}
+	return bestDir
+}
+
+// getInterpolatedFlowDirection performs bilinear interpolation for point entities
 func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64, cache *navigation.FlowFieldCache) (int64, int64) {
 	sampleX := preciseX - vmath.CellCenter
 	sampleY := preciseY - vmath.CellCenter
@@ -432,22 +538,17 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 	x0 := vmath.ToInt(sampleX)
 	y0 := vmath.ToInt(sampleY)
 
-	// Fraction (u, v) in Q32.32 [0, Scale)
 	u := sampleX & vmath.Mask
 	v := sampleY & vmath.Mask
 
-	// Inverted weights
 	invU := vmath.Scale - u
 	invV := vmath.Scale - v
 
-	// Base Weights for 4 neighbors
-	// TL(0,0), TR(1,0), BL(0,1), BR(1,1)
 	w00 := vmath.Mul(invU, invV)
 	w10 := vmath.Mul(u, invV)
 	w01 := vmath.Mul(invU, v)
 	w11 := vmath.Mul(u, v)
 
-	// Get Vectors and Validity
 	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, cache)
 	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, cache)
 	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, cache)
@@ -455,7 +556,6 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 
 	var sumX, sumY, totalWeight int64
 
-	// Accumulate only valid vectors
 	if valid00 {
 		sumX += vmath.Mul(v00x, w00)
 		sumY += vmath.Mul(v00y, w00)
@@ -477,24 +577,19 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 		totalWeight += w11
 	}
 
-	// If no valid neighbors (trapped in wall?) or weight 0, return 0
 	if totalWeight == 0 {
 		return 0, 0
 	}
 
-	// Renormalize result: divide by totalWeight
 	resX := vmath.Div(sumX, totalWeight)
 	resY := vmath.Div(sumY, totalWeight)
 
-	// Final normalization to ensure unit vector consistency
 	if resX != 0 || resY != 0 {
 		return vmath.Normalize2D(resX, resY)
 	}
-
 	return 0, 0
 }
 
-// getFlowVectorAndValidity retrieves vector and validity flag from specified cache
 func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, cache *navigation.FlowFieldCache) (int64, int64, bool) {
 	dir := cache.GetDirection(x, y)
 	if dir < 0 || dir >= navigation.DirCount {
@@ -503,253 +598,64 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, cache *navigation.
 	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
 }
 
-// sampleFlowSum sums flow vectors at live footprint cells
-func (s *NavigationSystem) sampleFlowSum(fp *compositeFootprint, gridX, gridY int, cache *navigation.FlowFieldCache) (int64, int64) {
-	var sumX, sumY int64
-	for _, m := range fp.entries {
-		if m.Entity == 0 {
+// pickAlternativeDirection returns weighted random non-optimal direction
+func (s *NavigationSystem) pickAlternativeDirection(x, y int, optimal int8, cache *navigation.FlowFieldCache) int8 {
+	if optimal < 0 {
+		return -1
+	}
+
+	optDist := cache.GetDistance(x, y)
+	if optDist < 0 {
+		return -1
+	}
+
+	type alt struct {
+		dir    int8
+		weight int
+	}
+	var alts [7]alt
+	nAlts := 0
+
+	for d := int8(0); d < navigation.DirCount; d++ {
+		if d == optimal {
 			continue
 		}
-		dir := cache.GetDirection(gridX+m.OffsetX, gridY+m.OffsetY)
-		if dir < 0 || dir >= navigation.DirCount {
-			continue
-		}
-		sumX += flowDirLUT[dir][0]
-		sumY += flowDirLUT[dir][1]
-	}
-	return sumX, sumY
-}
-
-// getCompositeFlowDirection samples flow at all footprint cells with wall-constraint projection
-func (s *NavigationSystem) getCompositeFlowDirection(headerEntity core.Entity, gridX, gridY int, cache *navigation.FlowFieldCache) (int64, int64) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
-	if !ok || len(headerComp.MemberEntries) == 0 {
-		return 0, 0
-	}
-
-	fp, ok := newCompositeFootprint(headerComp.MemberEntries)
-	if !ok {
-		return 0, 0
-	}
-
-	// Phase 1: flow sum (lock-free)
-	rawX, rawY := s.sampleFlowSum(&fp, gridX, gridY, cache)
-	if rawX == 0 && rawY == 0 {
-		return 0, 0
-	}
-
-	// Phase 2+3: wall projection and escape probing
-	s.world.Positions.Lock()
-
-	projX, projY := s.projectFlowAgainstWalls(rawX, rawY, gridX, gridY, &fp)
-	if projX != 0 || projY != 0 {
-		s.world.Positions.Unlock()
-		return vmath.Normalize2D(projX, projY)
-	}
-
-	// Phase 3: escape probing — projection yielded (0,0) from non-zero raw sum
-	// Probe opposite direction of each blocked axis
-	// Order: larger-magnitude axis first (clearing dominant blocked direction is higher impact)
-	type escapeProbe struct{ dx, dy int }
-	var probes [2]escapeProbe
-	nProbes := 0
-
-	absRawX, absRawY := rawX, rawY
-	if absRawX < 0 {
-		absRawX = -absRawX
-	}
-	if absRawY < 0 {
-		absRawY = -absRawY
-	}
-
-	addProbeX := func() {
-		if rawX > 0 {
-			probes[nProbes] = escapeProbe{-1, 0}
-		} else if rawX < 0 {
-			probes[nProbes] = escapeProbe{1, 0}
-		} else {
-			return
-		}
-		nProbes++
-	}
-	addProbeY := func() {
-		if rawY > 0 {
-			probes[nProbes] = escapeProbe{0, -1}
-		} else if rawY < 0 {
-			probes[nProbes] = escapeProbe{0, 1}
-		} else {
-			return
-		}
-		nProbes++
-	}
-
-	if absRawX >= absRawY {
-		addProbeX()
-		addProbeY()
-	} else {
-		addProbeY()
-		addProbeX()
-	}
-
-	for i := 0; i < nProbes; i++ {
-		probeGridX := gridX + probes[i].dx
-		probeGridY := gridY + probes[i].dy
-
-		if !s.canCompositeOccupy(probeGridX, probeGridY, &fp) {
+		nx := x + navigation.DirVectors[d][0]
+		ny := y + navigation.DirVectors[d][1]
+		nd := cache.GetDistance(nx, ny)
+		if nd < 0 {
 			continue
 		}
 
-		// Re-sample and re-project at probed position
-		probeSumX, probeSumY := s.sampleFlowSum(&fp, probeGridX, probeGridY, cache)
-		if probeSumX == 0 && probeSumY == 0 {
-			continue
+		delta := nd - optDist
+		if delta < 0 {
+			delta = 0
+		}
+		weight := 100 - delta
+		if weight < 1 {
+			weight = 1
 		}
 
-		probeProjX, probeProjY := s.projectFlowAgainstWalls(
-			probeSumX, probeSumY, probeGridX, probeGridY, &fp,
-		)
-		if probeProjX != 0 || probeProjY != 0 {
-			// Viable escape — return cardinal direction toward probe position
-			s.world.Positions.Unlock()
-			return vmath.Normalize2D(vmath.FromInt(probes[i].dx), vmath.FromInt(probes[i].dy))
+		alts[nAlts] = alt{d, weight}
+		nAlts++
+	}
+
+	if nAlts == 0 {
+		return -1
+	}
+
+	totalWeight := 0
+	for i := 0; i < nAlts; i++ {
+		totalWeight += alts[i].weight
+	}
+
+	roll := s.rng.Intn(totalWeight)
+	cum := 0
+	for i := 0; i < nAlts; i++ {
+		cum += alts[i].weight
+		if roll < cum {
+			return alts[i].dir
 		}
 	}
-
-	s.world.Positions.Unlock()
-	return 0, 0
-}
-
-// compositeFootprint caches bounding box derived from HeaderComponent member layout
-type compositeFootprint struct {
-	entries                            []component.MemberEntry
-	minOffX, maxOffX, minOffY, maxOffY int
-	footW, footH                       int
-}
-
-func newCompositeFootprint(entries []component.MemberEntry) (compositeFootprint, bool) {
-	if len(entries) == 0 {
-		return compositeFootprint{}, false
-	}
-
-	fp := compositeFootprint{
-		entries: entries,
-		minOffX: entries[0].OffsetX, maxOffX: entries[0].OffsetX,
-		minOffY: entries[0].OffsetY, maxOffY: entries[0].OffsetY,
-	}
-
-	for _, m := range entries[1:] {
-		if m.OffsetX < fp.minOffX {
-			fp.minOffX = m.OffsetX
-		}
-		if m.OffsetX > fp.maxOffX {
-			fp.maxOffX = m.OffsetX
-		}
-		if m.OffsetY < fp.minOffY {
-			fp.minOffY = m.OffsetY
-		}
-		if m.OffsetY > fp.maxOffY {
-			fp.maxOffY = m.OffsetY
-		}
-	}
-
-	fp.footW = fp.maxOffX - fp.minOffX + 1
-	fp.footH = fp.maxOffY - fp.minOffY + 1
-	return fp, true
-}
-
-// projectFlowAgainstWalls zeroes axis components the composite cannot physically follow
-// Caller MUST hold Position write lock
-func (s *NavigationSystem) projectFlowAgainstWalls(
-	sumX, sumY int64,
-	gridX, gridY int,
-	fp *compositeFootprint,
-) (int64, int64) {
-	topLeftX := gridX + fp.minOffX
-	topLeftY := gridY + fp.minOffY
-	mapW := s.world.Resources.Config.MapWidth
-	mapH := s.world.Resources.Config.MapHeight
-	mask := component.WallBlockKinetic
-
-	if sumX > 0 {
-		if topLeftX+fp.footW >= mapW ||
-			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX+1, topLeftY, fp.footW, fp.footH, mask) {
-			sumX = 0
-		}
-	} else if sumX < 0 {
-		if topLeftX <= 0 ||
-			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX-1, topLeftY, fp.footW, fp.footH, mask) {
-			sumX = 0
-		}
-	}
-
-	if sumY > 0 {
-		if topLeftY+fp.footH >= mapH ||
-			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX, topLeftY+1, fp.footW, fp.footH, mask) {
-			sumY = 0
-		}
-	} else if sumY < 0 {
-		if topLeftY <= 0 ||
-			s.world.Positions.HasBlockingWallInAreaUnsafe(topLeftX, topLeftY-1, fp.footW, fp.footH, mask) {
-			sumY = 0
-		}
-	}
-
-	return sumX, sumY
-}
-
-// canCompositeOccupy checks if composite footprint fits at (gridX, gridY) without wall/bounds collision
-// Caller MUST hold Position write lock
-func (s *NavigationSystem) canCompositeOccupy(gridX, gridY int, fp *compositeFootprint) bool {
-	topLeftX := gridX + fp.minOffX
-	topLeftY := gridY + fp.minOffY
-	mapW := s.world.Resources.Config.MapWidth
-	mapH := s.world.Resources.Config.MapHeight
-
-	if topLeftX < 0 || topLeftY < 0 || topLeftX+fp.footW > mapW || topLeftY+fp.footH > mapH {
-		return false
-	}
-
-	return !s.world.Positions.HasBlockingWallInAreaUnsafe(
-		topLeftX, topLeftY, fp.footW, fp.footH, component.WallBlockKinetic,
-	)
-}
-
-// suppressTabuDirection checks if flow would return composite to blacklisted position
-// Returns adjusted (flowX, flowY), zeroing the axis that causes regression
-func suppressTabuDirection(navComp *component.NavigationComponent, gridX, gridY int, flowX, flowY int64) (int64, int64) {
-	if navComp.TabuTick < 2 {
-		return flowX, flowY // Buffer not full
-	}
-
-	// Older entry is opposite of current write head
-	tabuIdx := (navComp.TabuHead + 1) % 2
-	tabuX := navComp.TabuPos[tabuIdx][0]
-	tabuY := navComp.TabuPos[tabuIdx][1]
-
-	// Predict next grid position from flow direction
-	nextX, nextY := gridX, gridY
-	if flowX > 0 {
-		nextX++
-	} else if flowX < 0 {
-		nextX--
-	}
-	if flowY > 0 {
-		nextY++
-	} else if flowY < 0 {
-		nextY--
-	}
-
-	if nextX != tabuX || nextY != tabuY {
-		return flowX, flowY // Not regressing
-	}
-
-	// Suppress axis that causes regression
-	if gridX != tabuX {
-		flowX = 0
-	}
-	if gridY != tabuY {
-		flowY = 0
-	}
-
-	return flowX, flowY
+	return -1
 }

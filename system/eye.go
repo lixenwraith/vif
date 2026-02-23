@@ -288,13 +288,15 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		},
 	})
 
-	// Navigation
+	// Navigation (single consolidated write, includes path diversity defaults)
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
 		Width:          parameter.EyeWidth,
 		Height:         parameter.EyeHeight,
 		TurnThreshold:  parameter.NavTurnThresholdDefault,
 		BrakeIntensity: parameter.NavBrakeIntensityDefault,
 		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+		PathDeviation:  parameter.EyeNavPathDeviationDefault,
+		FlowBlend:      parameter.EyeNavFlowBlendDefault,
 	})
 
 	// Combat

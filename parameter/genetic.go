@@ -84,20 +84,21 @@ const (
 
 // Genetic Algorithm - Eye Evolution Bounds
 const (
-	// TurnThreshold: wider range for maze cornering
-	GAEyeTurnThresholdMin = 0.3
-	GAEyeTurnThresholdMax = 0.98
-
-	// BrakeIntensity: higher ceiling for tight corridor braking
-	GAEyeBrakeIntensityMin = 0.5
-	GAEyeBrakeIntensityMax = 10.0
-
 	// FlowLookahead: extended range for long maze paths
 	GAEyeFlowLookaheadMin = 2.0
 	GAEyeFlowLookaheadMax = 60.0
 
+	// PathDeviation: probability of choosing non-optimal flow direction per cell
+	// Upper bound 0.3 = ~30% of cells deviate per tick
+	GAEyePathDeviationMin = 0.0
+	GAEyePathDeviationMax = 0.3
+
+	// FlowBlend: direct-to-target blend when no LOS
+	// Upper bound 0.5 = halfway between flow field and direct homing
+	GAEyeFlowBlendMin = 0.0
+	GAEyeFlowBlendMax = 0.5
+
 	// Perturbation standard deviation for eye genes
-	// Lower than drain — stable maze environments benefit from finer tuning
 	GAEyePerturbationStdDev = 0.10
 )
 

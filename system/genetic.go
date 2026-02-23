@@ -27,8 +27,6 @@ const (
 	geneNavCount
 )
 
-// --- Navigation Gene Configuration ---
-
 var navGeneBounds = []genetic.ParameterBounds{
 	{Min: parameter.GADrainTurnThresholdMin, Max: parameter.GADrainTurnThresholdMax},
 	{Min: parameter.GADrainBrakeIntensityMin, Max: parameter.GADrainBrakeIntensityMax},
@@ -37,10 +35,17 @@ var navGeneBounds = []genetic.ParameterBounds{
 
 // --- Eye Gene Configuration ---
 
+const (
+	geneEyeFlowLookahead = iota
+	geneEyePathDeviation
+	geneEyeFlowBlend
+	geneEyeCount
+)
+
 var eyeGeneBounds = []genetic.ParameterBounds{
-	{Min: parameter.GAEyeTurnThresholdMin, Max: parameter.GAEyeTurnThresholdMax},
-	{Min: parameter.GAEyeBrakeIntensityMin, Max: parameter.GAEyeBrakeIntensityMax},
 	{Min: parameter.GAEyeFlowLookaheadMin, Max: parameter.GAEyeFlowLookaheadMax},
+	{Min: parameter.GAEyePathDeviationMin, Max: parameter.GAEyePathDeviationMax},
+	{Min: parameter.GAEyeFlowBlendMin, Max: parameter.GAEyeFlowBlendMax},
 }
 
 // --- Fitness Metric Keys ---
@@ -125,7 +130,8 @@ func (m *playerModel) context() fitness.Context {
 type trackedEntity struct {
 	species       component.SpeciesType
 	evalID        uint64
-	collector     *tracking.StandardCollector
+	collector     tracking.Collector
+	isComposite   bool
 	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
 }
 
@@ -207,11 +213,11 @@ func (s *GeneticSystem) registerSpecies() {
 	}
 	_ = s.registry.Register(drainConfig, s.createAggregator())
 
-	// Eye species — group-targeting composite entities
+	// Eye species — group-targeting composite entities with path diversity genes
 	eyeConfig := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(component.SpeciesEye),
 		Name:               "eye_navigation",
-		GeneCount:          geneNavCount,
+		GeneCount:          geneEyeCount,
 		Bounds:             eyeGeneBounds,
 		PerturbationStdDev: parameter.GAEyePerturbationStdDev,
 		IsComposite:        true,
@@ -350,15 +356,31 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		navComp.Width = dims.Width
 		navComp.Height = dims.Height
 
-		if len(genes) >= geneNavCount {
-			navComp.TurnThreshold = vmath.FromFloat(genes[geneNavTurnThreshold])
-			navComp.BrakeIntensity = vmath.FromFloat(genes[geneNavBrakeIntensity])
-			navComp.FlowLookahead = vmath.FromFloat(genes[geneNavFlowLookahead])
-		} else {
-			navComp.TurnThreshold = parameter.NavTurnThresholdDefault
-			navComp.BrakeIntensity = parameter.NavBrakeIntensityDefault
-			navComp.FlowLookahead = parameter.NavFlowLookaheadDefault
+		switch speciesType {
+		case component.SpeciesEye:
+			if len(genes) >= geneEyeCount {
+				navComp.FlowLookahead = vmath.FromFloat(genes[geneEyeFlowLookahead])
+				navComp.PathDeviation = vmath.FromFloat(genes[geneEyePathDeviation])
+				navComp.FlowBlend = vmath.FromFloat(genes[geneEyeFlowBlend])
+			}
+			// Floor: prevent zero path diversity (GA can converge toward 0)
+			if navComp.PathDeviation == 0 {
+				navComp.PathDeviation = parameter.EyeNavPathDeviationDefault
+			}
+			// TurnThreshold, BrakeIntensity retain init defaults from eye spawn
+
+		default:
+			if len(genes) >= geneNavCount {
+				navComp.TurnThreshold = vmath.FromFloat(genes[geneNavTurnThreshold])
+				navComp.BrakeIntensity = vmath.FromFloat(genes[geneNavBrakeIntensity])
+				navComp.FlowLookahead = vmath.FromFloat(genes[geneNavFlowLookahead])
+			} else {
+				navComp.TurnThreshold = parameter.NavTurnThresholdDefault
+				navComp.BrakeIntensity = parameter.NavBrakeIntensityDefault
+				navComp.FlowLookahead = parameter.NavFlowLookaheadDefault
+			}
 		}
+
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 
@@ -368,11 +390,20 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		groupID = tc.GroupID
 	}
 
-	collector := s.collectorPool.AcquireStandard()
+	isComposite := s.world.Components.Header.HasEntity(entity)
+
+	var collector tracking.Collector
+	if isComposite {
+		collector = s.collectorPool.AcquireComposite()
+	} else {
+		collector = s.collectorPool.AcquireStandard()
+	}
+
 	s.tracking[entity] = &trackedEntity{
 		species:       speciesType,
 		evalID:        evalID,
 		collector:     collector,
+		isComposite:   isComposite,
 		targetGroupID: groupID,
 	}
 }
@@ -493,6 +524,19 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 			metricInShield:   boolToFloat(insideShield),
 		}
 
+		// Composite entities: track live member count from HeaderComponent
+		if tracked.isComposite {
+			if header, ok := s.world.Components.Header.GetComponent(entity); ok {
+				liveMembers := 0
+				for _, m := range header.MemberEntries {
+					if m.Entity != 0 {
+						liveMembers++
+					}
+				}
+				metrics[tracking.MetricMemberCount] = float64(liveMembers)
+			}
+		}
+
 		tracked.collector.Collect(metrics, dt)
 	}
 }
@@ -511,7 +555,16 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathAtCursor b
 		s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, fitnessVal)
 	}
 
-	s.collectorPool.ReleaseStandard(tracked.collector)
+	// Release collector to correct pool by type
+	if tracked.isComposite {
+		if c, ok := tracked.collector.(*tracking.CompositeCollector); ok {
+			s.collectorPool.ReleaseComposite(c)
+		}
+	} else {
+		if c, ok := tracked.collector.(*tracking.StandardCollector); ok {
+			s.collectorPool.ReleaseStandard(c)
+		}
+	}
 }
 
 func (s *GeneticSystem) updateTelemetry() {

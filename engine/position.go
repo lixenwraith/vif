@@ -981,7 +981,7 @@ func (p *Position) FindPlacementAroundExclusion(
 	defer p.mu.RUnlock()
 
 	config := p.world.Resources.Config
-	centerX := config.MapWidth / 22
+	centerX := config.MapWidth / 2
 	direction := getSearchDirection(anchorX, centerX)
 
 	// Compute centering offsets

@@ -12,7 +12,9 @@ const (
 	EyeHeight        = 3
 	EyeHeaderOffsetX = 2 // Center column
 	EyeHeaderOffsetY = 1 // Center row
+)
 
+const (
 	EyeTypeCount = 7
 
 	EyeRestitutionFloat = 0.5
@@ -26,6 +28,13 @@ const (
 	// EyeContactCheckDistSq is squared distance threshold for target contact member iteration
 	// Avoids per-member spatial queries when eye is far from target
 	EyeContactCheckDistSq = 100
+)
+
+// Navigation
+var (
+	// Pre-GA defaults for eye composites; GA overrides on tracking start
+	EyeNavPathDeviationDefault = vmath.FromFloat(0.05)
+	EyeNavFlowBlendDefault     = vmath.FromFloat(0.15)
 )
 
 var EyeRestitution = vmath.FromFloat(EyeRestitutionFloat)

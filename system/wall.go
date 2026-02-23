@@ -458,7 +458,8 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
 	}
 
-	// Route through death system with appropriate effects
+	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
+
 	if len(flashTargets) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets)
 	}
@@ -466,7 +467,15 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)
 	}
 	if len(silentTargets) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, silentTargets)
+		s.world.DestroyEntitiesBatch(silentTargets)
+	}
+
+	if count > 0 {
+		s.world.PushEvent(event.EventWallDespawned, &event.WallDespawnedPayload{
+			X: payload.X, Y: payload.Y,
+			Width: width, Height: height,
+			Count: count,
+		})
 	}
 }
 
@@ -487,7 +496,8 @@ func (s *WallSystem) despawnAllWalls() {
 		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
 	}
 
-	// Route through death system with appropriate effects
+	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
+
 	if len(flashTargets) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, flashTargets)
 	}
@@ -495,7 +505,16 @@ func (s *WallSystem) despawnAllWalls() {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFadeoutSpawnOne, fadeoutTargets)
 	}
 	if len(silentTargets) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, silentTargets)
+		s.world.DestroyEntitiesBatch(silentTargets)
+	}
+
+	if count > 0 {
+		config := s.world.Resources.Config
+		s.world.PushEvent(event.EventWallDespawned, &event.WallDespawnedPayload{
+			X: 0, Y: 0,
+			Width: config.MapWidth, Height: config.MapHeight,
+			Count: count,
+		})
 	}
 }
 
@@ -756,6 +775,14 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	if vis.BoxStyle != component.BoxDrawNone && maxX > minX && maxY > minY {
 		s.computeBoxCharsInArea(minX, minY, maxX-minX, maxY-minY, vis.BoxStyle)
 	}
+
+	// Notify navigation system of new walls
+	if maxX > minX && maxY > minY {
+		s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
+			X: minX, Y: minY,
+			Width: maxX - minX, Height: maxY - minY,
+		})
+	}
 }
 
 // spawnMazeBlock creates a rectangular wall block with visual config
@@ -839,6 +866,13 @@ func (s *WallSystem) handleDespawnAllSilent() {
 	}
 	// Direct destruction without protection check - death pipeline freezes on large map clears
 	s.world.DestroyEntitiesBatch(wallEntities)
+
+	config := s.world.Resources.Config
+	s.world.PushEvent(event.EventWallDespawned, &event.WallDespawnedPayload{
+		X: 0, Y: 0,
+		Width: config.MapWidth, Height: config.MapHeight,
+		Count: len(wallEntities),
+	})
 }
 
 // --- Box ---

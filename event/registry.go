@@ -271,6 +271,7 @@ func InitRegistry() {
 	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
 	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)
 	RegisterType("EventWallSpawned", EventWallSpawned, &WallSpawnedPayload{})
+	RegisterType("EventWallDespawned", EventWallDespawned, &WallDespawnedPayload{})
 	RegisterType("EventWallDespawnAll", EventWallDespawnAll, nil)
 
 	// Fadeout
@@ -298,9 +299,10 @@ func InitRegistry() {
 	RegisterType("EventSnakeDestroyed", EventSnakeDestroyed, &SnakeDestroyedPayload{})
 	RegisterType("EventSnakeCancelRequest", EventSnakeCancelRequest, nil)
 
-	// Target Group
+	// Navigation
 	RegisterType("EventTargetGroupUpdate", EventTargetGroupUpdate, &TargetGroupUpdatePayload{})
 	RegisterType("EventTargetGroupRemove", EventTargetGroupRemove, &TargetGroupRemovePayload{})
+	RegisterType("EventNavigationRegraph", EventNavigationRegraph, nil)
 
 	// Eye
 	RegisterType("EventEyeSpawnRequest", EventEyeSpawnRequest, &EyeSpawnRequestPayload{})
@@ -310,4 +312,5 @@ func InitRegistry() {
 
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
+	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)
 }

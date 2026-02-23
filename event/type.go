@@ -576,6 +576,11 @@ const (
 	// Consumer: FSM, debug systems | Payload: *WallSpawnedPayload
 	EventWallSpawned
 
+	// EventWallDespawned notifies completion of wall destruction with bounds
+	// Trigger: WallSystem after wall removal
+	// Consumer: NavigationSystem | Payload: *WallDespawnedPayload
+	EventWallDespawned
+
 	// EventWallDespawnAll signals silent destruction of all wall entities
 	// Trigger: FSM before level transitions
 	// Consumer: WallSystem | Payload: nil
@@ -720,6 +725,11 @@ const (
 	// Consumer: NavigationSystem | Payload: *TargetGroupRemovePayload
 	EventTargetGroupRemove
 
+	// EventNavigationRegraph configures or updates a navigation target group
+	// Trigger: Level system, game script, HFSM
+	// Consumer: NavigationSystem | Payload: nil
+	EventNavigationRegraph
+
 	// EventEyeSpawnRequest signals EyeSystem to create entity at location
 	// Trigger: Gateway/FSM
 	// Consumer: EyeSystem | Payload: *EyeSpawnRequestPayload
@@ -741,6 +751,7 @@ const (
 	EventEyeCancelRequest
 
 	EventDebugFlowToggle
+	EventDebugGraphToggle
 )
 
 // GameEvent represents a single game event with metadata

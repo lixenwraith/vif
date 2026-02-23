@@ -50,6 +50,7 @@ func (s *MetaSystem) Priority() int {
 func (s *MetaSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventDebugFlowToggle,
+		event.EventDebugGraphToggle,
 		event.EventMetaStatusMessageRequest,
 		event.EventLevelSetup,
 		event.EventMetaDebugRequest,
@@ -77,6 +78,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventDebugFlowToggle:
 		DebugShowFlow = !DebugShowFlow
+
+	case event.EventDebugGraphToggle:
+		DebugShowCompositeNav = !DebugShowCompositeNav
 
 	case event.EventMetaDebugRequest:
 		s.handleDebugRequest()

@@ -29,18 +29,20 @@ var DirOpposite = [8]int8{
 	DirN, DirNE, DirE, DirSE,
 }
 
-// Weighted edge costs: cardinal = 10, diagonal = 14 (≈10√2)
-// Approximates Euclidean distance to eliminate Chebyshev artifacts
+// Weighted edge costs accounting for terminal 2:1 aspect ratio (Width:Height)
+// X distance = 10, Y distance = 20
+// Diagonal distance = sqrt(10^2 + 20^2) ≈ 22.36
 const (
-	costCardinal    = 10
-	costDiagonal    = 14
+	costX           = 10
+	costY           = 20
+	costDiagonal    = 22
 	costUnreachable = 1<<30 - 1
 )
 
-// Per-direction costs matching DirVectors index order
+// Per-direction costs matching DirVectors index order (N, NE, E, SE, S, SW, W, NW)
 var dirCosts = [8]int{
-	costCardinal, costDiagonal, costCardinal, costDiagonal,
-	costCardinal, costDiagonal, costCardinal, costDiagonal,
+	costY, costDiagonal, costX, costDiagonal,
+	costY, costDiagonal, costX, costDiagonal,
 }
 
 // --- Min-heap for Dijkstra ---
@@ -97,7 +99,7 @@ func (h *minHeap) pop() heapEntry {
 type FlowField struct {
 	Width, Height int
 	Directions    []int8 // Per-cell direction index, DirNone if blocked
-	Distances     []int  // Weighted distance from target (cardinal=10, diagonal=14)
+	Distances     []int  // Aspect-weighted distance from target (X=10, Y=20, diag=22)
 
 	// Generation tracking for zero-allocation reset
 	VisitedGen []uint32
@@ -114,10 +116,14 @@ type FlowField struct {
 // NewFlowField creates an empty flow field for the given dimensions
 func NewFlowField(width, height int) *FlowField {
 	size := width * height
+	dirs := make([]int8, size)
+	for i := range dirs {
+		dirs[i] = DirNone
+	}
 	return &FlowField{
 		Width:      width,
 		Height:     height,
-		Directions: make([]int8, size),
+		Directions: dirs,
 		Distances:  make([]int, size),
 		VisitedGen: make([]uint32, size),
 		CurrentGen: 0,
@@ -139,10 +145,18 @@ func (f *FlowField) Resize(width, height int) {
 		f.Directions = f.Directions[:size]
 		f.Distances = f.Distances[:size]
 		f.VisitedGen = f.VisitedGen[:size]
+		// Clear stale generation markers to prevent collision after CurrentGen reset
+		for i := range f.VisitedGen {
+			f.VisitedGen[i] = 0
+		}
+	}
+	// Ensure no stale valid-looking directions survive resize
+	for i := range f.Directions {
+		f.Directions[i] = DirNone
 	}
 	f.Width = width
 	f.Height = height
-	f.CurrentGen = 0 // Reset generation on resize
+	f.CurrentGen = 0
 	f.Valid = false
 }
 
@@ -181,70 +195,53 @@ func (f *FlowField) GetDistance(x, y int) int {
 	return d
 }
 
-// ROIBounds defines rectangular region of interest for bounded computation
-type ROIBounds struct {
-	MinX, MinY, MaxX, MaxY int
-}
-
-// FullBounds returns ROI covering entire field
-func (f *FlowField) FullBounds() ROIBounds {
-	return ROIBounds{0, 0, f.Width - 1, f.Height - 1}
-}
-
 // WallChecker is a function that returns true if cell blocks navigation
 type WallChecker func(x, y int) bool
 
-// Compute performs weighted Dijkstra from target within ROI bounds
-// Pass nil for roi to compute full field
-func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker, roi *ROIBounds) {
+// Compute performs weighted Dijkstra from target across the entire valid field
+// ROI spatial limits are bypassed here because valid maze paths frequently exit geometric bounding boxes
+func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
 	if targetX < 0 || targetY < 0 || targetX >= f.Width || targetY >= f.Height {
 		f.Valid = false
 		return
 	}
 
-	// Determine bounds
-	minX, minY, maxX, maxY := 0, 0, f.Width-1, f.Height-1
-	if roi != nil {
-		minX = max(0, roi.MinX)
-		minY = max(0, roi.MinY)
-		maxX = min(f.Width-1, roi.MaxX)
-		maxY = min(f.Height-1, roi.MaxY)
-	}
-
-	// Ensure target is within bounds
-	if targetX < minX || targetX > maxX || targetY < minY || targetY > maxY {
-		// Expand bounds to include target
-		minX = min(minX, targetX)
-		minY = min(minY, targetY)
-		maxX = max(maxX, targetX)
-		maxY = max(maxY, targetY)
-	}
-
-	w := f.Width
+	// Always use full grid bounds for path computation
+	// Bounding pathfinding with an AABB in non-convex geometry blocks valid paths
 
 	// Increment generation (zero-allocation reset)
+	w := f.Width
 	f.CurrentGen++
 	if f.CurrentGen == 0 {
-		// Handle overflow by clearing all
 		for i := range f.VisitedGen {
 			f.VisitedGen[i] = 0
 		}
 		f.CurrentGen = 1
 	}
 
-	// Phase 1: Weighted Dijkstra within ROI
-	targetIdx := targetY*w + targetX
-	f.Distances[targetIdx] = 0
-	f.VisitedGen[targetIdx] = f.CurrentGen
-
 	f.heap = f.heap[:0]
-	f.heap.push(heapEntry{idx: targetIdx, dist: 0})
 
+	// Seed target(s): if exact target is blocked, find nearby passable cells
+	targetIdx := targetY*w + targetX
+	if !isBlocked(targetX, targetY) {
+		f.Distances[targetIdx] = 0
+		f.VisitedGen[targetIdx] = f.CurrentGen
+		f.Directions[targetIdx] = DirTarget
+		f.heap.push(heapEntry{idx: targetIdx, dist: 0})
+	} else {
+		f.seedVirtualTargets(targetX, targetY, isBlocked)
+	}
+
+	if len(f.heap) == 0 {
+		f.Valid = false
+		return
+	}
+
+	// Phase 1: Weighted Dijkstra (Unrestricted Expansion)
 	for len(f.heap) > 0 {
 		entry := f.heap.pop()
 		idx := entry.idx
 
-		// Skip if we've found a better path
 		if f.VisitedGen[idx] == f.CurrentGen && entry.dist > f.Distances[idx] {
 			continue
 		}
@@ -256,8 +253,7 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker, roi *RO
 			nx := cx + DirVectors[dirIdx][0]
 			ny := cy + DirVectors[dirIdx][1]
 
-			// ROI boundary check
-			if nx < minX || nx > maxX || ny < minY || ny > maxY {
+			if nx < 0 || nx >= f.Width || ny < 0 || ny >= f.Height {
 				continue
 			}
 
@@ -266,8 +262,9 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker, roi *RO
 			}
 
 			// Diagonal corner cutting prevention
-			if DirVectors[dirIdx][0] != 0 && DirVectors[dirIdx][1] != 0 {
-				if isBlocked(cx+DirVectors[dirIdx][0], cy) || isBlocked(cx, cy+DirVectors[dirIdx][1]) {
+			dx, dy := DirVectors[dirIdx][0], DirVectors[dirIdx][1]
+			if dx != 0 && dy != 0 {
+				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
 					continue
 				}
 			}
@@ -275,69 +272,14 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker, roi *RO
 			nIdx := ny*w + nx
 			newDist := entry.dist + dirCosts[dirIdx]
 
-			// Check if unvisited this generation or found better path
 			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
 				f.Distances[nIdx] = newDist
 				f.VisitedGen[nIdx] = f.CurrentGen
+				// Magic: O(1) assignment. The shortest path to the target goes through `cx`.
+				// The optimal flow vector from `nx` points exactly opposite to the expansion vector
+				f.Directions[nIdx] = DirOpposite[dirIdx]
 				f.heap.push(heapEntry{idx: nIdx, dist: newDist})
 			}
-		}
-	}
-
-	// Phase 2: Derive flow directions from distance gradient
-	f.Directions[targetIdx] = DirTarget
-	f.VisitedGen[targetIdx] = f.CurrentGen
-
-	for y := minY; y <= maxY; y++ {
-		for x := minX; x <= maxX; x++ {
-			idx := y*w + x
-
-			// Skip unvisited cells
-			if f.VisitedGen[idx] != f.CurrentGen {
-				f.Directions[idx] = DirNone
-				continue
-			}
-
-			dist := f.Distances[idx]
-			if dist >= costUnreachable || dist == 0 {
-				continue
-			}
-
-			bestDir := DirNone
-			bestDist := dist
-
-			for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
-				nx := x + DirVectors[dirIdx][0]
-				ny := y + DirVectors[dirIdx][1]
-
-				if nx < minX || nx > maxX || ny < minY || ny > maxY {
-					continue
-				}
-
-				nIdx := ny*w + nx
-
-				// Skip unvisited neighbors
-				if f.VisitedGen[nIdx] != f.CurrentGen {
-					continue
-				}
-
-				nDist := f.Distances[nIdx]
-				if nDist >= bestDist {
-					continue
-				}
-
-				// Diagonal corner cutting prevention
-				if DirVectors[dirIdx][0] != 0 && DirVectors[dirIdx][1] != 0 {
-					if isBlocked(x+DirVectors[dirIdx][0], y) || isBlocked(x, y+DirVectors[dirIdx][1]) {
-						continue
-					}
-				}
-
-				bestDist = nDist
-				bestDir = dirIdx
-			}
-
-			f.Directions[idx] = bestDir
 		}
 	}
 
@@ -346,71 +288,61 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker, roi *RO
 	f.Valid = true
 }
 
-// IncrementalUpdate patches newly-free cells within current generation
-func (f *FlowField) IncrementalUpdate(isBlocked WallChecker) {
-	if !f.Valid {
-		return
-	}
-
+// seedVirtualTargets finds passable cells near blocked target using spiral search
+// Seeds passable cells with weighted distance - does NOT mark blocked target
+func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallChecker) {
 	w := f.Width
+	const maxSearchRadius = 8
 
-	for y := 0; y < f.Height; y++ {
-		for x := 0; x < w; x++ {
-			idx := y*w + x
+	// DO NOT mark the blocked target cell - only seed passable neighbors
 
-			// Only consider cells from current generation with no direction
-			if f.VisitedGen[idx] == f.CurrentGen && f.Directions[idx] != DirNone {
-				continue
-			}
+	for radius := 1; radius <= maxSearchRadius; radius++ {
+		foundAny := false
 
-			// Skip if still blocked
-			if isBlocked(x, y) {
-				continue
-			}
+		// Check ring at this radius
+		for dy := -radius; dy <= radius; dy++ {
+			for dx := -radius; dx <= radius; dx++ {
+				// Only check cells on the ring perimeter
+				if abs(dx) != radius && abs(dy) != radius {
+					continue
+				}
 
-			// Cell is free but has no direction - find best neighbor
-			bestDir := DirNone
-			bestDist := costUnreachable
+				nx := targetX + dx
+				ny := targetY + dy
 
-			for dirIdx := int8(0); dirIdx < DirCount; dirIdx++ {
-				nx := x + DirVectors[dirIdx][0]
-				ny := y + DirVectors[dirIdx][1]
+				if nx < 0 || nx >= w || ny < 0 || ny >= f.Height {
+					continue
+				}
 
-				if nx < 0 || ny < 0 || nx >= w || ny >= f.Height {
+				if isBlocked(nx, ny) {
 					continue
 				}
 
 				nIdx := ny*w + nx
 
-				// Neighbor must be from current generation
-				if f.VisitedGen[nIdx] != f.CurrentGen {
-					continue
+				// Seed as virtual target with distance based on manhattan distance from real target
+				// Weighted by axis costs for consistency with Dijkstra
+				cost := abs(dx)*costX + abs(dy)*costY
+				if f.VisitedGen[nIdx] != f.CurrentGen || cost < f.Distances[nIdx] {
+					f.Distances[nIdx] = cost
+					f.VisitedGen[nIdx] = f.CurrentGen
+					f.Directions[nIdx] = DirTarget // Mark as target for direction derivation
+					f.heap.push(heapEntry{idx: nIdx, dist: cost})
+					foundAny = true
 				}
-
-				nDist := f.Distances[nIdx]
-				if nDist >= costUnreachable {
-					continue
-				}
-
-				// Diagonal corner-cutting check
-				if DirVectors[dirIdx][0] != 0 && DirVectors[dirIdx][1] != 0 {
-					if isBlocked(x+DirVectors[dirIdx][0], y) || isBlocked(x, y+DirVectors[dirIdx][1]) {
-						continue
-					}
-				}
-
-				cost := nDist + dirCosts[dirIdx]
-				if cost < bestDist {
-					bestDist = cost
-					bestDir = dirIdx
-				}
-			}
-
-			if bestDir != DirNone {
-				f.Directions[idx] = bestDir
-				f.Distances[idx] = bestDist
-				f.VisitedGen[idx] = f.CurrentGen
 			}
 		}
+
+		// Found at least one passable cell at this radius - stop expanding
+		if foundAny {
+			break
+		}
 	}
+}
+
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }
