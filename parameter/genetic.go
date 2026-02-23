@@ -2,6 +2,12 @@ package parameter
 
 import "time"
 
+// Set persistence path constant after existing constants
+const (
+	// GeneticPersistencePath is the directory for population save files
+	GeneticPersistencePath = "./config/genetic"
+)
+
 // Genetic Algorithm - Engine Configuration
 const (
 	// GAPoolSize is the number of candidates in each population
@@ -71,13 +77,43 @@ const (
 	GADrainFitnessWeightHeatPenalty  = 0.1
 )
 
-// Genetic Algorithm - Fitness Normalization Defaults
+// Genetic Algorithm - Fitness Normalization Defaults (Drain)
 const (
 	GAFitnessMaxTicksDefault = 600
 )
 
-// Set persistence path constant after existing constants
+// Genetic Algorithm - Eye Evolution Bounds
 const (
-	// GeneticPersistencePath is the directory for population save files
-	GeneticPersistencePath = "./config/genetic"
+	// TurnThreshold: wider range for maze cornering
+	GAEyeTurnThresholdMin = 0.3
+	GAEyeTurnThresholdMax = 0.98
+
+	// BrakeIntensity: higher ceiling for tight corridor braking
+	GAEyeBrakeIntensityMin = 0.5
+	GAEyeBrakeIntensityMax = 10.0
+
+	// FlowLookahead: extended range for long maze paths
+	GAEyeFlowLookaheadMin = 2.0
+	GAEyeFlowLookaheadMax = 60.0
+
+	// Perturbation standard deviation for eye genes
+	// Lower than drain — stable maze environments benefit from finer tuning
+	GAEyePerturbationStdDev = 0.10
+)
+
+// Genetic Algorithm - Fitness Weights (Eye)
+const (
+	GAEyeFitnessWeightReachedTarget = 0.5
+	GAEyeFitnessWeightSpeed         = 0.3
+	GAEyeFitnessWeightPositioning   = 0.2
+)
+
+// Genetic Algorithm - Eye Fitness Normalization
+const (
+	// GAEyeFitnessMaxTicks is inverse normalization cap for speed metric
+	GAEyeFitnessMaxTicks = 400
+
+	// GAEyeReachedTargetDistSq is squared distance threshold for target-reach detection
+	// Accounts for composite header offset from exact target position
+	GAEyeReachedTargetDistSq = 25
 )

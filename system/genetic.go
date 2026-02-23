@@ -27,10 +27,20 @@ const (
 	geneNavCount
 )
 
+// --- Navigation Gene Configuration ---
+
 var navGeneBounds = []genetic.ParameterBounds{
 	{Min: parameter.GADrainTurnThresholdMin, Max: parameter.GADrainTurnThresholdMax},
 	{Min: parameter.GADrainBrakeIntensityMin, Max: parameter.GADrainBrakeIntensityMax},
 	{Min: parameter.GADrainFlowLookaheadMin, Max: parameter.GADrainFlowLookaheadMax},
+}
+
+// --- Eye Gene Configuration ---
+
+var eyeGeneBounds = []genetic.ParameterBounds{
+	{Min: parameter.GAEyeTurnThresholdMin, Max: parameter.GAEyeTurnThresholdMax},
+	{Min: parameter.GAEyeBrakeIntensityMin, Max: parameter.GAEyeBrakeIntensityMax},
+	{Min: parameter.GAEyeFlowLookaheadMin, Max: parameter.GAEyeFlowLookaheadMax},
 }
 
 // --- Fitness Metric Keys ---
@@ -113,9 +123,10 @@ func (m *playerModel) context() fitness.Context {
 // --- Tracked Entity ---
 
 type trackedEntity struct {
-	species   component.SpeciesType
-	evalID    uint64
-	collector *tracking.StandardCollector
+	species       component.SpeciesType
+	evalID        uint64
+	collector     *tracking.StandardCollector
+	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
 }
 
 // --- Genetic System ---
@@ -136,11 +147,20 @@ type GeneticSystem struct {
 	shieldActive                 bool
 	shieldInvRxSq, shieldInvRySq int64
 
+	// Drain telemetry
 	statGeneration *atomic.Int64
 	statBest       *atomic.Int64
 	statAvg        *atomic.Int64
 	statPending    *atomic.Int64
 	statOutcomes   *atomic.Int64
+
+	// Eye telemetry
+	statEyeGeneration *atomic.Int64
+	statEyeBest       *atomic.Int64
+	statEyeAvg        *atomic.Int64
+	statEyePending    *atomic.Int64
+	statEyeOutcomes   *atomic.Int64
+	statEyeTracked    *atomic.Int64
 
 	enabled bool
 }
@@ -155,11 +175,20 @@ func NewGeneticSystem(world *engine.World) engine.System {
 		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
 	}
 
+	// Drain telemetry
 	s.statGeneration = world.Resources.Status.Ints.Get("ga.generation")
 	s.statBest = world.Resources.Status.Ints.Get("ga.best")
 	s.statAvg = world.Resources.Status.Ints.Get("ga.avg")
 	s.statPending = world.Resources.Status.Ints.Get("ga.pending")
 	s.statOutcomes = world.Resources.Status.Ints.Get("ga.outcomes")
+
+	// Eye telemetry
+	s.statEyeGeneration = world.Resources.Status.Ints.Get("eye.ga.generation")
+	s.statEyeBest = world.Resources.Status.Ints.Get("eye.ga.best")
+	s.statEyeAvg = world.Resources.Status.Ints.Get("eye.ga.avg")
+	s.statEyePending = world.Resources.Status.Ints.Get("eye.ga.pending")
+	s.statEyeOutcomes = world.Resources.Status.Ints.Get("eye.ga.outcomes")
+	s.statEyeTracked = world.Resources.Status.Ints.Get("eye.ga.tracked")
 
 	s.registerSpecies()
 	s.Init()
@@ -167,7 +196,8 @@ func NewGeneticSystem(world *engine.World) engine.System {
 }
 
 func (s *GeneticSystem) registerSpecies() {
-	config := registry.SpeciesConfig{
+	// Drain species — cursor-targeting single-cell entities
+	drainConfig := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(component.SpeciesDrain),
 		Name:               "navigation",
 		GeneCount:          geneNavCount,
@@ -175,7 +205,18 @@ func (s *GeneticSystem) registerSpecies() {
 		PerturbationStdDev: parameter.GADrainPerturbationStdDev,
 		IsComposite:        false,
 	}
-	_ = s.registry.Register(config, s.createAggregator())
+	_ = s.registry.Register(drainConfig, s.createAggregator())
+
+	// Eye species — group-targeting composite entities
+	eyeConfig := registry.SpeciesConfig{
+		ID:                 registry.SpeciesID(component.SpeciesEye),
+		Name:               "eye_navigation",
+		GeneCount:          geneNavCount,
+		Bounds:             eyeGeneBounds,
+		PerturbationStdDev: parameter.GAEyePerturbationStdDev,
+		IsComposite:        true,
+	}
+	_ = s.registry.Register(eyeConfig, s.createEyeAggregator())
 }
 
 func (s *GeneticSystem) createAggregator() fitness.Aggregator {
@@ -210,6 +251,23 @@ func (s *GeneticSystem) createAggregator() fitness.Aggregator {
 				adjusted["time_"+metricInShield] *= 1.3
 			}
 			return adjusted
+		},
+	}
+}
+
+func (s *GeneticSystem) createEyeAggregator() fitness.Aggregator {
+	return &fitness.WeightedAggregator{
+		Weights: map[string]float64{
+			tracking.MetricDeathAtTarget: parameter.GAEyeFitnessWeightReachedTarget,
+			tracking.MetricTicksAlive:    parameter.GAEyeFitnessWeightSpeed,
+			"avg_" + metricDistanceSq:    parameter.GAEyeFitnessWeightPositioning,
+		},
+		Normalizers: map[string]fitness.NormalizeFunc{
+			// Inverse: fewer ticks = higher fitness (eye should arrive fast)
+			tracking.MetricTicksAlive: fitness.NormalizeInverse(float64(parameter.GAEyeFitnessMaxTicks)),
+			// Inverse: closer average distance = higher fitness
+			"avg_" + metricDistanceSq: fitness.NormalizeInverse(200.0),
+			// MetricDeathAtTarget: no normalizer needed (already 0 or 1)
 		},
 	}
 }
@@ -304,11 +362,18 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 
+	// Resolve target group for distance tracking
+	groupID := uint8(0)
+	if tc, ok := s.world.Components.Target.GetComponent(entity); ok {
+		groupID = tc.GroupID
+	}
+
 	collector := s.collectorPool.AcquireStandard()
 	s.tracking[entity] = &trackedEntity{
-		species:   speciesType,
-		evalID:    evalID,
-		collector: collector,
+		species:       speciesType,
+		evalID:        evalID,
+		collector:     collector,
+		targetGroupID: groupID,
 	}
 }
 
@@ -362,8 +427,20 @@ func (s *GeneticSystem) processPendingDeaths() {
 			continue
 		}
 
-		deathAtCursor := death.X == s.cursorPos.X && death.Y == s.cursorPos.Y
-		s.completeTracking(tracked, deathAtCursor)
+		// Target-reach detection: proximity-based for group targets, exact for cursor
+		deathAtTarget := false
+		if tracked.targetGroupID > 0 {
+			groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+			if groupState.Valid {
+				dx := death.X - groupState.PosX
+				dy := death.Y - groupState.PosY
+				deathAtTarget = dx*dx+dy*dy <= parameter.GAEyeReachedTargetDistSq
+			}
+		} else {
+			deathAtTarget = death.X == s.cursorPos.X && death.Y == s.cursorPos.Y
+		}
+
+		s.completeTracking(tracked, deathAtTarget)
 		delete(s.tracking, death.Entity)
 	}
 	s.pendingDeaths = s.pendingDeaths[:0]
@@ -387,8 +464,20 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 			continue
 		}
 
-		dx := float64(pos.X - s.cursorPos.X)
-		dy := float64(pos.Y - s.cursorPos.Y)
+		// Resolve target position from entity's target group
+		var targetX, targetY int
+		if tracked.targetGroupID > 0 {
+			groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+			if !groupState.Valid {
+				continue
+			}
+			targetX, targetY = groupState.PosX, groupState.PosY
+		} else {
+			targetX, targetY = s.cursorPos.X, s.cursorPos.Y
+		}
+
+		dx := float64(pos.X - targetX)
+		dy := float64(pos.Y - targetY)
 
 		insideShield := false
 		if s.shieldActive {
@@ -426,12 +515,30 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathAtCursor b
 }
 
 func (s *GeneticSystem) updateTelemetry() {
-	stats := s.registry.Stats(registry.SpeciesID(component.SpeciesDrain))
-	s.statGeneration.Store(int64(stats.Generation))
-	s.statBest.Store(int64(stats.BestFitness * 1000))
-	s.statAvg.Store(int64(stats.AvgFitness * 1000))
-	s.statPending.Store(int64(stats.PendingCount))
-	s.statOutcomes.Store(int64(stats.TotalEvals))
+	// Drain stats
+	drainStats := s.registry.Stats(registry.SpeciesID(component.SpeciesDrain))
+	s.statGeneration.Store(int64(drainStats.Generation))
+	s.statBest.Store(int64(drainStats.BestFitness * 1000))
+	s.statAvg.Store(int64(drainStats.AvgFitness * 1000))
+	s.statPending.Store(int64(drainStats.PendingCount))
+	s.statOutcomes.Store(int64(drainStats.TotalEvals))
+
+	// Eye stats
+	eyeStats := s.registry.Stats(registry.SpeciesID(component.SpeciesEye))
+	s.statEyeGeneration.Store(int64(eyeStats.Generation))
+	s.statEyeBest.Store(int64(eyeStats.BestFitness * 1000))
+	s.statEyeAvg.Store(int64(eyeStats.AvgFitness * 1000))
+	s.statEyePending.Store(int64(eyeStats.PendingCount))
+	s.statEyeOutcomes.Store(int64(eyeStats.TotalEvals))
+
+	// Eye tracked count
+	eyeTracked := int64(0)
+	for _, t := range s.tracking {
+		if t.species == component.SpeciesEye {
+			eyeTracked++
+		}
+	}
+	s.statEyeTracked.Store(eyeTracked)
 }
 
 func boolToFloat(b bool) float64 {
