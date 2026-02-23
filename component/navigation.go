@@ -17,21 +17,10 @@ type NavigationComponent struct {
 	Width  int
 	Height int
 
-	// GA-optimized cornering parameters (Q32.32)
+	// GA-optimized parameters (Q32.32)
 
-	// TurnThreshold: alignment below which cornering drag activates (0.5–0.95)
-	TurnThreshold int64
-	// BrakeIntensity: drag multiplier during turns (1.0–6.0)
-	BrakeIntensity int64
 	// FlowLookahead: flow field projection distance (Q32.32 cells)
 	FlowLookahead int64
-
-	// GA-evolved path diversity parameters (Q32.32)
-
-	// PathDeviation: probability of choosing non-optimal flow direction [0, Scale]
-	PathDeviation int64
-	// FlowBlend: blend factor toward direct-to-target when no LOS [0, Scale]
-	FlowBlend int64
 }
 
 // SpeciesDimensions holds bounding box for collision detection

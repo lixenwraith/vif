@@ -11,14 +11,13 @@ const (
 
 	// NavFlowDirtyDistance triggers immediate recompute if target moves this far (cells)
 	NavFlowDirtyDistance = 5
-
-	// NavFlowROIMargin is expansion margin around computed AABB (cells)
-	NavFlowROIMargin = 10
 )
 
-// Navigation defaults (Q32.32)
 var (
-	NavTurnThresholdDefault  = vmath.FromFloat(GADrainTurnThresholdDefault)
-	NavBrakeIntensityDefault = vmath.FromFloat(GADrainBrakeIntensityDefault)
-	NavFlowLookaheadDefault  = vmath.FromFloat(GADrainFlowLookaheadDefault)
+	// Alignment below which cornering drag activates
+	NavCorneringBrake = vmath.FromFloat(0.8)
+	// Drag multiplier during turns
+	NavCorneringThreshold = vmath.FromFloat(3.0)
+	// LookAhead cells
+	NavFlowLookaheadDefault = vmath.FromFloat(12.0)
 )

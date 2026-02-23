@@ -351,11 +351,9 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 
 	// Navigation component (same pattern as Quasar)
 	s.world.Components.Navigation.SetComponent(headEntity, component.NavigationComponent{
-		Width:          parameter.SnakeHeadWidth,
-		Height:         parameter.SnakeHeadHeight,
-		TurnThreshold:  parameter.NavTurnThresholdDefault,
-		BrakeIntensity: parameter.NavBrakeIntensityDefault,
-		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+		Width:         parameter.SnakeHeadWidth,
+		Height:        parameter.SnakeHeadHeight,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
 	// Create head members (5×3 grid)

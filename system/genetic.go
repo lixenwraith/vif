@@ -18,40 +18,20 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// --- Navigation Gene Configuration ---
-
-const (
-	geneNavTurnThreshold = iota
-	geneNavBrakeIntensity
-	geneNavFlowLookahead
-	geneNavCount
-)
-
-var navGeneBounds = []genetic.ParameterBounds{
-	{Min: parameter.GADrainTurnThresholdMin, Max: parameter.GADrainTurnThresholdMax},
-	{Min: parameter.GADrainBrakeIntensityMin, Max: parameter.GADrainBrakeIntensityMax},
-	{Min: parameter.GADrainFlowLookaheadMin, Max: parameter.GADrainFlowLookaheadMax},
-}
-
 // --- Eye Gene Configuration ---
 
 const (
 	geneEyeFlowLookahead = iota
-	geneEyePathDeviation
-	geneEyeFlowBlend
 	geneEyeCount
 )
 
 var eyeGeneBounds = []genetic.ParameterBounds{
 	{Min: parameter.GAEyeFlowLookaheadMin, Max: parameter.GAEyeFlowLookaheadMax},
-	{Min: parameter.GAEyePathDeviationMin, Max: parameter.GAEyePathDeviationMax},
-	{Min: parameter.GAEyeFlowBlendMin, Max: parameter.GAEyeFlowBlendMax},
 }
 
 // --- Fitness Metric Keys ---
 
 const (
-	metricInShield   = "in_shield"
 	metricDistanceSq = "distance_sq"
 )
 
@@ -147,19 +127,6 @@ type GeneticSystem struct {
 	tracking      map[core.Entity]*trackedEntity
 	pendingDeaths []event.EnemyKilledPayload
 
-	cursorPos                    component.PositionComponent
-	cursorEnergy                 int64
-	cursorHeat                   int
-	shieldActive                 bool
-	shieldInvRxSq, shieldInvRySq int64
-
-	// Drain telemetry
-	statGeneration *atomic.Int64
-	statBest       *atomic.Int64
-	statAvg        *atomic.Int64
-	statPending    *atomic.Int64
-	statOutcomes   *atomic.Int64
-
 	// Eye telemetry
 	statEyeGeneration *atomic.Int64
 	statEyeBest       *atomic.Int64
@@ -181,13 +148,6 @@ func NewGeneticSystem(world *engine.World) engine.System {
 		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
 	}
 
-	// Drain telemetry
-	s.statGeneration = world.Resources.Status.Ints.Get("ga.generation")
-	s.statBest = world.Resources.Status.Ints.Get("ga.best")
-	s.statAvg = world.Resources.Status.Ints.Get("ga.avg")
-	s.statPending = world.Resources.Status.Ints.Get("ga.pending")
-	s.statOutcomes = world.Resources.Status.Ints.Get("ga.outcomes")
-
 	// Eye telemetry
 	s.statEyeGeneration = world.Resources.Status.Ints.Get("eye.ga.generation")
 	s.statEyeBest = world.Resources.Status.Ints.Get("eye.ga.best")
@@ -202,17 +162,6 @@ func NewGeneticSystem(world *engine.World) engine.System {
 }
 
 func (s *GeneticSystem) registerSpecies() {
-	// Drain species — cursor-targeting single-cell entities
-	drainConfig := registry.SpeciesConfig{
-		ID:                 registry.SpeciesID(component.SpeciesDrain),
-		Name:               "navigation",
-		GeneCount:          geneNavCount,
-		Bounds:             navGeneBounds,
-		PerturbationStdDev: parameter.GADrainPerturbationStdDev,
-		IsComposite:        false,
-	}
-	_ = s.registry.Register(drainConfig, s.createAggregator())
-
 	// Eye species — group-targeting composite entities with path diversity genes
 	eyeConfig := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(component.SpeciesEye),
@@ -223,42 +172,6 @@ func (s *GeneticSystem) registerSpecies() {
 		IsComposite:        true,
 	}
 	_ = s.registry.Register(eyeConfig, s.createEyeAggregator())
-}
-
-func (s *GeneticSystem) createAggregator() fitness.Aggregator {
-	return &fitness.WeightedAggregator{
-		Weights: map[string]float64{
-			"time_" + metricInShield:     parameter.GADrainFitnessWeightEnergyDrain,
-			tracking.MetricTicksAlive:    parameter.GADrainFitnessWeightSurvival,
-			"avg_" + metricDistanceSq:    parameter.GADrainFitnessWeightPositioning,
-			tracking.MetricDeathAtTarget: -parameter.GADrainFitnessWeightHeatPenalty,
-		},
-		Normalizers: map[string]fitness.NormalizeFunc{
-			"time_" + metricInShield:  fitness.NormalizeCap(30.0),
-			tracking.MetricTicksAlive: fitness.NormalizeCap(parameter.GAFitnessMaxTicksDefault),
-			"avg_" + metricDistanceSq: fitness.NormalizeInverse(100.0),
-		},
-		ContextAdjuster: func(w map[string]float64, ctx fitness.Context) map[string]float64 {
-			if ctx == nil {
-				return w
-			}
-			threat, ok := ctx.Get(fitness.ContextThreatLevel)
-			if !ok {
-				return w
-			}
-			adjusted := make(map[string]float64, len(w))
-			for k, v := range w {
-				adjusted[k] = v
-			}
-			if threat > 0.7 {
-				adjusted[tracking.MetricTicksAlive] *= 1.2
-				adjusted["avg_"+metricDistanceSq] *= 1.1
-			} else if threat < 0.3 {
-				adjusted["time_"+metricInShield] *= 1.3
-			}
-			return adjusted
-		},
-	}
 }
 
 func (s *GeneticSystem) createEyeAggregator() fitness.Aggregator {
@@ -360,24 +273,6 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		case component.SpeciesEye:
 			if len(genes) >= geneEyeCount {
 				navComp.FlowLookahead = vmath.FromFloat(genes[geneEyeFlowLookahead])
-				navComp.PathDeviation = vmath.FromFloat(genes[geneEyePathDeviation])
-				navComp.FlowBlend = vmath.FromFloat(genes[geneEyeFlowBlend])
-			}
-			// Floor: prevent zero path diversity (GA can converge toward 0)
-			if navComp.PathDeviation == 0 {
-				navComp.PathDeviation = parameter.EyeNavPathDeviationDefault
-			}
-			// TurnThreshold, BrakeIntensity retain init defaults from eye spawn
-
-		default:
-			if len(genes) >= geneNavCount {
-				navComp.TurnThreshold = vmath.FromFloat(genes[geneNavTurnThreshold])
-				navComp.BrakeIntensity = vmath.FromFloat(genes[geneNavBrakeIntensity])
-				navComp.FlowLookahead = vmath.FromFloat(genes[geneNavFlowLookahead])
-			} else {
-				navComp.TurnThreshold = parameter.NavTurnThresholdDefault
-				navComp.BrakeIntensity = parameter.NavBrakeIntensityDefault
-				navComp.FlowLookahead = parameter.NavFlowLookaheadDefault
 			}
 		}
 
@@ -414,41 +309,10 @@ func (s *GeneticSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	s.updateCursorState()
-	s.updatePlayerModel()
 	s.processPendingDeaths()
 	s.cleanupStaleTracking()
 	s.processTracking(dt)
 	s.updateTelemetry()
-}
-
-func (s *GeneticSystem) updateCursorState() {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	if pos, ok := s.world.Positions.GetPosition(cursorEntity); ok {
-		s.cursorPos = pos
-	}
-
-	if energy, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
-		s.cursorEnergy = energy.Current
-	}
-
-	if heat, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		s.cursorHeat = heat.Current
-	}
-
-	if shield, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {
-		s.shieldActive = shield.Active
-		s.shieldInvRxSq = shield.InvRxSq
-		s.shieldInvRySq = shield.InvRySq
-	} else {
-		s.shieldActive = false
-	}
-}
-
-func (s *GeneticSystem) updatePlayerModel() {
-	s.playerModel.recordEnergy(s.cursorEnergy)
-	s.playerModel.recordHeat(s.cursorHeat, parameter.HeatMax)
 }
 
 func (s *GeneticSystem) processPendingDeaths() {
@@ -460,15 +324,11 @@ func (s *GeneticSystem) processPendingDeaths() {
 
 		// Target-reach detection: proximity-based for group targets, exact for cursor
 		deathAtTarget := false
-		if tracked.targetGroupID > 0 {
-			groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-			if groupState.Valid {
-				dx := death.X - groupState.PosX
-				dy := death.Y - groupState.PosY
-				deathAtTarget = dx*dx+dy*dy <= parameter.GAEyeReachedTargetDistSq
-			}
-		} else {
-			deathAtTarget = death.X == s.cursorPos.X && death.Y == s.cursorPos.Y
+		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+		if groupState.Valid {
+			dx := death.X - groupState.PosX
+			dy := death.Y - groupState.PosY
+			deathAtTarget = dx*dx+dy*dy <= parameter.GAEyeReachedTargetDistSq
 		}
 
 		s.completeTracking(tracked, deathAtTarget)
@@ -496,32 +356,17 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 		}
 
 		// Resolve target position from entity's target group
-		var targetX, targetY int
-		if tracked.targetGroupID > 0 {
-			groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-			if !groupState.Valid {
-				continue
-			}
-			targetX, targetY = groupState.PosX, groupState.PosY
-		} else {
-			targetX, targetY = s.cursorPos.X, s.cursorPos.Y
+		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+		if !groupState.Valid {
+			continue
 		}
+		targetX, targetY := groupState.PosX, groupState.PosY
 
 		dx := float64(pos.X - targetX)
 		dy := float64(pos.Y - targetY)
 
-		insideShield := false
-		if s.shieldActive {
-			insideShield = vmath.EllipseContainsPoint(
-				pos.X, pos.Y,
-				s.cursorPos.X, s.cursorPos.Y,
-				s.shieldInvRxSq, s.shieldInvRySq,
-			)
-		}
-
 		metrics := tracking.MetricBundle{
 			metricDistanceSq: dx*dx + dy*dy,
-			metricInShield:   boolToFloat(insideShield),
 		}
 
 		// Composite entities: track live member count from HeaderComponent
@@ -568,14 +413,6 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathAtCursor b
 }
 
 func (s *GeneticSystem) updateTelemetry() {
-	// Drain stats
-	drainStats := s.registry.Stats(registry.SpeciesID(component.SpeciesDrain))
-	s.statGeneration.Store(int64(drainStats.Generation))
-	s.statBest.Store(int64(drainStats.BestFitness * 1000))
-	s.statAvg.Store(int64(drainStats.AvgFitness * 1000))
-	s.statPending.Store(int64(drainStats.PendingCount))
-	s.statOutcomes.Store(int64(drainStats.TotalEvals))
-
 	// Eye stats
 	eyeStats := s.registry.Stats(registry.SpeciesID(component.SpeciesEye))
 	s.statEyeGeneration.Store(int64(eyeStats.Generation))

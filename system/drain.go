@@ -1,7 +1,6 @@
 package system
 
 import (
-	"fmt"
 	"sync/atomic"
 	"time"
 
@@ -698,9 +697,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 
 	// Navigation component with defaults (GA will override via event)
 	navComp := component.NavigationComponent{
-		TurnThreshold:  parameter.NavTurnThresholdDefault,
-		BrakeIntensity: parameter.NavBrakeIntensityDefault,
-		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	}
 	s.world.Components.Navigation.SetComponent(entity, navComp)
 
@@ -908,28 +905,21 @@ func (s *DrainSystem) updateDrainMovement() {
 			appliedDrag := parameter.DrainDrag
 
 			// Cornering drag: check turn alignment when moving
-			navComp, hasNav := s.world.Components.Navigation.GetComponent(drainEntity)
-			if hasNav {
-				currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-				if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
-					// Normalized velocity
-					nx := vmath.Div(kineticComp.VelX, currentSpeed)
-					ny := vmath.Div(kineticComp.VelY, currentSpeed)
-
-					// Direction to target
-					dx := targetX - kineticComp.PreciseX
-					dy := targetY - kineticComp.PreciseY
-					dnx, dny := vmath.Normalize2D(dx, dy)
-
-					// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
-					alignment := vmath.DotProduct(nx, ny, dnx, dny)
-
-					// Apply cornering drag using GA parameters from navigation component
-					if alignment < navComp.TurnThreshold {
-						turnSeverity := navComp.TurnThreshold - alignment
-						brakeMult := vmath.Scale + vmath.Mul(turnSeverity, navComp.BrakeIntensity)
-						appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
-					}
+			currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+			if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
+				// Normalized velocity
+				nx := vmath.Div(kineticComp.VelX, currentSpeed)
+				ny := vmath.Div(kineticComp.VelY, currentSpeed)
+				// Direction to target
+				dx := targetX - kineticComp.PreciseX
+				dy := targetY - kineticComp.PreciseY
+				dnx, dny := vmath.Normalize2D(dx, dy)
+				// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
+				alignment := vmath.DotProduct(nx, ny, dnx, dny)
+				if alignment < parameter.NavCorneringThreshold {
+					turnSeverity := parameter.NavCorneringThreshold - alignment
+					brakeMult := vmath.Scale + vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
+					appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
 				}
 			}
 
@@ -1072,15 +1062,4 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Destroy the entity
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
-}
-
-// DebugGeneString returns formatted GA gene string for status bar
-// Format: [GA: T=0.80 B=3.0 L=12]
-func DebugGeneString(nav *component.NavigationComponent) string {
-	// Convert Q32.32 to float for display
-	turnThresh := float64(nav.TurnThreshold) / float64(1<<32)
-	brakeInt := float64(nav.BrakeIntensity) / float64(1<<32)
-	flowLook := float64(nav.FlowLookahead) / float64(1<<32)
-
-	return fmt.Sprintf("[GA: T=%.2f B=%.1f L=%.0f]", turnThresh, brakeInt, flowLook)
 }

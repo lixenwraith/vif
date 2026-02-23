@@ -359,11 +359,9 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 	// Navigation component for flow field guidance around obstacles
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:          parameter.QuasarWidth,
-		Height:         parameter.QuasarHeight,
-		TurnThreshold:  parameter.NavTurnThresholdDefault,
-		BrakeIntensity: parameter.NavBrakeIntensityDefault,
-		FlowLookahead:  parameter.NavFlowLookaheadDefault,
+		Width:         parameter.QuasarWidth,
+		Height:        parameter.QuasarHeight,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
 	// Build member entities
@@ -469,25 +467,22 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// (direct path vs flow field vs stuck fallback)
 	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
 
-	// Cornering drag: slow down during sharp turns
+	// Cornering drag
 	var extraDrag int64
-	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
-	if hasNav {
-		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-		if currentSpeed > vmath.Scale {
-			nx := vmath.Div(kineticComp.VelX, currentSpeed)
-			ny := vmath.Div(kineticComp.VelY, currentSpeed)
+	currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+	if currentSpeed > vmath.Scale {
+		nx := vmath.Div(kineticComp.VelX, currentSpeed)
+		ny := vmath.Div(kineticComp.VelY, currentSpeed)
 
-			dx := targetX - kineticComp.PreciseX
-			dy := targetY - kineticComp.PreciseY
-			dnx, dny := vmath.Normalize2D(dx, dy)
+		dx := targetX - kineticComp.PreciseX
+		dy := targetY - kineticComp.PreciseY
+		dnx, dny := vmath.Normalize2D(dx, dy)
 
-			alignment := vmath.DotProduct(nx, ny, dnx, dny)
+		alignment := vmath.DotProduct(nx, ny, dnx, dny)
 
-			if alignment < navComp.TurnThreshold {
-				turnSeverity := navComp.TurnThreshold - alignment
-				extraDrag = vmath.Mul(turnSeverity, navComp.BrakeIntensity)
-			}
+		if alignment < parameter.NavCorneringThreshold {
+			turnSeverity := parameter.NavCorneringThreshold - alignment
+			extraDrag = vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
 		}
 	}
 

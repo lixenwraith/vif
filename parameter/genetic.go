@@ -47,56 +47,11 @@ const (
 	GAMinOutcomesPerGen = 5
 )
 
-// Genetic Algorithm - Drain Evolution Bounds
-const (
-	// TurnThreshold: alignment below which cornering drag activates
-	GADrainTurnThresholdMin     = 0.5
-	GADrainTurnThresholdMax     = 0.95
-	GADrainTurnThresholdDefault = 0.8
-
-	// BrakeIntensity: drag multiplier during turns
-	GADrainBrakeIntensityMin     = 1.0
-	GADrainBrakeIntensityMax     = 6.0
-	GADrainBrakeIntensityDefault = 3.0
-
-	// FlowLookahead
-	GADrainFlowLookaheadMin     = 4.0
-	GADrainFlowLookaheadMax     = 40.0
-	GADrainFlowLookaheadDefault = 12.0
-
-	// Perturbation standard deviation for drain genes
-	GADrainPerturbationStdDev = 0.15
-)
-
-// Genetic Algorithm - Fitness Weights (Drain)
-const (
-	GADrainFitnessWeightEnergyDrain  = 0.4
-	GADrainFitnessWeightSurvival     = 0.3
-	GADrainFitnessWeightPositioning  = 0.2
-	GADrainFitnessWeightCoordination = 0.0
-	GADrainFitnessWeightHeatPenalty  = 0.1
-)
-
-// Genetic Algorithm - Fitness Normalization Defaults (Drain)
-const (
-	GAFitnessMaxTicksDefault = 600
-)
-
 // Genetic Algorithm - Eye Evolution Bounds
 const (
 	// FlowLookahead: extended range for long maze paths
 	GAEyeFlowLookaheadMin = 2.0
 	GAEyeFlowLookaheadMax = 60.0
-
-	// PathDeviation: probability of choosing non-optimal flow direction per cell
-	// Upper bound 0.3 = ~30% of cells deviate per tick
-	GAEyePathDeviationMin = 0.0
-	GAEyePathDeviationMax = 0.3
-
-	// FlowBlend: direct-to-target blend when no LOS
-	// Upper bound 0.5 = halfway between flow field and direct homing
-	GAEyeFlowBlendMin = 0.0
-	GAEyeFlowBlendMax = 0.5
 
 	// Perturbation standard deviation for eye genes
 	GAEyePerturbationStdDev = 0.10

@@ -290,13 +290,9 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 
 	// Navigation (single consolidated write, includes path diversity defaults)
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:          parameter.EyeWidth,
-		Height:         parameter.EyeHeight,
-		TurnThreshold:  parameter.NavTurnThresholdDefault,
-		BrakeIntensity: parameter.NavBrakeIntensityDefault,
-		FlowLookahead:  parameter.NavFlowLookaheadDefault,
-		PathDeviation:  parameter.EyeNavPathDeviationDefault,
-		FlowBlend:      parameter.EyeNavFlowBlendDefault,
+		Width:         parameter.EyeWidth,
+		Height:        parameter.EyeHeight,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 
 	// Combat
@@ -371,24 +367,21 @@ func (s *EyeSystem) updateHomingMovement(headerEntity core.Entity, eyeComp *comp
 
 	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
 
-	// Cornering drag from navigation component
+	// Cornering drag
 	var extraDrag int64
-	navComp, hasNav := s.world.Components.Navigation.GetComponent(headerEntity)
-	if hasNav {
-		currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-		if currentSpeed > vmath.Scale {
-			nx := vmath.Div(kineticComp.VelX, currentSpeed)
-			ny := vmath.Div(kineticComp.VelY, currentSpeed)
+	currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
+	if currentSpeed > vmath.Scale {
+		nx := vmath.Div(kineticComp.VelX, currentSpeed)
+		ny := vmath.Div(kineticComp.VelY, currentSpeed)
 
-			dx := targetX - kineticComp.PreciseX
-			dy := targetY - kineticComp.PreciseY
-			dnx, dny := vmath.Normalize2D(dx, dy)
+		dx := targetX - kineticComp.PreciseX
+		dy := targetY - kineticComp.PreciseY
+		dnx, dny := vmath.Normalize2D(dx, dy)
 
-			alignment := vmath.DotProduct(nx, ny, dnx, dny)
-			if alignment < navComp.TurnThreshold {
-				turnSeverity := navComp.TurnThreshold - alignment
-				extraDrag = vmath.Mul(turnSeverity, navComp.BrakeIntensity)
-			}
+		alignment := vmath.DotProduct(nx, ny, dnx, dny)
+		if alignment < parameter.NavCorneringThreshold {
+			turnSeverity := parameter.NavCorneringThreshold - alignment
+			extraDrag = vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
 		}
 	}
 

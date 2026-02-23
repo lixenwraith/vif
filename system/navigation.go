@@ -43,7 +43,6 @@ var DebugShowCompositeNav bool // New flag for composite debug view
 // NavigationSystem calculates flow fields for kinetic entities
 type NavigationSystem struct {
 	world *engine.World
-	rng   *vmath.FastRand
 
 	// Per-group flow field management
 	groups map[uint8]*targetGroupNav
@@ -78,7 +77,6 @@ func NewNavigationSystem(world *engine.World) engine.System {
 
 func (s *NavigationSystem) Init() {
 	s.enabled = true
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
 	s.groups = make(map[uint8]*targetGroupNav)
 
 	s.getOrCreateGroup(0)
@@ -364,42 +362,12 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		gridX, gridY := vmath.GridFromCentered(preciseX, preciseY)
 		isComposite := navComp.Width > 1 || navComp.Height > 1
 
 		if isComposite {
-			if pos, ok := s.world.Positions.GetPosition(entity); ok {
-				gridX, gridY = pos.X, pos.Y
-			}
-			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(gridX, gridY, group.compositeFlowCache, navComp.PathDeviation)
+			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
 		} else {
 			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.pointFlowCache)
-
-			// Stochastic deviation for point entities
-			if navComp.PathDeviation > 0 && int64(s.rng.Intn(int(vmath.Scale))) < navComp.PathDeviation {
-				optDir := group.pointFlowCache.GetDirection(gridX, gridY)
-				if altDir := s.pickAlternativeDirection(gridX, gridY, optDir, group.pointFlowCache); altDir >= 0 {
-					navComp.FlowX = flowDirLUT[altDir][0]
-					navComp.FlowY = flowDirLUT[altDir][1]
-				}
-			}
-		}
-
-		// FlowBlend: mix with direct-to-target direction
-		if navComp.FlowBlend > 0 {
-			groupState := s.world.Resources.Target.GetGroup(groupID)
-			if groupState.Valid {
-				directX := vmath.FromInt(groupState.PosX - gridX)
-				directY := vmath.FromInt(groupState.PosY - gridY)
-				if directX != 0 || directY != 0 {
-					dirX, dirY := vmath.Normalize2D(directX, directY)
-					navComp.FlowX = vmath.Lerp(navComp.FlowX, dirX, navComp.FlowBlend)
-					navComp.FlowY = vmath.Lerp(navComp.FlowY, dirY, navComp.FlowBlend)
-					if navComp.FlowX != 0 || navComp.FlowY != 0 {
-						navComp.FlowX, navComp.FlowY = vmath.Normalize2D(navComp.FlowX, navComp.FlowY)
-					}
-				}
-			}
 		}
 
 		s.world.Components.Navigation.SetComponent(entity, navComp)
@@ -490,30 +458,73 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 // getCompositeFlowDirection returns flow direction from composite-aware flow field
 // Handles case where entity's current cell is blocked in passability
-func (s *NavigationSystem) getCompositeFlowDirection(gridX, gridY int, cache *navigation.FlowFieldCache, deviation int64) (int64, int64) {
-	dir := cache.GetDirection(gridX, gridY)
+func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, cache *navigation.FlowFieldCache) (int64, int64) {
+	x0 := vmath.ToInt(preciseX)
+	y0 := vmath.ToInt(preciseY)
 
-	// If current cell has no direction (blocked or unvisited), find best passable neighbor
+	// Check if primary cell is blocked/unvisited — escape to best neighbor
+	dir := cache.GetDirection(x0, y0)
 	if dir < 0 || dir >= navigation.DirCount {
-		dir = s.findBestNeighborDirection(gridX, gridY, cache)
+		escDir := s.findBestNeighborDirection(x0, y0, cache)
+		if escDir < 0 || escDir >= navigation.DirCount {
+			return 0, 0
+		}
+		return flowDirLUT[escDir][0], flowDirLUT[escDir][1]
 	}
 
-	if dir < 0 || dir >= navigation.DirCount {
+	// Bilinear interpolation (same as point entities)
+	u := preciseX & vmath.Mask
+	v := preciseY & vmath.Mask
+	invU := vmath.Scale - u
+	invV := vmath.Scale - v
+
+	w00 := vmath.Mul(invU, invV)
+	w10 := vmath.Mul(u, invV)
+	w01 := vmath.Mul(invU, v)
+	w11 := vmath.Mul(u, v)
+
+	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, cache)
+	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, cache)
+	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, cache)
+	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, cache)
+
+	var sumX, sumY, totalWeight int64
+
+	if valid00 {
+		sumX += vmath.Mul(v00x, w00)
+		sumY += vmath.Mul(v00y, w00)
+		totalWeight += w00
+	}
+	if valid10 {
+		sumX += vmath.Mul(v10x, w10)
+		sumY += vmath.Mul(v10y, w10)
+		totalWeight += w10
+	}
+	if valid01 {
+		sumX += vmath.Mul(v01x, w01)
+		sumY += vmath.Mul(v01y, w01)
+		totalWeight += w01
+	}
+	if valid11 {
+		sumX += vmath.Mul(v11x, w11)
+		sumY += vmath.Mul(v11y, w11)
+		totalWeight += w11
+	}
+
+	if totalWeight == 0 {
 		return 0, 0
 	}
 
-	// Stochastic deviation
-	if deviation > 0 && int64(s.rng.Intn(int(vmath.Scale))) < deviation {
-		if altDir := s.pickAlternativeDirection(gridX, gridY, dir, cache); altDir >= 0 {
-			dir = altDir
-		}
-	}
+	resX := vmath.Div(sumX, totalWeight)
+	resY := vmath.Div(sumY, totalWeight)
 
-	return flowDirLUT[dir][0], flowDirLUT[dir][1]
+	if resX != 0 || resY != 0 {
+		return vmath.Normalize2D(resX, resY)
+	}
+	return 0, 0
 }
 
-// findBestNeighborDirection finds direction toward lowest-distance passable neighbor
-// Used when entity is at a blocked cell
+// findBestNeighborDirection finds direction toward lowest-distance passable neighbor, used when entity is at a blocked cell
 func (s *NavigationSystem) findBestNeighborDirection(x, y int, cache *navigation.FlowFieldCache) int8 {
 	bestDir := int8(-1)
 	bestDist := 1 << 30
@@ -596,66 +607,4 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, cache *navigation.
 		return 0, 0, false
 	}
 	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
-}
-
-// pickAlternativeDirection returns weighted random non-optimal direction
-func (s *NavigationSystem) pickAlternativeDirection(x, y int, optimal int8, cache *navigation.FlowFieldCache) int8 {
-	if optimal < 0 {
-		return -1
-	}
-
-	optDist := cache.GetDistance(x, y)
-	if optDist < 0 {
-		return -1
-	}
-
-	type alt struct {
-		dir    int8
-		weight int
-	}
-	var alts [7]alt
-	nAlts := 0
-
-	for d := int8(0); d < navigation.DirCount; d++ {
-		if d == optimal {
-			continue
-		}
-		nx := x + navigation.DirVectors[d][0]
-		ny := y + navigation.DirVectors[d][1]
-		nd := cache.GetDistance(nx, ny)
-		if nd < 0 {
-			continue
-		}
-
-		delta := nd - optDist
-		if delta < 0 {
-			delta = 0
-		}
-		weight := 100 - delta
-		if weight < 1 {
-			weight = 1
-		}
-
-		alts[nAlts] = alt{d, weight}
-		nAlts++
-	}
-
-	if nAlts == 0 {
-		return -1
-	}
-
-	totalWeight := 0
-	for i := 0; i < nAlts; i++ {
-		totalWeight += alts[i].weight
-	}
-
-	roll := s.rng.Intn(totalWeight)
-	cum := 0
-	for i := 0; i < nAlts; i++ {
-		cum += alts[i].weight
-		if roll < cum {
-			return alts[i].dir
-		}
-	}
-	return -1
 }

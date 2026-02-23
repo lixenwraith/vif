@@ -378,11 +378,9 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 
 	// Navigation for wall-aware pathfinding (no GA tracking - loot doesn't emit EnemyCreated)
 	s.world.Components.Navigation.SetComponent(entity, component.NavigationComponent{
-		Width:          1,
-		Height:         1,
-		TurnThreshold:  parameter.NavTurnThresholdDefault,  // Unused by loot, default value
-		BrakeIntensity: parameter.NavBrakeIntensityDefault, // Unused by loot, default value
-		FlowLookahead:  parameter.NavFlowLookaheadDefault,  // Unused by loot, default value
+		Width:         1,
+		Height:        1,
+		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 }
 
