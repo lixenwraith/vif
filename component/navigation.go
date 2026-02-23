@@ -40,9 +40,12 @@ type SpeciesDimensions struct {
 // speciesDimensionsLUT indexed by SpeciesType for O(1) lookup
 // Index 0 unused (SpeciesType starts at 1)
 var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
-	{1, 1}, // 0: unused
+	{1, 1}, // 0: SpeciesNone (unused)
 	{1, 1}, // 1: SpeciesDrain
-	{parameter.SwarmWidth, parameter.SwarmHeight},   // 2: SpeciesSwarm
-	{parameter.QuasarWidth, parameter.QuasarHeight}, // 3: SpeciesQuasar
-	{1, 1}, // 4: SpeciesStorm
+	{parameter.SwarmWidth, parameter.SwarmHeight},                                            // 2: SpeciesSwarm
+	{parameter.QuasarWidth, parameter.QuasarHeight},                                          // 3: SpeciesQuasar
+	{int(parameter.StormCircleRadiusXFloat * 2), int(parameter.StormCircleRadiusYFloat * 2)}, // 4: SpeciesStorm
+	{1, 1}, // 5: SpeciesPylon
+	{parameter.SnakeHeadWidth, parameter.SnakeHeadHeight}, // 6: SpeciesSnake
+	{parameter.EyeWidth, parameter.EyeHeight},             // 7: SpeciesEye
 }

@@ -720,6 +720,26 @@ const (
 	// Consumer: NavigationSystem | Payload: *TargetGroupRemovePayload
 	EventTargetGroupRemove
 
+	// EventEyeSpawnRequest signals EyeSystem to create entity at location
+	// Trigger: Gateway/FSM
+	// Consumer: EyeSystem | Payload: *EyeSpawnRequestPayload
+	EventEyeSpawnRequest
+
+	// EventEyeSpawned signals eye composite creation
+	// Trigger: EyeSystem
+	// Consumer: (future: audio/FSM) | Payload: *EyeSpawnedPayload
+	EventEyeSpawned
+
+	// EventEyeDestroyed signals eye termination
+	// Trigger: EyeSystem on HP death or self-destruct
+	// Consumer: (future: audio/FSM) | Payload: *EyeDestroyedPayload
+	EventEyeDestroyed
+
+	// EventEyeCancelRequest signals destruction of all eye composites
+	// Trigger: FSM
+	// Consumer: EyeSystem | Payload: nil
+	EventEyeCancelRequest
+
 	EventDebugFlowToggle
 )
 

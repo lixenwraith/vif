@@ -29,6 +29,7 @@ const (
 	PrioritySwarm       // After Drain
 	PriorityStorm       // After Swarm
 	PriorityPylon       // After Storm
+	PriorityEye         // After Pylon
 	PriorityCombat
 	PriorityLoot // After enemy entities and combat
 	PriorityDecay

@@ -19,6 +19,7 @@ const (
 	CombatEntityPylon
 	CombatEntitySnakeHead
 	CombatEntitySnakeBody
+	CombatEntityEye
 	CombatEntityCount
 )
 
@@ -42,6 +43,7 @@ const (
 	CombatAttackExplosion
 	CombatAttackMissile
 	CombatAttackPulse
+	CombatAttackSelfDestruct
 )
 
 // Effect Types
@@ -105,6 +107,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackCleanerToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackCleanerToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackCleanerToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackCleanerToEye,
 	},
 	CombatAttackShield: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackShieldToDrain,
@@ -114,6 +117,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackShieldToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackShieldToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackShieldToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackShieldToEye,
 	},
 	CombatAttackLightning: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackLightningToDrain,
@@ -123,6 +127,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackLightningToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackLightningToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackLightningToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackLightningToEye,
 	},
 	CombatAttackExplosion: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackExplosionToDrain,
@@ -132,6 +137,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackExplosionToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackExplosionToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackExplosionToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackExplosionToEye,
 	},
 	CombatAttackMissile: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackMissileToDrain,
@@ -141,6 +147,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackMissileToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackMissileToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackMissileToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackMissileToEye,
 	},
 	CombatAttackPulse: {
 		{CombatEntityCursor, CombatEntityDrain}:     &CombatAttackPulseToDrain,
@@ -150,6 +157,17 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityCursor, CombatEntityPylon}:     &CombatAttackPulseToPylon,
 		{CombatEntityCursor, CombatEntitySnakeHead}: &CombatAttackPulseToSnakeHead,
 		{CombatEntityCursor, CombatEntitySnakeBody}: &CombatAttackPulseToSnakeBody,
+		{CombatEntityCursor, CombatEntityEye}:       &CombatAttackPulseToEye,
+	},
+	CombatAttackSelfDestruct: {
+		{CombatEntityEye, CombatEntityDrain}:     &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntityQuasar}:    &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntitySwarm}:     &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntityStorm}:     &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntityPylon}:     &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntitySnakeHead}: &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntitySnakeBody}: &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntityCursor}:    &CombatAttackEyeSelfDestruct,
 	},
 }
 
@@ -234,6 +252,17 @@ var CombatAttackCleanerToSnakeBody = CombatAttackProfile{
 	CollisionProfile:   &physics.CleanerToSwarm, // Reuse swarm profile for body
 }
 
+var CombatAttackCleanerToEye = CombatAttackProfile{
+	AttackType:         CombatAttackProjectile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageCleaner,
+	EffectMask:         CombatEffectKinetic,
+	ChainAttack:        &CombatAttackLightningToEye,
+	CollisionProfile:   &physics.CleanerToEye,
+}
+
 // Lightning attack profiles
 
 var CombatAttackLightningToDrain = CombatAttackProfile{
@@ -313,6 +342,15 @@ var CombatAttackLightningToSnakeBody = CombatAttackProfile{
 	CollisionProfile:   nil,
 }
 
+var CombatAttackLightningToEye = CombatAttackProfile{
+	AttackType:         CombatAttackLightning,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageDirect,
+	DamageValue:        parameter.CombatDamageRod,
+	EffectMask:         CombatEffectVampireDrain,
+}
+
 // Shield attack profiles
 
 var CombatAttackShieldToDrain = CombatAttackProfile{
@@ -389,6 +427,16 @@ var CombatAttackShieldToPylon = CombatAttackProfile{
 	EffectMask:         CombatEffectNone, // Stationary, no knockback
 	ChainAttack:        nil,
 	CollisionProfile:   nil,
+}
+
+var CombatAttackShieldToEye = CombatAttackProfile{
+	AttackType:         CombatAttackShield,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageArea,
+	DamageValue:        0,
+	EffectMask:         CombatEffectKinetic,
+	CollisionProfile:   &physics.ShieldToEye,
 }
 
 // Explosion attack profiles
@@ -470,6 +518,16 @@ var CombatAttackExplosionToSnakeBody = CombatAttackProfile{
 	CollisionProfile:   &physics.ExplosionToSwarm,
 }
 
+var CombatAttackExplosionToEye = CombatAttackProfile{
+	AttackType:         CombatAttackExplosion,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageExplosion,
+	EffectMask:         CombatEffectKinetic,
+	CollisionProfile:   &physics.ExplosionToEye,
+}
+
 // Missile attack profiles
 
 var CombatAttackMissileToDrain = CombatAttackProfile{
@@ -547,6 +605,16 @@ var CombatAttackMissileToSnakeBody = CombatAttackProfile{
 	CollisionProfile:   &physics.ExplosionToSwarm,
 }
 
+var CombatAttackMissileToEye = CombatAttackProfile{
+	AttackType:         CombatAttackMissile,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamageMissile,
+	EffectMask:         CombatEffectNone,
+	CollisionProfile:   &physics.ExplosionToEye,
+}
+
 // Pulse
 var CombatAttackPulseToDrain = CombatAttackProfile{
 	AttackType:         CombatAttackPulse,
@@ -613,4 +681,21 @@ var CombatAttackPulseToSnakeBody = CombatAttackProfile{
 	EffectMask:         CombatEffectStun,
 	ChainAttack:        nil,
 	CollisionProfile:   nil,
+}
+
+var CombatAttackPulseToEye = CombatAttackProfile{
+	AttackType:         CombatAttackPulse,
+	AttackerEntityType: CombatEntityCursor,
+	DefenderEntityType: CombatEntityEye,
+	DamageType:         CombatDamageArea,
+	DamageValue:        parameter.CombatDamagePulse,
+	EffectMask:         CombatEffectStun,
+}
+
+// Eye self-destruct profile (shared across all targets, no kinetic effects)
+var CombatAttackEyeSelfDestruct = CombatAttackProfile{
+	AttackType:  CombatAttackSelfDestruct,
+	DamageType:  CombatDamageDirect,
+	DamageValue: parameter.CombatDamageEyeSelfDestruct,
+	EffectMask:  CombatEffectNone,
 }

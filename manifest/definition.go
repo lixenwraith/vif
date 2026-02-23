@@ -70,6 +70,7 @@ var Components = []ComponentDef{
 	{"SnakeHead", "SnakeHeadComponent"},
 	{"SnakeBody", "SnakeBodyComponent"},
 	{"SnakeMember", "SnakeMemberComponent"},
+	{"Eye", "EyeComponent"},
 
 	// --- Composite ---
 	{"Header", "HeaderComponent"},
@@ -141,6 +142,7 @@ var Systems = []SystemDef{
 	{"storm", "NewStormSystem"},
 	{"pylon", "NewPylonSystem"},
 	{"snake", "NewSnakeSystem"},
+	{"eye", "NewEyeSystem"},
 	{"bullet", "NewBulletSystem"},
 
 	// --- Particles / Effects ---

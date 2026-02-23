@@ -746,3 +746,21 @@ type TargetGroupUpdatePayload struct {
 type TargetGroupRemovePayload struct {
 	GroupID uint8
 }
+
+// EyeSpawnRequestPayload contains eye spawn parameters
+type EyeSpawnRequestPayload struct {
+	X             int
+	Y             int
+	Type          component.EyeType
+	TargetGroupID uint8
+}
+
+// EyeSpawnedPayload notifies eye composite creation
+type EyeSpawnedPayload struct {
+	HeaderEntity core.Entity
+}
+
+// EyeDestroyedPayload notifies eye termination
+type EyeDestroyedPayload struct {
+	HeaderEntity core.Entity
+}

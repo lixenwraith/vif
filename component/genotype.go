@@ -13,6 +13,7 @@ const (
 	SpeciesStorm
 	SpeciesPylon
 	SpeciesSnake
+	SpeciesEye
 	SpeciesCount
 )
 

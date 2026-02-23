@@ -210,7 +210,7 @@ var bestiary = []EnemyTemplate{
 				Attr: []string{"B   B", " BBB ", "B   B"},
 			},
 			{ // Bright — full glow
-				Art:  []string{"#===# ", "|<O>|", "#===#"},
+				Art:  []string{"#===#", "|<O>|", "#===#"},
 				Fg:   []string{"50005", "54245", "50005"},
 				Bg:   []string{"01110", "01210", "01110"},
 				Attr: []string{"BBBBB", "BBBBB", "BBBBB"},

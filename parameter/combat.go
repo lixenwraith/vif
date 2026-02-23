@@ -23,6 +23,9 @@ const (
 
 	// CombatInitialHPPylonMax is pylon member HP at center (default)
 	CombatInitialHPPylonMax = 20
+
+	// CombatDamageEyeSelfDestruct is damage applied to target on eye self-destruct
+	CombatDamageEyeSelfDestruct = 5
 )
 
 // Damage

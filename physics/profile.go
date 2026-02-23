@@ -20,6 +20,7 @@ const (
 	MassPylon     = vmath.Scale * 1000 // Immovable
 	MassSnakeHead = vmath.Scale * 8    // Similar to quasar
 	MassSnakeBody = vmath.Scale * 2    // Per-segment, similar to swarm
+	MassEye       = vmath.Scale * 5
 
 	MassRatioEqual = vmath.Scale
 )
@@ -74,6 +75,17 @@ var CleanerToSnakeBody = CollisionProfile{
 	OffsetInfluence:  0,
 }
 
+// CleanerToEye defines cleaner-to-eye collision (override for composite unit)
+var CleanerToEye = CollisionProfile{
+	MassRatio:        vmath.Div(MassCleaner, MassEye),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  OffsetInfluenceDefault,
+}
+
 // ShieldToDrain defines shield-to-drain knockback (radial repulsion)
 var ShieldToDrain = CollisionProfile{
 	MassRatio:        vmath.Div(MassCursor, MassDrain),
@@ -116,6 +128,17 @@ var ShieldToSnakeBody = CollisionProfile{
 	Mode:             ImpulseAdditive,
 	ImmunityDuration: parameter.CombatKineticImmunityDuration,
 	OffsetInfluence:  0,
+}
+
+// ShieldToEye defines shield-to-eye knockback (radial, override)
+var ShieldToEye = CollisionProfile{
+	MassRatio:        vmath.Div(MassCursor, MassEye),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseOverride,
+	ImmunityDuration: parameter.CombatKineticImmunityDuration,
+	OffsetInfluence:  OffsetInfluenceDefault,
 }
 
 // TODO: unused
@@ -166,6 +189,17 @@ var ExplosionToSnakeHead = CollisionProfile{
 // ExplosionToSnakeBody defines explosion-to-snake-body collision
 var ExplosionToSnakeBody = CollisionProfile{
 	MassRatio:        vmath.Div(MassExplosion, MassSnakeBody),
+	ImpulseMin:       parameter.CollisionKineticImpulseMin,
+	ImpulseMax:       parameter.CollisionKineticImpulseMax,
+	AngleVariance:    parameter.DrainDeflectAngleVar,
+	Mode:             ImpulseAdditive,
+	ImmunityDuration: parameter.CombatHitFlashDuration,
+	OffsetInfluence:  0,
+}
+
+// ExplosionToEye defines explosion-to-eye collision (additive, heavy)
+var ExplosionToEye = CollisionProfile{
+	MassRatio:        vmath.Div(MassExplosion, MassEye),
 	ImpulseMin:       parameter.CollisionKineticImpulseMin,
 	ImpulseMax:       parameter.CollisionKineticImpulseMax,
 	AngleVariance:    parameter.DrainDeflectAngleVar,
@@ -383,4 +417,18 @@ var SnakeHoming = HomingProfile{
 	ArrivalRadius:    vmath.FromFloat(2.0),
 	ArrivalDragBoost: vmath.FromFloat(2.0),
 	DeadZone:         vmath.Scale / 2,
+}
+
+// EyeHomingProfiles holds per-type homing configuration, computed at init from parameter table
+var EyeHomingProfiles [parameter.EyeTypeCount]HomingProfile
+
+func init() {
+	for i := 0; i < parameter.EyeTypeCount; i++ {
+		p := parameter.EyeTypeTable[i]
+		EyeHomingProfiles[i] = HomingProfile{
+			BaseSpeed:   vmath.FromFloat(p.BaseSpeed),
+			HomingAccel: vmath.FromFloat(p.HomingAccel),
+			Drag:        vmath.FromFloat(p.Drag),
+		}
+	}
 }
