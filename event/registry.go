@@ -290,12 +290,23 @@ func InitRegistry() {
 	RegisterType("EventPylonSpawned", EventPylonSpawned, &PylonSpawnedPayload{})
 	RegisterType("EventPylonDestroyed", EventPylonDestroyed, &PylonDestroyedPayload{})
 	RegisterType("EventPylonCancelRequest", EventPylonCancelRequest, nil)
+	RegisterType("EventPylonSpawnFailed", EventPylonSpawnFailed, nil)
 
 	// Snake
 	RegisterType("EventSnakeSpawnRequest", EventSnakeSpawnRequest, &SnakeSpawnRequestPayload{})
 	RegisterType("EventSnakeSpawned", EventSnakeSpawned, &SnakeSpawnedPayload{})
 	RegisterType("EventSnakeDestroyed", EventSnakeDestroyed, &SnakeDestroyedPayload{})
 	RegisterType("EventSnakeCancelRequest", EventSnakeCancelRequest, nil)
+
+	// Target Group
+	RegisterType("EventTargetGroupUpdate", EventTargetGroupUpdate, &TargetGroupUpdatePayload{})
+	RegisterType("EventTargetGroupRemove", EventTargetGroupRemove, &TargetGroupRemovePayload{})
+
+	// Eye
+	RegisterType("EventEyeSpawnRequest", EventEyeSpawnRequest, &EyeSpawnRequestPayload{})
+	RegisterType("EventEyeSpawned", EventEyeSpawned, &EyeSpawnedPayload{})
+	RegisterType("EventEyeDestroyed", EventEyeDestroyed, &EyeDestroyedPayload{})
+	RegisterType("EventEyeCancelRequest", EventEyeCancelRequest, nil)
 
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)

@@ -22,12 +22,16 @@ const (
 	PriorityHealthBar
 
 	// === Species (back to front) ===
-	PriorityPylon // Background species, rendered first
+
+	// Background species, rendered first,
+	// Foreground species with depth, rendered last
+	PriorityPylon
+	PriorityStorm
+	PriorityEye
 	PrioritySnake
 	PriorityDrain
 	PriorityQuasar
 	PrioritySwarm
-	PriorityStorm // Foreground species with depth, rendered last
 
 	// === Cleaner ===
 	PriorityCleaner

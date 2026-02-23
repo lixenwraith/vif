@@ -723,44 +723,44 @@ type SnakeSpawnRequestPayload struct {
 
 // SnakeSpawnedPayload emitted after successful spawn
 type SnakeSpawnedPayload struct {
-	RootEntity core.Entity
-	HeadEntity core.Entity
-	BodyEntity core.Entity
+	RootEntity core.Entity `toml:"root_entity"`
+	HeadEntity core.Entity `toml:"head_entity"`
+	BodyEntity core.Entity `toml:"body_entity"`
 }
 
 // SnakeDestroyedPayload emitted on snake death
 type SnakeDestroyedPayload struct {
-	RootEntity core.Entity
+	RootEntity core.Entity `toml:"root_entity"`
 }
 
 // TargetGroupUpdatePayload configures or updates a navigation target group
 type TargetGroupUpdatePayload struct {
-	GroupID uint8 // 0 = cursor (rarely set manually), 1+ = custom
-	Type    component.TargetType
-	Entity  core.Entity // For TargetEntity type
-	PosX    int         // For TargetPosition type
-	PosY    int         // For TargetPosition type
+	GroupID uint8                `toml:"group_id"` // 0 = cursor (rarely set manually), 1+ = custom
+	Type    component.TargetType `toml:"type"`
+	Entity  core.Entity          `toml:"entity"` // For TargetEntity type
+	PosX    int                  `toml:"pos_x"`  // For TargetPosition type
+	PosY    int                  `toml:"pos_y"`  // For TargetPosition type
 }
 
 // TargetGroupRemovePayload removes a target group
 type TargetGroupRemovePayload struct {
-	GroupID uint8
+	GroupID uint8 `toml:"group_id"`
 }
 
 // EyeSpawnRequestPayload contains eye spawn parameters
 type EyeSpawnRequestPayload struct {
-	X             int
-	Y             int
-	Type          component.EyeType
-	TargetGroupID uint8
+	X             int               `toml:"x"`
+	Y             int               `toml:"y"`
+	Type          component.EyeType `toml:"type"`
+	TargetGroupID uint8             `toml:"target_group_id"`
 }
 
 // EyeSpawnedPayload notifies eye composite creation
 type EyeSpawnedPayload struct {
-	HeaderEntity core.Entity
+	HeaderEntity core.Entity `toml:"header_entity"`
 }
 
 // EyeDestroyedPayload notifies eye termination
 type EyeDestroyedPayload struct {
-	HeaderEntity core.Entity
+	HeaderEntity core.Entity `toml:"header_entity"`
 }

@@ -189,6 +189,7 @@ var Renderers = []RendererDef{
 
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
+	{"eye", "NewEyeRenderer", "PriorityPylon"},
 	{"snake", "NewSnakeRenderer", "PrioritySnake"},
 	{"drain", "NewDrainRenderer", "PriorityDrain"},
 	{"quasar", "NewQuasarRenderer", "PriorityQuasar"},
