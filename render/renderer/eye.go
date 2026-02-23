@@ -12,11 +12,6 @@ import (
 
 // === Render Data ===
 
-const maxEyeFrames = 5
-
-// eye256FlashFg is xterm-256 bright yellow for hit flash
-const eye256FlashFg uint8 = 226
-
 // eyeCell holds resolved per-cell render data for one animation frame position
 type eyeCell struct {
 	Ch    rune
@@ -32,28 +27,12 @@ type eyeTypeRender struct {
 	Fg256      uint8
 	Bg256      uint8
 	FrameCount int
-	Frames     [maxEyeFrames][parameter.EyeHeight][parameter.EyeWidth]eyeCell
+	Frames     [visual.EyeMaxFrames][parameter.EyeHeight][parameter.EyeWidth]eyeCell
 }
 
 var eyeRenderTable [parameter.EyeTypeCount]eyeTypeRender
 
-// === Init: Parse Frame Specs → Render Table ===
-
-type eyeFrameStrings struct {
-	art  [3]string
-	fg   [3]string
-	bg   [3]string
-	attr [3]string
-}
-
-type eyeTypeSpec struct {
-	fgPalette  [8]terminal.RGB
-	bgPalette  [3]terminal.RGB
-	fg256      uint8
-	bg256      uint8
-	frameCount int
-	frames     [maxEyeFrames]eyeFrameStrings
-}
+// === Init: Parse Visual Specs → Render Table ===
 
 func parsePaletteIdx(b byte) int8 {
 	if b >= '0' && b <= '9' {
@@ -76,37 +55,37 @@ func parseAttr(b byte) terminal.Attr {
 	}
 }
 
-func buildEyeType(spec *eyeTypeSpec) eyeTypeRender {
+func buildEyeType(spec *visual.EyeTypeVisual) eyeTypeRender {
 	r := eyeTypeRender{
-		FgPalette:  spec.fgPalette,
-		BgPalette:  spec.bgPalette,
-		Fg256:      spec.fg256,
-		Bg256:      spec.bg256,
-		FrameCount: spec.frameCount,
+		FgPalette:  spec.FgPalette,
+		BgPalette:  spec.BgPalette,
+		Fg256:      spec.Fg256,
+		Bg256:      spec.Bg256,
+		FrameCount: spec.FrameCount,
 	}
-	for f := 0; f < spec.frameCount; f++ {
-		fs := &spec.frames[f]
+	for f := 0; f < spec.FrameCount; f++ {
+		fs := &spec.Frames[f]
 		for row := 0; row < parameter.EyeHeight; row++ {
 			for col := 0; col < parameter.EyeWidth; col++ {
 				cell := &r.Frames[f][row][col]
-				if col < len(fs.art[row]) {
-					ch := rune(fs.art[row][col])
+				if col < len(fs.Art[row]) {
+					ch := rune(fs.Art[row][col])
 					if ch != ' ' {
 						cell.Ch = ch
 					}
 				}
-				if col < len(fs.fg[row]) {
-					cell.FgIdx = parsePaletteIdx(fs.fg[row][col])
+				if col < len(fs.Fg[row]) {
+					cell.FgIdx = parsePaletteIdx(fs.Fg[row][col])
 				} else {
 					cell.FgIdx = -1
 				}
-				if col < len(fs.bg[row]) {
-					cell.BgIdx = parsePaletteIdx(fs.bg[row][col])
+				if col < len(fs.Bg[row]) {
+					cell.BgIdx = parsePaletteIdx(fs.Bg[row][col])
 				} else {
 					cell.BgIdx = -1
 				}
-				if col < len(fs.attr[row]) {
-					cell.Attr = parseAttr(fs.attr[row][col])
+				if col < len(fs.Attr[row]) {
+					cell.Attr = parseAttr(fs.Attr[row][col])
 				}
 			}
 		}
@@ -115,298 +94,8 @@ func buildEyeType(spec *eyeTypeSpec) eyeTypeRender {
 }
 
 func init() {
-	specs := [parameter.EyeTypeCount]eyeTypeSpec{
-
-		// 0: Void Eye — 5×3, 5 frames
-		// Deep ocean, slow blink cycle (O→o→=→O→shut)
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.DimGray, terminal.SteelBlue, terminal.White,
-				terminal.CeruleanBlue, terminal.NavyBlue, terminal.LightSkyBlue,
-				terminal.CobaltBlue, terminal.DodgerBlue,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.DeepNavy, terminal.Gunmetal, terminal.CobaltBlue,
-			},
-			fg256: 75, bg256: 17,
-			frameCount: 5,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{"[---]", "|(O)|", "[---]"},
-					fg:   [3]string{"01110", "43234", "01110"},
-					bg:   [3]string{"00000", "01210", "00000"},
-					attr: [3]string{" BBB ", " BBB ", " BBB "},
-				},
-				{
-					art:  [3]string{"[---]", "|(o)|", "[---]"},
-					fg:   [3]string{"01110", "43534", "01110"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{" BBB ", " BBB ", " BBB "},
-				},
-				{
-					art:  [3]string{"[===]", "|(=)|", "[===]"},
-					fg:   [3]string{"06660", "43634", "06660"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{" BBB ", "  B  ", " BBB "},
-				},
-				{
-					art:  [3]string{"[~~~]", "|(O)|", "[~~~]"},
-					fg:   [3]string{"07770", "43234", "07770"},
-					bg:   [3]string{"00100", "01210", "00100"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-				{
-					art:  [3]string{"[---]", "|===|", "[---]"},
-					fg:   [3]string{"01110", "46664", "01110"},
-					bg:   [3]string{"00000", "00000", "00000"},
-					attr: [3]string{" BBB ", "     ", " BBB "},
-				},
-			},
-		},
-
-		// 1: Flame Eye — 5×3, 4 frames
-		// Aggressive flicker (<@>→{*}→<o>→<O>)
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.LemonYellow, terminal.FlameOrange, terminal.White,
-				terminal.BrightRed, terminal.Amber, terminal.DarkCrimson,
-				terminal.Vermilion, terminal.WarmOrange,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.BlackRed, terminal.DarkAmber, terminal.Red,
-			},
-			fg256: 208, bg256: 88,
-			frameCount: 4,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{"#---#", "|<@>|", "#---#"},
-					fg:   [3]string{"51115", "54245", "51115"},
-					bg:   [3]string{"00000", "01210", "00000"},
-					attr: [3]string{"B   B", " BBB ", "B   B"},
-				},
-				{
-					art:  [3]string{"#-#-#", "|{*}|", "#-#-#"},
-					fg:   [3]string{"51615", "57275", "51615"},
-					bg:   [3]string{"01010", "01210", "01010"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-				{
-					art:  [3]string{"#---#", "|<o>|", "#---#"},
-					fg:   [3]string{"51115", "54745", "51115"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"B   B", " BBB ", "B   B"},
-				},
-				{
-					art:  [3]string{"#===#", "|<O>|", "#===#"},
-					fg:   [3]string{"50005", "54245", "50005"},
-					bg:   [3]string{"01110", "01210", "01110"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-
-		// 2: Frost Eye — 5×3, 4 frames
-		// Crystalline pulse (<O>→(O)→{=}→(O))
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.BrightCyan, terminal.White, terminal.LightSkyBlue,
-				terminal.CeruleanBlue, terminal.SteelBlue, terminal.CoolSilver,
-				terminal.AliceBlue, terminal.PaleCyan,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.DeepNavy, terminal.CobaltBlue, terminal.SteelBlue,
-			},
-			fg256: 81, bg256: 18,
-			frameCount: 4,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{"*---*", "|<O>|", "*---*"},
-					fg:   [3]string{"43334", "30103", "43334"},
-					bg:   [3]string{"00000", "01210", "00000"},
-					attr: [3]string{"B   B", " BBB ", "B   B"},
-				},
-				{
-					art:  [3]string{"*-+-*", "|(O)|", "*-+-*"},
-					fg:   [3]string{"43134", "30103", "43134"},
-					bg:   [3]string{"00100", "01210", "00100"},
-					attr: [3]string{"BBBBB", " BBB ", "BBBBB"},
-				},
-				{
-					art:  [3]string{"*---*", "|{=}|", "*---*"},
-					fg:   [3]string{"43334", "30534", "43334"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"B   B", "  B  ", "B   B"},
-				},
-				{
-					art:  [3]string{"*~+~*", "|(O)|", "*~+~*"},
-					fg:   [3]string{"40104", "30103", "40104"},
-					bg:   [3]string{"01210", "01210", "01210"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-
-		// 3: Storm Eye — 6→5×3, 3 frames (column 3 dropped)
-		// Electric, rotating highlight
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.BrightCyan, terminal.CeruleanBlue, terminal.White,
-				terminal.LemonYellow, terminal.SteelBlue, terminal.DodgerBlue,
-				terminal.SkyTeal, terminal.LightSkyBlue,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.DeepNavy, terminal.CobaltBlue, {},
-			},
-			fg256: 51, bg256: 17,
-			frameCount: 3,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{"+~~~+", "|(O)|", "+~~~+"},
-					fg:   [3]string{"40004", "41214", "40004"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"BBBBB", " BBB ", "BBBBB"},
-				},
-				{
-					art:  [3]string{"+~~~+", "|(=)|", "+~~~+"},
-					fg:   [3]string{"40004", "41614", "40004"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"BBBBB", " B B ", "BBBBB"},
-				},
-				{
-					art:  [3]string{"+~~~+", "|{O}|", "+~~~+"},
-					fg:   [3]string{"43034", "43234", "43034"},
-					bg:   [3]string{"00100", "01110", "00100"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-
-		// 4: Blood Eye — 5×3, 4 frames
-		// Veined pulse (X pupil, dilate cycle)
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.DarkCrimson, terminal.BrightRed, terminal.White,
-				terminal.Vermilion, terminal.Coral, terminal.Red,
-				terminal.Salmon, terminal.LightCoral,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.BlackRed, terminal.DarkCrimson, terminal.Red,
-			},
-			fg256: 160, bg256: 52,
-			frameCount: 4,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{">---<", "|(X)|", ">---<"},
-					fg:   [3]string{"31113", "05250", "31113"},
-					bg:   [3]string{"00000", "01210", "00000"},
-					attr: [3]string{"B   B", " BBB ", "B   B"},
-				},
-				{
-					art:  [3]string{">===<", "|(X)|", ">===<"},
-					fg:   [3]string{"35553", "05250", "35553"},
-					bg:   [3]string{"01110", "01210", "01110"},
-					attr: [3]string{"BBBBB", " BBB ", "BBBBB"},
-				},
-				{
-					art:  [3]string{">---<", "|-X-|", ">---<"},
-					fg:   [3]string{"31113", "05250", "31113"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"B   B", "  B  ", "B   B"},
-				},
-				{
-					art:  [3]string{">-#-<", "|(O)|", ">-#-<"},
-					fg:   [3]string{"31513", "04240", "31513"},
-					bg:   [3]string{"00100", "01210", "00100"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-
-		// 5: Golden Eye — 6→5×3, 4 frames (column 3 dropped)
-		// Regal shimmer, warm amber
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.Gold, terminal.Amber, terminal.White,
-				terminal.LemonYellow, terminal.DarkGold, terminal.PaleGold,
-				terminal.Buttercream, terminal.WarmOrange,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.DarkAmber, terminal.Amber, terminal.Gold,
-			},
-			fg256: 220, bg256: 94,
-			frameCount: 4,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{"|===|", "|(O)|", "|===|"},
-					fg:   [3]string{"40004", "41214", "40004"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"BBBBB", " BBB ", "BBBBB"},
-				},
-				{
-					art:  [3]string{"|=#=|", "|{O}|", "|=#=|"},
-					fg:   [3]string{"40304", "71217", "40304"},
-					bg:   [3]string{"00100", "01110", "00100"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-				{
-					art:  [3]string{"|===|", "|(=)|", "|===|"},
-					fg:   [3]string{"40004", "41514", "40004"},
-					bg:   [3]string{"00000", "01110", "00000"},
-					attr: [3]string{"BBBBB", " B B ", "BBBBB"},
-				},
-				{
-					art:  [3]string{"|~#~|", "|(O)|", "|~#~|"},
-					fg:   [3]string{"43334", "41214", "43334"},
-					bg:   [3]string{"01210", "01210", "01210"},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-
-		// 6: Abyss Eye — 5×3, 4 frames
-		// Transparent corners (bg skip), dimensional rift
-		{
-			fgPalette: [8]terminal.RGB{
-				terminal.PaleLavender, terminal.ElectricViolet, terminal.White,
-				terminal.SoftLavender, terminal.DarkViolet, terminal.MutedPurple,
-				terminal.DeepPurple, terminal.Orchid,
-			},
-			bgPalette: [3]terminal.RGB{
-				terminal.Obsidian, terminal.DeepPurple, {},
-			},
-			fg256: 135, bg256: 54,
-			frameCount: 4,
-			frames: [maxEyeFrames]eyeFrameStrings{
-				{
-					art:  [3]string{".---.", "|(O)|", "'---'"},
-					fg:   [3]string{"64446", "41214", "64446"},
-					bg:   [3]string{" 000 ", "01110", " 000 "},
-					attr: [3]string{" BBB ", " BBB ", " BBB "},
-				},
-				{
-					art:  [3]string{".---.", "|{O}|", "'---'"},
-					fg:   [3]string{"64446", "47274", "64446"},
-					bg:   [3]string{" 000 ", "01110", " 000 "},
-					attr: [3]string{" BBB ", " BBB ", " BBB "},
-				},
-				{
-					art:  [3]string{".~~~.", "|[O]|", "'~~~'"},
-					fg:   [3]string{"65556", "41214", "65556"},
-					bg:   [3]string{" 111 ", "01110", " 111 "},
-					attr: [3]string{"DBBBD", " BBB ", "DBBBD"},
-				},
-				{
-					art:  [3]string{".~~~.", "|(O)|", "'~~~'"},
-					fg:   [3]string{"61116", "41214", "61116"},
-					bg:   [3]string{" 111 ", "01110", " 111 "},
-					attr: [3]string{"BBBBB", "BBBBB", "BBBBB"},
-				},
-			},
-		},
-	}
-
-	for i := range specs {
-		eyeRenderTable[i] = buildEyeType(&specs[i])
+	for i := range visual.EyeTypeVisuals {
+		eyeRenderTable[i] = buildEyeType(&visual.EyeTypeVisuals[i])
 	}
 }
 
@@ -536,7 +225,7 @@ func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, ce
 	if hasCh {
 		fgIdx := tr.Fg256
 		if hasFlash {
-			fgIdx = eye256FlashFg
+			fgIdx = visual.Eye256FlashFg
 		}
 		buf.SetFgOnly(screenX, screenY, cell.Ch, terminal.RGB{R: fgIdx}, terminal.AttrFg256|cell.Attr)
 	}

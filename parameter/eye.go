@@ -22,6 +22,10 @@ const (
 
 	// Heat penalty when eye occupies cursor cell without shield
 	EyeDamageHeat = 5
+
+	// EyeContactCheckDistSq is squared distance threshold for target contact member iteration
+	// Avoids per-member spatial queries when eye is far from target
+	EyeContactCheckDistSq = 100
 )
 
 var EyeRestitution = vmath.FromFloat(EyeRestitutionFloat)

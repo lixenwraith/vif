@@ -12,10 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// eyeContactCheckDistSq is squared distance threshold for target contact member iteration
-// Avoids per-member spatial queries when eye is far from target
-const eyeContactCheckDistSq = 100
-
 // EyeSystem manages eye composite entity lifecycle
 // Eyes are 5×3 composites that home toward an assigned target group and self-destruct on contact
 type EyeSystem struct {
@@ -516,7 +512,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 	}
 	dx := headerPos.X - state.PosX
 	dy := headerPos.Y - state.PosY
-	if dx*dx+dy*dy > eyeContactCheckDistSq {
+	if dx*dx+dy*dy > parameter.EyeContactCheckDistSq {
 		return false
 	}
 

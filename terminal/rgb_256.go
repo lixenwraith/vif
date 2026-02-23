@@ -9,6 +9,12 @@ package terminal
 // Ordered dark-to-light within each hue group
 
 const (
+	// --- Blue ---
+	P256DeepNavy  uint8 = 17 // (0,0,1)
+	P256DarkBlue  uint8 = 18 // (0,0,2)
+	P256SteelBlue uint8 = 75 // (1,3,5)
+	P256LightBlue uint8 = 81 // (1,4,5)
+
 	// --- Teal / Cyan ---
 	P256DeepTeal  uint8 = 23 // (0,1,1)
 	P256Teal      uint8 = 44 // (0,4,4)
@@ -17,14 +23,21 @@ const (
 	P256LightCyan uint8 = 87 // (1,5,5)
 
 	// --- Blue / Purple ---
-	P256CobaltBlue uint8 = 33  // (0,2,5)
-	P256Indigo     uint8 = 63  // (1,1,5)
-	P256Purple     uint8 = 129 // (3,0,5)
-	P256Violet     uint8 = 134 // (3,1,4)
-	P256Orchid     uint8 = 176 // (4,2,4)
+	P256CobaltBlue     uint8 = 33  // (0,2,5)
+	P256DarkPurpleBlue uint8 = 54  // (1,0,2)
+	P256Indigo         uint8 = 63  // (1,1,5)
+	P256Purple         uint8 = 129 // (3,0,5)
+	P256Violet         uint8 = 134 // (3,1,4)
+	P256MediumPurple   uint8 = 135 // (3,1,5)
+	P256Orchid         uint8 = 176 // (4,2,4)
 
 	// --- Green / Yellow-Green ---
 	P256YellowGreen uint8 = 154 // (3,5,0)
+
+	// --- Red ---
+	P256Maroon      uint8 = 52  // (1,0,0)
+	P256DarkCrimson uint8 = 88  // (2,0,0)
+	P256Crimson     uint8 = 160 // (4,0,0)
 
 	// --- Red / Orange / Yellow ---
 	P256Red       uint8 = 196 // (5,0,0)
@@ -34,6 +47,9 @@ const (
 	P256Amber     uint8 = 214 // (5,3,0)
 	P256Gold      uint8 = 220 // (5,4,0)
 	P256Yellow    uint8 = 226 // (5,5,0)
+
+	// --- Orange / Brown ---
+	P256DarkAmber uint8 = 94 // (2,1,0)
 
 	// --- Grayscale ---
 	P256Gray uint8 = 240 // Grayscale step 8, level ~88
