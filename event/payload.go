@@ -379,6 +379,7 @@ type ExplosionType uint8
 const (
 	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
 	ExplosionTypeMissile                      // Visual only, warm palette
+	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )
 
 // ExplosionRequestPayload contains parameters for explosion effect

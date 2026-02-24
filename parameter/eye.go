@@ -33,8 +33,12 @@ const (
 
 	// EyeSelfDestructRadius is the proximity trigger distance (cells) for entity target contact
 	// Sized to cover default tower footprint (radiusX=6) + 1 cell buffer
-	EyeSelfDestructRadiusSq = 49 // 7²
+	// Used for both combat trigger and visual explosion effect
+	EyeSelfDestructRadius   = 7
+	EyeSelfDestructRadiusSq = EyeSelfDestructRadius * EyeSelfDestructRadius
 )
+
+var EyeExplosionRadius = vmath.FromFloat(float64(EyeSelfDestructRadius))
 
 // Navigation — band routing spawn defaults (pre-GA override)
 var (

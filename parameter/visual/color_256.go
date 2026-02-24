@@ -70,3 +70,6 @@ const (
 
 	Bullet256StormRed = terminal.P256Red // (5,0,0)
 )
+
+// Eye explosion
+var Eye256Explosion = terminal.P256MediumPurple // (3,1,5)

@@ -244,6 +244,8 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 		convertGlyphs = true
 	case event.ExplosionTypeMissile:
 		attackType = component.CombatAttackMissile
+	case event.ExplosionTypeEye:
+		return // Visual only, combat handled by EyeSystem
 	default:
 		return
 	}

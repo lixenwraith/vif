@@ -14,6 +14,28 @@ const (
 	Eye256FlashFg = terminal.P256Yellow
 )
 
+var (
+	// Eye explosion gradient — Palette Set A: Void Purple (active)
+	RgbEyeExplosionEdge = terminal.DarkViolet
+	RgbEyeExplosionMid  = terminal.ElectricViolet
+	RgbEyeExplosionCore = terminal.PaleLavender
+
+	// Palette Set B: Crimson (alternative)
+	// RgbEyeExplosionEdge = terminal.DarkBurgundy
+	// RgbEyeExplosionMid  = terminal.Cinnabar
+	// RgbEyeExplosionCore = terminal.MistyRose
+
+	// Palette Set C: Neon Magenta (alternative)
+	// RgbEyeExplosionEdge = terminal.DeepPurple
+	// RgbEyeExplosionMid  = terminal.HotMagenta
+	// RgbEyeExplosionCore = terminal.PalePink
+
+	// Palette Set D: Void Teal (alternative)
+	// RgbEyeExplosionEdge = terminal.Teal
+	// RgbEyeExplosionMid  = terminal.BrightCyan
+	// RgbEyeExplosionCore = terminal.PaleCyan
+)
+
 // EyeFrameArt holds per-frame character art and palette index mappings
 // Each row string is EyeWidth characters wide
 type EyeFrameArt struct {

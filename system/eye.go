@@ -165,6 +165,12 @@ func (s *EyeSystem) Update() {
 					X:       headerPos.X,
 					Y:       headerPos.Y,
 				})
+				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+					X:      headerPos.X,
+					Y:      headerPos.Y,
+					Radius: parameter.EyeExplosionRadius,
+					Type:   event.ExplosionTypeEye,
+				})
 			}
 			combatComp.HitPoints = 0
 			s.world.Components.Combat.SetComponent(headerEntity, combatComp)
