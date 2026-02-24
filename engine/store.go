@@ -128,3 +128,54 @@ func (s *Store[T]) RemoveBatch(entities []core.Entity) {
 	}
 	s.entities = s.entities[:writeIdx]
 }
+
+// RemoveEntityUnsafe deletes a component from an entity without locking
+// Caller MUST hold updateMutex
+func (s *Store[T]) RemoveEntityUnsafe(e core.Entity) {
+	if _, exists := s.components[e]; exists {
+		delete(s.components, e)
+		for i, entity := range s.entities {
+			if entity == e {
+				s.entities[i] = s.entities[len(s.entities)-1]
+				s.entities = s.entities[:len(s.entities)-1]
+				break
+			}
+		}
+	}
+}
+
+// RemoveBatchUnsafe deletes multiple entities in a single pass without locking
+// Caller MUST hold updateMutex
+func (s *Store[T]) RemoveBatchUnsafe(entities []core.Entity) {
+	if len(entities) == 0 || len(s.components) == 0 {
+		return
+	}
+
+	toRemove := make(map[core.Entity]struct{}, len(entities))
+	for _, e := range entities {
+		if _, exists := s.components[e]; exists {
+			toRemove[e] = struct{}{}
+			delete(s.components, e)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return
+	}
+
+	writeIdx := 0
+	for _, e := range s.entities {
+		if _, remove := toRemove[e]; !remove {
+			s.entities[writeIdx] = e
+			writeIdx++
+		}
+	}
+	s.entities = s.entities[:writeIdx]
+}
+
+// ClearAllComponentsUnsafe removes all components without locking
+// Caller MUST hold updateMutex
+func (s *Store[T]) ClearAllComponentsUnsafe() {
+	s.components = make(map[core.Entity]T)
+	s.entities = make([]core.Entity, 0, 64)
+}

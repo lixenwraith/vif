@@ -185,27 +185,30 @@ func initComponents(w *World) {
 }
 
 // removeEntity removes entity from every component store
+// Caller MUST hold updateMutex
 func (w *World) removeEntity(e core.Entity) {
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveEntity(e)
+	w.Components.{{ .Field }}.RemoveEntityUnsafe(e)
 {{- end }}
-	w.Positions.RemoveEntity(e)
+	w.Positions.RemoveEntityUnsafe(e)
 }
 
 // removeEntitiesBatch removes entities from all stores using batch operations
+// Caller MUST hold updateMutex
 func (w *World) removeEntitiesBatch(entities []core.Entity) {
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveBatch(entities)
+	w.Components.{{ .Field }}.RemoveBatchUnsafe(entities)
 {{- end }}
-	w.Positions.RemoveBatch(entities)
+	w.Positions.RemoveBatchUnsafe(entities)
 }
 
 // wipeAll clears all component stores
+// Caller MUST hold updateMutex
 func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Components.{{ .Field }}.ClearAllComponents()
+	w.Components.{{ .Field }}.ClearAllComponentsUnsafe()
 {{- end }}
-	w.Positions.ClearAllComponents()
+	w.Positions.ClearAllComponentsUnsafe()
 }
 `))
 

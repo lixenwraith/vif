@@ -489,6 +489,61 @@ func (p *Position) GetAllAtIntoUnsafe(x, y int, buf []core.Entity) int {
 	return count
 }
 
+// RemoveEntityUnsafe deletes an entity from the store and grid without locking
+// Caller MUST hold updateMutex
+func (p *Position) RemoveEntityUnsafe(e core.Entity) {
+	if pos, exists := p.components[e]; exists {
+		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
+		delete(p.components, e)
+
+		for i, entity := range p.entities {
+			if entity == e {
+				p.entities[i] = p.entities[len(p.entities)-1]
+				p.entities = p.entities[:len(p.entities)-1]
+				break
+			}
+		}
+	}
+}
+
+// RemoveBatchUnsafe deletes multiple entities in a single pass without locking
+// Caller MUST hold updateMutex
+func (p *Position) RemoveBatchUnsafe(entities []core.Entity) {
+	if len(entities) == 0 {
+		return
+	}
+
+	toRemove := make(map[core.Entity]struct{}, len(entities))
+	for _, e := range entities {
+		if pos, exists := p.components[e]; exists {
+			toRemove[e] = struct{}{}
+			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
+			delete(p.components, e)
+		}
+	}
+
+	if len(toRemove) == 0 {
+		return
+	}
+
+	writeIdx := 0
+	for _, e := range p.entities {
+		if _, remove := toRemove[e]; !remove {
+			p.entities[writeIdx] = e
+			writeIdx++
+		}
+	}
+	p.entities = p.entities[:writeIdx]
+}
+
+// ClearAllComponentsUnsafe removes all data without locking
+// Caller MUST hold updateMutex
+func (p *Position) ClearAllComponentsUnsafe() {
+	p.components = make(map[core.Entity]component.PositionComponent)
+	p.entities = make([]core.Entity, 0, 64)
+	p.grid.Clear()
+}
+
 // --- Batch Implementation ---
 
 type PositionBatch struct {
