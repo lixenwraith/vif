@@ -1,5 +1,16 @@
 package component
 
+// TowerType identifies the visual color variant
+type TowerType uint8
+
+const (
+	TowerCyan TowerType = iota
+	TowerGold
+	TowerViolet
+	TowerEmerald
+	TowerTypeCount // must be last
+)
+
 // TowerComponent holds tower-specific runtime state
 // Tower is a stationary ablative composite owned by player, attacked by eyes
 type TowerComponent struct {
@@ -10,4 +21,5 @@ type TowerComponent struct {
 	RadiusY int
 	MinHP   int
 	MaxHP   int
+	Type    TowerType
 }

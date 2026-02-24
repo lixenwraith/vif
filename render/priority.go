@@ -26,6 +26,7 @@ const (
 	// Background species, rendered first,
 	// Foreground species with depth, rendered last
 	PriorityPylon
+	PriorityTower
 	PriorityStorm
 	PriorityEye
 	PrioritySnake

@@ -776,12 +776,13 @@ type EyeDestroyedPayload struct {
 
 // TowerSpawnRequestPayload contains parameters for tower creation
 type TowerSpawnRequestPayload struct {
-	X       int `toml:"x"`
-	Y       int `toml:"y"`
-	RadiusX int `toml:"radius_x"`
-	RadiusY int `toml:"radius_y"`
-	MinHP   int `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
-	MaxHP   int `toml:"max_hp"` // HP at center
+	X       int                 `toml:"x"`
+	Y       int                 `toml:"y"`
+	Type    component.TowerType `toml:"type"`
+	RadiusX int                 `toml:"radius_x"`
+	RadiusY int                 `toml:"radius_y"`
+	MinHP   int                 `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
+	MaxHP   int                 `toml:"max_hp"` // HP at center
 }
 
 // TowerSpawnedPayload contains tower spawn data

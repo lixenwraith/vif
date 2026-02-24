@@ -187,9 +187,12 @@ func RegisterRenderers() {
 	registry.RegisterRenderer("pylon", func(ctx any) any {
 		return renderer.NewPylonRenderer(ctx.(*engine.GameContext))
 	}, render.PriorityPylon)
+	registry.RegisterRenderer("tower", func(ctx any) any {
+		return renderer.NewTowerRenderer(ctx.(*engine.GameContext))
+	}, render.PriorityTower)
 	registry.RegisterRenderer("eye", func(ctx any) any {
 		return renderer.NewEyeRenderer(ctx.(*engine.GameContext))
-	}, render.PriorityPylon)
+	}, render.PriorityEye)
 	registry.RegisterRenderer("snake", func(ctx any) any {
 		return renderer.NewSnakeRenderer(ctx.(*engine.GameContext))
 	}, render.PrioritySnake)
@@ -348,6 +351,7 @@ func ActiveRenderers() []string {
 		"gold",
 		"healthbar",
 		"pylon",
+		"tower",
 		"eye",
 		"snake",
 		"drain",
