@@ -406,6 +406,11 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 			continue
 		}
 
+		// Skip player-owned entities (tower members)
+		if isOwnedBy(s.world, target, cursorEntity) {
+			continue
+		}
+
 		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			AttackType:   component.CombatAttackProjectile,
 			OwnerEntity:  cursorEntity,

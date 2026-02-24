@@ -71,6 +71,7 @@ var Components = []ComponentDef{
 	{"SnakeBody", "SnakeBodyComponent"},
 	{"SnakeMember", "SnakeMemberComponent"},
 	{"Eye", "EyeComponent"},
+	{"Tower", "TowerComponent"},
 
 	// --- Composite ---
 	{"Header", "HeaderComponent"},
@@ -141,6 +142,7 @@ var Systems = []SystemDef{
 	{"swarm", "NewSwarmSystem"},
 	{"storm", "NewStormSystem"},
 	{"pylon", "NewPylonSystem"},
+	{"tower", "NewTowerSystem"},
 	{"snake", "NewSnakeSystem"},
 	{"eye", "NewEyeSystem"},
 	{"bullet", "NewBulletSystem"},
@@ -189,6 +191,7 @@ var Renderers = []RendererDef{
 
 	// --- Species (back to front) ---
 	{"pylon", "NewPylonRenderer", "PriorityPylon"},
+	// {"tower", "NewTowerRenderer", "PriorityPylon"},
 	{"eye", "NewEyeRenderer", "PriorityPylon"},
 	{"snake", "NewSnakeRenderer", "PrioritySnake"},
 	{"drain", "NewDrainRenderer", "PriorityDrain"},

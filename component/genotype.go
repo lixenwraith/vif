@@ -14,6 +14,7 @@ const (
 	SpeciesPylon
 	SpeciesSnake
 	SpeciesEye
+	SpeciesTower
 	SpeciesCount
 )
 

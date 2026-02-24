@@ -50,6 +50,7 @@ type Component struct {
 	SnakeBody   *Store[component.SnakeBodyComponent]
 	SnakeMember *Store[component.SnakeMemberComponent]
 	Eye         *Store[component.EyeComponent]
+	Tower       *Store[component.TowerComponent]
 	Header      *Store[component.HeaderComponent]
 	Member      *Store[component.MemberComponent]
 	Flash       *Store[component.FlashComponent]
@@ -103,6 +104,7 @@ func initComponents(w *World) {
 	w.Components.SnakeBody = NewStore[component.SnakeBodyComponent]()
 	w.Components.SnakeMember = NewStore[component.SnakeMemberComponent]()
 	w.Components.Eye = NewStore[component.EyeComponent]()
+	w.Components.Tower = NewStore[component.TowerComponent]()
 	w.Components.Header = NewStore[component.HeaderComponent]()
 	w.Components.Member = NewStore[component.MemberComponent]()
 	w.Components.Flash = NewStore[component.FlashComponent]()
@@ -157,6 +159,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.SnakeBody.RemoveEntity(e)
 	w.Components.SnakeMember.RemoveEntity(e)
 	w.Components.Eye.RemoveEntity(e)
+	w.Components.Tower.RemoveEntity(e)
 	w.Components.Header.RemoveEntity(e)
 	w.Components.Member.RemoveEntity(e)
 	w.Components.Flash.RemoveEntity(e)
@@ -210,6 +213,7 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.SnakeBody.RemoveBatch(entities)
 	w.Components.SnakeMember.RemoveBatch(entities)
 	w.Components.Eye.RemoveBatch(entities)
+	w.Components.Tower.RemoveBatch(entities)
 	w.Components.Header.RemoveBatch(entities)
 	w.Components.Member.RemoveBatch(entities)
 	w.Components.Flash.RemoveBatch(entities)
@@ -263,6 +267,7 @@ func (w *World) wipeAll() {
 	w.Components.SnakeBody.ClearAllComponents()
 	w.Components.SnakeMember.ClearAllComponents()
 	w.Components.Eye.ClearAllComponents()
+	w.Components.Tower.ClearAllComponents()
 	w.Components.Header.ClearAllComponents()
 	w.Components.Member.ClearAllComponents()
 	w.Components.Flash.ClearAllComponents()

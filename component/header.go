@@ -14,6 +14,7 @@ const (
 	BehaviorPylon
 	BehaviorSnake
 	BehaviorEye
+	BehaviorTower
 	BehaviorBoss // Future
 )
 

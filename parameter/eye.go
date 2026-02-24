@@ -25,9 +25,15 @@ const (
 	// Heat penalty when eye occupies cursor cell without shield
 	EyeDamageHeat = 5
 
+	// TODO: make the radii flexible
+
 	// EyeContactCheckDistSq is squared distance threshold for target contact member iteration
 	// Avoids per-member spatial queries when eye is far from target
 	EyeContactCheckDistSq = 100
+
+	// EyeSelfDestructRadius is the proximity trigger distance (cells) for entity target contact
+	// Sized to cover default tower footprint (radiusX=6) + 1 cell buffer
+	EyeSelfDestructRadiusSq = 49 // 7²
 )
 
 // Navigation — band routing spawn defaults (pre-GA override)

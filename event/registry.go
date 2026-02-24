@@ -310,6 +310,13 @@ func InitRegistry() {
 	RegisterType("EventEyeDestroyed", EventEyeDestroyed, &EyeDestroyedPayload{})
 	RegisterType("EventEyeCancelRequest", EventEyeCancelRequest, nil)
 
+	// Tower
+	RegisterType("EventTowerSpawnRequest", EventTowerSpawnRequest, &TowerSpawnRequestPayload{})
+	RegisterType("EventTowerSpawned", EventTowerSpawned, &TowerSpawnedPayload{})
+	RegisterType("EventTowerDestroyed", EventTowerDestroyed, &TowerDestroyedPayload{})
+	RegisterType("EventTowerCancelRequest", EventTowerCancelRequest, nil)
+	RegisterType("EventTowerSpawnFailed", EventTowerSpawnFailed, nil)
+
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)

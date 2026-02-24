@@ -20,6 +20,7 @@ const (
 	CombatEntitySnakeHead
 	CombatEntitySnakeBody
 	CombatEntityEye
+	CombatEntityTower
 	CombatEntityCount
 )
 
@@ -168,6 +169,7 @@ var CombatMatrix = combatMatrixMap{
 		{CombatEntityEye, CombatEntitySnakeHead}: &CombatAttackEyeSelfDestruct,
 		{CombatEntityEye, CombatEntitySnakeBody}: &CombatAttackEyeSelfDestruct,
 		{CombatEntityEye, CombatEntityCursor}:    &CombatAttackEyeSelfDestruct,
+		{CombatEntityEye, CombatEntityTower}:     &CombatAttackEyeSelfDestruct,
 	},
 }
 
@@ -695,7 +697,7 @@ var CombatAttackPulseToEye = CombatAttackProfile{
 // Eye self-destruct profile (shared across all targets, no kinetic effects)
 var CombatAttackEyeSelfDestruct = CombatAttackProfile{
 	AttackType:  CombatAttackSelfDestruct,
-	DamageType:  CombatDamageDirect,
+	DamageType:  CombatDamageArea,
 	DamageValue: parameter.CombatDamageEyeSelfDestruct,
 	EffectMask:  CombatEffectNone,
 }

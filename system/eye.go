@@ -483,8 +483,10 @@ func (s *EyeSystem) updateAnimationFrame(eyeComp *component.EyeComponent) {
 
 // === Target Contact ===
 
-// checkTargetContact detects overlap between eye members and target entity members
-// Emits CombatAttackDirectRequest on contact, returns true if self-destruct triggered
+// checkTargetContact detects proximity between eye and assigned entity target
+// For composite targets: triggers when any member is within self-destruct radius
+// For simple targets: triggers when target entity is within self-destruct radius
+// Emits CombatAttackAreaRequest with all in-radius members as HitEntities
 func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 	// Resolve target group
 	groupID := uint8(0)
@@ -502,61 +504,67 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 		return false
 	}
 
-	// Distance pre-check to avoid per-member spatial queries when far from target
-	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
-	if !ok {
-		return false
-	}
-	dx := headerPos.X - state.PosX
-	dy := headerPos.Y - state.PosY
-	if dx*dx+dy*dy > parameter.EyeContactCheckDistSq {
-		return false
-	}
-
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	eyePos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
 		return false
 	}
 
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-		memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
+	radiusSq := parameter.EyeSelfDestructRadiusSq
 
-		entities := s.world.Positions.GetAllEntityAt(memberPos.X, memberPos.Y)
-		for _, e := range entities {
-			if e == headerEntity {
+	// Composite target: check any member within explosion radius
+	if targetHeader, ok := s.world.Components.Header.GetComponent(targetEntity); ok {
+		var hitMembers []core.Entity
+		for _, member := range targetHeader.MemberEntries {
+			if member.Entity == 0 {
 				continue
 			}
-			// Skip own members
-			if mc, ok := s.world.Components.Member.GetComponent(e); ok {
-				if mc.HeaderEntity == headerEntity {
-					continue
-				}
-			}
-
-			resolvedTarget, hitEntity, valid := ResolveTargetFromEntity(s.world, e, headerEntity)
-			if !valid || resolvedTarget != targetEntity {
+			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+			if !ok {
 				continue
 			}
-
-			// Contact confirmed — emit combat attack before self-destruct
-			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-				AttackType:   component.CombatAttackSelfDestruct,
-				OwnerEntity:  headerEntity,
-				OriginEntity: headerEntity,
-				TargetEntity: resolvedTarget,
-				HitEntity:    hitEntity,
-			})
-			return true
+			dx := eyePos.X - memberPos.X
+			dy := eyePos.Y - memberPos.Y
+			if dx*dx+dy*dy <= radiusSq {
+				hitMembers = append(hitMembers, member.Entity)
+			}
 		}
+		if len(hitMembers) == 0 {
+			return false
+		}
+
+		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			AttackType:   component.CombatAttackSelfDestruct,
+			OwnerEntity:  headerEntity,
+			OriginEntity: headerEntity,
+			TargetEntity: targetEntity,
+			HitEntities:  hitMembers,
+			OriginX:      eyePos.X,
+			OriginY:      eyePos.Y,
+		})
+		return true
 	}
 
-	return false
+	// Simple entity: distance check
+	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
+	if !ok {
+		return false
+	}
+	dx := eyePos.X - targetPos.X
+	dy := eyePos.Y - targetPos.Y
+	if dx*dx+dy*dy > radiusSq {
+		return false
+	}
+
+	s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+		AttackType:   component.CombatAttackSelfDestruct,
+		OwnerEntity:  headerEntity,
+		OriginEntity: headerEntity,
+		TargetEntity: targetEntity,
+		HitEntities:  []core.Entity{targetEntity},
+		OriginX:      eyePos.X,
+		OriginY:      eyePos.Y,
+	})
+	return true
 }
 
 // === Interactions ===

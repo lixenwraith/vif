@@ -750,6 +750,30 @@ const (
 	// Consumer: EyeSystem | Payload: nil
 	EventEyeCancelRequest
 
+	// EventTowerSpawnRequest signals tower creation at location
+	// Trigger: FSM
+	// Consumer: TowerSystem | Payload: *TowerSpawnRequestPayload
+	EventTowerSpawnRequest
+
+	// EventTowerSpawnFailed signals tower spawn could not find valid position
+	// Trigger: TowerSystem | Payload: nil
+	EventTowerSpawnFailed
+
+	// EventTowerSpawned signals tower composite creation
+	// Trigger: TowerSystem after creation
+	// Consumer: FSM | Payload: *TowerSpawnedPayload
+	EventTowerSpawned
+
+	// EventTowerDestroyed signals tower termination (all members dead)
+	// Trigger: TowerSystem on lifecycle end
+	// Consumer: FSM, LootSystem | Payload: *TowerDestroyedPayload
+	EventTowerDestroyed
+
+	// EventTowerCancelRequest signals forced destruction of all towers
+	// Trigger: FSM on phase transition
+	// Consumer: TowerSystem | Payload: nil
+	EventTowerCancelRequest
+
 	EventDebugFlowToggle
 	EventDebugGraphToggle
 )
