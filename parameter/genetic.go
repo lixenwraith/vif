@@ -53,21 +53,32 @@ const (
 	GAEyeFlowLookaheadMin = 2.0
 	GAEyeFlowLookaheadMax = 60.0
 
+	// BudgetMultiplier: distance budget ratio (1.0 = optimal only, 2.5 = up to 2.5× optimal)
+	GAEyeBudgetMultiplierMin = 1.0
+	GAEyeBudgetMultiplierMax = 2.5
+
+	// ExplorationBias: direction preference within budget (0.0 = progress, 1.0 = explore)
+	GAEyeExplorationBiasMin = 0.0
+	GAEyeExplorationBiasMax = 1.0
+
 	// Perturbation standard deviation for eye genes
 	GAEyePerturbationStdDev = 0.10
 )
 
 // Genetic Algorithm - Fitness Weights (Eye)
 const (
-	GAEyeFitnessWeightReachedTarget = 0.5
-	GAEyeFitnessWeightSpeed         = 0.3
-	GAEyeFitnessWeightPositioning   = 0.2
+	GAEyeFitnessWeightReachedTarget  = 0.5
+	GAEyeFitnessWeightSpeedIfReached = 0.3
+	GAEyeFitnessWeightSurvival       = 0.2
 )
 
 // Genetic Algorithm - Eye Fitness Normalization
 const (
-	// GAEyeFitnessMaxTicks is inverse normalization cap for speed metric
+	// GAEyeFitnessMaxTicks is inverse normalization cap for speed-if-reached metric
 	GAEyeFitnessMaxTicks = 400
+
+	// GAEyeFitnessSurvivalCap is the tick count at which survival score saturates (NormalizeCap)
+	GAEyeFitnessSurvivalCap = 600.0
 
 	// GAEyeReachedTargetDistSq is squared distance threshold for target-reach detection
 	// Accounts for composite header offset from exact target position

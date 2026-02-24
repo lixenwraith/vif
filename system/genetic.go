@@ -21,18 +21,23 @@ import (
 // --- Eye Gene Configuration ---
 
 const (
-	geneEyeFlowLookahead = iota
+	geneEyeBudgetMultiplier = iota
+	geneEyeExplorationBias
+	geneEyeFlowLookahead
 	geneEyeCount
 )
 
 var eyeGeneBounds = []genetic.ParameterBounds{
+	{Min: parameter.GAEyeBudgetMultiplierMin, Max: parameter.GAEyeBudgetMultiplierMax},
+	{Min: parameter.GAEyeExplorationBiasMin, Max: parameter.GAEyeExplorationBiasMax},
 	{Min: parameter.GAEyeFlowLookaheadMin, Max: parameter.GAEyeFlowLookaheadMax},
 }
 
 // --- Fitness Metric Keys ---
 
 const (
-	metricDistanceSq = "distance_sq"
+	metricDistanceSq     = "distance_sq"
+	metricSpeedIfReached = "speed_if_reached"
 )
 
 // --- Player Behavior Model ---
@@ -178,15 +183,14 @@ func (s *GeneticSystem) createEyeAggregator() fitness.Aggregator {
 	return &fitness.WeightedAggregator{
 		Weights: map[string]float64{
 			tracking.MetricDeathAtTarget: parameter.GAEyeFitnessWeightReachedTarget,
-			tracking.MetricTicksAlive:    parameter.GAEyeFitnessWeightSpeed,
-			"avg_" + metricDistanceSq:    parameter.GAEyeFitnessWeightPositioning,
+			metricSpeedIfReached:         parameter.GAEyeFitnessWeightSpeedIfReached,
+			tracking.MetricTicksAlive:    parameter.GAEyeFitnessWeightSurvival,
 		},
 		Normalizers: map[string]fitness.NormalizeFunc{
-			// Inverse: fewer ticks = higher fitness (eye should arrive fast)
-			tracking.MetricTicksAlive: fitness.NormalizeInverse(float64(parameter.GAEyeFitnessMaxTicks)),
-			// Inverse: closer average distance = higher fitness
-			"avg_" + metricDistanceSq: fitness.NormalizeInverse(200.0),
-			// MetricDeathAtTarget: no normalizer needed (already 0 or 1)
+			// Survival: longer life = higher fitness, capped
+			tracking.MetricTicksAlive: fitness.NormalizeCap(parameter.GAEyeFitnessSurvivalCap),
+			// speed_if_reached: pre-computed in completeTracking, no normalizer
+			// MetricDeathAtTarget: already 0/1
 		},
 	}
 }
@@ -272,6 +276,8 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		switch speciesType {
 		case component.SpeciesEye:
 			if len(genes) >= geneEyeCount {
+				navComp.BudgetMultiplier = vmath.FromFloat(genes[geneEyeBudgetMultiplier])
+				navComp.ExplorationBias = vmath.FromFloat(genes[geneEyeExplorationBias])
 				navComp.FlowLookahead = vmath.FromFloat(genes[geneEyeFlowLookahead])
 			}
 		}
@@ -301,6 +307,13 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		isComposite:   isComposite,
 		targetGroupID: groupID,
 	}
+
+	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
+		Genes:     genes,
+		EvalID:    evalID,
+		Species:   speciesType,
+		SpawnTime: s.world.Resources.Time.GameTime,
+	})
 }
 
 func (s *GeneticSystem) Update() {
@@ -392,6 +405,14 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathAtCursor b
 	}
 
 	snapshot := tracked.collector.Finalize(deathCondition)
+
+	// Derived metric: speed gated by target reach
+	// Non-reachers get 0, reachers get inverse-tick score
+	reachedVal := snapshot.Get(tracking.MetricDeathAtTarget, 0)
+	ticksVal := snapshot.Get(tracking.MetricTicksAlive, 0)
+	speedScore := 1.0 / (1.0 + ticksVal/float64(parameter.GAEyeFitnessMaxTicks))
+	snapshot[metricSpeedIfReached] = reachedVal * speedScore
+
 	ctx := s.playerModel.context()
 
 	ts := s.registry.GetTracker(registry.SpeciesID(tracked.species))

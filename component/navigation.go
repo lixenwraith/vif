@@ -17,9 +17,18 @@ type NavigationComponent struct {
 	Width  int
 	Height int
 
-	// GA-optimized parameters (Q32.32)
+	// Band routing genes (Q32.32, written by GeneticSystem)
 
-	// FlowLookahead: flow field projection distance (Q32.32 cells)
+	// BudgetMultiplier: max acceptable distance as ratio of optimal
+	// Scale (1.0) = optimal only, 2.0*Scale = accepts paths up to 2× optimal length
+	BudgetMultiplier int64
+
+	// ExplorationBias: among valid band neighbors, preference toward divergent vs progressive paths
+	// 0 = prefer progress toward target, Scale (1.0) = prefer maximum divergence within budget
+	ExplorationBias int64
+
+	// FlowLookahead: aspect-weighted distance threshold below which band routing disables
+	// Entity converges via optimal flow within this distance of target (Q32.32)
 	FlowLookahead int64
 }
 

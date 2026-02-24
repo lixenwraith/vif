@@ -365,7 +365,13 @@ func (s *NavigationSystem) Update() {
 		isComposite := navComp.Width > 1 || navComp.Height > 1
 
 		if isComposite {
-			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
+			// Band routing: only active when BudgetMultiplier explicitly set above 1.0 (Scale)
+			// Non-GA species retain zero-value (0), always taking optimal flow path
+			if navComp.BudgetMultiplier > vmath.Scale {
+				navComp.FlowX, navComp.FlowY = s.getBandRoutedDirection(preciseX, preciseY, navComp, group.compositeFlowCache)
+			} else {
+				navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
+			}
 		} else {
 			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.pointFlowCache)
 		}
@@ -607,4 +613,91 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, cache *navigation.
 		return 0, 0, false
 	}
 	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
+}
+
+// getBandRoutedDirection selects direction within a distance budget around the optimal path
+// Entities accept any neighbor within BudgetMultiplier × current distance, scored by ExplorationBias
+// Falls back to optimal interpolated flow when near target (FlowLookahead) or no valid band neighbors
+// O(16) per call: two passes over 8 neighbors, zero allocations
+func (s *NavigationSystem) getBandRoutedDirection(
+	preciseX, preciseY int64,
+	navComp component.NavigationComponent,
+	cache *navigation.FlowFieldCache,
+) (int64, int64) {
+	gridX := vmath.ToInt(preciseX)
+	gridY := vmath.ToInt(preciseY)
+
+	currentDist := cache.GetDistance(gridX, gridY)
+
+	// Unreachable or blocked: escape to best passable neighbor
+	if currentDist < 0 {
+		escDir := s.findBestNeighborDirection(gridX, gridY, cache)
+		if escDir < 0 || escDir >= navigation.DirCount {
+			return 0, 0
+		}
+		return flowDirLUT[escDir][0], flowDirLUT[escDir][1]
+	}
+
+	// Within convergence zone: disable band routing, use optimal interpolated flow
+	if currentDist <= vmath.ToInt(navComp.FlowLookahead) {
+		return s.getCompositeFlowDirection(preciseX, preciseY, cache)
+	}
+
+	// Distance budget: currentDist × BudgetMultiplier (Q32.32 → integer)
+	maxDist := int((int64(currentDist) * navComp.BudgetMultiplier) >> 32)
+
+	// Pass 1: find optimal (minimum) reachable neighbor distance for scoring reference
+	const distSentinel = 1 << 30
+	optimalNeighborDist := distSentinel
+	for d := int8(0); d < navigation.DirCount; d++ {
+		nx := gridX + navigation.DirVectors[d][0]
+		ny := gridY + navigation.DirVectors[d][1]
+		nd := cache.GetDistance(nx, ny)
+		if nd >= 0 && nd < optimalNeighborDist {
+			optimalNeighborDist = nd
+		}
+	}
+
+	// No reachable neighbors at all
+	if optimalNeighborDist >= distSentinel {
+		return s.getCompositeFlowDirection(preciseX, preciseY, cache)
+	}
+
+	// Pass 2: score valid neighbors within budget
+	// score = (Scale - ExplorationBias) × progressScore + ExplorationBias × exploreScore
+	// progressScore: how much closer than current (positive = toward target)
+	// exploreScore: how much farther than optimal neighbor (positive = more divergent)
+	invBias := vmath.Scale - navComp.ExplorationBias
+	bias := navComp.ExplorationBias
+
+	bestDir := int8(-1)
+	var bestScore int64 = -(1 << 62)
+
+	for d := int8(0); d < navigation.DirCount; d++ {
+		nx := gridX + navigation.DirVectors[d][0]
+		ny := gridY + navigation.DirVectors[d][1]
+		nd := cache.GetDistance(nx, ny)
+		if nd < 0 {
+			continue // blocked or unreachable
+		}
+		if nd > maxDist {
+			continue // exceeds distance budget
+		}
+
+		progressScore := int64(currentDist - nd)
+		exploreScore := int64(nd - optimalNeighborDist)
+
+		score := progressScore*invBias + exploreScore*bias
+		if score > bestScore {
+			bestScore = score
+			bestDir = d
+		}
+	}
+
+	// No valid band neighbors: fall back to optimal flow
+	if bestDir < 0 {
+		return s.getCompositeFlowDirection(preciseX, preciseY, cache)
+	}
+
+	return flowDirLUT[bestDir][0], flowDirLUT[bestDir][1]
 }

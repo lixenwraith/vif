@@ -154,7 +154,7 @@ func (s *EyeSystem) Update() {
 		s.updateHomingMovement(headerEntity, &eyeComp, &combatComp, dtFixed)
 
 		// Physics integration and member position sync
-		s.integrateAndSync(headerEntity, &eyeComp, dtFixed)
+		s.integrateAndSync(headerEntity, dtFixed)
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {
@@ -290,9 +290,11 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 
 	// Navigation (single consolidated write, includes path diversity defaults)
 	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
-		Width:         parameter.EyeWidth,
-		Height:        parameter.EyeHeight,
-		FlowLookahead: parameter.NavFlowLookaheadDefault,
+		Width:            parameter.EyeWidth,
+		Height:           parameter.EyeHeight,
+		FlowLookahead:    parameter.NavFlowLookaheadDefault,
+		BudgetMultiplier: parameter.EyeNavBudgetMultiplierDefault,
+		ExplorationBias:  parameter.EyeNavExplorationBiasDefault,
 	})
 
 	// Combat
@@ -407,7 +409,7 @@ func (s *EyeSystem) updateHomingMovement(headerEntity core.Entity, eyeComp *comp
 	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
-func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, eyeComp *component.EyeComponent, dtFixed int64) {
+func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) {
 	config := s.world.Resources.Config
 
 	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)

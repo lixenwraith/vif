@@ -30,11 +30,10 @@ const (
 	EyeContactCheckDistSq = 100
 )
 
-// Navigation
+// Navigation — band routing spawn defaults (pre-GA override)
 var (
-	// Pre-GA defaults for eye composites; GA overrides on tracking start
-	EyeNavPathDeviationDefault = vmath.FromFloat(0.05)
-	EyeNavFlowBlendDefault     = vmath.FromFloat(0.15)
+	EyeNavBudgetMultiplierDefault = vmath.FromFloat(1.3)
+	EyeNavExplorationBiasDefault  = vmath.FromFloat(0.3)
 )
 
 var EyeRestitution = vmath.FromFloat(EyeRestitutionFloat)
