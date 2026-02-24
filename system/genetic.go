@@ -338,10 +338,19 @@ func (s *GeneticSystem) processPendingDeaths() {
 		// Target-reach detection: proximity-based for group targets, exact for cursor
 		deathAtTarget := false
 		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-		if groupState.Valid {
-			dx := death.X - groupState.PosX
-			dy := death.Y - groupState.PosY
-			deathAtTarget = dx*dx+dy*dy <= parameter.GAEyeReachedTargetDistSq
+		if groupState.Valid && groupState.Count > 0 {
+			bestDistSq := -1
+			for i := 0; i < groupState.Count; i++ {
+				dx := death.X - groupState.Targets[i].PosX
+				dy := death.Y - groupState.Targets[i].PosY
+				distSq := dx*dx + dy*dy
+				if bestDistSq == -1 || distSq < bestDistSq {
+					bestDistSq = distSq
+				}
+			}
+			if bestDistSq != -1 && bestDistSq <= parameter.GAEyeReachedTargetDistSq {
+				deathAtTarget = true
+			}
 		}
 
 		s.completeTracking(tracked, deathAtTarget)
@@ -370,16 +379,22 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 
 		// Resolve target position from entity's target group
 		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-		if !groupState.Valid {
+		if !groupState.Valid || groupState.Count == 0 {
 			continue
 		}
-		targetX, targetY := groupState.PosX, groupState.PosY
 
-		dx := float64(pos.X - targetX)
-		dy := float64(pos.Y - targetY)
+		bestDistSq := -1.0
+		for i := 0; i < groupState.Count; i++ {
+			dx := float64(pos.X - groupState.Targets[i].PosX)
+			dy := float64(pos.Y - groupState.Targets[i].PosY)
+			distSq := dx*dx + dy*dy
+			if bestDistSq < 0 || distSq < bestDistSq {
+				bestDistSq = distSq
+			}
+		}
 
 		metrics := tracking.MetricBundle{
-			metricDistanceSq: dx*dx + dy*dy,
+			metricDistanceSq: bestDistSq,
 		}
 
 		// Composite entities: track live member count from HeaderComponent

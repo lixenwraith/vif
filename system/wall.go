@@ -727,6 +727,11 @@ func (s *WallSystem) getMaskForEntity(entity core.Entity) component.WallBlockMas
 	if s.world.Components.Decay.HasEntity(entity) || s.world.Components.Blossom.HasEntity(entity) {
 		return component.WallBlockParticle
 	}
+	// TODO: test with all species
+	// Phantom heads are non-physical anchors, not subject to wall displacement
+	if s.world.Components.Header.HasEntity(entity) {
+		return component.WallBlockNone
+	}
 	return component.WallBlockSpawn
 }
 

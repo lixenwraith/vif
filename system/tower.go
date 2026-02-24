@@ -202,9 +202,10 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 	members := s.createDiscMembers(headerEntity, cursorEntity, centerX, centerY, radiusX, radiusY, minHP, maxHP)
 
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
-		Behavior:      component.BehaviorTower,
-		Type:          component.CompositeTypeAblative,
-		MemberEntries: members,
+		Behavior:         component.BehaviorTower,
+		Type:             component.CompositeTypeAblative,
+		MemberEntries:    members,
+		SkipPositionSync: true, // Stationary; spawn positions authoritative
 	})
 
 	if payload.TargetGroupID > 0 {

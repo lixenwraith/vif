@@ -495,12 +495,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 	}
 
 	state := s.world.Resources.Target.GetGroup(groupID)
-	if !state.Valid || state.Type != component.TargetEntity {
-		return false
-	}
-
-	targetEntity := state.Entity
-	if targetEntity == 0 || !s.world.Components.Combat.HasEntity(targetEntity) {
+	if !state.Valid || state.Count == 0 || state.Type != component.TargetEntity {
 		return false
 	}
 
@@ -511,60 +506,66 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 
 	radiusSq := parameter.EyeSelfDestructRadiusSq
 
-	// Composite target: check any member within explosion radius
-	if targetHeader, ok := s.world.Components.Header.GetComponent(targetEntity); ok {
-		var hitMembers []core.Entity
-		for _, member := range targetHeader.MemberEntries {
-			if member.Entity == 0 {
-				continue
+	for i := 0; i < state.Count; i++ {
+		targetEntity := state.Targets[i].Entity
+		if targetEntity == 0 || !s.world.Components.Combat.HasEntity(targetEntity) {
+			continue
+		}
+
+		// Composite target: check any member within explosion radius
+		if targetHeader, ok := s.world.Components.Header.GetComponent(targetEntity); ok {
+			var hitMembers []core.Entity
+			for _, member := range targetHeader.MemberEntries {
+				if member.Entity == 0 {
+					continue
+				}
+				memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+				if !ok {
+					continue
+				}
+				dx := eyePos.X - memberPos.X
+				dy := eyePos.Y - memberPos.Y
+				if dx*dx+dy*dy <= radiusSq {
+					hitMembers = append(hitMembers, member.Entity)
+				}
 			}
-			memberPos, ok := s.world.Positions.GetPosition(member.Entity)
+
+			if len(hitMembers) > 0 {
+				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+					AttackType:   component.CombatAttackSelfDestruct,
+					OwnerEntity:  headerEntity,
+					OriginEntity: headerEntity,
+					TargetEntity: targetEntity,
+					HitEntities:  hitMembers,
+					OriginX:      eyePos.X,
+					OriginY:      eyePos.Y,
+				})
+				return true
+			}
+		} else {
+			// Simple entity: distance check
+			targetPos, ok := s.world.Positions.GetPosition(targetEntity)
 			if !ok {
 				continue
 			}
-			dx := eyePos.X - memberPos.X
-			dy := eyePos.Y - memberPos.Y
+			dx := eyePos.X - targetPos.X
+			dy := eyePos.Y - targetPos.Y
 			if dx*dx+dy*dy <= radiusSq {
-				hitMembers = append(hitMembers, member.Entity)
+				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+					AttackType:   component.CombatAttackSelfDestruct,
+					OwnerEntity:  headerEntity,
+					OriginEntity: headerEntity,
+					TargetEntity: targetEntity,
+					HitEntities:  []core.Entity{targetEntity},
+					OriginX:      eyePos.X,
+					OriginY:      eyePos.Y,
+				})
+				return true
 			}
 		}
-		if len(hitMembers) == 0 {
-			return false
-		}
-
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackSelfDestruct,
-			OwnerEntity:  headerEntity,
-			OriginEntity: headerEntity,
-			TargetEntity: targetEntity,
-			HitEntities:  hitMembers,
-			OriginX:      eyePos.X,
-			OriginY:      eyePos.Y,
-		})
-		return true
 	}
 
-	// Simple entity: distance check
-	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
-	if !ok {
-		return false
-	}
-	dx := eyePos.X - targetPos.X
-	dy := eyePos.Y - targetPos.Y
-	if dx*dx+dy*dy > radiusSq {
-		return false
-	}
-
-	s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-		AttackType:   component.CombatAttackSelfDestruct,
-		OwnerEntity:  headerEntity,
-		OriginEntity: headerEntity,
-		TargetEntity: targetEntity,
-		HitEntities:  []core.Entity{targetEntity},
-		OriginX:      eyePos.X,
-		OriginY:      eyePos.Y,
-	})
-	return true
+	return false
 }
 
 // === Interactions ===

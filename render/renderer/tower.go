@@ -102,8 +102,13 @@ func (r *TowerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 func (r *TowerRenderer) isActiveTarget(headerEntity core.Entity) bool {
 	for i := range r.gameCtx.World.Resources.Target.Groups {
 		g := &r.gameCtx.World.Resources.Target.Groups[i]
-		if g.Valid && g.Type == component.TargetEntity && g.Entity == headerEntity {
-			return true
+		if !g.Valid || g.Type != component.TargetEntity {
+			continue
+		}
+		for j := 0; j < g.Count; j++ {
+			if g.Targets[j].Entity == headerEntity {
+				return true
+			}
 		}
 	}
 	return false
@@ -115,6 +120,56 @@ func clampVisualType(vt component.TowerType) int {
 		return 0
 	}
 	return int(vt)
+}
+
+// calculateTowerMemberMetrics centralizes the distance and relative HP math shared across all color modes
+func calculateTowerMemberMetrics(towerComp *component.TowerComponent, memberHP, offsetX, offsetY int) (healthRatio, normDist float64) {
+	radiusX := float64(towerComp.RadiusX)
+	radiusY := float64(towerComp.RadiusY)
+	if radiusX < 1 {
+		radiusX = 1
+	}
+	if radiusY < 1 {
+		radiusY = 1
+	}
+
+	invRxSq := 1.0 / (radiusX * radiusX)
+	invRySq := 1.0 / (radiusY * radiusY)
+
+	dx := float64(offsetX)
+	dy := float64(offsetY)
+	normDistSq := dx*dx*invRxSq + dy*dy*invRySq
+	normDist = math.Sqrt(normDistSq)
+
+	minHP := towerComp.MinHP
+	maxHP := towerComp.MaxHP
+	hpRange := maxHP - minHP
+
+	var initialHP int
+	if hpRange > 0 {
+		nd := normDist
+		if nd > 1.0 {
+			nd = 1.0
+		}
+		initialHP = maxHP - int(float64(hpRange)*nd)
+	} else {
+		initialHP = maxHP
+	}
+	if initialHP < minHP {
+		initialHP = minHP
+	}
+	if initialHP <= 0 {
+		initialHP = 1
+	}
+
+	healthRatio = float64(memberHP) / float64(initialHP)
+	if healthRatio > 1.0 {
+		healthRatio = 1.0
+	} else if healthRatio < 0.0 {
+		healthRatio = 0.0
+	}
+
+	return healthRatio, normDist
 }
 
 // === TrueColor ===
@@ -247,22 +302,6 @@ func (r *TowerRenderer) renderMembersTrueColor(
 	headerComp *component.HeaderComponent,
 	visualType int,
 ) {
-	radiusX := float64(towerComp.RadiusX)
-	radiusY := float64(towerComp.RadiusY)
-	if radiusX < 1 {
-		radiusX = 1
-	}
-	if radiusY < 1 {
-		radiusY = 1
-	}
-
-	invRxSq := 1.0 / (radiusX * radiusX)
-	invRySq := 1.0 / (radiusY * radiusY)
-
-	minHP := towerComp.MinHP
-	maxHP := towerComp.MaxHP
-	hpRange := maxHP - minHP
-
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity == 0 {
 			continue
@@ -283,34 +322,7 @@ func (r *TowerRenderer) renderMembersTrueColor(
 			continue
 		}
 
-		dx := float64(member.OffsetX)
-		dy := float64(member.OffsetY)
-		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
-		normDist := math.Sqrt(normDistSq)
-
-		var initialHP int
-		if hpRange > 0 {
-			if normDist > 1.0 {
-				normDist = 1.0
-			}
-			initialHP = maxHP - int(float64(hpRange)*normDist)
-		} else {
-			initialHP = maxHP
-		}
-		if initialHP < minHP {
-			initialHP = minHP
-		}
-		if initialHP <= 0 {
-			initialHP = 1
-		}
-
-		healthRatio := float64(combatComp.HitPoints) / float64(initialHP)
-		if healthRatio > 1.0 {
-			healthRatio = 1.0
-		}
-		if healthRatio < 0.0 {
-			healthRatio = 0.0
-		}
+		healthRatio, normDist := calculateTowerMemberMetrics(towerComp, combatComp.HitPoints, member.OffsetX, member.OffsetY)
 
 		positionBrightness := 1.0 - visual.TowerEdgeDimFactor*normDist
 		if positionBrightness < visual.TowerEdgeBrightnessMin {
@@ -354,22 +366,6 @@ func (r *TowerRenderer) renderMembers256Color(
 	headerComp *component.HeaderComponent,
 	visualType int,
 ) {
-	radiusX := float64(towerComp.RadiusX)
-	radiusY := float64(towerComp.RadiusY)
-	if radiusX < 1 {
-		radiusX = 1
-	}
-	if radiusY < 1 {
-		radiusY = 1
-	}
-
-	invRxSq := 1.0 / (radiusX * radiusX)
-	invRySq := 1.0 / (radiusY * radiusY)
-
-	minHP := towerComp.MinHP
-	maxHP := towerComp.MaxHP
-	hpRange := maxHP - minHP
-
 	tc := &visual.TowerTypes[visualType]
 
 	for _, member := range headerComp.MemberEntries {
@@ -392,31 +388,7 @@ func (r *TowerRenderer) renderMembers256Color(
 			continue
 		}
 
-		dx := float64(member.OffsetX)
-		dy := float64(member.OffsetY)
-		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
-		normDist := math.Sqrt(normDistSq)
-
-		var initialHP int
-		if hpRange > 0 {
-			if normDist > 1.0 {
-				normDist = 1.0
-			}
-			initialHP = maxHP - int(float64(hpRange)*normDist)
-		} else {
-			initialHP = maxHP
-		}
-		if initialHP < minHP {
-			initialHP = minHP
-		}
-		if initialHP <= 0 {
-			initialHP = 1
-		}
-
-		healthRatio := float64(combatComp.HitPoints) / float64(initialHP)
-		if healthRatio > 1.0 {
-			healthRatio = 1.0
-		}
+		healthRatio, _ := calculateTowerMemberMetrics(towerComp, combatComp.HitPoints, member.OffsetX, member.OffsetY)
 
 		var paletteIdx uint8
 		switch {
@@ -458,22 +430,6 @@ func (r *TowerRenderer) renderMembersBasicColor(
 	headerComp *component.HeaderComponent,
 	visualType int,
 ) {
-	radiusX := float64(towerComp.RadiusX)
-	radiusY := float64(towerComp.RadiusY)
-	if radiusX < 1 {
-		radiusX = 1
-	}
-	if radiusY < 1 {
-		radiusY = 1
-	}
-
-	invRxSq := 1.0 / (radiusX * radiusX)
-	invRySq := 1.0 / (radiusY * radiusY)
-
-	minHP := towerComp.MinHP
-	maxHP := towerComp.MaxHP
-	hpRange := maxHP - minHP
-
 	tc := &visual.TowerTypes[visualType]
 
 	for _, member := range headerComp.MemberEntries {
@@ -496,31 +452,7 @@ func (r *TowerRenderer) renderMembersBasicColor(
 			continue
 		}
 
-		dx := float64(member.OffsetX)
-		dy := float64(member.OffsetY)
-		normDistSq := dx*dx*invRxSq + dy*dy*invRySq
-		normDist := math.Sqrt(normDistSq)
-
-		var initialHP int
-		if hpRange > 0 {
-			if normDist > 1.0 {
-				normDist = 1.0
-			}
-			initialHP = maxHP - int(float64(hpRange)*normDist)
-		} else {
-			initialHP = maxHP
-		}
-		if initialHP < minHP {
-			initialHP = minHP
-		}
-		if initialHP <= 0 {
-			initialHP = 1
-		}
-
-		healthRatio := float64(combatComp.HitPoints) / float64(initialHP)
-		if healthRatio > 1.0 {
-			healthRatio = 1.0
-		}
+		healthRatio, _ := calculateTowerMemberMetrics(towerComp, combatComp.HitPoints, member.OffsetX, member.OffsetY)
 
 		var colorIdx uint8
 		switch {

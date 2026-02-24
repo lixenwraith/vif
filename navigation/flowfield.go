@@ -1,5 +1,9 @@
 package navigation
 
+import (
+	"github.com/lixenwraith/vi-fighter/core"
+)
+
 // Direction constants for flow field
 // Index into NavSenseDirections: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7
 const (
@@ -198,18 +202,13 @@ func (f *FlowField) GetDistance(x, y int) int {
 // WallChecker is a function that returns true if cell blocks navigation
 type WallChecker func(x, y int) bool
 
-// Compute performs weighted Dijkstra from target across the entire valid field
-// ROI spatial limits are bypassed here because valid maze paths frequently exit geometric bounding boxes
-func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
-	if targetX < 0 || targetY < 0 || targetX >= f.Width || targetY >= f.Height {
+// Compute performs weighted Dijkstra from all target points across the entire valid field
+func (f *FlowField) Compute(targets []core.Point, isBlocked WallChecker) {
+	if len(targets) == 0 {
 		f.Valid = false
 		return
 	}
 
-	// Always use full grid bounds for path computation
-	// Bounding pathfinding with an AABB in non-convex geometry blocks valid paths
-
-	// Increment generation (zero-allocation reset)
 	w := f.Width
 	f.CurrentGen++
 	if f.CurrentGen == 0 {
@@ -221,15 +220,23 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
 
 	f.heap = f.heap[:0]
 
-	// Seed target(s): if exact target is blocked, find nearby passable cells
-	targetIdx := targetY*w + targetX
-	if !isBlocked(targetX, targetY) {
-		f.Distances[targetIdx] = 0
-		f.VisitedGen[targetIdx] = f.CurrentGen
-		f.Directions[targetIdx] = DirTarget
-		f.heap.push(heapEntry{idx: targetIdx, dist: 0})
-	} else {
-		f.seedVirtualTargets(targetX, targetY, isBlocked)
+	// Seed all valid targets
+	for _, t := range targets {
+		if t.X < 0 || t.Y < 0 || t.X >= f.Width || t.Y >= f.Height {
+			continue
+		}
+
+		targetIdx := t.Y*w + t.X
+		if !isBlocked(t.X, t.Y) {
+			if f.VisitedGen[targetIdx] != f.CurrentGen {
+				f.Distances[targetIdx] = 0
+				f.VisitedGen[targetIdx] = f.CurrentGen
+				f.Directions[targetIdx] = DirTarget
+				f.heap.push(heapEntry{idx: targetIdx, dist: 0})
+			}
+		} else {
+			f.seedVirtualTargets(t.X, t.Y, isBlocked)
+		}
 	}
 
 	if len(f.heap) == 0 {
@@ -261,7 +268,6 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
 				continue
 			}
 
-			// Diagonal corner cutting prevention
 			dx, dy := DirVectors[dirIdx][0], DirVectors[dirIdx][1]
 			if dx != 0 && dy != 0 {
 				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
@@ -275,16 +281,12 @@ func (f *FlowField) Compute(targetX, targetY int, isBlocked WallChecker) {
 			if f.VisitedGen[nIdx] != f.CurrentGen || newDist < f.Distances[nIdx] {
 				f.Distances[nIdx] = newDist
 				f.VisitedGen[nIdx] = f.CurrentGen
-				// Magic: O(1) assignment. The shortest path to the target goes through `cx`.
-				// The optimal flow vector from `nx` points exactly opposite to the expansion vector
 				f.Directions[nIdx] = DirOpposite[dirIdx]
 				f.heap.push(heapEntry{idx: nIdx, dist: newDist})
 			}
 		}
 	}
 
-	f.TargetX = targetX
-	f.TargetY = targetY
 	f.Valid = true
 }
 

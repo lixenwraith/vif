@@ -138,13 +138,22 @@ func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
 }
 
-// TargetGroupState holds resolved navigation target for a group
-type TargetGroupState struct {
-	Type   component.TargetType
-	Entity core.Entity // Source entity for TargetEntity type
-	PosX   int         // Fixed position or resolved position
+// MaxTargetsPerGroup sets the hard limit for concurrent anchors in a single target group
+const MaxTargetsPerGroup = 8
+
+// TargetData holds coordinates and entity ID for a single target instance
+type TargetData struct {
+	Entity core.Entity
+	PosX   int
 	PosY   int
-	Valid  bool // False if target entity destroyed or uninitialized
+}
+
+// TargetGroupState holds resolved navigation targets for a group
+type TargetGroupState struct {
+	Type    component.TargetType
+	Targets [MaxTargetsPerGroup]TargetData
+	Count   int
+	Valid   bool // False if target entity destroyed or uninitialized
 }
 
 // TargetResource provides per-group target resolution accessible by all systems

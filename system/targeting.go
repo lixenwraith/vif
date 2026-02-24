@@ -309,7 +309,7 @@ func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, from
 	return best, bestX, bestY, true
 }
 
-// resolveBaseTarget returns the grid-coordinate target for an entity based on its group
+// resolveBaseTarget returns the closest grid-coordinate target for an entity based on its group
 // Falls back to cursor position for group 0 or uninitialized groups
 func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid bool) {
 	groupID := uint8(0)
@@ -318,15 +318,41 @@ func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid boo
 	}
 
 	state := w.Resources.Target.GetGroup(groupID)
-	if state.Valid {
-		return state.PosX, state.PosY, true
+	if !state.Valid || state.Count == 0 {
+		// Fallback: cursor
+		if pos, ok := w.Positions.GetPosition(w.Resources.Player.Entity); ok {
+			return pos.X, pos.Y, true
+		}
+		return 0, 0, false
 	}
 
-	// Fallback: cursor
-	if pos, ok := w.Positions.GetPosition(w.Resources.Player.Entity); ok {
-		return pos.X, pos.Y, true
+	if state.Count == 1 {
+		return state.Targets[0].PosX, state.Targets[0].PosY, true
 	}
-	return 0, 0, false
+
+	// Pick Euclidean closest target to entity
+	var ex, ey int
+	if pos, ok := w.Positions.GetPosition(entity); ok {
+		ex, ey = pos.X, pos.Y
+	} else {
+		return state.Targets[0].PosX, state.Targets[0].PosY, true
+	}
+
+	bestDistSq := -1
+	bestX, bestY := state.Targets[0].PosX, state.Targets[0].PosY
+
+	for i := 0; i < state.Count; i++ {
+		t := state.Targets[i]
+		dx := ex - t.PosX
+		dy := ey - t.PosY
+		distSq := dx*dx + dy*dy
+		if bestDistSq == -1 || distSq < bestDistSq {
+			bestDistSq = distSq
+			bestX, bestY = t.PosX, t.PosY
+		}
+	}
+
+	return bestX, bestY, true
 }
 
 // ResolveMovementTarget computes the effective homing target for a kinetic entity

@@ -234,9 +234,10 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 
 	// Header component
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
-		Behavior:      component.BehaviorPylon,
-		Type:          component.CompositeTypeAblative,
-		MemberEntries: members,
+		Behavior:         component.BehaviorPylon,
+		Type:             component.CompositeTypeAblative,
+		MemberEntries:    members,
+		SkipPositionSync: true,
 	})
 
 	// Emit creation events

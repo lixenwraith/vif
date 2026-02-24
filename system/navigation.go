@@ -277,13 +277,18 @@ func (s *NavigationSystem) Update() {
 		}
 
 		groupID := s.getEntityGroup(entity)
-		groupExists := false
-		if _, groupExists = s.groups[groupID]; !groupExists {
+		if _, groupExists := s.groups[groupID]; !groupExists {
 			groupID = 0
 		}
 
 		groupState := s.world.Resources.Target.GetGroup(groupID)
-		if !groupState.Valid {
+		if !groupState.Valid || groupState.Count == 0 {
+			continue
+		}
+
+		// Retrieve closest target coordinate dynamically
+		targetX, targetY, validTarget := resolveBaseTarget(s.world, entity)
+		if !validTarget {
 			continue
 		}
 
@@ -307,9 +312,9 @@ func (s *NavigationSystem) Update() {
 
 		hasLOS := false
 		if !isComposite {
-			hasLOS = s.world.Positions.HasLineOfSight(gridX, gridY, groupState.PosX, groupState.PosY, component.WallBlockKinetic)
+			hasLOS = s.world.Positions.HasLineOfSight(gridX, gridY, targetX, targetY, component.WallBlockKinetic)
 		} else {
-			hasLOS = s.world.Positions.HasAreaLineOfSightRotatable(gridX, gridY, groupState.PosX, groupState.PosY, width, height, component.WallBlockKinetic)
+			hasLOS = s.world.Positions.HasAreaLineOfSightRotatable(gridX, gridY, targetX, targetY, width, height, component.WallBlockKinetic)
 		}
 
 		if hasLOS {
@@ -324,17 +329,24 @@ func (s *NavigationSystem) Update() {
 
 	// Phase 2: Update flow fields
 	totalRecomputes := int64(0)
+	var targetsBuffer [engine.MaxTargetsPerGroup]core.Point
+
 	for groupID, g := range s.groups {
 		groupState := s.world.Resources.Target.GetGroup(groupID)
-		if !groupState.Valid {
+		if !groupState.Valid || groupState.Count == 0 {
 			continue
 		}
 
-		if recomputed := g.pointFlowCache.Update(groupState.PosX, groupState.PosY, isBlockedPoint); recomputed {
+		for i := 0; i < groupState.Count; i++ {
+			targetsBuffer[i] = core.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
+		}
+		targetsSlice := targetsBuffer[:groupState.Count]
+
+		if recomputed := g.pointFlowCache.Update(targetsSlice, isBlockedPoint); recomputed {
 			totalRecomputes++
 		}
 
-		if recomputed := g.compositeFlowCache.Update(groupState.PosX, groupState.PosY, isBlockedComposite); recomputed {
+		if recomputed := g.compositeFlowCache.Update(targetsSlice, isBlockedComposite); recomputed {
 			totalRecomputes++
 		}
 	}
@@ -365,8 +377,6 @@ func (s *NavigationSystem) Update() {
 		isComposite := navComp.Width > 1 || navComp.Height > 1
 
 		if isComposite {
-			// Band routing: only active when BudgetMultiplier explicitly set above 1.0 (Scale)
-			// Non-GA species retain zero-value (0), always taking optimal flow path
 			if navComp.BudgetMultiplier > vmath.Scale {
 				navComp.FlowX, navComp.FlowY = s.getBandRoutedDirection(preciseX, preciseY, navComp, group.compositeFlowCache)
 			} else {
@@ -389,13 +399,13 @@ func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePay
 	g.pointFlowCache.MarkDirty()
 	g.compositeFlowCache.MarkDirty()
 
-	s.world.Resources.Target.SetGroup(payload.GroupID, engine.TargetGroupState{
-		Type:   payload.Type,
-		Entity: payload.Entity,
-		PosX:   payload.PosX,
-		PosY:   payload.PosY,
-		Valid:  true,
-	})
+	var state engine.TargetGroupState
+	state.Type = payload.Type
+	state.Valid = true
+	state.Count = 1
+	state.Targets[0] = engine.TargetData{Entity: payload.Entity, PosX: payload.PosX, PosY: payload.PosY}
+
+	s.world.Resources.Target.SetGroup(payload.GroupID, state)
 }
 
 func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
@@ -433,16 +443,16 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	if s.cursorValid {
 		tr.Groups[0] = engine.TargetGroupState{
 			Type:  component.TargetCursor,
-			PosX:  s.cursorX,
-			PosY:  s.cursorY,
+			Count: 1,
 			Valid: true,
 		}
+		tr.Groups[0].Targets[0] = engine.TargetData{PosX: s.cursorX, PosY: s.cursorY}
 	}
 
 	// Scan TargetAnchor components — entity-based group registration
-	// Anchors override any previous entity-type assignment for their group
 	anchorEntities := s.world.Components.TargetAnchor.GetAllEntities()
 	anchoredGroups := make(map[uint8]bool, len(anchorEntities))
+	var groupCounts [component.MaxTargetGroups]int
 
 	for _, entity := range anchorEntities {
 		anchor, ok := s.world.Components.TargetAnchor.GetComponent(entity)
@@ -452,49 +462,50 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
-			// Entity destroyed or position removed — invalidate
-			tr.Groups[anchor.GroupID] = engine.TargetGroupState{Valid: false}
-			anchoredGroups[anchor.GroupID] = true
 			continue
 		}
 
-		// Ensure flow caches exist for anchored groups so fallback logic doesn't route to cursor
+		// Ensure flow caches exist for anchored groups
 		s.getOrCreateGroup(anchor.GroupID)
 
-		tr.Groups[anchor.GroupID] = engine.TargetGroupState{
-			Type:   component.TargetEntity,
-			Entity: entity,
-			PosX:   pos.X,
-			PosY:   pos.Y,
-			Valid:  true,
+		if groupCounts[anchor.GroupID] < engine.MaxTargetsPerGroup {
+			idx := groupCounts[anchor.GroupID]
+			tr.Groups[anchor.GroupID].Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
+			tr.Groups[anchor.GroupID].Type = component.TargetEntity
+			tr.Groups[anchor.GroupID].Valid = true
+			groupCounts[anchor.GroupID]++
 		}
 		anchoredGroups[anchor.GroupID] = true
 	}
 
-	// Resolve non-anchored groups (event-assigned via EventTargetGroupUpdate)
+	// Resolve non-anchored groups and clean up obsolete anchors
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
 		if anchoredGroups[groupID] {
-			continue // Anchor takes precedence
+			tr.Groups[groupID].Count = groupCounts[groupID]
+			if tr.Groups[groupID].Count == 0 {
+				tr.Groups[groupID].Valid = false
+			}
+			continue
 		}
 
 		state := tr.Groups[groupID]
-		if !state.Valid {
+		if !state.Valid || state.Count == 0 {
 			continue
 		}
 
 		switch state.Type {
 		case component.TargetEntity:
-			if pos, ok := s.world.Positions.GetPosition(state.Entity); ok {
-				state.PosX = pos.X
-				state.PosY = pos.Y
+			if pos, ok := s.world.Positions.GetPosition(state.Targets[0].Entity); ok {
+				state.Targets[0].PosX = pos.X
+				state.Targets[0].PosY = pos.Y
 			} else {
 				state.Valid = false
 			}
 			tr.Groups[groupID] = state
 
 		case component.TargetCursor:
-			state.PosX = s.cursorX
-			state.PosY = s.cursorY
+			state.Targets[0].PosX = s.cursorX
+			state.Targets[0].PosY = s.cursorY
 			tr.Groups[groupID] = state
 		}
 	}
