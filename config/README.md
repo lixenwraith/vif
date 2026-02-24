@@ -117,6 +117,41 @@ Apply bounds with `min`/`max` (optional, independent):
 { action = "SetVar", payload = { name = "level", source_var = "raw_level", min = 1, max = 99 } }
 ```
 
+### Config to Variable
+```toml
+{ action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } }
+```
+
+Reads a `ConfigResource` field value into an FSM variable at execution time. Enables dynamic position arithmetic based on runtime dimensions.
+
+Available fields (same set as `ConfigIntCompare`):
+`map_width`, `map_height`, `viewport_width`, `viewport_height`, `camera_x`, `camera_y`, `color_mode`
+
+### Nested payload_vars (Dot-Path Injection)
+
+`payload_vars` supports dot-separated paths for injecting FSM variables into
+nested struct fields and slice elements. Each path segment resolves by `toml`
+struct tag first, then Go field name. Numeric segments index into slices.
+
+**Syntax:** Keys containing dots must be quoted in TOML.
+
+```toml
+# Inject variable "cx" into Rooms[0].CenterX
+{ action = "EmitEvent", event = "EventMazeSpawnRequest",
+  payload = { rooms = [{ width = 15, height = 11 }] },
+  payload_vars = { "rooms.0.center_x" = "cx", "rooms.0.center_y" = "cy" }
+}
+```
+
+**Path resolution per segment:**
+- Struct field: matches `toml:"tag_name"`, falls back to Go field name
+- Slice index: numeric literal (0-based), must be within pre-defined slice bounds
+- Pointer: auto-dereferenced
+
+The payload slice must be pre-populated in `payload` with the correct number of
+elements. `payload_vars` overwrites individual fields; it does not append
+elements. Flat keys (no dots) behave identically to the original implementation.
+
 ### System Control
 ```toml
 { action = "EnableSystem", payload = { system_name = "name" } }

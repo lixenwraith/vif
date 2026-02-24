@@ -147,3 +147,9 @@ type StatusIntArgs struct {
 	Key   string `toml:"key"`
 	Value int64  `toml:"value"`
 }
+
+// ConfigToVarArgs holds args for reading ConfigResource fields into FSM variables
+type ConfigToVarArgs struct {
+	Field string `toml:"field"` // Config field name (same set as ConfigIntCompare)
+	Name  string `toml:"name"`  // Target FSM variable name
+}

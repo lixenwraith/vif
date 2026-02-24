@@ -10,55 +10,56 @@ import (
 // Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
 type Component struct {
-	Glyph       *Store[component.GlyphComponent]
-	Sigil       *Store[component.SigilComponent]
-	Nugget      *Store[component.NuggetComponent]
-	Cursor      *Store[component.CursorComponent]
-	Protection  *Store[component.ProtectionComponent]
-	Kinetic     *Store[component.KineticComponent]
-	Wall        *Store[component.WallComponent]
-	Loot        *Store[component.LootComponent]
-	Energy      *Store[component.EnergyComponent]
-	Heat        *Store[component.HeatComponent]
-	Shield      *Store[component.ShieldComponent]
-	Boost       *Store[component.BoostComponent]
-	Weapon      *Store[component.WeaponComponent]
-	Orb         *Store[component.OrbComponent]
-	Ping        *Store[component.PingComponent]
-	Decay       *Store[component.DecayComponent]
-	Blossom     *Store[component.BlossomComponent]
-	Cleaner     *Store[component.CleanerComponent]
-	Dust        *Store[component.DustComponent]
-	Navigation  *Store[component.NavigationComponent]
-	Combat      *Store[component.CombatComponent]
-	Genotype    *Store[component.GenotypeComponent]
-	Lightning   *Store[component.LightningComponent]
-	Missile     *Store[component.MissileComponent]
-	Pulse       *Store[component.PulseComponent]
-	Spirit      *Store[component.SpiritComponent]
-	Materialize *Store[component.MaterializeComponent]
-	Target      *Store[component.TargetComponent]
-	Drain       *Store[component.DrainComponent]
-	Quasar      *Store[component.QuasarComponent]
-	Swarm       *Store[component.SwarmComponent]
-	Storm       *Store[component.StormComponent]
-	StormCircle *Store[component.StormCircleComponent]
-	Bullet      *Store[component.BulletComponent]
-	Pylon       *Store[component.PylonComponent]
-	Snake       *Store[component.SnakeComponent]
-	SnakeHead   *Store[component.SnakeHeadComponent]
-	SnakeBody   *Store[component.SnakeBodyComponent]
-	SnakeMember *Store[component.SnakeMemberComponent]
-	Eye         *Store[component.EyeComponent]
-	Tower       *Store[component.TowerComponent]
-	Header      *Store[component.HeaderComponent]
-	Member      *Store[component.MemberComponent]
-	Flash       *Store[component.FlashComponent]
-	Fadeout     *Store[component.FadeoutComponent]
-	Splash      *Store[component.SplashComponent]
-	Marker      *Store[component.MarkerComponent]
-	Death       *Store[component.DeathComponent]
-	Timer       *Store[component.TimerComponent]
+	Glyph        *Store[component.GlyphComponent]
+	Sigil        *Store[component.SigilComponent]
+	Nugget       *Store[component.NuggetComponent]
+	Cursor       *Store[component.CursorComponent]
+	Protection   *Store[component.ProtectionComponent]
+	Kinetic      *Store[component.KineticComponent]
+	Wall         *Store[component.WallComponent]
+	Loot         *Store[component.LootComponent]
+	Energy       *Store[component.EnergyComponent]
+	Heat         *Store[component.HeatComponent]
+	Shield       *Store[component.ShieldComponent]
+	Boost        *Store[component.BoostComponent]
+	Weapon       *Store[component.WeaponComponent]
+	Orb          *Store[component.OrbComponent]
+	Ping         *Store[component.PingComponent]
+	Decay        *Store[component.DecayComponent]
+	Blossom      *Store[component.BlossomComponent]
+	Cleaner      *Store[component.CleanerComponent]
+	Dust         *Store[component.DustComponent]
+	Navigation   *Store[component.NavigationComponent]
+	Combat       *Store[component.CombatComponent]
+	Genotype     *Store[component.GenotypeComponent]
+	Lightning    *Store[component.LightningComponent]
+	Missile      *Store[component.MissileComponent]
+	Pulse        *Store[component.PulseComponent]
+	Spirit       *Store[component.SpiritComponent]
+	Materialize  *Store[component.MaterializeComponent]
+	Target       *Store[component.TargetComponent]
+	TargetAnchor *Store[component.TargetAnchorComponent]
+	Drain        *Store[component.DrainComponent]
+	Quasar       *Store[component.QuasarComponent]
+	Swarm        *Store[component.SwarmComponent]
+	Storm        *Store[component.StormComponent]
+	StormCircle  *Store[component.StormCircleComponent]
+	Bullet       *Store[component.BulletComponent]
+	Pylon        *Store[component.PylonComponent]
+	Snake        *Store[component.SnakeComponent]
+	SnakeHead    *Store[component.SnakeHeadComponent]
+	SnakeBody    *Store[component.SnakeBodyComponent]
+	SnakeMember  *Store[component.SnakeMemberComponent]
+	Eye          *Store[component.EyeComponent]
+	Tower        *Store[component.TowerComponent]
+	Header       *Store[component.HeaderComponent]
+	Member       *Store[component.MemberComponent]
+	Flash        *Store[component.FlashComponent]
+	Fadeout      *Store[component.FadeoutComponent]
+	Splash       *Store[component.SplashComponent]
+	Marker       *Store[component.MarkerComponent]
+	Death        *Store[component.DeathComponent]
+	Timer        *Store[component.TimerComponent]
 }
 
 // initComponents creates all component stores
@@ -92,6 +93,7 @@ func initComponents(w *World) {
 	w.Components.Spirit = NewStore[component.SpiritComponent]()
 	w.Components.Materialize = NewStore[component.MaterializeComponent]()
 	w.Components.Target = NewStore[component.TargetComponent]()
+	w.Components.TargetAnchor = NewStore[component.TargetAnchorComponent]()
 	w.Components.Drain = NewStore[component.DrainComponent]()
 	w.Components.Quasar = NewStore[component.QuasarComponent]()
 	w.Components.Swarm = NewStore[component.SwarmComponent]()
@@ -148,6 +150,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Spirit.RemoveEntityUnsafe(e)
 	w.Components.Materialize.RemoveEntityUnsafe(e)
 	w.Components.Target.RemoveEntityUnsafe(e)
+	w.Components.TargetAnchor.RemoveEntityUnsafe(e)
 	w.Components.Drain.RemoveEntityUnsafe(e)
 	w.Components.Quasar.RemoveEntityUnsafe(e)
 	w.Components.Swarm.RemoveEntityUnsafe(e)
@@ -203,6 +206,7 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.Spirit.RemoveBatchUnsafe(entities)
 	w.Components.Materialize.RemoveBatchUnsafe(entities)
 	w.Components.Target.RemoveBatchUnsafe(entities)
+	w.Components.TargetAnchor.RemoveBatchUnsafe(entities)
 	w.Components.Drain.RemoveBatchUnsafe(entities)
 	w.Components.Quasar.RemoveBatchUnsafe(entities)
 	w.Components.Swarm.RemoveBatchUnsafe(entities)
@@ -258,6 +262,7 @@ func (w *World) wipeAll() {
 	w.Components.Spirit.ClearAllComponentsUnsafe()
 	w.Components.Materialize.ClearAllComponentsUnsafe()
 	w.Components.Target.ClearAllComponentsUnsafe()
+	w.Components.TargetAnchor.ClearAllComponentsUnsafe()
 	w.Components.Drain.ClearAllComponentsUnsafe()
 	w.Components.Quasar.ClearAllComponentsUnsafe()
 	w.Components.Swarm.ClearAllComponentsUnsafe()

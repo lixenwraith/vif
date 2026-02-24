@@ -532,15 +532,16 @@ type MissileSpawnRequestPayload struct {
 
 // WallSpawnRequestPayload contains parameters for single wall cell creation
 type WallSpawnRequestPayload struct {
-	X         int                     `toml:"x"`
-	Y         int                     `toml:"y"`
-	BlockMask component.WallBlockMask `toml:"block_mask"`
-	Char      rune                    `toml:"char"`
-	FgColor   terminal.RGB            `toml:"fg_color"`
-	BgColor   terminal.RGB            `toml:"bg_color"`
-	RenderFg  bool                    `toml:"render_fg"`
-	RenderBg  bool                    `toml:"render_bg"`
-	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
+	X             int                     `toml:"x"`
+	Y             int                     `toml:"y"`
+	BlockMask     component.WallBlockMask `toml:"block_mask"`
+	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
+	Char          rune                    `toml:"char"`
+	FgColor       terminal.RGB            `toml:"fg_color"`
+	BgColor       terminal.RGB            `toml:"bg_color"`
+	RenderFg      bool                    `toml:"render_fg"`
+	RenderBg      bool                    `toml:"render_bg"`
+	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 }
 
 // WallBatchCollisionMode defines behavior when batch spawn encounters existing walls
@@ -570,19 +571,21 @@ type WallBatchSpawnRequestPayload struct {
 
 // WallCompositeSpawnRequestPayload contains parameters for multi-cell wall structure
 type WallCompositeSpawnRequestPayload struct {
-	X         int                     `toml:"x"` // Anchor position
-	Y         int                     `toml:"y"`
-	BlockMask component.WallBlockMask `toml:"block_mask"` // Applied to all cells
-	Cells     []component.WallCellDef `toml:"cells"`
-	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Applied to all cells
+	X             int                     `toml:"x"` // Anchor position
+	Y             int                     `toml:"y"`
+	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
+	Cells         []component.WallCellDef `toml:"cells"`
+	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Applied to all cells
 }
 
 // WallPatternSpawnRequestPayload contains parameters for pattern-based wall creation
 type WallPatternSpawnRequestPayload struct {
-	Path      string                  `toml:"path"`       // Path to .vfimg file
-	X         int                     `toml:"x"`          // Anchor X position
-	Y         int                     `toml:"y"`          // Anchor Y position
-	BlockMask component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+	Path          string                  `toml:"path"`       // Path to .vfimg file
+	X             int                     `toml:"x"`          // Anchor X position
+	Y             int                     `toml:"y"`          // Anchor Y position
+	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
 }
 
 // WallDespawnRequestPayload contains parameters for wall removal
@@ -683,6 +686,7 @@ type LevelSetupPayload struct {
 	Width         int  `toml:"width"`          // New map width in grid cells
 	Height        int  `toml:"height"`         // New map height in grid cells
 	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
 }
 
 // MazeRoomSpec defines an explicit room in maze
@@ -695,11 +699,12 @@ type MazeRoomSpec struct {
 
 // MazeSpawnRequestPayload configures maze generation
 type MazeSpawnRequestPayload struct {
-	CellWidth  int                        `toml:"cell_width"`
-	CellHeight int                        `toml:"cell_height"`
-	Braiding   float64                    `toml:"braiding"`
-	BlockMask  component.WallBlockMask    `toml:"block_mask"`
-	Visual     component.WallVisualConfig `toml:"visual"`
+	CellWidth     int                        `toml:"cell_width"`
+	CellHeight    int                        `toml:"cell_height"`
+	Braiding      float64                    `toml:"braiding"`
+	BlockMask     component.WallBlockMask    `toml:"block_mask"`
+	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
+	Visual        component.WallVisualConfig `toml:"visual"`
 	// Room generation
 	RoomCount         int            `toml:"room_count"`
 	Rooms             []MazeRoomSpec `toml:"rooms"`
@@ -801,13 +806,14 @@ type EyeDestroyedPayload struct {
 
 // TowerSpawnRequestPayload contains parameters for tower creation
 type TowerSpawnRequestPayload struct {
-	X       int                 `toml:"x"`
-	Y       int                 `toml:"y"`
-	Type    component.TowerType `toml:"type"`
-	RadiusX int                 `toml:"radius_x"`
-	RadiusY int                 `toml:"radius_y"`
-	MinHP   int                 `toml:"min_hp"` // HP at edge, when == MaxHP all members uniform
-	MaxHP   int                 `toml:"max_hp"` // HP at center
+	X             int                 `toml:"x"`
+	Y             int                 `toml:"y"`
+	Type          component.TowerType `toml:"type"`
+	RadiusX       int                 `toml:"radius_x"`
+	RadiusY       int                 `toml:"radius_y"`
+	MinHP         int                 `toml:"min_hp"`
+	MaxHP         int                 `toml:"max_hp"`
+	TargetGroupID uint8               `toml:"target_group_id"` // Navigation target group (0 = none)
 }
 
 // TowerSpawnedPayload contains tower spawn data

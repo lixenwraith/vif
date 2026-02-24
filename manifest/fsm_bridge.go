@@ -3,6 +3,8 @@ package manifest
 import (
 	"fmt"
 	"reflect"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -42,13 +44,14 @@ func registerCoreActions(m *fsm.Machine[*engine.World]) {
 }
 
 // applyPayloadVars injects FSM variable values into payload fields
+// Supports dot-path keys for nested struct/slice access: "rooms.0.center_x" = "cx"
+// Keys resolve against toml struct tags first, then Go field names at each level
 // Returns a modified copy of the payload (original unchanged)
 func applyPayloadVars(m *fsm.Machine[*engine.World], payload any, vars map[string]string) any {
 	if payload == nil || len(vars) == 0 {
 		return payload
 	}
 
-	// Get reflect value, dereference pointer
 	pv := reflect.ValueOf(payload)
 	if pv.Kind() != reflect.Ptr || pv.IsNil() {
 		return payload
@@ -59,33 +62,113 @@ func applyPayloadVars(m *fsm.Machine[*engine.World], payload any, vars map[strin
 		return payload
 	}
 
-	// Create a copy of the struct
-	copied := reflect.New(elem.Type()).Elem()
+	typ := elem.Type()
+	copied := reflect.New(typ).Elem()
 	copied.Set(elem)
 
-	// Apply variable values to specified fields
-	for fieldName, varName := range vars {
-		field := copied.FieldByName(fieldName)
+	// Track deep-copied slices by path prefix to avoid redundant copies
+	copiedSlices := make(map[string]bool)
+
+	for key, varName := range vars {
+		varValue := m.GetVar(varName)
+		segments := strings.Split(key, ".")
+
+		// Walk to parent container of the target field
+		parent := walkPayloadPath(copied, segments[:len(segments)-1], copiedSlices)
+		if !parent.IsValid() {
+			continue
+		}
+
+		field := resolvePayloadField(parent, segments[len(segments)-1])
 		if !field.IsValid() || !field.CanSet() {
 			continue
 		}
 
-		varValue := m.GetVar(varName)
-
-		// Set field based on type
-		switch field.Kind() {
-		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			field.SetInt(varValue)
-		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-			if varValue >= 0 {
-				field.SetUint(uint64(varValue))
-			}
-		case reflect.Float32, reflect.Float64:
-			field.SetFloat(float64(varValue))
-		}
+		setPayloadInt(field, varValue)
 	}
 
 	return copied.Addr().Interface()
+}
+
+// walkPayloadPath navigates nested structs and slices along dot-path segments
+// Deep-copies slice fields on first encounter to isolate mutations from the original
+func walkPayloadPath(current reflect.Value, segments []string, copiedSlices map[string]bool) reflect.Value {
+	for i, seg := range segments {
+		// Auto-deref pointers
+		for current.Kind() == reflect.Ptr {
+			if current.IsNil() {
+				return reflect.Value{}
+			}
+			current = current.Elem()
+		}
+
+		switch current.Kind() {
+		case reflect.Struct:
+			field := resolvePayloadField(current, seg)
+			if !field.IsValid() {
+				return reflect.Value{}
+			}
+			// Deep-copy slice fields before descent to avoid mutating original backing array
+			if field.Kind() == reflect.Slice && field.Len() > 0 {
+				pathKey := strings.Join(segments[:i+1], ".")
+				if !copiedSlices[pathKey] {
+					copiedSlices[pathKey] = true
+					newSlice := reflect.MakeSlice(field.Type(), field.Len(), field.Len())
+					reflect.Copy(newSlice, field)
+					field.Set(newSlice)
+				}
+			}
+			current = field
+
+		case reflect.Slice:
+			idx, err := strconv.Atoi(seg)
+			if err != nil || idx < 0 || idx >= current.Len() {
+				return reflect.Value{}
+			}
+			current = current.Index(idx)
+
+		default:
+			return reflect.Value{}
+		}
+	}
+	return current
+}
+
+// resolvePayloadField finds a struct field by toml tag first, then Go field name
+func resolvePayloadField(v reflect.Value, key string) reflect.Value {
+	if v.Kind() != reflect.Struct {
+		return reflect.Value{}
+	}
+	typ := v.Type()
+	for i := 0; i < typ.NumField(); i++ {
+		tag := typ.Field(i).Tag.Get("toml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		if idx := strings.Index(tag, ","); idx >= 0 {
+			tag = tag[:idx]
+		}
+		if tag == key {
+			return v.Field(i)
+		}
+	}
+	return v.FieldByName(key)
+}
+
+// setPayloadInt sets an int-compatible field from an FSM variable value
+func setPayloadInt(field reflect.Value, value int64) {
+	switch field.Kind() {
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		field.SetInt(value)
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		if value >= 0 {
+			field.SetUint(uint64(value))
+		}
+	case reflect.Float32, reflect.Float64:
+		field.SetFloat(float64(value))
+	case reflect.Bool:
+		field.SetBool(value != 0)
+	}
 }
 
 // === Region Control Actions ===
@@ -349,6 +432,34 @@ func registerSystemActions(m *fsm.Machine[*engine.World]) {
 		world.Resources.Status.Ints.Get("kills.swarm").Store(0)
 		world.Resources.Status.Ints.Get("kills.quasar").Store(0)
 		world.Resources.Status.Ints.Get("kills.storm").Store(0)
+	})
+
+	m.RegisterAction("ConfigToVar", func(world *engine.World, args any) {
+		ctArgs, ok := args.(*fsm.ConfigToVarArgs)
+		if !ok || ctArgs.Field == "" || ctArgs.Name == "" {
+			return
+		}
+		cfg := world.Resources.Config
+		var value int64
+		switch ctArgs.Field {
+		case "map_width":
+			value = int64(cfg.MapWidth)
+		case "map_height":
+			value = int64(cfg.MapHeight)
+		case "viewport_width":
+			value = int64(cfg.ViewportWidth)
+		case "viewport_height":
+			value = int64(cfg.ViewportHeight)
+		case "camera_x":
+			value = int64(cfg.CameraX)
+		case "camera_y":
+			value = int64(cfg.CameraY)
+		case "color_mode":
+			value = int64(cfg.ColorMode)
+		default:
+			return
+		}
+		m.SetVar(ctArgs.Name, value)
 	})
 }
 

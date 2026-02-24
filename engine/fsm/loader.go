@@ -245,6 +245,15 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 				}
 			}
 			args = statusArgs
+
+		case "ConfigToVar":
+			ctArgs := &ConfigToVarArgs{}
+			if cfg.Payload != nil {
+				if err := toml.Decode(cfg.Payload, ctArgs); err != nil {
+					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
+				}
+			}
+			args = ctArgs
 		}
 
 		// Compile action guard

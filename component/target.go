@@ -20,3 +20,11 @@ const MaxTargetGroups = 16
 type TargetComponent struct {
 	GroupID uint8 // 0 = cursor, 1+ = custom groups set by level/script
 }
+
+// TargetAnchorComponent marks an entity as the navigation destination for a group
+// Set by spawning systems when target_group_id > 0 in spawn payload
+// NavigationSystem discovers these and auto-registers/deregisters groups
+// Component lifecycle follows entity lifecycle — no manual cleanup required
+type TargetAnchorComponent struct {
+	GroupID uint8
+}

@@ -59,6 +59,7 @@ var Components = []ComponentDef{
 
 	// --- Species ---
 	{"Target", "TargetComponent"},
+	{"TargetAnchor", "TargetAnchorComponent"},
 	{"Drain", "DrainComponent"},
 	{"Quasar", "QuasarComponent"},
 	{"Swarm", "SwarmComponent"},

@@ -429,6 +429,7 @@ func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
 func (s *NavigationSystem) resolveGroupTargets() {
 	tr := s.world.Resources.Target
 
+	// Cursor always group 0
 	if s.cursorValid {
 		tr.Groups[0] = engine.TargetGroupState{
 			Type:  component.TargetCursor,
@@ -438,7 +439,41 @@ func (s *NavigationSystem) resolveGroupTargets() {
 		}
 	}
 
+	// Scan TargetAnchor components — entity-based group registration
+	// Anchors override any previous entity-type assignment for their group
+	anchorEntities := s.world.Components.TargetAnchor.GetAllEntities()
+	anchoredGroups := make(map[uint8]bool, len(anchorEntities))
+
+	for _, entity := range anchorEntities {
+		anchor, ok := s.world.Components.TargetAnchor.GetComponent(entity)
+		if !ok || anchor.GroupID == 0 {
+			continue
+		}
+
+		pos, ok := s.world.Positions.GetPosition(entity)
+		if !ok {
+			// Entity destroyed or position removed — invalidate
+			tr.Groups[anchor.GroupID] = engine.TargetGroupState{Valid: false}
+			anchoredGroups[anchor.GroupID] = true
+			continue
+		}
+
+		tr.Groups[anchor.GroupID] = engine.TargetGroupState{
+			Type:   component.TargetEntity,
+			Entity: entity,
+			PosX:   pos.X,
+			PosY:   pos.Y,
+			Valid:  true,
+		}
+		anchoredGroups[anchor.GroupID] = true
+	}
+
+	// Resolve non-anchored groups (event-assigned via EventTargetGroupUpdate)
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
+		if anchoredGroups[groupID] {
+			continue // Anchor takes precedence
+		}
+
 		state := tr.Groups[groupID]
 		if !state.Valid {
 			continue

@@ -168,8 +168,28 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		return
 	}
 
-	if s.world.Positions.IsBlocked(payload.X, payload.Y, component.WallBlockAll) {
-		return
+	isBlocked := s.world.Positions.IsBlocked(payload.X, payload.Y, component.WallBlockAll)
+
+	if isBlocked {
+		switch payload.CollisionMode {
+		case event.WallBatchOverwrite:
+			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
+			var toDestroy []core.Entity
+			s.world.Positions.Lock()
+			n := s.world.Positions.GetAllAtIntoUnsafe(payload.X, payload.Y, entityBuf[:])
+			s.world.Positions.Unlock()
+			for j := 0; j < n; j++ {
+				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
+					toDestroy = append(toDestroy, entityBuf[j])
+				}
+			}
+			if len(toDestroy) > 0 {
+				s.world.DestroyEntitiesBatch(toDestroy)
+			}
+		default:
+			// SkipBlocked (0) and FailIfBlocked both skip for single spawn
+			return
+		}
 	}
 
 	entity := s.world.CreateEntity()
@@ -420,7 +440,7 @@ func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnReque
 		Y:             payload.Y,
 		BlockMask:     payload.BlockMask,
 		BoxStyle:      payload.BoxStyle,
-		CollisionMode: event.WallBatchSkipBlocked,
+		CollisionMode: payload.CollisionMode,
 		Composite:     true,
 		Cells:         payload.Cells,
 	})
@@ -461,7 +481,7 @@ func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPa
 		X:             payload.X,
 		Y:             payload.Y,
 		BlockMask:     payload.BlockMask,
-		CollisionMode: event.WallBatchSkipBlocked,
+		CollisionMode: payload.CollisionMode,
 		Composite:     true,
 		Cells:         cells,
 	})
@@ -741,7 +761,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		}
 	}
 
-	// Convert event rooms to maze.RoomSpec
+	// Convert event rooms to maze.RoomSpec (best-effort placement by generator)
 	var rooms []maze.RoomSpec
 	for _, r := range payload.Rooms {
 		mCX := r.CenterX / payload.CellWidth
@@ -762,8 +782,8 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		}
 
 		rooms = append(rooms, maze.RoomSpec{
-			CenterX: r.CenterX / payload.CellWidth,
-			CenterY: r.CenterY / payload.CellHeight,
+			CenterX: mCX,
+			CenterY: mCY,
 			Width:   r.Width / payload.CellWidth,
 			Height:  r.Height / payload.CellHeight,
 		})
@@ -781,6 +801,38 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		DefaultRoomHeight: payload.DefaultRoomHeight / payload.CellHeight,
 	}
 	result := maze.Generate(cfg)
+
+	// Force-clear explicit rooms in world space post-generation
+	// Generator may reject rooms near edges due to margin constraints;
+	// this guarantees room areas are passable regardless
+	// Pad by 1 maze cell on each side for entity visual overflow (glow, radius)
+	for _, r := range payload.Rooms {
+		if r.CenterX == 0 && r.CenterY == 0 {
+			continue
+		}
+		roomW := r.Width
+		if roomW <= 0 {
+			roomW = payload.DefaultRoomWidth
+		}
+		roomH := r.Height
+		if roomH <= 0 {
+			roomH = payload.DefaultRoomHeight
+		}
+
+		x0 := r.CenterX - roomW/2
+		y0 := r.CenterY - roomH/2
+
+		mx0 := max(0, x0/payload.CellWidth-1)
+		my0 := max(0, y0/payload.CellHeight-1)
+		mx1 := min(mazeWidth-1, (x0+roomW-1)/payload.CellWidth+1)
+		my1 := min(mazeHeight-1, (y0+roomH-1)/payload.CellHeight+1)
+
+		for my := my0; my <= my1; my++ {
+			for mx := mx0; mx <= mx1; mx++ {
+				result.Grid[my][mx] = false
+			}
+		}
+	}
 
 	// Collect all wall cell entries from maze grid
 	cells := make([]component.WallCellDef, 0, mazeWidth*mazeHeight)
@@ -817,7 +869,7 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		Y:             0,
 		BlockMask:     payload.BlockMask,
 		BoxStyle:      vis.BoxStyle,
-		CollisionMode: event.WallBatchSkipBlocked,
+		CollisionMode: payload.CollisionMode,
 		Cells:         cells,
 	})
 }

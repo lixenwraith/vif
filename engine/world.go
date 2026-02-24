@@ -323,17 +323,15 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 // SetupLevel reconfigures map dimensions and optionally clears entities
 // Respects Protection component - entities with ProtectAll survive
 // Repositions cursor if outside new bounds
-func (w *World) SetupLevel(width, height int, clearEntities bool) {
+func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize bool) {
 	config := w.Resources.Config
 
 	// Update map dimensions
 	config.MapWidth = width
 	config.MapHeight = height
 
-	// Set crop mode based on map vs viewport relationship
-	// If map matches viewport, enable crop (normal mode)
-	// If map exceeds viewport, disable crop (level mode)
-	config.CropOnResize = (width <= config.ViewportWidth && height <= config.ViewportHeight)
+	// Apply explicit crop behavior
+	config.CropOnResize = cropOnResize
 
 	// Reset camera to origin
 	config.CameraX = 0

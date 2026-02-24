@@ -187,6 +187,10 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		MaxHP:   maxHP,
 	})
 
+	s.world.Components.Target.SetComponent(headerEntity, component.TargetComponent{
+		GroupID: payload.TargetGroupID,
+	})
+
 	// Ablative header: HP=0, damage routes to members
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
 		OwnerEntity:      cursorEntity,
@@ -202,6 +206,12 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		Type:          component.CompositeTypeAblative,
 		MemberEntries: members,
 	})
+
+	if payload.TargetGroupID > 0 {
+		s.world.Components.TargetAnchor.SetComponent(headerEntity, component.TargetAnchorComponent{
+			GroupID: payload.TargetGroupID,
+		})
+	}
 
 	s.world.PushEvent(event.EventTowerSpawned, &event.TowerSpawnedPayload{
 		HeaderEntity: headerEntity,
@@ -387,8 +397,6 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 		return
 	}
 
-	s.world.Components.Tower.RemoveEntity(headerEntity)
-
 	s.world.PushEvent(event.EventTowerDestroyed, &event.TowerDestroyedPayload{
 		HeaderEntity: headerEntity,
 		X:            towerComp.SpawnX,
@@ -408,15 +416,6 @@ func (s *TowerSystem) terminateTower(headerEntity core.Entity) {
 			Effect:       0,
 		})
 		return
-	}
-
-	// Remove wall components from living members before destruction
-	if headerComp, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
-		for _, member := range headerComp.MemberEntries {
-			if member.Entity != 0 {
-				s.world.Components.Wall.RemoveEntity(member.Entity)
-			}
-		}
 	}
 
 	s.world.Components.Tower.RemoveEntity(headerEntity)

@@ -1,28 +1,150 @@
-# Placeholder region: triggered from storm escalation
+# Placeholder region: tower defense level
+# Entry: storm escalation spawns with initial_state = "PlaceholderSetup"
+# Exit: resume main region, terminate self
+
+# --- Setup ---
 
 [states.PlaceholderSetup]
 parent = "Root"
 on_enter = [
-#    { action = "EmitEvent", event = "EventDrainPause" },
-    { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "EmitEvent", event = "EventWallDespawnAll" },
+    # Visual cue
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
-    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 10, cell_height = 5, braiding = 0.3, block_mask = 255, visual = { bg_color = { r = 40, g = 40, b = 45 }, render_bg = true } } },
+    # Drain control
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "EmitEvent", event = "EventDrainPause" },
+    # Clear previous phase walls
+    { action = "EmitEvent", event = "EventWallDespawnAll" },
+
+    # Read viewport dimensions (must precede all variable math)
+    { action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } },
+    { action = "ConfigToVar", payload = { field = "viewport_height", name = "vh" } },
+
+    # Calculate map center
+    { action = "CopyVar", payload = { name = "cx", source_var = "vw" } },
+    { action = "DivideVar", payload = { name = "cx", delta = 2 } },
+    { action = "CopyVar", payload = { name = "cy", source_var = "vh" } },
+    { action = "DivideVar", payload = { name = "cy", delta = 2 } },
+
+    # Calculate pylon corner positions (margin 8 from edges)
+    { action = "SetVar", payload = { name = "p_tl_x", value = 8 } },
+    { action = "SetVar", payload = { name = "p_tl_y", value = 8 } },
+    { action = "CopyVar", payload = { name = "p_tr_x", source_var = "vw" } },
+    { action = "DecrementVar", payload = { name = "p_tr_x", delta = 9 } },
+    { action = "SetVar", payload = { name = "p_tr_y", value = 8 } },
+    { action = "SetVar", payload = { name = "p_bl_x", value = 8 } },
+    { action = "CopyVar", payload = { name = "p_bl_y", source_var = "vh" } },
+    { action = "DecrementVar", payload = { name = "p_bl_y", delta = 9 } },
+    { action = "CopyVar", payload = { name = "p_br_x", source_var = "vw" } },
+    { action = "DecrementVar", payload = { name = "p_br_x", delta = 9 } },
+    { action = "CopyVar", payload = { name = "p_br_y", source_var = "vh" } },
+    { action = "DecrementVar", payload = { name = "p_br_y", delta = 9 } },
+
+    # Level setup: map = viewport, no crop, clear entities (before maze/entity spawns)
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
+
+    # Maze with rooms at calculated positions
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.5, block_mask = 255, visual = { box_style = 1, fg_color = { r = 200, g = 200, b = 200 }, render_fg = true, bg_color = { r = 40, g = 40, b = 45 }, render_bg = true }, rooms = [{ width = 15, height = 11 }, { width = 13, height = 11 }, { width = 13, height = 11 }, { width = 13, height = 11 }, { width = 13, height = 11 }] }, payload_vars = { "rooms.0.center_x" = "cx", "rooms.0.center_y" = "cy", "rooms.1.center_x" = "p_tl_x", "rooms.1.center_y" = "p_tl_y", "rooms.2.center_x" = "p_tr_x", "rooms.2.center_y" = "p_tr_y", "rooms.3.center_x" = "p_bl_x", "rooms.3.center_y" = "p_bl_y", "rooms.4.center_x" = "p_br_x", "rooms.4.center_y" = "p_br_y" } },
+
+    # Reset tracking
+    { action = "SetVar", payload = { name = "pylons_dead", value = 0 } },
+
+    # Spawn tower at center
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 0, y = 0, target_group_id = 1 }, payload_vars = { X = "cx", Y = "cy" } },
+
+    # Spawn 4 pylons at corners
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
+
+    # Push cursor out of walls
+    { action = "EmitEvent", event = "EventWallPushCheckRequest" },
+
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TOWER" } },
 ]
 transitions = [
     { trigger = "Tick", target = "PlaceholderActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]
 
-[states.PlaceholderActive]
+# --- Gameplay Cycle Parent ---
+# All active gameplay states live under this parent
+# on_exit handles entity cleanup and level restore for any exit path
+# (normal victory/defeat transitions AND external termination by monitor)
+
+[states.PlaceholderCycle]
 parent = "Root"
-# Placeholder: add gameplay transitions here
+on_exit = [
+    { action = "EmitEvent", event = "EventEyeCancelRequest" },
+    { action = "EmitEvent", event = "EventTowerCancelRequest" },
+    { action = "EmitEvent", event = "EventPylonCancelRequest" },
+    # Restore viewport-sized map with crop enabled for main region
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = true } },
+]
 transitions = [
-    { trigger = "Tick", target = "PlaceholderExit", guard = "StateTimeExceeds", guard_args = { ms = 50000 } }
+    # Tower death = defeat (highest priority event)
+    { trigger = "EventTowerDestroyed", target = "PlaceholderDefeat" },
+    # All pylons dead = victory (checked each tick)
+    { trigger = "Tick", target = "PlaceholderVictory", guard = "VarCompare", guard_args = { var = "pylons_dead", op = "gte", value = 4 } },
+    # Individual pylon death tracking (bubbles from children)
+    { trigger = "EventPylonDestroyed", target = "PlaceholderPylonDied" },
 ]
 
-[states.PlaceholderExit]
+# --- Active: Wait Between Waves ---
+
+[states.PlaceholderActive]
+parent = "PlaceholderCycle"
+transitions = [
+    { trigger = "Tick", target = "PlaceholderSpawnWave", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
+]
+
+# --- Eye Spawn Wave ---
+# Spawns one eye at each pylon position, all targeting group 1 (tower)
+# Immediately returns to Active (resets 2s timer)
+
+[states.PlaceholderSpawnWave]
+parent = "PlaceholderCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
+    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
+    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
+    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlaceholderActive" },
+]
+
+# --- Pylon Death Counter ---
+# Transient state: increments counter, returns to Active next tick
+# Cycle-level Tick guard catches pylons_dead >= 4 on subsequent evaluation
+
+[states.PlaceholderPylonDied]
+parent = "PlaceholderCycle"
+on_enter = [
+    { action = "IncrementVar", payload = { name = "pylons_dead" } },
+]
+transitions = [
+    { trigger = "Tick", target = "PlaceholderActive" },
+]
+
+# --- Exit: Victory ---
+
+[states.PlaceholderVictory]
 parent = "Root"
 on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DEFENSE CLEARED" } },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "ResumeRegion", region = "main" },
+    { action = "TerminateRegion", region = "placeholder" },
+]
+
+# --- Exit: Defeat ---
+
+[states.PlaceholderDefeat]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DESTROYED" } },
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "placeholder" },

@@ -156,14 +156,16 @@ func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayloa
 func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	width := payload.Width
 	height := payload.Height
+	cropOnResize := payload.CropOnResize
 
-	// Zero dimensions = reset to viewport
+	// Zero dimensions = reset to viewport with crop enabled
 	if width <= 0 || height <= 0 {
 		width = s.world.Resources.Config.ViewportWidth
 		height = s.world.Resources.Config.ViewportHeight
+		cropOnResize = true
 	}
 
-	s.world.SetupLevel(width, height, payload.ClearEntities)
+	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
 }
 
 // handleDebugRequest shows debug information overlay with auto-discovered stats
