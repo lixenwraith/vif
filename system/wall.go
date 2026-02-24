@@ -66,6 +66,7 @@ func (s *WallSystem) Priority() int {
 func (s *WallSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWallSpawnRequest,
+		event.EventWallBatchSpawnRequest,
 		event.EventWallCompositeSpawnRequest,
 		event.EventWallPatternSpawnRequest,
 		event.EventWallDespawnRequest,
@@ -102,6 +103,12 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventWallSpawnRequest:
 		if payload, ok := ev.Payload.(*event.WallSpawnRequestPayload); ok {
 			s.handleSpawnSingle(payload)
+		}
+
+	case event.EventWallBatchSpawnRequest:
+		if payload, ok := ev.Payload.(*event.WallBatchSpawnRequestPayload); ok {
+			s.executeBatchSpawn(payload)
+			event.ReleaseWallBatchRequest(payload)
 		}
 
 	case event.EventWallCompositeSpawnRequest:
@@ -204,121 +211,223 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 	})
 }
 
-// handleSpawnComposite creates a multi-cell wall using Header/Member pattern
-func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnRequestPayload) {
+// batchSpawnResult holds outcome of executeBatchSpawn
+type batchSpawnResult struct {
+	count        int
+	headerEntity core.Entity
+	minX, minY   int
+	maxX, maxY   int
+}
+
+// executeBatchSpawn is the unified wall creation path for all batch operations
+// Handles collision modes, composite structure, position batching, box chars, and push checks
+// Emits EventWallSpawned on success
+func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPayload) batchSpawnResult {
+	result := batchSpawnResult{}
+
 	if len(payload.Cells) == 0 {
-		return
+		return result
 	}
 
 	config := s.world.Resources.Config
 
-	// Create phantom head
-	headerEntity := s.world.CreateEntity()
-	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{
-		X: payload.X,
-		Y: payload.Y,
-	})
-	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll ^ component.ProtectFromDeath,
-	})
+	// 1. Resolve absolute positions, filter OOB
+	type resolvedCell struct {
+		x, y int
+		idx  int // Index into payload.Cells
+	}
+	resolved := make([]resolvedCell, 0, len(payload.Cells))
 
-	members := make([]component.MemberEntry, 0, len(payload.Cells))
-	count := 0
-	minX, minY := config.MapWidth, config.MapHeight
-	maxX, maxY := 0, 0
-
-	for _, cell := range payload.Cells {
+	for i, cell := range payload.Cells {
 		x := payload.X + cell.OffsetX
 		y := payload.Y + cell.OffsetY
-
 		if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 			continue
 		}
+		resolved = append(resolved, resolvedCell{x: x, y: y, idx: i})
+	}
 
-		if s.world.Positions.IsBlocked(x, y, component.WallBlockAll) {
-			continue
+	if len(resolved) == 0 {
+		return result
+	}
+
+	// 2. Collision handling based on mode
+	switch payload.CollisionMode {
+	case event.WallBatchSkipBlocked:
+		points := make([]core.Point, len(resolved))
+		for i, rc := range resolved {
+			points[i] = core.Point{X: rc.x, Y: rc.y}
+		}
+		blocked := s.world.Positions.CheckBlockedBatch(points, component.WallBlockAll)
+		filtered := resolved[:0]
+		for i, rc := range resolved {
+			if !blocked[i] {
+				filtered = append(filtered, rc)
+			}
+		}
+		resolved = filtered
+
+	case event.WallBatchOverwrite:
+		var toDestroy []core.Entity
+		var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
+
+		s.world.Positions.Lock()
+		for _, rc := range resolved {
+			n := s.world.Positions.GetAllAtIntoUnsafe(rc.x, rc.y, entityBuf[:])
+			for j := 0; j < n; j++ {
+				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
+					toDestroy = append(toDestroy, entityBuf[j])
+				}
+			}
+		}
+		s.world.Positions.Unlock()
+
+		if len(toDestroy) > 0 {
+			s.world.DestroyEntitiesBatch(toDestroy)
 		}
 
-		entity := s.world.CreateEntity()
-		s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
+	case event.WallBatchFailIfBlocked:
+		points := make([]core.Point, len(resolved))
+		for i, rc := range resolved {
+			points[i] = core.Point{X: rc.x, Y: rc.y}
+		}
+		if s.world.Positions.IsAnyBlockedInSet(points, component.WallBlockAll) {
+			return result
+		}
+	}
 
-		wallComp := component.WallComponent{
+	if len(resolved) == 0 {
+		return result
+	}
+
+	// 3. Create header if composite
+	var headerEntity core.Entity
+	if payload.Composite {
+		headerEntity = s.world.CreateEntity()
+		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{
+			X: payload.X, Y: payload.Y,
+		})
+		s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
+			Mask: component.ProtectAll ^ component.ProtectFromDeath,
+		})
+	}
+
+	// 4. Create entities, set components, batch positions
+	members := make([]component.MemberEntry, 0, len(resolved))
+	posBatch := s.world.Positions.BeginBatch()
+
+	result.minX, result.minY = config.MapWidth, config.MapHeight
+	result.maxX, result.maxY = 0, 0
+
+	for _, rc := range resolved {
+		cell := payload.Cells[rc.idx]
+		entity := s.world.CreateEntity()
+
+		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 			BlockMask: payload.BlockMask,
 			Rune:      cell.Char,
 			FgColor:   cell.FgColor,
 			BgColor:   cell.BgColor,
 			RenderFg:  cell.RenderFg,
 			RenderBg:  cell.RenderBg,
+			BoxStyle:  payload.BoxStyle,
 			Attrs:     cell.Attrs,
-		}
-
-		// Compute box char if box-drawing enabled at payload level
-		if payload.BoxStyle != component.BoxDrawNone {
-			wallComp.Rune = s.computeBoxChar(x, y, payload.BoxStyle)
-			wallComp.BoxStyle = payload.BoxStyle
-		}
-
-		s.world.Components.Wall.SetComponent(entity, wallComp)
-
-		s.world.Components.Member.SetComponent(entity, component.MemberComponent{
-			HeaderEntity: headerEntity,
 		})
 
-		// Members protected from destruction except OOB/death
-		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-			Mask: component.ProtectAll ^ component.ProtectFromDeath,
-		})
+		if payload.Composite {
+			s.world.Components.Member.SetComponent(entity, component.MemberComponent{
+				HeaderEntity: headerEntity,
+			})
+			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+				Mask: component.ProtectAll ^ component.ProtectFromDeath,
+			})
+			members = append(members, component.MemberEntry{
+				Entity:  entity,
+				OffsetX: cell.OffsetX,
+				OffsetY: cell.OffsetY,
+			})
+		}
 
-		members = append(members, component.MemberEntry{
-			Entity:  entity,
-			OffsetX: cell.OffsetX,
-			OffsetY: cell.OffsetY,
-		})
+		posBatch.Add(entity, component.PositionComponent{X: rc.x, Y: rc.y})
 
-		if x < minX {
-			minX = x
+		if rc.x < result.minX {
+			result.minX = rc.x
 		}
-		if x > maxX {
-			maxX = x
+		if rc.x > result.maxX {
+			result.maxX = rc.x
 		}
-		if y < minY {
-			minY = y
+		if rc.y < result.minY {
+			result.minY = rc.y
 		}
-		if y > maxY {
-			maxY = y
+		if rc.y > result.maxY {
+			result.maxY = rc.y
 		}
 
 		if payload.BlockMask != component.WallBlockNone {
-			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: x, Y: y})
+			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: rc.x, Y: rc.y})
 		}
 
-		count++
+		result.count++
 	}
 
-	if count == 0 {
-		s.world.DestroyEntity(headerEntity)
+	// 5. Single-lock position commit
+	posBatch.CommitForce()
+
+	// 6. Finalize composite header or cleanup
+	if payload.Composite {
+		if result.count > 0 {
+			s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
+				Behavior:      component.BehaviorNone,
+				MemberEntries: members,
+			})
+			result.headerEntity = headerEntity
+		} else {
+			s.world.DestroyEntity(headerEntity)
+		}
+	}
+
+	// 7. Box char computation
+	if payload.BoxStyle != component.BoxDrawNone && result.count > 0 {
+		s.computeBoxCharsInArea(
+			result.minX, result.minY,
+			result.maxX-result.minX+1, result.maxY-result.minY+1,
+			payload.BoxStyle,
+		)
+	}
+
+	// 8. Emit notification
+	if result.count > 0 {
+		s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
+			X: result.minX, Y: result.minY,
+			Width: result.maxX - result.minX + 1, Height: result.maxY - result.minY + 1,
+			Count:        result.count,
+			HeaderEntity: result.headerEntity,
+		})
+	}
+
+	return result
+}
+
+// handleSpawnComposite creates a multi-cell wall using Header/Member pattern
+// Delegates to executeBatchSpawn with composite mode
+func (s *WallSystem) handleSpawnComposite(payload *event.WallCompositeSpawnRequestPayload) {
+	if len(payload.Cells) == 0 {
 		return
 	}
 
-	// Post-spawn box char computation for composites
-	if payload.BoxStyle != component.BoxDrawNone && maxX >= minX && maxY >= minY {
-		s.computeBoxCharsInArea(minX, minY, maxX-minX+1, maxY-minY+1, payload.BoxStyle)
-	}
-
-	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
-		Behavior:      component.BehaviorNone,
-		MemberEntries: members,
-	})
-
-	s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
-		X: minX, Y: minY,
-		Width: maxX - minX + 1, Height: maxY - minY + 1,
-		Count:        count,
-		HeaderEntity: headerEntity,
+	s.executeBatchSpawn(&event.WallBatchSpawnRequestPayload{
+		X:             payload.X,
+		Y:             payload.Y,
+		BlockMask:     payload.BlockMask,
+		BoxStyle:      payload.BoxStyle,
+		CollisionMode: event.WallBatchSkipBlocked,
+		Composite:     true,
+		Cells:         payload.Cells,
 	})
 }
 
 // handlePatternSpawn loads .vfimg pattern and spawns as composite wall
+// Converts pattern cells to WallCellDef and delegates to executeBatchSpawn
 func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPayload) {
 	colorMode := s.world.Resources.Config.ColorMode
 
@@ -332,95 +441,29 @@ func (s *WallSystem) handlePatternSpawn(payload *event.WallPatternSpawnRequestPa
 		return
 	}
 
-	config := s.world.Resources.Config
-
-	// Create phantom head
-	headerEntity := s.world.CreateEntity()
-	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{
-		X: payload.X,
-		Y: payload.Y,
-	})
-	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll ^ component.ProtectFromDeath,
-	})
-
-	members := make([]component.MemberEntry, 0, len(patternResult.Cells))
-	count := 0
-	minX, minY := config.MapWidth, config.MapHeight
-	maxX, maxY := 0, 0
-
-	for _, cell := range patternResult.Cells {
-		x := payload.X + cell.OffsetX
-		y := payload.Y + cell.OffsetY
-
-		if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
-			continue
+	cells := make([]component.WallCellDef, len(patternResult.Cells))
+	for i, c := range patternResult.Cells {
+		cells[i] = component.WallCellDef{
+			OffsetX: c.OffsetX,
+			OffsetY: c.OffsetY,
+			WallVisualConfig: component.WallVisualConfig{
+				Char:     c.Rune,
+				FgColor:  c.Fg,
+				BgColor:  c.Bg,
+				RenderFg: c.RenderFg,
+				RenderBg: c.RenderBg,
+			},
+			Attrs: c.Attrs,
 		}
-
-		if s.world.Positions.IsBlocked(x, y, component.WallBlockAll) {
-			continue
-		}
-
-		entity := s.world.CreateEntity()
-		s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
-
-		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
-			BlockMask: payload.BlockMask,
-			Rune:      cell.Rune,
-			FgColor:   cell.Fg,
-			BgColor:   cell.Bg,
-			RenderFg:  cell.RenderFg,
-			RenderBg:  cell.RenderBg,
-			Attrs:     cell.Attrs,
-		})
-
-		s.world.Components.Member.SetComponent(entity, component.MemberComponent{
-			HeaderEntity: headerEntity,
-		})
-
-		// Members protected from destruction except OOB/death
-		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-			Mask: component.ProtectAll ^ component.ProtectFromDeath,
-		})
-
-		members = append(members, component.MemberEntry{
-			Entity:  entity,
-			OffsetX: cell.OffsetX,
-			OffsetY: cell.OffsetY,
-		})
-
-		if x < minX {
-			minX = x
-		}
-		if x > maxX {
-			maxX = x
-		}
-		if y < minY {
-			minY = y
-		}
-		if y > maxY {
-			maxY = y
-		}
-
-		count++
 	}
 
-	if count == 0 {
-		s.world.Components.Protection.RemoveEntity(headerEntity)
-		s.world.DestroyEntity(headerEntity)
-		return
-	}
-
-	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
-		Behavior:      component.BehaviorNone,
-		MemberEntries: members,
-	})
-
-	s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
-		X: minX, Y: minY,
-		Width: maxX - minX + 1, Height: maxY - minY + 1,
-		Count:        count,
-		HeaderEntity: headerEntity,
+	s.executeBatchSpawn(&event.WallBatchSpawnRequestPayload{
+		X:             payload.X,
+		Y:             payload.Y,
+		BlockMask:     payload.BlockMask,
+		CollisionMode: event.WallBatchSkipBlocked,
+		Composite:     true,
+		Cells:         cells,
 	})
 }
 
@@ -672,16 +715,15 @@ func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 	s.pushCheckEveryTick = enabled
 }
 
-// handleMazeSpawn generates maze and spawns wall blocks
+// handleMazeSpawn generates maze and spawns wall blocks via batch
 func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	config := s.world.Resources.Config
 
-	// Calculate maze dimensions from map size
 	mazeWidth := config.MapWidth / payload.CellWidth
 	mazeHeight := config.MapHeight / payload.CellHeight
 
 	if mazeWidth < 3 || mazeHeight < 3 {
-		return // Too small for valid maze
+		return
 	}
 
 	// Resolve visual config (apply defaults if zero-value)
@@ -702,7 +744,6 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	// Convert event rooms to maze.RoomSpec
 	var rooms []maze.RoomSpec
 	for _, r := range payload.Rooms {
-		// Calculate center and force to nearest odd grid index for perfect maze alignment
 		mCX := r.CenterX / payload.CellWidth
 		if mCX%2 == 0 {
 			if r.CenterX%payload.CellWidth > payload.CellWidth/2 {
@@ -720,7 +761,6 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 			}
 		}
 
-		// Convert game coords to maze coords
 		rooms = append(rooms, maze.RoomSpec{
 			CenterX: r.CenterX / payload.CellWidth,
 			CenterY: r.CenterY / payload.CellHeight,
@@ -742,79 +782,44 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	}
 	result := maze.Generate(cfg)
 
-	// Track spawn bounds for box char computation
-	minX, minY := config.MapWidth, config.MapHeight
-	maxX, maxY := 0, 0
+	// Collect all wall cell entries from maze grid
+	cells := make([]component.WallCellDef, 0, mazeWidth*mazeHeight)
 
-	// Spawn walls for each maze wall cell
 	for my, row := range result.Grid {
 		for mx, isWall := range row {
-			if isWall {
-				bx := mx * payload.CellWidth
-				by := my * payload.CellHeight
-				s.spawnMazeBlock(bx, by, payload.CellWidth, payload.CellHeight, payload.BlockMask, &vis)
+			if !isWall {
+				continue
+			}
+			bx := mx * payload.CellWidth
+			by := my * payload.CellHeight
 
-				// Track bounds
-				if bx < minX {
-					minX = bx
-				}
-				if bx+payload.CellWidth > maxX {
-					maxX = bx + payload.CellWidth
-				}
-				if by < minY {
-					minY = by
-				}
-				if by+payload.CellHeight > maxY {
-					maxY = by + payload.CellHeight
+			for dy := 0; dy < payload.CellHeight; dy++ {
+				for dx := 0; dx < payload.CellWidth; dx++ {
+					cells = append(cells, component.WallCellDef{
+						OffsetX: bx + dx,
+						OffsetY: by + dy,
+						WallVisualConfig: component.WallVisualConfig{
+							Char:     vis.Char,
+							FgColor:  vis.FgColor,
+							BgColor:  vis.BgColor,
+							RenderFg: vis.RenderFg,
+							RenderBg: vis.RenderBg,
+						},
+					})
 				}
 			}
 		}
 	}
 
-	// Post-spawn box char computation
-	if vis.BoxStyle != component.BoxDrawNone && maxX > minX && maxY > minY {
-		s.computeBoxCharsInArea(minX, minY, maxX-minX, maxY-minY, vis.BoxStyle)
-	}
-
-	// Notify navigation system of new walls
-	if maxX > minX && maxY > minY {
-		s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
-			X: minX, Y: minY,
-			Width: maxX - minX, Height: maxY - minY,
-		})
-	}
-}
-
-// spawnMazeBlock creates a rectangular wall block with visual config
-func (s *WallSystem) spawnMazeBlock(x, y, width, height int, mask component.WallBlockMask, vis *component.WallVisualConfig) {
-	config := s.world.Resources.Config
-
-	for dy := 0; dy < height; dy++ {
-		for dx := 0; dx < width; dx++ {
-			px, py := x+dx, y+dy
-
-			if px < 0 || px >= config.MapWidth || py < 0 || py >= config.MapHeight {
-				continue
-			}
-
-			if s.world.Positions.IsBlocked(px, py, component.WallBlockAll) {
-				continue
-			}
-
-			entity := s.world.CreateEntity()
-			s.world.Positions.SetPosition(entity, component.PositionComponent{X: px, Y: py})
-
-			s.world.Components.Wall.SetComponent(entity, component.WallComponent{
-				BlockMask: mask,
-				Rune:      vis.Char, // Will be overwritten by computeBoxCharsInArea if BoxStyle set
-				FgColor:   vis.FgColor,
-				BgColor:   vis.BgColor,
-				RenderFg:  vis.RenderFg,
-				RenderBg:  vis.RenderBg,
-				BoxStyle:  vis.BoxStyle,
-			})
-		}
-	}
+	// Batch spawn with anchor at origin (offsets are absolute positions)
+	s.executeBatchSpawn(&event.WallBatchSpawnRequestPayload{
+		X:             0,
+		Y:             0,
+		BlockMask:     payload.BlockMask,
+		BoxStyle:      vis.BoxStyle,
+		CollisionMode: event.WallBatchSkipBlocked,
+		Cells:         cells,
+	})
 }
 
 // computeBoxCharsInArea recomputes box-drawing characters for walls in rectangular area

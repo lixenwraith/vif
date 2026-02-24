@@ -543,6 +543,31 @@ type WallSpawnRequestPayload struct {
 	BoxStyle  component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 }
 
+// WallBatchCollisionMode defines behavior when batch spawn encounters existing walls
+type WallBatchCollisionMode uint8
+
+const (
+	// WallBatchSkipBlocked skips positions occupied by existing walls
+	WallBatchSkipBlocked WallBatchCollisionMode = iota
+	// WallBatchOverwrite destroys existing walls and spawns new ones at their positions
+	WallBatchOverwrite
+	// WallBatchFailIfBlocked aborts entire batch if any target position has a wall
+	WallBatchFailIfBlocked
+)
+
+// WallBatchSpawnRequestPayload contains parameters for bulk wall creation
+// Cells use offset coordinates relative to anchor (X, Y)
+// BoxStyle at payload level applies to all cells (per-cell BoxStyle in WallCellDef ignored)
+type WallBatchSpawnRequestPayload struct {
+	X             int                     `toml:"x"`          // Anchor position
+	Y             int                     `toml:"y"`          // Anchor position
+	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells
+	BoxStyle      component.BoxDrawStyle  `toml:"box_style"`  // Applied to all cells
+	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
+	Composite     bool                    `toml:"composite"` // If true, create header/member structure
+	Cells         []component.WallCellDef `toml:"cells"`
+}
+
 // WallCompositeSpawnRequestPayload contains parameters for multi-cell wall structure
 type WallCompositeSpawnRequestPayload struct {
 	X         int                     `toml:"x"` // Anchor position

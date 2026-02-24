@@ -546,6 +546,12 @@ const (
 	// Consumer: WallSystem | Payload: *WallSpawnRequestPayload
 	EventWallSpawnRequest
 
+	// EventWallBatchSpawnRequest creates multiple wall cells in a single batch operation
+	// Supports collision modes: skip blocked, overwrite existing, or fail-if-blocked
+	// Trigger: FSM, level loader, procedural generators, or internal wall operations
+	// Consumer: WallSystem | Payload: *WallBatchSpawnRequestPayload
+	EventWallBatchSpawnRequest
+
 	// EventWallCompositeSpawnRequest requests creation of a multi-cell wall structure
 	// Trigger: FSM, level loader, procedural generators
 	// Consumer: WallSystem | Payload: *WallCompositeSpawnRequestPayload

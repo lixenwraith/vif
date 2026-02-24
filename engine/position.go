@@ -350,6 +350,37 @@ func (p *Position) IsOutOfBounds(x, y int) bool {
 	return x < 0 || x >= p.world.Resources.Config.MapWidth || y < 0 || y >= p.world.Resources.Config.MapHeight
 }
 
+// CheckBlockedBatch checks multiple points for blocking (OOB or wall) under single lock
+// Returns bool slice aligned with input where true = position is blocked
+func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlockMask) []bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	result := make([]bool, len(points))
+	for i, pt := range points {
+		if p.IsOutOfBounds(pt.X, pt.Y) {
+			result[i] = true
+			continue
+		}
+		result[i] = p.HasBlockingWallAtUnsafe(pt.X, pt.Y, mask)
+	}
+	return result
+}
+
+// IsAnyBlockedInSet returns true if any point is blocked (OOB or wall)
+// Single lock acquisition, short-circuits on first blocked position
+func (p *Position) IsAnyBlockedInSet(points []core.Point, mask component.WallBlockMask) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+
+	for _, pt := range points {
+		if p.IsOutOfBounds(pt.X, pt.Y) || p.HasBlockingWallAtUnsafe(pt.X, pt.Y, mask) {
+			return true
+		}
+	}
+	return false
+}
+
 // HasLineOfSight checks if two grid points have unobstructed line of sight
 // Uses Bresenham traversal, checking intermediate cells for blocking walls
 // Acquires RLock once for entire traversal
