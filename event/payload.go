@@ -813,7 +813,7 @@ type TowerSpawnRequestPayload struct {
 	RadiusY       int                 `toml:"radius_y"`
 	MinHP         int                 `toml:"min_hp"`
 	MaxHP         int                 `toml:"max_hp"`
-	TargetGroupID uint8               `toml:"target_group_id"` // Navigation target group (0 = none)
+	TargetGroupID uint8               `toml:"target_group_id"` // Navigation target group
 }
 
 // TowerSpawnedPayload contains tower spawn data

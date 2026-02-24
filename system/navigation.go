@@ -458,6 +458,9 @@ func (s *NavigationSystem) resolveGroupTargets() {
 			continue
 		}
 
+		// Ensure flow caches exist for anchored groups so fallback logic doesn't route to cursor
+		s.getOrCreateGroup(anchor.GroupID)
+
 		tr.Groups[anchor.GroupID] = engine.TargetGroupState{
 			Type:   component.TargetEntity,
 			Entity: entity,
