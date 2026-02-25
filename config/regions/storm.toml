@@ -4,7 +4,7 @@
 parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventDrainPause" },
-    { action = "EmitEvent", event = "EventStormSpawnRequest" }
+    { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
     { trigger = "Tick", target = "StormActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } }
@@ -13,7 +13,7 @@ transitions = [
 [states.StormActive]
 parent = "Root"
 transitions = [
-    { trigger = "EventStormDestroyed", target = "StormDecision" }
+    { trigger = "EventStormDestroyed", target = "StormDecision" },
     # Defensive: storm died OOB without emitting destroy event
     { trigger = "Tick", target = "StormVictory", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
@@ -30,7 +30,7 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "StormEscalateTowerOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
     { trigger = "Tick", target = "StormEscalateTowerTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
-    { trigger = "Tick", target = "StormVictory" }
+    { trigger = "Tick", target = "StormVictory" },
 ]
 
 [states.StormEscalateTowerOne]
@@ -39,7 +39,7 @@ on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.swarm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
     { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
-    { action = "TerminateRegion", region = "storm" }
+    { action = "TerminateRegion", region = "storm" },
 ]
 
 [states.StormEscalateTowerTwo]
@@ -48,7 +48,7 @@ on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.storm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
     { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
-    { action = "TerminateRegion", region = "storm" }
+    { action = "TerminateRegion", region = "storm" },
 ]
 
 [states.StormVictory]
@@ -56,5 +56,5 @@ parent = "Root"
 on_enter = [
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
-    { action = "TerminateRegion", region = "storm" }
+    { action = "TerminateRegion", region = "storm" },
 ]

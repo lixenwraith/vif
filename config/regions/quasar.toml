@@ -74,10 +74,10 @@ transitions = [
 parent = "QuasarGoldCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } }
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } },
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" }
+    { trigger = "Tick", target = "QuasarDustAll" },
 ]
 
 [states.QuasarGoldTimeout]
@@ -89,7 +89,7 @@ transitions = [
 [states.QuasarGoldDestroyed]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" }
+    { trigger = "Tick", target = "QuasarDustAll" },
 ]
 
 # --- Dust ---
@@ -97,10 +97,10 @@ transitions = [
 [states.QuasarDustAll]
 parent = "QuasarGoldCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDustAllRequest" }
+    { action = "EmitEvent", event = "EventDustAllRequest" },
 ]
 transitions = [
-    { trigger = "Tick", target = "QuasarGoldSpawn" }
+    { trigger = "Tick", target = "QuasarGoldSpawn" },
 ]
 
 # --- Exit Conditions ---
@@ -111,7 +111,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
-    { action = "TerminateRegion", region = "quasar" }
+    { action = "TerminateRegion", region = "quasar" },
 ]
 
 [states.QuasarEscalate]
@@ -121,5 +121,5 @@ on_enter = [
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
     { action = "SpawnRegion", region = "storm", initial_state = "StormSetup" },
-    { action = "TerminateRegion", region = "quasar" }
+    { action = "TerminateRegion", region = "quasar" },
 ]

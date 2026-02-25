@@ -27,6 +27,13 @@ func init() {
 	}
 }
 
+// flowSource abstracts direction/distance queries over flow field data
+// Satisfied by *navigation.FlowFieldCache and *navigation.FlowField
+type flowSource interface {
+	GetDirection(x, y int) int8
+	GetDistance(x, y int) int
+}
+
 // targetGroupNav holds per-group flow fields and entity buffers
 type targetGroupNav struct {
 	pointFlowCache     *navigation.FlowFieldCache // For point entities (1×1)
@@ -110,6 +117,10 @@ func (s *NavigationSystem) Init() {
 
 	if s.world.Resources.Target == nil {
 		s.world.Resources.Target = &engine.TargetResource{}
+	}
+
+	if s.world.Resources.RouteGraph == nil {
+		s.world.Resources.RouteGraph = &engine.RouteGraphResource{}
 	}
 
 	// Debug exposure
@@ -207,6 +218,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 		for _, g := range s.groups {
 			g.compositeFlowCache.MarkDirty()
 		}
+		s.world.Resources.RouteGraph.Clear()
 	}
 }
 
@@ -379,6 +391,20 @@ func (s *NavigationSystem) Update() {
 
 		isComposite := navComp.Width > 1 || navComp.Height > 1
 
+		// Route graph: use per-route flow field when assigned
+		if navComp.UseRouteGraph && navComp.RouteID >= 0 {
+			if field := s.resolveRouteField(navComp.RouteGraphID, navComp.RouteID); field != nil {
+				if isComposite {
+					navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, field)
+				} else {
+					navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, field)
+				}
+				s.world.Components.Navigation.SetComponent(entity, navComp)
+				continue
+			}
+		}
+
+		// Shared group flow field (default)
 		if isComposite {
 			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
 		} else {
@@ -517,14 +543,14 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 // getCompositeFlowDirection returns flow direction from composite-aware flow field
 // Handles case where entity's current cell is blocked in passability
-func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, cache *navigation.FlowFieldCache) (int64, int64) {
+func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, src flowSource) (int64, int64) {
 	x0 := vmath.ToInt(preciseX)
 	y0 := vmath.ToInt(preciseY)
 
 	// Check if primary cell is blocked/unvisited — escape to best neighbor
-	dir := cache.GetDirection(x0, y0)
+	dir := src.GetDirection(x0, y0)
 	if dir < 0 || dir >= navigation.DirCount {
-		escDir := s.findBestNeighborDirection(x0, y0, cache)
+		escDir := s.findBestNeighborDirection(x0, y0, src)
 		if escDir < 0 || escDir >= navigation.DirCount {
 			return 0, 0
 		}
@@ -542,10 +568,10 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, c
 	w01 := vmath.Mul(invU, v)
 	w11 := vmath.Mul(u, v)
 
-	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, cache)
-	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, cache)
-	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, cache)
-	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, cache)
+	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
+	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
+	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
+	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
 
 	var sumX, sumY, totalWeight int64
 
@@ -584,14 +610,14 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, c
 }
 
 // findBestNeighborDirection finds direction toward lowest-distance passable neighbor, used when entity is at a blocked cell
-func (s *NavigationSystem) findBestNeighborDirection(x, y int, cache *navigation.FlowFieldCache) int8 {
+func (s *NavigationSystem) findBestNeighborDirection(x, y int, src flowSource) int8 {
 	bestDir := int8(-1)
 	bestDist := 1 << 30
 
 	for d := int8(0); d < navigation.DirCount; d++ {
 		nx := x + navigation.DirVectors[d][0]
 		ny := y + navigation.DirVectors[d][1]
-		dist := cache.GetDistance(nx, ny)
+		dist := src.GetDistance(nx, ny)
 		if dist >= 0 && dist < bestDist {
 			bestDist = dist
 			bestDir = d
@@ -601,7 +627,7 @@ func (s *NavigationSystem) findBestNeighborDirection(x, y int, cache *navigation
 }
 
 // getInterpolatedFlowDirection performs bilinear interpolation for point entities
-func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64, cache *navigation.FlowFieldCache) (int64, int64) {
+func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64, src flowSource) (int64, int64) {
 	sampleX := preciseX - vmath.CellCenter
 	sampleY := preciseY - vmath.CellCenter
 
@@ -619,10 +645,10 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 	w01 := vmath.Mul(invU, v)
 	w11 := vmath.Mul(u, v)
 
-	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, cache)
-	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, cache)
-	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, cache)
-	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, cache)
+	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
+	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
+	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
+	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
 
 	var sumX, sumY, totalWeight int64
 
@@ -660,10 +686,24 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 	return 0, 0
 }
 
-func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, cache *navigation.FlowFieldCache) (int64, int64, bool) {
-	dir := cache.GetDirection(x, y)
+func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (int64, int64, bool) {
+	dir := src.GetDirection(x, y)
 	if dir < 0 || dir >= navigation.DirCount {
 		return 0, 0, false
 	}
 	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
+}
+
+// resolveRouteField returns the per-route flow field for an entity's route assignment
+// Returns nil if route graph or route ID is invalid, triggering fallback to shared flow field
+func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navigation.FlowField {
+	rg := s.world.Resources.RouteGraph.Get(graphID)
+	if rg == nil || routeID < 0 || routeID >= len(rg.Routes) {
+		return nil
+	}
+	field := rg.Routes[routeID].Field
+	if field == nil || !field.Valid {
+		return nil
+	}
+	return field
 }

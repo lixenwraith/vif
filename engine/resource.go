@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/navigation"
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -19,8 +20,11 @@ type Resource struct {
 	Game   *GameStateResource
 	Player *PlayerResource
 	Event  *EventQueueResource
+
 	// Targeting
 	Target *TargetResource
+	// Route graphs for multi-path navigation
+	RouteGraph *RouteGraphResource
 
 	// Transient visual effects
 	Transient *TransientResource
@@ -175,6 +179,43 @@ func (tr *TargetResource) GetGroup(groupID uint8) TargetGroupState {
 func (tr *TargetResource) SetGroup(groupID uint8, state TargetGroupState) {
 	if int(groupID) < len(tr.Groups) {
 		tr.Groups[groupID] = state
+	}
+}
+
+// RouteGraphResource provides route graph storage accessible by NavigationSystem and GeneticSystem
+// Written by systems that compute route graphs (future: GatewaySystem), read by NavigationSystem
+// Keyed by opaque uint32 ID assigned at computation time
+type RouteGraphResource struct {
+	graphs map[uint32]*navigation.RouteGraph
+}
+
+// Get returns the route graph for the given ID, or nil
+func (r *RouteGraphResource) Get(id uint32) *navigation.RouteGraph {
+	if r == nil || r.graphs == nil {
+		return nil
+	}
+	return r.graphs[id]
+}
+
+// Set stores a route graph under the given ID
+func (r *RouteGraphResource) Set(id uint32, rg *navigation.RouteGraph) {
+	if r.graphs == nil {
+		r.graphs = make(map[uint32]*navigation.RouteGraph)
+	}
+	r.graphs[id] = rg
+}
+
+// Remove deletes a route graph by ID
+func (r *RouteGraphResource) Remove(id uint32) {
+	if r.graphs != nil {
+		delete(r.graphs, id)
+	}
+}
+
+// Clear removes all route graphs (used on regraph/reset)
+func (r *RouteGraphResource) Clear() {
+	if r.graphs != nil {
+		clear(r.graphs)
 	}
 }
 
