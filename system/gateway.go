@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -16,6 +17,10 @@ import (
 type GatewaySystem struct {
 	world *engine.World
 
+	// Telemetry
+	statActive *atomic.Bool
+	statCount  *atomic.Int64
+
 	enabled bool
 }
 
@@ -23,11 +28,17 @@ func NewGatewaySystem(world *engine.World) engine.System {
 	s := &GatewaySystem{
 		world: world,
 	}
+
+	s.statActive = world.Resources.Status.Bools.Get("gateway.active")
+	s.statCount = world.Resources.Status.Ints.Get("gateway.count")
+
 	s.Init()
 	return s
 }
 
 func (s *GatewaySystem) Init() {
+	s.statActive.Store(false)
+	s.statCount.Store(0)
 	s.enabled = true
 }
 
@@ -75,30 +86,30 @@ func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGatewayDespawnRequest:
 		if payload, ok := ev.Payload.(*event.GatewayDespawnRequestPayload); ok {
-			s.handleDespawnRequest(core.Entity(payload.AnchorEntity))
+			s.handleDespawnRequest(payload.AnchorEntity)
 		}
 	}
 }
 
 func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPayload) {
-	anchorEntity := core.Entity(payload.AnchorEntity)
+	anchorEntity := payload.AnchorEntity
 
 	// Validate anchor exists and has position
 	if _, ok := s.world.Positions.GetPosition(anchorEntity); !ok {
 		return
 	}
 
-	// Enforce single gateway per anchor — find and skip if exists
+	// Enforce single gateway per anchor
 	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
 	for _, e := range gatewayEntities {
 		if gw, ok := s.world.Components.Gateway.GetComponent(e); ok {
-			if core.Entity(gw.AnchorEntity) == anchorEntity {
+			if gw.AnchorEntity == anchorEntity {
 				return
 			}
 		}
 	}
 
-	baseInterval := time.Duration(payload.BaseInterval)
+	baseInterval := time.Duration(payload.BaseIntervalMs) * time.Millisecond
 	if baseInterval <= 0 {
 		baseInterval = parameter.GatewayDefaultInterval
 	}
@@ -108,10 +119,12 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		rateMultiplier = parameter.GatewayDefaultRateMultiplier
 	}
 
-	minInterval := time.Duration(payload.MinInterval)
+	minInterval := time.Duration(payload.MinIntervalMs) * time.Millisecond
 	if minInterval <= 0 {
 		minInterval = parameter.GatewayDefaultMinInterval
 	}
+
+	rateAccelInterval := time.Duration(payload.RateAccelIntervalMs) * time.Millisecond
 
 	gwComp := component.GatewayComponent{
 		AnchorEntity:      anchorEntity,
@@ -122,7 +135,7 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		Accumulated:       0,
 		Active:            true,
 		RateMultiplier:    rateMultiplier,
-		RateAccelInterval: time.Duration(payload.RateAccelInterval),
+		RateAccelInterval: rateAccelInterval,
 		RateAccelElapsed:  0,
 		MinInterval:       minInterval,
 		OffsetX:           payload.OffsetX,
@@ -140,7 +153,7 @@ func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
 		if !ok {
 			continue
 		}
-		if core.Entity(gw.AnchorEntity) == anchorEntity {
+		if gw.AnchorEntity == anchorEntity {
 			s.despawnGateway(e, anchorEntity)
 			return
 		}
@@ -155,15 +168,17 @@ func (s *GatewaySystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
 
+	activeCount := 0
+
 	for _, gwEntity := range gatewayEntities {
 		gw, ok := s.world.Components.Gateway.GetComponent(gwEntity)
 		if !ok {
 			continue
 		}
 
-		anchorEntity := core.Entity(gw.AnchorEntity)
+		anchorEntity := gw.AnchorEntity
 
-		// Anchor liveness check (follows SplashSystem pattern)
+		// Anchor liveness check
 		anchorPos, anchorAlive := s.world.Positions.GetPosition(anchorEntity)
 		if !anchorAlive {
 			s.despawnGateway(gwEntity, anchorEntity)
@@ -171,6 +186,7 @@ func (s *GatewaySystem) Update() {
 		}
 
 		if !gw.Active {
+			activeCount++
 			continue
 		}
 
@@ -203,7 +219,11 @@ func (s *GatewaySystem) Update() {
 		}
 
 		s.world.Components.Gateway.SetComponent(gwEntity, gw)
+		activeCount++
 	}
+
+	s.statCount.Store(int64(activeCount))
+	s.statActive.Store(activeCount > 0)
 }
 
 // emitSpawnEvent routes to the appropriate species spawn request event

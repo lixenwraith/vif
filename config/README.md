@@ -52,6 +52,26 @@ transitions = [...]                 # Transition rules
 
 `Tick` — evaluated every frame; use with guard to control timing.
 
+### Variable Capture from Payloads
+
+Extract event payload fields into FSM variables when a transition matches:
+
+```toml
+{ trigger = "EventPylonSpawned", target = "NextState", capture_vars = { header_entity = "pylon_entity" } }
+```
+
+`capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
+
+Supported field types: `int`, `int64`, `uint`, `uint64` (including `core.Entity`), `float64`, `bool` (true=1, false=0)
+
+Combine with guards and payload injection:
+```toml
+# Capture entity from spawn response, then inject into follow-up request
+{ trigger = "EventPylonSpawned", target = "AttachGateway", capture_vars = { header_entity = "anchor_id" } }
+# In AttachGateway on_enter:
+{ action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0 }, payload_vars = { anchor_entity = "anchor_id" } }
+```
+
 ---
 
 ## Actions

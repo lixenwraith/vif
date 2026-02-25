@@ -6,10 +6,12 @@ on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart" },
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200 } },
     { action = "EmitEvent", event = "EventDrainPause" },
-    { action = "EmitEvent", event = "EventFuseQuasarRequest" }
+    { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" }
+    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },
+    # Defensive: spawn never arrived
+    { trigger = "Tick", target = "QuasarExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
 
 # --- Gold Cycle Parent ---
@@ -17,12 +19,17 @@ transitions = [
 [states.QuasarGoldCycle]
 parent = "Root"
 on_exit = [
-    { action = "EmitEvent", event = "EventGoldCancel" }
+    { action = "EmitEvent", event = "EventGoldCancel" },
 ]
 transitions = [
     { trigger = "EventQuasarDestroyed", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
     { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
-    { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } }
+    { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
+    # Defensive: quasar died OOB without emitting destroy event
+    { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
+    ] } },
 ]
 
 # --- Gold Spawn ---
@@ -30,17 +37,22 @@ transitions = [
 [states.QuasarGoldSpawn]
 parent = "QuasarGoldCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldSpawnRetry" }
+    { trigger = "EventGoldSpawnFailed", target = "QuasarGoldSpawnRetry" },
+    # Defensive: quasar died OOB without emitting destroy event
+    { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
+    ] } },
 ]
 
 [states.QuasarGoldSpawnRetry]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
+    { trigger = "Tick", target = "QuasarGoldSpawn", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 # --- Gold Active ---
@@ -50,7 +62,12 @@ parent = "QuasarGoldCycle"
 transitions = [
     { trigger = "EventGoldComplete", target = "QuasarGoldComplete" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
-    { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" }
+    { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" },
+    # Defensive: quasar died OOB without emitting destroy event
+    { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
+    ] } },
 ]
 
 [states.QuasarGoldComplete]

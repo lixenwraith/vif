@@ -307,9 +307,10 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 		}
 
 		node.Transitions = append(node.Transitions, Transition[T]{
-			TargetID: targetID,
-			Event:    eventType,
-			Guard:    guard,
+			TargetID:    targetID,
+			Event:       eventType,
+			Guard:       guard,
+			CaptureVars: cfg.CaptureVars,
 		})
 	}
 	return nil

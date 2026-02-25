@@ -2,6 +2,7 @@ package fsm
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/event"
@@ -252,6 +253,11 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 		for _, trans := range node.Transitions {
 			if trans.Event == ev.Type {
 				if trans.Guard == nil || trans.Guard(ctx, region, ev.Payload) {
+					// Capture payload fields into FSM variables before transition
+					// Variables are available in target state on_enter actions
+					if len(trans.CaptureVars) > 0 {
+						m.capturePayloadVars(ev.Payload, trans.CaptureVars)
+					}
 					m.transitionRegion(ctx, region, trans.TargetID)
 					return true
 				}
@@ -261,6 +267,74 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 	}
 
 	return false
+}
+
+// capturePayloadVars extracts payload struct fields into FSM variables
+// Handles int, uint (including core.Entity), float, and bool types
+// Field resolution: toml struct tag first, then Go field name
+func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]string) {
+	if payload == nil || len(captureVars) == 0 {
+		return
+	}
+
+	v := reflect.ValueOf(payload)
+	if v.Kind() == reflect.Ptr {
+		if v.IsNil() {
+			return
+		}
+		v = v.Elem()
+	}
+	if v.Kind() != reflect.Struct {
+		return
+	}
+
+	typ := v.Type()
+
+	for key, varName := range captureVars {
+		field := resolveStructField(v, typ, key)
+		if !field.IsValid() {
+			continue
+		}
+
+		var value int64
+		switch field.Kind() {
+		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+			value = field.Int()
+		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+			value = int64(field.Uint())
+		case reflect.Float32, reflect.Float64:
+			value = int64(field.Float())
+		case reflect.Bool:
+			if field.Bool() {
+				value = 1
+			}
+		default:
+			continue
+		}
+
+		m.variables[varName] = value
+	}
+}
+
+// resolveStructField finds a struct field by toml tag first, then Go field name
+func resolveStructField(v reflect.Value, typ reflect.Type, key string) reflect.Value {
+	for i := 0; i < typ.NumField(); i++ {
+		tag := typ.Field(i).Tag.Get("toml")
+		if tag == "" || tag == "-" {
+			continue
+		}
+		// Strip options suffix
+		for j := 0; j < len(tag); j++ {
+			if tag[j] == ',' {
+				tag = tag[:j]
+				break
+			}
+		}
+		if tag == key {
+			return v.Field(i)
+		}
+	}
+	return v.FieldByName(key)
 }
 
 // transitionRegion performs state change within a specific region

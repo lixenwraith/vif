@@ -1,17 +1,18 @@
 # Tower region: tower defense level
 # Entry: storm escalation spawns with initial_state = "TowerSetup"
 # Exit: resume main region, terminate self
+# Spawning: gateways attached to pylons handle continuous eye spawning
 
 # --- Setup ---
 
 [states.TowerSetup]
 parent = "Root"
 on_enter = [
+    # Drain control
+    { action = "EmitEvent", event = "EventGoldCancel" },
+    { action = "EmitEvent", event = "EventDrainPause" },
     # Visual cue
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
-    # Drain control
-    { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "EmitEvent", event = "EventDrainPause" },
     # Clear previous phase walls
     { action = "EmitEvent", event = "EventWallDespawnAll" },
 
@@ -39,7 +40,7 @@ on_enter = [
     { action = "CopyVar", payload = { name = "p_br_y", source_var = "vh" } },
     { action = "DecrementVar", payload = { name = "p_br_y", delta = 9 } },
 
-    # Level setup: map = viewport, no crop, clear entities (before maze/entity spawns)
+    # Level setup: map = viewport, no crop, clear entities
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = false }, payload_vars = { Width = "vw", Height = "vh" } },
 
     # Maze with rooms at calculated positions
@@ -51,25 +52,18 @@ on_enter = [
     # Spawn tower at center
     { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 0, y = 0, target_group_id = 1 }, payload_vars = { X = "cx", Y = "cy" } },
 
-    # Spawn 4 pylons at corners
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
-    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
-
     # Push cursor out of walls
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },
 
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TOWER" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "TowerActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+    { trigger = "Tick", target = "TowerSpawnP1", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]
 
 # --- Gameplay Cycle Parent ---
 # All active gameplay states live under this parent
 # on_exit handles entity cleanup and level restore for any exit path
-# (normal victory/defeat transitions AND external termination by monitor)
 
 [states.TowerCycle]
 parent = "Root"
@@ -81,37 +75,106 @@ on_exit = [
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = true } },
 ]
 transitions = [
-    # Tower death = defeat (highest priority event)
+    # Tower death = defeat (highest priority)
     { trigger = "EventTowerDestroyed", target = "TowerDefeat" },
-    # All pylons dead = victory (checked each tick)
+    # All pylons dead = victory
     { trigger = "Tick", target = "TowerVictory", guard = "VarCompare", guard_args = { var = "pylons_dead", op = "gte", value = 4 } },
     # Individual pylon death tracking (bubbles from children)
     { trigger = "EventPylonDestroyed", target = "TowerPylonDied" },
 ]
 
-# --- Active: Wait Between Waves ---
+# --- Sequential Pylon Spawn + Gateway Attach Chain ---
+# Each pylon: spawn request → wait for response → capture entity → attach gateway → next
+# Failed spawns skip to next pylon (gateway not attached for that corner)
 
-[states.TowerActive]
-parent = "TowerCycle"
-transitions = [
-    { trigger = "Tick", target = "TowerSpawnWave", guard = "StateTimeExceeds", guard_args = { ms = 2000 } },
-]
-
-# --- Eye Spawn Wave ---
-# Spawns one eye at each pylon position, all targeting group 1 (tower)
-# Immediately returns to Active (resets 2s timer)
-
-[states.TowerSpawnWave]
+# Pylon 1: Top-Left
+[states.TowerSpawnP1]
 parent = "TowerCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
-    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
-    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
-    { action = "EmitEvent", event = "EventEyeSpawnRequest", payload = { x = 0, y = 0, type = 0, target_group_id = 1 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tl_x", Y = "p_tl_y" } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TowerAttachGW1", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP2" },
+    { trigger = "Tick", target = "TowerSpawnP2", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TowerAttachGW1]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TowerSpawnP2" },
+]
+
+# Pylon 2: Top-Right
+[states.TowerSpawnP2]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_tr_x", Y = "p_tr_y" } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TowerAttachGW2", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP3" },
+    { trigger = "Tick", target = "TowerSpawnP3", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TowerAttachGW2]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TowerSpawnP3" },
+]
+
+# Pylon 3: Bottom-Left
+[states.TowerSpawnP3]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_bl_x", Y = "p_bl_y" } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TowerAttachGW3", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TowerSpawnP4" },
+    { trigger = "Tick", target = "TowerSpawnP4", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TowerAttachGW3]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TowerSpawnP4" },
+]
+
+# Pylon 4: Bottom-Right
+[states.TowerSpawnP4]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 0, y = 0 }, payload_vars = { X = "p_br_x", Y = "p_br_y" } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TowerAttachGW4", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TowerActive" },
+    { trigger = "Tick", target = "TowerActive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TowerAttachGW4]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerActive" },
 ]
+
+# --- Active: Gateways handle spawning, FSM monitors win/loss ---
+
+[states.TowerActive]
+parent = "TowerCycle"
 
 # --- Pylon Death Counter ---
 # Transient state: increments counter, returns to Active next tick

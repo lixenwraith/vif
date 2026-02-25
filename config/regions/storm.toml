@@ -14,6 +14,11 @@ transitions = [
 parent = "Root"
 transitions = [
     { trigger = "EventStormDestroyed", target = "StormDecision" }
+    # Defensive: storm died OOB without emitting destroy event
+    { trigger = "Tick", target = "StormVictory", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "storm.active", value = false } },
+    ] } },
 ]
 
 [states.StormDecision]

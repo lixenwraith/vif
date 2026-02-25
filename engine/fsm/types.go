@@ -82,9 +82,10 @@ type Node[T any] struct {
 
 // Transition defines a link between states
 type Transition[T any] struct {
-	TargetID StateID
-	Event    event.EventType // 0 = Tick (auto-transition)
-	Guard    GuardFunc[T]    // nil = Always true
+	TargetID    StateID
+	Event       event.EventType   // 0 = Tick (auto-transition)
+	Guard       GuardFunc[T]      // nil = Always true
+	CaptureVars map[string]string // Payload field → FSM variable name
 }
 
 // Action represents a side-effect

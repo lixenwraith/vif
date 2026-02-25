@@ -745,6 +745,8 @@ type PylonSpawnRequestPayload struct {
 type PylonSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 	MemberCount  int         `toml:"member_count"`
+	X            int         `toml:"x"`
+	Y            int         `toml:"y"`
 }
 
 // PylonDestroyedPayload contains pylon death data
@@ -834,16 +836,16 @@ type TowerDestroyedPayload struct {
 
 // GatewaySpawnRequestPayload requests creation of a gateway entity
 type GatewaySpawnRequestPayload struct {
-	AnchorEntity      core.Entity `toml:"anchor_entity"`       // Parent entity (pylon header)
-	Species           uint8       `toml:"species"`             // component.SpeciesType
-	SubType           uint8       `toml:"sub_type"`            // Species variant (e.g. EyeType)
-	GroupID           uint8       `toml:"group_id"`            // Target group for spawned entities
-	BaseInterval      int64       `toml:"base_interval"`       // time.Duration as int64
-	RateMultiplier    float64     `toml:"rate_multiplier"`     // 1.0 = no acceleration
-	RateAccelInterval int64       `toml:"rate_accel_interval"` // time.Duration as int64, 0 = disabled
-	MinInterval       int64       `toml:"min_interval"`        // time.Duration as int64
-	OffsetX           int         `toml:"offset_x"`
-	OffsetY           int         `toml:"offset_y"`
+	AnchorEntity        core.Entity `toml:"anchor_entity"`          // Parent entity (pylon header)
+	Species             uint8       `toml:"species"`                // component.SpeciesType
+	SubType             uint8       `toml:"sub_type"`               // Species variant (e.g. EyeType)
+	GroupID             uint8       `toml:"group_id"`               // Target group for spawned entities
+	BaseIntervalMs      int         `toml:"base_interval_ms"`       // Spawn interval in milliseconds
+	RateMultiplier      float64     `toml:"rate_multiplier"`        // <1.0 = accelerating, 1.0 = constant
+	RateAccelIntervalMs int         `toml:"rate_accel_interval_ms"` // How often multiplier applied (ms), 0 = disabled
+	MinIntervalMs       int         `toml:"min_interval_ms"`        // Floor interval in milliseconds
+	OffsetX             int         `toml:"offset_x"`
+	OffsetY             int         `toml:"offset_y"`
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity

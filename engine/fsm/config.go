@@ -39,10 +39,11 @@ type StateConfig struct {
 
 // TransitionConfig represents a transition definition
 type TransitionConfig struct {
-	Trigger   string         `toml:"trigger"`              // Event Name or "Tick"
-	Target    string         `toml:"target"`               // Target GameState Name
-	Guard     string         `toml:"guard,omitempty"`      // Guard function name
-	GuardArgs map[string]any `toml:"guard_args,omitempty"` // Parameters for factory guards
+	Trigger     string            `toml:"trigger"`                // Event Name or "Tick"
+	Target      string            `toml:"target"`                 // Target GameState Name
+	Guard       string            `toml:"guard,omitempty"`        // Guard function name
+	GuardArgs   map[string]any    `toml:"guard_args,omitempty"`   // Parameters for factory guards
+	CaptureVars map[string]string `toml:"capture_vars,omitempty"` // Payload field → FSM variable (extracted on match)
 }
 
 // ActionConfig represents an action definition

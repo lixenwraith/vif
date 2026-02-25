@@ -249,6 +249,8 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	s.world.PushEvent(event.EventPylonSpawned, &event.PylonSpawnedPayload{
 		HeaderEntity: headerEntity,
 		MemberCount:  len(members),
+		X:            centerX,
+		Y:            centerY,
 	})
 }
 
