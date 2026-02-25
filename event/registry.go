@@ -317,6 +317,11 @@ func InitRegistry() {
 	RegisterType("EventTowerCancelRequest", EventTowerCancelRequest, nil)
 	RegisterType("EventTowerSpawnFailed", EventTowerSpawnFailed, nil)
 
+	// Gateway
+	RegisterType("EventGatewaySpawnRequest", EventGatewaySpawnRequest, &GatewaySpawnRequestPayload{})
+	RegisterType("EventGatewayDespawnRequest", EventGatewayDespawnRequest, &GatewayDespawnRequestPayload{})
+	RegisterType("EventGatewayDespawned", EventGatewayDespawned, &GatewayDespawnedPayload{})
+
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)

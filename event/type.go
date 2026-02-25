@@ -780,6 +780,21 @@ const (
 	// Consumer: TowerSystem | Payload: nil
 	EventTowerCancelRequest
 
+	// EventGatewaySpawnRequest signals GatewaySystem to create a gateway entity anchored to a parent
+	// Trigger: FSM
+	// Consumer: GatewaySystem | Payload: *GatewaySpawnRequestPayload
+	EventGatewaySpawnRequest
+
+	// EventGatewayDespawnRequest signals GatewaySystem to remove gateway for a specific anchor
+	// Trigger: FSM
+	// Consumer: GatewaySystem | Payload: *GatewayDespawnRequestPayload
+	EventGatewayDespawnRequest
+
+	// EventGatewayDespawned signals that a gateway entity has been cleaned up
+	// Trigger: GatewaySystem
+	// Consumer: FSM | Payload: *GatewayDespawnedPayload
+	EventGatewayDespawned
+
 	EventDebugFlowToggle
 	EventDebugGraphToggle
 )

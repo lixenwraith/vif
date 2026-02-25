@@ -45,6 +45,12 @@ func RegisterSystems() {
 	registry.RegisterSystem("wall", func(w any) any {
 		return system.NewWallSystem(w.(*engine.World))
 	})
+	registry.RegisterSystem("tower", func(w any) any {
+		return system.NewTowerSystem(w.(*engine.World))
+	})
+	registry.RegisterSystem("gateway", func(w any) any {
+		return system.NewGatewaySystem(w.(*engine.World))
+	})
 	registry.RegisterSystem("loot", func(w any) any {
 		return system.NewLootSystem(w.(*engine.World))
 	})
@@ -104,9 +110,6 @@ func RegisterSystems() {
 	})
 	registry.RegisterSystem("pylon", func(w any) any {
 		return system.NewPylonSystem(w.(*engine.World))
-	})
-	registry.RegisterSystem("tower", func(w any) any {
-		return system.NewTowerSystem(w.(*engine.World))
 	})
 	registry.RegisterSystem("snake", func(w any) any {
 		return system.NewSnakeSystem(w.(*engine.World))
@@ -299,6 +302,8 @@ func ActiveSystems() []string {
 		"typing",
 		"composite",
 		"wall",
+		"tower",
+		"gateway",
 		"loot",
 		"glyph",
 		"nugget",
@@ -319,7 +324,6 @@ func ActiveSystems() []string {
 		"swarm",
 		"storm",
 		"pylon",
-		"tower",
 		"snake",
 		"eye",
 		"bullet",

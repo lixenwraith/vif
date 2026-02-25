@@ -33,6 +33,7 @@ var Components = []ComponentDef{
 	{"Kinetic", "KineticComponent"},
 	{"Wall", "WallComponent"},
 	{"Loot", "LootComponent"},
+	{"Gateway", "GatewayComponent"},
 
 	// --- Player State ---
 	{"Energy", "EnergyComponent"},
@@ -111,6 +112,8 @@ var Systems = []SystemDef{
 	// --- Composite / Structure ---
 	{"composite", "NewCompositeSystem"},
 	{"wall", "NewWallSystem"},
+	{"tower", "NewTowerSystem"},
+	{"gateway", "NewGatewaySystem"},
 
 	// --- Entity Behaviors ---
 	{"loot", "NewLootSystem"},
@@ -143,7 +146,6 @@ var Systems = []SystemDef{
 	{"swarm", "NewSwarmSystem"},
 	{"storm", "NewStormSystem"},
 	{"pylon", "NewPylonSystem"},
-	{"tower", "NewTowerSystem"},
 	{"snake", "NewSnakeSystem"},
 	{"eye", "NewEyeSystem"},
 	{"bullet", "NewBulletSystem"},

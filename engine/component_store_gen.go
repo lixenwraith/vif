@@ -18,6 +18,7 @@ type Component struct {
 	Kinetic      *Store[component.KineticComponent]
 	Wall         *Store[component.WallComponent]
 	Loot         *Store[component.LootComponent]
+	Gateway      *Store[component.GatewayComponent]
 	Energy       *Store[component.EnergyComponent]
 	Heat         *Store[component.HeatComponent]
 	Shield       *Store[component.ShieldComponent]
@@ -73,6 +74,7 @@ func initComponents(w *World) {
 	w.Components.Kinetic = NewStore[component.KineticComponent]()
 	w.Components.Wall = NewStore[component.WallComponent]()
 	w.Components.Loot = NewStore[component.LootComponent]()
+	w.Components.Gateway = NewStore[component.GatewayComponent]()
 	w.Components.Energy = NewStore[component.EnergyComponent]()
 	w.Components.Heat = NewStore[component.HeatComponent]()
 	w.Components.Shield = NewStore[component.ShieldComponent]()
@@ -130,6 +132,7 @@ func (w *World) removeEntity(e core.Entity) {
 	w.Components.Kinetic.RemoveEntityUnsafe(e)
 	w.Components.Wall.RemoveEntityUnsafe(e)
 	w.Components.Loot.RemoveEntityUnsafe(e)
+	w.Components.Gateway.RemoveEntityUnsafe(e)
 	w.Components.Energy.RemoveEntityUnsafe(e)
 	w.Components.Heat.RemoveEntityUnsafe(e)
 	w.Components.Shield.RemoveEntityUnsafe(e)
@@ -186,6 +189,7 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	w.Components.Kinetic.RemoveBatchUnsafe(entities)
 	w.Components.Wall.RemoveBatchUnsafe(entities)
 	w.Components.Loot.RemoveBatchUnsafe(entities)
+	w.Components.Gateway.RemoveBatchUnsafe(entities)
 	w.Components.Energy.RemoveBatchUnsafe(entities)
 	w.Components.Heat.RemoveBatchUnsafe(entities)
 	w.Components.Shield.RemoveBatchUnsafe(entities)
@@ -242,6 +246,7 @@ func (w *World) wipeAll() {
 	w.Components.Kinetic.ClearAllComponentsUnsafe()
 	w.Components.Wall.ClearAllComponentsUnsafe()
 	w.Components.Loot.ClearAllComponentsUnsafe()
+	w.Components.Gateway.ClearAllComponentsUnsafe()
 	w.Components.Energy.ClearAllComponentsUnsafe()
 	w.Components.Heat.ClearAllComponentsUnsafe()
 	w.Components.Shield.ClearAllComponentsUnsafe()

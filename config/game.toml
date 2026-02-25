@@ -16,6 +16,6 @@ file = "regions/monitor.toml"
 background = true
 
 [regions.placeholder]
-file = "regions/placeholder.toml"
+file = "regions/tower.toml"
 
 [states.Root]

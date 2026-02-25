@@ -23,26 +23,26 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "StormEscalatePlaceholderOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
-    { trigger = "Tick", target = "StormEscalatePlaceholderTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
+    { trigger = "Tick", target = "StormEscalateTowerOne", guard = "StatusIntCompare", guard_args = { key = "kills.swarm", op = "gte", value = 20 } },
+    { trigger = "Tick", target = "StormEscalateTowerTwo", guard = "StatusIntCompare", guard_args = { key = "kills.storm", op = "gte", value = 3 } },
     { trigger = "Tick", target = "StormVictory" }
 ]
 
-[states.StormEscalatePlaceholderOne]
+[states.StormEscalateTowerOne]
 parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.swarm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "SpawnRegion", region = "placeholder", initial_state = "PlaceholderSetup" },
+    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
     { action = "TerminateRegion", region = "storm" }
 ]
 
-[states.StormEscalatePlaceholderTwo]
+[states.StormEscalateTowerTwo]
 parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.storm" } },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
-    { action = "SpawnRegion", region = "placeholder", initial_state = "PlaceholderSetup" },
+    { action = "SpawnRegion", region = "tower", initial_state = "TowerSetup" },
     { action = "TerminateRegion", region = "storm" }
 ]
 

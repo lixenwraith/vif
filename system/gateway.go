@@ -1,0 +1,233 @@
+package system
+
+import (
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/parameter"
+)
+
+// GatewaySystem manages gateway entity lifecycle and timed spawn emission
+// Gateways accumulate delta time and emit species spawn requests at configured intervals
+// Anchor liveness validated each tick — gateway despawns if anchor is destroyed
+type GatewaySystem struct {
+	world *engine.World
+
+	enabled bool
+}
+
+func NewGatewaySystem(world *engine.World) engine.System {
+	s := &GatewaySystem{
+		world: world,
+	}
+	s.Init()
+	return s
+}
+
+func (s *GatewaySystem) Init() {
+	s.enabled = true
+}
+
+func (s *GatewaySystem) Name() string {
+	return "gateway"
+}
+
+func (s *GatewaySystem) Priority() int {
+	return parameter.PriorityGateway
+}
+
+func (s *GatewaySystem) EventTypes() []event.EventType {
+	return []event.EventType{
+		event.EventGameReset,
+		event.EventMetaSystemCommandRequest,
+		event.EventGatewaySpawnRequest,
+		event.EventGatewayDespawnRequest,
+	}
+}
+
+func (s *GatewaySystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameReset {
+		s.Init()
+		return
+	}
+
+	if ev.Type == event.EventMetaSystemCommandRequest {
+		if payload, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok {
+			if payload.SystemName == s.Name() {
+				s.enabled = payload.Enabled
+			}
+		}
+		return
+	}
+
+	if !s.enabled {
+		return
+	}
+
+	switch ev.Type {
+	case event.EventGatewaySpawnRequest:
+		if payload, ok := ev.Payload.(*event.GatewaySpawnRequestPayload); ok {
+			s.handleSpawnRequest(payload)
+		}
+
+	case event.EventGatewayDespawnRequest:
+		if payload, ok := ev.Payload.(*event.GatewayDespawnRequestPayload); ok {
+			s.handleDespawnRequest(core.Entity(payload.AnchorEntity))
+		}
+	}
+}
+
+func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPayload) {
+	anchorEntity := core.Entity(payload.AnchorEntity)
+
+	// Validate anchor exists and has position
+	if _, ok := s.world.Positions.GetPosition(anchorEntity); !ok {
+		return
+	}
+
+	// Enforce single gateway per anchor — find and skip if exists
+	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
+	for _, e := range gatewayEntities {
+		if gw, ok := s.world.Components.Gateway.GetComponent(e); ok {
+			if core.Entity(gw.AnchorEntity) == anchorEntity {
+				return
+			}
+		}
+	}
+
+	baseInterval := time.Duration(payload.BaseInterval)
+	if baseInterval <= 0 {
+		baseInterval = parameter.GatewayDefaultInterval
+	}
+
+	rateMultiplier := payload.RateMultiplier
+	if rateMultiplier <= 0 {
+		rateMultiplier = parameter.GatewayDefaultRateMultiplier
+	}
+
+	minInterval := time.Duration(payload.MinInterval)
+	if minInterval <= 0 {
+		minInterval = parameter.GatewayDefaultMinInterval
+	}
+
+	gwComp := component.GatewayComponent{
+		AnchorEntity:      anchorEntity,
+		Species:           component.SpeciesType(payload.Species),
+		SubType:           payload.SubType,
+		GroupID:           payload.GroupID,
+		BaseInterval:      baseInterval,
+		Accumulated:       0,
+		Active:            true,
+		RateMultiplier:    rateMultiplier,
+		RateAccelInterval: time.Duration(payload.RateAccelInterval),
+		RateAccelElapsed:  0,
+		MinInterval:       minInterval,
+		OffsetX:           payload.OffsetX,
+		OffsetY:           payload.OffsetY,
+	}
+
+	entity := s.world.CreateEntity()
+	s.world.Components.Gateway.SetComponent(entity, gwComp)
+}
+
+func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
+	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
+	for _, e := range gatewayEntities {
+		gw, ok := s.world.Components.Gateway.GetComponent(e)
+		if !ok {
+			continue
+		}
+		if core.Entity(gw.AnchorEntity) == anchorEntity {
+			s.despawnGateway(e, anchorEntity)
+			return
+		}
+	}
+}
+
+func (s *GatewaySystem) Update() {
+	if !s.enabled {
+		return
+	}
+
+	dt := s.world.Resources.Time.DeltaTime
+	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
+
+	for _, gwEntity := range gatewayEntities {
+		gw, ok := s.world.Components.Gateway.GetComponent(gwEntity)
+		if !ok {
+			continue
+		}
+
+		anchorEntity := core.Entity(gw.AnchorEntity)
+
+		// Anchor liveness check (follows SplashSystem pattern)
+		anchorPos, anchorAlive := s.world.Positions.GetPosition(anchorEntity)
+		if !anchorAlive {
+			s.despawnGateway(gwEntity, anchorEntity)
+			continue
+		}
+
+		if !gw.Active {
+			continue
+		}
+
+		// Rate acceleration
+		if gw.RateAccelInterval > 0 && gw.RateMultiplier != 1.0 {
+			gw.RateAccelElapsed += dt
+			for gw.RateAccelElapsed >= gw.RateAccelInterval {
+				gw.RateAccelElapsed -= gw.RateAccelInterval
+				gw.BaseInterval = time.Duration(float64(gw.BaseInterval) * gw.RateMultiplier)
+				if gw.BaseInterval < gw.MinInterval {
+					gw.BaseInterval = gw.MinInterval
+				}
+			}
+		}
+
+		// Spawn accumulation
+		gw.Accumulated += dt
+		if gw.Accumulated >= gw.BaseInterval {
+			gw.Accumulated -= gw.BaseInterval
+
+			// Clamp overflow to prevent burst spawning after lag
+			if gw.Accumulated > gw.BaseInterval {
+				gw.Accumulated = 0
+			}
+
+			spawnX := anchorPos.X + gw.OffsetX
+			spawnY := anchorPos.Y + gw.OffsetY
+
+			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID)
+		}
+
+		s.world.Components.Gateway.SetComponent(gwEntity, gw)
+	}
+}
+
+// emitSpawnEvent routes to the appropriate species spawn request event
+func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8) {
+	switch species {
+	case component.SpeciesEye:
+		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{
+			X:             x,
+			Y:             y,
+			Type:          component.EyeType(subType),
+			TargetGroupID: groupID,
+		})
+
+		// Future species routing:
+		// case component.SpeciesSwarm:
+		// case component.SpeciesQuasar:
+		// etc.
+	}
+}
+
+func (s *GatewaySystem) despawnGateway(gwEntity core.Entity, anchorEntity core.Entity) {
+	s.world.PushEvent(event.EventGatewayDespawned, &event.GatewayDespawnedPayload{
+		GatewayEntity: gwEntity,
+		AnchorEntity:  anchorEntity,
+	})
+	s.world.DestroyEntity(gwEntity)
+}

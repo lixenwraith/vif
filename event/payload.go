@@ -832,6 +832,31 @@ type TowerDestroyedPayload struct {
 	Y            int         `toml:"y"`
 }
 
+// GatewaySpawnRequestPayload requests creation of a gateway entity
+type GatewaySpawnRequestPayload struct {
+	AnchorEntity      core.Entity `toml:"anchor_entity"`       // Parent entity (pylon header)
+	Species           uint8       `toml:"species"`             // component.SpeciesType
+	SubType           uint8       `toml:"sub_type"`            // Species variant (e.g. EyeType)
+	GroupID           uint8       `toml:"group_id"`            // Target group for spawned entities
+	BaseInterval      int64       `toml:"base_interval"`       // time.Duration as int64
+	RateMultiplier    float64     `toml:"rate_multiplier"`     // 1.0 = no acceleration
+	RateAccelInterval int64       `toml:"rate_accel_interval"` // time.Duration as int64, 0 = disabled
+	MinInterval       int64       `toml:"min_interval"`        // time.Duration as int64
+	OffsetX           int         `toml:"offset_x"`
+	OffsetY           int         `toml:"offset_y"`
+}
+
+// GatewayDespawnRequestPayload requests removal of gateway anchored to entity
+type GatewayDespawnRequestPayload struct {
+	AnchorEntity core.Entity `toml:"anchor_entity"`
+}
+
+// GatewayDespawnedPayload emitted when a gateway is cleaned up
+type GatewayDespawnedPayload struct {
+	GatewayEntity core.Entity `toml:"gateway_entity"`
+	AnchorEntity  core.Entity `toml:"anchor_entity"`
+}
+
 type DebugFlowGroupPayload struct {
 	GroupID uint8
 }

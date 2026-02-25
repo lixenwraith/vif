@@ -30,7 +30,9 @@ const (
 	PriorityStorm       // After Swarm
 	PriorityPylon       // After Storm
 	PriorityTower       // Before Eye
-	PriorityEye         // After Pylon
+
+	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
+	PriorityEye     // After Gateway
 	PriorityCombat
 	PriorityLoot // After enemy entities and combat
 	PriorityDecay
