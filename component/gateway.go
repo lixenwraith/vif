@@ -32,13 +32,11 @@ type GatewayComponent struct {
 	OffsetX int // Offset from anchor position (0 = spawn at anchor)
 	OffsetY int
 
-	// --- Future: Route Distribution (placeholder, not connected) ---
 	// RouteDistID will reference a per-gateway route weight table
 	// populated by NavigationSystem when alternative routes are computed
 	// GeneticSystem will read this to assign route-selection genes at spawn
 	RouteDistID uint32
 
-	// --- Future: Spawn Pool (placeholder, not connected) ---
 	// SpawnPoolSize will track batched spawn allocation for route assignment
 	// Allows pre-sampling N route genes then distributing across spawns
 	SpawnPoolSize int

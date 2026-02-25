@@ -144,20 +144,19 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 	}
 
 	entity := s.world.CreateEntity()
+	if payload.UseRouteGraph {
+		gwComp.RouteDistID = uint32(entity)
+	}
 	s.world.Components.Gateway.SetComponent(entity, gwComp)
 
-	// Request route graph computation for this gateway-target pair
-	spawnX := anchorPos.X + payload.OffsetX
-	spawnY := anchorPos.Y + payload.OffsetY
-	gwComp.RouteDistID = uint32(entity)
-	s.world.Components.Gateway.SetComponent(entity, gwComp)
-
-	s.world.PushEvent(event.EventRouteGraphRequest, &event.RouteGraphRequestPayload{
-		RouteGraphID:  uint32(entity),
-		SourceX:       spawnX,
-		SourceY:       spawnY,
-		TargetGroupID: payload.GroupID,
-	})
+	if payload.UseRouteGraph {
+		s.world.PushEvent(event.EventRouteGraphRequest, &event.RouteGraphRequestPayload{
+			RouteGraphID:  uint32(entity),
+			SourceX:       anchorPos.X + payload.OffsetX,
+			SourceY:       anchorPos.Y + payload.OffsetY,
+			TargetGroupID: payload.GroupID,
+		})
+	}
 }
 
 func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {

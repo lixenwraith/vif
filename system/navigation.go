@@ -703,6 +703,9 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (i
 // resolveRouteField returns the per-route flow field for an entity's route assignment
 // Returns nil if route graph or route ID is invalid, triggering fallback to shared flow field
 func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navigation.FlowField {
+	if graphID == 0 {
+		return nil
+	}
 	entry := s.world.Resources.RouteGraph.Get(graphID)
 	if entry == nil || entry.Graph == nil || routeID < 0 || routeID >= len(entry.Graph.Routes) {
 		return nil

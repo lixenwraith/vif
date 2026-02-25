@@ -251,6 +251,9 @@ func (r *RouteGraphResource) Clear() {
 // PopRoute returns and consumes the next pre-sampled route for the given graph and SubType
 // Returns -1 if graph missing, draining, pool exhausted, or no routes exist
 func (r *RouteGraphResource) PopRoute(id uint32, subType uint8) int {
+	if id == 0 {
+		return -1
+	}
 	entry := r.Get(id)
 	if entry == nil || entry.Draining || entry.Graph == nil || len(entry.Graph.Routes) == 0 {
 		return -1

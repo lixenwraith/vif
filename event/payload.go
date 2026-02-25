@@ -849,6 +849,7 @@ type GatewaySpawnRequestPayload struct {
 	MinIntervalMs       int         `toml:"min_interval_ms"`        // Floor interval in milliseconds
 	OffsetX             int         `toml:"offset_x"`
 	OffsetY             int         `toml:"offset_y"`
+	UseRouteGraph       bool        `toml:"use_route_graph"` // If true, request route graph computation for this gateway
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity
