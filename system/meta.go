@@ -77,10 +77,20 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventDebugFlowToggle:
-		DebugShowFlow = !DebugShowFlow
+		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
+			DebugFlowGroupID = payload.GroupID
+			DebugShowFlow = true
+		} else {
+			DebugShowFlow = !DebugShowFlow
+		}
 
 	case event.EventDebugGraphToggle:
-		DebugShowCompositeNav = !DebugShowCompositeNav
+		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
+			DebugFlowGroupID = payload.GroupID
+			DebugShowCompositeNav = true
+		} else {
+			DebugShowCompositeNav = !DebugShowCompositeNav
+		}
 
 	case event.EventMetaDebugRequest:
 		s.handleDebugRequest()

@@ -25,11 +25,12 @@ const (
 	// Heat penalty when eye occupies cursor cell without shield
 	EyeDamageHeat = 5
 
-	// TODO: make the radii flexible
-
+	// TODO: integrate this
 	// EyeContactCheckDistSq is squared distance threshold for target contact member iteration
 	// Avoids per-member spatial queries when eye is far from target
 	EyeContactCheckDistSq = 100
+
+	// TODO: make the radii flexible
 
 	// EyeSelfDestructRadius is the proximity trigger distance (cells) for entity target contact
 	// Sized to cover default tower footprint (radiusX=6) + 1 cell buffer
@@ -39,12 +40,6 @@ const (
 )
 
 var EyeExplosionRadius = vmath.FromFloat(float64(EyeSelfDestructRadius))
-
-// Navigation — band routing spawn defaults (pre-GA override)
-var (
-	EyeNavBudgetMultiplierDefault = vmath.FromFloat(1.3)
-	EyeNavExplorationBiasDefault  = vmath.FromFloat(0.3)
-)
 
 var EyeRestitution = vmath.FromFloat(EyeRestitutionFloat)
 

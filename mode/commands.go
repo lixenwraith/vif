@@ -36,11 +36,9 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	// Execute based on command
 	switch cmd {
 	case "flow":
-		ctx.World.PushEvent(event.EventDebugFlowToggle, nil)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return handleFlowCommand(ctx, args)
 	case "graph":
-		ctx.World.PushEvent(event.EventDebugGraphToggle, nil)
-		return CommandResult{Continue: true, KeepPaused: false}
+		return handleGraphCommand(ctx, args)
 	case "q", "quit":
 		return handleQuitCommand(ctx)
 	case "n", "new":
@@ -396,5 +394,39 @@ func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
 func handleDustCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventDustAllRequest, nil)
 	ctx.SetLastCommand(":dust")
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// === DEBUG ===
+
+func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) == 0 {
+		ctx.World.PushEvent(event.EventDebugFlowToggle, nil)
+	} else {
+		groupID, err := strconv.Atoi(args[0])
+		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
+			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		ctx.World.PushEvent(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
+			GroupID: uint8(groupID),
+		})
+	}
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) == 0 {
+		ctx.World.PushEvent(event.EventDebugGraphToggle, nil)
+	} else {
+		groupID, err := strconv.Atoi(args[0])
+		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
+			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		ctx.World.PushEvent(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
+			GroupID: uint8(groupID),
+		})
+	}
 	return CommandResult{Continue: true, KeepPaused: false}
 }

@@ -831,3 +831,7 @@ type TowerDestroyedPayload struct {
 	X            int         `toml:"x"`
 	Y            int         `toml:"y"`
 }
+
+type DebugFlowGroupPayload struct {
+	GroupID uint8
+}

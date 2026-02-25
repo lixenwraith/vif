@@ -37,10 +37,17 @@ var DirOpposite = [8]int8{
 // X distance = 10, Y distance = 20
 // Diagonal distance = sqrt(10^2 + 20^2) ≈ 22.36
 const (
-	costX           = 10
-	costY           = 20
-	costDiagonal    = 22
-	costUnreachable = 1<<30 - 1
+	CostX           = 10
+	CostY           = 20
+	CostDiagonal    = 22
+	CostUnreachable = 1<<30 - 1
+)
+
+const (
+	costX           = CostX
+	costY           = CostY
+	costDiagonal    = CostDiagonal
+	costUnreachable = CostUnreachable
 )
 
 // Per-direction costs matching DirVectors index order (N, NE, E, SE, S, SW, W, NW)
