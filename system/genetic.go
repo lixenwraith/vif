@@ -100,11 +100,13 @@ func (m *playerModel) context() fitness.Context {
 
 type trackedEntity struct {
 	species       component.SpeciesType
+	subType       uint8
 	evalID        uint64
 	collector     tracking.Collector
 	isComposite   bool
-	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
-	// Future: gatewayID for per-gateway population isolation
+	targetGroupID uint8  // Target group for distance measurement (0 = cursor)
+	routeGraphID  uint32 // Route graph ID for bandit outcome routing (0 = none)
+	routeID       int    // Assigned route index (-1 = no route)
 }
 
 // --- Genetic System ---
@@ -213,7 +215,7 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventEnemyCreated:
 		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
-			s.handleEnemyCreated(payload.Entity, payload.Species)
+			s.handleEnemyCreated(payload.Entity, payload.Species, payload.SubType)
 		}
 
 	case event.EventEnemyKilled:
@@ -223,7 +225,7 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType) {
+func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8) {
 	if _, exists := s.tracking[entity]; exists {
 		return
 	}
@@ -237,13 +239,19 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		speciesType = component.SpeciesNone
 	}
 
-	// Future: apply route-selection gene to entity here
-	// Route index from genes[0] maps to navigation-computed path set
-	// NavigationComponent.TargetGroupID or new RouteComponent assigned based on gene value
-
 	groupID := uint8(0)
 	if tc, ok := s.world.Components.Target.GetComponent(entity); ok {
 		groupID = tc.GroupID
+	}
+
+	// Read route assignment from NavigationComponent (set by species system at spawn)
+	routeGraphID := uint32(0)
+	routeID := -1
+	if nav, ok := s.world.Components.Navigation.GetComponent(entity); ok {
+		if nav.UseRouteGraph {
+			routeGraphID = nav.RouteGraphID
+			routeID = nav.RouteID
+		}
 	}
 
 	isComposite := s.world.Components.Header.HasEntity(entity)
@@ -257,16 +265,20 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 
 	s.tracking[entity] = &trackedEntity{
 		species:       speciesType,
+		subType:       subType,
 		evalID:        evalID,
 		collector:     collector,
 		isComposite:   isComposite,
 		targetGroupID: groupID,
+		routeGraphID:  routeGraphID,
+		routeID:       routeID,
 	}
 
 	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
 		Genes:     genes,
 		EvalID:    evalID,
 		Species:   speciesType,
+		SubType:   subType,
 		SpawnTime: s.world.Resources.Time.GameTime,
 	})
 }
@@ -280,6 +292,11 @@ func (s *GeneticSystem) Update() {
 	s.processPendingDeaths()
 	s.cleanupStaleTracking()
 	s.processTracking(dt)
+
+	// Bandit weight updates and draining cleanup
+	s.world.Resources.RouteGraph.ProcessUpdates()
+	s.world.Resources.RouteGraph.PruneDrained(s.world.Resources.Time.GameTime)
+
 	s.updateTelemetry()
 }
 
@@ -357,6 +374,7 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 // completeTracking finalizes entity tracking and reports distance-at-death fitness
 // Fitness = 1.0 at target, 0.0 at maximum map distance
 // deathX/deathY < 0 signals unknown position (zero fitness)
+// Reports to both bandit population (if route assigned) and GA registry (telemetry)
 func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY int) {
 	// Finalize collector, release accumulated metrics
 	_ = tracked.collector.Finalize(tracking.MetricBundle{})
@@ -387,6 +405,14 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 		}
 	}
 
+	// Route bandit outcome (parallel path)
+	if tracked.routeID >= 0 && tracked.routeGraphID != 0 {
+		s.world.Resources.RouteGraph.RecordOutcome(
+			tracked.routeGraphID, tracked.subType, tracked.routeID, fitnessVal,
+		)
+	}
+
+	// GA registry (telemetry path)
 	s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, fitnessVal)
 
 	if tracked.isComposite {
@@ -415,11 +441,4 @@ func (s *GeneticSystem) updateTelemetry() {
 		}
 	}
 	s.statTracked.Store(eyeTracked)
-}
-
-func boolToFloat(b bool) float64 {
-	if b {
-		return 1.0
-	}
-	return 0.0
 }

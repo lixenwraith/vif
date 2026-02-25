@@ -795,6 +795,16 @@ const (
 	// Consumer: FSM | Payload: *GatewayDespawnedPayload
 	EventGatewayDespawned
 
+	// EventRouteGraphRequest requests route graph computation for a gateway-target pair
+	// Trigger: GatewaySystem on gateway creation
+	// Consumer: NavigationSystem | Payload: *RouteGraphRequestPayload
+	EventRouteGraphRequest
+
+	// EventRouteGraphComputed signals route graph computation completion
+	// Trigger: NavigationSystem after successful computation
+	// Consumer: GatewaySystem (telemetry) | Payload: *RouteGraphComputedPayload
+	EventRouteGraphComputed
+
 	EventDebugFlowToggle
 	EventDebugGraphToggle
 )

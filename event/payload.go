@@ -661,6 +661,7 @@ type EnemyKilledPayload struct {
 type EnemyCreatedPayload struct {
 	Entity  core.Entity           `toml:"entity"`
 	Species component.SpeciesType `toml:"species"`
+	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 }
 
 // LootSpawnRequestPayload requests direct loot spawn (bypasses drop tables)
@@ -795,6 +796,8 @@ type EyeSpawnRequestPayload struct {
 	Y             int               `toml:"y"`
 	Type          component.EyeType `toml:"type"`
 	TargetGroupID uint8             `toml:"target_group_id"`
+	RouteGraphID  uint32            `toml:"route_graph_id"` // 0 = no route graph
+	RouteID       int               `toml:"route_id"`       // -1 = shared flow field
 }
 
 // EyeSpawnedPayload notifies eye composite creation
@@ -857,6 +860,20 @@ type GatewayDespawnRequestPayload struct {
 type GatewayDespawnedPayload struct {
 	GatewayEntity core.Entity `toml:"gateway_entity"`
 	AnchorEntity  core.Entity `toml:"anchor_entity"`
+}
+
+// RouteGraphRequestPayload requests route graph computation for a gateway-target pair
+type RouteGraphRequestPayload struct {
+	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
+	SourceX       int    `toml:"source_x"`       // Gateway spawn position
+	SourceY       int    `toml:"source_y"`
+	TargetGroupID uint8  `toml:"target_group_id"`
+}
+
+// RouteGraphComputedPayload signals route graph computation completion
+type RouteGraphComputedPayload struct {
+	RouteGraphID uint32 `toml:"route_graph_id"`
+	RouteCount   int    `toml:"route_count"`
 }
 
 type DebugFlowGroupPayload struct {

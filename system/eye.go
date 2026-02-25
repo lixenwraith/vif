@@ -84,7 +84,7 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventEyeSpawnRequest:
 		if payload, ok := ev.Payload.(*event.EyeSpawnRequestPayload); ok {
-			s.spawnEye(payload.X, payload.Y, payload.Type, payload.TargetGroupID)
+			s.spawnEye(payload)
 		}
 
 	case event.EventEyeCancelRequest:
@@ -194,12 +194,12 @@ func (s *EyeSystem) Update() {
 
 // === Spawn ===
 
-func (s *EyeSystem) spawnEye(targetX, targetY int, eyeType component.EyeType, groupID uint8) {
-	if int(eyeType) >= parameter.EyeTypeCount {
+func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
+	if int(payload.Type) >= parameter.EyeTypeCount {
 		return
 	}
 
-	headerX, headerY := targetX, targetY
+	headerX, headerY := payload.X, payload.Y
 	topLeftX := headerX - parameter.EyeHeaderOffsetX
 	topLeftY := headerY - parameter.EyeHeaderOffsetY
 
@@ -224,7 +224,7 @@ func (s *EyeSystem) spawnEye(targetX, targetY int, eyeType component.EyeType, gr
 	}
 
 	s.clearSpawnArea(headerX, headerY)
-	headerEntity := s.createEyeComposite(headerX, headerY, eyeType, groupID)
+	headerEntity := s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID)
 
 	s.world.PushEvent(event.EventEyeSpawned, &event.EyeSpawnedPayload{
 		HeaderEntity: headerEntity,
@@ -266,7 +266,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	}
 }
 
-func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8) core.Entity {
+func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8, routeGraphID uint32, routeID int) core.Entity {
 	topLeftX := headerX - parameter.EyeHeaderOffsetX
 	topLeftY := headerY - parameter.EyeHeaderOffsetY
 	params := &parameter.EyeTypeTable[eyeType]
@@ -294,12 +294,18 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		},
 	})
 
-	// Navigation (single consolidated write, includes path diversity defaults)
-	s.world.Components.Navigation.SetComponent(headerEntity, component.NavigationComponent{
+	// Navigation (single consolidated write, includes route assignment)
+	navComp := component.NavigationComponent{
 		Width:         parameter.EyeWidth,
 		Height:        parameter.EyeHeight,
 		FlowLookahead: parameter.NavFlowLookaheadDefault,
-	})
+	}
+	if routeID >= 0 {
+		navComp.UseRouteGraph = true
+		navComp.RouteGraphID = routeGraphID
+		navComp.RouteID = routeID
+	}
+	s.world.Components.Navigation.SetComponent(headerEntity, navComp)
 
 	// Combat
 	s.world.Components.Combat.SetComponent(headerEntity, component.CombatComponent{
@@ -353,6 +359,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
 		Entity:  headerEntity,
 		Species: component.SpeciesEye,
+		SubType: uint8(eyeType),
 	})
 
 	return headerEntity

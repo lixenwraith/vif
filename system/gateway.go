@@ -95,7 +95,8 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 	anchorEntity := payload.AnchorEntity
 
 	// Validate anchor exists and has position
-	if _, ok := s.world.Positions.GetPosition(anchorEntity); !ok {
+	anchorPos, ok := s.world.Positions.GetPosition(anchorEntity)
+	if !ok {
 		return
 	}
 
@@ -144,6 +145,19 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 
 	entity := s.world.CreateEntity()
 	s.world.Components.Gateway.SetComponent(entity, gwComp)
+
+	// Request route graph computation for this gateway-target pair
+	spawnX := anchorPos.X + payload.OffsetX
+	spawnY := anchorPos.Y + payload.OffsetY
+	gwComp.RouteDistID = uint32(entity)
+	s.world.Components.Gateway.SetComponent(entity, gwComp)
+
+	s.world.PushEvent(event.EventRouteGraphRequest, &event.RouteGraphRequestPayload{
+		RouteGraphID:  uint32(entity),
+		SourceX:       spawnX,
+		SourceY:       spawnY,
+		TargetGroupID: payload.GroupID,
+	})
 }
 
 func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
@@ -215,7 +229,7 @@ func (s *GatewaySystem) Update() {
 			spawnX := anchorPos.X + gw.OffsetX
 			spawnY := anchorPos.Y + gw.OffsetY
 
-			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID)
+			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
 		}
 
 		s.world.Components.Gateway.SetComponent(gwEntity, gw)
@@ -227,14 +241,18 @@ func (s *GatewaySystem) Update() {
 }
 
 // emitSpawnEvent routes to the appropriate species spawn request event
-func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8) {
+// routeDistID enables per-route assignment from bandit pool
+func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
 	switch species {
 	case component.SpeciesEye:
+		routeID := s.world.Resources.RouteGraph.PopRoute(routeDistID, subType)
 		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{
 			X:             x,
 			Y:             y,
 			Type:          component.EyeType(subType),
 			TargetGroupID: groupID,
+			RouteGraphID:  routeDistID,
+			RouteID:       routeID,
 		})
 
 		// Future species routing:
@@ -245,6 +263,13 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 }
 
 func (s *GatewaySystem) despawnGateway(gwEntity core.Entity, anchorEntity core.Entity) {
+	// Mark route distribution as draining for deferred cleanup
+	if gw, ok := s.world.Components.Gateway.GetComponent(gwEntity); ok {
+		if gw.RouteDistID != 0 {
+			s.world.Resources.RouteGraph.MarkDraining(gw.RouteDistID, s.world.Resources.Time.GameTime)
+		}
+	}
+
 	s.world.PushEvent(event.EventGatewayDespawned, &event.GatewayDespawnedPayload{
 		GatewayEntity: gwEntity,
 		AnchorEntity:  anchorEntity,

@@ -148,6 +148,7 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,
 		event.EventNavigationRegraph,
+		event.EventRouteGraphRequest,
 		event.EventWallSpawned,
 		event.EventWallDespawned,
 	}
@@ -195,6 +196,11 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.TargetGroupRemovePayload); ok {
 			delete(s.groups, payload.GroupID)
 			s.world.Resources.Target.SetGroup(payload.GroupID, engine.TargetGroupState{})
+		}
+
+	case event.EventRouteGraphRequest:
+		if payload, ok := ev.Payload.(*event.RouteGraphRequestPayload); ok {
+			s.handleRouteGraphRequest(payload)
 		}
 
 	case event.EventWallSpawned:
@@ -697,13 +703,72 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (i
 // resolveRouteField returns the per-route flow field for an entity's route assignment
 // Returns nil if route graph or route ID is invalid, triggering fallback to shared flow field
 func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navigation.FlowField {
-	rg := s.world.Resources.RouteGraph.Get(graphID)
-	if rg == nil || routeID < 0 || routeID >= len(rg.Routes) {
+	entry := s.world.Resources.RouteGraph.Get(graphID)
+	if entry == nil || entry.Graph == nil || routeID < 0 || routeID >= len(entry.Graph.Routes) {
 		return nil
 	}
-	field := rg.Routes[routeID].Field
+	field := entry.Graph.Routes[routeID].Field
 	if field == nil || !field.Valid {
 		return nil
 	}
 	return field
+}
+
+// handleRouteGraphRequest computes a route graph for a gateway-target pair
+// Resolves target position from TargetResource or TargetAnchor fallback
+func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequestPayload) {
+	if s.compositePassability == nil {
+		return
+	}
+
+	targetX, targetY, found := s.resolveTargetPosition(payload.TargetGroupID)
+	if !found {
+		return
+	}
+
+	config := s.world.Resources.Config
+	rg := navigation.ComputeRouteGraph(
+		payload.SourceX, payload.SourceY,
+		targetX, targetY,
+		config.MapWidth, config.MapHeight,
+		parameter.EyeWidth, parameter.EyeHeight,
+		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+		s.compositePassability.IsBlocked,
+	)
+	if rg == nil {
+		return
+	}
+
+	s.world.Resources.RouteGraph.Set(payload.RouteGraphID, rg)
+
+	s.world.PushEvent(event.EventRouteGraphComputed, &event.RouteGraphComputedPayload{
+		RouteGraphID: payload.RouteGraphID,
+		RouteCount:   len(rg.Routes),
+	})
+}
+
+// resolveTargetPosition returns the position for a target group
+// Checks TargetResource first, falls back to scanning TargetAnchor components
+func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool) {
+	// Primary: TargetResource (populated by previous tick's Update)
+	groupState := s.world.Resources.Target.GetGroup(groupID)
+	if groupState.Valid && groupState.Count > 0 {
+		return groupState.Targets[0].PosX, groupState.Targets[0].PosY, true
+	}
+
+	// Fallback: scan TargetAnchor components (handles same-tick registration)
+	anchorEntities := s.world.Components.TargetAnchor.GetAllEntities()
+	for _, e := range anchorEntities {
+		anchor, ok := s.world.Components.TargetAnchor.GetComponent(e)
+		if !ok || anchor.GroupID != groupID {
+			continue
+		}
+		pos, ok := s.world.Positions.GetPosition(e)
+		if !ok {
+			continue
+		}
+		return pos.X, pos.Y, true
+	}
+
+	return 0, 0, false
 }

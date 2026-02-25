@@ -23,6 +23,7 @@ type GenotypeComponent struct {
 	Genes     []float64
 	EvalID    uint64
 	Species   SpeciesType
+	SubType   uint8
 	SpawnTime time.Time
 
 	// Observed metrics (updated by GeneticSystem)
