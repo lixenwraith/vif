@@ -58,7 +58,18 @@ on_enter = [
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TOWER" } },
 ]
 transitions = [
-    { trigger = "Tick", target = "TowerSpawnP1", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+    { trigger = "EventTowerSpawned", target = "TowerAttachSnakeGW", capture_vars = { header_entity = "tower_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TowerDefeat" },
+    { trigger = "Tick", target = "TowerDefeat", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TowerAttachSnakeGW]
+parent = "TowerCycle"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 6, sub_type = 0, group_id = 0, base_interval_ms = 30000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 30000, use_route_graph = false }, payload_vars = { anchor_entity = "tower_anchor" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TowerSpawnP1" },
 ]
 
 # --- Gameplay Cycle Parent ---

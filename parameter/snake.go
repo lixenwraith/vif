@@ -21,12 +21,11 @@ const (
 
 // Snake trail and segment configuration
 const (
-	SnakeMaxSegments    = 20
-	SnakeTrailLookahead = 8
+	SnakeMaxSegments = 20
 
 	// SnakeSegmentSpacingFloat: distance between segment centers in cells
 	// Configurable for testing; lower = tighter body
-	SnakeSegmentSpacingFloat = 1.5
+	SnakeSegmentSpacingFloat = 1.0
 
 	// SnakeTrailSampleInterval: minimum distance head must move before trail sample
 	SnakeTrailSampleIntervalFloat = 0.5
@@ -64,8 +63,8 @@ const (
 
 // Snake damage values
 const (
-	SnakeDamageHeat         = 15 // Heat removed on head collision without shield
-	SnakeShieldDrainPerTick = 50 // Energy drained when inside player shield
+	SnakeDamageHeat         = 10
+	SnakeShieldDrainPerTick = 500
 )
 
 // Snake timers

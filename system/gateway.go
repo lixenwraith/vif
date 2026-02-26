@@ -258,9 +258,12 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 			RouteID:       routeID,
 		})
 
-		// Future species routing:
-		// case component.SpeciesSnake:
-		// etc.
+	case component.SpeciesSnake:
+		s.world.PushEvent(event.EventSnakeSpawnRequest, &event.SnakeSpawnRequestPayload{
+			X:            x,
+			Y:            y,
+			SegmentCount: parameter.SnakeMaxSegments,
+		})
 	}
 }
 

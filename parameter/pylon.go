@@ -19,12 +19,18 @@ const (
 
 	// PylonSpawnSpiralMaxRadius is max search distance for spiral fallback
 	PylonSpawnSpiralMaxRadius = 30
+
+	// CombatInitialHPPylonMin is pylon member HP at edge (default)
+	CombatInitialHPPylonMin = 10
+
+	// CombatInitialHPPylonMax is pylon member HP at center (default)
+	CombatInitialHPPylonMax = 100
 )
 
 // Pylon interaction
 const (
 	// PylonShieldDrain is energy drained per tick when pylon members overlap shield
-	PylonShieldDrain = 500
+	PylonShieldDrain = 50
 
 	// PylonDamageHeat is heat removed on cursor contact without shield
 	PylonDamageHeat = 10

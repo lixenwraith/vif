@@ -56,8 +56,8 @@ var DropTables = map[SpeciesType]SpeciesDropTable{
 	},
 	SpeciesEye: {
 		Tiers: []DropTier{
-			{Unique: true, Entries: []DropEntry{{LootDisruptor, 0.05, 1, 1}}},
-			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.05, 1, 1}}},
+			{Unique: true, Entries: []DropEntry{{LootRod, 0.05, 1, 0}}},
+			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.05, 1, 0}}},
 			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.10, 1, 0}}},
 		},
 	},

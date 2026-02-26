@@ -7,17 +7,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
-// TimeKeeperSystem manages lifecycle timers for entities
+// TimerSystem manages lifecycle timers for entities
 // It runs before cleanup to tag expired entities for destruction
-type TimeKeeperSystem struct {
+type TimerSystem struct {
 	world *engine.World
 
 	enabled bool
 }
 
-// NewTimeKeeperSystem creates a new timekeeper system
-func NewTimeKeeperSystem(world *engine.World) engine.System {
-	s := &TimeKeeperSystem{
+// NewTimerSystem creates a new timer system
+func NewTimerSystem(world *engine.World) engine.System {
+	s := &TimerSystem{
 		world: world,
 	}
 	s.Init()
@@ -25,22 +25,22 @@ func NewTimeKeeperSystem(world *engine.World) engine.System {
 }
 
 // Init resets session state for new game
-func (s *TimeKeeperSystem) Init() {
+func (s *TimerSystem) Init() {
 	s.enabled = true
 }
 
 // Name returns system's name
-func (s *TimeKeeperSystem) Name() string {
+func (s *TimerSystem) Name() string {
 	return "timekeeper"
 }
 
 // Priority returns the system's priority (runs just before CullSystem)
-func (s *TimeKeeperSystem) Priority() int {
+func (s *TimerSystem) Priority() int {
 	return parameter.PriorityTimekeeper
 }
 
-// EventTypes returns the event types TimeKeeperSystem handles
-func (s *TimeKeeperSystem) EventTypes() []event.EventType {
+// EventTypes returns the event types TimerSystem handles
+func (s *TimerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventTimerStart,
 		event.EventMetaSystemCommandRequest,
@@ -49,7 +49,7 @@ func (s *TimeKeeperSystem) EventTypes() []event.EventType {
 }
 
 // HandleEvent processes timer registration events
-func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
+func (s *TimerSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameReset {
 		s.Init()
 		return
@@ -77,7 +77,7 @@ func (s *TimeKeeperSystem) HandleEvent(ev event.GameEvent) {
 }
 
 // Update decrements timers and handles expiration
-func (s *TimeKeeperSystem) Update() {
+func (s *TimerSystem) Update() {
 	if !s.enabled {
 		return
 	}
