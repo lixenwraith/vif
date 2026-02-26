@@ -65,8 +65,8 @@ func InitRegistry() {
 
 	// Register all events from types.go
 
-	// Engine events
-	RegisterType("EventWorldClear", EventWorldClear, &WorldClearPayload{})
+	// Level
+	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})
 
 	// Audio events
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
@@ -97,7 +97,9 @@ func InitRegistry() {
 	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
 	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
 
-	// --- Game events ---
+	// FSM
+	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
+	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
 
 	// Nugget
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
@@ -129,9 +131,14 @@ func InitRegistry() {
 	RegisterType("EventEnergyAddRequest", EventEnergyAddRequest, &EnergyAddPayload{})
 	RegisterType("EventEnergySetRequest", EventEnergySetRequest, &EnergySetPayload{})
 	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, nil)
-	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &GlyphConsumedPayload{})
+	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &EnergyGlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
+
+	// Shield
+	RegisterType("EventShieldActivate", EventShieldActivate, nil)
+	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
+	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
 
 	// Weapon
 	RegisterType("EventWeaponAddRequest", EventWeaponAddRequest, &WeaponAddRequestPayload{})
@@ -143,18 +150,13 @@ func InitRegistry() {
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
 	RegisterType("EventHeatBurst", EventHeatBurst, nil)
 
-	// Shield
-	RegisterType("EventShieldActivate", EventShieldActivate, nil)
-	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
-	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
-
 	// Boost
-	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
 	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
 	RegisterType("EventBoostDeactivate", EventBoostDeactivate, nil)
 	RegisterType("EventBoostExtend", EventBoostExtend, &BoostExtendPayload{})
 
 	// Typing
+	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
 
 	// Ping
@@ -165,9 +167,11 @@ func InitRegistry() {
 	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &MaterializeCompletedPayload{})
 	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest, &MaterializeAreaRequestPayload{})
 
-	// Effects
+	// Flash
 	RegisterType("EventFlashSpawnOneRequest", EventFlashSpawnOneRequest, &FlashRequestPayload{})
 	RegisterType("EventFlashBatchRequest", EventFlashSpawnBatchRequest, nil) // Generic BatchPayload, no TOML decode
+
+	// Explosion
 	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
 
 	// Dust
@@ -189,13 +193,18 @@ func InitRegistry() {
 	RegisterType("EventDeathOne", EventDeathOne, nil) // Scalar bit-packed payload (no struct), use api
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 
+	// Timer
+	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
+
 	// Composite
 	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
+	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
+	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
 
 	// Cursor
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 
-	// Fuse events
+	// Fuse
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, nil)
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
 
@@ -227,10 +236,6 @@ func InitRegistry() {
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
 	RegisterType("EventStrobeRequest", EventStrobeRequest, &StrobeRequestPayload{})
 
-	// Level
-	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})
-	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest, &MazeSpawnRequestPayload{})
-
 	// Spirit
 	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnRequestPayload{})
 	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
@@ -245,6 +250,8 @@ func InitRegistry() {
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
 	RegisterType("EventEnemyCreated", EventEnemyCreated, &EnemyCreatedPayload{})
 	RegisterType("EventEnemyKilled", EventEnemyKilled, &EnemyKilledPayload{})
+
+	// Loot
 	RegisterType("EventLootSpawnRequest", EventLootSpawnRequest, &LootSpawnRequestPayload{})
 
 	// Missile
@@ -267,6 +274,7 @@ func InitRegistry() {
 	RegisterType("EventWallSpawnRequest", EventWallSpawnRequest, &WallSpawnRequestPayload{})
 	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest, &WallCompositeSpawnRequestPayload{})
 	RegisterType("EventWallPatternSpawnRequest", EventWallPatternSpawnRequest, &WallPatternSpawnRequestPayload{})
+	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest, &MazeSpawnRequestPayload{})
 	RegisterType("EventWallDespawnRequest", EventWallDespawnRequest, &WallDespawnRequestPayload{})
 	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
 	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)
@@ -277,14 +285,6 @@ func InitRegistry() {
 	// Fadeout
 	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne, &FadeoutSpawnPayload{})
 	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch, nil) // Generic BatchPayload, no TOML decode
-
-	// Composite Integrity
-	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
-	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
-
-	// FSM
-	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
-	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
 
 	// Pylon
 	RegisterType("EventPylonSpawnRequest", EventPylonSpawnRequest, &PylonSpawnRequestPayload{})
@@ -303,6 +303,8 @@ func InitRegistry() {
 	RegisterType("EventTargetGroupUpdate", EventTargetGroupUpdate, &TargetGroupUpdatePayload{})
 	RegisterType("EventTargetGroupRemove", EventTargetGroupRemove, &TargetGroupRemovePayload{})
 	RegisterType("EventNavigationRegraph", EventNavigationRegraph, nil)
+	RegisterType("EventRouteGraphRequest", EventRouteGraphRequest, &RouteGraphRequestPayload{})
+	RegisterType("EventRouteGraphComputed", EventRouteGraphComputed, &RouteGraphComputedPayload{})
 
 	// Eye
 	RegisterType("EventEyeSpawnRequest", EventEyeSpawnRequest, &EyeSpawnRequestPayload{})

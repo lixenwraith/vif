@@ -257,7 +257,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		}
 
 		// Use MoveEntity for existing entities (updates spatial grid)
-		_ = s.world.Positions.MoveEntity(memberEntry.Entity, component.PositionComponent{
+		s.world.Positions.MoveEntity(memberEntry.Entity, component.PositionComponent{
 			X: newX,
 			Y: newY,
 		})

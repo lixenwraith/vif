@@ -120,7 +120,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventEnergyGlyphConsumed:
-		if payload, ok := ev.Payload.(*event.GlyphConsumedPayload); ok {
+		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
 			s.handleGlyphConsumed(payload.Type, payload.Level)
 		}
 
@@ -187,7 +187,7 @@ func (s *EnergySystem) Update() {
 }
 
 // addEnergy modifies energy on cursor entity
-func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.EnergyDeltaType) {
+func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType component.EnergyDeltaType) {
 	cursorEntity := s.world.Resources.Player.Entity
 	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
 	if !ok {
@@ -214,7 +214,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 	}
 
 	// Apply cycle damage multiplier to penalties
-	if deltaType == event.EnergyDeltaPenalty {
+	if deltaType == component.EnergyDeltaPenalty {
 		absDelta *= s.damageMultiplier
 	}
 
@@ -223,7 +223,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 	var newEnergy int64
 	var crossedZero bool
 	switch deltaType {
-	case event.EnergyDeltaReward:
+	case component.EnergyDeltaReward:
 		// Absolute value increase, can't cross zero
 		if negativeEnergy {
 			newEnergy = currentEnergy - absDelta
@@ -231,7 +231,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 			newEnergy = currentEnergy + absDelta
 		}
 
-	case event.EnergyDeltaPenalty:
+	case component.EnergyDeltaPenalty:
 		// Boost protects from penalties
 		if boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok && boostComp.Active {
 			return
@@ -255,7 +255,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 			}
 		}
 
-	case event.EnergyDeltaPassive:
+	case component.EnergyDeltaPassive:
 		// Bypasses ember/boost, convergent clamp to zero
 		if negativeEnergy {
 			newEnergy = currentEnergy + absDelta
@@ -271,7 +271,7 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 			}
 		}
 
-	case event.EnergyDeltaSpend:
+	case component.EnergyDeltaSpend:
 		s.statSpendCount.Add(1)
 		// Convergent to zero, can cross zero
 		if negativeEnergy {

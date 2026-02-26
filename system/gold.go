@@ -212,7 +212,7 @@ func (s *GoldSystem) handleJumpRequest() {
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Delta:      parameter.GoldJumpCostPercent,
 		Percentage: true,
-		Type:       event.EnergyDeltaSpend,
+		Type:       component.EnergyDeltaSpend,
 	})
 
 	// 4. Play Sound

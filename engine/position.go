@@ -74,13 +74,13 @@ func (p *Position) RemoveEntity(e core.Entity) {
 }
 
 // MoveEntity updates position atomically
-func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent) error {
+func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	oldPos, exists := p.components[e]
-	if !exists {
-		return fmt.Errorf("entity %d does not have a position component", e)
+	oldPos, ok := p.components[e]
+	if !ok {
+		return
 	}
 
 	// RemoveEntity from old grid pos
@@ -93,7 +93,7 @@ func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent)
 	// Explicit ignore for OOB and Cell full
 	_ = p.grid.Set(e, newPos.X, newPos.Y)
 
-	return nil
+	return
 }
 
 // GetAllEntityAt returns a COPY of entities at the given position (concurrent safe but uses memory), nil if OOB or empty

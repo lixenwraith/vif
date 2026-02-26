@@ -505,7 +505,7 @@ func (s *DustSystem) Update() {
 						if shouldKillGlyph {
 							s.world.Components.Death.SetComponent(target, component.DeathComponent{})
 							deathCandidates = append(deathCandidates, target)
-							s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+							s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
 								Type:  glyphComp.Type,
 								Level: glyphComp.Level,
 							})

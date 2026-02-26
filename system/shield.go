@@ -113,7 +113,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Delta:      payload.Value,
 				Percentage: false,
-				Type:       event.EnergyDeltaPenalty,
+				Type:       component.EnergyDeltaPenalty,
 			})
 			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 				SoundType: core.SoundShield,
@@ -142,7 +142,7 @@ func (s *ShieldSystem) Update() {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 			Delta:      parameter.ShieldPassiveEnergyPercentDrain,
 			Percentage: true,
-			Type:       event.EnergyDeltaPassive,
+			Type:       component.EnergyDeltaPassive,
 		})
 		shieldComp.LastDrainTime = now
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)

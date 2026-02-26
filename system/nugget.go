@@ -206,7 +206,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Delta:      parameter.NuggetJumpCostPercent,
 		Percentage: true,
-		Type:       event.EnergyDeltaSpend,
+		Type:       component.EnergyDeltaSpend,
 	})
 
 	// 5. Collect nugget that overlaps with cursor

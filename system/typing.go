@@ -269,7 +269,7 @@ func (s *TypingSystem) handleCompositeMember(entity core.Entity, anchorID core.E
 
 	// Color-based energy (only Blue/Green/Red for now)
 	if header.Behavior != component.BehaviorGold {
-		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
 			Type:  glyph.Type,
 			Level: glyph.Level,
 		})
@@ -308,7 +308,7 @@ func (s *TypingSystem) handleGlyph(entity core.Entity, glyph component.GlyphComp
 	// Type-specific handling, placeholder for other type additions
 	switch glyph.Type {
 	case component.GlyphBlue, component.GlyphGreen, component.GlyphRed:
-		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.GlyphConsumedPayload{
+		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
 			Type:  glyph.Type,
 			Level: glyph.Level,
 		})

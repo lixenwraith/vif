@@ -48,6 +48,19 @@ var DropTables = map[SpeciesType]SpeciesDropTable{
 			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0, 3, 0}}},
 		},
 	},
+	SpeciesSnake: {
+		Tiers: []DropTier{
+			{Unique: true, Entries: []DropEntry{{LootDisruptor, 1.0, 1, 2}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 1.0, 3, 0}}},
+		},
+	},
+	SpeciesEye: {
+		Tiers: []DropTier{
+			{Unique: true, Entries: []DropEntry{{LootDisruptor, 0.05, 1, 1}}},
+			{Unique: true, Entries: []DropEntry{{LootLauncher, 0.05, 1, 1}}},
+			{Unique: false, Entries: []DropEntry{{LootEnergy, 0.10, 1, 0}}},
+		},
+	},
 }
 
 // LootType identifies collectible loot drops

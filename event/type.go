@@ -10,10 +10,10 @@ type GameEvent struct {
 type EventType int
 
 const (
-	// --- Engine ---
+	// --- Level ---
 
-	// EventWorldClear (WorldClearPayload) signals mass entity cleanup
-	EventWorldClear EventType = iota
+	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
+	EventLevelSetup EventType = iota
 
 	// --- Audio ---
 
@@ -76,11 +76,6 @@ const (
 	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
 	EventCycleDamageMultiplierReset
 
-	// --- Level ---
-
-	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
-	EventLevelSetup
-
 	// --- Nugget ---
 
 	// EventNuggetCollected (NuggetCollectedPayload) signals nugget was collected by player
@@ -133,7 +128,7 @@ const (
 	EventEnergySetRequest
 	// EventEnergyCrossedZero signals energy crossing zero
 	EventEnergyCrossedZero
-	// EventEnergyGlyphConsumed (GlyphConsumedPayload) signals glyph destruction for energy calculation
+	// EventEnergyGlyphConsumed (EnergyGlyphConsumedPayload) signals glyph destruction for energy calculation
 	EventEnergyGlyphConsumed
 	// EventEnergyBlinkStart (EnergyBlinkPayload) signals visual blink trigger
 	EventEnergyBlinkStart

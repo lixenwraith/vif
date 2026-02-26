@@ -417,7 +417,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Delta:      parameter.VampireDrainEnergyValue,
 		Percentage: false,
-		Type:       event.EnergyDeltaReward,
+		Type:       component.EnergyDeltaReward,
 	})
 
 	// Lightning VFX

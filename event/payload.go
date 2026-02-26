@@ -11,11 +11,14 @@ import (
 
 // --- Engine ---
 
-// WorldClearPayload contains parameters for mass entity cleanup
-type WorldClearPayload struct {
-	KeepProtected bool   `toml:"keep_protected"` // Preserve entities with ProtectAll
-	KeepCursor    bool   `toml:"keep_cursor"`    // Preserve cursor entity explicitly
-	RegionTag     string `toml:"region_tag"`     // If set, only clear entities tagged with this
+// --- Level ---
+
+// LevelSetupPayload configures map dimensions and entity lifecycle
+type LevelSetupPayload struct {
+	Width         int  `toml:"width"`          // New map width in grid cells
+	Height        int  `toml:"height"`         // New map height in grid cells
+	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
 }
 
 // --- Audio ---
@@ -122,16 +125,6 @@ type MetaSystemCommandPayload struct {
 	Enabled    bool   `toml:"enabled"`
 }
 
-// --- Level ---
-
-// LevelSetupPayload configures map dimensions and entity lifecycle
-type LevelSetupPayload struct {
-	Width         int  `toml:"width"`          // New map width in grid cells
-	Height        int  `toml:"height"`         // New map height in grid cells
-	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
-	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
-}
-
 // --- Nugget ---
 
 // NuggetCollectedPayload signals successful nugget collection
@@ -189,21 +182,11 @@ type SplashTimerCancelPayload struct {
 
 // --- Energy ---
 
-// EnergyDeltaType identifies type of energy modification that should be applied
-type EnergyDeltaType int
-
-const (
-	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
-	EnergyDeltaReward                         // Reward from actions, absolute value increase
-	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
-	EnergyDeltaPassive                        // Passive drain, bypasses ember/boost, convergent clamp to zero
-)
-
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
-	Delta      int             `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
-	Percentage bool            `toml:"percentage"` // True: percentage of current energy
-	Type       EnergyDeltaType `toml:"type"`
+	Delta      int                       `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
+	Percentage bool                      `toml:"percentage"` // True: percentage of current energy
+	Type       component.EnergyDeltaType `toml:"type"`
 }
 
 // EnergySetPayload contains energy value
@@ -211,8 +194,8 @@ type EnergySetPayload struct {
 	Value int `toml:"value"`
 }
 
-// GlyphConsumedPayload contains glyph data for centralized energy calculation
-type GlyphConsumedPayload struct {
+// EnergyGlyphConsumedPayload contains glyph data for centralized energy calculation
+type EnergyGlyphConsumedPayload struct {
 	Type  component.GlyphType  `toml:"type"`
 	Level component.GlyphLevel `toml:"level"`
 }

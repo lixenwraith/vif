@@ -372,10 +372,7 @@ func (w *World) clearNonProtectedEntities() {
 		toDestroy = append(toDestroy, e)
 	}
 
-	// Destroy collected entities
-	for _, e := range toDestroy {
-		w.removeEntity(e)
-	}
+	w.removeEntitiesBatch(toDestroy)
 
 	w.destroyedCount.Add(int64(len(toDestroy)))
 }

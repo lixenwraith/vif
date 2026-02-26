@@ -569,7 +569,7 @@ func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType
 		case component.RewardEnergy:
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Delta: profile.Reward.Delta,
-				Type:  event.EnergyDeltaReward,
+				Type:  component.EnergyDeltaReward,
 			})
 
 		case component.RewardHeat:
