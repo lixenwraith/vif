@@ -121,11 +121,11 @@ func (s *MaterializeSystem) Update() {
 		matComp.Progress += progressDelta
 
 		if matComp.Progress >= vmath.Scale {
-			s.world.PushEvent(event.EventMaterializeComplete, &event.SpawnCompletePayload{
+			s.world.PushEvent(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
 				X:    matComp.TargetX,
 				Y:    matComp.TargetY,
 				Type: matComp.Type,
-				// Note: SpawnCompletePayload may need AreaWidth/Height if consumers need it
+				// Note: MaterializeCompletedPayload may need AreaWidth/Height if consumers need it
 			})
 			s.world.DestroyEntity(matEntity)
 			continue

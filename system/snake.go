@@ -797,7 +797,7 @@ func (s *SnakeSystem) checkConnectivity(bodyEntity core.Entity, bodyComp *compon
 			if memberEntity == 0 {
 				continue
 			}
-			s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+			s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 				HeaderEntity: bodyEntity,
 				MemberEntity: memberEntity,
 			})
@@ -835,7 +835,7 @@ func (s *SnakeSystem) resolveAndProcessCombat(bodyEntity core.Entity, segmentCou
 		// Combat death check
 		if combatComp, ok := s.world.Components.Combat.GetComponent(entry.Entity); ok {
 			if combatComp.HitPoints <= 0 {
-				s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+				s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 					HeaderEntity: bodyEntity,
 					MemberEntity: entry.Entity,
 				})

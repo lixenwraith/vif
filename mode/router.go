@@ -663,7 +663,7 @@ func (r *Router) transitionMode(newMode core.GameMode) {
 	r.ctx.World.UpdateBoundsRadius()
 
 	// 3. Emit mode change event
-	r.ctx.PushEvent(event.EventModeChangeNotification, &event.ModeChangeNotificationPayload{Mode: newMode})
+	r.ctx.PushEvent(event.EventModeChanged, &event.ModeChangedPayload{Mode: newMode})
 
 	// 4. Sync input machine
 	var inputMode input.InputMode

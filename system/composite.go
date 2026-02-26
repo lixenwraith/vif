@@ -51,7 +51,7 @@ func (s *CompositeSystem) Priority() int {
 
 func (s *CompositeSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventMemberTyped,
+		event.EventCompositeMemberDestroyed,
 		event.EventCompositeDestroyRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -77,8 +77,8 @@ func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventMemberTyped:
-		if payload, ok := ev.Payload.(*event.MemberTypedPayload); ok {
+	case event.EventCompositeMemberDestroyed:
+		if payload, ok := ev.Payload.(*event.CompositeMemberDestroyedPayload); ok {
 			s.markMemberTombstone(payload.HeaderEntity, payload.MemberEntity)
 			// Track as expected death (typing, not external)
 			s.expectedDeaths[payload.HeaderEntity]++

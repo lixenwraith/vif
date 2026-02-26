@@ -79,7 +79,7 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventGoldSpawnRequest,
 		event.EventGoldCancel,
 		event.EventGoldJumpRequest,
-		event.EventMemberTyped,
+		event.EventCompositeMemberDestroyed,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
@@ -121,8 +121,8 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 		}
 
-	case event.EventMemberTyped:
-		if payload, ok := ev.Payload.(*event.MemberTypedPayload); ok {
+	case event.EventCompositeMemberDestroyed:
+		if payload, ok := ev.Payload.(*event.CompositeMemberDestroyedPayload); ok {
 			if payload.HeaderEntity == s.headerEntity && payload.RemainingCount == 0 {
 				s.handleGoldComplete()
 			}
@@ -343,7 +343,7 @@ func (s *GoldSystem) spawnGold() bool {
 }
 
 // handleMemberTyped processes a gold character being typed
-func (s *GoldSystem) handleMemberTyped(payload *event.MemberTypedPayload) {
+func (s *GoldSystem) handleMemberTyped(payload *event.CompositeMemberDestroyedPayload) {
 	if !s.active || payload.HeaderEntity != s.headerEntity {
 		return
 	}
@@ -363,7 +363,7 @@ func (s *GoldSystem) handleGoldComplete() {
 	headerEntity := s.headerEntity
 
 	// Emit completion event, FSM is the reward authority
-	s.world.PushEvent(event.EventGoldComplete, &event.GoldCompletionPayload{
+	s.world.PushEvent(event.EventGoldCompleted, &event.GoldCompletionPayload{
 		HeaderEntity: headerEntity,
 	})
 

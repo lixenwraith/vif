@@ -270,7 +270,7 @@ Inspect event payload fields directly in guards. Field names must match Go struc
 
 ### PayloadBoolEquals
 ```toml
-{ trigger = "EventGoldComplete", target = "PerfectComplete", guard = "PayloadBoolEquals", guard_args = { field = "Perfect", value = true } }
+{ trigger = "EventGoldCompleted", target = "PerfectComplete", guard = "PayloadBoolEquals", guard_args = { field = "Perfect", value = true } }
 ```
 
 ### PayloadStringEquals

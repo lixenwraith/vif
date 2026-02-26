@@ -1,816 +1,490 @@
 package event
 
-// EventType represents the type of game event
-type EventType int
-
-const (
-	// === Engine Event === // TODO: future implementation
-	// Mass entity cleanup
-	EventWorldClear EventType = iota
-
-	// === Audio Event ===
-
-	// EventSoundRequest requests audio playback
-	// Trigger: Systems requiring audio feedback
-	// Consumer: AudioSystem | Payload: *SoundRequestPayload
-	EventSoundRequest
-
-	// EventMusicStart begins music playback
-	// Trigger: Game start, FSM state change
-	// Consumer: MusicSystem | Payload: *MusicStartPayload
-	EventMusicStart
-
-	// EventMusicStop halts music playback
-	// Trigger: Game pause, exit
-	// Consumer: MusicSystem | Payload: nil
-	EventMusicStop
-
-	// EventMusicPause toggles pause state
-	// Trigger: Pause menu
-	// Consumer: MusicSystem | Payload: nil
-	EventMusicPause
-
-	// EventBeatPatternRequest requests beat pattern change
-	// Trigger: FSM, game state changes
-	// Consumer: MusicSystem | Payload: *BeatPatternRequestPayload
-	EventBeatPatternRequest
-
-	// EventMelodyNoteRequest triggers single note
-	// Trigger: Game events (gold complete, etc)
-	// Consumer: MusicSystem | Payload: *MelodyNoteRequestPayload
-	EventMelodyNoteRequest
-
-	// EventMelodyPatternRequest requests melody pattern change
-	// Trigger: FSM, game state changes
-	// Consumer: MusicSystem | Payload: *MelodyPatternRequestPayload
-	EventMelodyPatternRequest
-
-	// EventMusicIntensityChange adjusts music intensity
-	// Trigger: Heat changes, phase transitions
-	// Consumer: MusicSystem | Payload: *MusicIntensityPayload
-	EventMusicIntensityChange
-
-	// EventMusicTempoChange adjusts BPM
-	// Trigger: Game state
-	// Consumer: MusicSystem | Payload: *MusicTempoPayload
-	EventMusicTempoChange
-
-	// === Network Event ===
-
-	// EventNetworkConnect signals a new peer connection
-	// Trigger: NetworkService on accepted/established connection
-	// Consumer: Game systems | Payload: *NetworkConnectPayload
-	EventNetworkConnect
-
-	// EventNetworkDisconnect signals peer disconnection
-	// Trigger: NetworkService on connection close
-	// Consumer: Game systems | Payload: *NetworkDisconnectPayload
-	EventNetworkDisconnect
-
-	// EventRemoteInput signals input from a remote player
-	// Trigger: NetworkService on MsgInput received
-	// Consumer: InputSystem | Payload: *RemoteInputPayload
-	EventRemoteInput
-
-	// EventStateSync signals state snapshot received
-	// Trigger: NetworkService on MsgStateSync received
-	// Consumer: SyncSystem | Payload: *StateSyncPayload
-	EventStateSync
-
-	// EventNetworkEvent signals a game event from remote peer
-	// Trigger: NetworkService on MsgEvent received
-	// Consumer: Game systems | Payload: *NetworkEventPayload
-	EventNetworkEvent
-
-	// EventNetworkError signals a network error
-	// Trigger: NetworkService on error
-	// Consumer: UISystem | Payload: *NetworkErrorPayload
-	EventNetworkError
-
-	// === Game Event ===
-
-	// EventNuggetCollected signals nugget was collected by player
-	// Trigger: EnergySystem on successful nugget character match
-	// Consumer: NuggetSystem | Payload: *NuggetCollectedPayload
-	EventNuggetCollected
-
-	// EventNuggetDestroyed signals nugget was destroyed externally
-	// Trigger: DrainSystem collision, DecaySystem collision
-	// Consumer: NuggetSystem | Payload: *NuggetDestroyedPayload
-	EventNuggetDestroyed
-
-	// EventNuggetJumpRequest signals player intent to jump to active nugget
-	// Trigger: InputHandler (Tab key)
-	// Consumer: NuggetSystem | Payload: nil
-	EventNuggetJumpRequest
-
-	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
-	// Trigger: FSM
-	// Consumer: GoldSystem | Payload: nil
-	EventGoldSpawnRequest
-
-	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
-	// Trigger: GoldSystem
-	// Consumer: FSM | Payload: nil
-	EventGoldSpawnFailed
-
-	// EventGoldSpawned signals gold sequence creation
-	// Trigger: GoldSystem
-	// Consumer: SplashSystem (timer) | Payload: *GoldSpawnedPayload
-	EventGoldSpawned
-
-	// EventGoldComplete signals successful gold sequence completion
-	// Trigger: GoldSystem (Final gold character typed)
-	// Consumer: SplashSystem (destroy timer) | Payload: *GoldCompletionPayload
-	EventGoldComplete
-
-	// EventGoldTimeout signals gold sequence expiration
-	// Trigger: GoldSystem timeout
-	// Consumer: FSM | Payload: *GoldCompletionPayload
-	EventGoldTimeout
-
-	// EventGoldDestroyed signals external gold destruction (e.g., Drain)
-	// Trigger: GoldSystem
-	// Consumer: FSM
-	// Payload: *GoldCompletionPayload
-	EventGoldDestroyed
-
-	// EventGoldCancel signals mandatory cleanup of any active gold sequence
-	// Trigger: FSM exiting QuasarPhase or Reset
-	// Consumer: GoldSystem | Payload: nil
-	EventGoldCancel
-
-	// EventGoldJumpRequest signals player intent to jump to active gold sequence
-	// Trigger: InputHandler (Shift+Tab key)
-	// Consumer: GoldSystem | Payload: nil
-	EventGoldJumpRequest
-
-	// EventCleanerDirectionalRequest spawns 4-way cleaners from origin
-	// Trigger: Nugget collected at max heat, Enter in Normal, Visual or Insert modes
-	// Consumer: CleanerSystem | Payload: *DirectionalCleanerPayload
-	EventCleanerDirectionalRequest
-
-	// EventCleanerSweepingRequest spawns cleaners on rows with Red(positive energy) or Blue(negative energy) glyphs
-	// Trigger: FSM
-	// Consumer: CleanerSystem | Payload: nil
-	EventCleanerSweepingRequest
-
-	// EventCleanerSweepingFinished marks cleaner animation completion
-	// Trigger: FSM if required | Payload: nil
-	EventCleanerSweepingFinished
-
-	// EventCharacterTyped signals Insert mode keypress
-	// Trigger: InputHandler on printable key
-	// Consumer: EnergySystem | Payload: *CharacterTypedPayload
-	// Latency: max 50ms (next tick)
-	EventCharacterTyped
-
-	// EventSplashTimerRequest signals timer visual feedback
-	// Trigger: GoldSystem, QuasarSystem, ...
-	// Consumer: SplashSystem | Payload: *SplashTimerRequestPayload
-	EventSplashTimerRequest
-
-	// EventSplashTimerCancel signals ending timer visual feedback
-	// Trigger: GoldSystem, QuasarSystem, ...
-	// Consumer: SplashSystem | Payload: *SplashTimerCancelPayload
-	EventSplashTimerCancel
-
-	// EventEnergyAddRequest signals energy delta on target entity
-	// Trigger: Character typed, shield drain, nugget jump
-	// Consumer: EnergySystem | Payload: *EnergyAddPayload
-	EventEnergyAddRequest
-
-	// EventEnergySetRequest signals setting energy to specific value
-	// Trigger: Game reset, cheats
-	// Consumer: EnergySystem | Payload: *EnergySetPayload
-	EventEnergySetRequest
-
-	// EventEnergyCrossedZeroNotification signals energy crossing zero
-	// Trigger: EnergySystem
-	// Consumer: WeaponSystem | Payload: nil
-	EventEnergyCrossedZeroNotification
-
-	// EventEnergyGlyphConsumed signals glyph destruction for energy calculation
-	// Trigger: TypingSystem (correct character), DustSystem (shield collision)
-	// Consumer: EnergySystem | Payload: *GlyphConsumedPayload
-	EventEnergyGlyphConsumed
-
-	// EventEnergyBlinkStart signals visual blink trigger
-	// Trigger: Character typed (success/error)
-	// Consumer: EnergySystem | Payload: *EnergyBlinkPayload
-	EventEnergyBlinkStart
-
-	// EventEnergyBlinkStop signals blink clear
-	// Trigger: EnergySystem timeout
-	// Consumer: EnergySystem | Payload: nil
-	EventEnergyBlinkStop
-
-	// EventHeatAddRequest signals heat delta modification
-	// Trigger: Character typed, drain/quasar hit, nugget/gold collected
-	// Consumer: HeatSystem | Payload: *HeatAddRequestPayload
-	EventHeatAddRequest
-
-	// EventHeatSetRequest signals absolute heat value
-	// Trigger: MetaSystem commands
-	// Consumer: HeatSystem | Payload: *HeatSetRequestPayload
-	EventHeatSetRequest
-
-	// EventHeatSetRequest signals absolute heat value
-	// Trigger: HeatSystem
-	// Consumer: FSM | Payload: nil
-	EventHeatBurstNotification
-
-	// EventShieldActivate signals shield should become active
-	// Trigger: EnergySystem when energy > 0 and shield inactive
-	// Consumer: ShieldSystem | Payload: nil
-	EventShieldActivate
-
-	// EventShieldDeactivate signals shield should become inactive
-	// Trigger: EnergySystem when energy <= 0 and shield active
-	// Consumer: ShieldSystem | Payload: nil
-	EventShieldDeactivate
-
-	// EventShieldDrainRequest signals energy drain from external source
-	// Trigger: DrainSystem when drain inside shield zone
-	// Consumer: ShieldSystem | Payload: *ShieldDrainRequestPayload
-	EventShieldDrainRequest
-
-	// EventDeleteRequest signals a deletion operation (x, d, etc.)
-	// Trigger: InputHandler via modes package
-	// Consumer: EnergySystem | Payload: *DeleteRequestPayload
-	EventDeleteRequest
-
-	// EventPingGridRequest signals a request to show the ping grid
-	// Trigger: InputHandler (relative line numbers toggle, etc.)
-	// Consumer: PingSystem | Payload: *PingGridRequestPayload
-	EventPingGridRequest
-
-	// EventGameReset signals a request to reset the game state
-	// Trigger: Command :new
-	// Consumer: MetaSystem | Payload: nil
-	EventGameReset
-
-	// EventMetaDebugRequest signals a request to show debug overlay
-	// Trigger: Command :debug
-	// Consumer: MetaSystem | Payload: nil
-	EventMetaDebugRequest
-
-	// EventMetaHelpRequest signals a request to show help overlay
-	// Trigger: Command :help
-	// Consumer: MetaSystem | Payload: nil
-	EventMetaHelpRequest
-
-	// EventMetaAboutRequest signals a request to show about overlay
-	// Trigger: Command :about
-	// Consumer: MetaSystem | Payload: nil
-	EventMetaAboutRequest
-
-	// EventMetaStatusMessageRequest signals a request to display a message in status bar
-	// Trigger: Systems
-	// Consumer: MetaSystem | Payload: *MetaStatusMessagePayload
-	EventMetaStatusMessageRequest
-
-	// EventMetaSystemCommandRequest signals a request to show help overlay
-	// Trigger: MetaSystems
-	// Consumer: Systems | Payload: *MetaSystemCommandPayload
-	EventMetaSystemCommandRequest
-
-	// EventTimerStart signals creation of a lifecycle timer for an entity
-	// Trigger: Systems creating transient entities (Splash, Flash)
-	// Consumer: TimeKeeperSystem | Payload: *TimerStartPayload
-	EventTimerStart
-
-	// EventBoostActivate signals boost activation request
-	// Trigger: Max heat reached, :boost command
-	// Consumer: BoostSystem | Payload: *BoostActivatePayload
-	EventBoostActivate
-
-	// EventBoostDeactivate signals boost deactivation
-	// Trigger: Red character typed, error state
-	// Consumer: BoostSystem | Payload: nil
-	EventBoostDeactivate
-
-	// EventBoostExtend signals boost duration extension
-	// Trigger: Correct character typed while boost active
-	// Consumer: BoostSystem | Payload: *BoostExtendPayload
-	EventBoostExtend
-
-	// EventMaterializeRequest signals a request to start a materialization visual effect
-	// Trigger: DrainSystem (or others) determining a spawn location
-	// Consumer: MaterializeSystem | Payload: *MaterializeRequestPayload
-	EventMaterializeRequest
-
-	// EventMaterializeComplete signals materialization finished at location
-	// Trigger: MaterializeSystem
-	// Consumer: DrainSystem (or others) | Payload: *SpawnCompletePayload
-	EventMaterializeComplete
-
-	// EventMaterializeAreaRequest for area-based materialization (swarm, quasar)
-	// Trigger: FuseSystem for multi-cell entity spawns
-	// Consumer: MaterializeSystem | Payload: *MaterializeAreaRequestPayload
-	EventMaterializeAreaRequest
-
-	// EventFlashSpawnOneRequest signals a request to spawn a destruction flash effect
-	// Trigger: Systems destroying entities with visual feedback (Drain, Cleaner, Decay)
-	// Consumer: FlashSystem | Payload: *FlashRequestPayload
-	EventFlashSpawnOneRequest
-
-	// EventFlashSpawnBatchRequest signals batch spawn of destruction flash effects
-	// Trigger: DeathSystem on batch death with flash effect
-	// Consumer: FlashSystem | Payload: *BatchPayload[FlashSpawnEntry]
-	EventFlashSpawnBatchRequest
-
-	// EventBlossomSpawnOne signals intent to spawn a single blossom entity
-	// Trigger: DeathSystem on death with blossom effect (cleaner + positive energy)
-	// Consumer: BlossomSystem | Payload: *BlossomSpawnPayload
-	EventBlossomSpawnOne
-
-	// EventBlossomSpawnBatch signals batch spawn of blossom entities
-	// Trigger: DeathSystem on batch death with blossom effect
-	// Consumer: BlossomSystem | Payload: *BatchPayload[BlossomSpawnEntry]
-	EventBlossomSpawnBatch
-
-	// EventBlossomWave signals start of a full width rising blossom wave
-	// Trigger: FSM
-	// Consumer: BlossomSystem | Payload: nil
-	EventBlossomWave
-
-	// EventDecaySpawnOne signals intent to spawn a single decay entity
-	// Trigger: DeathSystem on death with decay effect (cleaner + negative energy)
-	// Consumer: DecaySystem | Payload: *DecaySpawnPayload
-	EventDecaySpawnOne
-
-	// EventDecaySpawnBatch signals batch spawn of decay entities
-	// Trigger: DeathSystem on batch death with decay effect
-	// Consumer: DecaySystem | Payload: *BatchPayload[DecaySpawnEntry]
-	EventDecaySpawnBatch
-
-	// EventDecayWave signals start of a full width falling decay wave
-	// Trigger: FSM
-	// Consumer: DecaySystem | Payload: nil
-	EventDecayWave
-
-	// EventDeathOne signals intent to destroy a single game entity (scalar/silent)
-	// Trigger: TypingSystem, NuggetSystem, etc.
-	// Consumer: DeathSystem | Payload: core.Entity
-	EventDeathOne
-
-	// EventDeathBatch signals intent to destroy a batch of entities with an optional effect
-	// Trigger: CleanerSystem, DecaySystem, etc.
-	// Consumer: DeathSystem | Payload: *DeathRequestPayload
-	EventDeathBatch
-
-	// EventMemberTyped signals a composite member was successfully typed
-	// Trigger: TypingSystem on valid member character match
-	// Consumer: CompositeSystem routes to behavior-specific handler
-	// Payload: *MemberTypedPayload
-	EventMemberTyped
-
-	// EventCursorMoved signals cursor position change
-	// Trigger: InputHandler on cursor movement (h/j/k/l, arrow keys, etc.)
-	// Consumer: SplashSystem (magnifier) | Payload: *CursorMovedPayload
-	EventCursorMoved
-
-	// EventFuseQuasarRequest signals drains should fuse into quasar
-	// Trigger: FSM
-	// Consumer: FuseSystem | Payload: nil
-	EventFuseQuasarRequest
-
-	// EventDrainPause signals DrainSystem to stop spawning
-	// Trigger: FSM
-	// Consumer: DrainSystem | Payload: nil
-	EventDrainPause
-
-	// EventDrainResume signals DrainSystem to resume spawning
-	// Trigger: FSM
-	// Consumer: DrainSystem | Payload: nil
-	EventDrainResume
-
-	// EventQuasarSpawnRequest signals QuasarSystem to create the entity at location
-	// Trigger: FuseSystem (after animation)
-	// Consumer: QuasarSystem | Payload: *QuasarSpawnRequestPayload
-	EventQuasarSpawnRequest
-
-	// EventQuasarSpawned signals quasar composite creation
-	// Trigger: FuseSystem after creating quasar
-	// Consumer: QuasarSystem | Payload: *QuasarSpawnedPayload
-	EventQuasarSpawned
-
-	// EventQuasarDestroyed signals quasar termination
-	// Trigger: QuasarSystem on lifecycle end
-	// Consumer: FSM | Payload: nil
-	EventQuasarDestroyed
-
-	// EventQuasarCancelRequest signals manual termination of the quasar phase
-	// Trigger: FSM (on GoldComplete during Quasar)
-	// Consumer: QuasarSystem | Payload: nil
-	EventQuasarCancelRequest
-
-	// EventGrayoutStart signals persistent grayout activation
-	// Trigger: FSM
-	// Consumer: TransientSystem | Payload: nil
-	EventGrayoutStart
-
-	// EventGrayoutEnd signals persistent grayout deactivation
-	// Trigger: FSM
-	// Consumer: TransientSystem | Payload: nil
-	EventGrayoutEnd
-
-	// EventSpiritSpawn signals intent to spawn a spirit entity
-	// Trigger: FuseSystem (or other systems needing convergence VFX)
-	// Consumer: SpiritSystem | Payload: *SpiritSpawnRequestPayload
-	EventSpiritSpawn
-
-	// EventSpiritDespawn signals force-clear of all spirit entities
-	// Trigger: FuseSystem timer expiry (safety mechanism)
-	// Consumer: SpiritSystem | Payload: nil
-	EventSpiritDespawn
-
-	// EventLightningSpawnRequest signals intent to spawn a lightning visual effect
-	// Trigger: QuasarSystem (zap), FuseSystem (convergence)
-	// Consumer: LightningSystem | Payload: *LightningSpawnRequestPayload
-	EventLightningSpawnRequest
-
-	// EventLightningUpdate signals target position update for tracked lightning
-	// Trigger: QuasarSystem (cursor tracking while zapping)
-	// Consumer: LightningSystem | Payload: *LightningUpdatePayload
-	EventLightningUpdate
-
-	// EventLightningDespawnRequest signals force-removal of lightning entity(ies)
-	// Trigger: QuasarSystem (zap ends), future use
-	// Consumer: LightningSystem | Payload: *LightningDespawnPayload
-	EventLightningDespawnRequest
-
-	// EventFireSpecialRequest signals player intent to fire special ability
-	// Trigger: InputHandler (\ key)
-	// Consumer: TBD | Payload: nil
-	EventFireSpecialRequest
-
-	// EventExplosionRequest triggers explosion effect at location
-	// Trigger: EventFireSpecialRequest handler, or programmatic
-	// Consumer: ExplosionSystem | Payload: *ExplosionRequestPayload
-	EventExplosionRequest
-
-	// EventDustSpawnOneRequest signals intent to spawn a single dust entity
-	// Trigger: ExplosionSystem, future effects
-	// Consumer: DustSystem | Payload: *DustSpawnOneRequestPayload
-	EventDustSpawnOneRequest
-
-	// EventDustSpawnBatchRequest signals intent to spawn multiple dust entities
-	// Trigger: ExplosionFieldSystem on glyph transformation
-	// Consumer: DustSystem | Payload: *DustSpawnBatchRequestPayload
-	EventDustSpawnBatchRequest
-
-	// EventDustAllRequest signals intent to spawn a single dust entity
-	// Trigger: FSM
-	// Consumer: DustSystem | Payload: nil
-	EventDustAllRequest
-
-	// EventFuseSwarmRequest signals two enraged drains should fuse into swarm
-	// Trigger: DrainSystem when detecting enraged pair
-	// Consumer: FuseSystem | Payload: *FuseSwarmRequestPayload
-	EventFuseSwarmRequest
-
-	// EventSwarmSpawnRequest signals SwarmSystem to create the entity at location
-	// Trigger: FuseSystem (after animation)
-	// Consumer: SwarmSystem | Payload: *SwarmSpawnRequestPayload
-	EventSwarmSpawnRequest
-
-	// EventSwarmSpawned signals swarm composite creation
-	// Trigger: FuseSystem after convergence animation
-	// Consumer: SwarmSystem | Payload: *SwarmSpawnedPayload
-	EventSwarmSpawned
-
-	// EventSwarmDestroyed signals swarm termination
-	// Trigger: SwarmSystem on lifecycle end
-	// Consumer: (future: audio/FSM) | Payload: *SwarmDestroyedPayload
-	EventSwarmDestroyed
-
-	// EventSwarmAbsorbedDrain signals drain absorbed by swarm
-	// Trigger: SwarmSystem on drain collision
-	// Consumer: (telemetry) | Payload: *SwarmAbsorbedDrainPayload
-	EventSwarmAbsorbedDrain
-
-	// EventSwarmCancelRequest signals destruction of all swarm composites
-	// Trigger: FSM
-	// Consumer: SwarmSystem | Payload: nil
-	EventSwarmCancelRequest
-
-	// EventWeaponAddRequest signals activating buff for cursor
-	// Trigger: FSM
-	// Consumer: WeaponSystem | Payload: *WeaponAddRequestPayload
-	EventWeaponAddRequest
-
-	// EventWeaponFireRequest signals activating buff for cursor
-	// Trigger: Enter in Normal, Visual, Insert modes
-	// Consumer: WeaponSystem | Payload: nil
-	EventWeaponFireRequest
-
-	// EventCombatAttackDirectRequest signals applying knockback
-	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, WeaponSystem
-	// Consumer: CombatSystem | Payload: *CombatAttackDirectRequestPayload
-	EventCombatAttackDirectRequest
-
-	// EventCombatAttackAreaRequest signals applying knockback
-	// Trigger: DrainSystem, QuasarSystem, CleanerSystem, WeaponSystem
-	// Consumer: CombatSystem | Payload: *CombatAttackAreaRequestPayload
-	EventCombatAttackAreaRequest
-
-	// EventMarkerSpawnRequest signals a request to spawn a visual marker
-	// Trigger: FuseSystem, SwarmSystem, QuasarSystem, future boss telegraphs
-	// Consumer: MarkerSystem | Payload: *MarkerSpawnRequestPayload
-	EventMarkerSpawnRequest
-
-	// EventMotionMarkerShowColored signals a request to show colored glyph motion markers in ping bound
-	// Trigger: Input/Mode
-	// Consumer: MotionMarkerSystem | Payload: *MotionMarkerShowPayload
-	EventMotionMarkerShowColored
-
-	// EventMotionMarkerClearColored signals clearing colored motion markers (jump executed or cancelled)
-	// Trigger: Input/Mode
-	// Consumer: MotionMarkerSystem | Payload: nil
-	EventMotionMarkerClearColored
-
-	// EventModeChangeNotification signals change of the mode
-	// Trigger: Input/Mode
-	// Consumer: MotionMarkerSystem | Payload: *ModeChangeNotificationPayload
-	EventModeChangeNotification
-
-	// EventMissileSpawnRequest signals launcher buff firing a cluster missile
-	// Trigger: WeaponSystem on launcher fire
-	// Consumer: MissileSystem | Payload: *MissileSpawnRequestPayload
-	EventMissileSpawnRequest
-
-	// EventWallSpawnRequest requests creation of a single wall cell
-	// Trigger: FSM, debug commands, external systems
-	// Consumer: WallSystem | Payload: *WallSpawnRequestPayload
-	EventWallSpawnRequest
-
-	// EventWallBatchSpawnRequest creates multiple wall cells in a single batch operation
-	// Supports collision modes: skip blocked, overwrite existing, or fail-if-blocked
-	// Trigger: FSM, level loader, procedural generators, or internal wall operations
-	// Consumer: WallSystem | Payload: *WallBatchSpawnRequestPayload
-	EventWallBatchSpawnRequest
-
-	// EventWallCompositeSpawnRequest requests creation of a multi-cell wall structure
-	// Trigger: FSM, level loader, procedural generators
-	// Consumer: WallSystem | Payload: *WallCompositeSpawnRequestPayload
-	EventWallCompositeSpawnRequest
-
-	// EventWallPatternSpawnRequest requests creation of wall structure from .vfimg pattern file
-	// Trigger: FSM, level loader
-	// Consumer: WallSystem | Payload: *WallPatternSpawnRequestPayload
-	EventWallPatternSpawnRequest
-
-	// EventWallDespawnRequest requests removal of walls in specified area or globally
-	// Trigger: FSM, level transitions, debug commands
-	// Consumer: WallSystem | Payload: *WallDespawnRequestPayload
-	EventWallDespawnRequest
-
-	// EventWallMaskChangeRequest modifies blocking behavior of existing walls
-	// Trigger: FSM, dynamic maze mechanics
-	// Consumer: WallSystem | Payload: *WallMaskChangeRequestPayload
-	EventWallMaskChangeRequest
-
-	// EventWallPushCheckRequest triggers full entity displacement check for blocking walls
-	// Trigger: FSM after bulk wall operations, resize events
-	// Consumer: WallSystem | Payload: nil
-	EventWallPushCheckRequest
-
-	// EventWallSpawned notifies completion of wall creation with bounds and entity count
-	// Trigger: WallSystem after successful spawn
-	// Consumer: FSM, debug systems | Payload: *WallSpawnedPayload
-	EventWallSpawned
-
-	// EventWallDespawned notifies completion of wall destruction with bounds
-	// Trigger: WallSystem after wall removal
-	// Consumer: NavigationSystem | Payload: *WallDespawnedPayload
-	EventWallDespawned
-
-	// EventWallDespawnAll signals silent destruction of all wall entities
-	// Trigger: FSM before level transitions
-	// Consumer: WallSystem | Payload: nil
-	EventWallDespawnAll
-
-	// EventFadeoutSpawnOne signals intent to spawn a single fadeout effect
-	// Trigger: DeathSystem on wall death with bg visual, WallSystem on despawn
-	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnPayload
-	EventFadeoutSpawnOne
-
-	// EventFadeoutSpawnBatch signals intent to spawn multiple fadeout effects
-	// Trigger: WallSystem on bulk despawn operations
-	// Consumer: FadeoutSystem | Payload: *FadeoutSpawnBatchPayload
-	EventFadeoutSpawnBatch
-
-	// EventCompositeIntegrityBreach signals unexpected member loss (OOB, enemy hit, etc.)
-	// Trigger: CompositeSystem on detecting external member destruction
-	// Consumer: GoldSystem, SwarmSystem, QuasarSystem | Payload: *CompositeIntegrityBreachPayload
-	EventCompositeIntegrityBreach
-
-	// EventCompositeDestroyRequest signals owner system requests full composite destruction
-	// Trigger: Owner systems (Gold, Swarm, Quasar) on lifecycle end, FSM
-	// Consumer: CompositeSystem | Payload: *CompositeDestroyRequestPayload
-	EventCompositeDestroyRequest
-
-	// EventEnemyCreated signals enemy entity creation via its system
-	// Trigger: DrainSystem, SwarmSystem, ...
-	// Consumer: GeneticSystem | Payload: *EnemyCreatedPayload
-	EventEnemyCreated
-
-	// EventEnemyKilled signals an enemy entity was destroyed via combat
-	// Trigger: SwarmSystem, QuasarSystem, ...
-	// Consumer: GeneticSystem, LootSystem | Payload: *EnemyKilledPayload
-	EventEnemyKilled
-
-	// EventLootSpawnRequest requests direct loot spawn at position
-	// Trigger: FSM, game scripts, debug commands
-	// Consumer: LootSystem | Payload: *LootSpawnRequestPayload
-	EventLootSpawnRequest
-
-	// EventStormSpawnRequest triggers storm spawn
-	// Trigger: SwarmSystem on player-damage kill threshold
-	// Consumer: StormSystem | Payload: nil
-	EventStormSpawnRequest
-
-	// EventStormCancelRequest signals destruction of all storm entities
-	// Trigger: FSM on phase transition (maze exit, quasar exit)
-	// Consumer: StormSystem | Payload: nil
-	EventStormCancelRequest
-
-	// EventStormCircleDestroyed signals individual circle destruction
-	// Trigger: StormSystem on circle health <= 0
-	// Consumer: future loot | Payload: *StormCircleDestroyedPayload
-	EventStormCircleDestroyed
-
-	// EventStormDestroyed signals all storm circles destroyed
-	// Trigger: StormSystem when last circle dies
-	// Consumer: Loot system/FSM | Payload: *StormDestroyedPayload
-	EventStormDestroyed
-
-	// EventLevelSetup signals map dimension change and optional entity clear
-	// Trigger: FSM on phase transition
-	// Consumer: MetaSystem | Payload: *LevelSetupPayload
-	EventLevelSetup
-
-	// EventMazeSpawnRequest signals maze generation and wall spawning
-	// Trigger: FSM after level setup
-	// Consumer: WallSystem | Payload: *MazeSpawnRequestPayload
-	EventMazeSpawnRequest
-
-	// EventBulletSpawnRequest signals maze generation and wall spawning
-	// Trigger: Species systems
-	// Consumer: BulletSystem | Payload: *MazeSpawnRequestPayload
-	EventBulletSpawnRequest
-
-	// EventCycleDamageMultiplierIncrease signals cycle completion, doubles damage multiplier
-	// Trigger: FSM on region/level cycle end
-	// Consumer: EnergySystem | Payload: nil
-	EventCycleDamageMultiplierIncrease
-
-	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
-	// Trigger: FSM on region/level fail
-	// Consumer: EnergySystem | Payload: nil
-	EventCycleDamageMultiplierReset
-
-	// EventStrobeRequest triggers screen flash effect
-	// Trigger: Combat, FSM, Systems
-	// Consumer: TransientSystem | Payload: *StrobeRequestPayload
-	EventStrobeRequest
-
-	// EventPylonSpawnRequest signals pylon creation at location
-	// Trigger: FSM
-	// Consumer: PylonSystem | Payload: *PylonSpawnRequestPayload
-	EventPylonSpawnRequest
-
-	// EventPylonSpawnFailed signals pylon spawn could not find valid position
-	// Trigger: PylonSystem | Payload: nil
-	EventPylonSpawnFailed
-
-	// EventPylonSpawned signals pylon composite creation
-	// Trigger: PylonSystem after creation
-	// Consumer: FSM | Payload: *PylonSpawnedPayload
-	EventPylonSpawned
-
-	// EventPylonDestroyed signals pylon termination (all members dead)
-	// Trigger: PylonSystem on lifecycle end
-	// Consumer: FSM, LootSystem | Payload: *PylonDestroyedPayload
-	EventPylonDestroyed
-
-	// EventPylonCancelRequest signals forced destruction of all pylons
-	// Trigger: FSM on phase transition
-	// Consumer: PylonSystem | Payload: nil
-	EventPylonCancelRequest
-
-	// EventSnakeSpawnRequest signals SnakeSystem to create the entity at location
-	// Trigger: FuseSystem (after animation) or FSM
-	// Consumer: SnakeSystem | Payload: *SnakeSpawnRequestPayload
-	EventSnakeSpawnRequest
-
-	// EventSnakeSpawned signals snake composite creation complete
-	// Trigger: SnakeSystem after creating snake
-	// Consumer: FSM, Telemetry | Payload: *SnakeSpawnedPayload
-	EventSnakeSpawned
-
-	// EventSnakeDestroyed signals snake termination
-	// Trigger: SnakeSystem on lifecycle end
-	// Consumer: FSM | Payload: *SnakeDestroyedPayload
-	EventSnakeDestroyed
-
-	// EventSnakeCancelRequest signals manual termination of all snakes
-	// Trigger: FSM (on phase transition)
-	// Consumer: SnakeSystem | Payload: nil
-	EventSnakeCancelRequest
-
-	// EventTargetGroupUpdate configures or updates a navigation target group
-	// Trigger: Level system, game script, HFSM
-	// Consumer: NavigationSystem | Payload: *TargetGroupUpdatePayload
-	EventTargetGroupUpdate
-
-	// EventTargetGroupRemove removes a target group, entities fall back to cursor
-	// Trigger: Level system on tower destruction, game script
-	// Consumer: NavigationSystem | Payload: *TargetGroupRemovePayload
-	EventTargetGroupRemove
-
-	// EventNavigationRegraph configures or updates a navigation target group
-	// Trigger: Level system, game script, HFSM
-	// Consumer: NavigationSystem | Payload: nil
-	EventNavigationRegraph
-
-	// EventEyeSpawnRequest signals EyeSystem to create entity at location
-	// Trigger: Gateway/FSM
-	// Consumer: EyeSystem | Payload: *EyeSpawnRequestPayload
-	EventEyeSpawnRequest
-
-	// EventEyeSpawned signals eye composite creation
-	// Trigger: EyeSystem
-	// Consumer: (future: audio/FSM) | Payload: *EyeSpawnedPayload
-	EventEyeSpawned
-
-	// EventEyeDestroyed signals eye termination
-	// Trigger: EyeSystem on HP death or self-destruct
-	// Consumer: (future: audio/FSM) | Payload: *EyeDestroyedPayload
-	EventEyeDestroyed
-
-	// EventEyeCancelRequest signals destruction of all eye composites
-	// Trigger: FSM
-	// Consumer: EyeSystem | Payload: nil
-	EventEyeCancelRequest
-
-	// EventTowerSpawnRequest signals tower creation at location
-	// Trigger: FSM
-	// Consumer: TowerSystem | Payload: *TowerSpawnRequestPayload
-	EventTowerSpawnRequest
-
-	// EventTowerSpawnFailed signals tower spawn could not find valid position
-	// Trigger: TowerSystem | Payload: nil
-	EventTowerSpawnFailed
-
-	// EventTowerSpawned signals tower composite creation
-	// Trigger: TowerSystem after creation
-	// Consumer: FSM | Payload: *TowerSpawnedPayload
-	EventTowerSpawned
-
-	// EventTowerDestroyed signals tower termination (all members dead)
-	// Trigger: TowerSystem on lifecycle end
-	// Consumer: FSM, LootSystem | Payload: *TowerDestroyedPayload
-	EventTowerDestroyed
-
-	// EventTowerCancelRequest signals forced destruction of all towers
-	// Trigger: FSM on phase transition
-	// Consumer: TowerSystem | Payload: nil
-	EventTowerCancelRequest
-
-	// EventGatewaySpawnRequest signals GatewaySystem to create a gateway entity anchored to a parent
-	// Trigger: FSM
-	// Consumer: GatewaySystem | Payload: *GatewaySpawnRequestPayload
-	EventGatewaySpawnRequest
-
-	// EventGatewayDespawnRequest signals GatewaySystem to remove gateway for a specific anchor
-	// Trigger: FSM
-	// Consumer: GatewaySystem | Payload: *GatewayDespawnRequestPayload
-	EventGatewayDespawnRequest
-
-	// EventGatewayDespawned signals that a gateway entity has been cleaned up
-	// Trigger: GatewaySystem
-	// Consumer: FSM | Payload: *GatewayDespawnedPayload
-	EventGatewayDespawned
-
-	// EventRouteGraphRequest requests route graph computation for a gateway-target pair
-	// Trigger: GatewaySystem on gateway creation
-	// Consumer: NavigationSystem | Payload: *RouteGraphRequestPayload
-	EventRouteGraphRequest
-
-	// EventRouteGraphComputed signals route graph computation completion
-	// Trigger: NavigationSystem after successful computation
-	// Consumer: GatewaySystem (telemetry) | Payload: *RouteGraphComputedPayload
-	EventRouteGraphComputed
-
-	EventDebugFlowToggle
-	EventDebugGraphToggle
-)
-
 // GameEvent represents a single game event with metadata
 type GameEvent struct {
 	Type    EventType
 	Payload any
 }
+
+// EventType represents the type of game event
+type EventType int
+
+const (
+	// --- Engine ---
+
+	// EventWorldClear (WorldClearPayload) signals mass entity cleanup
+	EventWorldClear EventType = iota
+
+	// --- Audio ---
+
+	// EventSoundRequest (SoundRequestPayload) requests audio playback
+	EventSoundRequest
+
+	// --- Music ---
+
+	// EventMusicStart (MusicStartPayload) begins music playback
+	EventMusicStart
+	// EventMusicStop halts music playback
+	EventMusicStop
+	// EventMusicPause toggles pause state
+	EventMusicPause
+	// EventBeatPatternRequest (BeatPatternRequestPayload) requests beat pattern change
+	EventBeatPatternRequest
+	// EventMelodyNoteRequest (MelodyNoteRequestPayload) triggers single note
+	EventMelodyNoteRequest
+	// EventMelodyPatternRequest (MelodyPatternRequestPayload) requests melody pattern change
+	EventMelodyPatternRequest
+	// EventMusicIntensityChange (MusicIntensityPayload) adjusts music intensity
+	EventMusicIntensityChange
+	// EventMusicTempoChange (MusicTempoPayload) adjusts BPM
+	EventMusicTempoChange
+
+	// --- Network ---
+
+	// EventNetworkConnect (NetworkConnectPayload) signals a new peer connection
+	EventNetworkConnect
+	// EventNetworkDisconnect (NetworkDisconnectPayload) signals peer disconnection
+	EventNetworkDisconnect
+	// EventRemoteInput (RemoteInputPayload) signals input from a remote player
+	EventRemoteInput
+	// EventStateSync (StateSyncPayload) signals state snapshot received
+	EventStateSync
+	// EventNetworkEvent (NetworkEventPayload) signals a game event from remote peer
+	EventNetworkEvent
+	// EventNetworkError (NetworkErrorPayload) signals a network error
+	EventNetworkError
+
+	// --- Meta ---
+
+	// EventGameReset signals a request to reset the game state
+	EventGameReset
+	// EventMetaDebugRequest signals a request to show debug overlay
+	EventMetaDebugRequest
+	// EventMetaHelpRequest signals a request to show help overlay
+	EventMetaHelpRequest
+	// EventMetaAboutRequest signals a request to show about overlay
+	EventMetaAboutRequest
+	// EventMetaStatusMessageRequest (MetaStatusMessagePayload) signals a request to display a message in status bar
+	EventMetaStatusMessageRequest
+	// EventMetaSystemCommandRequest (MetaSystemCommandPayload) signals a request to execute a system command
+	EventMetaSystemCommandRequest
+
+	// --- FSM ---
+
+	// EventCycleDamageMultiplierIncrease signals cycle completion, doubles damage multiplier
+	EventCycleDamageMultiplierIncrease
+	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
+	EventCycleDamageMultiplierReset
+
+	// --- Level ---
+
+	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
+	EventLevelSetup
+
+	// --- Nugget ---
+
+	// EventNuggetCollected (NuggetCollectedPayload) signals nugget was collected by player
+	EventNuggetCollected
+	// EventNuggetDestroyed (NuggetDestroyedPayload) signals nugget was destroyed externally
+	EventNuggetDestroyed
+	// EventNuggetJumpRequest signals player intent to jump to active nugget
+	EventNuggetJumpRequest
+
+	// --- Cleaner ---
+
+	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) spawns 4-way cleaners from origin
+	EventCleanerDirectionalRequest
+	// EventCleanerSweepingRequest spawns cleaners on rows with positive/negative energy glyphs
+	EventCleanerSweepingRequest
+	// EventCleanerSweepingFinished marks cleaner animation completion
+	EventCleanerSweepingFinished
+
+	// --- Gold ---
+
+	// EventGoldSpawnRequest (GoldSpawnedPayload) signals a specific request to try spawning a gold sequence
+	EventGoldSpawnRequest
+	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
+	EventGoldSpawnFailed
+	// EventGoldSpawned signals gold sequence creation
+	EventGoldSpawned
+	// EventGoldCompleted signals successful gold sequence completion
+	EventGoldCompleted
+	// EventGoldTimeout (GoldCompletionPayload) signals gold sequence expiration
+	EventGoldTimeout
+	// EventGoldDestroyed signals external gold destruction
+	EventGoldDestroyed
+	// EventGoldCancel signals mandatory cleanup of any active gold sequence
+	EventGoldCancel
+	// EventGoldJumpRequest signals player intent to jump to active gold sequence
+	EventGoldJumpRequest
+
+	// --- Splash ---
+
+	// EventSplashTimerRequest (SplashTimerRequestPayload) signals timer visual feedback
+	EventSplashTimerRequest
+	// EventSplashTimerCancel (SplashTimerCancelPayload) signals ending timer visual feedback
+	EventSplashTimerCancel
+
+	// --- Energy ---
+
+	// EventEnergyAddRequest (EnergyAddPayload) signals energy delta on target entity
+	EventEnergyAddRequest
+	// EventEnergySetRequest (EnergySetPayload) signals setting energy to specific value
+	EventEnergySetRequest
+	// EventEnergyCrossedZero signals energy crossing zero
+	EventEnergyCrossedZero
+	// EventEnergyGlyphConsumed (GlyphConsumedPayload) signals glyph destruction for energy calculation
+	EventEnergyGlyphConsumed
+	// EventEnergyBlinkStart (EnergyBlinkPayload) signals visual blink trigger
+	EventEnergyBlinkStart
+	// EventEnergyBlinkStop signals blink clear
+	EventEnergyBlinkStop
+
+	// --- Shield ---
+
+	// EventShieldActivate signals shield should become active
+	EventShieldActivate
+	// EventShieldDeactivate signals shield should become inactive
+	EventShieldDeactivate
+	// EventShieldDrainRequest (ShieldDrainRequestPayload) signals energy drain from external source
+	EventShieldDrainRequest
+
+	// --- Weapon ---
+
+	// EventWeaponAddRequest (WeaponAddRequestPayload) signals activating buff for cursor
+	EventWeaponAddRequest
+	// EventWeaponFireRequest signals weapon fire request
+	EventWeaponFireRequest
+	// EventFireSpecialRequest signals player intent to fire special ability
+	EventFireSpecialRequest
+
+	// --- Heat ---
+
+	// EventHeatAddRequest (HeatAddRequestPayload) signals heat delta modification
+	EventHeatAddRequest
+	// EventHeatSetRequest (HeatSetRequestPayload) signals absolute heat value
+	EventHeatSetRequest
+	// EventHeatBurst signals heat burst notification
+	EventHeatBurst
+
+	// --- Boost ---
+
+	// EventBoostActivate (BoostActivatePayload) signals boost activation request
+	EventBoostActivate
+	// EventBoostDeactivate signals boost deactivation
+	EventBoostDeactivate
+	// EventBoostExtend (BoostExtendPayload) signals boost duration extension
+	EventBoostExtend
+
+	// --- Typing ---
+
+	// EventCharacterTyped (CharacterTypedPayload) signals Insert mode keypress
+	EventCharacterTyped
+	// EventDeleteRequest (DeleteRequestPayload) signals a deletion operation (x, d, etc.)
+	EventDeleteRequest
+
+	// --- Ping ---
+
+	// EventPingGridRequest (PingGridRequestPayload) signals a request to show the ping grid
+	EventPingGridRequest
+
+	// --- Materialize ---
+
+	// EventMaterializeRequest (MaterializeRequestPayload) signals a request to start a materialization visual effect
+	EventMaterializeRequest
+	// EventMaterializeComplete (MaterializeCompletedPayload) signals materialization finished at location
+	EventMaterializeComplete
+	// EventMaterializeAreaRequest (MaterializeAreaRequestPayload) requests area-based materialization (swarm, quasar)
+	EventMaterializeAreaRequest
+
+	// --- Flash ---
+
+	// EventFlashSpawnOneRequest (FlashRequestPayload) signals a request to spawn a destruction flash effect
+	EventFlashSpawnOneRequest
+	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) signals batch spawn of destruction flash effects
+	EventFlashSpawnBatchRequest
+
+	// --- Explosion ---
+
+	// EventExplosionRequest (ExplosionRequestPayload) triggers explosion effect at location
+	EventExplosionRequest
+
+	// --- Dust ---
+
+	// EventDustSpawnOneRequest (DustSpawnOneRequestPayload) signals intent to spawn a single dust entity
+	EventDustSpawnOneRequest
+	// EventDustSpawnBatchRequest (BatchPayload[DustSpawnEntry]) signals intent to spawn multiple dust entities
+	EventDustSpawnBatchRequest
+	// EventDustAllRequest signals intent to spawn a single dust entity
+	EventDustAllRequest
+
+	// --- Blossom ---
+
+	// EventBlossomSpawnOne (BlossomSpawnPayload) signals intent to spawn a single blossom entity
+	EventBlossomSpawnOne
+	// EventBlossomSpawnBatch (BatchPayload[BlossomSpawnEntry]) signals batch spawn of blossom entities
+	EventBlossomSpawnBatch
+	// EventBlossomWave signals start of a full width rising blossom wave
+	EventBlossomWave
+
+	// --- Decay ---
+
+	// EventDecaySpawnOne (DecaySpawnPayload) signals intent to spawn a single decay entity
+	EventDecaySpawnOne
+	// EventDecaySpawnBatch (BatchPayload[DecaySpawnEntry]) signals batch spawn of decay entities
+	EventDecaySpawnBatch
+	// EventDecayWave signals start of a full width falling decay wave
+	EventDecayWave
+
+	// --- Death ---
+
+	// EventDeathOne (core.Entity) signals intent to destroy a single game entity (scalar/silent)
+	EventDeathOne
+	// EventDeathBatch (DeathRequestPayload) signals intent to destroy a batch of entities with an optional effect
+	EventDeathBatch
+
+	// --- Timer ---
+
+	// EventTimerStart (TimerStartPayload) signals creation of a lifecycle timer for an entity
+	EventTimerStart
+
+	// --- Composite ---
+
+	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) signals a composite member was successfully typed
+	EventCompositeMemberDestroyed
+	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) signals unexpected member loss (OOB, enemy hit, etc.)
+	EventCompositeIntegrityBreach
+	// EventCompositeDestroyRequest (CompositeDestroyRequestPayload) signals owner system requests full composite destruction
+	EventCompositeDestroyRequest
+
+	// --- Cursor ---
+
+	// EventCursorMoved (CursorMovedPayload) signals cursor position change
+	EventCursorMoved
+
+	// --- Fuse ---
+
+	// EventFuseQuasarRequest signals drains should fuse into quasar
+	EventFuseQuasarRequest
+	// EventFuseSwarmRequest (FuseSwarmRequestPayload) signals two enraged drains should fuse into swarm
+	EventFuseSwarmRequest
+
+	// --- Drain ---
+
+	// EventDrainPause signals DrainSystem to stop spawning
+	EventDrainPause
+	// EventDrainResume signals DrainSystem to resume spawning
+	EventDrainResume
+
+	// --- Quasar ---
+
+	// EventQuasarSpawnRequest (QuasarSpawnRequestPayload) signals QuasarSystem to create the entity at location
+	EventQuasarSpawnRequest
+	// EventQuasarSpawned (QuasarSpawnedPayload) signals quasar composite creation
+	EventQuasarSpawned
+	// EventQuasarDestroyed signals quasar termination
+	EventQuasarDestroyed
+	// EventQuasarCancelRequest signals manual termination of the quasar phase
+	EventQuasarCancelRequest
+
+	// --- Swarm ---
+
+	// EventSwarmSpawnRequest (SwarmSpawnRequestPayload) signals SwarmSystem to create the entity at location
+	EventSwarmSpawnRequest
+	// EventSwarmSpawned (SwarmSpawnedPayload) signals swarm composite creation
+	EventSwarmSpawned
+	// EventSwarmDestroyed (SwarmDestroyedPayload) signals swarm termination
+	EventSwarmDestroyed
+	// EventSwarmAbsorbedDrain (SwarmAbsorbedDrainPayload) signals drain absorbed by swarm
+	EventSwarmAbsorbedDrain
+	// EventSwarmCancelRequest signals destruction of all swarm composites
+	EventSwarmCancelRequest
+
+	// --- Storm ---
+
+	// EventStormSpawnRequest triggers storm spawn
+	EventStormSpawnRequest
+	// EventStormCancelRequest signals destruction of all storm entities
+	EventStormCancelRequest
+	// EventStormCircleDestroyed (StormCircleDestroyedPayload) signals individual circle destruction
+	EventStormCircleDestroyed
+	// EventStormDestroyed (StormDestroyedPayload) signals all storm circles destroyed
+	EventStormDestroyed
+
+	// --- Post-Process ---
+
+	// EventGrayoutStart signals persistent grayout activation
+	EventGrayoutStart
+	// EventGrayoutEnd signals persistent grayout deactivation
+	EventGrayoutEnd
+	// EventStrobeRequest (StrobeRequestPayload) triggers screen flash effect
+	EventStrobeRequest
+
+	// --- Spirit ---
+
+	// EventSpiritSpawn (SpiritSpawnRequestPayload) signals intent to spawn a spirit entity
+	EventSpiritSpawn
+	// EventSpiritDespawn signals force-clear of all spirit entities
+	EventSpiritDespawn
+
+	// --- Lightning ---
+
+	// EventLightningSpawnRequest (LightningSpawnRequestPayload) signals intent to spawn a lightning visual effect
+	EventLightningSpawnRequest
+	// EventLightningUpdate (LightningUpdatePayload) signals target position update for tracked lightning
+	EventLightningUpdate
+	// EventLightningDespawnRequest (LightningDespawnPayload) signals force-removal of lightning entity(ies)
+	EventLightningDespawnRequest
+
+	// --- Combat ---
+
+	// EventCombatAttackDirectRequest (CombatAttackDirectRequestPayload) signals applying knockback
+	EventCombatAttackDirectRequest
+	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) signals applying knockback
+	EventCombatAttackAreaRequest
+	// EventEnemyCreated (EnemyCreatedPayload) signals enemy entity creation via its system
+	EventEnemyCreated
+	// EventEnemyKilled (EnemyKilledPayload) signals an enemy entity was destroyed via combat
+	EventEnemyKilled
+
+	// --- Loot ---
+
+	// EventLootSpawnRequest (LootSpawnRequestPayload) requests direct loot spawn at position
+	EventLootSpawnRequest
+
+	// --- Missile ---
+
+	// EventMissileSpawnRequest (MissileSpawnRequestPayload) signals launcher buff firing a cluster missile
+	EventMissileSpawnRequest
+
+	// --- Bullet ---
+
+	// EventBulletSpawnRequest (BulletSpawnRequestPayload) signals creation of a linear projectile
+	EventBulletSpawnRequest
+
+	// --- Marker ---
+
+	// EventMarkerSpawnRequest (MarkerSpawnRequestPayload) signals a request to spawn a visual marker
+	EventMarkerSpawnRequest
+
+	// --- Motion Marker ---
+
+	// EventMotionMarkerShowColored (MotionMarkerShowPayload) signals a request to show colored glyph motion markers in ping bound
+	EventMotionMarkerShowColored
+	// EventMotionMarkerClearColored signals clearing colored motion markers (jump executed or cancelled)
+	EventMotionMarkerClearColored
+
+	// --- Mode ---
+
+	// EventModeChanged (ModeChangedPayload) signals change of the mode
+	EventModeChanged
+
+	// --- Wall ---
+
+	// EventWallSpawnRequest (WallSpawnRequestPayload) requests creation of a single wall cell
+	EventWallSpawnRequest
+	// EventWallBatchSpawnRequest (WallBatchSpawnRequestPayload) creates multiple wall cells in a single batch operation (supports collision modes)
+	EventWallBatchSpawnRequest
+	// EventWallCompositeSpawnRequest (WallCompositeSpawnRequestPayload) requests creation of a multi-cell wall structure
+	EventWallCompositeSpawnRequest
+	// EventWallPatternSpawnRequest (WallPatternSpawnRequestPayload) requests creation of wall structure from .vfimg pattern file
+	EventWallPatternSpawnRequest
+	// EventMazeSpawnRequest (MazeSpawnRequestPayload) signals maze generation and wall spawning
+	EventMazeSpawnRequest
+	// EventWallDespawnRequest (WallDespawnRequestPayload) requests removal of walls in specified area or globally
+	EventWallDespawnRequest
+	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) modifies blocking behavior of existing walls
+	EventWallMaskChangeRequest
+	// EventWallPushCheckRequest triggers full entity displacement check for blocking walls
+	EventWallPushCheckRequest
+	// EventWallSpawned (WallSpawnedPayload) notifies completion of wall creation with bounds and entity count
+	EventWallSpawned
+	// EventWallDespawned (WallDespawnedPayload) notifies completion of wall destruction with bounds
+	EventWallDespawned
+	// EventWallDespawnAll signals silent destruction of all wall entities
+	EventWallDespawnAll
+
+	// --- Fadeout ---
+
+	// EventFadeoutSpawnOne (FadeoutSpawnPayload) signals intent to spawn a single fadeout effect
+	EventFadeoutSpawnOne
+	// EventFadeoutSpawnBatch (BatchPayload[FadeoutSpawnEntry]) signals intent to spawn multiple fadeout effects
+	EventFadeoutSpawnBatch
+
+	// --- Pylon ---
+
+	// EventPylonSpawnRequest (PylonSpawnRequestPayload) signals pylon creation at location
+	EventPylonSpawnRequest
+	// EventPylonSpawnFailed signals pylon spawn could not find valid position
+	EventPylonSpawnFailed
+	// EventPylonSpawned (PylonSpawnedPayload) signals pylon composite creation
+	EventPylonSpawned
+	// EventPylonDestroyed (PylonDestroyedPayload) signals pylon termination (all members dead)
+	EventPylonDestroyed
+	// EventPylonCancelRequest signals forced destruction of all pylons
+	EventPylonCancelRequest
+
+	// --- Snake ---
+
+	// EventSnakeSpawnRequest (SnakeSpawnRequestPayload) signals SnakeSystem to create the entity at location
+	EventSnakeSpawnRequest
+	// EventSnakeSpawned (SnakeSpawnedPayload) signals snake composite creation complete
+	EventSnakeSpawned
+	// EventSnakeDestroyed (SnakeDestroyedPayload) signals snake termination
+	EventSnakeDestroyed
+	// EventSnakeCancelRequest signals manual termination of all snakes
+	EventSnakeCancelRequest
+
+	// --- Navigation ---
+
+	// EventTargetGroupUpdate (TargetGroupUpdatePayload) configures or updates a navigation target group
+	EventTargetGroupUpdate
+	// EventTargetGroupRemove (TargetGroupRemovePayload) removes a target group, entities fall back to group 0
+	EventTargetGroupRemove
+	// EventNavigationRegraph signals a request to recalculate navigation graphs
+	EventNavigationRegraph
+	// EventRouteGraphRequest (RouteGraphRequestPayload) requests route graph computation for a gateway-target pair
+	EventRouteGraphRequest
+	// EventRouteGraphComputed (RouteGraphComputedPayload) signals route graph computation completion
+	EventRouteGraphComputed
+
+	// --- Eye ---
+
+	// EventEyeSpawnRequest (EyeSpawnRequestPayload) signals EyeSystem to create entity at location
+	EventEyeSpawnRequest
+	// EventEyeSpawned (EyeSpawnedPayload) signals eye composite creation
+	EventEyeSpawned
+	// EventEyeDestroyed (EyeDestroyedPayload) signals eye termination
+	EventEyeDestroyed
+	// EventEyeCancelRequest signals destruction of all eye composites
+	EventEyeCancelRequest
+
+	// --- Tower ---
+
+	// EventTowerSpawnRequest (TowerSpawnRequestPayload) signals tower creation at location
+	EventTowerSpawnRequest
+	// EventTowerSpawnFailed signals tower spawn could not find valid position
+	EventTowerSpawnFailed
+	// EventTowerSpawned (TowerSpawnedPayload) signals tower composite creation
+	EventTowerSpawned
+	// EventTowerDestroyed (TowerDestroyedPayload) signals tower termination (all members dead)
+	EventTowerDestroyed
+	// EventTowerCancelRequest signals forced destruction of all towers
+	EventTowerCancelRequest
+
+	// --- Gateway ---
+
+	// EventGatewaySpawnRequest (GatewaySpawnRequestPayload) signals GatewaySystem to create a gateway entity anchored to a parent
+	EventGatewaySpawnRequest
+	// EventGatewayDespawnRequest (GatewayDespawnRequestPayload) signals GatewaySystem to remove gateway for a specific anchor
+	EventGatewayDespawnRequest
+	// EventGatewayDespawned (GatewayDespawnedPayload) signals that a gateway entity has been cleaned up
+	EventGatewayDespawned
+
+	// --- Debug ---
+
+	// EventDebugFlowToggle toggles debug flow field visualization
+	EventDebugFlowToggle
+	// EventDebugGraphToggle toggles debug graph visualization
+	EventDebugGraphToggle
+)

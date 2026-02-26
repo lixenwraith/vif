@@ -62,7 +62,7 @@ func (s *WeaponSystem) Priority() int {
 func (s *WeaponSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWeaponAddRequest,
-		event.EventEnergyCrossedZeroNotification,
+		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
 		event.EventWeaponFireRequest,
 		event.EventMetaSystemCommandRequest,
@@ -94,7 +94,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 			s.addWeapon(payload.Weapon)
 		}
 
-	case event.EventEnergyCrossedZeroNotification:
+	case event.EventEnergyCrossedZero:
 		s.removeAllWeapons()
 
 	case event.EventWeaponFireRequest:

@@ -917,7 +917,7 @@ func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormCompon
 
 		// Emit deaths for members with HP<=0
 		for _, memberEntity := range deadMembers {
-			s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+			s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 				HeaderEntity: circleEntity,
 				MemberEntity: memberEntity,
 			})

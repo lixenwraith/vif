@@ -52,7 +52,7 @@ func (s *MotionMarkerSystem) Priority() int {
 func (s *MotionMarkerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCursorMoved,
-		event.EventModeChangeNotification,
+		event.EventModeChanged,
 		event.EventMotionMarkerShowColored,
 		event.EventMotionMarkerClearColored,
 		event.EventMetaSystemCommandRequest,
@@ -84,7 +84,7 @@ func (s *MotionMarkerSystem) HandleEvent(ev event.GameEvent) {
 			s.regenerateBaseMarkers(payload.X, payload.Y)
 		}
 
-	case event.EventModeChangeNotification:
+	case event.EventModeChanged:
 		// Payload is ignored, just regenerate
 		cursorEntity := s.world.Resources.Player.Entity
 		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)

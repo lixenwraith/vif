@@ -294,14 +294,14 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType event.E
 	// Preventing one frame flickering of shield at zero energy
 	if newEnergy == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 		s.statCrossedZeroCount.Add(1)
 		return
 	}
 
 	// Signal to remove buffs
 	if crossedZero {
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 		s.statCrossedZeroCount.Add(1)
 	}
 }
@@ -316,12 +316,12 @@ func (s *EnergySystem) setEnergy(value int64) {
 
 	currentEnergy := energyComp.Current
 	if (currentEnergy < 0 && value > 0) || (currentEnergy >= 0 && value < 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 		s.statCrossedZeroCount.Add(1)
 	}
 	if value == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 		s.statCurrent.Store(value)
 	}
 
@@ -365,12 +365,12 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 
 	if newEnergy == 0 {
 		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 		return
 	}
 
 	if (newEnergy > 0 && currentEnergy < 0) || (newEnergy < 0 && currentEnergy > 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZeroNotification, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
 	}
 }
 

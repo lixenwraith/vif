@@ -177,7 +177,7 @@ func (s *HeatSystem) addHeat(delta int) {
 		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
-		s.world.PushEvent(event.EventHeatBurstNotification, nil)
+		s.world.PushEvent(event.EventHeatBurst, nil)
 	}
 
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)

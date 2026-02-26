@@ -114,7 +114,7 @@ func InitRegistry() {
 	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
 	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)
 	RegisterType("EventGoldSpawned", EventGoldSpawned, &GoldSpawnedPayload{})
-	RegisterType("EventGoldComplete", EventGoldComplete, &GoldCompletionPayload{})
+	RegisterType("EventGoldCompleted", EventGoldCompleted, &GoldCompletionPayload{})
 	RegisterType("EventGoldTimeout", EventGoldTimeout, &GoldCompletionPayload{})
 	RegisterType("EventGoldDestroyed", EventGoldDestroyed, &GoldCompletionPayload{})
 	RegisterType("EventGoldCancel", EventGoldCancel, nil)
@@ -128,7 +128,7 @@ func InitRegistry() {
 	// Energy
 	RegisterType("EventEnergyAddRequest", EventEnergyAddRequest, &EnergyAddPayload{})
 	RegisterType("EventEnergySetRequest", EventEnergySetRequest, &EnergySetPayload{})
-	RegisterType("EventEnergyCrossedZeroNotification", EventEnergyCrossedZeroNotification, nil)
+	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, nil)
 	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &GlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
 	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
@@ -141,7 +141,7 @@ func InitRegistry() {
 	// Heat
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
-	RegisterType("EventHeatBurstNotification", EventHeatBurstNotification, nil)
+	RegisterType("EventHeatBurst", EventHeatBurst, nil)
 
 	// Shield
 	RegisterType("EventShieldActivate", EventShieldActivate, nil)
@@ -162,7 +162,7 @@ func InitRegistry() {
 
 	// Materialize
 	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
-	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &SpawnCompletePayload{})
+	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &MaterializeCompletedPayload{})
 	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest, &MaterializeAreaRequestPayload{})
 
 	// Effects
@@ -190,7 +190,7 @@ func InitRegistry() {
 	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
 
 	// Composite
-	RegisterType("EventMemberTyped", EventMemberTyped, &MemberTypedPayload{})
+	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
 
 	// Cursor
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
@@ -261,7 +261,7 @@ func InitRegistry() {
 	RegisterType("EventMotionMarkerClearColored", EventMotionMarkerClearColored, nil)
 
 	// Mode
-	RegisterType("EventModeChangeNotification", EventModeChangeNotification, &ModeChangeNotificationPayload{})
+	RegisterType("EventModeChanged", EventModeChanged, &ModeChangedPayload{})
 
 	// Wall
 	RegisterType("EventWallSpawnRequest", EventWallSpawnRequest, &WallSpawnRequestPayload{})

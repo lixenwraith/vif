@@ -144,7 +144,7 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 		if s.paused {
 			return
 		}
-		if payload, ok := ev.Payload.(*event.SpawnCompletePayload); ok {
+		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok {
 			if payload.Type == component.SpawnTypeDrain {
 				s.removeCompletedSpawn(payload.X, payload.Y)
 				s.materializeDrainAt(payload.X, payload.Y)

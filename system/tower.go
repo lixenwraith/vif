@@ -379,7 +379,7 @@ func (s *TowerSystem) processAblativeCombat(headerEntity core.Entity, headerComp
 		// Remove wall component before death routing so spatial queries reflect cleared cells
 		s.world.Components.Wall.RemoveEntity(memberEntity)
 
-		s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+		s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 			HeaderEntity: headerEntity,
 			MemberEntity: memberEntity,
 		})

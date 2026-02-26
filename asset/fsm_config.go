@@ -49,12 +49,12 @@ transitions = [
 [states.MainGoldActive]
 parent = "MainCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "MainGoldComplete" },
+    { trigger = "EventGoldCompleted", target = "MainGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "MainGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" }
 ]
 
-[states.MainGoldComplete]
+[states.MainGoldCompleted]
 parent = "MainCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
@@ -118,7 +118,7 @@ transitions = [
 [states.MonitorActive]
 parent = "Root"
 transitions = [
-    { trigger = "EventHeatBurstNotification", target = "MonitorHeatBurst" },
+    { trigger = "EventHeatBurst", target = "MonitorHeatBurst" },
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
         { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
         { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } }
@@ -213,12 +213,12 @@ transitions = [
 [states.QuasarGoldActive]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "QuasarGoldComplete" },
+    { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" }
 ]
 
-[states.QuasarGoldComplete]
+[states.QuasarGoldCompleted]
 parent = "QuasarGoldCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },

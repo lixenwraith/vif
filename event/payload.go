@@ -9,7 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
-// TODO: future multi-level / network
+// --- Engine ---
+
 // WorldClearPayload contains parameters for mass entity cleanup
 type WorldClearPayload struct {
 	KeepProtected bool   `toml:"keep_protected"` // Preserve entities with ProtectAll
@@ -17,200 +18,14 @@ type WorldClearPayload struct {
 	RegionTag     string `toml:"region_tag"`     // If set, only clear entities tagged with this
 }
 
-// TODO: future multi-level, debug
-// SystemTogglePayload contains parameters for system activation control
-type SystemTogglePayload struct {
-	System string `toml:"system"` // System registry name
-	Active bool   `toml:"active"` // Target activation state
-}
-
-// DeleteRangeType defines the scope of deletion
-type DeleteRangeType int
-
-const (
-	DeleteRangeChar DeleteRangeType = iota
-	DeleteRangeLine
-)
-
-// DeleteRequestPayload contains coordinates for deletion
-type DeleteRequestPayload struct {
-	RangeType DeleteRangeType `toml:"range_type"`
-	StartX    int             `toml:"start_x"`
-	EndX      int             `toml:"end_x"`
-	StartY    int             `toml:"start_y"`
-	EndY      int             `toml:"end_y"`
-}
-
-// ShieldDrainRequestPayload contains energy drain amount from external sources
-type ShieldDrainRequestPayload struct {
-	Value int `toml:"value"`
-}
-
-// DirectionalCleanerPayload contains origin for 4-way cleaner spawn
-type DirectionalCleanerPayload struct {
-	OriginX   int                        `toml:"origin_x"`
-	OriginY   int                        `toml:"origin_y"`
-	ColorType component.CleanerColorType `toml:"color_type"`
-}
-
-// CharacterTypedPayload captures keypress and cursor state when character is typed
-type CharacterTypedPayload struct {
-	Char rune `toml:"char"`
-	X    int  `toml:"x"`
-	Y    int  `toml:"y"`
-}
-
-// CharacterTypedPayloadPool reduces GC pressure during high-frequency typing
-var CharacterTypedPayloadPool = sync.Pool{
-	New: func() any { return &CharacterTypedPayload{} },
-}
-
-// EnergyDeltaType identifies type of energy modification that should be applied
-type EnergyDeltaType int
-
-const (
-	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
-	EnergyDeltaReward                         // Reward from actions, absolute value increase
-	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
-	EnergyDeltaPassive                        // Passive drain, bypasses ember/boost, convergent clamp to zero
-)
-
-// EnergyAddPayload contains energy delta
-type EnergyAddPayload struct {
-	Delta      int             `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
-	Percentage bool            `toml:"percentage"` // True: percentage of current energy
-	Type       EnergyDeltaType `toml:"type"`
-}
-
-// EnergySetPayload contains energy value
-type EnergySetPayload struct {
-	Value int `toml:"value"`
-}
-
-// // EnergyAddPercentPayload contains energy delta
-// type EnergyAddPercentPayload struct {
-// 	DeltaPercent int  `toml:"delta_percent"`
-// 	Spend        bool `toml:"spend"`      // True: bypasses boost protection
-// 	Convergent   bool `toml:"convergent"` // True: clamp at zero, cannot cross
-// }
-
-// GlyphConsumedPayload contains glyph data for centralized energy calculation
-type GlyphConsumedPayload struct {
-	Type  component.GlyphType  `toml:"type"`
-	Level component.GlyphLevel `toml:"level"`
-}
-
-// EnergyBlinkPayload triggers visual blink state
-type EnergyBlinkPayload struct {
-	Type  int `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
-	Level int `toml:"level"` // 0=dark, 1=normal, 2=bright
-}
-
-// HeatAddRequestPayload contains heat delta
-type HeatAddRequestPayload struct {
-	Delta int `toml:"delta"`
-}
-
-// HeatSetRequestPayload contains absolute heat value
-type HeatSetRequestPayload struct {
-	Value int `toml:"value"`
-}
-
-// GoldSpawnedPayload provides information about the spawned gold sequence
-type GoldSpawnedPayload struct {
-	HeaderEntity core.Entity   `toml:"header_entity"`
-	Length       int           `toml:"length"`
-	Duration     time.Duration `toml:"duration"`
-}
-
-// GoldCompletionPayload identifies which gold sequence is completed
-type GoldCompletionPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
-// SplashTimerPayload anchors countdown timer to sequence position
-type SplashTimerRequestPayload struct {
-	AnchorEntity core.Entity   `toml:"anchor_entity"`
-	Color        terminal.RGB  `toml:"color"`
-	OriginX      int           `toml:"origin_x"`
-	OriginY      int           `toml:"origin_y"`
-	MarginLeft   int           `toml:"margin_left"`
-	MarginRight  int           `toml:"margin_right"`
-	MarginTop    int           `toml:"margin_top"`
-	MarginBottom int           `toml:"margin_bottom"`
-	Duration     time.Duration `toml:"duration"`
-}
-
-// SplashTimerCancelPayload anchors countdown timer to sequence position
-type SplashTimerCancelPayload struct {
-	AnchorEntity core.Entity `toml:"anchor_entity"`
-}
-
-// PingGridRequestPayload carries configuration for the ping grid activation
-type PingGridRequestPayload struct {
-	Duration time.Duration `toml:"duration"`
-}
-
-// TimerStartPayload configuration for a new lifecycle timer
-type TimerStartPayload struct {
-	Entity   core.Entity   `toml:"entity"`
-	Duration time.Duration `toml:"duration"`
-}
-
-// BoostActivatePayload contains boost activation parameters
-type BoostActivatePayload struct {
-	Duration time.Duration `toml:"duration"`
-}
-
-// BoostExtendPayload contains boost extension parameters
-type BoostExtendPayload struct {
-	Duration time.Duration `toml:"duration"`
-}
-
-// MaterializeRequestPayload contains parameters to start a visual spawn sequence
-type MaterializeRequestPayload struct {
-	X    int                 `toml:"x"`
-	Y    int                 `toml:"y"`
-	Type component.SpawnType `toml:"type"`
-}
-
-// MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
-type MaterializeAreaRequestPayload struct {
-	X          int                 `toml:"x"`          // Top-left X
-	Y          int                 `toml:"y"`          // Top-left Y
-	AreaWidth  int                 `toml:"area_width"` // 0 or 1 = single cell
-	AreaHeight int                 `toml:"area_height"`
-	Type       component.SpawnType `toml:"type"`
-}
-
-// SpawnCompletePayload carries details about a completed materialization
-type SpawnCompletePayload struct {
-	X    int                 `toml:"x"`
-	Y    int                 `toml:"y"`
-	Type component.SpawnType `toml:"type"`
-}
-
-// FlashRequestPayload contains parameters for destruction flash effect
-type FlashRequestPayload struct {
-	X    int  `toml:"x"`
-	Y    int  `toml:"y"`
-	Char rune `toml:"char"`
-}
-
-// NuggetCollectedPayload signals successful nugget collection
-type NuggetCollectedPayload struct {
-	Entity core.Entity `toml:"entity"`
-}
-
-// NuggetDestroyedPayload signals external nugget destruction
-type NuggetDestroyedPayload struct {
-	Entity core.Entity `toml:"entity"`
-}
+// --- Audio ---
 
 // SoundRequestPayload contains the sound type to play
 type SoundRequestPayload struct {
 	SoundType core.SoundType `toml:"sound_type"`
 }
+
+// --- Music ---
 
 // MusicStartPayload initializes music state
 type MusicStartPayload struct {
@@ -255,12 +70,7 @@ type MusicTempoPayload struct {
 	TransitionTime time.Duration `toml:"transition_time"` // Ramp duration
 }
 
-// DeathRequestPayload contains batch death request
-// EffectEvent: 0 = silent death, EventFlashSpawnOneRequest = flash, future: explosion, chain death
-type DeathRequestPayload struct {
-	Entities    []core.Entity `toml:"entities"`
-	EffectEvent EventType     `toml:"effect_event"`
-}
+// --- Network ---
 
 // NetworkConnectPayload signals peer connection
 type NetworkConnectPayload struct {
@@ -297,21 +107,262 @@ type NetworkErrorPayload struct {
 	Error  string `toml:"error"` // 0 for general errors
 }
 
-// MemberTypedPayload signals a composite member was typed
-type MemberTypedPayload struct {
-	HeaderEntity   core.Entity `toml:"header_entity"`
-	MemberEntity   core.Entity `toml:"member_entity"`
-	Char           rune        `toml:"char"`
-	RemainingCount int         `toml:"remaining_count"` // CountEntities of remaining live members after this one
+// --- Meta ---
+
+// MetaStatusMessagePayload contains message to be displayed in status bar
+type MetaStatusMessagePayload struct {
+	Message          string        `toml:"message"`
+	Duration         time.Duration `toml:"duration"`
+	DurationOverride bool          `toml:"duration_override"`
 }
 
-// DecaySpawnPayload contains parameters to spawn a single decay entity
-type DecaySpawnPayload struct {
-	X             int  `toml:"x"`
-	Y             int  `toml:"y"`
-	Char          rune `toml:"char"`
-	SkipStartCell bool `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
+// MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)
+type MetaSystemCommandPayload struct {
+	SystemName string `toml:"system_name"`
+	Enabled    bool   `toml:"enabled"`
 }
+
+// --- Level ---
+
+// LevelSetupPayload configures map dimensions and entity lifecycle
+type LevelSetupPayload struct {
+	Width         int  `toml:"width"`          // New map width in grid cells
+	Height        int  `toml:"height"`         // New map height in grid cells
+	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
+	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
+}
+
+// --- Nugget ---
+
+// NuggetCollectedPayload signals successful nugget collection
+type NuggetCollectedPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
+// NuggetDestroyedPayload signals external nugget destruction
+type NuggetDestroyedPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
+// --- Cleaner ---
+
+// DirectionalCleanerPayload contains origin for 4-way cleaner spawn
+type DirectionalCleanerPayload struct {
+	OriginX   int                        `toml:"origin_x"`
+	OriginY   int                        `toml:"origin_y"`
+	ColorType component.CleanerColorType `toml:"color_type"`
+}
+
+// --- Gold ---
+
+// GoldSpawnedPayload provides information about the spawned gold sequence
+type GoldSpawnedPayload struct {
+	HeaderEntity core.Entity   `toml:"header_entity"`
+	Length       int           `toml:"length"`
+	Duration     time.Duration `toml:"duration"`
+}
+
+// GoldCompletionPayload identifies which gold sequence is completed
+type GoldCompletionPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+}
+
+// --- Splash ---
+
+// SplashTimerPayload anchors countdown timer to sequence position
+type SplashTimerRequestPayload struct {
+	AnchorEntity core.Entity   `toml:"anchor_entity"`
+	Color        terminal.RGB  `toml:"color"`
+	OriginX      int           `toml:"origin_x"`
+	OriginY      int           `toml:"origin_y"`
+	MarginLeft   int           `toml:"margin_left"`
+	MarginRight  int           `toml:"margin_right"`
+	MarginTop    int           `toml:"margin_top"`
+	MarginBottom int           `toml:"margin_bottom"`
+	Duration     time.Duration `toml:"duration"`
+}
+
+// SplashTimerCancelPayload anchors countdown timer to sequence position
+type SplashTimerCancelPayload struct {
+	AnchorEntity core.Entity `toml:"anchor_entity"`
+}
+
+// --- Energy ---
+
+// EnergyDeltaType identifies type of energy modification that should be applied
+type EnergyDeltaType int
+
+const (
+	EnergyDeltaPenalty EnergyDeltaType = iota // Penalties from interactions, absolute value decrease, clamp to zero
+	EnergyDeltaReward                         // Reward from actions, absolute value increase
+	EnergyDeltaSpend                          // Energy spent, convergent to zero and can cross zero
+	EnergyDeltaPassive                        // Passive drain, bypasses ember/boost, convergent clamp to zero
+)
+
+// EnergyAddPayload contains energy delta
+type EnergyAddPayload struct {
+	Delta      int             `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
+	Percentage bool            `toml:"percentage"` // True: percentage of current energy
+	Type       EnergyDeltaType `toml:"type"`
+}
+
+// EnergySetPayload contains energy value
+type EnergySetPayload struct {
+	Value int `toml:"value"`
+}
+
+// GlyphConsumedPayload contains glyph data for centralized energy calculation
+type GlyphConsumedPayload struct {
+	Type  component.GlyphType  `toml:"type"`
+	Level component.GlyphLevel `toml:"level"`
+}
+
+// EnergyBlinkPayload triggers visual blink state
+type EnergyBlinkPayload struct {
+	Type  int `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	Level int `toml:"level"` // 0=dark, 1=normal, 2=bright
+}
+
+// --- Shield ----
+
+// ShieldDrainRequestPayload contains energy drain amount from external sources
+type ShieldDrainRequestPayload struct {
+	Value int `toml:"value"`
+}
+
+// --- Weapon ---
+
+// WeaponAddRequestPayload
+type WeaponAddRequestPayload struct {
+	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
+}
+
+// --- Heat ---
+
+// HeatAddRequestPayload contains heat delta
+type HeatAddRequestPayload struct {
+	Delta int `toml:"delta"`
+}
+
+// HeatSetRequestPayload contains absolute heat value
+type HeatSetRequestPayload struct {
+	Value int `toml:"value"`
+}
+
+// --- Boost ---
+
+// BoostActivatePayload contains boost activation parameters
+type BoostActivatePayload struct {
+	Duration time.Duration `toml:"duration"`
+}
+
+// BoostExtendPayload contains boost extension parameters
+type BoostExtendPayload struct {
+	Duration time.Duration `toml:"duration"`
+}
+
+// --- Typing ---
+
+// CharacterTypedPayload captures keypress and cursor state when character is typed
+type CharacterTypedPayload struct {
+	Char rune `toml:"char"`
+	X    int  `toml:"x"`
+	Y    int  `toml:"y"`
+}
+
+// CharacterTypedPayloadPool reduces GC pressure during high-frequency typing
+var CharacterTypedPayloadPool = sync.Pool{
+	New: func() any { return &CharacterTypedPayload{} },
+}
+
+// DeleteRangeType defines the scope of deletion
+type DeleteRangeType int
+
+const (
+	DeleteRangeChar DeleteRangeType = iota
+	DeleteRangeLine
+)
+
+// DeleteRequestPayload contains coordinates for deletion
+type DeleteRequestPayload struct {
+	RangeType DeleteRangeType `toml:"range_type"`
+	StartX    int             `toml:"start_x"`
+	EndX      int             `toml:"end_x"`
+	StartY    int             `toml:"start_y"`
+	EndY      int             `toml:"end_y"`
+}
+
+// --- Ping ---
+
+// PingGridRequestPayload carries configuration for the ping grid activation
+type PingGridRequestPayload struct {
+	Duration time.Duration `toml:"duration"`
+}
+
+// --- Materialize ---
+
+// MaterializeRequestPayload contains parameters to start a visual spawn sequence
+type MaterializeRequestPayload struct {
+	X    int                 `toml:"x"`
+	Y    int                 `toml:"y"`
+	Type component.SpawnType `toml:"type"`
+}
+
+// MaterializeAreaRequestPayload for area-based materialization (swarm, quasar)
+type MaterializeAreaRequestPayload struct {
+	X          int                 `toml:"x"`          // Top-left X
+	Y          int                 `toml:"y"`          // Top-left Y
+	AreaWidth  int                 `toml:"area_width"` // 0 or 1 = single cell
+	AreaHeight int                 `toml:"area_height"`
+	Type       component.SpawnType `toml:"type"`
+}
+
+// MaterializeCompletedPayload carries details about a completed materialization
+type MaterializeCompletedPayload struct {
+	X    int                 `toml:"x"`
+	Y    int                 `toml:"y"`
+	Type component.SpawnType `toml:"type"`
+}
+
+// --- Flash ---
+
+// FlashRequestPayload contains parameters for destruction flash effect
+type FlashRequestPayload struct {
+	X    int  `toml:"x"`
+	Y    int  `toml:"y"`
+	Char rune `toml:"char"`
+}
+
+// --- Explosion ---
+
+// ExplosionType differentiates visual and behavioral explosion variants
+type ExplosionType uint8
+
+const (
+	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
+	ExplosionTypeMissile                      // Visual only, warm palette
+	ExplosionTypeEye                          // Self-destruct explosion with character noise
+)
+
+// ExplosionRequestPayload contains parameters for explosion effect
+type ExplosionRequestPayload struct {
+	X      int           `toml:"x"`
+	Y      int           `toml:"y"`
+	Radius int64         `toml:"radius"` // Q32.32, 0 = use default
+	Type   ExplosionType `toml:"type"`   // Explosion variant
+}
+
+// --- Dust ---
+
+// DustSpawnOneRequestPayload contains parameters for single dust entity creation
+type DustSpawnOneRequestPayload struct {
+	X     int                  `toml:"x"`
+	Y     int                  `toml:"y"`
+	Char  rune                 `toml:"char"`
+	Level component.GlyphLevel `toml:"level"`
+}
+
+// --- Blossom ---
 
 // BlossomSpawnPayload contains parameters to spawn a single blossom entity
 type BlossomSpawnPayload struct {
@@ -321,16 +372,154 @@ type BlossomSpawnPayload struct {
 	SkipStartCell bool `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
 }
 
+// --- Decay ---
+
+// DecaySpawnPayload contains parameters to spawn a single decay entity
+type DecaySpawnPayload struct {
+	X             int  `toml:"x"`
+	Y             int  `toml:"y"`
+	Char          rune `toml:"char"`
+	SkipStartCell bool `toml:"skip_start_cell"` // True: particle skips interaction at spawn position
+}
+
+// --- Death ---
+
+// DeathRequestPayload contains batch death request
+// EffectEvent: 0 = silent death, EventFlashSpawnOneRequest = flash, future: explosion, chain death
+type DeathRequestPayload struct {
+	Entities    []core.Entity `toml:"entities"`
+	EffectEvent EventType     `toml:"effect_event"`
+}
+
+// --- Timer ---
+
+// TimerStartPayload configuration for a new lifecycle timer
+type TimerStartPayload struct {
+	Entity   core.Entity   `toml:"entity"`
+	Duration time.Duration `toml:"duration"`
+}
+
+// --- Composite ---
+
+// CompositeMemberDestroyedPayload signals a composite member was typed
+type CompositeMemberDestroyedPayload struct {
+	HeaderEntity   core.Entity `toml:"header_entity"`
+	MemberEntity   core.Entity `toml:"member_entity"`
+	Char           rune        `toml:"char"`
+	RemainingCount int         `toml:"remaining_count"` // CountEntities of remaining live members after this one
+}
+
+// CompositeIntegrityBreachPayload notifies owner system of unexpected member loss
+type CompositeIntegrityBreachPayload struct {
+	HeaderEntity   core.Entity        `toml:"header_entity"`
+	Behavior       component.Behavior `toml:"behavior"`
+	LostCount      int                `toml:"lost_count"`
+	RemainingCount int                `toml:"remaining_count"`
+}
+
+// CompositeDestroyRequestPayload requests centralized composite destruction
+type CompositeDestroyRequestPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
+}
+
+// --- Cursor ---
+
 // CursorMovedPayload signals cursor position change for magnifier updates
 type CursorMovedPayload struct {
 	X int `toml:"x"`
 	Y int `toml:"y"`
 }
 
+// --- Fuse ---
+
+// FuseEffect defines visual effect type for fusion animations
+type FuseEffect int
+
+const (
+	FuseEffectNone        FuseEffect = iota
+	FuseEffectSpirit                 // Converging spirit trails
+	FuseEffectMaterialize            // Reverse beam convergence
+)
+
+// FuseRequestPayload is generic payload for fusion types
+type FuseRequestPayload struct {
+	Sources []core.Entity `toml:"sources"`
+	TargetX int           `toml:"target_x"`
+	TargetY int           `toml:"target_y"`
+	Effect  FuseEffect    `toml:"effect"`
+	Type    int           `toml:"type"` // Maps to FuseType in fuse system
+}
+
+// FuseSwarmRequestPayload contains the two drains to fuse
+type FuseSwarmRequestPayload struct {
+	DrainA core.Entity `toml:"drain_a"`
+	DrainB core.Entity `toml:"drain_b"`
+	Effect FuseEffect  `toml:"effect"` // Defaults to FuseEffectSpirit (0)
+}
+
+// --- Quasar ---
+
 // QuasarSpawnedPayload contains quasar spawn data
 type QuasarSpawnedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
+
+// QuasarSpawnRequestPayload contains coordinates for creation
+type QuasarSpawnRequestPayload struct {
+	X int `toml:"x"`
+	Y int `toml:"y"`
+}
+
+// --- Swarm ---
+
+// SwarmSpawnedPayload contains swarm spawn data
+type SwarmSpawnedPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+}
+
+// SwarmDestroyedPayload contains despawn reason
+type SwarmDestroyedPayload struct {
+	HeaderEntity core.Entity `toml:"header_entity"`
+}
+
+// SwarmAbsorbedDrainPayload contains absorption data
+type SwarmAbsorbedDrainPayload struct {
+	SwarmEntity core.Entity `toml:"swarm_entity"`
+	DrainEntity core.Entity `toml:"drain_entity"`
+	HPAbsorbed  int         `toml:"hp_absorbed"`
+}
+
+// SwarmSpawnRequestPayload contains coordinates for creation
+type SwarmSpawnRequestPayload struct {
+	X int `toml:"x"`
+	Y int `toml:"y"`
+}
+
+// --- Storm ---
+
+// StormCircleDestroyedPayload contains individual circle death data
+type StormCircleDestroyedPayload struct {
+	CircleEntity core.Entity `toml:"circle_entity"`
+	RootEntity   core.Entity `toml:"root_entity"`
+	Index        int         `toml:"index"`
+}
+
+// StormDestroyedPayload contains storm death data
+type StormDestroyedPayload struct {
+	RootEntity core.Entity `toml:"root_entity"`
+}
+
+// --- Post-Process ---
+
+// StrobeRequestPayload configures screen flash effect
+type StrobeRequestPayload struct {
+	Color      terminal.RGB `toml:"color"`
+	Intensity  float64      `toml:"intensity"`   // Base intensity 0.0-1.0
+	DurationMs int64        `toml:"duration_ms"` // 0 = default value from parameters
+}
+
+// --- Spirit ---
 
 // SpiritSpawnRequestPayload contains parameters to spawn a spirit entity
 type SpiritSpawnRequestPayload struct {
@@ -343,6 +532,8 @@ type SpiritSpawnRequestPayload struct {
 	Char      rune                  `toml:"char"`
 	BaseColor component.SpiritColor `toml:"base_color"`
 }
+
+// --- Lightning ---
 
 // LightningSpawnRequestPayload contains parameters to spawn a lightning entity
 type LightningSpawnRequestPayload struct {
@@ -367,54 +558,12 @@ type LightningUpdatePayload struct {
 }
 
 // LightningDespawnPayload specifies lightning removal criteria
-// Owner is required; TargetEntity=0 removes all lightning from owner
 type LightningDespawnPayload struct {
-	Owner        core.Entity `toml:"owner"`
-	TargetEntity core.Entity `toml:"target_entity"` // 0 = all from owner
+	Owner        core.Entity `toml:"owner"`         // Required
+	TargetEntity core.Entity `toml:"target_entity"` // 0 = removes all from owner
 }
 
-// ExplosionType differentiates visual and behavioral explosion variants
-type ExplosionType uint8
-
-const (
-	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
-	ExplosionTypeMissile                      // Visual only, warm palette
-	ExplosionTypeEye                          // Self-destruct explosion with character noise
-)
-
-// ExplosionRequestPayload contains parameters for explosion effect
-type ExplosionRequestPayload struct {
-	X      int           `toml:"x"`
-	Y      int           `toml:"y"`
-	Radius int64         `toml:"radius"` // Q32.32, 0 = use default
-	Type   ExplosionType `toml:"type"`   // Explosion variant
-}
-
-// DustSpawnOneRequestPayload contains parameters for single dust entity creation
-type DustSpawnOneRequestPayload struct {
-	X     int                  `toml:"x"`
-	Y     int                  `toml:"y"`
-	Char  rune                 `toml:"char"`
-	Level component.GlyphLevel `toml:"level"`
-}
-
-// MetaStatusMessagePayload contains message to be displayed in status bar
-type MetaStatusMessagePayload struct {
-	Message          string        `toml:"message"`
-	Duration         time.Duration `toml:"duration"`
-	DurationOverride bool          `toml:"duration_override"`
-}
-
-// MetaSystemCommandPayload contains commands to the systems (currently only enable/disable functionality)
-type MetaSystemCommandPayload struct {
-	SystemName string `toml:"system_name"`
-	Enabled    bool   `toml:"enabled"`
-}
-
-// WeaponAddRequestPayload
-type WeaponAddRequestPayload struct {
-	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
-}
+// --- Combat ---
 
 // CombatAttackDirectRequestPayload
 type CombatAttackDirectRequestPayload struct {
@@ -438,60 +587,60 @@ type CombatAttackAreaRequestPayload struct {
 	OriginY int `toml:"origin_y"`
 }
 
-// FuseEffect defines visual effect type for fusion animations
-type FuseEffect int
-
-const (
-	FuseEffectNone        FuseEffect = iota
-	FuseEffectSpirit                 // Converging spirit trails
-	FuseEffectMaterialize            // Reverse beam convergence
-)
-
-// TODO: future implementation
-// FuseRequestPayload is generic payload for fusion types
-type FuseRequestPayload struct {
-	Sources []core.Entity `toml:"sources"`
-	TargetX int           `toml:"target_x"`
-	TargetY int           `toml:"target_y"`
-	Effect  FuseEffect    `toml:"effect"`
-	Type    int           `toml:"type"` // Maps to FuseType in fuse system
+// EnemyKilledPayload carries entity type and death position for loot resolution
+type EnemyKilledPayload struct {
+	Entity  core.Entity           `toml:"entity"`
+	Species component.SpeciesType `toml:"species"`
+	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
+	X       int                   `toml:"x"`
+	Y       int                   `toml:"y"`
 }
 
-// FuseSwarmRequestPayload contains the two drains to fuse
-type FuseSwarmRequestPayload struct {
-	DrainA core.Entity `toml:"drain_a"`
-	DrainB core.Entity `toml:"drain_b"`
-	Effect FuseEffect  `toml:"effect"` // Defaults to FuseEffectSpirit (0)
+// EnemyCreatedPayload signals enemy entity spawn for GA tracking
+type EnemyCreatedPayload struct {
+	Entity  core.Entity           `toml:"entity"`
+	Species component.SpeciesType `toml:"species"`
+	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 }
 
-// SwarmSpawnedPayload contains swarm spawn data
-type SwarmSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
+// --- Loot ---
+
+// LootSpawnRequestPayload requests direct loot spawn (bypasses drop tables)
+type LootSpawnRequestPayload struct {
+	Type component.LootType `toml:"type"`
+	X    int                `toml:"x"`
+	Y    int                `toml:"y"`
 }
 
-// SwarmDestroyedPayload contains despawn reason
-type SwarmDestroyedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
+// --- Missile ---
+
+// MissileSpawnRequestPayload contains cluster missile spawn parameters
+type MissileSpawnRequestPayload struct {
+	OwnerEntity  core.Entity   `toml:"owner_entity"`  // Cursor
+	OriginEntity core.Entity   `toml:"origin_entity"` // Launcher orb
+	OriginX      int           `toml:"origin_x"`
+	OriginY      int           `toml:"origin_y"`
+	TargetX      int           `toml:"target_x"` // Far quadrant aim point
+	TargetY      int           `toml:"target_y"`
+	ChildCount   int           `toml:"child_count"`  // heat/10
+	Targets      []core.Entity `toml:"targets"`      // Prioritized target entities
+	HitEntities  []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
 }
 
-// SwarmAbsorbedDrainPayload contains absorption data
-type SwarmAbsorbedDrainPayload struct {
-	SwarmEntity core.Entity `toml:"swarm_entity"`
-	DrainEntity core.Entity `toml:"drain_entity"`
-	HPAbsorbed  int         `toml:"hp_absorbed"`
+// --- Bullet ---
+
+// BulletSpawnRequestPayload requests creation of a linear projectile
+type BulletSpawnRequestPayload struct {
+	OriginX     int64                  `toml:"origin_x"` // Q32.32 spawn position
+	OriginY     int64                  `toml:"origin_y"`
+	VelX        int64                  `toml:"vel_x"`
+	VelY        int64                  `toml:"vel_y"` // Q32.32 velocity
+	Owner       core.Entity            `toml:"owner"`
+	MaxLifetime time.Duration          `toml:"max_lifetime"`
+	Damage      component.BulletDamage `toml:"damage"`
 }
 
-// QuasarSpawnRequestPayload contains coordinates for creation
-type QuasarSpawnRequestPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
-}
-
-// SwarmSpawnRequestPayload contains coordinates for creation
-type SwarmSpawnRequestPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
-}
+// --- Marker ---
 
 // MarkerSpawnRequestPayload for marker creation
 type MarkerSpawnRequestPayload struct {
@@ -507,29 +656,22 @@ type MarkerSpawnRequestPayload struct {
 	FadeMode  uint8                 `toml:"fade_mode"`  // 0=none, 1=out, 2=in
 }
 
+// --- Motion Marker ---
+
 // MotionMarkerShowPayload contains direction for colored marker display
 type MotionMarkerShowPayload struct {
 	DirectionX int `toml:"direction_x"` // -1, 0, 1
 	DirectionY int `toml:"direction_y"` // -1, 0, 1
 }
 
-// ModeChangeNotificationPayload contains the new mode
-type ModeChangeNotificationPayload struct {
+// --- Mode ---
+
+// ModeChangedPayload contains the new mode
+type ModeChangedPayload struct {
 	Mode core.GameMode `toml:"mode"`
 }
 
-// MissileSpawnRequestPayload contains cluster missile spawn parameters
-type MissileSpawnRequestPayload struct {
-	OwnerEntity  core.Entity   `toml:"owner_entity"`  // Cursor
-	OriginEntity core.Entity   `toml:"origin_entity"` // Launcher orb
-	OriginX      int           `toml:"origin_x"`
-	OriginY      int           `toml:"origin_y"`
-	TargetX      int           `toml:"target_x"` // Far quadrant aim point
-	TargetY      int           `toml:"target_y"`
-	ChildCount   int           `toml:"child_count"`  // heat/10
-	Targets      []core.Entity `toml:"targets"`      // Prioritized target entities
-	HitEntities  []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
-}
+// --- Wall ---
 
 // WallSpawnRequestPayload contains parameters for single wall cell creation
 type WallSpawnRequestPayload struct {
@@ -626,72 +768,6 @@ type WallDespawnedPayload struct {
 	Count  int `toml:"count"`
 }
 
-// FadeoutSpawnPayload contains parameters for single fadeout effect
-type FadeoutSpawnPayload struct {
-	X       int  `toml:"x"`
-	Y       int  `toml:"y"`
-	Char    rune `toml:"char"` // 0 = bg-only
-	FgColor terminal.RGB
-	BgColor terminal.RGB
-}
-
-// CompositeIntegrityBreachPayload notifies owner system of unexpected member loss
-type CompositeIntegrityBreachPayload struct {
-	HeaderEntity   core.Entity        `toml:"header_entity"`
-	Behavior       component.Behavior `toml:"behavior"`
-	LostCount      int                `toml:"lost_count"`
-	RemainingCount int                `toml:"remaining_count"`
-}
-
-// CompositeDestroyRequestPayload requests centralized composite destruction
-type CompositeDestroyRequestPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	Effect       EventType   `toml:"effect"` // 0 = silent, EventFlashSpawnOneRequest, etc.
-}
-
-// EnemyKilledPayload carries entity type and death position for loot resolution
-type EnemyKilledPayload struct {
-	Entity  core.Entity           `toml:"entity"`
-	Species component.SpeciesType `toml:"species"`
-	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-}
-
-// EnemyCreatedPayload signals enemy entity spawn for GA tracking
-type EnemyCreatedPayload struct {
-	Entity  core.Entity           `toml:"entity"`
-	Species component.SpeciesType `toml:"species"`
-	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
-}
-
-// LootSpawnRequestPayload requests direct loot spawn (bypasses drop tables)
-type LootSpawnRequestPayload struct {
-	Type component.LootType `toml:"type"`
-	X    int                `toml:"x"`
-	Y    int                `toml:"y"`
-}
-
-// StormCircleDestroyedPayload contains individual circle death data
-type StormCircleDestroyedPayload struct {
-	CircleEntity core.Entity `toml:"circle_entity"`
-	RootEntity   core.Entity `toml:"root_entity"`
-	Index        int         `toml:"index"`
-}
-
-// StormDestroyedPayload contains storm death data
-type StormDestroyedPayload struct {
-	RootEntity core.Entity `toml:"root_entity"`
-}
-
-// LevelSetupPayload configures map dimensions and entity lifecycle
-type LevelSetupPayload struct {
-	Width         int  `toml:"width"`          // New map width in grid cells
-	Height        int  `toml:"height"`         // New map height in grid cells
-	ClearEntities bool `toml:"clear_entities"` // If true, destroy non-protected entities
-	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
-}
-
 // MazeRoomSpec defines an explicit room in maze
 type MazeRoomSpec struct {
 	CenterX int `toml:"center_x"` // 0 = random placement
@@ -715,23 +791,18 @@ type MazeSpawnRequestPayload struct {
 	DefaultRoomHeight int            `toml:"default_room_height"`
 }
 
-// BulletSpawnRequestPayload requests creation of a linear projectile
-type BulletSpawnRequestPayload struct {
-	OriginX     int64                  `toml:"origin_x"` // Q32.32 spawn position
-	OriginY     int64                  `toml:"origin_y"`
-	VelX        int64                  `toml:"vel_x"`
-	VelY        int64                  `toml:"vel_y"` // Q32.32 velocity
-	Owner       core.Entity            `toml:"owner"`
-	MaxLifetime time.Duration          `toml:"max_lifetime"`
-	Damage      component.BulletDamage `toml:"damage"`
+// --- Fadeout ---
+
+// FadeoutSpawnPayload contains parameters for single fadeout effect
+type FadeoutSpawnPayload struct {
+	X       int  `toml:"x"`
+	Y       int  `toml:"y"`
+	Char    rune `toml:"char"` // 0 = bg-only
+	FgColor terminal.RGB
+	BgColor terminal.RGB
 }
 
-// StrobeRequestPayload configures screen flash effect
-type StrobeRequestPayload struct {
-	Color      terminal.RGB `toml:"color"`
-	Intensity  float64      `toml:"intensity"`   // Base intensity 0.0-1.0
-	DurationMs int64        `toml:"duration_ms"` // 0 = default value from parameters
-}
+// --- Pylon ---
 
 // PylonSpawnRequestPayload contains parameters for pylon creation
 type PylonSpawnRequestPayload struct {
@@ -758,6 +829,8 @@ type PylonDestroyedPayload struct {
 	Y            int         `toml:"y"`
 }
 
+// --- Snake ---
+
 // SnakeSpawnRequestPayload contains coordinates for snake creation
 type SnakeSpawnRequestPayload struct {
 	X            int `toml:"x"`
@@ -777,6 +850,8 @@ type SnakeDestroyedPayload struct {
 	RootEntity core.Entity `toml:"root_entity"`
 }
 
+// --- Navigation ---
+
 // TargetGroupUpdatePayload configures or updates a navigation target group
 type TargetGroupUpdatePayload struct {
 	GroupID uint8                `toml:"group_id"` // 0 = cursor (rarely set manually), 1+ = custom
@@ -790,6 +865,22 @@ type TargetGroupUpdatePayload struct {
 type TargetGroupRemovePayload struct {
 	GroupID uint8 `toml:"group_id"`
 }
+
+// RouteGraphRequestPayload requests route graph computation for a gateway-target pair
+type RouteGraphRequestPayload struct {
+	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
+	SourceX       int    `toml:"source_x"`       // Gateway spawn position
+	SourceY       int    `toml:"source_y"`
+	TargetGroupID uint8  `toml:"target_group_id"`
+}
+
+// RouteGraphComputedPayload signals route graph computation completion
+type RouteGraphComputedPayload struct {
+	RouteGraphID uint32 `toml:"route_graph_id"`
+	RouteCount   int    `toml:"route_count"`
+}
+
+// --- Eye ---
 
 // EyeSpawnRequestPayload contains eye spawn parameters
 type EyeSpawnRequestPayload struct {
@@ -810,6 +901,8 @@ type EyeSpawnedPayload struct {
 type EyeDestroyedPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
 }
+
+// --- Tower ---
 
 // TowerSpawnRequestPayload contains parameters for tower creation
 type TowerSpawnRequestPayload struct {
@@ -838,6 +931,8 @@ type TowerDestroyedPayload struct {
 	Y            int         `toml:"y"`
 }
 
+// --- Gateway ---
+
 // GatewaySpawnRequestPayload requests creation of a gateway entity
 type GatewaySpawnRequestPayload struct {
 	AnchorEntity        core.Entity `toml:"anchor_entity"`          // Parent entity (pylon header)
@@ -864,19 +959,7 @@ type GatewayDespawnedPayload struct {
 	AnchorEntity  core.Entity `toml:"anchor_entity"`
 }
 
-// RouteGraphRequestPayload requests route graph computation for a gateway-target pair
-type RouteGraphRequestPayload struct {
-	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
-	SourceX       int    `toml:"source_x"`       // Gateway spawn position
-	SourceY       int    `toml:"source_y"`
-	TargetGroupID uint8  `toml:"target_group_id"`
-}
-
-// RouteGraphComputedPayload signals route graph computation completion
-type RouteGraphComputedPayload struct {
-	RouteGraphID uint32 `toml:"route_graph_id"`
-	RouteCount   int    `toml:"route_count"`
-}
+// --- Debug ---
 
 type DebugFlowGroupPayload struct {
 	GroupID uint8

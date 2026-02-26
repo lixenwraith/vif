@@ -32,12 +32,12 @@ transitions = [
 [states.MainGoldActive]
 parent = "MainCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "MainGoldComplete" },
+    { trigger = "EventGoldCompleted", target = "MainGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "MainGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" }
 ]
 
-[states.MainGoldComplete]
+[states.MainGoldCompleted]
 parent = "MainCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },

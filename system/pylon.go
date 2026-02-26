@@ -438,7 +438,7 @@ func (s *PylonSystem) processAblativeCombat(headerEntity core.Entity, headerComp
 
 	// Route deaths through CompositeSystem for proper lifecycle handling
 	for _, memberEntity := range deadMembers {
-		s.world.PushEvent(event.EventMemberTyped, &event.MemberTypedPayload{
+		s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 			HeaderEntity: headerEntity,
 			MemberEntity: memberEntity,
 		})

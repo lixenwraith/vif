@@ -60,7 +60,7 @@ transitions = [
 [states.QuasarGoldActive]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "EventGoldComplete", target = "QuasarGoldComplete" },
+    { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" },
     # Defensive: quasar died OOB without emitting destroy event
@@ -70,7 +70,7 @@ transitions = [
     ] } },
 ]
 
-[states.QuasarGoldComplete]
+[states.QuasarGoldCompleted]
 parent = "QuasarGoldCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
