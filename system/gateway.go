@@ -244,7 +244,11 @@ func (s *GatewaySystem) Update() {
 func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
 	switch species {
 	case component.SpeciesEye:
-		routeID := s.world.Resources.RouteGraph.PopRoute(routeDistID, subType)
+		routeID := -1
+		if routeDistID != 0 && s.world.Resources.Adaptation != nil {
+			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, subType)
+		}
+
 		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{
 			X:             x,
 			Y:             y,
@@ -255,20 +259,13 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 		})
 
 		// Future species routing:
-		// case component.SpeciesSwarm:
-		// case component.SpeciesQuasar:
+		// case component.SpeciesSnake:
 		// etc.
 	}
 }
 
 func (s *GatewaySystem) despawnGateway(gwEntity core.Entity, anchorEntity core.Entity) {
-	// Mark route distribution as draining for deferred cleanup
-	if gw, ok := s.world.Components.Gateway.GetComponent(gwEntity); ok {
-		if gw.RouteDistID != 0 {
-			s.world.Resources.RouteGraph.MarkDraining(gw.RouteDistID, s.world.Resources.Time.GameTime)
-		}
-	}
-
+	// Let AdaptationSystem coordinate graph and resource draining
 	s.world.PushEvent(event.EventGatewayDespawned, &event.GatewayDespawnedPayload{
 		GatewayEntity: gwEntity,
 		AnchorEntity:  anchorEntity,

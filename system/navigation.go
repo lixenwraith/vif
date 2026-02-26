@@ -706,14 +706,17 @@ func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navig
 	if graphID == 0 {
 		return nil
 	}
-	entry := s.world.Resources.RouteGraph.Get(graphID)
-	if entry == nil || entry.Graph == nil || routeID < 0 || routeID >= len(entry.Graph.Routes) {
+
+	graph := s.world.Resources.RouteGraph.Get(graphID)
+	if graph == nil || routeID < 0 || routeID >= len(graph.Routes) {
 		return nil
 	}
-	field := entry.Graph.Routes[routeID].Field
+
+	field := graph.Routes[routeID].Field
 	if field == nil || !field.Valid {
 		return nil
 	}
+
 	return field
 }
 

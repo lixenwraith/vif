@@ -653,6 +653,7 @@ type CompositeDestroyRequestPayload struct {
 type EnemyKilledPayload struct {
 	Entity  core.Entity           `toml:"entity"`
 	Species component.SpeciesType `toml:"species"`
+	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
 }

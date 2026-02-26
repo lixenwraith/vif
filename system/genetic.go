@@ -18,11 +18,8 @@ import (
 
 // --- Species Configuration ---
 // Currently registered as a generic tracked species with no active genes
-// Future: route-selection gene per gateway population
-//   - Gene encodes path index from navigation-computed route set
-//   - Per-gateway populations replace single global species registration
-//   - Initial weight distribution: inverse route distance, minimum floor guaranteed
-//   - Fitness: distance-to-target at death (already implemented below)
+// Strictly handles telemetry, continuous trait evolution, and generational metrics
+// Discrete route distributions are exclusively handled by AdaptationSystem
 
 // --- Player Behavior Model ---
 // Tracks player metrics via exponential moving average
@@ -104,9 +101,7 @@ type trackedEntity struct {
 	evalID        uint64
 	collector     tracking.Collector
 	isComposite   bool
-	targetGroupID uint8  // Target group for distance measurement (0 = cursor)
-	routeGraphID  uint32 // Route graph ID for bandit outcome routing (0 = none)
-	routeID       int    // Assigned route index (-1 = no route)
+	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
 }
 
 // --- Genetic System ---
@@ -156,7 +151,6 @@ func NewGeneticSystem(world *engine.World) engine.System {
 
 // registerSpecies registers tracked species with no active genes
 // Enables the tracking/fitness pipeline for distance-at-death measurement
-// Future: re-register with route-selection gene bounds when navigation computes alternative routes
 func (s *GeneticSystem) registerSpecies() {
 	eyeConfig := registry.SpeciesConfig{
 		ID:          registry.SpeciesID(component.SpeciesEye),
@@ -244,16 +238,6 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		groupID = tc.GroupID
 	}
 
-	// Read route assignment from NavigationComponent (set by species system at spawn)
-	routeGraphID := uint32(0)
-	routeID := -1
-	if nav, ok := s.world.Components.Navigation.GetComponent(entity); ok {
-		if nav.UseRouteGraph {
-			routeGraphID = nav.RouteGraphID
-			routeID = nav.RouteID
-		}
-	}
-
 	isComposite := s.world.Components.Header.HasEntity(entity)
 
 	var collector tracking.Collector
@@ -270,8 +254,6 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		collector:     collector,
 		isComposite:   isComposite,
 		targetGroupID: groupID,
-		routeGraphID:  routeGraphID,
-		routeID:       routeID,
 	}
 
 	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
@@ -292,11 +274,6 @@ func (s *GeneticSystem) Update() {
 	s.processPendingDeaths()
 	s.cleanupStaleTracking()
 	s.processTracking(dt)
-
-	// Bandit weight updates and draining cleanup
-	s.world.Resources.RouteGraph.ProcessUpdates()
-	s.world.Resources.RouteGraph.PruneDrained(s.world.Resources.Time.GameTime)
-
 	s.updateTelemetry()
 }
 
@@ -371,10 +348,9 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 	}
 }
 
-// completeTracking finalizes entity tracking and reports distance-at-death fitness
-// Fitness = 1.0 at target, 0.0 at maximum map distance
-// deathX/deathY < 0 signals unknown position (zero fitness)
-// Reports to both bandit population (if route assigned) and GA registry (telemetry)
+// completeTracking finalizes entity tracking and reports absolute cartesian distance-at-death fitness
+// Reports directly to GA registry
+// Bandits are handled asynchronously by AdaptationSystem
 func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY int) {
 	// Finalize collector, release accumulated metrics
 	_ = tracked.collector.Finalize(tracking.MetricBundle{})
@@ -403,13 +379,6 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 				}
 			}
 		}
-	}
-
-	// Route bandit outcome (parallel path)
-	if tracked.routeID >= 0 && tracked.routeGraphID != 0 {
-		s.world.Resources.RouteGraph.RecordOutcome(
-			tracked.routeGraphID, tracked.subType, tracked.routeID, fitnessVal,
-		)
 	}
 
 	// GA registry (telemetry path)

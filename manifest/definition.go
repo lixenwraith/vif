@@ -165,6 +165,7 @@ var Systems = []SystemDef{
 	// --- Lifecycle ---
 	{"death", "NewDeathSystem"},
 	{"timekeeper", "NewTimeKeeperSystem"},
+	{"adaptation", "NewAdaptationSystem"},
 	{"genetic", "NewGeneticSystem"},
 
 	// --- Audio ---

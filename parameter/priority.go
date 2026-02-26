@@ -48,6 +48,7 @@ const (
 	PriorityMotionMarker // After game logic and splash, before rendering
 	PriorityDeath        // After game logic, before TimeKeeper
 	PriorityTimekeeper   // After game logic
+	PriorityAdaptation   // Before genetic
 	PriorityGenetic      // After death and timekeeper, observes entity lifecycle
 	PriorityDiagnostics  // After all others, telemetry collection
 )

@@ -102,7 +102,7 @@ transitions = [
 [states.TowerAttachGW1]
 parent = "TowerCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP2" },
@@ -123,7 +123,7 @@ transitions = [
 [states.TowerAttachGW2]
 parent = "TowerCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP3" },
@@ -144,7 +144,7 @@ transitions = [
 [states.TowerAttachGW3]
 parent = "TowerCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP4" },
@@ -165,7 +165,7 @@ transitions = [
 [states.TowerAttachGW4]
 parent = "TowerCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800 }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerActive" },

@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"math"
 	"math/rand/v2"
 	"sync/atomic"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/navigation"
-	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 	"github.com/lixenwraith/vi-fighter/terminal"
 )
@@ -26,8 +24,12 @@ type Resource struct {
 
 	// Targeting
 	Target *TargetResource
+
 	// Route graphs for multi-path navigation
 	RouteGraph *RouteGraphResource
+
+	// Bandit adaptation resource for route distribution
+	Adaptation *AdaptationResource
 
 	// Transient visual effects
 	Transient *TransientResource
@@ -145,6 +147,8 @@ func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
 }
 
+// === Target Resource ===
+
 // MaxTargetsPerGroup sets the hard limit for concurrent anchors in a single target group
 const MaxTargetsPerGroup = 8
 
@@ -187,252 +191,115 @@ func (tr *TargetResource) SetGroup(groupID uint8, state TargetGroupState) {
 
 // === RouteGraph ===
 
-// RouteGraphEntry wraps a computed route graph with per-SubType bandit populations
-type RouteGraphEntry struct {
-	Graph       *navigation.RouteGraph
-	Populations map[uint8]*RoutePopulation // Keyed by species SubType (e.g. EyeType)
-	Draining    bool
-	DrainTime   time.Time
-}
-
-// RoutePopulation maintains a softmax bandit over routes for a single SubType
-type RoutePopulation struct {
-	Weights   []float64      // W[k] for K routes, normalized to sum ~1.0
-	Pool      []int          // Pre-sampled route assignments, consumed FIFO
-	PoolIndex int            // Next assignment to distribute
-	Outcomes  []RouteOutcome // Accumulated since last weight update
-}
-
-// RouteOutcome records distance-at-death fitness for a single entity's route
-type RouteOutcome struct {
-	RouteIndex int
-	Fitness    float64
-}
-
-// RouteGraphResource provides route graph and bandit population storage
-// Written by NavigationSystem (graph computation), read/written by GatewaySystem and GeneticSystem (route distribution)
-// Keyed by opaque uint32 ID (typically uint32(gatewayEntity))
+// RouteGraphResource provides route graph geometry and constrained flow fields.
+// Written by NavigationSystem, read by AdaptationSystem and movement logic.
 type RouteGraphResource struct {
-	graphs map[uint32]*RouteGraphEntry
+	graphs map[uint32]*navigation.RouteGraph
 }
 
-// Get returns the route graph entry for the given ID, or nil
-func (r *RouteGraphResource) Get(id uint32) *RouteGraphEntry {
+// Get returns the route graph for the given ID, or nil
+func (r *RouteGraphResource) Get(id uint32) *navigation.RouteGraph {
 	if r == nil || r.graphs == nil {
 		return nil
 	}
 	return r.graphs[id]
 }
 
-// Set stores a route graph under the given ID, wrapping it in an entry
+// Set stores a route graph under the given ID
 func (r *RouteGraphResource) Set(id uint32, rg *navigation.RouteGraph) {
 	if r.graphs == nil {
-		r.graphs = make(map[uint32]*RouteGraphEntry)
+		r.graphs = make(map[uint32]*navigation.RouteGraph)
 	}
-	r.graphs[id] = &RouteGraphEntry{
-		Graph: rg,
-	}
+	r.graphs[id] = rg
 }
 
-// Remove deletes a route graph entry by ID
+// Remove deletes a route graph by ID
 func (r *RouteGraphResource) Remove(id uint32) {
 	if r.graphs != nil {
 		delete(r.graphs, id)
 	}
 }
 
-// Clear removes all route graph entries (used on regraph/reset)
+// Clear removes all route graphs
 func (r *RouteGraphResource) Clear() {
 	if r.graphs != nil {
 		clear(r.graphs)
 	}
 }
 
-// PopRoute returns and consumes the next pre-sampled route for the given graph and SubType
-// Returns -1 if graph missing, draining, pool exhausted, or no routes exist
-func (r *RouteGraphResource) PopRoute(id uint32, subType uint8) int {
-	if id == 0 {
+// === Adaptation ===
+
+// AdaptationEntry holds the discrete probability distribution and pools for a gateway
+type AdaptationEntry struct {
+	RouteCount  int
+	Populations map[uint8]*RoutePopulation // Keyed by species SubType (e.g. EyeType)
+	Draining    bool
+	DrainTime   time.Time
+}
+
+// RoutePopulation holds the EXP3 weights and a pre-sampled consumer pool
+type RoutePopulation struct {
+	Weights []float64 // Read-only for consumers, written by AdaptationSystem
+	Pool    []int     // Pre-sampled route assignments
+	Head    int       // Consumer index
+}
+
+// AdaptationResource provides lock-free route allocations for spawners.
+// Pools and weights are asynchronously populated by AdaptationSystem.
+type AdaptationResource struct {
+	Entries map[uint32]*AdaptationEntry
+}
+
+// PopRoute returns a pre-sampled route assignment for the spawner.
+// Falls back to uniform random sampling if the pool is exhausted or uninitialized.
+func (ar *AdaptationResource) PopRoute(id uint32, subType uint8) int {
+	if ar.Entries == nil {
 		return -1
 	}
-	entry := r.Get(id)
-	if entry == nil || entry.Draining || entry.Graph == nil || len(entry.Graph.Routes) == 0 {
+
+	entry, ok := ar.Entries[id]
+	if !ok || entry.Draining || entry.RouteCount == 0 {
 		return -1
 	}
-	pop := entry.getOrInitPopulation(subType)
-	if pop.PoolIndex >= len(pop.Pool) {
-		return -1
-	}
-	route := pop.Pool[pop.PoolIndex]
-	pop.PoolIndex++
-	return route
-}
 
-// RecordOutcome appends a fitness result for the given graph, SubType, and route
-// Discards outcomes for draining or unknown entries
-func (r *RouteGraphResource) RecordOutcome(id uint32, subType uint8, routeID int, fitness float64) {
-	entry := r.Get(id)
-	if entry == nil || entry.Draining {
-		return
-	}
-	pop, ok := entry.Populations[subType]
-	if !ok {
-		return
-	}
-	pop.Outcomes = append(pop.Outcomes, RouteOutcome{
-		RouteIndex: routeID,
-		Fitness:    fitness,
-	})
-}
-
-// ProcessUpdates runs EXP3 weight update and pool resampling for all populations with pending outcomes
-func (r *RouteGraphResource) ProcessUpdates() {
-	if r == nil || r.graphs == nil {
-		return
-	}
-	for _, entry := range r.graphs {
-		if entry.Draining {
-			continue
-		}
-		for _, pop := range entry.Populations {
-			if len(pop.Outcomes) == 0 {
-				continue
-			}
-			pop.updateWeights()
-			pop.samplePool()
-		}
-	}
-}
-
-// MarkDraining flags an entry for deferred cleanup after gateway death
-// Subsequent PopRoute and RecordOutcome calls are rejected
-func (r *RouteGraphResource) MarkDraining(id uint32, t time.Time) {
-	entry := r.Get(id)
-	if entry == nil {
-		return
-	}
-	entry.Draining = true
-	entry.DrainTime = t
-}
-
-// PruneDrained removes entries that have been draining past RouteDrainTimeout
-func (r *RouteGraphResource) PruneDrained(now time.Time) {
-	if r == nil || r.graphs == nil {
-		return
-	}
-	for id, entry := range r.graphs {
-		if entry.Draining && now.Sub(entry.DrainTime) >= parameter.RouteDrainTimeout {
-			delete(r.graphs, id)
-		}
-	}
-}
-
-// getOrInitPopulation returns or lazily creates the population for a SubType
-func (entry *RouteGraphEntry) getOrInitPopulation(subType uint8) *RoutePopulation {
 	if entry.Populations == nil {
 		entry.Populations = make(map[uint8]*RoutePopulation)
 	}
+
 	pop, ok := entry.Populations[subType]
-	if ok {
-		return pop
+	if !ok {
+		pop = &RoutePopulation{
+			Weights: make([]float64, entry.RouteCount),
+			Pool:    make([]int, 0),
+			Head:    0,
+		}
+		// Uniform initial weights
+		uniform := 1.0 / float64(entry.RouteCount)
+		for i := 0; i < entry.RouteCount; i++ {
+			pop.Weights[i] = uniform
+		}
+		entry.Populations[subType] = pop
 	}
-	pop = &RoutePopulation{
-		Weights:  make([]float64, len(entry.Graph.Routes)),
-		Pool:     make([]int, parameter.RoutePoolDefaultSize),
-		Outcomes: make([]RouteOutcome, 0, parameter.RoutePoolDefaultSize),
+
+	if pop.Head >= len(pop.Pool) {
+		// Exhausted pool fallback
+		return rand.IntN(entry.RouteCount)
 	}
-	for i, route := range entry.Graph.Routes {
-		pop.Weights[i] = route.Weight
-	}
-	pop.samplePool()
-	entry.Populations[subType] = pop
-	return pop
+
+	route := pop.Pool[pop.Head]
+	pop.Head++
+	return route
 }
 
-// updateWeights applies EXP3-style multiplicative weight update from accumulated outcomes
-func (pop *RoutePopulation) updateWeights() {
-	k := len(pop.Weights)
-	if k == 0 {
-		pop.Outcomes = pop.Outcomes[:0]
+// MarkDraining flags an entry for deferred cleanup
+func (ar *AdaptationResource) MarkDraining(id uint32, t time.Time) {
+	if ar.Entries == nil {
 		return
 	}
-
-	sumFitness := make([]float64, k)
-	counts := make([]int, k)
-	for _, o := range pop.Outcomes {
-		if o.RouteIndex >= 0 && o.RouteIndex < k {
-			sumFitness[o.RouteIndex] += o.Fitness
-			counts[o.RouteIndex]++
-		}
+	if entry, ok := ar.Entries[id]; ok {
+		entry.Draining = true
+		entry.DrainTime = t
 	}
-
-	for i := 0; i < k; i++ {
-		if counts[i] > 0 {
-			avg := sumFitness[i] / float64(counts[i])
-			pop.Weights[i] *= math.Exp(parameter.RouteLearningRate * avg)
-		}
-	}
-
-	// Floor + renormalize
-	total := 0.0
-	for i := 0; i < k; i++ {
-		if pop.Weights[i] < parameter.RouteMinWeight {
-			pop.Weights[i] = parameter.RouteMinWeight
-		}
-		total += pop.Weights[i]
-	}
-	if total > 0 {
-		for i := 0; i < k; i++ {
-			pop.Weights[i] /= total
-		}
-	}
-
-	pop.Outcomes = pop.Outcomes[:0]
-}
-
-// samplePool fills pool via multinomial sampling from weights, then shuffles
-func (pop *RoutePopulation) samplePool() {
-	n := len(pop.Pool)
-	k := len(pop.Weights)
-	if n == 0 || k == 0 {
-		pop.PoolIndex = n
-		return
-	}
-
-	// Build CDF
-	cdf := make([]float64, k)
-	cdf[0] = pop.Weights[0]
-	for i := 1; i < k; i++ {
-		cdf[i] = cdf[i-1] + pop.Weights[i]
-	}
-	total := cdf[k-1]
-	if total <= 0 {
-		// Uniform fallback
-		for i := 0; i < n; i++ {
-			pop.Pool[i] = rand.IntN(k)
-		}
-	} else {
-		for i := 0; i < n; i++ {
-			r := rand.Float64() * total
-			lo, hi := 0, k-1
-			for lo < hi {
-				mid := (lo + hi) / 2
-				if cdf[mid] < r {
-					lo = mid + 1
-				} else {
-					hi = mid
-				}
-			}
-			pop.Pool[i] = lo
-		}
-	}
-
-	// Fisher-Yates shuffle for unbiased distribution order
-	for i := n - 1; i > 0; i-- {
-		j := rand.IntN(i + 1)
-		pop.Pool[i], pop.Pool[j] = pop.Pool[j], pop.Pool[i]
-	}
-
-	pop.PoolIndex = 0
 }
 
 // === Bridged Resources from Service ===
