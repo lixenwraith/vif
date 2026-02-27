@@ -166,6 +166,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
+// Component ID Bitmasks Mapping for Engine-Level Entity Signatures
+// Used for O(1) destruction skipping and future fast queries
+const (
+{{- range $index, $comp := .Components }}
+	{{ if eq $index 0 }}{{ $comp.Field }}Bit uint64 = 1 << iota{{ else }}{{ $comp.Field }}Bit{{ end }}
+{{- end }}
+	PositionBit // Special index designated for spatial grid presence
+)
+
 // Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
 type Component struct {
@@ -178,24 +187,45 @@ type Component struct {
 // Called once from NewWorld()
 func initComponents(w *World) {
 {{- range .Components }}
-	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
+	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}](w, {{ .Field }}Bit)
 {{- end }}
-	w.Positions = NewPosition()
-	w.Positions.SetWorld(w)
+	w.Positions = NewPosition(w, PositionBit)
 }
 
 // removeEntity removes entity from every component store
 // Caller MUST hold updateMutex
 func (w *World) removeEntity(e core.Entity) {
+	// Guard against unallocated bounds (safety check)
+	if int(e) >= len(w.signatures) {
+		return
+	}
+
+	mask := w.signatures[e]
+	
+	// O(1) Fast-Path: If the entity has no components, exit immediately
+	if mask == 0 {
+		return
+	}
+
+	// O(1) Skip: Only invoke Unsafe removal on stores where the bit is strictly present
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveEntityUnsafe(e)
+	if mask&{{ .Field }}Bit != 0 {
+		w.Components.{{ .Field }}.RemoveEntityUnsafe(e)
+	}
 {{- end }}
-	w.Positions.RemoveEntityUnsafe(e)
+	if mask&PositionBit != 0 {
+		w.Positions.RemoveEntityUnsafe(e)
+	}
+
+	// Ensure signature is entirely wiped
+	w.signatures[e] = 0
 }
 
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
-func (w *World) removeEntitiesBatch(entities []core.Entity) {
+func (w *World) removeEntitiesBatch(entities[]core.Entity) {
+	// For batches, we rely on the internal fast-path (len == 0) of the stores 
+	// and the bitmask updates strictly scoped inside the stores.
 {{- range .Components }}
 	w.Components.{{ .Field }}.RemoveBatchUnsafe(entities)
 {{- end }}
@@ -260,3 +290,4 @@ func ActiveRenderers() []string {
 	}
 }
 `))
+

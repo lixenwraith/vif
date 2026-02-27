@@ -28,6 +28,10 @@ type World struct {
 
 	// Stats
 	destroyedCount atomic.Int64
+
+	// signatures is a dense array mapping an entity ID to its component bitmask
+	// Used for O(1) identification of components during destruction routines
+	signatures []uint64
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
@@ -36,6 +40,7 @@ func NewWorld() *World {
 		nextEntityID: 1,
 		Resources:    &Resource{},
 		systems:      make([]System, 0),
+		signatures:   make([]uint64, 4096), // Pre-allocate initial capacity
 	}
 
 	initComponents(w)
@@ -50,6 +55,14 @@ func (w *World) CreateEntity() core.Entity {
 
 	id := w.nextEntityID
 	w.nextEntityID++
+
+	// Expand signature slice proactively
+	if int(id) >= len(w.signatures) {
+		newSignatures := make([]uint64, len(w.signatures)*2)
+		copy(newSignatures, w.signatures)
+		w.signatures = newSignatures
+	}
+
 	return id
 }
 
@@ -75,6 +88,29 @@ func (w *World) Clear() {
 	defer w.mu.Unlock()
 	w.nextEntityID = 1
 	w.wipeAll()
+
+	// Clear signature arrays
+	for i := range w.signatures {
+		w.signatures[i] = 0
+	}
+}
+
+// AddSignature marks a component bit as active for the specified entity
+func (w *World) AddSignature(e core.Entity, bit uint64) {
+	w.mu.RLock()
+	if int(e) < len(w.signatures) {
+		atomic.OrUint64(&w.signatures[e], bit)
+	}
+	w.mu.RUnlock()
+}
+
+// RemoveSignature clears a component bit for the specified entity
+func (w *World) RemoveSignature(e core.Entity, bit uint64) {
+	w.mu.RLock()
+	if int(e) < len(w.signatures) {
+		atomic.AndUint64(&w.signatures[e], ^bit)
+	}
+	w.mu.RUnlock()
 }
 
 // AddSystem adds a systems to the world and sorts by priority
@@ -311,7 +347,7 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	)
 
 	if !found {
-		return pos.X, pos.Y, false // No escape route (catastrophic)
+		return pos.X, pos.Y, false // No escape route
 	}
 
 	w.Positions.SetPosition(entity, component.PositionComponent{X: newX, Y: newY})
@@ -387,3 +423,4 @@ func (w *World) DebugPrint(msg string) {
 		DurationOverride: true,
 	})
 }
+
