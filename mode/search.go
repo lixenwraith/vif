@@ -67,7 +67,6 @@ func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
 		pos, pOk := ctx.World.Positions.GetPosition(entity)
 		glyph, gOk := glyphStore.GetComponent(entity)
 		if !pOk || !gOk {
-			panic(nil)
 			continue
 		}
 		grid[core.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
@@ -191,3 +190,4 @@ func matchesPattern(grid map[core.Point]rune, x, y int, pattern []rune) bool {
 	}
 	return true
 }
+

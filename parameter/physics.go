@@ -2,47 +2,10 @@ package parameter
 
 import "github.com/lixenwraith/vi-fighter/vmath"
 
-// Pre-computed Q32.32 physics constants, initialized once to avoid repeated float calculation and used by systems
-
 // Collision kinetic impulse
 var (
 	CollisionKineticImpulseMin = vmath.FromFloat(CollisionKineticImpulseMinFloat)
 	CollisionKineticImpulseMax = vmath.FromFloat(CollisionKineticImpulseMaxFloat)
-)
-
-// Cleaner physics
-var (
-	CleanerBaseHorizontalSpeed = vmath.FromFloat(CleanerBaseHorizontalSpeedFloat)
-	CleanerBaseVerticalSpeed   = vmath.FromFloat(CleanerBaseVerticalSpeedFloat)
-	CleanerTrailLenFixed       = vmath.FromInt(CleanerTrailLength)
-)
-
-// Drain physics
-var (
-	// Drain physics
-	DrainBaseSpeed       = vmath.FromFloat(DrainBaseSpeedFloat)
-	DrainHomingAccel     = vmath.FromFloat(DrainHomingAccelFloat)
-	DrainDrag            = vmath.FromFloat(DrainDragFloat)
-	DrainDeflectAngleVar = vmath.FromFloat(DrainDeflectAngleVarFloat)
-)
-
-// Quasar physics
-var (
-	// Quasar physics
-	QuasarHomingAccel = vmath.FromFloat(QuasarHomingAccelFloat)
-	QuasarBaseSpeed   = vmath.FromFloat(QuasarBaseSpeedFloat)
-	QuasarMaxSpeed    = vmath.FromFloat(QuasarMaxSpeedFloat)
-	QuasarDrag        = vmath.FromFloat(QuasarDragFloat)
-	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
-	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
-)
-
-// Swarm physics
-var (
-	SwarmChaseSpeed      = vmath.Mul(DrainBaseSpeed, vmath.FromInt(SwarmChaseSpeedMultiplier))
-	SwarmHomingAccel     = vmath.FromFloat(SwarmHomingAccelFloat)
-	SwarmDrag            = vmath.FromFloat(SwarmDragFloat)
-	SwarmDeflectAngleVar = vmath.FromFloat(SwarmDeflectAngleVarFloat)
 )
 
 // Soft collision impulse (inter-enemy repulsion)
@@ -52,26 +15,12 @@ var (
 	SoftCollisionAngleVar   = vmath.FromFloat(SoftCollisionAngleVarFloat)
 )
 
-// Swarm flocking separation
+// Flocking separation
 var (
 	FlockingSeparationRadiusX = vmath.FromFloat(SwarmSeparationRadiusXFloat)
 	FlockingSeparationRadiusY = vmath.FromFloat(SwarmSeparationRadiusYFloat)
 	SwarmSeparationStrength   = vmath.FromFloat(SwarmSeparationStrengthFloat)
-)
-
-// Entity collision radii (ellipse semi-axes for overlap detection)
-var (
-	QuasarCollisionRadiusX = vmath.FromFloat(QuasarCollisionRadiusXFloat)
-	QuasarCollisionRadiusY = vmath.FromFloat(QuasarCollisionRadiusYFloat)
-	SwarmCollisionRadiusX  = vmath.FromFloat(SwarmCollisionRadiusXFloat)
-	SwarmCollisionRadiusY  = vmath.FromFloat(SwarmCollisionRadiusYFloat)
-	DrainCollisionRadius   = vmath.FromFloat(DrainCollisionRadiusFloat)
-)
-
-// Pre-computed inverse squared radii for ellipse overlap checks
-var (
-	QuasarCollisionInvRxSq, QuasarCollisionInvRySq       = vmath.EllipseInvRadiiSq(QuasarCollisionRadiusX, QuasarCollisionRadiusY)
-	SwarmCollisionInvRxSq, SwarmCollisionInvRySq         = vmath.EllipseInvRadiiSq(SwarmCollisionRadiusX, SwarmCollisionRadiusY)
+	// Pre-computed inverse squared radii for ellipse overlap checks
 	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSq(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
 )
 
@@ -148,3 +97,4 @@ var (
 	PylonCollisionRadiusY                        = vmath.FromFloat(PylonCollisionRadiusYFloat)
 	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSq(PylonCollisionRadiusX, PylonCollisionRadiusY)
 )
+

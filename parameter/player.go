@@ -78,14 +78,3 @@ const (
 	// OrbCoronaIntensity is peak corona glow alpha
 	OrbCoronaIntensity = 0.6
 )
-
-// Cleaner Entity
-const (
-	// CleanerBaseHorizontalSpeed
-	CleanerBaseHorizontalSpeedFloat = 80.0
-	// CleanerBaseVerticalSpeed
-	CleanerBaseVerticalSpeedFloat = 40.0
-
-	// CleanerTrailLength is the number of previous positions tracked for the fade trail effect
-	CleanerTrailLength = 10
-)
