@@ -57,24 +57,71 @@ func (r *Resource) ServiceBridge(res any) {
 
 // === World Resources ===
 
+// --- Time Resource ---
+
 // TimeResource is time data snapshot for systems and is updated by ClockScheduler at the start of a tick
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)
-	GameTime time.Time
+	// GameTime time.Time
+	gameTime atomic.Int64
 
 	// RealTime is the wall-clock time (unaffected by pause)
-	RealTime time.Time
+	// RealTime time.Time
+	realTime atomic.Int64
 
 	// DeltaTime is the duration since the last update
-	DeltaTime time.Duration
+	// DeltaTime time.Duration
+	deltaTime atomic.Int64
 }
 
 // Update modifies TimeResource fields in-place, Must be called under world lock
 func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration) {
-	tr.GameTime = gameTime
-	tr.RealTime = realTime
-	tr.DeltaTime = deltaTime
+	// tr.GameTime = gameTime
+	// tr.RealTime = realTime
+	// tr.DeltaTime = deltaTime
+
+	tr.gameTime.Store(gameTime.UnixNano())
+	tr.realTime.Store(realTime.UnixNano())
+	tr.deltaTime.Store(int64(deltaTime))
 }
+
+func (tr *TimeResource) SetGameTime(t time.Time) {
+	tr.gameTime.Store(t.UnixNano())
+}
+
+func (tr *TimeResource) SetRealTime(t time.Time) {
+	tr.realTime.Store(t.UnixNano())
+}
+
+func (tr *TimeResource) SetDeltaTime(t time.Duration) {
+	tr.deltaTime.Store(int64(t))
+}
+
+func (tr *TimeResource) GameTime() time.Time {
+	return time.Unix(0, tr.gameTime.Load())
+}
+
+func (tr *TimeResource) GameTimeNano() int64 {
+	return tr.gameTime.Load()
+}
+
+func (tr *TimeResource) RealTime() time.Time {
+	return time.Unix(0, tr.realTime.Load())
+}
+
+func (tr *TimeResource) RealTimeNano() int64 {
+	return tr.realTime.Load()
+}
+
+func (tr *TimeResource) DeltaTime() time.Duration {
+	return time.Duration(tr.deltaTime.Load())
+}
+
+func (tr *TimeResource) DeltaTimeNano() int64 {
+	return tr.deltaTime.Load()
+}
+
+// --- Config Resource ---
 
 // ConfigResource holds static or semi-static configuration data
 type ConfigResource struct {
@@ -104,9 +151,26 @@ type ConfigResource struct {
 	ColorMode terminal.ColorMode `toml:"color_mode"`
 }
 
+// --- EventQueue Resource ---
+
 // EventQueueResource wraps the event queue for systems access
 type EventQueueResource struct {
 	Queue *event.EventQueue
+}
+
+// --- GameState Resource ---
+
+// GameStateResource wraps GameState for read access by systems
+type GameStateResource struct {
+	State *GameState
+}
+
+// --- Player Resource ---
+
+// PlayerResource holds the player cursor entity and derived state
+type PlayerResource struct {
+	Entity core.Entity
+	bounds atomic.Pointer[PingBounds]
 }
 
 // PingBounds holds the boundaries for ping crosshair and operations
@@ -121,17 +185,6 @@ type PingAbsoluteBounds struct {
 	MinX, MaxX int
 	MinY, MaxY int
 	Active     bool
-}
-
-// GameStateResource wraps GameState for read access by systems
-type GameStateResource struct {
-	State *GameState
-}
-
-// PlayerResource holds the player cursor entity and derived state
-type PlayerResource struct {
-	Entity core.Entity
-	bounds atomic.Pointer[PingBounds]
 }
 
 // GetBounds returns current bounds snapshot (lock-free read)

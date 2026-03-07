@@ -102,7 +102,7 @@ func (s *SplashSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 
 	// Cache timer bboxes for magnifier collision checks to avoid alloc inside loop if not needed
 	var cachedTimerBBoxes []BBox
@@ -547,3 +547,4 @@ func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.En
 	}
 	return 0
 }
+

@@ -30,7 +30,7 @@ func NewLightningSystem(world *engine.World) engine.System {
 }
 
 func (s *LightningSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.enabled = true
 }
 
@@ -54,7 +54,7 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	deltaTime := s.world.Resources.Time.DeltaTime
+	deltaTime := s.world.Resources.Time.DeltaTime()
 	var toDestroy []core.Entity
 
 	for _, e := range entities {
@@ -202,3 +202,4 @@ func (s *LightningSystem) destroyAll() {
 		s.world.DestroyEntity(e)
 	}
 }
+

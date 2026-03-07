@@ -40,7 +40,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 }
 
 func (s *EnvironmentSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statWindActive.Store(false)
 	s.enabled = true
 }
@@ -90,3 +90,4 @@ func (s *EnvironmentSystem) Update() {
 	}
 
 }
+

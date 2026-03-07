@@ -49,7 +49,7 @@ func NewFuseSystem(world *engine.World) engine.System {
 
 func (s *FuseSystem) Init() {
 	s.fusions = make([]pendingFusion, 0, 16)
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.enabled = true
 }
 
@@ -110,7 +110,7 @@ func (s *FuseSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 
 	// Process in reverse to allow safe removal
 	for i := len(s.fusions) - 1; i >= 0; i-- {
@@ -324,3 +324,4 @@ func (s *FuseSystem) completeFusion(f pendingFusion) {
 		})
 	}
 }
+

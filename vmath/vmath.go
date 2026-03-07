@@ -6,10 +6,9 @@ import (
 	"unsafe"
 )
 
-// TODO: try making these typed int64 and see how bad is the refactor
 // Q32.32 Fixed Point constants
 const (
-	Shift       = 32
+	Shift int64 = 32
 	Scale int64 = 1 << Shift
 	Mask  int64 = Scale - 1
 	Half  int64 = 1 << (Shift - 1)

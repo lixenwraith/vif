@@ -2,7 +2,6 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -76,7 +75,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.pity = make(map[component.SpeciesType]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
@@ -157,8 +156,7 @@ func (s *LootSystem) Update() {
 	}
 
 	config := s.world.Resources.Config
-	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -590,3 +588,4 @@ func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType
 	s.world.DestroyEntity(entity)
 	s.statCollects.Add(1)
 }
+

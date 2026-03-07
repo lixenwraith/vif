@@ -39,7 +39,7 @@ func NewEyeSystem(world *engine.World) engine.System {
 }
 
 func (s *EyeSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -107,8 +107,7 @@ func (s *EyeSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -485,7 +484,7 @@ func (s *EyeSystem) syncMemberPositions(headerEntity core.Entity, headerX, heade
 
 func (s *EyeSystem) updateAnimationFrame(eyeComp *component.EyeComponent) {
 	params := &parameter.EyeTypeTable[eyeComp.Type]
-	eyeComp.FrameRemaining -= s.world.Resources.Time.DeltaTime
+	eyeComp.FrameRemaining -= s.world.Resources.Time.DeltaTime()
 	if eyeComp.FrameRemaining <= 0 {
 		eyeComp.FrameRemaining = params.FrameDuration
 		eyeComp.FrameIndex = (eyeComp.FrameIndex + 1) % params.FrameCount
@@ -619,3 +618,4 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 		Effect:       0,
 	})
 }
+

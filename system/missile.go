@@ -69,7 +69,7 @@ func (s *MissileSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
 	missileEntities := s.world.Components.Missile.GetAllEntities()
@@ -481,3 +481,4 @@ func (s *MissileSystem) destroyAll() {
 		s.destroyMissile(e)
 	}
 }
+

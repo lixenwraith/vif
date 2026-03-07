@@ -183,7 +183,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 }
 
 func (s *SoftCollisionSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.clearCaches()
 	s.enabled = true
 }
@@ -223,7 +223,7 @@ func (s *SoftCollisionSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -516,3 +516,4 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 
 	return vmath.Mul(dirX, accelMag), vmath.Mul(dirY, accelMag), true
 }
+

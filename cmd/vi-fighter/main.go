@@ -289,7 +289,7 @@ func main() {
 				// During pause: skip game updates but still render
 				if ctx.IsPaused.Load() {
 					// Update time for paused rendering
-					ctx.World.Resources.Time.RealTime = ctx.PausableClock.RealTime()
+					ctx.World.Resources.Time.SetRealTime(ctx.PausableClock.RealTime())
 				}
 
 				// Snapshot TimeResource state by value for thread-safe reading
@@ -366,3 +366,4 @@ func buildServiceArgs() map[string][]any {
 
 	return args
 }
+

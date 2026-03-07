@@ -52,7 +52,7 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 	// TrueColor path: precompute corona rotation once per frame
 	if r.colorMode == terminal.ColorModeTrueColor {
-		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+		gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
 		angleFixed := ((gameTimeMs % parameter.OrbCoronaPeriodMs) * vmath.Scale) / parameter.OrbCoronaPeriodMs
 		coronaRotDirX := vmath.Cos(angleFixed)
 		coronaRotDirY := vmath.Sin(angleFixed)
@@ -247,3 +247,4 @@ func (r *OrbRenderer) coronaColor(wt component.WeaponType) terminal.RGB {
 		return visual.RgbOrbFlash
 	}
 }
+

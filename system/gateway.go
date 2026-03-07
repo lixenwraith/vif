@@ -178,7 +178,7 @@ func (s *GatewaySystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
 
 	activeCount := 0
@@ -275,3 +275,4 @@ func (s *GatewaySystem) despawnGateway(gwEntity core.Entity, anchorEntity core.E
 	})
 	s.world.DestroyEntity(gwEntity)
 }
+

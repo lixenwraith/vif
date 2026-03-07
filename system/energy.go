@@ -148,7 +148,7 @@ func (s *EnergySystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	cursorEntity := s.world.Resources.Player.Entity
 
 	// Clear error flash after timeout
@@ -399,3 +399,4 @@ func (s *EnergySystem) stopBlink() {
 	energyComp.BlinkRemaining = 0
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
+

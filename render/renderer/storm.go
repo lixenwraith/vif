@@ -352,7 +352,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 
 	// Pulse via GameTime and vmath.Sin LUT
 	// angle ∈ [0, Scale) maps to [0, 2π), Sin returns [-Scale, Scale]
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	sinVal := vmath.Sin(angleFixed)          // Q32.32 in [-Scale, Scale]
@@ -497,7 +497,7 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 	perpX, perpY := -dirY, dirX
 
 	// Time-based flicker using game time
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
 	flicker := 0.85 + 0.15*vmath.ToFloat(vmath.Sin((gameTimeMs*vmath.Scale/80)%vmath.Scale))
 
 	for step := 0; step <= int(flashLength); step++ {
@@ -559,7 +559,7 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 	}
 
 	// Fast rotation via game time
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
 	periodMs := parameter.StormBlueGlowRotationPeriod.Milliseconds()
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	cosA := vmath.Cos(angleFixed)

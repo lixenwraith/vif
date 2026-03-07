@@ -53,7 +53,7 @@ func (s *ExplosionSystem) Init() {
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
 
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -122,7 +122,7 @@ func (s *ExplosionSystem) Update() {
 		return
 	}
 
-	dtNano := s.world.Resources.Time.DeltaTime.Nanoseconds()
+	dtNano := s.world.Resources.Time.DeltaTimeNano()
 
 	write := 0
 	for i := 0; i < transRes.ExplosionCount; i++ {
@@ -359,3 +359,4 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 		s.statConverted.Add(int64(len(s.entityBuf)))
 	}
 }
+

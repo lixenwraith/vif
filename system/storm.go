@@ -76,7 +76,7 @@ func NewStormSystem(world *engine.World) engine.System {
 
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	clear(s.memberExcludeSet)
 	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)
@@ -175,7 +175,7 @@ func (s *StormSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
@@ -1042,7 +1042,7 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 
 // updateCircleDamageImmunity sets immunity for concave circles and handles anti-deadlock nudge
 func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent) {
-	nowNano := s.world.Resources.Time.GameTime.UnixNano()
+	nowNano := s.world.Resources.Time.GameTimeNano()
 
 	for i := 0; i < component.StormCircleCount; i++ {
 		if !stormComp.CirclesAlive[i] {
@@ -1385,7 +1385,7 @@ func (s *StormSystem) processPendingBlueSpawns() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 
 	for i := len(s.pendingBlueSpawns) - 1; i >= 0; i-- {
 		s.pendingBlueSpawns[i].Timer -= dt
@@ -1485,3 +1485,4 @@ func (s *StormSystem) terminateStorm() {
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
 }
+

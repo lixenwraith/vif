@@ -52,7 +52,7 @@ func NewGoldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
 	s.active = false
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
@@ -144,7 +144,7 @@ func (s *GoldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
+	now := s.world.Resources.Time.GameTime()
 
 	s.statActive.Store(s.active)
 	if s.active {
@@ -228,7 +228,7 @@ func (s *GoldSystem) handleJumpRequest() {
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold() bool {
-	now := s.world.Resources.Time.GameTime
+	now := s.world.Resources.Time.GameTime()
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, parameter.GoldSequenceLength)

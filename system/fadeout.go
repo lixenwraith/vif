@@ -85,7 +85,7 @@ func (s *FadeoutSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	entities := s.world.Components.Fadeout.GetAllEntities()
 
 	for _, entity := range entities {

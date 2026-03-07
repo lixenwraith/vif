@@ -88,7 +88,7 @@ func NewDustSystem(world *engine.World) engine.System {
 func (s *DustSystem) Init() {
 	s.lastCursorX = 0
 	s.lastCursorY = 0
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.staggerTick = 0
 	s.statCreated.Store(0)
 	s.statActive.Store(0)
@@ -239,7 +239,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// 2. Setup Physics Constants
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -841,3 +841,4 @@ func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, 
 		return parameter.DustTimerNormal, visual.RgbDustNormal
 	}
 }
+

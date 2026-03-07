@@ -50,7 +50,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 func (s *SwarmSystem) Init() {
 	s.active = false
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)
@@ -123,7 +123,7 @@ func (s *SwarmSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
@@ -897,3 +897,4 @@ func (s *SwarmSystem) resetSwarmState(swarmComp *component.SwarmComponent) {
 	swarmComp.ChargeRemaining = 0
 	swarmComp.DecelRemaining = 0
 }
+

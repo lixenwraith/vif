@@ -60,8 +60,8 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResou
 	}
 
 	return RenderContext{
-		GameTime:  timeRes.GameTime,
-		DeltaTime: timeRes.DeltaTime.Seconds(),
+		GameTime:  timeRes.GameTime(),
+		DeltaTime: timeRes.DeltaTime().Seconds(),
 		IsPaused:  ctx.IsPaused.Load(),
 
 		CursorX: cursorX,
@@ -147,3 +147,4 @@ func (rc *RenderContext) VisibleMapBounds() (int, int, int, int) {
 func (rc *RenderContext) CursorViewportPos() (int, int) {
 	return rc.CursorX - rc.CameraX + rc.MapOffsetX, rc.CursorY - rc.CameraY + rc.MapOffsetY
 }
+

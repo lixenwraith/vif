@@ -47,7 +47,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)
@@ -124,8 +124,8 @@ func (s *NuggetSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime
-	dt := s.world.Resources.Time.DeltaTime
+	now := s.world.Resources.Time.GameTime()
+	dt := s.world.Resources.Time.DeltaTime()
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
@@ -218,7 +218,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 // spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget() {
-	now := s.world.Resources.Time.GameTime
+	now := s.world.Resources.Time.GameTime()
 	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
 		return

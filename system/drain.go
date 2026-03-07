@@ -633,7 +633,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Player.Entity
-	now := s.world.Resources.Time.GameTime
+	now := s.world.Resources.Time.GameTime()
 
 	// TODO: refactor to Position bound check
 	// Clamp to bounds
@@ -744,7 +744,7 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 
 // handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions() {
-	now := s.world.Resources.Time.GameTime
+	now := s.world.Resources.Time.GameTime()
 	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Detect drain-drain collisions (same cell)
@@ -861,8 +861,7 @@ func (s *DrainSystem) handleEntityCollisions() {
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
 
-	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -1063,3 +1062,4 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	// Destroy the entity
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 }
+

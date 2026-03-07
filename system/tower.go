@@ -236,7 +236,7 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	width := 2*radiusX + 1
 	height := 2*radiusY + 1
 
-	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTime.UnixNano()))
+	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTimeNano()))
 
 	minCX := radiusX
 	maxCX := config.MapWidth - radiusX - 1

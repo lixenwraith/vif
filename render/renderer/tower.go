@@ -236,7 +236,7 @@ func (r *TowerRenderer) renderGlow(
 	invRySq := 1.0 / (radiusY * radiusY)
 
 	// Pulse intensity using game time
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	sinVal := vmath.Sin(angleFixed)
 	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal)
@@ -467,3 +467,4 @@ func (r *TowerRenderer) renderMembersBasicColor(
 		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }
+

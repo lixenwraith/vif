@@ -273,7 +273,7 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	cursorPos, hasCursor := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 
 	// Tier 1: Random attempts
-	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTime.UnixNano()))
+	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTimeNano()))
 
 	// Valid center ranges: [radiusX, MapWidth-radiusX-1] and [radiusY, MapHeight-radiusY-1]
 	minCX := radiusX

@@ -367,11 +367,12 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
 	// NOTE: Do not use RunSafe if called from a blocking systems
+
 	// 1. Drain and discard stale events from the previous game session
 	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 2. Synchronize with world lock
-	// Acquire lock explicitly, wait till MetaSystem finishes its synchronous cleanup and releases the lock
+	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
 	cs.world.Lock()
 	defer cs.world.Unlock()
 
@@ -388,7 +389,7 @@ func (cs *ClockScheduler) executeReset() {
 	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
 
-	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world BEFORE unpause
+	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world before unpause
 	cs.dispatchAndProcessEvents()
 
 	// 6. Transition to Running state
@@ -468,3 +469,4 @@ func (cs *ClockScheduler) processTick() {
 	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }
+

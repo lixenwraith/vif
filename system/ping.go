@@ -81,7 +81,7 @@ func (s *PingSystem) Update() {
 	}
 
 	entities := s.world.Components.Ping.GetAllEntities()
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 
 	for _, entity := range entities {
 		ping, ok := s.world.Components.Ping.GetComponent(entity)
@@ -122,3 +122,4 @@ func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	ping.GridRemaining = duration
 	s.world.Components.Ping.SetComponent(entity, ping)
 }
+

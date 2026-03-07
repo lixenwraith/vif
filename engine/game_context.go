@@ -112,11 +112,12 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	}
 
 	// 3. Time Resource (Initial state)
-	world.Resources.Time = &TimeResource{
-		GameTime:  pausableClock.Now(),
-		RealTime:  pausableClock.RealTime(),
-		DeltaTime: parameter.GameUpdateInterval,
-	}
+	world.Resources.Time = &TimeResource{}
+	world.Resources.Time.Update(
+		pausableClock.Now(),
+		pausableClock.RealTime(),
+		parameter.GameUpdateInterval,
+	)
 
 	// 4. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
@@ -509,3 +510,4 @@ func (ctx *GameContext) SetPaused(paused bool) {
 		}
 	}
 }
+

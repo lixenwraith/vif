@@ -37,7 +37,7 @@ func NewSnakeSystem(world *engine.World) engine.System {
 }
 
 func (s *SnakeSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -102,8 +102,7 @@ func (s *SnakeSystem) Update() {
 		return
 	}
 
-	// TODO: review the delta-time cap
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
@@ -1071,3 +1070,4 @@ type resolvedSegment struct {
 func resolvedSegmentAlive(r *resolvedSegment) bool {
 	return r.Center != 0 || r.Left != 0 || r.Right != 0
 }
+

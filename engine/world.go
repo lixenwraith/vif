@@ -247,7 +247,7 @@ func (w *World) CreateCursorEntity() {
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusXFloat),
 		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusYFloat),
-		LastDrainTime: w.Resources.Time.GameTime,
+		LastDrainTime: w.Resources.Time.GameTime(),
 	})
 
 	// 9. Set boost component
@@ -423,4 +423,3 @@ func (w *World) DebugPrint(msg string) {
 		DurationOverride: true,
 	})
 }
-

@@ -75,7 +75,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.census = make(map[GlyphKey]int)
 	s.initCensus()
 
@@ -161,7 +161,7 @@ func (s *GlyphSystem) Update() {
 	s.updateRateMultiplier(density)
 
 	// Check if spawn is due
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	s.nextSpawnTimer -= dt
 
 	// Update metrics

@@ -96,7 +96,7 @@ func (s *BoostSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	cursorEntity := s.world.Resources.Player.Entity
 
 	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
@@ -162,3 +162,4 @@ func (s *BoostSystem) extend(duration time.Duration) {
 
 	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 }
+

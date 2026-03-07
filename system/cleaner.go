@@ -40,7 +40,7 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
 	s.enabled = true
@@ -113,7 +113,7 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
 
@@ -617,3 +617,4 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	}
 	return rows
 }
+

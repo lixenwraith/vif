@@ -72,7 +72,7 @@ func (s *MarkerSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
 	markerEntities := s.world.Components.Marker.GetAllEntities()
@@ -85,7 +85,7 @@ func (s *MarkerSystem) Update() {
 		// Pulse update
 		if markerComp.PulseRate > 0 {
 			// Sine pulse modulation
-			gameTime := s.world.Resources.Time.GameTime.UnixNano()
+			gameTime := s.world.Resources.Time.GameTimeNano()
 			pulsePhase := vmath.FromFloat(float64(gameTime) / 1e9)
 			pulseAngle := vmath.Mul(pulsePhase, markerComp.PulseRate)
 			pulseMod := vmath.Sin(pulseAngle)
@@ -161,3 +161,4 @@ func (s *MarkerSystem) destroyAllMarkers() {
 		s.world.DestroyEntity(entity)
 	}
 }
+

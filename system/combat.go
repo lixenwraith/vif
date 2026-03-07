@@ -40,7 +40,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 }
 
 func (s *CombatSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTime.UnixNano()))
+	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -100,7 +100,7 @@ func (s *CombatSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
+	dt := s.world.Resources.Time.DeltaTime()
 
 	combatEntities := s.world.Components.Combat.GetAllEntities()
 	for _, combatEntity := range combatEntities {
@@ -623,3 +623,4 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 
 	return true
 }
+
