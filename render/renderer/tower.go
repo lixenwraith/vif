@@ -100,8 +100,10 @@ func (r *TowerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 // isActiveTarget returns true if any target group references this tower header entity
 func (r *TowerRenderer) isActiveTarget(headerEntity core.Entity) bool {
-	for i := range r.gameCtx.World.Resources.Target.Groups {
-		g := &r.gameCtx.World.Resources.Target.Groups[i]
+
+	var g engine.TargetGroupState
+	for i := 1; i < component.MaxTargetGroups; i++ {
+		g = r.gameCtx.World.Resources.Target.GetGroup(uint8(i))
 		if !g.Valid || g.Type != component.TargetEntity {
 			continue
 		}
@@ -111,6 +113,19 @@ func (r *TowerRenderer) isActiveTarget(headerEntity core.Entity) bool {
 			}
 		}
 	}
+
+	// for i := range r.gameCtx.World.Resources.Target.Groups {
+	// 	g := &r.gameCtx.World.Resources.Target.Groups[i]
+	// 	if !g.Valid || g.Type != component.TargetEntity {
+	// 		continue
+	// 	}
+	// 	for j := 0; j < g.Count; j++ {
+	// 		if g.Targets[j].Entity == headerEntity {
+	// 			return true
+	// 		}
+	// 	}
+	// }
+	//
 	return false
 }
 
@@ -467,4 +482,3 @@ func (r *TowerRenderer) renderMembersBasicColor(
 		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }
-

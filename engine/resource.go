@@ -2,6 +2,7 @@ package engine
 
 import (
 	"math/rand/v2"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -223,23 +224,46 @@ type TargetGroupState struct {
 // TargetResource provides per-group target resolution accessible by all systems
 // Written by NavigationSystem, read by species systems
 type TargetResource struct {
-	Groups [component.MaxTargetGroups]TargetGroupState
+	mu     sync.RWMutex
+	groups [component.MaxTargetGroups]TargetGroupState
 }
 
 // GetGroup returns the resolved target state for a group
 // Group 0 is always cursor; uninitialized groups return zero-value (Valid=false)
 func (tr *TargetResource) GetGroup(groupID uint8) TargetGroupState {
-	if int(groupID) >= len(tr.Groups) {
+	tr.mu.RLock()
+	defer tr.mu.RUnlock()
+	if int(groupID) >= len(tr.groups) {
 		return TargetGroupState{}
 	}
-	return tr.Groups[groupID]
+	return tr.groups[groupID]
 }
 
 // SetGroup configures a target group
 func (tr *TargetResource) SetGroup(groupID uint8, state TargetGroupState) {
-	if int(groupID) < len(tr.Groups) {
-		tr.Groups[groupID] = state
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	if int(groupID) < len(tr.groups) {
+		tr.groups[groupID] = state
 	}
+}
+
+func (tr *TargetResource) SetGroupTarget(groupID uint8, targetID int, td TargetData) {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.groups[groupID].Targets[targetID] = td
+}
+
+func (tr *TargetResource) SetGroupCount(groupID uint8, count int) {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.groups[groupID].Count = count
+}
+
+func (tr *TargetResource) SetGroupValidity(groupID uint8, valid bool) {
+	tr.mu.Lock()
+	defer tr.mu.Unlock()
+	tr.groups[groupID].Valid = valid
 }
 
 // === RouteGraph ===

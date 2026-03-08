@@ -67,6 +67,7 @@ func (w *World) CreateEntity() core.Entity {
 }
 
 // DestroyEntity removes all components associated with an entity
+// Caller guarantees entity doesn't have ProtectAll
 func (w *World) DestroyEntity(e core.Entity) {
 	w.removeEntity(e)
 	w.destroyedCount.Add(1)

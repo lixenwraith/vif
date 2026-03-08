@@ -477,12 +477,20 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 	// Cursor always group 0
 	if s.cursorValid {
-		tr.Groups[0] = engine.TargetGroupState{
+		tr.SetGroup(0, engine.TargetGroupState{
 			Type:  component.TargetCursor,
 			Count: 1,
 			Valid: true,
-		}
-		tr.Groups[0].Targets[0] = engine.TargetData{PosX: s.cursorX, PosY: s.cursorY}
+		})
+		tr.SetGroupTarget(0, 0, engine.TargetData{PosX: s.cursorX, PosY: s.cursorY})
+
+		// tr.Groups[0] = engine.TargetGroupState{
+		// 	Type:  component.TargetCursor,
+		// 	Count: 1,
+		// 	Valid: true,
+		// }
+		// tr.Groups[0].Targets[0] = engine.TargetData{PosX: s.cursorX, PosY: s.cursorY}
+
 	}
 
 	// Scan TargetAnchor components — entity-based group registration
@@ -506,9 +514,18 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 		if groupCounts[anchor.GroupID] < engine.MaxTargetsPerGroup {
 			idx := groupCounts[anchor.GroupID]
-			tr.Groups[anchor.GroupID].Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
-			tr.Groups[anchor.GroupID].Type = component.TargetEntity
-			tr.Groups[anchor.GroupID].Valid = true
+			tgState := engine.TargetGroupState{
+				Type:  component.TargetEntity,
+				Valid: true,
+			}
+			tgState.Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
+
+			tr.SetGroup(anchor.GroupID, tgState)
+
+			// tr.Groups[anchor.GroupID].Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
+			// tr.Groups[anchor.GroupID].Type = component.TargetEntity
+			// tr.Groups[anchor.GroupID].Valid = true
+
 			groupCounts[anchor.GroupID]++
 		}
 		anchoredGroups[anchor.GroupID] = true
@@ -517,14 +534,16 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	// Resolve non-anchored groups and clean up obsolete anchors
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
 		if anchoredGroups[groupID] {
-			tr.Groups[groupID].Count = groupCounts[groupID]
-			if tr.Groups[groupID].Count == 0 {
-				tr.Groups[groupID].Valid = false
+			tr.SetGroupCount(groupID, groupCounts[groupID])
+			// tr.Groups[groupID].Count = groupCounts[groupID]
+			if groupCounts[groupID] == 0 {
+				tr.SetGroupValidity(groupID, false)
 			}
 			continue
 		}
 
-		state := tr.Groups[groupID]
+		// state := tr.Groups[groupID]
+		state := tr.GetGroup(groupID)
 		if !state.Valid || state.Count == 0 {
 			continue
 		}
@@ -537,12 +556,14 @@ func (s *NavigationSystem) resolveGroupTargets() {
 			} else {
 				state.Valid = false
 			}
-			tr.Groups[groupID] = state
+			// tr.Groups[groupID] = state
+			tr.SetGroup(groupID, state)
 
 		case component.TargetCursor:
 			state.Targets[0].PosX = s.cursorX
 			state.Targets[0].PosY = s.cursorY
-			tr.Groups[groupID] = state
+			// tr.Groups[groupID] = state
+			tr.SetGroup(groupID, state)
 		}
 	}
 }
