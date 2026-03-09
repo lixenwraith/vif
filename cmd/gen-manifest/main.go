@@ -166,15 +166,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
-// Component ID Bitmasks Mapping for Engine-Level Entity Signatures
-// Used for O(1) destruction skipping and future fast queries
-const (
-{{- range $index, $comp := .Components }}
-	{{ if eq $index 0 }}{{ $comp.Field }}Bit uint64 = 1 << iota{{ else }}{{ $comp.Field }}Bit{{ end }}
-{{- end }}
-	PositionBit // Special index designated for spatial grid presence
-)
-
 // Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
 type Component struct {
@@ -187,58 +178,36 @@ type Component struct {
 // Called once from NewWorld()
 func initComponents(w *World) {
 {{- range .Components }}
-	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}](w, {{ .Field }}Bit)
+	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
 {{- end }}
-	w.Positions = NewPosition(w, PositionBit)
+	w.Positions = NewPosition(w)
 }
 
 // removeEntity removes entity from every component store
 // Caller MUST hold updateMutex
 func (w *World) removeEntity(e core.Entity) {
-	// Guard against unallocated bounds (safety check)
-	if int(e) >= len(w.signatures) {
-		return
-	}
-
-	mask := w.signatures[e]
-	
-	// O(1) Fast-Path: If the entity has no components, exit immediately
-	if mask == 0 {
-		return
-	}
-
-	// O(1) Skip: Only invoke Unsafe removal on stores where the bit is strictly present
 {{- range .Components }}
-	if mask&{{ .Field }}Bit != 0 {
-		w.Components.{{ .Field }}.RemoveEntityUnsafe(e)
-	}
+	w.Components.{{ .Field }}.RemoveEntity(e)
 {{- end }}
-	if mask&PositionBit != 0 {
-		w.Positions.RemoveEntityUnsafe(e)
-	}
-
-	// Ensure signature is entirely wiped
-	w.signatures[e] = 0
+	w.Positions.RemoveEntity(e)
 }
 
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
-func (w *World) removeEntitiesBatch(entities[]core.Entity) {
-	// For batches, we rely on the internal fast-path (len == 0) of the stores 
-	// and the bitmask updates strictly scoped inside the stores.
+func (w *World) removeEntitiesBatch(entities []core.Entity) {
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveBatchUnsafe(entities)
+	w.Components.{{ .Field }}.RemoveBatch(entities)
 {{- end }}
-	w.Positions.RemoveBatchUnsafe(entities)
+	w.Positions.RemoveBatch(entities)
 }
 
 // wipeAll clears all component stores
 // Caller MUST hold updateMutex
 func (w *World) wipeAll() {
 {{- range .Components }}
-	w.Components.{{ .Field }}.ClearAllComponentsUnsafe()
+	w.Components.{{ .Field }}.ClearAllComponents()
 {{- end }}
-	w.Positions.ClearAllComponentsUnsafe()
+	w.Positions.ClearAllComponents()
 }
 `))
 
@@ -290,4 +259,3 @@ func ActiveRenderers() []string {
 	}
 }
 `))
-

@@ -485,10 +485,7 @@ func computeInputWindow(textLen, cursorPos, maxWidth int) (winStart, contentSlot
 	}
 
 	// Initial placement: cursor at ~1/3 from left for typing comfort
-	winStart = cursorPos - maxWidth/3
-	if winStart < 0 {
-		winStart = 0
-	}
+	winStart = max(0, cursorPos-maxWidth/3)
 
 	// Iterative fit: converge indicators and cursor visibility (max 2 passes)
 	for range 3 {
@@ -561,3 +558,4 @@ func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, sta
 	}
 	buf.SetWithBg(startX+maxWidth-1, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
 }
+

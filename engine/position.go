@@ -18,39 +18,17 @@ type Position struct {
 	entities   []core.Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
 	world      *World // Reference for z-index lookups and bitmasks
-	bit        uint64 // Identity bit index assigned to Position
 }
 
 // NewPosition creates a new position store with spatial indexing
-func NewPosition(w *World, bit uint64) *Position {
+func NewPosition(w *World) *Position {
 	// Default grid size, will be resized by GameContext if needed
 	return &Position{
 		components: make(map[core.Entity]component.PositionComponent),
 		entities:   make([]core.Entity, 0, 64),
 		grid:       NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
 		world:      w,
-		bit:        bit,
 	}
-}
-
-// SetUnsafe updates position without locking (Fast-path)
-// Caller MUST hold UpdateMutex
-func (p *Position) SetUnsafe(e core.Entity, pos component.PositionComponent) {
-	if oldPos, exists := p.components[e]; exists {
-		p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
-	} else {
-		p.entities = append(p.entities, e)
-		p.world.AddSignature(e, p.bit)
-	}
-	p.components[e] = pos
-	_ = p.grid.Set(e, pos.X, pos.Y)
-}
-
-// HasUnsafe verifies if position is occupied without locking (Fast-path)
-// Caller MUST hold UpdateMutex
-func (p *Position) HasUnsafe(e core.Entity) bool {
-	_, ok := p.components[e]
-	return ok
 }
 
 // SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored
@@ -64,7 +42,6 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	} else {
 		// New entity, add to dense array
 		p.entities = append(p.entities, e)
-		p.world.AddSignature(e, p.bit)
 	}
 
 	// Update component
@@ -79,15 +56,14 @@ func (p *Position) RemoveEntity(e core.Entity) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if len(p.components) == 0 {
-		return
-	}
-
 	if pos, exists := p.components[e]; exists {
+		// RemoveEntity from spatial grid
 		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
-		delete(p.components, e)
-		p.world.RemoveSignature(e, p.bit)
 
+		// RemoveEntity from components map
+		delete(p.components, e)
+
+		// RemoveEntity from dense entities array
 		for i, entity := range p.entities {
 			if entity == e {
 				p.entities[i] = p.entities[len(p.entities)-1]
@@ -117,8 +93,6 @@ func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent)
 	// Set to new grid pos
 	// Explicit ignore for OOB and Cell full
 	_ = p.grid.Set(e, newPos.X, newPos.Y)
-
-	return
 }
 
 // GetAllEntityAt returns a COPY of entities at the given position (concurrent safe but uses memory), nil if OOB or empty
@@ -206,10 +180,6 @@ func (p *Position) CountEntities() int {
 func (p *Position) ClearAllComponents() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-
-	for e := range p.components {
-		p.world.RemoveSignature(e, p.bit)
-	}
 
 	p.components = make(map[core.Entity]component.PositionComponent)
 	p.entities = make([]core.Entity, 0, 64)
@@ -521,7 +491,6 @@ func (p *Position) RemoveEntityUnsafe(e core.Entity) {
 	if pos, exists := p.components[e]; exists {
 		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 		delete(p.components, e)
-		p.world.RemoveSignature(e, p.bit)
 
 		for i, entity := range p.entities {
 			if entity == e {
@@ -546,7 +515,6 @@ func (p *Position) RemoveBatchUnsafe(entities []core.Entity) {
 			toRemove[e] = struct{}{}
 			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 			delete(p.components, e)
-			p.world.RemoveSignature(e, p.bit)
 		}
 	}
 
@@ -567,10 +535,6 @@ func (p *Position) RemoveBatchUnsafe(entities []core.Entity) {
 // ClearAllComponentsUnsafe removes all data without locking
 // Caller MUST hold updateMutex
 func (p *Position) ClearAllComponentsUnsafe() {
-	for e := range p.components {
-		p.world.RemoveSignature(e, p.bit)
-	}
-
 	p.components = make(map[core.Entity]component.PositionComponent)
 	p.entities = make([]core.Entity, 0, 64)
 	p.grid.Clear()
@@ -639,7 +603,6 @@ func (pb *PositionBatch) Commit() error {
 			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
-			pb.store.world.AddSignature(add.entity, pb.store.bit)
 		}
 
 		pb.store.components[add.entity] = add.pos
@@ -667,7 +630,6 @@ func (pb *PositionBatch) CommitForce() {
 			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
-			pb.store.world.AddSignature(add.entity, pb.store.bit)
 		}
 
 		pb.store.components[add.entity] = add.pos
@@ -710,7 +672,6 @@ func (p *Position) RemoveBatch(entities []core.Entity) {
 			toRemove[e] = struct{}{}
 			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 			delete(p.components, e)
-			p.world.RemoveSignature(e, p.bit)
 		}
 	}
 

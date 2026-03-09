@@ -10,88 +10,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/genetic/fitness"
 	"github.com/lixenwraith/vi-fighter/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
-
-// --- Species Configuration ---
-// Currently registered as a generic tracked species with no active genes
-// Strictly handles telemetry, continuous trait evolution, and generational metrics
-// Discrete route distributions are exclusively handled by AdaptationSystem
-
-// --- Player Behavior Model ---
-// Tracks player metrics via exponential moving average
-// Retained for future adaptive difficulty; currently supplies context to fitness pipeline
-
-type playerModel struct {
-	mu sync.RWMutex
-
-	avgReactionTime  time.Duration
-	energyManagement float64
-	heatManagement   float64
-	typingAccuracy   float64
-	emaAlpha         float64
-}
-
-func newPlayerModel() *playerModel {
-	return &playerModel{
-		avgReactionTime:  500 * time.Millisecond,
-		energyManagement: 0.5,
-		heatManagement:   0.3,
-		typingAccuracy:   0.8,
-		emaAlpha:         0.1,
-	}
-}
-
-func (m *playerModel) reset() {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.avgReactionTime = 500 * time.Millisecond
-	m.energyManagement = 0.5
-	m.heatManagement = 0.3
-	m.typingAccuracy = 0.8
-}
-
-func (m *playerModel) recordEnergy(current int64) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	magnitude := math.Abs(float64(current))
-	normalized := math.Min(magnitude/10000.0, 1.0)
-	m.energyManagement = m.emaAlpha*normalized + (1-m.emaAlpha)*m.energyManagement
-}
-
-func (m *playerModel) recordHeat(current, max int) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if max <= 0 {
-		return
-	}
-	normalized := math.Max(0, math.Min(float64(current)/float64(max), 1.0))
-	m.heatManagement = m.emaAlpha*normalized + (1-m.emaAlpha)*m.heatManagement
-}
-
-func (m *playerModel) threatLevel() float64 {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	reactionScore := 1.0 - float64(m.avgReactionTime)/(2*float64(time.Second))
-	if reactionScore < 0 {
-		reactionScore = 0
-	}
-	return 0.3*reactionScore + 0.3*m.typingAccuracy + 0.2*m.energyManagement + 0.2*m.heatManagement
-}
-
-func (m *playerModel) context() fitness.Context {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
-	return fitness.MapContext{
-		fitness.ContextThreatLevel:      m.threatLevel(),
-		fitness.ContextEnergyManagement: m.energyManagement,
-		fitness.ContextHeatManagement:   m.heatManagement,
-		fitness.ContextTypingAccuracy:   m.typingAccuracy,
-	}
-}
 
 // --- Tracked Entity ---
 
@@ -109,8 +31,9 @@ type trackedEntity struct {
 type GeneticSystem struct {
 	world *engine.World
 
+	mu sync.RWMutex
+
 	registry      *registry.Registry
-	playerModel   *playerModel
 	collectorPool *tracking.CollectorPool
 
 	tracking      map[core.Entity]*trackedEntity
@@ -131,7 +54,6 @@ func NewGeneticSystem(world *engine.World) engine.System {
 	s := &GeneticSystem{
 		world:         world,
 		registry:      registry.NewRegistry(parameter.GeneticPersistencePath),
-		playerModel:   newPlayerModel(),
 		collectorPool: tracking.NewCollectorPool(32),
 		tracking:      make(map[core.Entity]*trackedEntity),
 		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
@@ -165,7 +87,6 @@ func (s *GeneticSystem) registerSpecies() {
 func (s *GeneticSystem) Init() {
 	clear(s.tracking)
 	s.pendingDeaths = s.pendingDeaths[:0]
-	s.playerModel.reset()
 	s.enabled = true
 	_ = s.registry.Start()
 }
@@ -209,12 +130,16 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventEnemyCreated:
 		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
+			s.mu.Lock()
 			s.handleEnemyCreated(payload.Entity, payload.Species, payload.SubType)
+			s.mu.Unlock()
 		}
 
 	case event.EventEnemyKilled:
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+			s.mu.Lock()
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
+			s.mu.Unlock()
 		}
 	}
 }
@@ -270,7 +195,14 @@ func (s *GeneticSystem) Update() {
 		return
 	}
 
+	// TODO: some race here
+	return
+
 	dt := s.world.Resources.Time.DeltaTime()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	s.processPendingDeaths()
 	s.cleanupStaleTracking()
 	s.processTracking(dt)
@@ -411,4 +343,3 @@ func (s *GeneticSystem) updateTelemetry() {
 	}
 	s.statTracked.Store(eyeTracked)
 }
-
