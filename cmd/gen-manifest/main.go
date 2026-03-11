@@ -166,6 +166,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
+// Component ID Bitmasks Mapping for Engine-Level Entity Signatures
+// Used for O(1) destruction skipping and future fast queries
+const (
+{{- range $index, $comp := .Components }}
+	{{ if eq $index 0 }}{{ $comp.Field }}Bit uint64 = 1 << iota{{ else }}{{ $comp.Field }}Bit{{ end }}
+{{- end }}
+	PositionBit // Special index designated for spatial grid presence
+)
+
 // Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
 type Component struct {
@@ -178,27 +187,53 @@ type Component struct {
 // Called once from NewWorld()
 func initComponents(w *World) {
 {{- range .Components }}
-	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}]()
+	w.Components.{{ .Field }} = NewStore[component.{{ .Type }}](w, {{ .Field }}Bit)
 {{- end }}
-	w.Positions = NewPosition(w)
+	w.Positions = NewPosition(w, PositionBit)
 }
 
 // removeEntity removes entity from every component store
 // Caller MUST hold updateMutex
 func (w *World) removeEntity(e core.Entity) {
+
+	// Guard against unallocated entity
+	mask, ok := w.componentMask[e]
+	if !ok {
+		return
+	}
+
+	// O(1) Fast-Path: If the entity has no components, exit immediately
+	if mask == 0 {
+		delete(w.componentMask, e)
+		return
+	}
+
+	// O(1) Skip: Only invoke removal on stores where the bit is strictly present
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveEntity(e)
+	if mask&{{ .Field }}Bit != 0 {
+		w.Components.{{ .Field }}.RemoveEntity(e, true)
+	}
 {{- end }}
-	w.Positions.RemoveEntity(e)
+	if mask&PositionBit != 0 {
+		w.Positions.RemoveEntity(e, true)
+	}
+
+	// Remove entity from component mask
+	delete(w.componentMask, e)
 }
 
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
 func (w *World) removeEntitiesBatch(entities []core.Entity) {
+	// For batches, we rely on the internal fast-path (len == 0) of the stores and the bitmask updates strictly scoped inside the stores.
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveBatch(entities)
+	w.Components.{{ .Field }}.RemoveBatch(entities, true)
 {{- end }}
-	w.Positions.RemoveBatch(entities)
+	w.Positions.RemoveBatch(entities, true)
+
+	for _, e := range entities {
+		delete(w.componentMask, e)
+	}
 }
 
 // wipeAll clears all component stores
@@ -208,6 +243,11 @@ func (w *World) wipeAll() {
 	w.Components.{{ .Field }}.ClearAllComponents()
 {{- end }}
 	w.Positions.ClearAllComponents()
+	
+	// Clear component mask
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	clear(w.componentMask)
 }
 `))
 

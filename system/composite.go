@@ -183,7 +183,6 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect even
 	var members []core.Entity
 	for _, m := range header.MemberEntries {
 		if m.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(m.Entity)
 			members = append(members, m.Entity)
 		}
 	}
@@ -346,13 +345,10 @@ func (s *CompositeSystem) DestroyComposite(headerEntity core.Entity) {
 	// Destroy all living members
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity != 0 {
-			s.world.Components.Member.RemoveEntity(member.Entity)
 			s.world.DestroyEntity(member.Entity)
 		}
 	}
 
-	// RemoveEntityAt protection and destroy phantom head
-	s.world.Components.Protection.RemoveEntity(headerEntity)
 	s.world.DestroyEntity(headerEntity)
 }
 
@@ -364,3 +360,4 @@ func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Ent
 	}
 	return memberComp.HeaderEntity, true
 }
+

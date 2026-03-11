@@ -22,4 +22,4 @@ background = true
 file = "regions/tower.toml"
 disabled_systems = ["glyph"]
 
-[states.Root]
+#[states.Root]

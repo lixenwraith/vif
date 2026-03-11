@@ -16,6 +16,7 @@ type HeatSystem struct {
 	statCurrent  *atomic.Int64
 	statOverheat *atomic.Int64
 	statAtMax    *atomic.Bool
+	statEmber    *atomic.Bool
 
 	enabled bool
 }
@@ -28,6 +29,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 	s.statCurrent = s.world.Resources.Status.Ints.Get("heat.current")
 	s.statOverheat = s.world.Resources.Status.Ints.Get("heat.overheat")
 	s.statAtMax = s.world.Resources.Status.Bools.Get("heat.at_max")
+	s.statEmber = s.world.Resources.Status.Bools.Get("heat.ember")
 
 	s.Init()
 	return s
@@ -38,6 +40,7 @@ func (s *HeatSystem) Init() {
 	s.statCurrent.Store(0)
 	s.statOverheat.Store(0)
 	s.statAtMax.Store(false)
+	s.statEmber.Store(false)
 	s.enabled = true
 }
 
@@ -83,6 +86,7 @@ func (s *HeatSystem) Update() {
 			if heatComp.Current <= 0 {
 				heatComp.Current = 0
 				heatComp.EmberActive = false
+				s.statEmber.Store(false)
 			}
 
 			// Enforce invariant: heat < max → no overheat
@@ -178,6 +182,7 @@ func (s *HeatSystem) addHeat(delta int) {
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime()
 		s.world.PushEvent(event.EventHeatBurst, nil)
+		s.statEmber.Store(true)
 	}
 
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
@@ -215,4 +220,3 @@ func (s *HeatSystem) setHeat(value int) {
 
 	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 }
-

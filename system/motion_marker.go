@@ -127,7 +127,6 @@ func (s *MotionMarkerSystem) clearAllMarkers() {
 
 func (s *MotionMarkerSystem) clearBaseMarkers() {
 	for _, entity := range s.baseMarkers {
-		s.world.Components.Marker.RemoveEntity(entity)
 		s.world.DestroyEntity(entity)
 	}
 	s.baseMarkers = s.baseMarkers[:0]
@@ -136,7 +135,6 @@ func (s *MotionMarkerSystem) clearBaseMarkers() {
 
 func (s *MotionMarkerSystem) clearColoredMarkers() {
 	for _, entity := range s.coloredMarkers {
-		s.world.Components.Marker.RemoveEntity(entity)
 		s.world.DestroyEntity(entity)
 	}
 	s.coloredMarkers = s.coloredMarkers[:0]
@@ -268,3 +266,4 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 		}
 	}
 }
+

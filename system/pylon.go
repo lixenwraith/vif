@@ -456,8 +456,11 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 		return
 	}
 
-	// Remove component immediately to prevent re-entry from concurrent paths
-	s.world.Components.Pylon.RemoveEntity(headerEntity)
+	// Request composite destruction (header + remaining members)
+	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
+		HeaderEntity: headerEntity,
+		Effect:       0,
+	})
 
 	// Emit destroyed event
 	s.world.PushEvent(event.EventPylonDestroyed, &event.PylonDestroyedPayload{
@@ -473,12 +476,6 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 		X:       pylonComp.SpawnX,
 		Y:       pylonComp.SpawnY,
 	})
-
-	// Request composite destruction (header + remaining members)
-	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
-		HeaderEntity: headerEntity,
-		Effect:       0,
-	})
 }
 
 func (s *PylonSystem) terminatePylon(headerEntity core.Entity) {
@@ -492,7 +489,6 @@ func (s *PylonSystem) terminatePylon(headerEntity core.Entity) {
 		return
 	}
 
-	s.world.Components.Pylon.RemoveEntity(headerEntity)
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
 		Effect:       0,
@@ -504,3 +500,4 @@ func (s *PylonSystem) terminateAll() {
 		s.terminatePylon(entity)
 	}
 }
+

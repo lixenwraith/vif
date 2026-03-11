@@ -156,9 +156,6 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 func (s *MarkerSystem) destroyAllMarkers() {
 	entities := s.world.Components.Marker.GetAllEntities()
 	for _, entity := range entities {
-		s.world.Components.Marker.RemoveEntity(entity)
-		s.world.Components.Timer.RemoveEntity(entity)
 		s.world.DestroyEntity(entity)
 	}
 }
-

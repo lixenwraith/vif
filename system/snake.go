@@ -1008,7 +1008,6 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 	}
 
 	// Destroy root
-	s.world.Components.Snake.RemoveEntity(rootEntity)
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: rootEntity,
 		Effect:       0,
@@ -1070,4 +1069,3 @@ type resolvedSegment struct {
 func resolvedSegmentAlive(r *resolvedSegment) bool {
 	return r.Center != 0 || r.Left != 0 || r.Right != 0
 }
-

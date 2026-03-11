@@ -158,7 +158,7 @@ func (s *MissileSystem) Update() {
 	}
 
 	for _, e := range toDestroy {
-		s.destroyMissile(e)
+		s.world.DestroyEntity(e)
 	}
 }
 
@@ -469,16 +469,8 @@ func (s *MissileSystem) ageTrail(m *component.MissileComponent, dt time.Duration
 	}
 }
 
-func (s *MissileSystem) destroyMissile(e core.Entity) {
-	s.world.Components.Missile.RemoveEntity(e)
-	s.world.Components.Kinetic.RemoveEntity(e)
-	s.world.Positions.RemoveEntity(e)
-	s.world.DestroyEntity(e)
-}
-
 func (s *MissileSystem) destroyAll() {
 	for _, e := range s.world.Components.Missile.GetAllEntities() {
-		s.destroyMissile(e)
+		s.world.DestroyEntity(e)
 	}
 }
-

@@ -80,7 +80,6 @@ func (s *LightningSystem) Update() {
 	}
 
 	for _, e := range toDestroy {
-		s.world.Components.Lightning.RemoveEntity(e)
 		s.world.DestroyEntity(e)
 	}
 }
@@ -202,4 +201,3 @@ func (s *LightningSystem) destroyAll() {
 		s.world.DestroyEntity(e)
 	}
 }
-

@@ -7,6 +7,63 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 )
 
+// Component ID Bitmasks Mapping for Engine-Level Entity Signatures
+// Used for O(1) destruction skipping and future fast queries
+const (
+	GlyphBit uint64 = 1 << iota
+	SigilBit
+	NuggetBit
+	CursorBit
+	ProtectionBit
+	KineticBit
+	WallBit
+	LootBit
+	GatewayBit
+	EnergyBit
+	HeatBit
+	ShieldBit
+	BoostBit
+	WeaponBit
+	OrbBit
+	PingBit
+	DecayBit
+	BlossomBit
+	CleanerBit
+	DustBit
+	NavigationBit
+	CombatBit
+	GenotypeBit
+	LightningBit
+	MissileBit
+	PulseBit
+	SpiritBit
+	MaterializeBit
+	TargetBit
+	TargetAnchorBit
+	DrainBit
+	QuasarBit
+	SwarmBit
+	StormBit
+	StormCircleBit
+	BulletBit
+	PylonBit
+	SnakeBit
+	SnakeHeadBit
+	SnakeBodyBit
+	SnakeMemberBit
+	EyeBit
+	TowerBit
+	HeaderBit
+	MemberBit
+	FlashBit
+	FadeoutBit
+	SplashBit
+	MarkerBit
+	DeathBit
+	TimerBit
+	PositionBit // Special index designated for spatial grid presence
+)
+
 // Component provides typed component store pointers
 // Embedded in World, initialized once at world creation
 type Component struct {
@@ -66,172 +123,298 @@ type Component struct {
 // initComponents creates all component stores
 // Called once from NewWorld()
 func initComponents(w *World) {
-	w.Components.Glyph = NewStore[component.GlyphComponent]()
-	w.Components.Sigil = NewStore[component.SigilComponent]()
-	w.Components.Nugget = NewStore[component.NuggetComponent]()
-	w.Components.Cursor = NewStore[component.CursorComponent]()
-	w.Components.Protection = NewStore[component.ProtectionComponent]()
-	w.Components.Kinetic = NewStore[component.KineticComponent]()
-	w.Components.Wall = NewStore[component.WallComponent]()
-	w.Components.Loot = NewStore[component.LootComponent]()
-	w.Components.Gateway = NewStore[component.GatewayComponent]()
-	w.Components.Energy = NewStore[component.EnergyComponent]()
-	w.Components.Heat = NewStore[component.HeatComponent]()
-	w.Components.Shield = NewStore[component.ShieldComponent]()
-	w.Components.Boost = NewStore[component.BoostComponent]()
-	w.Components.Weapon = NewStore[component.WeaponComponent]()
-	w.Components.Orb = NewStore[component.OrbComponent]()
-	w.Components.Ping = NewStore[component.PingComponent]()
-	w.Components.Decay = NewStore[component.DecayComponent]()
-	w.Components.Blossom = NewStore[component.BlossomComponent]()
-	w.Components.Cleaner = NewStore[component.CleanerComponent]()
-	w.Components.Dust = NewStore[component.DustComponent]()
-	w.Components.Navigation = NewStore[component.NavigationComponent]()
-	w.Components.Combat = NewStore[component.CombatComponent]()
-	w.Components.Genotype = NewStore[component.GenotypeComponent]()
-	w.Components.Lightning = NewStore[component.LightningComponent]()
-	w.Components.Missile = NewStore[component.MissileComponent]()
-	w.Components.Pulse = NewStore[component.PulseComponent]()
-	w.Components.Spirit = NewStore[component.SpiritComponent]()
-	w.Components.Materialize = NewStore[component.MaterializeComponent]()
-	w.Components.Target = NewStore[component.TargetComponent]()
-	w.Components.TargetAnchor = NewStore[component.TargetAnchorComponent]()
-	w.Components.Drain = NewStore[component.DrainComponent]()
-	w.Components.Quasar = NewStore[component.QuasarComponent]()
-	w.Components.Swarm = NewStore[component.SwarmComponent]()
-	w.Components.Storm = NewStore[component.StormComponent]()
-	w.Components.StormCircle = NewStore[component.StormCircleComponent]()
-	w.Components.Bullet = NewStore[component.BulletComponent]()
-	w.Components.Pylon = NewStore[component.PylonComponent]()
-	w.Components.Snake = NewStore[component.SnakeComponent]()
-	w.Components.SnakeHead = NewStore[component.SnakeHeadComponent]()
-	w.Components.SnakeBody = NewStore[component.SnakeBodyComponent]()
-	w.Components.SnakeMember = NewStore[component.SnakeMemberComponent]()
-	w.Components.Eye = NewStore[component.EyeComponent]()
-	w.Components.Tower = NewStore[component.TowerComponent]()
-	w.Components.Header = NewStore[component.HeaderComponent]()
-	w.Components.Member = NewStore[component.MemberComponent]()
-	w.Components.Flash = NewStore[component.FlashComponent]()
-	w.Components.Fadeout = NewStore[component.FadeoutComponent]()
-	w.Components.Splash = NewStore[component.SplashComponent]()
-	w.Components.Marker = NewStore[component.MarkerComponent]()
-	w.Components.Death = NewStore[component.DeathComponent]()
-	w.Components.Timer = NewStore[component.TimerComponent]()
-	w.Positions = NewPosition(w)
+	w.Components.Glyph = NewStore[component.GlyphComponent](w, GlyphBit)
+	w.Components.Sigil = NewStore[component.SigilComponent](w, SigilBit)
+	w.Components.Nugget = NewStore[component.NuggetComponent](w, NuggetBit)
+	w.Components.Cursor = NewStore[component.CursorComponent](w, CursorBit)
+	w.Components.Protection = NewStore[component.ProtectionComponent](w, ProtectionBit)
+	w.Components.Kinetic = NewStore[component.KineticComponent](w, KineticBit)
+	w.Components.Wall = NewStore[component.WallComponent](w, WallBit)
+	w.Components.Loot = NewStore[component.LootComponent](w, LootBit)
+	w.Components.Gateway = NewStore[component.GatewayComponent](w, GatewayBit)
+	w.Components.Energy = NewStore[component.EnergyComponent](w, EnergyBit)
+	w.Components.Heat = NewStore[component.HeatComponent](w, HeatBit)
+	w.Components.Shield = NewStore[component.ShieldComponent](w, ShieldBit)
+	w.Components.Boost = NewStore[component.BoostComponent](w, BoostBit)
+	w.Components.Weapon = NewStore[component.WeaponComponent](w, WeaponBit)
+	w.Components.Orb = NewStore[component.OrbComponent](w, OrbBit)
+	w.Components.Ping = NewStore[component.PingComponent](w, PingBit)
+	w.Components.Decay = NewStore[component.DecayComponent](w, DecayBit)
+	w.Components.Blossom = NewStore[component.BlossomComponent](w, BlossomBit)
+	w.Components.Cleaner = NewStore[component.CleanerComponent](w, CleanerBit)
+	w.Components.Dust = NewStore[component.DustComponent](w, DustBit)
+	w.Components.Navigation = NewStore[component.NavigationComponent](w, NavigationBit)
+	w.Components.Combat = NewStore[component.CombatComponent](w, CombatBit)
+	w.Components.Genotype = NewStore[component.GenotypeComponent](w, GenotypeBit)
+	w.Components.Lightning = NewStore[component.LightningComponent](w, LightningBit)
+	w.Components.Missile = NewStore[component.MissileComponent](w, MissileBit)
+	w.Components.Pulse = NewStore[component.PulseComponent](w, PulseBit)
+	w.Components.Spirit = NewStore[component.SpiritComponent](w, SpiritBit)
+	w.Components.Materialize = NewStore[component.MaterializeComponent](w, MaterializeBit)
+	w.Components.Target = NewStore[component.TargetComponent](w, TargetBit)
+	w.Components.TargetAnchor = NewStore[component.TargetAnchorComponent](w, TargetAnchorBit)
+	w.Components.Drain = NewStore[component.DrainComponent](w, DrainBit)
+	w.Components.Quasar = NewStore[component.QuasarComponent](w, QuasarBit)
+	w.Components.Swarm = NewStore[component.SwarmComponent](w, SwarmBit)
+	w.Components.Storm = NewStore[component.StormComponent](w, StormBit)
+	w.Components.StormCircle = NewStore[component.StormCircleComponent](w, StormCircleBit)
+	w.Components.Bullet = NewStore[component.BulletComponent](w, BulletBit)
+	w.Components.Pylon = NewStore[component.PylonComponent](w, PylonBit)
+	w.Components.Snake = NewStore[component.SnakeComponent](w, SnakeBit)
+	w.Components.SnakeHead = NewStore[component.SnakeHeadComponent](w, SnakeHeadBit)
+	w.Components.SnakeBody = NewStore[component.SnakeBodyComponent](w, SnakeBodyBit)
+	w.Components.SnakeMember = NewStore[component.SnakeMemberComponent](w, SnakeMemberBit)
+	w.Components.Eye = NewStore[component.EyeComponent](w, EyeBit)
+	w.Components.Tower = NewStore[component.TowerComponent](w, TowerBit)
+	w.Components.Header = NewStore[component.HeaderComponent](w, HeaderBit)
+	w.Components.Member = NewStore[component.MemberComponent](w, MemberBit)
+	w.Components.Flash = NewStore[component.FlashComponent](w, FlashBit)
+	w.Components.Fadeout = NewStore[component.FadeoutComponent](w, FadeoutBit)
+	w.Components.Splash = NewStore[component.SplashComponent](w, SplashBit)
+	w.Components.Marker = NewStore[component.MarkerComponent](w, MarkerBit)
+	w.Components.Death = NewStore[component.DeathComponent](w, DeathBit)
+	w.Components.Timer = NewStore[component.TimerComponent](w, TimerBit)
+	w.Positions = NewPosition(w, PositionBit)
 }
 
 // removeEntity removes entity from every component store
 // Caller MUST hold updateMutex
 func (w *World) removeEntity(e core.Entity) {
-	w.Components.Glyph.RemoveEntity(e)
-	w.Components.Sigil.RemoveEntity(e)
-	w.Components.Nugget.RemoveEntity(e)
-	w.Components.Cursor.RemoveEntity(e)
-	w.Components.Protection.RemoveEntity(e)
-	w.Components.Kinetic.RemoveEntity(e)
-	w.Components.Wall.RemoveEntity(e)
-	w.Components.Loot.RemoveEntity(e)
-	w.Components.Gateway.RemoveEntity(e)
-	w.Components.Energy.RemoveEntity(e)
-	w.Components.Heat.RemoveEntity(e)
-	w.Components.Shield.RemoveEntity(e)
-	w.Components.Boost.RemoveEntity(e)
-	w.Components.Weapon.RemoveEntity(e)
-	w.Components.Orb.RemoveEntity(e)
-	w.Components.Ping.RemoveEntity(e)
-	w.Components.Decay.RemoveEntity(e)
-	w.Components.Blossom.RemoveEntity(e)
-	w.Components.Cleaner.RemoveEntity(e)
-	w.Components.Dust.RemoveEntity(e)
-	w.Components.Navigation.RemoveEntity(e)
-	w.Components.Combat.RemoveEntity(e)
-	w.Components.Genotype.RemoveEntity(e)
-	w.Components.Lightning.RemoveEntity(e)
-	w.Components.Missile.RemoveEntity(e)
-	w.Components.Pulse.RemoveEntity(e)
-	w.Components.Spirit.RemoveEntity(e)
-	w.Components.Materialize.RemoveEntity(e)
-	w.Components.Target.RemoveEntity(e)
-	w.Components.TargetAnchor.RemoveEntity(e)
-	w.Components.Drain.RemoveEntity(e)
-	w.Components.Quasar.RemoveEntity(e)
-	w.Components.Swarm.RemoveEntity(e)
-	w.Components.Storm.RemoveEntity(e)
-	w.Components.StormCircle.RemoveEntity(e)
-	w.Components.Bullet.RemoveEntity(e)
-	w.Components.Pylon.RemoveEntity(e)
-	w.Components.Snake.RemoveEntity(e)
-	w.Components.SnakeHead.RemoveEntity(e)
-	w.Components.SnakeBody.RemoveEntity(e)
-	w.Components.SnakeMember.RemoveEntity(e)
-	w.Components.Eye.RemoveEntity(e)
-	w.Components.Tower.RemoveEntity(e)
-	w.Components.Header.RemoveEntity(e)
-	w.Components.Member.RemoveEntity(e)
-	w.Components.Flash.RemoveEntity(e)
-	w.Components.Fadeout.RemoveEntity(e)
-	w.Components.Splash.RemoveEntity(e)
-	w.Components.Marker.RemoveEntity(e)
-	w.Components.Death.RemoveEntity(e)
-	w.Components.Timer.RemoveEntity(e)
-	w.Positions.RemoveEntity(e)
+
+	// Guard against unallocated entity
+	mask, ok := w.componentMask[e]
+	if !ok {
+		return
+	}
+
+	// O(1) Fast-Path: If the entity has no components, exit immediately
+	if mask == 0 {
+		delete(w.componentMask, e)
+		return
+	}
+
+	// O(1) Skip: Only invoke removal on stores where the bit is strictly present
+	if mask&GlyphBit != 0 {
+		w.Components.Glyph.RemoveEntity(e, true)
+	}
+	if mask&SigilBit != 0 {
+		w.Components.Sigil.RemoveEntity(e, true)
+	}
+	if mask&NuggetBit != 0 {
+		w.Components.Nugget.RemoveEntity(e, true)
+	}
+	if mask&CursorBit != 0 {
+		w.Components.Cursor.RemoveEntity(e, true)
+	}
+	if mask&ProtectionBit != 0 {
+		w.Components.Protection.RemoveEntity(e, true)
+	}
+	if mask&KineticBit != 0 {
+		w.Components.Kinetic.RemoveEntity(e, true)
+	}
+	if mask&WallBit != 0 {
+		w.Components.Wall.RemoveEntity(e, true)
+	}
+	if mask&LootBit != 0 {
+		w.Components.Loot.RemoveEntity(e, true)
+	}
+	if mask&GatewayBit != 0 {
+		w.Components.Gateway.RemoveEntity(e, true)
+	}
+	if mask&EnergyBit != 0 {
+		w.Components.Energy.RemoveEntity(e, true)
+	}
+	if mask&HeatBit != 0 {
+		w.Components.Heat.RemoveEntity(e, true)
+	}
+	if mask&ShieldBit != 0 {
+		w.Components.Shield.RemoveEntity(e, true)
+	}
+	if mask&BoostBit != 0 {
+		w.Components.Boost.RemoveEntity(e, true)
+	}
+	if mask&WeaponBit != 0 {
+		w.Components.Weapon.RemoveEntity(e, true)
+	}
+	if mask&OrbBit != 0 {
+		w.Components.Orb.RemoveEntity(e, true)
+	}
+	if mask&PingBit != 0 {
+		w.Components.Ping.RemoveEntity(e, true)
+	}
+	if mask&DecayBit != 0 {
+		w.Components.Decay.RemoveEntity(e, true)
+	}
+	if mask&BlossomBit != 0 {
+		w.Components.Blossom.RemoveEntity(e, true)
+	}
+	if mask&CleanerBit != 0 {
+		w.Components.Cleaner.RemoveEntity(e, true)
+	}
+	if mask&DustBit != 0 {
+		w.Components.Dust.RemoveEntity(e, true)
+	}
+	if mask&NavigationBit != 0 {
+		w.Components.Navigation.RemoveEntity(e, true)
+	}
+	if mask&CombatBit != 0 {
+		w.Components.Combat.RemoveEntity(e, true)
+	}
+	if mask&GenotypeBit != 0 {
+		w.Components.Genotype.RemoveEntity(e, true)
+	}
+	if mask&LightningBit != 0 {
+		w.Components.Lightning.RemoveEntity(e, true)
+	}
+	if mask&MissileBit != 0 {
+		w.Components.Missile.RemoveEntity(e, true)
+	}
+	if mask&PulseBit != 0 {
+		w.Components.Pulse.RemoveEntity(e, true)
+	}
+	if mask&SpiritBit != 0 {
+		w.Components.Spirit.RemoveEntity(e, true)
+	}
+	if mask&MaterializeBit != 0 {
+		w.Components.Materialize.RemoveEntity(e, true)
+	}
+	if mask&TargetBit != 0 {
+		w.Components.Target.RemoveEntity(e, true)
+	}
+	if mask&TargetAnchorBit != 0 {
+		w.Components.TargetAnchor.RemoveEntity(e, true)
+	}
+	if mask&DrainBit != 0 {
+		w.Components.Drain.RemoveEntity(e, true)
+	}
+	if mask&QuasarBit != 0 {
+		w.Components.Quasar.RemoveEntity(e, true)
+	}
+	if mask&SwarmBit != 0 {
+		w.Components.Swarm.RemoveEntity(e, true)
+	}
+	if mask&StormBit != 0 {
+		w.Components.Storm.RemoveEntity(e, true)
+	}
+	if mask&StormCircleBit != 0 {
+		w.Components.StormCircle.RemoveEntity(e, true)
+	}
+	if mask&BulletBit != 0 {
+		w.Components.Bullet.RemoveEntity(e, true)
+	}
+	if mask&PylonBit != 0 {
+		w.Components.Pylon.RemoveEntity(e, true)
+	}
+	if mask&SnakeBit != 0 {
+		w.Components.Snake.RemoveEntity(e, true)
+	}
+	if mask&SnakeHeadBit != 0 {
+		w.Components.SnakeHead.RemoveEntity(e, true)
+	}
+	if mask&SnakeBodyBit != 0 {
+		w.Components.SnakeBody.RemoveEntity(e, true)
+	}
+	if mask&SnakeMemberBit != 0 {
+		w.Components.SnakeMember.RemoveEntity(e, true)
+	}
+	if mask&EyeBit != 0 {
+		w.Components.Eye.RemoveEntity(e, true)
+	}
+	if mask&TowerBit != 0 {
+		w.Components.Tower.RemoveEntity(e, true)
+	}
+	if mask&HeaderBit != 0 {
+		w.Components.Header.RemoveEntity(e, true)
+	}
+	if mask&MemberBit != 0 {
+		w.Components.Member.RemoveEntity(e, true)
+	}
+	if mask&FlashBit != 0 {
+		w.Components.Flash.RemoveEntity(e, true)
+	}
+	if mask&FadeoutBit != 0 {
+		w.Components.Fadeout.RemoveEntity(e, true)
+	}
+	if mask&SplashBit != 0 {
+		w.Components.Splash.RemoveEntity(e, true)
+	}
+	if mask&MarkerBit != 0 {
+		w.Components.Marker.RemoveEntity(e, true)
+	}
+	if mask&DeathBit != 0 {
+		w.Components.Death.RemoveEntity(e, true)
+	}
+	if mask&TimerBit != 0 {
+		w.Components.Timer.RemoveEntity(e, true)
+	}
+	if mask&PositionBit != 0 {
+		w.Positions.RemoveEntity(e, true)
+	}
+
+	// Remove entity from component mask
+	delete(w.componentMask, e)
 }
 
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
 func (w *World) removeEntitiesBatch(entities []core.Entity) {
-	w.Components.Glyph.RemoveBatch(entities)
-	w.Components.Sigil.RemoveBatch(entities)
-	w.Components.Nugget.RemoveBatch(entities)
-	w.Components.Cursor.RemoveBatch(entities)
-	w.Components.Protection.RemoveBatch(entities)
-	w.Components.Kinetic.RemoveBatch(entities)
-	w.Components.Wall.RemoveBatch(entities)
-	w.Components.Loot.RemoveBatch(entities)
-	w.Components.Gateway.RemoveBatch(entities)
-	w.Components.Energy.RemoveBatch(entities)
-	w.Components.Heat.RemoveBatch(entities)
-	w.Components.Shield.RemoveBatch(entities)
-	w.Components.Boost.RemoveBatch(entities)
-	w.Components.Weapon.RemoveBatch(entities)
-	w.Components.Orb.RemoveBatch(entities)
-	w.Components.Ping.RemoveBatch(entities)
-	w.Components.Decay.RemoveBatch(entities)
-	w.Components.Blossom.RemoveBatch(entities)
-	w.Components.Cleaner.RemoveBatch(entities)
-	w.Components.Dust.RemoveBatch(entities)
-	w.Components.Navigation.RemoveBatch(entities)
-	w.Components.Combat.RemoveBatch(entities)
-	w.Components.Genotype.RemoveBatch(entities)
-	w.Components.Lightning.RemoveBatch(entities)
-	w.Components.Missile.RemoveBatch(entities)
-	w.Components.Pulse.RemoveBatch(entities)
-	w.Components.Spirit.RemoveBatch(entities)
-	w.Components.Materialize.RemoveBatch(entities)
-	w.Components.Target.RemoveBatch(entities)
-	w.Components.TargetAnchor.RemoveBatch(entities)
-	w.Components.Drain.RemoveBatch(entities)
-	w.Components.Quasar.RemoveBatch(entities)
-	w.Components.Swarm.RemoveBatch(entities)
-	w.Components.Storm.RemoveBatch(entities)
-	w.Components.StormCircle.RemoveBatch(entities)
-	w.Components.Bullet.RemoveBatch(entities)
-	w.Components.Pylon.RemoveBatch(entities)
-	w.Components.Snake.RemoveBatch(entities)
-	w.Components.SnakeHead.RemoveBatch(entities)
-	w.Components.SnakeBody.RemoveBatch(entities)
-	w.Components.SnakeMember.RemoveBatch(entities)
-	w.Components.Eye.RemoveBatch(entities)
-	w.Components.Tower.RemoveBatch(entities)
-	w.Components.Header.RemoveBatch(entities)
-	w.Components.Member.RemoveBatch(entities)
-	w.Components.Flash.RemoveBatch(entities)
-	w.Components.Fadeout.RemoveBatch(entities)
-	w.Components.Splash.RemoveBatch(entities)
-	w.Components.Marker.RemoveBatch(entities)
-	w.Components.Death.RemoveBatch(entities)
-	w.Components.Timer.RemoveBatch(entities)
-	w.Positions.RemoveBatch(entities)
+	// For batches, we rely on the internal fast-path (len == 0) of the stores and the bitmask updates strictly scoped inside the stores.
+	w.Components.Glyph.RemoveBatch(entities, true)
+	w.Components.Sigil.RemoveBatch(entities, true)
+	w.Components.Nugget.RemoveBatch(entities, true)
+	w.Components.Cursor.RemoveBatch(entities, true)
+	w.Components.Protection.RemoveBatch(entities, true)
+	w.Components.Kinetic.RemoveBatch(entities, true)
+	w.Components.Wall.RemoveBatch(entities, true)
+	w.Components.Loot.RemoveBatch(entities, true)
+	w.Components.Gateway.RemoveBatch(entities, true)
+	w.Components.Energy.RemoveBatch(entities, true)
+	w.Components.Heat.RemoveBatch(entities, true)
+	w.Components.Shield.RemoveBatch(entities, true)
+	w.Components.Boost.RemoveBatch(entities, true)
+	w.Components.Weapon.RemoveBatch(entities, true)
+	w.Components.Orb.RemoveBatch(entities, true)
+	w.Components.Ping.RemoveBatch(entities, true)
+	w.Components.Decay.RemoveBatch(entities, true)
+	w.Components.Blossom.RemoveBatch(entities, true)
+	w.Components.Cleaner.RemoveBatch(entities, true)
+	w.Components.Dust.RemoveBatch(entities, true)
+	w.Components.Navigation.RemoveBatch(entities, true)
+	w.Components.Combat.RemoveBatch(entities, true)
+	w.Components.Genotype.RemoveBatch(entities, true)
+	w.Components.Lightning.RemoveBatch(entities, true)
+	w.Components.Missile.RemoveBatch(entities, true)
+	w.Components.Pulse.RemoveBatch(entities, true)
+	w.Components.Spirit.RemoveBatch(entities, true)
+	w.Components.Materialize.RemoveBatch(entities, true)
+	w.Components.Target.RemoveBatch(entities, true)
+	w.Components.TargetAnchor.RemoveBatch(entities, true)
+	w.Components.Drain.RemoveBatch(entities, true)
+	w.Components.Quasar.RemoveBatch(entities, true)
+	w.Components.Swarm.RemoveBatch(entities, true)
+	w.Components.Storm.RemoveBatch(entities, true)
+	w.Components.StormCircle.RemoveBatch(entities, true)
+	w.Components.Bullet.RemoveBatch(entities, true)
+	w.Components.Pylon.RemoveBatch(entities, true)
+	w.Components.Snake.RemoveBatch(entities, true)
+	w.Components.SnakeHead.RemoveBatch(entities, true)
+	w.Components.SnakeBody.RemoveBatch(entities, true)
+	w.Components.SnakeMember.RemoveBatch(entities, true)
+	w.Components.Eye.RemoveBatch(entities, true)
+	w.Components.Tower.RemoveBatch(entities, true)
+	w.Components.Header.RemoveBatch(entities, true)
+	w.Components.Member.RemoveBatch(entities, true)
+	w.Components.Flash.RemoveBatch(entities, true)
+	w.Components.Fadeout.RemoveBatch(entities, true)
+	w.Components.Splash.RemoveBatch(entities, true)
+	w.Components.Marker.RemoveBatch(entities, true)
+	w.Components.Death.RemoveBatch(entities, true)
+	w.Components.Timer.RemoveBatch(entities, true)
+	w.Positions.RemoveBatch(entities, true)
+
+	for _, e := range entities {
+		delete(w.componentMask, e)
+	}
 }
 
 // wipeAll clears all component stores
@@ -289,4 +472,9 @@ func (w *World) wipeAll() {
 	w.Components.Death.ClearAllComponents()
 	w.Components.Timer.ClearAllComponents()
 	w.Positions.ClearAllComponents()
+
+	// Clear component mask
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	clear(w.componentMask)
 }

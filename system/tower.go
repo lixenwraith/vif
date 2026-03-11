@@ -376,9 +376,6 @@ func (s *TowerSystem) processAblativeCombat(headerEntity core.Entity, headerComp
 	}
 
 	for _, memberEntity := range deadMembers {
-		// Remove wall component before death routing so spatial queries reflect cleared cells
-		s.world.Components.Wall.RemoveEntity(memberEntity)
-
 		s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 			HeaderEntity: headerEntity,
 			MemberEntity: memberEntity,
@@ -419,7 +416,6 @@ func (s *TowerSystem) terminateTower(headerEntity core.Entity) {
 		return
 	}
 
-	s.world.Components.Tower.RemoveEntity(headerEntity)
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
 		Effect:       0,
@@ -431,3 +427,4 @@ func (s *TowerSystem) terminateAll() {
 		s.terminateTower(entity)
 	}
 }
+

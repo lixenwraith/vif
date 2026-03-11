@@ -12,13 +12,18 @@ type Store[T any] struct {
 	mu         sync.RWMutex
 	components map[core.Entity]T
 	entities   []core.Entity // Array of entities that have this component
+
+	world *World // Reference for bitmask signature updates
+	bit   uint64 // Component's unique bit index
 }
 
 // NewStore creates a new component store for type T
-func NewStore[T any]() *Store[T] {
+func NewStore[T any](w *World, bit uint64) *Store[T] {
 	return &Store[T]{
 		components: make(map[core.Entity]T),
 		entities:   make([]core.Entity, 0, 64),
+		world:      w,
+		bit:        bit,
 	}
 }
 
@@ -29,6 +34,7 @@ func (s *Store[T]) SetComponent(e core.Entity, val T) {
 
 	if _, exists := s.components[e]; !exists {
 		s.entities = append(s.entities, e)
+		s.world.AddComponentMask(e, s.bit)
 	}
 	s.components[e] = val
 }
@@ -42,7 +48,7 @@ func (s *Store[T]) GetComponent(e core.Entity) (T, bool) {
 }
 
 // RemoveEntity deletes a component from an entity
-func (s *Store[T]) RemoveEntity(e core.Entity) {
+func (s *Store[T]) RemoveEntity(e core.Entity, skipMask ...bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -52,6 +58,9 @@ func (s *Store[T]) RemoveEntity(e core.Entity) {
 
 	if _, exists := s.components[e]; exists {
 		delete(s.components, e)
+		if len(skipMask) == 0 || !skipMask[0] {
+			s.world.RemoveComponentMask(e, s.bit)
+		}
 		// RemoveEntity from entities slice
 		for i, entity := range s.entities {
 			if entity == e {
@@ -88,7 +97,7 @@ func (s *Store[T]) CountEntities() int {
 }
 
 // RemoveBatch deletes multiple entities in a single pass - O(n+m) vs O(n*m) for individual removes
-func (s *Store[T]) RemoveBatch(entities []core.Entity) {
+func (s *Store[T]) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 	if len(entities) == 0 {
 		return
 	}
@@ -101,12 +110,17 @@ func (s *Store[T]) RemoveBatch(entities []core.Entity) {
 		return
 	}
 
+	clearMask := len(skipMask) == 0 || !skipMask[0]
+
 	// Build removal set and delete from map
 	toRemove := make(map[core.Entity]struct{}, len(entities))
 	for _, e := range entities {
 		if _, exists := s.components[e]; exists {
 			toRemove[e] = struct{}{}
 			delete(s.components, e)
+			if clearMask {
+				s.world.RemoveComponentMask(e, s.bit)
+			}
 		}
 	}
 
@@ -129,6 +143,9 @@ func (s *Store[T]) RemoveBatch(entities []core.Entity) {
 func (s *Store[T]) ClearAllComponents() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	// Component mask will be removed centrally by wipeAll()
+
 	s.components = make(map[core.Entity]T)
 	s.entities = make([]core.Entity, 0, 64)
 }

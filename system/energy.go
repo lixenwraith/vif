@@ -2,7 +2,6 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -13,9 +12,6 @@ import (
 // EnergySystem handles character typing and energy calculation
 type EnergySystem struct {
 	world *engine.World
-
-	lastCorrect    time.Time
-	errorCursorSet bool
 
 	// Cycle difficulty scaling
 	damageMultiplier int64
@@ -50,8 +46,6 @@ func NewEnergySystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *EnergySystem) Init() {
-	s.lastCorrect = time.Time{}
-	s.errorCursorSet = false
 	s.damageMultiplier = 1
 
 	s.statCurrent.Store(0)
@@ -399,4 +393,3 @@ func (s *EnergySystem) stopBlink() {
 	energyComp.BlinkRemaining = 0
 	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
-

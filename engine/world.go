@@ -21,6 +21,8 @@ type World struct {
 
 	Components Component
 	Positions  *Position
+	// Used for O(1) identification of components during destruction routines, preventing unnecessary component store check
+	componentMask map[core.Entity]uint64
 
 	systems []System
 	// updateMutex sync.Mutex
@@ -33,9 +35,10 @@ type World struct {
 // NewWorld creates a new ECS world with dynamic component store support
 func NewWorld() *World {
 	w := &World{
-		nextEntityID: 1,
-		Resources:    &Resource{},
-		systems:      make([]System, 0),
+		nextEntityID:  1,
+		componentMask: make(map[core.Entity]uint64, 16384), // reasonable small screen size that doesn't require increase
+		Resources:     &Resource{},
+		systems:       make([]System, 0),
 	}
 
 	initComponents(w)
@@ -52,6 +55,20 @@ func (w *World) CreateEntity() core.Entity {
 	w.nextEntityID++
 
 	return id
+}
+
+// AddComponentMask marks a component bit as active for the specified entity
+func (w *World) AddComponentMask(e core.Entity, bit uint64) {
+	w.mu.RLock()
+	w.componentMask[e] |= bit
+	w.mu.RUnlock()
+}
+
+// RemoveComponentMask clears a component bit for the specified entity
+func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
+	w.mu.RLock()
+	w.componentMask[e] ^= bit
+	w.mu.RUnlock()
 }
 
 // DestroyEntity removes all components associated with an entity
@@ -77,6 +94,7 @@ func (w *World) Clear() {
 	defer w.mu.Unlock()
 	w.nextEntityID = 1
 	w.wipeAll()
+	clear(w.componentMask)
 }
 
 // AddSystem adds a systems to the world and sorts by priority

@@ -18,16 +18,18 @@ type Position struct {
 	entities   []core.Entity // Dense array for cache-friendly iteration
 	grid       *SpatialGrid
 	world      *World // Reference for z-index lookups and bitmasks
+	bit        uint64 // Component bit mask
 }
 
 // NewPosition creates a new position store with spatial indexing
-func NewPosition(w *World) *Position {
+func NewPosition(w *World, bit uint64) *Position {
 	// Default grid size, will be resized by GameContext if needed
 	return &Position{
 		components: make(map[core.Entity]component.PositionComponent),
 		entities:   make([]core.Entity, 0, 64),
 		grid:       NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
 		world:      w,
+		bit:        bit,
 	}
 }
 
@@ -42,6 +44,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	} else {
 		// New entity, add to dense array
 		p.entities = append(p.entities, e)
+		p.world.AddComponentMask(e, p.bit)
 	}
 
 	// Update component
@@ -52,9 +55,11 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 }
 
 // RemoveEntity deletes an entity from the store and grid
-func (p *Position) RemoveEntity(e core.Entity) {
+func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// No empty component slice check, there is almost always entities with position
 
 	if pos, exists := p.components[e]; exists {
 		// RemoveEntity from spatial grid
@@ -62,6 +67,11 @@ func (p *Position) RemoveEntity(e core.Entity) {
 
 		// RemoveEntity from components map
 		delete(p.components, e)
+
+		// Remove postition bit from entity component bit mask
+		if len(skipMask) == 0 || !skipMask[0] {
+			p.world.RemoveComponentMask(e, p.bit)
+		}
 
 		// RemoveEntity from dense entities array
 		for i, entity := range p.entities {
@@ -180,6 +190,8 @@ func (p *Position) CountEntities() int {
 func (p *Position) ClearAllComponents() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// Component mask will be removed centrally by wipeAll()
 
 	p.components = make(map[core.Entity]component.PositionComponent)
 	p.entities = make([]core.Entity, 0, 64)
@@ -653,7 +665,7 @@ func (p *Position) GridDimensions() (width, height int) {
 }
 
 // RemoveBatch deletes multiple entities in a single pass
-func (p *Position) RemoveBatch(entities []core.Entity) {
+func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 	if len(entities) == 0 {
 		return
 	}
@@ -665,6 +677,8 @@ func (p *Position) RemoveBatch(entities []core.Entity) {
 		return
 	}
 
+	clearMask := len(skipMask) == 0 || !skipMask[0]
+
 	// Build removal set, remove from grid and map
 	toRemove := make(map[core.Entity]struct{}, len(entities))
 	for _, e := range entities {
@@ -672,6 +686,9 @@ func (p *Position) RemoveBatch(entities []core.Entity) {
 			toRemove[e] = struct{}{}
 			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
 			delete(p.components, e)
+			if clearMask {
+				p.world.RemoveComponentMask(e, p.bit)
+			}
 		}
 	}
 

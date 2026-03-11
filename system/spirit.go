@@ -89,7 +89,7 @@ func (s *SpiritSystem) Update() {
 
 	// Destroy entities marked last tick
 	for _, entity := range s.destroyNextTick {
-		s.destroySpirit(entity)
+		s.world.DestroyEntity(entity)
 	}
 	s.destroyNextTick = s.destroyNextTick[:0]
 
@@ -118,7 +118,7 @@ func (s *SpiritSystem) Update() {
 
 	// Destroy completed spirits
 	for _, entity := range toDestroy {
-		s.destroySpirit(entity)
+		s.world.DestroyEntity(entity)
 	}
 }
 
@@ -160,15 +160,9 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 	})
 }
 
-func (s *SpiritSystem) destroySpirit(entity core.Entity) {
-	s.world.Components.Protection.RemoveEntity(entity)
-	s.world.Components.Spirit.RemoveEntity(entity)
-	s.world.DestroyEntity(entity)
-}
-
 func (s *SpiritSystem) destroyAllSpirits() {
 	entities := s.world.Components.Spirit.GetAllEntities()
 	for _, entity := range entities {
-		s.destroySpirit(entity)
+		s.world.DestroyEntity(entity)
 	}
 }
