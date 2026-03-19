@@ -15,8 +15,8 @@ const (
 	PriorityChargeLine
 
 	// === Base Entities ===
-	PriorityGlyph
 	PrioritySigil
+	PriorityGlyph
 	PriorityGold
 	PriorityNugget
 	PriorityHealthBar
@@ -76,3 +76,4 @@ const (
 	PriorityFlowField
 	PriorityDebug
 )
+

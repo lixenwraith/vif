@@ -256,7 +256,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 		}
 
 		// Use MoveEntity for existing entities (updates spatial grid)
-		s.world.Positions.MoveEntity(memberEntry.Entity, component.PositionComponent{
+		s.world.Positions.SetPosition(memberEntry.Entity, component.PositionComponent{
 			X: newX,
 			Y: newY,
 		})
@@ -360,4 +360,3 @@ func (s *CompositeSystem) GetAnchorForMember(memberEntity core.Entity) (core.Ent
 	}
 	return memberComp.HeaderEntity, true
 }
-

@@ -84,27 +84,6 @@ func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
 	}
 }
 
-// MoveEntity updates position atomically
-func (p *Position) MoveEntity(e core.Entity, newPos component.PositionComponent) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	oldPos, ok := p.components[e]
-	if !ok {
-		return
-	}
-
-	// RemoveEntity from old grid pos
-	p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
-
-	// Update component
-	p.components[e] = newPos
-
-	// Set to new grid pos
-	// Explicit ignore for OOB and Cell full
-	_ = p.grid.Set(e, newPos.X, newPos.Y)
-}
-
 // GetAllEntityAt returns a COPY of entities at the given position (concurrent safe but uses memory), nil if OOB or empty
 func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	p.mu.RLock()

@@ -140,7 +140,7 @@ func (s *WeaponSystem) Update() {
 	if pulseComp, ok := s.world.Components.Pulse.GetComponent(cursorEntity); ok {
 		pulseComp.Remaining -= dt
 		if pulseComp.Remaining <= 0 {
-			s.world.Components.Pulse.RemoveEntity(cursorEntity)
+			s.world.Components.Pulse.RemoveEntity(cursorEntity, false)
 		} else {
 			s.world.Components.Pulse.SetComponent(cursorEntity, pulseComp)
 		}
@@ -723,4 +723,3 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos c
 		Remaining: parameter.PulseEffectDuration,
 	})
 }
-

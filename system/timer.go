@@ -95,11 +95,10 @@ func (s *TimerSystem) Update() {
 
 		if timer.Remaining <= 0 {
 			// Timer expired
-			s.world.Components.Timer.RemoveEntity(entity)
+			s.world.Components.Timer.RemoveEntity(entity, false)
 			s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
 		} else {
 			s.world.Components.Timer.SetComponent(entity, timer)
 		}
 	}
 }
-

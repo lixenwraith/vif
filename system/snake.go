@@ -161,7 +161,7 @@ func (s *SnakeSystem) Update() {
 					}
 					newX := headPos.X + member.OffsetX
 					newY := headPos.Y + member.OffsetY
-					s.world.Positions.MoveEntity(member.Entity, component.PositionComponent{X: newX, Y: newY})
+					s.world.Positions.SetPosition(member.Entity, component.PositionComponent{X: newX, Y: newY})
 				}
 			}
 		}
@@ -173,7 +173,7 @@ func (s *SnakeSystem) Update() {
 		if snakeComp.BodyEntity != 0 && s.world.Components.Header.HasEntity(snakeComp.BodyEntity) {
 			// Sync body header position to head (body header has SkipPositionSync, CompositeSystem won't update it; keep spatial queries consistent)
 			if headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity); ok {
-				s.world.Positions.MoveEntity(snakeComp.BodyEntity, component.PositionComponent{
+				s.world.Positions.SetPosition(snakeComp.BodyEntity, component.PositionComponent{
 					X: headPos.X, Y: headPos.Y,
 				})
 			}
@@ -621,7 +621,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	)
 
 	if newX != headPos.X || newY != headPos.Y {
-		s.world.Positions.MoveEntity(headEntity, component.PositionComponent{X: newX, Y: newY})
+		s.world.Positions.SetPosition(headEntity, component.PositionComponent{X: newX, Y: newY})
 	}
 
 	s.world.Components.Kinetic.SetComponent(headEntity, kineticComp)
@@ -754,7 +754,7 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 
 			if pos, ok := s.world.Positions.GetPosition(memberEntity); ok {
 				if pos.X != newX || pos.Y != newY {
-					s.world.Positions.MoveEntity(memberEntity, component.PositionComponent{X: newX, Y: newY})
+					s.world.Positions.SetPosition(memberEntity, component.PositionComponent{X: newX, Y: newY})
 				}
 			}
 

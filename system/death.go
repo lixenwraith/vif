@@ -362,7 +362,7 @@ func (s *DeathSystem) isProtected(entity core.Entity) bool {
 	}
 	if protComp.Mask&component.ProtectFromDeath != 0 || protComp.Mask == component.ProtectAll {
 		// If immortal, remove tag to not process again in Update()
-		s.world.Components.Death.RemoveEntity(entity)
+		s.world.Components.Death.RemoveEntity(entity, false)
 		return true
 	}
 	return false
@@ -388,3 +388,4 @@ func (s *DeathSystem) destroyCollected() {
 	s.world.DestroyEntitiesBatch(s.destroyBuf)
 	s.statKilled.Add(int64(len(s.destroyBuf)))
 }
+

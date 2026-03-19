@@ -81,7 +81,7 @@ func main() {
 		panic(fmt.Sprintf("service init failed: %v", err))
 	}
 
-	// 6. Resources ServiceBridge - Services contribute to ECS
+	// 6. Service Resources Bridge - Services contribute to ECS
 	hub.PublishResources(world.Resources.ServiceBridge)
 
 	// 7. Terminal extraction (orchestrator needs direct interface)
@@ -366,4 +366,3 @@ func buildServiceArgs() map[string][]any {
 
 	return args
 }
-
