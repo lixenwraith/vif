@@ -68,6 +68,7 @@ type appState struct {
 }
 
 func main() {
+
 	term := terminal.New()
 	if err := term.Init(); err != nil {
 		fmt.Fprintln(os.Stderr, "terminal init:", err)
@@ -715,3 +716,4 @@ func (app *appState) handleToastEvent(ev terminal.Event) {
 	app.toastCount++
 	app.toast.Show(tui.DefaultToastOpts(msg, severity), 30) // 3 seconds at 10fps
 }
+

@@ -22,7 +22,7 @@ const (
 	NuggetHeatIncrease = 10
 
 	// NuggetSpawnInterval is the minimum interval between nugget spawns
-	NuggetSpawnInterval = 0 * time.Millisecond
+	NuggetSpawnInterval = 1000 * time.Millisecond
 
 	// NuggetMaxAttempts is the maximum number of random placement attempts (occupied cell results in retry)
 	NuggetMaxAttempts = 100
@@ -33,3 +33,4 @@ const (
 	// NuggetBeaconInterval is the interval between directional cleaner emissions
 	NuggetBeaconInterval = 2 * time.Second
 )
+
