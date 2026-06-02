@@ -42,7 +42,9 @@ type StreamingEngine[S Solution, F Numeric] struct {
 	combiner    Combiner[S, F]
 	perturbator Perturbator[S]
 
-	config      StreamingConfig
+	config StreamingConfig
+
+	poolMu      sync.RWMutex
 	rng         *rand.Rand
 	currentPool *Pool[S, F]
 
@@ -130,6 +132,9 @@ func (e *StreamingEngine[S, F]) CompleteEvaluation(id EvalID, score F) {
 }
 
 func (e *StreamingEngine[S, F]) GetBestImmediate() (Candidate[S, F], bool) {
+	e.poolMu.RLock()
+	defer e.poolMu.RUnlock()
+
 	if e.currentPool == nil || len(e.currentPool.Members) == 0 {
 		return Candidate[S, F]{}, false
 	}
@@ -144,12 +149,15 @@ func (e *StreamingEngine[S, F]) GetBestImmediate() (Candidate[S, F], bool) {
 }
 
 func (e *StreamingEngine[S, F]) SamplePopulation(n int) []S {
+	e.poolMu.RLock()
+	defer e.poolMu.RUnlock()
+
 	if e.currentPool == nil {
 		return nil
 	}
 
-	samples := make([]S, 0, n)
 	poolSize := len(e.currentPool.Members)
+	samples := make([]S, 0, n)
 
 	for i := 0; i < n && i < poolSize; i++ {
 		idx := e.rng.IntN(poolSize)
@@ -164,6 +172,12 @@ func (e *StreamingEngine[S, F]) ReceiveBest() <-chan Candidate[S, F] {
 }
 
 func (e *StreamingEngine[S, F]) initializePool() {
+	// Called only from Start() before evolutionLoop goroutine starts,
+	// or from evolutionLoop itself — lock still required since InjectPopulation
+	// can race with the early Start() path if called concurrently
+	e.poolMu.Lock()
+	defer e.poolMu.Unlock()
+
 	candidates := make([]Candidate[S, F], e.config.PoolSize)
 
 	for i := 0; i < e.config.PoolSize; i++ {
@@ -221,6 +235,9 @@ func (e *StreamingEngine[S, F]) processOutcome(outcome EvalOutcome[F]) {
 		return
 	}
 
+	e.poolMu.Lock()
+	defer e.poolMu.Unlock()
+
 	worstIdx := 0
 	worstScore := e.currentPool.Members[0].Score
 	for i, c := range e.currentPool.Members {
@@ -238,6 +255,9 @@ func (e *StreamingEngine[S, F]) processOutcome(outcome EvalOutcome[F]) {
 func (e *StreamingEngine[S, F]) evolveWithBudget() {
 	deadline := time.Now().Add(e.config.TickBudget)
 	maxOffspring := e.config.PoolSize / 4
+
+	e.poolMu.Lock()
+	defer e.poolMu.Unlock()
 
 	for i := 0; i < maxOffspring && time.Now().Before(deadline); i++ {
 		parents := e.selector.Select(e.currentPool, 2, e.rng)
@@ -262,6 +282,9 @@ func (e *StreamingEngine[S, F]) evolveWithBudget() {
 
 // Generation returns current evolution generation
 func (e *StreamingEngine[S, F]) Generation() int {
+	e.poolMu.RLock()
+	defer e.poolMu.RUnlock()
+
 	if e.currentPool == nil {
 		return 0
 	}
@@ -270,6 +293,9 @@ func (e *StreamingEngine[S, F]) Generation() int {
 
 // PoolStats returns current population statistics
 func (e *StreamingEngine[S, F]) PoolStats() (best, worst, avg F, size int) {
+	e.poolMu.RLock()
+	defer e.poolMu.RUnlock()
+
 	if e.currentPool == nil || len(e.currentPool.Members) == 0 {
 		return
 	}
@@ -307,6 +333,9 @@ func (e *StreamingEngine[S, F]) EvaluationsStarted() uint64 {
 
 // GetPoolSnapshot returns a copy of the current population for persistence
 func (e *StreamingEngine[S, F]) GetPoolSnapshot() *Pool[S, F] {
+	e.poolMu.RLock()
+	defer e.poolMu.RUnlock()
+
 	if e.currentPool == nil {
 		return nil
 	}
@@ -347,3 +376,4 @@ func (e *StreamingEngine[S, F]) InjectPopulation(candidates []Candidate[S, F], g
 		Generation: generation,
 	}
 }
+

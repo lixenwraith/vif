@@ -195,9 +195,6 @@ func (s *GeneticSystem) Update() {
 		return
 	}
 
-	// TODO: some race here
-	return
-
 	dt := s.world.Resources.Time.DeltaTime()
 
 	s.mu.Lock()
