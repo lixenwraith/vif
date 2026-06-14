@@ -4,6 +4,15 @@ A terminal-based game built with Go that combines vi/vim motion commands with fa
 
 Built using Entity-Component-System (ECS) architecture and Go standard library (no dependency).
 
+## Build and run
+
+```bash
+git clone https://github.com/lixenwraith/vi-fighter --depth 1
+cd vi-fighter
+make release
+bin/vi-fighter
+```
+
 ## Design Summary
 
 World is the source of truth
