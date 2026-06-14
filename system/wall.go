@@ -807,6 +807,10 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	}
 	result := maze.Generate(cfg)
 
+	// Derive actual dimensions post-ensureOdd adjustment in the generator
+	mazeCols := len(result.Grid[0])
+	mazeRows := len(result.Grid)
+
 	// Force-clear explicit rooms in world space post-generation
 	// Generator may reject rooms near edges due to margin constraints;
 	// this guarantees room areas are passable regardless
@@ -829,8 +833,8 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 
 		mx0 := max(0, x0/payload.CellWidth-1)
 		my0 := max(0, y0/payload.CellHeight-1)
-		mx1 := min(mazeWidth-1, (x0+roomW-1)/payload.CellWidth+1)
-		my1 := min(mazeHeight-1, (y0+roomH-1)/payload.CellHeight+1)
+		mx1 := min(mazeCols-1, (x0+roomW-1)/payload.CellWidth+1)
+		my1 := min(mazeRows-1, (y0+roomH-1)/payload.CellHeight+1)
 
 		for my := my0; my <= my1; my++ {
 			for mx := mx0; mx <= mx1; mx++ {
