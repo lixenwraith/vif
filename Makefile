@@ -6,7 +6,7 @@ LDFLAGS := -s -w
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release wasm run clean check-go
+.PHONY: help generate dev release wasm windows run clean check-go
 
 help:
 	@echo "Usage: make [target]"
@@ -15,6 +15,7 @@ help:
 	@echo "  dev      Build with race detector and debug symbols"
 	@echo "  release  Build optimized binary (stripped, trimmed)"
 	@echo "  wasm     Build WebAssembly binary for xterm.js"
+	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  clean    Remove build artifacts"
 
@@ -63,6 +64,9 @@ release: generate | $(BIN_DIR)
 
 wasm: generate | $(BIN_DIR)
 	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).wasm $(SRC)
+
+windows: generate | $(BIN_DIR)
+	GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
