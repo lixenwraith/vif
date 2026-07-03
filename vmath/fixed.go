@@ -65,6 +65,16 @@ func Div(a, b int64) int64 {
 	return int64((float64(a) / float64(b)) * ScaleF)
 }
 
+// MulDiv computes (a * b) / c
+// Optimization: Switched to float64 from 128-bit precision for performance (~100x speedup)
+func MulDiv(a, b, c int64) int64 {
+	if c == 0 {
+		return 0
+	}
+	// Use float64 batching for speed
+	return int64((float64(a) * float64(b)) / float64(c))
+}
+
 // Abs returns absolute value
 func Abs(x int64) int64 {
 	if x < 0 {
@@ -82,22 +92,6 @@ func Sign(x int64) int64 {
 		return Scale
 	}
 	return 0
-}
-
-// MulDiv computes (a * b) / c
-// Optimization: Switched to float64 from 128-bit precision for performance (~100x speedup)
-func MulDiv(a, b, c int64) int64 {
-	if c == 0 {
-		return 0
-	}
-	// Use float64 batching for speed
-	return int64((float64(a) * float64(b)) / float64(c))
-}
-
-// Lerp performs linear interpolation between a and b
-// t is in [0, Scale] where 0 returns a, Scale returns b
-func Lerp(a, b, t int64) int64 {
-	return a + Mul(b-a, t)
 }
 
 // --- Trigonometry ---
@@ -152,35 +146,10 @@ func Sqrt(x int64) int64 {
 	return int64(math.Sqrt(float64(x)) * 65536.0)
 }
 
-// --- Randomness ---
-
-type FastRand struct {
-	state uint64
-}
-
-func NewFastRand(seed uint64) *FastRand {
-	if seed == 0 {
-		seed = 1
-	}
-	return &FastRand{state: seed}
-}
-
-func (r *FastRand) Next() uint64 {
-	r.state ^= r.state << 13
-	r.state ^= r.state >> 17
-	r.state ^= r.state << 5
-	return r.state
-}
-
-func (r *FastRand) Intn(n int) int {
-	if n <= 0 {
-		return 0
-	}
-	return int(r.Next() % uint64(n))
-}
-
-func (r *FastRand) Float64() float64 {
-	return float64(r.Next()>>11) / (1 << 53)
+// Lerp performs linear interpolation between a and b
+// t is in [0, Scale] where 0 returns a, Scale returns b
+func Lerp(a, b, t int64) int64 {
+	return a + Mul(b-a, t)
 }
 
 // --- Misc ---
