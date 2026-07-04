@@ -83,7 +83,7 @@ transitions = [
 [states.QuasarGoldTimeout]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "Tick", target = "QuasarDustAll" }
+    { trigger = "Tick", target = "QuasarDustAll" },
 ]
 
 [states.QuasarGoldDestroyed]

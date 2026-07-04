@@ -24,8 +24,8 @@ type RegionConfig struct {
 	Initial         string   `toml:"initial"`
 	File            string   `toml:"file,omitempty"`             // External file path, relative to config dir
 	Background      bool     `toml:"background,omitempty"`       // Excluded from telemetry
-	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Systems to enable when region spawns
-	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Systems to disable when region spawns
+	EnabledSystems  []string `toml:"enabled_systems,omitempty"`  // Systems to enable when region spawns or resumes
+	DisabledSystems []string `toml:"disabled_systems,omitempty"` // Systems to disable when region spawns or resumes
 }
 
 // StateConfig represents a single state definition
@@ -58,3 +58,4 @@ type ActionConfig struct {
 	GuardArgs    map[string]any    `toml:"guard_args,omitempty"`    // Guard parameters
 	DelayMs      int               `toml:"delay_ms,omitempty"`      // Delay before execution (ms)
 }
+

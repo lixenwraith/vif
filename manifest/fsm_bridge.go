@@ -213,6 +213,11 @@ func registerRegionActions(m *fsm.Machine[*engine.World]) {
 			return
 		}
 		m.ResumeRegion(rcArgs.RegionName)
+
+		// Re-apply declared system toggles: Pause/Resume bypassed the
+		// reconciliation SpawnRegion performs, leaving a paused region's
+		// systems stuck past resume
+		applyRegionSystemConfig(world, m, rcArgs.RegionName)
 	})
 }
 
@@ -898,3 +903,4 @@ func extractStringField(payload any, fieldName string) (string, bool) {
 	}
 	return field.String(), true
 }
+

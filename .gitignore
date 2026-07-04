@@ -7,4 +7,5 @@ cmake-build-*/
 build.sh
 vi-fighter
 catalog.txt
+combined.txt
 web/*.wasm

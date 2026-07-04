@@ -3,10 +3,10 @@
 [states.MainCycle]
 parent = "Root"
 on_exit = [
-    { action = "EmitEvent", event = "EventGoldCancel" }
+    { action = "EmitEvent", event = "EventGoldCancel" },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } }
+    { trigger = "Tick", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } },
 ]
 
 # --- Gold Spawn ---
@@ -14,17 +14,17 @@ transitions = [
 [states.MainSpawnGold]
 parent = "MainCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventGoldSpawnRequest" }
+    { action = "EmitEvent", event = "EventGoldSpawnRequest" },
 ]
 transitions = [
     { trigger = "EventGoldSpawned", target = "MainGoldActive" },
-    { trigger = "EventGoldSpawnFailed", target = "MainSpawnGoldRetry" }
+    { trigger = "EventGoldSpawnFailed", target = "MainSpawnGoldRetry" },
 ]
 
 [states.MainSpawnGoldRetry]
 parent = "MainCycle"
 transitions = [
-    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 100 } }
+    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
 # --- Gold Active ---
@@ -34,29 +34,29 @@ parent = "MainCycle"
 transitions = [
     { trigger = "EventGoldCompleted", target = "MainGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "MainGoldTimeout" },
-    { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" }
+    { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" },
 ]
 
 [states.MainGoldCompleted]
 parent = "MainCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } }
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainDecayWait" }
+    { trigger = "Tick", target = "MainDecayWait" },
 ]
 
 [states.MainGoldTimeout]
 parent = "MainCycle"
 transitions = [
-    { trigger = "Tick", target = "MainDecayWait" }
+    { trigger = "Tick", target = "MainDecayWait" },
 ]
 
 [states.MainGoldDestroyed]
 parent = "MainCycle"
 transitions = [
-    { trigger = "Tick", target = "MainDecayWait" }
+    { trigger = "Tick", target = "MainDecayWait" },
 ]
 
 # --- Decay Cycle ---
@@ -64,16 +64,16 @@ transitions = [
 [states.MainDecayWait]
 parent = "MainCycle"
 transitions = [
-    { trigger = "Tick", target = "MainDecayWave", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+    { trigger = "Tick", target = "MainDecayWave", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
 
 [states.MainDecayWave]
 parent = "MainCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventDecayWave" }
+    { action = "EmitEvent", event = "EventDecayWave" },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
+    { trigger = "Tick", target = "MainSpawnGold", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
 
 # --- Escalation ---
@@ -83,8 +83,8 @@ parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.drain" } },
     { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
-    { action = "PauseRegion", region = "main" }
+    { action = "PauseRegion", region = "main" },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainSpawnGold" }
+    { trigger = "Tick", target = "MainSpawnGold" },
 ]

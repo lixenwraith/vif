@@ -15,7 +15,7 @@ transitions = [
     { trigger = "EventHeatBurst", target = "MonitorHeatBurst" },
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
         { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
-        { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } }
+        { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } },
     ] } },
 ]
 
