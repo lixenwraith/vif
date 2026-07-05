@@ -220,6 +220,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DESTROYED" } },
     { action = "EmitEvent", event = "EventDrainResume" },
-    { action = "ResumeRegion", region = "main" },
+    # { action = "ResumeRegion", region = "main" }, # Changed to level_failed mechanism for proper reset
     { action = "TerminateRegion", region = "tower" },
+    { action = "SetVar", payload = { name = "level_failed", value = 1 } },
 ]

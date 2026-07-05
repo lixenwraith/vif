@@ -1,7 +1,12 @@
 # Parallel region for global state and reset
+[states.MonitorCycle]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "MonitorGlobalReset", guard = "VarEquals", guard_args = { var = "level_failed", value = 1 } },
+]
 
 [states.MonitorWarmup]
-parent = "Root"
+parent = "MonitorCycle"
 transitions = [
     { trigger = "Tick", target = "MonitorActive", guard = "Or", guard_args = { guards = [
         { name = "StatusIntCompare", args = { key = "heat.current", op = "gt", value = 0 } },
@@ -10,7 +15,7 @@ transitions = [
 ]
 
 [states.MonitorActive]
-parent = "Root"
+parent = "MonitorCycle"
 transitions = [
     { trigger = "EventHeatBurst", target = "MonitorHeatBurst" },
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
@@ -20,7 +25,7 @@ transitions = [
 ]
 
 [states.MonitorHeatBurst]
-parent = "Root"
+parent = "MonitorCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
 ]
@@ -42,6 +47,7 @@ on_enter = [
     # Reset tracking
     { action = "ResetKillVars" },
     { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
+    { action = "SetVar", payload = { name = "level_failed", value = 0 } },
     # Terminate all gameplay regions
     { action = "TerminateRegion", region = "quasar" },
     { action = "TerminateRegion", region = "storm" },
