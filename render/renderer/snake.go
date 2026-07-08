@@ -1,7 +1,6 @@
 package renderer
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -269,8 +268,6 @@ func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *rende
 	if !ok {
 		return
 	}
-
-	r.gameCtx.World.DebugPrint(fmt.Sprintf("%d", len(headerComp.MemberEntries)))
 
 	combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headEntity)
 	if !ok {
@@ -580,4 +577,3 @@ func (r *SnakeRenderer) resolveBodyMembers(bodyEntity core.Entity, segmentCount 
 
 	return resolved
 }
-

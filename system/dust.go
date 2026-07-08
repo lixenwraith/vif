@@ -17,14 +17,13 @@ import (
 
 const (
 	cellFlagDrain           uint8 = 1
-	cellFlagCombatComposite uint8 = 2 // Renamed from cellFlagQuasar
-	cellFlagGlyph           uint8 = 4
-	cellFlagDecay           uint8 = 8
+	cellFlagCombatComposite uint8 = 2
+	// Non-combat collision types removed
 )
 
 // collisionContext holds pre-computed collision data for single tick
 type collisionContext struct {
-	// Cell flags: 1=drain, 2=combat composite, 4=glyph, 8=decay/blossom
+	// Cell flags: 1=drain, 2=combat composite
 	cellFlags map[uint64]uint8
 
 	// Impulse accumulators keyed by target entity
@@ -217,12 +216,8 @@ func (s *DustSystem) Update() {
 	}
 	hasAttraction := cursorEnergy != 0
 
-	// Shield data for collision energy reward
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := ok && shield.Active
-
 	// Build collision context for this tick
-	collisionCtx := s.buildCollisionContext(shieldActive, cursorPos, &shield)
+	collisionCtx := s.buildCollisionContext()
 
 	// Chase boost on cursor jump
 	cursorDeltaX := cursorPos.X - s.lastCursorX
@@ -273,11 +268,9 @@ func (s *DustSystem) Update() {
 			continue
 		}
 
-		// --- Positions and Shield State ---
+		// --- Positions relative to cursor (orbital physics input) ---
 		dx := kineticComp.PreciseX - cursorXFixed
 		dy := kineticComp.PreciseY - cursorYFixed
-
-		dustInsideShield := shieldActive && vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq)
 
 		// --- Per-Particle Jitter (always active) ---
 		jitterAngle := int64(s.rng.Intn(vmath.LUTSize)) << (vmath.Shift - 10)
@@ -374,7 +367,6 @@ func (s *DustSystem) Update() {
 
 		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
 			traverser := vmath.NewGridTraverser(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
-			destroyDust := false
 
 			for traverser.Next() {
 				currX, currY := traverser.Pos()
@@ -443,7 +435,7 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					// --- Combat Composite (Quasar, Swarm, Storm) ---
+					// --- Combat Composite ---
 					if flags&cellFlagCombatComposite != 0 {
 						if member, ok := s.world.Components.Member.GetComponent(target); ok {
 							if collisionCtx.combatHeaders[member.HeaderEntity] {
@@ -462,71 +454,8 @@ func (s *DustSystem) Update() {
 						continue
 					}
 
-					// --- Decay/Blossom (flag bit 3) ---
-					if flags&cellFlagDecay != 0 {
-						if s.world.Components.Blossom.HasEntity(target) || s.world.Components.Decay.HasEntity(target) {
-							s.world.Components.Death.SetComponent(target, component.DeathComponent{})
-							deathCandidates = append(deathCandidates, target)
-							if !dustInsideShield {
-								destroyDust = true
-								break
-							}
-						}
-						continue
-					}
-
-					// --- Glyph (flag bit 2, requires shield context) ---
-					if flags&cellFlagGlyph != 0 && dustInsideShield {
-						glyphComp, ok := s.world.Components.Glyph.GetComponent(target)
-						if !ok {
-							continue
-						}
-
-						shouldKillGlyph := false
-						shouldKillDust := false
-
-						if cursorEnergy > 0 {
-							if glyphComp.Type == component.GlyphBlue {
-								shouldKillGlyph = true
-								shouldKillDust = true
-							} else if glyphComp.Type == component.GlyphRed {
-								shouldKillDust = true
-							}
-						} else if cursorEnergy < 0 {
-							if glyphComp.Type == component.GlyphRed {
-								shouldKillGlyph = true
-								shouldKillDust = true
-							} else if glyphComp.Type == component.GlyphBlue {
-								shouldKillDust = true
-							}
-						}
-						// Green, Gold, and Zero Energy: No interaction
-
-						if shouldKillGlyph {
-							s.world.Components.Death.SetComponent(target, component.DeathComponent{})
-							deathCandidates = append(deathCandidates, target)
-							s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
-								Type:  glyphComp.Type,
-								Level: glyphComp.Level,
-							})
-						}
-
-						if shouldKillDust {
-							destroyDust = true
-							break // Dust destroyed, stop checking other entities in this cell
-						}
-					}
 				}
 
-				if destroyDust {
-					break
-				}
-			}
-
-			if destroyDust {
-				s.world.Components.Death.SetComponent(dustEntity, component.DeathComponent{})
-				destroyedCount++
-				continue
 			}
 
 			// Apply wall reflection
@@ -576,7 +505,7 @@ func (s *DustSystem) Update() {
 }
 
 // buildCollisionContext pre-computes collision data for current tick
-func (s *DustSystem) buildCollisionContext(shieldActive bool, cursorPos component.PositionComponent, shield *component.ShieldComponent) *collisionContext {
+func (s *DustSystem) buildCollisionContext() *collisionContext {
 	ctx := &collisionContext{
 		cellFlags:     make(map[uint64]uint8, 256),
 		impulses:      make(map[core.Entity]*impulseAcc, 16),
@@ -609,33 +538,6 @@ func (s *DustSystem) buildCollisionContext(shieldActive bool, cursorPos componen
 					ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagCombatComposite
 				}
 			}
-		}
-	}
-
-	// Glyphs (only if shield active)
-	if shieldActive {
-		cursorXFixed := vmath.FromInt(cursorPos.X)
-		cursorYFixed := vmath.FromInt(cursorPos.Y)
-		for _, e := range s.world.Components.Glyph.GetAllEntities() {
-			if pos, ok := s.world.Positions.GetPosition(e); ok {
-				dx := vmath.FromInt(pos.X) - cursorXFixed
-				dy := vmath.FromInt(pos.Y) - cursorYFixed
-				if vmath.EllipseContains(dx, dy, shield.InvRxSq, shield.InvRySq) {
-					ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagGlyph
-				}
-			}
-		}
-	}
-
-	// Decay/Blossom
-	for _, e := range s.world.Components.Decay.GetAllEntities() {
-		if pos, ok := s.world.Positions.GetPosition(e); ok {
-			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDecay
-		}
-	}
-	for _, e := range s.world.Components.Blossom.GetAllEntities() {
-		if pos, ok := s.world.Positions.GetPosition(e); ok {
-			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDecay
 		}
 	}
 
@@ -841,4 +743,3 @@ func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, 
 		return parameter.DustTimerNormal, visual.RgbDustNormal
 	}
 }
-

@@ -12,9 +12,6 @@ type DustComponent struct {
 	LastIntX int
 	LastIntY int
 
-	// Shield containment tracking for soft redirection
-	WasInsideShield bool
-
 	// Stagger group for chase response distribution (0-2)
 	ResponseGroup uint8
 }
