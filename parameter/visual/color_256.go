@@ -50,9 +50,9 @@ var SpiritBaseOffsets = [8]int{
 // 256-colors palette indices
 const (
 	// Missile
-	Missile256Trail  = terminal.P256Amber  // (5,3,0)
-	Missile256Body   = terminal.P256Gold   // (5,4,0)
-	Missile256Seeker = terminal.P256Orange // (5,2,0)
+	Missile256Trail = terminal.P256Amber  // (5,3,0)
+	Missile256Body  = terminal.P256Gold   // (5,4,0)
+	Missile256Base  = terminal.P256Orange // (5,2,0)
 
 	// Swarm charge line
 	SwarmChargeLine256Palette = terminal.P256Orchid // (4,2,4)
@@ -73,3 +73,4 @@ const (
 
 // Eye explosion
 var Eye256Explosion = terminal.P256MediumPurple // (3,1,5)
+

@@ -130,8 +130,8 @@ func (s *MissileSystem) Update() {
 }
 
 func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
-	// Lifetime timeout for orphaned seekers
-	if m.Lifetime > parameter.MissileSeekerMaxLifetime {
+	// Lifetime timeout for orphaned missiles
+	if m.Lifetime > parameter.MissileMaxLifetime {
 		return true
 	}
 
@@ -155,15 +155,15 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		}
 
 		// Homing via physics
-		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &physics.MissileSeekerHoming, dt)
-		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileSeekerMaxSpeed)
+		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &physics.MissileHoming, dt)
+		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileMaxSpeed)
 
 		// Integrate position
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	}
 
-	// General Enemy Collision: seeker detonates on any combatant contact
+	// General Enemy Collision: missile detonates on any combatant contact
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY)
 	if hitType == impactWall {
 		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
@@ -302,7 +302,7 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 	}
 
 	// Calculate spread arc
-	spread := parameter.MissileSeekerSpreadAngle
+	spread := parameter.MissileSpreadAngle
 	step := int64(0)
 	if p.Count > 1 {
 		step = spread / int64(p.Count-1)
@@ -314,8 +314,8 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 		dirX, dirY := vmath.RotateVector(baseDirX, baseDirY, angle)
 
 		// Stagger initial speed slightly for visual spread
-		speedFactor := vmath.Scale - vmath.FromFloat(parameter.MissileSeekerStaggerFactor*float64(i))
-		speed := vmath.Mul(parameter.MissileSeekerMaxSpeed, speedFactor)
+		speedFactor := vmath.Scale - vmath.FromFloat(parameter.MissileStaggerFactor*float64(i))
+		speed := vmath.Mul(parameter.MissileMaxSpeed, speedFactor)
 
 		vx := vmath.Mul(dirX, speed)
 		vy := vmath.Mul(dirY, speed)

@@ -87,27 +87,27 @@ type NetworkDisconnectPayload struct {
 
 // RemoteInputPayload contains input data from remote player
 type RemoteInputPayload struct {
-	PeerID  uint32 `toml:"peer_id"`
 	Payload []byte `toml:"payload"` // Encoded keystroke/intent
+	PeerID  uint32 `toml:"peer_id"`
 }
 
 // StateSyncPayload contains state snapshot from peer
 type StateSyncPayload struct {
+	Payload []byte `toml:"payload"` // Encoded snapshot
 	PeerID  uint32 `toml:"peer_id"`
 	Seq     uint32 `toml:"seq"`
-	Payload []byte `toml:"payload"` // Encoded snapshot
 }
 
 // NetworkEventPayload contains a forwarded game event
 type NetworkEventPayload struct {
-	PeerID  uint32 `toml:"peer_id"`
 	Payload []byte `toml:"payload"` // Encoded GameEvent
+	PeerID  uint32 `toml:"peer_id"`
 }
 
 // NetworkErrorPayload contains error information
 type NetworkErrorPayload struct {
-	PeerID uint32 `toml:"peer_id"`
 	Error  string `toml:"error"` // 0 for general errors
+	PeerID uint32 `toml:"peer_id"`
 }
 
 // --- Meta ---
@@ -162,7 +162,7 @@ type GoldCompletionPayload struct {
 
 // --- Splash ---
 
-// SplashTimerPayload anchors countdown timer to sequence position
+// SplashTimerRequestPayload anchors countdown timer to sequence position
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity   `toml:"anchor_entity"`
 	Color        terminal.RGB  `toml:"color"`
@@ -175,7 +175,7 @@ type SplashTimerRequestPayload struct {
 	Duration     time.Duration `toml:"duration"`
 }
 
-// SplashTimerCancelPayload anchors countdown timer to sequence position
+// SplashTimerCancelPayload cancels countdown timer of an anchor
 type SplashTimerCancelPayload struct {
 	AnchorEntity core.Entity `toml:"anchor_entity"`
 }
@@ -215,7 +215,7 @@ type ShieldDrainRequestPayload struct {
 
 // --- Weapon ---
 
-// WeaponAddRequestPayload
+// WeaponAddRequestPayload adds a weapon to cursor
 type WeaponAddRequestPayload struct {
 	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
 }
@@ -527,10 +527,10 @@ type LightningSpawnRequestPayload struct {
 	TargetY      int                          `toml:"target_y"`
 	OriginEntity core.Entity                  `toml:"origin_entity"` // 0 = use OriginX/Y as static
 	TargetEntity core.Entity                  `toml:"target_entity"` // 0 = use TargetX/Y as static
-	ColorType    component.LightningColorType `toml:"color_type"`
-	Duration     time.Duration                `toml:"duration"`
-	Tracked      bool                         `toml:"tracked"` // If true, entity persists and target can be updated
 	PathSeed     uint64                       // 0 = system generates
+	Duration     time.Duration                `toml:"duration"`
+	ColorType    component.LightningColorType `toml:"color_type"`
+	Tracked      bool                         `toml:"tracked"` // If true, entity persists and target can be updated
 }
 
 // LightningUpdatePayload updates target position for tracked lightning
@@ -550,11 +550,11 @@ type LightningDespawnPayload struct {
 
 // CombatAttackDirectRequestPayload contains direct attack information
 type CombatAttackDirectRequestPayload struct {
-	AttackType   component.CombatAttackType `toml:"attack_type"`
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
 	HitEntity    core.Entity                `toml:"hit_entity"`
+	AttackType   component.CombatAttackType `toml:"attack_type"`
 }
 
 // CombatAttackAreaRequestPayload contains area attack information
@@ -573,10 +573,10 @@ type CombatAttackAreaRequestPayload struct {
 // EnemyKilledPayload carries entity type and death position for loot resolution
 type EnemyKilledPayload struct {
 	Entity  core.Entity           `toml:"entity"`
-	Species component.SpeciesType `toml:"species"`
-	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 	X       int                   `toml:"x"`
 	Y       int                   `toml:"y"`
+	Species component.SpeciesType `toml:"species"`
+	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 }
 
 // EnemyCreatedPayload signals enemy entity spawn for GA tracking
@@ -658,7 +658,6 @@ type ModeChangedPayload struct {
 type WallSpawnRequestPayload struct {
 	X             int                     `toml:"x"`
 	Y             int                     `toml:"y"`
-	BlockMask     component.WallBlockMask `toml:"block_mask"`
 	Char          rune                    `toml:"char"`
 	FgColor       terminal.RGB            `toml:"fg_color"`
 	BgColor       terminal.RGB            `toml:"bg_color"`
@@ -666,6 +665,7 @@ type WallSpawnRequestPayload struct {
 	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 	RenderFg      bool                    `toml:"render_fg"`
 	RenderBg      bool                    `toml:"render_bg"`
+	BlockMask     component.WallBlockMask `toml:"block_mask"`
 }
 
 // WallBatchCollisionMode defines behavior when batch spawn encounters existing walls
@@ -853,16 +853,16 @@ type TargetGroupRemovePayload struct {
 
 // RouteGraphRequestPayload requests route graph computation for a gateway-target pair
 type RouteGraphRequestPayload struct {
-	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
-	SourceX       int    `toml:"source_x"`       // Gateway spawn position
+	SourceX       int    `toml:"source_x"` // Gateway spawn position
 	SourceY       int    `toml:"source_y"`
+	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
 	TargetGroupID uint8  `toml:"target_group_id"`
 }
 
 // RouteGraphComputedPayload signals route graph computation completion
 type RouteGraphComputedPayload struct {
-	RouteGraphID uint32 `toml:"route_graph_id"`
 	RouteCount   int    `toml:"route_count"`
+	RouteGraphID uint32 `toml:"route_graph_id"`
 }
 
 // --- Eye ---
@@ -871,10 +871,10 @@ type RouteGraphComputedPayload struct {
 type EyeSpawnRequestPayload struct {
 	X             int               `toml:"x"`
 	Y             int               `toml:"y"`
+	RouteID       int               `toml:"route_id"`       // -1 = shared flow field
+	RouteGraphID  uint32            `toml:"route_graph_id"` // 0 = no route graph
 	Type          component.EyeType `toml:"type"`
 	TargetGroupID uint8             `toml:"target_group_id"`
-	RouteGraphID  uint32            `toml:"route_graph_id"` // 0 = no route graph
-	RouteID       int               `toml:"route_id"`       // -1 = shared flow field
 }
 
 // EyeSpawnedPayload notifies eye composite creation
@@ -893,11 +893,11 @@ type EyeDestroyedPayload struct {
 type TowerSpawnRequestPayload struct {
 	X             int                 `toml:"x"`
 	Y             int                 `toml:"y"`
-	Type          component.TowerType `toml:"type"`
 	RadiusX       int                 `toml:"radius_x"`
 	RadiusY       int                 `toml:"radius_y"`
 	MinHP         int                 `toml:"min_hp"`
 	MaxHP         int                 `toml:"max_hp"`
+	Type          component.TowerType `toml:"type"`
 	TargetGroupID uint8               `toml:"target_group_id"` // Navigation target group
 }
 
@@ -921,15 +921,15 @@ type TowerDestroyedPayload struct {
 // GatewaySpawnRequestPayload requests creation of a gateway entity
 type GatewaySpawnRequestPayload struct {
 	AnchorEntity        core.Entity `toml:"anchor_entity"`          // Parent entity (pylon header)
-	Species             uint8       `toml:"species"`                // component.SpeciesType
-	SubType             uint8       `toml:"sub_type"`               // Species variant (e.g. EyeType)
-	GroupID             uint8       `toml:"group_id"`               // Target group for spawned entities
 	BaseIntervalMs      int         `toml:"base_interval_ms"`       // Spawn interval in milliseconds
 	RateMultiplier      float64     `toml:"rate_multiplier"`        // <1.0 = accelerating, 1.0 = constant
 	RateAccelIntervalMs int         `toml:"rate_accel_interval_ms"` // How often multiplier applied (ms), 0 = disabled
 	MinIntervalMs       int         `toml:"min_interval_ms"`        // Floor interval in milliseconds
 	OffsetX             int         `toml:"offset_x"`
 	OffsetY             int         `toml:"offset_y"`
+	Species             uint8       `toml:"species"`         // component.SpeciesType
+	SubType             uint8       `toml:"sub_type"`        // Species variant (e.g. EyeType)
+	GroupID             uint8       `toml:"group_id"`        // Target group for spawned entities
 	UseRouteGraph       bool        `toml:"use_route_graph"` // If true, request route graph computation for this gateway
 }
 

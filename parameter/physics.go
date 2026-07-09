@@ -65,14 +65,14 @@ var (
 
 // Missile physics
 var (
-	MissileSeekerMaxSpeed      = vmath.FromFloat(MissileSeekerMaxSpeedFloat)
-	MissileSeekerHomingAccel   = vmath.FromFloat(MissileSeekerHomingAccelFloat)
-	MissileSeekerDrag          = vmath.FromFloat(MissileSeekerDragFloat)
-	MissileSeekerSpreadAngle   = vmath.FromFloat(MissileSeekerSpreadAngleFloat)
-	MissileSeekerArrivalRadius = vmath.FromFloat(MissileSeekerArrivalRadiusFloat)
-	MissileImpactRadius        = vmath.FromFloat(MissileImpactRadiusFloat)
-	MissileImpactRadiusSq      = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
-	MissileExplosionRadius     = vmath.FromFloat(MissileExplosionRadiusFloat)
+	MissileMaxSpeed        = vmath.FromFloat(MissileMaxSpeedFloat)
+	MissileHomingAccel     = vmath.FromFloat(MissileHomingAccelFloat)
+	MissileDrag            = vmath.FromFloat(MissileDragFloat)
+	MissileSpreadAngle     = vmath.FromFloat(MissileSpreadAngleFloat)
+	MissileArrivalRadius   = vmath.FromFloat(MissileArrivalRadiusFloat)
+	MissileImpactRadius    = vmath.FromFloat(MissileImpactRadiusFloat)
+	MissileImpactRadiusSq  = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
+	MissileExplosionRadius = vmath.FromFloat(MissileExplosionRadiusFloat)
 )
 
 // Loot physics

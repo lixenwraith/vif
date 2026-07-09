@@ -398,12 +398,12 @@ var LootHoming = HomingProfile{
 	DeadZone:         vmath.Scale / 2,       // Snap at 0.5 cells
 }
 
-// MissileSeekerHoming: continuous drag, maintains full accel in arrival zone
-var MissileSeekerHoming = HomingProfile{
+// MissileHoming continuous drag, maintains full accel in arrival zone
+var MissileHoming = HomingProfile{
 	BaseSpeed:        0, // Continuous drag (overspeed always true)
-	HomingAccel:      parameter.MissileSeekerHomingAccel,
-	Drag:             parameter.MissileSeekerDrag,
-	ArrivalRadius:    parameter.MissileSeekerArrivalRadius,
+	HomingAccel:      parameter.MissileHomingAccel,
+	Drag:             parameter.MissileDrag,
+	ArrivalRadius:    parameter.MissileArrivalRadius,
 	ArrivalDragBoost: vmath.FromFloat(2.0), // 3x drag at target
 	ArrivalAccelMin:  vmath.Scale,          // Maintain full accel
 	DeadZone:         vmath.Scale / 10,     // Very small; impact check handles arrival
@@ -432,3 +432,4 @@ func init() {
 		}
 	}
 }
+

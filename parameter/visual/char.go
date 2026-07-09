@@ -54,7 +54,7 @@ var Density256Chars = [4]rune{
 const (
 	MissileTrailChar  = '▪' // U+25AA Black Small Square
 	MissileParentChar = '◆' // U+25C6 Black Diamond
-	MissileSeekerChar = '▸' // U+25B8 Black Right-Pointing Small Triangle
+	MissileBaseChar   = '▸' // U+25B8 Black Right-Pointing Small Triangle
 )
 
 // Circle characters
@@ -165,3 +165,4 @@ var BoxDrawDoubleLUT = [16]rune{
 	14: '╦', // E+S+W
 	15: '╬', // All
 }
+

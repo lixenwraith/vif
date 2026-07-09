@@ -73,26 +73,26 @@ const (
 
 // Missile Phase
 const (
-	// MissileSeekerMaxSpeedFloat is base homing velocity (cells/sec)
-	MissileSeekerMaxSpeedFloat = 180.0
+	// MissileMaxSpeedFloat is base homing velocity (cells/sec)
+	MissileMaxSpeedFloat = 180.0
 
-	// MissileSeekerHomingAccelFloat is steering acceleration (cells/sec²)
-	MissileSeekerHomingAccelFloat = 400.0
+	// MissileHomingAccelFloat is steering acceleration (cells/sec²)
+	MissileHomingAccelFloat = 400.0
 
-	// MissileSeekerDragFloat is velocity damping for stable turns
-	MissileSeekerDragFloat = 4.0
+	// MissileDragFloat is velocity damping for stable turns
+	MissileDragFloat = 4.0
 
-	// MissileSeekerSpreadAngleFloat is arc spread for children spawn (radians, ~120°)
-	MissileSeekerSpreadAngleFloat = 2.1
+	// MissileSpreadAngleFloat is arc spread for children spawn (radians, ~120°)
+	MissileSpreadAngleFloat = 2.1
 
-	// MissileSeekerStaggerFactor is velocity reduction per child index (0.05 = 5%)
-	MissileSeekerStaggerFactor = 0.05
+	// MissileStaggerFactor is velocity reduction per child index (0.05 = 5%)
+	MissileStaggerFactor = 0.05
 
-	// MissileSeekerArrivalRadius is distance to begin braking (cells)
-	MissileSeekerArrivalRadiusFloat = 2.0
+	// MissileArrivalRadius is distance to begin braking (cells)
+	MissileArrivalRadiusFloat = 2.0
 
-	// MissileSeekerMaxLifetime is safety timeout for orphaned seekers
-	MissileSeekerMaxLifetime = 3 * time.Second
+	// MissileMaxLifetime is safety timeout for orphaned missiles
+	MissileMaxLifetime = 3 * time.Second
 )
 
 // Missile Visuals

@@ -134,7 +134,7 @@ func (r *MissileRenderer) renderBody(
 func (r *MissileRenderer) directionChar(velX, velY int64) rune {
 	// 8-direction quantization
 	if velX == 0 && velY == 0 {
-		return visual.MissileSeekerChar
+		return visual.MissileBaseChar
 	}
 
 	// Normalize and quantize to octant
@@ -223,5 +223,5 @@ func (r *MissileRenderer) renderMissile256(
 
 	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
-	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Seeker}, terminal.AttrFg256|terminal.AttrBold)
+	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
 }
