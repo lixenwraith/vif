@@ -548,7 +548,7 @@ type LightningDespawnPayload struct {
 
 // --- Combat ---
 
-// CombatAttackDirectRequestPayload
+// CombatAttackDirectRequestPayload contains direct attack information
 type CombatAttackDirectRequestPayload struct {
 	AttackType   component.CombatAttackType `toml:"attack_type"`
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
@@ -557,13 +557,13 @@ type CombatAttackDirectRequestPayload struct {
 	HitEntity    core.Entity                `toml:"hit_entity"`
 }
 
-// CombatAttackAreaRequestPayload
+// CombatAttackAreaRequestPayload contains area attack information
 type CombatAttackAreaRequestPayload struct {
+	HitEntities  []core.Entity              `toml:"hit_entities"`
 	AttackType   component.CombatAttackType `toml:"attack_type"`
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
-	HitEntities  []core.Entity              `toml:"hit_entities"`
 	// Optional explicit origin position for knockback direction (e.g., explosion center)
 	// When both are 0, uses OriginEntity position
 	OriginX int `toml:"origin_x"`
@@ -597,17 +597,15 @@ type LootSpawnRequestPayload struct {
 
 // --- Missile ---
 
-// MissileSpawnRequestPayload contains cluster missile spawn parameters
+// MissileSpawnRequestPayload contains missile spawn parameters
 type MissileSpawnRequestPayload struct {
+	Targets      []core.Entity `toml:"targets"`       // Prioritized target entities
+	HitEntities  []core.Entity `toml:"hit_entities"`  // Corresponding hit points (member or same as target)
 	OwnerEntity  core.Entity   `toml:"owner_entity"`  // Cursor
 	OriginEntity core.Entity   `toml:"origin_entity"` // Launcher orb
 	OriginX      int           `toml:"origin_x"`
 	OriginY      int           `toml:"origin_y"`
-	TargetX      int           `toml:"target_x"` // Far quadrant aim point
-	TargetY      int           `toml:"target_y"`
-	ChildCount   int           `toml:"child_count"`  // heat/10
-	Targets      []core.Entity `toml:"targets"`      // Prioritized target entities
-	HitEntities  []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
+	Count        int           `toml:"count"`
 }
 
 // --- Bullet ---
@@ -631,12 +629,12 @@ type MarkerSpawnRequestPayload struct {
 	Y         int                   `toml:"y"`
 	Width     int                   `toml:"width"`
 	Height    int                   `toml:"height"`
-	Shape     component.MarkerShape `toml:"shape"`
-	Color     terminal.RGB          `toml:"color"`
 	Intensity int64                 `toml:"intensity"` // Q32.32
 	Duration  time.Duration         `toml:"duration"`
 	PulseRate int64                 `toml:"pulse_rate"` // Q32.32, 0 = none
-	FadeMode  uint8                 `toml:"fade_mode"`  // 0=none, 1=out, 2=in
+	Color     terminal.RGB          `toml:"color"`
+	Shape     component.MarkerShape `toml:"shape"`
+	FadeMode  uint8                 `toml:"fade_mode"` // 0=none, 1=out, 2=in
 }
 
 // --- Motion Marker ---
@@ -661,13 +659,13 @@ type WallSpawnRequestPayload struct {
 	X             int                     `toml:"x"`
 	Y             int                     `toml:"y"`
 	BlockMask     component.WallBlockMask `toml:"block_mask"`
-	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
 	Char          rune                    `toml:"char"`
 	FgColor       terminal.RGB            `toml:"fg_color"`
 	BgColor       terminal.RGB            `toml:"bg_color"`
+	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
+	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 	RenderFg      bool                    `toml:"render_fg"`
 	RenderBg      bool                    `toml:"render_bg"`
-	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 }
 
 // WallBatchCollisionMode defines behavior when batch spawn encounters existing walls
@@ -686,22 +684,22 @@ const (
 // Cells use offset coordinates relative to anchor (X, Y)
 // BoxStyle at payload level applies to all cells (per-cell BoxStyle in WallCellDef ignored)
 type WallBatchSpawnRequestPayload struct {
+	Cells         []component.WallCellDef `toml:"cells"`
 	X             int                     `toml:"x"`          // Anchor position
 	Y             int                     `toml:"y"`          // Anchor position
 	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells
 	BoxStyle      component.BoxDrawStyle  `toml:"box_style"`  // Applied to all cells
 	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
 	Composite     bool                    `toml:"composite"` // If true, create header/member structure
-	Cells         []component.WallCellDef `toml:"cells"`
 }
 
 // WallCompositeSpawnRequestPayload contains parameters for multi-cell wall structure
 type WallCompositeSpawnRequestPayload struct {
+	Cells         []component.WallCellDef `toml:"cells"`
 	X             int                     `toml:"x"` // Anchor position
 	Y             int                     `toml:"y"`
 	BlockMask     component.WallBlockMask `toml:"block_mask"` // Applied to all cells
 	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
-	Cells         []component.WallCellDef `toml:"cells"`
 	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Applied to all cells
 }
 
@@ -761,17 +759,21 @@ type MazeRoomSpec struct {
 
 // MazeSpawnRequestPayload configures maze generation
 type MazeSpawnRequestPayload struct {
-	CellWidth     int                        `toml:"cell_width"`
-	CellHeight    int                        `toml:"cell_height"`
-	Braiding      float64                    `toml:"braiding"`
-	BlockMask     component.WallBlockMask    `toml:"block_mask"`
-	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
+	// Reference types (GC scan boundary)
+	Rooms []MazeRoomSpec `toml:"rooms"`
+
+	// 8-byte scalars
+	CellWidth         int                     `toml:"cell_width"`
+	CellHeight        int                     `toml:"cell_height"`
+	RoomCount         int                     `toml:"room_count"`
+	DefaultRoomWidth  int                     `toml:"default_room_width"`
+	DefaultRoomHeight int                     `toml:"default_room_height"`
+	Braiding          float64                 `toml:"braiding"`
+	BlockMask         component.WallBlockMask `toml:"block_mask"`
+
+	// Mixed/smaller structs and scalars
 	Visual        component.WallVisualConfig `toml:"visual"`
-	// Room generation
-	RoomCount         int            `toml:"room_count"`
-	Rooms             []MazeRoomSpec `toml:"rooms"`
-	DefaultRoomWidth  int            `toml:"default_room_width"`
-	DefaultRoomHeight int            `toml:"default_room_height"`
+	CollisionMode WallBatchCollisionMode     `toml:"collision_mode"`
 }
 
 // --- Fadeout ---

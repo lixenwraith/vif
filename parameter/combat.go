@@ -119,9 +119,6 @@ const (
 const (
 	// MissileImpactRadiusFloat is hit detection threshold (cells)
 	MissileImpactRadiusFloat = 1.5
-
-	// MissileSplitTravelFractionFloat: parent splits after traveling this fraction (0.3 = 30%)
-	MissileSplitTravelFractionFloat = 0.3
 )
 
 // Pulse
@@ -138,3 +135,4 @@ const (
 	// PulseEffectDuration is pulse visual effect duration
 	PulseEffectDuration = 250 * time.Millisecond
 )
+

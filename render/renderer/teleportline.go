@@ -1,4 +1,3 @@
-// FILE: render/renderer/teleportline.go
 package renderer
 
 import (
@@ -193,3 +192,4 @@ func (r *TeleportLineRenderer) calcIntensity(progress, t, segStart, segEnd float
 		return 0.3 + 0.7*posInSeg
 	}
 }
+

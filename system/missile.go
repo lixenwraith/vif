@@ -12,7 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// MissileSystem manages cluster missile lifecycle
+// MissileSystem manages missile lifecycle
 type MissileSystem struct {
 	world   *engine.World
 	enabled bool
@@ -59,7 +59,7 @@ func (s *MissileSystem) HandleEvent(ev event.GameEvent) {
 	}
 	if ev.Type == event.EventMissileSpawnRequest {
 		if p, ok := ev.Payload.(*event.MissileSpawnRequestPayload); ok {
-			s.spawnClusterParent(p)
+			s.handleSpawnRequest(p)
 		}
 	}
 }
@@ -75,11 +75,6 @@ func (s *MissileSystem) Update() {
 	missileEntities := s.world.Components.Missile.GetAllEntities()
 
 	var toDestroy []core.Entity
-	type splitRequest struct {
-		m component.MissileComponent
-		k component.KineticComponent
-	}
-	var pendingSplits []splitRequest
 
 	for _, missileEntity := range missileEntities {
 		missileComp, ok := s.world.Components.Missile.GetComponent(missileEntity)
@@ -93,39 +88,15 @@ func (s *MissileSystem) Update() {
 
 		missileComp.Lifetime += dt
 
-		switch missileComp.Type {
-		case component.MissileTypeClusterParent:
-			shouldSplit, hitEnemy, hitWall := s.updateParent(&missileComp, &kineticComp, dtFixed)
-
-			if hitWall || hitEnemy {
-				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-					X:      vmath.ToInt(kineticComp.PreciseX),
-					Y:      vmath.ToInt(kineticComp.PreciseY),
-					Radius: parameter.MissileExplosionRadius,
-					Type:   event.ExplosionTypeMissile,
-				})
-				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
-				toDestroy = append(toDestroy, missileEntity)
-				continue
-			}
-
-			if shouldSplit {
-				pendingSplits = append(pendingSplits, splitRequest{missileComp, kineticComp})
-				toDestroy = append(toDestroy, missileEntity)
-				continue
-			}
-
-		case component.MissileTypeClusterChild:
-			if s.updateSeeker(&missileComp, &kineticComp, dtFixed) {
-				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-					X:      vmath.ToInt(kineticComp.PreciseX),
-					Y:      vmath.ToInt(kineticComp.PreciseY),
-					Radius: parameter.MissileExplosionRadius,
-					Type:   event.ExplosionTypeMissile,
-				})
-				toDestroy = append(toDestroy, missileEntity)
-				continue
-			}
+		if s.updateMissile(&missileComp, &kineticComp, dtFixed) {
+			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+				X:      vmath.ToInt(kineticComp.PreciseX),
+				Y:      vmath.ToInt(kineticComp.PreciseY),
+				Radius: parameter.MissileExplosionRadius,
+				Type:   event.ExplosionTypeMissile,
+			})
+			toDestroy = append(toDestroy, missileEntity)
+			continue
 		}
 
 		gridX := vmath.ToInt(kineticComp.PreciseX)
@@ -153,39 +124,12 @@ func (s *MissileSystem) Update() {
 		s.world.Components.Kinetic.SetComponent(missileEntity, kineticComp)
 	}
 
-	for _, req := range pendingSplits {
-		s.performSplit(&req.m, &req.k)
-	}
-
 	for _, e := range toDestroy {
 		s.world.DestroyEntity(e)
 	}
 }
 
-func (s *MissileSystem) updateParent(m *component.MissileComponent, k *component.KineticComponent, dt int64) (split bool, hitEnemy bool, hitWall bool) {
-	prevX, prevY := k.PreciseX, k.PreciseY
-
-	// Linear movement toward destination
-	k.PreciseX += vmath.Mul(k.VelX, dt)
-	k.PreciseY += vmath.Mul(k.VelY, dt)
-
-	// Path traversal for wall and enemy collision
-	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY)
-	if hitType == impactWall {
-		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
-		return false, false, true
-	}
-	if hitType == impactEnemy {
-		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
-		return false, true, false
-	}
-
-	// Split check: Time based
-	shouldSplit := m.Lifetime >= parameter.MissileClusterSplitDelay
-	return shouldSplit, false, false
-}
-
-func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
+func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
 	// Lifetime timeout for orphaned seekers
 	if m.Lifetime > parameter.MissileSeekerMaxLifetime {
 		return true
@@ -197,7 +141,7 @@ func (s *MissileSystem) updateSeeker(m *component.MissileComponent, k *component
 	targetX, targetY, hasTarget := s.resolveTarget(m, k.PreciseX, k.PreciseY)
 
 	if !hasTarget {
-		// Ballistic drift
+		// Ballistic drift if target is lost
 		k.PreciseX += vmath.Mul(k.VelX, dt)
 		k.PreciseY += vmath.Mul(k.VelY, dt)
 	} else {
@@ -329,89 +273,47 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 
 // --- Spawning ---
 
-func (s *MissileSystem) spawnClusterParent(p *event.MissileSpawnRequestPayload) {
-	// Calculate centroid of targets
-	sumX, sumY, count := 0, 0, 0
-	for _, t := range p.Targets {
-		if pos, ok := s.world.Positions.GetPosition(t); ok {
-			sumX += pos.X
-			sumY += pos.Y
-			count++
-		}
-	}
-
-	destX, destY := p.TargetX, p.TargetY
-	if count > 0 {
-		destX = sumX / count
-		destY = sumY / count
-	}
-
-	startX := vmath.FromInt(p.OriginX) + vmath.CellCenter
-	startY := vmath.FromInt(p.OriginY) + vmath.CellCenter
-	targetX := vmath.FromInt(destX) + vmath.CellCenter
-	targetY := vmath.FromInt(destY) + vmath.CellCenter
-
-	dirX, dirY := vmath.Normalize2D(targetX-startX, targetY-startY)
-
-	// Calculate original distance squared for split calculation
-	originalDistSq := vmath.MagnitudeSq(targetX-startX, targetY-startY)
-
-	e := s.world.CreateEntity()
-
-	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
-		Type:           component.MissileTypeClusterParent,
-		Phase:          component.MissilePhaseFlying,
-		Owner:          p.OwnerEntity,
-		Origin:         p.OriginEntity,
-		ChildCount:     p.ChildCount,
-		Targets:        p.Targets,
-		HitEntities:    p.HitEntities,
-		OriginalDistSq: originalDistSq,
-	})
-
-	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{
-		Kinetic: core.Kinetic{
-			PreciseX: startX,
-			PreciseY: startY,
-			VelX:     vmath.Mul(dirX, parameter.MissileClusterLaunchSpeed),
-			VelY:     vmath.Mul(dirY, parameter.MissileClusterLaunchSpeed),
-			AccelX:   targetX, // Destination stored here
-			AccelY:   targetY,
-		},
-	})
-
-	s.world.Positions.SetPosition(e, component.PositionComponent{X: p.OriginX, Y: p.OriginY})
-}
-
-func (s *MissileSystem) performSplit(m *component.MissileComponent, k *component.KineticComponent) {
-	if m.ChildCount <= 0 {
+func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) {
+	if p.Count <= 0 {
 		return
 	}
 
-	originX, originY := k.PreciseX, k.PreciseY
+	// Calculate centroid of targets to aim the center of the spread arc
+	sumX, sumY, validCount := int64(0), int64(0), 0
+	for _, t := range p.Targets {
+		if pos, ok := s.world.Positions.GetPosition(t); ok {
+			sumX += vmath.FromInt(pos.X) + vmath.CellCenter
+			sumY += vmath.FromInt(pos.Y) + vmath.CellCenter
+			validCount++
+		}
+	}
 
-	// Explosion at split point
-	s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-		X:      vmath.ToInt(originX),
-		Y:      vmath.ToInt(originY),
-		Radius: parameter.MissileExplosionRadius,
-	})
+	originX := vmath.FromInt(p.OriginX) + vmath.CellCenter
+	originY := vmath.FromInt(p.OriginY) + vmath.CellCenter
+
+	baseDirX, baseDirY := int64(0), -vmath.Scale // Default UP
+	if validCount > 0 {
+		centroidX := sumX / int64(validCount)
+		centroidY := sumY / int64(validCount)
+		dirX, dirY := vmath.Normalize2D(centroidX-originX, centroidY-originY)
+		if dirX != 0 || dirY != 0 {
+			baseDirX, baseDirY = dirX, dirY
+		}
+	}
 
 	// Calculate spread arc
 	spread := parameter.MissileSeekerSpreadAngle
 	step := int64(0)
-	if m.ChildCount > 1 {
-		step = spread / int64(m.ChildCount-1)
+	if p.Count > 1 {
+		step = spread / int64(p.Count-1)
 	}
 	startAngle := -spread / 2
 
-	baseDirX, baseDirY := vmath.Normalize2D(k.VelX, k.VelY)
-
-	for i := 0; i < m.ChildCount; i++ {
+	for i := 0; i < p.Count; i++ {
 		angle := startAngle + step*int64(i)
 		dirX, dirY := vmath.RotateVector(baseDirX, baseDirY, angle)
 
-		// Stagger initial speed slightly
+		// Stagger initial speed slightly for visual spread
 		speedFactor := vmath.Scale - vmath.FromFloat(parameter.MissileSeekerStaggerFactor*float64(i))
 		speed := vmath.Mul(parameter.MissileSeekerMaxSpeed, speedFactor)
 
@@ -419,21 +321,19 @@ func (s *MissileSystem) performSplit(m *component.MissileComponent, k *component
 		vy := vmath.Mul(dirY, speed)
 
 		var target, hit core.Entity
-		if len(m.Targets) > 0 {
-			target = m.Targets[i%len(m.Targets)]
-			hit = m.HitEntities[i%len(m.HitEntities)]
+		if len(p.Targets) > 0 {
+			target = p.Targets[i%len(p.Targets)]
+			hit = p.HitEntities[i%len(p.HitEntities)]
 		}
 
-		s.spawnChild(m.Owner, m.Origin, originX, originY, vx, vy, target, hit)
+		s.spawnMissile(p.OwnerEntity, p.OriginEntity, originX, originY, vx, vy, target, hit)
 	}
 }
 
-func (s *MissileSystem) spawnChild(owner, origin core.Entity, x, y, vx, vy int64, target, hit core.Entity) {
+func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy int64, target, hit core.Entity) {
 	e := s.world.CreateEntity()
 
 	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
-		Type:         component.MissileTypeClusterChild,
-		Phase:        component.MissilePhaseSeeking,
 		Owner:        owner,
 		Origin:       origin,
 		TargetEntity: target,

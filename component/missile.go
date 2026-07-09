@@ -1,27 +1,9 @@
-// FILE: component/missile.go
 package component
 
 import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
-)
-
-// MissilePhase represents lifecycle state
-type MissilePhase uint8
-
-const (
-	MissilePhaseFlying   MissilePhase = iota // Parent ascending
-	MissilePhaseSeeking                      // Child homing toward target
-	MissilePhaseImpacted                     // Terminal, pending cleanup
-)
-
-// MissileType distinguishes parent from children
-type MissileType uint8
-
-const (
-	MissileTypeClusterParent MissileType = iota
-	MissileTypeClusterChild
 )
 
 // TrailCapacity is ring buffer size for trail particles
@@ -35,8 +17,6 @@ type MissileTrailPoint struct {
 
 // MissileComponent holds missile entity state (pure data)
 type MissileComponent struct {
-	Type   MissileType
-	Phase  MissilePhase
 	Owner  core.Entity // Cursor that fired
 	Origin core.Entity // Orb entity (visual origin)
 
@@ -47,12 +27,6 @@ type MissileComponent struct {
 	// Timing
 	Lifetime      time.Duration // Time since spawn
 	LastTrailEmit time.Duration // Lifetime at last trail emission
-
-	// Parent-specific
-	ChildCount     int           // Number of children to spawn
-	Targets        []core.Entity // Pre-assigned targets for children
-	HitEntities    []core.Entity // Corresponding hit entities
-	OriginalDistSq int64         // Squared distance to target at spawn (for split calculation)
 
 	// Trail ring buffer
 	Trail     [TrailCapacity]MissileTrailPoint

@@ -10,7 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// MissileRenderer draws cluster missiles and their trails using traversal for gaps
+// MissileRenderer draws missiles and their trails using traversal for gaps
 type MissileRenderer struct {
 	gameCtx       *engine.GameContext
 	renderMissile missileRenderFunc
@@ -64,11 +64,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 
-	// Determine palette based on missile type
 	startCol, endCol := visual.RgbMissileChildTrailStart, visual.RgbMissileChildTrailEnd
-	if missile.Type == component.MissileTypeClusterParent {
-		startCol, endCol = visual.RgbMissileParentTrailStart, visual.RgbMissileParentTrailEnd
-	}
 
 	prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 
@@ -122,17 +118,8 @@ func (r *MissileRenderer) renderBody(
 		return
 	}
 
-	var char rune
 	var color terminal.RGB
-
-	switch missile.Type {
-	case component.MissileTypeClusterParent:
-		char = visual.MissileParentChar
-		color = visual.RgbMissileParentBody
-	case component.MissileTypeClusterChild:
-		char = r.directionChar(kinetic.VelX, kinetic.VelY)
-		color = visual.RgbMissileChildBody
-	}
+	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
 	if trueColor {
 		buf.Set(screenX, screenY, char, color, visual.RgbBackground,
@@ -234,17 +221,7 @@ func (r *MissileRenderer) renderMissile256(
 		return
 	}
 
-	var char rune
-	var paletteIdx uint8
+	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
-	switch missile.Type {
-	case component.MissileTypeClusterParent:
-		char = visual.MissileParentChar
-		paletteIdx = visual.Missile256Body
-	case component.MissileTypeClusterChild:
-		char = r.directionChar(kinetic.VelX, kinetic.VelY)
-		paletteIdx = visual.Missile256Seeker
-	}
-
-	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: paletteIdx}, terminal.AttrFg256|terminal.AttrBold)
+	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Seeker}, terminal.AttrFg256|terminal.AttrBold)
 }

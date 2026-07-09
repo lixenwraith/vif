@@ -633,48 +633,13 @@ func (s *WeaponSystem) fireAllWeapons() {
 				hits[i] = a.Hit
 			}
 
-			// 4. Determine Target Direction (Most Open Space)
-			// Scan 8 directions to find the path with longest free distance
-			// This prevents immediate wall collisions in tight spaces
-			directions := [8][2]int{
-				{0, -1}, {1, -1}, {1, 0}, {1, 1},
-				{0, 1}, {-1, 1}, {-1, 0}, {-1, -1},
-			}
-
-			bestDirX, bestDirY := 0, 0
-			maxFreeDistSq := int64(-1)
-			scanDist := parameter.MissileClusterScanDistance
-
-			for _, dir := range directions {
-				checkX := originX + dir[0]*scanDist
-				checkY := originY + dir[1]*scanDist
-
-				endX, endY, _ := s.world.Positions.FindLastFreeOnRay(originX, originY, checkX, checkY, component.WallBlockKinetic)
-
-				dx := vmath.FromInt(endX - originX)
-				dy := vmath.FromInt(endY - originY)
-				distSq := vmath.MagnitudeSq(dx, dy)
-
-				if distSq > maxFreeDistSq {
-					maxFreeDistSq = distSq
-					bestDirX = dir[0]
-					bestDirY = dir[1]
-				}
-			}
-
-			// Set target point far in the open direction to guide velocity
-			targetX := originX + bestDirX*scanDist
-			targetY := originY + bestDirY*scanDist
-
-			// 5. Fire the request
+			// 4. Fire the request directly (Parent scan removed)
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
 				OwnerEntity:  cursorEntity,
 				OriginEntity: launcherOrbEntity,
 				OriginX:      originX,
 				OriginY:      originY,
-				TargetX:      targetX,
-				TargetY:      targetY,
-				ChildCount:   shots,
+				Count:        shots,
 				Targets:      targets,
 				HitEntities:  hits,
 			})

@@ -71,22 +71,7 @@ const (
 	ExplosionGradientMidpointFloat = 0.5
 )
 
-// Cluster Missile - Parent Phase
-const (
-	// MissileClusterLaunchSpeedFloat is parent travel speed (cells/sec)
-	MissileClusterLaunchSpeedFloat = 10.0
-
-	// MissileClusterMinDistanceFloat is minimum travel before split allowed (cells)
-	MissileClusterMinDistanceFloat = 8.0
-
-	// MissileClusterSplitDelay is the fixed duration before automatic split
-	MissileClusterSplitDelay = 500 * time.Millisecond
-
-	// MissileClusterScanDistance is the distance cluster missile checks to find open space for its flight direction, to avoid obstacles and premature impact
-	MissileClusterScanDistance = 20
-)
-
-// Cluster Missile - Child/Seeker Phase
+// Missile Phase
 const (
 	// MissileSeekerMaxSpeedFloat is base homing velocity (cells/sec)
 	MissileSeekerMaxSpeedFloat = 180.0
@@ -110,7 +95,7 @@ const (
 	MissileSeekerMaxLifetime = 3 * time.Second
 )
 
-// Missile Visuals - Parent and Child
+// Missile Visuals
 const (
 	// MissileTrailMaxAge is duration before trail point fades completely
 	MissileTrailMaxAge = 300 * time.Millisecond
