@@ -124,13 +124,13 @@ func (s *WeaponSystem) Update() {
 	}
 
 	// Update weapon cooldowns
-	for weapon, active := range weaponComp.Active {
-		if !active {
+	for wt := range weaponComp.Charges {
+		if weaponComp.Charges[wt] <= 0 {
 			continue
 		}
-		weaponComp.Cooldown[weapon] -= dt
-		if weaponComp.Cooldown[weapon] < 0 {
-			weaponComp.Cooldown[weapon] = 0
+		weaponComp.Cooldown[wt] -= dt
+		if weaponComp.Cooldown[wt] < 0 {
+			weaponComp.Cooldown[wt] = 0
 		}
 	}
 
@@ -160,33 +160,21 @@ func (s *WeaponSystem) addWeapon(weapon component.WeaponType) {
 		return
 	}
 
-	// Initialize maps if nil
-	if weaponComp.Active == nil {
-		weaponComp.Active = make(map[component.WeaponType]bool)
-	}
-	if weaponComp.Cooldown == nil {
-		weaponComp.Cooldown = make(map[component.WeaponType]time.Duration)
-	}
-	if weaponComp.Orbs == nil {
-		weaponComp.Orbs = make(map[component.WeaponType]core.Entity)
+	firstAcquire := weaponComp.Charges[weapon] == 0
+	if maxCharge := parameter.WeaponMaxCharges[weapon]; weaponComp.Charges[weapon] < maxCharge {
+		weaponComp.Charges[weapon]++
 	}
 
-	// Skip if already active
-	if weaponComp.Active[weapon] {
-		return
-	}
-
-	weaponComp.Active[weapon] = true
-	weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately
-	switch weapon {
-	case component.WeaponRod:
-		s.statRod.Store(true)
-	case component.WeaponLauncher:
-		s.statLauncher.Store(true)
-	case component.WeaponDisruptor:
-		s.statDisruptor.Store(true)
-	default:
-		return
+	if firstAcquire {
+		weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately on first pickup
+		switch weapon {
+		case component.WeaponRod:
+			s.statRod.Store(true)
+		case component.WeaponLauncher:
+			s.statLauncher.Store(true)
+		case component.WeaponDisruptor:
+			s.statDisruptor.Store(true)
+		}
 	}
 
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
@@ -198,9 +186,10 @@ func (s *WeaponSystem) removeAllWeapons() {
 	if !ok {
 		return
 	}
-	clear(weaponComp.Active)
-	clear(weaponComp.Cooldown)
-	clear(weaponComp.Orbs)
+
+	weaponComp.Charges = [component.WeaponCount]int{}
+	weaponComp.Cooldown = [component.WeaponCount]time.Duration{}
+	weaponComp.Orbs = [component.WeaponCount]core.Entity{}
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
 	s.destroyAllOrbs()
@@ -228,20 +217,16 @@ func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 		return
 	}
 
-	if weaponComp.Orbs == nil {
-		weaponComp.Orbs = make(map[component.WeaponType]core.Entity)
-	}
-
 	changed := false
-	for weapon, active := range weaponComp.Active {
-		if !active {
+	for wt := range weaponComp.Charges {
+		if weaponComp.Charges[wt] <= 0 {
 			continue
 		}
 
-		orbEntity := weaponComp.Orbs[weapon]
+		orbEntity := weaponComp.Orbs[wt]
 		if orbEntity == 0 || !s.world.Components.Orb.HasEntity(orbEntity) {
-			newOrb := s.spawnOrbEntity(cursorEntity, weapon)
-			weaponComp.Orbs[weapon] = newOrb
+			newOrb := s.spawnOrbEntity(cursorEntity, component.WeaponType(wt))
+			weaponComp.Orbs[wt] = newOrb
 			changed = true
 		}
 	}
@@ -343,7 +328,7 @@ func (s *WeaponSystem) updateOrbs() {
 			continue
 		}
 		if orb, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
-			entries = append(entries, orbEntry{entity: orbEntity, comp: orb, weapon: weapon})
+			entries = append(entries, orbEntry{entity: orbEntity, comp: orb, weapon: component.WeaponType(weapon)})
 		}
 	}
 
@@ -491,7 +476,7 @@ func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
 	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
 	if ok {
 		if weaponComp, ok := s.world.Components.Weapon.GetComponent(orbComp.OwnerEntity); ok {
-			if weaponComp.Orbs != nil && weaponComp.Orbs[orbComp.WeaponType] == orbEntity {
+			if weaponComp.Orbs[orbComp.WeaponType] == orbEntity {
 				weaponComp.Orbs[orbComp.WeaponType] = 0
 				s.world.Components.Weapon.SetComponent(orbComp.OwnerEntity, weaponComp)
 			}
@@ -550,14 +535,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 	if !ok {
 		return
 	}
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-	shots := heatComp.Current / 10
-	if shots == 0 {
-		return
-	}
+
 	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
 	if !ok {
 		return
@@ -566,24 +544,48 @@ func (s *WeaponSystem) fireAllWeapons() {
 	// Resolve targets once for all weapons
 	fromX, fromY := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
 
-	assignments := FindNearestTargets(s.world, fromX, fromY, shots, cursorEntity)
+	// Single shared fetch for Rod+Launcher, sized to whichever needs more targets this tick
+	// collapses two Combat/Member store scans+sorts into one per fire cycle
+	rodCharges := weaponComp.Charges[component.WeaponRod]
+	rodReady := rodCharges > 0 && weaponComp.Cooldown[component.WeaponRod] <= 0
 
-	// GUARD: If no targets are visible, don't waste cooldowns
-	if len(assignments) == 0 {
-		return
+	launcherCharges := weaponComp.Charges[component.WeaponLauncher]
+	launcherReady := launcherCharges > 0 && weaponComp.Cooldown[component.WeaponLauncher] <= 0
+
+	var sharedAssignments []TargetAssignment
+	if rodReady || launcherReady {
+		maxNeeded := 0
+		if rodReady {
+			maxNeeded = rodCharges
+		}
+		if launcherReady && launcherCharges > maxNeeded {
+			maxNeeded = launcherCharges
+		}
+		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, cursorEntity)
 	}
 
-	for weapon, active := range weaponComp.Active {
-		if !active || weaponComp.Cooldown[weapon] > 0 {
+	for wt := range weaponComp.Charges {
+		charges := weaponComp.Charges[wt]
+		if charges <= 0 || weaponComp.Cooldown[wt] > 0 {
 			continue
 		}
 
+		weapon := component.WeaponType(wt)
+
 		switch weapon {
 		case component.WeaponRod:
-			weaponComp.Cooldown[weapon] = parameter.WeaponCooldownRod
+			// Slice shared result instead of independent fetch
+			assignments := sharedAssignments
+			if len(assignments) > charges {
+				assignments = assignments[:charges]
+			}
+			if len(assignments) == 0 {
+				continue
+			}
 
-			// Get rod orb entity and position for lightning origin
-			rodOrbEntity := weaponComp.Orbs[component.WeaponRod]
+			weaponComp.Cooldown[wt] = parameter.WeaponCooldownRod
+
+			rodOrbEntity := weaponComp.Orbs[wt]
 			if rodOrbEntity != 0 {
 				s.triggerOrbFlash(rodOrbEntity)
 			}
@@ -607,16 +609,17 @@ func (s *WeaponSystem) fireAllWeapons() {
 			}
 
 		case component.WeaponLauncher:
-			// 1. Do not fire and waste cooldown if no target
+			assignments := sharedAssignments
+			if len(assignments) > charges {
+				assignments = assignments[:charges]
+			}
 			if len(assignments) == 0 {
 				continue
 			}
 
-			// 2. Consume cooldown and handle orb-specific origin
-			weaponComp.Cooldown[weapon] = parameter.WeaponCooldownLauncher
-			launcherOrbEntity := weaponComp.Orbs[component.WeaponLauncher]
+			weaponComp.Cooldown[wt] = parameter.WeaponCooldownLauncher
+			launcherOrbEntity := weaponComp.Orbs[wt]
 
-			// Origin of fire at launcher orb with cursor fallback
 			originX, originY := cursorPos.X, cursorPos.Y
 			if launcherOrbEntity != 0 {
 				s.triggerOrbFlash(launcherOrbEntity)
@@ -625,7 +628,6 @@ func (s *WeaponSystem) fireAllWeapons() {
 				}
 			}
 
-			// 3. Prepare target metadata
 			targets := make([]core.Entity, len(assignments))
 			hits := make([]core.Entity, len(assignments))
 			for i, a := range assignments {
@@ -633,13 +635,12 @@ func (s *WeaponSystem) fireAllWeapons() {
 				hits[i] = a.Hit
 			}
 
-			// 4. Fire the request directly (Parent scan removed)
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
 				OwnerEntity:  cursorEntity,
 				OriginEntity: launcherOrbEntity,
 				OriginX:      originX,
 				OriginY:      originY,
-				Count:        shots,
+				Count:        charges,
 				Targets:      targets,
 				HitEntities:  hits,
 			})
@@ -647,10 +648,9 @@ func (s *WeaponSystem) fireAllWeapons() {
 		case component.WeaponDisruptor:
 			s.fireDisruptorWeapon(cursorEntity, cursorPos, &weaponComp)
 		}
-
-		// Update the component with new cooldowns and potentially updated orb states
-		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 	}
+
+	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
 
 func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {

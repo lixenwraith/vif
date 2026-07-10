@@ -2,7 +2,6 @@ package engine
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -238,10 +237,7 @@ func (w *World) CreateCursorEntity() {
 	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
 
 	// 10. Set weapon component
-	w.Components.Weapon.SetComponent(cursorEntity, component.WeaponComponent{
-		Active:   make(map[component.WeaponType]bool),
-		Cooldown: make(map[component.WeaponType]time.Duration),
-	})
+	w.Components.Weapon.SetComponent(cursorEntity, component.WeaponComponent{})
 
 	// 11. Set combat component
 	w.Components.Combat.SetComponent(cursorEntity, component.CombatComponent{

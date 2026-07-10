@@ -420,7 +420,10 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 		if profile.Reward == nil || profile.Reward.Type != component.RewardWeapon {
 			return false
 		}
-		return weaponComp.Active[profile.Reward.WeaponType]
+
+		// Max-charge check, repeats drops until capped
+		wt := profile.Reward.WeaponType
+		return weaponComp.Charges[wt] >= parameter.WeaponMaxCharges[wt]
 	}
 
 	var results []DropResult
@@ -588,4 +591,3 @@ func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType
 	s.world.DestroyEntity(entity)
 	s.statCollects.Add(1)
 }
-

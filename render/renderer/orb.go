@@ -72,7 +72,8 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 				continue
 			}
 
-			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, &orbComp, coronaRotDirX, coronaRotDirY)
+			glyph := r.chargeGlyph(&orbComp)
+			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, &orbComp, glyph, coronaRotDirX, coronaRotDirY)
 		}
 		return
 	}
@@ -94,28 +95,43 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 			continue
 		}
 
-		r.renderOrb256(buf, screenX, screenY, &orbComp)
+		glyph := r.chargeGlyph(&orbComp)
+		r.renderOrb256(buf, screenX, screenY, &orbComp, glyph)
 	}
 }
 
+// chargeGlyph resolves the ASCII digit for stacked sub-max charges (1-9), or the base
+// bullseye at max charge (Disruptor's max is 1, so it always renders as bullseye)
+func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
+	weaponComp, ok := r.gameCtx.World.Components.Weapon.GetComponent(orb.OwnerEntity)
+	if !ok {
+		return visual.CircleBullsEye
+	}
+	charges := weaponComp.Charges[orb.WeaponType]
+	if charges <= 0 || charges >= parameter.WeaponMaxCharges[orb.WeaponType] {
+		return visual.CircleBullsEye
+	}
+	return rune('0' + charges)
+}
+
 // renderOrb256 draws simple colored character for 256-color mode
-func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY int, orb *component.OrbComponent) {
+func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY int, orb *component.OrbComponent, glyph rune) {
 	var color terminal.RGB
 	if orb.FlashRemaining > 0 {
 		color = visual.RgbOrbFlash
 	} else {
 		color = r.baseColor(orb.WeaponType)
 	}
-	buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, color, terminal.AttrNone)
+	buf.SetFgOnly(screenX, screenY, glyph, color, terminal.AttrNone)
 }
 
 // renderOrbTrueColor draws corona glow with optional flash burst
-func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, rotDirX, rotDirY int64) {
+func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, mapX, mapY int, orb *component.OrbComponent, glyph rune, rotDirX, rotDirY int64) {
 	baseColor := r.baseColor(orb.WeaponType)
 
 	if orb.FlashRemaining > 0 {
 		progress := orb.FlashRemaining.Seconds() / parameter.OrbFlashDuration.Seconds()
-		r.renderBurst(ctx, buf, mapX, mapY, baseColor, progress)
+		r.renderBurst(ctx, buf, mapX, mapY, baseColor, glyph, progress)
 		return
 	}
 
@@ -123,7 +139,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if visible {
-		buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, baseColor, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, glyph, baseColor, terminal.AttrNone)
 	}
 }
 
@@ -174,7 +190,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 }
 
 // renderBurst draws radial flash burst when orb fires
-func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor terminal.RGB, progress float64) {
+func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor terminal.RGB, glyph rune, progress float64) {
 	expandPhase := 1.0 - progress
 	burstAlpha := progress
 	burstColor := render.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
@@ -212,7 +228,7 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 			}
 
 			if dx == 0 && dy == 0 {
-				buf.SetFgOnly(screenX, screenY, visual.CircleBullsEye, burstColor, terminal.AttrNone)
+				buf.SetFgOnly(screenX, screenY, glyph, burstColor, terminal.AttrNone)
 			}
 
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, burstColor, render.BlendAdd, alpha, terminal.AttrNone)
@@ -247,4 +263,3 @@ func (r *OrbRenderer) coronaColor(wt component.WeaponType) terminal.RGB {
 		return visual.RgbOrbFlash
 	}
 }
-
