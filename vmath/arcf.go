@@ -126,3 +126,52 @@ func AngleDiffF(from, to float64) float64 {
 	}
 	return diff
 }
+
+// DistributeAnglesF calculates N evenly-spaced angles within arc segments [0, 2π)
+func DistributeAnglesF(segments []ArcSegmentF, count int) []float64 {
+	if count <= 0 || len(segments) == 0 {
+		return nil
+	}
+
+	totalArc := TotalArcLengthF(segments)
+	if totalArc <= 0 {
+		return make([]float64, count)
+	}
+
+	spacing := totalArc / float64(count)
+	startOffset := spacing / 2.0
+
+	angles := make([]float64, count)
+	for i := 0; i < count; i++ {
+		arcPos := math.Mod(startOffset+float64(i)*spacing, totalArc)
+		angles[i] = arcPositionToAngleF(segments, arcPos)
+	}
+	return angles
+}
+
+func arcPositionToAngleF(segments []ArcSegmentF, pos float64) float64 {
+	var cumulative float64
+	for _, seg := range segments {
+		if pos <= cumulative+seg.Length {
+			offset := pos - cumulative
+			return NormalizeAngleF(seg.StartAngle + offset)
+		}
+		cumulative += seg.Length
+	}
+	if len(segments) > 0 {
+		return segments[0].StartAngle
+	}
+	return 0.0
+}
+
+// AngleToEllipsePosF converts angle to precise position on ellipse in float64
+func AngleToEllipsePosF(angle, centerX, centerY, radiusX, radiusY float64) (float64, float64) {
+	return centerX + math.Cos(angle)*radiusX, centerY + math.Sin(angle)*radiusY
+}
+
+// AngleToGridPosF converts angle to grid coordinates on ellipse
+func AngleToGridPosF(angle float64, centerX, centerY int, radiusX, radiusY float64) (int, int) {
+	cx, cy := CenteredFromGridF(centerX, centerY)
+	px, py := AngleToEllipsePosF(angle, cx, cy, radiusX, radiusY)
+	return int(math.Floor(px)), int(math.Floor(py))
+}

@@ -34,3 +34,13 @@ func CircleDistSqF(dx, dy float64) float64 {
 func CircleContainsF(dx, dy, radiusSq float64) bool {
 	return CircleDistSqF(dx, dy) <= radiusSq
 }
+
+// ScaleToCircularF transforms Y coordinate to make ellipse checks circular (1:2 terminal aspect)
+func ScaleToCircularF(dy float64) float64 {
+	return dy * 2.0
+}
+
+// ScaleFromCircularF reverses circular normalization for display
+func ScaleFromCircularF(dy float64) float64 {
+	return dy * 0.5
+}

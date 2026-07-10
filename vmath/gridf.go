@@ -131,3 +131,8 @@ func CalculateCentroidF(coords []float64) (float64, float64) {
 
 	return sumX / count, sumY / count
 }
+
+// GridFromCenteredF converts centered float64 position to integer grid coordinates
+func GridFromCenteredF(px, py float64) (int, int) {
+	return int(math.Floor(px)), int(math.Floor(py))
+}

@@ -64,3 +64,13 @@ func ReflectF(velX, velY, normalX, normalY float64) (float64, float64) {
 func PerpendicularF(x, y float64) (float64, float64) {
 	return -y, x
 }
+
+// ReflectAxisXF returns velocity reflected off a vertical wall
+func ReflectAxisXF(velX, velY float64) (float64, float64) {
+	return -velX, velY
+}
+
+// ReflectAxisYF returns velocity reflected off a horizontal wall
+func ReflectAxisYF(velX, velY float64) (float64, float64) {
+	return velX, -velY
+}
