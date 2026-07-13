@@ -2,7 +2,7 @@ package event
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // DustSpawnEntry is a value type for batch dust spawning

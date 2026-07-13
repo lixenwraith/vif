@@ -4,7 +4,7 @@ import (
 	"math"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Frame holds per-cell visual data for one animation frame

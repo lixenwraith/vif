@@ -11,7 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/status"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // StatusBarRenderer draws the status bar at the bottom

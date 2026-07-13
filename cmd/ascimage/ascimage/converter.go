@@ -4,7 +4,7 @@ import (
 	"image"
 	"image/color"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // QuadrantChars maps 4-bit patterns to Unicode quadrant characters

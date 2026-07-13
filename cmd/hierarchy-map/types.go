@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
-	"github.com/lixenwraith/vi-fighter/terminal/tui"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/tui"
 )
 
 const HierarchyLinePrefix = "lixen" // yields "@lixen:" in comments

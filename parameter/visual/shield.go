@@ -6,7 +6,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 

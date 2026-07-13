@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // swarmCellRenderer callback forterminal.RGB animated ASCII composite rendering (256 vs TrueColor)

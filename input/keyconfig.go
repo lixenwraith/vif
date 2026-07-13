@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
-	"github.com/lixenwraith/vi-fighter/toml"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/toml"
 )
 
 // Rune aliases for keys that can't be bare single-char TOML keys

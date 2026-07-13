@@ -2,7 +2,7 @@ package visual
 
 import (
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Eye animation constraints

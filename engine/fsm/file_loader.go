@@ -7,7 +7,7 @@ import (
 	"path"
 	"path/filepath"
 
-	"github.com/lixenwraith/vi-fighter/toml"
+	"github.com/lixenwraith/toml"
 )
 
 // LoadConfigFromPath loads FSM config from an OS file path

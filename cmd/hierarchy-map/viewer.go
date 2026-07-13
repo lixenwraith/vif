@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
-	"github.com/lixenwraith/vi-fighter/terminal/tui"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/tui"
 )
 
 // ViewerLine represents a single line in the file viewer

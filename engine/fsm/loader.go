@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/toml"
+	"github.com/lixenwraith/toml"
 )
 
 // LoadConfig parses a TOML byte slice and populates the Machine

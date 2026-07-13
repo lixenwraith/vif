@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 func handleDiagInput(ev terminal.Event) {

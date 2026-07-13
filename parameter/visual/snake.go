@@ -1,7 +1,7 @@
 package visual
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Snake TrueColor palette

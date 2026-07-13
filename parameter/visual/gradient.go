@@ -1,7 +1,7 @@
 package visual
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Heat gradient segment thresholds (6 segments, roughly 1/6 each)

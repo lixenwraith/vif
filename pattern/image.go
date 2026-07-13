@@ -2,7 +2,7 @@ package pattern
 
 import (
 	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // ImageConfig controls image-to-pattern conversion

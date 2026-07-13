@@ -1,7 +1,7 @@
 package visual
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Heat256LUT contains xterm 256-palette indices for 10 heat segments

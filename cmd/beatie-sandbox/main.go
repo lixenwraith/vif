@@ -3,7 +3,7 @@ package main
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // EnemyTemplate holds the structural DNA of a specific text-based horror.

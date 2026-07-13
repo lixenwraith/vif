@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // WallBlockMask defines what entity types a wall blocks

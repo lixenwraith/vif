@@ -2,7 +2,7 @@ package visual
 
 import (
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // --- Drop Tables ---

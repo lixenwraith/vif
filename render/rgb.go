@@ -3,7 +3,7 @@ package render
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Lookup tables array access (no pointers) for speed

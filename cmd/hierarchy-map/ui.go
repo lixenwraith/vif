@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // HandleEvent processes a terminal event and returns quit/output flags

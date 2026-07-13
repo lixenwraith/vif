@@ -5,7 +5,7 @@ import (
 	"image"
 
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // ViewMode determines how the image is displayed

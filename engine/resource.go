@@ -11,7 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/navigation"
 	"github.com/lixenwraith/vi-fighter/status"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources

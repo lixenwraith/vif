@@ -5,7 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // SplashSlot identifies the visual purpose of a splash for uniqueness enforcement

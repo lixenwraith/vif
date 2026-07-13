@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // WriteANSI outputs converted image as ANSI escape sequences to file or stdout

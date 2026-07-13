@@ -1,7 +1,7 @@
 package input
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // Machine is the input state machine

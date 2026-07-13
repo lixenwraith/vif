@@ -3,7 +3,7 @@ package renderer
 import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 type wallCellRenderer func(buf *render.RenderBuffer, screenX, screenY int,

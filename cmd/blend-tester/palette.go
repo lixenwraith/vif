@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // PaletteEntry represents a named color from the game

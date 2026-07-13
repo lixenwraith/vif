@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 func handleBlendInput(ev terminal.Event) {

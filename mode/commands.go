@@ -11,7 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/toml"
+	"github.com/lixenwraith/toml"
 )
 
 // CommandResult represents the outcome of command execution

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 const aspectRatio = 2.1

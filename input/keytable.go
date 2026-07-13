@@ -1,6 +1,6 @@
 package input
 
-import "github.com/lixenwraith/vi-fighter/terminal"
+import "github.com/lixenwraith/terminal"
 
 // KeyBehavior classifies how a key is processed
 type KeyBehavior uint8

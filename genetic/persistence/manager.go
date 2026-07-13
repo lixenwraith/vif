@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/lixenwraith/vi-fighter/toml"
+	"github.com/lixenwraith/toml"
 )
 
 // Manager handles save/load for species populations

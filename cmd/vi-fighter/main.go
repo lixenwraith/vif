@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -24,7 +25,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/service"
 	"github.com/lixenwraith/vi-fighter/system"
-	"github.com/lixenwraith/vi-fighter/terminal"
 )
 
 // CLI flags

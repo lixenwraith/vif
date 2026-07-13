@@ -5,7 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/network"
 	"github.com/lixenwraith/vi-fighter/registry"
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // RegisterServices registers all service factories

@@ -1,7 +1,7 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/terminal"
+	"github.com/lixenwraith/terminal"
 )
 
 // SigilComponent provides visual representation for non-typeable moving entities
