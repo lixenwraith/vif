@@ -1,14 +1,20 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
+	"sort"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/manifest"
@@ -28,9 +34,11 @@ var (
 	flagAudioMute   = flag.Bool("am", false, "Start with audio muted")
 	flagAudioUnmute = flag.Bool("au", false, "Start with audio unmuted")
 	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
-	flagGameScript  = flag.String("g", "", "Game FSM script path (TOML)")
+	flagGameScript  = flag.String("g", "", "Game config: game.toml path or map directory")
 	flagGameDefault = flag.Bool("gd", false, "Force embedded default FSM script")
 	flagKeymapPath  = flag.String("k", "", "Keymap config file path (TOML)")
+	flagCheck       = flag.Bool("check", false, "Validate FSM config and exit")
+	flagSchema      = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 )
 
 func main() {
@@ -38,6 +46,14 @@ func main() {
 
 	// Parse CLI flags
 	flag.Parse()
+
+	// Tool modes exit before terminal/service init
+	if *flagCheck {
+		os.Exit(runConfigCheck())
+	}
+	if *flagSchema {
+		os.Exit(runSchemaExport())
+	}
 
 	// Resolve service args from flags
 	serviceArgs := buildServiceArgs()
@@ -130,20 +146,18 @@ func main() {
 	// Create input handler
 	inputMachine := input.NewMachine()
 
-	keymapPath := *flagKeymapPath
-	if keymapPath == "" {
-		keymapPath = parameter.DefaultKeymapPath
-	}
-	if data, err := os.ReadFile(keymapPath); err == nil {
-		override, err := input.LoadKeyConfig(data)
-		if err != nil {
-			panic(fmt.Sprintf("keymap config: %v", err))
+	keymapPath := resolveKeymapPath(*flagKeymapPath)
+	if keymapPath != "" {
+		if data, err := os.ReadFile(keymapPath); err == nil {
+			override, err := input.LoadKeyConfig(data)
+			if err != nil {
+				panic(fmt.Sprintf("keymap config: %v", err))
+			}
+			merged := input.MergeKeyTable(input.DefaultKeyTable(), override)
+			inputMachine.SetKeyTable(merged)
+		} else if *flagKeymapPath != "" {
+			panic(fmt.Sprintf("keymap load: %v", err))
 		}
-		merged := input.MergeKeyTable(input.DefaultKeyTable(), override)
-		inputMachine.SetKeyTable(merged)
-	} else if *flagKeymapPath != "" {
-		// Explicit path given but unreadable — fatal
-		panic(fmt.Sprintf("keymap load: %v", err))
 	}
 	// Default path missing is silent (use defaults)
 
@@ -170,12 +184,23 @@ func main() {
 	event.InitRegistry()
 
 	// Load FSM Config: CLI path > external config > embedded fallback (unless forced)
-	if *flagGameDefault {
-		if err := clockScheduler.LoadFSM(asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+	if *flagGameDefault && *flagGameScript != "" {
+		panic("flags -g and -gd are mutually exclusive")
+	}
+	gamePath := ""
+	if !*flagGameDefault {
+		var err error
+		if gamePath, err = resolveGameConfigPath(*flagGameScript); err != nil {
+			panic(fmt.Sprintf("game config: %v", err))
+		}
+	}
+	if gamePath == "" {
+		// Embedded fallback from embed.FS
+		if err := clockScheduler.LoadFSMFromFS(asset.DefaultFSMConfig, asset.DefaultFSMEntry, manifest.RegisterFSMComponents); err != nil {
 			panic(fmt.Sprintf("failed to load FSM: %v", err))
 		}
 	} else {
-		if err := clockScheduler.LoadFSMAuto(*flagGameScript, asset.DefaultGameplayFSMConfig, manifest.RegisterFSMComponents); err != nil {
+		if err := clockScheduler.LoadFSMFromPath(gamePath, manifest.RegisterFSMComponents); err != nil {
 			panic(fmt.Sprintf("failed to load FSM: %v", err))
 		}
 	}
@@ -365,4 +390,149 @@ func buildServiceArgs() map[string][]any {
 	// No flag = default discovery (empty args)
 
 	return args
+}
+
+// resolveGameConfigPath returns the entry config path; "" selects the embedded fallback
+func resolveGameConfigPath(cliArg string) (string, error) {
+	if cliArg != "" {
+		info, err := os.Stat(cliArg)
+		if err != nil {
+			return "", err
+		}
+		if info.IsDir() {
+			p := filepath.Join(cliArg, parameter.GameConfigFile)
+			if !fileExists(p) {
+				return "", fmt.Errorf("%s not found in %s", parameter.GameConfigFile, cliArg)
+			}
+			return p, nil
+		}
+		return cliArg, nil // explicit file: entry filename override
+	}
+
+	candidates := []string{
+		parameter.GameConfigFile, // ./game.toml
+		filepath.Join(parameter.LocalConfigDir, parameter.GameConfigFile), // ./config/game.toml
+	}
+	if base, err := os.UserConfigDir(); err == nil {
+		candidates = append(candidates, filepath.Join(base, parameter.AppConfigDirName, parameter.GameConfigFile))
+	}
+	for _, p := range candidates {
+		if fileExists(p) {
+			return p, nil
+		}
+	}
+	return "", nil
+}
+
+// resolveKeymapPath: explicit CLI > ./keymap.toml > user config dir; "" = embedded defaults
+func resolveKeymapPath(cliArg string) string {
+	if cliArg != "" {
+		return cliArg
+	}
+	if fileExists(parameter.KeymapConfigFile) {
+		return parameter.KeymapConfigFile
+	}
+	if base, err := os.UserConfigDir(); err == nil {
+		p := filepath.Join(base, parameter.AppConfigDirName, parameter.KeymapConfigFile)
+		if fileExists(p) {
+			return p
+		}
+	}
+	return ""
+}
+
+func fileExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && !info.IsDir()
+}
+
+// runConfigCheck validates the resolved FSM config without starting the game
+func runConfigCheck() int {
+	event.InitRegistry()
+	m := fsm.NewMachine[*engine.World]()
+	manifest.RegisterFSMComponents(m)
+
+	var err error
+	switch {
+	case *flagGameDefault:
+		err = fsm.LoadConfigFromFS(m, asset.DefaultFSMConfig, asset.DefaultFSMEntry)
+	default:
+		var gamePath string
+		if gamePath, err = resolveGameConfigPath(*flagGameScript); err == nil {
+			if gamePath == "" {
+				err = fsm.LoadConfigFromFS(m, asset.DefaultFSMConfig, asset.DefaultFSMEntry)
+			} else {
+				fmt.Println("checking:", gamePath)
+				err = fsm.LoadConfigFromPath(m, gamePath)
+			}
+		}
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	fmt.Println("config ok")
+	return 0
+}
+
+// runSchemaExport prints machine schema as JSON for the map editor (F7a)
+func runSchemaExport() int {
+	event.InitRegistry()
+	m := fsm.NewMachine[*engine.World]()
+	manifest.RegisterFSMComponents(m)
+
+	type field struct {
+		Name   string `json:"name"`    // toml tag (authoring name)
+		GoName string `json:"go_name"` // reflection fallback name
+		Type   string `json:"type"`
+	}
+	type eventSchema struct {
+		Name   string  `json:"name"`
+		Fields []field `json:"fields,omitempty"`
+	}
+	schema := struct {
+		SchemaVersion    int           `json:"schema_version"`
+		Events           []eventSchema `json:"events"`
+		Guards           []string      `json:"guards"`
+		Actions          []string      `json:"actions"`
+		Ops              []string      `json:"ops"`
+		ConfigIntFields  []string      `json:"config_int_fields"`
+		ConfigBoolFields []string      `json:"config_bool_fields"`
+	}{
+		SchemaVersion:    1,
+		Guards:           m.RegisteredGuards(),
+		Actions:          m.RegisteredActions(),
+		Ops:              []string{"eq", "neq", "gt", "gte", "lt", "lte"},
+		ConfigIntFields:  []string{"map_width", "map_height", "viewport_width", "viewport_height", "camera_x", "camera_y", "color_mode"},
+		ConfigBoolFields: []string{"crop_on_resize"},
+	}
+
+	event.RangeEvents(func(name string, et event.EventType, payload any) {
+		es := eventSchema{Name: name}
+		if payload != nil {
+			t := reflect.TypeOf(payload)
+			if t.Kind() == reflect.Ptr {
+				t = t.Elem()
+			}
+			for i := 0; i < t.NumField(); i++ {
+				f := t.Field(i)
+				tag := f.Tag.Get("toml")
+				n := f.Name
+				if tag != "" && tag != "-" {
+					if idx := strings.Index(tag, ","); idx >= 0 {
+						tag = tag[:idx]
+					}
+					n = tag
+				}
+				es.Fields = append(es.Fields, field{Name: n, GoName: f.Name, Type: f.Type.String()})
+			}
+		}
+		schema.Events = append(schema.Events, es)
+	})
+	sort.Slice(schema.Events, func(i, j int) bool { return schema.Events[i].Name < schema.Events[j].Name })
+
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(schema)
+	return 0
 }

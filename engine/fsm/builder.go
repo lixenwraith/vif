@@ -40,9 +40,11 @@ func (m *Machine[T]) CompilePaths() error {
 				break
 			}
 			var ok bool
-			curr, ok = m.nodes[curr.ParentID]
+			// Capture parent ID before lookup; nil curr deref on missing parent
+			parentID := curr.ParentID
+			curr, ok = m.nodes[parentID]
 			if !ok {
-				return fmt.Errorf("node %d references missing parent %d", id, curr.ParentID)
+				return fmt.Errorf("node %d references missing parent %d", id, parentID)
 			}
 		}
 
@@ -55,3 +57,4 @@ func (m *Machine[T]) CompilePaths() error {
 	}
 	return nil
 }
+

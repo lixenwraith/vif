@@ -1,15 +1,32 @@
 # FSM Configuration Reference
 
-## File Structure
+## Configuration Resolution
+
+Entry config search order:
+
+1. `-g <path>` — file, or directory containing `game.toml`
+2. `./game.toml`
+3. `./config/game.toml`
+4. `$XDG_CONFIG_HOME/vi-fighter/game.toml` (`~/.config/vi-fighter/` default)
+5. Embedded default (`asset/default/`; forced with `-gd`)
+
+Region `file` references resolve relative to the entry config's directory and
+cannot escape it (`..` is rejected). Flat layout:
 
 ```
-config/
-├── game.toml           # Root config (required)
-└── regions/            # External region files
-    ├── main.toml
-    ├── quasar.toml
-    └── maze.toml
+~/.config/vi-fighter/
+├── game.toml
+├── main.toml
+├── quasar.toml
+├── storm.toml
+├── monitor.toml
+├── tower.toml
+└── keymap.toml
 ```
+
+`vi-fighter -check [-g <path>]` validates the resolved config and exits;
+all state-level errors are reported in one pass. `vi-fighter -schema` prints
+the machine schema (events, guards, actions) as JSON.
 
 ---
 
@@ -17,13 +34,14 @@ config/
 
 ```toml
 [systems]
-disabled = ["system_name", ...]     # Disabled at FSM init
+disabled_systems = ["system_name", ...] # Disabled at FSM init
 
 [regions.region_name]
 initial = "StateName"               # Initial state (omit for dynamic regions)
-file = "regions/file.toml"          # External state definitions
-enabled_systems = ["system_name"]   # Enable on region spawn
-disabled_systems = ["system_name"]  # Disable on region spawn
+file = "file.toml"                  # External state definitions
+background = true                   # Exclude region from telemetry overlay
+enabled_systems = ["system_name"]   # Enable on region spawn/resume
+disabled_systems = ["system_name"]  # Disable on region spawn/resume
 ```
 
 ---
@@ -45,12 +63,11 @@ transitions = [...]                 # Transition rules
 
 ```toml
 { trigger = "EventName", target = "TargetState" }
-{ trigger = "EventName", target = "TargetState", guard = "GuardName" }
 { trigger = "EventName", target = "TargetState", guard = "GuardName", guard_args = { ... } }
 { trigger = "Tick", target = "TargetState", guard = "StateTimeExceeds", guard_args = { ms = 1000 } }
 ```
 
-`Tick` — evaluated every frame; use with guard to control timing.
+`Tick` — evaluated every game tick; use with guard to control timing.
 
 ### Variable Capture from Payloads
 
@@ -71,6 +88,58 @@ Combine with guards and payload injection:
 # In AttachGateway on_enter:
 { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0 }, payload_vars = { anchor_entity = "anchor_id" } }
 ```
+
+### Transition Actions
+
+Actions attached to a transition execute between the exit and enter phases:
+
+```toml
+{ trigger = "EventWaveCleared", target = "NextWave", actions = [
+    { action = "IncrementVar", payload = { name = "wave" } },
+] }
+```
+
+Execution order on a matching transition:
+`capture_vars` → `on_exit` (leaf → LCA) → transition `actions` → `on_enter` (LCA → target leaf).
+
+A transition targeting the currently active state executes its actions only
+(no exit/enter, no time reset).
+
+### Internal Transitions
+
+`internal = true` consumes the trigger without changing state. No `target`,
+no `on_exit`/`on_enter`, `TimeInState` unaffected. Declared on a composite
+state, it fires while **any** descendant is active — the pattern for counting
+events without leaving the current state:
+
+```toml
+[states.TowerCycle]
+transitions = [
+    { trigger = "EventPylonDestroyed", internal = true, actions = [
+        { action = "IncrementVar", payload = { name = "pylons_dead" } },
+    ] },
+]
+```
+
+An internal transition consumes the event/tick and stops bubbling; place it
+below higher-priority transitions of the same trigger. An internal `Tick`
+transition with a passing guard executes every tick and shadows all outer
+`Tick` transitions — equivalent to a guarded `on_update`.
+
+
+---
+
+## Lifecycle Hooks
+
+`on_enter` — root → leaf on entry. `on_exit` — leaf → root on exit.
+`on_update` — every tick for **every state on the active path**, root → leaf.
+
+### Delayed Actions
+
+`delay_ms` counts down in region time and survives transitions while the
+owning state remains on the active path. Delayed actions are cleared when
+their owning state exits. Transition actions with `delay_ms` are owned by the
+target state; internal-transition actions by the active leaf.
 
 ---
 
@@ -261,7 +330,9 @@ Empty `guards` array evaluates to `true`.
 
 ## Payload Guards
 
-Inspect event payload fields directly in guards. Field names must match Go struct field names (case-sensitive).
+Inspect event payload fields directly in guards. Fields resolve by `toml`
+struct tag first, then Go field name — identical to `capture_vars` and
+`payload_vars`.
 
 ### PayloadIntCompare
 ```toml
@@ -298,6 +369,18 @@ Combine with compound guards:
 
 ---
 
+## Variables
+
+Variables are **machine-global**: shared across all regions and states.
+They persist across transitions and region spawn/terminate; cleared only on
+FSM init/reset. Regions that respawn must explicitly re-zero their counters
+in the setup state.
+
+`delta` defaults to 1 for `IncrementVar`, `DecrementVar`, `MultiplyVar`,
+`DivideVar`. `ModuloVar` with omitted or zero delta is a no-op.
+
+---
+
 ## Variable Payload Injection
 
 Inject FSM variable values into event payloads:
@@ -307,6 +390,16 @@ Inject FSM variable values into event payloads:
 ```
 
 Supported field types: `int`, `int64`, `uint`, `float64`
+
+---
+
+## Timing Caveat
+
+`StateTimeExceeds` reads `TimeInState`, which is **region-scoped** and resets
+on every transition in the region. On a transition declared on an ancestor
+state, it measures time since the region's last transition — not time within
+the ancestor's subtree. Rapid child-state cycling (e.g. spawn-retry loops)
+starves ancestor-level timeouts.
 
 ---
 
@@ -350,17 +443,21 @@ Available fields for `ConfigBoolCompare`:
 
 ## Execution Order
 
-1. **FSM Init** — Apply `[systems].disabled`, enter initial states
-2. **Region Spawn** — Apply region `enabled_systems`/`disabled_systems`
-3. **State Enter** — Execute `on_enter` actions (root → leaf)
-4. **Tick** — Process delayed actions, execute `on_update`, evaluate transitions
-5. **State Exit** — Execute `on_exit` actions (leaf → root)
+1. **FSM Init** — apply `[systems].disabled_systems`, enter initial states
+2. **Region Spawn** — apply region `enabled_systems`/`disabled_systems`
+3. **Tick** — process delayed actions, execute `on_update` (root → leaf), evaluate transitions (leaf → root, first match wins)
+4. **Transition** — `capture_vars`, `on_exit` (leaf → LCA), transition `actions`, `on_enter` (LCA → leaf)
 
 ---
 
 ## Notes
 
-- Transitions evaluated in definition order; first matching wins
-- Delayed actions cleared on state exit
-- Variables persist across state transitions, cleared on FSM reset
-- Region system toggles applied immediately via `EventMetaSystemCommandRequest`
+- One transition per region per tick or per event; a matching leaf transition
+  shadows ancestors
+- Paused regions drop events entirely (no queueing)
+- Keep `Root` free of actions: its hooks run on every region spawn/terminate
+- Event payloads are shared compiled templates: handlers must treat them as
+  immutable; `payload_vars` produces an isolated copy
+- Region-control actions (`TerminateRegion` on self) are supported in
+  `on_enter`/`on_exit`/transition actions; unsupported in `on_update`
+

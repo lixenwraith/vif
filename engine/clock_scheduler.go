@@ -2,6 +2,7 @@ package engine
 
 import (
 	"fmt"
+	"io/fs"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -124,48 +125,56 @@ func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 	cs.eventRouter.Register(handler)
 }
 
-// LoadFSM initializes HFSM with provided config and registry bridge, must be called before Start()
-func (cs *ClockScheduler) LoadFSM(config string, registerComponents func(*fsm.Machine[*World])) error {
-	// Register Actions/Guards
+// LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
+func (cs *ClockScheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
 	registerComponents(cs.fsm)
-
-	// Load Graph
-	if err := cs.fsm.LoadConfig([]byte(config)); err != nil {
-		return fmt.Errorf("failed to load FSM config: %w", err)
-	}
-
-	// Initialize GameState (enters initial state)
-	if err := cs.fsm.Init(cs.world); err != nil {
-		return fmt.Errorf("failed to init FSM: %w", err)
-	}
-
-	// Apply global system configuration
-	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
-
-	return nil
-}
-
-// LoadFSMAuto initializes HFSM with priority: customPath > external detection > embedded
-// customPath is used if non-empty, otherwise falls back to auto-detection
-func (cs *ClockScheduler) LoadFSMAuto(customPath, embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
-	// Register Actions/Guards
-	registerComponents(cs.fsm)
-
-	// Load with priority resolution
-	if err := fsm.LoadConfigAuto(cs.fsm, customPath, embeddedFallback); err != nil {
+	if err := fsm.LoadConfigFromFS(cs.fsm, fsys, entry); err != nil {
 		return fmt.Errorf("failed to load FSM: %w", err)
 	}
+	return cs.initLoadedFSM()
+}
 
-	// Initialize GameState (enters initial state)
+// LoadFSMFromPath initializes HFSM from an external entry config
+// Region file includes resolve relative to the file's directory
+func (cs *ClockScheduler) LoadFSMFromPath(configPath string, registerComponents func(*fsm.Machine[*World])) error {
+	registerComponents(cs.fsm)
+
+	if err := fsm.LoadConfigFromPath(cs.fsm, configPath); err != nil {
+		return fmt.Errorf("failed to load FSM: %w", err)
+	}
+	return cs.initLoadedFSM()
+}
+
+// initLoadedFSM is common post-load initialization
+func (cs *ClockScheduler) initLoadedFSM() error {
 	if err := cs.fsm.Init(cs.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
-
-	// Apply global system configuration
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
-
 	return nil
 }
+
+// // LoadFSMAuto initializes HFSM with priority: customPath > external detection > embedded
+// // customPath is used if non-empty, otherwise falls back to auto-detection
+// func (cs *ClockScheduler) LoadFSMAuto(customPath, embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
+// 	// Register Actions/Guards
+// 	registerComponents(cs.fsm)
+//
+// 	// Load with priority resolution
+// 	if err := fsm.LoadConfigAuto(cs.fsm, customPath, embeddedFallback); err != nil {
+// 		return fmt.Errorf("failed to load FSM: %w", err)
+// 	}
+//
+// 	// Initialize GameState (enters initial state)
+// 	if err := cs.fsm.Init(cs.world); err != nil {
+// 		return fmt.Errorf("failed to init FSM: %w", err)
+// 	}
+//
+// 	// Apply global system configuration
+// 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+//
+// 	return nil
+// }
 
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
@@ -469,4 +478,3 @@ func (cs *ClockScheduler) processTick() {
 	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }
-

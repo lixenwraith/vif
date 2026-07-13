@@ -2,24 +2,24 @@
 
 [regions.main]
 initial = "MainSpawnGold"
-file = "regions/main.toml"
+file = "main.toml"
 enabled_systems = ["glyph"]
 
 [regions.quasar]
-file = "regions/quasar.toml"
+file = "quasar.toml"
 enabled_systems = ["glyph"]
 
 [regions.storm]
-file = "regions/storm.toml"
+file = "storm.toml"
 enabled_systems = ["glyph"]
 
 [regions.monitor]
 initial = "MonitorWarmup"
-file = "regions/monitor.toml"
+file = "monitor.toml"
 background = true
 
 [regions.tower]
-file = "regions/tower.toml"
+file = "tower.toml"
 disabled_systems = ["glyph"]
 
 #[states.Root]

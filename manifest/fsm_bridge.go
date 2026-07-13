@@ -179,11 +179,7 @@ func registerRegionActions(m *fsm.Machine[*engine.World]) {
 		if !ok {
 			return
 		}
-		initialID, ok := m.GetStateID(rcArgs.InitialState)
-		if !ok {
-			return
-		}
-		if err := m.SpawnRegion(world, rcArgs.RegionName, initialID); err != nil {
+		if err := m.SpawnRegion(world, rcArgs.RegionName, rcArgs.InitialID); err != nil {
 			return
 		}
 
@@ -472,7 +468,7 @@ func registerSystemActions(m *fsm.Machine[*engine.World]) {
 
 func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 	// StateTimeExceeds - checks if time in current state exceeds threshold
-	m.RegisterGuardFactory("StateTimeExceeds", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("StateTimeExceeds", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		duration := parameter.GameUpdateInterval
 		if args != nil {
 			if v, ok := args["ms"]; ok {
@@ -488,11 +484,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 		}
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return region.TimeInState >= duration
-		}
+		}, nil
 	})
 
 	// StatusBoolEquals - checks status registry bool value
-	m.RegisterGuardFactory("StatusBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("StatusBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		key, _ := args["key"].(string)
 		expected := true
 		if v, ok := args["value"].(bool); ok {
@@ -504,11 +500,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				return false
 			}
 			return world.Resources.Status.Bools.Get(key).Load() == expected
-		}
+		}, nil
 	})
 
 	// StatusIntCompare - compares status registry int value
-	m.RegisterGuardFactory("StatusIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("StatusIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		key, _ := args["key"].(string)
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
@@ -519,51 +515,51 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			}
 			current := world.Resources.Status.Ints.Get(key).Load()
 			return compareInt(current, op, value)
-		}
+		}, nil
 	})
 
 	// RegionExists - checks if a region is currently active
-	m.RegisterGuardFactory("RegionExists", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("RegionExists", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		regionName, _ := args["region"].(string)
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return machine.HasRegion(regionName)
-		}
+		}, nil
 	})
 
 	// VarEquals - checks if FSM variable equals value
-	m.RegisterGuardFactory("VarEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("VarEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		varName, _ := args["var"].(string)
 		value := parseIntArg(args, "value")
 
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return machine.GetVar(varName) == value
-		}
+		}, nil
 	})
 
 	// VarCompare - compares FSM variable with operators
-	m.RegisterGuardFactory("VarCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("VarCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		varName, _ := args["var"].(string)
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
 
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return compareInt(machine.GetVar(varName), op, value)
-		}
+		}, nil
 	})
 
 	// VarCompareVar - compares two FSM variables
-	m.RegisterGuardFactory("VarCompareVar", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("VarCompareVar", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		varA, _ := args["var_a"].(string)
 		varB, _ := args["var_b"].(string)
 		op, _ := args["op"].(string)
 
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return compareInt(machine.GetVar(varA), op, machine.GetVar(varB))
-		}
+		}, nil
 	})
 
 	// ConfigIntCompare - compares ConfigResource int fields
-	m.RegisterGuardFactory("ConfigIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("ConfigIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		field, _ := args["field"].(string)
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
@@ -576,7 +572,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			"color_mode": true,
 		}
 		if !validFields[field] {
-			panic(fmt.Sprintf("ConfigIntCompare: unknown field '%s'", field))
+			return nil, fmt.Errorf("ConfigIntCompare: unknown field '%s'", field)
 		}
 
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
@@ -599,11 +595,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				current = int64(cfg.ColorMode)
 			}
 			return compareInt(current, op, value)
-		}
+		}, nil
 	})
 
 	// ConfigBoolCompare - compares ConfigResource bool fields
-	m.RegisterGuardFactory("ConfigBoolCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("ConfigBoolCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		field, _ := args["field"].(string)
 		expected := true
 		if v, ok := args["value"].(bool); ok {
@@ -615,7 +611,7 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 			"crop_on_resize": true,
 		}
 		if !validFields[field] {
-			panic(fmt.Sprintf("ConfigBoolCompare: unknown field '%s'", field))
+			return nil, fmt.Errorf("ConfigBoolCompare: unknown field '%s'", field)
 		}
 
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
@@ -626,14 +622,17 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				current = cfg.CropOnResize
 			}
 			return current == expected
-		}
+		}, nil
 	})
 
 	// And - all child guards must pass
-	m.RegisterGuardFactory("And", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
-		childGuards := resolveChildGuards(machine, args)
+	m.RegisterGuardFactory("And", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
+		childGuards, err := resolveChildGuards(machine, args)
+		if err != nil {
+			return nil, err
+		}
 		if len(childGuards) == 0 {
-			return func(world *engine.World, region *fsm.RegionState, payload any) bool { return true }
+			return func(*engine.World, *fsm.RegionState, any) bool { return true }, nil
 		}
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			for _, g := range childGuards {
@@ -642,14 +641,17 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				}
 			}
 			return true
-		}
+		}, nil
 	})
 
 	// Or - at least one child guard must pass
-	m.RegisterGuardFactory("Or", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
-		childGuards := resolveChildGuards(machine, args)
+	m.RegisterGuardFactory("Or", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
+		childGuards, err := resolveChildGuards(machine, args)
+		if err != nil {
+			return nil, err
+		}
 		if len(childGuards) == 0 {
-			return func(world *engine.World, region *fsm.RegionState, payload any) bool { return true }
+			return func(world *engine.World, region *fsm.RegionState, payload any) bool { return true }, nil
 		}
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			for _, g := range childGuards {
@@ -658,11 +660,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				}
 			}
 			return false
-		}
+		}, nil
 	})
 
 	// PayloadIntCompare - compares int field in event payload
-	m.RegisterGuardFactory("PayloadIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("PayloadIntCompare", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		field, _ := args["field"].(string)
 		op, _ := args["op"].(string)
 		value := parseIntArg(args, "value")
@@ -676,11 +678,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				return false
 			}
 			return compareInt(fieldVal, op, value)
-		}
+		}, nil
 	})
 
 	// PayloadBoolEquals - checks bool field in event payload
-	m.RegisterGuardFactory("PayloadBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("PayloadBoolEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		field, _ := args["field"].(string)
 		expected := true
 		if v, ok := args["value"].(bool); ok {
@@ -696,11 +698,11 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				return false
 			}
 			return fieldVal == expected
-		}
+		}, nil
 	})
 
 	// PayloadStringEquals - checks string field in event payload
-	m.RegisterGuardFactory("PayloadStringEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("PayloadStringEquals", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		field, _ := args["field"].(string)
 		expected, _ := args["value"].(string)
 
@@ -713,14 +715,14 @@ func registerGuardFactories(m *fsm.Machine[*engine.World]) {
 				return false
 			}
 			return fieldVal == expected
-		}
+		}, nil
 	})
 
 	// PayloadExists - checks if payload is non-nil (useful in Or guards)
-	m.RegisterGuardFactory("PayloadExists", func(machine *fsm.Machine[*engine.World], args map[string]any) fsm.GuardFunc[*engine.World] {
+	m.RegisterGuardFactory("PayloadExists", func(machine *fsm.Machine[*engine.World], args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 		return func(world *engine.World, region *fsm.RegionState, payload any) bool {
 			return payload != nil
-		}
+		}, nil
 	})
 }
 
@@ -785,27 +787,28 @@ func compareInt(current int64, op string, value int64) bool {
 }
 
 // resolveChildGuards parses nested guard definitions and returns compiled guard functions
-func resolveChildGuards(m *fsm.Machine[*engine.World], args map[string]any) []fsm.GuardFunc[*engine.World] {
+
+func resolveChildGuards(m *fsm.Machine[*engine.World], args map[string]any) ([]fsm.GuardFunc[*engine.World], error) {
 	guardsRaw, ok := args["guards"]
 	if !ok {
-		return nil
+		return nil, nil
 	}
 
 	guardsList, ok := guardsRaw.([]any)
 	if !ok {
-		return nil
+		return nil, fmt.Errorf("compound guard: 'guards' must be an array")
 	}
 
 	result := make([]fsm.GuardFunc[*engine.World], 0, len(guardsList))
-	for _, item := range guardsList {
+	for i, item := range guardsList {
 		guardDef, ok := item.(map[string]any)
 		if !ok {
-			continue
+			return nil, fmt.Errorf("compound guard: entry %d is not a table", i)
 		}
 
 		name, _ := guardDef["name"].(string)
 		if name == "" {
-			continue
+			return nil, fmt.Errorf("compound guard: entry %d missing 'name'", i)
 		}
 
 		var childArgs map[string]any
@@ -813,25 +816,27 @@ func resolveChildGuards(m *fsm.Machine[*engine.World], args map[string]any) []fs
 			childArgs, _ = argsRaw.(map[string]any)
 		}
 
-		guard := resolveGuard(m, name, childArgs)
-		if guard != nil {
-			result = append(result, guard)
+		g, err := resolveGuard(m, name, childArgs)
+		if err != nil {
+			return nil, fmt.Errorf("compound guard '%s': %w", name, err)
 		}
+
+		result = append(result, g)
 	}
-	return result
+	return result, nil
 }
 
 // resolveGuard creates a guard function from name and args using registered factories/guards
-func resolveGuard(m *fsm.Machine[*engine.World], name string, args map[string]any) fsm.GuardFunc[*engine.World] {
+func resolveGuard(m *fsm.Machine[*engine.World], name string, args map[string]any) (fsm.GuardFunc[*engine.World], error) {
 	// Check factory first (for parameterized guards)
 	if factory, ok := m.GetGuardFactory(name); ok {
 		return factory(m, args)
 	}
 	// Fall back to static guard
 	if guard, ok := m.GetGuard(name); ok {
-		return guard
+		return guard, nil
 	}
-	return nil
+	return nil, fmt.Errorf("unknown guard '%s'", name)
 }
 
 // extractIntField retrieves an int-compatible field from a struct via reflection
@@ -847,7 +852,7 @@ func extractIntField(payload any, fieldName string) (int64, bool) {
 		return 0, false
 	}
 
-	field := v.FieldByName(fieldName)
+	field := resolvePayloadField(v, fieldName)
 	if !field.IsValid() {
 		return 0, false
 	}
@@ -877,7 +882,7 @@ func extractBoolField(payload any, fieldName string) (bool, bool) {
 		return false, false
 	}
 
-	field := v.FieldByName(fieldName)
+	field := resolvePayloadField(v, fieldName)
 	if !field.IsValid() || field.Kind() != reflect.Bool {
 		return false, false
 	}
@@ -897,10 +902,9 @@ func extractStringField(payload any, fieldName string) (string, bool) {
 		return "", false
 	}
 
-	field := v.FieldByName(fieldName)
+	field := resolvePayloadField(v, fieldName)
 	if !field.IsValid() || field.Kind() != reflect.String {
 		return "", false
 	}
 	return field.String(), true
 }
-

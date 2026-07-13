@@ -3,6 +3,7 @@ package fsm
 import (
 	"fmt"
 	"reflect"
+	"sort"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/event"
@@ -27,6 +28,29 @@ func NewMachine[T any]() *Machine[T] {
 		StateCount:     0,
 	}
 	return m
+}
+
+// RegisteredGuards returns sorted names of static guards and guard factories
+func (m *Machine[T]) RegisteredGuards() []string {
+	names := make([]string, 0, len(m.guardReg)+len(m.guardFactoryReg))
+	for n := range m.guardReg {
+		names = append(names, n)
+	}
+	for n := range m.guardFactoryReg {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// RegisteredActions returns sorted names of registered actions
+func (m *Machine[T]) RegisteredActions() []string {
+	names := make([]string, 0, len(m.actionReg))
+	for n := range m.actionReg {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // RegisterGuard adds a predicate function to the registry
@@ -98,7 +122,7 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 	// Execute OnEnter for the entire chain from Root to Initial
 	for _, id := range region.ActivePath {
 		if n, exists := m.nodes[id]; exists {
-			m.executeActions(ctx, region, n.OnEnter)
+			m.executeActions(ctx, region, id, n.OnEnter)
 		}
 	}
 
@@ -134,21 +158,29 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 	region.TimeInState += dt
 
 	// Process delayed actions
-	m.processDelayedActions(ctx, region)
+	m.processDelayedActions(ctx, region, dt)
 
-	// Execute OnUpdate actions for current leaf state
-	leaf := m.nodes[region.ActiveStateID]
-	m.executeActions(ctx, region, leaf.OnUpdate)
+	// Execute on_update along active path, root → leaf
+	for _, id := range region.ActivePath {
+		if n, ok := m.nodes[id]; ok {
+			m.executeActions(ctx, region, id, n.OnUpdate)
+		}
+	}
 
 	// Evaluate Tick Transitions (Event == 0), bubble up
-	// Tick has no payload
 	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
-		for _, trans := range node.Transitions {
+		for i := range node.Transitions {
+			trans := &node.Transitions[i]
 			if trans.Event == 0 {
 				if trans.Guard == nil || trans.Guard(ctx, region, nil) {
-					m.transitionRegion(ctx, region, trans.TargetID)
+					if trans.Internal {
+						// Actions only, no state change
+						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
+						return
+					}
+					m.transitionRegion(ctx, region, trans.TargetID, trans.Actions)
 					return
 				}
 			}
@@ -169,7 +201,7 @@ func (m *Machine[T]) ExecuteAction(ctx T, actionName string, args any) bool {
 }
 
 // executeActions runs a slice of actions, respecting guards and delays
-func (m *Machine[T]) executeActions(ctx T, region *RegionState, actions []Action[T]) {
+func (m *Machine[T]) executeActions(ctx T, region *RegionState, owner StateID, actions []Action[T]) {
 	for _, action := range actions {
 		// Check guard (action guards have no payload context)
 		if action.Guard != nil && !action.Guard(ctx, region, nil) {
@@ -178,15 +210,11 @@ func (m *Machine[T]) executeActions(ctx T, region *RegionState, actions []Action
 
 		// Handle delay
 		if action.DelayMs > 0 {
-			delayed := DelayedAction[T]{
-				ExecuteAt: region.TimeInState + time.Duration(action.DelayMs)*time.Millisecond,
-				Action: Action[T]{
-					Func:  action.Func,
-					Args:  action.Args,
-					Guard: nil, // Guard already evaluated
-				},
-			}
-			m.delayedActions[region.Name] = append(m.delayedActions[region.Name], delayed)
+			m.delayedActions[region.Name] = append(m.delayedActions[region.Name], DelayedAction[T]{
+				Remaining: time.Duration(action.DelayMs) * time.Millisecond,
+				Owner:     owner,
+				Action:    Action[T]{Func: action.Func, Args: action.Args},
+			})
 			continue
 		}
 
@@ -195,19 +223,20 @@ func (m *Machine[T]) executeActions(ctx T, region *RegionState, actions []Action
 	}
 }
 
-// processDelayedActions executes actions whose delay has elapsed
-func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState) {
+// processDelayedActions executes actions whose delay has elapsed, dt-driven countdown
+func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.Duration) {
 	delayed := m.delayedActions[region.Name]
 	if len(delayed) == 0 {
 		return
 	}
 
 	remaining := delayed[:0]
-	for _, da := range delayed {
-		if region.TimeInState >= da.ExecuteAt {
-			da.Action.Func(ctx, da.Action.Args)
+	for i := range delayed {
+		delayed[i].Remaining -= dt
+		if delayed[i].Remaining <= 0 {
+			delayed[i].Action.Func(ctx, delayed[i].Action.Args)
 		} else {
-			remaining = append(remaining, da)
+			remaining = append(remaining, delayed[i])
 		}
 	}
 	m.delayedActions[region.Name] = remaining
@@ -250,7 +279,8 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 	currID := region.ActiveStateID
 	for currID != StateNone {
 		node := m.nodes[currID]
-		for _, trans := range node.Transitions {
+		for i := range node.Transitions {
+			trans := &node.Transitions[i]
 			if trans.Event == ev.Type {
 				if trans.Guard == nil || trans.Guard(ctx, region, ev.Payload) {
 					// Capture payload fields into FSM variables before transition
@@ -258,14 +288,18 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 					if len(trans.CaptureVars) > 0 {
 						m.capturePayloadVars(ev.Payload, trans.CaptureVars)
 					}
-					m.transitionRegion(ctx, region, trans.TargetID)
+					if trans.Internal {
+						// Consume event; no exit/enter, TimeInState unaffected
+						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
+						return true
+					}
+					m.transitionRegion(ctx, region, trans.TargetID, trans.Actions)
 					return true
 				}
 			}
 		}
 		currID = node.ParentID
 	}
-
 	return false
 }
 
@@ -338,8 +372,11 @@ func resolveStructField(v reflect.Value, typ reflect.Type, key string) reflect.V
 }
 
 // transitionRegion performs state change within a specific region
-func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID) {
+// Order: exit (leaf→LCA) → delayed cleanup → commit → transition actions → enter (LCA→leaf)
+func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID, transActions []Action[T]) {
 	if region.ActiveStateID == targetID {
+		// Self-transition degrades to internal — actions only
+		m.executeActions(ctx, region, targetID, transActions)
 		return
 	}
 
@@ -357,7 +394,6 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	if len(targetPath) < minLen {
 		minLen = len(targetPath)
 	}
-
 	for i := 0; i < minLen; i++ {
 		if currentPath[i] == targetPath[i] {
 			lcaIndex = i
@@ -370,33 +406,50 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	for i := len(currentPath) - 1; i > lcaIndex; i-- {
 		nodeID := currentPath[i]
 		if node, exists := m.nodes[nodeID]; exists {
-			m.executeActions(ctx, region, node.OnExit)
+			m.executeActions(ctx, region, nodeID, node.OnExit)
 		}
 	}
 
-	// Clear delayed actions on state exit
-	m.delayedActions[region.Name] = nil
-
-	// Enter Phase: walk DOWN from LCA (exclusive) to target leaf
-	// Reset TimeInState before entering new state
-	region.TimeInState = 0
-
-	for i := lcaIndex + 1; i < len(targetPath); i++ {
-		nodeID := targetPath[i]
-		if node, exists := m.nodes[nodeID]; exists {
-			m.executeActions(ctx, region, node.OnEnter)
+	// Clear only delayed actions owned by exited states
+	// Must run before commit: currentPath aliases region.ActivePath's backing array
+	if len(m.delayedActions[region.Name]) > 0 {
+		exited := currentPath[lcaIndex+1:]
+		remaining := m.delayedActions[region.Name][:0]
+		for _, da := range m.delayedActions[region.Name] {
+			owned := false
+			for _, id := range exited {
+				if da.Owner == id {
+					owned = true
+					break
+				}
+			}
+			if !owned {
+				remaining = append(remaining, da)
+			}
 		}
+		m.delayedActions[region.Name] = remaining
 	}
 
-	// Update region state
+	// Commit target state before enter phase (D2 fix retained)
 	region.ActiveStateID = targetID
-
 	if cap(region.ActivePath) >= len(targetPath) {
 		region.ActivePath = region.ActivePath[:len(targetPath)]
 		copy(region.ActivePath, targetPath)
 	} else {
 		region.ActivePath = make([]StateID, len(targetPath))
 		copy(region.ActivePath, targetPath)
+	}
+	region.TimeInState = 0
+
+	// Transition actions between exit and enter; delayed owner = target leaf
+	m.executeActions(ctx, region, targetID, transActions)
+
+	// Enter Phase: walk DOWN from LCA (exclusive) to target leaf
+	for i := lcaIndex + 1; i < len(targetPath); i++ {
+		nodeID := targetPath[i]
+		if node, exists := m.nodes[nodeID]; exists {
+			m.executeActions(ctx, region, nodeID, node.OnEnter)
+		}
 	}
 }
 
@@ -406,8 +459,9 @@ func (m *Machine[T]) Reset(ctx T) error {
 	for _, region := range m.regions {
 		if region.ActiveStateID != StateNone {
 			for i := len(region.ActivePath) - 1; i >= 0; i-- {
-				if node, ok := m.nodes[region.ActivePath[i]]; ok {
-					m.executeActions(ctx, region, node.OnExit)
+				nodeID := region.ActivePath[i]
+				if node, ok := m.nodes[nodeID]; ok {
+					m.executeActions(ctx, region, nodeID, node.OnExit)
 				}
 			}
 		}
@@ -516,8 +570,9 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 
 	// Execute OnExit for entire path
 	for i := len(region.ActivePath) - 1; i >= 0; i-- {
-		if node, exists := m.nodes[region.ActivePath[i]]; exists {
-			m.executeActions(ctx, region, node.OnExit)
+		nodeID := region.ActivePath[i]
+		if node, ok := m.nodes[nodeID]; ok {
+			m.executeActions(ctx, region, region.ActiveStateID, node.OnExit)
 		}
 	}
 

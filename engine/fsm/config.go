@@ -1,12 +1,5 @@
 package fsm
 
-// External configuration paths (Unix-only)
-const (
-	DefaultConfigDir  = "./config"
-	DefaultConfigFile = "game.toml"
-	DefaultConfigPath = DefaultConfigDir + "/" + DefaultConfigFile
-)
-
 // RootConfig represents the top-level config structure
 type RootConfig struct {
 	Systems *SystemsConfig          `toml:"systems,omitempty"` // Global system toggles
@@ -40,10 +33,12 @@ type StateConfig struct {
 // TransitionConfig represents a transition definition
 type TransitionConfig struct {
 	Trigger     string            `toml:"trigger"`                // Event Name or "Tick"
-	Target      string            `toml:"target"`                 // Target GameState Name
+	Target      string            `toml:"target,omitempty"`       // Target GameState Name, optional for internal
 	Guard       string            `toml:"guard,omitempty"`        // Guard function name
 	GuardArgs   map[string]any    `toml:"guard_args,omitempty"`   // Parameters for factory guards
 	CaptureVars map[string]string `toml:"capture_vars,omitempty"` // Payload field → FSM variable (extracted on match)
+	Actions     []ActionConfig    `toml:"actions,omitempty"`      // Transition effect actions
+	Internal    bool              `toml:"internal,omitempty"`     // Consume without state change
 }
 
 // ActionConfig represents an action definition
@@ -58,4 +53,3 @@ type ActionConfig struct {
 	GuardArgs    map[string]any    `toml:"guard_args,omitempty"`    // Guard parameters
 	DelayMs      int               `toml:"delay_ms,omitempty"`      // Delay before execution (ms)
 }
-

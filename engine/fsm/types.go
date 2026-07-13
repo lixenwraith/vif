@@ -86,6 +86,8 @@ type Transition[T any] struct {
 	Event       event.EventType   // 0 = Tick (auto-transition)
 	Guard       GuardFunc[T]      // nil = Always true
 	CaptureVars map[string]string // Payload field → FSM variable name
+	Actions     []Action[T]       // Executed between exit and enter phases
+	Internal    bool
 }
 
 // Action represents a side-effect
@@ -96,9 +98,9 @@ type Action[T any] struct {
 	DelayMs int          // Delay before execution (0 = immediate)
 }
 
-// DelayedAction holds a scheduled action for later execution
 type DelayedAction[T any] struct {
-	ExecuteAt time.Duration // TimeInState threshold
+	Remaining time.Duration // CHANGED: countdown decremented by dt (was TimeInState threshold)
+	Owner     StateID       // ADDED: cleared when owner state exits
 	Action    Action[T]
 }
 
@@ -111,7 +113,8 @@ type ActionFunc[T any] func(ctx T, args any)
 
 // GuardFactoryFunc creates a parameterized guard from JSON args
 // Used for configurable guards like StateTimeExceeds with duration parameter
-type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) GuardFunc[T]
+// Return errors (invalid args surface at load, not panic)
+type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) (GuardFunc[T], error)
 
 // EmitEventArgs holds pre-compiled event data for the EmitEvent action
 // Type identifies the event; Payload is the decoded struct (or nil)
@@ -124,7 +127,8 @@ type EmitEventArgs struct {
 // RegionControlArgs holds args for region control actions
 type RegionControlArgs struct {
 	RegionName   string
-	InitialState string // For SpawnRegion
+	InitialState string  // For SpawnRegion
+	InitialID    StateID // Resolved at load time
 }
 
 // VariableArgs holds args for variable manipulation actions

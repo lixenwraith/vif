@@ -45,6 +45,13 @@ func GetEventName(et EventType) string {
 	return typeToName[et]
 }
 
+// RangeEvents iterates registered events; payload is NewPayloadStruct(et) (nil for payload-less events)
+func RangeEvents(fn func(name string, et EventType, payload any)) {
+	for name, et := range nameToType {
+		fn(name, et, NewPayloadStruct(et))
+	}
+}
+
 // NewPayloadStruct returns a new pointer to a zero-value payload struct for the event type
 // Returns nil if no payload is registered
 func NewPayloadStruct(et EventType) any {
@@ -328,3 +335,4 @@ func InitRegistry() {
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)
 }
+

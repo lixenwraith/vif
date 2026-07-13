@@ -48,6 +48,10 @@ on_enter = [
 
     # Reset tracking
     { action = "SetVar", payload = { name = "pylons_dead", value = 0 } },
+    # Track successful spawns for dynamic victory threshold
+    { action = "SetVar", payload = { name = "pylons_spawned", value = 0 } },
+    # Victory ungated until spawn chain completes
+    { action = "SetVar", payload = { name = "pylons_chain_done", value = 0 } },
 
     # Spawn tower at center
     { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 0, y = 0, target_group_id = 1 }, payload_vars = { X = "cx", Y = "cy" } },
@@ -88,10 +92,16 @@ on_exit = [
 transitions = [
     # Tower death = defeat (highest priority)
     { trigger = "EventTowerDestroyed", target = "TowerDefeat" },
-    # All pylons dead = victory
-    { trigger = "Tick", target = "TowerVictory", guard = "VarCompare", guard_args = { var = "pylons_dead", op = "gte", value = 4 } },
-    # Individual pylon death tracking (bubbles from children)
-    { trigger = "EventPylonDestroyed", target = "TowerPylonDied" },
+    # Handles any number of simultaneous deaths and deaths during the spawn chain
+    { trigger = "EventPylonDestroyed", internal = true, actions = [
+        { action = "IncrementVar", payload = { name = "pylons_dead" } },
+    ] },
+    # All spawned pylons dead = victory threshold = actual spawned count; guard against zero
+    { trigger = "Tick", target = "TowerVictory", guard = "And", guard_args = { guards = [
+        { name = "VarEquals", args = { var = "pylons_chain_done", value = 1 } },
+        { name = "VarCompare", args = { var = "pylons_spawned", op = "gt", value = 0 } },
+        { name = "VarCompareVar", args = { var_a = "pylons_dead", op = "gte", var_b = "pylons_spawned" } },
+    ] } },
 ]
 
 # --- Sequential Pylon Spawn + Gateway Attach Chain ---
@@ -114,6 +124,7 @@ transitions = [
 parent = "TowerCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP2" },
@@ -135,6 +146,7 @@ transitions = [
 parent = "TowerCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP3" },
@@ -156,6 +168,7 @@ transitions = [
 parent = "TowerCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerSpawnP4" },
@@ -177,6 +190,7 @@ transitions = [
 parent = "TowerCycle"
 on_enter = [
     { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "pylons_spawned" } },
 ]
 transitions = [
     { trigger = "Tick", target = "TowerActive" },
@@ -186,18 +200,16 @@ transitions = [
 
 [states.TowerActive]
 parent = "TowerCycle"
-
-# --- Pylon Death Counter ---
-# Transient state: increments counter, returns to Active next tick
-# Cycle-level Tick guard catches pylons_dead >= 4 on subsequent evaluation
-
-[states.TowerPylonDied]
-parent = "TowerCycle"
 on_enter = [
-    { action = "IncrementVar", payload = { name = "pylons_dead" } },
+    # Spawn chain complete; victory guard armed
+    { action = "SetVar", payload = { name = "pylons_chain_done", value = 1 } },
 ]
+# Zero-pylon bailout (all spawns failed → nothing to defend)
 transitions = [
-    { trigger = "Tick", target = "TowerActive" },
+    { trigger = "Tick", target = "TowerVictory", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "VarEquals", args = { var = "pylons_spawned", value = 0 } },
+    ] } },
 ]
 
 # --- Exit: Victory ---
@@ -220,7 +232,6 @@ on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DESTROYED" } },
     { action = "EmitEvent", event = "EventDrainResume" },
-    # { action = "ResumeRegion", region = "main" }, # Changed to level_failed mechanism for proper reset
     { action = "TerminateRegion", region = "tower" },
     { action = "SetVar", payload = { name = "level_failed", value = 1 } },
 ]

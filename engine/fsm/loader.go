@@ -1,6 +1,7 @@
 package fsm
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"time"
@@ -72,11 +73,19 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		nextID++
 	}
 
-	// 5. Second Pass: Build Nodes and resolve relationships
-	for name, cfg := range config.States {
+	// Store region configs before action compilation (reference validation)
+	for regionName, regionCfg := range config.Regions {
+		cfgCopy := regionCfg
+		m.regionConfigs[regionName] = &cfgCopy
+	}
+
+	// 5. Second Pass: build nodes; accumulate validation errors per state
+	var errs []error
+	orderedNames := append([]string{"Root"}, stateNames...) // deterministic diagnostics
+	for _, name := range orderedNames {
+		cfg := config.States[name]
 		id := nameToID[name]
 
-		// Skip root creation (done manually above), but process its config
 		var node *Node[T]
 		if id == StateRoot {
 			node = m.nodes[StateRoot]
@@ -87,27 +96,28 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 			}
 			parentID, ok := nameToID[pName]
 			if !ok {
-				return fmt.Errorf("state '%s' references unknown parent '%s'", name, pName)
+				errs = append(errs, fmt.Errorf("state '%s': unknown parent '%s'", name, pName))
+				continue
 			}
 			node = m.AddState(id, name, parentID)
 		}
 
-		// Compile Actions
 		var err error
 		if node.OnEnter, err = m.compileActions(cfg.OnEnter, nameToID); err != nil {
-			return fmt.Errorf("state '%s' OnEnter: %w", name, err)
+			errs = append(errs, fmt.Errorf("state '%s' on_enter: %w", name, err))
 		}
 		if node.OnUpdate, err = m.compileActions(cfg.OnUpdate, nameToID); err != nil {
-			return fmt.Errorf("state '%s' OnUpdate: %w", name, err)
+			errs = append(errs, fmt.Errorf("state '%s' on_update: %w", name, err))
 		}
 		if node.OnExit, err = m.compileActions(cfg.OnExit, nameToID); err != nil {
-			return fmt.Errorf("state '%s' OnExit: %w", name, err)
+			errs = append(errs, fmt.Errorf("state '%s' on_exit: %w", name, err))
 		}
-
-		// Compile Transitions
-		if err := m.compileTransitions(node, cfg.Transitions, nameToID); err != nil {
-			return fmt.Errorf("state '%s' transitions: %w", name, err)
+		if err = m.compileTransitions(node, cfg.Transitions, nameToID); err != nil {
+			errs = append(errs, fmt.Errorf("state '%s' transitions: %w", name, err))
 		}
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
 	}
 
 	// 6. Finalize: Compile Paths for LCA
@@ -145,10 +155,6 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 
 	// 8. Handle regions initial state and store configs
 	for regionName, regionCfg := range config.Regions {
-		// Store region config for system toggles
-		cfgCopy := regionCfg
-		m.regionConfigs[regionName] = &cfgCopy
-
 		// Skip regions without initial (states-only, spawned dynamically)
 		if regionCfg.Initial == "" {
 			continue
@@ -208,6 +214,10 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			if cfg.Region == "" {
 				return nil, fmt.Errorf("%s action requires 'region' field", cfg.Action)
 			}
+			// Load-time region reference validation
+			if _, ok := m.regionConfigs[cfg.Region]; !ok {
+				return nil, fmt.Errorf("%s references undeclared region '%s'", cfg.Action, cfg.Region)
+			}
 			rcArgs := &RegionControlArgs{
 				RegionName: cfg.Region,
 			}
@@ -215,7 +225,13 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 				if cfg.InitialState == "" {
 					return nil, fmt.Errorf("SpawnRegion action requires 'initial_state' field")
 				}
+				// Resolve initial state at load
+				initialID, ok := nameToID[cfg.InitialState]
+				if !ok {
+					return nil, fmt.Errorf("SpawnRegion references unknown initial state '%s'", cfg.InitialState)
+				}
 				rcArgs.InitialState = cfg.InitialState
+				rcArgs.InitialID = initialID
 			}
 			args = rcArgs
 
@@ -260,7 +276,10 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
 			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
-				guard = factory(m, cfg.GuardArgs)
+				var err error
+				if guard, err = factory(m, cfg.GuardArgs); err != nil {
+					return nil, fmt.Errorf("action guard '%s': %w", cfg.Guard, err)
+				}
 			} else if g, ok := m.guardReg[cfg.Guard]; ok {
 				guard = g
 			} else {
@@ -280,12 +299,21 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 
 func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfig, nameToID map[string]StateID) error {
 	for _, cfg := range configs {
-		targetID, ok := nameToID[cfg.Target]
-		if !ok {
-			return fmt.Errorf("transition references unknown target '%s'", cfg.Target)
+		var targetID StateID
+		if cfg.Internal {
+			// Internal transitions have no target
+			if cfg.Target != "" {
+				return fmt.Errorf("internal transition cannot have target '%s'", cfg.Target)
+			}
+		} else {
+			id, ok := nameToID[cfg.Target]
+			if !ok {
+				return fmt.Errorf("transition references unknown target '%s'", cfg.Target)
+			}
+			targetID = id
 		}
 
-		var eventType event.EventType = 0 // 0 = Tick
+		var eventType event.EventType
 		if cfg.Trigger != "Tick" {
 			et, ok := event.GetEventType(cfg.Trigger)
 			if !ok {
@@ -296,9 +324,12 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 
 		var guard GuardFunc[T]
 		if cfg.Guard != "" {
-			// Check factory first
+			var err error
+			// Factory errors propagate
 			if factory, ok := m.guardFactoryReg[cfg.Guard]; ok {
-				guard = factory(m, cfg.GuardArgs)
+				if guard, err = factory(m, cfg.GuardArgs); err != nil {
+					return fmt.Errorf("guard '%s': %w", cfg.Guard, err)
+				}
 			} else if g, ok := m.guardReg[cfg.Guard]; ok {
 				guard = g
 			} else {
@@ -306,11 +337,19 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 			}
 		}
 
+		// Transition actions
+		actions, err := m.compileActions(cfg.Actions, nameToID)
+		if err != nil {
+			return fmt.Errorf("transition actions: %w", err)
+		}
+
 		node.Transitions = append(node.Transitions, Transition[T]{
 			TargetID:    targetID,
 			Event:       eventType,
 			Guard:       guard,
 			CaptureVars: cfg.CaptureVars,
+			Actions:     actions,
+			Internal:    cfg.Internal,
 		})
 	}
 	return nil

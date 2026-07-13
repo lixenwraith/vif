@@ -1,0 +1,20 @@
+[regions.main]
+initial = "MainSpawnGold"
+file = "main.toml"
+enabled_systems = ["glyph"]
+
+[regions.quasar]
+file = "quasar.toml"
+enabled_systems = ["glyph"]
+
+[regions.storm]
+file = "storm.toml"
+enabled_systems = ["glyph"]
+
+[regions.monitor]
+initial = "MonitorWarmup"
+file = "monitor.toml"
+background = true
+
+[regions.placeholder]
+file = "placeholder.toml"

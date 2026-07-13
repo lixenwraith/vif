@@ -15,6 +15,21 @@ type RGB struct {
 	B uint8 `toml:"b"`
 }
 
+// Lerp linearly interpolates from c to other by t, clamped to [0,1]
+func (c RGB) Lerp(other RGB, t float64) RGB {
+	if t <= 0 {
+		return c
+	}
+	if t >= 1 {
+		return other
+	}
+	return RGB{
+		R: uint8(float64(c.R) + (float64(other.R)-float64(c.R))*t),
+		G: uint8(float64(c.G) + (float64(other.G)-float64(c.G))*t),
+		B: uint8(float64(c.B) + (float64(other.B)-float64(c.B))*t),
+	}
+}
+
 // RGBBlack is the zero value black color
 var RGBBlack = RGB{0, 0, 0}
 
@@ -98,3 +113,4 @@ var cubeValues = [6]int{0, 95, 135, 175, 215, 255}
 func RGBTo256(c RGB) uint8 {
 	return lut256[int(c.R>>2)<<12|int(c.G>>2)<<6|int(c.B>>2)]
 }
+
