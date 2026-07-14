@@ -1,8 +1,8 @@
 package visual
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/terminal"
 )
 
 // --- Drop Tables ---
@@ -10,8 +10,8 @@ import (
 // LootVisualDef defines rendering properties for a loot type
 type LootVisualDef struct {
 	Rune       rune
-	InnerColor terminal.RGB // Sigil color
-	GlowColor  terminal.RGB // Shield glow color
+	InnerColor color.RGB // Sigil color
+	GlowColor  color.RGB // Shield glow color
 }
 
 // LootVisuals defines the visual attributes of loot
@@ -43,3 +43,4 @@ var LootVisuals = map[component.LootType]LootVisualDef{
 		GlowColor:  RgbLootEnergyGlow,
 	},
 }
+

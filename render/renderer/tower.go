@@ -3,19 +3,20 @@ package renderer
 import (
 	"math"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // towerColorEntry holds pre-computed color pair for a health ratio
 type towerColorEntry struct {
-	bright terminal.RGB
-	dark   terminal.RGB
+	bright color.RGB
+	dark   color.RGB
 }
 
 // towerRenderFunc defines the render strategy signature, selected at initialization
@@ -66,7 +67,7 @@ func (r *TowerRenderer) buildColorLUTs() {
 
 func computeTowerColorEntry(visualType int, healthRatio float64) towerColorEntry {
 	tc := &visual.TowerTypes[visualType]
-	var bright, dark terminal.RGB
+	var bright, dark color.RGB
 
 	switch {
 	case healthRatio >= visual.TowerHealthThresholdDamaged:
@@ -205,7 +206,7 @@ func (r *TowerRenderer) renderTrueColor(ctx render.RenderContext, buf *render.Re
 		active := r.isActiveTarget(headerEntity)
 
 		// Glow parameters: active target uses brighter, faster pulse
-		var glowColor terminal.RGB
+		var glowColor color.RGB
 		var intensityMin, intensityMax float64
 		var periodMs int64
 
@@ -230,7 +231,7 @@ func (r *TowerRenderer) renderGlow(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
 	towerComp *component.TowerComponent,
-	glowColor terminal.RGB,
+	glowColor color.RGB,
 	intensityMin, intensityMax float64,
 	periodMs int64,
 ) {
@@ -304,7 +305,7 @@ func (r *TowerRenderer) renderGlow(
 				bVal = 255
 			}
 
-			color := terminal.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
+			color := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}

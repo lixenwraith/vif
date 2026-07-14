@@ -1,9 +1,10 @@
 package pattern
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/terminal"
 )
 
 // PatternCell holds visual data + offset for one cell
@@ -11,8 +12,8 @@ type PatternCell struct {
 	OffsetX  int
 	OffsetY  int
 	Rune     rune
-	Fg       terminal.RGB
-	Bg       terminal.RGB
+	Fg       color.RGB
+	Bg       color.RGB
 	Attrs    terminal.Attr // Preserves AttrFg256/AttrBg256 from ascimage
 	RenderFg bool
 	RenderBg bool
@@ -105,3 +106,4 @@ func (p *PatternResult) Count() int {
 func (p *PatternResult) Empty() bool {
 	return len(p.Cells) == 0
 }
+

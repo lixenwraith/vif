@@ -1,12 +1,12 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // CursorRenderer draws the cursor with complex entity overlap handling
@@ -38,7 +38,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// 1. Determine default state (Empty Cell)
 	var charAtCursor = ' '
-	var cursorBgColor terminal.RGB
+	var cursorBgColor color.RGB
 
 	// Default background based on mode
 	if r.gameCtx.IsInsertMode() {
@@ -109,3 +109,4 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// 5. Render
 	buf.SetWithBg(screenX, screenY, charAtCursor, charFgColor, cursorBgColor)
 }
+

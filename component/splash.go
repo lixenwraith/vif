@@ -3,9 +3,9 @@ package component
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/terminal"
 )
 
 // SplashSlot identifies the visual purpose of a splash for uniqueness enforcement
@@ -21,7 +21,7 @@ const (
 type SplashComponent struct {
 	Content [parameter.SplashMaxLength]rune // Content buffer
 	Length  int                             // Active character count
-	Color   terminal.RGB                    // Render color
+	Color   color.RGB                       // Render color
 
 	// Positioning: AnchorEntity != 0 uses entity-relative, else absolute AnchorX/Y
 	AnchorEntity                                     core.Entity
@@ -36,3 +36,4 @@ type SplashComponent struct {
 	Remaining time.Duration // Time remaining until expiration (Delta-based)
 	Duration  time.Duration // Total initial duration (for progress/animations)
 }
+

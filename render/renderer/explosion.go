@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -30,7 +31,7 @@ type ExplosionRenderer struct {
 
 // explosionPalette holds gradient colors for an explosion type
 type explosionPalette struct {
-	Edge, Mid, Core terminal.RGB
+	Edge, Mid, Core color.RGB
 }
 
 // Block element characters ordered by visual density for intensity-based selection
@@ -288,7 +289,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 			}
 
 			// Gradient mapping
-			var color terminal.RGB
+			var color color.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
@@ -340,7 +341,7 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 			}
 
 			// Gradient mapping (Edge → Mid → Core)
-			var color terminal.RGB
+			var color color.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
@@ -389,3 +390,4 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 		}
 	}
 }
+

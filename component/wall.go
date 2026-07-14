@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -31,11 +32,11 @@ type WallComponent struct {
 
 	// Foreground visual (character layer)
 	Rune     rune // 0 = no foreground character
-	FgColor  terminal.RGB
+	FgColor  color.RGB
 	RenderFg bool
 
 	// Background visual (cell fill)
-	BgColor  terminal.RGB
+	BgColor  color.RGB
 	RenderBg bool
 
 	// Box-drawing: when non-zero, Rune is computed from neighbor topology
@@ -58,9 +59,10 @@ type WallCellDef struct {
 // Zero value struct signals use of system defaults
 type WallVisualConfig struct {
 	Char     rune         `toml:"char"`
-	FgColor  terminal.RGB `toml:"fg_color"`
-	BgColor  terminal.RGB `toml:"bg_color"`
+	FgColor  color.RGB    `toml:"fg_color"`
+	BgColor  color.RGB    `toml:"bg_color"`
 	RenderFg bool         `toml:"render_fg"`
 	RenderBg bool         `toml:"render_bg"`
 	BoxStyle BoxDrawStyle `toml:"box_style"`
 }
+

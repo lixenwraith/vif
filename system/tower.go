@@ -427,4 +427,3 @@ func (s *TowerSystem) terminateAll() {
 		s.terminateTower(entity)
 	}
 }
-

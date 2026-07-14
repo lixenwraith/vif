@@ -1,25 +1,25 @@
 package visual
 
 import (
-	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/color"
 )
 
 // Pylon health color zones (TrueColor)
 var (
 	// Healthy zone (1.0 - 0.6): Blue
-	RgbPylonHealthyBright = terminal.CeruleanBlue
-	RgbPylonHealthyDark   = terminal.NavyBlue
+	RgbPylonHealthyBright = color.CeruleanBlue
+	RgbPylonHealthyDark   = color.NavyBlue
 
 	// Damaged zone (0.6 - 0.3): Green
-	RgbPylonDamagedBright = terminal.SeaGreen
-	RgbPylonDamagedDark   = terminal.DeepForest
+	RgbPylonDamagedBright = color.SeaGreen
+	RgbPylonDamagedDark   = color.DeepForest
 
 	// Critical zone (0.3 - 0.0): Red
-	RgbPylonCriticalBright = terminal.Cinnabar
-	RgbPylonCriticalDark   = terminal.DarkBurgundy
+	RgbPylonCriticalBright = color.Cinnabar
+	RgbPylonCriticalDark   = color.DarkBurgundy
 
 	// Glow color (constant blue)
-	RgbPylonGlow = terminal.SteelBlue
+	RgbPylonGlow = color.SteelBlue
 )
 
 // Pylon 256-color palette indices
@@ -50,3 +50,4 @@ const (
 	PylonHealthThresholdDamaged  = 0.6
 	PylonHealthThresholdCritical = 0.3
 )
+

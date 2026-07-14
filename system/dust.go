@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -11,7 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/physics"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -731,7 +731,7 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 }
 
 // TODO: convert to LUT in visual/color.go for colors and timer in parameter/particle.go?
-func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, terminal.RGB) {
+func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, color.RGB) {
 	switch level {
 	case component.GlyphDark:
 		return parameter.DustTimerDark, visual.RgbDustDark

@@ -1,5 +1,7 @@
-github.com/lixenwraith/terminal v0.0.0-20260712224105-aa22225c612f h1:E5bnPvKRqUGE4H+z9/SUn7TroAWtVKpRAvHWHA4U8os=
-github.com/lixenwraith/terminal v0.0.0-20260712224105-aa22225c612f/go.mod h1:PPxV2H7DTfeO7P++6Lp9jLxlN708Iwh85e8D7UFCtns=
+github.com/lixenwraith/color v0.0.0-20260714170240-79433f872c42 h1:wBqu4zX4jtEOhQVTI1x492N/DKrNpawY4RSxGyDlEXM=
+github.com/lixenwraith/color v0.0.0-20260714170240-79433f872c42/go.mod h1:p02MsAGqlmZu3sc6BPYCKmaedF+lqBoijnuu5cOrYeo=
+github.com/lixenwraith/terminal v0.0.0-20260714170427-21041633b2c3 h1:9zbFMAZMb8V4Q4N3pHO/I9oSGwB6RNKC/p+rDPjNPeE=
+github.com/lixenwraith/terminal v0.0.0-20260714170427-21041633b2c3/go.mod h1:KSA1VFStFKduxZDbHlcA3ttdbMQf4dCd/9X36S/fS20=
 github.com/lixenwraith/toml v0.0.0-20260713064549-c8e23ff85928 h1:UrIIqgbg2lcBzU5Yk37adcig8x63oMpXyuBmUxySeQE=
 github.com/lixenwraith/toml v0.0.0-20260713064549-c8e23ff85928/go.mod h1:BGt83WOBOxj0cCQU+2zdgavTma9Vmz8huuSY47AKH4I=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=

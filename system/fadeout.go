@@ -1,11 +1,11 @@
 package system
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/terminal"
 )
 
 // FadeoutSystem manages the lifecycle of visual fadeout effects
@@ -103,7 +103,7 @@ func (s *FadeoutSystem) Update() {
 	}
 }
 
-func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor terminal.RGB) {
+func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor color.RGB) {
 	entity := s.world.CreateEntity()
 	s.world.Components.Fadeout.SetComponent(entity, component.FadeoutComponent{
 		Char:      char,

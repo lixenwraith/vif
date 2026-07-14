@@ -3,20 +3,21 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // snakeBodyColorEntry holds pre-computed color for segment position
 type snakeBodyColorEntry struct {
-	center terminal.RGB
-	edge   terminal.RGB
+	center color.RGB
+	edge   color.RGB
 }
 
 // snakeRenderFunc defines the render strategy signature
@@ -235,7 +236,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 			}
 
 			// Base color from lateral position
-			var baseColor terminal.RGB
+			var baseColor color.RGB
 			if lateralOffsets[j] == 0 {
 				baseColor = entry.center
 			} else {
@@ -275,7 +276,7 @@ func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *rende
 	}
 
 	// Head color: shielded tint or health-based
-	var baseColor terminal.RGB
+	var baseColor color.RGB
 	if isShielded {
 		baseColor = render.Lerp(visual.RgbSnakeHeadBright, visual.RgbSnakeShieldTint, 0.3)
 	} else {
@@ -318,7 +319,7 @@ func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *rende
 	}
 }
 
-func (r *SnakeRenderer) calculateFlashColor(base terminal.RGB, remaining time.Duration) terminal.RGB {
+func (r *SnakeRenderer) calculateFlashColor(base color.RGB, remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64

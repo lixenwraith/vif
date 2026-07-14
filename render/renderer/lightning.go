@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -324,7 +325,7 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 		// SetFgOnly: write character and foreground color, preserve existing background
 		// This allows finalize() to set theme background on untouched cells
 		// Fg.R stores palette index when AttrFg256 is set
-		buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: paletteIdx}, terminal.AttrFg256)
+		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: paletteIdx}, terminal.AttrFg256)
 	}
 }
 
@@ -379,3 +380,4 @@ func (r *LightningRenderer) traceSubPixelLineHalf(hits map[uint64]uint8, sx0, sy
 		}
 	}
 }
+

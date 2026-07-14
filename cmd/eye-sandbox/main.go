@@ -21,11 +21,11 @@ type borderCell struct{ x, y int }
 type EnemyTemplate struct {
 	Name          string
 	Width, Height int
-	FgPalette     []terminal.RGB
-	BgPalette     []terminal.RGB
+	FgPalette     []color.RGB
+	BgPalette     []color.RGB
 
 	// Radial aura
-	AuraColor      terminal.RGB
+	AuraColor      color.RGB
 	AuraRadius     float64
 	AuraPulseFreq  float64 // Hz
 	AuraRotSpeed   float64 // Hz, 0 = static omnidirectional
@@ -33,7 +33,7 @@ type EnemyTemplate struct {
 
 	// Programmatic border rotation
 	BorderRotSpeed  float64 // Hz, 0 = off
-	BorderHighlight terminal.RGB
+	BorderHighlight color.RGB
 	BorderWidth     int // highlight width in perimeter cells
 
 	TicksPerFrame int
@@ -54,7 +54,7 @@ var startTime = time.Now()
 
 // --- Color helpers ---
 
-func scaleRGB(c terminal.RGB, f float64) terminal.RGB {
+func scaleRGB(c color.RGB, f float64) color.RGB {
 	if f <= 0 {
 		return terminal.Black
 	}
@@ -68,10 +68,10 @@ func scaleRGB(c terminal.RGB, f float64) terminal.RGB {
 	if b > 255 {
 		b = 255
 	}
-	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
+	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
 }
 
-func addRGB(a, b terminal.RGB) terminal.RGB {
+func addRGB(a, b color.RGB) color.RGB {
 	r, g, bl := int(a.R)+int(b.R), int(a.G)+int(b.G), int(a.B)+int(b.B)
 	if r > 255 {
 		r = 255
@@ -82,7 +82,7 @@ func addRGB(a, b terminal.RGB) terminal.RGB {
 	if bl > 255 {
 		bl = 255
 	}
-	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
 }
 
 func paletteIdx(b byte) int {
@@ -126,12 +126,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "VOID EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.DimGray, terminal.SteelBlue, terminal.White,
 			terminal.CeruleanBlue, terminal.NavyBlue, terminal.LightSkyBlue,
 			terminal.CobaltBlue, terminal.DodgerBlue,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DeepNavy, terminal.Gunmetal, terminal.CobaltBlue,
 		},
 		AuraColor: terminal.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.5,
@@ -180,12 +180,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "FLAME EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.LemonYellow, terminal.FlameOrange, terminal.White,
 			terminal.BrightRed, terminal.Amber, terminal.DarkCrimson,
 			terminal.Vermilion, terminal.WarmOrange,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.BlackRed, terminal.DarkAmber, terminal.Red,
 		},
 		AuraColor: terminal.FlameOrange, AuraRadius: 2.5, AuraPulseFreq: 2.0,
@@ -227,12 +227,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "FROST EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.BrightCyan, terminal.White, terminal.LightSkyBlue,
 			terminal.CeruleanBlue, terminal.SteelBlue, terminal.CoolSilver,
 			terminal.AliceBlue, terminal.PaleCyan,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DeepNavy, terminal.CobaltBlue, terminal.SteelBlue,
 		},
 		AuraColor: terminal.BrightCyan, AuraRadius: 2.5, AuraPulseFreq: 0.4,
@@ -275,12 +275,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "STORM EYE", Width: 6, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.BrightCyan, terminal.CeruleanBlue, terminal.White,
 			terminal.LemonYellow, terminal.SteelBlue, terminal.DodgerBlue,
 			terminal.SkyTeal, terminal.LightSkyBlue,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DeepNavy, terminal.CobaltBlue,
 		},
 		AuraColor: terminal.BrightCyan, AuraRadius: 3.0, AuraPulseFreq: 1.2,
@@ -318,12 +318,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "BLOOD EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.DarkCrimson, terminal.BrightRed, terminal.White,
 			terminal.Vermilion, terminal.Coral, terminal.Red,
 			terminal.Salmon, terminal.LightCoral,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.BlackRed, terminal.DarkCrimson, terminal.Red,
 		},
 		AuraColor: terminal.DarkCrimson, AuraRadius: 2.0, AuraPulseFreq: 1.2,
@@ -365,12 +365,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "GOLDEN EYE", Width: 6, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.Gold, terminal.Amber, terminal.White,
 			terminal.LemonYellow, terminal.DarkGold, terminal.PaleGold,
 			terminal.Buttercream, terminal.WarmOrange,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DarkAmber, terminal.Amber, terminal.Gold,
 		},
 		AuraColor: terminal.Amber, AuraRadius: 2.5, AuraPulseFreq: 0.6,
@@ -415,12 +415,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "ABYSS EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.PaleLavender, terminal.ElectricViolet, terminal.White,
 			terminal.SoftLavender, terminal.DarkViolet, terminal.MutedPurple,
 			terminal.DeepPurple, terminal.Orchid,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.Obsidian, terminal.DeepPurple,
 		},
 		AuraColor: terminal.DeepPurple, AuraRadius: 3.0, AuraPulseFreq: 0.5,
@@ -770,7 +770,7 @@ func renderBorderHighlight(cells []terminal.Cell, w, h int, e *Enemy, now time.T
 	}
 }
 
-func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg terminal.RGB, attr terminal.Attr) {
+func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, attr terminal.Attr) {
 	if y < 0 || y >= h {
 		return
 	}

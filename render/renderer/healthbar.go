@@ -3,12 +3,13 @@ package renderer
 import (
 	"math"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // HealthBarRenderer draws health indicators above enemy entities
@@ -230,6 +231,7 @@ func (r *HealthBarRenderer) renderCell256(buf *render.RenderBuffer, x, y int, ch
 	paletteIdx := visual.Health256LUT[segment]
 
 	// Use 256-color foreground attribute
-	buf.Set(x, y, ch, terminal.RGB{R: paletteIdx}, visual.RgbBlack,
+	buf.Set(x, y, ch, color.RGB{R: paletteIdx}, visual.RgbBlack,
 		render.BlendFgOnly, 1.0, terminal.AttrFg256)
 }
+

@@ -1,11 +1,12 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -82,7 +83,7 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 		return
 	}
 
-	var pulseColor terminal.RGB
+	var pulseColor color.RGB
 	if negativeEnergy {
 		pulseColor = visual.RgbPulseNegative
 	} else {
@@ -147,3 +148,4 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 		}
 	}
 }
+

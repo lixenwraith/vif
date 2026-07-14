@@ -21,9 +21,9 @@ type Frame struct {
 type EnemyTemplate struct {
 	Name          string
 	Width, Height int
-	FgPalette     []terminal.RGB
-	BgPalette     []terminal.RGB
-	AuraColor     terminal.RGB
+	FgPalette     []color.RGB
+	BgPalette     []color.RGB
+	AuraColor     color.RGB
 	AuraRadius    float64
 	AuraPulseFreq float64 // Hz
 	TicksPerFrame int     // base ticks per frame change
@@ -42,7 +42,7 @@ var startTime = time.Now()
 
 // --- Color helpers ---
 
-func scaleRGB(c terminal.RGB, f float64) terminal.RGB {
+func scaleRGB(c color.RGB, f float64) color.RGB {
 	if f <= 0 {
 		return terminal.Black
 	}
@@ -58,10 +58,10 @@ func scaleRGB(c terminal.RGB, f float64) terminal.RGB {
 	if b > 255 {
 		b = 255
 	}
-	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
+	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
 }
 
-func addRGB(a, b terminal.RGB) terminal.RGB {
+func addRGB(a, b color.RGB) color.RGB {
 	r := int(a.R) + int(b.R)
 	g := int(a.G) + int(b.G)
 	bl := int(a.B) + int(b.B)
@@ -74,7 +74,7 @@ func addRGB(a, b terminal.RGB) terminal.RGB {
 	if bl > 255 {
 		bl = 255
 	}
-	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
 }
 
 func paletteIdx(b byte) int {
@@ -97,11 +97,11 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "INFERNAL", Width: 6, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.LemonYellow, terminal.FlameOrange, terminal.BrightRed,
 			terminal.White, terminal.Amber, terminal.DarkCrimson, terminal.Vermilion,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DarkAmber, terminal.BlackRed, terminal.Red,
 		},
 		AuraColor: terminal.FlameOrange, AuraRadius: 3.0, AuraPulseFreq: 1.5,
@@ -147,11 +147,11 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "WRAITH", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.PaleLavender, terminal.ElectricViolet, terminal.DarkViolet,
 			terminal.SoftLavender, terminal.DeepPurple,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.Obsidian, terminal.DeepPurple,
 		},
 		AuraColor: terminal.DeepPurple, AuraRadius: 2.5, AuraPulseFreq: 0.6,
@@ -192,12 +192,12 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "ARCANE EYE", Width: 5, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.CeruleanBlue, terminal.SteelBlue, terminal.White,
 			terminal.BrightCyan, terminal.LightSkyBlue, terminal.CobaltBlue,
 			terminal.DodgerBlue, terminal.SkyTeal,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DeepNavy, terminal.CobaltBlue, terminal.DodgerBlue,
 		},
 		AuraColor: terminal.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.8,
@@ -248,11 +248,11 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "VENOM QUEEN", Width: 6, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.NeonGreen, terminal.YellowGreen, terminal.BrightGreen,
 			terminal.White, terminal.DarkGreen, terminal.Lime,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.BlackGreen, terminal.DarkGreen,
 		},
 		AuraColor: terminal.NeonGreen, AuraRadius: 2.0, AuraPulseFreq: 1.0,
@@ -292,11 +292,11 @@ var bestiary = []EnemyTemplate{
 	// ================================================================
 	{
 		Name: "IRON REAVER", Width: 6, Height: 3,
-		FgPalette: []terminal.RGB{
+		FgPalette: []color.RGB{
 			terminal.Silver, terminal.CoolSilver, terminal.IronGray,
 			terminal.BrightRed, terminal.White, terminal.DarkGray,
 		},
-		BgPalette: []terminal.RGB{
+		BgPalette: []color.RGB{
 			terminal.DarkSlate, terminal.BlackRed, terminal.Gunmetal,
 		},
 		AuraColor: terminal.IronGray, AuraRadius: 1.5, AuraPulseFreq: 2.0,
@@ -574,7 +574,7 @@ func renderSprite(cells []terminal.Cell, w, h int, e *Enemy, tick int) {
 	}
 }
 
-func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg terminal.RGB, attr terminal.Attr) {
+func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, attr terminal.Attr) {
 	if y < 0 || y >= h {
 		return
 	}

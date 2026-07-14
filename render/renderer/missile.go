@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -118,7 +119,7 @@ func (r *MissileRenderer) renderBody(
 		return
 	}
 
-	var color terminal.RGB
+	var color color.RGB
 	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
 	if trueColor {
@@ -126,7 +127,7 @@ func (r *MissileRenderer) renderBody(
 			render.BlendReplace, 1.0, terminal.AttrBold)
 	} else {
 		// 256-color fallback remains as is or mapped to similar indices
-		buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Body}, terminal.AttrFg256|terminal.AttrBold)
+		buf.SetFgOnly(screenX, screenY, char, visual.RgbMissileChildBody, terminal.AttrFg256|terminal.AttrBold)
 	}
 }
 
@@ -208,7 +209,7 @@ func (r *MissileRenderer) renderMissile256(
 		// Binary visibility for 256-color (no alpha blending)
 		if pt.Age < maxAge/2 {
 			buf.SetFgOnly(screenX, screenY, visual.MissileTrailChar,
-				terminal.RGB{R: visual.Missile256Trail}, terminal.AttrFg256)
+				color.RGB{R: visual.Missile256Trail}, terminal.AttrFg256)
 		}
 	}
 
@@ -223,5 +224,5 @@ func (r *MissileRenderer) renderMissile256(
 
 	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
-	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
+	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
 }

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 
+	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -24,7 +25,7 @@ func WriteANSI(converted *ConvertedImage, output string, colorMode terminal.Colo
 	}
 	defer w.Flush()
 
-	var lastFg, lastBg terminal.RGB
+	var lastFg, lastBg lcolor.RGB
 	lastValid := false
 
 	for y := 0; y < converted.Height; y++ {
@@ -67,3 +68,4 @@ func WriteANSI(converted *ConvertedImage, output string, colorMode terminal.Colo
 
 	return nil
 }
+

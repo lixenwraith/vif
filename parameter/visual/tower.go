@@ -1,22 +1,23 @@
 package visual
 
 import (
-	"github.com/lixenwraith/vi-fighter/component"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/component"
 )
 
 // TowerTypeColors holds per-type health gradient, glow, and palette colors
 type TowerTypeColors struct {
 	// TrueColor health zones (bright=center, dark=edge)
-	HealthyBright  terminal.RGB
-	HealthyDark    terminal.RGB
-	DamagedBright  terminal.RGB
-	DamagedDark    terminal.RGB
-	CriticalBright terminal.RGB
-	CriticalDark   terminal.RGB
+	HealthyBright  color.RGB
+	HealthyDark    color.RGB
+	DamagedBright  color.RGB
+	DamagedDark    color.RGB
+	CriticalBright color.RGB
+	CriticalDark   color.RGB
 
 	// TrueColor glow
-	GlowColor terminal.RGB
+	GlowColor color.RGB
 
 	// 256-color palette per health zone
 	Palette256Healthy  uint8
@@ -33,13 +34,13 @@ type TowerTypeColors struct {
 var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 	// Type 0: Cyan — Cyan → PaleGold → Coral
 	{
-		HealthyBright:      terminal.BrightCyan,
-		HealthyDark:        terminal.Teal,
-		DamagedBright:      terminal.PaleGold,
-		DamagedDark:        terminal.Amber,
-		CriticalBright:     terminal.Coral,
-		CriticalDark:       terminal.Brick,
-		GlowColor:          terminal.SkyTeal,
+		HealthyBright:      color.BrightCyan,
+		HealthyDark:        color.Teal,
+		DamagedBright:      color.PaleGold,
+		DamagedDark:        color.Amber,
+		CriticalBright:     color.Coral,
+		CriticalDark:       color.Brick,
+		GlowColor:          color.SkyTeal,
 		Palette256Healthy:  terminal.P256Cyan,
 		Palette256Damaged:  terminal.P256Gold,
 		Palette256Critical: terminal.P256Crimson,
@@ -49,13 +50,13 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 	},
 	// Type 1: Gold — Gold → WarmOrange → BrightRed
 	{
-		HealthyBright:      terminal.Gold,
-		HealthyDark:        terminal.DarkGold,
-		DamagedBright:      terminal.WarmOrange,
-		DamagedDark:        terminal.BurntOrange,
-		CriticalBright:     terminal.BrightRed,
-		CriticalDark:       terminal.Brick,
-		GlowColor:          terminal.Apricot,
+		HealthyBright:      color.Gold,
+		HealthyDark:        color.DarkGold,
+		DamagedBright:      color.WarmOrange,
+		DamagedDark:        color.BurntOrange,
+		CriticalBright:     color.BrightRed,
+		CriticalDark:       color.Brick,
+		GlowColor:          color.Apricot,
 		Palette256Healthy:  terminal.P256Gold,
 		Palette256Damaged:  terminal.P256Amber,
 		Palette256Critical: terminal.P256Red,
@@ -65,13 +66,13 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 	},
 	// Type 2: Violet — ElectricViolet → SoftLavender → Vermilion
 	{
-		HealthyBright:      terminal.ElectricViolet,
-		HealthyDark:        terminal.DarkViolet,
-		DamagedBright:      terminal.SoftLavender,
-		DamagedDark:        terminal.MutedPurple,
-		CriticalBright:     terminal.Vermilion,
-		CriticalDark:       terminal.DarkCrimson,
-		GlowColor:          terminal.SoftLavender,
+		HealthyBright:      color.ElectricViolet,
+		HealthyDark:        color.DarkViolet,
+		DamagedBright:      color.SoftLavender,
+		DamagedDark:        color.MutedPurple,
+		CriticalBright:     color.Vermilion,
+		CriticalDark:       color.DarkCrimson,
+		GlowColor:          color.SoftLavender,
 		Palette256Healthy:  terminal.P256MediumPurple,
 		Palette256Damaged:  terminal.P256Violet,
 		Palette256Critical: terminal.P256Crimson,
@@ -81,13 +82,13 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 	},
 	// Type 3: Emerald — EmeraldGreen → YellowGreen → BurntSienna
 	{
-		HealthyBright:      terminal.EmeraldGreen,
-		HealthyDark:        terminal.SeaGreen,
-		DamagedBright:      terminal.YellowGreen,
-		DamagedDark:        terminal.FernGreen,
-		CriticalBright:     terminal.BurntSienna,
-		CriticalDark:       terminal.Brick,
-		GlowColor:          terminal.MintGreen,
+		HealthyBright:      color.EmeraldGreen,
+		HealthyDark:        color.SeaGreen,
+		DamagedBright:      color.YellowGreen,
+		DamagedDark:        color.FernGreen,
+		CriticalBright:     color.BurntSienna,
+		CriticalDark:       color.Brick,
+		GlowColor:          color.MintGreen,
 		Palette256Healthy:  terminal.P256Green,
 		Palette256Damaged:  terminal.P256YellowGreen,
 		Palette256Critical: terminal.P256Crimson,
@@ -98,7 +99,7 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 }
 
 // Active target glow color (shared across all types)
-var RgbTowerActiveGlow = terminal.Gold
+var RgbTowerActiveGlow = color.Gold
 
 // Health ratio thresholds for zone boundaries
 const (

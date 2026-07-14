@@ -1,14 +1,15 @@
 package render
 
 import (
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // backgroundOverlay holds deferred background effect state
 type backgroundOverlay struct {
 	active    bool
-	color     terminal.RGB
+	color     color.RGB
 	intensity float64
 }
 
@@ -82,7 +83,7 @@ func (b *RenderBuffer) SetWriteMask(mask uint8) {
 
 // SetBackgroundOverlay configures overlay for untouched cells applied in finalize()
 // Intensity is pre-computed by caller (envelope already applied)
-func (b *RenderBuffer) SetBackgroundOverlay(color terminal.RGB, intensity float64) {
+func (b *RenderBuffer) SetBackgroundOverlay(color color.RGB, intensity float64) {
 	b.bgOverlay = backgroundOverlay{
 		active:    true,
 		color:     color,
@@ -98,7 +99,7 @@ func (b *RenderBuffer) inBounds(x, y int) bool {
 // === COMPOSITOR API ===
 
 // Set composites a cell with specified blend mode
-func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg terminal.RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
+func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode BlendMode, alpha float64, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -167,7 +168,7 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg terminal.RGB, mode Bl
 }
 
 // SetFgOnly writes rune, foreground, and attrs while preserving existing background and bg attrs
-func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg terminal.RGB, attrs terminal.Attr) {
+func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg color.RGB, attrs terminal.Attr) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -182,7 +183,7 @@ func (b *RenderBuffer) SetFgOnly(x, y int, r rune, fg terminal.RGB, attrs termin
 }
 
 // SetBgOnly updates background color while preserving existing rune/foreground
-func (b *RenderBuffer) SetBgOnly(x, y int, bg terminal.RGB) {
+func (b *RenderBuffer) SetBgOnly(x, y int, bg color.RGB) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -194,7 +195,7 @@ func (b *RenderBuffer) SetBgOnly(x, y int, bg terminal.RGB) {
 }
 
 // SetWithBg writes a cell with explicit fg and bg colors (opaque replace)
-func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg terminal.RGB) {
+func (b *RenderBuffer) SetWithBg(x, y int, r rune, fg, bg color.RGB) {
 	if !b.inBounds(x, y) {
 		return
 	}
@@ -217,7 +218,7 @@ func (b *RenderBuffer) SetBg256(x, y int, paletteIdx uint8) {
 		return
 	}
 	idx := y*b.width + x
-	b.cells[idx].Bg = terminal.RGB{R: paletteIdx, G: 0, B: 0}
+	b.cells[idx].Bg = color.RGB{R: paletteIdx, G: 0, B: 0}
 	// Preserve fg-related attrs, add bg256
 	b.cells[idx].Attrs = (b.cells[idx].Attrs & terminal.AttrFg256) | terminal.AttrBg256
 	b.touched[idx] = true
@@ -337,3 +338,4 @@ func (b *RenderBuffer) FlushToTerminal(term terminal.Terminal) {
 	b.finalize()
 	term.Flush(b.cells, b.width, b.height)
 }
+

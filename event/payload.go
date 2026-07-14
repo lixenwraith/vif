@@ -4,9 +4,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/terminal"
 )
 
 // --- Engine ---
@@ -165,7 +165,7 @@ type GoldCompletionPayload struct {
 // SplashTimerRequestPayload anchors countdown timer to sequence position
 type SplashTimerRequestPayload struct {
 	AnchorEntity core.Entity   `toml:"anchor_entity"`
-	Color        terminal.RGB  `toml:"color"`
+	Color        color.RGB     `toml:"color"`
 	OriginX      int           `toml:"origin_x"`
 	OriginY      int           `toml:"origin_y"`
 	MarginLeft   int           `toml:"margin_left"`
@@ -497,9 +497,9 @@ type StormDestroyedPayload struct {
 
 // StrobeRequestPayload configures screen flash effect
 type StrobeRequestPayload struct {
-	Color      terminal.RGB `toml:"color"`
-	Intensity  float64      `toml:"intensity"`   // Base intensity 0.0-1.0
-	DurationMs int64        `toml:"duration_ms"` // 0 = default value from parameters
+	Color      color.RGB `toml:"color"`
+	Intensity  float64   `toml:"intensity"`   // Base intensity 0.0-1.0
+	DurationMs int64     `toml:"duration_ms"` // 0 = default value from parameters
 }
 
 // --- Spirit ---
@@ -632,7 +632,7 @@ type MarkerSpawnRequestPayload struct {
 	Intensity int64                 `toml:"intensity"` // Q32.32
 	Duration  time.Duration         `toml:"duration"`
 	PulseRate int64                 `toml:"pulse_rate"` // Q32.32, 0 = none
-	Color     terminal.RGB          `toml:"color"`
+	Color     color.RGB             `toml:"color"`
 	Shape     component.MarkerShape `toml:"shape"`
 	FadeMode  uint8                 `toml:"fade_mode"` // 0=none, 1=out, 2=in
 }
@@ -659,8 +659,8 @@ type WallSpawnRequestPayload struct {
 	X             int                     `toml:"x"`
 	Y             int                     `toml:"y"`
 	Char          rune                    `toml:"char"`
-	FgColor       terminal.RGB            `toml:"fg_color"`
-	BgColor       terminal.RGB            `toml:"bg_color"`
+	FgColor       color.RGB               `toml:"fg_color"`
+	BgColor       color.RGB               `toml:"bg_color"`
 	CollisionMode WallBatchCollisionMode  `toml:"collision_mode"`
 	BoxStyle      component.BoxDrawStyle  `toml:"box_style"` // Box-drawing style (0=none, 1=single, 2=double)
 	RenderFg      bool                    `toml:"render_fg"`
@@ -783,8 +783,8 @@ type FadeoutSpawnPayload struct {
 	X       int  `toml:"x"`
 	Y       int  `toml:"y"`
 	Char    rune `toml:"char"` // 0 = bg-only
-	FgColor terminal.RGB
-	BgColor terminal.RGB
+	FgColor color.RGB
+	BgColor color.RGB
 }
 
 // --- Pylon ---

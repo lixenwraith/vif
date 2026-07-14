@@ -4,6 +4,7 @@ import (
 	"image"
 	"image/color"
 
+	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -127,7 +128,7 @@ func convertBackground(img image.Image, cells []terminal.Cell, outW, outH int, c
 
 			if colorMode == terminal.ColorMode256 {
 				palIdx := terminal.RGBTo256(rgb)
-				cells[idx].Bg = terminal.RGB{R: palIdx}
+				cells[idx].Bg = lcolor.RGB{R: palIdx}
 				cells[idx].Attrs = terminal.AttrBg256
 			} else {
 				cells[idx].Bg = rgb
@@ -146,7 +147,7 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 
 	for y := 0; y < outH; y++ {
 		for x := 0; x < outW; x++ {
-			var pixels [4]terminal.RGB
+			var pixels [4]lcolor.RGB
 
 			gx := x * 2
 			gy := y * 2
@@ -175,8 +176,8 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 			if colorMode == terminal.ColorMode256 {
 				fgIdx := terminal.RGBTo256(fg)
 				bgIdx := terminal.RGBTo256(bg)
-				cells[idx].Fg = terminal.RGB{R: fgIdx}
-				cells[idx].Bg = terminal.RGB{R: bgIdx}
+				cells[idx].Fg = lcolor.RGB{R: fgIdx}
+				cells[idx].Bg = lcolor.RGB{R: bgIdx}
 				cells[idx].Attrs = terminal.AttrFg256 | terminal.AttrBg256
 			} else {
 				cells[idx].Fg = fg
@@ -186,10 +187,10 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 	}
 }
 
-func findBestQuadrant(pixels [4]terminal.RGB) (rune, terminal.RGB, terminal.RGB) {
+func findBestQuadrant(pixels [4]lcolor.RGB) (rune, lcolor.RGB, lcolor.RGB) {
 	bestError := int(^uint(0) >> 1)
 	bestPattern := 0
-	var bestFg, bestBg terminal.RGB
+	var bestFg, bestBg lcolor.RGB
 
 	for pattern := 0; pattern < 16; pattern++ {
 		fg, bg, err := computePatternColors(pixels, pattern)
@@ -204,7 +205,7 @@ func findBestQuadrant(pixels [4]terminal.RGB) (rune, terminal.RGB, terminal.RGB)
 	return QuadrantChars[bestPattern], bestFg, bestBg
 }
 
-func computePatternColors(pixels [4]terminal.RGB, pattern int) (fg, bg terminal.RGB, totalError int) {
+func computePatternColors(pixels [4]lcolor.RGB, pattern int) (fg, bg lcolor.RGB, totalError int) {
 	var fgR, fgG, fgB, fgCount int
 	var bgR, bgG, bgB, bgCount int
 
@@ -223,14 +224,14 @@ func computePatternColors(pixels [4]terminal.RGB, pattern int) (fg, bg terminal.
 	}
 
 	if fgCount > 0 {
-		fg = terminal.RGB{
+		fg = lcolor.RGB{
 			R: uint8(fgR / fgCount),
 			G: uint8(fgG / fgCount),
 			B: uint8(fgB / fgCount),
 		}
 	}
 	if bgCount > 0 {
-		bg = terminal.RGB{
+		bg = lcolor.RGB{
 			R: uint8(bgR / bgCount),
 			G: uint8(bgG / bgCount),
 			B: uint8(bgB / bgCount),
@@ -238,7 +239,7 @@ func computePatternColors(pixels [4]terminal.RGB, pattern int) (fg, bg terminal.
 	}
 
 	for i := 0; i < 4; i++ {
-		var target terminal.RGB
+		var target lcolor.RGB
 		if pattern&(1<<i) != 0 {
 			target = fg
 		} else {
@@ -250,21 +251,22 @@ func computePatternColors(pixels [4]terminal.RGB, pattern int) (fg, bg terminal.
 	return fg, bg, totalError
 }
 
-func colorDistanceSq(a, b terminal.RGB) int {
+func colorDistanceSq(a, b lcolor.RGB) int {
 	dr := int(a.R) - int(b.R)
 	dg := int(a.G) - int(b.G)
 	db := int(a.B) - int(b.B)
 	return dr*dr + dg*dg + db*db
 }
 
-func colorToRGB(c color.Color) terminal.RGB {
+func colorToRGB(c color.Color) lcolor.RGB {
 	r, g, b, a := c.RGBA()
 	if a == 0 {
-		return terminal.RGB{R: 0, G: 0, B: 0}
+		return lcolor.RGB{R: 0, G: 0, B: 0}
 	}
-	return terminal.RGB{
+	return lcolor.RGB{
 		R: uint8((r * 0xff) / a),
 		G: uint8((g * 0xff) / a),
 		B: uint8((b * 0xff) / a),
 	}
 }
+

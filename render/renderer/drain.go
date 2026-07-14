@@ -3,11 +3,12 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // DrainRenderer draws drain entities with combat-state-aware coloring
@@ -48,7 +49,7 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Priority: hit flash > enraged > normal
-		var color terminal.RGB
+		var color color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
 			color = r.calculateFlashColor(combatComp.RemainingHitFlash)
@@ -63,7 +64,7 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 }
 
 // calculateFlashColor returns yellow with pulse effect
-func (r *DrainRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
+func (r *DrainRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -77,3 +78,4 @@ func (r *DrainRenderer) calculateFlashColor(remaining time.Duration) terminal.RG
 
 	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }
+

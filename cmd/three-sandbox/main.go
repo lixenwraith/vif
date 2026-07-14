@@ -22,7 +22,7 @@ type Part struct {
 	Pos, Vel Vec3
 	Mass     int64 // Q32.32
 	Radius   int64 // Q32.32
-	Color    terminal.RGB
+	Color    color.RGB
 	Frozen   bool
 	Flash    int64 // Q32.32 remaining flash seconds
 }
@@ -336,7 +336,7 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 				b = math.Min(255, b+40*pulse)
 			}
 
-			color := terminal.RGB{R: clampF(r), G: clampF(g), B: clampF(b)}
+			color := color.RGB{R: clampF(r), G: clampF(g), B: clampF(b)}
 
 			// Alpha: solid core, fading glow
 			alpha := 1.0
@@ -351,9 +351,9 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 
 			// Use screen blend for additive glow effect
 			if distSq > sphereRadiusSq {
-				buf.Set(sx, sy, ' ', terminal.RGB{}, color, render.BlendScreen, alpha*0.7, terminal.AttrNone)
+				buf.Set(sx, sy, ' ', color.RGB{}, color, render.BlendScreen, alpha*0.7, terminal.AttrNone)
 			} else {
-				buf.Set(sx, sy, ' ', terminal.RGB{}, color, render.BlendAlpha, alpha, terminal.AttrNone)
+				buf.Set(sx, sy, ' ', color.RGB{}, color, render.BlendAlpha, alpha, terminal.AttrNone)
 			}
 		}
 	}
@@ -384,7 +384,7 @@ func renderFrame(buf *render.RenderBuffer, parts *[3]Part, selected, screenW, sc
 func renderHUD(buf *render.RenderBuffer, parts *[3]Part, selected, screenW, screenH int, paused bool) {
 	statusY := screenH - 2
 	controlY := screenH - 1
-	dim := terminal.RGB{R: 100, G: 100, B: 110}
+	dim := color.RGB{R: 100, G: 100, B: 110}
 
 	x := 1
 	for i := range parts {
@@ -407,13 +407,13 @@ func renderHUD(buf *render.RenderBuffer, parts *[3]Part, selected, screenW, scre
 	}
 
 	if paused {
-		writeStr(buf, screenW-9, statusY, "[PAUSED]", terminal.RGB{R: 255, G: 200, B: 50})
+		writeStr(buf, screenW-9, statusY, "[PAUSED]", color.RGB{R: 255, G: 200, B: 50})
 	}
 
 	writeStr(buf, 1, controlY, "1/2/3:sel  f:freeze  up/dn:mass  space:pause  r:reset  q:quit", dim)
 }
 
-func writeStr(buf *render.RenderBuffer, x, y int, s string, fg terminal.RGB) {
+func writeStr(buf *render.RenderBuffer, x, y int, s string, fg color.RGB) {
 	for _, r := range s {
 		buf.SetFgOnly(x, y, r, fg, terminal.AttrNone)
 		x++
@@ -542,21 +542,21 @@ func main() {
 // 			Vel:    Vec3{vmath.FromFloat(5.0), vmath.FromFloat(2.0), vmath.FromFloat(-3.0)},
 // 			Mass:   massDefault,
 // 			Radius: partRadius,
-// 			Color:  terminal.RGB{R: 80, G: 160, B: 255}, // Blue
+// 			Color:  color.RGB{R: 80, G: 160, B: 255}, // Blue
 // 		},
 // 		{
 // 			Pos:    Vec3{vmath.FromFloat(3.0), vmath.FromFloat(1.5), vmath.FromFloat(18.0)},
 // 			Vel:    Vec3{vmath.FromFloat(-3.0), vmath.FromFloat(-4.0), vmath.FromFloat(4.0)},
 // 			Mass:   massDefault,
 // 			Radius: partRadius,
-// 			Color:  terminal.RGB{R: 255, G: 90, B: 90}, // Red
+// 			Color:  color.RGB{R: 255, G: 90, B: 90}, // Red
 // 		},
 // 		{
 // 			Pos:    Vec3{vmath.FromFloat(0.0), vmath.FromFloat(0.0), vmath.FromFloat(24.0)},
 // 			Vel:    Vec3{vmath.FromFloat(2.0), vmath.FromFloat(3.5), vmath.FromFloat(-6.0)},
 // 			Mass:   massDefault,
 // 			Radius: partRadius,
-// 			Color:  terminal.RGB{R: 90, G: 255, B: 120}, // Green
+// 			Color:  color.RGB{R: 90, G: 255, B: 120}, // Green
 // 		},
 // 	}
 // }
@@ -568,21 +568,21 @@ func initParts() [3]Part {
 			Vel:    Vec3{vmath.FromFloat(5.0), vmath.FromFloat(2.0), vmath.FromFloat(-3.0)},
 			Mass:   massDefault,
 			Radius: partRadius,
-			Color:  terminal.RGB{R: 40, G: 180, B: 255}, // Cyan
+			Color:  color.RGB{R: 40, G: 180, B: 255}, // Cyan
 		},
 		{
 			Pos:    Vec3{vmath.FromFloat(3.0), vmath.FromFloat(1.5), vmath.FromFloat(18.0)},
 			Vel:    Vec3{vmath.FromFloat(-3.0), vmath.FromFloat(-4.0), vmath.FromFloat(4.0)},
 			Mass:   massDefault,
 			Radius: partRadius,
-			Color:  terminal.RGB{R: 255, G: 60, B: 120}, // Magenta
+			Color:  color.RGB{R: 255, G: 60, B: 120}, // Magenta
 		},
 		{
 			Pos:    Vec3{vmath.FromFloat(0.0), vmath.FromFloat(0.0), vmath.FromFloat(24.0)},
 			Vel:    Vec3{vmath.FromFloat(2.0), vmath.FromFloat(3.5), vmath.FromFloat(-6.0)},
 			Mass:   massDefault,
 			Radius: partRadius,
-			Color:  terminal.RGB{R: 120, G: 255, B: 80}, // Lime
+			Color:  color.RGB{R: 120, G: 255, B: 80}, // Lime
 		},
 	}
 }

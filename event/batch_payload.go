@@ -1,8 +1,8 @@
 package event
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/terminal"
 )
 
 // DustSpawnEntry is a value type for batch dust spawning
@@ -18,8 +18,8 @@ type FadeoutSpawnEntry struct {
 	X       int
 	Y       int
 	Char    rune
-	FgColor terminal.RGB
-	BgColor terminal.RGB
+	FgColor color.RGB
+	BgColor color.RGB
 }
 
 // FlashSpawnEntry is a value type for batch flash spawning
@@ -44,3 +44,4 @@ type DecaySpawnEntry struct {
 	Char          rune
 	SkipStartCell bool
 }
+

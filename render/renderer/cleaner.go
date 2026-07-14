@@ -1,21 +1,21 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // CleanerRenderer draws cleaner entities with gradient trails
 type CleanerRenderer struct {
 	gameCtx *engine.GameContext
 
-	gradientPositive []terminal.RGB
-	gradientNegative []terminal.RGB
-	gradientNugget   []terminal.RGB
+	gradientPositive []color.RGB
+	gradientNegative []color.RGB
+	gradientNugget   []color.RGB
 }
 
 // NewCleanerRenderer creates cleaner renderer with gradient generation
@@ -31,9 +31,9 @@ func NewCleanerRenderer(gameCtx *engine.GameContext) *CleanerRenderer {
 func (r *CleanerRenderer) buildGradients() {
 	length := parameter.CleanerTrailLength
 
-	r.gradientPositive = make([]terminal.RGB, length)
-	r.gradientNegative = make([]terminal.RGB, length)
-	r.gradientNugget = make([]terminal.RGB, length)
+	r.gradientPositive = make([]color.RGB, length)
+	r.gradientNegative = make([]color.RGB, length)
+	r.gradientNugget = make([]color.RGB, length)
 
 	for i := 0; i < length; i++ {
 		opacity := 1.0 - (float64(i) / float64(length))
@@ -65,7 +65,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		}
 
 		// Select gradient based on color type
-		var gradient []terminal.RGB
+		var gradient []color.RGB
 		switch cleaner.ColorType {
 		case component.CleanerColorPositive:
 			gradient = r.gradientPositive
@@ -113,3 +113,4 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		}
 	}
 }
+

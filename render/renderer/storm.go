@@ -4,13 +4,14 @@ import (
 	"math"
 	"sort"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -270,7 +271,7 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 			blue = 255
 		}
 
-		color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+		color := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 		buf.SetBgOnly(screenX, screenY, color)
 	}
 }
@@ -336,7 +337,7 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			color := terminal.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+			color := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 
 			// BlendAdd for glow on black background
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
@@ -400,7 +401,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 				continue
 			}
 
-			color := terminal.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
+			color := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
@@ -566,7 +567,7 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 	sinA := vmath.Sin(angleFixed)
 
 	// Warm amber glow contrasting blue body
-	glowColor := terminal.RGB{R: 255, G: 190, B: 70}
+	glowColor := color.RGB{R: 255, G: 190, B: 70}
 
 	// Render ring around circle edge
 	outerRx := r.radiusX + parameter.StormConvexGlowExtendFloat + 1.0

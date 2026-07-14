@@ -1,10 +1,11 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -48,7 +49,7 @@ func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	// 2. Draw Crosshair (Row/Column Highlights)
 	if pingComp.ShowCrosshair {
-		var lineColor terminal.RGB
+		var lineColor color.RGB
 		if r.gameCtx.IsInsertMode() {
 			lineColor = visual.RgbPingHighlight
 		} else {
@@ -155,7 +156,7 @@ func (r *PingRenderer) isExcluded(vx, vy int) bool {
 }
 
 // drawCrosshair draws the crosshair lines in viewport space
-func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color terminal.RGB) {
+func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color color.RGB) {
 	pingBounds := r.gameCtx.World.GetPingAbsoluteBounds()
 
 	// Convert ping bounds from map coords to viewport coords
@@ -202,7 +203,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 }
 
 // drawGrid draws the 5-cell grid in viewport space
-func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color terminal.RGB) {
+func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color color.RGB) {
 	// Vertical lines at ±5, ±10, etc. from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -261,3 +262,4 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		}
 	}
 }
+

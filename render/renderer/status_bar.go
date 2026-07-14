@@ -6,12 +6,13 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/status"
-	"github.com/lixenwraith/terminal"
 )
 
 // StatusBarRenderer draws the status bar at the bottom
@@ -93,8 +94,8 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// === BUILD RIGHT-SIDE ITEMS ===
 	type statusItem struct {
 		text string
-		fg   terminal.RGB
-		bg   terminal.RGB
+		fg   color.RGB
+		bg   color.RGB
 	}
 	var rightItems []statusItem
 
@@ -130,7 +131,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	energyVal := energyComp.Current
 	energyText := fmt.Sprintf(" Energy: %d ", energyVal)
 
-	var energyFg, energyBg terminal.RGB
+	var energyFg, energyBg color.RGB
 	if energyVal < 0 {
 		energyFg, energyBg = visual.RgbEnergyBg, visual.RgbBlack
 	} else {
@@ -143,7 +144,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		if typeCode == 0 {
 			energyFg = visual.RgbCursorError
 		} else {
-			var blinkColor terminal.RGB
+			var blinkColor color.RGB
 			switch typeCode {
 			case 1:
 				blinkColor = visual.RgbEnergyBlinkBlue
@@ -235,7 +236,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		effectMuted := player.IsEffectMuted()
 		musicMuted := player.IsMusicMuted()
 
-		var audioBgColor terminal.RGB
+		var audioBgColor color.RGB
 		switch {
 		case effectMuted && musicMuted:
 			audioBgColor = visual.RgbAudioBothOff
@@ -257,7 +258,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Mode indicator
 	var modeText string
-	var modeBgColor terminal.RGB
+	var modeBgColor color.RGB
 	if r.gameCtx.IsSearchMode() {
 		modeText = parameter.ModeTextSearch
 		modeBgColor = visual.RgbModeSearchBg
@@ -310,7 +311,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// === DETERMINE TEXT CONTENT AND NEEDED WIDTH ===
 	var textContent string
-	var textFg terminal.RGB
+	var textFg color.RGB
 	var isInputMode bool // search or command mode (needs cursor)
 
 	if r.gameCtx.IsSearchMode() {
@@ -425,7 +426,7 @@ func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
 
 // renderInputText renders search/command input with scrolling window around cursor
 // Returns screen X position where cursor should be drawn
-func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg terminal.RGB, cursorPos int) int {
+func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX, maxWidth int, text string, fg color.RGB, cursorPos int) int {
 	if maxWidth <= 0 {
 		return startX
 	}
@@ -558,4 +559,3 @@ func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, sta
 	}
 	buf.SetWithBg(startX+maxWidth-1, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
 }
-

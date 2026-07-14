@@ -24,17 +24,17 @@ const (
 
 // UI Colors
 var (
-	ColorBg        = terminal.RGB{R: 16, G: 16, B: 20}
-	ColorGridBg    = terminal.RGB{R: 30, G: 30, B: 35}
-	ColorPixelOn   = terminal.RGB{R: 0, G: 255, B: 150}
-	ColorPixelOff  = terminal.RGB{R: 60, G: 60, B: 70}
-	ColorCursor    = terminal.RGB{R: 255, G: 0, B: 255}
-	ColorText      = terminal.RGB{R: 200, G: 200, B: 220}
-	ColorHighlight = terminal.RGB{R: 255, G: 200, B: 0}
-	ColorDim       = terminal.RGB{R: 100, G: 100, B: 110}
-	ColorBorder    = terminal.RGB{R: 80, G: 80, B: 100}
-	ColorSuccess   = terminal.RGB{R: 50, G: 200, B: 100}
-	ColorError     = terminal.RGB{R: 200, G: 50, B: 50}
+	ColorBg        = color.RGB{R: 16, G: 16, B: 20}
+	ColorGridBg    = color.RGB{R: 30, G: 30, B: 35}
+	ColorPixelOn   = color.RGB{R: 0, G: 255, B: 150}
+	ColorPixelOff  = color.RGB{R: 60, G: 60, B: 70}
+	ColorCursor    = color.RGB{R: 255, G: 0, B: 255}
+	ColorText      = color.RGB{R: 200, G: 200, B: 220}
+	ColorHighlight = color.RGB{R: 255, G: 200, B: 0}
+	ColorDim       = color.RGB{R: 100, G: 100, B: 110}
+	ColorBorder    = color.RGB{R: 80, G: 80, B: 100}
+	ColorSuccess   = color.RGB{R: 50, G: 200, B: 100}
+	ColorError     = color.RGB{R: 200, G: 50, B: 50}
 )
 
 // Box drawing characters
@@ -659,7 +659,7 @@ func (e *Editor) setCell(cells []terminal.Cell, x, y int, c terminal.Cell) {
 	cells[y*e.width+x] = c
 }
 
-func (e *Editor) drawText(cells []terminal.Cell, x, y int, text string, fg, bg terminal.RGB, attrs terminal.Attr) {
+func (e *Editor) drawText(cells []terminal.Cell, x, y int, text string, fg, bg color.RGB, attrs terminal.Attr) {
 	for i, r := range text {
 		e.setCell(cells, x+i, y, terminal.Cell{
 			Rune:  r,
@@ -890,7 +890,7 @@ func (e *Editor) drawCode(cells []terminal.Cell) {
 		if strings.HasPrefix(strings.TrimSpace(line), "//") {
 			fg = ColorDim
 		} else if strings.Contains(line, "0x") {
-			fg = terminal.RGB{R: 150, G: 200, B: 255}
+			fg = color.RGB{R: 150, G: 200, B: 255}
 		}
 		displayLine := strings.ReplaceAll(line, "\t", "  ")
 		if len(displayLine) > boxW-4 {
@@ -967,7 +967,7 @@ func (e *Editor) drawStatus(cells []terminal.Cell) {
 	barY := e.height - 1
 	msg := " " + e.statusMsg + " "
 
-	bg := terminal.RGB{R: 60, G: 60, B: 80}
+	bg := color.RGB{R: 60, G: 60, B: 80}
 	switch e.statusType {
 	case 1:
 		bg = ColorSuccess
@@ -979,5 +979,5 @@ func (e *Editor) drawStatus(cells []terminal.Cell) {
 	if x < 0 {
 		x = 0
 	}
-	e.drawText(cells, x, barY, msg, terminal.RGB{R: 255, G: 255, B: 255}, bg, terminal.AttrBold)
+	e.drawText(cells, x, barY, msg, color.RGB{R: 255, G: 255, B: 255}, bg, terminal.AttrBold)
 }

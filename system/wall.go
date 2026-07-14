@@ -3,6 +3,7 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -11,7 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/pattern"
-	"github.com/lixenwraith/terminal"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -754,8 +754,8 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 	// Resolve visual config (apply defaults if zero-value)
 	vis := payload.Visual
 	isZero := vis.Char == 0 &&
-		vis.FgColor == (terminal.RGB{}) &&
-		vis.BgColor == (terminal.RGB{}) &&
+		vis.FgColor == (color.RGB{}) &&
+		vis.BgColor == (color.RGB{}) &&
 		!vis.RenderFg &&
 		!vis.RenderBg &&
 		vis.BoxStyle == component.BoxDrawNone

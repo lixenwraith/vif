@@ -1,8 +1,9 @@
 package pattern
 
 import (
-	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
 )
 
 // FromDualModeImage converts dual-mode image to pattern using specified color mode
@@ -25,12 +26,12 @@ func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 			renderFg := src.Rune != 0 && src.Rune != ' '
 			renderBg := true
 
-			var fg, bg terminal.RGB
+			var fg, bg color.RGB
 			var attrs terminal.Attr
 
 			if colorMode == terminal.ColorMode256 {
-				fg = terminal.RGB{R: src.Palette256Fg}
-				bg = terminal.RGB{R: src.Palette256Bg}
+				fg = color.RGB{R: src.Palette256Fg}
+				bg = color.RGB{R: src.Palette256Bg}
 				attrs = terminal.AttrFg256 | terminal.AttrBg256
 			} else {
 				fg = src.TrueFg
@@ -67,3 +68,4 @@ func LoadDualModePattern(path string, colorMode terminal.ColorMode) (PatternResu
 	}
 	return FromDualModeImage(img, colorMode), nil
 }
+

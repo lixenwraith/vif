@@ -1,11 +1,12 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 type bulletRenderFunc func(
@@ -106,7 +107,7 @@ func (r *BulletRenderer) renderBullet256(
 	}
 
 	char := r.directionChar256(kinetic.VelX, kinetic.VelY)
-	buf.SetFgOnly(screenX, screenY, char, terminal.RGB{R: visual.Bullet256StormRed}, terminal.AttrFg256|terminal.AttrBold)
+	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Bullet256StormRed}, terminal.AttrFg256|terminal.AttrBold)
 }
 
 func (r *BulletRenderer) directionChar(velX, velY int64) rune {
@@ -175,3 +176,4 @@ func (r *BulletRenderer) directionChar256(velX, velY int64) rune {
 	}
 	return '/'
 }
+

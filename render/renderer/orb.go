@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -116,7 +117,7 @@ func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 
 // renderOrb256 draws simple colored character for 256-color mode
 func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY int, orb *component.OrbComponent, glyph rune) {
-	var color terminal.RGB
+	var color color.RGB
 	if orb.FlashRemaining > 0 {
 		color = visual.RgbOrbFlash
 	} else {
@@ -144,7 +145,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 }
 
 // renderCorona draws rotating directional glow around orb center
-func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color terminal.RGB, rotDirX, rotDirY int64) {
+func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color color.RGB, rotDirX, rotDirY int64) {
 	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
 		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			if dx == 0 && dy == 0 {
@@ -190,7 +191,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 }
 
 // renderBurst draws radial flash burst when orb fires
-func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor terminal.RGB, glyph rune, progress float64) {
+func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor color.RGB, glyph rune, progress float64) {
 	expandPhase := 1.0 - progress
 	burstAlpha := progress
 	burstColor := render.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
@@ -237,7 +238,7 @@ func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBu
 }
 
 // baseColor returns sigil color for weapon type
-func (r *OrbRenderer) baseColor(wt component.WeaponType) terminal.RGB {
+func (r *OrbRenderer) baseColor(wt component.WeaponType) color.RGB {
 	switch wt {
 	case component.WeaponRod:
 		return visual.RgbOrbRod
@@ -251,7 +252,7 @@ func (r *OrbRenderer) baseColor(wt component.WeaponType) terminal.RGB {
 }
 
 // coronaColor returns glow color for weapon type
-func (r *OrbRenderer) coronaColor(wt component.WeaponType) terminal.RGB {
+func (r *OrbRenderer) coronaColor(wt component.WeaponType) color.RGB {
 	switch wt {
 	case component.WeaponRod:
 		return visual.RgbOrbCoronaRod

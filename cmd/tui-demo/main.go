@@ -672,7 +672,7 @@ func (app *appState) handleListEvent(ev terminal.Event) {
 				item.CheckFg = app.theme.Selected
 			case tui.CheckFull:
 				item.Check = tui.CheckNone
-				item.CheckFg = terminal.RGB{}
+				item.CheckFg = color.RGB{}
 			case tui.CheckPartial:
 				item.Check = tui.CheckFull
 				item.CheckFg = app.theme.Selected

@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"image"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // ViewMode determines how the image is displayed
@@ -303,9 +304,9 @@ func (v *Viewer) Render(buf *render.RenderBuffer, termW, termH int) {
 func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 	y := termH - 1
 
-	statusBg := terminal.RGB{R: 40, G: 40, B: 50}
-	statusFg := terminal.RGB{R: 200, G: 200, B: 200}
-	keyFg := terminal.RGB{R: 100, G: 180, B: 255}
+	statusBg := lcolor.RGB{R: 40, G: 40, B: 50}
+	statusFg := lcolor.RGB{R: 200, G: 200, B: 200}
+	keyFg := lcolor.RGB{R: 100, G: 180, B: 255}
 
 	for x := 0; x < termW; x++ {
 		buf.Set(x, y, ' ', statusFg, statusBg, render.BlendReplace, 1.0, terminal.AttrNone)
@@ -387,3 +388,4 @@ func (v *Viewer) NeedsPanning(termW, termH int) bool {
 	}
 	return v.converted.Width > termW || v.converted.Height > availH
 }
+

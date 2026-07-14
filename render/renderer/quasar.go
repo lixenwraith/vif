@@ -3,12 +3,13 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -65,7 +66,7 @@ func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 // renderZapRange renders zap range ellipse boundary
 func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.RenderBuffer, headerX, headerY int, quasar *component.QuasarComponent) {
 	// Use same color as quasar entity state
-	var borderColor terminal.RGB
+	var borderColor color.RGB
 	if quasar.IsCharging || quasar.IsZapping {
 		borderColor = visual.RgbCombatEnraged
 	} else {
@@ -119,7 +120,7 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 
 // renderMembers draws quasar character grid with state-based coloring
 func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
-	var color terminal.RGB
+	var color color.RGB
 	if combatComp.RemainingHitFlash > 0 {
 		color = r.calculateFlashColor(combatComp.RemainingHitFlash)
 	} else if combatComp.IsEnraged {
@@ -152,7 +153,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 }
 
 // calculateFlashColor returns yellow with pulse effect
-func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
+func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -166,3 +167,4 @@ func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) terminal.R
 
 	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }
+

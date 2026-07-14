@@ -1,7 +1,7 @@
 package visual
 
 import (
-	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/color"
 )
 
 // Heat gradient segment thresholds (6 segments, roughly 1/6 each)
@@ -16,13 +16,13 @@ const (
 
 // Heat gradient keyframe colors (rainbow spectrum endpoints)
 var (
-	GradientDeepRed = terminal.DarkCrimson
-	GradientOrange  = terminal.OrangeRed
-	GradientYellow  = terminal.Gold
-	GradientGreen   = terminal.ForestGreen
-	GradientCyan    = terminal.DarkTurquoise
-	GradientBlue    = terminal.RoyalBlue
-	GradientPurple  = terminal.PaleVioletRed
+	GradientDeepRed = color.DarkCrimson
+	GradientOrange  = color.OrangeRed
+	GradientYellow  = color.Gold
+	GradientGreen   = color.ForestGreen
+	GradientCyan    = color.DarkTurquoise
+	GradientBlue    = color.RoyalBlue
+	GradientPurple  = color.PaleVioletRed
 )
 
 // Rainbow LUT index bounds for readable text backgrounds
@@ -32,3 +32,4 @@ const (
 	RainbowLUTMax   = 220
 	RainbowLUTRange = RainbowLUTMax - RainbowLUTMin // 180
 )
+

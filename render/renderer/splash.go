@@ -4,13 +4,13 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/asset"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // SplashRenderer draws large block characters as background effect
@@ -77,7 +77,7 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 }
 
 // renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color terminal.RGB) {
+func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color color.RGB) {
 	var bitmap [12]uint16
 	// Bounds check and fallback for missing glyphs
 	if char < 32 || char > 126 {
@@ -110,3 +110,4 @@ func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 		}
 	}
 }
+

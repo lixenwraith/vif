@@ -4,18 +4,19 @@ import (
 	"math"
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // emberLayerColors holds pre-blended intensities for cached 1D mapping
 type emberLayerColors struct {
-	Core terminal.RGB
-	Mid  terminal.RGB
-	Edge terminal.RGB
+	Core color.RGB
+	Mid  color.RGB
+	Edge color.RGB
 }
 
 // emberRingState holds per-ring precomputed values for current frame
@@ -101,10 +102,10 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 // emberColors holds interpolated colors for current heat level
 type emberColors struct {
-	Core terminal.RGB
-	Mid  terminal.RGB
-	Edge terminal.RGB
-	Ring terminal.RGB
+	Core color.RGB
+	Mid  color.RGB
+	Edge color.RGB
+	Ring color.RGB
 }
 
 // interpolateEmberColors computes colors for given heat factor (Q32.32)
@@ -419,10 +420,11 @@ func (p *EmberPainter) powFixed(x, n int64) int64 {
 }
 
 // scaleRGB multiplies RGB by factor in [0, Scale]
-func scaleRGB(c terminal.RGB, factor int64) terminal.RGB {
-	return terminal.RGB{
+func scaleRGB(c color.RGB, factor int64) color.RGB {
+	return color.RGB{
 		R: uint8((int64(c.R) * factor) >> vmath.Shift),
 		G: uint8((int64(c.G) * factor) >> vmath.Shift),
 		B: uint8((int64(c.B) * factor) >> vmath.Shift),
 	}
 }
+

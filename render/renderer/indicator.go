@@ -1,10 +1,10 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // IndicatorRenderer draws relative row and column indicators around the viewport.
@@ -41,7 +41,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 		// Column 1: line indicator
 		var ch rune
-		var fg, bg terminal.RGB
+		var fg, bg color.RGB
 
 		if relativeNum == 0 {
 			ch = '0'
@@ -76,7 +76,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		relativeCol := x - cursorVX
 
 		var ch rune
-		var fg, bg terminal.RGB
+		var fg, bg color.RGB
 
 		if relativeCol == 0 {
 			ch = '0'
@@ -110,3 +110,4 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		buf.SetWithBg(i, indicatorY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 }
+

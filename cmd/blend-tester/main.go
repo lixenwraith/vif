@@ -59,7 +59,7 @@ type AppState struct {
 	blendOp       int
 	blendAlpha    float64
 	blendBgIdx    int // 0=black, 1=white, 2=game-bg, 3=custom
-	blendCustomBg terminal.RGB
+	blendCustomBg color.RGB
 
 	// Effect mode - Shield
 	shieldRadiusX     float64
@@ -67,7 +67,7 @@ type AppState struct {
 	shieldOpacity     float64
 	shieldState       ShieldColorState
 	shieldBgIdx       int
-	shieldCustomColor terminal.RGB // Custom shield color
+	shieldCustomColor color.RGB // Custom shield color
 	shieldColorMode   int          // 0=preset, 1=custom
 
 	// Effect mode - Trail
@@ -86,7 +86,7 @@ type AppState struct {
 
 	// Diag mode
 	diagInputHex string
-	diagInputRGB terminal.RGB
+	diagInputRGB color.RGB
 
 	// Hex input state
 	hexInputActive bool
@@ -123,12 +123,12 @@ var blendOps = []struct {
 // Background presets
 var bgPresets = []struct {
 	name  string
-	color terminal.RGB
+	color color.RGB
 }{
-	{"Black", terminal.RGB{0, 0, 0}},
-	{"White", terminal.RGB{255, 255, 255}},
-	{"GameBg", terminal.RGB{26, 27, 38}},
-	{"Custom", terminal.RGB{128, 128, 128}},
+	{"Black", color.RGB{0, 0, 0}},
+	{"White", color.RGB{255, 255, 255}},
+	{"GameBg", color.RGB{26, 27, 38}},
+	{"Custom", color.RGB{128, 128, 128}},
 }
 
 func main() {
@@ -277,14 +277,14 @@ func handleHexInput(ev terminal.Event) {
 	}
 }
 
-func parseHex(s string) terminal.RGB {
+func parseHex(s string) color.RGB {
 	if len(s) != 6 {
-		return terminal.RGB{}
+		return color.RGB{}
 	}
 	r, _ := strconv.ParseUint(s[0:2], 16, 8)
 	g, _ := strconv.ParseUint(s[2:4], 16, 8)
 	b, _ := strconv.ParseUint(s[4:6], 16, 8)
-	return terminal.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
+	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(b)}
 }
 
 func renderFrame() {
@@ -315,11 +315,11 @@ func drawHeader() {
 	modes := []string{"F1:Palette", "F2:Blend", "F3:Effect", "F4:Analyze"}
 	x := 1
 	for i, m := range modes {
-		fg := terminal.RGB{180, 180, 180}
-		bg := terminal.RGB{40, 40, 40}
+		fg := color.RGB{180, 180, 180}
+		bg := color.RGB{40, 40, 40}
 		if Mode(i) == state.mode {
-			fg = terminal.RGB{0, 0, 0}
-			bg = terminal.RGB{0, 255, 255}
+			fg = color.RGB{0, 0, 0}
+			bg = color.RGB{0, 255, 255}
 		}
 		drawText(x, 0, " "+m+" ", fg, bg)
 		x += len(m) + 3
@@ -330,14 +330,14 @@ func drawHeader() {
 	if state.colorMode == terminal.ColorMode256 {
 		modeStr = "256"
 	}
-	drawText(state.width-6, 0, "["+modeStr+"]", terminal.RGB{255, 255, 0}, terminal.RGB{40, 40, 40})
+	drawText(state.width-6, 0, "["+modeStr+"]", color.RGB{255, 255, 0}, color.RGB{40, 40, 40})
 }
 
 func drawFooter() {
 	// Size info
 	sizeStr := fmt.Sprintf("Size: %dx%d  Min: %dx%d", state.width, state.height, MinWidth, MinHeight)
-	drawText(state.width-len(sizeStr)-1, state.height-1, sizeStr, terminal.RGB{100, 100, 100}, terminal.RGB{0, 0, 0})
+	drawText(state.width-len(sizeStr)-1, state.height-1, sizeStr, color.RGB{100, 100, 100}, color.RGB{0, 0, 0})
 
 	// Global keys
-	drawText(1, state.height-1, "Q:Quit Tab/Shift-Tab:Mode", terminal.RGB{100, 100, 100}, terminal.RGB{0, 0, 0})
+	drawText(1, state.height-1, "Q:Quit Tab/Shift-Tab:Mode", color.RGB{100, 100, 100}, color.RGB{0, 0, 0})
 }

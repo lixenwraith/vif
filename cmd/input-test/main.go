@@ -40,14 +40,14 @@ func main() {
 
 	render := func() {
 		region := tui.NewRegion(cells, w, 0, 0, w, h)
-		region.Fill(terminal.RGB{R: 20, G: 20, B: 30})
+		region.Fill(color.RGB{R: 20, G: 20, B: 30})
 
 		// Title
 		region.TextCenter(0, "Input Test - Press keys, move mouse, drag the [X] - Press Ctrl+C to quit",
-			terminal.RGB{R: 200, G: 200, B: 200}, terminal.RGB{R: 40, G: 40, B: 60}, terminal.AttrBold)
+			color.RGB{R: 200, G: 200, B: 200}, color.RGB{R: 40, G: 40, B: 60}, terminal.AttrBold)
 
 		// Divider
-		region.HLine(1, tui.LineSingle, terminal.RGB{R: 60, G: 60, B: 80})
+		region.HLine(1, tui.LineSingle, color.RGB{R: 60, G: 60, B: 80})
 
 		// Event log
 		for i, entry := range eventLog {
@@ -55,22 +55,22 @@ func main() {
 			if y >= h-3 {
 				break
 			}
-			region.Text(1, y, entry, terminal.RGB{R: 180, G: 180, B: 180}, terminal.RGB{}, terminal.AttrNone)
+			region.Text(1, y, entry, color.RGB{R: 180, G: 180, B: 180}, color.RGB{}, terminal.AttrNone)
 		}
 
 		// Draggable object
 		if objX >= 0 && objX < w-2 && objY >= 0 && objY < h {
-			fg := terminal.RGB{R: 100, G: 255, B: 100}
+			fg := color.RGB{R: 100, G: 255, B: 100}
 			if dragging {
-				fg = terminal.RGB{R: 255, G: 255, B: 100}
+				fg = color.RGB{R: 255, G: 255, B: 100}
 			}
-			region.Text(objX, objY, "[X]", fg, terminal.RGB{R: 40, G: 40, B: 60}, terminal.AttrBold)
+			region.Text(objX, objY, "[X]", fg, color.RGB{R: 40, G: 40, B: 60}, terminal.AttrBold)
 		}
 
 		// Status bar
-		region.HLine(h-2, tui.LineSingle, terminal.RGB{R: 60, G: 60, B: 80})
+		region.HLine(h-2, tui.LineSingle, color.RGB{R: 60, G: 60, B: 80})
 		status := fmt.Sprintf("Size: %dx%d | Object: (%d,%d) | Dragging: %v", w, h, objX, objY, dragging)
-		region.Text(1, h-1, status, terminal.RGB{R: 140, G: 140, B: 160}, terminal.RGB{}, terminal.AttrNone)
+		region.Text(1, h-1, status, color.RGB{R: 140, G: 140, B: 160}, color.RGB{}, terminal.AttrNone)
 
 		term.Flush(cells, w, h)
 	}

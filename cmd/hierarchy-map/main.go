@@ -123,8 +123,8 @@ func renderSizeWarning(term terminal.Terminal, w, h int) {
 	}
 
 	cells := make([]terminal.Cell, w*h)
-	bg := terminal.RGB{R: 20, G: 20, B: 30}
-	fg := terminal.RGB{R: 200, G: 200, B: 200}
+	bg := color.RGB{R: 20, G: 20, B: 30}
+	fg := color.RGB{R: 200, G: 200, B: 200}
 	for i := range cells {
 		cells[i] = terminal.Cell{Rune: ' ', Fg: fg, Bg: bg}
 	}
@@ -141,7 +141,7 @@ func renderSizeWarning(term terminal.Terminal, w, h int) {
 	}
 	root.TextCenter(cy, msg2, fg, bg, terminal.AttrNone)
 	if cy+2 < h {
-		root.TextCenter(cy+2, msg3, terminal.RGB{R: 140, G: 140, B: 140}, bg, terminal.AttrDim)
+		root.TextCenter(cy+2, msg3, color.RGB{R: 140, G: 140, B: 140}, bg, terminal.AttrDim)
 	}
 
 	term.Flush(cells, w, h)

@@ -1,8 +1,9 @@
 package visual
 
 import (
-	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Eye animation constraints
@@ -16,24 +17,24 @@ const (
 
 var (
 	// Eye explosion gradient — Palette Set A: Void Purple (active)
-	RgbEyeExplosionEdge = terminal.DarkViolet
-	RgbEyeExplosionMid  = terminal.ElectricViolet
-	RgbEyeExplosionCore = terminal.PaleLavender
+	RgbEyeExplosionEdge = color.DarkViolet
+	RgbEyeExplosionMid  = color.ElectricViolet
+	RgbEyeExplosionCore = color.PaleLavender
 
 	// Palette Set B: Crimson (alternative)
-	// RgbEyeExplosionEdge = terminal.DarkBurgundy
-	// RgbEyeExplosionMid  = terminal.Cinnabar
-	// RgbEyeExplosionCore = terminal.MistyRose
+	// RgbEyeExplosionEdge = color.DarkBurgundy
+	// RgbEyeExplosionMid  = color.Cinnabar
+	// RgbEyeExplosionCore = color.MistyRose
 
 	// Palette Set C: Neon Magenta (alternative)
-	// RgbEyeExplosionEdge = terminal.DeepPurple
-	// RgbEyeExplosionMid  = terminal.HotMagenta
-	// RgbEyeExplosionCore = terminal.PalePink
+	// RgbEyeExplosionEdge = color.DeepPurple
+	// RgbEyeExplosionMid  = color.HotMagenta
+	// RgbEyeExplosionCore = color.PalePink
 
 	// Palette Set D: Void Teal (alternative)
-	// RgbEyeExplosionEdge = terminal.Teal
-	// RgbEyeExplosionMid  = terminal.BrightCyan
-	// RgbEyeExplosionCore = terminal.PaleCyan
+	// RgbEyeExplosionEdge = color.Teal
+	// RgbEyeExplosionMid  = color.BrightCyan
+	// RgbEyeExplosionCore = color.PaleCyan
 )
 
 // EyeFrameArt holds per-frame character art and palette index mappings
@@ -47,8 +48,8 @@ type EyeFrameArt struct {
 
 // EyeTypeVisual holds the complete visual specification for one eye type
 type EyeTypeVisual struct {
-	FgPalette  [8]terminal.RGB
-	BgPalette  [3]terminal.RGB
+	FgPalette  [8]color.RGB
+	BgPalette  [3]color.RGB
 	Fg256      uint8
 	Bg256      uint8
 	FrameCount int
@@ -61,13 +62,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 0: Void Eye — 5×3, 5 frames
 	// Deep ocean, slow blink cycle (O→o→=→O→shut)
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.DimGray, terminal.SteelBlue, terminal.White,
-			terminal.CeruleanBlue, terminal.NavyBlue, terminal.LightSkyBlue,
-			terminal.CobaltBlue, terminal.DodgerBlue,
+		FgPalette: [8]color.RGB{
+			color.DimGray, color.SteelBlue, color.White,
+			color.CeruleanBlue, color.NavyBlue, color.LightSkyBlue,
+			color.CobaltBlue, color.DodgerBlue,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.DeepNavy, terminal.Gunmetal, terminal.CobaltBlue,
+		BgPalette: [3]color.RGB{
+			color.DeepNavy, color.Gunmetal, color.CobaltBlue,
 		},
 		Fg256: terminal.P256SteelBlue, Bg256: terminal.P256DeepNavy,
 		FrameCount: 5,
@@ -108,13 +109,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 1: Flame Eye — 5×3, 4 frames
 	// Aggressive flicker (<@>→{*}→<o>→<O>)
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.LemonYellow, terminal.FlameOrange, terminal.White,
-			terminal.BrightRed, terminal.Amber, terminal.DarkCrimson,
-			terminal.Vermilion, terminal.WarmOrange,
+		FgPalette: [8]color.RGB{
+			color.LemonYellow, color.FlameOrange, color.White,
+			color.BrightRed, color.Amber, color.DarkCrimson,
+			color.Vermilion, color.WarmOrange,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.BlackRed, terminal.DarkAmber, terminal.Red,
+		BgPalette: [3]color.RGB{
+			color.BlackRed, color.DarkAmber, color.Red,
 		},
 		Fg256: terminal.P256Orange, Bg256: terminal.P256DarkCrimson,
 		FrameCount: 4,
@@ -149,13 +150,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 2: Frost Eye — 5×3, 4 frames
 	// Crystalline pulse (<O>→(O)→{=}→(O))
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.BrightCyan, terminal.White, terminal.LightSkyBlue,
-			terminal.CeruleanBlue, terminal.SteelBlue, terminal.CoolSilver,
-			terminal.AliceBlue, terminal.PaleCyan,
+		FgPalette: [8]color.RGB{
+			color.BrightCyan, color.White, color.LightSkyBlue,
+			color.CeruleanBlue, color.SteelBlue, color.CoolSilver,
+			color.AliceBlue, color.PaleCyan,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.DeepNavy, terminal.CobaltBlue, terminal.SteelBlue,
+		BgPalette: [3]color.RGB{
+			color.DeepNavy, color.CobaltBlue, color.SteelBlue,
 		},
 		Fg256: terminal.P256LightBlue, Bg256: terminal.P256DarkBlue,
 		FrameCount: 4,
@@ -190,13 +191,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 3: Storm Eye — 5×3, 3 frames
 	// Electric, rotating highlight
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.BrightCyan, terminal.CeruleanBlue, terminal.White,
-			terminal.LemonYellow, terminal.SteelBlue, terminal.DodgerBlue,
-			terminal.SkyTeal, terminal.LightSkyBlue,
+		FgPalette: [8]color.RGB{
+			color.BrightCyan, color.CeruleanBlue, color.White,
+			color.LemonYellow, color.SteelBlue, color.DodgerBlue,
+			color.SkyTeal, color.LightSkyBlue,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.DeepNavy, terminal.CobaltBlue, {},
+		BgPalette: [3]color.RGB{
+			color.DeepNavy, color.CobaltBlue, {},
 		},
 		Fg256: terminal.P256Cyan, Bg256: terminal.P256DeepNavy,
 		FrameCount: 3,
@@ -225,13 +226,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 4: Blood Eye — 5×3, 4 frames
 	// Veined pulse (X pupil, dilate cycle)
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.DarkCrimson, terminal.BrightRed, terminal.White,
-			terminal.Vermilion, terminal.Coral, terminal.Red,
-			terminal.Salmon, terminal.LightCoral,
+		FgPalette: [8]color.RGB{
+			color.DarkCrimson, color.BrightRed, color.White,
+			color.Vermilion, color.Coral, color.Red,
+			color.Salmon, color.LightCoral,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.BlackRed, terminal.DarkCrimson, terminal.Red,
+		BgPalette: [3]color.RGB{
+			color.BlackRed, color.DarkCrimson, color.Red,
 		},
 		Fg256: terminal.P256Crimson, Bg256: terminal.P256Maroon,
 		FrameCount: 4,
@@ -266,13 +267,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 5: Golden Eye — 5×3, 4 frames
 	// Regal shimmer, warm amber
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.Gold, terminal.Amber, terminal.White,
-			terminal.LemonYellow, terminal.DarkGold, terminal.PaleGold,
-			terminal.Buttercream, terminal.WarmOrange,
+		FgPalette: [8]color.RGB{
+			color.Gold, color.Amber, color.White,
+			color.LemonYellow, color.DarkGold, color.PaleGold,
+			color.Buttercream, color.WarmOrange,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.DarkAmber, terminal.Amber, terminal.Gold,
+		BgPalette: [3]color.RGB{
+			color.DarkAmber, color.Amber, color.Gold,
 		},
 		Fg256: terminal.P256Gold, Bg256: terminal.P256DarkAmber,
 		FrameCount: 4,
@@ -307,13 +308,13 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 	// 6: Abyss Eye — 5×3, 4 frames
 	// Transparent corners (bg skip), dimensional rift
 	{
-		FgPalette: [8]terminal.RGB{
-			terminal.PaleLavender, terminal.ElectricViolet, terminal.White,
-			terminal.SoftLavender, terminal.DarkViolet, terminal.MutedPurple,
-			terminal.DeepPurple, terminal.Orchid,
+		FgPalette: [8]color.RGB{
+			color.PaleLavender, color.ElectricViolet, color.White,
+			color.SoftLavender, color.DarkViolet, color.MutedPurple,
+			color.DeepPurple, color.Orchid,
 		},
-		BgPalette: [3]terminal.RGB{
-			terminal.Obsidian, terminal.DeepPurple, {},
+		BgPalette: [3]color.RGB{
+			color.Obsidian, color.DeepPurple, {},
 		},
 		Fg256: terminal.P256MediumPurple, Bg256: terminal.P256DarkPurpleBlue,
 		FrameCount: 4,

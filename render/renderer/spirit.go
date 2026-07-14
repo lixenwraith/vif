@@ -1,11 +1,12 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -84,7 +85,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 			// --- Coloring & Fading ---
 
-			var color terminal.RGB
+			var color color.RGB
 			var alpha float64 = 1.0
 
 			if i == 0 {
@@ -124,7 +125,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 // spiritProgressColor returns gradient color based on base and animation progress
-func spiritProgressColor(base component.SpiritColor, progress int64) terminal.RGB {
+func spiritProgressColor(base component.SpiritColor, progress int64) color.RGB {
 	offset := visual.SpiritBaseOffsets[base]
 	// Progress adds 0-128 to cycle through ~half the gradient
 	progressOffset := int((progress * 128) >> vmath.Shift)
@@ -132,3 +133,4 @@ func spiritProgressColor(base component.SpiritColor, progress int64) terminal.RG
 
 	return render.HeatGradientLUT[lutIdx]
 }
+

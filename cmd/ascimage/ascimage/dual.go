@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	lcolor "github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -27,8 +28,8 @@ type DualModeImage struct {
 // DualCell stores both color mode representations for one cell
 type DualCell struct {
 	Rune         rune
-	TrueFg       terminal.RGB
-	TrueBg       terminal.RGB
+	TrueFg       lcolor.RGB
+	TrueBg       lcolor.RGB
 	Palette256Fg uint8
 	Palette256Bg uint8
 	Transparent  bool
@@ -120,7 +121,7 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 
 	for y := 0; y < outH; y++ {
 		for x := 0; x < outW; x++ {
-			var pixels [4]terminal.RGB
+			var pixels [4]lcolor.RGB
 			allTransparent := true
 
 			gx := x * 2
@@ -180,8 +181,8 @@ func (d *DualModeImage) ToConvertedImage(colorMode terminal.ColorMode) *Converte
 		if colorMode == terminal.ColorMode256 {
 			cells[i] = terminal.Cell{
 				Rune:  dc.Rune,
-				Fg:    terminal.RGB{R: dc.Palette256Fg},
-				Bg:    terminal.RGB{R: dc.Palette256Bg},
+				Fg:    lcolor.RGB{R: dc.Palette256Fg},
+				Bg:    lcolor.RGB{R: dc.Palette256Bg},
 				Attrs: terminal.AttrFg256 | terminal.AttrBg256,
 			}
 		} else {
@@ -295,8 +296,8 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 		}
 		cells[i] = DualCell{
 			Rune:         rune(binary.LittleEndian.Uint32(cellBuf[0:4])),
-			TrueFg:       terminal.RGB{R: cellBuf[4], G: cellBuf[5], B: cellBuf[6]},
-			TrueBg:       terminal.RGB{R: cellBuf[7], G: cellBuf[8], B: cellBuf[9]},
+			TrueFg:       lcolor.RGB{R: cellBuf[4], G: cellBuf[5], B: cellBuf[6]},
+			TrueBg:       lcolor.RGB{R: cellBuf[7], G: cellBuf[8], B: cellBuf[9]},
 			Palette256Fg: cellBuf[10],
 			Palette256Bg: cellBuf[11],
 			Transparent:  cellBuf[12]&cellFlagTransparent != 0,
@@ -337,3 +338,4 @@ func LoadDualMode(path string) (*DualModeImage, error) {
 
 	return ReadDualMode(f)
 }
+

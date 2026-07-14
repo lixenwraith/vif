@@ -24,7 +24,7 @@ type Entity struct {
 	X, Y       float64
 	DX, DY     float64
 	Radius     float64
-	Color      terminal.RGB
+	Color      color.RGB
 	RenderType int
 	Phase      float64
 }
@@ -61,19 +61,19 @@ func main() {
 		// 1. "The Sun" - Additive blending, hot core
 		{
 			X: 20, Y: 10, DX: 0.8, DY: 0.4, Radius: 14,
-			Color:      terminal.RGB{R: 255, G: 160, B: 60}, // Orange
+			Color:      color.RGB{R: 255, G: 160, B: 60}, // Orange
 			RenderType: 0,
 		},
 		// 2. "The Bubble" - SoftLight/Overlay, distinct rim
 		{
 			X: 60, Y: 20, DX: -0.6, DY: 0.7, Radius: 18,
-			Color:      terminal.RGB{R: 60, G: 220, B: 255}, // Cyan
+			Color:      color.RGB{R: 60, G: 220, B: 255}, // Cyan
 			RenderType: 1,
 		},
 		// 3. "The Pulse" - Screen blending, interference pattern
 		{
 			X: 40, Y: 30, DX: 0.4, DY: -0.5, Radius: 22,
-			Color:      terminal.RGB{R: 200, G: 60, B: 255}, // Purple
+			Color:      color.RGB{R: 200, G: 60, B: 255}, // Purple
 			RenderType: 2,
 		},
 	}
@@ -145,7 +145,7 @@ func main() {
 			for x := 0; x < w; x++ {
 				cells[rowOffset+x] = terminal.Cell{
 					Rune: ' ',
-					Bg:   terminal.RGB{R: baseR, G: baseG, B: baseB},
+					Bg:   color.RGB{R: baseR, G: baseG, B: baseB},
 				}
 			}
 		}
@@ -161,11 +161,11 @@ func main() {
 				brite := s.Brightness * (0.8 + 0.2*math.Sin(currTime*5.0+s.X))
 				val := uint8(255 * brite)
 
-				// Convert terminal.RGB -> terminal.RGB -> terminal.RGB
-				bgRender := terminal.RGB{R: bg.R, G: bg.G, B: bg.B}
+				// Convert color.RGB -> color.RGB -> color.RGB
+				bgRender := color.RGB{R: bg.R, G: bg.G, B: bg.B}
 				// Explicit alpha 1.0 for additive blend
-				res := render.Add(bgRender, terminal.RGB{R: val, G: val, B: val}, 1.0)
-				cells[idx].Bg = terminal.RGB{R: res.R, G: res.G, B: res.B}
+				res := render.Add(bgRender, color.RGB{R: val, G: val, B: val}, 1.0)
+				cells[idx].Bg = color.RGB{R: res.R, G: res.G, B: res.B}
 			}
 		}
 
@@ -211,9 +211,9 @@ func main() {
 					dist := math.Sqrt(distSq)
 					normDist := dist / e.Radius
 					idx := rowOff + x
-					bg := terminal.RGB{R: cells[idx].Bg.R, G: cells[idx].Bg.G, B: cells[idx].Bg.B}
+					bg := color.RGB{R: cells[idx].Bg.R, G: cells[idx].Bg.G, B: cells[idx].Bg.B}
 
-					var finalColor terminal.RGB
+					var finalColor color.RGB
 
 					switch e.RenderType {
 					case 0: // "The Sun" - Additive Core + Corona
@@ -229,7 +229,7 @@ func main() {
 						// Set white core
 						if core > 0 {
 							// Explicit alpha 1.0
-							val = render.Add(val, render.Scale(terminal.RGB{R: 255, G: 255, B: 255}, core), 1.0)
+							val = render.Add(val, render.Scale(color.RGB{R: 255, G: 255, B: 255}, core), 1.0)
 						}
 						// Explicit alpha 1.0
 						finalColor = render.Add(bg, val, 1.0)
@@ -250,7 +250,7 @@ func main() {
 						// Set distinct rim highlight
 						if normDist > 0.85 {
 							// Explicit alpha 1.0
-							finalColor = render.Add(finalColor, render.Scale(terminal.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
+							finalColor = render.Add(finalColor, render.Scale(color.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
 						}
 
 					case 2: // "The Pulse" - Screen Interference
@@ -265,7 +265,7 @@ func main() {
 						finalColor = render.Screen(bg, pulseCol, 1.0)
 					}
 
-					cells[idx].Bg = terminal.RGB{R: finalColor.R, G: finalColor.G, B: finalColor.B}
+					cells[idx].Bg = color.RGB{R: finalColor.R, G: finalColor.G, B: finalColor.B}
 				}
 			}
 		}

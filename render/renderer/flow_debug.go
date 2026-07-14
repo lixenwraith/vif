@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/navigation"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/system"
-	"github.com/lixenwraith/terminal"
 )
 
 var flowDirArrows = [8]rune{
@@ -74,28 +75,28 @@ func (r *FlowFieldDebugRenderer) renderFlowField(ctx render.RenderContext, buf *
 			}
 
 			var arrow rune
-			var fg terminal.RGB
+			var fg color.RGB
 
 			switch {
 			case dir == navigation.DirTarget:
 				arrow = '●'
-				fg = terminal.RGB{R: 255, G: 255, B: 255}
+				fg = color.RGB{R: 255, G: 255, B: 255}
 			case dir == navigation.DirNone || dir < 0:
 				arrow = '·'
-				fg = terminal.RGB{R: 60, G: 60, B: 60}
+				fg = color.RGB{R: 60, G: 60, B: 60}
 			default:
 				arrow = flowDirArrows[dir]
 				t := 1.0 - float64(dist)/float64(maxDist)
 				if isComposite {
 					// Composite: orange/yellow gradient
-					fg = terminal.RGB{
+					fg = color.RGB{
 						R: uint8(180 + t*75),
 						G: uint8(80 + t*120),
 						B: uint8(20 + t*30),
 					}
 				} else {
 					// Point: cyan/blue gradient
-					fg = terminal.RGB{
+					fg = color.RGB{
 						R: uint8(40 + t*60),
 						G: uint8(80 + t*175),
 						B: uint8(120 + t*135),
@@ -138,10 +139,10 @@ func (r *FlowFieldDebugRenderer) renderPassabilityGrid(ctx render.RenderContext,
 
 			if pass.IsValid(mapX, mapY) {
 				// Valid: dim green dot
-				buf.SetFgOnly(screenX, screenY, '·', terminal.RGB{R: 40, G: 100, B: 40}, terminal.AttrNone)
+				buf.SetFgOnly(screenX, screenY, '·', color.RGB{R: 40, G: 100, B: 40}, terminal.AttrNone)
 			} else {
 				// Blocked: dim red X
-				buf.SetFgOnly(screenX, screenY, '×', terminal.RGB{R: 120, G: 40, B: 40}, terminal.AttrNone)
+				buf.SetFgOnly(screenX, screenY, '×', color.RGB{R: 120, G: 40, B: 40}, terminal.AttrNone)
 			}
 		}
 	}
@@ -184,12 +185,12 @@ func (r *FlowFieldDebugRenderer) renderCompositeFlowField(ctx render.RenderConte
 			dist := field.Distances[idx]
 
 			var arrow rune
-			var fg terminal.RGB
+			var fg color.RGB
 
 			switch {
 			case dir == navigation.DirTarget:
 				arrow = '◆'
-				fg = terminal.RGB{R: 255, G: 200, B: 50}
+				fg = color.RGB{R: 255, G: 200, B: 50}
 			case dir == navigation.DirNone || dir < 0:
 				// Blocked in passability but visited? Shouldn't happen
 				continue
@@ -197,7 +198,7 @@ func (r *FlowFieldDebugRenderer) renderCompositeFlowField(ctx render.RenderConte
 				arrow = flowDirArrows[dir]
 				t := 1.0 - float64(dist)/float64(maxDist)
 				// Orange/yellow for composite flow
-				fg = terminal.RGB{
+				fg = color.RGB{
 					R: uint8(200 + t*55),
 					G: uint8(120 + t*100),
 					B: uint8(20 + t*40),
@@ -219,3 +220,4 @@ func (r *FlowFieldDebugRenderer) findMaxDistance(field *navigation.FlowField) in
 	}
 	return maxDist
 }
+

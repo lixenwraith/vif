@@ -9,8 +9,8 @@ import (
 // EnemyTemplate holds the structural DNA of a specific text-based horror.
 type EnemyTemplate struct {
 	Width, Height int
-	Color         terminal.RGB
-	BgColor       terminal.RGB // Per-species background aura/glow
+	Color         color.RGB
+	BgColor       color.RGB // Per-species background aura/glow
 	Frames        [][]string
 }
 
@@ -439,7 +439,7 @@ func render(term terminal.Terminal, tick int) {
 }
 
 // drawText is a quick utility to embed horizontal strings in the cell buffer
-func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg terminal.RGB, attr terminal.Attr) {
+func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, attr terminal.Attr) {
 	if y < 0 || y >= h {
 		return
 	}

@@ -3,19 +3,20 @@ package renderer
 import (
 	"math"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 // pylonColorEntry holds pre-computed color for a health ratio
 type pylonColorEntry struct {
-	bright terminal.RGB
-	dark   terminal.RGB
+	bright color.RGB
+	dark   color.RGB
 }
 
 // pylonRenderFunc defines the render strategy signature, selected at initialization
@@ -30,7 +31,7 @@ type PylonRenderer struct {
 	colorLUT [256]pylonColorEntry
 
 	// Glow parameters
-	glowColor terminal.RGB
+	glowColor color.RGB
 
 	// Render function selected at construction
 	renderFunc pylonRenderFunc
@@ -69,7 +70,7 @@ func (r *PylonRenderer) buildColorLUT() {
 }
 
 func (r *PylonRenderer) computeColorEntry(healthRatio float64) pylonColorEntry {
-	var bright, dark terminal.RGB
+	var bright, dark color.RGB
 
 	switch {
 	case healthRatio >= visual.PylonHealthThresholdDamaged:
@@ -202,7 +203,7 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 				bVal = 255
 			}
 
-			color := terminal.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
+			color := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
@@ -500,4 +501,3 @@ func (r *PylonRenderer) renderMembersBasicColor(
 		buf.SetBg256(screenX, screenY, colorIdx)
 	}
 }
-

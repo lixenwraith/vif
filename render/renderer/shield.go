@@ -3,13 +3,14 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -18,10 +19,10 @@ import (
 type ShieldStyle struct {
 	// Hot: accessed every cell
 	Config *visual.ShieldConfig // 8 bytes - pointer to geometry/opacity
-	Color  terminal.RGB         // 3 bytes
+	Color  color.RGB            // 3 bytes
 
 	// Warm: accessed for glow cells only
-	GlowColor  terminal.RGB  // 3 bytes
+	GlowColor  color.RGB     // 3 bytes
 	GlowPeriod time.Duration // 8 bytes
 
 	// Cold: accessed once per entity
@@ -378,3 +379,4 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 		}
 	}
 }
+

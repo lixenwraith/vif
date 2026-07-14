@@ -1,22 +1,22 @@
 package visual
 
 import (
-	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/color"
 )
 
 // Snake TrueColor palette
 var (
 	// Head colors
-	RgbSnakeHeadBright = terminal.YellowGreen
-	RgbSnakeHeadDark   = terminal.HunterGreen
+	RgbSnakeHeadBright = color.YellowGreen
+	RgbSnakeHeadDark   = color.HunterGreen
 
 	// Body colors (gradient from head toward tail)
-	RgbSnakeBodyBright = terminal.GrassGreen
-	RgbSnakeBodyMid    = terminal.FernGreen
-	RgbSnakeBodyDark   = terminal.DarkFern
+	RgbSnakeBodyBright = color.GrassGreen
+	RgbSnakeBodyMid    = color.FernGreen
+	RgbSnakeBodyDark   = color.DarkFern
 
 	// Shielded state overlay
-	RgbSnakeShieldTint = terminal.SkyTeal
+	RgbSnakeShieldTint = color.SkyTeal
 )
 
 // Snake 256-color fallback
@@ -61,3 +61,4 @@ var SnakeHeadChars = [3][5]rune{
 	{'▌', '●', '▓', '●', '▐'},
 	{'▘', '▄', '▄', '▄', '▝'},
 }
+

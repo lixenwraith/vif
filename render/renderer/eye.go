@@ -3,11 +3,12 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // === Render Data ===
@@ -22,8 +23,8 @@ type eyeCell struct {
 
 // eyeTypeRender holds compiled render data for one eye type
 type eyeTypeRender struct {
-	FgPalette  [8]terminal.RGB
-	BgPalette  [3]terminal.RGB
+	FgPalette  [8]color.RGB
+	BgPalette  [3]color.RGB
 	Fg256      uint8
 	Bg256      uint8
 	FrameCount int
@@ -102,7 +103,7 @@ func init() {
 // === Renderer ===
 
 // eyeCellRenderer callback for color mode strategy (256 vs TrueColor)
-type eyeCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor terminal.RGB, hasFlash bool)
+type eyeCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool)
 
 // EyeRenderer draws eye composite entities
 type EyeRenderer struct {
@@ -155,7 +156,7 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 		frameIdx := eyeComp.FrameIndex % tr.FrameCount
 		frame := &tr.Frames[frameIdx]
 
-		var flashColor terminal.RGB
+		var flashColor color.RGB
 		hasFlash := combatComp.RemainingHitFlash > 0
 		if hasFlash {
 			flashColor = calculateEyeFlashColor(combatComp.RemainingHitFlash)
@@ -188,7 +189,7 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 }
 
 // cellTrueColor renders with per-cell palette colors and attributes
-func (r *EyeRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor terminal.RGB, hasFlash bool) {
+func (r *EyeRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool) {
 	hasCh := cell.Ch != 0 && cell.FgIdx >= 0
 	hasBg := cell.BgIdx >= 0
 
@@ -210,7 +211,7 @@ func (r *EyeRenderer) cellTrueColor(buf *render.RenderBuffer, screenX, screenY i
 }
 
 // cell256 renders with simplified per-type 256-color palette
-func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor terminal.RGB, hasFlash bool) {
+func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, cell *eyeCell, tr *eyeTypeRender, flashColor color.RGB, hasFlash bool) {
 	hasCh := cell.Ch != 0
 	hasBg := cell.BgIdx >= 0
 
@@ -227,12 +228,12 @@ func (r *EyeRenderer) cell256(buf *render.RenderBuffer, screenX, screenY int, ce
 		if hasFlash {
 			fgIdx = visual.Eye256FlashFg
 		}
-		buf.SetFgOnly(screenX, screenY, cell.Ch, terminal.RGB{R: fgIdx}, terminal.AttrFg256|cell.Attr)
+		buf.SetFgOnly(screenX, screenY, cell.Ch, color.RGB{R: fgIdx}, terminal.AttrFg256|cell.Attr)
 	}
 }
 
 // calculateEyeFlashColor returns pulsed yellow flash color matching combat convention
-func calculateEyeFlashColor(remaining time.Duration) terminal.RGB {
+func calculateEyeFlashColor(remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -246,3 +247,4 @@ func calculateEyeFlashColor(remaining time.Duration) terminal.RGB {
 
 	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }
+

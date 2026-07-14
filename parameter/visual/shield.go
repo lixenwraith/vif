@@ -4,9 +4,9 @@ import (
 	"math"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -57,12 +57,12 @@ type ShieldConfig struct {
 	GlowPeriod time.Duration // 8 bytes
 
 	// Colors - accessed once per entity or per-cell for blend
-	Color         terminal.RGB // 3 bytes
-	ColorAlt      terminal.RGB // 3 bytes
-	GlowColor     terminal.RGB // 3 bytes
-	_             [5]byte      // padding to 8-byte boundary
-	Palette256    uint8        // 1 byte
-	Palette256Alt uint8        // 1 byte
+	Color         color.RGB // 3 bytes
+	ColorAlt      color.RGB // 3 bytes
+	GlowColor     color.RGB // 3 bytes
+	_             [5]byte   // padding to 8-byte boundary
+	Palette256    uint8     // 1 byte
+	Palette256Alt uint8     // 1 byte
 }
 
 // Total: 64 + 8 + 9 + 5 + 2 = 88 bytes (fits in ~1.5 cache lines)
@@ -100,7 +100,7 @@ func init() {
 		parameter.QuasarShieldMaxOpacity,
 		RgbQuasarShield, RgbQuasarShield,
 		parameter.QuasarShield256Palette, parameter.QuasarShield256Palette,
-		terminal.RGB{},
+		color.RGB{},
 		0,
 		0,
 	)
@@ -112,13 +112,13 @@ func init() {
 		parameter.LootShieldMaxOpacity,
 		RgbLootShieldBorder, RgbLootShieldBorder,
 		Loot256Rim, Loot256Rim,
-		terminal.RGB{},
+		color.RGB{},
 		parameter.LootGlowIntensity,
 		parameter.LootGlowRotationPeriod,
 	)
 }
 
-func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt terminal.RGB, palette, paletteAlt uint8, glowColor terminal.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
+func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
 	rx := vmath.FromFloat(rxF)
 	ry := vmath.FromFloat(ryF)
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
@@ -143,3 +143,4 @@ func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt terminal.RG
 		GlowColor:        glowColor,
 	}
 }
+

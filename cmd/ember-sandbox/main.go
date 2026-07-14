@@ -18,42 +18,42 @@ const aspectRatio = 2.1
 // ColorPalette defines gradient stops for ember effect
 type ColorPalette struct {
 	Name               string
-	CoreHot, CoreEmber terminal.RGB
-	MidHot, MidEmber   terminal.RGB
-	EdgeHot, EdgeEmber terminal.RGB
-	RingColor          terminal.RGB
+	CoreHot, CoreEmber color.RGB
+	MidHot, MidEmber   color.RGB
+	EdgeHot, EdgeEmber color.RGB
+	RingColor          color.RGB
 }
 
 var palettes = []ColorPalette{
 	{
 		Name:      "Solar",
-		CoreHot:   terminal.RGB{R: 255, G: 255, B: 250},
-		CoreEmber: terminal.RGB{R: 255, G: 200, B: 100},
-		MidHot:    terminal.RGB{R: 255, G: 230, B: 140},
-		MidEmber:  terminal.RGB{R: 255, G: 140, B: 50},
-		EdgeHot:   terminal.RGB{R: 255, G: 180, B: 80},
-		EdgeEmber: terminal.RGB{R: 220, G: 100, B: 40},
-		RingColor: terminal.RGB{R: 50, G: 40, B: 60},
+		CoreHot:   color.RGB{R: 255, G: 255, B: 250},
+		CoreEmber: color.RGB{R: 255, G: 200, B: 100},
+		MidHot:    color.RGB{R: 255, G: 230, B: 140},
+		MidEmber:  color.RGB{R: 255, G: 140, B: 50},
+		EdgeHot:   color.RGB{R: 255, G: 180, B: 80},
+		EdgeEmber: color.RGB{R: 220, G: 100, B: 40},
+		RingColor: color.RGB{R: 50, G: 40, B: 60},
 	},
 	{
 		Name:      "Lava",
-		CoreHot:   terminal.RGB{R: 255, G: 255, B: 240},
-		CoreEmber: terminal.RGB{R: 255, G: 160, B: 60},
-		MidHot:    terminal.RGB{R: 255, G: 200, B: 100},
-		MidEmber:  terminal.RGB{R: 240, G: 100, B: 30},
-		EdgeHot:   terminal.RGB{R: 255, G: 140, B: 60},
-		EdgeEmber: terminal.RGB{R: 200, G: 60, B: 25},
-		RingColor: terminal.RGB{R: 60, G: 30, B: 40},
+		CoreHot:   color.RGB{R: 255, G: 255, B: 240},
+		CoreEmber: color.RGB{R: 255, G: 160, B: 60},
+		MidHot:    color.RGB{R: 255, G: 200, B: 100},
+		MidEmber:  color.RGB{R: 240, G: 100, B: 30},
+		EdgeHot:   color.RGB{R: 255, G: 140, B: 60},
+		EdgeEmber: color.RGB{R: 200, G: 60, B: 25},
+		RingColor: color.RGB{R: 60, G: 30, B: 40},
 	},
 	{
 		Name:      "Molten",
-		CoreHot:   terminal.RGB{R: 230, G: 245, B: 255},
-		CoreEmber: terminal.RGB{R: 255, G: 220, B: 140},
-		MidHot:    terminal.RGB{R: 255, G: 255, B: 255},
-		MidEmber:  terminal.RGB{R: 255, G: 180, B: 80},
-		EdgeHot:   terminal.RGB{R: 255, G: 220, B: 180},
-		EdgeEmber: terminal.RGB{R: 220, G: 100, B: 50},
-		RingColor: terminal.RGB{R: 40, G: 45, B: 60},
+		CoreHot:   color.RGB{R: 230, G: 245, B: 255},
+		CoreEmber: color.RGB{R: 255, G: 220, B: 140},
+		MidHot:    color.RGB{R: 255, G: 255, B: 255},
+		MidEmber:  color.RGB{R: 255, G: 180, B: 80},
+		EdgeHot:   color.RGB{R: 255, G: 220, B: 180},
+		EdgeEmber: color.RGB{R: 220, G: 100, B: 50},
+		RingColor: color.RGB{R: 40, G: 45, B: 60},
 	},
 }
 
@@ -184,14 +184,14 @@ func (e *Ember) getJaggedRadius(theta, rx, ry float64) (float64, float64) {
 	return rx + displacement, ry + displacement/aspectRatio
 }
 
-func lerpRGB(a, b terminal.RGB, t float64) terminal.RGB {
+func lerpRGB(a, b color.RGB, t float64) color.RGB {
 	if t < 0 {
 		t = 0
 	}
 	if t > 1 {
 		t = 1
 	}
-	return terminal.RGB{
+	return color.RGB{
 		R: uint8(float64(a.R) + (float64(b.R)-float64(a.R))*t),
 		G: uint8(float64(a.G) + (float64(b.G)-float64(a.G))*t),
 		B: uint8(float64(a.B) + (float64(b.B)-float64(a.B))*t),
@@ -341,7 +341,7 @@ func renderStars(stars []star, cells []terminal.Cell, w, h int, t float64) {
 		brite := s.brightness * (0.6 + 0.4*math.Sin(t*3.5+s.phase))
 		val := uint8(160 * brite)
 		idx := sy*w + sx
-		cells[idx].Bg = render.Add(cells[idx].Bg, terminal.RGB{R: val, G: val, B: val}, 1.0)
+		cells[idx].Bg = render.Add(cells[idx].Bg, color.RGB{R: val, G: val, B: val}, 1.0)
 	}
 }
 
@@ -359,9 +359,9 @@ type Control struct {
 func renderHUD(cells []terminal.Cell, w, h int, e *Ember, controls []Control, selected int) {
 	pal := palettes[e.PaletteIdx]
 
-	fg := terminal.RGB{R: 180, G: 180, B: 180}
-	fgSel := terminal.RGB{R: 255, G: 255, B: 100}
-	fgVal := terminal.RGB{R: 100, G: 220, B: 150}
+	fg := color.RGB{R: 180, G: 180, B: 180}
+	fgSel := color.RGB{R: 255, G: 255, B: 100}
+	fgVal := color.RGB{R: 100, G: 220, B: 150}
 
 	lines := make([]struct {
 		text string
@@ -480,7 +480,7 @@ func main() {
 
 	w, h := term.Size()
 	cells := make([]terminal.Cell, w*h)
-	bgColor := terminal.RGB{R: 12, G: 12, B: 20}
+	bgColor := color.RGB{R: 12, G: 12, B: 20}
 
 	stars := make([]star, 60)
 	for i := range stars {

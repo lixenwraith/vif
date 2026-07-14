@@ -102,7 +102,7 @@ func (app *AppState) formatSizeValue(totalSize, depSize int64) string {
 }
 
 // sizeColor returns warning color if size exceeds threshold
-func (app *AppState) sizeColor(size int64) terminal.RGB {
+func (app *AppState) sizeColor(size int64) color.RGB {
 	if size > SizeWarningThreshold {
 		return app.Theme.Warning
 	}
@@ -279,7 +279,7 @@ func (app *AppState) buildHierarchyNodes(ui *CategoryUIState) []tui.TreeNode {
 	return nodes
 }
 
-func (app *AppState) categoryColor(dimmed bool) terminal.RGB {
+func (app *AppState) categoryColor(dimmed bool) color.RGB {
 	if dimmed {
 		return app.Theme.Unselected
 	}
@@ -516,7 +516,7 @@ func (app *AppState) buildDetailNodes(state *DetailPaneState) []tui.TreeNode {
 
 			// Checkbox for local packages only
 			check := tui.CheckNone
-			checkFg := terminal.RGB{}
+			checkFg := color.RGB{}
 			if item.IsLocal && item.PkgDir != "" {
 				check, checkFg = app.getHeaderSelectionState(item.PkgDir)
 			}
@@ -559,7 +559,7 @@ func (app *AppState) buildDetailNodes(state *DetailPaneState) []tui.TreeNode {
 
 			// Badge for files with active symbol usage
 			var badge rune
-			var badgeFg terminal.RGB
+			var badgeFg color.RGB
 			if item.HasUsage {
 				badge = '★'
 				badgeFg = app.Theme.ModuleFg
@@ -638,7 +638,7 @@ func (app *AppState) toCheckState(s TagSelectionState) tui.CheckState {
 }
 
 // checkColor returns appropriate checkbox color based on selection state
-func (app *AppState) checkColor(s TagSelectionState, dimmed bool) terminal.RGB {
+func (app *AppState) checkColor(s TagSelectionState, dimmed bool) color.RGB {
 	if dimmed {
 		return app.Theme.Unselected
 	}
@@ -685,7 +685,7 @@ func (app *AppState) dirStyle(dimmed bool) tui.Style {
 }
 
 // suffixColor returns color for suffix text
-func (app *AppState) suffixColor(dimmed bool) terminal.RGB {
+func (app *AppState) suffixColor(dimmed bool) color.RGB {
 	if dimmed {
 		return app.Theme.Unselected
 	}
@@ -704,7 +704,7 @@ func (app *AppState) dirCheckState(sel, total int) tui.CheckState {
 }
 
 // dirCheckColor returns checkbox color for directory based on selection
-func (app *AppState) dirCheckColor(sel, total int, dimmed bool) terminal.RGB {
+func (app *AppState) dirCheckColor(sel, total int, dimmed bool) color.RGB {
 	if dimmed {
 		return app.Theme.Unselected
 	}
@@ -718,7 +718,7 @@ func (app *AppState) dirCheckColor(sel, total int, dimmed bool) terminal.RGB {
 }
 
 // getHeaderSelectionState returns checkbox state and color for package headers
-func (app *AppState) getHeaderSelectionState(pkgDir string) (tui.CheckState, terminal.RGB) {
+func (app *AppState) getHeaderSelectionState(pkgDir string) (tui.CheckState, color.RGB) {
 	pkg := app.Index.Packages[pkgDir]
 	if pkg == nil || len(pkg.Files) == 0 {
 		return tui.CheckNone, app.Theme.Unselected

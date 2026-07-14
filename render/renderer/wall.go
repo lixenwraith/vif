@@ -1,13 +1,14 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 type wallCellRenderer func(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr)
+	char rune, fg, bg color.RGB, renderFg, renderBg bool, attrs terminal.Attr)
 
 // WallRenderer draws wall entities with fg/bg support
 type WallRenderer struct {
@@ -62,7 +63,7 @@ func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 }
 
 func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
+	char rune, fg, bg color.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
 
 	if renderFg && renderBg {
 		buf.SetWithBg(screenX, screenY, char, fg, bg)
@@ -75,7 +76,7 @@ func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, sc
 
 // renderCell256 updated to use per-cell colors with fallback
 func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY int,
-	char rune, fg, bg terminal.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
+	char rune, fg, bg color.RGB, renderFg, renderBg bool, attrs terminal.Attr) {
 
 	if renderBg {
 		// Use per-cell palette index if set, otherwise fallback to default
@@ -98,6 +99,7 @@ func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY 
 			fgIdx = terminal.RGBTo256(fg)
 		}
 		buf.SetFgOnly(screenX, screenY, char,
-			terminal.RGB{R: fgIdx}, terminal.AttrFg256)
+			color.RGB{R: fgIdx}, terminal.AttrFg256)
 	}
 }
+

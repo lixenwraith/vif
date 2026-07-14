@@ -3,15 +3,16 @@ package renderer
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
-// swarmCellRenderer callback forterminal.RGB animated ASCII composite rendering (256 vs TrueColor)
+// swarmCellRenderer callback forcolor.RGB animated ASCII composite rendering (256 vs TrueColor)
 type swarmCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
 
 // SwarmRenderer draws the swarm composite
@@ -55,7 +56,7 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Determine color: hit flash > enraged > normal
-		var color terminal.RGB
+		var color color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
 			color = r.calculateFlashColor(combatComp.RemainingHitFlash)
@@ -75,7 +76,7 @@ func (r *SwarmRenderer) renderMembers(
 	buf *render.RenderBuffer,
 	headerComp *component.HeaderComponent,
 	swarmComp *component.SwarmComponent,
-	color terminal.RGB,
+	color color.RGB,
 ) {
 	patternIdx := swarmComp.PatternIndex
 	if patternIdx < 0 || patternIdx >= parameter.SwarmPatternCount {
@@ -114,7 +115,7 @@ func (r *SwarmRenderer) renderMembers(
 }
 
 // calculateFlashColor returns yellow with pulse effect
-func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) terminal.RGB {
+func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 	progress := float64(remaining) / float64(parameter.CombatHitFlashDuration)
 
 	var intensity float64
@@ -128,3 +129,4 @@ func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) terminal.RG
 
 	return render.Scale(visual.RgbCombatHitFlash, intensity)
 }
+

@@ -3,9 +3,9 @@ package engine
 import (
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/terminal"
 )
 
 // TransientResource holds short-lived visual effect state
@@ -30,7 +30,7 @@ type GrayoutState struct {
 // StrobeState controls screen flash overlay
 type StrobeState struct {
 	Active          bool
-	Color           terminal.RGB
+	Color           color.RGB
 	Intensity       float64       // Base intensity (0.0-1.0)
 	InitialDuration time.Duration // Original duration for envelope calculation
 	Remaining       time.Duration // Time until auto-deactivate
@@ -70,3 +70,4 @@ func (r *TransientResource) ExplosionCenters() []ExplosionCenter {
 func (r *TransientResource) ClearExplosions() {
 	r.ExplosionCount = 0
 }
+

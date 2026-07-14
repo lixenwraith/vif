@@ -13,16 +13,16 @@ import (
 
 // --- Visual Constants ---
 var (
-	ColorBg     = terminal.RGB{R: 26, G: 27, B: 38}
-	ColorSmoke  = terminal.RGB{R: 100, G: 100, B: 110}
-	ColorFire   = terminal.RGB{R: 255, G: 160, B: 50}
-	ColorCyan   = terminal.RGB{R: 0, G: 255, B: 255}
-	ColorPink   = terminal.RGB{R: 255, G: 0, B: 255}
-	ColorGold   = terminal.RGB{R: 255, G: 215, B: 0}
-	ColorGreen  = terminal.RGB{R: 50, G: 255, B: 50}
-	ColorPurple = terminal.RGB{R: 180, G: 100, B: 255}
-	ColorWhite  = terminal.RGB{R: 255, G: 255, B: 255}
-	ColorRed    = terminal.RGB{R: 255, G: 60, B: 60}
+	ColorBg     = color.RGB{R: 26, G: 27, B: 38}
+	ColorSmoke  = color.RGB{R: 100, G: 100, B: 110}
+	ColorFire   = color.RGB{R: 255, G: 160, B: 50}
+	ColorCyan   = color.RGB{R: 0, G: 255, B: 255}
+	ColorPink   = color.RGB{R: 255, G: 0, B: 255}
+	ColorGold   = color.RGB{R: 255, G: 215, B: 0}
+	ColorGreen  = color.RGB{R: 50, G: 255, B: 50}
+	ColorPurple = color.RGB{R: 180, G: 100, B: 255}
+	ColorWhite  = color.RGB{R: 255, G: 255, B: 255}
+	ColorRed    = color.RGB{R: 255, G: 60, B: 60}
 )
 
 // --- Types ---
@@ -47,8 +47,8 @@ type Particle struct {
 	Age        int
 	MaxAge     int
 	Char       rune
-	ColorStart terminal.RGB
-	ColorEnd   terminal.RGB
+	ColorStart color.RGB
+	ColorEnd   color.RGB
 	Scale      float64 // Size multiplier for intensity
 }
 
@@ -164,7 +164,7 @@ func main() {
 
 			// Draw targets
 			for i, t := range targets {
-				char, color := 'o', terminal.RGB{R: 80, G: 80, B: 80}
+				char, color := 'o', color.RGB{R: 80, G: 80, B: 80}
 				if i == currentTargetIdx {
 					char, color = '◎', ColorRed
 				}
@@ -179,11 +179,11 @@ func main() {
 			// Draw UI
 			uiText := fmt.Sprintf("[%s] ←/→:Type ↑/↓:Target Space:Fire Esc:Quit",
 				MissileTypeName(currentType))
-			DrawString(buf, 2, screenHeight-1, uiText, terminal.RGB{R: 180, G: 180, B: 180})
+			DrawString(buf, 2, screenHeight-1, uiText, color.RGB{R: 180, G: 180, B: 180})
 
 			// Draw type legend
 			for i := 0; i < int(MissileCount); i++ {
-				color := terminal.RGB{R: 100, G: 100, B: 100}
+				color := color.RGB{R: 100, G: 100, B: 100}
 				if MissileType(i) == currentType {
 					color = ColorGold
 				}
@@ -323,8 +323,8 @@ func updateSingleMissile(m *Missile, dt int64) {
 				X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
 				VelX: -m.Pos.VelX / 20, VelY: -m.Pos.VelY / 20,
 				MaxAge: 25, Char: '░',
-				ColorStart: terminal.RGB{R: 255, G: 200, B: 150},
-				ColorEnd:   terminal.RGB{R: 60, G: 60, B: 70},
+				ColorStart: color.RGB{R: 255, G: 200, B: 150},
+				ColorEnd:   color.RGB{R: 60, G: 60, B: 70},
 				Scale:      intensity,
 			})
 		}
@@ -357,11 +357,11 @@ func updateSingleMissile(m *Missile, dt int64) {
 			offX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
 			offY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
 
-			colors := []terminal.RGB{ColorCyan, ColorPink, ColorPurple}
+			colors := []color.RGB{ColorCyan, ColorPink, ColorPurple}
 			m.Trail = append(m.Trail, Particle{
 				X: m.Pos.PreciseX + offX, Y: m.Pos.PreciseY + offY,
 				MaxAge: 18, Char: '∘',
-				ColorStart: colors[i], ColorEnd: terminal.RGB{R: 20, G: 20, B: 40},
+				ColorStart: colors[i], ColorEnd: color.RGB{R: 20, G: 20, B: 40},
 				Scale: 0.5 + 0.5*float64(cosVal)/float64(vmath.Scale),
 			})
 		}
@@ -689,7 +689,7 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 	}
 
 	var char rune
-	var color terminal.RGB
+	var color color.RGB
 	angle := math.Atan2(float64(m.Pos.VelY), float64(m.Pos.VelX))
 
 	switch m.Type {
@@ -723,7 +723,7 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 	buf.Set(screenX, screenY, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
 }
 
-func hueToRGB(hue int) terminal.RGB {
+func hueToRGB(hue int) color.RGB {
 	h := float64(hue) / 256.0 * 6.0
 	x := 1.0 - math.Abs(math.Mod(h, 2)-1)
 	var r, g, b float64
@@ -741,7 +741,7 @@ func hueToRGB(hue int) terminal.RGB {
 	default:
 		r, g, b = 1, 0, x
 	}
-	return terminal.RGB{R: uint8(r * 255), G: uint8(g * 255), B: uint8(b * 255)}
+	return color.RGB{R: uint8(r * 255), G: uint8(g * 255), B: uint8(b * 255)}
 }
 
 func AngleToChar(rad float64) rune {
@@ -791,7 +791,7 @@ func AngleToArrow(rad float64) rune {
 	}
 }
 
-func DrawString(buf *render.RenderBuffer, x, y int, s string, color terminal.RGB) {
+func DrawString(buf *render.RenderBuffer, x, y int, s string, color color.RGB) {
 	for i, r := range s {
 		if x+i < screenWidth {
 			buf.SetFgOnly(x+i, y, r, color, terminal.AttrNone)

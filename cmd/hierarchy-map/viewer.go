@@ -919,7 +919,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 }
 
 // renderViewerLine renders a single line with styled spans
-func (app *AppState) renderViewerLine(r tui.Region, y, startX int, text string, spans []StyledSpan, isCollapsed, isMatch bool, bg terminal.RGB) {
+func (app *AppState) renderViewerLine(r tui.Region, y, startX int, text string, spans []StyledSpan, isCollapsed, isMatch bool, bg color.RGB) {
 	runes := []rune(text)
 	x := startX
 

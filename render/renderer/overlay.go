@@ -1,13 +1,14 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/terminal/tui"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/terminal/tui"
 )
 
 // TUIAdapter bridges terminal/tui to render.RenderBuffer
@@ -51,7 +52,7 @@ func (a *TUIAdapter) SubRegion(x, y, w, h int) tui.Region {
 }
 
 // Clear fills buffer with specified background
-func (a *TUIAdapter) Clear(bg terminal.RGB) {
+func (a *TUIAdapter) Clear(bg color.RGB) {
 	for i := range a.cells {
 		a.cells[i] = terminal.Cell{Rune: ' ', Bg: bg}
 	}
@@ -378,7 +379,7 @@ func (r *OverlayRenderer) renderAboutContent(outer, content tui.Region, data *co
 	outer.Text(hintsX, outer.H-2, hints, visual.RgbOverlayHint, bg, terminal.AttrDim)
 }
 
-func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg terminal.RGB, card core.OverlayCard) {
+func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg color.RGB, card core.OverlayCard) {
 	y := 0
 
 	// Title
@@ -425,7 +426,7 @@ var logoPattern = []string{
 	"BBBBBBBBBBBBBBBBBBBBBBBBBB",
 }
 
-var logoColorMap = map[rune]terminal.RGB{
+var logoColorMap = map[rune]color.RGB{
 	'B': {30, 30, 40},    // Black (frame)
 	'r': {255, 60, 60},   // Red
 	'o': {255, 165, 60},  // Orange
@@ -442,7 +443,7 @@ const (
 	logoPatternH = 13
 )
 
-func (r *OverlayRenderer) renderLogo(region tui.Region, bg terminal.RGB) {
+func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
 	w, h := region.W, region.H
 	if w < 1 || h < 1 {
 		return
@@ -469,3 +470,4 @@ func (r *OverlayRenderer) renderLogo(region tui.Region, bg terminal.RGB) {
 		}
 	}
 }
+
