@@ -376,14 +376,13 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
 	// NOTE: Do not use RunSafe if called from a blocking systems
-
-	// 1. Drain and discard stale events from the previous game session
-	_ = cs.world.Resources.Event.Queue.Consume()
-
-	// 2. Synchronize with world lock
+	// 1. Synchronize with world lock
 	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
 	cs.world.Lock()
 	defer cs.world.Unlock()
+
+	// 2. Drain and discard stale events from the previous game session
+	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 3. Reset Scheduler internal timing
 	cs.lastGameTickTime = cs.pausableClock.Now()

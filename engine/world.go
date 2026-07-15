@@ -90,10 +90,9 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 // Clear removes all entities and components from the world
 func (w *World) Clear() {
 	w.mu.Lock()
-	defer w.mu.Unlock()
 	w.nextEntityID = 1
+	w.mu.Unlock()
 	w.wipeAll()
-	clear(w.componentMask)
 }
 
 // AddSystem adds a systems to the world and sorts by priority
