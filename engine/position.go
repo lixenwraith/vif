@@ -594,6 +594,7 @@ func (pb *PositionBatch) Commit() error {
 			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
+			pb.store.world.AddComponentMask(add.entity, pb.store.bit)
 		}
 
 		pb.store.components[add.entity] = add.pos
@@ -621,6 +622,7 @@ func (pb *PositionBatch) CommitForce() {
 			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
 		} else {
 			pb.store.entities = append(pb.store.entities, add.entity)
+			pb.store.world.AddComponentMask(add.entity, pb.store.bit)
 		}
 
 		pb.store.components[add.entity] = add.pos

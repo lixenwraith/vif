@@ -1049,6 +1049,7 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	// Convert glyphs to dust
 	if s.world.Components.Glyph.HasEntity(entity) {
 		event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventDustSpawnOneRequest)
+		// event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventDustSpawnOneRequest, []core.Entity{entity})
 		return
 	}
 
@@ -1062,4 +1063,3 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	// Destroy the entity
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 }
-

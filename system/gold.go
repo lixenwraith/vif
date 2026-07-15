@@ -21,10 +21,10 @@ type GoldSystem struct {
 	rng *vmath.FastRand
 
 	// Internal state
-	active       bool
 	headerEntity core.Entity // Phantom Head
 	startTime    time.Time
 	timeoutTime  time.Time
+	active       bool
 	spawnEnabled bool
 
 	// Cached metric pointers
@@ -315,6 +315,7 @@ func (s *GoldSystem) spawnGold() bool {
 	// 6. Create composite header
 	s.world.Components.Header.SetComponent(headerEntity, component.HeaderComponent{
 		Behavior:      component.BehaviorGold,
+		Type:          component.CompositeTypeContainer,
 		MemberEntries: members,
 	})
 
@@ -488,3 +489,4 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 
 	return -1, -1
 }
+
