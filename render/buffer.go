@@ -132,17 +132,17 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 		case opReplace:
 			dst.Bg = bg
 		case opAlpha:
-			dst.Bg = Blend(dst.Bg, bg, alpha)
+			dst.Bg = color.Blend(dst.Bg, bg, alpha)
 		case opAdd:
-			dst.Bg = Add(dst.Bg, bg, alpha)
+			dst.Bg = color.Add(dst.Bg, bg, alpha)
 		case opMax:
-			dst.Bg = Max(dst.Bg, bg, alpha)
+			dst.Bg = color.Max(dst.Bg, bg, alpha)
 		case opSoftLight:
-			dst.Bg = SoftLight(dst.Bg, bg, alpha)
+			dst.Bg = color.SoftLight(dst.Bg, bg, alpha)
 		case opScreen:
-			dst.Bg = Screen(dst.Bg, bg, alpha)
+			dst.Bg = color.Screen(dst.Bg, bg, alpha)
 		case opOverlay:
-			dst.Bg = Overlay(dst.Bg, bg, alpha)
+			dst.Bg = color.Overlay(dst.Bg, bg, alpha)
 		}
 		b.touched[idx] = true
 	}
@@ -152,17 +152,17 @@ func (b *RenderBuffer) Set(x, y int, mainRune rune, fg, bg color.RGB, mode Blend
 		case opReplace:
 			dst.Fg = fg
 		case opAlpha:
-			dst.Fg = Blend(dst.Fg, fg, alpha)
+			dst.Fg = color.Blend(dst.Fg, fg, alpha)
 		case opAdd:
-			dst.Fg = Add(dst.Fg, fg, alpha)
+			dst.Fg = color.Add(dst.Fg, fg, alpha)
 		case opMax:
-			dst.Fg = Max(dst.Fg, fg, alpha)
+			dst.Fg = color.Max(dst.Fg, fg, alpha)
 		case opSoftLight:
-			dst.Fg = SoftLight(dst.Fg, fg, alpha)
+			dst.Fg = color.SoftLight(dst.Fg, fg, alpha)
 		case opScreen:
-			dst.Fg = Screen(dst.Fg, fg, alpha)
+			dst.Fg = color.Screen(dst.Fg, fg, alpha)
 		case opOverlay:
-			dst.Fg = Overlay(dst.Fg, fg, alpha)
+			dst.Fg = color.Overlay(dst.Fg, fg, alpha)
 		}
 	}
 }
@@ -242,11 +242,11 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 
 		// Skip 256-color fg - scaling palette index corrupts color
 		if cell.Attrs&terminal.AttrFg256 == 0 {
-			cell.Fg = Scale(cell.Fg, factor)
+			cell.Fg = color.Scale(cell.Fg, factor)
 		}
 
 		if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
-			cell.Bg = Scale(cell.Bg, factor)
+			cell.Bg = color.Scale(cell.Bg, factor)
 		}
 	}
 }
@@ -272,20 +272,20 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 
 		// Skip 256-color fg - grayscale conversion corrupts palette index
 		if cell.Attrs&terminal.AttrFg256 == 0 {
-			fgGray := Grayscale(cell.Fg)
+			fgGray := color.Grayscale(cell.Fg)
 			if fullGray {
 				cell.Fg = fgGray
 			} else {
-				cell.Fg = Lerp(cell.Fg, fgGray, intensity)
+				cell.Fg = color.Lerp(cell.Fg, fgGray, intensity)
 			}
 		}
 
 		if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
-			bgGray := Grayscale(cell.Bg)
+			bgGray := color.Grayscale(cell.Bg)
 			if fullGray {
 				cell.Bg = bgGray
 			} else {
-				cell.Bg = Lerp(cell.Bg, bgGray, intensity)
+				cell.Bg = color.Lerp(cell.Bg, bgGray, intensity)
 			}
 		}
 	}
@@ -303,7 +303,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 	// Pre-compute untouched background once
 	untouchedBg := visual.RgbBackground
 	if b.bgOverlay.active {
-		untouchedBg = Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+		untouchedBg = color.Scale(b.bgOverlay.color, b.bgOverlay.intensity)
 	}
 
 	for i := range b.cells {
@@ -314,7 +314,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 		// Occlusion dimming for touched cells with foreground
 		// if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 && b.masks[i]&visual.MaskUI == 0 {
 		if b.cells[i].Rune != 0 && b.masks[i]&visual.OcclusionDimMask != 0 {
-			b.cells[i].Bg = Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
+			b.cells[i].Bg = color.Scale(b.cells[i].Bg, visual.OcclusionDimFactor)
 		}
 	}
 }
@@ -323,7 +323,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 func finalizeSimple(b *RenderBuffer) {
 	untouchedBg := visual.RgbBackground
 	if b.bgOverlay.active {
-		untouchedBg = Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+		untouchedBg = color.Scale(b.bgOverlay.color, b.bgOverlay.intensity)
 	}
 
 	for i := range b.cells {
@@ -338,4 +338,3 @@ func (b *RenderBuffer) FlushToTerminal(term terminal.Terminal) {
 	b.finalize()
 	term.Flush(b.cells, b.width, b.height)
 }
-

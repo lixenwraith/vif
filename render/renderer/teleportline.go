@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // Phase thresholds matching materialize timing
@@ -144,7 +145,7 @@ func (r *TeleportLineRenderer) renderBeam(
 						buf.SetBg256(screenX, screenY, visual.SwarmChargeLine256Palette)
 					}
 				} else {
-					scaledColor := render.Scale(visual.RgbSwarmTeleport, intensity)
+					scaledColor := color.Scale(visual.RgbSwarmTeleport, intensity)
 					buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor,
 						render.BlendMaxBg, 1.0, terminal.AttrNone)
 				}
@@ -192,4 +193,3 @@ func (r *TeleportLineRenderer) calcIntensity(progress, t, segStart, segEnd float
 		return 0.3 + 0.7*posInSeg
 	}
 }
-

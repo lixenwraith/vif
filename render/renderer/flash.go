@@ -1,10 +1,11 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // FlashRenderer draws brief destruction flash effects
@@ -55,7 +56,7 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			opacity = 0.0
 		}
 
-		flashColor := render.Scale(visual.RgbRemovalFlash, opacity)
+		flashColor := color.Scale(visual.RgbRemovalFlash, opacity)
 
 		// Additive blend on foreground only, preserves background
 		buf.Set(screenX, screenY, flashComp.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)

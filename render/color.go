@@ -18,14 +18,9 @@ func init() {
 	}
 }
 
-// LerpRGBFixed interpolates between colors using Q32.32 factor t
+// LerpRGBFixed delegates to color.LerpFixed; retains vmath-typed signature for callers
 func LerpRGBFixed(a, b color.RGB, t int64) color.RGB {
-	// (diff * t) >> Shift is equivalent to Mul(diff * Scale, t) since diff is integer
-	// We do the multiplication in 64-bit to prevent overflow before shift
-	r := int64(a.R) + ((int64(b.R)-int64(a.R))*t)>>vmath.Shift
-	g := int64(a.G) + ((int64(b.G)-int64(a.G))*t)>>vmath.Shift
-	bl := int64(a.B) + ((int64(b.B)-int64(a.B))*t)>>vmath.Shift
-	return color.RGB{R: uint8(r), G: uint8(g), B: uint8(bl)}
+	return color.LerpFixed(a, b, t, uint(vmath.Shift))
 }
 
 // RainbowIndexColor returns a color from HeatGradientLUT mapped to index/total
@@ -99,4 +94,3 @@ func calculateHeatColor(progress float64) color.RGB {
 		}
 	}
 }
-

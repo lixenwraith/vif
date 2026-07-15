@@ -77,13 +77,13 @@ func computeTowerColorEntry(visualType int, healthRatio float64) towerColorEntry
 	case healthRatio >= visual.TowerHealthThresholdCritical:
 		t := (visual.TowerHealthThresholdDamaged - healthRatio) /
 			(visual.TowerHealthThresholdDamaged - visual.TowerHealthThresholdCritical)
-		bright = render.Lerp(tc.HealthyBright, tc.DamagedBright, t)
-		dark = render.Lerp(tc.HealthyDark, tc.DamagedDark, t)
+		bright = color.Lerp(tc.HealthyBright, tc.DamagedBright, t)
+		dark = color.Lerp(tc.HealthyDark, tc.DamagedDark, t)
 
 	default:
 		t := (visual.TowerHealthThresholdCritical - healthRatio) / visual.TowerHealthThresholdCritical
-		bright = render.Lerp(tc.DamagedBright, tc.CriticalBright, t)
-		dark = render.Lerp(tc.DamagedDark, tc.CriticalDark, t)
+		bright = color.Lerp(tc.DamagedBright, tc.CriticalBright, t)
+		dark = color.Lerp(tc.DamagedDark, tc.CriticalDark, t)
 	}
 
 	return towerColorEntry{bright: bright, dark: dark}
@@ -351,7 +351,7 @@ func (r *TowerRenderer) renderMembersTrueColor(
 		}
 		entry := r.colorLUTs[visualType][lutIdx]
 
-		color := render.Lerp(entry.dark, entry.bright, positionBrightness)
+		color := color.Lerp(entry.dark, entry.bright, positionBrightness)
 		buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendMax, 1.0, terminal.AttrNone)
 	}
 }

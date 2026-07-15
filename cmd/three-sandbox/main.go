@@ -400,7 +400,7 @@ func renderHUD(buf *render.RenderBuffer, parts *[3]Part, selected, screenW, scre
 
 		fg := parts[i].Color
 		if parts[i].Frozen {
-			fg = render.Lerp(fg, render.Grayscale(fg), 0.5)
+			fg = color.Lerp(fg, color.Grayscale(fg), 0.5)
 		}
 		writeStr(buf, x, statusY, s, fg)
 		x += len([]rune(s)) + 3

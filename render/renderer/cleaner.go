@@ -40,9 +40,9 @@ func (r *CleanerRenderer) buildGradients() {
 		if opacity < 0 {
 			opacity = 0
 		}
-		r.gradientPositive[i] = render.Scale(visual.RgbCleanerBasePositive, opacity)
-		r.gradientNegative[i] = render.Scale(visual.RgbCleanerBaseNegative, opacity)
-		r.gradientNugget[i] = render.Scale(visual.RgbCleanerBaseNugget, opacity)
+		r.gradientPositive[i] = color.Scale(visual.RgbCleanerBasePositive, opacity)
+		r.gradientNegative[i] = color.Scale(visual.RgbCleanerBaseNegative, opacity)
+		r.gradientNugget[i] = color.Scale(visual.RgbCleanerBaseNugget, opacity)
 	}
 }
 

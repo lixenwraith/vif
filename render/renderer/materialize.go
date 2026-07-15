@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -165,7 +166,7 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 		intensityFloat = 0.0
 	}
 
-	scaledColor := render.Scale(visual.RgbMaterialize, intensityFloat)
+	scaledColor := color.Scale(visual.RgbMaterialize, intensityFloat)
 	screenX, screenY := ctx.ViewportToScreen(vx, vy)
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledColor, render.BlendMaxBg, 1.0, terminal.AttrNone)
@@ -207,3 +208,4 @@ func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart
 		return vmath.Div(vmath.FromInt(cellPos), vmath.FromInt(segLen))
 	}
 }
+

@@ -1,10 +1,11 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // HeatRenderer draws the heat meter bar at the top of the screen
@@ -77,23 +78,23 @@ func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 // cellTrueColor renders with smooth gradient
 func (r *HeatRenderer) cellTrueColor(buf *render.RenderBuffer, x, width int, fillRune rune) {
 	lutIdx := (x * 255) / (width - 1)
-	color := render.HeatGradientLUT[lutIdx]
+	c := render.HeatGradientLUT[lutIdx]
 
 	separatorPos := segmentIndex(x, width) != segmentIndex(x+1, width)
 	if x > 0 && separatorPos {
 		if !r.burstBlink {
-			color = render.Scale(color, 0.5)
+			c = color.Scale(c, 0.5)
 		} else {
-			color = visual.RgbRed
+			c = visual.RgbRed
 		}
 	} else {
 		fillRune = 0
 	}
 
 	if fillRune == 0 {
-		buf.SetBgOnly(x, 0, color)
+		buf.SetBgOnly(x, 0, c)
 	} else {
-		buf.SetWithBg(x, 0, fillRune, visual.RgbWhite, color)
+		buf.SetWithBg(x, 0, fillRune, visual.RgbWhite, c)
 	}
 }
 
@@ -115,3 +116,4 @@ func segmentIndex(x, width int) int {
 	}
 	return segment
 }
+

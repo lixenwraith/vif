@@ -78,14 +78,14 @@ func (r *BulletRenderer) renderBulletTrueColor(
 	}
 
 	// Color dims over lifetime
-	color := visual.RgbBulletStormRed
+	c := visual.RgbBulletStormRed
 	if lifetimeRatio > 0.5 {
 		t := (lifetimeRatio - 0.5) / 0.5
-		color = render.Lerp(visual.RgbBulletStormRed, visual.RgbBulletStormRedDim, t)
+		c = color.Lerp(visual.RgbBulletStormRed, visual.RgbBulletStormRedDim, t)
 	}
 
 	char := r.directionChar(kinetic.VelX, kinetic.VelY)
-	buf.Set(screenX, screenY, char, color, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrBold)
+	buf.Set(screenX, screenY, char, c, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrBold)
 }
 
 func (r *BulletRenderer) renderBullet256(
@@ -176,4 +176,3 @@ func (r *BulletRenderer) directionChar256(velX, velY int64) rune {
 	}
 	return '/'
 }
-

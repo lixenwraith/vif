@@ -194,7 +194,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 func (r *OrbRenderer) renderBurst(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, baseColor color.RGB, glyph rune, progress float64) {
 	expandPhase := 1.0 - progress
 	burstAlpha := progress
-	burstColor := render.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
+	burstColor := color.Lerp(baseColor, visual.RgbOrbFlash, 0.5)
 
 	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
 		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {

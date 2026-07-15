@@ -341,16 +341,16 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 			}
 
 			// Gradient mapping (Edge → Mid → Core)
-			var color color.RGB
+			var c color.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
 				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
+				c = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
 			} else {
 				base := val - parameter.ExplosionGradientMidpoint
 				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
+				c = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
 			}
 
 			// Alpha mapping
@@ -363,7 +363,7 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 			alphaFloat := vmath.ToFloat(alphaFixed)
 
 			// Background glow layer (screen blend like missile)
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendScreen, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alphaFloat, terminal.AttrNone)
 
 			// Character noise layer
 			seed := uint32(vx*7919 + vy*104729)
@@ -384,10 +384,9 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 				}
 
 				// Fg brightness tracks intensity for natural fade at edges
-				fgColor := render.Scale(palette.Core, alphaFloat)
+				fgColor := color.Scale(palette.Core, alphaFloat)
 				buf.SetFgOnly(screenX, screenY, eyeBlockChars[band], fgColor, terminal.AttrNone)
 			}
 		}
 	}
 }
-

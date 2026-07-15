@@ -120,7 +120,7 @@ func main() {
 		if alpha > MaxOpacity {
 			alpha = MaxOpacity
 		}
-		color := render.Lerp(ColorCore, ColorHot, 1.0-lifeRatio)
+		color := color.Lerp(ColorCore, ColorHot, 1.0-lifeRatio)
 
 		timeBucket := now.UnixMilli() / VibrationInterval.Milliseconds()
 

@@ -164,7 +164,7 @@ func main() {
 				// Convert color.RGB -> color.RGB -> color.RGB
 				bgRender := color.RGB{R: bg.R, G: bg.G, B: bg.B}
 				// Explicit alpha 1.0 for additive blend
-				res := render.Add(bgRender, color.RGB{R: val, G: val, B: val}, 1.0)
+				res := color.Add(bgRender, color.RGB{R: val, G: val, B: val}, 1.0)
 				cells[idx].Bg = color.RGB{R: res.R, G: res.G, B: res.B}
 			}
 		}
@@ -225,14 +225,14 @@ func main() {
 						// Turbulence
 						noise := math.Sin(normDist*20.0-currTime*4.0) * 0.1
 
-						val := render.Scale(e.Color, corona+noise)
+						val := color.Scale(e.Color, corona+noise)
 						// Set white core
 						if core > 0 {
 							// Explicit alpha 1.0
-							val = render.Add(val, render.Scale(color.RGB{R: 255, G: 255, B: 255}, core), 1.0)
+							val = color.Add(val, color.Scale(color.RGB{R: 255, G: 255, B: 255}, core), 1.0)
 						}
 						// Explicit alpha 1.0
-						finalColor = render.Add(bg, val, 1.0)
+						finalColor = color.Add(bg, val, 1.0)
 
 					case 1: // "The Bubble" - Overlay Body + SoftLight Rim
 						// Rim lighting (strong at edges)
@@ -241,16 +241,16 @@ func main() {
 						body := math.Sqrt(1.0 - normDist) // Sphere-like volume
 
 						// Combine
-						bubbleCol := render.Scale(e.Color, body*0.6+rim*0.8)
+						bubbleCol := color.Scale(e.Color, body*0.6+rim*0.8)
 
 						// Overlay preserves background details (stars) behind the bubble
 						// Explicit alpha 1.0
-						finalColor = render.Overlay(bg, bubbleCol, 1.0)
+						finalColor = color.Overlay(bg, bubbleCol, 1.0)
 
 						// Set distinct rim highlight
 						if normDist > 0.85 {
 							// Explicit alpha 1.0
-							finalColor = render.Add(finalColor, render.Scale(color.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
+							finalColor = color.Add(finalColor, color.Scale(color.RGB{R: 200, G: 255, B: 255}, (normDist-0.85)*6.0), 1.0)
 						}
 
 					case 2: // "The Pulse" - Screen Interference
@@ -258,11 +258,11 @@ func main() {
 						ripple := math.Sin(normDist*30.0 - currTime*8.0)
 						alpha := (1.0 - normDist) * (0.5 + 0.5*ripple)
 
-						pulseCol := render.Scale(e.Color, alpha)
+						pulseCol := color.Scale(e.Color, alpha)
 
 						// Screen blend makes it look like a hologram/light projection
 						// Explicit alpha 1.0
-						finalColor = render.Screen(bg, pulseCol, 1.0)
+						finalColor = color.Screen(bg, pulseCol, 1.0)
 					}
 
 					cells[idx].Bg = color.RGB{R: finalColor.R, G: finalColor.G, B: finalColor.B}

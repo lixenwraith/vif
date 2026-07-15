@@ -302,14 +302,14 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor co
 				// TrueColor: smooth gradient
 				falloff := (1.0 - dist) * (1.0 - dist)
 				alpha := falloff * state.shieldOpacity
-				blended := render.Screen(bgColor, shieldColor, alpha)
+				blended := color.Screen(bgColor, shieldColor, alpha)
 				buf.SetWithBg(screenX, screenY, ' ', blended, blended)
 			} else {
 				// 256: rim-only mode (matching cell256 in shields.go)
 				if dist < 0.6 {
 					buf.SetWithBg(screenX, screenY, ' ', bgColor, bgColor)
 				} else {
-					blended := render.Screen(bgColor, shieldColor, 0.6)
+					blended := color.Screen(bgColor, shieldColor, 0.6)
 					idx := color.RGBTo256(blended)
 					rgb256 := Get256PaletteRGB(idx)
 					buf.SetWithBg(screenX, screenY, ' ', rgb256, rgb256)
@@ -348,7 +348,7 @@ func drawTrailEffect(startY int, fg, bg color.RGB) {
 		if opacity < 0 {
 			opacity = 0
 		}
-		scaled := render.Scale(baseColor, opacity)
+		scaled := color.Scale(baseColor, opacity)
 		buf.SetWithBg(5+i*2, startY, '█', scaled, bg)
 		buf.SetWithBg(6+i*2, startY, '█', scaled, bg)
 	}
@@ -361,7 +361,7 @@ func drawTrailEffect(startY int, fg, bg color.RGB) {
 		if opacity < 0 {
 			opacity = 0
 		}
-		scaled := render.Scale(baseColor, opacity)
+		scaled := color.Scale(baseColor, opacity)
 		idx := color.RGBTo256(scaled)
 		rgb256 := Get256PaletteRGB(idx)
 		buf.SetWithBg(5+i*2, startY, '█', rgb256, bg)
@@ -411,7 +411,7 @@ func drawFlashEffect(startY int, fg, bg color.RGB) {
 	drawText(1, startY, "Set blend on char 'A' (green):", fg, bg)
 	startY++
 	charFg := visual.RgbGlyphGreenNormal
-	addedTC := render.Add(charFg, flashColor, 1.0)
+	addedTC := color.Add(charFg, flashColor, 1.0)
 	idx := color.RGBTo256(addedTC)
 	added256 := Get256PaletteRGB(idx)
 

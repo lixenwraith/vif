@@ -82,14 +82,14 @@ func (r *PylonRenderer) computeColorEntry(healthRatio float64) pylonColorEntry {
 		// Damaged: interpolate Blue → Green
 		t := (visual.PylonHealthThresholdDamaged - healthRatio) /
 			(visual.PylonHealthThresholdDamaged - visual.PylonHealthThresholdCritical)
-		bright = render.Lerp(visual.RgbPylonHealthyBright, visual.RgbPylonDamagedBright, t)
-		dark = render.Lerp(visual.RgbPylonHealthyDark, visual.RgbPylonDamagedDark, t)
+		bright = color.Lerp(visual.RgbPylonHealthyBright, visual.RgbPylonDamagedBright, t)
+		dark = color.Lerp(visual.RgbPylonHealthyDark, visual.RgbPylonDamagedDark, t)
 
 	default:
 		// Critical: interpolate Green → Red
 		t := (visual.PylonHealthThresholdCritical - healthRatio) / visual.PylonHealthThresholdCritical
-		bright = render.Lerp(visual.RgbPylonDamagedBright, visual.RgbPylonCriticalBright, t)
-		dark = render.Lerp(visual.RgbPylonDamagedDark, visual.RgbPylonCriticalDark, t)
+		bright = color.Lerp(visual.RgbPylonDamagedBright, visual.RgbPylonCriticalBright, t)
+		dark = color.Lerp(visual.RgbPylonDamagedDark, visual.RgbPylonCriticalDark, t)
 	}
 
 	return pylonColorEntry{bright: bright, dark: dark}
@@ -297,7 +297,7 @@ func (r *PylonRenderer) renderMembersTrueColor(
 		entry := r.colorLUT[lutIdx]
 
 		// Interpolate between bright and dark based on position
-		color := render.Lerp(entry.dark, entry.bright, positionBrightness)
+		color := color.Lerp(entry.dark, entry.bright, positionBrightness)
 
 		// buf.SetBgOnly(screenX, screenY, color)
 		// Use BlendMax to defer to brighter existing species

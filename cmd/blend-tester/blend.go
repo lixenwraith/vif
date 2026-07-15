@@ -115,17 +115,17 @@ func drawBlendMode() {
 	case 0: // Replace
 		result = srcColor
 	case 1: // Alpha
-		result = render.Blend(dstColor, srcColor, state.blendAlpha)
+		result = color.Blend(dstColor, srcColor, state.blendAlpha)
 	case 2: // Set
-		result = render.Add(dstColor, srcColor, state.blendAlpha)
+		result = color.Add(dstColor, srcColor, state.blendAlpha)
 	case 3: // Max
-		result = render.Max(dstColor, srcColor, state.blendAlpha)
+		result = color.Max(dstColor, srcColor, state.blendAlpha)
 	case 4: // SoftLight
-		result = render.SoftLight(dstColor, srcColor, state.blendAlpha)
+		result = color.SoftLight(dstColor, srcColor, state.blendAlpha)
 	case 5: // Screen
-		result = render.Screen(dstColor, srcColor, state.blendAlpha)
+		result = color.Screen(dstColor, srcColor, state.blendAlpha)
 	case 6: // Overlay
-		result = render.Overlay(dstColor, srcColor, state.blendAlpha)
+		result = color.Overlay(dstColor, srcColor, state.blendAlpha)
 	}
 
 	// Results box

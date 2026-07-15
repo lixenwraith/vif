@@ -127,6 +127,6 @@ func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 		intensity = 0.6
 	}
 
-	return render.Scale(visual.RgbCombatHitFlash, intensity)
+	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }
 

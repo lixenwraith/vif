@@ -62,8 +62,8 @@ func (r *SnakeRenderer) buildBodyColorLUT() {
 		t := float64(i) / 255.0
 		// Longitudinal gradient: bright → dark toward tail
 		darkenFactor := 1.0 - t*visual.SnakeBodyTailDarken
-		center := render.Scale(visual.RgbSnakeBodyBright, darkenFactor)
-		edge := render.Scale(center, 1.0-visual.SnakeBodyEdgeFalloff)
+		center := color.Scale(visual.RgbSnakeBodyBright, darkenFactor)
+		edge := color.Scale(center, 1.0-visual.SnakeBodyEdgeFalloff)
 		r.bodyColorLUT[i] = snakeBodyColorEntry{center: center, edge: edge}
 	}
 }
@@ -171,7 +171,7 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 			}
 
 			factor := glowIntensity * alpha * alpha // Quadratic falloff
-			color := render.Scale(visual.RgbSnakeShieldTint, factor)
+			color := color.Scale(visual.RgbSnakeShieldTint, factor)
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
@@ -252,7 +252,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 			if healthRatio > 1.0 {
 				healthRatio = 1.0
 			}
-			color := render.Scale(baseColor, 0.3+0.7*healthRatio)
+			color := color.Scale(baseColor, 0.3+0.7*healthRatio)
 
 			// Hit flash
 			if combatComp.RemainingHitFlash > 0 {
@@ -278,13 +278,13 @@ func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *rende
 	// Head color: shielded tint or health-based
 	var baseColor color.RGB
 	if isShielded {
-		baseColor = render.Lerp(visual.RgbSnakeHeadBright, visual.RgbSnakeShieldTint, 0.3)
+		baseColor = color.Lerp(visual.RgbSnakeHeadBright, visual.RgbSnakeShieldTint, 0.3)
 	} else {
 		healthRatio := float64(combatComp.HitPoints) / float64(parameter.CombatInitialHPSnakeHead)
 		if healthRatio > 1.0 {
 			healthRatio = 1.0
 		}
-		baseColor = render.Lerp(visual.RgbSnakeHeadDark, visual.RgbSnakeHeadBright, healthRatio)
+		baseColor = color.Lerp(visual.RgbSnakeHeadDark, visual.RgbSnakeHeadBright, healthRatio)
 	}
 
 	// Hit flash override (only when unshielded)
@@ -331,8 +331,8 @@ func (r *SnakeRenderer) calculateFlashColor(base color.RGB, remaining time.Durat
 		intensity = 0.6
 	}
 
-	flashColor := render.Scale(visual.RgbCombatHitFlash, intensity)
-	return render.Lerp(base, flashColor, visual.SnakeHitFlashIntensity)
+	flashColor := color.Scale(visual.RgbCombatHitFlash, intensity)
+	return color.Lerp(base, flashColor, visual.SnakeHitFlashIntensity)
 }
 
 func (r *SnakeRenderer) countConnectedSegments(bodyComp *component.SnakeBodyComponent, resolved []snakeResolvedSegment) int {

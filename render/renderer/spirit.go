@@ -85,22 +85,22 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 			// --- Coloring & Fading ---
 
-			var color color.RGB
+			var c color.RGB
 			var alpha float64 = 1.0
 
 			if i == 0 {
 				// Head: color cycle through gradient based on progress
-				color = spiritProgressColor(spiritComp.BaseColor, p)
+				c = spiritProgressColor(spiritComp.BaseColor, p)
 				// Intensity increases as it approaches target (0.5 -> 1.0)
 				intensity := 0.5 + (vmath.ToFloat(p) * 0.5)
-				color = render.Scale(color, intensity)
+				c = color.Scale(c, intensity)
 			} else {
 				// Trail: inherit cycled color with linear fade + boosted alpha
 				trailProgress := p - int64(i-1)*trailLag
 				if trailProgress < 0 {
 					trailProgress = 0
 				}
-				color = spiritProgressColor(spiritComp.BaseColor, trailProgress)
+				c = spiritProgressColor(spiritComp.BaseColor, trailProgress)
 
 				// Normalized position in trail (0.0 to 1.0)
 				trailPos := float64(i) / float64(trailSteps)
@@ -112,14 +112,14 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 					fade = 1.0
 				}
 
-				color = render.Scale(color, fade)
+				c = color.Scale(c, fade)
 				// Reduce alpha blend weight for tail to make it ghostly
 				// alpha = fade
 				alpha = 0.4 + fade*0.6 // Higher base alpha
 			}
 
 			// Additive blend for glow effect
-			buf.Set(screenX, screenY, spiritComp.Rune, color, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrNone)
+			buf.Set(screenX, screenY, spiritComp.Rune, c, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrNone)
 		}
 	}
 }
@@ -133,4 +133,3 @@ func spiritProgressColor(base component.SpiritColor, progress int64) color.RGB {
 
 	return render.HeatGradientLUT[lutIdx]
 }
-

@@ -536,7 +536,7 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 			}
 
 			// Color: orange-red at base fading to dark red
-			color := render.Lerp(visual.RgbMuzzleFlashBase, visual.RgbMuzzleFlashTip, t)
+			color := color.Lerp(visual.RgbMuzzleFlashBase, visual.RgbMuzzleFlashTip, t)
 
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, alpha, terminal.AttrNone)
 		}

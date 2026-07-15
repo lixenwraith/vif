@@ -268,28 +268,28 @@ func renderEmber(e *Ember, cells []terminal.Cell, w, h int) {
 
 			// Corona layer
 			if coronaInt > 0.01 {
-				coronaCol := render.Scale(edgeColor, coronaInt*flicker)
-				result = render.Add(result, coronaCol, 1.0)
+				coronaCol := color.Scale(edgeColor, coronaInt*flicker)
+				result = color.Add(result, coronaCol, 1.0)
 			}
 
 			// Mid layer
 			if midInt > 0.01 {
-				midCol := render.Scale(midColor, midInt*flicker)
-				result = render.Screen(result, midCol, 1.0)
+				midCol := color.Scale(midColor, midInt*flicker)
+				result = color.Screen(result, midCol, 1.0)
 			}
 
 			// Core layer
 			if coreInt > 0.01 {
-				coreCol := render.Scale(coreColor, coreInt*flicker)
-				result = render.Add(result, coreCol, 1.0)
+				coreCol := color.Scale(coreColor, coreInt*flicker)
+				result = color.Add(result, coreCol, 1.0)
 			}
 
 			// Rings
 			if normDist < e.RingVisible && e.RingAlpha > 0.01 {
 				ringVis := renderRings(e, dx, dy, normDist)
 				if ringVis > 0.01 {
-					ringCol := render.Scale(pal.RingColor, ringVis)
-					result = render.Overlay(result, ringCol, ringVis*0.7)
+					ringCol := color.Scale(pal.RingColor, ringVis)
+					result = color.Overlay(result, ringCol, ringVis*0.7)
 				}
 			}
 
@@ -341,7 +341,7 @@ func renderStars(stars []star, cells []terminal.Cell, w, h int, t float64) {
 		brite := s.brightness * (0.6 + 0.4*math.Sin(t*3.5+s.phase))
 		val := uint8(160 * brite)
 		idx := sy*w + sx
-		cells[idx].Bg = render.Add(cells[idx].Bg, color.RGB{R: val, G: val, B: val}, 1.0)
+		cells[idx].Bg = color.Add(cells[idx].Bg, color.RGB{R: val, G: val, B: val}, 1.0)
 	}
 }
 

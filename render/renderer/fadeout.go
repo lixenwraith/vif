@@ -1,10 +1,11 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // FadeoutRenderer draws fadeout effects for wall destruction
@@ -54,11 +55,11 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		}
 
 		// Scale colors by opacity
-		scaledBg := render.Scale(fadeoutComp.BgColor, opacity)
+		scaledBg := color.Scale(fadeoutComp.BgColor, opacity)
 
 		if fadeoutComp.Char != 0 {
 			// Fg + Bg fadeout
-			scaledFg := render.Scale(fadeoutComp.FgColor, opacity)
+			scaledFg := color.Scale(fadeoutComp.FgColor, opacity)
 			buf.Set(screenX, screenY, fadeoutComp.Char, scaledFg, scaledBg, render.BlendAlpha, opacity, terminal.AttrNone)
 		} else {
 			// Bg-only fadeout
