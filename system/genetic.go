@@ -25,7 +25,8 @@ type trackedEntity struct {
 	species       component.SpeciesType
 	subType       uint8
 	isComposite   bool
-	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
+	targetGroupID uint8   // Target group for distance measurement (0 = cursor)
+	dealtDamage   float64 // Tracks damage dealt before death
 }
 
 // --- Genetic System ---
@@ -101,6 +102,7 @@ func (s *GeneticSystem) EventTypes() []event.EventType {
 		event.EventGeneticRegisterSpecies,
 		event.EventEnemyCreated,
 		event.EventEnemyKilled,
+		event.EventCombatAttackAreaRequest,
 	}
 }
 
@@ -142,6 +144,18 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			s.mu.Lock()
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
+			s.mu.Unlock()
+		}
+
+	case event.EventCombatAttackAreaRequest:
+		if payload, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok {
+			s.mu.Lock()
+			if tracked, ok := s.tracking[payload.OwnerEntity]; ok {
+				// Only reward successful self-destructs against targets (ignores cursor shield bumps)
+				if payload.AttackType == component.CombatAttackSelfDestruct {
+					tracked.dealtDamage += float64(parameter.CombatDamageEyeSelfDestruct)
+				}
+			}
 			s.mu.Unlock()
 		}
 	}
@@ -333,8 +347,11 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 		}
 	}
 
+	// Calculate final fitness: Distance (0.0 to 1.0) + Damage Dealt
+	finalFitness := fitnessVal + tracked.dealtDamage
+
 	// GA registry (telemetry path)
-	s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, fitnessVal)
+	s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, finalFitness)
 
 	if tracked.isComposite {
 		if c, ok := tracked.collector.(*tracking.CompositeCollector); ok {
