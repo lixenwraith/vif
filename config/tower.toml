@@ -53,6 +53,9 @@ on_enter = [
     # Victory ungated until spawn chain completes
     { action = "SetVar", payload = { name = "pylons_chain_done", value = 0 } },
 
+    # Register Eye (Species 7) for GA. 1 Gene [0.0, 0.99] mapping to 7 discrete types.
+    { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = 7, gene_count = 1, bounds = [{ min = 0.0, max = 0.99 }], perturbation_std_dev = 0.1, is_composite = true } },
+
     # Spawn tower at center
     { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 0, y = 0, target_group_id = 1 }, payload_vars = { X = "cx", Y = "cy" } },
 

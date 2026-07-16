@@ -331,8 +331,10 @@ func InitRegistry() {
 	RegisterType("EventGatewayDespawnRequest", EventGatewayDespawnRequest, &GatewayDespawnRequestPayload{})
 	RegisterType("EventGatewayDespawned", EventGatewayDespawned, &GatewayDespawnedPayload{})
 
+	// Genetic
+	RegisterType("EventGeneticRegisterSpecies", EventGeneticRegisterSpecies, &GeneticRegisterSpeciesPayload{})
+
 	// Debug
 	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
 	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)
 }
-

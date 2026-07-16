@@ -6,12 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/navigation"
 	"github.com/lixenwraith/vi-fighter/status"
-	"github.com/lixenwraith/terminal"
 )
 
 // Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
@@ -31,6 +32,9 @@ type Resource struct {
 
 	// Bandit adaptation resource for route distribution
 	Adaptation *AdaptationResource
+
+	// Genetics
+	Genetics *GeneticResource
 
 	// Transient visual effects
 	Transient *TransientResource
@@ -377,6 +381,23 @@ func (ar *AdaptationResource) MarkDraining(id uint32, t time.Time) {
 		entry.Draining = true
 		entry.DrainTime = t
 	}
+}
+
+// === Genetics ===
+
+// GeneticResource exposes the GA registry for synchronous gene sampling by spawners.
+// Includes PopulationID for future-proofing multi-island populations.
+type GeneticResource struct {
+	Registry *registry.Registry
+}
+
+// Sample requests a genotype from the specified species and population pool
+func (gr *GeneticResource) Sample(speciesID uint8, populationID uint32) ([]float64, uint64) {
+	if gr == nil || gr.Registry == nil {
+		return nil, 0
+	}
+	// For now, PopulationID is ignored. Future expansion will map (SpeciesID + PopulationID) to a unique tracker.
+	return gr.Registry.Sample(registry.SpeciesID(speciesID))
 }
 
 // === Bridged Resources from Service ===

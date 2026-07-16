@@ -1,6 +1,7 @@
 package system
 
 import (
+	"fmt"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/genetic"
 	"github.com/lixenwraith/vi-fighter/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -51,9 +53,16 @@ type GeneticSystem struct {
 }
 
 func NewGeneticSystem(world *engine.World) engine.System {
+	reg := registry.NewRegistry(parameter.GeneticPersistencePath)
+
+	// Expose registry synchronously to ECS
+	world.Resources.Genetics = &engine.GeneticResource{
+		Registry: reg,
+	}
+
 	s := &GeneticSystem{
 		world:         world,
-		registry:      registry.NewRegistry(parameter.GeneticPersistencePath),
+		registry:      reg,
 		collectorPool: tracking.NewCollectorPool(32),
 		tracking:      make(map[core.Entity]*trackedEntity),
 		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
@@ -66,22 +75,8 @@ func NewGeneticSystem(world *engine.World) engine.System {
 	s.statOutcomes = world.Resources.Status.Ints.Get("eye.ga.outcomes")
 	s.statTracked = world.Resources.Status.Ints.Get("eye.ga.tracked")
 
-	s.registerSpecies()
 	s.Init()
 	return s
-}
-
-// registerSpecies registers tracked species with no active genes
-// Enables the tracking/fitness pipeline for distance-at-death measurement
-func (s *GeneticSystem) registerSpecies() {
-	eyeConfig := registry.SpeciesConfig{
-		ID:          registry.SpeciesID(component.SpeciesEye),
-		Name:        "eye",
-		GeneCount:   0,
-		Bounds:      nil,
-		IsComposite: true,
-	}
-	_ = s.registry.Register(eyeConfig, nil)
 }
 
 func (s *GeneticSystem) Init() {
@@ -103,6 +98,7 @@ func (s *GeneticSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameReset,
 		event.EventMetaSystemCommandRequest,
+		event.EventGeneticRegisterSpecies,
 		event.EventEnemyCreated,
 		event.EventEnemyKilled,
 	}
@@ -128,6 +124,13 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
+	case event.EventGeneticRegisterSpecies:
+		if payload, ok := ev.Payload.(*event.GeneticRegisterSpeciesPayload); ok {
+			s.mu.Lock()
+			s.handleRegistration(payload)
+			s.mu.Unlock()
+		}
+
 	case event.EventEnemyCreated:
 		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
 			s.mu.Lock()
@@ -141,6 +144,26 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
 			s.mu.Unlock()
 		}
+	}
+}
+
+func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpeciesPayload) {
+	bounds := make([]genetic.ParameterBounds, len(payload.Bounds))
+	for i, b := range payload.Bounds {
+		bounds[i] = genetic.ParameterBounds{Min: b.Min, Max: b.Max}
+	}
+
+	config := registry.SpeciesConfig{
+		ID:                 registry.SpeciesID(payload.Species),
+		Name:               fmt.Sprintf("species_%d", payload.Species),
+		GeneCount:          payload.GeneCount,
+		Bounds:             bounds,
+		PerturbationStdDev: payload.PerturbationStdDev,
+		IsComposite:        payload.IsComposite,
+	}
+
+	if err := s.registry.Register(config, nil); err == nil {
+		_ = s.registry.Start()
 	}
 }
 

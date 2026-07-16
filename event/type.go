@@ -476,6 +476,11 @@ const (
 	// EventGatewayDespawned (GatewayDespawnedPayload) signals that a gateway entity has been cleaned up
 	EventGatewayDespawned
 
+	// --- Genetic ---
+
+	// EventGeneticRegisterSpecies (GeneticRegisterSpeciesPayload) dynamically registers a species for evolution
+	EventGeneticRegisterSpecies
+
 	// --- Debug ---
 
 	// EventDebugFlowToggle toggles debug flow field visualization
@@ -483,3 +488,4 @@ const (
 	// EventDebugGraphToggle toggles debug graph visualization
 	EventDebugGraphToggle
 )
+

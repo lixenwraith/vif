@@ -279,9 +279,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 					default:
 					}
 				}
-				if cs.isPaused.Load() {
-					cs.executeReset()
-				}
+				cs.executeReset()
 			case <-cs.stopChan:
 				return
 			}

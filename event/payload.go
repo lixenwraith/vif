@@ -944,6 +944,23 @@ type GatewayDespawnedPayload struct {
 	AnchorEntity  core.Entity `toml:"anchor_entity"`
 }
 
+// --- Genetic ---
+
+// ParameterBoundDef defines TOML-parsable bounds
+type ParameterBoundDef struct {
+	Min float64 `toml:"min"`
+	Max float64 `toml:"max"`
+}
+
+// GeneticRegisterSpeciesPayload dynamically configures a species for GA tracking
+type GeneticRegisterSpeciesPayload struct {
+	Species            component.SpeciesType `toml:"species"`
+	GeneCount          int                   `toml:"gene_count"`
+	Bounds             []ParameterBoundDef   `toml:"bounds"`
+	PerturbationStdDev float64               `toml:"perturbation_std_dev"`
+	IsComposite        bool                  `toml:"is_composite"`
+}
+
 // --- Debug ---
 
 type DebugFlowGroupPayload struct {
