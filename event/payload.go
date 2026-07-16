@@ -937,6 +937,7 @@ type GatewaySpawnRequestPayload struct {
 	SubType             uint8       `toml:"sub_type"`        // Species variant (e.g. EyeType)
 	GroupID             uint8       `toml:"group_id"`        // Target group for spawned entities
 	UseRouteGraph       bool        `toml:"use_route_graph"` // If true, request route graph computation for this gateway
+	PopulationID        uint32      `toml:"population_id"`
 }
 
 // GatewayDespawnRequestPayload requests removal of gateway anchored to entity

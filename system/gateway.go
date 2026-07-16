@@ -132,6 +132,7 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		Species:           component.SpeciesType(payload.Species),
 		SubType:           payload.SubType,
 		GroupID:           payload.GroupID,
+		PopulationID:      payload.PopulationID,
 		BaseInterval:      baseInterval,
 		Accumulated:       0,
 		Active:            true,
@@ -228,7 +229,7 @@ func (s *GatewaySystem) Update() {
 			spawnX := anchorPos.X + gw.OffsetX
 			spawnY := anchorPos.Y + gw.OffsetY
 
-			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID)
+			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID, gw.PopulationID)
 		}
 
 		s.world.Components.Gateway.SetComponent(gwEntity, gw)
@@ -241,21 +242,17 @@ func (s *GatewaySystem) Update() {
 
 // emitSpawnEvent routes to the appropriate species spawn request event
 // routeDistID enables per-route assignment from bandit pool
-func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
+func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32, populationID uint32) {
 	// Sample GA if available
 	var evalID uint64
 	var genes []float64
 	if s.world.Resources.Genetics != nil {
-		genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), 0) // populationID 0 for now
+		genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
 	}
 
 	switch species {
 	case component.SpeciesEye:
-		routeID := -1
-		if routeDistID != 0 && s.world.Resources.Adaptation != nil {
-			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, subType)
-		}
-
+		// 1. Resolve phenotype
 		// Phenotype translation: map continuous gene [0.0, 0.99] to discrete EyeType [0..6]
 		eyeType := component.EyeType(subType) // Fallback to base configuration
 		if evalID != 0 && len(genes) > 0 {
@@ -266,6 +263,12 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 				typeIdx = 0
 			}
 			eyeType = component.EyeType(typeIdx)
+		}
+
+		// 2. Pop route using the resolved phenotype
+		routeID := -1
+		if routeDistID != 0 && s.world.Resources.Adaptation != nil {
+			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, subType)
 		}
 
 		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{

@@ -354,11 +354,18 @@ func (ar *AdaptationResource) PopRoute(id uint32, subType uint8) int {
 			Pool:    make([]int, 0),
 			Head:    0,
 		}
-		// Uniform initial weights
-		uniform := 1.0 / float64(entry.RouteCount)
-		for i := 0; i < entry.RouteCount; i++ {
-			pop.Weights[i] = uniform
+
+		// Clone baseline topological weights from subType 0 if available
+		if basePop, hasBase := entry.Populations[0]; hasBase && len(basePop.Weights) == entry.RouteCount {
+			copy(pop.Weights, basePop.Weights)
+		} else {
+			// Uniform fallback
+			uniform := 1.0 / float64(entry.RouteCount)
+			for i := 0; i < entry.RouteCount; i++ {
+				pop.Weights[i] = uniform
+			}
 		}
+
 		entry.Populations[subType] = pop
 	}
 

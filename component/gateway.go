@@ -13,9 +13,10 @@ type GatewayComponent struct {
 	AnchorEntity core.Entity
 
 	// Species routing
-	Species SpeciesType // Which species to spawn
-	SubType uint8       // Species-specific variant (e.g. EyeType)
-	GroupID uint8       // Target group ID assigned to spawned entities
+	Species      SpeciesType // Which species to spawn
+	SubType      uint8       // Species-specific variant (e.g. EyeType)
+	GroupID      uint8       // Target group ID assigned to spawned entities
+	PopulationID uint32      // GA Population/Island identifier (0 = global)
 
 	// Spawn timing
 	BaseInterval time.Duration // Base time between spawns
@@ -41,3 +42,4 @@ type GatewayComponent struct {
 	// Allows pre-sampling N route genes then distributing across spawns
 	SpawnPoolSize int
 }
+
