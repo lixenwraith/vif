@@ -32,4 +32,17 @@ const (
 
 	// RouteGraphMaxRoutes caps total routes per graph to bound DFS enumeration
 	RouteGraphMaxRoutes = 64
+
+	// RouteGraphMaxOverlapPct: reject route candidate sharing more than this
+	// percentage of its cells with already-accepted routes (dilated)
+	RouteGraphMaxOverlapPct = 70
+
+	// RouteCorridorRadius: BFS dilation (cells) around a route path; sets
+	// penalty spread and per-route flow-field corridor width. Raise if
+	// knockback deaths outside corridors produce excessive zero-fitness noise
+	RouteCorridorRadius = 2
+
+	// RouteGraphWaypointStride: path decimation interval for Route.Waypoints
+	RouteGraphWaypointStride = 8
 )
+
