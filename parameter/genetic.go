@@ -33,6 +33,10 @@ const (
 
 	// GACrossoverMixProbability for uniform crossover
 	GACrossoverMixProbability = 0.5
+
+	// GAScoutRate is the fraction of gateway samples replaced by probe genotypes
+	// covering all phenotype bins (mirrors the route bandit scout wave)
+	GAScoutRate = 0.08
 )
 
 // Genetic Algorithm - Streaming Configuration
@@ -46,3 +50,4 @@ const (
 	// GAMinOutcomesPerGen triggers evolution after N fitness results
 	GAMinOutcomesPerGen = 5
 )
+

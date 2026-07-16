@@ -10,8 +10,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/navigation"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
+	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
 type routeOutcome struct {
@@ -21,8 +23,8 @@ type routeOutcome struct {
 
 // trackedRoute caches navigation state because components are wiped before EventEnemyKilled is processed
 type trackedRoute struct {
-	GraphID uint32
 	RouteID int
+	GraphID uint32
 	SubType uint8
 }
 
@@ -155,7 +157,7 @@ func (s *AdaptationSystem) Update() {
 		return
 	}
 
-	// Defer death handling ensures the ECS component wipe doesn't create race conditions against tracking
+	// Deferred death processing avoids racing the ECS component wipe
 	s.processPendingDeaths()
 	s.cleanupStaleTracking()
 
@@ -175,6 +177,8 @@ func (s *AdaptationSystem) Update() {
 
 			pop, exists := entry.Populations[subType]
 			if !exists {
+				// Drop unattributable outcomes instead of buffering forever
+				s.outcomes[graphID][subType] = s.outcomes[graphID][subType][:0]
 				continue
 			}
 
@@ -202,7 +206,8 @@ func (s *AdaptationSystem) Update() {
 	s.updateTelemetry(ar)
 }
 
-// Pre-initialize SubType 0 with the graph's optimal weights so PopRoute doesn't overwrite them
+// handleGraphComputed creates the bandit entry for a computed graph and seeds
+// SubType 0 with topological route weights; PopRoute lazily clones this baseline
 func (s *AdaptationSystem) handleGraphComputed(graphID uint32, routeCount int) {
 	ar := s.world.Resources.Adaptation
 	if ar.Entries == nil {
@@ -215,72 +220,27 @@ func (s *AdaptationSystem) handleGraphComputed(graphID uint32, routeCount int) {
 	}
 	ar.Entries[graphID] = entry
 
+	pop := &engine.RoutePopulation{
+		Weights: make([]float64, routeCount),
+		Pool:    make([]int, 0),
+	}
 	// Pre-populate SubType 0 to preserve the initial distance-based weights
 	graph := s.world.Resources.RouteGraph.Get(graphID)
 	if graph != nil && len(graph.Routes) == routeCount {
-		pop := &engine.RoutePopulation{
-			Weights: make([]float64, routeCount),
-			Pool:    make([]int, 0),
-			Head:    0,
-		}
+
 		for i, r := range graph.Routes {
-			pop.Weights[i] = r.Weight // Preserves initial higher weights on short routes
+			pop.Weights[i] = r.Weight
 		}
-		entry.Populations[0] = pop
-		s.samplePool(pop)
-	}
-}
-
-// Factor route efficiency into fitness so EXP3 can distinguish between short and long paths
-func (s *AdaptationSystem) handleEnemyKilled(payload *event.EnemyKilledPayload) {
-	nav, ok := s.world.Components.Navigation.GetComponent(payload.Entity)
-	if !ok || !nav.UseRouteGraph || nav.RouteGraphID == 0 || nav.RouteID < 0 {
-		return // Ignore standard entities
-	}
-
-	graph := s.world.Resources.RouteGraph.Get(nav.RouteGraphID)
-	if graph == nil || nav.RouteID >= len(graph.Routes) {
-		return
-	}
-
-	route := graph.Routes[nav.RouteID]
-	if route.Field == nil || !route.Field.Valid {
-		return
-	}
-
-	deathDist := route.Field.GetDistance(payload.X, payload.Y)
-
-	var fitness float64
-	if deathDist < 0 {
-		fitness = 0.0
-	} else {
-		spawnDist := float64(route.TotalDistance)
-		if spawnDist <= 0 {
-			spawnDist = 1.0
+	} else if routeCount > 0 {
+		// uniform fallback instead of skipping — population 0 must
+		// always exist with correct arity
+		u := 1.0 / float64(routeCount)
+		for i := range pop.Weights {
+			pop.Weights[i] = u
 		}
-
-		progress := 1.0 - (float64(deathDist) / spawnDist)
-		if progress < 0.0 {
-			progress = 0.0
-		} else if progress > 1.0 {
-			progress = 1.0
-		}
-
-		// EFFICIENCY SCALING: Scale progress by how optimal this route actually is.
-		// A long route that reaches the tower gets a lower score than a short route.
-		minDist := spawnDist
-		for _, r := range graph.Routes {
-			d := float64(r.TotalDistance)
-			if d > 0 && d < minDist {
-				minDist = d
-			}
-		}
-
-		efficiency := minDist / spawnDist
-		fitness = progress * efficiency
 	}
-
-	s.recordOutcome(nav.RouteGraphID, payload.SubType, route.ID, fitness)
+	entry.Populations[0] = pop
+	s.samplePool(pop)
 }
 
 // handleEnemyCreated caches routing data before entity destruction
@@ -296,6 +256,7 @@ func (s *AdaptationSystem) handleEnemyCreated(payload *event.EnemyCreatedPayload
 	}
 }
 
+// recordOutcome buffers a fitness sample for the next Update pass
 func (s *AdaptationSystem) recordOutcome(graphID uint32, subType uint8, routeID int, fitness float64) {
 	if s.outcomes[graphID] == nil {
 		s.outcomes[graphID] = make(map[uint8][]routeOutcome)
@@ -306,6 +267,8 @@ func (s *AdaptationSystem) recordOutcome(graphID uint32, subType uint8, routeID 
 	})
 }
 
+// processPendingDeaths converts tracked deaths into route outcomes:
+// corridor progress at death scaled by route efficiency (minDist/routeDist)
 func (s *AdaptationSystem) processPendingDeaths() {
 	for _, death := range s.pendingDeaths {
 		t, ok := s.tracking[death.Entity]
@@ -318,6 +281,11 @@ func (s *AdaptationSystem) processPendingDeaths() {
 			route := graph.Routes[t.RouteID]
 			if route.Field != nil && route.Field.Valid {
 				deathDist := route.Field.GetDistance(death.X, death.Y)
+
+				// Recover topological distance if knocked slightly out of corridor
+				if deathDist < 0 {
+					deathDist = findCorridorDistance(route.Field, death.X, death.Y, 5)
+				}
 
 				var fitness float64
 				if deathDist < 0 {
@@ -357,6 +325,35 @@ func (s *AdaptationSystem) processPendingDeaths() {
 	s.pendingDeaths = s.pendingDeaths[:0]
 }
 
+// findCorridorDistance performs a spiral search to find the nearest valid topological
+// distance in the route corridor, penalizing the gap using aspect-weighted costs.
+func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius int) int {
+	for r := 1; r <= maxRadius; r++ {
+		bestDist := -1
+		for dy := -r; dy <= r; dy++ {
+			for dx := -r; dx <= r; dx++ {
+				if vmath.IntAbs(dx) != r && vmath.IntAbs(dy) != r {
+					continue // Perimeter only
+				}
+				d := field.GetDistance(startX+dx, startY+dy)
+				if d >= 0 {
+					// Manhattan gap penalty using engine-defined axis costs
+					penalty := vmath.IntAbs(dx)*navigation.CostX + vmath.IntAbs(dy)*navigation.CostY
+					total := d + penalty
+					if bestDist < 0 || total < bestDist {
+						bestDist = total
+					}
+				}
+			}
+		}
+		// Return the best distance found at this radius ring before expanding further
+		if bestDist >= 0 {
+			return bestDist
+		}
+	}
+	return -1
+}
+
 // cleanupStaleTracking removes entities destroyed by map resets/resizes without death events
 func (s *AdaptationSystem) cleanupStaleTracking() {
 	for entity, t := range s.tracking {
@@ -368,7 +365,9 @@ func (s *AdaptationSystem) cleanupStaleTracking() {
 	}
 }
 
-// applyEXP3 implements Multiplicative Weights Update, keeping exploitation math clean and untampered
+// applyEXP3 implements MWU/Hedge on per-route mean fitness, not canonical EXP3.
+// Rewards are not importance-weighted, weight floor (0.5%) prevents underflow
+// Exploration is enforced in samplePool
 func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []routeOutcome) {
 	k := len(pop.Weights)
 	if k == 0 {
@@ -386,7 +385,7 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 	}
 
 	// 1. Multiply weights by exponential fitness (Multiplicative Weight Updates)
-	for i := 0; i < k; i++ {
+	for i := range k {
 		if counts[i] > 0 {
 			avg := sumFitness[i] / float64(counts[i])
 			pop.Weights[i] *= math.Exp(parameter.RouteLearningRate * avg)
@@ -395,11 +394,11 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 
 	// 2. Normalize raw weights to sum = 1.0
 	totalWeight := 0.0
-	for i := 0; i < k; i++ {
+	for i := range k {
 		totalWeight += pop.Weights[i]
 	}
 	if totalWeight > 0 {
-		for i := 0; i < k; i++ {
+		for i := range k {
 			pop.Weights[i] /= totalWeight
 		}
 	}
@@ -408,7 +407,7 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 	// Exploration is actively enforced during selection (samplePool), NOT baked directly into latent weights
 	minWeight := 0.005
 	floorApplied := false
-	for i := 0; i < k; i++ {
+	for i := range k {
 		if pop.Weights[i] < minWeight {
 			pop.Weights[i] = minWeight
 			floorApplied = true
@@ -418,16 +417,17 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 	// Re-normalize if any floors were applied
 	if floorApplied {
 		totalWeight = 0.0
-		for i := 0; i < k; i++ {
+		for i := range k {
 			totalWeight += pop.Weights[i]
 		}
-		for i := 0; i < k; i++ {
+		for i := range k {
 			pop.Weights[i] /= totalWeight
 		}
 	}
 }
 
-// samplePool fills consumer pool using decoupled epsilon-greedy sampling, maintaining pure underlying weights
+// samplePool refills the consumer pool: 10% uniform scouts, remainder sampled
+// proportionally from latent weights via CDF binary search, then shuffled
 func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	n := parameter.RoutePoolDefaultSize
 	k := len(pop.Weights)
@@ -481,6 +481,7 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	pop.Head = 0
 }
 
+// pruneDrained deletes drained entries, their graphs, and buffered outcomes after timeout
 func (s *AdaptationSystem) pruneDrained(ar *engine.AdaptationResource) {
 	now := s.world.Resources.Time.GameTime()
 	for id, entry := range ar.Entries {
@@ -492,6 +493,7 @@ func (s *AdaptationSystem) pruneDrained(ar *engine.AdaptationResource) {
 	}
 }
 
+// updateTelemetry publishes graph/population counts and top-weight summaries (G1–G4)
 func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 	activeGraphs := int64(0)
 	activePopulations := int64(0)
@@ -551,6 +553,9 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 				str = "0% 0% 0% /0"
 			}
 			groupStrs = append(groupStrs, str)
+		} else {
+			// placeholder keeps G1-G4 slot ↔ gateway alignment
+			groupStrs = append(groupStrs, fmt.Sprintf("? /%d", entry.RouteCount))
 		}
 	}
 
@@ -578,4 +583,3 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 		s.statG4.Store("-")
 	}
 }
-

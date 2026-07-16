@@ -3,6 +3,7 @@ package registry
 import (
 	"math/rand/v2"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/genetic"
@@ -12,6 +13,8 @@ import (
 
 // TrackedSpecies manages evolution for a single species
 type TrackedSpecies struct {
+	pool *tracking.CollectorPool
+
 	Config     SpeciesConfig
 	Engine     *genetic.StreamingEngine[[]float64, float64]
 	Aggregator fitness.Aggregator
@@ -19,13 +22,14 @@ type TrackedSpecies struct {
 	active   map[uint64]*activeEval
 	activeMu sync.RWMutex
 
-	pool *tracking.CollectorPool
+	// Round-robin cursor for scout bin stratification
+	probeCounter atomic.Uint64
 }
 
 type activeEval struct {
-	evalID    uint64
 	collector tracking.Collector
 	startTime time.Time
+	evalID    uint64
 }
 
 // NewTrackedSpecies creates a tracker with configured engine
@@ -198,3 +202,33 @@ func (ts *TrackedSpecies) AcquireCompositeCollector() *tracking.CompositeCollect
 func (ts *TrackedSpecies) ReleaseCompositeCollector(c *tracking.CompositeCollector) {
 	ts.pool.ReleaseComposite(c)
 }
+
+// SampleScout synthesizes a probe genotype and registers it for evaluation.
+// gene[0] is stratified round-robin across ProbeBins (bin center); remaining
+// genes are uniform within bounds. The probe enters the normal generation pool
+// via BeginEvaluation and survives only if its fitness is competitive.
+// Returns evalID 0 if no genes/bounds are configured.
+func (ts *TrackedSpecies) SampleScout() ([]float64, uint64) {
+	n := ts.Config.GeneCount
+	if n == 0 || len(ts.Config.Bounds) == 0 {
+		return nil, 0
+	}
+
+	g := make([]float64, n)
+	for i := 0; i < n && i < len(ts.Config.Bounds); i++ {
+		b := ts.Config.Bounds[i]
+		g[i] = b.Min + rand.Float64()*(b.Max-b.Min)
+	}
+
+	// Stratify gene[0] to the next bin center; falls back to the uniform draw above
+	if bins := ts.Config.ProbeBins; bins > 0 {
+		b := ts.Config.Bounds[0]
+		idx := ts.probeCounter.Add(1) - 1
+		bin := int(idx % uint64(bins))
+		g[0] = b.Min + (float64(bin)+0.5)/float64(bins)*(b.Max-b.Min)
+	}
+
+	evalID := ts.Engine.BeginEvaluation(g)
+	return g, uint64(evalID)
+}
+

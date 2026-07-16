@@ -14,6 +14,7 @@ type SpeciesConfig struct {
 	PerturbationStdDev float64
 	IsComposite        bool
 	EngineConfig       *genetic.StreamingConfig
+	ProbeBins          int
 }
 
 // Stats holds population statistics
@@ -25,3 +26,4 @@ type Stats struct {
 	PendingCount int
 	TotalEvals   uint64
 }
+

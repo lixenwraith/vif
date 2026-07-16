@@ -964,6 +964,7 @@ type GeneticRegisterSpeciesPayload struct {
 	Bounds             []ParameterBoundDef   `toml:"bounds"`
 	PerturbationStdDev float64               `toml:"perturbation_std_dev"`
 	GeneCount          int                   `toml:"gene_count"`
+	ProbeBins          int                   `toml:"probe_bins"` // scout stratification bins for gene[0] (0 = uniform)
 	Species            component.SpeciesType `toml:"species"`
 	IsComposite        bool                  `toml:"is_composite"`
 }

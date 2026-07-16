@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math/rand/v2"
 	"sync/atomic"
 	"time"
 
@@ -247,7 +248,12 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 	var evalID uint64
 	var genes []float64
 	if s.world.Resources.Genetics != nil {
-		genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
+		// Periodic probe keeps all phenotype bins under evaluation
+		if rand.Float64() < parameter.GAScoutRate {
+			genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species), populationID)
+		} else {
+			genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
+		}
 	}
 
 	switch species {
@@ -268,7 +274,7 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 		// 2. Pop route using the resolved phenotype
 		routeID := -1
 		if routeDistID != 0 && s.world.Resources.Adaptation != nil {
-			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, subType)
+			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, uint8(eyeType))
 		}
 
 		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{

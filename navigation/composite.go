@@ -107,6 +107,7 @@ func (p *CompositePassability) ComputeROI(isWall WallChecker, minX, minY, maxX, 
 
 // --- DEBUG ---
 
+// DebugStats returns total/valid/blocked cell counts for diagnostics
 func (p *CompositePassability) DebugStats() (total, valid, blocked int) {
 	total = len(p.Valid)
 	for _, v := range p.Valid {
@@ -128,3 +129,4 @@ func (p *CompositePassability) GetDimensions() (width, height int) {
 func (p *CompositePassability) GetFootprint() (footW, footH, offX, offY int) {
 	return p.FootprintW, p.FootprintH, p.HeaderOffX, p.HeaderOffY
 }
+

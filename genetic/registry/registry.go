@@ -169,3 +169,16 @@ func (r *Registry) GetTracker(id SpeciesID) *TrackedSpecies {
 	defer r.mu.RUnlock()
 	return r.species[id]
 }
+
+// SampleScout returns a stratified probe genotype for evaluation.
+func (r *Registry) SampleScout(id SpeciesID) ([]float64, uint64) {
+	r.mu.RLock()
+	ts, ok := r.species[id]
+	r.mu.RUnlock()
+
+	if !ok {
+		return nil, 0
+	}
+	return ts.SampleScout()
+}
+

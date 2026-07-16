@@ -16,6 +16,7 @@ import (
 var flowDirLUT [8][2]int64
 
 func init() {
+	// Y halved for terminal 2:1 cell aspect before normalization
 	aspectY := vmath.Scale / 2
 	for i, vec := range navigation.DirVectors {
 		fx := vmath.FromInt(vec[0])
@@ -50,7 +51,8 @@ var DebugShowCompositeNav bool // New flag for composite debug view
 // DebugFlowGroupID selects which target group's flow fields are exposed to debug renderer
 var DebugFlowGroupID uint8
 
-// NavigationSystem calculates flow fields for kinetic entities
+// NavigationSystem resolves target groups, maintains per-group point and composite
+// flow fields, tracks composite passability, and computes gateway route graphs
 type NavigationSystem struct {
 	world *engine.World
 
@@ -225,6 +227,7 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 			g.compositeFlowCache.MarkDirty()
 		}
 		s.world.Resources.RouteGraph.Clear()
+		s.rebuildGatewayRouteGraphs()
 	}
 }
 
@@ -400,13 +403,20 @@ func (s *NavigationSystem) Update() {
 		// Route graph: use per-route flow field when assigned
 		if navComp.UseRouteGraph && navComp.RouteID >= 0 {
 			if field := s.resolveRouteField(navComp.RouteGraphID, navComp.RouteID); field != nil {
+				var fx, fy int64
 				if isComposite {
-					navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, field)
+					fx, fy = s.getCompositeFlowDirection(preciseX, preciseY, field)
 				} else {
-					navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, field)
+					fx, fy = s.getInterpolatedFlowDirection(preciseX, preciseY, field)
 				}
-				s.world.Components.Navigation.SetComponent(entity, navComp)
-				continue
+				// zero flow = entity outside its narrow route corridor
+				// (knockback, spawn relocation); fall through to shared field
+				// instead of stalling
+				if fx != 0 || fy != 0 {
+					navComp.FlowX, navComp.FlowY = fx, fy
+					s.world.Components.Navigation.SetComponent(entity, navComp)
+					continue
+				}
 			}
 		}
 
@@ -430,6 +440,7 @@ func (s *NavigationSystem) Update() {
 	}
 }
 
+// handleGroupUpdate registers or retargets a group and dirties its flow caches
 func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePayload) {
 	g := s.getOrCreateGroup(payload.GroupID)
 	g.pointFlowCache.MarkDirty()
@@ -444,6 +455,7 @@ func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePay
 	s.world.Resources.Target.SetGroup(payload.GroupID, state)
 }
 
+// getOrCreateGroup returns group nav state, allocating flow caches on first use
 func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 	if g, ok := s.groups[groupID]; ok {
 		return g
@@ -472,6 +484,8 @@ func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
 	return 0
 }
 
+// resolveGroupTargets refreshes TargetResource each tick: cursor (group 0),
+// TargetAnchor scan, position sync for non-anchored groups, validity cleanup
 func (s *NavigationSystem) resolveGroupTargets() {
 	tr := s.world.Resources.Target
 
@@ -483,14 +497,6 @@ func (s *NavigationSystem) resolveGroupTargets() {
 			Valid: true,
 		})
 		tr.SetGroupTarget(0, 0, engine.TargetData{PosX: s.cursorX, PosY: s.cursorY})
-
-		// tr.Groups[0] = engine.TargetGroupState{
-		// 	Type:  component.TargetCursor,
-		// 	Count: 1,
-		// 	Valid: true,
-		// }
-		// tr.Groups[0].Targets[0] = engine.TargetData{PosX: s.cursorX, PosY: s.cursorY}
-
 	}
 
 	// Scan TargetAnchor components — entity-based group registration
@@ -584,7 +590,7 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, s
 		return flowDirLUT[escDir][0], flowDirLUT[escDir][1]
 	}
 
-	// Bilinear interpolation (same as point entities)
+	// Bilinear interpolation, header-anchored (no half-cell offset, unlike point entities)
 	u := preciseX & vmath.Mask
 	v := preciseY & vmath.Mask
 	invU := vmath.Scale - u
@@ -798,4 +804,24 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 	}
 
 	return 0, 0, false
+}
+
+// rebuildGatewayRouteGraphs recomputes route graphs for all route-enabled gateways
+func (s *NavigationSystem) rebuildGatewayRouteGraphs() {
+	for _, e := range s.world.Components.Gateway.GetAllEntities() {
+		gw, ok := s.world.Components.Gateway.GetComponent(e)
+		if !ok || gw.RouteDistID == 0 {
+			continue
+		}
+		anchorPos, ok := s.world.Positions.GetPosition(gw.AnchorEntity)
+		if !ok {
+			continue
+		}
+		s.handleRouteGraphRequest(&event.RouteGraphRequestPayload{
+			RouteGraphID:  gw.RouteDistID,
+			SourceX:       anchorPos.X + gw.OffsetX,
+			SourceY:       anchorPos.Y + gw.OffsetY,
+			TargetGroupID: gw.GroupID,
+		})
+	}
 }

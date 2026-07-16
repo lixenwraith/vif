@@ -37,8 +37,8 @@ func (c *FlowFieldCache) Resize(width, height int) {
 	c.PendingUpdate = true
 }
 
-// Update checks if recomputation needed and performs it
-// targets: slice of points for entities requiring flow field navigation
+// Update recomputes the field when dirty state and throttling allow
+// targets: goal points the field converges toward
 // Returns true if field was recomputed this tick
 func (c *FlowFieldCache) Update(targets []core.Point, isBlocked WallChecker) bool {
 	c.TicksSinceCompute++
@@ -95,3 +95,4 @@ func (c *FlowFieldCache) GetDistance(x, y int) int {
 func (c *FlowFieldCache) IsValid() bool {
 	return c.Field.Valid
 }
+

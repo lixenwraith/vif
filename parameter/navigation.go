@@ -14,9 +14,9 @@ const (
 )
 
 var (
-	// Alignment below which cornering drag activates
+	// Drag multiplier applied per unit of turn severity
 	NavCorneringBrake = vmath.FromFloat(0.8)
-	// Drag multiplier during turns
+	// Alignment threshold below which cornering drag activates
 	NavCorneringThreshold = vmath.FromFloat(3.0)
 	// LookAhead cells
 	NavFlowLookaheadDefault = vmath.FromFloat(12.0)
@@ -24,13 +24,10 @@ var (
 
 // Route Graph — Computation
 const (
-	// RouteGraphMaxBranchFanout caps neighbor expansion at a single branch point
-	RouteGraphMaxBranchFanout = 8
-
 	// RouteGraphMinWeightFloor ensures every route gets minimum traffic share
 	RouteGraphMinWeightFloor = 0.05
 
-	// RouteGraphMaxRoutes caps total routes per graph to bound DFS enumeration
+	// RouteGraphMaxRoutes caps accepted routes per graph (attempt budget = 2×)
 	RouteGraphMaxRoutes = 64
 
 	// RouteGraphMaxOverlapPct: reject route candidate sharing more than this
@@ -45,4 +42,3 @@ const (
 	// RouteGraphWaypointStride: path decimation interval for Route.Waypoints
 	RouteGraphWaypointStride = 8
 )
-

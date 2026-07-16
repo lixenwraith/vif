@@ -54,19 +54,21 @@ type EyeTypeParams struct {
 }
 
 // EyeTypeTable indexed by EyeType iota values
+// Balance: HP×BaseSpeed ≈ 42, HomingAccel ≈ 1.9×BaseSpeed, Drag = Accel/Speed
 var EyeTypeTable = [EyeTypeCount]EyeTypeParams{
-	// 0: Void — medium, contemplative
-	{HP: 15, BaseSpeed: 2.0, HomingAccel: 3.0, Drag: 2.0, FrameCount: 5, FrameDuration: 600 * time.Millisecond},
-	// 1: Flame — fast, fragile
-	{HP: 8, BaseSpeed: 4.0, HomingAccel: 6.0, Drag: 2.5, FrameCount: 4, FrameDuration: 300 * time.Millisecond},
-	// 2: Frost — slow, tanky
-	{HP: 25, BaseSpeed: 1.5, HomingAccel: 2.0, Drag: 1.5, FrameCount: 4, FrameDuration: 600 * time.Millisecond},
-	// 3: Storm — medium, electric
-	{HP: 12, BaseSpeed: 3.0, HomingAccel: 5.0, Drag: 2.0, FrameCount: 3, FrameDuration: 600 * time.Millisecond},
+	// 0: Void — baseline
+	{HP: 16, BaseSpeed: 2.6, HomingAccel: 5.0, Drag: 1.9, FrameCount: 5, FrameDuration: 600 * time.Millisecond},
+	// 1: Flame — glass cannon
+	{HP: 10, BaseSpeed: 4.2, HomingAccel: 8.0, Drag: 1.9, FrameCount: 4, FrameDuration: 300 * time.Millisecond},
+	// 2: Frost — tank
+	{HP: 26, BaseSpeed: 1.6, HomingAccel: 3.0, Drag: 1.9, FrameCount: 4, FrameDuration: 600 * time.Millisecond},
+	// 3: Storm — skirmisher
+	{HP: 14, BaseSpeed: 3.0, HomingAccel: 5.5, Drag: 1.8, FrameCount: 3, FrameDuration: 600 * time.Millisecond},
 	// 4: Blood — aggressive
-	{HP: 18, BaseSpeed: 3.5, HomingAccel: 5.0, Drag: 2.0, FrameCount: 4, FrameDuration: 450 * time.Millisecond},
+	{HP: 12, BaseSpeed: 3.5, HomingAccel: 6.5, Drag: 1.85, FrameCount: 4, FrameDuration: 450 * time.Millisecond},
 	// 5: Golden — resilient
-	{HP: 30, BaseSpeed: 1.8, HomingAccel: 2.5, Drag: 1.5, FrameCount: 4, FrameDuration: 750 * time.Millisecond},
-	// 6: Abyss — shifty
-	{HP: 10, BaseSpeed: 2.5, HomingAccel: 4.0, Drag: 2.0, FrameCount: 4, FrameDuration: 600 * time.Millisecond},
+	{HP: 22, BaseSpeed: 1.9, HomingAccel: 3.6, Drag: 1.9, FrameCount: 4, FrameDuration: 750 * time.Millisecond},
+	// 6: Abyss — shifty (over-curve accel, matched drag: snappier turns, same terminal)
+	{HP: 17, BaseSpeed: 2.4, HomingAccel: 5.5, Drag: 2.3, FrameCount: 4, FrameDuration: 600 * time.Millisecond},
 }
+

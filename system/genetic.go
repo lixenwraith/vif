@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/status"
 )
 
 // --- Tracked Entity ---
@@ -49,6 +50,9 @@ type GeneticSystem struct {
 	statPending    *atomic.Int64
 	statOutcomes   *atomic.Int64
 	statTracked    *atomic.Int64
+
+	typeFitEMA  [parameter.EyeTypeCount]float64
+	statTypeFit *status.AtomicString
 
 	enabled bool
 }
@@ -171,6 +175,7 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 		ID:                 registry.SpeciesID(payload.Species),
 		Name:               fmt.Sprintf("species_%d", payload.Species),
 		GeneCount:          payload.GeneCount,
+		ProbeBins:          payload.ProbeBins,
 		Bounds:             bounds,
 		PerturbationStdDev: payload.PerturbationStdDev,
 		IsComposite:        payload.IsComposite,
@@ -349,6 +354,12 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 
 	// Calculate final fitness: Distance (0.0 to 1.0) + Damage Dealt
 	finalFitness := fitnessVal + tracked.dealtDamage
+
+	// Per-subtype fitness EMA for probe/distribution evaluation
+	if tracked.species == component.SpeciesEye && int(tracked.subType) < parameter.EyeTypeCount {
+		const alpha = 0.1
+		s.typeFitEMA[tracked.subType] = (1-alpha)*s.typeFitEMA[tracked.subType] + alpha*finalFitness
+	}
 
 	// GA registry (telemetry path)
 	s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, finalFitness)

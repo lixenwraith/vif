@@ -407,6 +407,15 @@ func (gr *GeneticResource) Sample(speciesID uint8, populationID uint32) ([]float
 	return gr.Registry.Sample(registry.SpeciesID(speciesID))
 }
 
+// SampleScout requests a stratified probe genotype covering all phenotype bins.
+func (gr *GeneticResource) SampleScout(speciesID uint8, populationID uint32) ([]float64, uint64) {
+	if gr == nil || gr.Registry == nil {
+		return nil, 0
+	}
+	// populationID reserved for multi-island; single tracker per species today.
+	return gr.Registry.SampleScout(registry.SpeciesID(speciesID))
+}
+
 // === Bridged Resources from Service ===
 
 // ContentProvider defines the interface for content access

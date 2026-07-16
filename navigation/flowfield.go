@@ -43,17 +43,10 @@ const (
 	CostUnreachable = 1<<30 - 1
 )
 
-const (
-	costX           = CostX
-	costY           = CostY
-	costDiagonal    = CostDiagonal
-	costUnreachable = CostUnreachable
-)
-
 // Per-direction costs matching DirVectors index order (N, NE, E, SE, S, SW, W, NW)
 var dirCosts = [8]int{
-	costY, costDiagonal, costX, costDiagonal,
-	costY, costDiagonal, costX, costDiagonal,
+	CostY, CostDiagonal, CostX, CostDiagonal,
+	CostY, CostDiagonal, CostX, CostDiagonal,
 }
 
 // --- Min-heap for Dijkstra ---
@@ -200,7 +193,7 @@ func (f *FlowField) GetDistance(x, y int) int {
 		return -1
 	}
 	d := f.Distances[idx]
-	if d >= costUnreachable {
+	if d >= CostUnreachable {
 		return -1
 	}
 	return d
@@ -251,7 +244,7 @@ func (f *FlowField) Compute(targets []core.Point, isBlocked WallChecker) {
 		return
 	}
 
-	// Phase 1: Weighted Dijkstra (Unrestricted Expansion)
+	// Weighted Dijkstra (Unrestricted Expansion)
 	for len(f.heap) > 0 {
 		entry := f.heap.pop()
 		idx := entry.idx
@@ -331,7 +324,7 @@ func (f *FlowField) seedVirtualTargets(targetX, targetY int, isBlocked WallCheck
 
 				// Seed as virtual target with distance based on manhattan distance from real target
 				// Weighted by axis costs for consistency with Dijkstra
-				cost := abs(dx)*costX + abs(dy)*costY
+				cost := abs(dx)*CostX + abs(dy)*CostY
 				if f.VisitedGen[nIdx] != f.CurrentGen || cost < f.Distances[nIdx] {
 					f.Distances[nIdx] = cost
 					f.VisitedGen[nIdx] = f.CurrentGen
@@ -355,3 +348,4 @@ func abs(x int) int {
 	}
 	return x
 }
+
