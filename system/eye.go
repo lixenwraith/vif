@@ -223,7 +223,7 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	}
 
 	s.clearSpawnArea(headerX, headerY)
-	headerEntity := s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID)
+	headerEntity := s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
 
 	s.world.PushEvent(event.EventEyeSpawned, &event.EyeSpawnedPayload{
 		HeaderEntity: headerEntity,
@@ -265,7 +265,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	}
 }
 
-func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8, routeGraphID uint32, routeID int) core.Entity {
+func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8, routeGraphID uint32, routeID int, evalID uint64, genes []float64) core.Entity {
 	topLeftX := headerX - parameter.EyeHeaderOffsetX
 	topLeftY := headerY - parameter.EyeHeaderOffsetY
 	params := &parameter.EyeTypeTable[eyeType]
@@ -356,6 +356,8 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	})
 
 	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+		EvalID:  evalID,
+		Genes:   genes,
 		Entity:  headerEntity,
 		Species: component.SpeciesEye,
 		SubType: uint8(eyeType),
@@ -618,4 +620,3 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 		Effect:       0,
 	})
 }
-

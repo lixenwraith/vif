@@ -581,6 +581,9 @@ type EnemyKilledPayload struct {
 
 // EnemyCreatedPayload signals enemy entity spawn for GA tracking
 type EnemyCreatedPayload struct {
+	Genes  []float64 `toml:"genes"`
+	EvalID uint64    `toml:"eval_id"`
+
 	Entity  core.Entity           `toml:"entity"`
 	Species component.SpeciesType `toml:"species"`
 	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
@@ -869,6 +872,9 @@ type RouteGraphComputedPayload struct {
 
 // EyeSpawnRequestPayload contains eye spawn parameters
 type EyeSpawnRequestPayload struct {
+	Genes  []float64 `toml:"genes"`
+	EvalID uint64    `toml:"eval_id"`
+
 	X             int               `toml:"x"`
 	Y             int               `toml:"y"`
 	RouteID       int               `toml:"route_id"`       // -1 = shared flow field
@@ -954,10 +960,10 @@ type ParameterBoundDef struct {
 
 // GeneticRegisterSpeciesPayload dynamically configures a species for GA tracking
 type GeneticRegisterSpeciesPayload struct {
-	Species            component.SpeciesType `toml:"species"`
-	GeneCount          int                   `toml:"gene_count"`
 	Bounds             []ParameterBoundDef   `toml:"bounds"`
 	PerturbationStdDev float64               `toml:"perturbation_std_dev"`
+	GeneCount          int                   `toml:"gene_count"`
+	Species            component.SpeciesType `toml:"species"`
 	IsComposite        bool                  `toml:"is_composite"`
 }
 

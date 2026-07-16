@@ -20,10 +20,10 @@ import (
 // --- Tracked Entity ---
 
 type trackedEntity struct {
+	collector     tracking.Collector
+	evalID        uint64
 	species       component.SpeciesType
 	subType       uint8
-	evalID        uint64
-	collector     tracking.Collector
 	isComposite   bool
 	targetGroupID uint8 // Target group for distance measurement (0 = cursor)
 }
@@ -134,7 +134,7 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnemyCreated:
 		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
 			s.mu.Lock()
-			s.handleEnemyCreated(payload.Entity, payload.Species, payload.SubType)
+			s.handleEnemyCreated(payload.Entity, payload.Species, payload.SubType, payload.EvalID, payload.Genes)
 			s.mu.Unlock()
 		}
 
@@ -167,12 +167,12 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 	}
 }
 
-func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8) {
+func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8, evalID uint64, genes []float64) {
 	if _, exists := s.tracking[entity]; exists {
 		return
 	}
 
-	genes, evalID := s.registry.Sample(registry.SpeciesID(speciesType))
+	// Bail out if GA isn't managing this entity
 	if evalID == 0 {
 		return
 	}

@@ -242,6 +242,13 @@ func (s *GatewaySystem) Update() {
 // emitSpawnEvent routes to the appropriate species spawn request event
 // routeDistID enables per-route assignment from bandit pool
 func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32) {
+	// Sample GA if available
+	var evalID uint64
+	var genes []float64
+	if s.world.Resources.Genetics != nil {
+		genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), 0) // populationID 0 for now
+	}
+
 	switch species {
 	case component.SpeciesEye:
 		routeID := -1
@@ -249,10 +256,24 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 			routeID = s.world.Resources.Adaptation.PopRoute(routeDistID, subType)
 		}
 
+		// Phenotype translation: map continuous gene [0.0, 0.99] to discrete EyeType [0..6]
+		eyeType := component.EyeType(subType) // Fallback to base configuration
+		if evalID != 0 && len(genes) > 0 {
+			typeIdx := int(genes[0] * float64(parameter.EyeTypeCount))
+			if typeIdx >= parameter.EyeTypeCount {
+				typeIdx = parameter.EyeTypeCount - 1
+			} else if typeIdx < 0 {
+				typeIdx = 0
+			}
+			eyeType = component.EyeType(typeIdx)
+		}
+
 		s.world.PushEvent(event.EventEyeSpawnRequest, &event.EyeSpawnRequestPayload{
+			EvalID:        evalID,
+			Genes:         genes,
 			X:             x,
 			Y:             y,
-			Type:          component.EyeType(subType),
+			Type:          eyeType,
 			TargetGroupID: groupID,
 			RouteGraphID:  routeDistID,
 			RouteID:       routeID,
@@ -275,4 +296,3 @@ func (s *GatewaySystem) despawnGateway(gwEntity core.Entity, anchorEntity core.E
 	})
 	s.world.DestroyEntity(gwEntity)
 }
-
