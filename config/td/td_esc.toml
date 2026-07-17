@@ -1,0 +1,134 @@
+
+# P2 escalation, serialized both sides; twin pylons stacked VERTICALLY:
+# top twin gateway → group 1 (T1), bottom twin gateway → group 2 (T2)
+# P2 room: 17x27 at (60,125) / (440,125); pylons at y=118 / y=132 (13x7 footprint each)
+
+[states.EscWait]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "EscLSpawnA", guard = "And", guard_args = { guards = [
+        { name = "VarEquals", args = { var = "setup_done", value = 1 } },
+        { name = "VarEquals", args = { var = "p2l_done", value = 0 } },
+        { name = "VarCompareVar", args = { var_a = "left_dead", op = "gte", var_b = "l_p1n" } },
+    ] } },
+    { trigger = "Tick", target = "EscRSpawnA", guard = "And", guard_args = { guards = [
+        { name = "VarEquals", args = { var = "setup_done", value = 1 } },
+        { name = "VarEquals", args = { var = "p2r_done", value = 0 } },
+        { name = "VarCompareVar", args = { var_a = "right_dead", op = "gte", var_b = "r_p1n" } },
+    ] } },
+]
+
+# --- Left twins: top → group 1, bottom → group 2 ---
+
+[states.EscLSpawnA]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 60, y = 118 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "EscLGwA", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "EscLSpawnB" },
+    { trigger = "Tick", target = "EscLSpawnB", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.EscLGwA]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 2000, rate_multiplier = 0.88, rate_accel_interval_ms = 10000, min_interval_ms = 500, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "l_p2n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscLSpawnB" },
+]
+
+[states.EscLSpawnB]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 60, y = 132 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "EscLGwB", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "EscLDone" },
+    { trigger = "Tick", target = "EscLDone", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.EscLGwB]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 2, base_interval_ms = 2000, rate_multiplier = 0.88, rate_accel_interval_ms = 10000, min_interval_ms = 500, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "l_p2n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscLDone" },
+]
+
+[states.EscLDone]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "p2l_done", value = 1 } },
+    { action = "CopyVar", payload = { name = "l_total", source_var = "l_p1n" } },
+    { action = "IncrementVar", payload = { name = "l_total", source_var = "l_p2n" } },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "WEST FLANK REINFORCED" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscWait" },
+]
+
+# --- Right twins (mirror) ---
+
+[states.EscRSpawnA]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 440, y = 118 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "EscRGwA", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "EscRSpawnB" },
+    { trigger = "Tick", target = "EscRSpawnB", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.EscRGwA]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 1, base_interval_ms = 2000, rate_multiplier = 0.88, rate_accel_interval_ms = 10000, min_interval_ms = 500, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "r_p2n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscRSpawnB" },
+]
+
+[states.EscRSpawnB]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 440, y = 132 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "EscRGwB", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "EscRDone" },
+    { trigger = "Tick", target = "EscRDone", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.EscRGwB]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 2, base_interval_ms = 2000, rate_multiplier = 0.88, rate_accel_interval_ms = 10000, min_interval_ms = 500, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "r_p2n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscRDone" },
+]
+
+[states.EscRDone]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "p2r_done", value = 1 } },
+    { action = "CopyVar", payload = { name = "r_total", source_var = "r_p1n" } },
+    { action = "IncrementVar", payload = { name = "r_total", source_var = "r_p2n" } },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "EAST FLANK REINFORCED" } },
+]
+transitions = [
+    { trigger = "Tick", target = "EscWait" },
+]
+

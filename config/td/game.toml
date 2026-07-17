@@ -1,0 +1,27 @@
+# Standalone tower-defense map: fixed 500x250, twin towers, escalating pylons, storm finale
+
+[regions.td_main]
+initial = "TdSetup"
+file = "td_main.toml"
+enabled_systems = ["glyph"]
+
+[regions.td_counter]
+initial = "CntWatch"
+file = "td_counter.toml"
+background = true
+
+[regions.td_esc]
+initial = "EscWait"
+file = "td_esc.toml"
+background = true
+
+[regions.td_storm]
+initial = "StWait"
+file = "td_storm.toml"
+background = true
+
+[regions.td_monitor]
+initial = "MonWatch"
+file = "td_monitor.toml"
+background = true
+

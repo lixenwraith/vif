@@ -154,28 +154,6 @@ func (cs *ClockScheduler) initLoadedFSM() error {
 	return nil
 }
 
-// // LoadFSMAuto initializes HFSM with priority: customPath > external detection > embedded
-// // customPath is used if non-empty, otherwise falls back to auto-detection
-// func (cs *ClockScheduler) LoadFSMAuto(customPath, embeddedFallback string, registerComponents func(*fsm.Machine[*World])) error {
-// 	// Register Actions/Guards
-// 	registerComponents(cs.fsm)
-//
-// 	// Load with priority resolution
-// 	if err := fsm.LoadConfigAuto(cs.fsm, customPath, embeddedFallback); err != nil {
-// 		return fmt.Errorf("failed to load FSM: %w", err)
-// 	}
-//
-// 	// Initialize GameState (enters initial state)
-// 	if err := cs.fsm.Init(cs.world); err != nil {
-// 		return fmt.Errorf("failed to init FSM: %w", err)
-// 	}
-//
-// 	// Apply global system configuration
-// 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
-//
-// 	return nil
-// }
-
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {

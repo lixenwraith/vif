@@ -1,0 +1,83 @@
+# Persistent region: never terminates itself
+
+[states.MonWatch]
+parent = "Root"
+transitions = [
+    # defeat = both CENTRAL towers dead (quadrant towers sacrificial)
+    { trigger = "Tick", target = "MonDefeat", guard = "Or", guard_args = { guards = [
+        { name = "And", args = { guards = [
+            { name = "VarEquals", args = { var = "t1_dead", value = 1 } },
+            { name = "VarEquals", args = { var = "t2_dead", value = 1 } },
+        ] } },
+        { name = "VarEquals", args = { var = "setup_failed", value = 1 } },
+    ] } },
+    { trigger = "Tick", target = "MonVictory", guard = "VarEquals", guard_args = { var = "game_won", value = 1 } },
+]
+
+[states.MonDefeat]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 0, b = 0 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWERS LOST - RESTARTING" } },
+]
+transitions = [
+    { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+]
+
+[states.MonVictory]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 0, g = 255, b = 0 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "TOWER DEFENSE CLEARED" } },
+]
+transitions = [
+    { trigger = "Tick", target = "MonReset", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+]
+
+[states.MonReset]
+parent = "Root"
+on_enter = [
+    # Entity/system teardown
+    { action = "EmitEvent", event = "EventEyeCancelRequest" },
+    { action = "EmitEvent", event = "EventSnakeCancelRequest" },
+    { action = "EmitEvent", event = "EventStormCancelRequest" },
+    { action = "EmitEvent", event = "EventQuasarCancelRequest" },
+    { action = "EmitEvent", event = "EventSwarmCancelRequest" },
+    { action = "EmitEvent", event = "EventPylonCancelRequest" },
+    { action = "EmitEvent", event = "EventTowerCancelRequest" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "ResetKillVars" },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
+    # Region teardown (variable reset happens in TdSetup on respawn)
+    { action = "TerminateRegion", region = "td_main" },
+    { action = "TerminateRegion", region = "td_counter" },
+    { action = "TerminateRegion", region = "td_esc" },
+    { action = "TerminateRegion", region = "td_storm" },
+    # full engine reset — clears cursor state (weapons/charges/energy/heat)
+    # LAST action: if EventGameReset triggers FSM Reset(), regions restart from
+    # config initials and the MonRespawn SpawnRegion calls below fail with
+    # "already exists" (ignored) — both paths converge on a clean restart
+    { action = "EmitEvent", event = "EventGameReset" },
+
+    # ALTERNATIVE (if EventGameReset misbehaves): zero energy (removes weapons) and heat
+    # { action = "EmitEvent", event = "EventEnergySetRequest", payload = { value = 0 } },
+    # { action = "EmitEvent", event = "EventHeatSetRequest", payload = { value = 0 } },
+]
+transitions = [
+    { trigger = "Tick", target = "MonRespawn", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
+]
+
+[states.MonRespawn]
+parent = "Root"
+on_enter = [
+    # SpawnRegion runs TdSetup on_enter synchronously → vars zeroed before MonWatch re-entry
+    { action = "SpawnRegion", region = "td_main", initial_state = "TdSetup" },
+    { action = "SpawnRegion", region = "td_counter", initial_state = "CntWatch" },
+    { action = "SpawnRegion", region = "td_esc", initial_state = "EscWait" },
+    { action = "SpawnRegion", region = "td_storm", initial_state = "StWait" },
+]
+transitions = [
+    { trigger = "Tick", target = "MonWatch" },
+]
+

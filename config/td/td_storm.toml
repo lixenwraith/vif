@@ -1,0 +1,68 @@
+# Finale: early storm on ST pylon death; forced breach when all side pylons cleared
+# Victory latches only after storm dead AND all side pylons dead (early-storm path may leave pylons)
+
+[states.StWait]
+parent = "Root"
+transitions = [
+    # Early breach: player killed the ST pylon (counter region sets st_dead)
+    { trigger = "Tick", target = "StIncoming", guard = "VarEquals", guard_args = { var = "st_dead", value = 1 } },
+    # Forced breach: every non-ST pylon dead → PylonCancelRequest hits only ST
+    { trigger = "Tick", target = "StForceBreach", guard = "And", guard_args = { guards = [
+        { name = "VarEquals", args = { var = "p2l_done", value = 1 } },
+        { name = "VarEquals", args = { var = "p2r_done", value = 1 } },
+        { name = "VarCompareVar", args = { var_a = "left_dead", op = "gte", var_b = "l_total" } },
+        { name = "VarCompareVar", args = { var_a = "right_dead", op = "gte", var_b = "r_total" } },
+    ] } },
+]
+
+[states.StForceBreach]
+parent = "Root"
+on_enter = [
+    # Precondition (gate above) guarantees ST is the only surviving pylon
+    { action = "EmitEvent", event = "EventPylonCancelRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "StIncoming", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
+]
+
+[states.StIncoming]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 180, g = 0, b = 255 }, intensity = 1.0, duration_ms = 400 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "STORM BREACH - KILL IT BEFORE IT REACHES THE TOWERS" } },
+    { action = "EmitEvent", event = "EventStormSpawnRequest" },
+]
+transitions = [
+    { trigger = "Tick", target = "StLive", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.StLive]
+parent = "Root"
+transitions = [
+    { trigger = "EventStormDestroyed", target = "StCleared" },
+    # Defensive: storm died OOB without destroy event
+    { trigger = "Tick", target = "StCleared", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "storm.active", value = false } },
+    ] } },
+]
+
+[states.StCleared]
+parent = "Root"
+transitions = [
+    # Early-storm path: remaining side pylons must still fall
+    { trigger = "Tick", target = "StVictory", guard = "And", guard_args = { guards = [
+        { name = "VarEquals", args = { var = "p2l_done", value = 1 } },
+        { name = "VarEquals", args = { var = "p2r_done", value = 1 } },
+        { name = "VarCompareVar", args = { var_a = "left_dead", op = "gte", var_b = "l_total" } },
+        { name = "VarCompareVar", args = { var_a = "right_dead", op = "gte", var_b = "r_total" } },
+    ] } },
+]
+
+[states.StVictory]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "game_won", value = 1 } },
+]
+# Idle; monitor handles end sequence
+

@@ -1,0 +1,333 @@
+# Setup chain: level → maze → T1/T2 → Q1..Q4 quadrant towers → P1 x4 (+gateways → quadrant groups)
+# → ST pylon (+snake gateway) → arm. Then quasar pressure loop with grayout.
+
+# --- Setup ---
+
+[states.TdSetup]
+parent = "Root"
+on_enter = [
+    # Machine-global variable reset (persists across restarts otherwise)
+    { action = "SetVar", payload = { name = "setup_done", value = 0 } },
+    { action = "SetVar", payload = { name = "setup_failed", value = 0 } },
+    { action = "SetVar", payload = { name = "l_p1n", value = 0 } },
+    { action = "SetVar", payload = { name = "r_p1n", value = 0 } },
+    { action = "SetVar", payload = { name = "l_p2n", value = 0 } },
+    { action = "SetVar", payload = { name = "r_p2n", value = 0 } },
+    { action = "SetVar", payload = { name = "l_total", value = 0 } },
+    { action = "SetVar", payload = { name = "r_total", value = 0 } },
+    { action = "SetVar", payload = { name = "left_dead", value = 0 } },
+    { action = "SetVar", payload = { name = "right_dead", value = 0 } },
+    { action = "SetVar", payload = { name = "st_dead", value = 0 } },
+    { action = "SetVar", payload = { name = "t1_dead", value = 0 } },
+    { action = "SetVar", payload = { name = "t2_dead", value = 0 } },
+    { action = "SetVar", payload = { name = "p2l_done", value = 0 } },
+    { action = "SetVar", payload = { name = "p2r_done", value = 0 } },
+    { action = "SetVar", payload = { name = "game_won", value = 0 } },
+    { action = "SetVar", payload = { name = "st_pylon", value = 0 } },
+    { action = "SetVar", payload = { name = "t1_anchor", value = 0 } },
+    { action = "SetVar", payload = { name = "t2_anchor", value = 0 } },
+    { action = "SetVar", payload = { name = "q1_anchor", value = 0 } },
+    { action = "SetVar", payload = { name = "q2_anchor", value = 0 } },
+    { action = "SetVar", payload = { name = "q3_anchor", value = 0 } },
+    { action = "SetVar", payload = { name = "q4_anchor", value = 0 } },
+
+    # Normalize systems and trackers
+    { action = "EmitEvent", event = "EventDrainResume" },
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventCycleDamageMultiplierReset" },
+    { action = "ResetKillVars" },
+    { action = "EmitEvent", event = "EventWallDespawnAll" },
+
+    # Fixed map
+    { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 500, height = 250, clear_entities = true, crop_on_resize = false } },
+
+    # Maze with 13 pre-carved rooms:
+    # ST center, T1/T2, 4x quadrant towers, 4x P1 corners, 2x P2 mid-side (vertical twin stack)
+    { action = "EmitEvent", event = "EventMazeSpawnRequest", payload = { cell_width = 5, cell_height = 3, braiding = 0.5, block_mask = 255, visual = { box_style = 1, fg_color = { r = 200, g = 200, b = 200 }, render_fg = true, bg_color = { r = 40, g = 40, b = 45 }, render_bg = true }, rooms = [
+        { center_x = 250, center_y = 125, width = 85, height = 45 },
+        { center_x = 250, center_y = 95,  width = 17, height = 13 },
+        { center_x = 250, center_y = 155, width = 17, height = 13 },
+        { center_x = 125, center_y = 62,  width = 17, height = 13 },
+        { center_x = 375, center_y = 62,  width = 17, height = 13 },
+        { center_x = 125, center_y = 188, width = 17, height = 13 },
+        { center_x = 375, center_y = 188, width = 17, height = 13 },
+        { center_x = 20,  center_y = 15,  width = 13, height = 11 },
+        { center_x = 480, center_y = 15,  width = 13, height = 11 },
+        { center_x = 20,  center_y = 235, width = 13, height = 11 },
+        { center_x = 480, center_y = 235, width = 13, height = 11 },
+        { center_x = 60,  center_y = 125, width = 17, height = 27 },
+        { center_x = 440, center_y = 125, width = 17, height = 27 },
+    ] } },
+
+    # Eye GA registration (idempotence on restart assumed)
+    { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = 7, gene_count = 1, bounds = [{ min = 0.0, max = 0.99 }], perturbation_std_dev = 0.1, is_composite = true, probe_bins = 7 } },
+
+    { action = "EmitEvent", event = "EventWallPushCheckRequest" },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "DEFEND THE TWIN TOWERS" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdSpawnT1", guard = "StateTimeExceeds", guard_args = { ms = 250 } },
+]
+
+# --- Central towers (loss condition) ---
+
+[states.TdSpawnT1]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 250, y = 95, target_group_id = 1 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdSpawnT2", capture_vars = { header_entity = "t1_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdAbort" },
+    { trigger = "Tick", target = "TdAbort", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdSpawnT2]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 250, y = 155, target_group_id = 2 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdSpawnQ1", capture_vars = { header_entity = "t2_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdAbort" },
+    { trigger = "Tick", target = "TdAbort", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+# --- Quadrant towers (forward bases, sacrificial) ---
+# Spawn failure is non-fatal: fail path points the group at the central tower
+# so the corner gateway never feeds an invalid group
+
+[states.TdSpawnQ1]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 125, y = 62, target_group_id = 3 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdSpawnQ2", capture_vars = { header_entity = "q1_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ2", actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
+    ] },
+    { trigger = "Tick", target = "TdSpawnQ2", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 3, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
+    ] },
+]
+
+[states.TdSpawnQ2]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 375, y = 62, target_group_id = 4 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdSpawnQ3", capture_vars = { header_entity = "q2_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ3", actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
+    ] },
+    { trigger = "Tick", target = "TdSpawnQ3", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 4, type = 1, entity = 0 }, payload_vars = { entity = "t1_anchor" } },
+    ] },
+]
+
+[states.TdSpawnQ3]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 125, y = 188, target_group_id = 5 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdSpawnQ4", capture_vars = { header_entity = "q3_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdSpawnQ4", actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
+    ] },
+    { trigger = "Tick", target = "TdSpawnQ4", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 5, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
+    ] },
+]
+
+[states.TdSpawnQ4]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 375, y = 188, target_group_id = 6 } },
+]
+transitions = [
+    { trigger = "EventTowerSpawned", target = "TdP1TL", capture_vars = { header_entity = "q4_anchor" } },
+    { trigger = "EventTowerSpawnFailed", target = "TdP1TL", actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
+    ] },
+    { trigger = "Tick", target = "TdP1TL", guard = "StateTimeExceeds", guard_args = { ms = 500 }, actions = [
+        { action = "EmitEvent", event = "EventTargetGroupUpdate", payload = { group_id = 6, type = 1, entity = 0 }, payload_vars = { entity = "t2_anchor" } },
+    ] },
+]
+
+# --- P1 pylon chain: each corner gateway targets its quadrant tower group ---
+
+[states.TdP1TL]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 20, y = 15 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TdGwTL", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TdP1TR" },
+    { trigger = "Tick", target = "TdP1TR", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdGwTL]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 3, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "l_p1n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdP1TR" },
+]
+
+[states.TdP1TR]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 480, y = 15 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TdGwTR", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TdP1BL" },
+    { trigger = "Tick", target = "TdP1BL", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdGwTR]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 4, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "r_p1n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdP1BL" },
+]
+
+[states.TdP1BL]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 20, y = 235 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TdGwBL", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TdP1BR" },
+    { trigger = "Tick", target = "TdP1BR", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdGwBL]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 5, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "l_p1n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdP1BR" },
+]
+
+[states.TdP1BR]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 480, y = 235 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TdGwBR", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventPylonSpawnFailed", target = "TdStPylon" },
+    { trigger = "Tick", target = "TdStPylon", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdGwBR]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 7, sub_type = 0, group_id = 6, base_interval_ms = 3000, rate_multiplier = 0.92, rate_accel_interval_ms = 15000, min_interval_ms = 800, use_route_graph = true }, payload_vars = { anchor_entity = "gw_anchor" } },
+    { action = "IncrementVar", payload = { name = "r_p1n" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdStPylon" },
+]
+
+# --- ST pylon: snake spawner, storm trigger on death; 2x HP (tuning) ---
+
+[states.TdStPylon]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 250, y = 125, min_hp = 20, max_hp = 200 } },
+]
+transitions = [
+    { trigger = "EventPylonSpawned", target = "TdStGw", capture_vars = { header_entity = "st_pylon" } },
+    { trigger = "EventPylonSpawnFailed", target = "TdArm" },
+    { trigger = "Tick", target = "TdArm", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
+]
+
+[states.TdStGw]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0, species = 6, sub_type = 0, group_id = 0, base_interval_ms = 30000, rate_multiplier = 1.0, rate_accel_interval_ms = 0, min_interval_ms = 30000, use_route_graph = false }, payload_vars = { anchor_entity = "st_pylon" } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdArm" },
+]
+
+[states.TdArm]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "setup_done", value = 1 } },
+]
+transitions = [
+    { trigger = "Tick", target = "TdCalm" },
+]
+
+[states.TdAbort]
+parent = "Root"
+on_enter = [
+    { action = "SetVar", payload = { name = "setup_failed", value = 1 } },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SETUP FAILED" } },
+]
+# Idle; monitor handles reset
+
+# --- Quasar pressure loop (glyph active, drains fuse at kill threshold) ---
+
+[states.TdCalm]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "TdQuasarFuse", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } },
+]
+
+[states.TdQuasarFuse]
+parent = "Root"
+on_enter = [
+    { action = "ResetStatusInt", payload = { key = "kills.drain" } },
+    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventFuseQuasarRequest" },
+    { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "QUASAR FORMING" } },
+]
+transitions = [
+    { trigger = "EventQuasarSpawned", target = "TdQuasarLive" },
+    # Defensive: fuse never completed
+    { trigger = "Tick", target = "TdQuasarEnd", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
+]
+
+[states.TdQuasarLive]
+parent = "Root"
+on_enter = [
+    # Danger cue against quasar long-range attacks
+    { action = "EmitEvent", event = "EventGrayoutStart" },
+]
+transitions = [
+    { trigger = "EventQuasarDestroyed", target = "TdQuasarEnd" },
+    # Defensive: quasar died OOB without destroy event
+    { trigger = "Tick", target = "TdQuasarEnd", guard = "And", guard_args = { guards = [
+        { name = "StateTimeExceeds", args = { ms = 2000 } },
+        { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
+    ] } },
+]
+
+[states.TdQuasarEnd]
+parent = "Root"
+on_enter = [
+    # GrayoutEnd harmless on fuse-timeout path (no prior start)
+    { action = "EmitEvent", event = "EventGrayoutEnd" },
+    { action = "EmitEvent", event = "EventDrainResume" },
+]
+transitions = [
+    { trigger = "Tick", target = "TdCalm" },
+]
+
