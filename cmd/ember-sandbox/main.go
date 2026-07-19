@@ -9,7 +9,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -629,3 +629,4 @@ func main() {
 
 	term.Fini()
 }
+

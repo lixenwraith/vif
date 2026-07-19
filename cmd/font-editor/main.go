@@ -9,8 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/asset"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/asset"
 )
 
 // Editor constants
@@ -981,3 +982,4 @@ func (e *Editor) drawStatus(cells []terminal.Cell) {
 	}
 	e.drawText(cells, x, barY, msg, color.RGB{R: 255, G: 255, B: 255}, bg, terminal.AttrBold)
 }
+

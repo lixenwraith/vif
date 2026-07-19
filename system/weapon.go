@@ -113,7 +113,7 @@ func (s *WeaponSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	// Update main fire cooldown
 	if weaponComp.MainFireCooldown > 0 {
@@ -302,7 +302,7 @@ func (s *WeaponSystem) redistributeOrbs(cursorEntity core.Entity) {
 
 // updateOrbs handles orbital motion with arc-aware collision avoidance
 func (s *WeaponSystem) updateOrbs() {
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Player.Entity
 

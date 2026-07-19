@@ -83,7 +83,7 @@ func (s *TimerSystem) Update() {
 	}
 
 	entities := s.world.Components.Timer.GetAllEntities()
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	for _, entity := range entities {
 		timer, ok := s.world.Components.Timer.GetComponent(entity)

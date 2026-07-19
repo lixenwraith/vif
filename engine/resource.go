@@ -67,64 +67,32 @@ func (r *Resource) ServiceBridge(res any) {
 // TimeResource is time data snapshot for systems and is updated by ClockScheduler at the start of a tick
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)
-	// GameTime time.Time
-	gameTime atomic.Int64
+	GameTime time.Time
 
 	// RealTime is the wall-clock time (unaffected by pause)
-	// RealTime time.Time
-	realTime atomic.Int64
+	RealTime time.Time
 
 	// DeltaTime is the duration since the last update
-	// DeltaTime time.Duration
-	deltaTime atomic.Int64
+	DeltaTime time.Duration
 }
 
-// Update modifies TimeResource fields in-place, Must be called under world lock
+// Update overwrites all three fields
+// Caller MUST hold updateMutex
 func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Duration) {
-	// tr.GameTime = gameTime
-	// tr.RealTime = realTime
-	// tr.DeltaTime = deltaTime
-
-	tr.gameTime.Store(gameTime.UnixNano())
-	tr.realTime.Store(realTime.UnixNano())
-	tr.deltaTime.Store(int64(deltaTime))
+	tr.GameTime = gameTime
+	tr.RealTime = realTime
+	tr.DeltaTime = deltaTime
 }
 
-func (tr *TimeResource) SetGameTime(t time.Time) {
-	tr.gameTime.Store(t.UnixNano())
-}
+// GameTimeNano returns game time as Unix nanoseconds
+// Retained for fixed-point and integer comparison paths
+func (tr *TimeResource) GameTimeNano() int64 { return tr.GameTime.UnixNano() }
 
-func (tr *TimeResource) SetRealTime(t time.Time) {
-	tr.realTime.Store(t.UnixNano())
-}
+// RealTimeNano returns wall-clock time as Unix nanoseconds
+func (tr *TimeResource) RealTimeNano() int64 { return tr.RealTime.UnixNano() }
 
-func (tr *TimeResource) SetDeltaTime(t time.Duration) {
-	tr.deltaTime.Store(int64(t))
-}
-
-func (tr *TimeResource) GameTime() time.Time {
-	return time.Unix(0, tr.gameTime.Load())
-}
-
-func (tr *TimeResource) GameTimeNano() int64 {
-	return tr.gameTime.Load()
-}
-
-func (tr *TimeResource) RealTime() time.Time {
-	return time.Unix(0, tr.realTime.Load())
-}
-
-func (tr *TimeResource) RealTimeNano() int64 {
-	return tr.realTime.Load()
-}
-
-func (tr *TimeResource) DeltaTime() time.Duration {
-	return time.Duration(tr.deltaTime.Load())
-}
-
-func (tr *TimeResource) DeltaTimeNano() int64 {
-	return tr.deltaTime.Load()
-}
+// DeltaTimeNano returns the tick delta in nanoseconds
+func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
 
 // --- Config Resource ---
 

@@ -25,7 +25,7 @@ func main() {
 		jailStr, _ := reader.ReadString('\n')
 		jailMode := strings.ToLower(strings.TrimSpace(jailStr)) == "y"
 
-		// CHANGED: 0 values now trigger auto-scaling logic in the generator
+		// 0 values now trigger auto-scaling logic in the generator
 		roomCount := getInt(reader, "Room Count (default 0): ", 0)
 		roomW := getInt(reader, "Default Room Width (0 = Auto): ", 0)
 		roomH := getInt(reader, "Default Room Height (0 = Auto): ", 0)
@@ -174,3 +174,4 @@ func getFloat(r *bufio.Reader, prompt string, def float64) float64 {
 	}
 	return v
 }
+

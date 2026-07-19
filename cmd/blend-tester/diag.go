@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -144,3 +145,4 @@ func deltaColor(delta int) color.RGB {
 	}
 	return color.RGB{255, 100, 100} // Red - poor
 }
+

@@ -57,17 +57,15 @@ func (w *World) CreateEntity() core.Entity {
 }
 
 // AddComponentMask marks a component bit as active for the specified entity
+// Callers MUST hold updateMutex, matching removeEntity/wipeAll.
 func (w *World) AddComponentMask(e core.Entity, bit uint64) {
-	w.mu.RLock()
 	w.componentMask[e] |= bit
-	w.mu.RUnlock()
 }
 
 // RemoveComponentMask clears a component bit for the specified entity
+// Caller MUST hold updateMutex
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
-	w.mu.RLock()
-	w.componentMask[e] ^= bit
-	w.mu.RUnlock()
+	w.componentMask[e] &^= bit // &^= clears unconditionally
 }
 
 // DestroyEntity removes all components associated with an entity
@@ -112,6 +110,19 @@ func (w *World) AddSystem(system System) {
 	}
 }
 
+// HasSystem reports whether a system with the given name is registered
+// Validation source for command-mode and config system references
+func (w *World) HasSystem(name string) bool {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+	for _, s := range w.systems {
+		if s.Name() == name {
+			return true
+		}
+	}
+	return false
+}
+
 // Systems returns a copy of all registered systems
 // Used by ClockScheduler for event handler auto-registration
 func (w *World) Systems() []System {
@@ -154,15 +165,20 @@ func (w *World) Update() {
 
 // UpdateLocked runs all systems assuming the caller already holds updateMutex
 func (w *World) UpdateLocked() {
-	w.mu.RLock()
-	systems := make([]System, len(w.systems))
-	copy(systems, w.systems)
-	w.mu.RUnlock()
-
-	for _, system := range systems {
+	for _, system := range w.systems {
 		system.Update()
 	}
 }
+
+// // func (w *World) UpdateLocked() {
+// // 	w.mu.RLock()
+// // 	systems := make([]System, len(w.systems))
+// // 	copy(systems, w.systems)
+// // 	w.mu.RUnlock()
+// 	for _, system := range systems {
+// 		system.Update()
+// 	}
+// }
 
 // PushEvent emits a game event using direct cached pointers. HOT-PATH for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
@@ -229,7 +245,7 @@ func (w *World) CreateCursorEntity() {
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
 		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusXFloat),
 		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusYFloat),
-		LastDrainTime: w.Resources.Time.GameTime(),
+		LastDrainTime: w.Resources.Time.GameTime,
 	})
 
 	// 9. Set boost component

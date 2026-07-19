@@ -68,7 +68,7 @@ func (s *HeatSystem) Update() {
 
 	// Handle burst flash timeout
 	if heatComp.BurstFlashRemaining > 0 {
-		dt := s.world.Resources.Time.DeltaTime()
+		dt := s.world.Resources.Time.DeltaTime
 		heatComp.BurstFlashRemaining -= dt
 		if heatComp.BurstFlashRemaining <= 0 {
 			heatComp.BurstFlashRemaining = 0
@@ -78,7 +78,7 @@ func (s *HeatSystem) Update() {
 
 	// Handle ember decay
 	if heatComp.EmberActive {
-		now := s.world.Resources.Time.GameTime()
+		now := s.world.Resources.Time.GameTime
 		if now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
 			heatComp.Current -= parameter.EmberDecayAmount
 			heatComp.EmberDecayTime = now
@@ -180,7 +180,7 @@ func (s *HeatSystem) addHeat(delta int) {
 		heatComp.Overheat = 0
 		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
 		heatComp.EmberActive = true
-		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime()
+		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushEvent(event.EventHeatBurst, nil)
 		s.statEmber.Store(true)
 	}

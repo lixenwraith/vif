@@ -144,7 +144,7 @@ func (s *GoldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 
 	s.statActive.Store(s.active)
 	if s.active {
@@ -228,7 +228,7 @@ func (s *GoldSystem) handleJumpRequest() {
 
 // spawnGold creates a new gold sequence
 func (s *GoldSystem) spawnGold() bool {
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, parameter.GoldSequenceLength)

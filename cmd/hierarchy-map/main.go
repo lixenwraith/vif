@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
 )
@@ -53,7 +54,7 @@ func main() {
 		Filter:           NewFilterState(),
 		RgAvailable:      rgErr == nil,
 		CategoryNames:    index.CategoryNames,
-		HierarchyUI:          NewCategoryUIState(),
+		HierarchyUI:      NewCategoryUIState(),
 		DepByState:       NewDetailPaneState(),
 		DepOnState:       NewDetailPaneState(),
 		DepAnalysisCache: make(map[string]*DependencyAnalysis),

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
 )
@@ -301,3 +302,4 @@ func keyToString(k terminal.Key) string {
 		return fmt.Sprintf("Key(%d)", k)
 	}
 }
+

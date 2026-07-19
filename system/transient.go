@@ -119,7 +119,7 @@ func (s *TransientSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	strobe.Remaining -= dt
 
 	if strobe.Remaining <= 0 {

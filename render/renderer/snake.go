@@ -128,7 +128,7 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 	invInnerRySq := vmath.FromFloat(1.0 / (innerRadiusY * innerRadiusY))
 
 	// Pulse intensity
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	sinVal := vmath.Sin(angleFixed)

@@ -46,7 +46,7 @@ type RenderContext struct {
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
-func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResource, cursorX, cursorY int) RenderContext {
+func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResource, cursorX, cursorY int) RenderContext {
 	config := ctx.World.Resources.Config
 
 	// Compute map centering offset when map < viewport
@@ -60,8 +60,8 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes *engine.TimeResou
 	}
 
 	return RenderContext{
-		GameTime:  timeRes.GameTime(),
-		DeltaTime: timeRes.DeltaTime().Seconds(),
+		GameTime:  timeRes.GameTime,
+		DeltaTime: timeRes.DeltaTime.Seconds(),
 		IsPaused:  ctx.IsPaused.Load(),
 
 		CursorX: cursorX,
@@ -147,4 +147,3 @@ func (rc *RenderContext) VisibleMapBounds() (int, int, int, int) {
 func (rc *RenderContext) CursorViewportPos() (int, int) {
 	return rc.CursorX - rc.CameraX + rc.MapOffsetX, rc.CursorY - rc.CameraY + rc.MapOffsetY
 }
-

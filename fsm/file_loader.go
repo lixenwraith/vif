@@ -24,8 +24,9 @@ func LoadConfigFromPath[T any](m *Machine[T], configPath string) error {
 
 // LoadConfigFromFS loads FSM config from any fs.FS (os.DirFS, embed.FS)
 func LoadConfigFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
-	visited := make(map[string]bool)
-	merged, err := loadAndResolve(fsys, entry, visited)
+	// 'stack' tracks the in-progress include chain, not every file seen
+	stack := make(map[string]bool)
+	merged, err := loadAndResolve(fsys, entry, stack)
 	if err != nil {
 		return fmt.Errorf("failed to load FSM config '%s': %w", entry, err)
 	}
@@ -33,12 +34,14 @@ func LoadConfigFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
 }
 
 // loadAndResolve recursively loads a TOML file and resolves region file includes
-func loadAndResolve(fsys fs.FS, name string, visited map[string]bool) (map[string]any, error) {
+// stack holds the ancestors currently being resolved; entries are popped on return
+func loadAndResolve(fsys fs.FS, name string, stack map[string]bool) (map[string]any, error) {
 	cleanName := path.Clean(name)
-	if visited[cleanName] {
+	if stack[cleanName] {
 		return nil, fmt.Errorf("circular include detected: %s", cleanName)
 	}
-	visited[cleanName] = true
+	stack[cleanName] = true
+	defer delete(stack, cleanName) // pop on return; siblings may re-include
 
 	data, err := fs.ReadFile(fsys, cleanName)
 	if err != nil {
@@ -80,7 +83,8 @@ func loadAndResolve(fsys fs.FS, name string, visited map[string]bool) (map[strin
 			return nil, fmt.Errorf("%s: region '%s' file must be a string", cleanName, regionName)
 		}
 
-		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), visited)
+		// pass stack (was visited)
+		regionMap, err := loadAndResolve(fsys, path.Join(baseDir, fileStr), stack)
 		if err != nil {
 			return nil, fmt.Errorf("region '%s': %w", regionName, err)
 		}

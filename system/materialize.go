@@ -96,7 +96,7 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
 	dtCap := vmath.FromFloat(0.1)
 	if dtFixed > dtCap {

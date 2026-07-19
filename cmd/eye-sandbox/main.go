@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -781,3 +782,4 @@ func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, 
 		}
 	}
 }
+

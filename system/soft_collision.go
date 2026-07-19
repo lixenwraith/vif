@@ -223,7 +223,7 @@ func (s *SoftCollisionSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}

@@ -142,7 +142,7 @@ func (s *EnergySystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	cursorEntity := s.world.Resources.Player.Entity
 
 	// Clear error flash after timeout

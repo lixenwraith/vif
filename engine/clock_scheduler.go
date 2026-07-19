@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/engine/fsm"
 	"github.com/lixenwraith/vi-fighter/event"
+	"github.com/lixenwraith/vi-fighter/fsm"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
@@ -151,6 +151,7 @@ func (cs *ClockScheduler) initLoadedFSM() error {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
 	return nil
 }
 
@@ -372,6 +373,7 @@ func (cs *ClockScheduler) executeReset() {
 
 	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
 
 	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world before unpause
 	cs.dispatchAndProcessEvents()

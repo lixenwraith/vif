@@ -12,7 +12,7 @@ type CameraSystem struct {
 }
 
 // NewCameraSystem creates camera following system
-func NewCameraSystem(world *engine.World) *CameraSystem {
+func NewCameraSystem(world *engine.World) engine.System {
 	s := &CameraSystem{
 		world: world,
 	}
@@ -185,11 +185,4 @@ func (s *CameraSystem) CenterCameraOn(mapX, mapY int) {
 
 	config.CameraX = targetCameraX
 	config.CameraY = targetCameraY
-}
-
-// ResetCamera sets camera to origin
-func (s *CameraSystem) ResetCamera() {
-	config := s.world.Resources.Config
-	config.CameraX = 0
-	config.CameraY = 0
 }

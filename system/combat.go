@@ -100,7 +100,7 @@ func (s *CombatSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	combatEntities := s.world.Components.Combat.GetAllEntities()
 	for _, combatEntity := range combatEntities {

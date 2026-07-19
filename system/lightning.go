@@ -54,7 +54,7 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	deltaTime := s.world.Resources.Time.DeltaTime()
+	deltaTime := s.world.Resources.Time.DeltaTime
 	var toDestroy []core.Entity
 
 	for _, e := range entities {

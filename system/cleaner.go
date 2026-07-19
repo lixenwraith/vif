@@ -113,7 +113,7 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
 

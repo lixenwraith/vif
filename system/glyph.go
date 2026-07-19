@@ -161,7 +161,7 @@ func (s *GlyphSystem) Update() {
 	s.updateRateMultiplier(density)
 
 	// Check if spawn is due
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	s.nextSpawnTimer -= dt
 
 	// Update metrics

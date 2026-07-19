@@ -136,7 +136,7 @@ func (s *ShieldSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 
 	if now.Sub(shieldComp.LastDrainTime) >= parameter.ShieldPassiveDrainInterval {
 		s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{

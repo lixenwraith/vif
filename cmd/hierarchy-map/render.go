@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
 )
@@ -904,3 +905,4 @@ func (app *AppState) nodeMatchesFilter(node *TreeNode) bool {
 
 	return app.Filter.FilteredPaths[node.Path]
 }
+

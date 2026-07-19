@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -212,3 +213,4 @@ func drawColorInfo(x, y int, info ColorInfo) int {
 
 	return line
 }
+

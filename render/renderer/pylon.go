@@ -145,7 +145,7 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 	invRySq := 1.0 / (radiusY * radiusY)
 
 	// Pulse intensity using game time
-	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime().UnixMilli()
+	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
 	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
 	sinVal := vmath.Sin(angleFixed)

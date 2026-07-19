@@ -175,7 +175,7 @@ func (s *StormSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
@@ -1385,7 +1385,7 @@ func (s *StormSystem) processPendingBlueSpawns() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	for i := len(s.pendingBlueSpawns) - 1; i >= 0; i-- {
 		s.pendingBlueSpawns[i].Timer -= dt

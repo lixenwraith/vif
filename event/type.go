@@ -9,11 +9,52 @@ type GameEvent struct {
 // EventType represents the type of game event
 type EventType int
 
+// EventType constants are the sole input to the event registry. The generator
+// (cmd/gen-manifest) parses this block and emits event/registry_gen.go; that
+// file is never hand-edited, and every constant declared here is registered.
+//
+// Doc comment format, one of:
+//
+//	// EventFoo (FooPayload) short description of what the event signals
+//	// EventFoo short description of what the event signals
+//
+// The first form registers the event with a typed payload, making its fields
+// addressable from FSM configs and from ":emit". The second registers nil.
+// A constant with no doc comment at all is registered nil and warned about.
+//
+// Stem convention: an event named Event<Stem> pairs with a payload named
+// <Stem>Payload. Keeping the stem identical is what lets the generator detect
+// a forgotten annotation — it errors when <Stem>Payload exists but the doc
+// comment declares no payload. A deliberately divergent name (EventGoldCompleted
+// carrying GoldCompletionPayload) defeats that check and is registered nil in
+// silence, so prefer the convention and treat divergence as a last resort.
+//
+// Payload types that are not TOML-authorable are annotated for documentation
+// but register nil. The generator recognises them by the presence of '[' or
+// '.' in the annotation:
+//
+//	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) ...   pooled
+//	// EventDeathOne (core.Entity) ...                                   bit-packed scalar
+//
+// Payload structs must carry `toml:"..."` tags on every field intended to be
+// set from a config or from ":emit"; untagged fields resolve only by Go name
+// and cannot be decoded.
+//
+// Ordering and numbering: values are contiguous in [0, EventTypeCount) and are
+// never serialized, so the block may be freely reordered. EventNone is reserved
+// at zero — it is the FSM tick sentinel (fsm.Transition.Event == 0) and the
+// "no effect" marker in DeathRequestPayload.EffectEvent and
+// CompositeDestroyRequestPayload.Effect. No real event may occupy it.
+
 const (
+	// EventNone is the zero value, reserved so that no real event
+	// aliases the FSM tick sentinel (fsm.Transition.Event == 0) or the
+	EventNone EventType = iota
+
 	// --- Level ---
 
 	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
-	EventLevelSetup EventType = iota
+	EventLevelSetup
 
 	// --- Audio ---
 
@@ -96,17 +137,17 @@ const (
 
 	// --- Gold ---
 
-	// EventGoldSpawnRequest (GoldSpawnedPayload) signals a specific request to try spawning a gold sequence
+	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
 	EventGoldSpawnRequest
 	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
 	EventGoldSpawnFailed
-	// EventGoldSpawned signals gold sequence creation
+	// EventGoldSpawned (GoldSpawnedPayload) signals gold sequence creation
 	EventGoldSpawned
-	// EventGoldCompleted signals successful gold sequence completion
+	// EventGoldCompleted (GoldCompletionPayload) signals successful gold sequence completion
 	EventGoldCompleted
 	// EventGoldTimeout (GoldCompletionPayload) signals gold sequence expiration
 	EventGoldTimeout
-	// EventGoldDestroyed signals external gold destruction
+	// EventGoldDestroyed (GoldCompletionPayload) signals external gold destruction
 	EventGoldDestroyed
 	// EventGoldCancel signals mandatory cleanup of any active gold sequence
 	EventGoldCancel
@@ -210,7 +251,7 @@ const (
 	EventDustSpawnOneRequest
 	// EventDustSpawnBatchRequest (BatchPayload[DustSpawnEntry]) signals intent to spawn multiple dust entities
 	EventDustSpawnBatchRequest
-	// EventDustAllRequest signals intent to spawn a single dust entity
+	// EventDustAllRequest signals intent to convert all glyphs on the map to dust
 	EventDustAllRequest
 
 	// --- Blossom ---
@@ -483,9 +524,8 @@ const (
 
 	// --- Debug ---
 
-	// EventDebugFlowToggle toggles debug flow field visualization
+	// EventDebugFlowToggle (DebugFlowGroupPayload) toggles debug flow field visualization
 	EventDebugFlowToggle
-	// EventDebugGraphToggle toggles debug graph visualization
+	// EventDebugGraphToggle (DebugFlowGroupPayload) toggles debug graph visualization
 	EventDebugGraphToggle
 )
-

@@ -425,15 +425,6 @@ const (
 	FuseEffectMaterialize            // Reverse beam convergence
 )
 
-// FuseRequestPayload is generic payload for fusion types
-type FuseRequestPayload struct {
-	Sources []core.Entity `toml:"sources"`
-	TargetX int           `toml:"target_x"`
-	TargetY int           `toml:"target_y"`
-	Effect  FuseEffect    `toml:"effect"`
-	Type    int           `toml:"type"` // Maps to FuseType in fuse system
-}
-
 // FuseSwarmRequestPayload contains the two drains to fuse
 type FuseSwarmRequestPayload struct {
 	DrainA core.Entity `toml:"drain_a"`
@@ -971,6 +962,7 @@ type GeneticRegisterSpeciesPayload struct {
 
 // --- Debug ---
 
+// DebugFlowGroupPayload selects a navigation target group for debug overlays
 type DebugFlowGroupPayload struct {
-	GroupID uint8
+	GroupID uint8 `toml:"group_id"`
 }

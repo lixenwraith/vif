@@ -15,9 +15,19 @@ var (
 // RegisterType maps a string name to an EventType and its payload struct type
 // payloadInstance should be a pointer to the payload struct (e.g., &SpawnChangePayload{})
 // Pass nil if the event has no payload
+// Called only from generated code and registerAliases
 func RegisterType(name string, et EventType, payloadInstance any) {
+	// Don't allow duplicate events
+	if _, dup := nameToType[name]; dup {
+		panic("event: duplicate registration for " + name)
+	}
 	nameToType[name] = et
-	typeToName[et] = name
+
+	// First registration wins, so an alias cannot displace the canonical name in the reverse map
+	if _, exists := typeToName[et]; !exists {
+		typeToName[et] = name
+	}
+
 	if payloadInstance != nil {
 		t := reflect.TypeOf(payloadInstance)
 		if t.Kind() == reflect.Ptr {
@@ -29,9 +39,9 @@ func RegisterType(name string, et EventType, payloadInstance any) {
 
 // GetEventType returns the EventType for a given name
 func GetEventType(name string) (EventType, bool) {
-	// Special case for FSM "Tick"
+	// EventNone is special case for FSM "Tick"
 	if strings.EqualFold(name, "Tick") {
-		return 0, true
+		return EventNone, true
 	}
 	et, ok := nameToType[name]
 	return et, ok
@@ -39,7 +49,7 @@ func GetEventType(name string) (EventType, bool) {
 
 // GetEventName returns the string name for an EventType
 func GetEventName(et EventType) string {
-	if et == 0 {
+	if et == EventNone {
 		return "Tick"
 	}
 	return typeToName[et]
@@ -60,281 +70,4 @@ func NewPayloadStruct(et EventType) any {
 		return nil
 	}
 	return reflect.New(t).Interface()
-}
-
-// InitRegistry populates the registry with all game events
-// Must be called once at startup
-func InitRegistry() {
-	if registryInit {
-		return
-	}
-	registryInit = true
-
-	// Register all events from types.go
-
-	// Level
-	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})
-
-	// Audio events
-	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
-
-	// Music events
-	RegisterType("EventMusicStart", EventMusicStart, &MusicStartPayload{})
-	RegisterType("EventMusicStop", EventMusicStop, nil)
-	RegisterType("EventMusicPause", EventMusicPause, nil)
-	RegisterType("EventBeatPatternRequest", EventBeatPatternRequest, &BeatPatternRequestPayload{})
-	RegisterType("EventMelodyNoteRequest", EventMelodyNoteRequest, &MelodyNoteRequestPayload{})
-	RegisterType("EventMelodyPatternRequest", EventMelodyPatternRequest, &MelodyPatternRequestPayload{})
-	RegisterType("EventMusicIntensityChange", EventMusicIntensityChange, &MusicIntensityPayload{})
-	RegisterType("EventMusicTempoChange", EventMusicTempoChange, &MusicTempoPayload{})
-
-	// Network events
-	RegisterType("EventNetworkConnect", EventNetworkConnect, &NetworkConnectPayload{})
-	RegisterType("EventNetworkDisconnect", EventNetworkDisconnect, &NetworkDisconnectPayload{})
-	RegisterType("EventRemoteInput", EventRemoteInput, &RemoteInputPayload{})
-	RegisterType("EventStateSync", EventStateSync, &StateSyncPayload{})
-	RegisterType("EventNetworkEvent", EventNetworkEvent, &NetworkEventPayload{})
-	RegisterType("EventNetworkError", EventNetworkError, &NetworkErrorPayload{})
-
-	// Meta events
-	RegisterType("EventGameReset", EventGameReset, nil)
-	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
-	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
-	RegisterType("EventMetaAboutRequest", EventMetaAboutRequest, nil)
-	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
-	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
-
-	// FSM
-	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
-	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
-
-	// Nugget
-	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})
-	RegisterType("EventNuggetDestroyed", EventNuggetDestroyed, &NuggetDestroyedPayload{})
-	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, nil)
-
-	// Cleaner
-	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
-	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, nil)
-	RegisterType("EventCleanerSweepingRequest", EventCleanerSweepingRequest, nil)
-	RegisterType("EventCleanerSweepingFinished", EventCleanerSweepingFinished, nil)
-
-	// Gold
-	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
-	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)
-	RegisterType("EventGoldSpawned", EventGoldSpawned, &GoldSpawnedPayload{})
-	RegisterType("EventGoldCompleted", EventGoldCompleted, &GoldCompletionPayload{})
-	RegisterType("EventGoldTimeout", EventGoldTimeout, &GoldCompletionPayload{})
-	RegisterType("EventGoldDestroyed", EventGoldDestroyed, &GoldCompletionPayload{})
-	RegisterType("EventGoldCancel", EventGoldCancel, nil)
-	RegisterType("EventGoldJumpRequest", EventGoldJumpRequest, nil)
-	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
-
-	// Splash
-	RegisterType("EventSplashTimerRequest", EventSplashTimerRequest, &SplashTimerRequestPayload{})
-	RegisterType("EventSplashTimerCancel", EventSplashTimerCancel, &SplashTimerCancelPayload{})
-
-	// Energy
-	RegisterType("EventEnergyAddRequest", EventEnergyAddRequest, &EnergyAddPayload{})
-	RegisterType("EventEnergySetRequest", EventEnergySetRequest, &EnergySetPayload{})
-	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, nil)
-	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &EnergyGlyphConsumedPayload{})
-	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
-	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
-
-	// Shield
-	RegisterType("EventShieldActivate", EventShieldActivate, nil)
-	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
-	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
-
-	// Weapon
-	RegisterType("EventWeaponAddRequest", EventWeaponAddRequest, &WeaponAddRequestPayload{})
-	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, nil)
-	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, nil)
-
-	// Heat
-	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
-	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
-	RegisterType("EventHeatBurst", EventHeatBurst, nil)
-
-	// Boost
-	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
-	RegisterType("EventBoostDeactivate", EventBoostDeactivate, nil)
-	RegisterType("EventBoostExtend", EventBoostExtend, &BoostExtendPayload{})
-
-	// Typing
-	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
-	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
-
-	// Ping
-	RegisterType("EventPingGridRequest", EventPingGridRequest, &PingGridRequestPayload{})
-
-	// Materialize
-	RegisterType("EventMaterializeRequest", EventMaterializeRequest, &MaterializeRequestPayload{})
-	RegisterType("EventMaterializeComplete", EventMaterializeComplete, &MaterializeCompletedPayload{})
-	RegisterType("EventMaterializeAreaRequest", EventMaterializeAreaRequest, &MaterializeAreaRequestPayload{})
-
-	// Flash
-	RegisterType("EventFlashSpawnOneRequest", EventFlashSpawnOneRequest, &FlashRequestPayload{})
-	RegisterType("EventFlashBatchRequest", EventFlashSpawnBatchRequest, nil) // Generic BatchPayload, no TOML decode
-
-	// Explosion
-	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
-
-	// Dust
-	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
-	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, nil) // Generic BatchPayload, no TOML decode
-	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)
-
-	// Blossom
-	RegisterType("EventBlossomSpawnOne", EventBlossomSpawnOne, &BlossomSpawnPayload{})
-	RegisterType("EventBlossomSpawnBatch", EventBlossomSpawnBatch, nil) // Generic BatchPayload, no TOML decode
-	RegisterType("EventBlossomWave", EventBlossomWave, nil)
-
-	// Decay
-	RegisterType("EventDecaySpawnOne", EventDecaySpawnOne, &DecaySpawnPayload{})
-	RegisterType("EventDecaySpawnBatch", EventDecaySpawnBatch, nil) // Generic BatchPayload, no TOML decode
-	RegisterType("EventDecayWave", EventDecayWave, nil)
-
-	// Death
-	RegisterType("EventDeathOne", EventDeathOne, nil) // Scalar bit-packed payload (no struct), use api
-	RegisterType("EventDeathBatch", EventDeathBatch, &DeathRequestPayload{})
-
-	// Timer
-	RegisterType("EventTimerStart", EventTimerStart, &TimerStartPayload{})
-
-	// Composite
-	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
-	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
-	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
-
-	// Cursor
-	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
-
-	// Fuse
-	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, nil)
-	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
-
-	// Drain
-	RegisterType("EventDrainPause", EventDrainPause, nil)
-	RegisterType("EventDrainResume", EventDrainResume, nil)
-
-	// Quasar
-	RegisterType("EventQuasarSpawnRequest", EventQuasarSpawnRequest, &QuasarSpawnRequestPayload{})
-	RegisterType("EventQuasarSpawned", EventQuasarSpawned, &QuasarSpawnedPayload{})
-	RegisterType("EventQuasarDestroyed", EventQuasarDestroyed, nil)
-	RegisterType("EventQuasarCancelRequest", EventQuasarCancelRequest, nil)
-
-	// Swarm
-	RegisterType("EventSwarmSpawnRequest", EventSwarmSpawnRequest, &SwarmSpawnRequestPayload{})
-	RegisterType("EventSwarmSpawned", EventSwarmSpawned, &SwarmSpawnedPayload{})
-	RegisterType("EventSwarmDestroyed", EventSwarmDestroyed, &SwarmDestroyedPayload{})
-	RegisterType("EventSwarmAbsorbedDrain", EventSwarmAbsorbedDrain, &SwarmAbsorbedDrainPayload{})
-	RegisterType("EventSwarmCancelRequest", EventSwarmCancelRequest, nil)
-
-	// Storm
-	RegisterType("EventStormSpawnRequest", EventStormSpawnRequest, nil)
-	RegisterType("EventStormCancelRequest", EventStormCancelRequest, nil)
-	RegisterType("EventStormCircleDestroyed", EventStormCircleDestroyed, &StormCircleDestroyedPayload{})
-	RegisterType("EventStormDestroyed", EventStormDestroyed, &StormDestroyedPayload{})
-
-	// Post-Process
-	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
-	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
-	RegisterType("EventStrobeRequest", EventStrobeRequest, &StrobeRequestPayload{})
-
-	// Spirit
-	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnRequestPayload{})
-	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
-
-	// Lightning
-	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
-	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
-	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest, &LightningDespawnPayload{})
-
-	// Combat
-	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
-	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
-	RegisterType("EventEnemyCreated", EventEnemyCreated, &EnemyCreatedPayload{})
-	RegisterType("EventEnemyKilled", EventEnemyKilled, &EnemyKilledPayload{})
-
-	// Loot
-	RegisterType("EventLootSpawnRequest", EventLootSpawnRequest, &LootSpawnRequestPayload{})
-
-	// Missile
-	RegisterType("EventMissileSpawnRequest", EventMissileSpawnRequest, &MissileSpawnRequestPayload{})
-
-	// Bullet
-	RegisterType("EventBulletSpawnRequest", EventBulletSpawnRequest, &BulletSpawnRequestPayload{})
-
-	// Marker
-	RegisterType("EventMarkerSpawnRequest", EventMarkerSpawnRequest, &MarkerSpawnRequestPayload{})
-
-	// Motion Marker
-	RegisterType("EventMotionMarkerShowColored", EventMotionMarkerShowColored, &MotionMarkerShowPayload{})
-	RegisterType("EventMotionMarkerClearColored", EventMotionMarkerClearColored, nil)
-
-	// Mode
-	RegisterType("EventModeChanged", EventModeChanged, &ModeChangedPayload{})
-
-	// Wall
-	RegisterType("EventWallSpawnRequest", EventWallSpawnRequest, &WallSpawnRequestPayload{})
-	RegisterType("EventWallCompositeSpawnRequest", EventWallCompositeSpawnRequest, &WallCompositeSpawnRequestPayload{})
-	RegisterType("EventWallPatternSpawnRequest", EventWallPatternSpawnRequest, &WallPatternSpawnRequestPayload{})
-	RegisterType("EventMazeSpawnRequest", EventMazeSpawnRequest, &MazeSpawnRequestPayload{})
-	RegisterType("EventWallDespawnRequest", EventWallDespawnRequest, &WallDespawnRequestPayload{})
-	RegisterType("EventWallMaskChangeRequest", EventWallMaskChangeRequest, &WallMaskChangeRequestPayload{})
-	RegisterType("EventWallPushCheckRequest", EventWallPushCheckRequest, nil)
-	RegisterType("EventWallSpawned", EventWallSpawned, &WallSpawnedPayload{})
-	RegisterType("EventWallDespawned", EventWallDespawned, &WallDespawnedPayload{})
-	RegisterType("EventWallDespawnAll", EventWallDespawnAll, nil)
-
-	// Fadeout
-	RegisterType("EventFadeoutSpawnOne", EventFadeoutSpawnOne, &FadeoutSpawnPayload{})
-	RegisterType("EventFadeoutSpawnBatch", EventFadeoutSpawnBatch, nil) // Generic BatchPayload, no TOML decode
-
-	// Pylon
-	RegisterType("EventPylonSpawnRequest", EventPylonSpawnRequest, &PylonSpawnRequestPayload{})
-	RegisterType("EventPylonSpawned", EventPylonSpawned, &PylonSpawnedPayload{})
-	RegisterType("EventPylonDestroyed", EventPylonDestroyed, &PylonDestroyedPayload{})
-	RegisterType("EventPylonCancelRequest", EventPylonCancelRequest, nil)
-	RegisterType("EventPylonSpawnFailed", EventPylonSpawnFailed, nil)
-
-	// Snake
-	RegisterType("EventSnakeSpawnRequest", EventSnakeSpawnRequest, &SnakeSpawnRequestPayload{})
-	RegisterType("EventSnakeSpawned", EventSnakeSpawned, &SnakeSpawnedPayload{})
-	RegisterType("EventSnakeDestroyed", EventSnakeDestroyed, &SnakeDestroyedPayload{})
-	RegisterType("EventSnakeCancelRequest", EventSnakeCancelRequest, nil)
-
-	// Navigation
-	RegisterType("EventTargetGroupUpdate", EventTargetGroupUpdate, &TargetGroupUpdatePayload{})
-	RegisterType("EventTargetGroupRemove", EventTargetGroupRemove, &TargetGroupRemovePayload{})
-	RegisterType("EventNavigationRegraph", EventNavigationRegraph, nil)
-	RegisterType("EventRouteGraphRequest", EventRouteGraphRequest, &RouteGraphRequestPayload{})
-	RegisterType("EventRouteGraphComputed", EventRouteGraphComputed, &RouteGraphComputedPayload{})
-
-	// Eye
-	RegisterType("EventEyeSpawnRequest", EventEyeSpawnRequest, &EyeSpawnRequestPayload{})
-	RegisterType("EventEyeSpawned", EventEyeSpawned, &EyeSpawnedPayload{})
-	RegisterType("EventEyeDestroyed", EventEyeDestroyed, &EyeDestroyedPayload{})
-	RegisterType("EventEyeCancelRequest", EventEyeCancelRequest, nil)
-
-	// Tower
-	RegisterType("EventTowerSpawnRequest", EventTowerSpawnRequest, &TowerSpawnRequestPayload{})
-	RegisterType("EventTowerSpawned", EventTowerSpawned, &TowerSpawnedPayload{})
-	RegisterType("EventTowerDestroyed", EventTowerDestroyed, &TowerDestroyedPayload{})
-	RegisterType("EventTowerCancelRequest", EventTowerCancelRequest, nil)
-	RegisterType("EventTowerSpawnFailed", EventTowerSpawnFailed, nil)
-
-	// Gateway
-	RegisterType("EventGatewaySpawnRequest", EventGatewaySpawnRequest, &GatewaySpawnRequestPayload{})
-	RegisterType("EventGatewayDespawnRequest", EventGatewayDespawnRequest, &GatewayDespawnRequestPayload{})
-	RegisterType("EventGatewayDespawned", EventGatewayDespawned, &GatewayDespawnedPayload{})
-
-	// Genetic
-	RegisterType("EventGeneticRegisterSpecies", EventGeneticRegisterSpecies, &GeneticRegisterSpeciesPayload{})
-
-	// Debug
-	RegisterType("EventDebugFlowToggle", EventDebugFlowToggle, nil)
-	RegisterType("EventDebugGraphToggle", EventDebugGraphToggle, nil)
 }

@@ -5,13 +5,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/manifest"
 	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/toml"
 )
 
 // CommandResult represents the outcome of command execution
@@ -101,18 +100,11 @@ func handleNewCommand(ctx *engine.GameContext) CommandResult {
 // handleSystemCommand sets the energy to a specified value
 func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 2 {
-		setCommandError(ctx, "Invalid arguments for system")
+		setCommandError(ctx, "Usage: :system <name> enable|disable")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	validSystem := false
-	for _, s := range manifest.ActiveSystems() {
-		if args[0] == s {
-			validSystem = true
-			break
-		}
-	}
-	if !validSystem {
+	if !ctx.World.HasSystem(args[0]) {
 		setCommandError(ctx, fmt.Sprintf("Invalid system: %s", args[0]))
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
@@ -124,7 +116,7 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	case "d", "disable", "disabled":
 		enabledFlag = false
 	default:
-		setCommandError(ctx, fmt.Sprintf("Invalid system: %s", args[0]))
+		setCommandError(ctx, fmt.Sprintf("Invalid state: %s", args[1]))
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
@@ -430,3 +422,4 @@ func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 	return CommandResult{Continue: true, KeepPaused: false}
 }
+

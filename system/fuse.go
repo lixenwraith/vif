@@ -110,7 +110,7 @@ func (s *FuseSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	// Process in reverse to allow safe removal
 	for i := len(s.fusions) - 1; i >= 0; i-- {

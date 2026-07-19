@@ -36,6 +36,12 @@ type Machine[T any] struct {
 	// Runtime State (per-region)
 	regions map[string]*RegionState
 
+	// Deterministic iteration order, mirrors regions map
+	regionOrder []string
+	// Reusable snapshots; separate buffers so a nested dispatch cannot alias
+	updateOrder []string
+	eventOrder  []string
+
 	// FSM Variables (runtime state)
 	variables map[string]int64
 
@@ -54,6 +60,7 @@ type Machine[T any] struct {
 	guardReg        map[string]GuardFunc[T]
 	guardFactoryReg map[string]GuardFactoryFunc[T]
 	actionReg       map[string]ActionFunc[T]
+	argCompilerReg  map[string]ArgCompiler[T]
 
 	// State metadata (populated by loader)
 	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
@@ -99,8 +106,8 @@ type Action[T any] struct {
 }
 
 type DelayedAction[T any] struct {
-	Remaining time.Duration // CHANGED: countdown decremented by dt (was TimeInState threshold)
-	Owner     StateID       // ADDED: cleared when owner state exits
+	Remaining time.Duration // Countdown decremented by dt (was TimeInState threshold)
+	Owner     StateID       // Cleared when owner state exits
 	Action    Action[T]
 }
 
@@ -116,45 +123,10 @@ type ActionFunc[T any] func(ctx T, args any)
 // Return errors (invalid args surface at load, not panic)
 type GuardFactoryFunc[T any] func(m *Machine[T], args map[string]any) (GuardFunc[T], error)
 
-// EmitEventArgs holds pre-compiled event data for the EmitEvent action
-// Type identifies the event; Payload is the decoded struct (or nil)
-type EmitEventArgs struct {
-	Type        event.EventType
-	Payload     any
-	PayloadVars map[string]string // Field name -> variable name
-}
+// ArgCompiler builds the pre-compiled Args value for an action from its config
+// Runs once at load; returning an error fails the load with a precise diagnostic
+type ArgCompiler[T any] func(m *Machine[T], cfg ActionConfig, resolve StateResolver) (any, error)
 
-// RegionControlArgs holds args for region control actions
-type RegionControlArgs struct {
-	RegionName   string
-	InitialState string  // For SpawnRegion
-	InitialID    StateID // Resolved at load time
-}
-
-// VariableArgs holds args for variable manipulation actions
-type VariableArgs struct {
-	Name      string `toml:"name"`
-	Value     int64  `toml:"value"`
-	Delta     int64  `toml:"delta"`
-	SourceVar string `toml:"source_var"` // If set, use this var's value instead of Value/Delta
-	Min       *int64 `toml:"min"`        // Optional clamp lower bound
-	Max       *int64 `toml:"max"`        // Optional clamp upper bound
-}
-
-// SystemControlArgs holds args for system enable/disable actions
-type SystemControlArgs struct {
-	SystemName string `toml:"system_name"`
-	Enabled    bool   `toml:"enabled"`
-}
-
-// StatusIntArgs holds args for status registry int manipulation
-type StatusIntArgs struct {
-	Key   string `toml:"key"`
-	Value int64  `toml:"value"`
-}
-
-// ConfigToVarArgs holds args for reading ConfigResource fields into FSM variables
-type ConfigToVarArgs struct {
-	Field string `toml:"field"` // Config field name (same set as ConfigIntCompare)
-	Name  string `toml:"name"`  // Target FSM variable name
-}
+// StateResolver maps a state name to its ID during load
+// Valid only for the duration of the compile call
+type StateResolver func(name string) (StateID, bool)

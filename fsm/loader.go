@@ -6,8 +6,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vi-fighter/event"
 )
 
 // LoadConfig parses a TOML byte slice and populates the Machine
@@ -39,6 +39,7 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 	// 2. Clear existing graph
 	m.nodes = make(map[StateID]*Node[T])
 	m.regions = make(map[string]*RegionState)
+	m.regionOrder = m.regionOrder[:0]
 	m.regionInitials = make(map[string]StateID)
 	m.regionConfigs = make(map[string]*RegionConfig)
 	m.variables = make(map[string]int64)
@@ -89,6 +90,12 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		var node *Node[T]
 		if id == StateRoot {
 			node = m.nodes[StateRoot]
+			if len(cfg.OnEnter) > 0 || len(cfg.OnUpdate) > 0 || len(cfg.OnExit) > 0 {
+				errs = append(errs, fmt.Errorf(
+					"state 'Root': on_enter/on_update/on_exit are not permitted; "+
+						"Root is shared by every region and its actions run once per region. "+
+						"Put one-shot setup in a dedicated region's initial state"))
+			}
 		} else {
 			pName := cfg.Parent
 			if pName == "" {
@@ -180,6 +187,11 @@ func (m *Machine[T]) GetStateID(name string) (StateID, bool) {
 }
 
 func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]StateID) ([]Action[T], error) {
+	resolve := func(name string) (StateID, bool) {
+		id, ok := nameToID[name]
+		return id, ok
+	}
+
 	actions := make([]Action[T], 0, len(configs))
 	for _, cfg := range configs {
 		fn, ok := m.actionReg[cfg.Action]
@@ -187,89 +199,13 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
 		}
 
-		var args any = nil
-
-		switch cfg.Action {
-		case "EmitEvent":
-			if cfg.Event == "" {
-				return nil, fmt.Errorf("EmitEvent action requires 'event' field")
+		// Each action registers its own compiler
+		var args any
+		if compile, ok := m.argCompilerReg[cfg.Action]; ok {
+			var err error
+			if args, err = compile(m, cfg, resolve); err != nil {
+				return nil, fmt.Errorf("action '%s': %w", cfg.Action, err)
 			}
-			et, ok := event.GetEventType(cfg.Event)
-			if !ok {
-				return nil, fmt.Errorf("unknown event type '%s'", cfg.Event)
-			}
-			payload := event.NewPayloadStruct(et)
-			if payload != nil && cfg.Payload != nil {
-				if err := toml.Decode(cfg.Payload, payload); err != nil {
-					return nil, fmt.Errorf("failed to decode payload for event '%s': %w", cfg.Event, err)
-				}
-			}
-			args = &EmitEventArgs{
-				Type:        et,
-				Payload:     payload,
-				PayloadVars: cfg.PayloadVars,
-			}
-
-		case "SpawnRegion", "TerminateRegion", "PauseRegion", "ResumeRegion":
-			if cfg.Region == "" {
-				return nil, fmt.Errorf("%s action requires 'region' field", cfg.Action)
-			}
-			// Load-time region reference validation
-			if _, ok := m.regionConfigs[cfg.Region]; !ok {
-				return nil, fmt.Errorf("%s references undeclared region '%s'", cfg.Action, cfg.Region)
-			}
-			rcArgs := &RegionControlArgs{
-				RegionName: cfg.Region,
-			}
-			if cfg.Action == "SpawnRegion" {
-				if cfg.InitialState == "" {
-					return nil, fmt.Errorf("SpawnRegion action requires 'initial_state' field")
-				}
-				// Resolve initial state at load
-				initialID, ok := nameToID[cfg.InitialState]
-				if !ok {
-					return nil, fmt.Errorf("SpawnRegion references unknown initial state '%s'", cfg.InitialState)
-				}
-				rcArgs.InitialState = cfg.InitialState
-				rcArgs.InitialID = initialID
-			}
-			args = rcArgs
-
-		case "SetVar", "IncrementVar", "DecrementVar", "MultiplyVar", "DivideVar", "ModuloVar", "ClampVar", "CopyVar":
-			varArgs := &VariableArgs{}
-			if cfg.Payload != nil {
-				if err := toml.Decode(cfg.Payload, varArgs); err != nil {
-					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
-				}
-			}
-			args = varArgs
-
-		case "EnableSystem", "DisableSystem":
-			sysArgs := &SystemControlArgs{}
-			if cfg.Payload != nil {
-				if err := toml.Decode(cfg.Payload, sysArgs); err != nil {
-					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
-				}
-			}
-			args = sysArgs
-
-		case "SetStatusInt", "ResetStatusInt":
-			statusArgs := &StatusIntArgs{}
-			if cfg.Payload != nil {
-				if err := toml.Decode(cfg.Payload, statusArgs); err != nil {
-					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
-				}
-			}
-			args = statusArgs
-
-		case "ConfigToVar":
-			ctArgs := &ConfigToVarArgs{}
-			if cfg.Payload != nil {
-				if err := toml.Decode(cfg.Payload, ctArgs); err != nil {
-					return nil, fmt.Errorf("failed to decode payload for '%s': %w", cfg.Action, err)
-				}
-			}
-			args = ctArgs
 		}
 
 		// Compile action guard

@@ -7,8 +7,9 @@ import (
 	"sort"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -456,7 +457,7 @@ func main() {
 	lastTick := time.Now()
 	running := true
 
-	// CHANGED: use channel-based input
+	// use channel-based input
 	inputCh := startInputReader(term)
 
 	for running {
@@ -639,4 +640,3 @@ func startInputReader(term terminal.Terminal) chan terminal.Event {
 	}()
 	return ch
 }
-

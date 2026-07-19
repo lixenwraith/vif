@@ -7,8 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // ==========================================
@@ -292,3 +293,4 @@ func drawText256(buf *render.RenderBuffer, x, y int, text string) {
 		buf.SetFgOnly(x+i, y, r, color.RGB{R: 250}, terminal.AttrFg256)
 	}
 }
+

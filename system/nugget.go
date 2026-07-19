@@ -124,8 +124,8 @@ func (s *NuggetSystem) Update() {
 		return
 	}
 
-	now := s.world.Resources.Time.GameTime()
-	dt := s.world.Resources.Time.DeltaTime()
+	now := s.world.Resources.Time.GameTime
+	dt := s.world.Resources.Time.DeltaTime
 
 	// Validate active nugget still exists
 	if s.activeNuggetEntity != 0 && !s.world.Components.Nugget.HasEntity(s.activeNuggetEntity) {
@@ -218,7 +218,7 @@ func (s *NuggetSystem) handleJumpRequest() {
 
 // spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
 func (s *NuggetSystem) spawnNugget() {
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
 		return

@@ -22,6 +22,7 @@ func NewMachine[T any]() *Machine[T] {
 		guardReg:        make(map[string]GuardFunc[T]),
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
+		argCompilerReg:  make(map[string]ArgCompiler[T]),
 
 		StateDurations: make(map[StateID]time.Duration),
 		StateIndices:   make(map[StateID]int),
@@ -80,6 +81,13 @@ func (m *Machine[T]) RegisterAction(name string, fn ActionFunc[T]) {
 	m.actionReg[name] = fn
 }
 
+// RegisterActionArgs associates an argument compiler with an action name
+// actions supply their own arg construction; fsm core does not needs to
+// know which arg struct belongs to which action name
+func (m *Machine[T]) RegisterActionArgs(name string, compile ArgCompiler[T]) {
+	m.argCompilerReg[name] = compile
+}
+
 // Init initializes all configured regions
 func (m *Machine[T]) Init(ctx T) error {
 	if len(m.regionInitials) == 0 {
@@ -90,9 +98,15 @@ func (m *Machine[T]) Init(ctx T) error {
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
 
-	// Multi-region initialization
-	for regionName, regionInitial := range m.regionInitials {
-		if err := m.initRegion(ctx, regionName, regionInitial); err != nil {
+	// Multi-region initialization, sorted init order
+	names := make([]string, 0, len(m.regionInitials))
+	for name := range m.regionInitials {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	for _, regionName := range names {
+		if err := m.initRegion(ctx, regionName, m.regionInitials[regionName]); err != nil {
 			return fmt.Errorf("region '%s': %w", regionName, err)
 		}
 	}
@@ -116,6 +130,10 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 	}
 	copy(region.ActivePath, node.Path)
 
+	// Track insertion order; idempotent for re-init of an existing name
+	if _, exists := m.regions[regionName]; !exists {
+		m.regionOrder = append(m.regionOrder, regionName)
+	}
 	m.regions[regionName] = region
 	m.delayedActions[regionName] = nil
 
@@ -131,13 +149,10 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 
 // Update advances the FSM by delta time for all active regions
 func (m *Machine[T]) Update(ctx T, dt time.Duration) {
-	// Snapshot region names to prevent map mutation during iteration
-	regionNames := make([]string, 0, len(m.regions))
-	for name := range m.regions {
-		regionNames = append(regionNames, name)
-	}
+	// Snapshot into a reusable buffer in deterministic order
+	m.updateOrder = append(m.updateOrder[:0], m.regionOrder...)
 
-	for _, name := range regionNames {
+	for _, name := range m.updateOrder {
 		region, ok := m.regions[name]
 		if !ok {
 			continue // Region terminated during this update
@@ -147,6 +162,7 @@ func (m *Machine[T]) Update(ctx T, dt time.Duration) {
 		}
 		m.updateRegion(ctx, region, dt)
 	}
+
 }
 
 // updateRegion advances a single region, handling automatic transitions (Event == 0) and per-tick actions
@@ -245,15 +261,12 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.D
 // HandleEvent routes an external event through all active regions
 // Returns true if the event triggered a transition or was consumed
 func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
-	// Snapshot region names to prevent dispatch to regions spawned by this event
-	regionNames := make([]string, 0, len(m.regions))
-	for name := range m.regions {
-		regionNames = append(regionNames, name)
-	}
+	// Reusable deterministic snapshot; excludes regions spawned by this event
+	m.eventOrder = append(m.eventOrder[:0], m.regionOrder...)
 
 	handled := false
 
-	for _, name := range regionNames {
+	for _, name := range m.eventOrder {
 		region, ok := m.regions[name]
 		if !ok {
 			continue // Region terminated during this event's handling
@@ -311,21 +324,14 @@ func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]stri
 		return
 	}
 
-	v := reflect.ValueOf(payload)
-	if v.Kind() == reflect.Ptr {
-		if v.IsNil() {
-			return
-		}
-		v = v.Elem()
-	}
-	if v.Kind() != reflect.Struct {
+	// Shared cached resolver
+	v := StructValue(payload)
+	if !v.IsValid() {
 		return
 	}
 
-	typ := v.Type()
-
 	for key, varName := range captureVars {
-		field := resolveStructField(v, typ, key)
+		field := FieldByTag(v, key)
 		if !field.IsValid() {
 			continue
 		}
@@ -350,27 +356,6 @@ func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]stri
 	}
 }
 
-// resolveStructField finds a struct field by toml tag first, then Go field name
-func resolveStructField(v reflect.Value, typ reflect.Type, key string) reflect.Value {
-	for i := 0; i < typ.NumField(); i++ {
-		tag := typ.Field(i).Tag.Get("toml")
-		if tag == "" || tag == "-" {
-			continue
-		}
-		// Strip options suffix
-		for j := 0; j < len(tag); j++ {
-			if tag[j] == ',' {
-				tag = tag[:j]
-				break
-			}
-		}
-		if tag == key {
-			return v.Field(i)
-		}
-	}
-	return v.FieldByName(key)
-}
-
 // transitionRegion performs state change within a specific region
 // Order: exit (leaf→LCA) → delayed cleanup → commit → transition actions → enter (LCA→leaf)
 func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID, transActions []Action[T]) {
@@ -390,11 +375,8 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	currentPath := region.ActivePath
 	targetPath := targetNode.Path
 
-	minLen := len(currentPath)
-	if len(targetPath) < minLen {
-		minLen = len(targetPath)
-	}
-	for i := 0; i < minLen; i++ {
+	minLen := min(len(currentPath), len(targetPath))
+	for i := range minLen {
 		if currentPath[i] == targetPath[i] {
 			lcaIndex = i
 		} else {
@@ -456,19 +438,22 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 // Reset returns FSM to initial state for all regions
 func (m *Machine[T]) Reset(ctx T) error {
 	// Exit all regions
-	for _, region := range m.regions {
-		if region.ActiveStateID != StateNone {
-			for i := len(region.ActivePath) - 1; i >= 0; i-- {
-				nodeID := region.ActivePath[i]
-				if node, ok := m.nodes[nodeID]; ok {
-					m.executeActions(ctx, region, nodeID, node.OnExit)
-				}
+	for _, name := range m.regionOrder {
+		region, ok := m.regions[name]
+		if !ok || region.ActiveStateID == StateNone {
+			continue
+		}
+		for i := len(region.ActivePath) - 1; i >= 0; i-- {
+			nodeID := region.ActivePath[i]
+			if node, ok := m.nodes[nodeID]; ok {
+				m.executeActions(ctx, region, nodeID, node.OnExit)
 			}
 		}
 	}
 
 	// Clear regions and variables
 	m.regions = make(map[string]*RegionState)
+	m.regionOrder = m.regionOrder[:0]
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
 
@@ -488,8 +473,9 @@ func (m *Machine[T]) GetActiveRegionTelemetry() (stateName string, stateID State
 	var activeRegion *RegionState
 
 	// Find first unpaused foreground region
-	for name, region := range m.regions {
-		if region.Paused {
+	for _, name := range m.regionOrder {
+		region, ok := m.regions[name]
+		if !ok || region.Paused {
 			continue
 		}
 		if cfg := m.regionConfigs[name]; cfg != nil && cfg.Background {
@@ -572,12 +558,18 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	for i := len(region.ActivePath) - 1; i >= 0; i-- {
 		nodeID := region.ActivePath[i]
 		if node, ok := m.nodes[nodeID]; ok {
-			m.executeActions(ctx, region, region.ActiveStateID, node.OnExit)
+			m.executeActions(ctx, region, nodeID, node.OnExit)
 		}
 	}
 
 	delete(m.regions, regionName)
 	delete(m.delayedActions, regionName)
+	for i, n := range m.regionOrder {
+		if n == regionName {
+			m.regionOrder = append(m.regionOrder[:i], m.regionOrder[i+1:]...)
+			break
+		}
+	}
 	return nil
 }
 
@@ -609,6 +601,14 @@ func (m *Machine[T]) GetRegionState(regionName string) string {
 		}
 	}
 	return ""
+}
+
+// ActiveRegions returns the names of currently active regions in deterministic order
+// Allocates; intended for init and teardown paths, not per-tick use
+func (m *Machine[T]) ActiveRegions() []string {
+	names := make([]string, len(m.regionOrder))
+	copy(names, m.regionOrder)
+	return names
 }
 
 // RegionTimeInState returns time spent in current state for a region

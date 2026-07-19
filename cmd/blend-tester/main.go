@@ -6,9 +6,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // Mode represents the current app mode
@@ -68,7 +69,7 @@ type AppState struct {
 	shieldState       ShieldColorState
 	shieldBgIdx       int
 	shieldCustomColor color.RGB // Custom shield color
-	shieldColorMode   int          // 0=preset, 1=custom
+	shieldColorMode   int       // 0=preset, 1=custom
 
 	// Effect mode - Trail
 	trailLength   int
@@ -341,3 +342,4 @@ func drawFooter() {
 	// Global keys
 	drawText(1, state.height-1, "Q:Quit Tab/Shift-Tab:Mode", color.RGB{100, 100, 100}, color.RGB{0, 0, 0})
 }
+

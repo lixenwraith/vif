@@ -234,7 +234,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// 2. Setup Physics Constants
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}

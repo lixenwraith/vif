@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 func handleEffectInput(ev terminal.Event) {
@@ -493,3 +494,4 @@ func getHeatColor(progress float64) color.RGB {
 	idx := int(progress * 255)
 	return render.HeatGradientLUT[idx]
 }
+

@@ -107,7 +107,7 @@ func (s *EyeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap
 	}
@@ -486,7 +486,7 @@ func (s *EyeSystem) syncMemberPositions(headerEntity core.Entity, headerX, heade
 
 func (s *EyeSystem) updateAnimationFrame(eyeComp *component.EyeComponent) {
 	params := &parameter.EyeTypeTable[eyeComp.Type]
-	eyeComp.FrameRemaining -= s.world.Resources.Time.DeltaTime()
+	eyeComp.FrameRemaining -= s.world.Resources.Time.DeltaTime
 	if eyeComp.FrameRemaining <= 0 {
 		eyeComp.FrameRemaining = params.FrameDuration
 		eyeComp.FrameIndex = (eyeComp.FrameIndex + 1) % params.FrameCount

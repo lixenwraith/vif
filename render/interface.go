@@ -9,3 +9,10 @@ type SystemRenderer interface {
 type VisibilityToggle interface {
 	IsVisible() bool
 }
+
+// Registration pairs a constructed renderer with its layer priority
+type Registration struct {
+	Renderer SystemRenderer
+	Priority RenderPriority
+}
+

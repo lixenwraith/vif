@@ -72,7 +72,7 @@ func (s *MarkerSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
 	markerEntities := s.world.Components.Marker.GetAllEntities()

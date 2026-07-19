@@ -1,30 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
-	"reflect"
-	"sort"
-	"strings"
-	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/asset"
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/engine"
-	"github.com/lixenwraith/vi-fighter/engine/fsm"
-	"github.com/lixenwraith/vi-fighter/event"
-	"github.com/lixenwraith/vi-fighter/input"
-	"github.com/lixenwraith/vi-fighter/manifest"
-	"github.com/lixenwraith/vi-fighter/mode"
-	"github.com/lixenwraith/vi-fighter/parameter"
-	"github.com/lixenwraith/vi-fighter/registry"
-	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/vi-fighter/service"
-	"github.com/lixenwraith/vi-fighter/system"
+	"github.com/lixenwraith/vi-fighter/app"
 )
 
 // CLI flags
@@ -42,497 +24,47 @@ var (
 )
 
 func main() {
-	// 0. Config
-
-	// Parse CLI flags
 	flag.Parse()
-
-	// Tool modes exit before terminal/service init
-	if *flagCheck {
-		os.Exit(runConfigCheck())
-	}
-	if *flagSchema {
-		os.Exit(runSchemaExport())
-	}
-
-	// Resolve service args from flags
-	serviceArgs := buildServiceArgs()
-
-	// 1. Service Hub
-	hub := service.NewHub()
-
-	defer func() {
-		if r := recover(); r != nil {
-			core.HandleCrash(r) // Crash
-		}
-		// Normal exit
-		hub.StopAll()
-	}()
-
-	// 2. Registry Setup
-	manifest.RegisterServices()
-	manifest.RegisterSystems()
-	manifest.RegisterRenderers()
-
-	// 3. Service Registration
-	for _, name := range manifest.ActiveServices() {
-		factory, ok := registry.GetService(name)
-		if !ok {
-			panic(fmt.Sprintf("service not registered: %s", name))
-		}
-		svc := factory().(service.Service)
-		args := serviceArgs[name]
-		if err := hub.RegisterWithArgs(svc, args...); err != nil {
-			panic(fmt.Sprintf("service registration failed: %s: %v", name, err))
-		}
-	}
-
-	// 4. World Creation, Resources & Components Initialization
-	world := engine.NewWorld()
-
-	// TODO: check moving it up since no world dependency
-
-	// 5.: Service Initialization
-	if err := hub.InitAll(); err != nil {
-		panic(fmt.Sprintf("service init failed: %v", err))
-	}
-
-	// 6. Service Resources Bridge - Services contribute to ECS
-	hub.PublishResources(world.Resources.ServiceBridge)
-
-	// 7. Terminal extraction (orchestrator needs direct interface)
-	termSvc := service.MustGet[*terminal.TerminalService](hub, "terminal")
-	term := termSvc.Terminal()
-	core.SetCrashTerminal(term)
-	term.SetMouseMode(terminal.MouseModeClick | terminal.MouseModeDrag)
-	width, height := term.Size()
-
-	// 8. GameContext Creation
-
-	// World resources are initialized in GameContext
-	ctx := engine.NewGameContext(world, width, height)
-
-	// 9. Systems Instantiation
-
-	// Set active systems to ECS world
-	for _, name := range manifest.ActiveSystems() {
-		factory, ok := registry.GetSystem(name)
-		if !ok {
-			panic(fmt.Sprintf("system not registered: %s", name))
-		}
-		sys := factory(world).(engine.System)
-		world.AddSystem(sys)
-	}
-
-	// 10. Render Orchestrator
-
-	// Resolve color mode for RenderConfig
-	colorMode := term.ColorMode()
-	ctx.World.Resources.Config.ColorMode = colorMode
-
-	orchestrator := render.NewRenderOrchestrator(term, ctx.Width, ctx.Height)
-
-	for _, name := range manifest.ActiveRenderers() {
-		entry, ok := registry.GetRenderer(name)
-		if !ok {
-			panic(fmt.Sprintf("renderer not registered: %s", name))
-		}
-		renderer := entry.Factory(ctx).(render.SystemRenderer)
-		orchestrator.Register(renderer, entry.Priority)
-	}
-
-	// 11. Input & Clock Scheduler
-
-	// Create input handler
-	inputMachine := input.NewMachine()
-
-	keymapPath := resolveKeymapPath(*flagKeymapPath)
-	if keymapPath != "" {
-		if data, err := os.ReadFile(keymapPath); err == nil {
-			override, err := input.LoadKeyConfig(data)
-			if err != nil {
-				panic(fmt.Sprintf("keymap config: %v", err))
-			}
-			merged := input.MergeKeyTable(input.DefaultKeyTable(), override)
-			inputMachine.SetKeyTable(merged)
-		} else if *flagKeymapPath != "" {
-			panic(fmt.Sprintf("keymap load: %v", err))
-		}
-	}
-	// Default path missing is silent (use defaults)
-
-	router := mode.NewRouter(ctx, inputMachine)
-
-	// Create frame synchronization channel
-	frameReady := make(chan struct{}, 1)
-
-	// Create clock scheduler with frame synchronization
-	clockScheduler, gameUpdateDone, resetChan := engine.NewClockScheduler(
-		world,
-		ctx.PausableClock,
-		&ctx.IsPaused,
-		parameter.GameUpdateInterval,
-		frameReady,
-	)
-
-	// Wire reset channels to GameContext for MetaSystem access
-	ctx.ResetChan = resetChan
-
-	// 12. Engine (FSM) Setup
-
-	// Initialize Event Registry for payload reflection
-	event.InitRegistry()
-
-	// Load FSM Config: CLI path > external config > embedded fallback (unless forced)
-	if *flagGameDefault && *flagGameScript != "" {
-		panic("flags -g and -gd are mutually exclusive")
-	}
-	gamePath := ""
-	if !*flagGameDefault {
-		var err error
-		if gamePath, err = resolveGameConfigPath(*flagGameScript); err != nil {
-			panic(fmt.Sprintf("game config: %v", err))
-		}
-	}
-	if gamePath == "" {
-		// Embedded fallback from embed.FS
-		if err := clockScheduler.LoadFSMFromFS(asset.DefaultFSMConfig, asset.DefaultFSMEntry, manifest.RegisterFSMComponents); err != nil {
-			panic(fmt.Sprintf("failed to load FSM: %v", err))
-		}
-	} else {
-		if err := clockScheduler.LoadFSMFromPath(gamePath, manifest.RegisterFSMComponents); err != nil {
-			panic(fmt.Sprintf("failed to load FSM: %v", err))
-		}
-	}
-
-	// 13. Event Handlers
-
-	// Meta/Audio systems (not in World.Systems - event-only, no Update logic)
-	metaSystem := system.NewMetaSystem(ctx)
-	clockScheduler.RegisterEventHandler(metaSystem.(event.Handler))
-
-	audioSystem := system.NewAudioSystem(world)
-	clockScheduler.RegisterEventHandler(audioSystem.(event.Handler))
-
-	// Auto-register event handlers from World systems
-	for _, sys := range world.Systems() {
-		if handler, ok := sys.(event.Handler); ok {
-			clockScheduler.RegisterEventHandler(handler)
-		}
-	}
-
-	// 14. Start Services
-	if err := hub.StartAll(); err != nil {
-		panic(fmt.Sprintf("service start failed: %v", err))
-	}
-
-	// 15. Start Game
-
-	// Signal initial frame ready
-	frameReady <- struct{}{}
-
-	// Start game ticks
-	clockScheduler.Start()
-	defer clockScheduler.Stop()
-
-	// Set frame rate
-	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
-	defer frameTicker.Stop()
-
-	eventChan := termSvc.Events()
-	// Track last update state for rendering
-	var updatePending bool
-
-	// Track terminal mouse mode state
-	lastMouseMode := terminal.MouseModeClick | terminal.MouseModeDrag
-
-	// 16. Main Loop
-	for {
-		select {
-		case ev := <-eventChan:
-			// Input handling always works, Dumb pipe: Key Event → Machine → Intent → Router
-			intent := inputMachine.Process(ev)
-
-			if intent != nil {
-				if !router.Handle(intent) {
-					return // Exit game
-				}
-			}
-
-			// Dispatch input events immediately, bypassing game tick wait
-			clockScheduler.DispatchEventsImmediately()
-
-			// Update terminal mouse mode on state change
-			var wantMode terminal.MouseMode
-			if !ctx.MouseDisabled.Load() {
-				wantMode = terminal.MouseModeClick | terminal.MouseModeDrag
-				if ctx.MouseFreeMode.Load() {
-					wantMode |= terminal.MouseModeMotion
-				}
-			}
-			if wantMode != lastMouseMode {
-				term.SetMouseMode(wantMode)
-				lastMouseMode = wantMode
-			}
-
-			// Update orchestrator dimensions if screen resized
-			if ev.Type == terminal.EventResize {
-				ctx.Width = ev.Width
-				ctx.Height = ev.Height
-				ctx.HandleResize()
-				orchestrator.Resize(ctx.Width, ctx.Height)
-			}
-
-		case <-frameTicker.C:
-			// Increment frame number at the start of the frame cycle
-			ctx.IncrementFrameNumber()
-
-			// Process mouse hold repeat events
-			router.ProcessMouseTick()
-
-			// Process macro playback tick (may return multiple intents)
-			macroIntents := router.ProcessMacroTick()
-			for _, macroIntent := range macroIntents {
-				if !router.Handle(macroIntent) {
-					return
-				}
-			}
-			if len(macroIntents) > 0 {
-				clockScheduler.DispatchEventsImmediately()
-			}
-
-			// Snapshots for rendering (captured safely under lock)
-			var (
-				snapTimeRes engine.TimeResource
-				snapCursorX int
-				snapCursorY int
-			)
-
-			// Lock world to safely access/mutate shared TimeResource
-			// Copy the values to stack variables for minimal lock duration and ensuring RenderContext is built with consistent state
-			ctx.World.RunSafe(func() {
-				// During pause: skip game updates but still render
-				if ctx.IsPaused.Load() {
-					// Update time for paused rendering
-					ctx.World.Resources.Time.SetRealTime(ctx.PausableClock.RealTime())
-				}
-
-				// Snapshot TimeResource state by value for thread-safe reading
-				snapTimeRes = *ctx.World.Resources.Time
-
-				// Capture cursor position
-				if pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Player.Entity); ok {
-					snapCursorX = pos.X
-					snapCursorY = pos.Y
-				}
-			})
-
-			// Build RenderContext using the thread-safe snapshots
-			// NewRenderContextFromGame expects a pointer, so we pass the address of our snapshot copy
-			renderCtx := render.NewRenderContextFromGame(ctx, &snapTimeRes, snapCursorX, snapCursorY)
-
-			if ctx.IsPaused.Load() {
-				// Show pause overlay and maintains visual feedback
-				orchestrator.RenderFrame(renderCtx, ctx.World)
-				continue
-			}
-
-			// Check if game update completed
-			select {
-			case <-gameUpdateDone:
-				// Update completed since last frame
-				updatePending = false
-			default:
-				// No update or still in progress
-				updatePending = true
-			}
-
-			// Render frame (all updates guaranteed complete), locks internally for component access
-			orchestrator.RenderFrame(renderCtx, ctx.World)
-
-			// Signal ready for next update (non-blocking)
-			if !updatePending && !ctx.IsPaused.Load() {
-				select {
-				case frameReady <- struct{}{}:
-				default:
-					// Channel full, skip signal
-				}
-			}
-		}
-	}
-}
-
-// buildServiceArgs maps service names to their initialization args from flags
-func buildServiceArgs() map[string][]any {
-	args := make(map[string][]any)
-
-	// Terminal: color mode
-	if *flagColor256 {
-		args["terminal"] = []any{terminal.ColorMode256}
-	} else if *flagColorTrue {
-		args["terminal"] = []any{terminal.ColorModeTrueColor}
-	}
-	// No flag = auto-detect (empty args)
-
-	// Audio: mute state (default muted)
-	if *flagAudioUnmute {
-		args["audio"] = []any{false} // unmuted
-	} else if *flagAudioMute {
-		args["audio"] = []any{true} // muted (explicit)
-	} else {
-		args["audio"] = []any{true} // muted (default)
-	}
-
-	// Content: file pattern
-	if *flagContentPath != "" {
-		args["content"] = []any{*flagContentPath}
-	}
-	// No flag = default discovery (empty args)
-
-	return args
-}
-
-// resolveGameConfigPath returns the entry config path; "" selects the embedded fallback
-func resolveGameConfigPath(cliArg string) (string, error) {
-	if cliArg != "" {
-		info, err := os.Stat(cliArg)
-		if err != nil {
-			return "", err
-		}
-		if info.IsDir() {
-			p := filepath.Join(cliArg, parameter.GameConfigFile)
-			if !fileExists(p) {
-				return "", fmt.Errorf("%s not found in %s", parameter.GameConfigFile, cliArg)
-			}
-			return p, nil
-		}
-		return cliArg, nil // explicit file: entry filename override
-	}
-
-	candidates := []string{
-		parameter.GameConfigFile, // ./game.toml
-		filepath.Join(parameter.LocalConfigDir, parameter.GameConfigFile), // ./config/game.toml
-	}
-	if base, err := os.UserConfigDir(); err == nil {
-		candidates = append(candidates, filepath.Join(base, parameter.AppConfigDirName, parameter.GameConfigFile))
-	}
-	for _, p := range candidates {
-		if fileExists(p) {
-			return p, nil
-		}
-	}
-	return "", nil
-}
-
-// resolveKeymapPath: explicit CLI > ./keymap.toml > user config dir; "" = embedded defaults
-func resolveKeymapPath(cliArg string) string {
-	if cliArg != "" {
-		return cliArg
-	}
-	if fileExists(parameter.KeymapConfigFile) {
-		return parameter.KeymapConfigFile
-	}
-	if base, err := os.UserConfigDir(); err == nil {
-		p := filepath.Join(base, parameter.AppConfigDirName, parameter.KeymapConfigFile)
-		if fileExists(p) {
-			return p
-		}
-	}
-	return ""
-}
-
-func fileExists(p string) bool {
-	info, err := os.Stat(p)
-	return err == nil && !info.IsDir()
-}
-
-// runConfigCheck validates the resolved FSM config without starting the game
-func runConfigCheck() int {
-	event.InitRegistry()
-	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m)
 
 	var err error
 	switch {
-	case *flagGameDefault:
-		err = fsm.LoadConfigFromFS(m, asset.DefaultFSMConfig, asset.DefaultFSMEntry)
+	case *flagSchema:
+		err = app.Schema(os.Stdout)
+	case *flagCheck:
+		err = app.Check(buildConfig(), os.Stdout)
 	default:
-		var gamePath string
-		if gamePath, err = resolveGameConfigPath(*flagGameScript); err == nil {
-			if gamePath == "" {
-				err = fsm.LoadConfigFromFS(m, asset.DefaultFSMConfig, asset.DefaultFSMEntry)
-			} else {
-				fmt.Println("checking:", gamePath)
-				err = fsm.LoadConfigFromPath(m, gamePath)
-			}
-		}
+		err = app.Run(buildConfig())
 	}
+
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return 1
+		os.Exit(1)
 	}
-	fmt.Println("config ok")
-	return 0
 }
 
-// runSchemaExport prints machine schema as JSON for the map editor (F7a)
-func runSchemaExport() int {
-	event.InitRegistry()
-	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m)
-
-	type field struct {
-		Name   string `json:"name"`    // toml tag (authoring name)
-		GoName string `json:"go_name"` // reflection fallback name
-		Type   string `json:"type"`
-	}
-	type eventSchema struct {
-		Name   string  `json:"name"`
-		Fields []field `json:"fields,omitempty"`
-	}
-	schema := struct {
-		SchemaVersion    int           `json:"schema_version"`
-		Events           []eventSchema `json:"events"`
-		Guards           []string      `json:"guards"`
-		Actions          []string      `json:"actions"`
-		Ops              []string      `json:"ops"`
-		ConfigIntFields  []string      `json:"config_int_fields"`
-		ConfigBoolFields []string      `json:"config_bool_fields"`
-	}{
-		SchemaVersion:    1,
-		Guards:           m.RegisteredGuards(),
-		Actions:          m.RegisteredActions(),
-		Ops:              []string{"eq", "neq", "gt", "gte", "lt", "lte"},
-		ConfigIntFields:  []string{"map_width", "map_height", "viewport_width", "viewport_height", "camera_x", "camera_y", "color_mode"},
-		ConfigBoolFields: []string{"crop_on_resize"},
+// buildConfig translates parsed flags into the runtime configuration
+func buildConfig() app.Config {
+	cfg := app.Config{
+		AudioMuted:   true, // default muted
+		ContentPath:  *flagContentPath,
+		GameScript:   *flagGameScript,
+		ForceDefault: *flagGameDefault,
+		KeymapPath:   *flagKeymapPath,
 	}
 
-	event.RangeEvents(func(name string, et event.EventType, payload any) {
-		es := eventSchema{Name: name}
-		if payload != nil {
-			t := reflect.TypeOf(payload)
-			if t.Kind() == reflect.Ptr {
-				t = t.Elem()
-			}
-			for i := 0; i < t.NumField(); i++ {
-				f := t.Field(i)
-				tag := f.Tag.Get("toml")
-				n := f.Name
-				if tag != "" && tag != "-" {
-					if idx := strings.Index(tag, ","); idx >= 0 {
-						tag = tag[:idx]
-					}
-					n = tag
-				}
-				es.Fields = append(es.Fields, field{Name: n, GoName: f.Name, Type: f.Type.String()})
-			}
-		}
-		schema.Events = append(schema.Events, es)
-	})
-	sort.Slice(schema.Events, func(i, j int) bool { return schema.Events[i].Name < schema.Events[j].Name })
+	if *flagAudioUnmute {
+		cfg.AudioMuted = false
+	} else if *flagAudioMute {
+		cfg.AudioMuted = true
+	}
 
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(schema)
-	return 0
+	switch {
+	case *flagColorTrue:
+		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorModeTrueColor, true
+	case *flagColor256:
+		cfg.ColorMode, cfg.ColorModeSet = terminal.ColorMode256, true
+	}
+	// Neither flag: terminal auto-detects
+
+	return cfg
 }

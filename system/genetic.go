@@ -228,7 +228,7 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		EvalID:    evalID,
 		Species:   speciesType,
 		SubType:   subType,
-		SpawnTime: s.world.Resources.Time.GameTime(),
+		SpawnTime: s.world.Resources.Time.GameTime,
 	})
 }
 
@@ -237,7 +237,7 @@ func (s *GeneticSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	s.mu.Lock()
 	defer s.mu.Unlock()

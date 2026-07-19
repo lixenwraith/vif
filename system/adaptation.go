@@ -133,7 +133,7 @@ func (s *AdaptationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventGatewayDespawned:
 		if payload, ok := ev.Payload.(*event.GatewayDespawnedPayload); ok {
-			s.world.Resources.Adaptation.MarkDraining(uint32(payload.GatewayEntity), s.world.Resources.Time.GameTime())
+			s.world.Resources.Adaptation.MarkDraining(uint32(payload.GatewayEntity), s.world.Resources.Time.GameTime)
 		}
 
 	case event.EventEnemyCreated:
@@ -483,7 +483,7 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 
 // pruneDrained deletes drained entries, their graphs, and buffered outcomes after timeout
 func (s *AdaptationSystem) pruneDrained(ar *engine.AdaptationResource) {
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 	for id, entry := range ar.Entries {
 		if entry.Draining && now.Sub(entry.DrainTime) >= parameter.RouteDrainTimeout {
 			delete(ar.Entries, id)

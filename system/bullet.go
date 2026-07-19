@@ -71,7 +71,7 @@ func (s *BulletSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
 	entities := s.world.Components.Bullet.GetAllEntities()

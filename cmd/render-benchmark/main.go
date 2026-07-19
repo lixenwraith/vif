@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -304,3 +304,4 @@ func main() {
 	fmt.Printf("Total Alloc:  %d bytes\n", m.TotalAlloc)
 	fmt.Printf("Mallocs:      %d\n", m.Mallocs)
 }
+

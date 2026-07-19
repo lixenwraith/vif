@@ -7,8 +7,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/render"
 )
 
 // ==========================================
@@ -105,7 +106,7 @@ func main() {
 
 		// Draw background chars
 		for _, bg := range bgChars {
-			buf.Set(bg.x, bg.y, bg.c, color.RGB{100, 100, 100}, color.RGBBlack, render.BlendReplace, 1.0, 0)
+			buf.Set(bg.x, bg.y, bg.c, color.RGB{100, 100, 100}, color.Black, render.BlendReplace, 1.0, 0)
 		}
 
 		elapsed := now.Sub(boltStart)
@@ -245,7 +246,7 @@ func drawLineBg(buf *render.RenderBuffer, x0, y0, x1, y1 int, color color.RGB, a
 	err := dx - dy
 
 	for {
-		buf.Set(x0, y0, 0, color.RGBBlack, color, BlendMode, alpha, terminal.AttrNone)
+		buf.Set(x0, y0, 0, color.Black, color, BlendMode, alpha, terminal.AttrNone)
 		if x0 == x1 && y0 == y1 {
 			break
 		}
@@ -322,7 +323,7 @@ func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int 
 		r := quadrantChars[bits]
 		if r != ' ' {
 			// Fg-only: screen blend foreground, bg completely untouched
-			buf.Set(cx, cy, r, color, color.RGBBlack, BlendScreenFgOnly, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, r, color, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
 		}
 	}
 }
@@ -347,7 +348,7 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 		cy := int(int32(key & 0xFFFFFFFF))
 		if bits != 0 {
 			// Set background glow - use Max to not darken existing bg
-			buf.Set(cx, cy, 0, color.RGBBlack, glowColor, render.BlendMax, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, 0, color.Black, glowColor, render.BlendMax, alpha, terminal.AttrNone)
 		}
 	}
 
@@ -357,7 +358,7 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 		cy := int(int32(key & 0xFFFFFFFF))
 		r := quadrantChars[bits]
 		if r != ' ' {
-			buf.Set(cx, cy, r, color, color.RGBBlack, BlendScreenFgOnly, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, r, color, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
 		}
 	}
 }
@@ -428,7 +429,7 @@ func traceSubPixelLine(hits map[uint64]uint8, sx0, sy0, sx1, sy1 int) {
 
 func drawText(buf *render.RenderBuffer, x, y int, text string) {
 	for i, r := range text {
-		buf.Set(x+i, y, r, color.RGB{200, 200, 200}, color.RGBBlack, render.BlendReplace, 1.0, 0)
+		buf.Set(x+i, y, r, color.RGB{200, 200, 200}, color.Black, render.BlendReplace, 1.0, 0)
 	}
 }
 
@@ -448,3 +449,4 @@ func sign(x int) int {
 	}
 	return 0
 }
+

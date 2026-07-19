@@ -120,7 +120,7 @@ func (s *QuasarSystem) Update() {
 	height := s.world.Resources.Config.MapHeight
 	currentRadius := vmath.FromInt(max(width/2, height))
 
-	dt := s.world.Resources.Time.DeltaTime()
+	dt := s.world.Resources.Time.DeltaTime
 
 	for _, headerEntity := range quasarEntities {
 		// Verify composite still exists
@@ -436,7 +436,7 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 // updateKineticMovement handles continuous kinetic quasar movement toward cursor
 func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
 	config := s.world.Resources.Config
-	now := s.world.Resources.Time.GameTime()
+	now := s.world.Resources.Time.GameTime
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
@@ -448,7 +448,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime().Seconds())
+	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta to prevent tunneling
 	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
 		dtFixed = dtCap

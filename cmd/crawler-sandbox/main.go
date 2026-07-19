@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
