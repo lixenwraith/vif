@@ -1,9 +1,12 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/status"
 )
 
 // AudioSystem consumes sound request events and plays audio
@@ -13,6 +16,13 @@ type AudioSystem struct {
 	player engine.AudioPlayer
 
 	enabled bool
+
+	// Cached registry pointers + telemetry
+	telemetry   engine.AudioTelemetry
+	statBackend *status.AtomicString
+	statSilent  *atomic.Bool
+	statPlayed  *atomic.Int64
+	statDropped *atomic.Int64
 }
 
 // NewAudioSystem creates an audio system with the given player
@@ -27,6 +37,16 @@ func NewAudioSystem(world *engine.World) engine.System {
 		world:  world,
 		player: player,
 	}
+
+	if world.Resources.Audio != nil {
+		s.telemetry = world.Resources.Audio.Telemetry
+	}
+	reg := world.Resources.Status
+	s.statBackend = reg.Strings.Get("audio.backend")
+	s.statSilent = reg.Bools.Get("audio.silent")
+	s.statPlayed = reg.Ints.Get("audio.played")
+	s.statDropped = reg.Ints.Get("audio.dropped")
+
 	s.Init()
 	return s
 }
@@ -84,9 +104,15 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update implements System interface (no tick-based logic)
+// Update implements System interface
 func (s *AudioSystem) Update() {
-	if !s.enabled {
+	if !s.enabled || s.telemetry == nil {
 		return
 	}
+	p, d := s.telemetry.Stats()
+	s.statPlayed.Store(int64(p))
+	s.statDropped.Store(int64(d))
+	s.statBackend.Store(s.telemetry.BackendName())
+	s.statSilent.Store(s.telemetry.IsSilent())
 }
+

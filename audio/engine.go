@@ -5,22 +5,33 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // AudioEngine manages audio via pipe to system tools
+// Control flows through one command channel into the mixer goroutine;
+// sequencer, tracks, and voices are mixer-confined and lock-free
 type AudioEngine struct {
 	config *AudioConfig
 	cache  *soundCache
 	mixer  *Mixer
 
-	backend *BackendConfig
-	cmd     *exec.Cmd
-	stdin   io.WriteCloser
-	ossFile *os.File // For direct OSS writes
+	// Backend lifecycle; beMu because failover runs concurrently with Stop
+	beMu       sync.Mutex
+	candidates []*BackendConfig // untried, priority order
+	backend    *BackendConfig
+	cmd        *exec.Cmd
+	stdin      io.WriteCloser
+	ossFile    *os.File
+	procExit   chan struct{} // closed on active backend exit; nil for OSS
+
+	stderrTail *tailBuffer
 
 	running     atomic.Bool
 	paused      atomic.Bool
@@ -28,8 +39,10 @@ type AudioEngine struct {
 	musicMuted  atomic.Bool
 	silentMode  atomic.Bool
 
-	mu sync.RWMutex // Protects config
-	wg sync.WaitGroup
+	stopChan chan struct{}
+	stopOnce sync.Once
+	mu       sync.RWMutex // config
+	wg       sync.WaitGroup
 }
 
 // NewAudioEngine creates an audio engine
@@ -38,121 +51,173 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 	if len(cfg) > 0 && cfg[0] != nil {
 		config = cfg[0]
 	}
-
 	ae := &AudioEngine{
-		config: config,
-		cache:  newSoundCache(),
+		config:     config,
+		cache:      newSoundCache(),
+		stderrTail: &tailBuffer{},
+		stopChan:   make(chan struct{}),
 	}
 	ae.effectMuted.Store(!config.Enabled)
 	ae.musicMuted.Store(!config.Enabled)
-
-	// Preload common sounds
-	ae.cache.preload()
-
+	// CHANGED: preload moved to Start (full preload, before mixer exists)
 	return ae, nil
 }
 
-// SetPaused toggles the paused state of the mixer (music + effects)
-func (ae *AudioEngine) SetPaused(paused bool) {
-	ae.paused.Store(paused)
-	if ae.mixer != nil {
-		ae.mixer.SetPaused(paused)
-	}
-}
-
-// Start launches the audio backend and mixer
+// Start probes backends in priority order and launches the mixer
+// Returns an error when no backend survives; the engine still enters silent
+// mode so the already-published AudioPlayer stays valid
 func (ae *AudioEngine) Start() error {
-	if ae.running.Load() {
+	if !ae.running.CompareAndSwap(false, true) {
 		return fmt.Errorf("audio engine already running")
 	}
 
-	backend, err := DetectBackend()
-	if err != nil {
-		ae.silentMode.Store(true)
-		ae.running.Store(true)
-		return nil // Silent mode, not an error
-	}
-
-	ae.backend = backend
-
-	var writer io.Writer
-	if backend.Type == BackendOSS {
-		// Direct file write for OSS
-		f, err := os.OpenFile(backend.Path, os.O_WRONLY, 0)
-		if err != nil {
-			ae.silentMode.Store(true)
-			ae.running.Store(true)
-			return nil
-		}
-		ae.ossFile = f
-		writer = f
-	} else {
-		// Exec-based backend
-		cmd := exec.Command(backend.Path, backend.Args...)
-		stdin, err := cmd.StdinPipe()
-		if err != nil {
-			ae.silentMode.Store(true)
-			ae.running.Store(true)
-			return nil
-		}
-
-		if err := cmd.Start(); err != nil {
-			stdin.Close()
-			ae.silentMode.Store(true)
-			ae.running.Store(true)
-			return nil
-		}
-
-		ae.cmd = cmd
-		ae.stdin = stdin
-		writer = stdin
-
-		// Monitor process
-		ae.wg.Add(1)
-		go ae.monitorProcess()
-	}
-
-	ae.mixer = NewMixer(writer, ae.config, ae.cache)
-	ae.mixer.Start()
-
-	// Initialize default patterns
+	// One-time DSP: all SFX buffers and the drum kit render before the mixer
+	// goroutine exists — read-only afterward, shared without locks
+	ae.cache.preloadAll()
+	kit := buildDrumKit(parameter.DrumVariants)
 	InitDefaultPatterns()
 
-	// Monitor mixer errors
-	ae.wg.Add(1)
-	go ae.monitorMixer()
+	if len(ae.config.PatternTOML) > 0 {
+		if pats, err := LoadPatternsTOML(ae.config.PatternTOML); err == nil {
+			for _, p := range pats {
+				RegisterPattern(p)
+			}
+		} // parse error dropped until logging lands
+	}
 
-	ae.running.Store(true)
+	cands, err := DetectBackends(ae.config.ForceBackend)
+	if err != nil {
+		ae.silentMode.Store(true)
+		return err
+	}
+
+	ae.beMu.Lock()
+	ae.candidates = cands
+	w, err := ae.nextBackendLocked()
+	ae.beMu.Unlock()
+	if err != nil {
+		ae.silentMode.Store(true)
+		return err
+	}
+
+	ae.mixer = NewMixer(w, ae.cache, kit)
+	ae.mixer.Start()
+
+	ae.wg.Add(1)
+	go ae.supervise()
 	return nil
 }
 
-// monitorProcess watches for subprocess exit
-func (ae *AudioEngine) monitorProcess() {
-	defer ae.wg.Done()
+// nextBackendLocked advances through remaining candidates until one survives
+// its probe; caller holds beMu
+func (ae *AudioEngine) nextBackendLocked() (io.Writer, error) {
+	var errs []string
+	for len(ae.candidates) > 0 {
+		c := ae.candidates[0]
+		ae.candidates = ae.candidates[1:]
+		w, err := ae.attach(c)
+		if err == nil {
+			ae.backend = c
+			return w, nil
+		}
+		errs = append(errs, c.Name+": "+err.Error())
+	}
+	return nil, fmt.Errorf("%w: %s", ErrNoAudioBackend, strings.Join(errs, "; "))
+}
 
-	if ae.cmd == nil {
-		return
+// attach spawns and probes a single backend
+// The probe pre-rolls one silent buffer and confirms process survival,
+// catching bad args, dead daemons, and broken pipes at selection time
+// Limitation: a process that accepts data but routes nowhere passes
+func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
+	if c.Type == BackendOSS {
+		f, err := os.OpenFile(c.Path, os.O_WRONLY, 0)
+		if err != nil {
+			return nil, err
+		}
+		ae.ossFile, ae.procExit = f, nil
+		return f, nil
 	}
 
-	err := ae.cmd.Wait()
-	if err != nil && ae.running.Load() && !ae.silentMode.Load() {
-		ae.silentMode.Store(true)
+	cmd := exec.Command(c.Path, c.Args...)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	cmd.Stderr = ae.stderrTail // ADDED: backend stderr no longer lost to raw-mode terminal
+	if err := cmd.Start(); err != nil {
+		stdin.Close()
+		return nil, err
+	}
+
+	exit := make(chan struct{})
+	ae.wg.Add(1)
+	go func() {
+		defer ae.wg.Done()
+		cmd.Wait()
+		close(exit)
+	}()
+
+	silence := make([]byte, parameter.AudioBufferSamples*parameter.AudioBytesPerFrame)
+	if _, err := stdin.Write(silence); err != nil {
+		cmd.Process.Kill()
+		<-exit
+		return nil, fmt.Errorf("probe write: %w", err)
+	}
+	select {
+	case <-exit:
+		return nil, fmt.Errorf("exited during probe: %s", ae.stderrTail.LastLine())
+	case <-time.After(parameter.AudioProbeWindow):
+	}
+
+	ae.cmd, ae.stdin, ae.procExit = cmd, stdin, exit
+	return stdin, nil
+}
+
+// supervise reacts to backend death or mixer write failure with failover
+func (ae *AudioEngine) supervise() {
+	defer ae.wg.Done()
+	for {
+		ae.beMu.Lock()
+		exit := ae.procExit
+		ae.beMu.Unlock()
+
+		select {
+		case <-ae.stopChan:
+			return
+		case <-exit: // nil for OSS: blocks; mixer errors still covered
+		case <-ae.mixer.Errors():
+		}
+		if !ae.running.Load() {
+			return
+		}
+		ae.failover()
 	}
 }
 
-// monitorMixer watches for pipe errors
-func (ae *AudioEngine) monitorMixer() {
-	defer ae.wg.Done()
+// failover kills the dead backend and attaches the next candidate
+// Exhausted candidates latch silent mode; mixer keeps state, skips writes
+func (ae *AudioEngine) failover() {
+	ae.beMu.Lock()
+	defer ae.beMu.Unlock()
 
-	if ae.mixer == nil {
+	if ae.cmd != nil && ae.cmd.Process != nil {
+		ae.cmd.Process.Kill()
+	}
+	if ae.stdin != nil {
+		ae.stdin.Close()
+	}
+	if ae.ossFile != nil {
+		ae.ossFile.Close()
+	}
+	ae.cmd, ae.stdin, ae.ossFile, ae.procExit, ae.backend = nil, nil, nil, nil, nil
+
+	w, err := ae.nextBackendLocked()
+	if err != nil {
+		ae.silentMode.Store(true)
 		return
 	}
-
-	select {
-	case <-ae.mixer.Errors():
-		ae.silentMode.Store(true)
-	case <-ae.mixer.stopChan:
-	}
+	ae.mixer.SwapOutput(w)
 }
 
 // Stop terminates the engine
@@ -160,111 +225,157 @@ func (ae *AudioEngine) Stop() {
 	if !ae.running.CompareAndSwap(true, false) {
 		return
 	}
+	ae.stopOnce.Do(func() { close(ae.stopChan) })
 
 	if ae.mixer != nil {
 		ae.mixer.Stop()
 	}
 
+	ae.beMu.Lock()
 	if ae.stdin != nil {
 		ae.stdin.Close()
 	}
-
 	if ae.ossFile != nil {
 		ae.ossFile.Close()
 	}
-
 	if ae.cmd != nil && ae.cmd.Process != nil {
 		ae.cmd.Process.Kill()
 	}
+	ae.beMu.Unlock()
 
 	ae.wg.Wait()
 }
 
-// Play queues a sound for playback
+// SetPaused toggles the paused state (music frozen + effects gated)
+func (ae *AudioEngine) SetPaused(paused bool) {
+	ae.paused.Store(paused)
+	if ae.mixer != nil {
+		ae.mixer.SetPaused(paused)
+	}
+}
+
+// Play queues a sound effect; volume computed here, dampening at the mixer
 func (ae *AudioEngine) Play(st core.SoundType) bool {
 	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
-
 	if ae.mixer == nil {
 		return false
 	}
-
 	ae.mu.RLock()
-	master := ae.config.MasterVolume
-	effects := ae.config.EffectVolumes
+	vol := ae.config.MasterVolume
+	if ev, ok := ae.config.EffectVolumes[st]; ok {
+		vol *= ev
+	}
 	ae.mu.RUnlock()
-
-	ae.mixer.Play(st, master, effects)
+	ae.mixer.Send(audioCmd{op: cmdPlay, sound: st, f1: vol})
 	return true
 }
 
-// ToggleEffectMute toggles mute state, returns true if now unmuted
+func (ae *AudioEngine) send(c audioCmd) {
+	if ae.mixer != nil {
+		ae.mixer.Send(c)
+	}
+}
+
 func (ae *AudioEngine) ToggleEffectMute() bool {
 	wasMuted := ae.effectMuted.Load()
 	ae.effectMuted.Store(!wasMuted)
 	return wasMuted
 }
 
-// IsEffectMuted returns current mute state
-func (ae *AudioEngine) IsEffectMuted() bool {
-	return ae.effectMuted.Load()
-}
+func (ae *AudioEngine) IsEffectMuted() bool { return ae.effectMuted.Load() }
 
-// IsEnabled returns true if running and unmuted
 func (ae *AudioEngine) IsEnabled() bool {
 	return ae.running.Load() && !ae.effectMuted.Load() && !ae.silentMode.Load()
-}
 
-// ToggleMusicMute toggles music mute state, returns true if music now enabled
-func (ae *AudioEngine) ToggleMusicMute() bool {
-	newMute := !ae.musicMuted.Load()
-	ae.musicMuted.Store(newMute)
-	if ae.mixer != nil {
-		ae.mixer.SetMusicMuted(newMute)
-	}
-	return !newMute
 }
+func (ae *AudioEngine) IsRunning() bool { return ae.running.Load() }
 
-// IsMusicMuted returns music mute state
-func (ae *AudioEngine) IsMusicMuted() bool {
-	return ae.musicMuted.Load()
-}
-
-// SetMusicMuted sets music mute state directly
 func (ae *AudioEngine) SetMusicMuted(muted bool) {
 	ae.musicMuted.Store(muted)
 	if ae.mixer != nil {
 		ae.mixer.SetMusicMuted(muted)
+		if muted {
+			ae.mixer.Send(audioCmd{op: cmdMusicStop})
+		}
 	}
 }
 
-// StartMusic starts music playback
+func (ae *AudioEngine) ToggleMusicMute() bool {
+	newMute := !ae.musicMuted.Load()
+	ae.SetMusicMuted(newMute)
+	return !newMute
+}
+
+func (ae *AudioEngine) IsMusicMuted() bool { return ae.musicMuted.Load() }
+
 func (ae *AudioEngine) StartMusic() {
-	if ae.mixer != nil && !ae.musicMuted.Load() {
-		ae.mixer.StartMusic()
+	if !ae.musicMuted.Load() {
+		ae.send(audioCmd{op: cmdMusicStart})
 	}
 }
 
-// StopMusic stops music playback
-func (ae *AudioEngine) StopMusic() {
+func (ae *AudioEngine) StopMusic() { ae.send(audioCmd{op: cmdMusicStop}) }
+
+func (ae *AudioEngine) ResetMusic() { ae.send(audioCmd{op: cmdMusicReset}) }
+
+func (ae *AudioEngine) SetMusicBPM(bpm int) { ae.send(audioCmd{op: cmdBPM, i1: bpm}) }
+
+func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing, f1: a}) }
+
+func (ae *AudioEngine) SetMusicVolume(vol float64) { ae.send(audioCmd{op: cmdMusicVol, f1: vol}) }
+
+// SetPattern targets a sequencer slot (0=rhythm, 1=melody, 2=free)
+func (ae *AudioEngine) SetPattern(slot int, p core.PatternID, crossfadeSamples int, quantize bool) {
+	ae.send(audioCmd{op: cmdPattern, pattern: p, i1: crossfadeSamples, i2: slot, b: quantize})
+}
+
+// SetTrackMask enables/disables tracks within a slot's pattern
+func (ae *AudioEngine) SetTrackMask(slot int, mask uint32) {
+	ae.send(audioCmd{op: cmdMask, i1: slot, i2: int(mask)})
+}
+
+// SetHarmony updates key, scale, and chord progression
+// root<=0 keeps root, scale out of range keeps scale, nil progression keeps
+func (ae *AudioEngine) SetHarmony(root int, scale core.ScaleID, progression []int) {
+	ae.send(audioCmd{op: cmdHarmony, i1: root, i2: int(scale), ints: progression})
+}
+
+func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType) {
+	ae.send(audioCmd{op: cmdNote, i1: note, f1: velocity, i2: durationSamples, instr: instr})
+}
+
+func (ae *AudioEngine) IsMusicPlaying() bool {
+	return ae.mixer != nil && ae.mixer.musicRunning.Load()
+}
+
+// SetVolume, SetConfig: unchanged
+// GetStats retained for compatibility, overflow always 0
+func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
+	p, d := ae.Stats()
+	return p, d, 0
+}
+
+// --- engine.AudioTelemetry ---
+
+func (ae *AudioEngine) Stats() (played, dropped uint64) {
 	if ae.mixer != nil {
-		ae.mixer.StopMusic()
+		return ae.mixer.GetStats()
 	}
+	return 0, 0
 }
 
-// Sequencer returns the mixer's sequencer for direct control
-func (ae *AudioEngine) Sequencer() *Sequencer {
-	if ae.mixer != nil {
-		return ae.mixer.Sequencer()
+func (ae *AudioEngine) BackendName() string {
+	ae.beMu.Lock()
+	defer ae.beMu.Unlock()
+	if ae.backend != nil {
+		return ae.backend.Name
 	}
-	return nil
+	return ""
 }
 
-// IsRunning returns true if engine is running (even in silent mode)
-func (ae *AudioEngine) IsRunning() bool {
-	return ae.running.Load()
-}
+func (ae *AudioEngine) IsSilent() bool { return ae.silentMode.Load() }
 
 // SetVolume updates master volume (0.0-1.0)
 func (ae *AudioEngine) SetVolume(vol float64) {
@@ -288,72 +399,4 @@ func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
 	ae.mu.Lock()
 	ae.config = cfg
 	ae.mu.Unlock()
-}
-
-// GetStats returns played, dropped, overflow counts
-func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
-	if ae.mixer != nil {
-		p, d := ae.mixer.GetStats()
-		return p, d, 0
-	}
-	return 0, 0, 0
-}
-
-// === Sequencer Control Methods ===
-
-// SetMusicBPM updates sequencer tempo
-func (ae *AudioEngine) SetMusicBPM(bpm int) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().SetBPM(bpm)
-	}
-}
-
-// SetMusicSwing sets shuffle amount
-func (ae *AudioEngine) SetMusicSwing(amount float64) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().SetSwing(amount)
-	}
-}
-
-// SetMusicVolume sets music volume
-func (ae *AudioEngine) SetMusicVolume(vol float64) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().SetVolume(vol)
-	}
-}
-
-// SetBeatPattern queues beat pattern change
-func (ae *AudioEngine) SetBeatPattern(pattern core.PatternID, crossfadeSamples int, quantize bool) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().SetBeatPattern(pattern, crossfadeSamples, quantize)
-	}
-}
-
-// SetMelodyPattern queues melody pattern change
-func (ae *AudioEngine) SetMelodyPattern(pattern core.PatternID, root int, crossfadeSamples int, quantize bool) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().SetMelodyPattern(pattern, root, crossfadeSamples, quantize)
-	}
-}
-
-// TriggerMelodyNote triggers immediate note
-func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType) {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().TriggerNote(note, velocity, durationSamples, instr)
-	}
-}
-
-// ResetMusic resets sequencer state
-func (ae *AudioEngine) ResetMusic() {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		ae.mixer.Sequencer().Reset()
-	}
-}
-
-// IsMusicPlaying returns sequencer running state
-func (ae *AudioEngine) IsMusicPlaying() bool {
-	if ae.mixer != nil && ae.mixer.Sequencer() != nil {
-		return ae.mixer.Sequencer().IsRunning()
-	}
-	return false
 }

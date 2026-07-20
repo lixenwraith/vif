@@ -419,16 +419,28 @@ type AudioPlayer interface {
 	SetMusicBPM(bpm int)
 	SetMusicSwing(amount float64)
 	SetMusicVolume(vol float64)
-	SetBeatPattern(pattern core.PatternID, crossfadeSamples int, quantize bool)
-	SetMelodyPattern(pattern core.PatternID, root int, crossfadeSamples int, quantize bool)
+
+	SetPattern(slot int, pattern core.PatternID, crossfadeSamples int, quantize bool)
+	SetTrackMask(slot int, mask uint32)
+	SetHarmony(root int, scale core.ScaleID, progression []int)
+
 	TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType)
 	ResetMusic()
 	IsMusicPlaying() bool
 }
 
+// AudioTelemetry exposes engine health for the status registry
+// Implemented by audio.AudioEngine; optional — nil-checked at wiring
+type AudioTelemetry interface {
+	Stats() (played, dropped uint64)
+	BackendName() string
+	IsSilent() bool
+}
+
 // AudioResource wraps the audio player interface
 type AudioResource struct {
-	Player AudioPlayer
+	Player    AudioPlayer
+	Telemetry AudioTelemetry
 }
 
 // NetworkProvider defines the interface for network access

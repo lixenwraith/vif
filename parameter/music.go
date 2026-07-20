@@ -4,8 +4,6 @@ import (
 	"time"
 )
 
-// TODO: to be moved to music system or audio package
-
 // APMToBPM maps player actions-per-minute to music tempo
 // APM 0-60: 100 BPM (calm baseline)
 // APM 60-120: 100-140 BPM (linear scale)
@@ -146,3 +144,18 @@ const (
 	MusicDuckAmount    = 0.6                    // Music volume when effects play
 	MusicDuckRelease   = 100 * time.Millisecond // Duck recovery time
 )
+
+// Music arrangement
+const (
+	MusicSlots      = 3  // rhythm, melody, free layer
+	DefaultRootNote = 40 // E2
+
+	// MusicAPM tier thresholds (5s burst, per-minute normalized)
+	TierNormalAPM   = 60
+	TierElevatedAPM = 140
+	TierIntenseAPM  = 220
+	TierPeakAPM     = 300
+)
+
+// MusicConfigFile is the optional pattern override file
+const MusicConfigFile = "music.toml"

@@ -475,16 +475,16 @@ func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
 	return nil
 }
 
-// ToggleAudioMute toggles the mute state of the audio engine
-// Returns the new mute state (true if muted, false if unmuted)
+// ToggleAudioMute toggles effect mute and mirrors the state into IsMuted
 func (ctx *GameContext) ToggleAudioMute() bool {
 	player := ctx.GetAudioPlayer()
 	if player == nil {
 		return ctx.IsMuted.Load()
 	}
-	newMuted := player.ToggleEffectMute()
-	ctx.IsMuted.Store(newMuted)
-	return newMuted
+	player.ToggleEffectMute()
+	muted := player.IsEffectMuted()
+	ctx.IsMuted.Store(muted)
+	return muted
 }
 
 // === Pause ===
@@ -510,4 +510,3 @@ func (ctx *GameContext) SetPaused(paused bool) {
 		}
 	}
 }
-

@@ -378,10 +378,19 @@ func (cs *ClockScheduler) executeReset() {
 	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world before unpause
 	cs.dispatchAndProcessEvents()
 
-	// 6. Transition to Running state
+	// 7. Transition to Running state
 	// Scheduler is the unpause authority during reset, preventing systems from ticking against an uninitialized FSM
 	cs.isPaused.Store(false)
 	cs.pausableClock.Resume()
+
+	// TODO: review
+	// resume must mirror GameContext.SetPaused(false); the bare
+	// store left AudioEngine.paused latched true after :new (permanent
+	// silence, toggles ineffective). Pause via SetPaused, resume via raw
+	// store was the asymmetry unique to the reset path.
+	if res := cs.world.Resources.Audio; res != nil && res.Player != nil && res.Player.IsRunning() {
+		res.Player.SetPaused(false)
+	}
 }
 
 // DispatchEventsImmediately processes all pending events synchronously

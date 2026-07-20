@@ -11,6 +11,8 @@ type AudioConfig struct {
 	MasterVolume  float64
 	EffectVolumes map[core.SoundType]float64
 	SampleRate    int
+	ForceBackend  string
+	PatternTOML   []byte // raw music.toml content; nil = built-ins only
 }
 
 // DefaultAudioConfig returns default configuration

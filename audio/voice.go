@@ -2,7 +2,6 @@ package audio
 
 import (
 	"math"
-	"math/rand"
 
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -27,20 +26,32 @@ type VoiceParams struct {
 
 // --- DrumVoice: One-shot percussion ---
 
-// DrumVoice generates single percussion hits
+// DrumVoice plays from a pre-rendered variant set; no allocation on trigger
 type DrumVoice struct {
-	instrument core.InstrumentType
-	buffer     floatBuffer // Pre-generated or generated on trigger
-	pos        int
-	velocity   float64
-	active     bool
+	variants []floatBuffer
+	buffer   floatBuffer
+	pos      int
+	velocity float64
+	nextVar  uint32 // rotation counter; retrigger picks a different variant
+	active   bool
 }
 
-// NewDrumVoice creates a drum voice for the given instrument
-func NewDrumVoice(instr core.InstrumentType) *DrumVoice {
-	return &DrumVoice{
-		instrument: instr,
+// NewDrumVoice creates a drum voice over a variant set
+func NewDrumVoice(variants []floatBuffer) *DrumVoice {
+	return &DrumVoice{variants: variants}
+}
+
+func (v *DrumVoice) Trigger(params VoiceParams) {
+	if len(v.variants) == 0 {
+		return
 	}
+	// rotate pre-rendered variants instead of synthesizing per hit
+	// on the audio path; rotation avoids the machine-gun effect
+	v.buffer = v.variants[v.nextVar%uint32(len(v.variants))]
+	v.nextVar++
+	v.velocity = params.Velocity
+	v.pos = 0
+	v.active = true
 }
 
 func (v *DrumVoice) Sample() float64 {
@@ -55,13 +66,6 @@ func (v *DrumVoice) Sample() float64 {
 
 func (v *DrumVoice) Active() bool {
 	return v.active
-}
-
-func (v *DrumVoice) Trigger(params VoiceParams) {
-	v.velocity = params.Velocity
-	v.buffer = generateDrumSound(v.instrument)
-	v.pos = 0
-	v.active = true
 }
 
 func (v *DrumVoice) Release() {
@@ -102,6 +106,8 @@ type TonalVoice struct {
 	decay    int     // Samples
 	sustain  float64 // Level 0-1
 	release  int     // Samples
+	durLeft  int     // samples until auto-release; 0 = hold until Release()
+	relFrom  float64 // envelope level at release start
 
 	// Instrument-specific state
 	filterState float64 // For filter sweep
@@ -146,6 +152,13 @@ func (v *TonalVoice) Sample() float64 {
 		v.active = false
 		return 0
 	}
+	// Scheduled note-off
+	if v.durLeft > 0 {
+		v.durLeft--
+		if v.durLeft == 0 {
+			v.Release()
+		}
+	}
 
 	return raw * env * v.velocity
 }
@@ -176,6 +189,7 @@ func (v *TonalVoice) processEnvelope() float64 {
 			if v.sustain > 0 {
 				v.envState = ADSRSustain
 			} else {
+				v.relFrom = v.envLevel
 				v.envState = ADSRRelease
 				v.envPos = 0
 			}
@@ -188,7 +202,7 @@ func (v *TonalVoice) processEnvelope() float64 {
 	case ADSRRelease:
 		if v.release > 0 {
 			t := float64(v.envPos) / float64(v.release)
-			v.envLevel = v.sustain * (1.0 - t)
+			v.envLevel = v.relFrom * (1.0 - t)
 		} else {
 			v.envLevel = 0
 		}
@@ -280,6 +294,8 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	v.envState = ADSRAttack
 	v.envPos = 0
 	v.envLevel = 0
+	v.durLeft = params.Duration
+	v.relFrom = 0
 	v.active = true
 	v.releasing = false
 }
@@ -287,6 +303,7 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 func (v *TonalVoice) Release() {
 	if v.active && !v.releasing {
 		v.releasing = true
+		v.relFrom = v.envLevel
 		v.envState = ADSRRelease
 		v.envPos = 0
 	}
@@ -297,6 +314,7 @@ func (v *TonalVoice) Reset() {
 	v.releasing = false
 	v.envState = ADSRIdle
 	v.envLevel = 0
+	v.durLeft = 0
 }
 
 func (v *TonalVoice) Note() int {
@@ -305,135 +323,4 @@ func (v *TonalVoice) Note() int {
 
 func (v *TonalVoice) EnvLevel() float64 {
 	return v.envLevel
-}
-
-// --- Drum Sound Generation ---
-
-func generateDrumSound(instr core.InstrumentType) floatBuffer {
-	switch instr {
-	case core.InstrKick:
-		return generateKick()
-	case core.InstrHihat:
-		return generateHihat()
-	case core.InstrSnare:
-		return generateSnare()
-	case core.InstrClap:
-		return generateClap()
-	default:
-		return nil
-	}
-}
-
-func generateKick() floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.KickDecay)
-	buf := make(floatBuffer, duration)
-
-	startFreq := 150.0
-	endFreq := 40.0
-
-	phase := 0.0
-	for i := 0; i < duration; i++ {
-		t := float64(i) / float64(duration)
-		// Exponential pitch drop
-		freq := endFreq + (startFreq-endFreq)*math.Exp(-8*t)
-		// Exponential amplitude decay
-		amp := math.Exp(-5 * t)
-
-		buf[i] = math.Sin(2*math.Pi*phase) * amp
-		phase += freq / float64(sr)
-	}
-
-	// Soft saturation for punch
-	for i := range buf {
-		buf[i] = math.Tanh(buf[i] * 2.0)
-	}
-
-	return buf
-}
-
-func generateHihat() floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.HihatDecay)
-	buf := make(floatBuffer, duration)
-
-	for i := 0; i < duration; i++ {
-		t := float64(i) / float64(duration)
-		// Filtered noise with sharp decay
-		noise := rand.Float64()*2 - 1
-		amp := math.Exp(-15 * t)
-		buf[i] = noise * amp
-	}
-
-	// High-pass filter
-	filterBiquadHP(buf, 7000, 0.707)
-	normalizePeak(buf, 0.9)
-
-	return buf
-}
-
-func generateSnare() floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.SnareDecay)
-	buf := make(floatBuffer, duration)
-
-	// Tone component (200Hz body)
-	tonePhase := 0.0
-	for i := 0; i < duration; i++ {
-		t := float64(i) / float64(duration)
-		toneAmp := math.Exp(-10 * t)
-		buf[i] = math.Sin(2*math.Pi*tonePhase) * toneAmp * 0.5
-		tonePhase += 200.0 / float64(sr)
-	}
-
-	// Noise component (snare wires)
-	for i := 0; i < duration; i++ {
-		t := float64(i) / float64(duration)
-		noise := rand.Float64()*2 - 1
-		noiseAmp := math.Exp(-8 * t)
-		buf[i] += noise * noiseAmp * 0.5
-	}
-
-	// Band-pass the noise
-	filterBiquadBP(buf, 2000, 1.5)
-	normalizePeak(buf, 0.9)
-
-	return buf
-}
-
-func generateClap() floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.ClapDecay)
-	buf := make(floatBuffer, duration)
-
-	// Multiple short noise bursts
-	burstLen := sr / 100 // 10ms bursts
-	burstGap := sr / 200 // 5ms gaps
-	numBursts := 4
-
-	pos := 0
-	for b := 0; b < numBursts && pos < duration; b++ {
-		burstAmp := 1.0 - float64(b)*0.15 // Decreasing amplitude
-		for i := 0; i < burstLen && pos < duration; i++ {
-			t := float64(i) / float64(burstLen)
-			noise := rand.Float64()*2 - 1
-			env := math.Exp(-5 * t)
-			buf[pos] = noise * env * burstAmp
-			pos++
-		}
-		pos += burstGap // Gap between bursts
-	}
-
-	// Tail
-	tailStart := pos
-	for i := tailStart; i < duration; i++ {
-		t := float64(i-tailStart) / float64(duration-tailStart)
-		noise := rand.Float64()*2 - 1
-		buf[i] = noise * math.Exp(-8*t) * 0.3
-	}
-
-	filterBiquadBP(buf, 1500, 2.0)
-	normalizePeak(buf, 0.9)
-
-	return buf
 }

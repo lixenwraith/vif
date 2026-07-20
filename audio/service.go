@@ -1,9 +1,11 @@
 package audio
 
 import (
+	"os"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/service"
 )
 
@@ -43,6 +45,17 @@ func (s *AudioService) Init(args ...any) error {
 	}
 	// Default: config.Enabled = false (effectMuted)
 
+	// -ab backend override
+	if len(args) > 1 {
+		if name, ok := args[1].(string); ok {
+			config.ForceBackend = name
+		}
+	}
+
+	if data, err := os.ReadFile(parameter.MusicConfigFile); err == nil {
+		config.PatternTOML = data
+	}
+
 	audioEngine, err := NewAudioEngine(config)
 	if err != nil {
 		s.disabled.Store(true)
@@ -52,18 +65,14 @@ func (s *AudioService) Init(args ...any) error {
 	return nil
 }
 
-// Start implements Service
-// Launches mixer goroutine; sets disabled on failure (no error returned)
+// Start launches the engine; backend absence is degradation, not failure
 func (s *AudioService) Start() error {
 	if s.disabled.Load() || s.audioEngine == nil {
 		return nil
 	}
-
-	if err := s.audioEngine.Start(); err != nil {
-		s.disabled.Store(true)
-		s.audioEngine = nil
-		return nil
-	}
+	// Error deliberately dropped until logging lands; engine stays
+	// alive in silent mode — published AudioPlayer remains valid
+	_ = s.audioEngine.Start()
 	return nil
 }
 
@@ -79,7 +88,7 @@ func (s *AudioService) Stop() error {
 // Publishes AudioResource if initialization succeeded
 func (s *AudioService) Contribute(publish service.ResourcePublisher) {
 	if player := s.Player(); player != nil {
-		publish(&engine.AudioResource{Player: player})
+		publish(&engine.AudioResource{Player: player, Telemetry: s.audioEngine})
 	}
 }
 

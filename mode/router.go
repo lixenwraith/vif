@@ -299,26 +299,12 @@ func (r *Router) handleEscape() bool {
 }
 
 func (r *Router) handleToggleEffectMute() bool {
-	if player := r.ctx.GetAudioPlayer(); player != nil {
-		_ = player.ToggleEffectMute()
-	}
+	r.ctx.ToggleAudioMute()
 	return true
 }
 
 func (r *Router) handleToggleMusicMute() bool {
-	player := r.ctx.GetAudioPlayer()
-	if player == nil {
-		return true
-	}
-
-	// TODO: Move this to music system, should not be handled here
-	musicEnabled := player.ToggleMusicMute()
-	if musicEnabled {
-		bpm := parameter.APMToBPM(r.ctx.State.GetAPM())
-		player.SetMusicBPM(bpm)
-		player.SetBeatPattern(core.PatternBeatBasic, 0, false)
-		player.StartMusic()
-	}
+	r.ctx.PushEvent(event.EventMusicPause, nil)
 	return true
 }
 

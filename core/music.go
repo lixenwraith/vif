@@ -14,6 +14,19 @@ const (
 	InstrumentCount
 )
 
+func (i InstrumentType) String() string {
+	names := [...]string{"kick", "hihat", "snare", "clap", "bass", "piano", "pad"}
+	if int(i) < len(names) {
+		return names[i]
+	}
+	return "unknown"
+}
+
+// IsDrum returns true for percussion instruments
+func (i InstrumentType) IsDrum() bool {
+	return i <= InstrClap
+}
+
 // PatternID identifies beat/melody patterns
 type PatternID int
 
@@ -34,30 +47,6 @@ const (
 	PatternCount   = PatternDynamic
 )
 
-// MusicIntensity drives adaptive music changes
-type MusicIntensity int
-
-const (
-	IntensityCalm MusicIntensity = iota
-	IntensityNormal
-	IntensityElevated
-	IntensityIntense
-	IntensityPeak
-)
-
-func (i InstrumentType) String() string {
-	names := [...]string{"kick", "hihat", "snare", "clap", "bass", "piano", "pad"}
-	if int(i) < len(names) {
-		return names[i]
-	}
-	return "unknown"
-}
-
-// IsDrum returns true for percussion instruments
-func (i InstrumentType) IsDrum() bool {
-	return i <= InstrClap
-}
-
 func (p PatternID) String() string {
 	names := map[PatternID]string{
 		PatternSilence:       "silence",
@@ -76,6 +65,17 @@ func (p PatternID) String() string {
 	return "dynamic"
 }
 
+// MusicIntensity drives adaptive music changes
+type MusicIntensity int
+
+const (
+	IntensityCalm MusicIntensity = iota
+	IntensityNormal
+	IntensityElevated
+	IntensityIntense
+	IntensityPeak
+)
+
 func (m MusicIntensity) String() string {
 	names := [...]string{"calm", "normal", "elevated", "intense", "peak"}
 	if int(m) < len(names) {
@@ -93,3 +93,17 @@ const (
 	StealSameNote
 	StealNone // Reject new note if all voices busy
 )
+
+// ScaleID selects a built-in scale
+type ScaleID int
+
+const (
+	ScaleMinor ScaleID = iota
+	ScaleHarmonicMinor
+	ScalePhrygian
+	ScaleDorian
+	ScaleMinorPent
+	ScaleMajor
+	ScaleCount
+)
+

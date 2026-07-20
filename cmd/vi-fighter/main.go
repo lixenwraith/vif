@@ -11,16 +11,17 @@ import (
 
 // CLI flags
 var (
-	flagColor256    = flag.Bool("cx", false, "Force 256-color mode")
-	flagColorTrue   = flag.Bool("ct", false, "Force truecolor mode")
-	flagAudioMute   = flag.Bool("am", false, "Start with audio muted")
-	flagAudioUnmute = flag.Bool("au", false, "Start with audio unmuted")
-	flagContentPath = flag.String("f", "", "Content file path or glob pattern")
-	flagGameScript  = flag.String("g", "", "Game config: game.toml path or map directory")
-	flagGameDefault = flag.Bool("gd", false, "Force embedded default FSM script")
-	flagKeymapPath  = flag.String("k", "", "Keymap config file path (TOML)")
-	flagCheck       = flag.Bool("check", false, "Validate FSM config and exit")
-	flagSchema      = flag.Bool("schema", false, "Print FSM schema JSON and exit")
+	flagColor256     = flag.Bool("cx", false, "Force 256-color mode")
+	flagColorTrue    = flag.Bool("ct", false, "Force truecolor mode")
+	flagAudioBackend = flag.String("ab", "", "Force audio backend by name")
+	flagAudioMute    = flag.Bool("am", false, "Start with audio muted")
+	flagAudioUnmute  = flag.Bool("au", false, "Start with audio unmuted")
+	flagContentPath  = flag.String("f", "", "Content file path or glob pattern")
+	flagGameScript   = flag.String("g", "", "Game config: game.toml path or map directory")
+	flagGameDefault  = flag.Bool("gd", false, "Force embedded default FSM script")
+	flagKeymapPath   = flag.String("k", "", "Keymap config file path (TOML)")
+	flagCheck        = flag.Bool("check", false, "Validate FSM config and exit")
+	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 )
 
 func main() {
@@ -45,6 +46,7 @@ func main() {
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
 	cfg := app.Config{
+		AudioBackend: *flagAudioBackend,
 		AudioMuted:   true, // default muted
 		ContentPath:  *flagContentPath,
 		GameScript:   *flagGameScript,

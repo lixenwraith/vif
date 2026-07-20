@@ -14,6 +14,9 @@ type Config struct {
 	ColorMode    terminal.ColorMode
 	ColorModeSet bool
 
+	// AudioBackend forces a named backend; "" = auto-detect priority chain
+	AudioBackend string
+
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
 
@@ -46,7 +49,7 @@ func serviceArgs(cfg Config) map[string][]any {
 	if cfg.ColorModeSet {
 		args["terminal"] = []any{cfg.ColorMode}
 	}
-	args["audio"] = []any{cfg.AudioMuted}
+	args["audio"] = []any{cfg.AudioMuted, cfg.AudioBackend}
 	if cfg.ContentPath != "" {
 		args["content"] = []any{cfg.ContentPath}
 	}

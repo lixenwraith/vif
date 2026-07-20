@@ -4,7 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
-	"sync"
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -19,250 +19,251 @@ type activeSound struct {
 	volume float64
 }
 
-// Mixer handles mixing and output
+// Mixer is the audio thread. Fields below the confinement marker are touched
+// only by the mix goroutine; all mutation arrives as audioCmd values
 type Mixer struct {
-	output io.Writer
-	cache  *soundCache
-	config *AudioConfig
+	cmds     chan audioCmd
+	stopChan chan struct{}
+	stopped  atomic.Bool
 
-	playQueue chan playRequest
-	stopChan  chan struct{}
-	stopped   atomic.Bool
-	paused    atomic.Bool
+	paused       atomic.Bool
+	musicMuted   atomic.Bool
+	musicRunning atomic.Bool // query mirror for IsMusicPlaying
 
-	// Accessed only by mix goroutine
-	active []activeSound
-
-	// Music
-	sequencer  *Sequencer
-	musicMuted atomic.Bool
-
-	// Stats
-	statsMu sync.Mutex
-	played  uint64
-	dropped uint64
-
-	// Error signaling
+	played  atomic.Uint64
+	dropped atomic.Uint64
 	errChan chan error
-}
 
-type playRequest struct {
-	sound  core.SoundType
-	volume float64
+	// --- mix-goroutine confined ---
+	output    io.Writer
+	outBroken bool
+	cache     *soundCache
+	sequencer *Sequencer
+	active    []activeSound
+
+	lastPlay [core.SoundTypeCount]time.Time
+	rapidVol [core.SoundTypeCount]float64
+
+	pauseGain float64
+	duckGain  float64
+	musicBuf  []float64
+	sfxBuf    []float64
 }
 
 // NewMixer creates a mixer writing to out
-func NewMixer(out io.Writer, cfg *AudioConfig, cache *soundCache) *Mixer {
-	return &Mixer{
+func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
+	m := &Mixer{
 		output:    out,
-		config:    cfg,
 		cache:     cache,
-		playQueue: make(chan playRequest, 32),
+		cmds:      make(chan audioCmd, 256),
 		stopChan:  make(chan struct{}),
-		active:    make([]activeSound, 0, 8),
 		errChan:   make(chan error, 1),
-		sequencer: NewSequencer(parameter.DefaultBPM),
+		sequencer: NewSequencer(parameter.DefaultBPM, kit),
+		active:    make([]activeSound, 0, 8),
+		pauseGain: 1.0,
+		duckGain:  1.0,
+	}
+	for i := range m.rapidVol {
+		m.rapidVol[i] = 1.0
+	}
+	return m
+}
+
+// Send enqueues a command from any goroutine; full queue drops
+func (m *Mixer) Send(c audioCmd) {
+	if m.stopped.Load() {
+		return
+	}
+	select {
+	case m.cmds <- c:
+	default:
+		if c.op == cmdPlay {
+			m.dropped.Add(1)
+		}
 	}
 }
 
-// SetPaused sets the pause state
-func (m *Mixer) SetPaused(paused bool) {
-	m.paused.Store(paused)
-}
+// SwapOutput redirects backend output; applied at the next tick
+func (m *Mixer) SwapOutput(w io.Writer) { m.Send(audioCmd{op: cmdSwapOutput, w: w}) }
 
-// Start begins the mixing loop
-func (m *Mixer) Start() {
-	go m.loop()
-}
+func (m *Mixer) SetPaused(p bool)        { m.paused.Store(p) }
+func (m *Mixer) SetMusicMuted(mute bool) { m.musicMuted.Store(mute) }
+func (m *Mixer) IsMusicMuted() bool      { return m.musicMuted.Load() }
+func (m *Mixer) Errors() <-chan error    { return m.errChan }
 
-// Stop signals the mixer to halt
+func (m *Mixer) Start() { go m.loop() }
+
 func (m *Mixer) Stop() {
 	if m.stopped.CompareAndSwap(false, true) {
 		close(m.stopChan)
 	}
 }
 
-// Play queues a sound with computed volume
-func (m *Mixer) Play(st core.SoundType, masterVol float64, effectVols map[core.SoundType]float64) {
-	if m.stopped.Load() {
-		return
-	}
-
-	vol := masterVol
-	if ev, ok := effectVols[st]; ok {
-		vol *= ev
-	}
-
-	// Get dampening factor for rapid-fire sounds
-	_, dampen := m.cache.getWithDampening(st)
-	vol *= dampen
-
-	select {
-	case m.playQueue <- playRequest{sound: st, volume: vol}:
-	default:
-		m.statsMu.Lock()
-		m.dropped++
-		m.statsMu.Unlock()
-	}
+func (m *Mixer) GetStats() (played, dropped uint64) {
+	return m.played.Load(), m.dropped.Load()
 }
 
-// Errors returns channel for pipe errors
-func (m *Mixer) Errors() <-chan error {
-	return m.errChan
+// onePoleCoef converts a smoothing time constant to a per-sample coefficient
+func onePoleCoef(tau time.Duration) float64 {
+	return 1.0 - math.Exp(-1.0/(tau.Seconds()*float64(parameter.AudioSampleRate)))
 }
 
-// SetMusicMuted sets music mute state
-func (m *Mixer) SetMusicMuted(muted bool) {
-	m.musicMuted.Store(muted)
-	if muted && m.sequencer != nil {
-		m.sequencer.Stop()
-	}
-}
-
-// IsMusicMuted returns music mute state
-func (m *Mixer) IsMusicMuted() bool {
-	return m.musicMuted.Load()
-}
-
-// Sequencer returns the sequencer for direct control
-func (m *Mixer) Sequencer() *Sequencer {
-	return m.sequencer
-}
-
-// StartMusic starts the sequencer
-func (m *Mixer) StartMusic() {
-	if m.sequencer != nil && !m.musicMuted.Load() {
-		m.sequencer.Start()
-	}
-}
-
-// StopMusic stops the sequencer
-func (m *Mixer) StopMusic() {
-	if m.sequencer != nil {
-		m.sequencer.Stop()
-	}
-}
-
-// loop is the main mixing goroutine
+// loop: drain commands, render, write — one pass per buffer tick
 func (m *Mixer) loop() {
 	ticker := time.NewTicker(parameter.AudioBufferDuration)
 	defer ticker.Stop()
 
-	samplesPerTick := parameter.AudioBufferSamples
-	mixBuf := make([]float64, samplesPerTick)
-	outBytes := make([]byte, samplesPerTick*parameter.AudioBytesPerFrame)
+	n := parameter.AudioBufferSamples
+	m.musicBuf = make([]float64, n)
+	m.sfxBuf = make([]float64, n)
+	mixBuf := make([]float64, n)
+	outBytes := make([]byte, n*parameter.AudioBytesPerFrame)
 
-	// Pause smoothing
-	pauseGain := 1.0
+	// CHANGED: pause fade is per-sample (was 5×0.2 staircase across ticks)
+	pauseStep := 1.0 / (parameter.AudioPauseFade.Seconds() * float64(parameter.AudioSampleRate))
+	duckAtk := onePoleCoef(parameter.MusicDuckAttack)
+	duckRel := onePoleCoef(parameter.MusicDuckRelease)
 
 	for {
 		select {
 		case <-m.stopChan:
 			return
-
-		case req := <-m.playQueue:
-			// If paused, drop new requests immediately to prevent queue buildup
-			if m.paused.Load() {
-				m.statsMu.Lock()
-				m.dropped++
-				m.statsMu.Unlock()
-				continue
-			}
-
-			buf := m.cache.get(req.sound)
-			if len(buf) > 0 {
-				m.active = append(m.active, activeSound{
-					buffer: buf,
-					pos:    0,
-					volume: req.volume,
-				})
-				m.statsMu.Lock()
-				m.played++
-				m.statsMu.Unlock()
-			}
-			// Drain additional queued requests
-			m.drainQueue(4)
-
 		case <-ticker.C:
-			// Clear mix buffer
-			for i := range mixBuf {
-				mixBuf[i] = 0
-			}
-
-			isPaused := m.paused.Load()
-
-			// Handle Pause Fading (prevents clicks)
-			if isPaused {
-				if pauseGain > 0 {
-					pauseGain -= 0.2 // 250ms fade out (at 50ms tick)
-					if pauseGain < 0 {
-						pauseGain = 0
-					}
-				}
-			} else {
-				if pauseGain < 1.0 {
-					pauseGain += 0.2 // 250ms fade in
-					if pauseGain > 1.0 {
-						pauseGain = 1.0
-					}
-				}
-			}
-
-			// Only process audio logic if we are audible or fading out
-			if pauseGain > 0.001 {
-				// Generate music (if not effectMuted and sequencer is running)
-				// If paused, Generate() is not called, freezing sequencer time, keeping the beat aligned for resume
-				if !isPaused && !m.musicMuted.Load() && m.sequencer != nil {
-					m.sequencer.Generate(mixBuf)
-				}
-
-				// Mix active sound effects
-				// Even if paused, letting tails play out or fade via pauseGain
-				if len(m.active) > 0 {
-					m.active = m.mixActive(mixBuf, samplesPerTick)
-				}
-
-				// Apply pause gain
-				if pauseGain < 1.0 {
-					for i := range mixBuf {
-						mixBuf[i] *= pauseGain
-					}
-				}
-			}
-
-			// Convert to int16 bytes with soft limiting
-			floatToBytes(mixBuf, outBytes)
-
-			// Write to output
-			if _, err := m.output.Write(outBytes); err != nil {
-				select {
-				case m.errChan <- fmt.Errorf("%w: %v", ErrPipeClosed, err):
-				default:
-				}
-				return
-			}
+			m.drainCmds()
+			m.renderTick(mixBuf, outBytes, n, pauseStep, duckAtk, duckRel)
 		}
 	}
 }
 
-// drainQueue processes up to n additional queued requests
-func (m *Mixer) drainQueue(n int) {
-	for i := 0; i < n; i++ {
+func (m *Mixer) drainCmds() {
+	for {
 		select {
-		case req := <-m.playQueue:
-			buf := m.cache.get(req.sound)
-			if len(buf) > 0 {
-				m.active = append(m.active, activeSound{
-					buffer: buf,
-					pos:    0,
-					volume: req.volume,
-				})
-				m.statsMu.Lock()
-				m.played++
-				m.statsMu.Unlock()
-			}
+		case c := <-m.cmds:
+			m.apply(c)
 		default:
 			return
+		}
+	}
+}
+
+func (m *Mixer) apply(c audioCmd) {
+	switch c.op {
+	case cmdPlay:
+		m.startSound(c.sound, c.f1)
+	case cmdBPM:
+		m.sequencer.SetBPM(c.i1)
+	case cmdSwing:
+		m.sequencer.SetSwing(c.f1)
+	case cmdMusicVol:
+		m.sequencer.SetVolume(c.f1)
+	case cmdPattern:
+		m.sequencer.SetPattern(c.i2, c.pattern, c.i1, c.b)
+	case cmdMask:
+		m.sequencer.SetMask(c.i1, uint32(c.i2))
+	case cmdHarmony:
+		m.sequencer.SetHarmonyCfg(c.i1, core.ScaleID(c.i2), c.ints)
+	case cmdNote:
+		m.sequencer.TriggerNote(c.i1, c.f1, c.i2, c.instr)
+	case cmdMusicStart:
+		m.sequencer.Start()
+		m.musicRunning.Store(true)
+	case cmdMusicStop:
+		m.sequencer.Stop()
+		m.musicRunning.Store(false)
+	case cmdMusicReset:
+		m.sequencer.Reset()
+		m.musicRunning.Store(false)
+	case cmdSwapOutput:
+		m.output = c.w
+		m.outBroken = false
+	}
+}
+
+// startSound applies rapid-fire dampening at consume time and activates a voice
+func (m *Mixer) startSound(st core.SoundType, vol float64) {
+	if m.paused.Load() {
+		m.dropped.Add(1)
+		return
+	}
+	buf := m.cache.get(st)
+	if len(buf) == 0 {
+		return
+	}
+	now := time.Now()
+	if now.Sub(m.lastPlay[st]) < parameter.RapidFireCooldown {
+		m.rapidVol[st] *= parameter.RapidFireDecay
+		if m.rapidVol[st] < parameter.RapidFireMinVolume {
+			m.rapidVol[st] = parameter.RapidFireMinVolume
+		}
+	} else {
+		m.rapidVol[st] = 1.0
+	}
+	m.lastPlay[st] = now
+
+	m.active = append(m.active, activeSound{buffer: buf, volume: vol * m.rapidVol[st]})
+	m.played.Add(1)
+}
+
+// renderTick renders one buffer: music bus, SFX bus, duck, pause, limit, write
+func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, duckAtk, duckRel float64) {
+	isPaused := m.paused.Load()
+
+	clear(m.musicBuf)
+	clear(m.sfxBuf)
+
+	// Music freezes under pause: sequencer position holds for aligned resume
+	if !isPaused && !m.musicMuted.Load() && m.sequencer.IsRunning() {
+		m.sequencer.Generate(m.musicBuf)
+	}
+
+	// SFX tails always render; pause gain fades them out
+	sfxLive := len(m.active) > 0
+	if sfxLive {
+		m.active = m.mixActive(m.sfxBuf, n)
+	}
+
+	// ADDED: sidechain duck — music dips under active effects (#11)
+	duckTarget := 1.0
+	if sfxLive {
+		duckTarget = parameter.MusicDuckAmount
+	}
+
+	for i := 0; i < n; i++ {
+		coef := duckRel
+		if duckTarget < m.duckGain {
+			coef = duckAtk
+		}
+		m.duckGain += (duckTarget - m.duckGain) * coef
+
+		if isPaused {
+			if m.pauseGain > 0 {
+				m.pauseGain -= pauseStep
+				if m.pauseGain < 0 {
+					m.pauseGain = 0
+				}
+			}
+		} else if m.pauseGain < 1 {
+			m.pauseGain += pauseStep
+			if m.pauseGain > 1 {
+				m.pauseGain = 1
+			}
+		}
+
+		mixBuf[i] = (m.musicBuf[i]*m.duckGain + m.sfxBuf[i]) * m.pauseGain
+	}
+
+	floatToBytes(mixBuf, outBytes)
+
+	if m.outBroken {
+		return // keep rendering state; supervisor swaps output or latches silent
+	}
+	if _, err := m.output.Write(outBytes); err != nil {
+		// CHANGED: mixer no longer exits on write error — flags broken output,
+		// continues; failover restores audio via cmdSwapOutput
+		m.outBroken = true
+		select {
+		case m.errChan <- fmt.Errorf("%w: %v", ErrPipeClosed, err):
+		default:
 		}
 	}
 }
@@ -308,11 +309,4 @@ func floatToBytes(in []float64, out []byte) {
 		binary.LittleEndian.PutUint16(out[idx:], uint16(i16))   // L
 		binary.LittleEndian.PutUint16(out[idx+2:], uint16(i16)) // R
 	}
-}
-
-// GetStats returns played and dropped counts
-func (m *Mixer) GetStats() (played, dropped uint64) {
-	m.statsMu.Lock()
-	defer m.statsMu.Unlock()
-	return m.played, m.dropped
 }

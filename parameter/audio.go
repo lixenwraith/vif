@@ -24,6 +24,18 @@ const (
 
 	// MinSoundGap between consecutive sounds
 	MinSoundGap = 50 * time.Millisecond
+
+	// AudioProbeWindow is the backend survival window after the probe write
+	AudioProbeWindow = 60 * time.Millisecond
+
+	// AudioPauseFade is the pause fade-in/out ramp length
+	AudioPauseFade = 250 * time.Millisecond
+
+	// DrumVariants is pre-rendered buffers per percussion instrument
+	DrumVariants = 6
+
+	// MusicDuckAttack is the duck engage smoothing constant
+	MusicDuckAttack = 10 * time.Millisecond
 )
 
 // TODO: standard format for sound effects
