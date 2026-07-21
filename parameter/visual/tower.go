@@ -2,7 +2,6 @@ package visual
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/component"
 )
 
@@ -41,9 +40,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.Coral,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.SkyTeal,
-		Palette256Healthy:  terminal.P256Cyan,
-		Palette256Damaged:  terminal.P256Gold,
-		Palette256Critical: terminal.P256Crimson,
+		Palette256Healthy:  color.P256Cyan,
+		Palette256Damaged:  color.P256Gold,
+		Palette256Critical: color.P256Crimson,
 		BasicHealthy:       6, // Cyan
 		BasicDamaged:       3, // Yellow
 		BasicCritical:      1, // Red
@@ -57,9 +56,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.BrightRed,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.Apricot,
-		Palette256Healthy:  terminal.P256Gold,
-		Palette256Damaged:  terminal.P256Amber,
-		Palette256Critical: terminal.P256Red,
+		Palette256Healthy:  color.P256Gold,
+		Palette256Damaged:  color.P256Amber,
+		Palette256Critical: color.P256Red,
 		BasicHealthy:       3, // Yellow
 		BasicDamaged:       3, // Yellow
 		BasicCritical:      1, // Red
@@ -73,9 +72,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.Vermilion,
 		CriticalDark:       color.DarkCrimson,
 		GlowColor:          color.SoftLavender,
-		Palette256Healthy:  terminal.P256MediumPurple,
-		Palette256Damaged:  terminal.P256Violet,
-		Palette256Critical: terminal.P256Crimson,
+		Palette256Healthy:  color.P256MediumPurple,
+		Palette256Damaged:  color.P256Violet,
+		Palette256Critical: color.P256Crimson,
 		BasicHealthy:       5, // Magenta
 		BasicDamaged:       5, // Magenta
 		BasicCritical:      1, // Red
@@ -89,9 +88,9 @@ var TowerTypes = [component.TowerTypeCount]TowerTypeColors{
 		CriticalBright:     color.BurntSienna,
 		CriticalDark:       color.Brick,
 		GlowColor:          color.MintGreen,
-		Palette256Healthy:  terminal.P256Green,
-		Palette256Damaged:  terminal.P256YellowGreen,
-		Palette256Critical: terminal.P256Crimson,
+		Palette256Healthy:  color.P256Green,
+		Palette256Damaged:  color.P256YellowGreen,
+		Palette256Critical: color.P256Crimson,
 		BasicHealthy:       2, // Green
 		BasicDamaged:       2, // Green
 		BasicCritical:      1, // Red

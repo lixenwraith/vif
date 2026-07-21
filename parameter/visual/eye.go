@@ -2,7 +2,6 @@ package visual
 
 import (
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
@@ -12,7 +11,7 @@ const (
 	EyeMaxFrames = 5
 
 	// Eye256FlashFg is xterm-256 bright yellow for hit flash
-	Eye256FlashFg = terminal.P256Yellow
+	Eye256FlashFg = color.P256Yellow
 )
 
 var (
@@ -70,7 +69,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.Gunmetal, color.CobaltBlue,
 		},
-		Fg256: terminal.P256SteelBlue, Bg256: terminal.P256DeepNavy,
+		Fg256: color.P256SteelBlue, Bg256: color.P256DeepNavy,
 		FrameCount: 5,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -117,7 +116,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.BlackRed, color.DarkAmber, color.Red,
 		},
-		Fg256: terminal.P256Orange, Bg256: terminal.P256DarkCrimson,
+		Fg256: color.P256Orange, Bg256: color.P256DarkCrimson,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -158,7 +157,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.CobaltBlue, color.SteelBlue,
 		},
-		Fg256: terminal.P256LightBlue, Bg256: terminal.P256DarkBlue,
+		Fg256: color.P256LightBlue, Bg256: color.P256DarkBlue,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -199,7 +198,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DeepNavy, color.CobaltBlue, {},
 		},
-		Fg256: terminal.P256Cyan, Bg256: terminal.P256DeepNavy,
+		Fg256: color.P256Cyan, Bg256: color.P256DeepNavy,
 		FrameCount: 3,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -234,7 +233,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.BlackRed, color.DarkCrimson, color.Red,
 		},
-		Fg256: terminal.P256Crimson, Bg256: terminal.P256Maroon,
+		Fg256: color.P256Crimson, Bg256: color.P256Maroon,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -275,7 +274,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.DarkAmber, color.Amber, color.Gold,
 		},
-		Fg256: terminal.P256Gold, Bg256: terminal.P256DarkAmber,
+		Fg256: color.P256Gold, Bg256: color.P256DarkAmber,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
@@ -316,7 +315,7 @@ var EyeTypeVisuals = [parameter.EyeTypeCount]EyeTypeVisual{
 		BgPalette: [3]color.RGB{
 			color.Obsidian, color.DeepPurple, {},
 		},
-		Fg256: terminal.P256MediumPurple, Bg256: terminal.P256DarkPurpleBlue,
+		Fg256: color.P256MediumPurple, Bg256: color.P256DarkPurpleBlue,
 		FrameCount: 4,
 		Frames: [EyeMaxFrames]EyeFrameArt{
 			{
