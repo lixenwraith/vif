@@ -14,7 +14,7 @@ const (
 	AudioBytesPerFrame = AudioChannels * (AudioBitDepth / 8) // 4
 
 	// AudioBufferDuration sets mixer tick rate and output latency
-	// 50ms aligns with the game tick
+	// TODO: make it adjustable?
 	AudioBufferDuration = 50 * time.Millisecond
 
 	// AudioBufferSamples is frames per mixer tick
@@ -77,7 +77,7 @@ const (
 
 	MaxPatternLen = 64 // max steps per pattern
 	MusicSlots    = 3  // rhythm, melody, free layer
-	MaxPolyphony  = 8  // simultaneous tonal voices per slot
+	MaxPolyphony  = 16 // simultaneous tonal voices per slot
 
 	DefaultSwing = 0.0 // straight
 	MaxSwing     = 0.5 // max shuffle
@@ -122,7 +122,7 @@ const (
 	PianoAttack  = 0.002
 	PianoDecay   = 0.3
 	PianoSustain = 0.0 // decay only, no sustain
-	PianoRelease = 0.5
+	PianoRelease = 0.25
 	// FM: harmonic modulator ratio, peak index scaled by the envelope
 	PianoModRatio = 2.0
 	PianoModIndex = 3.0

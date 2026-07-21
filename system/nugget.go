@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -305,7 +306,9 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 
 // collectNugget handles auto-collection when cursor overlaps nugget
 func (s *NuggetSystem) collectNugget() {
-	// s.world.Resources.Audio.Player.Play(audio.SoundBell)
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		SoundType: audio.SoundBell,
+	})
 
 	s.world.DestroyEntity(s.activeNuggetEntity)
 

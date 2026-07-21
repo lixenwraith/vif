@@ -11,6 +11,9 @@ import (
 	"time"
 )
 
+// maxPreStartCmds bounds the pre-Start buffer; the mixer queue is 256
+const maxPreStartCmds = 64
+
 // AudioEngine manages audio via pipe to system tools
 // Control flows through one command channel into the mixer goroutine;
 // sequencer, tracks, and voices are mixer-confined and lock-free
@@ -18,6 +21,11 @@ type AudioEngine struct {
 	config *AudioConfig
 	cache  *soundCache
 	mixer  *Mixer
+
+	// Commands issued before Start builds the mixer, replayed in order
+	// at mixer creation. Both ends run on the wiring goroutine, which
+	// happens-before the scheduler goroutine that sends afterward
+	preStart []audioCmd
 
 	// Backend lifecycle; beMu because failover runs concurrently with Stop
 	beMu       sync.Mutex
@@ -97,6 +105,12 @@ func (ae *AudioEngine) Start() error {
 	}
 
 	ae.mixer = NewMixer(w, ae.cache, kit)
+	ae.mixer.SetMusicMuted(ae.musicMuted.Load())
+	ae.mixer.SetPaused(ae.paused.Load())
+	for _, c := range ae.preStart {
+		ae.mixer.Send(c)
+	}
+	ae.preStart = nil
 	ae.mixer.Start()
 
 	ae.wg.Add(1)
@@ -268,24 +282,23 @@ func (ae *AudioEngine) Play(st SoundType) bool {
 	return true
 }
 
+// send routes a command to the mixer, buffering it until Start builds one
 func (ae *AudioEngine) send(c audioCmd) {
-	if ae.mixer != nil {
-		ae.mixer.Send(c)
+	if ae.mixer == nil {
+		if len(ae.preStart) < maxPreStartCmds {
+			ae.preStart = append(ae.preStart, c)
+		}
+		return
 	}
-}
-
-func (ae *AudioEngine) ToggleEffectMute() bool {
-	wasMuted := ae.effectMuted.Load()
-	ae.effectMuted.Store(!wasMuted)
-	return wasMuted
+	ae.mixer.Send(c)
 }
 
 func (ae *AudioEngine) IsEffectMuted() bool { return ae.effectMuted.Load() }
 
 func (ae *AudioEngine) IsEnabled() bool {
-	return ae.running.Load() && !ae.effectMuted.Load() && !ae.silentMode.Load()
-
+	return ae.running.Load() && !ae.silentMode.Load()
 }
+
 func (ae *AudioEngine) IsRunning() bool { return ae.running.Load() }
 
 func (ae *AudioEngine) SetEffectMuted(muted bool) { ae.effectMuted.Store(muted) }
@@ -294,16 +307,7 @@ func (ae *AudioEngine) SetMusicMuted(muted bool) {
 	ae.musicMuted.Store(muted)
 	if ae.mixer != nil {
 		ae.mixer.SetMusicMuted(muted)
-		if muted {
-			ae.mixer.Send(audioCmd{op: cmdMusicStop})
-		}
 	}
-}
-
-func (ae *AudioEngine) ToggleMusicMute() bool {
-	newMute := !ae.musicMuted.Load()
-	ae.SetMusicMuted(newMute)
-	return !newMute
 }
 
 func (ae *AudioEngine) IsMusicMuted() bool { return ae.musicMuted.Load() }
@@ -329,12 +333,12 @@ func (ae *AudioEngine) SetMusicVolume(vol float64) { ae.send(audioCmd{op: cmdMus
 
 // SetPattern targets a sequencer slot (0=rhythm, 1=melody, 2=free)
 func (ae *AudioEngine) SetPattern(slot int, p PatternID, crossfadeSamples int, quantize bool) {
-	ae.send(audioCmd{op: cmdPattern, pattern: p, i1: crossfadeSamples, i2: slot, b: quantize})
+	ae.send(audioCmd{op: cmdPattern, slot: int8(slot), pattern: p, i1: crossfadeSamples, b: quantize})
 }
 
 // SetTrackMask enables/disables tracks within a slot's pattern
 func (ae *AudioEngine) SetTrackMask(slot int, mask uint32) {
-	ae.send(audioCmd{op: cmdMask, i1: slot, i2: int(mask)})
+	ae.send(audioCmd{op: cmdMask, slot: int8(slot), i2: int(mask)})
 }
 
 // SetHarmony updates key, scale, and chord progression
@@ -349,12 +353,6 @@ func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSam
 
 func (ae *AudioEngine) IsMusicPlaying() bool {
 	return ae.mixer != nil && ae.mixer.musicRunning.Load()
-}
-
-// GetStats retained for compatibility, overflow always 0
-func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
-	p, d := ae.Stats()
-	return p, d, 0
 }
 
 // --- engine.AudioTelemetry ---
@@ -399,4 +397,15 @@ func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
 	ae.mu.Lock()
 	ae.config = cfg
 	ae.mu.Unlock()
+}
+
+// SetArrangement registers the pattern set for an intensity tier
+func (ae *AudioEngine) SetArrangement(t Intensity, a Arrangement) {
+	ae.send(audioCmd{op: cmdArrangement, tier: t, pattern: a.Rhythm, i2: int(a.Melody)})
+}
+
+// SetIntensity applies a registered tier to the rhythm and melody slots
+// reveal requests the sequencer's per-bar track build-up on arrival
+func (ae *AudioEngine) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
+	ae.send(audioCmd{op: cmdIntensity, tier: t, i1: crossfadeSamples, b: quantize, reveal: reveal})
 }

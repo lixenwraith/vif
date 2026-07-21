@@ -639,23 +639,6 @@ func generateMetalHitSound(v sfxVariance) floatBuffer {
 	return result
 }
 
-// generateSoundVariants renders n deviated takes of one SoundType
-// Parameter walk mirrors buildDrumKit; noise re-rolls per pass via genRng
-func generateSoundVariants(st SoundType, n int) []floatBuffer {
-	if n < 1 {
-		n = 1
-	}
-	out := make([]floatBuffer, 0, n)
-	for i := 0; i < n; i++ {
-		f := float64(i)/float64(n) - 0.5
-		v := sfxVariance{pitch: 1 + 0.10*f, decay: 1 + 0.24*f}
-		if b := generateSound(st, v); b != nil {
-			out = append(out, b)
-		}
-	}
-	return out
-}
-
 // sweepBiquadBP glides a band-pass center start→end Hz across the buffer
 // Coefficients recomputed per 64-sample block; filter state carries across
 // blocks, keeping the steps click-free. Render-time only

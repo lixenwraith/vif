@@ -38,7 +38,7 @@ func (s *ContentService) Dependencies() []string { return nil }
 func (s *ContentService) Init() error {
 	s.manager = content.NewContentManager()
 	if s.contentPath != "" {
-		s.manager.SetDataDir(s.contentPath) // Assume method exposed on ContentManager
+		s.manager.SetDataDir(s.contentPath)
 	}
 	_ = s.manager.DiscoverContentFiles()
 	_ = s.manager.PreValidateAllContent()

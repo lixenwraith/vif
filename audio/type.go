@@ -130,9 +130,9 @@ const (
 type VoiceStealStrategy int32
 
 const (
-	StealNone VoiceStealStrategy = iota // reject the new note
-	StealOldest
-	StealQuietest
+	StealNone     VoiceStealStrategy = iota // reject the new note
+	StealLowest                             // lowest envelope level (deepest into decay)
+	StealQuietest                           // lowest envelope × velocity
 	StealSameNote
 )
 

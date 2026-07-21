@@ -41,8 +41,9 @@ func newMelodyGen() *melodyGen {
 // regenerate produces the lead line for the given bar within the phrase
 // Chord-tone targeting on strong beats (0, 8) via FollowChord degree sets;
 // constrained interval-weighted walk fills between motif statements
-func (g *melodyGen) regenerate(phraseBar int, h *harmony, rng *rand.Rand) {
-	if g.pat == nil {
+// Chord offset applies at resolve time via the track's FollowChord flag
+func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
+	if g.pat == nil || len(g.pat.Tracks) < 2 {
 		return
 	}
 	if phraseBar == 0 {
@@ -54,7 +55,14 @@ func (g *melodyGen) regenerate(phraseBar int, h *harmony, rng *rand.Rand) {
 	if phraseBar == PhraseBars-1 {
 		k = 3 // thin out under the fill bar
 	}
-	mask := EuclidMask(k, 16, rng.IntN(4))
+
+	// TODO: test difference
+	// mask := EuclidMask(k, 16, rng.IntN(4))
+
+	// fixed rotation with anchored strong beats. A fresh rng.IntN(4)
+	// rotation every bar moved the onset grid under the chord-tone targeting
+	// at pos 0 and 8, which then rarely had an onset to land on
+	mask := EuclidMask(k, 16, 0) | 1<<0 | 1<<8
 
 	lead := g.leadBuf[:0]
 	mi := 0

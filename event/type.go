@@ -81,6 +81,10 @@ const (
 	EventMusicIntensityChange
 	// EventMusicTempoChange (MusicTempoPayload) adjusts BPM
 	EventMusicTempoChange
+	// EventMusicSeedRequest (MusicSeedPayload) re-keys the sequencer rng
+	EventMusicSeedRequest
+	// EventMusicSwingRequest (MusicSwingPayload) sets sequencer shuffle
+	EventMusicSwingRequest
 
 	// --- Network ---
 

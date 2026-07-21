@@ -9,6 +9,7 @@ type patternTransition struct {
 	pattern          PatternID
 	targetBar        int64
 	crossfadeSamples int
+	reveal           bool // per-bar track build-up on arrival
 }
 
 // slotState owns the A/B PatternPlayer pair for one layer
@@ -90,6 +91,10 @@ type Sequencer struct {
 	gen      *melodyGen
 	autoFill bool
 
+	// tier table, registered before playback, applied by SetIntensity
+	arrangements [IntensityCount]Arrangement
+	tier         Intensity
+
 	running bool
 }
 
@@ -141,7 +146,6 @@ func (s *Sequencer) applyPendingBPM() {
 }
 
 func (s *Sequencer) SetSwing(a float64) {
-	// literal 0.5 → MaxSwing
 	if a < 0 {
 		a = 0
 	} else if a > MaxSwing {
@@ -244,12 +248,10 @@ func (s *Sequencer) applyPendingTransitions() {
 		}
 		faded := s.startTransition(si, p.pattern, p.crossfadeSamples)
 		ss.pending = nil
-		// reveal only when a fade actually started
-		if faded && p.crossfadeSamples >= SamplesPerBar(s.bpm) {
-			if pat := GetPattern(p.pattern); pat != nil && len(pat.Tracks) > 1 {
-				ss.revealN = 1
-				ss.nxt.SetMask(1)
-			}
+		// Reveal is requested explicitly; inferring it from
+		// crossfade >= SamplesPerBar made build-ups tempo-dependent
+		if faded && p.reveal {
+			s.armReveal(ss, p.pattern)
 		}
 	}
 }
@@ -304,11 +306,17 @@ func (s *Sequencer) updateFill() {
 // Unquantized starts play bass-only until the next bar seeds the lead
 func (s *Sequencer) updateMelodyGen() {
 	if s.slots[1].activeID() == PatternMelodyGen {
-		s.gen.regenerate(int(s.barCount%PhraseBars), s.harmony, s.rng)
+		s.gen.regenerate(int(s.barCount%PhraseBars), s.rng)
 	}
 }
 
 func (s *Sequencer) SetPattern(slot int, p PatternID, crossfadeSamples int, quantize bool) {
+	s.setPattern(slot, p, crossfadeSamples, quantize, false)
+}
+
+// setPattern schedules or applies a slot transition; reveal requests the
+// per-bar track build-up on the incoming pattern
+func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal bool) {
 	if slot < 0 || slot >= MusicSlots {
 		return
 	}
@@ -316,10 +324,23 @@ func (s *Sequencer) SetPattern(slot int, p PatternID, crossfadeSamples int, quan
 	ss.revealN = 0
 	if !quantize {
 		ss.pending = nil
-		s.startTransition(slot, p, crossfadeSamples)
+		if s.startTransition(slot, p, fade) && reveal {
+			s.armReveal(ss, p)
+		}
 		return
 	}
-	ss.pending = &patternTransition{pattern: p, targetBar: s.barCount + 1, crossfadeSamples: crossfadeSamples}
+	ss.pending = &patternTransition{
+		pattern: p, targetBar: s.barCount + 1, crossfadeSamples: fade, reveal: reveal,
+	}
+}
+
+// armReveal masks the incoming pattern to its first track; updateReveal
+// admits one more per bar. A silent-source snap has nothing to build from
+func (s *Sequencer) armReveal(ss *slotState, id PatternID) {
+	if pat := GetPattern(id); pat != nil && len(pat.Tracks) > 1 {
+		ss.revealN = 1
+		ss.nxt.SetMask(1)
+	}
 }
 
 func (s *Sequencer) SetMask(slot int, mask uint32) {
@@ -357,6 +378,7 @@ func (s *Sequencer) Reset() {
 	s.currentStep, s.samplePos, s.barCount = 0, 0, 0
 	s.pendingBPM = 0
 	s.harmony.reset()
+	s.tier = IntensityCalm
 	for si := range s.slots {
 		ss := &s.slots[si]
 		ss.cur.Reset()
@@ -368,4 +390,22 @@ func (s *Sequencer) Reset() {
 		ss.revealN = 0
 		ss.inFill = false
 	}
+}
+
+// SetArrangement registers the pattern set for a tier
+func (s *Sequencer) SetArrangement(t Intensity, a Arrangement) {
+	if t >= 0 && t < IntensityCount {
+		s.arrangements[t] = a
+	}
+}
+
+// SetIntensity applies a registered tier to the rhythm and melody slots
+func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
+	if t < 0 || t >= IntensityCount {
+		return
+	}
+	s.tier = t
+	a := s.arrangements[t]
+	s.setPattern(0, a.Rhythm, crossfadeSamples, quantize, reveal)
+	s.setPattern(1, a.Melody, crossfadeSamples, quantize, reveal)
 }

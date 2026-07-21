@@ -53,10 +53,10 @@ type AudioMuteChangedPayload struct {
 
 // MusicStartPayload initializes music state
 type MusicStartPayload struct {
-	BPM           int                 `toml:"bpm"`
-	Intensity     core.MusicIntensity `toml:"intensity"`
-	BeatPattern   audio.PatternID     `toml:"beat_pattern"`
-	MelodyPattern audio.PatternID     `toml:"melody_pattern"`
+	BPM           int             `toml:"bpm"`
+	Intensity     audio.Intensity `toml:"intensity"`
+	BeatPattern   audio.PatternID `toml:"beat_pattern"`
+	MelodyPattern audio.PatternID `toml:"melody_pattern"`
 }
 
 // BeatPatternRequestPayload requests beat pattern transition
@@ -84,14 +84,26 @@ type MelodyPatternRequestPayload struct {
 
 // MusicIntensityPayload adjusts overall music intensity
 type MusicIntensityPayload struct {
-	Intensity      core.MusicIntensity `toml:"intensity"`
-	TransitionTime time.Duration       `toml:"transition_time"`
+	Intensity      audio.Intensity `toml:"intensity"`
+	TransitionTime time.Duration   `toml:"transition_time"`
 }
 
 // MusicTempoPayload adjusts BPM
 type MusicTempoPayload struct {
 	BPM            int           `toml:"bpm"`
 	TransitionTime time.Duration `toml:"transition_time"` // Ramp duration
+}
+
+// MusicSeedPayload re-keys the musical rng: generative melody, step
+// probabilities, fill selection. Seed 0 draws from wall clock.
+// Emit before EventMusicStart for a reproducible run
+type MusicSeedPayload struct {
+	Seed int64 `toml:"seed"`
+}
+
+// MusicSwingPayload sets shuffle; 0 = straight, audio.MaxSwing = maximum
+type MusicSwingPayload struct {
+	Amount float64 `toml:"amount"`
 }
 
 // --- Network ---

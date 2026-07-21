@@ -31,7 +31,7 @@ const (
 	OctaveMid     = 4 // C4 = 60, ~262Hz
 	OctaveHigh    = 5 // C5 = 72, ~523Hz
 	OctaveBright  = 6 // C6 = 84, ~1047Hz
-	OctaveSparkle = 7 // C7 = 96, ~2093Hz — FIXED: was OctaveSparkel
+	OctaveSparkle = 7 // C7 = 96, ~2093Hz
 )
 
 // NoteFrequencies maps MIDI note numbers to Hz, equal temperament

@@ -34,7 +34,8 @@ func (h *harmony) set(root int, scale ScaleID, prog []int) {
 		h.scale = scaleTable[scale]
 	}
 	if len(prog) > 0 {
-		h.prog = prog
+		// Own the slice — caller retains its copy across the command channel
+		h.prog = append(h.prog[:0:0], prog...)
 	}
 	h.chordIdx = 0
 }

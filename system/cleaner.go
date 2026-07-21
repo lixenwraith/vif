@@ -313,9 +313,9 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	}
 	s.statSpawned.Add(int64(spawnCount))
 
-	// s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-	// 	SoundType: audio.SoundWhoosh,
-	// })
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		SoundType: audio.SoundWhoosh,
+	})
 
 	// Determine color type from energy polarity
 	colorType := component.CleanerColorPositive

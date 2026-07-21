@@ -23,7 +23,7 @@ func buildDrumKit(n int) *drumKit {
 		k.variants[InstrKick] = append(k.variants[InstrKick], generateKickVar(det, dec))
 		k.variants[InstrHihat] = append(k.variants[InstrHihat], generateHihatVar(dec))
 		k.variants[InstrSnare] = append(k.variants[InstrSnare], generateSnareVar(det, dec))
-		k.variants[InstrClap] = append(k.variants[InstrClap], generateHihatVar(dec))
+		k.variants[InstrClap] = append(k.variants[InstrClap], generateClapVar(dec))
 	}
 	return k
 }

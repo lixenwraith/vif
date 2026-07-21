@@ -17,6 +17,8 @@ const (
 	TierPeakAPM     = 300
 )
 
+// TODO: move logic to music system, keep parameters only
+
 // APMToBPM maps burst APM to target tempo; the sequencer re-clamps to
 // [audio.MinBPM, audio.MaxBPM]. The calm floor must stay >= audio.MinBPM.
 //
@@ -42,6 +44,22 @@ func APMToBPM(apm uint64) int {
 	}
 }
 
+// TierForAPM maps burst APM to an arrangement tier
+func TierForAPM(apm uint64) audio.Intensity {
+	switch {
+	case apm < TierNormalAPM:
+		return audio.IntensityCalm
+	case apm < TierElevatedAPM:
+		return audio.IntensityNormal
+	case apm < TierIntenseAPM:
+		return audio.IntensityElevated
+	case apm < TierPeakAPM:
+		return audio.IntensityIntense
+	default:
+		return audio.IntensityPeak
+	}
+}
+
 // Tempo dynamics: the conductor slews toward the APM target, the sequencer
 // applies the result bar-quantized
 const (
@@ -55,7 +73,7 @@ const (
 // Default is deliberately below that — falling tiers swap without a build-up
 const (
 	PatternTransitionDefault = 250 * time.Millisecond
-	PatternTransitionSlow    = 2 * time.Second
+	PatternTransitionRise    = 400 * time.Millisecond
 )
 
 // DefaultRootNote is the harmony root the conductor requests (E2)

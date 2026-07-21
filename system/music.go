@@ -4,7 +4,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/audio"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -15,31 +14,26 @@ const (
 	slotMelody = 1
 )
 
-type arrangement struct {
-	beat   audio.PatternID
-	melody audio.PatternID
+var tierArrangements = [audio.IntensityCount]audio.Arrangement{
+	audio.IntensityCalm:     {Rhythm: audio.PatternBeatBasic, Melody: audio.PatternMelodyHold},
+	audio.IntensityNormal:   {Rhythm: audio.PatternBeatDriving, Melody: audio.PatternMelodyHold},
+	audio.IntensityElevated: {Rhythm: audio.PatternBeatDrivingPlus, Melody: audio.PatternMelodyArpUp},
+	audio.IntensityIntense:  {Rhythm: audio.PatternBeatIntense, Melody: audio.PatternMelodyArpUp},
+	audio.IntensityPeak:     {Rhythm: audio.PatternBeatIntense, Melody: audio.PatternMelodyGen},
 }
 
-var tierArrangements = [core.IntensityPeak + 1]arrangement{
-	core.IntensityCalm:     {audio.PatternBeatBasic, audio.PatternMelodyHold},
-	core.IntensityNormal:   {audio.PatternBeatDriving, audio.PatternMelodyHold},
-	core.IntensityElevated: {audio.PatternBeatDrivingPlus, audio.PatternMelodyArpUp},
-	core.IntensityIntense:  {audio.PatternBeatIntense, audio.PatternMelodyArpUp},
-	core.IntensityPeak:     {audio.PatternBeatIntense, audio.PatternMelodyGen},
-}
-
-func tierForAPM(apm uint64) core.MusicIntensity {
+func tierForAPM(apm uint64) audio.Intensity {
 	switch {
 	case apm < parameter.TierNormalAPM:
-		return core.IntensityCalm
+		return audio.IntensityCalm
 	case apm < parameter.TierElevatedAPM:
-		return core.IntensityNormal
+		return audio.IntensityNormal
 	case apm < parameter.TierIntenseAPM:
-		return core.IntensityElevated
+		return audio.IntensityElevated
 	case apm < parameter.TierPeakAPM:
-		return core.IntensityIntense
+		return audio.IntensityIntense
 	default:
-		return core.IntensityPeak
+		return audio.IntensityPeak
 	}
 }
 
@@ -50,7 +44,7 @@ type MusicSystem struct {
 
 	bpmF       float64 // slewed tempo state; drifts toward APM target
 	lastBPM    int
-	tier       core.MusicIntensity
+	tier       audio.Intensity
 	manualTier bool
 	arranged   bool // first auto-arrangement applied; slots start silent otherwise
 
@@ -71,11 +65,14 @@ func NewMusicSystem(world *engine.World) engine.System {
 func (s *MusicSystem) Init() {
 	s.bpmF = float64(parameter.APMToBPM(0))
 	s.lastBPM = 0
-	s.tier = core.IntensityCalm
+	s.tier = audio.IntensityCalm
 	s.manualTier = false
 	s.arranged = false
 	s.enabled = true
 	if s.player != nil {
+		for t, a := range tierArrangements {
+			s.player.SetArrangement(audio.Intensity(t), a)
+		}
 		s.player.ResetMusic()
 	}
 }
@@ -101,6 +98,8 @@ func (s *MusicSystem) EventTypes() []event.EventType {
 		event.EventMelodyPatternRequest,
 		event.EventMusicIntensityChange,
 		event.EventMusicTempoChange,
+		event.EventMusicSeedRequest,
+		event.EventMusicSwingRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameReset,
 	}
@@ -146,42 +145,37 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventMusicStart:
-		if payload, ok := ev.Payload.(*event.MusicStartPayload); ok {
-			if payload.BPM > 0 {
-				s.player.SetMusicBPM(payload.BPM)
-				s.lastBPM = payload.BPM
-				s.bpmF = float64(payload.BPM) // slew departs from manual tempo
+		if p, ok := ev.Payload.(*event.MusicStartPayload); ok && p != nil {
+			if p.BPM > 0 {
+				s.player.SetMusicBPM(p.BPM)
+				s.lastBPM = p.BPM
+				s.bpmF = float64(p.BPM) // slew departs from manual tempo
 			}
-			s.player.SetHarmony(parameter.DefaultRootNote, audio.ScalePhrygian, nil)
-			if payload.BeatPattern != audio.PatternSilence {
-				s.player.SetPattern(slotRhythm, payload.BeatPattern, 0, false)
+			// > 0 only: IntensityCalm is indistinguishable from the zero value
+			if p.Intensity > 0 && p.Intensity < audio.IntensityCount {
+				s.tier = p.Intensity
 				s.manualTier = true
 			}
-			if payload.MelodyPattern != audio.PatternSilence {
-				s.player.SetPattern(slotMelody, payload.MelodyPattern, 0, false)
+			s.startMusic()
+			// CHANGED: explicit slots applied after the tier, not before
+			if p.BeatPattern != audio.PatternSilence {
+				s.player.SetPattern(slotRhythm, p.BeatPattern, 0, false)
 				s.manualTier = true
 			}
-			s.player.StartMusic()
+			if p.MelodyPattern != audio.PatternSilence {
+				s.player.SetPattern(slotMelody, p.MelodyPattern, 0, false)
+				s.manualTier = true
+			}
+			return
 		}
+		s.startMusic()
 
 	case event.EventMusicStop:
 		s.player.StopMusic()
 
-	case event.EventAudioMuteChanged:
-		if p, ok := ev.Payload.(*event.AudioMuteChangedPayload); ok {
-			audible := p.Mask&parameter.AudioChanMusic != 0
-			if audible == !s.player.IsMusicMuted() {
-				return
-			}
-			s.player.SetMusicMuted(!audible)
-			if audible {
-				s.startMusic() // SetMusicMuted(true) issued cmdMusicStop
-			}
-		}
-
 	case event.EventBeatPatternRequest:
 		if payload, ok := ev.Payload.(*event.BeatPatternRequestPayload); ok {
-			s.player.SetPattern(slotRhythm, payload.Pattern, s.crossfade(payload.TransitionTime), payload.Quantize)
+			s.player.SetPattern(slotRhythm, payload.Pattern, s.fadeSamples(payload.TransitionTime, false), payload.Quantize)
 			s.manualTier = true
 		}
 
@@ -190,7 +184,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 			if payload.RootNote > 0 {
 				s.player.SetHarmony(payload.RootNote, -1, nil) // keep scale/progression
 			}
-			s.player.SetPattern(slotMelody, payload.Pattern, s.crossfade(payload.TransitionTime), payload.Quantize)
+			s.player.SetPattern(slotMelody, payload.Pattern, s.fadeSamples(payload.TransitionTime, false), payload.Quantize)
 			s.manualTier = true
 		}
 
@@ -208,13 +202,19 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventMusicIntensityChange:
-		if payload, ok := ev.Payload.(*event.MusicIntensityPayload); ok {
-			if payload.Intensity >= 0 && payload.Intensity <= core.IntensityPeak {
-				rising := payload.Intensity > s.tier // fall uses default fade, no reveal
-				s.tier = payload.Intensity
+		if p, ok := ev.Payload.(*event.MusicIntensityPayload); ok {
+			// negative tier releases the manual hold, resuming APM tracking
+			if p.Intensity < 0 {
+				s.manualTier = false
+				return
+			}
+			if p.Intensity < audio.IntensityCount {
+				rising := p.Intensity > s.tier
+				s.tier = p.Intensity
 				s.manualTier = true
 				if s.player.IsMusicPlaying() {
-					s.applyArrangement(true, rising)
+					// TODO: test reveal (last arg) toggle impact on music
+					s.applyArrangement(true, s.fadeSamples(p.TransitionTime, rising), true)
 				}
 			}
 		}
@@ -225,13 +225,26 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 			s.lastBPM = payload.BPM
 			s.bpmF = float64(payload.BPM)
 		}
+
+	case event.EventMusicSeedRequest:
+		if p, ok := ev.Payload.(*event.MusicSeedPayload); ok {
+			seed := p.Seed
+			if seed == 0 {
+				seed = s.world.Resources.Time.RealTimeNano()
+			}
+			s.player.SetMusicSeed(seed)
+		}
+
+	case event.EventMusicSwingRequest:
+		if p, ok := ev.Payload.(*event.MusicSwingPayload); ok {
+			s.player.SetMusicSwing(p.Amount) // sequencer clamps to [0, MaxSwing]
+		}
 	}
 }
 
-// applyMusicAudible mutes or unmutes the music bus. SetMusicMuted(true) issues
-// a sequencer stop, so unmuting must restart; startMusic resyncs tempo and
-// arrangement to current APM before StartMusic. Same polarity the old
-// EventMusicPause path relied on, driven by the mask instead of a toggle.
+// applyMusicAudible gates the music bus. The sequencer is frozen, not stopped,
+// so position and phrase survive the mute. Start only covers a session that
+// began muted and never ran.
 func (s *MusicSystem) applyMusicAudible(audible bool) {
 	if audible == !s.player.IsMusicMuted() {
 		return
@@ -244,36 +257,66 @@ func (s *MusicSystem) applyMusicAudible(audible bool) {
 
 // Update implements System interface
 func (s *MusicSystem) Update() {
-	if !s.enabled || s.player == nil || !s.player.IsMusicPlaying() {
+	// Skip the slew while muted — the sequencer is frozen, commands
+	if !s.enabled || s.player == nil || s.player.IsMusicMuted() || !s.player.IsMusicPlaying() {
 		return
 	}
 	s.syncToAPM()
 }
 
-// applyArrangement: rising tier shifts use the slow crossfade — spans ≥1 bar
-// at ≥120 BPM, which triggers the sequencer's per-bar track reveal (build-up)
-func (s *MusicSystem) applyArrangement(quantize, rising bool) {
-	arr := tierArrangements[s.tier]
-	ft := parameter.PatternTransitionDefault
-	if rising {
-		ft = parameter.PatternTransitionSlow
-	}
-	fade := int(ft.Seconds() * float64(audio.AudioSampleRate))
-	s.player.SetHarmony(parameter.DefaultRootNote, audio.ScalePhrygian, nil)
-	s.player.SetPattern(slotRhythm, arr.beat, fade, quantize)
-	s.player.SetPattern(slotMelody, arr.melody, fade, quantize)
+// applyArrangement applies the tier's registered pattern set
+// reveal requests the sequencer's per-bar track build-up
+func (s *MusicSystem) applyArrangement(quantize bool, fade int, reveal bool) {
+	s.player.SetIntensity(s.tier, fade, quantize, reveal)
 }
 
+// fadeSamples resolves a transition length: explicit request wins, else the
+// rise/fall preset. Falling tiers swap without a build-up by design
+func (s *MusicSystem) fadeSamples(t time.Duration, rising bool) int {
+	if t == 0 {
+		t = parameter.PatternTransitionDefault
+		if rising {
+			t = parameter.PatternTransitionRise
+		}
+	}
+	return int(t.Seconds() * float64(audio.AudioSampleRate))
+}
+
+// startMusic seeds harmony and tempo, applies the current tier immediately,
+// then runs the sequencer. The tier must not go through syncToAPM's
+// bar-quantized path: the sequencer is stopped, so a pending transition would
+// not resolve until bar 1 and the first bar would render silence
 func (s *MusicSystem) startMusic() {
-	s.syncToAPM()
+	s.player.SetHarmony(parameter.DefaultRootNote, audio.ScalePhrygian, nil)
+	apm := s.world.Resources.Game.State.GetMusicAPM()
+	s.syncTempo(apm)
+	if !s.manualTier {
+		s.tier = tierForAPM(apm)
+	}
+	s.arranged = true
+	s.applyArrangement(false, 0, false) // silent source: immediate, no build-up
 	s.player.StartMusic()
 }
 
 // syncToAPM slews tempo toward the APM target and applies auto-tier shifts
-// Single path for startMusic and Update — Update previously bypassed hysteresis
 func (s *MusicSystem) syncToAPM() {
 	apm := s.world.Resources.Game.State.GetMusicAPM()
+	s.syncTempo(apm)
+	if s.manualTier {
+		return
+	}
+	tier := tierForAPM(apm)
+	if tier == s.tier && s.arranged {
+		return
+	}
+	rising := s.arranged && tier > s.tier // first arrangement is not a build-up
+	s.tier = tier
+	s.arranged = true
+	s.applyArrangement(true, s.fadeSamples(0, rising), rising)
+}
 
+// syncTempo drifts the slewed tempo toward the APM target under hysteresis
+func (s *MusicSystem) syncTempo(apm uint64) {
 	target := float64(parameter.APMToBPM(apm))
 	dt := s.world.Resources.Time.DeltaTime.Seconds()
 	if target > s.bpmF {
@@ -286,22 +329,4 @@ func (s *MusicSystem) syncToAPM() {
 		s.player.SetMusicBPM(bpm) // bar-quantized at the sequencer
 		s.lastBPM = bpm
 	}
-
-	if !s.manualTier {
-		tier := tierForAPM(apm)
-		if tier != s.tier || !s.arranged {
-			rising := s.arranged && tier > s.tier // computed before overwrite; first arrangement is not a build-up
-			s.tier = tier
-			s.arranged = true
-			s.applyArrangement(true, rising)
-		}
-	}
-}
-
-// crossfade converts a transition duration to samples; 0 = default
-func (s *MusicSystem) crossfade(t time.Duration) int {
-	if t == 0 {
-		t = parameter.PatternTransitionDefault
-	}
-	return int(t.Seconds() * float64(audio.AudioSampleRate))
 }

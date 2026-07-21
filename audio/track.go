@@ -19,6 +19,7 @@ type pendingTrig struct {
 type PatternPlayer struct {
 	patternData *Pattern
 	mask        uint32
+	serial      uint64 // monotonic trigger counter for voice age
 
 	// 2-voice round-robin per drum — retrigger rings out on the sibling
 	drums  [InstrumentCount][2]*DrumVoice
@@ -33,7 +34,7 @@ type PatternPlayer struct {
 }
 
 func NewPatternPlayer(kit *drumKit) *PatternPlayer {
-	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealOldest}
+	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealLowest}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
 		p.drums[i][0] = NewDrumVoice(kit.variants[i])
 		p.drums[i][1] = NewDrumVoice(kit.variants[i])
@@ -131,6 +132,8 @@ func (p *PatternPlayer) TriggerNoteMIDI(midi int, vel float64, durSamples int, i
 		return
 	}
 	v.Trigger(VoiceParams{Note: midi, Velocity: vel, Duration: durSamples, Instrument: instr})
+	p.serial++
+	v.serial = p.serial // age stamp, survives Trigger
 }
 
 func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
@@ -140,27 +143,6 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 		}
 	}
 	switch p.stealStrategy {
-	case StealOldest:
-		var oldest *TonalVoice
-		lowest := 2.0
-		for _, v := range p.tonal {
-			if v.EnvLevel() < lowest {
-				lowest = v.EnvLevel()
-				oldest = v
-			}
-		}
-		return oldest
-	case StealQuietest:
-		var quietest *TonalVoice
-		lowest := 2.0
-		for _, v := range p.tonal {
-			vol := v.EnvLevel() * v.velocity
-			if vol < lowest {
-				lowest = vol
-				quietest = v
-			}
-		}
-		return quietest
 	case StealSameNote:
 		for _, v := range p.tonal {
 			if v.Note() == note {
@@ -168,6 +150,40 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 			}
 		}
 		return nil
+
+	case StealQuietest:
+		var victim *TonalVoice
+		lowest := 2.0
+		for _, v := range p.tonal {
+			w := v.EnvLevel() * v.velocity
+			if v.releasing {
+				w *= 0.25 // tails are the cheapest to lose
+			}
+			if w < lowest {
+				lowest, victim = w, v
+			}
+		}
+		return victim
+
+	case StealLowest:
+		// NOTE: oldest or lowest envelope level?
+		var victim *TonalVoice
+		oldest := ^uint64(0)
+		for _, v := range p.tonal {
+			if v.releasing && v.serial < oldest {
+				oldest, victim = v.serial, v
+			}
+		}
+		if victim != nil {
+			return victim
+		}
+		for _, v := range p.tonal {
+			if v.serial < oldest {
+				oldest, victim = v.serial, v
+			}
+		}
+		return victim
+
 	default:
 		return nil
 	}

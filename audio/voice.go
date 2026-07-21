@@ -94,6 +94,7 @@ type TonalVoice struct {
 	freq       float64
 	velocity   float64
 	phase      float64 // Oscillator phase 0-1
+	serial     uint64  // Trigger order; StealOldest ranks on this
 
 	// ADSR envelope
 	envState ADSRState
@@ -217,17 +218,16 @@ func (v *TonalVoice) generateBass() float64 {
 	// Saw wave with low-pass filter
 	saw := 2.0*v.phase - 1.0
 	// Simple one-pole filter
-	cutoff := 0.3 - 0.2*v.envLevel // Filter closes as note decays
+	cutoff := BassFilterBase - BassFilterTrack*v.envLevel // Filter closes as note decays
 	v.filterState += cutoff * (saw - v.filterState)
 	return v.filterState
 }
 
 func (v *TonalVoice) generatePiano() float64 {
 	// FM synthesis: carrier + modulator for bell-like tone
-	modRatio := 2.0              // Harmonic modulator
-	modIndex := 3.0 * v.envLevel // Index decreases with envelope
+	modIndex := PianoModIndex * v.envLevel // Index decreases with envelope
+	modFreq := v.freq * PianoModRatio      // Harmonic modulator
 
-	modFreq := v.freq * modRatio
 	v.modPhase += modFreq / float64(AudioSampleRate)
 	if v.modPhase >= 1.0 {
 		v.modPhase -= 1.0
@@ -239,9 +239,8 @@ func (v *TonalVoice) generatePiano() float64 {
 
 func (v *TonalVoice) generatePad() float64 {
 	// Detuned oscillators for thick sound
-	detune := 0.003 // 3 cents
-	phase2 := v.phase * (1.0 + detune)
-	phase3 := v.phase * (1.0 - detune)
+	phase2 := v.phase * (1.0 + PadDetune)
+	phase3 := v.phase * (1.0 - PadDetune)
 
 	osc1 := math.Sin(2 * math.Pi * v.phase)
 	osc2 := math.Sin(2 * math.Pi * phase2)

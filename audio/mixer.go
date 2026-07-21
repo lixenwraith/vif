@@ -156,9 +156,9 @@ func (m *Mixer) apply(c audioCmd) {
 	case cmdMusicVol:
 		m.sequencer.SetVolume(c.f1)
 	case cmdPattern:
-		m.sequencer.SetPattern(c.i2, c.pattern, c.i1, c.b)
+		m.sequencer.SetPattern(int(c.slot), c.pattern, c.i1, c.b)
 	case cmdMask:
-		m.sequencer.SetMask(c.i1, uint32(c.i2))
+		m.sequencer.SetMask(int(c.slot), uint32(c.i2))
 	case cmdHarmony:
 		m.sequencer.SetHarmonyCfg(c.i1, ScaleID(c.i2), c.ints)
 	case cmdNote:
@@ -177,6 +177,10 @@ func (m *Mixer) apply(c audioCmd) {
 		m.outBroken = false
 	case cmdSeed:
 		m.sequencer.Reseed(c.seed)
+	case cmdArrangement:
+		m.sequencer.SetArrangement(c.tier, Arrangement{Rhythm: c.pattern, Melody: PatternID(c.i2)})
+	case cmdIntensity:
+		m.sequencer.SetIntensity(c.tier, c.i1, c.b, c.reveal)
 	}
 }
 
@@ -188,6 +192,7 @@ func (m *Mixer) startSound(st SoundType, vol float64) {
 	}
 	vars := m.cache.variants(st)
 	if len(vars) == 0 {
+		m.dropped.Add(1)
 		return
 	}
 	buf := vars[m.sfxVar[st]%uint32(len(vars))]
@@ -262,7 +267,7 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		m.active = m.mixActive(m.sfxBuf, n)
 	}
 
-	// sidechain duck — music dips under active effects (#11)
+	// sidechain duck — music dips under active effects
 	duckTarget := 1.0
 	if sfxLive {
 		duckTarget = MusicDuckAmount
@@ -298,7 +303,7 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		return // keep rendering state; supervisor swaps output or latches silent
 	}
 	if _, err := m.output.Write(outBytes); err != nil {
-		// Mixer doesn't exits on write error — flags broken output,
+		// Mixer doesn't exit on write error — flags broken output,
 		// continues; failover restores audio via cmdSwapOutput
 		m.outBroken = true
 		select {

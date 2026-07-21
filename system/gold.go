@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -216,9 +217,9 @@ func (s *GoldSystem) handleJumpRequest() {
 	})
 
 	// // 4. Play Sound
-	// if s.world.Resources.Audio != nil {
-	// 	s.world.Resources.Audio.Player.Play(audio.SoundBell)
-	// }
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		SoundType: audio.SoundCoin,
+	})
 
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
 		X: targetPos.X,

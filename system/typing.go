@@ -4,6 +4,7 @@ import (
 	"math"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -216,9 +217,9 @@ func (s *TypingSystem) emitTypingError() {
 	s.world.PushEvent(event.EventBoostDeactivate, nil)
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 
-	// s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-	// 	SoundType: audio.SoundError,
-	// })
+	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		SoundType: audio.SoundError,
+	})
 
 	s.statErrors.Add(1)
 	s.currentStreak = 0
@@ -439,4 +440,3 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, entitiesToDelete)
 	}
 }
-

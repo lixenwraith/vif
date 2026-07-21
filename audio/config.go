@@ -17,8 +17,6 @@ type AudioConfig struct {
 }
 
 // DefaultAudioConfig returns a neutral configuration
-// CHANGED: uniform DefaultEffectVolume; the game's per-sound levels moved to
-// parameter.GameEffectVolumes, applied by service/audio.go
 func DefaultAudioConfig() *AudioConfig {
 	vols := make(map[SoundType]float64, SoundTypeCount)
 	for st := SoundType(0); st < SoundTypeCount; st++ {

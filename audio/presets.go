@@ -69,9 +69,10 @@ const (
 // --- Shaping ---
 
 // SFXParams is embedder-supplied per-sound shaping applied at render time.
-// Zero fields mean "unmodified". Length only reaches presets whose duration
-// derives from the decay multiplier; Error, Shield and MetalHit use fixed
-// durations and ignore it
+// Zero fields mean "unmodified". Pitch reaches every preset. Length scales
+// only presets whose duration derives from the decay multiplier — Bell,
+// Whoosh, Coin, Zap, Crackle, Explosion; Error, Shield and MetalHit have
+// fixed durations and ignore it
 type SFXParams struct {
 	Pitch  float64 // frequency multiplier; 0 = 1.0
 	Length float64 // duration/decay multiplier; 0 = 1.0
@@ -93,6 +94,7 @@ type sfxVariance struct {
 
 // RenderVariants renders n deviated takes of one SoundType under p
 // The walk is deterministic; noise re-rolls per pass via genRng
+// nil is skipped, so the variant set is empty (len 0, not nil)
 func RenderVariants(st SoundType, n int, p SFXParams) []floatBuffer {
 	if n < 1 {
 		n = 1
@@ -137,6 +139,12 @@ func generateSound(st SoundType, v sfxVariance) floatBuffer {
 		return generateMetalHitSound(v)
 	case SoundExplosion:
 		return generateExplosionSound(v)
+	case SoundBullet:
+		// TODO: add generator
+		return nil
+	case SoundRing:
+		// TODO: add generator
+		return nil
 	default:
 		return nil
 	}
@@ -183,9 +191,9 @@ func generateWhooshSound(v sfxVariance) floatBuffer {
 }
 
 func generateCoinSound(v sfxVariance) floatBuffer {
-	n1Samples := durationToSamples(CoinSoundNote1Duration.Seconds())
+	n1Samples := durationToSamples(CoinSoundNote1Duration.Seconds() * v.decay)
 	n1 := oscillator(waveSquare, 987.77*v.pitch, n1Samples)
-	applyEnvelope(n1, CoinSoundAttack.Seconds(), CoinSoundNote1Release.Seconds())
+	applyEnvelope(n1, CoinSoundAttack.Seconds(), CoinSoundNote1Release.Seconds()*v.decay)
 
 	n2Samples := durationToSamples(CoinSoundNote2Duration.Seconds() * v.decay)
 	n2 := oscillator(waveSquare, 1318.51*v.pitch, n2Samples)
