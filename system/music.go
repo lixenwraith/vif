@@ -157,7 +157,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 				s.manualTier = true
 			}
 			s.startMusic()
-			// CHANGED: explicit slots applied after the tier, not before
+			// explicit slots applied after the tier, not before
 			if p.BeatPattern != audio.PatternSilence {
 				s.player.SetPattern(slotRhythm, p.BeatPattern, 0, false)
 				s.manualTier = true

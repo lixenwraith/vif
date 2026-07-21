@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"math"
 	"time"
 )
 
@@ -59,6 +60,30 @@ const (
 )
 
 const ExplosionSoundDuration = 280 * time.Millisecond
+
+// bullet — highest-rate SFX in the game; kept short and cheap so
+// rapid-fire dampening and MaxSFXPerType do the mixing work
+const (
+	BulletSoundDuration = 70 * time.Millisecond
+	BulletSoundAttack   = 1 * time.Millisecond
+	BulletDecayRate     = 20 * time.Millisecond
+	BulletStartFreq     = 1500.0 // Hz
+	BulletEndFreq       = 240.0  // Hz
+	BulletTransientLen  = 5 * time.Millisecond
+)
+
+// ring — rotary cue. Pitch leads, amplitude trails by 90°: the phase
+// quadrature is what reads as rotation on a mono bus (Leslie signature)
+const (
+	RingSoundDuration = 700 * time.Millisecond
+	RingSoundAttack   = 8 * time.Millisecond
+	RingSoundRelease  = 260 * time.Millisecond
+	RingCarrierFreq   = 660.0 // Hz
+	RingPartialRatio  = 1.5   // inharmonic upper partial
+	RingRotationRate  = 2.5   // Hz — full circles per second
+	RingDopplerDepth  = 0.06  // ±6% pitch across the circle
+	RingTremoloDepth  = 0.55
+)
 
 // Deterministic per-variant deviation walk (peak-to-peak), mirrors buildDrumKit
 const (
@@ -140,11 +165,9 @@ func generateSound(st SoundType, v sfxVariance) floatBuffer {
 	case SoundExplosion:
 		return generateExplosionSound(v)
 	case SoundBullet:
-		// TODO: add generator
-		return nil
+		return generateBulletSound(v)
 	case SoundRing:
-		// TODO: add generator
-		return nil
+		return generateRingSound(v)
 	default:
 		return nil
 	}
@@ -226,4 +249,62 @@ func generateExplosionSound(v sfxVariance) floatBuffer {
 	applyWaveshaper(out, 1.6)
 	normalizePeak(out, 0.8) // deliberately below other SFX
 	return out
+}
+
+// generateBulletSound: fast descending saw with a noise transient — the pitch
+// drop carries the shot, the transient carries the impact
+func generateBulletSound(v sfxVariance) floatBuffer {
+	samples := durationToSamples(BulletSoundDuration.Seconds() * v.decay)
+
+	body := oscillatorSweep(waveSaw, BulletStartFreq*v.pitch, BulletEndFreq*v.pitch, samples)
+	filterBiquadLP(body, 4200*v.pitch, 0.9) // tame saw harshness at the top of the sweep
+
+	transient := oscillator(waveNoise, 0, durationToSamples(BulletTransientLen.Seconds()))
+	filterBiquadHP(transient, 2000, 0.707)
+	applyEnvelope(transient, 0.0003, BulletTransientLen.Seconds()*0.8)
+
+	out := mixFloatBuffers(body, transient, 0.6)
+	applyWaveshaper(out, 1.8)
+	applyDecayEnvelope(out, BulletSoundAttack.Seconds(), float64(AudioSampleRate)*BulletDecayRate.Seconds()*v.decay)
+	normalizePeak(out, 0.85)
+	return out
+}
+
+// generateRingSound: two partials swept by a single rotation phase. Doppler
+// (pitch) uses cos, tremolo (amplitude) uses sin — the quadrature offset is
+// the rotation cue; in-phase modulation reads as a flat wobble
+func generateRingSound(v sfxVariance) floatBuffer {
+	samples := durationToSamples(RingSoundDuration.Seconds() * v.decay)
+	buf := make(floatBuffer, samples)
+
+	sr := float64(AudioSampleRate)
+	base := RingCarrierFreq * v.pitch
+	rotInc := RingRotationRate / sr
+
+	var rot, p1, p2 float64
+	for i := range buf {
+		a := 2 * math.Pi * rot
+		freq := base * (1.0 + RingDopplerDepth*math.Cos(a))
+		amp := 1.0 - RingTremoloDepth*0.5*(1.0-math.Sin(a))
+
+		buf[i] = (math.Sin(2*math.Pi*p1) + 0.45*math.Sin(2*math.Pi*p2)) * amp
+
+		p1 += freq / sr
+		p2 += freq * RingPartialRatio / sr
+		if p1 >= 1.0 {
+			p1 -= 1.0
+		}
+		if p2 >= 1.0 {
+			p2 -= 1.0
+		}
+		rot += rotInc
+		if rot >= 1.0 {
+			rot -= 1.0
+		}
+	}
+
+	filterBiquadBP(buf, 1600*v.pitch, 0.8) // hollow the mid, pushes the sweep forward
+	applyEnvelope(buf, RingSoundAttack.Seconds(), RingSoundRelease.Seconds()*v.decay)
+	normalizePeak(buf, 0.85)
+	return buf
 }
