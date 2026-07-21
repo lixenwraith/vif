@@ -22,6 +22,9 @@ type StatusBarRenderer struct {
 	// Color mode (persist throughout runtime)
 	colorMode terminal.ColorMode
 
+	// Sound/Audio indicator
+	statAudioMask *atomic.Int64
+
 	// Cached metric pointers (zero-lock reads)
 	statFPS        *atomic.Int64
 	statAPM        *atomic.Int64
@@ -52,6 +55,8 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		gameCtx: gameCtx,
 
 		colorMode: gameCtx.World.Resources.Config.ColorMode,
+
+		statAudioMask: statusReg.Ints.Get("audio.mask"),
 
 		statFPS:        statusReg.Ints.Get("engine.fps"),
 		statAPM:        statusReg.Ints.Get("engine.apm"),
@@ -231,18 +236,15 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// === RENDER LEFT-SIDE FIXED ELEMENTS ===
 	x := 0
 
-	// Audio state indicator
-	if player := r.gameCtx.GetAudioPlayer(); player != nil {
-		effectMuted := player.IsEffectMuted()
-		musicMuted := player.IsMusicMuted()
-
+	// Audio state indicator; -1 = no audio resource
+	if mv := r.statAudioMask.Load(); mv >= 0 {
 		var audioBgColor color.RGB
-		switch {
-		case effectMuted && musicMuted:
+		switch uint8(mv) {
+		case parameter.AudioChanNone:
 			audioBgColor = visual.RgbAudioBothOff
-		case effectMuted && !musicMuted:
+		case parameter.AudioChanMusic:
 			audioBgColor = visual.RgbAudioMusicOnly
-		case !effectMuted && musicMuted:
+		case parameter.AudioChanEffects:
 			audioBgColor = visual.RgbAudioEffectsOnly
 		default:
 			audioBgColor = visual.RgbAudioBothOn

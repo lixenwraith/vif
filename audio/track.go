@@ -1,30 +1,42 @@
 package audio
 
 import (
-	"math/rand"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
+	"math/rand/v2"
 )
 
+// pendingTrig is a humanization-delayed event awaiting its fire sample
+type pendingTrig struct {
+	wait  int
+	midi  int
+	vel   float64
+	dur   int
+	instr InstrumentType
+}
+
 // PatternPlayer plays one Pattern layer; mixer-goroutine confined
-// Owns its drum voices and tonal pool: no cross-slot stealing
+// Crossfading between patterns is owned by the sequencer's slot A/B pair;
+// the per-player fade-in was removed — it hard-cut voice tails on SetPattern
 type PatternPlayer struct {
 	patternData *Pattern
-	mask        uint32 // bit i enables track i
+	mask        uint32
 
-	drums         [core.InstrumentCount]*DrumVoice
-	tonal         [parameter.MaxPolyphony]*TonalVoice
-	stealStrategy core.VoiceStealStrategy
+	// 2-voice round-robin per drum — retrigger rings out on the sibling
+	drums  [InstrumentCount][2]*DrumVoice
+	drumRR [InstrumentCount]uint8
 
-	fadePos int
-	fadeLen int
+	tonal         [MaxPolyphony]*TonalVoice
+	stealStrategy VoiceStealStrategy
+
+	// fixed-size micro-timing scheduler; allocation-free
+	pend  [MaxPendingTrigs]pendingTrig
+	pendN int
 }
 
 func NewPatternPlayer(kit *drumKit) *PatternPlayer {
-	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: core.StealOldest}
-	for i := core.InstrumentType(0); i <= core.InstrClap; i++ {
-		p.drums[i] = NewDrumVoice(kit.variants[i])
+	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealOldest}
+	for i := InstrumentType(0); i <= InstrClap; i++ {
+		p.drums[i][0] = NewDrumVoice(kit.variants[i])
+		p.drums[i][1] = NewDrumVoice(kit.variants[i])
 	}
 	for i := range p.tonal {
 		p.tonal[i] = NewTonalVoice()
@@ -32,7 +44,7 @@ func NewPatternPlayer(kit *drumKit) *PatternPlayer {
 	return p
 }
 
-// TriggerStep fires all events at the step position
+// TriggerStep fires all events at the step position, applying humanization
 func (p *PatternPlayer) TriggerStep(step, samplesPerStep int, h *harmony, rng *rand.Rand) {
 	pat := p.patternData
 	if pat == nil || pat.Steps <= 0 {
@@ -52,8 +64,23 @@ func (p *PatternPlayer) TriggerStep(step, samplesPerStep int, h *harmony, rng *r
 			if ev.Prob > 0 && ev.Prob < 1 && rng.Float64() > ev.Prob {
 				continue
 			}
+
+			vel := ev.Vel
+			delay := 0
+			if tr.Humanize > 0 {
+				vel += (rng.Float64()*2 - 1) * HumanizeVelJitter * tr.Humanize
+				vel = min(max(vel, 0.05), 1.0)
+				if tr.Instr != InstrKick { // kick anchors the grid: no lag
+					delay = rng.IntN(int(tr.Humanize*HumanizeMaxDelaySamples) + 1)
+				}
+			}
+
 			if tr.Instr.IsDrum() {
-				p.drums[tr.Instr].Trigger(VoiceParams{Velocity: ev.Vel})
+				if delay > 0 {
+					p.schedule(0, vel, 0, tr.Instr, delay)
+				} else {
+					p.triggerDrum(tr.Instr, vel)
+				}
 				continue
 			}
 			dur := ev.Dur
@@ -61,13 +88,44 @@ func (p *PatternPlayer) TriggerStep(step, samplesPerStep int, h *harmony, rng *r
 				dur = 1
 			}
 			midi := h.resolve(ev.Deg, ev.Oct, tr.FollowChord)
-			p.TriggerNoteMIDI(midi, ev.Vel, dur*samplesPerStep, tr.Instr)
+			if delay > 0 {
+				p.schedule(midi, vel, dur*samplesPerStep, tr.Instr, delay)
+			} else {
+				p.TriggerNoteMIDI(midi, vel, dur*samplesPerStep, tr.Instr)
+			}
 		}
 	}
 }
 
+func (p *PatternPlayer) schedule(midi int, vel float64, dur int, instr InstrumentType, wait int) {
+	if p.pendN >= len(p.pend) {
+		p.fire(midi, vel, dur, instr) // ring full: fire on-grid rather than drop
+		return
+	}
+	p.pend[p.pendN] = pendingTrig{wait: wait, midi: midi, vel: vel, dur: dur, instr: instr}
+	p.pendN++
+}
+
+func (p *PatternPlayer) fire(midi int, vel float64, dur int, instr InstrumentType) {
+	if instr.IsDrum() {
+		p.triggerDrum(instr, vel)
+		return
+	}
+	p.TriggerNoteMIDI(midi, vel, dur, instr)
+}
+
+func (p *PatternPlayer) triggerDrum(instr InstrumentType, vel float64) {
+	idx := p.drumRR[instr] & 1
+	// Prefer an idle sibling so the ringing hit completes (declick)
+	if p.drums[instr][idx].Active() && !p.drums[instr][idx^1].Active() {
+		idx ^= 1
+	}
+	p.drums[instr][idx].Trigger(VoiceParams{Velocity: vel})
+	p.drumRR[instr] = (idx + 1) & 1
+}
+
 // TriggerNoteMIDI triggers a tonal note directly (pattern steps and external requests)
-func (p *PatternPlayer) TriggerNoteMIDI(midi int, vel float64, durSamples int, instr core.InstrumentType) {
+func (p *PatternPlayer) TriggerNoteMIDI(midi int, vel float64, durSamples int, instr InstrumentType) {
 	v := p.allocateVoice(midi)
 	if v == nil {
 		return
@@ -82,7 +140,7 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 		}
 	}
 	switch p.stealStrategy {
-	case core.StealOldest:
+	case StealOldest:
 		var oldest *TonalVoice
 		lowest := 2.0
 		for _, v := range p.tonal {
@@ -92,7 +150,7 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 			}
 		}
 		return oldest
-	case core.StealQuietest:
+	case StealQuietest:
 		var quietest *TonalVoice
 		lowest := 2.0
 		for _, v := range p.tonal {
@@ -103,7 +161,7 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 			}
 		}
 		return quietest
-	case core.StealSameNote:
+	case StealSameNote:
 		for _, v := range p.tonal {
 			if v.Note() == note {
 				return v
@@ -115,30 +173,37 @@ func (p *PatternPlayer) allocateVoice(note int) *TonalVoice {
 	}
 }
 
-// Sample returns the mixed layer output with fade-in applied
+// Sample advances the micro-timing scheduler and returns the mixed layer output
 func (p *PatternPlayer) Sample() float64 {
+	for i := 0; i < p.pendN; {
+		p.pend[i].wait--
+		if p.pend[i].wait <= 0 {
+			t := p.pend[i]
+			p.pendN--
+			p.pend[i] = p.pend[p.pendN]
+			p.fire(t.midi, t.vel, t.dur, t.instr)
+			continue
+		}
+		i++
+	}
+
 	var sum float64
-	for i := core.InstrumentType(0); i <= core.InstrClap; i++ {
-		sum += p.drums[i].Sample()
+	for i := InstrumentType(0); i <= InstrClap; i++ {
+		sum += p.drums[i][0].Sample() + p.drums[i][1].Sample()
 	}
 	for _, v := range p.tonal {
 		if v.Active() {
 			sum += v.Sample()
 		}
 	}
-	if p.fadeLen > 0 && p.fadePos < p.fadeLen {
-		sum *= float64(p.fadePos) / float64(p.fadeLen)
-		p.fadePos++
-	}
 	return sum
 }
 
-func (p *PatternPlayer) SetPattern(id core.PatternID, crossfadeSamples int) {
+// SetPattern swaps pattern data; gain handling lives in the sequencer slot
+func (p *PatternPlayer) SetPattern(id PatternID) {
 	p.patternData = GetPattern(id)
 	p.mask = ^uint32(0)
-	if crossfadeSamples > 0 {
-		p.fadePos, p.fadeLen = 0, crossfadeSamples
-	}
+	p.pendN = 0
 }
 
 func (p *PatternPlayer) SetMask(mask uint32) { p.mask = mask }
@@ -146,9 +211,10 @@ func (p *PatternPlayer) SetMask(mask uint32) { p.mask = mask }
 func (p *PatternPlayer) Reset() {
 	p.patternData = nil
 	p.mask = ^uint32(0)
-	p.fadePos, p.fadeLen = 0, 0
-	for i := core.InstrumentType(0); i <= core.InstrClap; i++ {
-		p.drums[i].Reset()
+	p.pendN = 0
+	for i := InstrumentType(0); i <= InstrClap; i++ {
+		p.drums[i][0].Reset()
+		p.drums[i][1].Reset()
 	}
 	for _, v := range p.tonal {
 		v.Reset()

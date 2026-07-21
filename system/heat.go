@@ -3,7 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -157,9 +156,11 @@ func (s *HeatSystem) addHeat(delta int) {
 	// Reset overheat if heat penalty
 	if delta < 0 {
 		heatComp.Overheat = 0
-		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-			SoundType: core.SoundMetalHit,
-		})
+
+		// s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+		// 	SoundType: audio.SoundMetalHit,
+		// })
+
 	}
 
 	// Update heat, clamp to bounds, update overheat

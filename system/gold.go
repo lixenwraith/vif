@@ -215,10 +215,10 @@ func (s *GoldSystem) handleJumpRequest() {
 		Type:       component.EnergyDeltaSpend,
 	})
 
-	// 4. Play Sound
-	if s.world.Resources.Audio != nil {
-		s.world.Resources.Audio.Player.Play(core.SoundBell)
-	}
+	// // 4. Play Sound
+	// if s.world.Resources.Audio != nil {
+	// 	s.world.Resources.Audio.Player.Play(audio.SoundBell)
+	// }
 
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
 		X: targetPos.X,
@@ -368,10 +368,10 @@ func (s *GoldSystem) handleGoldComplete() {
 		HeaderEntity: headerEntity,
 	})
 
-	// Play sound
-	if s.world.Resources.Audio != nil && s.world.Resources.Audio.Player != nil {
-		s.world.Resources.Audio.Player.Play(core.SoundCoin)
-	}
+	// // Play sound
+	// if s.world.Resources.Audio != nil && s.world.Resources.Audio.Player != nil {
+	// 	s.world.Resources.Audio.Player.Play(audio.SoundCoin)
+	// }
 
 	// Silent destruction - members already dead from typing
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
@@ -489,4 +489,3 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 
 	return -1, -1
 }
-

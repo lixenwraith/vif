@@ -50,9 +50,21 @@ type Router struct {
 	mouseLastFireMain time.Time
 	mouseLastFireSpec time.Time
 
+	apm apmGate
+
 	// Look-up tables: OpCode → Function
 	motionLUT map[input.MotionOp]MotionFunc
 	charLUT   map[input.MotionOp]CharMotionFunc
+}
+
+// apmGate admits weighted actions into the music-APM signal
+// Future mouse/game-event weighting extends admit() — GameState stays unchanged
+type apmGate struct {
+	lastSig   uint64
+	lastAdmit time.Time
+	lastMouse time.Time
+	secAnchor int64
+	secBudget uint64
 }
 
 // NewRouter creates a router with LUTs initialized
@@ -123,7 +135,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.SetStatusMessage("", 0, false)
 	}
-	r.ctx.State.RecordAction()
+	r.recordAPM(intent)
 
 	// === Macro Context Interception ===
 
@@ -269,6 +281,52 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	return true
 }
 
+// intentSig collapses an intent to a repeat-detection signature
+func intentSig(in *input.Intent) uint64 {
+	return uint64(in.Type)<<48 ^ uint64(in.Motion)<<32 ^ uint64(in.Special)<<24 ^ uint64(uint32(in.Char))
+}
+
+// recordAPM is the admission point for APM, which exists to drive adaptive
+// music. Machine-generated activity is excluded: macro playback here,
+// mouse auto-fire by construction (ProcessMouseTick emits events, not intents)
+func (r *Router) recordAPM(intent *input.Intent) {
+	if intent.MacroPlayback {
+		return // 4.a: machine input; mouse auto-fire excluded by construction (events, not intents)
+	}
+	now := r.ctx.PausableClock.Now()
+
+	switch intent.Type {
+	case input.IntentMouseMove, input.IntentMouseDrag, input.IntentMouseWheelMove:
+		if now.Sub(r.apm.lastMouse) < parameter.MouseAPMSampleInterval {
+			return
+		}
+		r.apm.lastMouse = now
+	}
+
+	sig := intentSig(intent)
+	w := uint64(parameter.APMWeightFull)
+	if sig == r.apm.lastSig {
+		if now.Sub(r.apm.lastAdmit) < parameter.APMRepeatWindow {
+			return // 4.b: auto-repeat / spam
+		}
+		w = parameter.APMWeightRepeat
+	}
+
+	sec := now.Unix()
+	if sec != r.apm.secAnchor {
+		r.apm.secAnchor, r.apm.secBudget = sec, 0
+	}
+	if r.apm.secBudget+w > parameter.APMMaxPerSecond {
+		w = parameter.APMMaxPerSecond - r.apm.secBudget
+	}
+	r.apm.lastSig, r.apm.lastAdmit = sig, now
+	if w == 0 {
+		return
+	}
+	r.apm.secBudget += w
+	r.ctx.State.RecordActionWeight(w)
+}
+
 // --- System Handlers ---
 
 func (r *Router) handleEscape() bool {
@@ -299,12 +357,16 @@ func (r *Router) handleEscape() bool {
 }
 
 func (r *Router) handleToggleEffectMute() bool {
-	r.ctx.ToggleAudioMute()
+	r.ctx.PushEvent(event.EventSoundMuteToggle, &event.SoundMuteTogglePayload{
+		Mode: event.MuteToggle, Mask: parameter.AudioChanEffects,
+	})
 	return true
 }
 
 func (r *Router) handleToggleMusicMute() bool {
-	r.ctx.PushEvent(event.EventMusicPause, nil)
+	r.ctx.PushEvent(event.EventSoundMuteToggle, &event.SoundMuteTogglePayload{
+		Mode: event.MuteToggle, Mask: parameter.AudioChanMusic,
+	})
 	return true
 }
 

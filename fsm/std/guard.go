@@ -12,9 +12,6 @@ import (
 func registerCoreGuards[T any](m *fsm.Machine[T]) {
 	// StateTimeExceeds passes once the region has been in its state for 'ms'
 	m.RegisterGuardFactory("StateTimeExceeds", func(machine *fsm.Machine[T], args map[string]any) (fsm.GuardFunc[T], error) {
-		// CHANGED: an absent or unparseable 'ms' silently defaulted to one game
-		// tick, so a misspelled key produced a guard that always passed. The
-		// default also coupled this library to game tuning constants.
 		if args == nil {
 			return nil, fmt.Errorf("StateTimeExceeds requires 'ms'")
 		}
@@ -299,7 +296,7 @@ func registerConfigGuards[T any](m *fsm.Machine[T], h Host[T]) {
 		if h.ConfigInt == nil {
 			return alwaysFalse[T](), nil
 		}
-		// CHANGED: accessor binds here, replacing a per-evaluation switch
+		// accessor binds here
 		accessor, ok := h.ConfigInt(field)
 		if !ok {
 			return nil, fmt.Errorf("ConfigIntCompare: unknown field '%s'", field)

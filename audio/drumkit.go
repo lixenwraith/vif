@@ -2,16 +2,12 @@ package audio
 
 import (
 	"math"
-	"math/rand"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // drumKit holds pre-rendered percussion buffers, N variants per instrument
 // Built once at engine Start, read-only afterward
 type drumKit struct {
-	variants [core.InstrumentCount][]floatBuffer
+	variants [InstrumentCount][]floatBuffer
 }
 
 // buildDrumKit renders n variants per drum with a deterministic parameter
@@ -22,19 +18,19 @@ func buildDrumKit(n int) *drumKit {
 	}
 	k := &drumKit{}
 	for i := 0; i < n; i++ {
-		det := 1.0 + 0.08*(float64(i)/float64(n)-0.5)
-		dec := 1.0 + 0.20*(float64(i)/float64(n)-0.5)
-		k.variants[core.InstrKick] = append(k.variants[core.InstrKick], generateKickVar(det, dec))
-		k.variants[core.InstrHihat] = append(k.variants[core.InstrHihat], generateHihatVar(dec))
-		k.variants[core.InstrSnare] = append(k.variants[core.InstrSnare], generateSnareVar(det, dec))
-		k.variants[core.InstrClap] = append(k.variants[core.InstrClap], generateClapVar(dec))
+		det := 1.0 + DrumPitchWalk*(float64(i)/float64(n)-0.5)
+		dec := 1.0 + DrumDecayWalk*(float64(i)/float64(n)-0.5)
+		k.variants[InstrKick] = append(k.variants[InstrKick], generateKickVar(det, dec))
+		k.variants[InstrHihat] = append(k.variants[InstrHihat], generateHihatVar(dec))
+		k.variants[InstrSnare] = append(k.variants[InstrSnare], generateSnareVar(det, dec))
+		k.variants[InstrClap] = append(k.variants[InstrClap], generateHihatVar(dec))
 	}
 	return k
 }
 
 func generateKickVar(det, dec float64) floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.KickDecay * dec)
+	sr := AudioSampleRate
+	duration := int(float64(sr) * KickDecay * dec)
 	buf := make(floatBuffer, duration)
 	startFreq, endFreq := 150.0*det, 40.0*det
 	phase := 0.0
@@ -51,12 +47,12 @@ func generateKickVar(det, dec float64) floatBuffer {
 }
 
 func generateHihatVar(dec float64) floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.HihatDecay * dec)
+	sr := AudioSampleRate
+	duration := int(float64(sr) * HihatDecay * dec)
 	buf := make(floatBuffer, duration)
 	for i := 0; i < duration; i++ {
 		t := float64(i) / float64(duration)
-		buf[i] = (rand.Float64()*2 - 1) * math.Exp(-15*t)
+		buf[i] = (genRng.Float64()*2 - 1) * math.Exp(-15*t)
 	}
 	filterBiquadHP(buf, 7000, 0.707)
 	normalizePeak(buf, 0.9)
@@ -64,8 +60,8 @@ func generateHihatVar(dec float64) floatBuffer {
 }
 
 func generateSnareVar(det, dec float64) floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.SnareDecay * dec)
+	sr := AudioSampleRate
+	duration := int(float64(sr) * SnareDecay * dec)
 	buf := make(floatBuffer, duration)
 
 	tonePhase := 0.0
@@ -77,7 +73,7 @@ func generateSnareVar(det, dec float64) floatBuffer {
 	}
 	for i := 0; i < duration; i++ {
 		t := float64(i) / float64(duration)
-		buf[i] += (rand.Float64()*2 - 1) * math.Exp(-8*t) * 0.5
+		buf[i] += (genRng.Float64()*2 - 1) * math.Exp(-8*t) * 0.5
 	}
 	filterBiquadBP(buf, 2000*det, 1.5)
 	normalizePeak(buf, 0.9)
@@ -85,8 +81,8 @@ func generateSnareVar(det, dec float64) floatBuffer {
 }
 
 func generateClapVar(dec float64) floatBuffer {
-	sr := parameter.AudioSampleRate
-	duration := int(float64(sr) * parameter.ClapDecay * dec)
+	sr := AudioSampleRate
+	duration := int(float64(sr) * ClapDecay * dec)
 	buf := make(floatBuffer, duration)
 
 	burstLen := sr / 100
@@ -96,7 +92,7 @@ func generateClapVar(dec float64) floatBuffer {
 		burstAmp := 1.0 - float64(b)*0.15
 		for i := 0; i < burstLen && pos < duration; i++ {
 			t := float64(i) / float64(burstLen)
-			buf[pos] = (rand.Float64()*2 - 1) * math.Exp(-5*t) * burstAmp
+			buf[pos] = (genRng.Float64()*2 - 1) * math.Exp(-5*t) * burstAmp
 			pos++
 		}
 		pos += burstGap
@@ -104,7 +100,7 @@ func generateClapVar(dec float64) floatBuffer {
 	tailStart := pos
 	for i := tailStart; i < duration; i++ {
 		t := float64(i-tailStart) / float64(duration-tailStart)
-		buf[i] = (rand.Float64()*2 - 1) * math.Exp(-8*t) * 0.3
+		buf[i] = (genRng.Float64()*2 - 1) * math.Exp(-8*t) * 0.3
 	}
 	filterBiquadBP(buf, 1500, 2.0)
 	normalizePeak(buf, 0.9)

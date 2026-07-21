@@ -3,6 +3,7 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -312,9 +313,9 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 	}
 	s.statSpawned.Add(int64(spawnCount))
 
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: core.SoundWhoosh,
-	})
+	// s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	// 	SoundType: audio.SoundWhoosh,
+	// })
 
 	// Determine color type from energy polarity
 	colorType := component.CleanerColorPositive
@@ -511,7 +512,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 	config := s.world.Resources.Config
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: core.SoundWhoosh,
+		SoundType: audio.SoundWhoosh,
 	})
 
 	gameWidthFixed := vmath.FromInt(config.MapWidth)
@@ -617,4 +618,3 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	}
 	return rows
 }
-

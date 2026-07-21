@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 )
@@ -25,7 +26,27 @@ type LevelSetupPayload struct {
 
 // SoundRequestPayload contains the sound type to play
 type SoundRequestPayload struct {
-	SoundType core.SoundType `toml:"sound_type"`
+	SoundType audio.SoundType `toml:"sound_type"`
+}
+
+type SoundMuteToggleMode uint8
+
+const (
+	MuteCycle  SoundMuteToggleMode = iota // ignore Mask, advance the rotation
+	MuteToggle                            // flip the channels named in Mask
+	MuteSet                               // set the mask verbatim
+)
+
+// SoundMuteTogglePayload requests an audio mute-mask change
+// A nil payload is equivalent to {Mode: MuteCycle}
+type SoundMuteTogglePayload struct {
+	Mode SoundMuteToggleMode `toml:"mode"`
+	Mask uint8               `toml:"mask"` // parameter.AudioChan* bits
+}
+
+// AudioMuteChangedPayload announces the applied mask; AudioSystem is the sole emitter
+type AudioMuteChangedPayload struct {
+	Mask uint8 `toml:"mask"`
 }
 
 // --- Music ---
@@ -34,31 +55,31 @@ type SoundRequestPayload struct {
 type MusicStartPayload struct {
 	BPM           int                 `toml:"bpm"`
 	Intensity     core.MusicIntensity `toml:"intensity"`
-	BeatPattern   core.PatternID      `toml:"beat_pattern"`
-	MelodyPattern core.PatternID      `toml:"melody_pattern"`
+	BeatPattern   audio.PatternID     `toml:"beat_pattern"`
+	MelodyPattern audio.PatternID     `toml:"melody_pattern"`
 }
 
 // BeatPatternRequestPayload requests beat pattern transition
 type BeatPatternRequestPayload struct {
-	Pattern        core.PatternID `toml:"pattern"`
-	TransitionTime time.Duration  `toml:"transition_time"` // 0 = default
-	Quantize       bool           `toml:"quantize"`        // Wait for bar boundary
+	Pattern        audio.PatternID `toml:"pattern"`
+	TransitionTime time.Duration   `toml:"transition_time"` // 0 = default
+	Quantize       bool            `toml:"quantize"`        // Wait for bar boundary
 }
 
 // MelodyNoteRequestPayload triggers immediate note
 type MelodyNoteRequestPayload struct {
-	Note       int                 `toml:"note"`       // MIDI note number
-	Velocity   float64             `toml:"velocity"`   // 0.0-1.0
-	Duration   time.Duration       `toml:"duration"`   // 0 = use instrument default
-	Instrument core.InstrumentType `toml:"instrument"` // 0 = default (piano)
+	Note       int                  `toml:"note"`       // MIDI note number
+	Velocity   float64              `toml:"velocity"`   // 0.0-1.0
+	Duration   time.Duration        `toml:"duration"`   // 0 = use instrument default
+	Instrument audio.InstrumentType `toml:"instrument"` // 0 = default (piano)
 }
 
 // MelodyPatternRequestPayload requests melody pattern transition
 type MelodyPatternRequestPayload struct {
-	Pattern        core.PatternID `toml:"pattern"`
-	RootNote       int            `toml:"root_note"` // MIDI note for pattern root
-	TransitionTime time.Duration  `toml:"transition_time"`
-	Quantize       bool           `toml:"quantize"`
+	Pattern        audio.PatternID `toml:"pattern"`
+	RootNote       int             `toml:"root_note"` // MIDI note for pattern root
+	TransitionTime time.Duration   `toml:"transition_time"`
+	Quantize       bool            `toml:"quantize"`
 }
 
 // MusicIntensityPayload adjusts overall music intensity
@@ -123,6 +144,11 @@ type MetaStatusMessagePayload struct {
 type MetaSystemCommandPayload struct {
 	SystemName string `toml:"system_name"`
 	Enabled    bool   `toml:"enabled"`
+}
+
+// GamePausePayload carries the new pause state
+type GamePausePayload struct {
+	Paused bool `toml:"paused"`
 }
 
 // --- Nugget ---

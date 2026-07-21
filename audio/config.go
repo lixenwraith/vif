@@ -1,35 +1,33 @@
 package audio
 
-import (
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
-)
+// DefaultEffectVolume is the neutral per-sound level shipped by the package.
+// Embedders overlay EffectVolumes / EffectShapes at service wiring; no
+// game-specific mix lives here
+const DefaultEffectVolume = 0.7
 
-// AudioConfig holds audio system configuration
+// AudioConfig holds engine configuration
+// SampleRate field dropped (write-only duplicate of AudioSampleRate)
 type AudioConfig struct {
 	Enabled       bool
 	MasterVolume  float64
-	EffectVolumes map[core.SoundType]float64
-	SampleRate    int
+	EffectVolumes map[SoundType]float64
+	EffectShapes  map[SoundType]SFXParams // per-sound render shaping
 	ForceBackend  string
 	PatternTOML   []byte // raw music.toml content; nil = built-ins only
 }
 
-// DefaultAudioConfig returns default configuration
+// DefaultAudioConfig returns a neutral configuration
+// CHANGED: uniform DefaultEffectVolume; the game's per-sound levels moved to
+// parameter.GameEffectVolumes, applied by service/audio.go
 func DefaultAudioConfig() *AudioConfig {
+	vols := make(map[SoundType]float64, SoundTypeCount)
+	for st := SoundType(0); st < SoundTypeCount; st++ {
+		vols[st] = DefaultEffectVolume
+	}
 	return &AudioConfig{
-		Enabled:      false,
-		MasterVolume: 0.5,
-		EffectVolumes: map[core.SoundType]float64{
-			core.SoundError:    0.8,
-			core.SoundBell:     1.0,
-			core.SoundWhoosh:   0.6,
-			core.SoundCoin:     0.5,
-			core.SoundShield:   0.7,
-			core.SoundZap:      0.5,
-			core.SoundCrackle:  0.6,
-			core.SoundMetalHit: 0.7,
-		},
-		SampleRate: parameter.AudioSampleRate,
+		Enabled:       false,
+		MasterVolume:  0.5,
+		EffectVolumes: vols,
+		EffectShapes:  nil,
 	}
 }

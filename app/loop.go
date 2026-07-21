@@ -131,8 +131,6 @@ func (a *App) frame() bool {
 		return true
 	}
 
-	// CHANGED: updatePending was a loop-scope variable, but its only read
-	// follows its only write within the same frame
 	updatePending := true
 	select {
 	case <-a.gameUpdateDone:

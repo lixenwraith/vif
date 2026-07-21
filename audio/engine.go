@@ -9,9 +9,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // AudioEngine manages audio via pipe to system tools
@@ -59,7 +56,6 @@ func NewAudioEngine(cfg ...*AudioConfig) (*AudioEngine, error) {
 	}
 	ae.effectMuted.Store(!config.Enabled)
 	ae.musicMuted.Store(!config.Enabled)
-	// CHANGED: preload moved to Start (full preload, before mixer exists)
 	return ae, nil
 }
 
@@ -73,8 +69,8 @@ func (ae *AudioEngine) Start() error {
 
 	// One-time DSP: all SFX buffers and the drum kit render before the mixer
 	// goroutine exists — read-only afterward, shared without locks
-	ae.cache.preloadAll()
-	kit := buildDrumKit(parameter.DrumVariants)
+	ae.cache.preloadAll(ae.config.EffectShapes)
+	kit := buildDrumKit(DrumVariants)
 	InitDefaultPatterns()
 
 	if len(ae.config.PatternTOML) > 0 {
@@ -144,7 +140,7 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 	if err != nil {
 		return nil, err
 	}
-	cmd.Stderr = ae.stderrTail // ADDED: backend stderr no longer lost to raw-mode terminal
+	cmd.Stderr = ae.stderrTail // backend stderr no longer lost to raw-mode terminal
 	if err := cmd.Start(); err != nil {
 		stdin.Close()
 		return nil, err
@@ -158,7 +154,7 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 		close(exit)
 	}()
 
-	silence := make([]byte, parameter.AudioBufferSamples*parameter.AudioBytesPerFrame)
+	silence := make([]byte, AudioBufferSamples*AudioBytesPerFrame)
 	if _, err := stdin.Write(silence); err != nil {
 		cmd.Process.Kill()
 		<-exit
@@ -167,7 +163,7 @@ func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
 	select {
 	case <-exit:
 		return nil, fmt.Errorf("exited during probe: %s", ae.stderrTail.LastLine())
-	case <-time.After(parameter.AudioProbeWindow):
+	case <-time.After(AudioProbeWindow):
 	}
 
 	ae.cmd, ae.stdin, ae.procExit = cmd, stdin, exit
@@ -255,7 +251,7 @@ func (ae *AudioEngine) SetPaused(paused bool) {
 }
 
 // Play queues a sound effect; volume computed here, dampening at the mixer
-func (ae *AudioEngine) Play(st core.SoundType) bool {
+func (ae *AudioEngine) Play(st SoundType) bool {
 	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
@@ -292,6 +288,8 @@ func (ae *AudioEngine) IsEnabled() bool {
 }
 func (ae *AudioEngine) IsRunning() bool { return ae.running.Load() }
 
+func (ae *AudioEngine) SetEffectMuted(muted bool) { ae.effectMuted.Store(muted) }
+
 func (ae *AudioEngine) SetMusicMuted(muted bool) {
 	ae.musicMuted.Store(muted)
 	if ae.mixer != nil {
@@ -320,14 +318,17 @@ func (ae *AudioEngine) StopMusic() { ae.send(audioCmd{op: cmdMusicStop}) }
 
 func (ae *AudioEngine) ResetMusic() { ae.send(audioCmd{op: cmdMusicReset}) }
 
-func (ae *AudioEngine) SetMusicBPM(bpm int) { ae.send(audioCmd{op: cmdBPM, i1: bpm}) }
+func (ae *AudioEngine) SetMusicBPM(bpm int) { ae.send(audioCmd{op: cmdBPM, i1: bpm, b: true}) }
+
+// Run-seed injection; call before StartMusic on new game
+func (ae *AudioEngine) SetMusicSeed(seed int64) { ae.send(audioCmd{op: cmdSeed, seed: seed}) }
 
 func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing, f1: a}) }
 
 func (ae *AudioEngine) SetMusicVolume(vol float64) { ae.send(audioCmd{op: cmdMusicVol, f1: vol}) }
 
 // SetPattern targets a sequencer slot (0=rhythm, 1=melody, 2=free)
-func (ae *AudioEngine) SetPattern(slot int, p core.PatternID, crossfadeSamples int, quantize bool) {
+func (ae *AudioEngine) SetPattern(slot int, p PatternID, crossfadeSamples int, quantize bool) {
 	ae.send(audioCmd{op: cmdPattern, pattern: p, i1: crossfadeSamples, i2: slot, b: quantize})
 }
 
@@ -338,11 +339,11 @@ func (ae *AudioEngine) SetTrackMask(slot int, mask uint32) {
 
 // SetHarmony updates key, scale, and chord progression
 // root<=0 keeps root, scale out of range keeps scale, nil progression keeps
-func (ae *AudioEngine) SetHarmony(root int, scale core.ScaleID, progression []int) {
+func (ae *AudioEngine) SetHarmony(root int, scale ScaleID, progression []int) {
 	ae.send(audioCmd{op: cmdHarmony, i1: root, i2: int(scale), ints: progression})
 }
 
-func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType) {
+func (ae *AudioEngine) TriggerMelodyNote(note int, velocity float64, durationSamples int, instr InstrumentType) {
 	ae.send(audioCmd{op: cmdNote, i1: note, f1: velocity, i2: durationSamples, instr: instr})
 }
 
@@ -350,7 +351,6 @@ func (ae *AudioEngine) IsMusicPlaying() bool {
 	return ae.mixer != nil && ae.mixer.musicRunning.Load()
 }
 
-// SetVolume, SetConfig: unchanged
 // GetStats retained for compatibility, overflow always 0
 func (ae *AudioEngine) GetStats() (played, dropped, overflow uint64) {
 	p, d := ae.Stats()

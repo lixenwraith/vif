@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/navigation"
+	"github.com/lixenwraith/vi-fighter/network"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
-// Resources holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
+// Resource holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
 type Resource struct {
 	// World Resource
 	Time   *TimeResource
@@ -46,18 +48,6 @@ type Resource struct {
 	Content *ContentResource
 	Audio   *AudioResource
 	Network *NetworkResource
-}
-
-// ServiceBridge routes a service-contributed resource to its typed field
-func (r *Resource) ServiceBridge(res any) {
-	switch v := res.(type) {
-	case *AudioResource:
-		r.Audio = v
-	case *ContentResource:
-		r.Content = v
-	case *NetworkResource:
-		r.Network = v
-	}
 }
 
 // === World Resources ===
@@ -398,60 +388,29 @@ type ContentResource struct {
 	Provider ContentProvider
 }
 
-// AudioPlayer defines the audio interface used by game systems
-type AudioPlayer interface {
-	// Global Pause
-	SetPaused(paused bool)
-
-	// Sound effects
-	Play(core.SoundType) bool
-	ToggleEffectMute() bool
-	IsEffectMuted() bool
-	IsRunning() bool
-
-	// Music playback control
-	ToggleMusicMute() bool
-	IsMusicMuted() bool
-	StartMusic()
-	StopMusic()
-
-	// Sequencer control
-	SetMusicBPM(bpm int)
-	SetMusicSwing(amount float64)
-	SetMusicVolume(vol float64)
-
-	SetPattern(slot int, pattern core.PatternID, crossfadeSamples int, quantize bool)
-	SetTrackMask(slot int, mask uint32)
-	SetHarmony(root int, scale core.ScaleID, progression []int)
-
-	TriggerMelodyNote(note int, velocity float64, durationSamples int, instr core.InstrumentType)
-	ResetMusic()
-	IsMusicPlaying() bool
-}
-
-// AudioTelemetry exposes engine health for the status registry
-// Implemented by audio.AudioEngine; optional — nil-checked at wiring
-type AudioTelemetry interface {
-	Stats() (played, dropped uint64)
-	BackendName() string
-	IsSilent() bool
-}
-
-// AudioResource wraps the audio player interface
+// AudioResource exposes the audio engine directly. The engine's internal
+// command channel is the decoupling layer; no interface mirror is kept here.
+// Nil Resources.Audio = audio unavailable.
 type AudioResource struct {
-	Player    AudioPlayer
-	Telemetry AudioTelemetry
+	Engine *audio.AudioEngine
 }
 
-// NetworkProvider defines the interface for network access
-type NetworkProvider interface {
+// TODO: refactor wrapper after network stub developement
+// NetworkPort is the service-side endpoint driven by NetworkSystem.
+// Outbound: direct calls. Inbound: Drain per game tick (poll model keeps
+// network goroutines out of the world event queue).
+// Interface is transitional; collapses to a concrete network type once the
+// package matures (same path as audio).
+type NetworkPort interface {
 	Send(peerID uint32, msgType uint8, payload []byte) bool
 	Broadcast(msgType uint8, payload []byte)
 	PeerCount() int
 	IsRunning() bool
+	// Drain fills dst with pending inbound notifications, returns count
+	Drain(dst []network.Inbound) int
 }
 
-// NetworkResource wraps network provider for ECS access
+// NetworkResource wraps the network endpoint for ECS access
 type NetworkResource struct {
-	Transport NetworkProvider
+	Port NetworkPort
 }

@@ -4,25 +4,26 @@ import (
 	"fmt"
 	"sort"
 	"sync"
+
+	"github.com/lixenwraith/vi-fighter/engine"
 )
 
 // Hub is the runtime container for service instances
 // Manages lifecycle and provides type-safe access
 type Hub struct {
-	mu       sync.RWMutex
-	services map[string]Service
-	sorted   []string         // Topological order, computed on InitAll
-	started  []string         // Services that completed Start(), for rollback
-	initArgs map[string][]any // Per-service init args
+	mu          sync.RWMutex
+	services    map[string]Service
+	sorted      []string // Topological order, computed on InitAll
+	initialized []string // completed Init(), for teardown
+	started     []string // Services that completed Start(), for rollback
 }
 
-// TODO: need some telemetry for services at some point
+// TODO: service telemetry
 
 // NewHub creates an empty service hub
 func NewHub() *Hub {
 	return &Hub{
 		services: make(map[string]Service),
-		initArgs: make(map[string][]any),
 	}
 }
 
@@ -39,17 +40,6 @@ func (h *Hub) Register(svc Service) error {
 
 	h.services[name] = svc
 	h.sorted = nil // Invalidate cached order
-	return nil
-}
-
-// RegisterWithArgs adds a service with init-time configuration
-func (h *Hub) RegisterWithArgs(svc Service, args ...any) error {
-	if err := h.Register(svc); err != nil {
-		return err
-	}
-	h.mu.Lock()
-	h.initArgs[svc.Name()] = args
-	h.mu.Unlock()
 	return nil
 }
 
@@ -98,8 +88,7 @@ func (h *Hub) InitAll() error {
 	var initialized []string
 	for _, name := range h.sorted {
 		svc := h.services[name]
-		args := h.initArgs[name]
-		if err := svc.Init(args...); err != nil {
+		if err := svc.Init(); err != nil {
 			// Rollback: stop already-initialized in reverse order
 			for i := len(initialized) - 1; i >= 0; i-- {
 				h.services[initialized[i]].Stop()
@@ -108,6 +97,7 @@ func (h *Hub) InitAll() error {
 		}
 		initialized = append(initialized, name)
 	}
+	h.initialized = initialized
 
 	return nil
 }
@@ -141,14 +131,14 @@ func (h *Hub) StopAll() {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	// Stop in reverse order
-	for i := len(h.started) - 1; i >= 0; i-- {
-		name := h.started[i]
-		if svc, ok := h.services[name]; ok {
-			svc.Stop() // Errors logged internally by service
+	// initialized is a superset of started and Stop is contractually
+	// idempotent, so one reverse pass releases everything Init acquired.
+	for i := len(h.initialized) - 1; i >= 0; i-- {
+		if svc, ok := h.services[h.initialized[i]]; ok {
+			svc.Stop()
 		}
 	}
-	h.started = nil
+	h.initialized, h.started = nil, nil
 }
 
 // topologicalSort computes initialization order using Kahn's algorithm
@@ -225,14 +215,25 @@ func (h *Hub) Names() []string {
 	return names
 }
 
-// PublishResources invokes Contribute on all eligible services
-func (h *Hub) PublishResources(publish ResourcePublisher) {
+// // PublishResources invokes Contribute on all eligible services
+// func (h *Hub) PublishResources(publish ResourcePublisher) {
+// 	h.mu.RLock()
+// 	defer h.mu.RUnlock()
+//
+// 	for _, name := range h.sorted {
+// 		if contrib, ok := h.services[name].(ResourceContributor); ok {
+// 			contrib.Contribute(publish)
+// 		}
+// 	}
+// }
+
+// BindResources lets initialized services attach typed resources
+func (h *Hub) BindResources(r *engine.Resource) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-
 	for _, name := range h.sorted {
-		if contrib, ok := h.services[name].(ResourceContributor); ok {
-			contrib.Contribute(publish)
+		if c, ok := h.services[name].(ResourceContributor); ok {
+			c.Contribute(r)
 		}
 	}
 }

@@ -2,9 +2,6 @@ package audio
 
 import (
 	"math"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // Voice is the common interface for sound generators
@@ -21,7 +18,7 @@ type VoiceParams struct {
 	Note       int     // MIDI note (ignored for drums)
 	Velocity   float64 // 0.0-1.0
 	Duration   int     // Samples, 0 = instrument default
-	Instrument core.InstrumentType
+	Instrument InstrumentType
 }
 
 // --- DrumVoice: One-shot percussion ---
@@ -92,7 +89,7 @@ const (
 
 // TonalVoice generates pitched sounds with envelope
 type TonalVoice struct {
-	instrument core.InstrumentType
+	instrument InstrumentType
 	note       int
 	freq       float64
 	velocity   float64
@@ -130,18 +127,18 @@ func (v *TonalVoice) Sample() float64 {
 	// Generate raw oscillator sample based on instrument
 	var raw float64
 	switch v.instrument {
-	case core.InstrBass:
+	case InstrBass:
 		raw = v.generateBass()
-	case core.InstrPiano:
+	case InstrPiano:
 		raw = v.generatePiano()
-	case core.InstrPad:
+	case InstrPad:
 		raw = v.generatePad()
 	default:
 		raw = math.Sin(2 * math.Pi * v.phase)
 	}
 
 	// Advance phase
-	v.phase += v.freq / float64(parameter.AudioSampleRate)
+	v.phase += v.freq / float64(AudioSampleRate)
 	if v.phase >= 1.0 {
 		v.phase -= 1.0
 	}
@@ -231,7 +228,7 @@ func (v *TonalVoice) generatePiano() float64 {
 	modIndex := 3.0 * v.envLevel // Index decreases with envelope
 
 	modFreq := v.freq * modRatio
-	v.modPhase += modFreq / float64(parameter.AudioSampleRate)
+	v.modPhase += modFreq / float64(AudioSampleRate)
 	if v.modPhase >= 1.0 {
 		v.modPhase -= 1.0
 	}
@@ -267,28 +264,28 @@ func (v *TonalVoice) Trigger(params VoiceParams) {
 	v.filterState = 0
 
 	// Set ADSR based on instrument
-	sr := float64(parameter.AudioSampleRate)
+	sr := float64(AudioSampleRate)
 	switch params.Instrument {
-	case core.InstrBass:
-		v.attack = int(parameter.BassAttack * sr)
-		v.decay = int(parameter.BassDecay * sr)
-		v.sustain = parameter.BassSustain
-		v.release = int(parameter.BassRelease * sr)
-	case core.InstrPiano:
-		v.attack = int(parameter.PianoAttack * sr)
-		v.decay = int(parameter.PianoDecay * sr)
-		v.sustain = parameter.PianoSustain
-		v.release = int(parameter.PianoRelease * sr)
-	case core.InstrPad:
-		v.attack = int(parameter.PadAttack * sr)
-		v.decay = int(parameter.PadDecay * sr)
-		v.sustain = parameter.PadSustain
-		v.release = int(parameter.PadRelease * sr)
+	case InstrBass:
+		v.attack = int(BassAttack * sr)
+		v.decay = int(BassDecay * sr)
+		v.sustain = BassSustain
+		v.release = int(BassRelease * sr)
+	case InstrPiano:
+		v.attack = int(PianoAttack * sr)
+		v.decay = int(PianoDecay * sr)
+		v.sustain = PianoSustain
+		v.release = int(PianoRelease * sr)
+	case InstrPad:
+		v.attack = int(PadAttack * sr)
+		v.decay = int(PadDecay * sr)
+		v.sustain = PadSustain
+		v.release = int(PadRelease * sr)
 	default:
-		v.attack = int(0.01 * sr)
-		v.decay = int(0.1 * sr)
-		v.sustain = 0.5
-		v.release = int(0.2 * sr)
+		v.attack = int(VoiceDefaultAttack * sr)
+		v.decay = int(VoiceDefaultDecay * sr)
+		v.sustain = VoiceDefaultSustain
+		v.release = int(VoiceDefaultRelease * sr)
 	}
 
 	v.envState = ADSRAttack

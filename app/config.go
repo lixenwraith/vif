@@ -40,19 +40,3 @@ func (c Config) Validate() error {
 	}
 	return nil
 }
-
-// serviceArgs maps service names to their Init arguments
-// An absent entry means the service uses its own default
-func serviceArgs(cfg Config) map[string][]any {
-	args := make(map[string][]any, 3)
-
-	if cfg.ColorModeSet {
-		args["terminal"] = []any{cfg.ColorMode}
-	}
-	args["audio"] = []any{cfg.AudioMuted, cfg.AudioBackend}
-	if cfg.ContentPath != "" {
-		args["content"] = []any{cfg.ContentPath}
-	}
-
-	return args
-}

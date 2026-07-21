@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
 )
 
@@ -73,9 +74,14 @@ func (gs *GameState) GetGameTicks() uint64 {
 	return gs.GameTicks.Load()
 }
 
-// RecordAction increments the pending action counter for APM calculation
+// RecordActionWeight adds admitted milli-actions (Router admission gate)
+func (gs *GameState) RecordActionWeight(w uint64) {
+	gs.PendingActions.Add(w)
+}
+
+// RecordAction admits one full-weight action (non-Router callers, if any)
 func (gs *GameState) RecordAction() {
-	gs.PendingActions.Add(1)
+	gs.PendingActions.Add(parameter.APMWeightFull)
 }
 
 // GetAPM returns the current calculated APM
@@ -124,7 +130,8 @@ func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time)
 	for _, count := range gs.apmHistory {
 		total += count
 	}
-	gs.CurrentAPM.Store(total)
+	currentAPM := total / parameter.APMUnit
+	gs.CurrentAPM.Store(currentAPM)
 
 	// Calculate total over last 5 seconds (Music/Burst APM)
 	// We traverse backwards from current index
@@ -144,11 +151,12 @@ func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time)
 		}
 	}
 	// Normalize 5s window to 1-minute rate
-	gs.MusicAPM.Store(burstTotal * (60 / burstWindow))
+	musicAPM := burstTotal * (60 / burstWindow) / parameter.APMUnit
+	gs.MusicAPM.Store(musicAPM)
 
 	// Publish to registry
 	if registry != nil {
-		registry.Ints.Get("engine.apm").Store(int64(total))
-		registry.Ints.Get("engine.music_apm").Store(int64(gs.MusicAPM.Load()))
+		registry.Ints.Get("engine.apm").Store(int64(currentAPM))
+		registry.Ints.Get("engine.music_apm").Store(int64(musicAPM))
 	}
 }

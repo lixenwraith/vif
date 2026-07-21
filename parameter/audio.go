@@ -1,103 +1,45 @@
 package parameter
 
-import "time"
+import "github.com/lixenwraith/vi-fighter/audio"
 
-// Audio Hardware Settings
+// Game audio mix policy. The audio package ships neutral defaults; these maps
+// overlay them at service wiring (service/audio.go). Per-sound shaping lets the
+// game shorten or retune any preset without touching the audio package.
+
+// MusicConfigFile is the pattern override file, loaded at audio service start
+const MusicConfigFile = "music.toml"
+
+// GameEffectVolumes: per-sound levels, multiplied into MasterVolume at Play
+// Bullet is the rapid-fire sound: lowest level; mixer dampening does the rest
+var GameEffectVolumes = map[audio.SoundType]float64{
+	audio.SoundError:     0.7,
+	audio.SoundBell:      0.9,
+	audio.SoundWhoosh:    0.4,
+	audio.SoundCoin:      0.5,
+	audio.SoundShield:    0.7,
+	audio.SoundZap:       0.45,
+	audio.SoundCrackle:   0.55,
+	audio.SoundMetalHit:  0.6,
+	audio.SoundExplosion: 0.6,
+	audio.SoundBullet:    0.35,
+	audio.SoundRing:      0.6,
+}
+
+// GameEffectShapes is per-sound preset shaping applied once at render time
+// Only presets whose duration derives from the decay multiplier honor Length
+var GameEffectShapes = map[audio.SoundType]audio.SFXParams{
+	audio.SoundWhoosh: {Length: 0.8},
+	audio.SoundBell:   {Length: 0.85},
+}
+
+// Audio channel mask: a set bit means the channel is audible. The engine's
+// per-channel mute flags stay authoritative; this is the composed view.
 const (
-	AudioSampleRate    = 44100
-	AudioChannels      = 2
-	AudioBitDepth      = 16
-	AudioBytesPerFrame = AudioChannels * (AudioBitDepth / 8) // 4 bytes
+	AudioChanEffects uint8 = 1 << 0
+	AudioChanMusic   uint8 = 1 << 1
+	AudioChanAll           = AudioChanEffects | AudioChanMusic
+	AudioChanNone    uint8 = 0
 )
 
-// Audio Engine Timing
-const (
-	// AudioBufferDuration determines latency and mixer tick rate
-	// 50ms aligns with game tick
-	AudioBufferDuration = 50 * time.Millisecond
-
-	// AudioBufferSamples is frames per mixer tick at 44.1kHz
-	AudioBufferSamples = (AudioSampleRate * 50) / 1000 // 2205
-
-	// AudioDrainTimeout for queue cleanup on stop
-	AudioDrainTimeout = 100 * time.Millisecond
-
-	// MinSoundGap between consecutive sounds
-	MinSoundGap = 50 * time.Millisecond
-
-	// AudioProbeWindow is the backend survival window after the probe write
-	AudioProbeWindow = 60 * time.Millisecond
-
-	// AudioPauseFade is the pause fade-in/out ramp length
-	AudioPauseFade = 250 * time.Millisecond
-
-	// DrumVariants is pre-rendered buffers per percussion instrument
-	DrumVariants = 6
-
-	// MusicDuckAttack is the duck engage smoothing constant
-	MusicDuckAttack = 10 * time.Millisecond
-)
-
-// TODO: standard format for sound effects
-// Error Sound
-const (
-	ErrorSoundDuration = 80 * time.Millisecond
-	ErrorSoundAttack   = 5 * time.Millisecond
-	ErrorSoundRelease  = 20 * time.Millisecond
-)
-
-// Bell Sound
-const (
-	BellSoundDuration           = 600 * time.Millisecond
-	BellSoundAttack             = 5 * time.Millisecond
-	BellSoundFundamentalRelease = 550 * time.Millisecond
-	BellSoundOvertoneRelease    = 200 * time.Millisecond
-)
-
-// Whoosh Sound
-const (
-	WhooshSoundDuration = 300 * time.Millisecond
-	WhooshSoundAttack   = 150 * time.Millisecond
-	WhooshSoundRelease  = 150 * time.Millisecond
-)
-
-// Coin Sound
-const (
-	CoinSoundNote1Duration = 80 * time.Millisecond
-	CoinSoundNote2Duration = 280 * time.Millisecond
-	CoinSoundAttack        = 5 * time.Millisecond
-	CoinSoundNote1Release  = 40 * time.Millisecond
-	CoinSoundNote2Release  = 200 * time.Millisecond
-)
-
-// Shield Deflect Sound
-const (
-	ShieldSoundDuration = 100 * time.Millisecond
-	ShieldSoundAttack   = 2 * time.Millisecond
-	ShieldSoundRelease  = 80 * time.Millisecond
-	ShieldStartFreq     = 160.0 // Hz - Raised slightly for audibility
-	ShieldEndFreq       = 40.0  // Hz
-)
-
-// Lightning Zap Sound (continuous)
-const (
-	ZapSoundDuration    = 180 * time.Millisecond // Halved for rapid re-triggering
-	ZapSoundAttack      = 5 * time.Millisecond
-	ZapSoundRelease     = 30 * time.Millisecond
-	ZapModulationRate   = 25.0 // Hz - Faster buzz to fit shorter duration
-	ZapCrackleIntensity = 0.3
-)
-
-// Lightning Crackle Sound (Short Bolt/Spark)
-const (
-	CrackleSoundDuration = 80 * time.Millisecond
-	// Bursts replaced by impulse generation logic in generator
-)
-
-// Metal Hit Sound
-const (
-	MetalHitSoundDuration   = 120 * time.Millisecond
-	MetalHitTransientLength = 4 * time.Millisecond
-	MetalHitAttack          = 1 * time.Millisecond
-	MetalHitDecayRate       = 40 * time.Millisecond
-)
+// AudioMaskCycle advances the rotation: all -> music -> effects -> silence -> all
+func AudioMaskCycle(m uint8) uint8 { return (m - 1) & AudioChanAll }

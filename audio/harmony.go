@@ -1,17 +1,12 @@
 package audio
 
-import (
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
-)
-
-var scaleTable = [core.ScaleCount][]int{
-	core.ScaleMinor:         {0, 2, 3, 5, 7, 8, 10},
-	core.ScaleHarmonicMinor: {0, 2, 3, 5, 7, 8, 11},
-	core.ScalePhrygian:      {0, 1, 3, 5, 7, 8, 10},
-	core.ScaleDorian:        {0, 2, 3, 5, 7, 9, 10},
-	core.ScaleMinorPent:     {0, 3, 5, 7, 10},
-	core.ScaleMajor:         {0, 2, 4, 5, 7, 9, 11},
+var scaleTable = [ScaleCount][]int{
+	ScaleMinor:         {0, 2, 3, 5, 7, 8, 10},
+	ScaleHarmonicMinor: {0, 2, 3, 5, 7, 8, 11},
+	ScalePhrygian:      {0, 1, 3, 5, 7, 8, 10},
+	ScaleDorian:        {0, 2, 3, 5, 7, 9, 10},
+	ScaleMinorPent:     {0, 3, 5, 7, 10},
+	ScaleMajor:         {0, 2, 4, 5, 7, 9, 11},
 }
 
 // harmony is the mixer-confined tonal context: key, scale, chord progression
@@ -24,18 +19,18 @@ type harmony struct {
 
 func newHarmony() *harmony {
 	return &harmony{
-		root:  parameter.DefaultRootNote,
-		scale: scaleTable[core.ScalePhrygian],
+		root:  DefaultRootNote,
+		scale: scaleTable[ScalePhrygian],
 		prog:  []int{0, 0, 5, 6}, // i i VI VII
 	}
 }
 
 // set applies partial updates: root<=0 keeps, scale out of range keeps, nil prog keeps
-func (h *harmony) set(root int, scale core.ScaleID, prog []int) {
+func (h *harmony) set(root int, scale ScaleID, prog []int) {
 	if root > 0 && root < 128 {
 		h.root = root
 	}
-	if scale >= 0 && scale < core.ScaleCount {
+	if scale >= 0 && scale < ScaleCount {
 		h.scale = scaleTable[scale]
 	}
 	if len(prog) > 0 {

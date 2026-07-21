@@ -60,6 +60,10 @@ const (
 
 	// EventSoundRequest (SoundRequestPayload) requests audio playback
 	EventSoundRequest
+	// EventSoundMuteToggle (SoundMuteTogglePayload) requests an audio mute-mask change; nil payload cycles
+	EventSoundMuteToggle
+	// EventAudioMuteChanged (AudioMuteChangedPayload) announces the applied audio mute mask
+	EventAudioMuteChanged
 
 	// --- Music ---
 
@@ -67,8 +71,6 @@ const (
 	EventMusicStart
 	// EventMusicStop halts music playback
 	EventMusicStop
-	// EventMusicPause toggles pause state
-	EventMusicPause
 	// EventBeatPatternRequest (BeatPatternRequestPayload) requests beat pattern change
 	EventBeatPatternRequest
 	// EventMelodyNoteRequest (MelodyNoteRequestPayload) triggers single note
@@ -109,6 +111,10 @@ const (
 	EventMetaStatusMessageRequest
 	// EventMetaSystemCommandRequest (MetaSystemCommandPayload) signals a request to execute a system command
 	EventMetaSystemCommandRequest
+	// EventGamePauseRequest (GamePausePayload) asks MetaSystem to change pause state
+	EventGamePauseRequest
+	// EventGamePauseChanged (GamePausePayload) announces applied pause state; systems react in their own domain
+	EventGamePauseChanged
 
 	// --- FSM ---
 

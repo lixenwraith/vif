@@ -23,7 +23,7 @@ type App struct {
 	cfg Config
 
 	hub     *service.Hub
-	termSvc *terminal.TerminalService
+	termSvc *service.TerminalService
 	term    terminal.Terminal
 
 	world *engine.World
@@ -57,13 +57,18 @@ func (a *App) init() error {
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.InitRegistry()
 
-	// 1. Service registration
-	args := serviceArgs(a.cfg)
-	for _, svc := range manifest.BuildServices() {
-		if err := a.hub.RegisterWithArgs(svc, args[svc.Name()]...); err != nil {
-			return fmt.Errorf("service registration: %s: %w", svc.Name(), err)
-		}
+	// 1. Service registration (Strongly typed, replacing manifest.BuildServices and serviceArgs)
+	colorMode := terminal.DetectColorMode()
+	if a.cfg.ColorModeSet {
+		colorMode = a.cfg.ColorMode
 	}
+
+	termSvc := service.NewTerminalService(colorMode)
+	netSvc := service.NewNetworkService(nil) // disabled by default (RoleNone)
+	_ = a.hub.Register(termSvc)
+	_ = a.hub.Register(netSvc)
+	_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
+	_ = a.hub.Register(service.NewContentService(a.cfg.ContentPath))
 
 	// 2. World creation
 	// Services take no world argument, so placement relative to InitAll is free
@@ -75,10 +80,10 @@ func (a *App) init() error {
 	}
 
 	// 4. Service resources bridged into the ECS
-	a.hub.PublishResources(a.world.Resources.ServiceBridge)
+	a.hub.BindResources(a.world.Resources)
 
 	// 5. Terminal; the orchestrator needs the interface directly
-	a.termSvc = service.MustGet[*terminal.TerminalService](a.hub, "terminal")
+	a.termSvc = termSvc
 	a.term = a.termSvc.Terminal()
 	core.SetCrashTerminal(a.term)
 	a.term.SetMouseMode(defaultMouseMode)
@@ -87,6 +92,11 @@ func (a *App) init() error {
 	// 6. GameContext initializes the remaining world resources
 	a.ctx = engine.NewGameContext(a.world, width, height)
 	a.world.Resources.Config.ColorMode = a.term.ColorMode()
+
+	// TODO: wire event handling in network system
+
+	// Post-Context wiring: Connect network service to the initialized event queue
+	// netSvc.SetEventQueue(a.world.Resources.Event.Queue)
 
 	// 7. Systems; AddSystem sorts by Priority(), manifest order breaks ties
 	for _, sys := range manifest.BuildSystems(a.world) {

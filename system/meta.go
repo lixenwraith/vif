@@ -56,6 +56,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
 		event.EventMetaAboutRequest,
+		event.EventGamePauseRequest,
 		event.EventGameReset,
 	}
 }
@@ -100,6 +101,11 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventMetaAboutRequest:
 		s.handleAboutRequest()
+
+	case event.EventGamePauseRequest:
+		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
+			s.handlePauseRequest(p.Paused)
+		}
 	}
 }
 
@@ -388,3 +394,21 @@ func (s *MetaSystem) handleAboutRequest() {
 
 	s.ctx.SetOverlayContent(content)
 }
+
+// === Pause ===
+
+// handlePauseRequest applies pause to game state and clock, then announces
+// the change; each system applies it to its own domain (audio → AudioSystem)
+func (s *MetaSystem) handlePauseRequest(paused bool) {
+	if s.ctx.IsPaused.Load() == paused {
+		return
+	}
+	s.ctx.IsPaused.Store(paused)
+	if paused {
+		s.ctx.PausableClock.Pause()
+	} else {
+		s.ctx.PausableClock.Resume()
+	}
+	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
+}
+

@@ -4,9 +4,6 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/toml"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 type stepDef struct {
@@ -21,6 +18,7 @@ type stepDef struct {
 type trackDef struct {
 	Instr       string    `toml:"instr"`
 	FollowChord bool      `toml:"follow_chord"`
+	Humanize    float64   `toml:"humanize"`
 	Event       []stepDef `toml:"event"`
 }
 
@@ -34,10 +32,10 @@ type patternFile struct {
 	Pattern []patternDef `toml:"pattern"`
 }
 
-var instrByName = map[string]core.InstrumentType{
-	"kick": core.InstrKick, "hihat": core.InstrHihat, "snare": core.InstrSnare,
-	"clap": core.InstrClap, "bass": core.InstrBass, "piano": core.InstrPiano,
-	"pad": core.InstrPad,
+var instrByName = map[string]InstrumentType{
+	"kick": InstrKick, "hihat": InstrHihat, "snare": InstrSnare,
+	"clap": InstrClap, "bass": InstrBass, "piano": InstrPiano,
+	"pad": InstrPad,
 }
 
 // LoadPatternsTOML parses user pattern definitions
@@ -49,7 +47,7 @@ func LoadPatternsTOML(data []byte) ([]*Pattern, error) {
 	}
 	out := make([]*Pattern, 0, len(pf.Pattern))
 	for _, pd := range pf.Pattern {
-		if pd.Name == "" || pd.Steps <= 0 || pd.Steps > parameter.MaxPatternLen {
+		if pd.Name == "" || pd.Steps <= 0 || pd.Steps > MaxPatternLen {
 			return nil, fmt.Errorf("pattern %q: invalid name or steps", pd.Name)
 		}
 		p := &Pattern{Name: pd.Name, Steps: pd.Steps}
@@ -58,7 +56,7 @@ func LoadPatternsTOML(data []byte) ([]*Pattern, error) {
 			if !ok {
 				return nil, fmt.Errorf("pattern %q: unknown instrument %q", pd.Name, td.Instr)
 			}
-			tr := Track{Instr: instr, FollowChord: td.FollowChord}
+			tr := Track{Instr: instr, FollowChord: td.FollowChord, Humanize: td.Humanize}
 			for _, sd := range td.Event {
 				if sd.Pos < 0 || sd.Pos >= pd.Steps {
 					return nil, fmt.Errorf("pattern %q: event pos %d out of range", pd.Name, sd.Pos)

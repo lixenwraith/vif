@@ -7,13 +7,11 @@ import (
 	"math"
 	"sync/atomic"
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/parameter"
 )
 
 // activeSound tracks a playing sound instance
 type activeSound struct {
+	st     SoundType // per-type polyphony accounting
 	buffer floatBuffer
 	pos    int
 	volume float64
@@ -40,9 +38,10 @@ type Mixer struct {
 	cache     *soundCache
 	sequencer *Sequencer
 	active    []activeSound
+	sfxVar    [SoundTypeCount]uint32 // variant rotation counters
 
-	lastPlay [core.SoundTypeCount]time.Time
-	rapidVol [core.SoundTypeCount]float64
+	lastPlay [SoundTypeCount]time.Time
+	rapidVol [SoundTypeCount]float64
 
 	pauseGain float64
 	duckGain  float64
@@ -58,7 +57,7 @@ func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
 		cmds:      make(chan audioCmd, 256),
 		stopChan:  make(chan struct{}),
 		errChan:   make(chan error, 1),
-		sequencer: NewSequencer(parameter.DefaultBPM, kit),
+		sequencer: NewSequencer(DefaultBPM, kit),
 		active:    make([]activeSound, 0, 8),
 		pauseGain: 1.0,
 		duckGain:  1.0,
@@ -105,24 +104,24 @@ func (m *Mixer) GetStats() (played, dropped uint64) {
 
 // onePoleCoef converts a smoothing time constant to a per-sample coefficient
 func onePoleCoef(tau time.Duration) float64 {
-	return 1.0 - math.Exp(-1.0/(tau.Seconds()*float64(parameter.AudioSampleRate)))
+	return 1.0 - math.Exp(-1.0/(tau.Seconds()*float64(AudioSampleRate)))
 }
 
 // loop: drain commands, render, write — one pass per buffer tick
 func (m *Mixer) loop() {
-	ticker := time.NewTicker(parameter.AudioBufferDuration)
+	ticker := time.NewTicker(AudioBufferDuration)
 	defer ticker.Stop()
 
-	n := parameter.AudioBufferSamples
+	n := AudioBufferSamples
 	m.musicBuf = make([]float64, n)
 	m.sfxBuf = make([]float64, n)
 	mixBuf := make([]float64, n)
-	outBytes := make([]byte, n*parameter.AudioBytesPerFrame)
+	outBytes := make([]byte, n*AudioBytesPerFrame)
 
-	// CHANGED: pause fade is per-sample (was 5×0.2 staircase across ticks)
-	pauseStep := 1.0 / (parameter.AudioPauseFade.Seconds() * float64(parameter.AudioSampleRate))
-	duckAtk := onePoleCoef(parameter.MusicDuckAttack)
-	duckRel := onePoleCoef(parameter.MusicDuckRelease)
+	// Pause fade is per-sample (was 5×0.2 staircase across ticks)
+	pauseStep := 1.0 / (AudioPauseFade.Seconds() * float64(AudioSampleRate))
+	duckAtk := onePoleCoef(MusicDuckAttack)
+	duckRel := onePoleCoef(MusicDuckRelease)
 
 	for {
 		select {
@@ -151,7 +150,7 @@ func (m *Mixer) apply(c audioCmd) {
 	case cmdPlay:
 		m.startSound(c.sound, c.f1)
 	case cmdBPM:
-		m.sequencer.SetBPM(c.i1)
+		m.sequencer.SetBPM(c.i1, c.b)
 	case cmdSwing:
 		m.sequencer.SetSwing(c.f1)
 	case cmdMusicVol:
@@ -161,7 +160,7 @@ func (m *Mixer) apply(c audioCmd) {
 	case cmdMask:
 		m.sequencer.SetMask(c.i1, uint32(c.i2))
 	case cmdHarmony:
-		m.sequencer.SetHarmonyCfg(c.i1, core.ScaleID(c.i2), c.ints)
+		m.sequencer.SetHarmonyCfg(c.i1, ScaleID(c.i2), c.ints)
 	case cmdNote:
 		m.sequencer.TriggerNote(c.i1, c.f1, c.i2, c.instr)
 	case cmdMusicStart:
@@ -176,31 +175,72 @@ func (m *Mixer) apply(c audioCmd) {
 	case cmdSwapOutput:
 		m.output = c.w
 		m.outBroken = false
+	case cmdSeed:
+		m.sequencer.Reseed(c.seed)
 	}
 }
 
-// startSound applies rapid-fire dampening at consume time and activates a voice
-func (m *Mixer) startSound(st core.SoundType, vol float64) {
+// startSound applies rapid-fire dampening and polyphony caps, then activates a voice on a rotated variant
+func (m *Mixer) startSound(st SoundType, vol float64) {
 	if m.paused.Load() {
 		m.dropped.Add(1)
 		return
 	}
-	buf := m.cache.get(st)
-	if len(buf) == 0 {
+	vars := m.cache.variants(st)
+	if len(vars) == 0 {
 		return
 	}
+	buf := vars[m.sfxVar[st]%uint32(len(vars))]
+	m.sfxVar[st]++
+
 	now := time.Now()
-	if now.Sub(m.lastPlay[st]) < parameter.RapidFireCooldown {
-		m.rapidVol[st] *= parameter.RapidFireDecay
-		if m.rapidVol[st] < parameter.RapidFireMinVolume {
-			m.rapidVol[st] = parameter.RapidFireMinVolume
+	elapsed := now.Sub(m.lastPlay[st])
+	if elapsed < RapidFireCooldown {
+		m.rapidVol[st] *= RapidFireDecay
+		if m.rapidVol[st] < RapidFireMinVolume {
+			m.rapidVol[st] = RapidFireMinVolume
 		}
 	} else {
-		m.rapidVol[st] = 1.0
+		// gradual recovery replaces instant reset — sustained fire
+		// at real cadence previously reset to full volume every shot
+		rec := elapsed.Seconds() / RapidFireRecovery.Seconds()
+		if rec > 1 {
+			rec = 1
+		}
+		m.rapidVol[st] += (1.0 - m.rapidVol[st]) * rec
 	}
 	m.lastPlay[st] = now
 
-	m.active = append(m.active, activeSound{buffer: buf, volume: vol * m.rapidVol[st]})
+	ns := activeSound{st: st, buffer: buf, volume: vol * m.rapidVol[st]}
+
+	// Same-type cap: steal the most-progressed sibling (deep in its decay tail)
+	cnt, victim := 0, -1
+	for i := range m.active {
+		if m.active[i].st != st {
+			continue
+		}
+		cnt++
+		if victim < 0 || m.active[i].pos > m.active[victim].pos {
+			victim = i
+		}
+	}
+	if cnt >= MaxSFXPerType {
+		m.active[victim] = ns
+		m.played.Add(1)
+		return
+	}
+	if len(m.active) >= MaxActiveSFX {
+		g := 0
+		for i := range m.active {
+			if m.active[i].pos > m.active[g].pos {
+				g = i
+			}
+		}
+		m.active[g] = ns
+		m.played.Add(1)
+		return
+	}
+	m.active = append(m.active, ns)
 	m.played.Add(1)
 }
 
@@ -222,10 +262,10 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		m.active = m.mixActive(m.sfxBuf, n)
 	}
 
-	// ADDED: sidechain duck — music dips under active effects (#11)
+	// sidechain duck — music dips under active effects (#11)
 	duckTarget := 1.0
 	if sfxLive {
-		duckTarget = parameter.MusicDuckAmount
+		duckTarget = MusicDuckAmount
 	}
 
 	for i := 0; i < n; i++ {
@@ -258,7 +298,7 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		return // keep rendering state; supervisor swaps output or latches silent
 	}
 	if _, err := m.output.Write(outBytes); err != nil {
-		// CHANGED: mixer no longer exits on write error — flags broken output,
+		// Mixer doesn't exits on write error — flags broken output,
 		// continues; failover restores audio via cmdSwapOutput
 		m.outBroken = true
 		select {

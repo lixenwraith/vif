@@ -87,6 +87,11 @@ func NewContentManager() *ContentManager {
 	}
 }
 
+// SetDataDir overrides the default data directory path
+func (cm *ContentManager) SetDataDir(path string) {
+	cm.dataDir = path
+}
+
 // safeOperation wraps an operation with panic recovery
 // Returns default content on panic
 func (cm *ContentManager) safeOperation(operation func() ([]string, error), operationName string) (lines []string, err error) {
@@ -717,3 +722,4 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
 }
+

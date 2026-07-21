@@ -10,8 +10,6 @@ import (
 
 // ResolveGameConfig returns the FSM entry config path
 // "" selects the embedded default
-// CHANGED: the ForceDefault branch was duplicated between main() and
-// runConfigCheck(), which could disagree
 func ResolveGameConfig(cfg Config) (string, error) {
 	if cfg.ForceDefault {
 		return "", nil

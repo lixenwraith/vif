@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 162
+const EventTypeCount = 165
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -15,9 +15,10 @@ func InitRegistry() {
 	registryInit = true
 	RegisterType("EventLevelSetup", EventLevelSetup, &LevelSetupPayload{})
 	RegisterType("EventSoundRequest", EventSoundRequest, &SoundRequestPayload{})
+	RegisterType("EventSoundMuteToggle", EventSoundMuteToggle, &SoundMuteTogglePayload{})
+	RegisterType("EventAudioMuteChanged", EventAudioMuteChanged, &AudioMuteChangedPayload{})
 	RegisterType("EventMusicStart", EventMusicStart, &MusicStartPayload{})
 	RegisterType("EventMusicStop", EventMusicStop, nil)
-	RegisterType("EventMusicPause", EventMusicPause, nil)
 	RegisterType("EventBeatPatternRequest", EventBeatPatternRequest, &BeatPatternRequestPayload{})
 	RegisterType("EventMelodyNoteRequest", EventMelodyNoteRequest, &MelodyNoteRequestPayload{})
 	RegisterType("EventMelodyPatternRequest", EventMelodyPatternRequest, &MelodyPatternRequestPayload{})
@@ -35,6 +36,8 @@ func InitRegistry() {
 	RegisterType("EventMetaAboutRequest", EventMetaAboutRequest, nil)
 	RegisterType("EventMetaStatusMessageRequest", EventMetaStatusMessageRequest, &MetaStatusMessagePayload{})
 	RegisterType("EventMetaSystemCommandRequest", EventMetaSystemCommandRequest, &MetaSystemCommandPayload{})
+	RegisterType("EventGamePauseRequest", EventGamePauseRequest, &GamePausePayload{})
+	RegisterType("EventGamePauseChanged", EventGamePauseChanged, &GamePausePayload{})
 	RegisterType("EventCycleDamageMultiplierIncrease", EventCycleDamageMultiplierIncrease, nil)
 	RegisterType("EventCycleDamageMultiplierReset", EventCycleDamageMultiplierReset, nil)
 	RegisterType("EventNuggetCollected", EventNuggetCollected, &NuggetCollectedPayload{})

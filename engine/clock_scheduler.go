@@ -51,7 +51,6 @@ type ClockScheduler struct {
 	eventLoopBackoffMax int
 
 	// Cached metric pointers
-	statusReg         *status.Registry
 	statTicks         *atomic.Int64
 	statEvBackoffs    *atomic.Int64
 	statEvDispatches  *atomic.Int64
@@ -266,7 +265,21 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 }
 
-// eventLoop runs at 1ms frequency for reactive event settling
+// eventLoop settles queued events between ticks so a frame renders a settled
+// world. Runs regardless of pause: pause freezes the simulation (processTick),
+// not delivery.
+//
+// The world lock is mandatory here, not merely for component safety:
+// EventQueue.Consume is single-consumer, and updateMutex is what serializes
+// this goroutine against processTick, DispatchEventsImmediately, and
+// executeReset. Never Consume without holding it.
+//
+// TryLock first — short holds (frame snapshot, router RunSafe) are cheaper to
+// skip and retry than to queue behind. Escalate to a blocking acquire after
+// EventLoopBackoffMax misses: a hold that long means a tick is in progress,
+// and its post-UpdateLocked events need settling before the next frame.
+// Without the escalation the only guaranteed consumer is processTick, i.e.
+// one tick of latency on exactly the ticks that need it least.
 func (cs *ClockScheduler) eventLoop() {
 	defer cs.wg.Done()
 
@@ -281,10 +294,6 @@ func (cs *ClockScheduler) eventLoop() {
 			return
 
 		case <-ticker.C:
-			if cs.isPaused.Load() {
-				continue
-			}
-
 			// Skip if queue empty (prevents busy-wait contention)
 			if cs.world.Resources.Event.Queue.Len() == 0 {
 				backoffCount = 0
@@ -375,22 +384,12 @@ func (cs *ClockScheduler) executeReset() {
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
 	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
 
-	// 6. Process the events emitted by FSM Reset while holding World lock to ensure initial entities are spawned in world before unpause
+	// 6. Unpause via the single owner so clock, context, and audio move
+	//    together; settled below while the world lock is still held.
+	cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+
+	// 7. Settle FSM-reset and unpause events before releasing the lock
 	cs.dispatchAndProcessEvents()
-
-	// 7. Transition to Running state
-	// Scheduler is the unpause authority during reset, preventing systems from ticking against an uninitialized FSM
-	cs.isPaused.Store(false)
-	cs.pausableClock.Resume()
-
-	// TODO: review
-	// resume must mirror GameContext.SetPaused(false); the bare
-	// store left AudioEngine.paused latched true after :new (permanent
-	// silence, toggles ineffective). Pause via SetPaused, resume via raw
-	// store was the asymmetry unique to the reset path.
-	if res := cs.world.Resources.Audio; res != nil && res.Player != nil && res.Player.IsRunning() {
-		res.Player.SetPaused(false)
-	}
 }
 
 // DispatchEventsImmediately processes all pending events synchronously

@@ -170,16 +170,6 @@ func (w *World) UpdateLocked() {
 	}
 }
 
-// // func (w *World) UpdateLocked() {
-// // 	w.mu.RLock()
-// // 	systems := make([]System, len(w.systems))
-// // 	copy(systems, w.systems)
-// // 	w.mu.RUnlock()
-// 	for _, system := range systems {
-// 		system.Update()
-// 	}
-// }
-
 // PushEvent emits a game event using direct cached pointers. HOT-PATH for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
 	if w.Resources.Event.Queue == nil {

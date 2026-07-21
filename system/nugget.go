@@ -305,7 +305,7 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 
 // collectNugget handles auto-collection when cursor overlaps nugget
 func (s *NuggetSystem) collectNugget() {
-	s.world.Resources.Audio.Player.Play(core.SoundBell)
+	// s.world.Resources.Audio.Player.Play(audio.SoundBell)
 
 	s.world.DestroyEntity(s.activeNuggetEntity)
 

@@ -4,7 +4,6 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -115,9 +114,11 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				Percentage: false,
 				Type:       component.EnergyDeltaPenalty,
 			})
-			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-				SoundType: core.SoundShield,
-			})
+
+			// s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+			// 	SoundType: audio.SoundShield,
+			// })
+
 			s.statShieldHit.Add(1)
 		}
 	}
@@ -148,3 +149,4 @@ func (s *ShieldSystem) Update() {
 		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
 	}
 }
+

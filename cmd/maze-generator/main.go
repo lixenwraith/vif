@@ -56,7 +56,7 @@ func main() {
 			EndPos:            endPos,
 		}
 
-		// ADDED: Support for partially random RoomSpecs (0 = random for that field)
+		// Support for partially random RoomSpecs (0 = random for that field)
 		if roomCount > 0 {
 			fmt.Print("Define explicit room specs? (0 for random field) [y/N]: ")
 			exStr, _ := reader.ReadString('\n')
@@ -174,4 +174,3 @@ func getFloat(r *bufio.Reader, prompt string, def float64) float64 {
 	}
 	return v
 }
-

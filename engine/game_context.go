@@ -30,7 +30,6 @@ type GameContext struct {
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
 
 	IsPaused atomic.Bool // Pause flag; actual timing handled by PausableClock
-	IsMuted  atomic.Bool // Mute flag; keeps mute state
 
 	MacroRecording      atomic.Bool  // True when macro is recording
 	MacroRecordingLabel atomic.Int32 // Current recording label (rune), 0 if not recording
@@ -143,13 +142,10 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 9. Initialize audio muted
-	ctx.IsMuted.Store(true)
-
-	// 10. Initialize pause state
+	// 9. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 11. Initialize FPS tracking
+	// 10. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
@@ -464,49 +460,8 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 	ctx.overlayScroll.Store(0)
 }
 
-// === Audio ===
-
-// GetAudioPlayer retrieves audio player from resources
-// Returns nil if audio unavailable
-func (ctx *GameContext) GetAudioPlayer() AudioPlayer {
-	if ctx.World.Resources.Audio != nil {
-		return ctx.World.Resources.Audio.Player
-	}
-	return nil
-}
-
-// ToggleAudioMute toggles effect mute and mirrors the state into IsMuted
-func (ctx *GameContext) ToggleAudioMute() bool {
-	player := ctx.GetAudioPlayer()
-	if player == nil {
-		return ctx.IsMuted.Load()
-	}
-	player.ToggleEffectMute()
-	muted := player.IsEffectMuted()
-	ctx.IsMuted.Store(muted)
-	return muted
-}
-
 // === Pause ===
 
-// SetPaused sets the pause state using the pausable clock
 func (ctx *GameContext) SetPaused(paused bool) {
-	wasPaused := ctx.IsPaused.Load()
-	ctx.IsPaused.Store(paused)
-
-	player := ctx.GetAudioPlayer()
-
-	if paused && !wasPaused {
-		ctx.PausableClock.Pause()
-		// Pause audio engine (freezes sequencer, stops SFX)
-		if player != nil && player.IsRunning() {
-			player.SetPaused(true)
-		}
-	} else if !paused && wasPaused {
-		ctx.PausableClock.Resume()
-		// Resume audio engine
-		if player != nil && player.IsRunning() {
-			player.SetPaused(false)
-		}
-	}
+	ctx.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
