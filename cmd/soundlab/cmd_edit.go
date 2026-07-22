@@ -161,8 +161,8 @@ func cmdNew(s *Session, a []string) error {
 		return err
 	}
 	name := a[1]
-	if strings.Contains(name, ".") {
-		return fmt.Errorf("dots are reserved for paths")
+	if err := badName(name); err != nil {
+		return err
 	}
 	if s.sounds.has(name) || s.pats.has(name) {
 		return fmt.Errorf("%q: already exists", name)
@@ -178,8 +178,11 @@ func cmdNew(s *Session, a []string) error {
 
 func cmdCp(s *Session, a []string) error {
 	src, dst := a[0], a[1]
-	if strings.Contains(dst, ".") {
-		return fmt.Errorf("dots are reserved for paths")
+	if err := badName(src); err != nil {
+		return err
+	}
+	if err := badName(dst); err != nil {
+		return err
 	}
 	if s.sounds.has(dst) || s.pats.has(dst) {
 		return fmt.Errorf("%q: already exists", dst)
@@ -203,8 +206,11 @@ func cmdCp(s *Session, a []string) error {
 
 func cmdMv(s *Session, a []string) error {
 	src, dst := a[0], a[1]
-	if strings.Contains(dst, ".") {
-		return fmt.Errorf("dots are reserved for paths")
+	if err := badName(src); err != nil {
+		return err
+	}
+	if err := badName(dst); err != nil {
+		return err
 	}
 	if s.sounds.has(src) {
 		if err := s.sounds.rename(src, dst); err != nil {
@@ -221,6 +227,33 @@ func cmdMv(s *Session, a []string) error {
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", src)
+}
+
+func cmdUnset(s *Session, a []string) error {
+	segs := strings.Split(a[0], ".")
+	if len(segs) < 2 {
+		return fmt.Errorf("unset: path must address a field, not a document entry (del removes entries)")
+	}
+	if len(segs) == 2 && segs[1] == "name" {
+		return fmt.Errorf("unset: name is the registration identity; use mv")
+	}
+	root, mark, err := s.docRoot(segs[0])
+	if err != nil {
+		return err
+	}
+	// create=false: a chain that is already unset errors here with "unset",
+	// which is the correct report — there is nothing to clear.
+	v, err := resolve(reflect.ValueOf(root), segs[1:], false)
+	if err != nil {
+		return fmt.Errorf("%s: %w", segs[0], err)
+	}
+	if !v.CanSet() {
+		return fmt.Errorf("%s: not settable", a[0])
+	}
+	v.Set(reflect.Zero(v.Type()))
+	mark()
+	fmt.Fprintf(s.out, "unset %s\n", a[0])
+	return nil
 }
 
 func cmdValidate(s *Session, a []string) error {
@@ -246,4 +279,14 @@ func cmdRevert(s *Session, a []string) error {
 		return s.revertAll()
 	}
 	return s.revertName(a[0])
+}
+
+// badName rejects names the command grammar cannot address: '.' collides with
+// path segments, whitespace with tokenization, '#' with comments. Validation
+// allows all of them, so the guard lives at creation.
+func badName(n string) error {
+	if strings.ContainsAny(n, ". \t#") {
+		return fmt.Errorf("%q: dots, spaces and '#' are reserved by the command grammar", n)
+	}
+	return nil
 }

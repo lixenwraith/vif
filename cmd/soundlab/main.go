@@ -16,6 +16,7 @@ var (
 	flagSound    = flag.String("snd", "", "Sound TOML to load at startup")
 	flagPat      = flag.String("pat", "", "Pattern TOML to load at startup")
 	flagVol      = flag.Float64("vol", 0.7, "Master volume 0..1")
+	flagTUI      = flag.Bool("tui", false, "Full-screen TUI (default: line REPL)")
 )
 
 func main() {
@@ -40,18 +41,6 @@ func run() error {
 		fmt.Fprintf(s.out, "audio backend: %v (silent mode; edit/validate/export still work)\n", s.startErr)
 	}
 
-	// Backend processes must not outlive an interrupted editor. Stop kills
-	// them and restores nothing else — the REPL never touches terminal modes,
-	// so there is nothing to restore. Close is stopOnce-guarded; racing the
-	// deferred call is fine.
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-sig
-		s.Close()
-		os.Exit(130)
-	}()
-
 	if *flagSound != "" {
 		if err := s.loadSoundFile(*flagSound, true); err != nil {
 			return err
@@ -71,6 +60,15 @@ func run() error {
 		defer f.Close()
 		return runScript(s, f)
 	}
+	if *flagTUI {
+		// runTUI owns terminal teardown; signals become a clean loop exit so
+		// the deferred Fini always runs. The REPL's exit-on-signal handler
+		// must not be installed alongside it.
+		return runTUI(s)
+	}
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
+	go func() { <-sig; s.Close(); os.Exit(130) }()
 	runREPL(s, os.Stdin)
 	return nil
 }

@@ -146,3 +146,25 @@ func TestPathDiagnostics(t *testing.T) {
 		t.Fatalf("want sibling hint listing known keys, got: %v", err)
 	}
 }
+
+func TestUnset(t *testing.T) {
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new sound u1
+set u1.duration 0.1
+add u1.layer
+set u1.layer.0.source.kind osc
+set u1.layer.0.source.freq 100
+set u1.layer.0.source.vibrato.rate 5   # create-on-write through a nil pointer
+show u1.layer.0.source.vibrato.rate
+unset u1.layer.0.source.vibrato
+show u1.layer.0.source.vibrato
+validate u1
+`)
+	o := out.String()
+	if !strings.Contains(o, "= 5") || !strings.Contains(o, "<unset>") {
+		t.Fatalf("unset round-trip failed:\n%s", o)
+	}
+}
