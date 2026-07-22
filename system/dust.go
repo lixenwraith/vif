@@ -706,11 +706,11 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 	}
 
 	// Sigil for rendering
-	remaining, color := s.dustProperties(level)
+	remaining, c := s.dustProperties(level)
 
 	sigilComp := component.SigilComponent{
 		Rune:  char,
-		Color: color,
+		Color: c,
 	}
 
 	timerComp := component.TimerComponent{Remaining: remaining}
@@ -730,7 +730,7 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 }
 
-// TODO: convert to LUT in visual/color.go for colors and timer in parameter/particle.go?
+// TODO: move to parameter/particle.go and visual/color.go
 func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, color.RGB) {
 	switch level {
 	case component.GlyphDark:

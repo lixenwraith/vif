@@ -56,17 +56,17 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Determine color: hit flash > enraged > normal
-		var color color.RGB
+		var c color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
-			color = r.calculateFlashColor(combatComp.RemainingHitFlash)
+			c = r.calculateFlashColor(combatComp.RemainingHitFlash)
 		case combatComp.IsEnraged:
-			color = visual.RgbCombatEnraged
+			c = visual.RgbCombatEnraged
 		default:
-			color = visual.RgbDrain
+			c = visual.RgbDrain
 		}
 
-		r.renderMembers(ctx, buf, &headerComp, &swarmComp, color)
+		r.renderMembers(ctx, buf, &headerComp, &swarmComp, c)
 	}
 }
 
@@ -76,7 +76,7 @@ func (r *SwarmRenderer) renderMembers(
 	buf *render.RenderBuffer,
 	headerComp *component.HeaderComponent,
 	swarmComp *component.SwarmComponent,
-	color color.RGB,
+	c color.RGB,
 ) {
 	patternIdx := swarmComp.PatternIndex
 	if patternIdx < 0 || patternIdx >= parameter.SwarmPatternCount {
@@ -110,7 +110,7 @@ func (r *SwarmRenderer) renderMembers(
 		}
 
 		ch := visual.SwarmPatternChars[patternIdx][row][col]
-		buf.SetFgOnly(screenX, screenY, ch, color, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, ch, c, terminal.AttrNone)
 	}
 }
 
@@ -129,4 +129,3 @@ func (r *SwarmRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 
 	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }
-

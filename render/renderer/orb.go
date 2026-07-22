@@ -117,13 +117,13 @@ func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
 
 // renderOrb256 draws simple colored character for 256-color mode
 func (r *OrbRenderer) renderOrb256(buf *render.RenderBuffer, screenX, screenY int, orb *component.OrbComponent, glyph rune) {
-	var color color.RGB
+	var c color.RGB
 	if orb.FlashRemaining > 0 {
-		color = visual.RgbOrbFlash
+		c = visual.RgbOrbFlash
 	} else {
-		color = r.baseColor(orb.WeaponType)
+		c = r.baseColor(orb.WeaponType)
 	}
-	buf.SetFgOnly(screenX, screenY, glyph, color, terminal.AttrNone)
+	buf.SetFgOnly(screenX, screenY, glyph, c, terminal.AttrNone)
 }
 
 // renderOrbTrueColor draws corona glow with optional flash burst
@@ -145,7 +145,7 @@ func (r *OrbRenderer) renderOrbTrueColor(ctx render.RenderContext, buf *render.R
 }
 
 // renderCorona draws rotating directional glow around orb center
-func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, color color.RGB, rotDirX, rotDirY int64) {
+func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int, c color.RGB, rotDirX, rotDirY int64) {
 	for dy := -r.effectRadiusYInt; dy <= r.effectRadiusYInt; dy++ {
 		for dx := -r.effectRadiusXInt; dx <= r.effectRadiusXInt; dx++ {
 			if dx == 0 && dy == 0 {
@@ -185,7 +185,7 @@ func (r *OrbRenderer) renderCorona(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, alpha, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, alpha, terminal.AttrNone)
 		}
 	}
 }

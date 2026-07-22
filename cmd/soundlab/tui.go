@@ -1,9 +1,9 @@
 package main
 
 // TUI shell over the same dispatch table the REPL uses. Every mutation and
-// every audition goes through Execute — the direct keybindings are macros
-// that assemble a command line — so nothing the TUI can do is unreachable
-// from a script, which is what keeps the scripted E2E authoritative.
+// every audition goes through Execute — direct keybindings are macros that
+// assemble a command line — so nothing the TUI can do is unreachable from a
+// script, which is what keeps the scripted E2E authoritative.
 
 import (
 	"errors"
@@ -16,6 +16,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
+	"github.com/lixenwraith/vi-fighter/audio"
 )
 
 type focusArea int
@@ -33,12 +34,14 @@ const (
 	modeNormal uiMode = iota
 	modeCommand
 	modeEdit
+	modePiano
 )
 
 const (
 	kindSound   = 0
 	kindPattern = 1
 	logPaneH    = 9
+	pianoRowsH  = 2
 	tickEvery   = 100 * time.Millisecond
 )
 
@@ -53,23 +56,31 @@ type tuiApp struct {
 	focus focusArea
 	mode  uiMode
 
-	kind     int    // browser tab: kindSound | kindPattern
-	brCursor [2]int // per-kind cursor survives tab switches
+	kind     int
+	brCursor [2]int
 	brScroll [2]int
 
 	exp    *tui.TreeExpansion
 	tree   *tui.TreeState
 	nodes  []tui.TreeNode
-	selKey string // kind/name; change resets the tree cursor
+	selKey string
 
 	cmdField *tui.TextFieldState
 	history  []string
 	histIdx  int
 
 	editField *tui.TextFieldState
-	editPath  string // full "name.a.b" for the pending set
+	editPath  string
 
-	logScroll int // lines up from the tail; 0 = follow
+	logScroll int
+
+	pianoOct   int
+	pianoVel   float64
+	pianoInstr audio.InstrumentType
+	pianoLit   map[rune]int // keycap -> ticks of highlight remaining
+
+	quitArmed  bool // one warning issued for unsaved-on-quit
+	hintedFill bool // slot-2 auto-fill hint shown once
 }
 
 func runTUI(s *Session) error {
@@ -87,7 +98,7 @@ func runTUI(s *Session) error {
 	defer term.Fini()
 
 	// Signals become a clean loop exit rather than os.Exit: Fini must run or
-	// the terminal is left in raw mode on the alternate screen.
+	// the terminal is left raw on the alternate screen.
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sig)
@@ -103,8 +114,8 @@ func runTUI(s *Session) error {
 
 	// The transport readout animates without input: a ticker wakes the
 	// blocking PollEvent through the synthetic channel. KeyNone is what
-	// unknown escape sequences already decode to, so the app tolerates it by
-	// construction. This replaces the demo's poll-with-default spin.
+	// unknown escape sequences already decode to, so the app tolerates it
+	// by construction.
 	stop := make(chan struct{})
 	defer close(stop)
 	go func() {
@@ -124,14 +135,28 @@ func runTUI(s *Session) error {
 	a := &tuiApp{
 		s: s, term: term, log: lb, theme: tui.DefaultTheme,
 		w: w, h: h,
-		exp:       tui.NewTreeExpansion(),
-		tree:      tui.NewTreeState(10),
-		cmdField:  tui.NewTextFieldState(""),
-		editField: tui.NewTextFieldState(""),
+		exp:        tui.NewTreeExpansion(),
+		tree:       tui.NewTreeState(10),
+		cmdField:   tui.NewTextFieldState(""),
+		editField:  tui.NewTextFieldState(""),
+		pianoOct:   3,
+		pianoVel:   0.8,
+		pianoInstr: audio.InstrPiano,
+		pianoLit:   map[rune]int{},
 	}
-	fmt.Fprintln(lb, "soundlab TUI — ':' for commands, Tab cycles focus, Ctrl+Q quits")
+	fmt.Fprintln(lb, "soundlab TUI — ':' commands, Tab focus, p piano, m/M music, Ctrl+Q quit")
 	if s.startErr != nil {
 		fmt.Fprintf(lb, "audio backend: %v (silent mode)\n", s.startErr)
+	}
+	// An empty session has nothing to browse; the TUI seeds builtins per
+	// empty document. REPL and scripts stay unseeded — they own their state.
+	if len(s.sounds.order) == 0 {
+		if err := s.seedBuiltinSounds(); err != nil {
+			fmt.Fprintf(lb, "seed sounds: %v\n", err)
+		}
+	}
+	if len(s.pats.order) == 0 {
+		_ = s.seedBuiltinPatterns()
 	}
 
 	for !a.quit {
@@ -144,14 +169,31 @@ func runTUI(s *Session) error {
 // exec runs one command line, echoing it and any error into the log pane.
 func (a *tuiApp) exec(line string) {
 	fmt.Fprintf(a.log, "> %s\n", line)
+	a.execQ(line)
+}
+
+// execQ runs without echoing the command — the piano would otherwise flood
+// the log with one line per note. Errors still surface.
+func (a *tuiApp) execQ(line string) {
 	if err := Execute(a.s, line); err != nil {
 		if errors.Is(err, errQuit) {
-			a.quit = true
+			a.requestQuit()
 			return
 		}
 		fmt.Fprintf(a.log, "error: %v\n", err)
 	}
 	a.logScroll = 0 // new output re-sticks the log to its tail
+}
+
+// requestQuit guards unsaved work once, then quits. Applies to Ctrl+Q and
+// :quit alike.
+func (a *tuiApp) requestQuit() {
+	if (a.s.sounds.modified || a.s.pats.modified) && !a.quitArmed {
+		a.quitArmed = true
+		fmt.Fprintln(a.log, "unsaved changes — :save sound|pattern <file> to keep them; quit again to discard")
+		return
+	}
+	a.quit = true
 }
 
 func (a *tuiApp) handle(ev terminal.Event) {
@@ -160,7 +202,7 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		a.w, a.h = ev.Width, ev.Height
 		return
 	case terminal.EventClosed:
-		a.quit = true
+		a.quit = true // signal path: must exit so the deferred Fini runs
 		return
 	case terminal.EventError:
 		fmt.Fprintf(a.log, "input error: %v\n", ev.Err)
@@ -170,17 +212,28 @@ func (a *tuiApp) handle(ev terminal.Event) {
 		return
 	}
 	if ev.Key == terminal.KeyNone {
-		return // ticker wake or unknown escape: render only
-	}
-	if ev.Key == terminal.KeyCtrlQ || ev.Key == terminal.KeyCtrlC {
-		a.quit = true
+		// Ticker wake (or unknown escape): decay piano highlights, render.
+		for k, t := range a.pianoLit {
+			if t <= 1 {
+				delete(a.pianoLit, k)
+			} else {
+				a.pianoLit[k] = t - 1
+			}
+		}
 		return
 	}
+	if ev.Key == terminal.KeyCtrlQ || ev.Key == terminal.KeyCtrlC {
+		a.requestQuit()
+		return
+	}
+	a.quitArmed = false // any other real key withdraws the pending quit
 	switch a.mode {
 	case modeCommand:
 		a.commandKey(ev)
 	case modeEdit:
 		a.editKey(ev)
+	case modePiano:
+		a.pianoKey(ev)
 	default:
 		a.normalKey(ev)
 	}
@@ -197,6 +250,15 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		a.cmdField.Clear()
 		a.histIdx = len(a.history)
 		return
+	case r == 'p':
+		a.enterPiano()
+		return
+	case r == 'm':
+		a.toggleMusic()
+		return
+	case r == 'M':
+		a.exec("music reset")
+		return
 	case ev.Key == terminal.KeyTab:
 		a.focus = (a.focus + 1) % focusCount
 		return
@@ -208,6 +270,30 @@ func (a *tuiApp) normalKey(ev terminal.Event) {
 		a.inspectorKey(ev, r)
 	case focusLog:
 		a.logKey(ev, r)
+	}
+}
+
+// toggleMusic starts or stops the transport. Stop preserves the playhead by
+// engine design (aligned resume); M / music reset zeroes it.
+func (a *tuiApp) toggleMusic() {
+	if a.s.eng.IsMusicPlaying() {
+		a.exec("music stop")
+		return
+	}
+	if a.s.eng.IsMusicMuted() {
+		fmt.Fprintln(a.log, "music is muted — :mute none first")
+		return
+	}
+	a.exec("music start")
+	silent := true
+	for i := 0; i < 3; i++ {
+		if a.s.eng.SlotPattern(i) != audio.PatternSilence {
+			silent = false
+			break
+		}
+	}
+	if silent {
+		fmt.Fprintln(a.log, "all slots silent — 0/1/2 on a pattern assigns it")
 	}
 }
 
@@ -230,7 +316,11 @@ func (a *tuiApp) browserKey(ev terminal.Event, r rune) {
 			a.focus = focusInspector
 		}
 	case ev.Key == terminal.KeySpace || r == ' ':
-		a.audition()
+		if a.kind == kindSound {
+			a.audition()
+		} else {
+			a.toggleMusic()
+		}
 	case r >= '0' && r <= '2':
 		a.assignSlot(int(r - '0'))
 	case r == 'a':
@@ -258,13 +348,12 @@ func (a *tuiApp) audition() {
 		fmt.Fprintf(a.log, "%q: not addressable (space/dot/# in name)\n", n)
 		return
 	}
-	if a.kind == kindSound {
-		a.exec("play " + n)
-		return
-	}
-	fmt.Fprintln(a.log, "patterns audition via a slot: press 0, 1 or 2")
+	a.exec("play " + n)
 }
 
+// assignSlot toggles the cursor pattern in a slot: assigning the pattern a
+// slot already holds clears the slot instead, so one key both layers and
+// un-layers. Assignment auto-starts the transport — the pattern must sound.
 func (a *tuiApp) assignSlot(slot int) {
 	if a.kind != kindPattern {
 		return
@@ -273,7 +362,22 @@ func (a *tuiApp) assignSlot(slot int) {
 	if n == "" || !addressable(n) {
 		return
 	}
+	if id := audio.PatternIDByName(n); id != audio.PatternSilence && a.s.eng.SlotPattern(slot) == id {
+		a.exec(fmt.Sprintf("slot %d -", slot))
+		return
+	}
 	a.exec(fmt.Sprintf("slot %d %s", slot, n))
+	if slot == 2 && !a.hintedFill {
+		a.hintedFill = true
+		fmt.Fprintln(a.log, "note: slot 2 auto-fill swaps once per phrase — :fill off to pin")
+	}
+	if !a.s.eng.IsMusicPlaying() {
+		if a.s.eng.IsMusicMuted() {
+			fmt.Fprintln(a.log, "music is muted — :mute none to hear it")
+			return
+		}
+		a.exec("music start")
+	}
 }
 
 func (a *tuiApp) nameCmd(verb string) {
@@ -304,10 +408,14 @@ func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
 		if m != nil && a.curExpandable() {
 			a.exp.Expand(full)
 		}
+	case r == 'L':
+		a.expandAll()
 	case ev.Key == terminal.KeyLeft || r == 'h':
 		if m != nil {
 			a.exp.Collapse(full)
 		}
+	case r == 'H':
+		a.collapseAll()
 	case ev.Key == terminal.KeyEnter:
 		a.inspectorEnter(m, full)
 	case r == 'a':
@@ -319,6 +427,39 @@ func (a *tuiApp) inspectorKey(ev terminal.Event, r rune) {
 	case ev.Key == terminal.KeyEscape:
 		a.focus = focusBrowser
 	}
+}
+
+// expandAll runs to fixpoint: children exist in the node list only after
+// their parent expands, so each pass can reveal new expandables. Depth is
+// bounded by the spec shape (~5); 8 passes is slack.
+func (a *tuiApp) expandAll() {
+	name := a.selName()
+	if name == "" {
+		return
+	}
+	for range 8 {
+		a.buildNodes(name)
+		changed := false
+		for i := range a.nodes {
+			n := &a.nodes[i]
+			if n.Expandable && !a.exp.IsExpanded(n.Key) {
+				a.exp.Expand(n.Key)
+				changed = true
+			}
+		}
+		if !changed {
+			break
+		}
+	}
+}
+
+func (a *tuiApp) collapseAll() {
+	for i := range a.nodes {
+		if a.nodes[i].Expandable {
+			a.exp.Collapse(a.nodes[i].Key)
+		}
+	}
+	a.tree.JumpStart()
 }
 
 func (a *tuiApp) inspectorEnter(m *nodeMeta, full string) {
@@ -352,7 +493,7 @@ func (a *tuiApp) inspectorAdd(m *nodeMeta) {
 	}
 	p := name + "." + strings.Join(segs, ".")
 	a.exec("add " + p)
-	a.exp.Expand(p) // show what was just appended
+	a.exp.Expand(p)
 }
 
 func (a *tuiApp) startEdit(m *nodeMeta) {

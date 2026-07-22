@@ -251,6 +251,8 @@ func cmdStat(s *Session, a []string) error {
 	fmt.Fprintf(s.out, "sounds %d (dirty %v)  patterns %d (dirty %v)\n",
 		len(s.sounds.order), s.sounds.dirtyNames(),
 		len(s.pats.order), s.pats.dirtyNames())
+	fmt.Fprintf(s.out, "unsaved to disk: sounds=%v patterns=%v\n",
+		s.sounds.modified, s.pats.modified)
 	return nil
 }
 

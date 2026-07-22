@@ -167,6 +167,7 @@ func (s *Session) saveSounds(file string) error {
 		fmt.Fprintf(s.out, ", %d includes preserved; root overrides by name", len(s.sounds.include))
 	}
 	fmt.Fprintln(s.out, ")")
+	s.sounds.modified = false
 	return nil
 }
 
@@ -186,6 +187,7 @@ func (s *Session) savePatterns(file string) error {
 	}
 	s.pats.src = file
 	fmt.Fprintf(s.out, "wrote %s (%d patterns)\n", file, len(s.pats.order))
+	s.pats.modified = false
 	return nil
 }
 

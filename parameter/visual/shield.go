@@ -118,7 +118,7 @@ func init() {
 	)
 }
 
-func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
+func buildShieldConfig(rxF, ryF, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
 	rx := vmath.FromFloat(rxF)
 	ry := vmath.FromFloat(ryF)
 	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
@@ -136,11 +136,10 @@ func buildShieldConfig(rxF, ryF, maxOpacity float64, color, colorAlt color.RGB, 
 		MaxOpacityQ32:    vmath.FromFloat(maxOpacity),
 		GlowIntensityQ32: vmath.FromFloat(glowIntensity),
 		GlowPeriod:       glowPeriod,
-		Color:            color,
+		Color:            colorMain,
 		ColorAlt:         colorAlt,
 		Palette256:       palette,
 		Palette256Alt:    paletteAlt,
 		GlowColor:        glowColor,
 	}
 }
-

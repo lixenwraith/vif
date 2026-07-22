@@ -271,8 +271,8 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 			blue = 255
 		}
 
-		color := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
-		buf.SetBgOnly(screenX, screenY, color)
+		c := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+		buf.SetBgOnly(screenX, screenY, c)
 	}
 }
 
@@ -337,10 +337,10 @@ func (r *StormRenderer) renderHalo(ctx render.RenderContext, buf *render.RenderB
 				continue
 			}
 
-			color := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
+			c := color.RGB{R: uint8(red), G: uint8(green), B: uint8(blue)}
 
 			// BlendAdd for glow on black background
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
 }
@@ -401,8 +401,8 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 				continue
 			}
 
-			color := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+			c := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
 }
@@ -536,9 +536,9 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 			}
 
 			// Color: orange-red at base fading to dark red
-			color := color.Lerp(visual.RgbMuzzleFlashBase, visual.RgbMuzzleFlashTip, t)
+			c := color.Lerp(visual.RgbMuzzleFlashBase, visual.RgbMuzzleFlashTip, t)
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, alpha, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, alpha, terminal.AttrNone)
 		}
 	}
 }

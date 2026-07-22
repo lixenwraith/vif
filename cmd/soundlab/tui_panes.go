@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
+	"github.com/lixenwraith/vi-fighter/audio"
 )
 
 // --- log capture ---
@@ -111,19 +112,25 @@ func (a *tuiApp) buildNodes(name string) {
 
 // walkStruct emits one node per toml key, recursing into expanded
 // composites. keysOf is alphabetical, matching MarshalSounds' key order, so
-// the inspector and a saved file read the same way.
+// the inspector and a saved file read the same way. omitempty is read here:
+// it is the exact serialization rule that makes a zero value mean "default".
 func (a *tuiApp) walkStruct(name string, sv reflect.Value, segs []string, depth int, unset bool) {
-	idx := tagIndex(sv.Type())
-	for _, key := range keysOf(sv.Type()) {
-		a.emitField(name, key, sv.Field(idx[key]), append(slices.Clone(segs), key), depth, unset)
+	t := sv.Type()
+	idx := tagIndex(t)
+	for _, key := range keysOf(t) {
+		f := t.Field(idx[key])
+		oe := strings.Contains(f.Tag.Get("toml"), "omitempty")
+		a.emitField(name, key, sv.Field(idx[key]), append(slices.Clone(segs), key), depth, unset, oe)
 	}
 }
 
 // emitField renders one field. A nil pointer sub-table (Burst, Vibrato) is
-// walked through its zero value so the user can browse and edit fields that
-// do not exist yet — set's create-on-write resolve allocates the chain on the
-// first commit. The whole zero-substituted subtree renders dimmed.
-func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, depth int, unset bool) {
+// walked through its zero value so fields that do not exist yet can be
+// browsed and edited — set's create-on-write resolve allocates on commit;
+// the whole substituted subtree renders dimmed. A leaf also dims when its
+// tag is omitempty and the value is zero: exactly the fields a save would
+// omit, i.e. the ones resolving to package defaults.
+func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, depth int, unset, omitEmpty bool) {
 	full := name + "." + strings.Join(segs, ".")
 	for fv.Kind() == reflect.Pointer {
 		if fv.IsNil() {
@@ -161,7 +168,9 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
 			Expandable: n > 0, Expanded: exp,
-			Style: st, Suffix: fmt.Sprintf("[%d]", n), SuffixStyle: sfx,
+			// "(n)" not "[n]": bus[1] read as "routed to bus 1" when it
+			// meant "one bus defined".
+			Style: st, Suffix: fmt.Sprintf("(%d)", n), SuffixStyle: sfx,
 			Data: &nodeMeta{segs: segs, slice: true},
 		})
 		if exp {
@@ -170,9 +179,13 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 			}
 		}
 	default:
+		lst := st
+		if !unset && omitEmpty && fv.IsZero() {
+			lst.Fg = a.theme.HintFg // serialization would omit it: default
+		}
 		a.nodes = append(a.nodes, tui.TreeNode{
 			Key: full, Label: key, Depth: depth,
-			Style: st, Suffix: "= " + formatLeaf(fv), SuffixStyle: sfx,
+			Style: lst, Suffix: "= " + formatLeaf(fv), SuffixStyle: sfx,
 			Data: &nodeMeta{segs: segs, leaf: true, ro: depth == 0 && key == "name"},
 		})
 	}
@@ -275,8 +288,18 @@ func (a *tuiApp) render() {
 		return
 	}
 
+	stripH := 0
+	if a.mode == modePiano {
+		stripH = pianoRowsH
+	}
 	header, rest := tui.SplitVFixed(root, 1)
-	body, input := tui.SplitVFixed(rest, rest.H-1)
+	body, bottom := tui.SplitVFixed(rest, rest.H-1-stripH)
+	var strip, input tui.Region
+	if stripH > 0 {
+		strip, input = tui.SplitVFixed(bottom, stripH)
+	} else {
+		input = bottom
+	}
 	main, logR := tui.SplitVFixed(body, body.H-logPaneH)
 	brR, insR := tui.SplitHFixed(main, main.W*32/100)
 
@@ -284,6 +307,9 @@ func (a *tuiApp) render() {
 	a.renderBrowser(brR)
 	a.renderInspector(insR)
 	a.renderLog(logR)
+	if stripH > 0 {
+		a.renderPiano(strip)
+	}
 	a.renderInput(input)
 
 	a.term.Flush(cells, w, h)
@@ -309,21 +335,45 @@ func (a *tuiApp) renderHeader(r tui.Region) {
 	if a.s.eng.IsSilent() || be == "" {
 		be = "silent"
 	}
-	slots := fmt.Sprintf("%s·%s·%s",
-		tui.Truncate(patName(a.s.eng.SlotPattern(0)), 12),
-		tui.Truncate(patName(a.s.eng.SlotPattern(1)), 12),
-		tui.Truncate(patName(a.s.eng.SlotPattern(2)), 12))
-	dirty := len(a.s.sounds.dirty) + len(a.s.pats.dirty)
-
 	lab := tui.Style{Fg: a.theme.HintFg}
 	val := tui.Style{Fg: a.theme.HeaderFg}
-	r.StatusBar(0, []tui.BarSection{
-		{Value: fmt.Sprintf("%s %d:%02d", sym, bar, step), LabelStyle: lab, ValueStyle: val, Priority: 3},
-		{Label: "slots ", Value: slots, LabelStyle: lab, ValueStyle: val, Priority: 1},
+
+	rest := []tui.BarSection{
 		{Label: "bpm ", Value: strconv.Itoa(a.s.bpm), LabelStyle: lab, ValueStyle: val, Priority: 2},
-		{Label: "dirty ", Value: strconv.Itoa(dirty), LabelStyle: lab, ValueStyle: val, Priority: 2},
-		{Value: be, LabelStyle: lab, ValueStyle: val, Priority: 1},
-	}, tui.BarOpts{Bg: a.theme.HeaderBg, Align: tui.BarAlignRight})
+		{Label: "dirty ", Value: strconv.Itoa(len(a.s.sounds.dirty) + len(a.s.pats.dirty)), LabelStyle: lab, ValueStyle: val, Priority: 2},
+		{Value: be, ValueStyle: val, Priority: 1},
+	}
+	if a.s.sounds.modified || a.s.pats.modified {
+		rest = append([]tui.BarSection{
+			{Value: "● unsaved", ValueStyle: tui.Style{Fg: a.theme.Warning}, Priority: 2},
+		}, rest...)
+	}
+	trans := tui.BarSection{Value: fmt.Sprintf("%s %d:%02d", sym, bar, step), ValueStyle: val, Priority: 3}
+
+	// Slot names shorten only when the full form does not fit (was an
+	// unconditional 12-char cap): measure the fixed sections, give the
+	// slots whatever width remains.
+	names := [3]string{
+		patName(a.s.eng.SlotPattern(0)),
+		patName(a.s.eng.SlotPattern(1)),
+		patName(a.s.eng.SlotPattern(2)),
+	}
+	fixed := 1 + tui.RuneLen("soundlab") + 2 + tui.RuneLen(trans.Value) + 3
+	for _, s := range rest {
+		fixed += tui.RuneLen(s.Label) + tui.RuneLen(s.Value) + 3
+	}
+	budget := r.W - fixed - tui.RuneLen("slots ") - 2 // two '·' separators
+	if full := tui.RuneLen(names[0]) + tui.RuneLen(names[1]) + tui.RuneLen(names[2]); full > budget {
+		per := max(budget/3, 6)
+		for i := range names {
+			names[i] = tui.Truncate(names[i], per)
+		}
+	}
+	secs := append([]tui.BarSection{
+		trans,
+		{Label: "slots ", Value: names[0] + "·" + names[1] + "·" + names[2], LabelStyle: lab, ValueStyle: val, Priority: 1},
+	}, rest...)
+	r.StatusBar(0, secs, tui.BarOpts{Bg: a.theme.HeaderBg, Align: tui.BarAlignRight})
 }
 
 func (a *tuiApp) renderBrowser(r tui.Region) {
@@ -343,22 +393,32 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 	}
 	items := make([]tui.ListItem, 0, len(names))
 	for _, n := range names {
-		var text string
-		var dirty bool
+		var it tui.ListItem
 		if a.kind == kindSound {
 			d, _ := a.s.sounds.get(n)
-			text = fmt.Sprintf("%-20s %2dL %4.1fs", tui.Truncate(n, 20), len(d.Layer), soundDur(d))
-			dirty = a.s.sounds.isDirty(n)
+			it.Text = fmt.Sprintf("%-20s %2dL %4.1fs", tui.Truncate(n, 20), len(d.Layer), soundDur(d))
+			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
+			if a.s.sounds.isDirty(n) {
+				it.Icon, it.IconFg = '*', a.theme.Warning
+			}
 		} else {
 			d, _ := a.s.pats.get(n)
-			text = fmt.Sprintf("%-20s %2ds %2dT", tui.Truncate(n, 20), d.Steps, len(d.Track))
-			dirty = a.s.pats.isDirty(n)
+			// Dirty moves into the text so the icon can carry the slot
+			// badge: which slot is sounding this pattern right now.
+			it.Text = fmt.Sprintf("%s%-20s %2ds %2dT",
+				dirtyMark(a.s.pats.isDirty(n)), tui.Truncate(n, 20), d.Steps, len(d.Track))
+			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
+			if id := audio.PatternIDByName(n); id != audio.PatternSilence {
+				for si := 0; si < 3; si++ {
+					if a.s.eng.SlotPattern(si) == id {
+						it.Icon, it.IconFg = rune('0'+si), a.theme.Selected
+						break
+					}
+				}
+			}
 		}
-		icon, iconFg := tui.IconBullet, a.theme.Unselected
-		if dirty {
-			icon, iconFg = '*', a.theme.Warning
-		}
-		items = append(items, tui.ListItem{Icon: icon, IconFg: iconFg, Text: text, TextStyle: tui.Style{Fg: a.theme.Fg}})
+		it.TextStyle = tui.Style{Fg: a.theme.Fg}
+		items = append(items, it)
 	}
 	c := a.brCursor[a.kind]
 	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], content.H, len(items))
@@ -443,6 +503,11 @@ func (a *tuiApp) renderInput(r tui.Region) {
 	case modeEdit:
 		pre := tui.Truncate(a.editPath, r.W/2) + " = "
 		r.TextField(a.editField, tui.TextFieldOpts{Prefix: pre, Focused: true, Border: tui.LineNone})
+	case modePiano:
+		r.Fill(a.theme.HeaderBg)
+		msg := fmt.Sprintf("PIANO  %s  oct %d  vel %.2f   z/q rows play  [ ] octave  ↑↓ vel  tab instrument  esc exit",
+			a.pianoInstr, a.pianoOct, a.pianoVel)
+		r.Text(1, 0, msg, a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
 	default:
 		r.Fill(a.theme.HeaderBg)
 		r.Text(1, 0, a.footHint(), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
@@ -452,9 +517,12 @@ func (a *tuiApp) renderInput(r tui.Region) {
 func (a *tuiApp) footHint() string {
 	switch a.focus {
 	case focusInspector:
-		return "j/k move  h/l fold  enter edit  a add  x del  esc browser  tab focus  : cmd  ^Q quit"
+		return "j/k move  h/l fold  H/L fold all  enter edit  a add  x del  esc back  dim=default  p piano  m/M music  : cmd  ^Q quit"
 	case focusLog:
-		return "j/k scroll  g/G ends  tab focus  : cmd  ^Q quit"
+		return "j/k scroll  g/G ends  tab focus  p piano  m/M music  : cmd  ^Q quit"
 	}
-	return "j/k move  h/l kind  enter inspect  space play  0-2 slot(pat)  a apply  v validate  r revert  : cmd  ^Q quit"
+	if a.kind == kindPattern {
+		return "j/k move  h/l kind  space music  0-2 slot toggle  a/v/r apply/val/rev  p piano  M reset  : cmd  ^Q quit"
+	}
+	return "j/k move  h/l kind  space play  enter inspect  a/v/r apply/val/rev  p piano  m/M music  : cmd  ^Q quit"
 }

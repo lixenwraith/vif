@@ -203,8 +203,8 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 				bVal = 255
 			}
 
-			color := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+			c := color.RGB{R: uint8(rVal), G: uint8(gVal), B: uint8(bVal)}
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
 }
@@ -297,11 +297,10 @@ func (r *PylonRenderer) renderMembersTrueColor(
 		entry := r.colorLUT[lutIdx]
 
 		// Interpolate between bright and dark based on position
-		color := color.Lerp(entry.dark, entry.bright, positionBrightness)
+		c := color.Lerp(entry.dark, entry.bright, positionBrightness)
 
-		// buf.SetBgOnly(screenX, screenY, color)
 		// Use BlendMax to defer to brighter existing species
-		buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendMax, 1.0, terminal.AttrNone)
+		buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendMax, 1.0, terminal.AttrNone)
 	}
 }
 

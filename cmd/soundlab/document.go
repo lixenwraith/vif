@@ -18,9 +18,10 @@ type doc[T any] struct {
 	src     string   // provenance for bare `save`
 	include []string // sound documents only; patterns have no include form
 
-	nameOf  func(T) string
-	setName func(T, string)
-	clone   func(T) T
+	nameOf   func(T) string
+	setName  func(T, string)
+	clone    func(T) T
+	modified bool // modified tracks divergence from disk
 }
 
 func newSoundDoc() *doc[*audio.SoundDef] {
@@ -68,6 +69,7 @@ func (d *doc[T]) put(v T, dirty bool) {
 	d.byName[n] = v
 	if dirty {
 		d.dirty[n] = true
+		d.modified = true
 	} else {
 		delete(d.dirty, n)
 	}
@@ -82,6 +84,7 @@ func (d *doc[T]) del(n string) bool {
 	if i := slices.Index(d.order, n); i >= 0 {
 		d.order = slices.Delete(d.order, i, i+1)
 	}
+	d.modified = true
 	return true
 }
 
@@ -103,12 +106,14 @@ func (d *doc[T]) rename(from, to string) error {
 		d.order[i] = to
 	}
 	d.dirty[to] = true
+	d.modified = true
 	return nil
 }
 
 func (d *doc[T]) markDirty(n string) {
 	if d.has(n) {
 		d.dirty[n] = true
+		d.modified = true
 	}
 }
 func (d *doc[T]) clearDirty(n string) { delete(d.dirty, n) }
@@ -156,6 +161,7 @@ func (d *doc[T]) replaceAll(vs []T, src string, dirty bool) {
 	for _, v := range vs {
 		d.put(v, dirty)
 	}
+	d.modified = true // bulk replacement is a baseline, not an edit
 }
 
 func (d *doc[T]) mergeAll(vs []T, dirty bool) {

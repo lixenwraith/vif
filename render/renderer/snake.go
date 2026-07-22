@@ -171,8 +171,8 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 			}
 
 			factor := glowIntensity * alpha * alpha // Quadratic falloff
-			color := color.Scale(visual.RgbSnakeShieldTint, factor)
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendAdd, 1.0, terminal.AttrNone)
+			c := color.Scale(visual.RgbSnakeShieldTint, factor)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendAdd, 1.0, terminal.AttrNone)
 		}
 	}
 }
@@ -252,14 +252,14 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 			if healthRatio > 1.0 {
 				healthRatio = 1.0
 			}
-			color := color.Scale(baseColor, 0.3+0.7*healthRatio)
+			c := color.Scale(baseColor, 0.3+0.7*healthRatio)
 
 			// Hit flash
 			if combatComp.RemainingHitFlash > 0 {
-				color = r.calculateFlashColor(color, combatComp.RemainingHitFlash)
+				c = r.calculateFlashColor(c, combatComp.RemainingHitFlash)
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, render.BlendMax, 1.0, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendMax, 1.0, terminal.AttrNone)
 		}
 	}
 }

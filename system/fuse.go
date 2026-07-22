@@ -147,7 +147,7 @@ func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []core.Point, 
 	}
 }
 
-func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, color component.SpiritColor) {
+func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, c component.SpiritColor) {
 	for i, src := range sources {
 		dest := vmath.AreaDistributePoint(area, i, s.rng)
 
@@ -157,7 +157,7 @@ func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, colo
 			TargetX:   dest.X,
 			TargetY:   dest.Y,
 			Char:      visual.DrainChar,
-			BaseColor: color,
+			BaseColor: c,
 		})
 	}
 }
@@ -324,4 +324,3 @@ func (s *FuseSystem) completeFusion(f pendingFusion) {
 		})
 	}
 }
-

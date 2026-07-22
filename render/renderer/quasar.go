@@ -120,13 +120,13 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 
 // renderMembers draws quasar character grid with state-based coloring
 func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.RenderBuffer, headerComp *component.HeaderComponent, combatComp *component.CombatComponent) {
-	var color color.RGB
+	var c color.RGB
 	if combatComp.RemainingHitFlash > 0 {
-		color = r.calculateFlashColor(combatComp.RemainingHitFlash)
+		c = r.calculateFlashColor(combatComp.RemainingHitFlash)
 	} else if combatComp.IsEnraged {
-		color = visual.RgbCombatEnraged
+		c = visual.RgbCombatEnraged
 	} else {
-		color = visual.RgbDrain
+		c = visual.RgbDrain
 	}
 
 	for _, member := range headerComp.MemberEntries {
@@ -148,7 +148,7 @@ func (r *QuasarRenderer) renderMembers(ctx render.RenderContext, buf *render.Ren
 		col := int(member.OffsetX) + parameter.QuasarHeaderOffsetX
 		ch := visual.QuasarChars[row][col]
 
-		buf.SetFgOnly(screenX, screenY, ch, color, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, ch, c, terminal.AttrNone)
 	}
 }
 
@@ -167,4 +167,3 @@ func (r *QuasarRenderer) calculateFlashColor(remaining time.Duration) color.RGB 
 
 	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }
-

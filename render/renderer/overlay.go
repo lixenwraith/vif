@@ -449,7 +449,7 @@ func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
 		return
 	}
 
-	for y := 0; y < h; y++ {
+	for y := range h {
 		// Map region Y to pattern Y
 		patY := y * logoPatternH / h
 		if patY >= logoPatternH {
@@ -457,7 +457,7 @@ func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
 		}
 		row := logoPattern[patY]
 
-		for x := 0; x < w; x++ {
+		for x := range w {
 			// Map region X to pattern X
 			patX := x * logoPatternW / w
 			if patX >= logoPatternW {
@@ -465,9 +465,8 @@ func (r *OverlayRenderer) renderLogo(region tui.Region, bg color.RGB) {
 			}
 
 			ch := rune(row[patX])
-			color := logoColorMap[ch]
-			region.Cell(x, y, '█', color, bg, terminal.AttrNone)
+			c := logoColorMap[ch]
+			region.Cell(x, y, '█', c, bg, terminal.AttrNone)
 		}
 	}
 }
-

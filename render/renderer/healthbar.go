@@ -212,9 +212,9 @@ func (r *HealthBarRenderer) renderCellTrueColor(buf *render.RenderBuffer, x, y i
 	if lutIdx > visual.HealthLUTMax {
 		lutIdx = visual.HealthLUTMax
 	}
-	color := render.HeatGradientLUT[lutIdx]
+	c := render.HeatGradientLUT[lutIdx]
 
-	buf.SetFgOnly(x, y, ch, color, terminal.AttrNone)
+	buf.SetFgOnly(x, y, ch, c, terminal.AttrNone)
 }
 
 // renderCell256 renders with segmented 256-color palette
@@ -234,4 +234,3 @@ func (r *HealthBarRenderer) renderCell256(buf *render.RenderBuffer, x, y int, ch
 	buf.Set(x, y, ch, color.RGB{R: paletteIdx}, visual.RgbBlack,
 		render.BlendFgOnly, 1.0, terminal.AttrFg256)
 }
-

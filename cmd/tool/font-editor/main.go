@@ -700,10 +700,7 @@ func (e *Editor) drawHeader(cells []terminal.Cell) {
 		modMark = "*"
 	}
 	header := fmt.Sprintf(" VI-FIGHTER FONT EDITOR │ '%c' (0x%02X)%s ", e.current, e.current, modMark)
-	startX := (e.width - len(header)) / 2
-	if startX < 0 {
-		startX = 0
-	}
+	startX := max(0, (e.width-len(header))/2)
 	e.drawText(cells, startX, 1, header, ColorText, ColorBg, terminal.AttrBold)
 }
 
@@ -717,25 +714,25 @@ func (e *Editor) drawGrid(cells []terminal.Cell) {
 	e.drawBox(cells, startX, startY, boxW, boxH, "Glyph")
 
 	// Column indicators
-	for c := 0; c < GridCols; c++ {
-		val := fmt.Sprintf("%X", c)
-		color := ColorDim
-		if c == e.cursorX {
-			color = ColorHighlight
+	for col := range GridCols {
+		val := fmt.Sprintf("%X", col)
+		c := ColorDim
+		if col == e.cursorX {
+			c = ColorHighlight
 		}
-		e.drawText(cells, startX+2+(c*2), startY+1, val, color, ColorBg, 0)
+		e.drawText(cells, startX+2+(col*2), startY+1, val, c, ColorBg, 0)
 	}
 
 	// Row indicators and grid
-	for r := 0; r < GridRows; r++ {
+	for r := range GridRows {
 		rowNum := fmt.Sprintf("%X", r)
-		color := ColorDim
+		c := ColorDim
 		if r == e.cursorY {
-			color = ColorHighlight
+			c = ColorHighlight
 		}
-		e.drawText(cells, startX+1, startY+2+r, rowNum, color, ColorBg, 0)
+		e.drawText(cells, startX+1, startY+2+r, rowNum, c, ColorBg, 0)
 
-		for c := 0; c < GridCols; c++ {
+		for c := range GridCols {
 			active := e.getBit(r, c)
 			isCursor := r == e.cursorY && c == e.cursorX
 
@@ -768,7 +765,7 @@ func (e *Editor) drawGrid(cells []terminal.Cell) {
 
 	// Hex values on right side
 	hexX := startX + boxW + 1
-	for r := 0; r < GridRows; r++ {
+	for r := range GridRows {
 		hexVal := fmt.Sprintf("0x%04X", e.glyphs[e.current][r])
 		e.drawText(cells, hexX, startY+2+r, hexVal, ColorDim, ColorBg, 0)
 	}
@@ -805,10 +802,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 	// Calculate how many chars fit per row
 	pAreaX := startX + 2
 	pAreaW := boxW - 4
-	charsPerRow := pAreaW / (GridCols + 1)
-	if charsPerRow < 1 {
-		charsPerRow = 1
-	}
+	charsPerRow := max(1, pAreaW/(GridCols+1))
 
 	// Render preview glyphs in wrapped rows
 	charIdx := 0
@@ -835,7 +829,7 @@ func (e *Editor) drawPreview(cells []terminal.Cell) {
 					break
 				}
 
-				for x := 0; x < GridCols; x++ {
+				for x := range GridCols {
 					if renderX+x >= pAreaX+pAreaW {
 						break
 					}
@@ -976,10 +970,6 @@ func (e *Editor) drawStatus(cells []terminal.Cell) {
 		bg = ColorError
 	}
 
-	x := e.width - len(msg) - 2
-	if x < 0 {
-		x = 0
-	}
+	x := max(0, e.width-len(msg)-2)
 	e.drawText(cells, x, barY, msg, color.RGB{R: 255, G: 255, B: 255}, bg, terminal.AttrBold)
 }
-

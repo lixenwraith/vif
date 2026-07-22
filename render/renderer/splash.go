@@ -77,7 +77,7 @@ func (r *SplashRenderer) resolveAnchor(splashComp *component.SplashComponent) (i
 }
 
 // renderChar renders a single splash character bitmap
-func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, color color.RGB) {
+func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.RenderBuffer, char rune, gameX, gameY int, c color.RGB) {
 	var bitmap [12]uint16
 	// Bounds check and fallback for missing glyphs
 	if char < 32 || char > 126 {
@@ -86,12 +86,12 @@ func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 		bitmap = asset.SplashFont[char-32]
 	}
 
-	for row := 0; row < parameter.SplashCharHeight; row++ {
+	for row := range parameter.SplashCharHeight {
 		// Map coord for this row
 		mapY := gameY + row
 
 		rowBits := bitmap[row]
-		for col := 0; col < parameter.SplashCharWidth; col++ {
+		for col := range parameter.SplashCharWidth {
 			// MSB-first: bit 15 = column 0
 			if rowBits&(1<<(15-col)) == 0 {
 				continue
@@ -106,8 +106,7 @@ func (r *SplashRenderer) renderChar(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			buf.SetBgOnly(screenX, screenY, color)
+			buf.SetBgOnly(screenX, screenY, c)
 		}
 	}
 }
-

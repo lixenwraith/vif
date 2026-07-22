@@ -289,16 +289,16 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 			}
 
 			// Gradient mapping
-			var color color.RGB
+			var c color.RGB
 			var tFixed int64
 
 			if val < parameter.ExplosionGradientMidpoint {
 				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
+				c = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
 			} else {
 				base := val - parameter.ExplosionGradientMidpoint
 				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
-				color = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
+				c = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
 			}
 
 			// Alpha mapping
@@ -310,7 +310,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 			screenX := ctx.GameXOffset + vx
 			alphaFloat := vmath.ToFloat(alphaFixed)
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, color, blendMode, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, blendMode, alphaFloat, terminal.AttrNone)
 		}
 	}
 }

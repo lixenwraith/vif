@@ -195,7 +195,7 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, buf *render.RenderBuffer,
 	points []struct{ X, Y int }, colorType component.LightningColorType, alpha float64) {
 
-	color := visual.LightningTrueColorLUT[colorType][0]
+	c := visual.LightningTrueColorLUT[colorType][0]
 
 	// Accumulate quadrant hits per cell
 	// Key: packed (x,y), Value: quadrant bitmap
@@ -224,7 +224,7 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 		}
 
 		// Screen blend foreground only - background untouched for theme preservation
-		buf.Set(screenX, screenY, char, color, visual.RgbBlack, render.BlendScreenFg, alpha, terminal.AttrNone)
+		buf.Set(screenX, screenY, char, c, visual.RgbBlack, render.BlendScreenFg, alpha, terminal.AttrNone)
 	}
 }
 
@@ -380,4 +380,3 @@ func (r *LightningRenderer) traceSubPixelLineHalf(hits map[uint64]uint8, sx0, sy
 		}
 	}
 }
-

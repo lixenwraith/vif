@@ -121,7 +121,7 @@ func main() {
 		if alpha > MaxOpacity {
 			alpha = MaxOpacity
 		}
-		color := color.Lerp(ColorCore, ColorHot, 1.0-lifeRatio)
+		c := color.Lerp(ColorCore, ColorHot, 1.0-lifeRatio)
 
 		timeBucket := now.UnixMilli() / VibrationInterval.Milliseconds()
 
@@ -140,7 +140,7 @@ func main() {
 
 			for i := 0; i < len(points)-1; i++ {
 				p1, p2 := points[i], points[i+1]
-				drawLineBg(buf, p1.X, p1.Y, p2.X, p2.Y, color, alpha)
+				drawLineBg(buf, p1.X, p1.Y, p2.X, p2.Y, c, alpha)
 			}
 			drawText(buf, ox, oy-1, "ORIGINAL (bg cells)")
 		}
@@ -156,7 +156,7 @@ func main() {
 			rng := rand.New(rand.NewSource(seed))
 			points := generateFractalPathSubPixel(ox, oy, tx, ty, rng)
 
-			drawSubPixelBoltFgOnly(buf, points, color, alpha)
+			drawSubPixelBoltFgOnly(buf, points, c, alpha)
 			drawText(buf, ox, oy-1, "SUB-PIXEL (fg-only, no bg touch)")
 		}
 
@@ -171,7 +171,7 @@ func main() {
 			rng := rand.New(rand.NewSource(seed))
 			points := generateFractalPathSubPixel(ox, oy, tx, ty, rng)
 
-			drawSubPixelBoltWithGlow(buf, points, color, alpha)
+			drawSubPixelBoltWithGlow(buf, points, c, alpha)
 			drawText(buf, ox, oy-1, "SUB-PIXEL (bg glow)")
 		}
 
@@ -186,7 +186,7 @@ func main() {
 			rng := rand.New(rand.NewSource(seed))
 			points := generateFractalPathSubPixel(ox, oy, tx, ty, rng)
 
-			drawSubPixelBoltWithBgBlend(buf, points, color, alpha)
+			drawSubPixelBoltWithBgBlend(buf, points, c, alpha)
 			drawText(buf, ox, oy-1, "SUB-PIXEL (bg screen blend)")
 		}
 

@@ -9,7 +9,7 @@ import (
 // backgroundOverlay holds deferred background effect state
 type backgroundOverlay struct {
 	active    bool
-	color     color.RGB
+	bgColor   color.RGB
 	intensity float64
 }
 
@@ -83,10 +83,10 @@ func (b *RenderBuffer) SetWriteMask(mask uint8) {
 
 // SetBackgroundOverlay configures overlay for untouched cells applied in finalize()
 // Intensity is pre-computed by caller (envelope already applied)
-func (b *RenderBuffer) SetBackgroundOverlay(color color.RGB, intensity float64) {
+func (b *RenderBuffer) SetBackgroundOverlay(c color.RGB, intensity float64) {
 	b.bgOverlay = backgroundOverlay{
 		active:    true,
-		color:     color,
+		bgColor:   c,
 		intensity: intensity,
 	}
 }
@@ -303,7 +303,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 	// Pre-compute untouched background once
 	untouchedBg := visual.RgbBackground
 	if b.bgOverlay.active {
-		untouchedBg = color.Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+		untouchedBg = color.Scale(b.bgOverlay.bgColor, b.bgOverlay.intensity)
 	}
 
 	for i := range b.cells {
@@ -323,7 +323,7 @@ func finalizeTrueColorOcclusion(b *RenderBuffer) {
 func finalizeSimple(b *RenderBuffer) {
 	untouchedBg := visual.RgbBackground
 	if b.bgOverlay.active {
-		untouchedBg = color.Scale(b.bgOverlay.color, b.bgOverlay.intensity)
+		untouchedBg = color.Scale(b.bgOverlay.bgColor, b.bgOverlay.intensity)
 	}
 
 	for i := range b.cells {

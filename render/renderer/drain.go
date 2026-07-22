@@ -49,17 +49,17 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		// Priority: hit flash > enraged > normal
-		var color color.RGB
+		var c color.RGB
 		switch {
 		case combatComp.RemainingHitFlash > 0:
-			color = r.calculateFlashColor(combatComp.RemainingHitFlash)
+			c = r.calculateFlashColor(combatComp.RemainingHitFlash)
 		case combatComp.IsEnraged:
-			color = visual.RgbCombatEnraged
+			c = visual.RgbCombatEnraged
 		default:
-			color = visual.RgbDrain
+			c = visual.RgbDrain
 		}
 
-		buf.SetFgOnly(screenX, screenY, visual.DrainChar, color, terminal.AttrNone)
+		buf.SetFgOnly(screenX, screenY, visual.DrainChar, c, terminal.AttrNone)
 	}
 }
 
@@ -78,4 +78,3 @@ func (r *DrainRenderer) calculateFlashColor(remaining time.Duration) color.RGB {
 
 	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }
-

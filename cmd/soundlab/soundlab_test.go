@@ -168,3 +168,24 @@ validate u1
 		t.Fatalf("unset round-trip failed:\n%s", o)
 	}
 }
+
+func TestModifiedFlag(t *testing.T) {
+	dir := t.TempDir()
+	var out bytes.Buffer
+	s := newTestSession(t, &out)
+	defer teardown(t, s)
+	runOrFatal(t, s, &out, `
+new sound mf
+set mf.duration 0.1
+add mf.layer
+set mf.layer.0.source.kind osc
+set mf.layer.0.source.freq 200
+`)
+	if !s.sounds.modified {
+		t.Fatal("edits must set modified")
+	}
+	runOrFatal(t, s, &out, "save sound "+filepath.Join(dir, "mf.toml"))
+	if s.sounds.modified {
+		t.Fatal("save must clear modified")
+	}
+}

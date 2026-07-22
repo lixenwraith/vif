@@ -165,12 +165,12 @@ func main() {
 
 			// Draw targets
 			for i, t := range targets {
-				char, color := 'o', color.RGB{R: 80, G: 80, B: 80}
+				char, c := 'o', color.RGB{R: 80, G: 80, B: 80}
 				if i == currentTargetIdx {
-					char, color = '◎', ColorRed
+					char, c = '◎', ColorRed
 				}
 				if t.X < screenWidth && t.Y < screenHeight {
-					buf.Set(t.X, t.Y, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
+					buf.Set(t.X, t.Y, char, c, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
 				}
 			}
 
@@ -184,11 +184,11 @@ func main() {
 
 			// Draw type legend
 			for i := 0; i < int(MissileCount); i++ {
-				color := color.RGB{R: 100, G: 100, B: 100}
+				c := color.RGB{R: 100, G: 100, B: 100}
 				if MissileType(i) == currentType {
-					color = ColorGold
+					c = ColorGold
 				}
-				DrawString(buf, 2, 1+i, fmt.Sprintf("%d:%s", i+1, MissileTypeName(MissileType(i))), color)
+				DrawString(buf, 2, 1+i, fmt.Sprintf("%d:%s", i+1, MissileTypeName(MissileType(i))), c)
 			}
 
 			RenderMissiles(buf, missiles)
@@ -511,11 +511,11 @@ func updateSingleMissile(m *Missile, dt int64) {
 
 		// Rainbow trail
 		hue := int(m.Age) % 256
-		color := hueToRGB(hue)
+		c := hueToRGB(hue)
 		m.Trail = append(m.Trail, Particle{
 			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
 			MaxAge: 20, Char: '~',
-			ColorStart: color, ColorEnd: ColorBg,
+			ColorStart: c, ColorEnd: ColorBg,
 		})
 
 	case MissileSpiral:
@@ -658,7 +658,7 @@ func renderMissileTrail(buf *render.RenderBuffer, m *Missile) {
 		}
 
 		t := int64(p.Age) * vmath.Scale / int64(p.MaxAge)
-		color := render.LerpRGBFixed(p.ColorStart, p.ColorEnd, t)
+		c := render.LerpRGBFixed(p.ColorStart, p.ColorEnd, t)
 		alpha := 1.0 - float64(p.Age)/float64(p.MaxAge)
 		if p.Scale > 0 {
 			alpha *= p.Scale
@@ -673,7 +673,7 @@ func renderMissileTrail(buf *render.RenderBuffer, m *Missile) {
 				char = '·'
 			}
 		}
-		buf.Set(screenX, screenY, char, color, ColorBg, render.BlendAddFg, alpha, terminal.AttrNone)
+		buf.Set(screenX, screenY, char, c, ColorBg, render.BlendAddFg, alpha, terminal.AttrNone)
 	}
 }
 
@@ -690,38 +690,38 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 	}
 
 	var char rune
-	var color color.RGB
+	var c color.RGB
 	angle := math.Atan2(float64(m.Pos.VelY), float64(m.Pos.VelX))
 
 	switch m.Type {
 	case MissileKinetic:
 		char = AngleToChar(angle)
-		color = ColorWhite
+		c = ColorWhite
 	case MissileHelix:
 		chars := []rune{'✧', '✦', '★'}
 		char = chars[(m.Age/4)%3]
-		color = render.LerpRGBFixed(ColorCyan, ColorPink, vmath.Sin(m.Phase))
+		c = render.LerpRGBFixed(ColorCyan, ColorPink, vmath.Sin(m.Phase))
 	case MissileSeeker:
 		char = AngleToArrow(angle)
-		color = ColorFire
+		c = ColorFire
 	case MissileCluster:
 		char = '◆'
-		color = ColorGold
+		c = ColorGold
 	case MissileLaser:
 		char = '⚡'
-		color = ColorCyan
+		c = ColorCyan
 	case MissileWave:
 		char = '≋'
-		color = hueToRGB(int(m.Age) % 256)
+		c = hueToRGB(int(m.Age) % 256)
 	case MissileSpiral:
 		char = '✺'
-		color = ColorGreen
+		c = ColorGreen
 	case MissileBounce:
 		char = '●'
-		color = ColorGold
+		c = ColorGold
 	}
 
-	buf.Set(screenX, screenY, char, color, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
+	buf.Set(screenX, screenY, char, c, ColorBg, render.BlendReplace, 1.0, terminal.AttrBold)
 }
 
 func hueToRGB(hue int) color.RGB {
@@ -792,10 +792,10 @@ func AngleToArrow(rad float64) rune {
 	}
 }
 
-func DrawString(buf *render.RenderBuffer, x, y int, s string, color color.RGB) {
+func DrawString(buf *render.RenderBuffer, x, y int, s string, c color.RGB) {
 	for i, r := range s {
 		if x+i < screenWidth {
-			buf.SetFgOnly(x+i, y, r, color, terminal.AttrNone)
+			buf.SetFgOnly(x+i, y, r, c, terminal.AttrNone)
 		}
 	}
 }
@@ -816,4 +816,3 @@ func MissileTypeName(t MissileType) string {
 	}
 	return "?"
 }
-

@@ -156,7 +156,7 @@ func (r *PingRenderer) isExcluded(vx, vy int) bool {
 }
 
 // drawCrosshair draws the crosshair lines in viewport space
-func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color color.RGB) {
+func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
 	pingBounds := r.gameCtx.World.GetPingAbsoluteBounds()
 
 	// Convert ping bounds from map coords to viewport coords
@@ -182,7 +182,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 		screenY := ctx.GameYOffset + vy
 		for vx := 0; vx < ctx.ViewportWidth; vx++ {
 			if !r.isExcluded(vx, vy) {
-				buf.Set(ctx.GameXOffset+vx, screenY, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(ctx.GameXOffset+vx, screenY, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
@@ -196,14 +196,14 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 				continue
 			}
 			if !r.isExcluded(vx, vy) {
-				buf.Set(screenX, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+				buf.Set(screenX, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 }
 
 // drawGrid draws the 5-cell grid in viewport space
-func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, color color.RGB) {
+func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
 	// Vertical lines at ±5, ±10, etc. from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -215,7 +215,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for vy := 0; vy < ctx.ViewportHeight; vy++ {
 				if !r.isExcluded(colRight, vy) {
-					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -223,7 +223,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for vy := 0; vy < ctx.ViewportHeight; vy++ {
 				if !r.isExcluded(colLeft, vy) {
-					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+vy, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -244,7 +244,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for vx := 0; vx < ctx.ViewportWidth; vx++ {
 				if !r.isExcluded(vx, rowDown) {
-					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -252,7 +252,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 			inBounds = true
 			for vx := 0; vx < ctx.ViewportWidth; vx++ {
 				if !r.isExcluded(vx, rowUp) {
-					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, color, render.BlendReplace, 1.0, terminal.AttrNone)
+					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
 			}
 		}
@@ -262,4 +262,3 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		}
 	}
 }
-
