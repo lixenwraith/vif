@@ -22,10 +22,8 @@ type SoundSpecFile struct {
 type SoundDef struct {
 	Name string `toml:"name"`
 
-	// Desc is human annotation that survives Marshal. TOML comments do not:
-	// the encoder emits from the decoded value and preserves neither comments nor
-	// whitespace, so an editor's first save strips them. Anything an editor user
-	// needs to see about a sound belongs here, not in a # comment.
+	// Desc is per-layer annotation that survives Marshal, for the same reason
+	// SoundDef.Desc does: an editor's first save strips TOML comments.
 	Desc string `toml:"desc,omitempty"`
 	// Duration is the master buffer length. 0 derives it from the layers as
 	// max(offset+length), which then requires every layer to set length.

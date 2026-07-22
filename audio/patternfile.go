@@ -1,73 +1,72 @@
 package audio
 
 import (
+	"errors"
 	"fmt"
+	"reflect"
 
 	"github.com/lixenwraith/toml"
 )
 
-type stepDef struct {
-	Pos  int     `toml:"pos"`
-	Vel  float64 `toml:"vel"`
-	Deg  int     `toml:"deg"`
-	Oct  int     `toml:"oct"`
-	Dur  int     `toml:"dur"`
-	Prob float64 `toml:"prob"`
+// LoadPatternDefs parses a music document into the authoring form without
+// converting. Unknown keys are rejected: the decoder ignores them, which would
+// turn "follow_chords" into a silent false. checkKeys reflects over the struct
+// tags, so there is no schema to keep in sync.
+func LoadPatternDefs(data []byte) ([]*PatternDef, error) {
+	raw, err := toml.NewParser(data).Parse()
+	if err != nil {
+		return nil, fmt.Errorf("pattern spec: %w", err)
+	}
+	if err := checkKeys("", raw, reflect.TypeOf(PatternSpecFile{})); err != nil {
+		return nil, fmt.Errorf("pattern spec: %w", err)
+	}
+	var f PatternSpecFile
+	if err := toml.Decode(raw, &f); err != nil {
+		return nil, fmt.Errorf("pattern spec: %w", err)
+	}
+	return f.Pattern, nil
 }
 
-type trackDef struct {
-	Instr       string    `toml:"instr"`
-	FollowChord bool      `toml:"follow_chord"`
-	Humanize    float64   `toml:"humanize"`
-	Event       []stepDef `toml:"event"`
-}
-
-type patternDef struct {
-	Name  string     `toml:"name"`
-	Steps int        `toml:"steps"`
-	Track []trackDef `toml:"track"`
-}
-
-type patternFile struct {
-	Pattern []patternDef `toml:"pattern"`
-}
-
-var instrByName = map[string]InstrumentType{
-	"kick": InstrKick, "hihat": InstrHihat, "snare": InstrSnare,
-	"clap": InstrClap, "bass": InstrBass, "piano": InstrPiano,
-	"pad": InstrPad,
-}
-
-// LoadPatternsTOML parses user pattern definitions
-// Name collisions with built-ins override the built-in in place
+// LoadPatternsTOML parses user pattern definitions into the render form. The
+// returned slice holds every pattern that validated; err joins the ones that
+// did not, so one bad pattern does not discard the file — parity with
+// LoadSoundsTOML. Name collisions with built-ins override in place at
+// RegisterPattern.
 func LoadPatternsTOML(data []byte) ([]*Pattern, error) {
-	var pf patternFile
-	if err := toml.Unmarshal(data, &pf); err != nil {
+	defs, err := LoadPatternDefs(data)
+	if err != nil {
 		return nil, err
 	}
-	out := make([]*Pattern, 0, len(pf.Pattern))
-	for _, pd := range pf.Pattern {
-		if pd.Name == "" || pd.Steps <= 0 || pd.Steps > MaxPatternLen {
-			return nil, fmt.Errorf("pattern %q: invalid name or steps", pd.Name)
-		}
-		p := &Pattern{Name: pd.Name, Steps: pd.Steps}
-		for _, td := range pd.Track {
-			instr, ok := instrByName[td.Instr]
-			if !ok {
-				return nil, fmt.Errorf("pattern %q: unknown instrument %q", pd.Name, td.Instr)
-			}
-			tr := Track{Instr: instr, FollowChord: td.FollowChord, Humanize: td.Humanize}
-			for _, sd := range td.Event {
-				if sd.Pos < 0 || sd.Pos >= pd.Steps {
-					return nil, fmt.Errorf("pattern %q: event pos %d out of range", pd.Name, sd.Pos)
-				}
-				tr.Events = append(tr.Events, Step{
-					Pos: sd.Pos, Vel: sd.Vel, Deg: sd.Deg, Oct: sd.Oct, Dur: sd.Dur, Prob: sd.Prob,
-				})
-			}
-			p.Tracks = append(p.Tracks, tr)
+	out := make([]*Pattern, 0, len(defs))
+	var errs []error
+	for _, d := range defs {
+		p, err := d.Pattern()
+		if err != nil {
+			errs = append(errs, err)
+			continue
 		}
 		out = append(out, p)
 	}
-	return out, nil
+	return out, errors.Join(errs...)
+}
+
+// MarshalPatternDefs re-emits authored patterns as TOML. Arrays keep their
+// order; scalar keys within a table are sorted. Reloading yields identical
+// playback. Comments and whitespace are not preserved — annotation belongs in
+// the desc fields, which are data.
+func MarshalPatternDefs(defs []*PatternDef) ([]byte, error) {
+	return toml.Marshal(PatternSpecFile{Pattern: defs})
+}
+
+// MarshalPatterns converts render-form patterns and emits them. Anonymous
+// patterns are skipped: without a name they cannot be reloaded or overridden.
+func MarshalPatterns(pats []*Pattern) ([]byte, error) {
+	f := PatternSpecFile{Pattern: make([]*PatternDef, 0, len(pats))}
+	for _, p := range pats {
+		if p == nil || p.Name == "" {
+			continue
+		}
+		f.Pattern = append(f.Pattern, p.Def())
+	}
+	return toml.Marshal(f)
 }

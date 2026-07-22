@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"slices"
 	"sync"
 )
 
@@ -17,6 +18,7 @@ type Step struct {
 // Track is one instrument lane within a pattern
 type Track struct {
 	Instr       InstrumentType
+	Desc        string
 	FollowChord bool
 	Humanize    float64 // 0 = quantized; scales velocity jitter + micro-lag
 	Events      []Step
@@ -26,6 +28,7 @@ type Track struct {
 type Pattern struct {
 	ID     PatternID
 	Name   string
+	Desc   string
 	Steps  int
 	Tracks []Track
 }
@@ -211,9 +214,16 @@ func InitDefaultPatterns() {
 	)
 }
 
-// RegisterPattern adds or overwrites a pattern; ID PatternSilence allocates
-// a dynamic ID. Returns the effective ID
+// RegisterPattern validates and adds or overwrites a pattern; ID
+// PatternSilence allocates a dynamic ID. Returns the effective ID, or
+// PatternSilence when validation fails — an unregistered ID resolves to nil in
+// GetPattern and plays as silence, matching the rest of the degrade path.
+// Callers that need the reason call ValidatePattern first; the TOML path
+// already does, at load, with a specific error.
 func RegisterPattern(p *Pattern) PatternID {
+	if ValidatePattern(p) != nil {
+		return PatternSilence
+	}
 	patternMu.Lock()
 	defer patternMu.Unlock()
 	if p.ID == PatternSilence {
@@ -229,6 +239,31 @@ func RegisterPattern(p *Pattern) PatternID {
 		patternName[p.Name] = p.ID
 	}
 	return p.ID
+}
+
+// RegisteredPatterns snapshots the registry in ID order. Setup and editor path
+// only — the mixer holds pattern pointers directly.
+func RegisteredPatterns() []*Pattern {
+	patternMu.RLock()
+	defer patternMu.RUnlock()
+	out := make([]*Pattern, 0, len(patterns))
+	for _, p := range patterns {
+		out = append(out, p)
+	}
+	slices.SortFunc(out, func(a, b *Pattern) int { return int(a.ID) - int(b.ID) })
+	return out
+}
+
+// resetPatternRegistry clears the registry. fillIDs is written outside the
+// mutex under the same write-once contract InitDefaultPatterns relies on: the
+// caller guarantees no mixer exists.
+func resetPatternRegistry() {
+	patternMu.Lock()
+	patterns = make(map[PatternID]*Pattern)
+	patternName = make(map[string]PatternID)
+	nextDynamic = PatternID(PatternDynamic)
+	patternMu.Unlock()
+	fillIDs = nil
 }
 
 // GetPattern retrieves a pattern by ID

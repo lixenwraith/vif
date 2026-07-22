@@ -12,8 +12,13 @@ const (
 	waveNoise
 )
 
-// floatBuffer is mono float64 samples at unity gain
-type floatBuffer []float64
+// floatBuffer is mono float64 samples at unity gain.
+//
+// Alias, not a defined type: exported entry points (RenderVariants,
+// RenderPreview, WriteWAV) hand buffers to callers outside the package, and a
+// defined type would be unnameable there. Nothing in the package relies on
+// buffers being distinguishable from a bare []float64.
+type floatBuffer = []float64
 
 // applyEnvelope applies attack/release envelope in place
 func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
@@ -35,24 +40,6 @@ func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
 		}
 		buf[i] *= vol
 	}
-}
-
-// mixFloatBuffers adds b into a (in place), extending a if needed
-func mixFloatBuffers(a, b floatBuffer, bScale float64) floatBuffer {
-	if len(b) > len(a) {
-		extended := make(floatBuffer, len(b))
-		copy(extended, a)
-		a = extended
-	}
-	for i := range b {
-		a[i] += b[i] * bScale
-	}
-	return a
-}
-
-// durationToSamples converts duration to sample count
-func durationToSamples(d float64) int {
-	return int(d * float64(AudioSampleRate))
 }
 
 // applyDecayEnvelope applies attack then exponential-style decay

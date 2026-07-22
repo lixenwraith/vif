@@ -19,6 +19,24 @@ var (
 	soundFrozen bool
 )
 
+// RegisteredSounds snapshots the registry in ID order, starting at the first
+// real sound (the SoundNone sentinel is omitted). Setup and editor path only.
+func RegisteredSounds() []*SoundDef { return registeredSounds()[1:] }
+
+// ResetRegistries clears the sound and pattern registries and unfreezes sound
+// registration, so a later AudioEngine.Start rebuilds both from scratch.
+//
+// Process-wide, unsynchronized against a running mixer, and it invalidates
+// every SoundID and PatternID previously handed out — including the ones cached
+// in parameter.Sfx, which must be re-resolved. Call it only with no engine
+// running: after Stop, before the next Start. The game never calls this; it
+// exists for editors and tests, which build and tear down engines repeatedly in
+// one process.
+func ResetRegistries() {
+	resetSoundRegistry()
+	resetPatternRegistry()
+}
+
 // RegisterSound validates and installs a spec. An existing name is replaced in
 // place, keeping its ID, mirroring RegisterPattern. Registration closes before
 // rendering: the cache and mixer size their tables from the registry, so a late
@@ -82,4 +100,3 @@ func resetSoundRegistry() {
 	soundFrozen = false
 	soundMu.Unlock()
 }
-

@@ -40,8 +40,10 @@ type AudioEngine struct {
 	backend    *BackendConfig
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser
-	ossFile    *os.File
-	procExit   chan struct{} // closed on active backend exit; nil for OSS
+	// sink is the closer for non-process backends (OSS device, wav file);
+	// nil for process backends and for the null sink.
+	sink     io.Closer
+	procExit chan struct{} // closed on active backend exit; nil for OSS
 
 	stderrTail *tailBuffer
 
@@ -162,12 +164,23 @@ func (ae *AudioEngine) nextBackendLocked() (io.Writer, error) {
 // catching bad args, dead daemons, and broken pipes at selection time
 // Limitation: a process that accepts data but routes nowhere passes
 func (ae *AudioEngine) attach(c *BackendConfig) (io.Writer, error) {
-	if c.Type == BackendOSS {
+	switch c.Type {
+	case BackendNull:
+		ae.sink, ae.procExit = nil, nil
+		return io.Discard, nil
+	case BackendWAV:
+		s, err := newWAVSink(c.Path)
+		if err != nil {
+			return nil, err
+		}
+		ae.sink, ae.procExit = s, nil
+		return s, nil
+	case BackendOSS:
 		f, err := os.OpenFile(c.Path, os.O_WRONLY, 0)
 		if err != nil {
 			return nil, err
 		}
-		ae.ossFile, ae.procExit = f, nil
+		ae.sink, ae.procExit = f, nil
 		return f, nil
 	}
 
@@ -239,10 +252,10 @@ func (ae *AudioEngine) failover() {
 	if ae.stdin != nil {
 		ae.stdin.Close()
 	}
-	if ae.ossFile != nil {
-		ae.ossFile.Close()
+	if ae.sink != nil {
+		ae.sink.Close()
 	}
-	ae.cmd, ae.stdin, ae.ossFile, ae.procExit, ae.backend = nil, nil, nil, nil, nil
+	ae.cmd, ae.stdin, ae.sink, ae.procExit, ae.backend = nil, nil, nil, nil, nil
 
 	w, err := ae.nextBackendLocked()
 	if err != nil {
@@ -267,8 +280,8 @@ func (ae *AudioEngine) Stop() {
 	if ae.stdin != nil {
 		ae.stdin.Close()
 	}
-	if ae.ossFile != nil {
-		ae.ossFile.Close()
+	if ae.sink != nil {
+		ae.sink.Close()
 	}
 	if ae.cmd != nil && ae.cmd.Process != nil {
 		ae.cmd.Process.Kill()

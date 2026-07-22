@@ -5,6 +5,15 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
+)
+
+// Synthetic sink backends. Neither is auto-detected — they have no executable
+// and no probe — so they are reachable only by explicit force. They exist for
+// headless runs: tests, CI, and offline capture.
+const (
+	BackendNameNull = "null"
+	wavForcePrefix  = "wav:"
 )
 
 // backendSpecs returns the priority-ordered candidate table
@@ -35,6 +44,16 @@ func lookupBin(name string) string {
 // Returns ErrNoAudioBackend when nothing is installed; caller drops or logs
 // it — silent mode remains the degradation path
 func DetectBackends(force string) ([]*BackendConfig, error) {
+	if force == BackendNameNull {
+		return []*BackendConfig{{Type: BackendNull, Name: force}}, nil
+	}
+	if p, ok := strings.CutPrefix(force, wavForcePrefix); ok {
+		if p == "" {
+			return nil, fmt.Errorf("%w: %q needs a path, e.g. wav:out.wav", ErrNoAudioBackend, force)
+		}
+		return []*BackendConfig{{Type: BackendWAV, Name: force, Path: p}}, nil
+	}
+
 	var out []*BackendConfig
 	for _, spec := range backendSpecs() {
 		if force != "" && spec.Name != force {
@@ -61,4 +80,3 @@ func DetectBackends(force string) ([]*BackendConfig, error) {
 	}
 	return out, nil
 }
-

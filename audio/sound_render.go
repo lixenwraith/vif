@@ -85,6 +85,29 @@ func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
 	return out
 }
 
+// RenderPreview renders one take at unity variance, bypassing the registry and
+// the variant walk. This is the editor's per-keystroke path: a 200ms spec is
+// ~9k samples through a handful of O(N) passes, well under a millisecond.
+// Validation runs first, so an in-editor mutation that would produce non-finite
+// samples is reported rather than played.
+//
+// The result is the canonical sound, not variant 0 — the variant walk deviates
+// from it in both directions. Use RenderVariants to audition the set.
+func RenderPreview(d *SoundDef, p SFXParams) ([]float64, error) {
+	if err := ValidateSound(d); err != nil {
+		return nil, err
+	}
+	bp, bl := norm(p.Pitch), norm(p.Length)
+	if d.FixedLength {
+		bl = 1.0
+	}
+	v := variance{
+		pitch:  clampScale(bp, minPitchScale, maxPitchScale),
+		length: clampScale(bl, minLengthScale, maxLengthScale),
+	}
+	return renderSound(d, v, rand.New(rand.NewPCG(fnv64a(d.Name), 1))), nil
+}
+
 // renderSound is total: ValidateSound has already excluded every input that
 // could fail. It runs on the wiring goroutine, before the mixer exists.
 func renderSound(d *SoundDef, v variance, rng *rand.Rand) floatBuffer {

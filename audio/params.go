@@ -51,21 +51,6 @@ const (
 	RapidFireRecovery  = 600 * time.Millisecond
 )
 
-// --- Drum kit rendering ---
-const (
-	DrumVariants = 6 // pre-rendered buffers per percussion instrument
-
-	// Deterministic parameter walk across the variant set (peak-to-peak)
-	DrumPitchWalk = 0.08 // ±4% pitch
-	DrumDecayWalk = 0.20 // ±10% decay
-
-	// Per-drum decay, seconds
-	KickDecay  = 0.15
-	HihatDecay = 0.08
-	SnareDecay = 0.12
-	ClapDecay  = 0.10
-)
-
 // --- Sequencer grid ---
 const (
 	DefaultBPM   = 140 // psytrance range 135-150
@@ -75,9 +60,15 @@ const (
 	BeatsPerBar  = 4 // 4/4
 	StepsPerBar  = StepsPerBeat * BeatsPerBar
 
-	MaxPatternLen = 64 // max steps per pattern
-	MusicSlots    = 3  // rhythm, melody, free layer
-	MaxPolyphony  = 16 // simultaneous tonal voices per slot
+	MaxPatternLen     = 64 // max steps per pattern
+	MusicSlots        = 3  // rhythm, melody, free layer
+	MaxPolyphony      = 16 // simultaneous tonal voices per slot
+	MaxPatternNameLen = 64
+	MaxPatternTracks  = 32  // SetMask is a uint32; reveal shifts 1<<n
+	MaxPatternEvents  = 512 // per track
+	MaxStepDegree     = 64
+	MinStepOctave     = -2
+	MaxStepOctave     = 8
 
 	DefaultSwing = 0.0 // straight
 	MaxSwing     = 0.5 // max shuffle

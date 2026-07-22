@@ -36,6 +36,24 @@ func (i InstrumentType) String() string {
 // IsDrum reports whether the instrument uses pre-rendered drum variants
 func (i InstrumentType) IsDrum() bool { return i <= InstrClap }
 
+// instrByName is the inverse of instrumentNames. Derived rather than written
+// out: the two must agree for PatternDef round-tripping to be lossless.
+var instrByName = func() map[string]InstrumentType {
+	m := make(map[string]InstrumentType, len(instrumentNames))
+	for i, n := range instrumentNames {
+		m[n] = InstrumentType(i)
+	}
+	return m
+}()
+
+// InstrumentByName resolves a canonical instrument name — the InstrumentType
+// String form, which is the TOML key space and is stable across enum
+// reordering.
+func InstrumentByName(s string) (InstrumentType, bool) {
+	i, ok := instrByName[s]
+	return i, ok
+}
+
 // === Patterns ===
 
 // PatternID identifies a registered pattern
@@ -128,6 +146,8 @@ const (
 	BackendSoX
 	BackendFFplay
 	BackendOSS
+	BackendNull
+	BackendWAV
 )
 
 // BackendConfig describes a CLI audio backend

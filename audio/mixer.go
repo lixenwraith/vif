@@ -22,6 +22,8 @@ type activeSound struct {
 type Mixer struct {
 	cmds     chan audioCmd
 	stopChan chan struct{}
+	done     chan struct{}
+	started  atomic.Bool
 	stopped  atomic.Bool
 
 	paused       atomic.Bool
@@ -56,6 +58,7 @@ func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
 		cache:     cache,
 		cmds:      make(chan audioCmd, 256),
 		stopChan:  make(chan struct{}),
+		done:      make(chan struct{}),
 		errChan:   make(chan error, 1),
 		sequencer: NewSequencer(DefaultBPM, kit),
 		active:    make([]activeSound, 0, 8),
@@ -94,7 +97,11 @@ func (m *Mixer) SetMusicMuted(mute bool) { m.musicMuted.Store(mute) }
 func (m *Mixer) IsMusicMuted() bool      { return m.musicMuted.Load() }
 func (m *Mixer) Errors() <-chan error    { return m.errChan }
 
-func (m *Mixer) Start() { go m.loop() }
+func (m *Mixer) Start() {
+	if m.started.CompareAndSwap(false, true) {
+		go m.loop()
+	}
+}
 
 func (m *Mixer) Stop() {
 	if m.stopped.CompareAndSwap(false, true) {
@@ -113,6 +120,7 @@ func onePoleCoef(tau time.Duration) float64 {
 
 // loop: drain commands, render, write — one pass per buffer tick
 func (m *Mixer) loop() {
+	defer close(m.done)
 	ticker := time.NewTicker(AudioBufferDuration)
 	defer ticker.Stop()
 
