@@ -1,6 +1,7 @@
 package service
 
 import (
+	"errors"
 	"os"
 	"sync/atomic"
 
@@ -39,6 +40,9 @@ func (s *AudioService) Init() error {
 	if data, err := os.ReadFile(parameter.MusicConfigFile); err == nil {
 		config.PatternTOML = data
 	}
+	if data, err := os.ReadFile(parameter.SoundConfigFile); err == nil {
+		config.SoundTOML = data
+	}
 
 	eng, err := audio.NewAudioEngine(config)
 	if err != nil {
@@ -51,10 +55,13 @@ func (s *AudioService) Init() error {
 
 func (s *AudioService) Start() error {
 	if s.disabled.Load() || s.audioEngine == nil {
-		return nil
+		return nil // Sfx stays SoundNone: every Play is a no-op
 	}
-	_ = s.audioEngine.Start()
-	return nil
+	// Registration completes inside Start before backend probing, so IDs are
+	// valid even when the engine falls through to silent mode.
+	startErr := s.audioEngine.Start()
+	startErr = errors.Join(startErr, s.audioEngine.SpecError(), parameter.ResolveSounds())
+	return startErr
 }
 
 func (s *AudioService) Stop() error {

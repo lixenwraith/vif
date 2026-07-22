@@ -40,7 +40,7 @@ const (
 // --- SFX policy ---
 const (
 	SFXVariants   = 3  // pre-rendered variants per sound effect
-	MaxSFXPerType = 2  // concurrent instances per SoundType (most-progressed stolen)
+	MaxSFXPerType = 2  // concurrent instances per SoundID (most-progressed stolen)
 	MaxActiveSFX  = 12 // global concurrent SFX cap
 
 	// Rapid-fire dampening: repeats inside the cooldown attenuate, then

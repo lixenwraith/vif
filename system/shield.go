@@ -3,7 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -117,7 +116,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 			})
 
 			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-				SoundType: audio.SoundShield,
+				// SoundType: audio.SoundShield,
 			})
 
 			s.statShieldHit.Add(1)

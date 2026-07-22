@@ -13,4 +13,8 @@ const (
 
 	// LocalConfigDir is the repo-local fallback config directory
 	LocalConfigDir = "./config"
+
+	MusicConfigFile = "music.toml"
+
+	SoundConfigFile = "sounds.toml"
 )

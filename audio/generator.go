@@ -2,13 +2,7 @@ package audio
 
 import (
 	"math"
-	"math/rand/v2"
 )
-
-// Deterministic render source — identical SFX/drum timbre every process run
-// Single-goroutine: preloadAll/buildDrumKit at Start render everything; the cold
-// cache path would race on this but never executes (all SoundTypes preloaded)
-var genRng = rand.New(rand.NewPCG(0x5EED, 0x50FA))
 
 // Waveform types
 const (
@@ -20,36 +14,6 @@ const (
 
 // floatBuffer is mono float64 samples at unity gain
 type floatBuffer []float64
-
-// oscillator generates raw waveform samples
-func oscillator(waveType int, freq float64, samples int) floatBuffer {
-	buf := make(floatBuffer, samples)
-	phase := 0.0
-	phaseInc := freq / float64(AudioSampleRate)
-
-	for i := 0; i < samples; i++ {
-		switch waveType {
-		case waveSine:
-			buf[i] = math.Sin(2 * math.Pi * phase)
-		case waveSquare:
-			if phase < 0.5 {
-				buf[i] = 1.0
-			} else {
-				buf[i] = -1.0
-			}
-		case waveSaw:
-			buf[i] = 2.0 * (phase - 0.5)
-		case waveNoise:
-			buf[i] = genRng.Float64()*2 - 1
-		}
-
-		phase += phaseInc
-		if phase >= 1.0 {
-			phase -= 1.0
-		}
-	}
-	return buf
-}
 
 // applyEnvelope applies attack/release envelope in place
 func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
@@ -86,50 +50,9 @@ func mixFloatBuffers(a, b floatBuffer, bScale float64) floatBuffer {
 	return a
 }
 
-// concatFloatBuffers appends b to a
-func concatFloatBuffers(a, b floatBuffer) floatBuffer {
-	result := make(floatBuffer, len(a)+len(b))
-	copy(result, a)
-	copy(result[len(a):], b)
-	return result
-}
-
 // durationToSamples converts duration to sample count
 func durationToSamples(d float64) int {
 	return int(d * float64(AudioSampleRate))
-}
-
-// oscillatorSweep generates waveform with linear frequency glide
-func oscillatorSweep(waveType int, startFreq, endFreq float64, samples int) floatBuffer {
-	buf := make(floatBuffer, samples)
-	phase := 0.0
-	freqDelta := (endFreq - startFreq) / float64(samples)
-
-	for i := 0; i < samples; i++ {
-		freq := startFreq + freqDelta*float64(i)
-		phaseInc := freq / float64(AudioSampleRate)
-
-		switch waveType {
-		case waveSine:
-			buf[i] = math.Sin(2 * math.Pi * phase)
-		case waveSquare:
-			if phase < 0.5 {
-				buf[i] = 1.0
-			} else {
-				buf[i] = -1.0
-			}
-		case waveSaw:
-			buf[i] = 2.0 * (phase - 0.5)
-		case waveNoise:
-			buf[i] = genRng.Float64()*2 - 1
-		}
-
-		phase += phaseInc
-		if phase >= 1.0 {
-			phase -= 1.0
-		}
-	}
-	return buf
 }
 
 // applyDecayEnvelope applies attack then exponential-style decay
@@ -150,53 +73,23 @@ func applyDecayEnvelope(buf floatBuffer, attackSec float64, decayRate float64) {
 	}
 }
 
-// oscillatorFM generates frequency-modulated waveform
-// carrierFreq: base frequency, modFreq: modulator frequency
-// modIndex: modulation depth (0 = none, higher = more harmonics)
-func oscillatorFM(carrierFreq, modFreq, modIndex float64, samples int) floatBuffer {
-	buf := make(floatBuffer, samples)
-	carrierPhase := 0.0
-	modPhase := 0.0
-	carrierInc := carrierFreq / float64(AudioSampleRate)
-	modInc := modFreq / float64(AudioSampleRate)
-
-	for i := 0; i < samples; i++ {
-		modValue := math.Sin(2 * math.Pi * modPhase)
-		instantPhase := carrierPhase + modIndex*modValue
-		buf[i] = math.Sin(2 * math.Pi * instantPhase)
-
-		carrierPhase += carrierInc
-		modPhase += modInc
-		if carrierPhase >= 1.0 {
-			carrierPhase -= 1.0
-		}
-		if modPhase >= 1.0 {
-			modPhase -= 1.0
-		}
-	}
-	return buf
-}
-
-// applyAM applies amplitude modulation (tremolo/wobble effect)
-// modFreq: oscillation rate in Hz, depth: 0.0-1.0 modulation depth
-func applyAM(buf floatBuffer, modFreq, depth float64) {
-	phase := 0.0
-	phaseInc := modFreq / float64(AudioSampleRate)
-
+// applyAM applies amplitude modulation. phase offsets the modulator in
+// cycles: 0.5 inverts the sine, which is what locks the ring tremolo in
+// quadrature with its Doppler vibrato.
+func applyAM(buf floatBuffer, modFreq, depth, phase float64) {
+	inc := modFreq / float64(AudioSampleRate)
+	p := 0.0
 	for i := range buf {
-		mod := 1.0 - depth*0.5*(1.0+math.Sin(2*math.Pi*phase))
-		buf[i] *= mod
-		phase += phaseInc
-		if phase >= 1.0 {
-			phase -= 1.0
+		buf[i] *= 1.0 - depth*0.5*(1.0+math.Sin(2*math.Pi*(p+phase)))
+		if p += inc; p >= 1.0 {
+			p -= 1.0
 		}
 	}
 }
 
 // applyRingMod multiplies buffer by a sine oscillator (ring modulation)
 // Creates sum and difference frequencies for metallic/bell tones
-func applyRingMod(buf floatBuffer, modFreq float64) {
-	phase := 0.0
+func applyRingMod(buf floatBuffer, modFreq, phase float64) {
 	phaseInc := modFreq / float64(AudioSampleRate)
 
 	for i := range buf {
@@ -205,49 +98,6 @@ func applyRingMod(buf floatBuffer, modFreq float64) {
 		if phase >= 1.0 {
 			phase -= 1.0
 		}
-	}
-}
-
-// filterOnePoleLP applies single-pole low-pass filter
-// cutoff: normalized frequency 0.0-1.0 (1.0 = Nyquist)
-func filterOnePoleLP(buf floatBuffer, cutoff float64) {
-	if cutoff >= 1.0 {
-		return
-	}
-	if cutoff <= 0.0 {
-		cutoff = 0.001
-	}
-	// Attempt to map cutoff to coefficient
-	// alpha ≈ cutoff for low values, approaches 1 as cutoff approaches 1
-	alpha := cutoff
-	if alpha > 0.99 {
-		alpha = 0.99
-	}
-
-	prev := 0.0
-	for i := range buf {
-		buf[i] = prev + alpha*(buf[i]-prev)
-		prev = buf[i]
-	}
-}
-
-// filterOnePoleHP applies single-pole high-pass filter
-func filterOnePoleHP(buf floatBuffer, cutoff float64) {
-	if cutoff <= 0.0 {
-		return
-	}
-	alpha := 1.0 - cutoff
-	if alpha < 0.01 {
-		alpha = 0.01
-	}
-
-	prevIn := 0.0
-	prevOut := 0.0
-	for i := range buf {
-		in := buf[i]
-		buf[i] = alpha * (prevOut + in - prevIn)
-		prevIn = in
-		prevOut = buf[i]
 	}
 }
 
@@ -386,106 +236,6 @@ func applyOverdrive(buf floatBuffer, drive float64) {
 	}
 }
 
-// generateImpulses creates discrete high-amplitude spikes
-// density: 0.0-1.0 probability of spike per sample (very low values recommended, e.g. 0.001)
-func generateImpulses(samples int, density float64) floatBuffer {
-	buf := make(floatBuffer, samples)
-	for i := range buf {
-		if genRng.Float64() < density {
-			// Random bipolar spike
-			if genRng.Float64() > 0.5 {
-				buf[i] = 1.0
-			} else {
-				buf[i] = -1.0
-			}
-		}
-	}
-	return buf
-}
-
-// generateBurst creates a series of micro-transient noise bursts
-// burstCount: number of bursts, burstDuration: each burst length
-// gapVariation: 0.0-1.0 randomness in gap timing
-func generateBurst(burstCount int, burstDurationSec, gapDurationSec, gapVariation float64) floatBuffer {
-	burstSamples := durationToSamples(burstDurationSec)
-	gapSamples := durationToSamples(gapDurationSec)
-
-	// Estimate total size
-	totalSamples := burstCount * (burstSamples + gapSamples)
-	buf := make(floatBuffer, 0, totalSamples)
-
-	for i := 0; i < burstCount; i++ {
-		// Generate burst
-		burst := oscillator(waveNoise, 0, burstSamples)
-		applyEnvelope(burst, 0.0005, burstDurationSec*0.7)
-
-		// Vary amplitude per burst
-		amp := 0.5 + genRng.Float64()*0.5
-		for j := range burst {
-			burst[j] *= amp
-		}
-
-		buf = append(buf, burst...)
-
-		// Variable gap
-		actualGap := gapSamples
-		if gapVariation > 0 {
-			variance := int(float64(gapSamples) * gapVariation * (genRng.Float64()*2 - 1))
-			actualGap += variance
-			if actualGap < 0 {
-				actualGap = 0
-			}
-		}
-		gap := make(floatBuffer, actualGap)
-		buf = append(buf, gap...)
-	}
-
-	return buf
-}
-
-// applyPitchEnvelope modulates playback rate simulation via sample skipping/doubling
-// Not true pitch shift but creates pitch contour effect for simple cases
-// startRate, endRate: 1.0 = normal, 0.5 = octave down, 2.0 = octave up
-func applyPitchEnvelope(buf floatBuffer, startRate, endRate float64) floatBuffer {
-	if len(buf) == 0 {
-		return buf
-	}
-
-	// Estimate output length
-	avgRate := (startRate + endRate) / 2.0
-	outLen := int(float64(len(buf)) / avgRate)
-	if outLen < 1 {
-		outLen = 1
-	}
-	out := make(floatBuffer, outLen)
-
-	srcPos := 0.0
-	rateDelta := (endRate - startRate) / float64(outLen)
-	rate := startRate
-
-	for i := range out {
-		idx := int(srcPos)
-		if idx >= len(buf)-1 {
-			idx = len(buf) - 2
-			if idx < 0 {
-				idx = 0
-			}
-		}
-		// Linear interpolation
-		frac := srcPos - float64(idx)
-		if idx+1 < len(buf) {
-			out[i] = buf[idx]*(1-frac) + buf[idx+1]*frac
-		} else {
-			out[i] = buf[idx]
-		}
-
-		srcPos += rate
-		rate += rateDelta
-	}
-
-	return out
-}
-
 // normalizePeak scales buffer so max absolute value equals target
 func normalizePeak(buf floatBuffer, target float64) {
 	var peak float64
@@ -501,142 +251,6 @@ func normalizePeak(buf floatBuffer, target float64) {
 	for i := range buf {
 		buf[i] *= scale
 	}
-}
-
-func generateShieldSound(v sfxVariance) floatBuffer {
-	samples := durationToSamples(ShieldSoundDuration.Seconds())
-
-	// Primary sweep - slightly higher start freq for audibility
-	sweep := oscillatorSweep(waveSine, ShieldStartFreq*v.pitch, ShieldEndFreq*v.pitch, samples)
-
-	// Set sub-harmonic
-	sub := oscillatorSweep(waveSine, ShieldStartFreq*0.5, ShieldEndFreq*v.pitch, samples)
-
-	// Mix and Drive: The saturation creates harmonics that make the bass audible on small speakers
-	combined := mixFloatBuffers(sweep, sub, 0.6)
-	applyOverdrive(combined, 2.5)
-
-	// Low-pass to remove the harsh edge of the overdrive, keeping the "thud"
-	filterBiquadLP(combined, 400.0, 1.0)
-
-	// Set a filtered noise layer for the "force field" texture
-	noiseSamples := durationToSamples(0.04)
-	noise := oscillator(waveNoise, 0, noiseSamples)
-	filterBiquadBP(noise, 800.0, 2.0)
-	applyEnvelope(noise, 0.005, 0.03)
-
-	result := mixFloatBuffers(combined, noise, 0.2)
-
-	applyEnvelope(result, ShieldSoundAttack.Seconds(), ShieldSoundRelease.Seconds())
-	normalizePeak(result, 0.95)
-	return result
-}
-
-func generateZapSound(v sfxVariance) floatBuffer {
-	// Shorter duration for continuous looping capability
-	samples := durationToSamples(ZapSoundDuration.Seconds() * v.decay)
-
-	// Layer 1: Electrical Arc (Band-limited noise)
-	arc := oscillator(waveNoise, 0, samples)
-	filterBiquadBP(arc, 1200.0*v.pitch, 1.0)
-
-	// Fast AM modulation for the "buzz" (approx 25Hz)
-	applyAM(arc, ZapModulationRate, 0.8)
-
-	// Layer 2: High Voltage Hum (FM Synthesis)
-	// Carrier 110Hz, Modulator 55Hz (Sub-octave), High Index -> Saw-like buzz
-	hum := oscillatorFM(110.0*v.pitch, 55.0*v.pitch, 3.0, samples)
-	// Tremolo on the hum
-	applyAM(hum, ZapModulationRate*0.5, 0.4)
-
-	// Mix layers
-	result := mixFloatBuffers(arc, hum, 0.6)
-
-	// Slight distortion to fuse layers
-	applyWaveshaper(result, 1.5)
-
-	// Fast envelope for responsive re-triggering
-	applyEnvelope(result, ZapSoundAttack.Seconds(), ZapSoundRelease.Seconds())
-
-	normalizePeak(result, 0.85)
-	return result
-}
-
-func generateCrackleSound(v sfxVariance) floatBuffer {
-	samples := durationToSamples(CrackleSoundDuration.Seconds() * v.decay)
-
-	// Electrical crackle is defined by discrete, high-voltage sparks
-	// 1. Generate sparse impulses (sparks)
-	sparks := generateImpulses(samples, 0.002) // ~80-90 sparks per second
-
-	// 2. High-pass filter to remove DC/thump, leaving only the "snap"
-	filterBiquadHP(sparks, 1500.0, 0.707)
-
-	// 3. Band-pass random resonance to vary the tone of sparks
-	// We simulate this by mixing a few differently filtered copies
-	layer2 := make(floatBuffer, len(sparks))
-	copy(layer2, sparks)
-	filterBiquadBP(layer2, 3500.0*v.pitch, 4.0) // High snap
-
-	result := mixFloatBuffers(sparks, layer2, 0.8)
-
-	// 4. Heavy distortion to turn "clicks" into "zaps"
-	applyOverdrive(result, 5.0)
-
-	// 5. Hard decay to ensure it sounds like a spark gap, not a noise wash
-	applyDecayEnvelope(result, 0.001, float64(AudioSampleRate)*0.03)
-
-	normalizePeak(result, 0.9)
-	return result
-}
-
-func generateMetalHitSound(v sfxVariance) floatBuffer {
-	samples := durationToSamples(MetalHitSoundDuration.Seconds())
-
-	// FM Synthesis is superior for metallic/inharmonic sounds
-	// Carrier: 800Hz (Body), Modulator: 1143Hz (non-integer ratio ~1.42), Index: High decaying to low
-
-	// Create FM buffer manually to control index envelope
-	fm := make(floatBuffer, samples)
-	carrierPhase := 0.0
-	modPhase := 0.0
-	cFreq := 800.0 * v.pitch
-	mFreq := 1143.0 * v.pitch
-
-	cInc := cFreq / float64(AudioSampleRate)
-	mInc := mFreq / float64(AudioSampleRate)
-
-	maxIndex := 5.0
-
-	for i := range fm {
-		// Index decays over time: rich spectrum at start -> pure tone at end
-		progress := float64(i) / float64(samples)
-		index := maxIndex * (1.0 - progress*progress) // Quadratic decay
-
-		modVal := math.Sin(2 * math.Pi * modPhase)
-		fm[i] = math.Sin(2 * math.Pi * (carrierPhase + index*modVal))
-
-		carrierPhase += cInc
-		modPhase += mInc
-	}
-
-	// Filter to remove mud
-	filterBiquadHP(fm, 200.0, 0.707)
-
-	// Sharp impact transient (Click)
-	transientSamples := durationToSamples(MetalHitTransientLength.Seconds())
-	transient := oscillator(waveNoise, 0, transientSamples)
-	filterBiquadLP(transient, 3000.0, 1.0)
-	applyEnvelope(transient, 0.0005, 0.003)
-
-	// Mix Impact + FM Body
-	result := mixFloatBuffers(fm, transient, 0.5)
-
-	// Short envelope for a dead, solid hit
-	applyDecayEnvelope(result, MetalHitAttack.Seconds(), float64(AudioSampleRate)*MetalHitDecayRate.Seconds())
-
-	normalizePeak(result, 0.95)
-	return result
 }
 
 // sweepBiquadBP glides a band-pass center start→end Hz across the buffer

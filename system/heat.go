@@ -3,7 +3,6 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
@@ -159,17 +158,14 @@ func (s *HeatSystem) addHeat(delta int) {
 		heatComp.Overheat = 0
 
 		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-			SoundType: audio.SoundMetalHit,
+			ID: parameter.Sfx.MetalHit,
 		})
 
 	}
 
 	// Update heat, clamp to bounds, update overheat
 	current := heatComp.Current
-	newVal := current + delta
-	if newVal < 0 {
-		newVal = 0
-	}
+	newVal := max(0, current+delta)
 	if newVal > parameter.HeatMax {
 		overheat := newVal - parameter.HeatMax
 		newVal = parameter.HeatMax

@@ -29,7 +29,7 @@ const (
 // Single channel preserves ordering between playback and control commands
 type audioCmd struct {
 	op      cmdOp
-	sound   SoundType
+	sound   SoundID
 	pattern PatternID
 	instr   InstrumentType
 	tier    Intensity // arrangement tier (§5)

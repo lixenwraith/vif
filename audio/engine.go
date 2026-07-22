@@ -1,6 +1,7 @@
 package audio
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,6 +23,12 @@ type AudioEngine struct {
 	cache  *soundCache
 	mixer  *Mixer
 
+	// volumes is the per-SoundID effect level, resolved once from the
+	// name-keyed config at Start. Guarded by mu with config; read on Play.
+	volumes []float64
+	// specErr retains non-fatal problems in the embedder's sound TOML.
+	// Written on the wiring goroutine before the mixer exists; read-only after.
+	specErr error
 	// Commands issued before Start builds the mixer, replayed in order
 	// at mixer creation. Both ends run on the wiring goroutine, which
 	// happens-before the scheduler goroutine that sends afterward
@@ -75,18 +82,33 @@ func (ae *AudioEngine) Start() error {
 		return fmt.Errorf("audio engine already running")
 	}
 
-	// One-time DSP: all SFX buffers and the drum kit render before the mixer
-	// goroutine exists — read-only afterward, shared without locks
-	ae.cache.preloadAll(ae.config.EffectShapes)
-	kit := buildDrumKit(DrumVariants)
-	InitDefaultPatterns()
-
-	if len(ae.config.PatternTOML) > 0 {
-		if pats, err := LoadPatternsTOML(ae.config.PatternTOML); err == nil {
-			for _, p := range pats {
-				RegisterPattern(p)
+	// Registration then render, both before the mixer goroutine exists.
+	// A bad user spec degrades to the built-ins rather than to silence.
+	if err := registerBuiltinSounds(); err != nil {
+		ae.running.Store(false)
+		return fmt.Errorf("built-in sounds: %w", err)
+	}
+	if len(ae.config.SoundTOML) > 0 {
+		defs, err := LoadSoundsTOML(ae.config.SoundTOML)
+		ae.specErr = err
+		for _, d := range defs {
+			if _, rerr := RegisterSound(d); rerr != nil {
+				ae.specErr = errors.Join(ae.specErr, rerr)
 			}
-		} // parse error dropped until logging lands
+		}
+	}
+	freezeSounds()
+
+	ae.cache.preloadAll(ae.config.EffectShapes)
+	kit := buildDrumKit(ae.cache)
+	ae.resolveVolumes()
+	InitDefaultPatterns()
+	if len(ae.config.PatternTOML) > 0 {
+		pats, err := LoadPatternsTOML(ae.config.PatternTOML)
+		ae.specErr = errors.Join(ae.specErr, err)
+		for _, p := range pats {
+			RegisterPattern(p) // ID zero -> name-keyed override, dynamic otherwise
+		}
 	}
 
 	cands, err := DetectBackends(ae.config.ForceBackend)
@@ -264,8 +286,28 @@ func (ae *AudioEngine) SetPaused(paused bool) {
 	}
 }
 
+// volumes is the per-ID effect level, resolved once from the name-keyed
+// config. Removes the map lookup Play used to do per shot.
+func (ae *AudioEngine) resolveVolumes() {
+	defs := registeredSounds()
+	v := make([]float64, len(defs))
+	ae.mu.RLock()
+	m := ae.config.EffectVolumes
+	ae.mu.RUnlock()
+	for i := 1; i < len(defs); i++ {
+		lvl, ok := m[defs[i].Name]
+		if !ok {
+			lvl = DefaultEffectVolume
+		}
+		v[i] = lvl
+	}
+	ae.mu.Lock()
+	ae.volumes = v
+	ae.mu.Unlock()
+}
+
 // Play queues a sound effect; volume computed here, dampening at the mixer
-func (ae *AudioEngine) Play(st SoundType) bool {
+func (ae *AudioEngine) Play(id SoundID) bool {
 	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
 		return false
 	}
@@ -274,13 +316,23 @@ func (ae *AudioEngine) Play(st SoundType) bool {
 	}
 	ae.mu.RLock()
 	vol := ae.config.MasterVolume
-	if ev, ok := ae.config.EffectVolumes[st]; ok {
-		vol *= ev
+	ok := id > 0 && int(id) < len(ae.volumes)
+	if ok {
+		vol *= ae.volumes[id]
 	}
 	ae.mu.RUnlock()
-	ae.mixer.Send(audioCmd{op: cmdPlay, sound: st, f1: vol})
+	if !ok {
+		return false
+	}
+	ae.mixer.Send(audioCmd{op: cmdPlay, sound: id, f1: vol})
 	return true
 }
+
+// SoundID resolves a name for callers to cache at wiring time.
+func (ae *AudioEngine) SoundID(name string) SoundID { return SoundIDByName(name) }
+
+// SpecError reports non-fatal problems in the embedder's sound TOML.
+func (ae *AudioEngine) SpecError() error { return ae.specErr }
 
 // send routes a command to the mixer, buffering it until Start builds one
 func (ae *AudioEngine) send(c audioCmd) {
@@ -324,7 +376,6 @@ func (ae *AudioEngine) ResetMusic() { ae.send(audioCmd{op: cmdMusicReset}) }
 
 func (ae *AudioEngine) SetMusicBPM(bpm int) { ae.send(audioCmd{op: cmdBPM, i1: bpm, b: true}) }
 
-// Run-seed injection; call before StartMusic on new game
 func (ae *AudioEngine) SetMusicSeed(seed int64) { ae.send(audioCmd{op: cmdSeed, seed: seed}) }
 
 func (ae *AudioEngine) SetMusicSwing(a float64) { ae.send(audioCmd{op: cmdSwing, f1: a}) }
@@ -397,6 +448,7 @@ func (ae *AudioEngine) SetConfig(cfg *AudioConfig) {
 	ae.mu.Lock()
 	ae.config = cfg
 	ae.mu.Unlock()
+	ae.resolveVolumes()
 }
 
 // SetArrangement registers the pattern set for an intensity tier

@@ -26,7 +26,7 @@ type LevelSetupPayload struct {
 
 // SoundRequestPayload contains the sound type to play
 type SoundRequestPayload struct {
-	SoundType audio.SoundType `toml:"sound_type"`
+	ID audio.SoundID `toml:"sound_id"`
 }
 
 type SoundMuteToggleMode uint8

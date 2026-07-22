@@ -1,0 +1,214 @@
+# Built-in sound effects. Times are seconds, frequencies Hz.
+# Table headers are flush-left deliberately; chains use inline tables, but the
+# block form ([[sound.layer.chain]]) parses to the same array.
+
+[[sound]]
+name = "error"
+duration = 0.08
+fixed_length = true
+norm = 0.9
+[[sound.layer]]
+source = { kind = "sweep", wave = "saw", freq = 130, freq_end = 85 }
+chain = [
+  { kind = "lp", freq = 900, q = 0.9 },
+  { kind = "ar", attack = 0.005, release = 0.02 }
+]
+
+# Three partials, upper slightly stretched: the beating is the shimmer.
+[[sound]]
+name = "bell"
+duration = 0.35
+norm = 0.9
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 880 }
+chain = [{ kind = "ar", attack = 0.004, release = 0.32 }]
+[[sound.layer]]
+gain = 0.35
+source = { kind = "osc", wave = "sine", freq = 1765.28 }
+chain = [{ kind = "ar", attack = 0.004, release = 0.14 }]
+[[sound.layer]]
+gain = 0.18
+source = { kind = "osc", wave = "sine", freq = 2637 }
+chain = [{ kind = "decay", attack = 0.002, tau = 0.05 }]
+
+[[sound]]
+name = "whoosh"
+duration = 0.12
+norm = 0.8
+[[sound.layer]]
+source = { kind = "noise" }
+chain = [
+  { kind = "sweepbp", freq = 500, freq_end = 2600, q = 1.2, track_pitch = true },
+  { kind = "am", rate = 13.0, depth = 0.35 },
+  { kind = "ar", attack = 0.015, release = 0.07 }
+]
+
+# Two notes in sequence: offset replaces concatenation.
+[[sound]]
+name = "coin"
+norm = 0.85
+chain = [{ kind = "lp", freq = 6000, q = 0.707 }]
+[[sound.layer]]
+length = 0.08
+source = { kind = "osc", wave = "square", freq = 987.77 }
+chain = [{ kind = "ar", attack = 0.005, release = 0.04 }]
+[[sound.layer]]
+offset = 0.08
+length = 0.16
+source = { kind = "osc", wave = "square", freq = 1318.51 }
+chain = [{ kind = "ar", attack = 0.005, release = 0.11 }]
+
+# The one preset that needs a bus: overdrive is nonlinear and must see the
+# sweep+sub sum, but not the noise texture.
+[[sound]]
+name = "shield"
+duration = 0.10
+fixed_length = true
+norm = 0.95
+chain = [{ kind = "ar", attack = 0.002, release = 0.08 }]
+[[sound.bus]]
+name = "body"
+chain = [
+  { kind = "clip", drive = 2.5 },
+  { kind = "lp", freq = 400, q = 1.0 }
+]
+[[sound.layer]]
+bus = "body"
+source = { kind = "sweep", wave = "sine", freq = 160, freq_end = 40 }
+[[sound.layer]]
+bus = "body"
+gain = 0.6
+source = { kind = "sweep", wave = "sine", freq = 80, freq_end = 40 }
+[[sound.layer]]
+gain = 0.2
+length = 0.04
+source = { kind = "noise" }
+chain = [
+  { kind = "bp", freq = 800, q = 2.0 },
+  { kind = "ar", attack = 0.005, release = 0.03 }
+]
+
+[[sound]]
+name = "zap"
+duration = 0.18
+norm = 0.85
+chain = [
+  { kind = "shape", drive = 1.5 },
+  { kind = "ar", attack = 0.005, release = 0.03 }
+]
+[[sound.layer]]
+source = { kind = "noise" }
+chain = [
+  { kind = "bp", freq = 1200, q = 1.0, track_pitch = true },
+  { kind = "am", rate = 25.0, depth = 0.8 }
+]
+[[sound.layer]]
+gain = 0.6
+source = { kind = "fm", freq = 110, ratio = 0.5, index = 3.0 }
+chain = [{ kind = "am", rate = 12.5, depth = 0.4 }]
+
+# The band-passed copy must be the same spark realization, not a redraw:
+# that is what ref is for.
+[[sound]]
+name = "crackle"
+duration = 0.08
+norm = 0.9
+chain = [
+  { kind = "clip", drive = 5.0 },
+  { kind = "decay", attack = 0.001, tau = 0.03 }
+]
+[[sound.layer]]
+name = "sparks"
+source = { kind = "impulse", density = 0.002 }
+chain = [{ kind = "hp", freq = 1500, q = 0.707 }]
+[[sound.layer]]
+gain = 0.8
+source = { kind = "ref", ref = "sparks" }
+chain = [{ kind = "bp", freq = 3500, q = 4.0, track_pitch = true }]
+
+# index_curve = "quad" is 5*(1-t^2): the inharmonic FM index decay that was a
+# hand-written per-sample loop.
+[[sound]]
+name = "metalhit"
+duration = 0.12
+fixed_length = true
+norm = 0.95
+chain = [{ kind = "decay", attack = 0.001, tau = 0.04 }]
+[[sound.layer]]
+source = { kind = "fm", freq = 800, mod_freq = 1143, index = 5.0, index_end = 0, index_curve = "quad" }
+chain = [{ kind = "hp", freq = 200, q = 0.707 }]
+[[sound.layer]]
+gain = 0.5
+length = 0.004
+source = { kind = "noise" }
+chain = [
+  { kind = "lp", freq = 3000, q = 1.0 },
+  { kind = "ar", attack = 0.0005, release = 0.003 }
+]
+
+[[sound]]
+name = "explosion"
+duration = 0.28
+norm = 0.8
+chain = [{ kind = "shape", drive = 1.6 }]
+[[sound.layer]]
+source = { kind = "sweep", wave = "sine", freq = 110, freq_end = 34 }
+chain = [
+  { kind = "shape", drive = 3.0 },
+  { kind = "decay", attack = 0.002, tau = 0.10 }
+]
+[[sound.layer]]
+gain = 0.8
+source = { kind = "noise" }
+chain = [
+  { kind = "lp", freq = 450, q = 0.9 },
+  { kind = "decay", attack = 0.004, tau = 0.09 }
+]
+[[sound.layer]]
+gain = 0.7
+length = 0.05
+source = { kind = "noise" }
+chain = [
+  { kind = "bp", freq = 2800, q = 0.8, track_pitch = true },
+  { kind = "decay", attack = 0.001, tau = 0.012 }
+]
+
+[[sound]]
+name = "bullet"
+duration = 0.07
+norm = 0.85
+chain = [
+  { kind = "shape", drive = 1.8 },
+  { kind = "decay", attack = 0.001, tau = 0.02 }
+]
+[[sound.layer]]
+source = { kind = "sweep", wave = "saw", freq = 1500, freq_end = 240 }
+chain = [{ kind = "lp", freq = 4200, q = 0.9, track_pitch = true }]
+[[sound.layer]]
+gain = 0.6
+length = 0.005
+source = { kind = "noise" }
+chain = [
+  { kind = "hp", freq = 2000, q = 0.707 },
+  { kind = "ar", attack = 0.0003, release = 0.004 }
+]
+
+# Rotary cue. Pitch leads, amplitude trails by 90 degrees: vibrato phase 0.25
+# is cos, am phase 0.5 flips the sine. In-phase modulation reads as a flat
+# wobble. The two partials are two layers, which is what partials are.
+[[sound]]
+name = "ring"
+duration = 0.7
+norm = 0.85
+chain = [
+  { kind = "bp", freq = 1600, q = 0.8, track_pitch = true },
+  { kind = "ar", attack = 0.008, release = 0.26 }
+]
+[[sound.layer]]
+source = { kind = "osc", wave = "sine", freq = 660, vibrato = { rate = 2.5, depth = 0.06, phase = 0.25 } }
+chain = [{ kind = "am", rate = 2.5, depth = 0.55, phase = 0.5 }]
+[[sound.layer]]
+gain = 0.45
+source = { kind = "osc", wave = "sine", freq = 990, vibrato = { rate = 2.5, depth = 0.06, phase = 0.25 } }
+chain = [{ kind = "am", rate = 2.5, depth = 0.55, phase = 0.5 }]
+

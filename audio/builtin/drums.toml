@@ -1,0 +1,66 @@
+# Percussion. Names bind to InstrumentType in drumkit.go; overriding "kick" in
+# user TOML replaces the kit piece. Six variants with a tighter walk than SFX.
+
+[[sound]]
+name = "kick"
+duration = 0.15
+raw = true          # tanh saturation sets the level; no peak normalization
+variants = 6
+pitch_walk = 0.08
+length_walk = 0.20
+[[sound.layer]]
+source = { kind = "sweep", wave = "sine", freq = 150, freq_end = 40, curve = "exp", curve_k = 8 }
+chain = [
+  { kind = "decay", tau = 0.03 },
+  { kind = "shape", drive = 2.0 }
+]
+
+[[sound]]
+name = "hihat"
+duration = 0.08
+norm = 0.9
+variants = 6
+pitch_walk = 0.08
+length_walk = 0.20
+[[sound.layer]]
+source = { kind = "noise" }
+chain = [
+  { kind = "decay", tau = 0.0053333 },
+  { kind = "hp", freq = 7000, q = 0.707 }
+]
+
+[[sound]]
+name = "snare"
+duration = 0.12
+norm = 0.9
+variants = 6
+pitch_walk = 0.08
+length_walk = 0.20
+chain = [{ kind = "bp", freq = 2000, q = 1.5, track_pitch = true }]
+[[sound.layer]]
+gain = 0.5
+source = { kind = "osc", wave = "sine", freq = 200 }
+chain = [{ kind = "decay", tau = 0.012 }]
+[[sound.layer]]
+gain = 0.5
+source = { kind = "noise" }
+chain = [{ kind = "decay", tau = 0.015 }]
+
+[[sound]]
+name = "clap"
+duration = 0.10
+norm = 0.9
+variants = 6
+pitch_walk = 0.08
+length_walk = 0.20
+chain = [{ kind = "bp", freq = 1500, q = 2.0 }]
+[[sound.layer]]
+length = 0.06
+source = { kind = "burst", burst = { count = 4, len = 0.01, gap = 0.005, tau = 0.002, decay = 0.15 } }
+[[sound.layer]]
+gain = 0.3
+offset = 0.06
+length = 0.04
+source = { kind = "noise" }
+chain = [{ kind = "decay", tau = 0.005 }]
+

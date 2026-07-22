@@ -4,7 +4,6 @@ import (
 	"math"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/audio"
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -218,7 +217,7 @@ func (s *TypingSystem) emitTypingError() {
 	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{Type: 0, Level: 0})
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-		SoundType: audio.SoundError,
+		ID: parameter.Sfx.Error,
 	})
 
 	s.statErrors.Add(1)

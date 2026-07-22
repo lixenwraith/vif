@@ -137,7 +137,7 @@ func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 
 	if ev.Type == event.EventSoundRequest {
 		if p, ok := ev.Payload.(*event.SoundRequestPayload); ok {
-			s.player.Play(p.SoundType) // payload carries audio.SoundType
+			s.player.Play(p.ID) // payload carries audio.SoundType
 		}
 	}
 }

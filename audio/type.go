@@ -6,26 +6,6 @@ import (
 	"sync"
 )
 
-// === Sound effects ===
-
-// SoundType identifies a preset sound effect
-type SoundType int32
-
-const (
-	SoundError SoundType = iota
-	SoundBell
-	SoundWhoosh
-	SoundCoin
-	SoundShield
-	SoundZap
-	SoundCrackle
-	SoundMetalHit
-	SoundExplosion
-	SoundBullet
-	SoundRing
-	SoundTypeCount
-)
-
 // === Instruments ===
 
 // InstrumentType identifies a synthesis voice

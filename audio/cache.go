@@ -1,27 +1,29 @@
 package audio
 
-// soundCache stores pre-rendered unity-gain SFX variant sets
-// preloadAll runs in AudioEngine.Start before the mixer goroutine exists;
-// storage is immutable afterward — no synchronization required
+// soundCache stores pre-rendered unity-gain variant sets, indexed by SoundID.
+// Sized at Start from the frozen registry; immutable afterward, so the mix
+// goroutine reads it without synchronization.
 type soundCache struct {
-	store [SoundTypeCount][]floatBuffer
+	store [][]floatBuffer
 }
 
 func newSoundCache() *soundCache { return &soundCache{} }
 
-// preloadAll renders every SFX variant set before the mixer goroutine exists
-// Shapes threaded from AudioConfig.EffectShapes; a nil map reads the
-// zero SFXParams, which norm() maps to unity
-func (c *soundCache) preloadAll(shapes map[SoundType]SFXParams) {
-	for st := SoundType(0); st < SoundTypeCount; st++ {
-		c.store[st] = RenderVariants(st, SFXVariants, shapes[st])
+func (c *soundCache) preloadAll(shapes map[string]SFXParams) {
+	defs := registeredSounds()
+	c.store = make([][]floatBuffer, len(defs))
+	for id := 1; id < len(defs); id++ {
+		c.store[id] = RenderVariants(defs[id], shapes[defs[id].Name])
 	}
 }
 
-// variants returns the pre-rendered set; nil for unknown types
-func (c *soundCache) variants(st SoundType) []floatBuffer {
-	if st < 0 || int(st) >= int(SoundTypeCount) {
+// variants returns the pre-rendered set; nil for unknown IDs, which is the
+// degrade-to-silence path.
+func (c *soundCache) variants(id SoundID) []floatBuffer {
+	if id <= 0 || int(id) >= len(c.store) {
 		return nil
 	}
-	return c.store[st]
+	return c.store[id]
 }
+
+func (c *soundCache) count() int { return len(c.store) }

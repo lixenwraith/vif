@@ -11,7 +11,7 @@ import (
 
 // activeSound tracks a playing sound instance
 type activeSound struct {
-	st     SoundType // per-type polyphony accounting
+	st     SoundID // per-type polyphony accounting
 	buffer floatBuffer
 	pos    int
 	volume float64
@@ -38,10 +38,10 @@ type Mixer struct {
 	cache     *soundCache
 	sequencer *Sequencer
 	active    []activeSound
-	sfxVar    [SoundTypeCount]uint32 // variant rotation counters
 
-	lastPlay [SoundTypeCount]time.Time
-	rapidVol [SoundTypeCount]float64
+	sfxVar   []uint32 // variant rotation counters, indexed by SoundID
+	lastPlay []time.Time
+	rapidVol []float64
 
 	pauseGain float64
 	duckGain  float64
@@ -62,6 +62,10 @@ func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
 		pauseGain: 1.0,
 		duckGain:  1.0,
 	}
+	n := cache.count()
+	m.sfxVar = make([]uint32, n)
+	m.lastPlay = make([]time.Time, n)
+	m.rapidVol = make([]float64, n)
 	for i := range m.rapidVol {
 		m.rapidVol[i] = 1.0
 	}
@@ -185,8 +189,12 @@ func (m *Mixer) apply(c audioCmd) {
 }
 
 // startSound applies rapid-fire dampening and polyphony caps, then activates a voice on a rotated variant
-func (m *Mixer) startSound(st SoundType, vol float64) {
+func (m *Mixer) startSound(st SoundID, vol float64) {
 	if m.paused.Load() {
+		m.dropped.Add(1)
+		return
+	}
+	if st <= 0 || int(st) >= len(m.sfxVar) {
 		m.dropped.Add(1)
 		return
 	}
