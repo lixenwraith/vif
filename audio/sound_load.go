@@ -39,6 +39,12 @@ func LoadSoundsFS(fsys fs.FS, names ...string) ([]*SoundDef, error) {
 	return partitionValid(l.out)
 }
 
+// MarshalSoundsFile re-emits a document with its include directives intact.
+// MarshalSounds drops them, which flattens a multi-file spec set on first save.
+func MarshalSoundsFile(include []string, defs []*SoundDef) ([]byte, error) {
+	return toml.Marshal(SoundSpecFile{Include: include, Sound: defs})
+}
+
 // MarshalSounds re-emits specs as TOML. Arrays keep their order; scalar keys
 // are sorted. Reloading the output yields identical audio.
 func MarshalSounds(defs []*SoundDef) ([]byte, error) {

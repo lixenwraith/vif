@@ -592,3 +592,27 @@ func (ae *AudioEngine) SetEffectVolume(name string, vol float64) {
 	ae.mu.Unlock()
 	ae.resolveVolumes()
 }
+
+// Transport reports the sequencer playhead. The position freezes rather than
+// resetting on Stop, so a stopped readout still shows where playback left off.
+func (ae *AudioEngine) Transport() (bar int64, step int, running bool) {
+	if ae.mixer == nil {
+		return 0, 0, false
+	}
+	p := ae.mixer.sequencer.pos.Load()
+	return int64(p >> 8), int(p & 0xff), ae.mixer.musicRunning.Load()
+}
+
+// SlotPattern reports what a slot is currently sounding, which differs from the
+// last SetPattern during a crossfade and during an auto-fill bar.
+func (ae *AudioEngine) SlotPattern(slot int) PatternID {
+	if ae.mixer == nil || slot < 0 || slot >= MusicSlots {
+		return PatternSilence
+	}
+	return PatternID(ae.mixer.sequencer.slotPat[slot].Load())
+}
+
+// SetAutoFill toggles the slot-2 phrase fill. An editor auditioning a pattern
+// in slot 2 needs it off; the fill swaps the slot out from under it once per
+// phrase.
+func (ae *AudioEngine) SetAutoFill(on bool) { ae.send(audioCmd{op: cmdAutoFill, b: on}) }

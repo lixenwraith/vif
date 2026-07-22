@@ -237,6 +237,8 @@ func (m *Mixer) apply(c audioCmd) {
 		m.sequencer.ReloadPattern(c.pattern)
 	case cmdPlayBuffer:
 		m.startBuffer(c.buf, c.f1)
+	case cmdAutoFill:
+		m.sequencer.autoFill = c.b
 	}
 }
 

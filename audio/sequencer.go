@@ -3,6 +3,7 @@ package audio
 import (
 	"math"
 	"math/rand/v2"
+	"sync/atomic"
 )
 
 type patternTransition struct {
@@ -84,11 +85,17 @@ type Sequencer struct {
 	samplePos   int64
 	barCount    int64
 
-	harmony  *harmony
-	slots    [MusicSlots]slotState
-	gains    [MusicSlots]float64
-	rng      *rand.Rand
-	gen      *melodyGen
+	harmony *harmony
+	slots   [MusicSlots]slotState
+	gains   [MusicSlots]float64
+	rng     *rand.Rand
+	gen     *melodyGen
+	// pos is the transport readout: bar<<8 | step. Written once per step by
+	// Generate on the mixer goroutine. Relaxed on purpose — a reader that
+	// catches it mid-store is one 16th note stale, below the refresh rate of
+	// anything that would ask.
+	pos      atomic.Uint64
+	slotPat  [MusicSlots]atomic.Int32
 	autoFill bool
 
 	// tier table, registered before playback, applied by SetIntensity
@@ -195,6 +202,7 @@ func (s *Sequencer) Generate(buf []float64) {
 				s.updateMelodyGen()
 			}
 			s.triggerStep(int(s.currentStep))
+			s.publish()
 		}
 
 		var mix float64
@@ -327,6 +335,7 @@ func (s *Sequencer) setPattern(slot int, p PatternID, fade int, quantize, reveal
 		if s.startTransition(slot, p, fade) && reveal {
 			s.armReveal(ss, p)
 		}
+		s.publish()
 		return
 	}
 	ss.pending = &patternTransition{
@@ -363,6 +372,7 @@ func (s *Sequencer) Start() {
 	if !s.running {
 		s.running = true
 		s.triggerStep(0)
+		s.publish()
 		// master fade-in — patterns enter at full internal gain (no
 		// equal-power-from-silence attenuation), the bus rides up under them
 		s.startGain = 0
@@ -390,6 +400,7 @@ func (s *Sequencer) Reset() {
 		ss.revealN = 0
 		ss.inFill = false
 	}
+	s.publish()
 }
 
 // SetArrangement registers the pattern set for a tier
@@ -426,5 +437,16 @@ func (s *Sequencer) ReloadPattern(id PatternID) {
 	// replacement leaves it holding the superseded struct.
 	if id == PatternMelodyGen && s.gen != nil {
 		s.gen.pat = GetPattern(id)
+	}
+}
+
+// publish exports the playhead and the per-slot sounding pattern. Three
+// separate atomics: a reader can pair a step from before a transition with a
+// pattern from after it. That is skew in a readout, not a property anything
+// depends on.
+func (s *Sequencer) publish() {
+	s.pos.Store(uint64(s.barCount)<<8 | uint64(s.currentStep)&0xff)
+	for si := range s.slots {
+		s.slotPat[si].Store(int32(s.slots[si].activeID()))
 	}
 }

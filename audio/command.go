@@ -26,6 +26,7 @@ const (
 	cmdReloadSound   // swap a rendered variant set; grows per-ID tables
 	cmdReloadPattern // re-resolve slots pointing at a replaced pattern
 	cmdPlayBuffer    // audition a caller-rendered buffer, unregistered
+	cmdAutoFill
 )
 
 // audioCmd is the unified control/play message consumed by the mixer goroutine

@@ -1,15 +1,5 @@
-github.com/lixenwraith/color v0.0.0-20260714170240-79433f872c42 h1:wBqu4zX4jtEOhQVTI1x492N/DKrNpawY4RSxGyDlEXM=
-github.com/lixenwraith/color v0.0.0-20260714170240-79433f872c42/go.mod h1:p02MsAGqlmZu3sc6BPYCKmaedF+lqBoijnuu5cOrYeo=
-github.com/lixenwraith/color v0.0.0-20260715115131-49124ee97342 h1:KhjVSKhsHrngqeQ6sIcXX7HMmocixQ7ZZCumycbEKBo=
-github.com/lixenwraith/color v0.0.0-20260715115131-49124ee97342/go.mod h1:p02MsAGqlmZu3sc6BPYCKmaedF+lqBoijnuu5cOrYeo=
 github.com/lixenwraith/color v0.0.0-20260719094342-615e11bc7897 h1:YkTK1vIzG6sqKRKaeUdkPyMT2laithY1d8tCqyId77U=
 github.com/lixenwraith/color v0.0.0-20260719094342-615e11bc7897/go.mod h1:p02MsAGqlmZu3sc6BPYCKmaedF+lqBoijnuu5cOrYeo=
-github.com/lixenwraith/terminal v0.0.0-20260714170427-21041633b2c3 h1:9zbFMAZMb8V4Q4N3pHO/I9oSGwB6RNKC/p+rDPjNPeE=
-github.com/lixenwraith/terminal v0.0.0-20260714170427-21041633b2c3/go.mod h1:KSA1VFStFKduxZDbHlcA3ttdbMQf4dCd/9X36S/fS20=
-github.com/lixenwraith/terminal v0.0.0-20260715115338-9853ac02707e h1:eQxQLYbquhC5v4t9LIX1dQRlaL6XavX+MXRNOvwWGOE=
-github.com/lixenwraith/terminal v0.0.0-20260715115338-9853ac02707e/go.mod h1:ACCQWrKJ8eEvSwfkBau09y3UI0yb5qTfLLNEQHEHSys=
-github.com/lixenwraith/terminal v0.0.0-20260719094802-e5c78a87f2dd h1:7HxhYOwssa8zsHYZAak3Sfq1xWB/kRUfYiC9mmU34w8=
-github.com/lixenwraith/terminal v0.0.0-20260719094802-e5c78a87f2dd/go.mod h1:4rwKdMTck5HljHtRyg+ZyQGIU1Xtgdvy8IVZY9t2fL8=
 github.com/lixenwraith/terminal v0.0.0-20260721091325-056401d20a19 h1:35JE1224CqCr4pc7pAviq+gY2jjUB+qRfIBbvOiPKE0=
 github.com/lixenwraith/terminal v0.0.0-20260721091325-056401d20a19/go.mod h1:4rwKdMTck5HljHtRyg+ZyQGIU1Xtgdvy8IVZY9t2fL8=
 github.com/lixenwraith/toml v0.0.0-20260713064549-c8e23ff85928 h1:UrIIqgbg2lcBzU5Yk37adcig8x63oMpXyuBmUxySeQE=

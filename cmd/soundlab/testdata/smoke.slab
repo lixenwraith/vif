@@ -1,0 +1,17 @@
+# Human-runnable mirror of TestEndToEnd (writes into the current directory):
+#   go run ./cmd/soundlab -headless -s cmd/soundlab/testdata/smoke.slab
+new sound blip
+set blip.duration 0.2
+add blip.layer
+set blip.layer.0.source.kind osc
+set blip.layer.0.source.freq 440
+add blip.layer.0.chain
+set blip.layer.0.chain.0.kind ar
+set blip.layer.0.chain.0.release 0.05
+validate blip
+apply blip
+play blip
+export blip smoke_blip.wav
+save sound smoke_sounds.toml
+stat
+quit
