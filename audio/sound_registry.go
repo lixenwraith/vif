@@ -38,26 +38,58 @@ func ResetRegistries() {
 }
 
 // RegisterSound validates and installs a spec. An existing name is replaced in
-// place, keeping its ID, mirroring RegisterPattern. Registration closes before
-// rendering: the cache and mixer size their tables from the registry, so a late
-// insert would race the mix goroutine.
+// place, keeping its ID, mirroring RegisterPattern.
+//
+// The freeze taken at Start blocks *new* names only: soundCache.store,
+// Mixer.sfxVar/lastPlay/rapidVol and AudioEngine.volumes are all sized from the
+// registry at Start, so a late append would exceed them. Replacing a known name
+// changes no table size and is always allowed.
 func RegisterSound(d *SoundDef) (SoundID, error) {
 	if err := ValidateSound(d); err != nil {
 		return SoundNone, err
 	}
 	soundMu.Lock()
 	defer soundMu.Unlock()
-	if soundFrozen {
+	if _, known := soundByName[d.Name]; !known && soundFrozen {
 		return SoundNone, fmt.Errorf("sound %q: registry frozen after Start", d.Name)
 	}
+	return insertLocked(d), nil
+}
+
+// defineSound registers or replaces regardless of freeze state. A new name
+// after Start yields an ID beyond every table sized at Start, so the caller
+// MUST propagate it to all of them. AudioEngine.DefineSound is the only caller
+// and does exactly that; nothing else should call this.
+func defineSound(d *SoundDef) (SoundID, error) {
+	if err := ValidateSound(d); err != nil {
+		return SoundNone, err
+	}
+	soundMu.Lock()
+	defer soundMu.Unlock()
+	return insertLocked(d), nil
+}
+
+func insertLocked(d *SoundDef) SoundID {
 	if id, ok := soundByName[d.Name]; ok {
 		soundDefs[id] = d
-		return id, nil
+		return id
 	}
 	id := SoundID(len(soundDefs))
 	soundDefs = append(soundDefs, d)
 	soundByName[d.Name] = id
-	return id, nil
+	return id
+}
+
+// SoundDefByName returns the live registry entry, or nil. The pointer is shared
+// with the render path — mutate a Clone, then DefineSound it.
+func SoundDefByName(name string) *SoundDef {
+	soundMu.RLock()
+	defer soundMu.RUnlock()
+	id, ok := soundByName[name]
+	if !ok {
+		return nil
+	}
+	return soundDefs[id]
 }
 
 // SoundIDByName resolves a name; SoundNone if absent. Setup path only —

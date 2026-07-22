@@ -239,14 +239,14 @@ func generateFractalPath(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X, Y int 
 	return points
 }
 
-func drawLineBg(buf *render.RenderBuffer, x0, y0, x1, y1 int, color color.RGB, alpha float64) {
+func drawLineBg(buf *render.RenderBuffer, x0, y0, x1, y1 int, c color.RGB, alpha float64) {
 	dx := abs(x1 - x0)
 	dy := abs(y1 - y0)
 	sx, sy := sign(x1-x0), sign(y1-y0)
 	err := dx - dy
 
 	for {
-		buf.Set(x0, y0, 0, color.Black, color, BlendMode, alpha, terminal.AttrNone)
+		buf.Set(x0, y0, 0, color.Black, c, BlendMode, alpha, terminal.AttrNone)
 		if x0 == x1 && y0 == y1 {
 			break
 		}
@@ -310,7 +310,7 @@ func generateFractalPathSubPixel(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X
 // ==========================================
 
 // drawSubPixelBoltFgOnly: Foreground only, background untouched (theme color shows through)
-func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int }, color color.RGB, alpha float64) {
+func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
 	for i := 0; i < len(points)-1; i++ {
@@ -323,13 +323,13 @@ func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int 
 		r := quadrantChars[bits]
 		if r != ' ' {
 			// Fg-only: screen blend foreground, bg completely untouched
-			buf.Set(cx, cy, r, color, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, r, c, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
 		}
 	}
 }
 
 // drawSubPixelBoltWithGlow: Fg + soft background glow (dims with distance from center)
-func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y int }, color color.RGB, alpha float64) {
+func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
 	for i := 0; i < len(points)-1; i++ {
@@ -338,9 +338,9 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 
 	// Pass 1: Background glow (dimmed color)
 	glowColor := color.RGB{
-		R: uint8(float64(color.R) * 0.3),
-		G: uint8(float64(color.G) * 0.3),
-		B: uint8(float64(color.B) * 0.3),
+		R: uint8(float64(c.R) * 0.3),
+		G: uint8(float64(c.G) * 0.3),
+		B: uint8(float64(c.B) * 0.3),
 	}
 
 	for key, bits := range cellHits {
@@ -358,13 +358,13 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 		cy := int(int32(key & 0xFFFFFFFF))
 		r := quadrantChars[bits]
 		if r != ' ' {
-			buf.Set(cx, cy, r, color, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, r, c, color.Black, BlendScreenFgOnly, alpha, terminal.AttrNone)
 		}
 	}
 }
 
 // drawSubPixelBoltWithBgBlend: Both fg and bg get screen blended
-func drawSubPixelBoltWithBgBlend(buf *render.RenderBuffer, points []struct{ X, Y int }, color color.RGB, alpha float64) {
+func drawSubPixelBoltWithBgBlend(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
 	for i := 0; i < len(points)-1; i++ {
@@ -373,9 +373,9 @@ func drawSubPixelBoltWithBgBlend(buf *render.RenderBuffer, points []struct{ X, Y
 
 	// Dimmer bg color for subtle fill
 	bgColor := color.RGB{
-		R: uint8(float64(color.R) * 0.4),
-		G: uint8(float64(color.G) * 0.4),
-		B: uint8(float64(color.B) * 0.4),
+		R: uint8(float64(c.R) * 0.4),
+		G: uint8(float64(c.G) * 0.4),
+		B: uint8(float64(c.B) * 0.4),
 	}
 
 	for key, bits := range cellHits {
@@ -384,7 +384,7 @@ func drawSubPixelBoltWithBgBlend(buf *render.RenderBuffer, points []struct{ X, Y
 		r := quadrantChars[bits]
 		if r != ' ' {
 			// Screen blend both fg and bg
-			buf.Set(cx, cy, r, color, bgColor, render.BlendScreen, alpha, terminal.AttrNone)
+			buf.Set(cx, cy, r, c, bgColor, render.BlendScreen, alpha, terminal.AttrNone)
 		}
 	}
 }
@@ -449,4 +449,3 @@ func sign(x int) int {
 	}
 	return 0
 }
-

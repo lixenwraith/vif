@@ -10,9 +10,9 @@ import (
 	"os"
 	"strings"
 
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
 	"github.com/lixenwraith/vi-fighter/render"
-	"github.com/lixenwraith/terminal"
 )
 
 func main() {

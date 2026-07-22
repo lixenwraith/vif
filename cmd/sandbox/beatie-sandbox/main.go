@@ -29,35 +29,35 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// SWARM — 2x2, fast cheap fodder
 	// ========================================================================
-	{2, 2, terminal.Red, terminal.BlackRed, [][]string{
+	{2, 2, color.Red, color.BlackRed, [][]string{
 		{`/\`, `\/`},
 		{`||`, `||`},
 	}},
-	{2, 2, terminal.VibrantCyan, terminal.Black, [][]string{
+	{2, 2, color.VibrantCyan, color.Black, [][]string{
 		{`><`, `""`},
 		{`><`, `^^`},
 	}},
-	{2, 2, terminal.Lime, terminal.BlackGreen, [][]string{
+	{2, 2, color.Lime, color.BlackGreen, [][]string{
 		{`##`, `/\`},
 		{`##`, `--`},
 		{`##`, `\/`},
 	}},
-	{2, 2, terminal.ElectricViolet, terminal.DeepPurple, [][]string{
+	{2, 2, color.ElectricViolet, color.DeepPurple, [][]string{
 		{`\\`, `//`},
 		{`//`, `\\`},
 	}},
-	{2, 2, terminal.Amber, terminal.DarkAmber, [][]string{
+	{2, 2, color.Amber, color.DarkAmber, [][]string{
 		{`00`, `/\`},
 		{`00`, `\/`},
 	}},
 	// Firefly — blinks
-	{2, 2, terminal.LemonYellow, terminal.Black, [][]string{
+	{2, 2, color.LemonYellow, color.Black, [][]string{
 		{`**`, `  `},
 		{`  `, `**`},
 		{`**`, `**`},
 	}},
 	// Mite — twitchy
-	{2, 2, terminal.Rust, terminal.Black, [][]string{
+	{2, 2, color.Rust, color.Black, [][]string{
 		{`..`, `vv`},
 		{`::`, `^^`},
 		{`..`, `^^`},
@@ -66,34 +66,34 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// SCOUTS — 3x2, fast flankers
 	// ========================================================================
-	{3, 2, terminal.FlameOrange, terminal.Black, [][]string{
+	{3, 2, color.FlameOrange, color.Black, [][]string{
 		{`<0>`, `/ \`},
 		{`<0>`, `\ /`},
 	}},
-	{3, 2, terminal.SkyTeal, terminal.Black, [][]string{
+	{3, 2, color.SkyTeal, color.Black, [][]string{
 		{`[+]`, `v v`},
 		{`[+]`, `^ ^`},
 	}},
-	{3, 2, terminal.HotPink, terminal.DarkPlum, [][]string{
+	{3, 2, color.HotPink, color.DarkPlum, [][]string{
 		{`\ /`, `[=]`},
 		{`/ \`, `[=]`},
 	}},
-	{3, 2, terminal.MintGreen, terminal.Black, [][]string{
+	{3, 2, color.MintGreen, color.Black, [][]string{
 		{`===`, `> <`},
 		{`===`, `< >`},
 	}},
-	{3, 2, terminal.Gold, terminal.DarkAmber, [][]string{
+	{3, 2, color.Gold, color.DarkAmber, [][]string{
 		{`>-<`, `/ \`},
 		{`>-<`, `- -`},
 	}},
 	// Bat — flapping
-	{3, 2, terminal.DarkViolet, terminal.Black, [][]string{
+	{3, 2, color.DarkViolet, color.Black, [][]string{
 		{`\./`, ` v `},
 		{`/.\`, ` ^ `},
 		{`-.-`, ` | `},
 	}},
 	// Spark — electric jitter
-	{3, 2, terminal.BrightCyan, terminal.DeepNavy, [][]string{
+	{3, 2, color.BrightCyan, color.DeepNavy, [][]string{
 		{`~*~`, ` | `},
 		{`*~*`, ` | `},
 		{`~*~`, ` ! `},
@@ -102,39 +102,39 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// SOLDIERS — 4x2, standard creeps
 	// ========================================================================
-	{4, 2, terminal.NeonGreen, terminal.Black, [][]string{
+	{4, 2, color.NeonGreen, color.Black, [][]string{
 		{`OOOO`, `/\/\`},
 		{`OOOO`, `\/\/`},
 	}},
-	{4, 2, terminal.Coral, terminal.Black, [][]string{
+	{4, 2, color.Coral, color.Black, [][]string{
 		{`\//\`, ` || `},
 		{`//\\`, ` || `},
 	}},
-	{4, 2, terminal.CobaltBlue, terminal.DeepNavy, [][]string{
+	{4, 2, color.CobaltBlue, color.DeepNavy, [][]string{
 		{`[##]`, `|  |`},
 		{`[##]`, `/  \`},
 	}},
-	{4, 2, terminal.RoseRed, terminal.BlackRed, [][]string{
+	{4, 2, color.RoseRed, color.BlackRed, [][]string{
 		{`~-~-`, `v v `},
 		{`-~-~`, ` v v`},
 	}},
-	{4, 2, terminal.Silver, terminal.Black, [][]string{
+	{4, 2, color.Silver, color.Black, [][]string{
 		{`{oo}`, `/\/\`},
 		{`[oo]`, `\/\/`},
 	}},
 	// Crab — side-scuttle
-	{4, 2, terminal.Terracotta, terminal.Black, [][]string{
+	{4, 2, color.Terracotta, color.Black, [][]string{
 		{`>oo<`, `/  \`},
 		{`>oo<`, `\  /`},
 		{` oo `, `>  <`},
 	}},
 	// Shield Bearer — heavy step
-	{4, 2, terminal.SteelBlue, terminal.BlueCharcoal, [][]string{
+	{4, 2, color.SteelBlue, color.BlueCharcoal, [][]string{
 		{`[==]`, `|/\|`},
 		{`[==]`, `|\\/`},
 	}},
 	// Toxic — pulsing poison
-	{4, 2, terminal.YellowGreen, terminal.BlackGreen, [][]string{
+	{4, 2, color.YellowGreen, color.BlackGreen, [][]string{
 		{`{~~}`, ` :: `},
 		{`(~~)`, ` ;; `},
 		{`{~~}`, ` :: `},
@@ -144,46 +144,46 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// ELITES — 5x3, dangerous mid-tier
 	// ========================================================================
-	{5, 3, terminal.Orchid, terminal.DarkPlum, [][]string{
+	{5, 3, color.Orchid, color.DarkPlum, [][]string{
 		{`/\_/\`, `[( )]`, ` / \ `},
 		{`\_/_/`, `[( )]`, ` \ / `},
 	}},
-	{5, 3, terminal.FlameOrange, terminal.DarkAmber, [][]string{
+	{5, 3, color.FlameOrange, color.DarkAmber, [][]string{
 		{`[===]`, `<|#|>`, ` / \ `},
 		{`[===]`, `>|#|<`, ` \ / `},
 	}},
-	{5, 3, terminal.Gold, terminal.DarkAmber, [][]string{
+	{5, 3, color.Gold, color.DarkAmber, [][]string{
 		{` \ / `, `>|=| `, ` / \ `},
 		{` / \ `, `>|=| `, ` \ / `},
 	}},
-	{5, 3, terminal.BrightRed, terminal.BlackRed, [][]string{
+	{5, 3, color.BrightRed, color.BlackRed, [][]string{
 		{`_/#\_`, `\[X]/`, ` / \ `},
 		{`-\#/-`, `/[X]\`, ` | | `},
 	}},
-	{5, 3, terminal.VibrantCyan, terminal.Black, [][]string{
+	{5, 3, color.VibrantCyan, color.Black, [][]string{
 		{` /-\ `, ` ||| `, ` >-< `},
 		{` \-/ `, ` ||| `, ` <-> `},
 	}},
 	// Wraith — phasing flicker
-	{5, 3, terminal.MutedPurple, terminal.Obsidian, [][]string{
+	{5, 3, color.MutedPurple, color.Obsidian, [][]string{
 		{` .M. `, `(   )`, ` |~| `},
 		{` :M: `, `{   }`, ` |~| `},
 		{` 'M' `, `[   ]`, ` |_| `},
 	}},
 	// Scorpion — tail strike
-	{5, 3, terminal.WarmOrange, terminal.Black, [][]string{
+	{5, 3, color.WarmOrange, color.Black, [][]string{
 		{`  /| `, `(oo) `, `/||\\`},
 		{` /|  `, ` (oo)`, `/||\\`},
 		{`/|   `, `(oo) `, `/||\\`},
 	}},
 	// Djinn — swirling
-	{5, 3, terminal.SoftLavender, terminal.DeepPurple, [][]string{
+	{5, 3, color.SoftLavender, color.DeepPurple, [][]string{
 		{` ~~~ `, `( @ )`, ` ))) `},
 		{` ~~~ `, `( @ )`, `((( `},
 		{` ~~~ `, `( @ )`, ` ||| `},
 	}},
 	// Beetle — armored march
-	{5, 3, terminal.Bronze, terminal.DarkAmber, [][]string{
+	{5, 3, color.Bronze, color.DarkAmber, [][]string{
 		{`/===\`, `|ooo|`, `\/ \/`},
 		{`/===\`, `|ooo|`, `/\ /\`},
 	}},
@@ -191,40 +191,40 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// HEAVIES — 6x3, tanky
 	// ========================================================================
-	{6, 3, terminal.Magenta, terminal.DarkPlum, [][]string{
+	{6, 3, color.Magenta, color.DarkPlum, [][]string{
 		{`\ // /`, `[####]`, `/ \\ \`},
 		{`/ \\ \`, `[####]`, `\ // /`},
 	}},
-	{6, 3, terminal.Cyan, terminal.Black, [][]string{
+	{6, 3, color.Cyan, color.Black, [][]string{
 		{` <><> `, `(====)`, ` /\/\ `},
 		{` ><>< `, `(====)`, ` \/\/ `},
 	}},
-	{6, 3, terminal.LightGreen, terminal.BlackGreen, [][]string{
+	{6, 3, color.LightGreen, color.BlackGreen, [][]string{
 		{` /--\ `, `/|  |\`, `\    /`},
 		{` |--| `, `\|  |/`, `/    \`},
 	}},
-	{6, 3, terminal.Rust, terminal.Black, [][]string{
+	{6, 3, color.Rust, color.Black, [][]string{
 		{`^^^^^^`, `[MMMM]`, ` /  \ `},
 		{`^^^^^^`, `[MMMM]`, ` \  / `},
 	}},
-	{6, 3, terminal.DodgerBlue, terminal.DeepNavy, [][]string{
+	{6, 3, color.DodgerBlue, color.DeepNavy, [][]string{
 		{`_/__\_`, `\/  \/`, ` /  \ `},
 		{`_\__/_`, `/\  /\`, ` \  / `},
 	}},
 	// Golem — lumbering stone
-	{6, 3, terminal.Taupe, terminal.DarkSlate, [][]string{
+	{6, 3, color.Taupe, color.DarkSlate, [][]string{
 		{`[####]`, `|<  >|`, ` |  | `},
 		{`[####]`, `|>  <|`, ` /  \ `},
 		{`[####]`, `|<  >|`, ` \  / `},
 	}},
 	// Hive Carrier — spawns swarm
-	{6, 3, terminal.OliveYellow, terminal.DarkAmber, [][]string{
+	{6, 3, color.OliveYellow, color.DarkAmber, [][]string{
 		{`/~~~~\`, `|*||*|`, `\____/`},
 		{`/~~~~\`, `|+||+|`, `\____/`},
 		{`/~~~~\`, `|*||*|`, `\_/\_/`},
 	}},
 	// Reaver — blade arms
-	{6, 3, terminal.Vermilion, terminal.BlackRed, [][]string{
+	{6, 3, color.Vermilion, color.BlackRed, [][]string{
 		{`\    /`, `-[XX]-`, `/    \`},
 		{` \  / `, `-[XX]-`, ` /  \ `},
 		{`\    /`, `=[XX]=`, `/    \`},
@@ -233,30 +233,30 @@ var bestiary = []EnemyTemplate{
 	// ========================================================================
 	// CHAMPIONS — 8x4, mini-boss creeps
 	// ========================================================================
-	{8, 4, terminal.BrightRed, terminal.Obsidian, [][]string{
+	{8, 4, color.BrightRed, color.Obsidian, [][]string{
 		{` /\  /\ `, `( @  @ )`, ` \<XX>/ `, `  /  \  `},
 		{` /\  /\ `, `( @  @ )`, ` /<XX>\ `, `  \  /  `},
 		{` /\  /\ `, `( @  @ )`, ` |<XX>| `, `  |  |  `},
 	}},
 	// War Machine — treaded
-	{8, 4, terminal.IronGray, terminal.DarkSlate, [][]string{
+	{8, 4, color.IronGray, color.DarkSlate, [][]string{
 		{` [====] `, ` |<HH>| `, `=|    |=`, `{OOOOOO}`},
 		{` [====] `, ` |<HH>| `, `=|    |=`, `{OOOOOO}`},
 	}},
 	// Hydra — writhing heads
-	{8, 4, terminal.SeaGreen, terminal.BlackGreen, [][]string{
+	{8, 4, color.SeaGreen, color.BlackGreen, [][]string{
 		{`  /  \  `, ` /    \ `, `< @  @ >`, ` \\||// `},
 		{` /    \ `, `/      \`, `< @  @ >`, `  \\//  `},
 		{`  /  \  `, ` / \/ \ `, `< @  @ >`, ` //||\\ `},
 	}},
 	// Floating Eye — pulsing iris
-	{8, 4, terminal.DodgerBlue, terminal.DeepNavy, [][]string{
+	{8, 4, color.DodgerBlue, color.DeepNavy, [][]string{
 		{` /----\ `, `| (00) |`, `| \--/ |`, ` \----/ `},
 		{` /----\ `, `|  (0) |`, `|  --  |`, ` \----/ `},
 		{` /----\ `, `| (00) |`, `| /--\ |`, ` \----/ `},
 	}},
 	// Inferno Elemental — flame dance
-	{8, 4, terminal.FlameOrange, terminal.DarkRust, [][]string{
+	{8, 4, color.FlameOrange, color.DarkRust, [][]string{
 		{` ,  /\  `, `/ \/ /\ `, `\ /\/ /\`, ` \/  \/ `},
 		{`  /\  , `, `/\ \/ / `, `/\/ /\ \`, ` \/  \/ `},
 		{` /  \   `, `/ /\ /\ `, `\/\/ \/ `, ` /\  /\ `},
@@ -267,24 +267,24 @@ var bestiary = []EnemyTemplate{
 	// BOSSES — 10x5, wave-ending threats
 	// ========================================================================
 	// Demon Lord
-	{10, 5, terminal.Vermilion, terminal.BlackRed, [][]string{
+	{10, 5, color.Vermilion, color.BlackRed, [][]string{
 		{` /\\    /\\ `, ` \  \\//  / `, `  | >..< |  `, `  | \\// |  `, `  /||  ||\\ `},
 		{` /\\    /\\ `, ` \\  \\/  / `, `  | >..< |  `, `  | //\\ |  `, `  \\||  ||/ `},
 	}},
 	// Siege Titan
-	{10, 5, terminal.CoolSilver, terminal.DarkSlate, [][]string{
+	{10, 5, color.CoolSilver, color.DarkSlate, [][]string{
 		{`  [======]  `, `  |<IIII>|  `, ` /|      |\\ `, `/ |  {}  | \\`, `{OO}    {OO}`},
 		{`  [======]  `, `  |<IIII>|  `, ` /|      |\\ `, `\\ |  {}  | /`, `{OO}    {OO}`},
 		{`  [======]  `, `  |>IIII<|  `, `  |      |  `, `  | ={} = |  `, `{OO}    {OO}`},
 	}},
 	// Lich — necromantic pulse
-	{10, 5, terminal.PaleLavender, terminal.Obsidian, [][]string{
+	{10, 5, color.PaleLavender, color.Obsidian, [][]string{
 		{`   /==\\   `, `  / oo \\  `, `  | -- |   `, ` /|    |\\  `, `~ \\~~~~/ ~ `},
 		{`   /==\\   `, `  / ** \\  `, `  | -- |   `, ` ~|    |~  `, `  \\~~~~/ ~ `},
 		{`   /==\\   `, `  / oo \\  `, `  | ~~ |   `, ` /|    |\\  `, `~ /~~~~\\ ~ `},
 	}},
 	// Kraken — tentacle thrash
-	{10, 5, terminal.Teal, terminal.DeepNavy, [][]string{
+	{10, 5, color.Teal, color.DeepNavy, [][]string{
 		{`   /__\\   `, `  / @@ \\  `, ` /|    |\\  `, `/ \\~~~~/ \\`, `~  ~~~~  ~ `},
 		{`   /--\\   `, `  / @@ \\  `, `  |    |   `, ` \\/ ~~ \\/  `, `~~ ~~~~  ~~`},
 		{`   /__\\   `, `  / @@ \\  `, ` \\|    |/ `, `  \\ ~~ /   `, ` ~~ ~~~~ ~ `},
@@ -384,7 +384,7 @@ func render(term terminal.Terminal, tick int) {
 	// Create blank frame filled with empty cells
 	cells := make([]terminal.Cell, w*h)
 	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Bg: terminal.Black}
+		cells[i] = terminal.Cell{Rune: ' ', Bg: color.Black}
 	}
 
 	// Draw Title
@@ -393,7 +393,7 @@ func render(term terminal.Terminal, tick int) {
 	if titleX < 0 {
 		titleX = 0
 	}
-	drawText(cells, w, h, titleX, 1, title, terminal.White, terminal.AttrBold)
+	drawText(cells, w, h, titleX, 1, title, color.White, terminal.AttrBold)
 
 	// Draw Footer
 	footer := " Press ESC or Q to quit "
@@ -401,7 +401,7 @@ func render(term terminal.Terminal, tick int) {
 	if footX < 0 {
 		footX = 0
 	}
-	drawText(cells, w, h, footX, h-2, footer, terminal.DimGray, terminal.AttrNone)
+	drawText(cells, w, h, footX, h-2, footer, color.DimGray, terminal.AttrNone)
 
 	// Draw Entities
 	for _, e := range enemies {
@@ -419,7 +419,7 @@ func render(term terminal.Terminal, tick int) {
 				bg := e.Template.BgColor
 				if char == ' ' {
 					// Transparent foreground, but still paint bg aura if non-black
-					if bg == terminal.Black {
+					if bg == color.Black {
 						continue
 					}
 					cells[idx] = terminal.Cell{Rune: ' ', Bg: bg}
@@ -450,10 +450,9 @@ func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, 
 			cells[y*w+sx] = terminal.Cell{
 				Rune:  r,
 				Fg:    fg,
-				Bg:    terminal.Black,
+				Bg:    color.Black,
 				Attrs: attr,
 			}
 		}
 	}
 }
-

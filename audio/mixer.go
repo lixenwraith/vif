@@ -38,6 +38,7 @@ type Mixer struct {
 	output    io.Writer
 	outBroken bool
 	cache     *soundCache
+	kit       *drumKit
 	sequencer *Sequencer
 	active    []activeSound
 
@@ -56,6 +57,7 @@ func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
 	m := &Mixer{
 		output:    out,
 		cache:     cache,
+		kit:       kit,
 		cmds:      make(chan audioCmd, 256),
 		stopChan:  make(chan struct{}),
 		done:      make(chan struct{}),
@@ -75,17 +77,20 @@ func NewMixer(out io.Writer, cache *soundCache, kit *drumKit) *Mixer {
 	return m
 }
 
-// Send enqueues a command from any goroutine; full queue drops
-func (m *Mixer) Send(c audioCmd) {
+// Send enqueues a command from any goroutine. Reports false when the queue is
+// full and the command was dropped; play commands also bump the drop counter.
+func (m *Mixer) Send(c audioCmd) bool {
 	if m.stopped.Load() {
-		return
+		return false
 	}
 	select {
 	case m.cmds <- c:
+		return true
 	default:
 		if c.op == cmdPlay {
 			m.dropped.Add(1)
 		}
+		return false
 	}
 }
 
@@ -106,6 +111,37 @@ func (m *Mixer) Start() {
 func (m *Mixer) Stop() {
 	if m.stopped.CompareAndSwap(false, true) {
 		close(m.stopChan)
+	}
+}
+
+// Wait blocks until the mix goroutine has returned, reporting whether it did so
+// within timeout. A true return is a happens-before edge against every
+// mixer-confined write, which is what makes post-Stop inspection of the cache,
+// the kit or the sequencer well-defined rather than merely temporally ordered.
+//
+// timeout <= 0 polls without blocking. A false return means the goroutine is
+// still inside output.Write on a backend that stopped draining: the caller has
+// no edge and must not touch mixer-confined state or reset the registries.
+// Returns true if Start was never called.
+func (m *Mixer) Wait(timeout time.Duration) bool {
+	if !m.started.Load() {
+		return true
+	}
+	if timeout <= 0 {
+		select {
+		case <-m.done:
+			return true
+		default:
+			return false
+		}
+	}
+	t := time.NewTimer(timeout)
+	defer t.Stop()
+	select {
+	case <-m.done:
+		return true
+	case <-t.C:
+		return false
 	}
 }
 
@@ -193,6 +229,14 @@ func (m *Mixer) apply(c audioCmd) {
 		m.sequencer.SetArrangement(c.tier, Arrangement{Rhythm: c.pattern, Melody: PatternID(c.i2)})
 	case cmdIntensity:
 		m.sequencer.SetIntensity(c.tier, c.i1, c.b, c.reveal)
+	case cmdReloadSound:
+		m.growTables(c.sound)
+		m.cache.replace(c.sound, c.bufs)
+		m.kit.rebind(c.sound, c.bufs)
+	case cmdReloadPattern:
+		m.sequencer.ReloadPattern(c.pattern)
+	case cmdPlayBuffer:
+		m.startBuffer(c.buf, c.f1)
 	}
 }
 
@@ -232,37 +276,7 @@ func (m *Mixer) startSound(st SoundID, vol float64) {
 	}
 	m.lastPlay[st] = now
 
-	ns := activeSound{st: st, buffer: buf, volume: vol * m.rapidVol[st]}
-
-	// Same-type cap: steal the most-progressed sibling (deep in its decay tail)
-	cnt, victim := 0, -1
-	for i := range m.active {
-		if m.active[i].st != st {
-			continue
-		}
-		cnt++
-		if victim < 0 || m.active[i].pos > m.active[victim].pos {
-			victim = i
-		}
-	}
-	if cnt >= MaxSFXPerType {
-		m.active[victim] = ns
-		m.played.Add(1)
-		return
-	}
-	if len(m.active) >= MaxActiveSFX {
-		g := 0
-		for i := range m.active {
-			if m.active[i].pos > m.active[g].pos {
-				g = i
-			}
-		}
-		m.active[g] = ns
-		m.played.Add(1)
-		return
-	}
-	m.active = append(m.active, ns)
-	m.played.Add(1)
+	m.admit(activeSound{st: st, buffer: buf, volume: vol * m.rapidVol[st]})
 }
 
 // renderTick renders one buffer: music bus, SFX bus, duck, pause, limit, write
@@ -370,4 +384,60 @@ func floatToBytes(in []float64, out []byte) {
 		binary.LittleEndian.PutUint16(out[idx:], uint16(i16))   // L
 		binary.LittleEndian.PutUint16(out[idx+2:], uint16(i16)) // R
 	}
+}
+
+// growTables extends the per-SoundID tables to cover id. Reachable only via
+// cmdReloadSound for a sound defined after Start.
+func (m *Mixer) growTables(id SoundID) {
+	n := int(id) + 1
+	if n <= len(m.sfxVar) {
+		return
+	}
+	m.sfxVar = append(m.sfxVar, make([]uint32, n-len(m.sfxVar))...)
+	m.lastPlay = append(m.lastPlay, make([]time.Time, n-len(m.lastPlay))...)
+	for len(m.rapidVol) < n {
+		m.rapidVol = append(m.rapidVol, 1.0)
+	}
+}
+
+// admit inserts a voice under the per-type and global caps, stealing the
+// most-progressed sibling (deepest into its decay tail). Shared by the registry
+// and preview paths.
+func (m *Mixer) admit(ns activeSound) {
+	cnt, victim := 0, -1
+	for i := range m.active {
+		if m.active[i].st != ns.st {
+			continue
+		}
+		cnt++
+		if victim < 0 || m.active[i].pos > m.active[victim].pos {
+			victim = i
+		}
+	}
+	switch {
+	case cnt >= MaxSFXPerType:
+		m.active[victim] = ns
+	case len(m.active) >= MaxActiveSFX:
+		g := 0
+		for i := range m.active {
+			if m.active[i].pos > m.active[g].pos {
+				g = i
+			}
+		}
+		m.active[g] = ns
+	default:
+		m.active = append(m.active, ns)
+	}
+	m.played.Add(1)
+}
+
+// startBuffer plays an unregistered buffer. st is SoundNone, so previews
+// contend only with each other for the per-type cap; rapid-fire dampening and
+// variant rotation do not apply.
+func (m *Mixer) startBuffer(buf floatBuffer, vol float64) {
+	if m.paused.Load() || len(buf) == 0 {
+		m.dropped.Add(1)
+		return
+	}
+	m.admit(activeSound{st: SoundNone, buffer: buf, volume: vol})
 }

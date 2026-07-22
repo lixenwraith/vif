@@ -3,8 +3,9 @@ package main
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/parameter/visual"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/parameter/visual"
 )
 
 // PaletteEntry represents a named color from the game
@@ -258,3 +259,4 @@ func absDelta(a, b color.RGB) int {
 	}
 	return dr + dg + db
 }
+

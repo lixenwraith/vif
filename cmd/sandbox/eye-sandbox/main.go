@@ -57,7 +57,7 @@ var startTime = time.Now()
 
 func scaleRGB(c color.RGB, f float64) color.RGB {
 	if f <= 0 {
-		return terminal.Black
+		return color.Black
 	}
 	r, g, b := float64(c.R)*f, float64(c.G)*f, float64(c.B)*f
 	if r > 255 {
@@ -128,14 +128,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "VOID EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.DimGray, terminal.SteelBlue, terminal.White,
-			terminal.CeruleanBlue, terminal.NavyBlue, terminal.LightSkyBlue,
-			terminal.CobaltBlue, terminal.DodgerBlue,
+			color.DimGray, color.SteelBlue, color.White,
+			color.CeruleanBlue, color.NavyBlue, color.LightSkyBlue,
+			color.CobaltBlue, color.DodgerBlue,
 		},
 		BgPalette: []color.RGB{
-			terminal.DeepNavy, terminal.Gunmetal, terminal.CobaltBlue,
+			color.DeepNavy, color.Gunmetal, color.CobaltBlue,
 		},
-		AuraColor: terminal.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.5,
+		AuraColor: color.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.5,
 		AuraRotSpeed: 0.15, AuraFocusWidth: 0.7,
 		TicksPerFrame: 4,
 		Frames: []Frame{
@@ -182,14 +182,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "FLAME EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.LemonYellow, terminal.FlameOrange, terminal.White,
-			terminal.BrightRed, terminal.Amber, terminal.DarkCrimson,
-			terminal.Vermilion, terminal.WarmOrange,
+			color.LemonYellow, color.FlameOrange, color.White,
+			color.BrightRed, color.Amber, color.DarkCrimson,
+			color.Vermilion, color.WarmOrange,
 		},
 		BgPalette: []color.RGB{
-			terminal.BlackRed, terminal.DarkAmber, terminal.Red,
+			color.BlackRed, color.DarkAmber, color.Red,
 		},
-		AuraColor: terminal.FlameOrange, AuraRadius: 2.5, AuraPulseFreq: 2.0,
+		AuraColor: color.FlameOrange, AuraRadius: 2.5, AuraPulseFreq: 2.0,
 		TicksPerFrame: 2,
 		Frames: []Frame{
 			{ // Base
@@ -229,14 +229,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "FROST EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.BrightCyan, terminal.White, terminal.LightSkyBlue,
-			terminal.CeruleanBlue, terminal.SteelBlue, terminal.CoolSilver,
-			terminal.AliceBlue, terminal.PaleCyan,
+			color.BrightCyan, color.White, color.LightSkyBlue,
+			color.CeruleanBlue, color.SteelBlue, color.CoolSilver,
+			color.AliceBlue, color.PaleCyan,
 		},
 		BgPalette: []color.RGB{
-			terminal.DeepNavy, terminal.CobaltBlue, terminal.SteelBlue,
+			color.DeepNavy, color.CobaltBlue, color.SteelBlue,
 		},
-		AuraColor: terminal.BrightCyan, AuraRadius: 2.5, AuraPulseFreq: 0.4,
+		AuraColor: color.BrightCyan, AuraRadius: 2.5, AuraPulseFreq: 0.4,
 		AuraRotSpeed: 0.2, AuraFocusWidth: 0.4,
 		TicksPerFrame: 4,
 		Frames: []Frame{
@@ -277,16 +277,16 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "STORM EYE", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.BrightCyan, terminal.CeruleanBlue, terminal.White,
-			terminal.LemonYellow, terminal.SteelBlue, terminal.DodgerBlue,
-			terminal.SkyTeal, terminal.LightSkyBlue,
+			color.BrightCyan, color.CeruleanBlue, color.White,
+			color.LemonYellow, color.SteelBlue, color.DodgerBlue,
+			color.SkyTeal, color.LightSkyBlue,
 		},
 		BgPalette: []color.RGB{
-			terminal.DeepNavy, terminal.CobaltBlue,
+			color.DeepNavy, color.CobaltBlue,
 		},
-		AuraColor: terminal.BrightCyan, AuraRadius: 3.0, AuraPulseFreq: 1.2,
+		AuraColor: color.BrightCyan, AuraRadius: 3.0, AuraPulseFreq: 1.2,
 		AuraRotSpeed: 0.8, AuraFocusWidth: 0.5,
-		BorderRotSpeed: 1.0, BorderHighlight: terminal.BrightCyan, BorderWidth: 3,
+		BorderRotSpeed: 1.0, BorderHighlight: color.BrightCyan, BorderWidth: 3,
 		TicksPerFrame: 4,
 		Frames: []Frame{
 			{ // Wide open
@@ -320,14 +320,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "BLOOD EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.DarkCrimson, terminal.BrightRed, terminal.White,
-			terminal.Vermilion, terminal.Coral, terminal.Red,
-			terminal.Salmon, terminal.LightCoral,
+			color.DarkCrimson, color.BrightRed, color.White,
+			color.Vermilion, color.Coral, color.Red,
+			color.Salmon, color.LightCoral,
 		},
 		BgPalette: []color.RGB{
-			terminal.BlackRed, terminal.DarkCrimson, terminal.Red,
+			color.BlackRed, color.DarkCrimson, color.Red,
 		},
-		AuraColor: terminal.DarkCrimson, AuraRadius: 2.0, AuraPulseFreq: 1.2,
+		AuraColor: color.DarkCrimson, AuraRadius: 2.0, AuraPulseFreq: 1.2,
 		TicksPerFrame: 3,
 		Frames: []Frame{
 			{ // Base — steady gaze
@@ -367,16 +367,16 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "GOLDEN EYE", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.Gold, terminal.Amber, terminal.White,
-			terminal.LemonYellow, terminal.DarkGold, terminal.PaleGold,
-			terminal.Buttercream, terminal.WarmOrange,
+			color.Gold, color.Amber, color.White,
+			color.LemonYellow, color.DarkGold, color.PaleGold,
+			color.Buttercream, color.WarmOrange,
 		},
 		BgPalette: []color.RGB{
-			terminal.DarkAmber, terminal.Amber, terminal.Gold,
+			color.DarkAmber, color.Amber, color.Gold,
 		},
-		AuraColor: terminal.Amber, AuraRadius: 2.5, AuraPulseFreq: 0.6,
+		AuraColor: color.Amber, AuraRadius: 2.5, AuraPulseFreq: 0.6,
 		AuraRotSpeed: -0.3, AuraFocusWidth: 0.6,
-		BorderRotSpeed: 0.4, BorderHighlight: terminal.Gold, BorderWidth: 3,
+		BorderRotSpeed: 0.4, BorderHighlight: color.Gold, BorderWidth: 3,
 		TicksPerFrame: 5,
 		Frames: []Frame{
 			{ // Regal open
@@ -417,14 +417,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "ABYSS EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.PaleLavender, terminal.ElectricViolet, terminal.White,
-			terminal.SoftLavender, terminal.DarkViolet, terminal.MutedPurple,
-			terminal.DeepPurple, terminal.Orchid,
+			color.PaleLavender, color.ElectricViolet, color.White,
+			color.SoftLavender, color.DarkViolet, color.MutedPurple,
+			color.DeepPurple, color.Orchid,
 		},
 		BgPalette: []color.RGB{
-			terminal.Obsidian, terminal.DeepPurple,
+			color.Obsidian, color.DeepPurple,
 		},
-		AuraColor: terminal.DeepPurple, AuraRadius: 3.0, AuraPulseFreq: 0.5,
+		AuraColor: color.DeepPurple, AuraRadius: 3.0, AuraPulseFreq: 0.5,
 		AuraRotSpeed: 0.25, AuraFocusWidth: 0.3,
 		TicksPerFrame: 4,
 		Frames: []Frame{
@@ -555,7 +555,7 @@ func renderFrame(term terminal.Terminal, tick int) {
 
 	cells := make([]terminal.Cell, w*h)
 	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Bg: terminal.Black}
+		cells[i] = terminal.Cell{Rune: ' ', Bg: color.Black}
 	}
 
 	now := time.Now()
@@ -584,13 +584,13 @@ func renderFrame(term terminal.Terminal, tick int) {
 	}
 
 	title := " TOWER DEFENSE — ARCANE SENTINELS "
-	drawText(cells, w, h, max(0, (w-len(title))/2), 1, title, terminal.White, terminal.AttrBold)
+	drawText(cells, w, h, max(0, (w-len(title))/2), 1, title, color.White, terminal.AttrBold)
 
 	sub := "Per-cell palette | Directional aura | Rotating borders"
-	drawText(cells, w, h, max(0, (w-len(sub))/2), 2, sub, terminal.DimGray, terminal.AttrNone)
+	drawText(cells, w, h, max(0, (w-len(sub))/2), 2, sub, color.DimGray, terminal.AttrNone)
 
 	footer := " ESC / Q to quit "
-	drawText(cells, w, h, max(0, (w-len(footer))/2), h-1, footer, terminal.SlateGray, terminal.AttrDim)
+	drawText(cells, w, h, max(0, (w-len(footer))/2), h-1, footer, color.SlateGray, terminal.AttrDim)
 
 	term.Flush(cells, w, h)
 }
@@ -778,8 +778,7 @@ func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, 
 	for i, r := range text {
 		sx := x + i
 		if sx >= 0 && sx < w {
-			cells[y*w+sx] = terminal.Cell{Rune: r, Fg: fg, Bg: terminal.Black, Attrs: attr}
+			cells[y*w+sx] = terminal.Cell{Rune: r, Fg: fg, Bg: color.Black, Attrs: attr}
 		}
 	}
 }
-

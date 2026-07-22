@@ -33,6 +33,22 @@ type Pattern struct {
 	Tracks []Track
 }
 
+// Clone deep-copies a pattern. Mandatory before editing anything obtained from
+// RegisteredPatterns or GetPattern: the mixer reads those structs directly from
+// its goroutine, so in-place mutation is a data race. Register the clone; the
+// swap is a pointer store under the registry lock.
+func (p *Pattern) Clone() *Pattern {
+	if p == nil {
+		return nil
+	}
+	c := *p
+	c.Tracks = slices.Clone(p.Tracks)
+	for i := range c.Tracks {
+		c.Tracks[i].Events = slices.Clone(p.Tracks[i].Events)
+	}
+	return &c
+}
+
 var (
 	patterns    = make(map[PatternID]*Pattern)
 	patternName = make(map[string]PatternID)

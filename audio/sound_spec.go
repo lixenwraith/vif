@@ -1,5 +1,7 @@
 package audio
 
+import "slices"
+
 // Declarative sound specification.
 //
 // Conventions:
@@ -176,4 +178,32 @@ func normOf(n float64) float64 {
 		return 0.9
 	}
 	return n
+}
+
+// Clone deep-copies a spec so an editor can mutate, audition, and discard
+// without touching the registered entry. Slices and the optional sub-tables are
+// copied; nothing is shared.
+func (d *SoundDef) Clone() *SoundDef {
+	if d == nil {
+		return nil
+	}
+	c := *d
+	c.Chain = slices.Clone(d.Chain)
+	c.Bus = slices.Clone(d.Bus)
+	for i := range c.Bus {
+		c.Bus[i].Chain = slices.Clone(d.Bus[i].Chain)
+	}
+	c.Layer = slices.Clone(d.Layer)
+	for i := range c.Layer {
+		c.Layer[i].Chain = slices.Clone(d.Layer[i].Chain)
+		if b := d.Layer[i].Source.Burst; b != nil {
+			v := *b
+			c.Layer[i].Source.Burst = &v
+		}
+		if l := d.Layer[i].Source.Vibrato; l != nil {
+			v := *l
+			c.Layer[i].Source.Vibrato = &v
+		}
+	}
+	return &c
 }

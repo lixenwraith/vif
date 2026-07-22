@@ -36,8 +36,8 @@ type PatternPlayer struct {
 func NewPatternPlayer(kit *drumKit) *PatternPlayer {
 	p := &PatternPlayer{mask: ^uint32(0), stealStrategy: StealLowest}
 	for i := InstrumentType(0); i <= InstrClap; i++ {
-		p.drums[i][0] = NewDrumVoice(kit.variants[i])
-		p.drums[i][1] = NewDrumVoice(kit.variants[i])
+		p.drums[i][0] = NewDrumVoice(kit, i)
+		p.drums[i][1] = NewDrumVoice(kit, i)
 	}
 	for i := range p.tonal {
 		p.tonal[i] = NewTonalVoice()
@@ -236,3 +236,8 @@ func (p *PatternPlayer) Reset() {
 		v.Reset()
 	}
 }
+
+// refresh re-resolves the pattern pointer after a registry replacement, leaving
+// mask and pending triggers alone — unlike SetPattern, which resets both and
+// would clobber an in-flight reveal.
+func (p *PatternPlayer) refresh(id PatternID) { p.patternData = GetPattern(id) }

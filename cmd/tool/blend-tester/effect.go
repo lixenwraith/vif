@@ -451,8 +451,8 @@ func drawHeatEffect(startY int, fg, bg color.RGB) {
 	drawText(1, startY, "TC:", fg, bgColor)
 	for i := 0; i < gradientW; i++ {
 		progress := float64(i+1) / float64(gradientW)
-		color := getHeatColor(progress)
-		buf.SetWithBg(5+i, startY, ' ', color, color)
+		c := getHeatColor(progress)
+		buf.SetWithBg(5+i, startY, ' ', c, c)
 	}
 	startY++
 
@@ -460,8 +460,8 @@ func drawHeatEffect(startY int, fg, bg color.RGB) {
 	drawText(1, startY, "256:", fg, bgColor)
 	for i := 0; i < gradientW; i++ {
 		progress := float64(i+1) / float64(gradientW)
-		color := getHeatColor(progress)
-		idx := color.RGBTo256(color)
+		c := getHeatColor(progress)
+		idx := color.RGBTo256(c)
 		rgb256 := Get256PaletteRGB(idx)
 		buf.SetWithBg(5+i, startY, ' ', rgb256, rgb256)
 	}
@@ -494,4 +494,3 @@ func getHeatColor(progress float64) color.RGB {
 	idx := int(progress * 255)
 	return render.HeatGradientLUT[idx]
 }
-

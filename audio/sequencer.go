@@ -409,3 +409,22 @@ func (s *Sequencer) SetIntensity(t Intensity, crossfadeSamples int, quantize, re
 	s.setPattern(0, a.Rhythm, crossfadeSamples, quantize, reveal)
 	s.setPattern(1, a.Melody, crossfadeSamples, quantize, reveal)
 }
+
+// ReloadPattern re-resolves any slot pointing at id after the registry replaced
+// the pattern. Mixer-goroutine confined.
+func (s *Sequencer) ReloadPattern(id PatternID) {
+	for si := range s.slots {
+		ss := &s.slots[si]
+		if ss.curID == id {
+			ss.cur.refresh(id)
+		}
+		if ss.nxtID == id {
+			ss.nxt.refresh(id)
+		}
+	}
+	// melodyGen writes into the registered Pattern's lead track in place, so a
+	// replacement leaves it holding the superseded struct.
+	if id == PatternMelodyGen && s.gen != nil {
+		s.gen.pat = GetPattern(id)
+	}
+}

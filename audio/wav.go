@@ -6,6 +6,7 @@ import (
 	"io"
 	"math"
 	"os"
+	"sync"
 )
 
 const wavHeaderSize = 44
@@ -48,11 +49,17 @@ func writeWAVHeader(w io.Writer, n uint32) error {
 
 // wavSink is the "wav:<path>" backend: the mixer's byte stream captured to a
 // file. The header is written with zero sizes at open and patched on Close, so
-// a capture cut short by a crash still parses — players read zero frames rather
-// than garbage.
+// a capture cut short by a crash still parses.
+//
+// The mutex is not optional. Write runs on the mix goroutine and Close on
+// whoever calls Stop or failover, and Close seeks to the header — an
+// interleaved Write would land at offset 0. It costs one uncontended
+// lock per 50ms tick.
 type wavSink struct {
-	f *os.File
-	n uint64 // PCM bytes written; mixer-goroutine confined
+	f      *os.File
+	mu     sync.Mutex
+	n      uint64 // PCM bytes written
+	closed bool
 }
 
 func newWAVSink(path string) (*wavSink, error) {
@@ -67,20 +74,32 @@ func newWAVSink(path string) (*wavSink, error) {
 	return &wavSink{f: f}, nil
 }
 
-// Write runs on the mixer goroutine.
+// Write runs on the mix goroutine. A write after Close reports success and
+// discards: a closed sink is one the engine deliberately detached, and
+// reporting an error there would set outBroken and push to errChan, making the
+// supervisor fail over a second time for a backend it has already replaced.
+// The dropped tail is at most one buffer.
 func (s *wavSink) Write(p []byte) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return len(p), nil
+	}
 	n, err := s.f.Write(p)
 	s.n += uint64(n)
 	return n, err
 }
 
-// Close patches the header. AudioEngine.Stop waits for the mix goroutine to
-// return before calling it, so n is final.
+// Close patches the header with the byte count. Idempotent: Stop and failover
+// can both reach it.
 func (s *wavSink) Close() error {
-	n := s.n
-	if n > math.MaxUint32-wavHeaderSize {
-		n = math.MaxUint32 - wavHeaderSize
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.closed {
+		return nil
 	}
+	s.closed = true
+	n := min(s.n, math.MaxUint32-wavHeaderSize)
 	if _, err := s.f.Seek(0, io.SeekStart); err == nil {
 		writeWAVHeader(s.f, uint32(n))
 	}

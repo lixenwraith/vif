@@ -45,7 +45,7 @@ var startTime = time.Now()
 
 func scaleRGB(c color.RGB, f float64) color.RGB {
 	if f <= 0 {
-		return terminal.Black
+		return color.Black
 	}
 	r := float64(c.R) * f
 	g := float64(c.G) * f
@@ -99,13 +99,13 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "INFERNAL", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.LemonYellow, terminal.FlameOrange, terminal.BrightRed,
-			terminal.White, terminal.Amber, terminal.DarkCrimson, terminal.Vermilion,
+			color.LemonYellow, color.FlameOrange, color.BrightRed,
+			color.White, color.Amber, color.DarkCrimson, color.Vermilion,
 		},
 		BgPalette: []color.RGB{
-			terminal.DarkAmber, terminal.BlackRed, terminal.Red,
+			color.DarkAmber, color.BlackRed, color.Red,
 		},
-		AuraColor: terminal.FlameOrange, AuraRadius: 3.0, AuraPulseFreq: 1.5,
+		AuraColor: color.FlameOrange, AuraRadius: 3.0, AuraPulseFreq: 1.5,
 		TicksPerFrame: 2,
 		Frames: []Frame{
 			{
@@ -149,13 +149,13 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "WRAITH", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.PaleLavender, terminal.ElectricViolet, terminal.DarkViolet,
-			terminal.SoftLavender, terminal.DeepPurple,
+			color.PaleLavender, color.ElectricViolet, color.DarkViolet,
+			color.SoftLavender, color.DeepPurple,
 		},
 		BgPalette: []color.RGB{
-			terminal.Obsidian, terminal.DeepPurple,
+			color.Obsidian, color.DeepPurple,
 		},
-		AuraColor: terminal.DeepPurple, AuraRadius: 2.5, AuraPulseFreq: 0.6,
+		AuraColor: color.DeepPurple, AuraRadius: 2.5, AuraPulseFreq: 0.6,
 		TicksPerFrame: 3,
 		Frames: []Frame{
 			{
@@ -194,14 +194,14 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "ARCANE EYE", Width: 5, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.CeruleanBlue, terminal.SteelBlue, terminal.White,
-			terminal.BrightCyan, terminal.LightSkyBlue, terminal.CobaltBlue,
-			terminal.DodgerBlue, terminal.SkyTeal,
+			color.CeruleanBlue, color.SteelBlue, color.White,
+			color.BrightCyan, color.LightSkyBlue, color.CobaltBlue,
+			color.DodgerBlue, color.SkyTeal,
 		},
 		BgPalette: []color.RGB{
-			terminal.DeepNavy, terminal.CobaltBlue, terminal.DodgerBlue,
+			color.DeepNavy, color.CobaltBlue, color.DodgerBlue,
 		},
-		AuraColor: terminal.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.8,
+		AuraColor: color.CobaltBlue, AuraRadius: 2.5, AuraPulseFreq: 0.8,
 		TicksPerFrame: 4,
 		Frames: []Frame{
 			// Wide open
@@ -250,13 +250,13 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "VENOM QUEEN", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.NeonGreen, terminal.YellowGreen, terminal.BrightGreen,
-			terminal.White, terminal.DarkGreen, terminal.Lime,
+			color.NeonGreen, color.YellowGreen, color.BrightGreen,
+			color.White, color.DarkGreen, color.Lime,
 		},
 		BgPalette: []color.RGB{
-			terminal.BlackGreen, terminal.DarkGreen,
+			color.BlackGreen, color.DarkGreen,
 		},
-		AuraColor: terminal.NeonGreen, AuraRadius: 2.0, AuraPulseFreq: 1.0,
+		AuraColor: color.NeonGreen, AuraRadius: 2.0, AuraPulseFreq: 1.0,
 		TicksPerFrame: 3,
 		Frames: []Frame{
 			{
@@ -294,13 +294,13 @@ var bestiary = []EnemyTemplate{
 	{
 		Name: "IRON REAVER", Width: 6, Height: 3,
 		FgPalette: []color.RGB{
-			terminal.Silver, terminal.CoolSilver, terminal.IronGray,
-			terminal.BrightRed, terminal.White, terminal.DarkGray,
+			color.Silver, color.CoolSilver, color.IronGray,
+			color.BrightRed, color.White, color.DarkGray,
 		},
 		BgPalette: []color.RGB{
-			terminal.DarkSlate, terminal.BlackRed, terminal.Gunmetal,
+			color.DarkSlate, color.BlackRed, color.Gunmetal,
 		},
-		AuraColor: terminal.IronGray, AuraRadius: 1.5, AuraPulseFreq: 2.0,
+		AuraColor: color.IronGray, AuraRadius: 1.5, AuraPulseFreq: 2.0,
 		TicksPerFrame: 2,
 		Frames: []Frame{
 			// Blades open
@@ -422,7 +422,7 @@ func renderFrame(term terminal.Terminal, tick int) {
 
 	cells := make([]terminal.Cell, w*h)
 	for i := range cells {
-		cells[i] = terminal.Cell{Rune: ' ', Bg: terminal.Black}
+		cells[i] = terminal.Cell{Rune: ' ', Bg: color.Black}
 	}
 
 	now := time.Now()
@@ -451,17 +451,17 @@ func renderFrame(term terminal.Terminal, tick int) {
 	// Title
 	title := " TOWER DEFENSE BESTIARY "
 	titleX := (w - len(title)) / 2
-	drawText(cells, w, h, max(0, titleX), 1, title, terminal.White, terminal.AttrBold)
+	drawText(cells, w, h, max(0, titleX), 1, title, color.White, terminal.AttrBold)
 
 	// Subtitle
 	sub := "Per-cell palette | Radial aura | Multi-frame animation"
 	subX := (w - len(sub)) / 2
-	drawText(cells, w, h, max(0, subX), 2, sub, terminal.DimGray, terminal.AttrNone)
+	drawText(cells, w, h, max(0, subX), 2, sub, color.DimGray, terminal.AttrNone)
 
 	// Footer
 	footer := " ESC / Q to quit "
 	footX := (w - len(footer)) / 2
-	drawText(cells, w, h, max(0, footX), h-1, footer, terminal.SlateGray, terminal.AttrDim)
+	drawText(cells, w, h, max(0, footX), h-1, footer, color.SlateGray, terminal.AttrDim)
 
 	term.Flush(cells, w, h)
 }
@@ -585,7 +585,7 @@ func drawText(cells []terminal.Cell, w, h, x, y int, text string, fg color.RGB, 
 			cells[y*w+sx] = terminal.Cell{
 				Rune:  r,
 				Fg:    fg,
-				Bg:    terminal.Black,
+				Bg:    color.Black,
 				Attrs: attr,
 			}
 		}

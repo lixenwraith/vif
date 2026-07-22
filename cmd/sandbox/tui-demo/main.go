@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
 )
@@ -399,7 +400,8 @@ func (app *appState) renderListDemo(r tui.Region) {
 	})
 
 	// Scroll bar
-	tui.ScrollBar(content.Sub(content.W-2, 1, 1, content.H-4), 0, app.listScroll, content.H-4, len(app.listItems), app.theme.Border)
+	listRegion.ScrollBar(0, app.listScroll, content.H-4, len(app.listItems), app.theme.Border)
+	// ScrollBar(content.Sub(content.W-2, 1, 1, content.H-4), 0, app.listScroll, content.H-4, len(app.listItems), app.theme.Border)
 
 	y := content.H - 2
 	content.Text(1, y, "j/k: move │ Space: toggle │ Shows icons, checkboxes, indentation", app.theme.HintFg, app.theme.Bg, terminal.AttrDim)
@@ -716,4 +718,3 @@ func (app *appState) handleToastEvent(ev terminal.Event) {
 	app.toastCount++
 	app.toast.Show(tui.DefaultToastOpts(msg, severity), 30) // 3 seconds at 10fps
 }
-

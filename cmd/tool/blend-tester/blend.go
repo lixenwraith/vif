@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 )
 
@@ -173,3 +173,4 @@ func drawBlendMode() {
 		drawText(22, 13, "Enter:Apply Esc:Cancel", color.RGB{100, 100, 100}, color.RGB{40, 40, 60})
 	}
 }
+

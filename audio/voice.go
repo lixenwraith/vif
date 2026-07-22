@@ -25,7 +25,8 @@ type VoiceParams struct {
 
 // DrumVoice plays from a pre-rendered variant set; no allocation on trigger
 type DrumVoice struct {
-	variants []floatBuffer
+	kit      *drumKit
+	instr    InstrumentType
 	buffer   floatBuffer
 	pos      int
 	velocity float64
@@ -34,17 +35,18 @@ type DrumVoice struct {
 }
 
 // NewDrumVoice creates a drum voice over a variant set
-func NewDrumVoice(variants []floatBuffer) *DrumVoice {
-	return &DrumVoice{variants: variants}
+func NewDrumVoice(kit *drumKit, instr InstrumentType) *DrumVoice {
+	return &DrumVoice{kit: kit, instr: instr}
 }
 
 func (v *DrumVoice) Trigger(params VoiceParams) {
-	if len(v.variants) == 0 {
+	// Read through the kit rather than caching the slice header: a cached
+	// header would pin the superseded set across a hot-reload.
+	vars := v.kit.variants[v.instr]
+	if len(vars) == 0 {
 		return
 	}
-	// rotate pre-rendered variants instead of synthesizing per hit
-	// on the audio path; rotation avoids the machine-gun effect
-	v.buffer = v.variants[v.nextVar%uint32(len(v.variants))]
+	v.buffer = vars[v.nextVar%uint32(len(vars))]
 	v.nextVar++
 	v.velocity = params.Velocity
 	v.pos = 0

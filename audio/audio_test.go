@@ -358,3 +358,177 @@ func FuzzLoadPatternsTOML(f *testing.F) {
 		}
 	})
 }
+
+// startNullEngine brings up an engine on the discard backend with the built-in
+// sound set registered.
+func startNullEngine(t *testing.T) *AudioEngine {
+	t.Helper()
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	cfg := DefaultAudioConfig()
+	cfg.Enabled = true
+	cfg.ForceBackend = BackendNameNull
+	ae, err := NewAudioEngine(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ae.Start(); err != nil {
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(ae.Stop)
+	return ae
+}
+
+func TestDefineSoundReplacesInPlace(t *testing.T) {
+	ae := startNullEngine(t)
+	id := ae.SoundID("bell")
+	if id == SoundNone {
+		t.Fatal("bell unresolved")
+	}
+	d := SoundDefByName("bell").Clone()
+	d.Layer[0].Source.Freq = 220
+	got, err := ae.DefineSound(d)
+	if err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	if got != id {
+		t.Errorf("id changed on replace: %d -> %d", id, got)
+	}
+	if SoundDefByName("bell").Layer[0].Source.Freq != 220 {
+		t.Error("registry did not take the replacement")
+	}
+}
+
+func TestDefineSoundAppendsAfterFreeze(t *testing.T) {
+	ae := startNullEngine(t)
+	d := &SoundDef{
+		Name: "editor_scratch", Duration: 0.05,
+		Layer: []Layer{{Source: Source{Kind: "osc", Wave: "sine", Freq: 440}}},
+	}
+	// RegisterSound must still refuse a new name after Start; DefineSound is
+	// the door that also propagates the ID.
+	if _, err := RegisterSound(d); err == nil {
+		t.Error("frozen registry accepted a new name via RegisterSound")
+	}
+	id, err := ae.DefineSound(d)
+	if err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	time.Sleep(3 * AudioBufferDuration)
+	if !ae.Play(id) {
+		t.Error("Play rejected a sound defined after Start")
+	}
+	time.Sleep(3 * AudioBufferDuration)
+	if played, _ := ae.Stats(); played == 0 {
+		t.Error("mixer never admitted the new sound")
+	}
+}
+
+// Drum reload must reach every DrumVoice in every PatternPlayer, which is why
+// the voice reads through the kit instead of caching the slice.
+func TestDefineSoundRebindsDrumKit(t *testing.T) {
+	ae := startNullEngine(t)
+	d := SoundDefByName("kick").Clone()
+	d.Duration = 0.25
+	if _, err := ae.DefineSound(d); err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	time.Sleep(3 * AudioBufferDuration)
+
+	// Stop before inspecting: Wait inside Stop establishes happens-before
+	// against the mix goroutine, the only writer of kit and cache.
+	ae.Stop()
+	if !ae.Stopped() {
+		t.Fatal("mix goroutine still running; kit inspection would race")
+	}
+
+	vars := ae.mixer.kit.variants[InstrKick]
+	if len(vars) == 0 {
+		t.Fatal("kit lost its kick variants")
+	}
+	// Every variant of the new 0.25s take is longer than any variant of the
+	// old 0.15s one, whatever the length walk does.
+	if len(vars[0]) <= samplesOf(0.15) {
+		t.Errorf("kit still holds the old take: %d samples", len(vars[0]))
+	}
+}
+
+func TestDefinePatternSwapsUnderPlayback(t *testing.T) {
+	ae := startNullEngine(t)
+	ae.StartMusic()
+	ae.SetPattern(0, PatternBeatBasic, MinCrossfadeSamples, false)
+	time.Sleep(3 * AudioBufferDuration)
+
+	p := GetPattern(PatternBeatBasic).Clone()
+	p.Tracks[0].Events = []Step{{Pos: 0, Vel: 0.5}, {Pos: 8, Vel: 0.5}}
+	id, err := ae.DefinePattern(p)
+	if err != nil {
+		t.Fatalf("define: %v", err)
+	}
+	if id != PatternBeatBasic {
+		t.Errorf("name override changed id: %d", id)
+	}
+	time.Sleep(3 * AudioBufferDuration)
+	ae.Stop()
+	if !ae.Stopped() {
+		t.Fatal("mix goroutine still running; slot inspection would race")
+	}
+
+	if got := len(ae.mixer.sequencer.slots[0].cur.patternData.Tracks[0].Events); got != 2 {
+		t.Errorf("slot still on the old pattern: %d kick events", got)
+	}
+}
+
+func TestPatternCloneIsDeep(t *testing.T) {
+	t.Cleanup(ResetRegistries)
+	ResetRegistries()
+	InitDefaultPatterns()
+
+	src := GetPattern(PatternBeatBasic)
+	c := src.Clone()
+	c.Tracks[0].Events[0].Vel = 0.01
+	c.Tracks[0].Humanize = 0.99
+	if src.Tracks[0].Events[0].Vel == 0.01 || src.Tracks[0].Humanize == 0.99 {
+		t.Error("Clone aliases the original")
+	}
+}
+
+func TestSoundDefCloneIsDeep(t *testing.T) {
+	defs := loadBuiltins(t)
+	var ring *SoundDef
+	for _, d := range defs {
+		if d.Name == "ring" {
+			ring = d
+		}
+	}
+	if ring == nil {
+		t.Skip("ring spec absent")
+	}
+	c := ring.Clone()
+	c.Layer[0].Chain[0].Depth = 0.01
+	c.Layer[0].Source.Vibrato.Rate = 99
+	if ring.Layer[0].Chain[0].Depth == 0.01 || ring.Layer[0].Source.Vibrato.Rate == 99 {
+		t.Error("Clone aliases the original")
+	}
+}
+
+func TestPlayBufferAuditions(t *testing.T) {
+	ae := startNullEngine(t)
+	buf, err := RenderPreview(&SoundDef{
+		Name: "unsaved", Duration: 0.1,
+		Layer: []Layer{{Source: Source{Kind: "osc", Wave: "sine", Freq: 440}}},
+	}, SFXParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if SoundIDByName("unsaved") != SoundNone {
+		t.Fatal("preview leaked into the registry")
+	}
+	if !ae.PlayBuffer(buf, 1.0) {
+		t.Fatal("PlayBuffer rejected")
+	}
+	time.Sleep(3 * AudioBufferDuration)
+	if played, _ := ae.Stats(); played == 0 {
+		t.Error("mixer never admitted the preview")
+	}
+}

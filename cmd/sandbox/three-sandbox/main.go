@@ -337,7 +337,7 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 				b = math.Min(255, b+40*pulse)
 			}
 
-			color := color.RGB{R: clampF(r), G: clampF(g), B: clampF(b)}
+			c := color.RGB{R: clampF(r), G: clampF(g), B: clampF(b)}
 
 			// Alpha: solid core, fading glow
 			alpha := 1.0
@@ -352,9 +352,9 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 
 			// Use screen blend for additive glow effect
 			if distSq > sphereRadiusSq {
-				buf.Set(sx, sy, ' ', color.RGB{}, color, render.BlendScreen, alpha*0.7, terminal.AttrNone)
+				buf.Set(sx, sy, ' ', color.RGB{}, c, render.BlendScreen, alpha*0.7, terminal.AttrNone)
 			} else {
-				buf.Set(sx, sy, ' ', color.RGB{}, color, render.BlendAlpha, alpha, terminal.AttrNone)
+				buf.Set(sx, sy, ' ', color.RGB{}, c, render.BlendAlpha, alpha, terminal.AttrNone)
 			}
 		}
 	}

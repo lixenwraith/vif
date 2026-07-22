@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
 )
@@ -1010,3 +1011,4 @@ func formatFoldInfo(collapsed, total int) string {
 	}
 	return "[" + formatLineNumber(collapsed, 1) + "/" + formatLineNumber(total, 1) + " folded]"
 }
+

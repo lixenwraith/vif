@@ -15,6 +15,11 @@ import (
 // maxPreStartCmds bounds the pre-Start buffer; the mixer queue is 256
 const maxPreStartCmds = 64
 
+// mixerStopTimeout bounds Stop's wait for the mix goroutine. Bounded rather
+// than indefinite because a wedged backend must not hang shutdown and leave the
+// terminal in raw mode; on timeout Stop proceeds and leaks the goroutine.
+const mixerStopTimeout = 5 * AudioBufferDuration
+
 // AudioEngine manages audio via pipe to system tools
 // Control flows through one command channel into the mixer goroutine;
 // sequencer, tracks, and voices are mixer-confined and lock-free
@@ -265,7 +270,9 @@ func (ae *AudioEngine) failover() {
 	ae.mixer.SwapOutput(w)
 }
 
-// Stop terminates the engine
+// Stop terminates the engine. On return the mix goroutine has finished (see
+// Stopped), so the caller may inspect mixer-confined state or call
+// ResetRegistries.
 func (ae *AudioEngine) Stop() {
 	if !ae.running.CompareAndSwap(true, false) {
 		return
@@ -276,6 +283,10 @@ func (ae *AudioEngine) Stop() {
 		ae.mixer.Stop()
 	}
 
+	// Tear the backend down before waiting, not after: the mix goroutine can be
+	// blocked in Write on a pipe whose reader is gone, and closing the pipe is
+	// what unblocks it. Waiting first deadlocks. The sink closes here too and
+	// therefore may precede the final Write — wavSink handles that itself.
 	ae.beMu.Lock()
 	if ae.stdin != nil {
 		ae.stdin.Close()
@@ -288,7 +299,17 @@ func (ae *AudioEngine) Stop() {
 	}
 	ae.beMu.Unlock()
 
+	if ae.mixer != nil {
+		ae.mixer.Wait(mixerStopTimeout)
+	}
 	ae.wg.Wait()
+}
+
+// Stopped reports whether the mix goroutine has returned. False after Stop
+// means a backend write never unblocked: mixer-confined state is still live,
+// and ResetRegistries or a fresh Start would race it.
+func (ae *AudioEngine) Stopped() bool {
+	return ae.mixer == nil || ae.mixer.Wait(0)
 }
 
 // SetPaused toggles the paused state (music frozen + effects gated)
@@ -348,14 +369,15 @@ func (ae *AudioEngine) SoundID(name string) SoundID { return SoundIDByName(name)
 func (ae *AudioEngine) SpecError() error { return ae.specErr }
 
 // send routes a command to the mixer, buffering it until Start builds one
-func (ae *AudioEngine) send(c audioCmd) {
+func (ae *AudioEngine) send(c audioCmd) bool {
 	if ae.mixer == nil {
 		if len(ae.preStart) < maxPreStartCmds {
 			ae.preStart = append(ae.preStart, c)
+			return true
 		}
-		return
+		return false
 	}
-	ae.mixer.Send(c)
+	return ae.mixer.Send(c)
 }
 
 func (ae *AudioEngine) IsEffectMuted() bool { return ae.effectMuted.Load() }
@@ -473,4 +495,100 @@ func (ae *AudioEngine) SetArrangement(t Intensity, a Arrangement) {
 // reveal requests the sequencer's per-bar track build-up on arrival
 func (ae *AudioEngine) SetIntensity(t Intensity, crossfadeSamples int, quantize, reveal bool) {
 	ae.send(audioCmd{op: cmdIntensity, tier: t, i1: crossfadeSamples, b: quantize, reveal: reveal})
+}
+
+// DefineSound registers or replaces a spec and hot-swaps the rendered result
+// into a running mixer. An existing name keeps its ID; a new name appends one
+// and every per-ID table grows to match.
+//
+// Rendering runs on the caller's goroutine — the mixer receives finished
+// buffers and never synthesizes. Voices already playing keep their old buffer
+// alias and ring out on the previous take, so the swap is click-free.
+//
+// Determinism note: the variant rng is seeded from the name, so re-rendering
+// under the same name reproduces the same noise. Renaming re-rolls it.
+//
+// Not safe for concurrent callers: ID assignment and table growth are separate
+// steps. One editor goroutine.
+func (ae *AudioEngine) DefineSound(d *SoundDef) (SoundID, error) {
+	id, err := defineSound(d)
+	if err != nil {
+		return SoundNone, err
+	}
+	ae.mu.RLock()
+	shape := ae.config.EffectShapes[d.Name]
+	ae.mu.RUnlock()
+	bufs := RenderVariants(d, shape)
+	ae.resolveVolumes() // covers a newly appended ID
+
+	if ae.mixer == nil {
+		return id, nil // pre-Start: preloadAll renders from the registry
+	}
+	if !ae.mixer.Send(audioCmd{op: cmdReloadSound, sound: id, bufs: bufs}) {
+		return id, fmt.Errorf("sound %q: mixer queue full, reload dropped", d.Name)
+	}
+	return id, nil
+}
+
+// DefinePattern validates, registers and hot-swaps a pattern. Slots currently
+// playing it re-resolve on the next tick, mid-bar, keeping their step position
+// and track mask. Pass a Clone — registering a struct the mixer already holds
+// mutates it underneath the mix goroutine.
+func (ae *AudioEngine) DefinePattern(p *Pattern) (PatternID, error) {
+	if err := ValidatePattern(p); err != nil {
+		return PatternSilence, err
+	}
+	id := RegisterPattern(p)
+	if id == PatternSilence {
+		return PatternSilence, fmt.Errorf("pattern %q: registration failed", p.Name)
+	}
+	ae.send(audioCmd{op: cmdReloadPattern, pattern: id})
+	return id, nil
+}
+
+// PlayBuffer auditions a caller-rendered buffer without registering it — the
+// path for an unsaved spec. The mixer owns the slice for the life of the voice;
+// do not mutate it afterward. Volume is absolute, not scaled by the effect
+// table, but master volume and the mute/pause gates still apply.
+func (ae *AudioEngine) PlayBuffer(buf []float64, volume float64) bool {
+	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
+		return false
+	}
+	if ae.mixer == nil || len(buf) == 0 {
+		return false
+	}
+	ae.mu.RLock()
+	vol := ae.config.MasterVolume * volume
+	ae.mu.RUnlock()
+	return ae.mixer.Send(audioCmd{op: cmdPlayBuffer, buf: buf, f1: vol})
+}
+
+// SetEffectShape updates render shaping for one sound and re-renders it. This
+// is the slider-drag path: shaping is a render-time input, so it cannot be
+// applied at playback.
+func (ae *AudioEngine) SetEffectShape(name string, p SFXParams) error {
+	d := SoundDefByName(name)
+	if d == nil {
+		return fmt.Errorf("sound %q: not registered", name)
+	}
+	ae.mu.Lock()
+	if ae.config.EffectShapes == nil {
+		ae.config.EffectShapes = make(map[string]SFXParams)
+	}
+	ae.config.EffectShapes[name] = p
+	ae.mu.Unlock()
+	_, err := ae.DefineSound(d)
+	return err
+}
+
+// SetEffectVolume updates one sound's mix level. Applied at Play, so no
+// re-render.
+func (ae *AudioEngine) SetEffectVolume(name string, vol float64) {
+	ae.mu.Lock()
+	if ae.config.EffectVolumes == nil {
+		ae.config.EffectVolumes = make(map[string]float64)
+	}
+	ae.config.EffectVolumes[name] = vol
+	ae.mu.Unlock()
+	ae.resolveVolumes()
 }

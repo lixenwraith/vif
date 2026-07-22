@@ -23,6 +23,9 @@ const (
 	cmdSeed
 	cmdArrangement
 	cmdIntensity
+	cmdReloadSound   // swap a rendered variant set; grows per-ID tables
+	cmdReloadPattern // re-resolve slots pointing at a replaced pattern
+	cmdPlayBuffer    // audition a caller-rendered buffer, unregistered
 )
 
 // audioCmd is the unified control/play message consumed by the mixer goroutine
@@ -42,4 +45,6 @@ type audioCmd struct {
 	b       bool      // quantize
 	reveal  bool      // per-bar track build-up on the incoming pattern
 	w       io.Writer
+	bufs    []floatBuffer // cmdReloadSound: rendered variant set, mixer-owned on receipt
+	buf     floatBuffer   // cmdPlayBuffer: single take, mixer-owned on receipt
 }
