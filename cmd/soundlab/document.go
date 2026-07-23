@@ -11,6 +11,22 @@ import (
 // doc is an ordered, name-keyed working set. Order is document order — it is
 // what save emits and what ls shows — and survives replace-by-name so an edit
 // does not shuffle the file.
+//
+// Divergence is tracked on two independent axes (registry-vs-mixer is the
+// engine's problem):
+//
+//	dirty — per entry, document vs registry ('*' in ls/browser). Set by any
+//	entry mutation; cleared per entry by apply (registry now holds this
+//	content) and revert (this entry now holds registry content).
+//
+//	modified — per document, document vs disk ('● unsaved', quit guard). A
+//	one-way latch: any mutation sets it; only baseline events clear it —
+//	save (the document became the file) and replaceAll (load/builtin
+//	installed a new baseline). revert deliberately does NOT clear it:
+//	revert restores registry state, which has no defined relationship to
+//	what is on disk, so the unsaved warning must survive until a save
+//	re-anchors. The latch may over-warn (edit, then hand-restore
+//	baseline-identical content); it never under-warns.
 type doc[T any] struct {
 	order   []string
 	byName  map[string]T
@@ -159,9 +175,9 @@ func (d *doc[T]) replaceAll(vs []T, src string, dirty bool) {
 	clear(d.dirty)
 	d.src = src
 	for _, v := range vs {
-		d.put(v, dirty)
+		d.put(v, dirty) // per-entry put latches modified when dirty…
 	}
-	d.modified = true // bulk replacement is a baseline, not an edit
+	d.modified = false // …but bulk replacement is a baseline, not an edit
 }
 
 func (d *doc[T]) mergeAll(vs []T, dirty bool) {

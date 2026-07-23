@@ -74,6 +74,17 @@ func (a *tuiApp) selName() string {
 // browser shows such entries but macro keys refuse to build commands.
 func addressable(n string) bool { return n != "" && !strings.ContainsAny(n, " \t.#") }
 
+// cursorTo lands the active tab's cursor on name; false when absent (the
+// command that should have created it failed).
+func (a *tuiApp) cursorTo(name string) bool {
+	i := slices.Index(a.browserNames(), name)
+	if i < 0 {
+		return false
+	}
+	a.brCursor[a.kind] = i
+	return true
+}
+
 // --- inspector tree ---
 
 // nodeMeta rides TreeNode.Data so key handlers know what is legal at the
@@ -288,10 +299,19 @@ func (a *tuiApp) render() {
 		return
 	}
 
+	// The strip between the log and the input line belongs to at most one
+	// mode at a time: piano rows or the beat grid. Its height is decided
+	// here, before the vertical split, so the panes above shrink to fit.
 	stripH := 0
-	if a.mode == modePiano {
+	switch a.mode {
+	case modePiano:
 		stripH = pianoRowsH
+	case modeBeat:
+		if d := a.beatPat(); d != nil {
+			stripH = min(max(len(d.Track), 2), 6) // grows with tracks, capped
+		}
 	}
+
 	header, rest := tui.SplitVFixed(root, 1)
 	body, bottom := tui.SplitVFixed(rest, rest.H-1-stripH)
 	var strip, input tui.Region
@@ -307,7 +327,10 @@ func (a *tuiApp) render() {
 	a.renderBrowser(brR)
 	a.renderInspector(insR)
 	a.renderLog(logR)
-	if stripH > 0 {
+	switch a.mode {
+	case modeBeat:
+		a.renderBeat(strip)
+	case modePiano:
 		a.renderPiano(strip)
 	}
 	a.renderInput(input)
@@ -403,15 +426,23 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 			}
 		} else {
 			d, _ := a.s.pats.get(n)
-			// Dirty moves into the text so the icon can carry the slot
-			// badge: which slot is sounding this pattern right now.
-			it.Text = fmt.Sprintf("%s%-20s %2ds %2dT",
-				dirtyMark(a.s.pats.isDirty(n)), tui.Truncate(n, 20), d.Steps, len(d.Track))
+			it.Text = fmt.Sprintf("%-20s %2ds %2dT", tui.Truncate(n, 20), d.Steps, len(d.Track))
 			it.Icon, it.IconFg = tui.IconBullet, a.theme.Unselected
+
+			isDirty := a.s.pats.isDirty(n)
+			if isDirty {
+				it.Icon, it.IconFg = '*', a.theme.Warning
+			}
+
 			if id := audio.PatternIDByName(n); id != audio.PatternSilence {
 				for si := 0; si < 3; si++ {
 					if a.s.eng.SlotPattern(si) == id {
-						it.Icon, it.IconFg = rune('0'+si), a.theme.Selected
+						it.Icon = rune('0' + si)
+						if isDirty {
+							it.IconFg = a.theme.Warning
+						} else {
+							it.IconFg = a.theme.Selected
+						}
 						break
 					}
 				}
@@ -421,6 +452,10 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 		items = append(items, it)
 	}
 	c := a.brCursor[a.kind]
+	if c > len(items)-1 {
+		c = len(items) - 1
+		a.brCursor[a.kind] = c
+	}
 	a.brScroll[a.kind] = tui.AdjustScroll(c, a.brScroll[a.kind], content.H, len(items))
 	cur := a.theme.FocusBg
 	if a.focus == focusBrowser {
@@ -505,24 +540,40 @@ func (a *tuiApp) renderInput(r tui.Region) {
 		r.TextField(a.editField, tui.TextFieldOpts{Prefix: pre, Focused: true, Border: tui.LineNone})
 	case modePiano:
 		r.Fill(a.theme.HeaderBg)
-		msg := fmt.Sprintf("PIANO  %s  oct %d  vel %.2f   z/q rows play  [ ] octave  ↑↓ vel  tab instrument  esc exit",
-			a.pianoInstr, a.pianoOct, a.pianoVel)
-		r.Text(1, 0, msg, a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
+		recBadge := ""
+		if a.rec {
+			recBadge = "REC ● "
+		}
+		msg := fmt.Sprintf("PIANO %s%s  oct %d  vel %.2f   z/q play  [ ] oct  ↑↓ vel  tab instr  ^S rec  esc exit",
+			recBadge, a.pianoInstr, a.pianoOct, a.pianoVel)
+		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
+	case modeBeat:
+		r.Fill(a.theme.HeaderBg)
+		msg := fmt.Sprintf("BEAT %s  hjkl move  space toggle  +/- 1-9 0 vel  t instr  a/x track  enter apply+play  esc close",
+			a.beat.name)
+		r.Text(1, 0, tui.Truncate(msg, r.W-2), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
+	case modePrompt:
+		r.TextField(a.editField, tui.TextFieldOpts{Prefix: a.promptLabel, Focused: true, Border: tui.LineNone})
 	default:
 		r.Fill(a.theme.HeaderBg)
 		r.Text(1, 0, a.footHint(), a.theme.HintFg, a.theme.HeaderBg, terminal.AttrNone)
 	}
 }
 
+// footHint forks on focus first — that is the axis that changes which keys
+// are live. The browser hint additionally forks on the active tab, because
+// space/0-2/b mean different things per kind; inspector and log hints are
+// tab-independent.
 func (a *tuiApp) footHint() string {
 	switch a.focus {
 	case focusInspector:
-		return "j/k move  h/l fold  H/L fold all  enter edit  a add  x del  esc back  dim=default  p piano  m/M music  : cmd  ^Q quit"
+		return "j/k move  h/l fold  H/L all  enter edit  space play  a add  x del  esc back  dim=default  p piano  m reset  ^S save  : cmd  ^Q quit"
 	case focusLog:
-		return "j/k scroll  g/G ends  tab focus  p piano  m/M music  : cmd  ^Q quit"
+		return "j/k scroll  g/G ends  tab/shift-tab focus  p piano  m/M music  ^S save  : cmd  ^Q quit"
+	default: // focusBrowser
+		if a.kind == kindPattern {
+			return "j/k move  h/l kind  space play  0-2 slot  b beat  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
+		}
+		return "j/k move  h/l kind  space play  enter inspect  n/c/w new/clone/write  + mix  d del  a/v/r apply/val/rev  p piano  m reset  ^S save  : cmd  ^Q quit"
 	}
-	if a.kind == kindPattern {
-		return "j/k move  h/l kind  space music  0-2 slot toggle  a/v/r apply/val/rev  p piano  M reset  : cmd  ^Q quit"
-	}
-	return "j/k move  h/l kind  space play  enter inspect  a/v/r apply/val/rev  p piano  m/M music  : cmd  ^Q quit"
 }

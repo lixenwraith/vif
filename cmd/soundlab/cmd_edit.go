@@ -167,12 +167,27 @@ func cmdNew(s *Session, a []string) error {
 	if s.sounds.has(name) || s.pats.has(name) {
 		return fmt.Errorf("%q: already exists", name)
 	}
+
 	if snd {
-		s.sounds.put(&audio.SoundDef{Name: name}, true)
+		// Minimal valid spec: a new entry must be playable immediately, not
+		// a validation error. 0.2s sine with a click-free release.
+		s.sounds.put(&audio.SoundDef{
+			Name: name, Duration: 0.2,
+			Layer: []audio.Layer{{
+				Source: audio.Source{Kind: "osc", Wave: "sine", Freq: 440},
+				Chain:  []audio.Proc{{Kind: "ar", Attack: 0.005, Release: 0.05}},
+			}},
+		}, true)
 	} else {
-		s.pats.put(&audio.PatternDef{Name: name}, true)
+		s.pats.put(&audio.PatternDef{
+			Name: name, Steps: 16,
+			Track: []audio.TrackDef{{
+				Instr: "kick",
+				Event: []audio.StepDef{{Pos: 0, Vel: 0.9}},
+			}},
+		}, true)
 	}
-	fmt.Fprintf(s.out, "created %s %q (invalid until fields are set)\n", a[0], name)
+	fmt.Fprintf(s.out, "created %s %q (minimal valid seed; edit away)\n", a[0], name)
 	return nil
 }
 
@@ -212,6 +227,11 @@ func cmdMv(s *Session, a []string) error {
 	if err := badName(dst); err != nil {
 		return err
 	}
+	// doc.rename checks only its own kind; docRoot shadows patterns behind
+	// sounds on collision — mv must not create the state new/cp refuse.
+	if s.sounds.has(dst) || s.pats.has(dst) {
+		return fmt.Errorf("%q: already exists", dst)
+	}
 	if s.sounds.has(src) {
 		if err := s.sounds.rename(src, dst); err != nil {
 			return err
@@ -224,6 +244,51 @@ func cmdMv(s *Session, a []string) error {
 			return err
 		}
 		fmt.Fprintf(s.out, "renamed pattern %q -> %q\n", src, dst)
+		return nil
+	}
+	return fmt.Errorf("%q: not in any document", src)
+}
+
+// cmdMix appends src's structure into dst. Deep copies via Clone /
+// clonePatternDef: owned memory moves into dst, src keeps its own. Domain
+// bounds (events past dst's grid, track/layer caps, bus refs) belong to
+// validate, per house style — except sound bus name collisions, which would
+// silently reroute src layers into dst's bus instead of failing validation.
+func cmdMix(s *Session, a []string) error {
+	src, dst := a[0], a[1]
+	if src == dst {
+		return fmt.Errorf("mix: src and dst are the same entry")
+	}
+	if sd, ok := s.sounds.get(src); ok {
+		dd, ok := s.sounds.get(dst)
+		if !ok {
+			return fmt.Errorf("%q: not a sound in the document (mix is same-kind)", dst)
+		}
+		c := sd.Clone()
+		for i := range c.Bus {
+			for j := range dd.Bus {
+				if c.Bus[i].Name == dd.Bus[j].Name {
+					return fmt.Errorf("bus %q exists in both; rename one first", c.Bus[i].Name)
+				}
+			}
+		}
+		dd.Bus = append(dd.Bus, c.Bus...)
+		dd.Layer = append(dd.Layer, c.Layer...)
+		s.sounds.markDirty(dst)
+		fmt.Fprintf(s.out, "mixed sound %q into %q: +%d layer(s) +%d bus(es); dst master chain/duration win — validate %s\n",
+			src, dst, len(c.Layer), len(c.Bus), dst)
+		return nil
+	}
+	if pd, ok := s.pats.get(src); ok {
+		dd, ok := s.pats.get(dst)
+		if !ok {
+			return fmt.Errorf("%q: not a pattern in the document (mix is same-kind)", dst)
+		}
+		c := clonePatternDef(pd)
+		dd.Track = append(dd.Track, c.Track...)
+		s.pats.markDirty(dst)
+		fmt.Fprintf(s.out, "mixed pattern %q into %q: +%d track(s); dst steps=%d — validate flags events past the grid\n",
+			src, dst, len(c.Track), dd.Steps)
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", src)

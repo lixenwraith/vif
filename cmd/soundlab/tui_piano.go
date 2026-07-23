@@ -7,6 +7,7 @@ package main
 
 import (
 	"fmt"
+	"slices"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
@@ -41,14 +42,13 @@ var pianoOffsets = func() map[rune]int {
 }()
 
 func (a *tuiApp) enterPiano() {
-	// Tonal voices render only inside Sequencer.Generate: no transport, no
-	// sound. Start it rather than let the first note land in silence.
 	if !a.s.eng.IsMusicPlaying() {
 		if a.s.eng.IsMusicMuted() {
 			fmt.Fprintln(a.log, "music is muted — :mute none, then p")
 			return
 		}
 		a.exec("music start")
+		a.pianoStarted = true // piano owns this start; Esc reverts it
 	}
 	a.mode = modePiano
 }
@@ -56,7 +56,26 @@ func (a *tuiApp) enterPiano() {
 func (a *tuiApp) pianoKey(ev terminal.Event) {
 	switch ev.Key {
 	case terminal.KeyEscape:
+		if a.rec {
+			a.finishRecording()
+		}
 		a.mode = modeNormal
+		// Stop only a transport piano itself started: exiting must not kill
+		// patterns the user had running underneath.
+		if a.pianoStarted {
+			a.exec("music stop")
+		}
+		a.pianoStarted = false
+		return
+	case terminal.KeyCtrlS:
+		if a.rec {
+			a.finishRecording()
+		} else {
+			a.rec = true
+			a.recSteps = a.recSteps[:0]
+			a.recInstr = a.pianoInstr
+			fmt.Fprintln(a.log, "recording — notes quantize to the 16th; Ctrl+S to commit")
+		}
 		return
 	case terminal.KeyTab:
 		switch a.pianoInstr {
@@ -94,8 +113,12 @@ func (a *tuiApp) pianoKey(ev terminal.Event) {
 			return
 		}
 		midi := audio.MIDINote(audio.NoteC, a.pianoOct) + off
+
 		a.execQ(fmt.Sprintf("note %d %.2f 2 %s", midi, a.pianoVel, a.pianoInstr))
 		a.pianoLit[ev.Rune] = 3 // ~300ms at the ticker rate
+		if a.rec {
+			a.captureNote(midi)
+		}
 	}
 }
 
@@ -113,4 +136,56 @@ func (a *tuiApp) renderPiano(r tui.Region) {
 	}
 	r.Text(36, 1, fmt.Sprintf("C%d .. C%d", a.pianoOct, a.pianoOct+2),
 		a.theme.HintFg, a.theme.Bg, terminal.AttrNone)
+}
+
+// captureNote quantizes a played note onto the 16th grid. deg is relative to
+// the harmony default root (E, DefaultRootNote) so recordings land in the
+// scale the sequencer resolves against; FollowChord stays off on the
+// recorded track, so absolute pitch is preserved bar over bar.
+func (a *tuiApp) captureNote(midi int) {
+	bar, step, running := a.s.eng.Transport()
+	if !running {
+		return
+	}
+	_ = bar
+	a.recSteps = append(a.recSteps, audio.StepDef{
+		Pos: step % audio.StepsPerBar,
+		Vel: a.pianoVel,
+		Deg: midi - audio.DefaultRootNote, // chromatic offset; resolve() folds octaves
+		Oct: 0,
+		Dur: 2,
+	})
+}
+
+// finishRecording writes the take as a document pattern. One bar, merged by
+// pos (later note wins a collision), dirty — the normal a/0-2 flow applies
+// and assigns it.
+func (a *tuiApp) finishRecording() {
+	a.rec = false
+	if len(a.recSteps) == 0 {
+		fmt.Fprintln(a.log, "recording empty — nothing written")
+		return
+	}
+	name := ""
+	for {
+		a.recN++
+		name = fmt.Sprintf("rec_%d", a.recN)
+		if !a.s.pats.has(name) && !a.s.sounds.has(name) {
+			break
+		}
+	}
+	byPos := map[int]audio.StepDef{}
+	for _, st := range a.recSteps {
+		byPos[st.Pos] = st
+	}
+	evs := make([]audio.StepDef, 0, len(byPos))
+	for _, st := range byPos {
+		evs = append(evs, st)
+	}
+	slices.SortFunc(evs, func(x, y audio.StepDef) int { return x.Pos - y.Pos })
+	a.s.pats.put(&audio.PatternDef{
+		Name: name, Steps: audio.StepsPerBar,
+		Track: []audio.TrackDef{{Instr: a.recInstr.String(), Humanize: 0.15, Event: evs}},
+	}, true)
+	fmt.Fprintf(a.log, "recorded %d step(s) -> pattern %q (a to apply, 1 to hear in the melody slot)\n", len(evs), name)
 }

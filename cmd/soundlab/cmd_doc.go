@@ -100,3 +100,36 @@ func cmdExport(s *Session, a []string) error {
 		a[1], len(buf), float64(len(buf))/audio.AudioSampleRate)
 	return nil
 }
+
+// cmdWrite exports one document entry as a standalone TOML document. It is
+// an export, not a save: the working document still diverges from its
+// provenance file, so dirty and modified are deliberately untouched — save
+// owns the baseline (see doc[T]). Document-only resolution, matching show:
+// what the browser displays is what writes, with the same sounds-shadow-
+// patterns precedence as docRoot.
+func cmdWrite(s *Session, a []string) error {
+	name, file := a[0], a[1]
+	if d, ok := s.sounds.get(name); ok {
+		data, err := audio.MarshalSounds([]*audio.SoundDef{d})
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "wrote %s (sound %q)\n", file, name)
+		return nil
+	}
+	if d, ok := s.pats.get(name); ok {
+		data, err := audio.MarshalPatternDefs([]*audio.PatternDef{d})
+		if err != nil {
+			return err
+		}
+		if err := os.WriteFile(file, data, 0o644); err != nil {
+			return err
+		}
+		fmt.Fprintf(s.out, "wrote %s (pattern %q)\n", file, name)
+		return nil
+	}
+	return fmt.Errorf("%q: not in any document", name)
+}

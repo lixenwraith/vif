@@ -34,6 +34,7 @@ func init() {
 		"merge":   {"merge sound|pattern <file>", "overlay file onto document by name", 2, 2, cmdMerge},
 		"builtin": {"builtin sound|pattern", "seed document from built-ins (patterns: current registry snapshot)", 1, 1, cmdBuiltin},
 		"save":    {"save sound|pattern [file]", "write document; bare = provenance path", 1, 2, cmdSave},
+		"write":   {"write <name> <file>", "save one entry as standalone TOML (export: dirty/modified untouched)", 2, 2, cmdWrite},
 		"export":  {"export <name> <file.wav> [variant]", "render to WAV; no variant = canonical take", 2, 3, cmdExport},
 
 		"ls":    {"ls sound|pattern [glob]", "list document entries (* marks dirty)", 1, 2, cmdLs},
@@ -44,6 +45,7 @@ func init() {
 		"new":   {"new sound|pattern <name>", "create an empty entry (invalid until fields are set)", 2, 2, cmdNew},
 		"cp":    {"cp <src> <dst>", "duplicate an entry", 2, 2, cmdCp},
 		"mv":    {"mv <src> <dst>", "rename (sound noise variants re-roll: rng seeds from name)", 2, 2, cmdMv},
+		"mix":   {"mix <src> <dst>", "append src's tracks/layers into dst (same kind; src unchanged; validate dst after)", 2, 2, cmdMix},
 		"set":   {"set <name.path> <value...>", "set a leaf field; value may contain spaces", 2, -1, cmdSet},
 		"add":   {"add <name.path>", "append a zero element to a list field", 1, 1, cmdAdd},
 		"del":   {"del <name>|<name.path.idx>", "delete a document entry or a list element", 1, 1, cmdDel},

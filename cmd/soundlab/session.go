@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -47,6 +48,10 @@ func NewSession(backend string, masterVol float64, out io.Writer) (*Session, err
 	// rendering is engine-independent: edit, validate and export all work
 	// with no backend. Record the error and continue rather than abort.
 	s.startErr = eng.Start()
+	// Editor policy: deterministic slots. The engine's auto-fill swaps slot 2
+	// to a random fill once per phrase — game drama, editor confusion. Forced
+	// off here; :fill on restores it for auditioning the fill bank.
+	s.eng.SetAutoFill(false)
 	return s, nil
 }
 
@@ -274,24 +279,51 @@ func (s *Session) applyAll() error {
 	return nil
 }
 
+// sameCanonical reports whether two defs serialize to identical canonical
+// TOML. This is the honest equality for revert: what matters is "would save
+// emit the same document", and the marshaller is already the canonical form
+// (cmdShow leans on the same property). reflect.DeepEqual is the wrong
+// predicate — it distinguishes representations that serialize, validate and
+// render identically.
+func sameCanonical[T any](marshal func([]T) ([]byte, error), a, b T) bool {
+	x, ex := marshal([]T{a})
+	y, ey := marshal([]T{b})
+	return ex == nil && ey == nil && bytes.Equal(x, y)
+}
+
+// revertName restores one document entry from the live registry. That is the
+// whole contract — registry-level, never disk-level; load restores a file.
+// Corollary: revert after apply is the identity, because apply moved the
+// edits into the registry. Report that case instead of claiming a restore.
 func (s *Session) revertName(name string) error {
-	if s.sounds.has(name) {
+	if cur, ok := s.sounds.get(name); ok {
 		reg := audio.SoundDefByName(name)
 		if reg == nil {
 			return fmt.Errorf("%q: never registered; nothing to revert to (del to drop)", name)
 		}
-		s.sounds.put(reg.Clone(), false)
-		fmt.Fprintf(s.out, "reverted sound %q to registry state\n", name)
+		noop := sameCanonical(audio.MarshalSounds, cur, reg)
+		s.sounds.put(reg.Clone(), false) // normalizes ownership, clears a stale '*'
+		if noop {
+			fmt.Fprintf(s.out, "%q matches registry — nothing to revert (apply committed these edits; load restores disk state)\n", name)
+		} else {
+			fmt.Fprintf(s.out, "reverted sound %q to registry state\n", name)
+		}
 		return nil
 	}
-	if s.pats.has(name) {
+	if cur, ok := s.pats.get(name); ok {
 		id := audio.PatternIDByName(name)
 		p := audio.GetPattern(id)
 		if id == audio.PatternSilence || p == nil {
 			return fmt.Errorf("%q: never registered; nothing to revert to (del to drop)", name)
 		}
-		s.pats.put(p.Def(), false) // Def allocates; the live pointer stays untouched
-		fmt.Fprintf(s.out, "reverted pattern %q to registry state\n", name)
+		def := p.Def() // Def allocates; the live mixer pointer stays untouched
+		noop := sameCanonical(audio.MarshalPatternDefs, cur, def)
+		s.pats.put(def, false)
+		if noop {
+			fmt.Fprintf(s.out, "%q matches registry — nothing to revert (apply committed these edits; load restores disk state)\n", name)
+		} else {
+			fmt.Fprintf(s.out, "reverted pattern %q to registry state\n", name)
+		}
 		return nil
 	}
 	return fmt.Errorf("%q: not in any document", name)
