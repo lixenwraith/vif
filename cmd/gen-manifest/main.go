@@ -249,11 +249,25 @@ func (w *World) removeEntity(e core.Entity) {
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
 func (w *World) removeEntitiesBatch(entities []core.Entity) {
-	// For batches, we rely on the internal fast-path (len == 0) of the stores and the bitmask updates strictly scoped inside the stores.
+	// Union of component signatures: skip every store no entity touches
+	var union uint64
+	for _, e := range entities {
+		union |= w.componentMask[e]
+	}
+	if union == 0 {
+		for _, e := range entities {
+			delete(w.componentMask, e)
+		}
+		return
+	}
 {{- range .Components }}
-	w.Components.{{ .Field }}.RemoveBatch(entities, true)
+	if union&{{ .Field }}Bit != 0 {
+		w.Components.{{ .Field }}.RemoveBatch(entities, true)
+	}
 {{- end }}
-	w.Positions.RemoveBatch(entities, true)
+	if union&PositionBit != 0 {
+		w.Positions.RemoveBatch(entities, true)
+	}
 
 	for _, e := range entities {
 		delete(w.componentMask, e)

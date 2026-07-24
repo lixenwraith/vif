@@ -358,59 +358,173 @@ func (w *World) removeEntity(e core.Entity) {
 // removeEntitiesBatch removes entities from all stores using batch operations
 // Caller MUST hold updateMutex
 func (w *World) removeEntitiesBatch(entities []core.Entity) {
-	// For batches, we rely on the internal fast-path (len == 0) of the stores and the bitmask updates strictly scoped inside the stores.
-	w.Components.Glyph.RemoveBatch(entities, true)
-	w.Components.Sigil.RemoveBatch(entities, true)
-	w.Components.Nugget.RemoveBatch(entities, true)
-	w.Components.Cursor.RemoveBatch(entities, true)
-	w.Components.Protection.RemoveBatch(entities, true)
-	w.Components.Kinetic.RemoveBatch(entities, true)
-	w.Components.Wall.RemoveBatch(entities, true)
-	w.Components.Loot.RemoveBatch(entities, true)
-	w.Components.Gateway.RemoveBatch(entities, true)
-	w.Components.Energy.RemoveBatch(entities, true)
-	w.Components.Heat.RemoveBatch(entities, true)
-	w.Components.Shield.RemoveBatch(entities, true)
-	w.Components.Boost.RemoveBatch(entities, true)
-	w.Components.Weapon.RemoveBatch(entities, true)
-	w.Components.Orb.RemoveBatch(entities, true)
-	w.Components.Ping.RemoveBatch(entities, true)
-	w.Components.Decay.RemoveBatch(entities, true)
-	w.Components.Blossom.RemoveBatch(entities, true)
-	w.Components.Cleaner.RemoveBatch(entities, true)
-	w.Components.Dust.RemoveBatch(entities, true)
-	w.Components.Navigation.RemoveBatch(entities, true)
-	w.Components.Combat.RemoveBatch(entities, true)
-	w.Components.Genotype.RemoveBatch(entities, true)
-	w.Components.Lightning.RemoveBatch(entities, true)
-	w.Components.Missile.RemoveBatch(entities, true)
-	w.Components.Pulse.RemoveBatch(entities, true)
-	w.Components.Spirit.RemoveBatch(entities, true)
-	w.Components.Materialize.RemoveBatch(entities, true)
-	w.Components.Target.RemoveBatch(entities, true)
-	w.Components.TargetAnchor.RemoveBatch(entities, true)
-	w.Components.Drain.RemoveBatch(entities, true)
-	w.Components.Quasar.RemoveBatch(entities, true)
-	w.Components.Swarm.RemoveBatch(entities, true)
-	w.Components.Storm.RemoveBatch(entities, true)
-	w.Components.StormCircle.RemoveBatch(entities, true)
-	w.Components.Bullet.RemoveBatch(entities, true)
-	w.Components.Pylon.RemoveBatch(entities, true)
-	w.Components.Snake.RemoveBatch(entities, true)
-	w.Components.SnakeHead.RemoveBatch(entities, true)
-	w.Components.SnakeBody.RemoveBatch(entities, true)
-	w.Components.SnakeMember.RemoveBatch(entities, true)
-	w.Components.Eye.RemoveBatch(entities, true)
-	w.Components.Tower.RemoveBatch(entities, true)
-	w.Components.Header.RemoveBatch(entities, true)
-	w.Components.Member.RemoveBatch(entities, true)
-	w.Components.Flash.RemoveBatch(entities, true)
-	w.Components.Fadeout.RemoveBatch(entities, true)
-	w.Components.Splash.RemoveBatch(entities, true)
-	w.Components.Marker.RemoveBatch(entities, true)
-	w.Components.Death.RemoveBatch(entities, true)
-	w.Components.Timer.RemoveBatch(entities, true)
-	w.Positions.RemoveBatch(entities, true)
+	// Union of component signatures: skip every store no entity touches
+	var union uint64
+	for _, e := range entities {
+		union |= w.componentMask[e]
+	}
+	if union == 0 {
+		for _, e := range entities {
+			delete(w.componentMask, e)
+		}
+		return
+	}
+	if union&GlyphBit != 0 {
+		w.Components.Glyph.RemoveBatch(entities, true)
+	}
+	if union&SigilBit != 0 {
+		w.Components.Sigil.RemoveBatch(entities, true)
+	}
+	if union&NuggetBit != 0 {
+		w.Components.Nugget.RemoveBatch(entities, true)
+	}
+	if union&CursorBit != 0 {
+		w.Components.Cursor.RemoveBatch(entities, true)
+	}
+	if union&ProtectionBit != 0 {
+		w.Components.Protection.RemoveBatch(entities, true)
+	}
+	if union&KineticBit != 0 {
+		w.Components.Kinetic.RemoveBatch(entities, true)
+	}
+	if union&WallBit != 0 {
+		w.Components.Wall.RemoveBatch(entities, true)
+	}
+	if union&LootBit != 0 {
+		w.Components.Loot.RemoveBatch(entities, true)
+	}
+	if union&GatewayBit != 0 {
+		w.Components.Gateway.RemoveBatch(entities, true)
+	}
+	if union&EnergyBit != 0 {
+		w.Components.Energy.RemoveBatch(entities, true)
+	}
+	if union&HeatBit != 0 {
+		w.Components.Heat.RemoveBatch(entities, true)
+	}
+	if union&ShieldBit != 0 {
+		w.Components.Shield.RemoveBatch(entities, true)
+	}
+	if union&BoostBit != 0 {
+		w.Components.Boost.RemoveBatch(entities, true)
+	}
+	if union&WeaponBit != 0 {
+		w.Components.Weapon.RemoveBatch(entities, true)
+	}
+	if union&OrbBit != 0 {
+		w.Components.Orb.RemoveBatch(entities, true)
+	}
+	if union&PingBit != 0 {
+		w.Components.Ping.RemoveBatch(entities, true)
+	}
+	if union&DecayBit != 0 {
+		w.Components.Decay.RemoveBatch(entities, true)
+	}
+	if union&BlossomBit != 0 {
+		w.Components.Blossom.RemoveBatch(entities, true)
+	}
+	if union&CleanerBit != 0 {
+		w.Components.Cleaner.RemoveBatch(entities, true)
+	}
+	if union&DustBit != 0 {
+		w.Components.Dust.RemoveBatch(entities, true)
+	}
+	if union&NavigationBit != 0 {
+		w.Components.Navigation.RemoveBatch(entities, true)
+	}
+	if union&CombatBit != 0 {
+		w.Components.Combat.RemoveBatch(entities, true)
+	}
+	if union&GenotypeBit != 0 {
+		w.Components.Genotype.RemoveBatch(entities, true)
+	}
+	if union&LightningBit != 0 {
+		w.Components.Lightning.RemoveBatch(entities, true)
+	}
+	if union&MissileBit != 0 {
+		w.Components.Missile.RemoveBatch(entities, true)
+	}
+	if union&PulseBit != 0 {
+		w.Components.Pulse.RemoveBatch(entities, true)
+	}
+	if union&SpiritBit != 0 {
+		w.Components.Spirit.RemoveBatch(entities, true)
+	}
+	if union&MaterializeBit != 0 {
+		w.Components.Materialize.RemoveBatch(entities, true)
+	}
+	if union&TargetBit != 0 {
+		w.Components.Target.RemoveBatch(entities, true)
+	}
+	if union&TargetAnchorBit != 0 {
+		w.Components.TargetAnchor.RemoveBatch(entities, true)
+	}
+	if union&DrainBit != 0 {
+		w.Components.Drain.RemoveBatch(entities, true)
+	}
+	if union&QuasarBit != 0 {
+		w.Components.Quasar.RemoveBatch(entities, true)
+	}
+	if union&SwarmBit != 0 {
+		w.Components.Swarm.RemoveBatch(entities, true)
+	}
+	if union&StormBit != 0 {
+		w.Components.Storm.RemoveBatch(entities, true)
+	}
+	if union&StormCircleBit != 0 {
+		w.Components.StormCircle.RemoveBatch(entities, true)
+	}
+	if union&BulletBit != 0 {
+		w.Components.Bullet.RemoveBatch(entities, true)
+	}
+	if union&PylonBit != 0 {
+		w.Components.Pylon.RemoveBatch(entities, true)
+	}
+	if union&SnakeBit != 0 {
+		w.Components.Snake.RemoveBatch(entities, true)
+	}
+	if union&SnakeHeadBit != 0 {
+		w.Components.SnakeHead.RemoveBatch(entities, true)
+	}
+	if union&SnakeBodyBit != 0 {
+		w.Components.SnakeBody.RemoveBatch(entities, true)
+	}
+	if union&SnakeMemberBit != 0 {
+		w.Components.SnakeMember.RemoveBatch(entities, true)
+	}
+	if union&EyeBit != 0 {
+		w.Components.Eye.RemoveBatch(entities, true)
+	}
+	if union&TowerBit != 0 {
+		w.Components.Tower.RemoveBatch(entities, true)
+	}
+	if union&HeaderBit != 0 {
+		w.Components.Header.RemoveBatch(entities, true)
+	}
+	if union&MemberBit != 0 {
+		w.Components.Member.RemoveBatch(entities, true)
+	}
+	if union&FlashBit != 0 {
+		w.Components.Flash.RemoveBatch(entities, true)
+	}
+	if union&FadeoutBit != 0 {
+		w.Components.Fadeout.RemoveBatch(entities, true)
+	}
+	if union&SplashBit != 0 {
+		w.Components.Splash.RemoveBatch(entities, true)
+	}
+	if union&MarkerBit != 0 {
+		w.Components.Marker.RemoveBatch(entities, true)
+	}
+	if union&DeathBit != 0 {
+		w.Components.Death.RemoveBatch(entities, true)
+	}
+	if union&TimerBit != 0 {
+		w.Components.Timer.RemoveBatch(entities, true)
+	}
+	if union&PositionBit != 0 {
+		w.Positions.RemoveBatch(entities, true)
+	}
 
 	for _, e := range entities {
 		delete(w.componentMask, e)
