@@ -351,6 +351,9 @@ func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize b
 	// Apply explicit crop behavior
 	config.CropOnResize = cropOnResize
 
+	// Grid tracks map dimensions; grow-only backing makes this cheap
+	w.Positions.ResizeGrid(width, height)
+
 	// Reset camera to origin
 	config.CameraX = 0
 	config.CameraY = 0

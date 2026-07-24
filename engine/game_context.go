@@ -202,7 +202,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 		ctx.clampCamera(config)
 	}
 
-	// Grid tracks map dimensions (grow-only backing, §8)
+	// Grid tracks map dimensions (grow-only, no reallocation on shrink)
 	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
 	// Clamp cursor to Map bounds

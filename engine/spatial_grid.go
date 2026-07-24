@@ -15,17 +15,17 @@ type Cell struct {
 
 // SpatialGrid is a dense 2D grid for fast spatial queries without allocation
 type SpatialGrid struct {
+	Cells  []Cell // 1D array: index = y*Width + x
 	Width  int
 	Height int
-	Cells  []Cell // 1D array: index = y*Width + x
 }
 
 // NewSpatialGrid creates a new grid with the specified dimensions
 func NewSpatialGrid(width, height int) *SpatialGrid {
 	return &SpatialGrid{
+		Cells:  make([]Cell, width*height),
 		Width:  width,
 		Height: height,
-		Cells:  make([]Cell, width*height),
 	}
 }
 
@@ -136,13 +136,24 @@ func (g *SpatialGrid) Clear() {
 	}
 }
 
-// Resize resizes the grid, clearing all data
-// This does NOT preserve entities because re-mapping them from components
-// is the responsibility of the Position
+// Resize reconfigures logical grid dimensions. Backing storage is grow-only:
+// shrinking retains capacity, so map-size oscillation (tmux pane resize,
+// crop-on-resize, wasm) never reallocates; growth allocates once and holds.
+// Contents are cleared; Position.ResizeGrid repopulates from component data.
 func (g *SpatialGrid) Resize(newWidth, newHeight int) {
+	need := newWidth * newHeight
+	if need <= cap(g.Cells) {
+		g.Cells = g.Cells[:need]
+		// Must clear the full range: re-grown cells may hold stale counts
+		// from a previous larger layout
+		for i := range g.Cells {
+			g.Cells[i].Count = 0
+		}
+	} else {
+		g.Cells = make([]Cell, need)
+	}
 	g.Width = newWidth
 	g.Height = newHeight
-	g.Cells = make([]Cell, newWidth*newHeight)
 }
 
 // GridStats holds computed statistics for the spatial grid
@@ -168,3 +179,4 @@ func (g *SpatialGrid) ComputeStats() GridStats {
 	}
 	return stats
 }
+
