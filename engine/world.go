@@ -46,13 +46,10 @@ func NewWorld() *World {
 }
 
 // CreateEntity reserves a new entity ID
+// Caller holds updateMutex (all creation paths: systems, event handlers)
 func (w *World) CreateEntity() core.Entity {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
 	id := w.nextEntityID
 	w.nextEntityID++
-
 	return id
 }
 

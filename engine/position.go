@@ -3,7 +3,6 @@ package engine
 import (
 	"fmt"
 	"math"
-	"sync"
 
 	"github.com/lixenwraith/vi-fighter/component"
 	"github.com/lixenwraith/vi-fighter/core"
@@ -13,82 +12,106 @@ import (
 
 // Position maintains a spatial index using a fixed-capacity dense grid, multiple entities per cell (up to MaxEntitiesPerCell)
 type Position struct {
-	mu         sync.RWMutex
-	components map[core.Entity]component.PositionComponent
-	entities   []core.Entity // Dense array for cache-friendly iteration
-	grid       *SpatialGrid
-	world      *World // Reference for z-index lookups and bitmasks
-	bit        uint64 // Component bit mask
+	world    *World
+	grid     *SpatialGrid
+	index    map[core.Entity]int32
+	dense    []component.PositionComponent
+	entities []core.Entity // Dense array for cache-friendly iteration
+	bit      uint64        // Component bit mask
 }
 
 // NewPosition creates a new position store with spatial indexing
+// SYNC: all Position access occurs under World.updateMutex; no internal locking
 func NewPosition(w *World, bit uint64) *Position {
 	// Default grid size, will be resized by GameContext if needed
 	return &Position{
-		components: make(map[core.Entity]component.PositionComponent),
-		entities:   make([]core.Entity, 0, 64),
-		grid:       NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
-		world:      w,
-		bit:        bit,
+		index:    make(map[core.Entity]int32, 256),
+		dense:    make([]component.PositionComponent, 0, 64),
+		entities: make([]core.Entity, 0, 64),
+		grid:     NewSpatialGrid(parameter.DefaultGridWidth, parameter.DefaultGridHeight), // Default safe size
+		world:    w,
+		bit:      bit,
 	}
 }
 
 // SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored
 func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// If entity already has a position, remove it from old grid location
-	if oldPos, exists := p.components[e]; exists {
-		p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
+	if i, ok := p.index[e]; ok {
+		old := p.dense[i]
+		p.grid.RemoveEntityAt(e, old.X, old.Y)
+		p.dense[i] = pos
 	} else {
-		// New entity, add to dense array
+		p.index[e] = int32(len(p.dense))
+		p.dense = append(p.dense, pos)
 		p.entities = append(p.entities, e)
 		p.world.AddComponentMask(e, p.bit)
 	}
-
-	// Update component
-	p.components[e] = pos
-
-	// Set to new grid location
+	// Explicit ignore for OOB and Cell full
 	_ = p.grid.Set(e, pos.X, pos.Y)
 }
 
-// RemoveEntity deletes an entity from the store and grid
+// GetPosition retrieves a position component
+func (p *Position) GetPosition(e core.Entity) (component.PositionComponent, bool) {
+	if i, ok := p.index[e]; ok {
+		return p.dense[i], true
+	}
+	return component.PositionComponent{}, false
+}
+
+// removeAt swap-removes dense slot i; caller already removed grid entry
+func (p *Position) removeAt(i int32) {
+	e := p.entities[i]
+	last := int32(len(p.dense) - 1)
+	if i != last {
+		moved := p.entities[last]
+		p.dense[i] = p.dense[last]
+		p.entities[i] = moved
+		p.index[moved] = i
+	}
+	p.dense = p.dense[:last]
+	p.entities = p.entities[:last]
+	delete(p.index, e)
+}
+
+// RemoveEntity deletes an entity from the store and grid. O(1)
 func (p *Position) RemoveEntity(e core.Entity, skipMask ...bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
+	i, ok := p.index[e]
+	if !ok {
+		return
+	}
+	pos := p.dense[i]
+	p.grid.RemoveEntityAt(e, pos.X, pos.Y)
+	p.removeAt(i)
+	if len(skipMask) == 0 || !skipMask[0] {
+		p.world.RemoveComponentMask(e, p.bit)
+	}
+}
 
-	// No empty component slice check, there is almost always entities with position
-
-	if pos, exists := p.components[e]; exists {
-		// RemoveEntity from spatial grid
-		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
-
-		// RemoveEntity from components map
-		delete(p.components, e)
-
-		// Remove postition bit from entity component bit mask
-		if len(skipMask) == 0 || !skipMask[0] {
-			p.world.RemoveComponentMask(e, p.bit)
+// RemoveBatch deletes multiple entities. O(m)
+func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
+	if len(p.index) == 0 {
+		return
+	}
+	clearMask := len(skipMask) == 0 || !skipMask[0]
+	for _, e := range entities {
+		i, ok := p.index[e]
+		if !ok {
+			continue
 		}
-
-		// RemoveEntity from dense entities array
-		for i, entity := range p.entities {
-			if entity == e {
-				p.entities[i] = p.entities[len(p.entities)-1]
-				p.entities = p.entities[:len(p.entities)-1]
-				break
-			}
+		pos := p.dense[i]
+		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
+		p.removeAt(i)
+		if clearMask {
+			p.world.RemoveComponentMask(e, p.bit)
 		}
 	}
 }
 
-// GetAllEntityAt returns a COPY of entities at the given position (concurrent safe but uses memory), nil if OOB or empty
+// GetAllEntityAt returns a COPY of entities at the given position, nil if OOB or empty
+// Copy is required: callers may SetPosition/remove returned entities while
+// iterating, which swap-mutates the underlying grid cell.
+// Hot paths should prefer GetAllEntitiesAtInto (zero-alloc)
 func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	view := p.grid.GetAllEntitiesAt(x, y)
 	if len(view) == 0 {
 		return nil
@@ -100,80 +123,61 @@ func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	return result
 }
 
-// GetAllEntitiesAtInto copies entities into a caller-provided buffer and returns number of entities copied, Zero-alloc if buf is on stack
+// GetAllEntitiesAtInto copies entities into a caller-provided buffer and returns number copied
+// Zero-alloc if buf is on stack; identical to GetAllAtIntoUnsafe
 func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	view := p.grid.GetAllEntitiesAt(x, y)
-	// Copy min(len(buf), len(view))
-	return copy(buf, view)
+	return p.GetAllAtIntoUnsafe(x, y, buf)
 }
 
 // HasAnyEntityAt O(1) returns true if any entity exists at the given coordinates
 func (p *Position) HasAnyEntityAt(x, y int) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.grid.HasAnyEntityAt(x, y)
 }
 
-// ResizeGrid resizes the internal spatial grid
+// ResizeGrid resizes the internal spatial grid and re-indexes all entities
+// Backing storage is grow-only (SpatialGrid.Resize); cheap on shrink
 func (p *Position) ResizeGrid(width, height int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	// Create new grid
 	p.grid.Resize(width, height)
 
-	// Re-populate grid from components map
-	// This ensures consistency even if grid size changes
-	for e, pos := range p.components {
+	// Re-populate grid from dense component data
+	for i, e := range p.entities {
 		// Explicit ignore for OOB and Cell full
-		_ = p.grid.Set(e, pos.X, pos.Y)
+		_ = p.grid.Set(e, p.dense[i].X, p.dense[i].Y)
 	}
-}
-
-// GetPosition retrieves a position component
-func (p *Position) GetPosition(e core.Entity) (component.PositionComponent, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	val, ok := p.components[e]
-	return val, ok
 }
 
 // HasPosition checks if an entity has a position component
 func (p *Position) HasPosition(e core.Entity) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-	_, ok := p.components[e]
+	_, ok := p.index[e]
 	return ok
 }
 
-// AllEntities returns all entities with position components
+// AllEntities returns a detached copy of all entities with position components
+// Safe to iterate while removing. Prefer Entities() for read-only hot paths
 func (p *Position) AllEntities() []core.Entity {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	result := make([]core.Entity, len(p.entities))
 	copy(result, p.entities)
 	return result
 }
 
+// Entities returns the live dense entity slice — zero allocation
+// CONTRACT: no removals from this store while ranging it; collect candidates
+// and remove after the loop (same contract as Store.Entities)
+func (p *Position) Entities() []core.Entity {
+	return p.entities
+}
+
 // CountEntities returns the number of entities
 func (p *Position) CountEntities() int {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return len(p.entities)
 }
 
-// ClearAllComponents removes all data
+// ClearAllComponents removes all data, retaining capacity
 func (p *Position) ClearAllComponents() {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
 	// Component mask will be removed centrally by wipeAll()
-
-	p.components = make(map[core.Entity]component.PositionComponent)
-	p.entities = make([]core.Entity, 0, 64)
+	clear(p.index)
+	p.dense = p.dense[:0]
+	p.entities = p.entities[:0]
 	p.grid.Clear()
 }
 
@@ -182,13 +186,11 @@ func (p *Position) ClearAllComponents() {
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
 // O(k) where k = entities at cell (typically 1-3)
 func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.HasBlockingWallAtUnsafe(x, y, mask)
 }
 
-// HasBlockingWallAtUnsafe checks wall without acquiring lock
-// Caller MUST hold Lock() or RLock()
+// HasBlockingWallAtUnsafe checks wall presence at (x, y)
+// SYNC: caller holds World.updateMutex; "Unsafe" name retained for compatibility
 func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMask) bool {
 	if p.world == nil {
 		return false
@@ -197,6 +199,13 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 	// Check against Map bounds
 	config := p.world.Resources.Config
 	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
+		return false
+	}
+
+	// Defensive grid bounds: ResizeGrid wiring keeps grid dims == map dims,
+	// but this guards the transition window and prevents OOB cell indexing
+	// if map dims ever exceed grid dims
+	if x >= p.grid.Width || y >= p.grid.Height {
 		return false
 	}
 
@@ -216,8 +225,6 @@ func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMas
 // HasBlockingWallInArea returns true if any wall exists in rectangular area that blocks the given mask
 // Area defined as [x, x+width) × [y, y+height), skips out-of-bounds cells
 func (p *Position) HasBlockingWallInArea(x, y, width, height int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.HasBlockingWallInAreaUnsafe(x, y, width, height, mask)
 }
 
@@ -258,9 +265,6 @@ func (p *Position) FindFreeAreaSpiral(
 	mask component.WallBlockMask,
 	maxRadius int,
 ) (int, int, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	if p.world == nil {
 		return 0, 0, false
 	}
@@ -299,24 +303,19 @@ func (p *Position) FindFreeAreaSpiral(
 // IsAreaFree checks if the rectangular area is strictly within grid bounds and free of blocking walls
 // Returns true only if the entire area is valid and empty of walls matching the mask
 func (p *Position) IsAreaFree(x, y, width, height int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.isAreaFreeUnsafe(x, y, width, height, mask)
 }
 
 // IsBlocked checks if a specific point is invalid (OOB) or blocked by a wall
 // Consolidates IsOutOfBounds and HasBlockingWallAt for point entities
 func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	if p.IsOutOfBounds(x, y) {
 		return true
 	}
 	return p.HasBlockingWallAtUnsafe(x, y, mask)
 }
 
-// isAreaFreeUnsafe checks bounds and wall presence, caller must hold lock
+// isAreaFreeUnsafe checks bounds and wall presence
 func (p *Position) isAreaFreeUnsafe(x, y, width, height int, mask component.WallBlockMask) bool {
 	config := p.world.Resources.Config
 	// Strict bounds: area must be completely inside map
@@ -333,12 +332,9 @@ func (p *Position) IsOutOfBounds(x, y int) bool {
 	return x < 0 || x >= p.world.Resources.Config.MapWidth || y < 0 || y >= p.world.Resources.Config.MapHeight
 }
 
-// CheckBlockedBatch checks multiple points for blocking (OOB or wall) under single lock
+// CheckBlockedBatch checks multiple points for blocking (OOB or wall)
 // Returns bool slice aligned with input where true = position is blocked
 func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlockMask) []bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	result := make([]bool, len(points))
 	for i, pt := range points {
 		if p.IsOutOfBounds(pt.X, pt.Y) {
@@ -351,11 +347,8 @@ func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlo
 }
 
 // IsAnyBlockedInSet returns true if any point is blocked (OOB or wall)
-// Single lock acquisition, short-circuits on first blocked position
+// Short-circuits on first blocked position
 func (p *Position) IsAnyBlockedInSet(points []core.Point, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	for _, pt := range points {
 		if p.IsOutOfBounds(pt.X, pt.Y) || p.HasBlockingWallAtUnsafe(pt.X, pt.Y, mask) {
 			return true
@@ -365,16 +358,11 @@ func (p *Position) IsAnyBlockedInSet(points []core.Point, mask component.WallBlo
 }
 
 // HasLineOfSight checks if two grid points have unobstructed line of sight
-// Uses Bresenham traversal, checking intermediate cells for blocking walls
-// Acquires RLock once for entire traversal
 func (p *Position) HasLineOfSight(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.HasLineOfSightUnsafe(x0, y0, x1, y1, mask)
 }
 
-// HasLineOfSightUnsafe performs Bresenham LOS without acquiring lock
-// Caller MUST hold RLock() or Lock()
+// HasLineOfSightUnsafe performs Bresenham LOS checking intermediate cells for blocking walls
 func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
 	dx := x1 - x0
 	dy := y1 - y0
@@ -421,30 +409,32 @@ func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallB
 
 // --- Unsafe operation ---
 
+// TODO: remove stubs after refactor
+
 // Lock manually acquires the write lock for bulk operations, MUST be paired with Unlock()
 func (p *Position) Lock() {
-	p.mu.Lock()
 }
 
 // Unlock releases the write lock manually
 func (p *Position) Unlock() {
-	p.mu.Unlock()
 }
 
-// GetUnsafe retrieves position without locking, caller MUST hold Lock/RLock
+// GetUnsafe retrieves a position; identical to GetPosition
+// "Unsafe" name retained for source compatibility
 func (p *Position) GetUnsafe(e core.Entity) (component.PositionComponent, bool) {
-	val, ok := p.components[e]
-	return val, ok
+	return p.GetPosition(e)
 }
 
-// MoveUnsafe updates position without locking, caller MUST hold Lock()
+// MoveUnsafe updates position of an existing entity; no-op if entity has no position
+// "Unsafe" name retained for source compatibility
 func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent) {
-	oldPos, exists := p.components[e]
-	if !exists {
+	i, ok := p.index[e]
+	if !ok {
 		return
 	}
-	p.grid.RemoveEntityAt(e, oldPos.X, oldPos.Y)
-	p.components[e] = newPos
+	old := p.dense[i]
+	p.grid.RemoveEntityAt(e, old.X, old.Y)
+	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
 	_ = p.grid.Set(e, newPos.X, newPos.Y)
 }
@@ -472,63 +462,20 @@ func (p *Position) GetAllAtIntoUnsafe(x, y int, buf []core.Entity) int {
 	return count
 }
 
-// RemoveEntityUnsafe deletes an entity from the store and grid without locking
-// Caller MUST hold updateMutex
+// RemoveEntityUnsafe deletes an entity from store and grid without clearing
+// the component mask (original semantic); equivalent to RemoveEntity(e, true)
 func (p *Position) RemoveEntityUnsafe(e core.Entity) {
-	if len(p.components) == 0 {
-		return
-	}
-
-	if pos, exists := p.components[e]; exists {
-		p.grid.RemoveEntityAt(e, pos.X, pos.Y)
-		delete(p.components, e)
-
-		for i, entity := range p.entities {
-			if entity == e {
-				p.entities[i] = p.entities[len(p.entities)-1]
-				p.entities = p.entities[:len(p.entities)-1]
-				break
-			}
-		}
-	}
+	p.RemoveEntity(e, true)
 }
 
-// RemoveBatchUnsafe deletes multiple entities in a single pass without locking
-// Caller MUST hold updateMutex
+// RemoveBatchUnsafe deletes multiple entities without clearing component masks
 func (p *Position) RemoveBatchUnsafe(entities []core.Entity) {
-	if len(entities) == 0 || len(p.components) == 0 {
-		return
-	}
-
-	toRemove := make(map[core.Entity]struct{}, len(entities))
-	for _, e := range entities {
-		if pos, exists := p.components[e]; exists {
-			toRemove[e] = struct{}{}
-			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
-			delete(p.components, e)
-		}
-	}
-
-	if len(toRemove) == 0 {
-		return
-	}
-
-	writeIdx := 0
-	for _, e := range p.entities {
-		if _, remove := toRemove[e]; !remove {
-			p.entities[writeIdx] = e
-			writeIdx++
-		}
-	}
-	p.entities = p.entities[:writeIdx]
+	p.RemoveBatch(entities, true)
 }
 
-// ClearAllComponentsUnsafe removes all data without locking
-// Caller MUST hold updateMutex
+// ClearAllComponentsUnsafe removes all data
 func (p *Position) ClearAllComponentsUnsafe() {
-	p.components = make(map[core.Entity]component.PositionComponent)
-	p.entities = make([]core.Entity, 0, 64)
-	p.grid.Clear()
+	p.ClearAllComponents()
 }
 
 // --- Batch Implementation ---
@@ -563,9 +510,6 @@ func (pb *PositionBatch) Commit() error {
 	}
 	pb.committed = true
 
-	pb.store.mu.Lock()
-	defer pb.store.mu.Unlock()
-
 	// 1. Validation phase (Gameplay logic: don't spawn on top of things)
 	// Check both the current grid AND the pending batch for conflicts
 	batchOccupied := make(map[int]map[int]bool)
@@ -587,25 +531,16 @@ func (pb *PositionBatch) Commit() error {
 		batchOccupied[add.pos.Y][add.pos.X] = true
 	}
 
-	// 2. Application phase
+	// 2. Application phase — SetPosition implements the exact
+	// insert-or-update + grid sync logic previously inlined here
 	for _, add := range pb.additions {
-		// RemoveEntityAt old position if exists
-		if oldPos, exists := pb.store.components[add.entity]; exists {
-			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
-		} else {
-			pb.store.entities = append(pb.store.entities, add.entity)
-			pb.store.world.AddComponentMask(add.entity, pb.store.bit)
-		}
-
-		pb.store.components[add.entity] = add.pos
-		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.Set(add.entity, add.pos.X, add.pos.Y)
+		pb.store.SetPosition(add.entity, add.pos)
 	}
 
 	return nil
 }
 
-// CommitForce applies batch addition without checking for existing entity collisions
+// CommitForce applies batch additions without checking for existing entity collisions
 // Used for effects like Dust that overlay existing entities or replace them before death processing
 func (pb *PositionBatch) CommitForce() {
 	if pb.committed {
@@ -613,79 +548,19 @@ func (pb *PositionBatch) CommitForce() {
 	}
 	pb.committed = true
 
-	pb.store.mu.Lock()
-	defer pb.store.mu.Unlock()
-
 	for _, add := range pb.additions {
-		// RemoveEntityAt old position if exists
-		if oldPos, exists := pb.store.components[add.entity]; exists {
-			pb.store.grid.RemoveEntityAt(add.entity, oldPos.X, oldPos.Y)
-		} else {
-			pb.store.entities = append(pb.store.entities, add.entity)
-			pb.store.world.AddComponentMask(add.entity, pb.store.bit)
-		}
-
-		pb.store.components[add.entity] = add.pos
-		// Explicit ignore for OOB and Cell full
-		_ = pb.store.grid.Set(add.entity, add.pos.X, add.pos.Y)
+		pb.store.SetPosition(add.entity, add.pos)
 	}
 }
 
 // GridStats returns computed statistics for the spatial grid
 func (p *Position) GridStats() GridStats {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.grid.ComputeStats()
 }
 
 // GridDimensions returns width and height of the spatial grid
 func (p *Position) GridDimensions() (width, height int) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.grid.Width, p.grid.Height
-}
-
-// RemoveBatch deletes multiple entities in a single pass
-func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
-	if len(entities) == 0 {
-		return
-	}
-
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if len(p.components) == 0 {
-		return
-	}
-
-	clearMask := len(skipMask) == 0 || !skipMask[0]
-
-	// Build removal set, remove from grid and map
-	toRemove := make(map[core.Entity]struct{}, len(entities))
-	for _, e := range entities {
-		if pos, exists := p.components[e]; exists {
-			toRemove[e] = struct{}{}
-			p.grid.RemoveEntityAt(e, pos.X, pos.Y)
-			delete(p.components, e)
-			if clearMask {
-				p.world.RemoveComponentMask(e, p.bit)
-			}
-		}
-	}
-
-	if len(toRemove) == 0 {
-		return
-	}
-
-	// Single pass compaction
-	writeIdx := 0
-	for _, e := range p.entities {
-		if _, remove := toRemove[e]; !remove {
-			p.entities[writeIdx] = e
-			writeIdx++
-		}
-	}
-	p.entities = p.entities[:writeIdx]
 }
 
 // --- Range Operations ---
@@ -697,16 +572,13 @@ type ScanLineResult struct {
 }
 
 // ScanLine traverses cells from (startX, startY) in direction (dx, dy) until bounds or maxSteps
-// Acquires lock once for entire scan. Returns slice of (entity, x, y) for cells with matching filter
+// Returns slice of (entity, x, y) for cells with matching filter
 // filter: nil = all entities, or func to test entity (e.g. HasGlyph)
 func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) []ScanLineResult {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	var results []ScanLineResult
 	x, y := startX, startY
 
-	for step := 0; step < maxSteps; step++ {
+	for range maxSteps {
 		if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
 			break
 		}
@@ -731,12 +603,9 @@ func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(co
 // ScanLineFirst returns first entity matching filter along line, or (0, -1, -1) if none
 // Single-lock scan optimized for finding first match
 func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) (core.Entity, int, int) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	x, y := startX, startY
 
-	for step := 0; step < maxSteps; step++ {
+	for range maxSteps {
 		if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
 			break
 		}
@@ -762,9 +631,6 @@ func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter fu
 // within the specified bounds. It enforces "Center-Oriented Consolidation".
 // Returns (entity, x, y, found).
 func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	// Direction handling
 	if dy != 0 {
 		// VERTICAL SCAN (Up/Down)
@@ -967,9 +833,6 @@ func (p *Position) FindFreeFromPattern(
 	mask component.WallBlockMask,
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	// Compute direction internally
 	centerX := p.world.Resources.Config.MapWidth / 2
 	direction := getSearchDirection(originX, centerX)
@@ -1061,9 +924,6 @@ func (p *Position) FindPlacementAroundExclusion(
 	mask component.WallBlockMask,
 	additionalCheck func(absX, absY, w, h int) bool,
 ) (int, int, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	config := p.world.Resources.Config
 	centerX := config.MapWidth / 2
 	direction := getSearchDirection(anchorX, centerX)
@@ -1191,9 +1051,6 @@ func getSearchDirection(originX, centerX int) SearchDirection {
 // Useful for finding safe position before wall collision
 // Returns (x, y, reachedEnd) where reachedEnd=true if entire path is free
 func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask component.WallBlockMask) (int, int, bool) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	// Start must be free (caller's responsibility to ensure valid origin)
 	lastFreeX, lastFreeY := startX, startY
 
@@ -1241,9 +1098,6 @@ func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask compon
 // Uses Bresenham traversal, returns true if ANY intermediate cell is blocked
 // Endpoints are NOT checked - only path between them
 func (p *Position) IsPathBlocked(x0, y0, x1, y1 int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	if x0 == x1 && y0 == y1 {
 		return false
 	}
@@ -1294,9 +1148,6 @@ func (p *Position) IsPathBlocked(x0, y0, x1, y1 int, mask component.WallBlockMas
 
 // IsPointValidForOrbit checks if grid point is within bounds and not wall-blocked
 func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	config := p.world.Resources.Config
 	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 		return false
@@ -1305,12 +1156,7 @@ func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) 
 }
 
 // HasAreaLineOfSight checks if rectangular entity can traverse unobstructed from (x0,y0) to (x1,y1)
-// Entity bounding box (width×height) is centered at each intermediate path cell
-// Returns false if any intermediate position causes wall collision or exits map bounds
-// For 1×1 entities, delegates to point-based HasLineOfSight
 func (p *Position) HasAreaLineOfSight(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
 	return p.HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height, mask)
 }
 
@@ -1382,11 +1228,7 @@ func (p *Position) HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height int, m
 
 // HasAreaLineOfSightRotatable checks LOS with optional 90° rotation
 // Tries width×height first, then height×width if blocked
-// Heuristic for elongated entities that may rotate to fit through corridors
 func (p *Position) HasAreaLineOfSightRotatable(x0, y0, x1, y1, width, height int, mask component.WallBlockMask) bool {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
 	if p.HasAreaLineOfSightUnsafe(x0, y0, x1, y1, width, height, mask) {
 		return true
 	}

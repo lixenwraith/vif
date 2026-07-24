@@ -123,7 +123,9 @@ func (a *App) frame() bool {
 	var (
 		snapTime         engine.TimeResource
 		cursorX, cursorY int
+		renderCtx        render.RenderContext
 	)
+
 	a.world.RunSafe(func() {
 		if a.ctx.IsPaused.Load() {
 			// Keep wall-clock advancing so paused frames still animate
@@ -134,9 +136,11 @@ func (a *App) frame() bool {
 		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
 			cursorX, cursorY = pos.X, pos.Y
 		}
+		// Config (Map/Viewport/Camera/crop) is mutated under updateMutex by
+		// LevelSetup/reset handlers on the event-loop and tick goroutines;
+		// RenderContext must be built inside the same critical section
+		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY)
 	})
-
-	renderCtx := render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY)
 
 	if a.ctx.IsPaused.Load() {
 		// Pause overlay still renders

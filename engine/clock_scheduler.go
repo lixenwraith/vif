@@ -405,6 +405,8 @@ func (cs *ClockScheduler) processTick() {
 		return
 	}
 
+	var entityCount int
+
 	cs.world.RunSafe(func() {
 		now := cs.pausableClock.Now()
 
@@ -448,9 +450,14 @@ func (cs *ClockScheduler) processTick() {
 
 		// 7. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()
+
+		// 8. Snapshot store-derived stats while the lock is held
+		// Position has no internal locking; CountEntities outside this
+		// closure races removeAt on the event-loop/main goroutines
+		entityCount = cs.world.Positions.CountEntities()
 	})
 
-	// Increment ticks
+	// Lock-free / internally synchronized paths only below this line
 	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
 
 	// Update APM based on game time
@@ -460,6 +467,6 @@ func (cs *ClockScheduler) processTick() {
 	)
 
 	cs.statTicks.Store(int64(ticks))
-	cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
+	cs.statEntityCount.Store(int64(entityCount))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 }
