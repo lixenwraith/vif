@@ -1,8 +1,8 @@
 package render
 
 import (
-	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/engine"
 )
 
 type rendererEntry struct {
@@ -59,11 +59,10 @@ func (o *RenderOrchestrator) Resize(width, height int) {
 
 // RenderFrame executes the render pipeline: clear, render all, flush, show
 func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World) {
-	world.Lock()
-	defer world.Unlock()
-
+	// Buffer is orchestrator-owned; no lock needed for clear
 	o.buffer.Clear()
 
+	world.Lock()
 	for _, entry := range o.renderers {
 		// Skip if renderer implements VisibilityToggle and is not visible
 		if vt, ok := entry.renderer.(VisibilityToggle); ok && !vt.IsVisible() {
@@ -71,6 +70,8 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 		}
 		entry.renderer.Render(ctx, o.buffer)
 	}
+	world.Unlock()
 
+	// Terminal I/O outside the world lock: stalled terminal write mustn't block evel loop
 	o.buffer.FlushToTerminal(o.term)
 }
