@@ -187,7 +187,7 @@ func (r *HealthBarRenderer) isBarOOB(ctx render.RenderContext, barX, barY, barLe
 func (r *HealthBarRenderer) renderHealthBar(ctx render.RenderContext, buf *render.RenderBuffer, startX, startY, length int, ratio float64, position visual.HealthBarPosition) {
 	isVertical := position == visual.HealthBarLeft || position == visual.HealthBarRight
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		var mapX, mapY int
 		if isVertical {
 			mapX = startX

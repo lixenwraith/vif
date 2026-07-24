@@ -352,7 +352,7 @@ func (cs *ClockScheduler) dispatchOnePass() int {
 // dispatchAndProcessEvents settles pending events with iteration cap
 // Used by reset path where immediate settling is required
 func (cs *ClockScheduler) dispatchAndProcessEvents() {
-	for i := 0; i < parameter.EventLoopIterations; i++ {
+	for range parameter.EventLoopIterations {
 		if cs.dispatchOnePass() == 0 {
 			return
 		}

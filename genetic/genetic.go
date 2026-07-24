@@ -29,10 +29,7 @@ func (ts *TournamentSelector[S, F]) Select(pool *Pool[S, F], size int, rng *rand
 	poolSize := len(pool.Members)
 
 	// Validate tournament size
-	tournSize := ts.TournamentSize
-	if tournSize > poolSize {
-		tournSize = poolSize
-	}
+	tournSize := min(ts.TournamentSize, poolSize)
 	if tournSize < 1 {
 		tournSize = 2 // Default minimum
 	}
@@ -41,7 +38,7 @@ func (ts *TournamentSelector[S, F]) Select(pool *Pool[S, F], size int, rng *rand
 	for len(selected) < size {
 		// Create tournament bracket
 		tournament := make([]Candidate[S, F], tournSize)
-		for i := 0; i < tournSize; i++ {
+		for i := range tournSize {
 			tournament[i] = pool.Members[rng.IntN(poolSize)]
 		}
 
@@ -85,7 +82,7 @@ func (rs *RouletteSelector[S, F]) Select(pool *Pool[S, F], size int, rng *rand.R
 
 	// Select candidates based on roulette wheel
 	selected := make([]Candidate[S, F], size)
-	for i := 0; i < size; i++ {
+	for i := range size {
 		// Spin the wheel
 		spin := F(rng.Float64()) * totalScore
 
@@ -126,7 +123,7 @@ func (uc *UniformCombiner[S, T, F]) Combine(parents []Candidate[S, F], rng *rand
 	offspring2 := make(S, length)
 
 	// Uniform crossover - each position independently chosen
-	for i := 0; i < length; i++ {
+	for i := range length {
 		if rng.Float64() < uc.MixProbability {
 			offspring1[i] = parent1[i]
 			offspring2[i] = parent2[i]
@@ -176,7 +173,7 @@ func (nc *NPointCombiner[S, T, F]) Combine(parents []Candidate[S, F], rng *rand.
 	offspring2 := make(S, length)
 
 	useParent1 := true
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		start, end := points[i], points[i+1]
 		for j := start; j < end; j++ {
 			if useParent1 {
@@ -192,3 +189,4 @@ func (nc *NPointCombiner[S, T, F]) Combine(parents []Candidate[S, F], rng *rand.
 
 	return []S{offspring1, offspring2}
 }
+

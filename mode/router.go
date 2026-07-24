@@ -946,16 +946,10 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 		return true
 	}
 
-	n := intent.Count
-	if n < 1 {
-		n = 1
-	}
-	if n > r.undoCount {
-		n = r.undoCount
-	}
+	n := min(max(intent.Count, 1), r.undoCount)
 
 	var x, y int
-	for i := 0; i < n; i++ {
+	for range n {
 		r.undoHead = (r.undoHead - 1 + undoStackSize) % undoStackSize
 		r.undoCount--
 		x, y = r.undoRing[r.undoHead].x, r.undoRing[r.undoHead].y

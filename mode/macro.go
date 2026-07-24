@@ -193,7 +193,7 @@ func (m *MacroManager) Tick(now time.Time) []*input.Intent {
 	}
 
 	// Sort by start order (FIFO)
-	for i := 0; i < len(ready)-1; i++ {
+	for i := range len(ready) - 1 {
 		for j := i + 1; j < len(ready); j++ {
 			if ready[j].state.startOrder < ready[i].state.startOrder {
 				ready[i], ready[j] = ready[j], ready[i]
@@ -223,7 +223,7 @@ func (m *MacroManager) ActiveLabels() []rune {
 	for label, state := range m.active {
 		items = append(items, item{label, state.startOrder})
 	}
-	for i := 0; i < len(items)-1; i++ {
+	for i := range len(items) - 1 {
 		for j := i + 1; j < len(items); j++ {
 			if items[j].order < items[i].order {
 				items[i], items[j] = items[j], items[i]
@@ -246,3 +246,4 @@ func (m *MacroManager) Reset() {
 	m.active = make(map[rune]*PlaybackState)
 	m.startCounter = 0
 }
+

@@ -48,7 +48,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		relYCirc := vmath.ScaleToCircular(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
-		for i := 0; i < trailSteps; i++ {
+		for i := range trailSteps {
 			// Calculate progress for this segment
 			p := spiritComp.Progress - int64(i)*trailLag
 			if p < 0 {
@@ -86,7 +86,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			// --- Coloring & Fading ---
 
 			var c color.RGB
-			var alpha float64 = 1.0
+			var alpha = 1.0
 
 			if i == 0 {
 				// Head: color cycle through gradient based on progress

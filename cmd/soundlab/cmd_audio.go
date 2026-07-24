@@ -227,7 +227,7 @@ func cmdWhere(s *Session, a []string) error {
 		state = "running"
 	}
 	fmt.Fprintf(s.out, "bar %d step %d (%s)", bar, step, state)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		fmt.Fprintf(s.out, "  slot%d=%s", i, patName(s.eng.SlotPattern(i)))
 	}
 	fmt.Fprintln(s.out)

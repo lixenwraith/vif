@@ -138,7 +138,7 @@ func main() {
 			rng := rand.New(rand.NewSource(seed))
 			points := generateFractalPath(ox, oy, tx, ty, rng)
 
-			for i := 0; i < len(points)-1; i++ {
+			for i := range len(points) - 1 {
 				p1, p2 := points[i], points[i+1]
 				drawLineBg(buf, p1.X, p1.Y, p2.X, p2.Y, c, alpha)
 			}
@@ -211,10 +211,7 @@ func generateFractalPath(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X, Y int 
 	segments := 2
 	if distSq > 16 {
 		dist := int(math.Sqrt(float64(distSq)))
-		segments = int(float64(dist) / SegmentDensity)
-		if segments < MinSegments {
-			segments = MinSegments
-		}
+		segments = max(int(float64(dist)/SegmentDensity), MinSegments)
 	}
 
 	points := make([]struct{ X, Y int }, 0, segments+1)
@@ -277,10 +274,7 @@ func generateFractalPathSubPixel(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X
 	segments := 4
 	if distSq > 64 {
 		dist := int(math.Sqrt(float64(distSq)))
-		segments = int(float64(dist) / (SegmentDensity * 1.5))
-		if segments < MinSegments*2 {
-			segments = MinSegments * 2
-		}
+		segments = max(int(float64(dist)/(SegmentDensity*1.5)), MinSegments*2)
 	}
 
 	points := make([]struct{ X, Y int }, 0, segments+1)
@@ -313,7 +307,7 @@ func generateFractalPathSubPixel(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X
 func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		traceSubPixelLine(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
 
@@ -332,7 +326,7 @@ func drawSubPixelBoltFgOnly(buf *render.RenderBuffer, points []struct{ X, Y int 
 func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		traceSubPixelLine(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
 
@@ -367,7 +361,7 @@ func drawSubPixelBoltWithGlow(buf *render.RenderBuffer, points []struct{ X, Y in
 func drawSubPixelBoltWithBgBlend(buf *render.RenderBuffer, points []struct{ X, Y int }, c color.RGB, alpha float64) {
 	cellHits := make(map[uint64]uint8)
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		traceSubPixelLine(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
 

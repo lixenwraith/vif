@@ -82,7 +82,7 @@ func findPrevEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
-			for i := 0; i < count; i++ {
+			for i := range count {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
 					break
@@ -108,7 +108,7 @@ func findNextEmptyLine(ctx *engine.GameContext, cursorY int) int {
 		// Scan row; stop early if any interactable entity is found
 		for x := 0; x < ctx.World.Resources.Config.MapWidth && rowEmpty; x++ {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
-			for i := 0; i < count; i++ {
+			for i := range count {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					rowEmpty = false
 					break
@@ -328,7 +328,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
 		for x := ctx.World.Resources.Config.MapWidth - 1; x >= 0; x-- {
 			count := ctx.World.Positions.GetAllEntitiesAtInto(x, y, buf[:])
-			for i := 0; i < count; i++ {
+			for i := range count {
 				if buf[i] != 0 && glyphStore.HasEntity(buf[i]) {
 					if x > rightmost {
 						rightmost = x
@@ -345,7 +345,7 @@ func findLineEndInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBoun
 // findFirstNonWhitespaceInBounds returns leftmost non-whitespace position in bounds
 func findFirstNonWhitespaceInBounds(ctx *engine.GameContext, bounds engine.PingAbsoluteBounds) (int, int) {
 	for y := bounds.MinY; y <= bounds.MaxY; y++ {
-		for x := 0; x < ctx.World.Resources.Config.MapWidth; x++ {
+		for x := range ctx.World.Resources.Config.MapWidth {
 			if getCharacterTypeAt(ctx, x, y) != CharTypeSpace {
 				return x, y
 			}

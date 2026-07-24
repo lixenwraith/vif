@@ -125,7 +125,7 @@ func (s *ExplosionSystem) Update() {
 	dtNano := s.world.Resources.Time.DeltaTimeNano()
 
 	write := 0
-	for i := 0; i < transRes.ExplosionCount; i++ {
+	for i := range transRes.ExplosionCount {
 		transRes.ExplosionBacking[i].Age += dtNano
 		if transRes.ExplosionBacking[i].Age < transRes.ExplosionDurNano {
 			if write != i {
@@ -165,7 +165,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 	centerY := vmath.FromInt(y)
 
 	// Merge check - only merge same type
-	for i := 0; i < transRes.ExplosionCount; i++ {
+	for i := range transRes.ExplosionCount {
 		c := &transRes.ExplosionBacking[i]
 		if c.Type != explosionType {
 			continue
@@ -359,4 +359,3 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 		s.statConverted.Add(int64(len(s.entityBuf)))
 	}
 }
-

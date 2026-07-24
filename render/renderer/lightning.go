@@ -201,7 +201,7 @@ func (r *LightningRenderer) renderLightningTrueColor(ctx render.RenderContext, b
 	// Key: packed (x,y), Value: quadrant bitmap
 	cellHits := make(map[uint64]uint8)
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		r.traceSubPixelLineQuadrant(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
 
@@ -300,7 +300,7 @@ func (r *LightningRenderer) renderLightning256(ctx render.RenderContext, buf *re
 	// Key: packed (x,y), Value: half bitmap (bit0=top, bit1=bottom)
 	cellHits := make(map[uint64]uint8)
 
-	for i := 0; i < len(points)-1; i++ {
+	for i := range len(points) - 1 {
 		r.traceSubPixelLineHalf(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 	}
 

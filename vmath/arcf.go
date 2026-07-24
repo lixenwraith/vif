@@ -17,7 +17,7 @@ func SampleEllipseGridF(centerX, centerY int, radiusX, radiusY float64, count in
 	angleStep := TwoPi / float64(count)
 	cx, cy := CenteredFromGridF(centerX, centerY)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		angle := float64(i) * angleStep
 		px := cx + math.Cos(angle)*radiusX
 		py := cy + math.Sin(angle)*radiusY
@@ -63,7 +63,7 @@ func FindUnblockedArcsF(blocked []bool) []ArcSegmentF {
 	inSegment := false
 	segStart := 0
 
-	for offset := 0; offset < n; offset++ {
+	for offset := range n {
 		i := (firstBlocked + offset) % n
 
 		if !blocked[i] && !inSegment {
@@ -142,7 +142,7 @@ func DistributeAnglesF(segments []ArcSegmentF, count int) []float64 {
 	startOffset := spacing / 2.0
 
 	angles := make([]float64, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		arcPos := math.Mod(startOffset+float64(i)*spacing, totalArc)
 		angles[i] = arcPositionToAngleF(segments, arcPos)
 	}

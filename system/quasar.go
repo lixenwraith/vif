@@ -283,8 +283,8 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < parameter.QuasarHeight; row++ {
-		for col := 0; col < parameter.QuasarWidth; col++ {
+	for row := range parameter.QuasarHeight {
+		for col := range parameter.QuasarWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -369,8 +369,8 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	// Build member entities
 	members := make([]component.MemberEntry, 0, parameter.QuasarWidth*parameter.QuasarHeight)
 
-	for row := 0; row < parameter.QuasarHeight; row++ {
-		for col := 0; col < parameter.QuasarWidth; col++ {
+	for row := range parameter.QuasarHeight {
+		for col := range parameter.QuasarWidth {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 
@@ -702,8 +702,8 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	topLeftX := headerX - parameter.QuasarHeaderOffsetX
 	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
-	for row := 0; row < parameter.QuasarHeight; row++ {
-		for col := 0; col < parameter.QuasarWidth; col++ {
+	for row := range parameter.QuasarHeight {
+		for col := range parameter.QuasarWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 

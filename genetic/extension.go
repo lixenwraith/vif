@@ -19,7 +19,7 @@ type MonteCarloInitializer[S Solution] struct {
 
 // Generate creates a solution using Monte Carlo sampling
 func (mci *MonteCarloInitializer[S]) Generate(rng *rand.Rand) S {
-	for attempt := 0; attempt < mci.MaxAttempts; attempt++ {
+	for range mci.MaxAttempts {
 		candidate := mci.SampleSpace(rng)
 		if mci.Constraints == nil || mci.Constraints(candidate) {
 			return candidate
@@ -78,3 +78,4 @@ func (gp *GaussianPerturbator[S, F]) Perturb(solution *S, rate float64, rng *ran
 		}
 	}
 }
+

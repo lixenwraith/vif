@@ -57,8 +57,8 @@ func NewTowerRenderer(gameCtx *engine.GameContext) *TowerRenderer {
 }
 
 func (r *TowerRenderer) buildColorLUTs() {
-	for t := 0; t < int(component.TowerTypeCount); t++ {
-		for i := 0; i < 256; i++ {
+	for t := range int(component.TowerTypeCount) {
+		for i := range 256 {
 			ratio := float64(i) / 255.0
 			r.colorLUTs[t][i] = computeTowerColorEntry(t, ratio)
 		}
@@ -108,25 +108,13 @@ func (r *TowerRenderer) isActiveTarget(headerEntity core.Entity) bool {
 		if !g.Valid || g.Type != component.TargetEntity {
 			continue
 		}
-		for j := 0; j < g.Count; j++ {
+		for j := range g.Count {
 			if g.Targets[j].Entity == headerEntity {
 				return true
 			}
 		}
 	}
 
-	// for i := range r.gameCtx.World.Resources.Target.Groups {
-	// 	g := &r.gameCtx.World.Resources.Target.Groups[i]
-	// 	if !g.Valid || g.Type != component.TargetEntity {
-	// 		continue
-	// 	}
-	// 	for j := 0; j < g.Count; j++ {
-	// 		if g.Targets[j].Entity == headerEntity {
-	// 			return true
-	// 		}
-	// 	}
-	// }
-	//
 	return false
 }
 

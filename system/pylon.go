@@ -291,7 +291,7 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 
 	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
 
-	for attempt := 0; attempt < parameter.PylonSpawnMaxAttempts; attempt++ {
+	for range parameter.PylonSpawnMaxAttempts {
 		cx := minCX + rng.Intn(rangeX)
 		cy := minCY + rng.Intn(rangeY)
 		lastCX, lastCY = cx, cy
@@ -500,4 +500,3 @@ func (s *PylonSystem) terminateAll() {
 		s.terminatePylon(entity)
 	}
 }
-

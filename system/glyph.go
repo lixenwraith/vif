@@ -1,7 +1,6 @@
 package system
 
 import (
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -237,16 +236,6 @@ func (s *GlyphSystem) getNextBlock() content.CodeBlock {
 	return block
 }
 
-// hasBracesInBlock checks if a block contains braces
-func (s *GlyphSystem) hasBracesInBlock(lines []string) bool {
-	for _, line := range lines {
-		if strings.Contains(line, "{") || strings.Contains(line, "}") {
-			return true
-		}
-	}
-	return false
-}
-
 // updateCensus iterates all glyph entities and counts types/levels
 // Called once per spawn check, O(n)
 func (s *GlyphSystem) updateCensus() {
@@ -336,7 +325,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 
 	// Try up to MaxPlacementTries times to find a valid position
-	for attempt := 0; attempt < parameter.MaxPlacementTries; attempt++ {
+	for range parameter.MaxPlacementTries {
 		// Random row selection
 		// TODO: convert to fast rand
 		row := s.rng.Intn(config.MapHeight)
@@ -358,7 +347,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		// Check for overlaps
 		hasOverlap := false
-		for i := 0; i < lineLength; i++ {
+		for i := range lineLength {
 			if s.world.Positions.IsBlocked(startCol+i, row, component.WallBlockSpawn) {
 				hasOverlap = true
 				break
@@ -370,7 +359,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		if !ok {
 			return false
 		}
-		for i := 0; i < lineLength; i++ {
+		for i := range lineLength {
 			col := startCol + i
 			// if math.Abs(float64(col-cursorPos.X)) <= parameter.CursorExclusionX &&
 			// 	math.Abs(float64(row-cursorPos.Y)) <= parameter.CursorExclusionY {
@@ -396,7 +385,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 
 		entities := make([]entityData, 0, lineLength)
 
-		for i := 0; i < lineLength; i++ {
+		for i := range lineLength {
 			// Skip space characters - don't create entities for them
 			if lineRunes[i] == ' ' {
 				continue

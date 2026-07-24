@@ -275,7 +275,7 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		return -1, -1
 	}
 
-	for attempt := 0; attempt < parameter.NuggetMaxAttempts; attempt++ {
+	for range parameter.NuggetMaxAttempts {
 		x := s.rng.Intn(config.MapWidth)
 		y := s.rng.Intn(config.MapHeight)
 

@@ -27,7 +27,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	inputMode := r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode()
 
 	// --- Row indicators (left gutter) ---
-	for y := 0; y < ctx.ViewportHeight; y++ {
+	for y := range ctx.ViewportHeight {
 		relativeNum := y - cursorVY
 		absRelative := relativeNum
 		if absRelative < 0 {
@@ -71,7 +71,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// --- Column indicators (bottom row) ---
 	indicatorY := ctx.GameYOffset + ctx.ViewportHeight
 
-	for x := 0; x < ctx.ViewportWidth; x++ {
+	for x := range ctx.ViewportWidth {
 		screenX := ctx.GameXOffset + x
 		relativeCol := x - cursorVX
 
@@ -106,8 +106,7 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Clear line number area for indicator row
-	for i := 0; i < ctx.GameXOffset; i++ {
+	for i := range ctx.GameXOffset {
 		buf.SetWithBg(i, indicatorY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 }
-

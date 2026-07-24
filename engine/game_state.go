@@ -143,7 +143,7 @@ func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time)
 
 	// Sum last 5 entries
 	const burstWindow = 5
-	for i := 0; i < burstWindow; i++ {
+	for range burstWindow {
 		burstTotal += gs.apmHistory[idx]
 		idx--
 		if idx < 0 {

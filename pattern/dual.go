@@ -14,8 +14,8 @@ func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode
 
 	cells := make([]PatternCell, 0, len(img.Cells))
 
-	for y := 0; y < img.Height; y++ {
-		for x := 0; x < img.Width; x++ {
+	for y := range img.Height {
+		for x := range img.Width {
 			idx := y*img.Width + x
 			src := img.Cells[idx]
 
@@ -68,4 +68,3 @@ func LoadDualModePattern(path string, colorMode terminal.ColorMode) (PatternResu
 	}
 	return FromDualModeImage(img, colorMode), nil
 }
-

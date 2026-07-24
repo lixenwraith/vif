@@ -341,7 +341,7 @@ func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid boo
 	bestDistSq := -1
 	bestX, bestY := state.Targets[0].PosX, state.Targets[0].PosY
 
-	for i := 0; i < state.Count; i++ {
+	for i := range state.Count {
 		t := state.Targets[i]
 		dx := ex - t.PosX
 		dy := ey - t.PosY

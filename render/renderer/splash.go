@@ -51,7 +51,7 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 		} else {
 			// Transient: render content directly
-			for i := 0; i < splash.Length; i++ {
+			for i := range splash.Length {
 				charX := anchorX + i*parameter.SplashCharWidth
 				r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
 			}

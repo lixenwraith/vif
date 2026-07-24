@@ -275,8 +275,8 @@ func drawShieldPreview(startX, startY, w, h, cx, cy int, shieldColor, bgColor co
 	invRxSq := 1.0 / (state.shieldRadiusX * state.shieldRadiusX)
 	invRySq := 1.0 / (state.shieldRadiusY * state.shieldRadiusY)
 
-	for y := 0; y < h; y++ {
-		for x := 0; x < w; x++ {
+	for y := range h {
+		for x := range w {
 			screenX := startX + x
 			screenY := startY + y
 
@@ -344,7 +344,7 @@ func drawTrailEffect(startY int, fg, bg color.RGB) {
 
 	// TC strip
 	drawText(1, startY, "TC:", fg, bg)
-	for i := 0; i < state.trailLength; i++ {
+	for i := range state.trailLength {
 		opacity := 1.0 - (float64(i) / float64(state.trailLength))
 		if opacity < 0 {
 			opacity = 0
@@ -357,7 +357,7 @@ func drawTrailEffect(startY int, fg, bg color.RGB) {
 
 	// 256 strip
 	drawText(1, startY, "256:", fg, bg)
-	for i := 0; i < state.trailLength; i++ {
+	for i := range state.trailLength {
 		opacity := 1.0 - (float64(i) / float64(state.trailLength))
 		if opacity < 0 {
 			opacity = 0
@@ -449,7 +449,7 @@ func drawHeatEffect(startY int, fg, bg color.RGB) {
 	gradientW := 60
 	// TC gradient
 	drawText(1, startY, "TC:", fg, bgColor)
-	for i := 0; i < gradientW; i++ {
+	for i := range gradientW {
 		progress := float64(i+1) / float64(gradientW)
 		c := getHeatColor(progress)
 		buf.SetWithBg(5+i, startY, ' ', c, c)
@@ -458,7 +458,7 @@ func drawHeatEffect(startY int, fg, bg color.RGB) {
 
 	// 256 gradient
 	drawText(1, startY, "256:", fg, bgColor)
-	for i := 0; i < gradientW; i++ {
+	for i := range gradientW {
 		progress := float64(i+1) / float64(gradientW)
 		c := getHeatColor(progress)
 		idx := color.RGBTo256(c)

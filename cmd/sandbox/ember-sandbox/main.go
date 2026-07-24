@@ -141,7 +141,7 @@ func newEmber(screenW, screenH int) *Ember {
 		RingSpeed:   1.0,
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		tilt := (float64(i) + 0.5) * (math.Pi / 3.5)
 		azimuth := float64(i) * (2.0 * math.Pi / 3)
 
@@ -629,4 +629,3 @@ func main() {
 
 	term.Fini()
 }
-

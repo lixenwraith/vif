@@ -35,7 +35,7 @@ func (r *CleanerRenderer) buildGradients() {
 	r.gradientNegative = make([]color.RGB, length)
 	r.gradientNugget = make([]color.RGB, length)
 
-	for i := 0; i < length; i++ {
+	for i := range length {
 		opacity := 1.0 - (float64(i) / float64(length))
 		if opacity < 0 {
 			opacity = 0
@@ -85,14 +85,11 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			if ratio < 0 {
 				ratio = 0
 			}
-			visibleLen = int(float64(cleaner.TrailLen) * ratio)
-			if visibleLen < 1 {
-				visibleLen = 1
-			}
+			visibleLen = max(int(float64(cleaner.TrailLen)*ratio), visibleLen)
 		}
 
 		// Iterate trail ring buffer: index 0 is head (brightest), last is tail (faintest)
-		for i := 0; i < cleaner.TrailLen; i++ {
+		for i := range cleaner.TrailLen {
 			// Walk backwards from head in the ring buffer
 			idx := (cleaner.TrailHead - i + parameter.CleanerTrailLength) % parameter.CleanerTrailLength
 			point := cleaner.TrailRing[idx]
@@ -103,14 +100,10 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 				continue
 			}
 
-			gradientIndex := i
-			if gradientIndex > maxGradientIdx {
-				gradientIndex = maxGradientIdx
-			}
+			gradientIndex := min(i, maxGradientIdx)
 
 			// Cleaners are opaque (solid background)
 			buf.SetWithBg(screenX, screenY, cleaner.Rune, gradient[gradientIndex], visual.RgbBackground)
 		}
 	}
 }
-

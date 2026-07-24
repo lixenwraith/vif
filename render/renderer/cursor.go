@@ -56,7 +56,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var glyphEntity core.Entity
 	var sigilEntity core.Entity
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		e := entitiesBuf[i]
 
 		// Priority 1: Glyph (Interactable)
@@ -109,4 +109,3 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// 5. Render
 	buf.SetWithBg(screenX, screenY, charAtCursor, charFgColor, cursorBgColor)
 }
-

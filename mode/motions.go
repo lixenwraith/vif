@@ -17,10 +17,7 @@ func MotionLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if r == 0 {
 			r = 1
 		}
-		nextX := endX - r
-		if nextX < 0 {
-			nextX = 0
-		}
+		nextX := max(endX-r, 0)
 
 		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, nextX, y) {
@@ -55,10 +52,7 @@ func MotionDown(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if r == 0 {
 			r = 1
 		}
-		nextY := endY + r
-		if nextY > maxY {
-			nextY = maxY
-		}
+		nextY := min(endY+r, maxY)
 
 		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, x, nextY) {
@@ -91,10 +85,7 @@ func MotionUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if r == 0 {
 			r = 1
 		}
-		nextY := endY - r
-		if nextY < 0 {
-			nextY = 0
-		}
+		nextY := max(endY-r, 0)
 
 		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, x, nextY) {
@@ -128,10 +119,7 @@ func MotionRight(ctx *engine.GameContext, x, y, count int) MotionResult {
 		if r == 0 {
 			r = 1
 		}
-		nextX := endX + r
-		if nextX > maxX {
-			nextX = maxX
-		}
+		nextX := min(endX+r, maxX)
 
 		// If full step blocked, scan backward for closest valid position
 		if isCursorBlocked(ctx, nextX, y) {
@@ -159,7 +147,7 @@ func MotionWordForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findNextWordStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -181,7 +169,7 @@ func MotionWORDForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findNextWORDStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -203,7 +191,7 @@ func MotionWordEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findWordEndInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -225,7 +213,7 @@ func MotionWORDEnd(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findWORDEndInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -247,7 +235,7 @@ func MotionWordBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findPrevWordStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -269,7 +257,7 @@ func MotionWORDBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	bounds := ctx.World.GetPingAbsoluteBounds()
 	endX, endY := x, y
 
-	for i := 0; i < count; i++ {
+	for range count {
 		newX, newY := findPrevWORDStartInBounds(ctx, endX, endY, bounds)
 		if newX == endX && newY == endY {
 			break
@@ -414,7 +402,7 @@ func MotionScreenHorizontalMid(ctx *engine.GameContext, x, y, count int) MotionR
 // MotionParaBack implements '{' motion
 func MotionParaBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
-	for i := 0; i < count; i++ {
+	for range count {
 		prev := endY
 		endY = findPrevEmptyLine(ctx, endY)
 		if endY == prev {
@@ -432,7 +420,7 @@ func MotionParaBack(ctx *engine.GameContext, x, y, count int) MotionResult {
 // MotionParaForward implements '}' motion
 func MotionParaForward(ctx *engine.GameContext, x, y, count int) MotionResult {
 	endY := y
-	for i := 0; i < count; i++ {
+	for range count {
 		prev := endY
 		endY = findNextEmptyLine(ctx, endY)
 		if endY == prev {
@@ -730,10 +718,7 @@ func MotionTillBack(ctx *engine.GameContext, x, y, count int, char rune) MotionR
 // MotionHalfPageLeft implements 'H' motion
 func MotionHalfPageLeft(ctx *engine.GameContext, x, y, count int) MotionResult {
 	halfWidth := ctx.World.Resources.Config.ViewportWidth / 2
-	endX := x - (halfWidth * count)
-	if endX < 0 {
-		endX = 0
-	}
+	endX := max(x-(halfWidth*count), 0)
 
 	// Scan forward to find last unblocked position
 	for endX < x && isCursorBlocked(ctx, endX, y) {
@@ -773,10 +758,7 @@ func MotionHalfPageRight(ctx *engine.GameContext, x, y, count int) MotionResult 
 // MotionHalfPageUp implements 'K' and PgUp motion
 func MotionHalfPageUp(ctx *engine.GameContext, x, y, count int) MotionResult {
 	halfHeight := ctx.World.Resources.Config.ViewportHeight / 2
-	endY := y - (halfHeight * count)
-	if endY < 0 {
-		endY = 0
-	}
+	endY := max(y-(halfHeight*count), 0)
 
 	// Scan forward to find last unblocked position
 	for endY < y && isCursorBlocked(ctx, x, endY) {
@@ -833,7 +815,7 @@ func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) Mot
 		return glyphStore.HasEntity(e)
 	}
 
-	for i := 0; i < count; i++ {
+	for range count {
 		// Use shared engine logic for consistency
 		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, filter)
 		if !found {
@@ -885,7 +867,7 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 	endX, endY := x, y
 	found := false
 
-	for i := 0; i < count; i++ {
+	for range count {
 		var nextX, nextY int
 		var ok bool
 		// Use the centralized engine logic
@@ -906,3 +888,4 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		Valid: found,
 	}
 }
+

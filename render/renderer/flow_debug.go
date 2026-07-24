@@ -55,8 +55,8 @@ func (r *FlowFieldDebugRenderer) renderFlowField(ctx render.RenderContext, buf *
 		maxDist = 1
 	}
 
-	for mapY := 0; mapY < field.Height; mapY++ {
-		for mapX := 0; mapX < field.Width; mapX++ {
+	for mapY := range field.Height {
+		for mapX := range field.Width {
 			vx, vy, visible := ctx.MapToViewport(mapX, mapY)
 			if !visible {
 				continue
@@ -127,8 +127,8 @@ func (r *FlowFieldDebugRenderer) renderPassabilityGrid(ctx render.RenderContext,
 
 	w, h := pass.GetDimensions()
 
-	for mapY := 0; mapY < h; mapY++ {
-		for mapX := 0; mapX < w; mapX++ {
+	for mapY := range h {
+		for mapX := range w {
 			vx, vy, visible := ctx.MapToViewport(mapX, mapY)
 			if !visible {
 				continue
@@ -164,8 +164,8 @@ func (r *FlowFieldDebugRenderer) renderCompositeFlowField(ctx render.RenderConte
 		maxDist = 1
 	}
 
-	for mapY := 0; mapY < field.Height; mapY++ {
-		for mapX := 0; mapX < field.Width; mapX++ {
+	for mapY := range field.Height {
+		for mapX := range field.Width {
 			vx, vy, visible := ctx.MapToViewport(mapX, mapY)
 			if !visible {
 				continue
@@ -220,4 +220,3 @@ func (r *FlowFieldDebugRenderer) findMaxDistance(field *navigation.FlowField) in
 	}
 	return maxDist
 }
-

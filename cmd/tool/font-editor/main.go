@@ -119,7 +119,7 @@ func NewEditor(term terminal.Terminal) *Editor {
 }
 
 func (e *Editor) loadAssets() {
-	for i := 0; i < len(asset.SplashFont); i++ {
+	for i := range len(asset.SplashFont) {
 		r := rune(MinChar + i)
 		e.glyphs[r] = asset.SplashFont[i]
 		e.original[r] = asset.SplashFont[i]
@@ -302,7 +302,7 @@ func (e *Editor) handleRuneInput(r rune) {
 		e.setStatus("Cleared glyph", 1)
 	case 'i':
 		g := e.glyphs[e.current]
-		for row := 0; row < GridRows; row++ {
+		for row := range GridRows {
 			g[row] = ^g[row]
 		}
 		e.glyphs[e.current] = g
@@ -455,7 +455,7 @@ func (e *Editor) moveCursor(dx, dy int) {
 
 func (e *Editor) shiftLeft() {
 	g := e.glyphs[e.current]
-	for r := 0; r < GridRows; r++ {
+	for r := range GridRows {
 		g[r] = g[r] << 1
 	}
 	e.glyphs[e.current] = g
@@ -463,7 +463,7 @@ func (e *Editor) shiftLeft() {
 
 func (e *Editor) shiftRight() {
 	g := e.glyphs[e.current]
-	for r := 0; r < GridRows; r++ {
+	for r := range GridRows {
 		g[r] = g[r] >> 1
 	}
 	e.glyphs[e.current] = g
@@ -472,7 +472,7 @@ func (e *Editor) shiftRight() {
 func (e *Editor) shiftUp() {
 	g := e.glyphs[e.current]
 	first := g[0]
-	for r := 0; r < GridRows-1; r++ {
+	for r := range GridRows - 1 {
 		g[r] = g[r+1]
 	}
 	g[GridRows-1] = first
@@ -491,9 +491,9 @@ func (e *Editor) shiftDown() {
 
 func (e *Editor) flipHorizontal() {
 	g := e.glyphs[e.current]
-	for r := 0; r < GridRows; r++ {
+	for r := range GridRows {
 		var newVal uint16
-		for c := 0; c < GridCols; c++ {
+		for c := range GridCols {
 			if (g[r] & (1 << (15 - c))) != 0 {
 				// Write to mirrored MSB-aligned position
 				newVal |= 1 << (15 - (GridCols - 1 - c))
@@ -506,7 +506,7 @@ func (e *Editor) flipHorizontal() {
 
 func (e *Editor) flipVertical() {
 	g := e.glyphs[e.current]
-	for r := 0; r < GridRows/2; r++ {
+	for r := range GridRows / 2 {
 		g[r], g[GridRows-1-r] = g[GridRows-1-r], g[r]
 	}
 	e.glyphs[e.current] = g
@@ -573,7 +573,7 @@ func (e *Editor) exportAllGlyphs() {
 	var buf bytes.Buffer
 	buf.WriteString("var SplashFont = [95][12]uint16{\n")
 
-	for i := 0; i < 95; i++ {
+	for i := range 95 {
 		r := rune(MinChar + i)
 		g := e.glyphs[r]
 

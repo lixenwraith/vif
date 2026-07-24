@@ -252,7 +252,7 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 
 	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
 
-	for attempt := 0; attempt < parameter.TowerSpawnMaxAttempts; attempt++ {
+	for range parameter.TowerSpawnMaxAttempts {
 		cx := minCX + rng.Intn(rangeX)
 		cy := minCY + rng.Intn(rangeY)
 		lastCX, lastCY = cx, cy

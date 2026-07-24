@@ -136,8 +136,7 @@ func checkKeys(at string, v any, t reflect.Type) error {
 			return nil
 		}
 		fields := make(map[string]reflect.Type, t.NumField())
-		for i := 0; i < t.NumField(); i++ {
-			f := t.Field(i)
+		for f := range t.Fields() {
 			if f.PkgPath != "" {
 				continue
 			}

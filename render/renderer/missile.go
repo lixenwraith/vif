@@ -69,7 +69,7 @@ func (r *MissileRenderer) renderMissileTrueColor(
 
 	prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 
-	for i := 0; i < missile.TrailLen; i++ {
+	for i := range missile.TrailLen {
 		idx := (missile.TrailHead - 1 - i + component.TrailCapacity) % component.TrailCapacity
 		pt := &missile.Trail[idx]
 
@@ -190,7 +190,7 @@ func (r *MissileRenderer) renderMissile256(
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
 
-	for i := 0; i < missile.TrailLen; i++ {
+	for i := range missile.TrailLen {
 		idx := (missile.TrailHead - missile.TrailLen + i + component.TrailCapacity) % component.TrailCapacity
 		pt := &missile.Trail[idx]
 

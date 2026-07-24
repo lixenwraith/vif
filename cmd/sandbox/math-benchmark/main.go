@@ -36,14 +36,14 @@ func benchMagnitude() {
 
 	start := time.Now()
 	var rQ int64
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		rQ = vmath.Magnitude(dx, dy)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rF float64
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		rF = math.Sqrt(dxF*dxF + dyF*dyF)
 	}
 	floatTime := time.Since(start)
@@ -58,14 +58,14 @@ func benchMagnitudeApprox() {
 
 	start := time.Now()
 	var rQ int64
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		rQ = vmath.MagnitudeApprox(dx, dy)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rF float64
-	for i := 0; i < iterations; i++ {
+	for i := range iterations {
 		rF = math.Sqrt(dxF*dxF + dyF*dyF)
 	}
 	floatTime := time.Since(start)
@@ -81,14 +81,14 @@ func benchClampMagnitude() {
 
 	start := time.Now()
 	var rxQ, ryQ int64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		rxQ, ryQ = vmath.ClampMagnitude(x, y, maxMag)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rxF, ryF float64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		mag := math.Sqrt(xF*xF + yF*yF)
 		if mag > maxMagF {
 			scale := maxMagF / mag
@@ -109,14 +109,14 @@ func benchNormalize2D() {
 
 	start := time.Now()
 	var nxQ, nyQ int64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		nxQ, nyQ = vmath.Normalize2D(x, y)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var nxF, nyF float64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		inv := 1.0 / math.Sqrt(xF*xF+yF*yF)
 		nxF, nyF = xF*inv, yF*inv
 	}
@@ -132,14 +132,14 @@ func benchV3Normalize() {
 
 	start := time.Now()
 	var rQ vmath.Vec3
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		rQ = vmath.V3Normalize(v)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rxF, ryF, rzF float64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		inv := 1.0 / math.Sqrt(xF*xF+yF*yF+zF*zF)
 		rxF, ryF, rzF = xF*inv, yF*inv, zF*inv
 	}
@@ -157,14 +157,14 @@ func benchMulDiv() {
 
 	start := time.Now()
 	var rQ int64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		rQ = vmath.MulDiv(a, b, c)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rF float64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		rF = (aF * bF) / cF
 	}
 	floatTime := time.Since(start)
@@ -186,14 +186,14 @@ func benchOrbitalDamp() {
 
 	start := time.Now()
 	var nvxQ, nvyQ int64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		nvxQ, nvyQ = physics.OrbitalDamp(vx, vy, dx, dy, damping, dt)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var nvxF, nvyF float64
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		// Mutate input slightly to prevent compiler deleting the loop
 		dxF += 0.00001
 
@@ -221,14 +221,14 @@ func benchCapSpeed() {
 	maxSpeedF := 50.0
 
 	start := time.Now()
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		vx, vy := vmath.FromFloat(100.0), vmath.FromFloat(100.0)
 		vx, vy = physics.CapSpeed(vx, vy, maxSpeed)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
-	for i := 0; i < iterations; i++ {
+	for range iterations {
 		vxF, vyF := 100.0, 100.0
 		magSq := vxF*vxF + vyF*vyF
 		maxSq := maxSpeedF * maxSpeedF
@@ -263,7 +263,7 @@ func benchElasticCollision3D() {
 
 	start := time.Now()
 	var collidedQ bool
-	for i := 0; i < iters; i++ {
+	for i := range iters {
 		// Copy base values each iteration (simulates real usage)
 		posA, posB := posABase, posBBase
 		velA, velB := velABase, velBBase
@@ -278,7 +278,7 @@ func benchElasticCollision3D() {
 
 	start = time.Now()
 	var collidedF bool
-	for i := 0; i < iters; i++ {
+	for i := range iters {
 		posBxVar := posBxF + float64(i&0xFF)*0.001
 
 		deltaX := posBxVar - posAxF
@@ -324,3 +324,4 @@ func printResult(name string, q32Time, floatTime time.Duration) {
 	ratio := float64(q32Time) / float64(floatTime)
 	fmt.Printf("%-28s %14s %14s %9.2fx\n", name, q32Time, floatTime, ratio)
 }
+

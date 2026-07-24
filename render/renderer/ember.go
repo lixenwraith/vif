@@ -164,7 +164,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 	// Compute ring rotation angles and cache trig values
 	gameTimeF := float64(p.gameTime) / visual.NanoPerSecondF
 	baseSpeed := p.params.RingSpeed
-	for i := 0; i < visual.EmberRingCount; i++ {
+	for i := range visual.EmberRingCount {
 		effectiveSpeed := vmath.Mul(baseSpeed, visual.EmberRingVelocities[i])
 		phase := (p.gameTime * effectiveSpeed) / visual.NanoPerSecond
 		angle := vmath.NormalizeAngle(phase + visual.EmberRingPhaseOffsets[i])
@@ -177,7 +177,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 	}
 
 	// Precalculate Jagged Noise & Geometric Divisions for the frame
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		theta := (int64(i) * vmath.Scale) / 256
 		disp := p.computeJaggedDisplacement(theta)
 		adjRx := p.radiusX + disp
@@ -232,7 +232,7 @@ func (p *EmberPainter) buildColorLUT() {
 	params := &p.params
 	colors := &p.colors
 
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		normDist := (int64(i) * vmath.Scale) / 255
 
 		coreT := vmath.Scale - vmath.Mul(normDist, params.CoreFalloff)
@@ -272,7 +272,7 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 	dzF := math.Sqrt(math.Max(0, 1.0-normDistF*normDistF))
 
 	var maxVis float64
-	for i := 0; i < visual.EmberRingCount; i++ {
+	for i := range visual.EmberRingCount {
 		rs := &p.ringStates[i]
 		norms := &visual.EmberRingNormalsF[i]
 
@@ -406,7 +406,7 @@ func (p *EmberPainter) powFixed(x, n int64) int64 {
 	result := vmath.Scale
 	base := x
 
-	for i := int64(0); i < intN; i++ {
+	for range intN {
 		result = vmath.Mul(result, base)
 	}
 
@@ -427,4 +427,3 @@ func scaleRGB(c color.RGB, factor int64) color.RGB {
 		B: uint8((int64(c.B) * factor) >> vmath.Shift),
 	}
 }
-

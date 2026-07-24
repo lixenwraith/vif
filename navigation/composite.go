@@ -42,8 +42,8 @@ func (p *CompositePassability) Resize(width, height int) {
 // Compute rebuilds passability grid from wall state
 // isWall: returns true if cell blocks composite movement
 func (p *CompositePassability) Compute(isWall WallChecker) {
-	for y := 0; y < p.Height; y++ {
-		for x := 0; x < p.Width; x++ {
+	for y := range p.Height {
+		for x := range p.Width {
 			p.Valid[y*p.Width+x] = p.canOccupy(x, y, isWall)
 		}
 	}
@@ -62,8 +62,8 @@ func (p *CompositePassability) canOccupy(headerX, headerY int, isWall WallChecke
 	}
 
 	// Wall check for entire footprint
-	for dy := 0; dy < p.FootprintH; dy++ {
-		for dx := 0; dx < p.FootprintW; dx++ {
+	for dy := range p.FootprintH {
+		for dx := range p.FootprintW {
 			if isWall(topLeftX+dx, topLeftY+dy) {
 				return false
 			}
@@ -129,4 +129,3 @@ func (p *CompositePassability) GetDimensions() (width, height int) {
 func (p *CompositePassability) GetFootprint() (footW, footH, offX, offY int) {
 	return p.FootprintW, p.FootprintH, p.HeaderOffX, p.HeaderOffY
 }
-

@@ -178,7 +178,7 @@ func (s *BlossomSystem) spawnBlossomWave() {
 	gameHeight := s.world.Resources.Config.MapHeight
 
 	// Spawn one blossom entity per column for full-width coverage
-	for column := 0; column < gameWidth; column++ {
+	for column := range gameWidth {
 		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnSingleBlossom(column, gameHeight-1, char, false)
 	}
@@ -338,4 +338,3 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 
 	return false
 }
-

@@ -62,7 +62,7 @@ func main() {
 			exStr, _ := reader.ReadString('\n')
 			if strings.ToLower(strings.TrimSpace(exStr)) == "y" {
 				numSpecs := getInt(reader, "  How many specs?: ", 1)
-				for i := 0; i < numSpecs; i++ {
+				for i := range numSpecs {
 					fmt.Printf("  --- Room Spec %d ---\n", i+1)
 					cfg.Rooms = append(cfg.Rooms, maze.RoomSpec{
 						CenterX: getInt(reader, "    Center X (0=rnd): ", 0),

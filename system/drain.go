@@ -506,7 +506,7 @@ func (s *DrainSystem) randomSpawnOffset(baseX, baseY int, queuedPositions map[ui
 	rangeX := maxX - minX + 1
 	rangeY := maxY - minY + 1
 
-	for attempt := 0; attempt < maxRetries; attempt++ {
+	for range maxRetries {
 		x := minX + s.rng.Intn(rangeX)
 		y := minY + s.rng.Intn(rangeY)
 
@@ -596,7 +596,7 @@ func (s *DrainSystem) queueDrainSpawns(count int) int {
 	queuedPositions := s.buildQueuedPositionSet()
 
 	queued := 0
-	for i := 0; i < count; i++ {
+	for range count {
 		targetX, targetY, valid := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, queuedPositions)
 		if !valid {
 			continue
@@ -619,12 +619,9 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	}
 
 	ordered := s.getActiveDrainsBySpawnOrder()
-	toRemove := count
-	if toRemove > len(ordered) {
-		toRemove = len(ordered)
-	}
+	toRemove := min(count, len(ordered))
 
-	for i := 0; i < toRemove; i++ {
+	for i := range toRemove {
 		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashSpawnOneRequest)
 	}
 }
@@ -982,7 +979,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 			// Entity-Entity Collision
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
-			for i := 0; i < count; i++ {
+			for i := range count {
 				target := collisionBuf[i]
 				if target == 0 || target == drainEntity || target == cursorEntity {
 					continue

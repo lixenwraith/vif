@@ -115,7 +115,7 @@ func (s *TypingSystem) handleTyping(cursorX, cursorY int, typedRune rune) {
 
 	// Iterate to find typeable entity (Glyph)
 	// Break on first match for O(1) best case in crowded cells
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if s.world.Components.Glyph.HasEntity(buf[i]) {
 			entity = buf[i]
 			break

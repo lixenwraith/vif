@@ -77,8 +77,8 @@ func (p PatternResult) Tile(areaWidth, areaHeight int) PatternResult {
 
 	cells := make([]PatternCell, 0, len(p.Cells)*tilesX*tilesY)
 
-	for ty := 0; ty < tilesY; ty++ {
-		for tx := 0; tx < tilesX; tx++ {
+	for ty := range tilesY {
+		for tx := range tilesX {
 			offsetX := tx * p.Width
 			offsetY := ty * p.Height
 
@@ -146,3 +146,4 @@ func Merge(patterns ...PatternResult) PatternResult {
 		Height: maxH,
 	}
 }
+

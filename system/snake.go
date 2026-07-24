@@ -325,7 +325,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 		LastTrailY: headY,
 	}
 	// Seed trail with spawn point, enough copies for initial body formation
-	for i := 0; i < component.SnakeTrailCapacity; i++ {
+	for i := range component.SnakeTrailCapacity {
 		headComp.Trail[i] = core.Point{X: headX, Y: headY}
 	}
 	headComp.TrailHead = 0
@@ -375,8 +375,8 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 func (s *SnakeSystem) createHeadMembers(headEntity core.Entity, headX, headY int) []component.MemberEntry {
 	members := make([]component.MemberEntry, 0, parameter.SnakeHeadWidth*parameter.SnakeHeadHeight)
 
-	for row := 0; row < parameter.SnakeHeadHeight; row++ {
-		for col := 0; col < parameter.SnakeHeadWidth; col++ {
+	for row := range parameter.SnakeHeadHeight {
+		for col := range parameter.SnakeHeadWidth {
 			offsetX := col - parameter.SnakeHeadHeaderOffsetX
 			offsetY := row - parameter.SnakeHeadHeaderOffsetY
 
@@ -1031,8 +1031,8 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < height; row++ {
-		for col := 0; col < width; col++ {
+	for row := range height {
+		for col := range width {
 			x := topLeftX + col
 			y := topLeftY + row
 

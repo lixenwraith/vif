@@ -183,7 +183,7 @@ func main() {
 			DrawString(buf, 2, screenHeight-1, uiText, color.RGB{R: 180, G: 180, B: 180})
 
 			// Draw type legend
-			for i := 0; i < int(MissileCount); i++ {
+			for i := range int(MissileCount) {
 				c := color.RGB{R: 100, G: 100, B: 100}
 				if MissileType(i) == currentType {
 					c = ColorGold
@@ -349,7 +349,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 		perpX, perpY := vmath.Perpendicular(baseX, baseY)
 
 		// Triple helix with phase offsets
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			phase := m.Phase + vmath.FromInt(i*120)
 			amp := vmath.FromFloat(2.5)
 			sinVal := vmath.Sin(phase)
@@ -432,7 +432,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 		// Split at apex or after time
 		if m.Pos.VelY > 0 && m.Age > 20 && len(m.Children) == 0 {
 			m.Active = false
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				angle := float64(i)*math.Pi/2.5 - math.Pi/2
 				child := &Missile{
 					Type:   MissileSeeker,
@@ -450,7 +450,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 				m.Children = append(m.Children, child)
 			}
 			// Burst effect
-			for i := 0; i < 12; i++ {
+			for i := range 12 {
 				angle := float64(i) * math.Pi / 6
 				m.Trail = append(m.Trail, Particle{
 					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
@@ -480,7 +480,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 				})
 			}
 			// Impact flash
-			for i := 0; i < 8; i++ {
+			for i := range 8 {
 				angle := float64(i) * math.Pi / 4
 				m.Trail = append(m.Trail, Particle{
 					X: vmath.FromInt(x2), Y: vmath.FromInt(y2),
@@ -567,7 +567,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 		if bounced {
 			m.Bounces--
 			// Bounce spark
-			for i := 0; i < 6; i++ {
+			for i := range 6 {
 				angle := float64(globalRng.Intn(628)) / 100
 				m.Trail = append(m.Trail, Particle{
 					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
@@ -609,7 +609,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 }
 
 func spawnExplosion(m *Missile) {
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		angle := float64(i) * math.Pi / 8
 		speed := 2.0 + float64(globalRng.Intn(30))/10
 		m.Trail = append(m.Trail, Particle{

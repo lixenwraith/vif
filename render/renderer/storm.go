@@ -85,7 +85,7 @@ func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.RenderBuffer, stormComp *component.StormComponent) {
 	r.sortBuffer = r.sortBuffer[:0]
 
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}

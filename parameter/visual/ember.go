@@ -101,7 +101,7 @@ var EmberRingNormals = [EmberRingCount][3]int64{
 var EmberRingNormalsF [EmberRingCount][3]float64
 
 func init() {
-	for i := 0; i < EmberRingCount; i++ {
+	for i := range EmberRingCount {
 		EmberRingNormalsF[i][0] = vmath.ToFloat(EmberRingNormals[i][0])
 		EmberRingNormalsF[i][1] = vmath.ToFloat(EmberRingNormals[i][1])
 		EmberRingNormalsF[i][2] = vmath.ToFloat(EmberRingNormals[i][2])
@@ -181,3 +181,4 @@ func Ember256PaletteIndex(heat int) uint8 {
 	}
 	return Heat256LUT[idx]
 }
+

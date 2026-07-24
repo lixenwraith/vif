@@ -98,8 +98,8 @@ func (w *World) AddSystem(system System) {
 	w.systems = append(w.systems, system)
 
 	// Sort by priority (bubble sort, small N)
-	for i := 0; i < len(w.systems)-1; i++ {
-		for j := 0; j < len(w.systems)-i-1; j++ {
+	for i := range len(w.systems) - 1 {
+		for j := range len(w.systems) - i - 1 {
 			if w.systems[j].Priority() > w.systems[j+1].Priority() {
 				w.systems[j], w.systems[j+1] = w.systems[j+1], w.systems[j]
 			}

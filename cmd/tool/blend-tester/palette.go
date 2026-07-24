@@ -179,7 +179,7 @@ func drawPaletteMode() {
 		}
 
 		// Clear row
-		for x := 0; x < state.width; x++ {
+		for x := range state.width {
 			buf.SetWithBg(x, y, ' ', fg, rowBg)
 		}
 
@@ -259,4 +259,3 @@ func absDelta(a, b color.RGB) int {
 	}
 	return dr + dg + db
 }
-

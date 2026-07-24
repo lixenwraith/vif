@@ -126,7 +126,7 @@ func main() {
 			// Skip if nearly faded
 			if alpha >= 0.1 {
 				cellHits := make(map[uint64]uint8)
-				for i := 0; i < len(points)-1; i++ {
+				for i := range len(points) - 1 {
 					traceSubPixelLineHalf(cellHits, points[i].X, points[i].Y, points[i+1].X, points[i+1].Y)
 				}
 
@@ -197,10 +197,7 @@ func generateFractalPathSubPixel(x1, y1, x2, y2 int, rng *rand.Rand) []struct{ X
 	}
 
 	// ~1 segment every 6 sub-pixels
-	segments := int(dist / 6.0)
-	if segments < 4 {
-		segments = 4
-	}
+	segments := max(int(dist/6.0), 4)
 
 	// Jitter scaled for sub-pixel coordinates
 	jitterScale := JitterScale + (4.0 / dist)
@@ -293,4 +290,3 @@ func drawText256(buf *render.RenderBuffer, x, y int, text string) {
 		buf.SetFgOnly(x+i, y, r, color.RGB{R: 250}, terminal.AttrFg256)
 	}
 }
-

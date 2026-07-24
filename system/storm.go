@@ -162,7 +162,7 @@ func (s *StormSystem) Update() {
 	}
 
 	// Check liveness via Header existence (CompositeSystem authority)
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if stormComp.CirclesAlive[i] && !s.world.Components.Header.HasEntity(stormComp.Circles[i]) {
 			stormComp.CirclesAlive[i] = false
 		}
@@ -247,7 +247,7 @@ func (s *StormSystem) spawnStorm() {
 	var circleInfos [component.StormCircleCount]circleSpawnInfo
 
 	// 1. Calculate target positions and validate all circles
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		angle := angleOffsets[i]
 		offsetX := initialRadius * math.Cos(angle)
 		offsetY := initialRadius * math.Sin(angle) * 0.5 // Terminal aspect ratio
@@ -279,7 +279,7 @@ func (s *StormSystem) spawnStorm() {
 	}
 
 	// 2. Clear all spawn areas (validation passed)
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		s.clearCircleSpawnArea(circleInfos[i].gridX, circleInfos[i].gridY)
 	}
 
@@ -291,7 +291,7 @@ func (s *StormSystem) spawnStorm() {
 
 	stormComp := component.StormComponent{}
 
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		circleEntity := s.createCircleHeader(rootEntity, i, circleInfos[i].pos3D, circleInfos[i].vel3D)
 		stormComp.Circles[i] = circleEntity
 		stormComp.CirclesAlive[i] = true
@@ -299,7 +299,7 @@ func (s *StormSystem) spawnStorm() {
 
 	// Root header component linking circles
 	rootMembers := make([]component.MemberEntry, component.StormCircleCount)
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		rootMembers[i] = component.MemberEntry{
 			Entity:  stormComp.Circles[i],
 			OffsetX: 0,
@@ -574,14 +574,14 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 	// Collect alive circles
 	type circleState struct {
-		entity  core.Entity
 		circle  *component.StormCircleComponent
+		entity  core.Entity
 		index   int
 		stunned bool
 	}
 
 	var circles []circleState
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
@@ -732,15 +732,8 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		}
 	}
 
-	// // Inter-circle collision
-	// for i := 0; i < len(circles); i++ {
-	// 	for j := i + 1; j < len(circles); j++ {
-	// 		s.resolveCircleCollision(circles[i].circle, circles[j].circle)
-	// 	}
-	// }
-
 	// Inter-circle collision (skip stunned circles)
-	for i := 0; i < len(circles); i++ {
+	for i := range len(circles) {
 		if circles[i].stunned {
 			continue
 		}
@@ -882,7 +875,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 
 // processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem, storm system it the combat-based lifecycle authority
 func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormComponent) {
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
@@ -983,7 +976,7 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 	}
 
 	// Find which circle was breached
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if stormComp.Circles[i] == headerEntity && stormComp.CirclesAlive[i] {
 			stormComp.CirclesAlive[i] = false
 
@@ -1009,7 +1002,7 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 func (s *StormSystem) handleCircleInteractions(stormComp *component.StormComponent) {
 	cursorEntity := s.world.Resources.Player.Entity
 
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
@@ -1044,7 +1037,7 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent) {
 	nowNano := s.world.Resources.Time.GameTimeNano()
 
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
@@ -1108,7 +1101,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 		return
 	}
 
-	for i := 0; i < component.StormCircleCount; i++ {
+	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
@@ -1465,7 +1458,7 @@ func (s *StormSystem) terminateStorm() {
 	stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity)
 	if ok {
 		// Destroy remaining circles
-		for i := 0; i < component.StormCircleCount; i++ {
+		for i := range component.StormCircleCount {
 			if stormComp.CirclesAlive[i] {
 				s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 					HeaderEntity: stormComp.Circles[i],
@@ -1485,4 +1478,3 @@ func (s *StormSystem) terminateStorm() {
 	s.statActive.Store(false)
 	s.statCircleCount.Store(0)
 }
-

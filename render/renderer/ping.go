@@ -180,7 +180,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 	// Draw horizontal band (rows from minVY to maxVY, full viewport width)
 	for vy := minVY; vy <= maxVY; vy++ {
 		screenY := ctx.GameYOffset + vy
-		for vx := 0; vx < ctx.ViewportWidth; vx++ {
+		for vx := range ctx.ViewportWidth {
 			if !r.isExcluded(vx, vy) {
 				buf.Set(ctx.GameXOffset+vx, screenY, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
@@ -190,7 +190,7 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 	// Draw vertical band (columns from minVX to maxVX, full viewport height)
 	for vx := minVX; vx <= maxVX; vx++ {
 		screenX := ctx.GameXOffset + vx
-		for vy := 0; vy < ctx.ViewportHeight; vy++ {
+		for vy := range ctx.ViewportHeight {
 			// Skip cells already drawn by horizontal band
 			if vy >= minVY && vy <= maxVY {
 				continue
@@ -213,7 +213,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 
 		if colRight < ctx.ViewportWidth {
 			inBounds = true
-			for vy := 0; vy < ctx.ViewportHeight; vy++ {
+			for vy := range ctx.ViewportHeight {
 				if !r.isExcluded(colRight, vy) {
 					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
@@ -221,7 +221,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		}
 		if colLeft >= 0 {
 			inBounds = true
-			for vy := 0; vy < ctx.ViewportHeight; vy++ {
+			for vy := range ctx.ViewportHeight {
 				if !r.isExcluded(colLeft, vy) {
 					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
@@ -242,7 +242,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 
 		if rowDown < ctx.ViewportHeight {
 			inBounds = true
-			for vx := 0; vx < ctx.ViewportWidth; vx++ {
+			for vx := range ctx.ViewportWidth {
 				if !r.isExcluded(vx, rowDown) {
 					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}
@@ -250,7 +250,7 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		}
 		if rowUp >= 0 {
 			inBounds = true
-			for vx := 0; vx < ctx.ViewportWidth; vx++ {
+			for vx := range ctx.ViewportWidth {
 				if !r.isExcluded(vx, rowUp) {
 					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 				}

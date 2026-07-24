@@ -26,12 +26,9 @@ func applyEnvelope(buf floatBuffer, attackSec, releaseSec float64) {
 	attackSamples := int(attackSec * float64(AudioSampleRate))
 	releaseSamples := int(releaseSec * float64(AudioSampleRate))
 
-	releaseStart := total - releaseSamples
-	if releaseStart < attackSamples {
-		releaseStart = attackSamples
-	}
+	releaseStart := max(total-releaseSamples, attackSamples)
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		vol := 1.0
 		if i < attackSamples && attackSamples > 0 {
 			vol = float64(i) / float64(attackSamples)
@@ -48,7 +45,7 @@ func applyDecayEnvelope(buf floatBuffer, attackSec float64, decayRate float64) {
 	total := len(buf)
 	attackSamples := int(attackSec * float64(AudioSampleRate))
 
-	for i := 0; i < total; i++ {
+	for i := range total {
 		var vol float64
 		if i < attackSamples && attackSamples > 0 {
 			vol = float64(i) / float64(attackSamples)
@@ -251,10 +248,7 @@ func sweepBiquadBP(buf floatBuffer, startHz, endHz, q float64) {
 	}
 	var x1, x2, y1, y2 float64
 	for off := 0; off < n; off += blk {
-		end := off + blk
-		if end > n {
-			end = n
-		}
+		end := min(off+blk, n)
 		f := startHz + (endHz-startHz)*float64(off)/float64(n)
 		omega := 2 * math.Pi * f / float64(AudioSampleRate)
 		sn, cs := math.Sin(omega), math.Cos(omega)

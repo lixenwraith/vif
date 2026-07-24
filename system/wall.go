@@ -178,7 +178,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 			s.world.Positions.Lock()
 			n := s.world.Positions.GetAllAtIntoUnsafe(payload.X, payload.Y, entityBuf[:])
 			s.world.Positions.Unlock()
-			for j := 0; j < n; j++ {
+			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
 				}
@@ -294,7 +294,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		s.world.Positions.Lock()
 		for _, rc := range resolved {
 			n := s.world.Positions.GetAllAtIntoUnsafe(rc.x, rc.y, entityBuf[:])
-			for j := 0; j < n; j++ {
+			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
 				}
@@ -854,8 +854,8 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 			bx := mx * payload.CellWidth
 			by := my * payload.CellHeight
 
-			for dy := 0; dy < payload.CellHeight; dy++ {
-				for dx := 0; dx < payload.CellWidth; dx++ {
+			for dy := range payload.CellHeight {
+				for dx := range payload.CellWidth {
 					cells = append(cells, component.WallCellDef{
 						OffsetX: bx + dx,
 						OffsetY: by + dy,

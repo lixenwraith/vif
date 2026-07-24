@@ -63,7 +63,7 @@ func NewPylonRenderer(gameCtx *engine.GameContext) *PylonRenderer {
 }
 
 func (r *PylonRenderer) buildColorLUT() {
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		ratio := float64(i) / 255.0
 		r.colorLUT[i] = r.computeColorEntry(ratio)
 	}

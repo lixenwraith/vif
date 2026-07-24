@@ -27,9 +27,9 @@ type RoomSpec struct {
 
 // RoomResult describes a generated room
 type RoomResult struct {
+	Entries       []Point // Entry points connecting to maze
 	X, Y          int     // Top-left corner
 	Width, Height int     // Dimensions
-	Entries       []Point // Entry points connecting to maze
 }
 
 // resolvedRoom is internal representation with top-left coords
@@ -170,12 +170,9 @@ func resolveRooms(cfg Config, cols, rows int, rng *rand.Rand) []resolvedRoom {
 		defaultH = 3
 	}
 
-	explicitCount := len(cfg.Rooms)
-	if explicitCount > cfg.RoomCount {
-		explicitCount = cfg.RoomCount
-	}
+	explicitCount := min(len(cfg.Rooms), cfg.RoomCount)
 
-	for i := 0; i < explicitCount; i++ {
+	for i := range explicitCount {
 		spec := cfg.Rooms[i]
 		w, h := ensureOdd(spec.Width), ensureOdd(spec.Height)
 		if w <= 0 {
@@ -203,10 +200,10 @@ func resolveRooms(cfg Config, cols, rows int, rng *rand.Rand) []resolvedRoom {
 	randomCount := cfg.RoomCount - len(resolved)
 	curW, curH := defaultW, defaultH
 
-	for i := 0; i < randomCount; i++ {
+	for range randomCount {
 		// Adaptive shrinking. If we can't place a room, shrink it and try again.
 		placed := false
-		for attempt := 0; attempt < 3; attempt++ {
+		for range 3 {
 			room, ok := resolveRandomRoom(curW, curH, cols, rows, resolved, rng)
 			if ok {
 				resolved = append(resolved, room)
@@ -279,7 +276,7 @@ func resolveRandomRoom(width, height, cols, rows int, existing []resolvedRoom, r
 	}
 
 	const maxAttempts = 100
-	for attempt := 0; attempt < maxAttempts; attempt++ {
+	for range maxAttempts {
 		// Pick odd coordinates to align with maze nodes
 		x := minX + rng.Intn((maxX-minX)/2+1)*2
 		y := minY + rng.Intn((maxY-minY)/2+1)*2
@@ -434,10 +431,7 @@ func connectRooms(grid [][]bool, rooms []resolvedRoom, rng *rand.Rand) []RoomRes
 			})
 
 			// Determine entry count: 1-4, biased toward fewer
-			maxEntries := len(candidates)
-			if maxEntries > 4 {
-				maxEntries = 4
-			}
+			maxEntries := min(len(candidates), 4)
 			entryCount := 1 + rng.Intn(maxEntries)
 
 			for i := 0; i < entryCount && i < len(candidates); i++ {
@@ -480,7 +474,7 @@ func forceRoomEntry(grid [][]bool, room resolvedRoom) Point {
 	for _, d := range dirs {
 		x, y := d.startX, d.startY
 
-		for steps := 0; steps < 20; steps++ {
+		for range 20 {
 			if x < 0 || x >= cols || y < 0 || y >= rows {
 				break
 			}
@@ -655,11 +649,11 @@ func canSafelyRemoveWall(grid [][]bool, x, y int) bool {
 
 func stripBorders(grid [][]bool) {
 	rows, cols := len(grid), len(grid[0])
-	for x := 0; x < cols; x++ {
+	for x := range cols {
 		grid[0][x] = Passage
 		grid[rows-1][x] = Passage
 	}
-	for y := 0; y < rows; y++ {
+	for y := range rows {
 		grid[y][0] = Passage
 		grid[y][cols-1] = Passage
 	}

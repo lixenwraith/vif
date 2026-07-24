@@ -120,7 +120,7 @@ func (r *TeleportLineRenderer) renderBeam(
 	err := absDx - absDy
 	mapX, mapY := x0, y0
 
-	for step := 0; step <= totalSteps; step++ {
+	for step := range totalSteps + 1 {
 		t := float64(step) * invSteps
 
 		// Only draw cells within visible segment

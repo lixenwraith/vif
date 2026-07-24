@@ -16,7 +16,7 @@ func EuclidMask(k, n, rot int) uint64 {
 		return full
 	}
 	var m uint64
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if (i*k)%n < k {
 			m |= 1 << uint(i)
 		}
@@ -32,7 +32,7 @@ func EuclidMask(k, n, rot int) uint64 {
 func euclidEvents(mask uint64, n int, vel, accentVel float64, accentEvery int, prob float64) []Step {
 	ev := make([]Step, 0, bits.OnesCount64(mask))
 	onset := 0
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if mask&(1<<uint(i)) == 0 {
 			continue
 		}

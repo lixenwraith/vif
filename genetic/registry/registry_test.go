@@ -110,7 +110,7 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 	}
 
 	// Collect metrics
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		reg.CollectMetrics(1, evalID, tracking.MetricBundle{"distance": float64(i)}, 100*time.Millisecond)
 	}
 
@@ -185,8 +185,8 @@ func TestRegistry_Evolution(t *testing.T) {
 	initialStats := reg.Stats(1)
 
 	// Run multiple generations
-	for gen := 0; gen < 10; gen++ {
-		for i := 0; i < 4; i++ {
+	for range 10 { // gen
+		for range 4 { // i
 			genes, evalID := reg.Sample(1)
 			if evalID == 0 {
 				continue
@@ -216,3 +216,4 @@ func TestRegistry_Evolution(t *testing.T) {
 	t.Logf("Evolution test: evals=%d, gen=%d, best=%.2f, avg=%.2f",
 		finalStats.TotalEvals, finalStats.Generation, finalStats.BestFitness, finalStats.AvgFitness)
 }
+

@@ -85,7 +85,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Clear status bar
-	for x := 0; x < ctx.ScreenWidth; x++ {
+	for x := range ctx.ScreenWidth {
 		buf.SetWithBg(x, statusY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 
@@ -365,7 +365,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		// Drop last item
 		fitCount--
 		rightFitWidth = 0
-		for i := 0; i < fitCount; i++ {
+		for i := range fitCount {
 			rightFitWidth += itemWidths[i]
 		}
 	}
@@ -399,7 +399,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// === RENDER RIGHT-SIDE ITEMS ===
 	if fitCount > 0 {
 		startX := ctx.ScreenWidth - rightFitWidth
-		for i := 0; i < fitCount; i++ {
+		for i := range fitCount {
 			item := rightItems[i]
 			for _, ch := range item.text {
 				buf.SetWithBg(startX, statusY, ch, item.fg, item.bg)
@@ -459,10 +459,7 @@ func (r *StatusBarRenderer) renderInputText(buf *render.RenderBuffer, y, startX,
 		buf.SetWithBg(screenX, y, '<', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)
 		screenX++
 	}
-	winEnd := winStart + contentSlots
-	if winEnd > textLen {
-		winEnd = textLen
-	}
+	winEnd := min(winStart+contentSlots, textLen)
 	for i := winStart; i < winEnd; i++ {
 		buf.SetWithBg(screenX, y, runes[i], fg, visual.RgbBackground)
 		screenX++
@@ -556,7 +553,7 @@ func (r *StatusBarRenderer) renderStatusMessage(buf *render.RenderBuffer, y, sta
 		return
 	}
 
-	for i := 0; i < maxWidth-1; i++ {
+	for i := range maxWidth - 1 {
 		buf.SetWithBg(startX+i, y, runes[i], visual.RgbStatusMessageText, visual.RgbBackground)
 	}
 	buf.SetWithBg(startX+maxWidth-1, y, '>', visual.RgbTruncateIndicator, visual.RgbTruncateIndicatorBg)

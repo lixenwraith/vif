@@ -290,7 +290,7 @@ func (s *GeneticSystem) processTracking(dt time.Duration) {
 		}
 
 		bestDistSq := -1.0
-		for i := 0; i < groupState.Count; i++ {
+		for i := range groupState.Count {
 			dx := float64(pos.X - groupState.Targets[i].PosX)
 			dy := float64(pos.Y - groupState.Targets[i].PosY)
 			distSq := dx*dx + dy*dy
@@ -332,7 +332,7 @@ func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY 
 		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
 		if groupState.Valid && groupState.Count > 0 {
 			bestDistSq := math.MaxFloat64
-			for i := 0; i < groupState.Count; i++ {
+			for i := range groupState.Count {
 				dx := float64(deathX - groupState.Targets[i].PosX)
 				dy := float64(deathY - groupState.Targets[i].PosY)
 				distSq := dx*dx + dy*dy

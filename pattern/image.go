@@ -1,8 +1,8 @@
 package pattern
 
 import (
-	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
 )
 
 // ImageConfig controls image-to-pattern conversion
@@ -19,8 +19,8 @@ func FromImage(img *ascimage.ConvertedImage, cfg ImageConfig) PatternResult {
 
 	cells := make([]PatternCell, 0, len(img.Cells))
 
-	for y := 0; y < img.Height; y++ {
-		for x := 0; x < img.Width; x++ {
+	for y := range img.Height {
+		for x := range img.Width {
 			idx := y*img.Width + x
 			src := img.Cells[idx]
 
@@ -56,8 +56,8 @@ func FromImageWithFilter(img *ascimage.ConvertedImage, skip func(cell terminal.C
 
 	cells := make([]PatternCell, 0, len(img.Cells))
 
-	for y := 0; y < img.Height; y++ {
-		for x := 0; x < img.Width; x++ {
+	for y := range img.Height {
+		for x := range img.Width {
 			idx := y*img.Width + x
 			src := img.Cells[idx]
 
@@ -87,3 +87,4 @@ func FromImageWithFilter(img *ascimage.ConvertedImage, skip func(cell terminal.C
 		Height: img.Height,
 	}
 }
+

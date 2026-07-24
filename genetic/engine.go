@@ -112,7 +112,7 @@ func (e *Engine[S, F]) Run(ctx context.Context) (*Pool[S, F], error) {
 	}
 
 	// Main evolution loop
-	for iteration := 0; iteration < e.config.MaxIterations; iteration++ {
+	for iteration := range e.config.MaxIterations {
 		// Check context cancellation
 		select {
 		case <-ctx.Done():
@@ -145,7 +145,7 @@ func (e *Engine[S, F]) initializePool() error {
 	var wg sync.WaitGroup
 	errs := make(chan error, e.config.PoolSize)
 
-	for i := 0; i < e.config.PoolSize; i++ {
+	for i := range e.config.PoolSize {
 		wg.Add(1)
 		e.semaphore <- struct{}{} // Acquire semaphore
 
@@ -296,3 +296,4 @@ func (e *Engine[S, F]) GetBest() (Candidate[S, F], error) {
 
 	return best, nil
 }
+

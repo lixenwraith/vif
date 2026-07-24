@@ -52,8 +52,8 @@ func (r *MarkerRenderer) renderRectangle(ctx render.RenderContext, buf *render.R
 		alpha = 1.0
 	}
 
-	for dy := 0; dy < marker.Height; dy++ {
-		for dx := 0; dx < marker.Width; dx++ {
+	for dy := range marker.Height {
+		for dx := range marker.Width {
 			mapX := marker.X + dx
 			mapY := marker.Y + dy
 
@@ -72,8 +72,8 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 		return
 	}
 
-	for dy := 0; dy < marker.Height; dy++ {
-		for dx := 0; dx < marker.Width; dx++ {
+	for dy := range marker.Height {
+		for dx := range marker.Width {
 			mapX := marker.X + dx
 			mapY := marker.Y + dy
 
@@ -117,3 +117,4 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 		}
 	}
 }
+

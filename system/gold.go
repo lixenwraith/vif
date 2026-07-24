@@ -232,7 +232,7 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// Generate random 10-character sequence
 	sequence := make([]rune, parameter.GoldSequenceLength)
-	for i := 0; i < parameter.GoldSequenceLength; i++ {
+	for i := range parameter.GoldSequenceLength {
 		sequence[i] = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 	}
 
@@ -256,7 +256,7 @@ func (s *GoldSystem) spawnGold() bool {
 	members := make([]component.MemberEntry, 0, parameter.GoldSequenceLength)
 
 	// Set position component to gold entities
-	for i := 0; i < parameter.GoldSequenceLength; i++ {
+	for i := range parameter.GoldSequenceLength {
 		entity := s.world.CreateEntity()
 		entities = append(entities, entityData{
 			entity: entity,
@@ -458,7 +458,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		return -1, -1
 	}
 
-	for attempt := 0; attempt < parameter.GoldSpawnMaxAttempts; attempt++ {
+	for range parameter.GoldSpawnMaxAttempts {
 		x := s.rng.Intn(config.MapWidth)
 		y := s.rng.Intn(config.MapHeight)
 
@@ -475,7 +475,7 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 
 		// Check for overlaps with existing characters
 		overlaps := false
-		for i := 0; i < seqLength; i++ {
+		for i := range seqLength {
 			if s.world.Positions.IsBlocked(x+i, y, component.WallBlockParticle) {
 				overlaps = true
 				break

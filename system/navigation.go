@@ -361,7 +361,7 @@ func (s *NavigationSystem) Update() {
 			continue
 		}
 
-		for i := 0; i < groupState.Count; i++ {
+		for i := range groupState.Count {
 			targetsBuffer[i] = core.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
 		}
 		targetsSlice := targetsBuffer[:groupState.Count]
@@ -528,10 +528,6 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 			tr.SetGroup(anchor.GroupID, tgState)
 
-			// tr.Groups[anchor.GroupID].Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
-			// tr.Groups[anchor.GroupID].Type = component.TargetEntity
-			// tr.Groups[anchor.GroupID].Valid = true
-
 			groupCounts[anchor.GroupID]++
 		}
 		anchoredGroups[anchor.GroupID] = true
@@ -541,14 +537,12 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
 		if anchoredGroups[groupID] {
 			tr.SetGroupCount(groupID, groupCounts[groupID])
-			// tr.Groups[groupID].Count = groupCounts[groupID]
 			if groupCounts[groupID] == 0 {
 				tr.SetGroupValidity(groupID, false)
 			}
 			continue
 		}
 
-		// state := tr.Groups[groupID]
 		state := tr.GetGroup(groupID)
 		if !state.Valid || state.Count == 0 {
 			continue
@@ -647,7 +641,7 @@ func (s *NavigationSystem) findBestNeighborDirection(x, y int, src flowSource) i
 	bestDir := int8(-1)
 	bestDist := 1 << 30
 
-	for d := int8(0); d < navigation.DirCount; d++ {
+	for d := range navigation.DirCount {
 		nx := x + navigation.DirVectors[d][0]
 		ny := y + navigation.DirVectors[d][1]
 		dist := src.GetDistance(nx, ny)

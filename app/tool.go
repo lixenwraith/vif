@@ -88,8 +88,7 @@ func Schema(w io.Writer) error {
 			if t.Kind() == reflect.Ptr {
 				t = t.Elem()
 			}
-			for i := 0; i < t.NumField(); i++ {
-				f := t.Field(i)
+			for f := range t.Fields() {
 				tag := f.Tag.Get("toml")
 				n := f.Name
 				if tag != "" && tag != "-" {

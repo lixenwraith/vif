@@ -97,7 +97,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 	}
 
 	// Wrap around to beginning
-	for y := 0; y < startY; y++ {
+	for y := range startY {
 		for x := 0; x <= ctx.World.Resources.Config.MapWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern) {
 				// Write cursor position to ECS
@@ -112,7 +112,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 	}
 
 	// Search remaining part of start line
-	for x := 0; x < startX; x++ {
+	for x := range startX {
 		if matchesPattern(grid, x, startY, pattern) {
 			// Write cursor position to ECS
 			ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
@@ -190,4 +190,3 @@ func matchesPattern(grid map[core.Point]rune, x, y int, pattern []rune) bool {
 	}
 	return true
 }
-

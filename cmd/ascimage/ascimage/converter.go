@@ -98,10 +98,7 @@ func CalculateOutputSize(srcW, srcH, targetWidth int) (outW, outH int) {
 	}
 	aspectRatio := float64(srcH) / float64(srcW)
 	outW = targetWidth
-	outH = int(float64(targetWidth) * aspectRatio * 0.5)
-	if outH < 1 {
-		outH = 1
-	}
+	outH = max(int(float64(targetWidth)*aspectRatio*0.5), outH)
 	return outW, outH
 }
 
@@ -110,8 +107,8 @@ func convertBackground(img image.Image, cells []terminal.Cell, outW, outH int, c
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	for y := 0; y < outH; y++ {
-		for x := 0; x < outW; x++ {
+	for y := range outH {
+		for x := range outW {
 			sx := bounds.Min.X + (x*srcW+srcW/2)/outW
 			sy := bounds.Min.Y + (y*srcH+srcH/2)/outH
 
@@ -145,8 +142,8 @@ func convertQuadrant(img image.Image, cells []terminal.Cell, outW, outH int, col
 	gridW := outW * 2
 	gridH := outH * 2
 
-	for y := 0; y < outH; y++ {
-		for x := 0; x < outW; x++ {
+	for y := range outH {
+		for x := range outW {
 			var pixels [4]lcolor.RGB
 
 			gx := x * 2
@@ -192,7 +189,7 @@ func findBestQuadrant(pixels [4]lcolor.RGB) (rune, lcolor.RGB, lcolor.RGB) {
 	bestPattern := 0
 	var bestFg, bestBg lcolor.RGB
 
-	for pattern := 0; pattern < 16; pattern++ {
+	for pattern := range 16 {
 		fg, bg, err := computePatternColors(pixels, pattern)
 		if err < bestError {
 			bestError = err
@@ -209,7 +206,7 @@ func computePatternColors(pixels [4]lcolor.RGB, pattern int) (fg, bg lcolor.RGB,
 	var fgR, fgG, fgB, fgCount int
 	var bgR, bgG, bgB, bgCount int
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		if pattern&(1<<i) != 0 {
 			fgR += int(pixels[i].R)
 			fgG += int(pixels[i].G)
@@ -238,7 +235,7 @@ func computePatternColors(pixels [4]lcolor.RGB, pattern int) (fg, bg lcolor.RGB,
 		}
 	}
 
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		var target lcolor.RGB
 		if pattern&(1<<i) != 0 {
 			target = fg
@@ -269,4 +266,3 @@ func colorToRGB(c color.Color) lcolor.RGB {
 		B: uint8((b * 0xff) / a),
 	}
 }
-

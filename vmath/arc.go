@@ -19,7 +19,7 @@ func SampleEllipseGrid(centerX, centerY int, radiusX, radiusY int64, count int) 
 	angleStep := Scale / int64(count)
 	cx, cy := CenteredFromGrid(centerX, centerY)
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		angle := int64(i) * angleStep
 		px := cx + Mul(Cos(angle), radiusX)
 		py := cy + Mul(Sin(angle), radiusY)
@@ -68,7 +68,7 @@ func FindUnblockedArcs(blocked []bool) []ArcSegment {
 	inSegment := false
 	segStart := 0
 
-	for offset := 0; offset < n; offset++ {
+	for offset := range n {
 		i := (firstBlocked + offset) % n
 
 		if !blocked[i] && !inSegment {
@@ -132,7 +132,7 @@ func DistributeAngles(segments []ArcSegment, count int) []int64 {
 	startOffset := spacing / 2
 
 	angles := make([]int64, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		arcPos := (startOffset + int64(i)*spacing) % totalArc
 		angles[i] = arcPositionToAngle(segments, arcPos)
 	}
@@ -195,3 +195,4 @@ func AngleDiff(from, to int64) int64 {
 	}
 	return diff
 }
+

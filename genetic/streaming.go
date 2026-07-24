@@ -180,7 +180,7 @@ func (e *StreamingEngine[S, F]) initializePool() {
 
 	candidates := make([]Candidate[S, F], e.config.PoolSize)
 
-	for i := 0; i < e.config.PoolSize; i++ {
+	for i := range e.config.PoolSize {
 		candidates[i] = Candidate[S, F]{
 			Data:     e.initializer(e.rng),
 			Score:    F(0),
@@ -376,4 +376,3 @@ func (e *StreamingEngine[S, F]) InjectPopulation(candidates []Candidate[S, F], g
 		Generation: generation,
 	}
 }
-

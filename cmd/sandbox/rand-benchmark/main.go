@@ -77,7 +77,7 @@ func main() {
 		{"FastRand.Intn (13,17,5)", func(b *testing.B) {
 			rng := NewFastRand(12345)
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rng.Intn(bound)
 				}
 			}
@@ -85,7 +85,7 @@ func main() {
 		{"SlicesXorshift.Intn (13,7,17)", func(b *testing.B) {
 			rng := SlicesXorshift(12345)
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rng.Intn(bound)
 				}
 			}
@@ -93,14 +93,14 @@ func main() {
 		{"SlicesXorshift via rand/v2.IntN", func(b *testing.B) {
 			rng := rand2.New(&SlicesXorshiftSource{state: 12345})
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rng.IntN(bound)
 				}
 			}
 		}},
 		{"math/rand.Global.Intn", func(b *testing.B) {
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rand1.Intn(bound)
 				}
 			}
@@ -108,14 +108,14 @@ func main() {
 		{"math/rand.Source.Intn", func(b *testing.B) {
 			rng := rand1.New(rand1.NewSource(12345))
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rng.Intn(bound)
 				}
 			}
 		}},
 		{"math/rand/v2.Global.IntN (ChaCha8)", func(b *testing.B) {
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rand2.IntN(bound)
 				}
 			}
@@ -123,7 +123,7 @@ func main() {
 		{"math/rand/v2.PCG.IntN", func(b *testing.B) {
 			rng := rand2.New(rand2.NewPCG(12345, 67890))
 			for b.Loop() {
-				for i := 0; i < n; i++ {
+				for range n {
 					_ = rng.IntN(bound)
 				}
 			}
@@ -146,13 +146,12 @@ func main() {
 	fr := NewFastRand(42)
 	sx := SlicesXorshift(42)
 	fmt.Print("  FastRand (13,17,5):    ")
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		fmt.Printf("%3d ", fr.Intn(100))
 	}
 	fmt.Print("\n  SlicesXS (13,7,17):    ")
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		fmt.Printf("%3d ", sx.Intn(100))
 	}
 	fmt.Println()
 }
-

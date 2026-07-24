@@ -23,9 +23,9 @@ var (
 // circuitBreaker tracks failures and prevents excessive retries
 type circuitBreaker struct {
 	mu               sync.RWMutex
+	lastFailureError error
 	failureCount     int
 	isOpen           bool
-	lastFailureError error
 }
 
 func (cb *circuitBreaker) recordFailure(err error) {
@@ -521,10 +521,7 @@ func (cm *ContentManager) GetContentBlock(filePath string, startLine, size int) 
 	}
 
 	// Normalize startLine to be within bounds
-	startLine = startLine % len(validLines)
-	if startLine < 0 {
-		startLine = 0
-	}
+	startLine = max(startLine%len(validLines), 0)
 
 	// Extract the block with wrapping
 	var block []string
@@ -591,7 +588,7 @@ func (cm *ContentManager) selectFromValidatedCache() ([]string, string, error) {
 
 	// Extract the block
 	block := make([]string, blockSize)
-	for i := 0; i < blockSize; i++ {
+	for i := range blockSize {
 		block[i] = cached.lines[(startLine+i)%len(cached.lines)]
 	}
 
@@ -695,7 +692,7 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	}
 
 	// Try to get valid content with retries
-	for attempt := 0; attempt < parameter.MaxRetries; attempt++ {
+	for range parameter.MaxRetries {
 		// Try to select a random block
 		block, filePath, err := cm.SelectRandomBlock()
 		if err != nil {
@@ -722,4 +719,3 @@ func (cm *ContentManager) SelectRandomBlockWithValidation() ([]string, string, e
 	cm.breaker.recordFailure(err)
 	return cm.GetDefaultContent(), "default", nil
 }
-

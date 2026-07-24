@@ -177,7 +177,7 @@ func (s *DecaySystem) spawnDecayWave() {
 	gameWidth := s.world.Resources.Config.MapWidth
 
 	// Spawn one decay entity per column for full-width coverage
-	for column := 0; column < gameWidth; column++ {
+	for column := range gameWidth {
 		char := parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 		s.spawnSingleDecay(column, 0, char, false)
 	}
@@ -239,7 +239,7 @@ func (s *DecaySystem) updateDecayEntities() {
 			}
 
 			n := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
-			for i := 0; i < n; i++ {
+			for i := range n {
 				target := collisionBuf[i]
 				if target == 0 || target == entity {
 					continue
@@ -352,4 +352,3 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 	s.statApplied.Add(1)
 }
-

@@ -64,10 +64,10 @@ func buildEyeType(spec *visual.EyeTypeVisual) eyeTypeRender {
 		Bg256:      spec.Bg256,
 		FrameCount: spec.FrameCount,
 	}
-	for f := 0; f < spec.FrameCount; f++ {
+	for f := range spec.FrameCount {
 		fs := &spec.Frames[f]
-		for row := 0; row < parameter.EyeHeight; row++ {
-			for col := 0; col < parameter.EyeWidth; col++ {
+		for row := range parameter.EyeHeight {
+			for col := range parameter.EyeWidth {
 				cell := &r.Frames[f][row][col]
 				if col < len(fs.Art[row]) {
 					ch := rune(fs.Art[row][col])
@@ -247,4 +247,3 @@ func calculateEyeFlashColor(remaining time.Duration) color.RGB {
 
 	return color.Scale(visual.RgbCombatHitFlash, intensity)
 }
-

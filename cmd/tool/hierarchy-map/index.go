@@ -406,7 +406,7 @@ func parseBlocks(content string, fi *FileInfo) error {
 		// Find first delimiter to determine format
 		var delimIdx int
 		var delim byte
-		for i := 0; i < len(content); i++ {
+		for i := range len(content) {
 			if content[i] == '{' || content[i] == '(' {
 				delimIdx = i
 				delim = content[i]
@@ -513,7 +513,7 @@ func parseGroupEntries(content string) (map[string]map[string][]string, error) {
 
 		groupEnd := -1
 		var format byte
-		for i := 0; i < len(content); i++ {
+		for i := range len(content) {
 			if content[i] == '[' || content[i] == '(' {
 				groupEnd = i
 				format = content[i]
@@ -579,7 +579,7 @@ func parseModuleEntries(content string) (map[string][]string, error) {
 
 		modEnd := len(content)
 		hasTags := false
-		for i := 0; i < len(content); i++ {
+		for i := range len(content) {
 			if content[i] == '(' {
 				modEnd = i
 				hasTags = true
@@ -686,3 +686,4 @@ func uniqueStrings(s []string) []string {
 	}
 	return res
 }
+

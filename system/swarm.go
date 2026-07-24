@@ -259,8 +259,8 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < parameter.SwarmHeight; row++ {
-		for col := 0; col < parameter.SwarmWidth; col++ {
+	for row := range parameter.SwarmHeight {
+		for col := range parameter.SwarmWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -341,8 +341,8 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	// Build member entities (pre-allocate all 8 positions)
 	members := make([]component.MemberEntry, 0, parameter.SwarmWidth*parameter.SwarmHeight)
 
-	for row := 0; row < parameter.SwarmHeight; row++ {
-		for col := 0; col < parameter.SwarmWidth; col++ {
+	for row := range parameter.SwarmHeight {
+		for col := range parameter.SwarmWidth {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 

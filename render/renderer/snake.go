@@ -58,7 +58,7 @@ func NewSnakeRenderer(gameCtx *engine.GameContext) *SnakeRenderer {
 }
 
 func (r *SnakeRenderer) buildBodyColorLUT() {
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		t := float64(i) / 255.0
 		// Longitudinal gradient: bright → dark toward tail
 		darkenFactor := 1.0 - t*visual.SnakeBodyTailDarken

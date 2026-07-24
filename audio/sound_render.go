@@ -74,7 +74,7 @@ func RenderVariants(d *SoundDef, p SFXParams) []floatBuffer {
 	}
 	seed := fnv64a(d.Name)
 	out := make([]floatBuffer, 0, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		f := float64(i)/float64(n) - 0.5
 		v := variance{
 			pitch:  clampScale(bp*(1+pw*f), minPitchScale, maxPitchScale),
@@ -373,7 +373,7 @@ func mixAt(dst, src floatBuffer, off int, g float64) {
 		return
 	}
 	n := min(len(src), len(dst)-off)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		dst[off+i] += src[i] * g
 	}
 }
@@ -442,7 +442,7 @@ func samplesOf(sec float64) int {
 func fnv64a(s string) uint64 {
 	const offset64, prime64 = 14695981039346656037, 1099511628211
 	h := uint64(offset64)
-	for i := 0; i < len(s); i++ {
+	for i := range len(s) {
 		h ^= uint64(s[i])
 		h *= prime64
 	}

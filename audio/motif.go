@@ -66,7 +66,7 @@ func (g *melodyGen) regenerate(phraseBar int, rng *rand.Rand) {
 
 	lead := g.leadBuf[:0]
 	mi := 0
-	for pos := 0; pos < 16; pos++ {
+	for pos := range 16 {
 		if mask&(1<<uint(pos)) == 0 {
 			continue
 		}

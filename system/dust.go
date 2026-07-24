@@ -166,7 +166,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			// OPTIMIZATION: Use PositionBatch to lock the spatial grid once for all new entities
 			posBatch := s.world.Positions.BeginBatch()
 
-			for i := 0; i < count; i++ {
+			for i := range count {
 				entry := p.Entries[i]
 				if entry.Level == component.GlyphDark {
 					continue
@@ -409,7 +409,7 @@ func (s *DustSystem) Update() {
 				// Only query grid if flags indicate targets present, unsafe-access while holding lock
 				n := s.world.Positions.GetAllAtIntoUnsafe(currX, currY, collisionBuf[:])
 
-				for i := 0; i < n; i++ {
+				for i := range n {
 					target := collisionBuf[i]
 					if target == 0 || target == dustEntity {
 						continue

@@ -69,7 +69,7 @@ func IntegrateWithBounce(
 	hitAny := false
 
 	// 2. Sub-step integration
-	for i := 0; i < steps; i++ {
+	for range steps {
 		// --- X Axis Movement ---
 		startPreciseX := k.PreciseX
 		k.PreciseX += vmath.Mul(k.VelX, dtStep)
@@ -116,3 +116,4 @@ func IntegrateWithBounce(
 
 	return vmath.ToInt(k.PreciseX), vmath.ToInt(k.PreciseY), hitAny
 }
+

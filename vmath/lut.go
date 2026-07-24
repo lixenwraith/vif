@@ -6,20 +6,20 @@ import (
 
 func init() {
 	// Sin/Cos LUT calculation
-	for i := 0; i < LUTSize; i++ {
+	for i := range LUTSize {
 		rad := 2.0 * math.Pi * float64(i) / LUTSize
 		SinLUT[i] = int64(math.Sin(rad) * ScaleF)
 		CosLUT[i] = int64(math.Cos(rad) * ScaleF)
 	}
 
 	// Exp LUT calculation
-	for i := 0; i < ExpLUTSize; i++ {
+	for i := range ExpLUTSize {
 		x := float64(i) * ExpLUTMaxInput / float64(ExpLUTSize-1)
 		ExpDecayLUT[i] = int64(math.Exp(-x/ExpLUTDecayK) * ScaleF)
 	}
 
 	// Atan2 LUT: ratio [0,1] -> angle [0, π/4] in Q32.32
-	for i := 0; i < LUTSize; i++ {
+	for i := range LUTSize {
 		ratio := float64(i) / float64(LUTMask)
 		angle := math.Atan(ratio)
 		atan2LUT[i] = int64(angle / (2 * math.Pi) * ScaleF)
@@ -146,3 +146,4 @@ func Atan2(dy, dx int64) int64 {
 	}
 	return 3 * Scale / 4 // -Y axis = 3π/2
 }
+

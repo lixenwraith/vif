@@ -61,8 +61,8 @@ func (a *TUIAdapter) Clear(bg color.RGB) {
 // FlushTo copies adapter buffer to RenderBuffer at offset with mask
 func (a *TUIAdapter) FlushTo(buf *render.RenderBuffer, offsetX, offsetY int, mask uint8) {
 	buf.SetWriteMask(mask)
-	for y := 0; y < a.height; y++ {
-		for x := 0; x < a.width; x++ {
+	for y := range a.height {
+		for x := range a.width {
 			idx := y*a.width + x
 			cell := a.cells[idx]
 			ch := cell.Rune

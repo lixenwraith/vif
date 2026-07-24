@@ -251,7 +251,7 @@ func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
 	// Flatten results into spawn list
 	var spawns []component.LootType
 	for _, r := range results {
-		for i := 0; i < r.Count; i++ {
+		for range r.Count {
 			spawns = append(spawns, r.Loot)
 		}
 	}

@@ -160,7 +160,7 @@ func InitDefaultPatterns() {
 
 	arp := make([]Step, 0, 8)
 	degs := []int{0, 2, 4, 7}
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		arp = append(arp, Step{Pos: i * 2, Vel: 0.55, Deg: degs[i%4], Oct: 2, Dur: 1, Prob: 0.85})
 	}
 	RegisterPattern(&Pattern{
@@ -172,7 +172,7 @@ func InitDefaultPatterns() {
 	})
 
 	arpDown := make([]Step, 0, 8)
-	for i := 0; i < 8; i++ {
+	for i := range 8 {
 		arpDown = append(arpDown, Step{Pos: i * 2, Vel: 0.55, Deg: degs[3-i%4], Oct: 2, Dur: 1, Prob: 0.85})
 	}
 	RegisterPattern(&Pattern{
@@ -304,7 +304,7 @@ func fourFloor(vel float64) []Step {
 // rollingBass is the psytrance offbeat-16th bass lane: k-b-b-b per beat
 func rollingBass() []Step {
 	ev := make([]Step, 0, 12)
-	for beat := 0; beat < 4; beat++ {
+	for beat := range 4 {
 		base := beat * 4
 		ev = append(ev,
 			Step{Pos: base + 1, Vel: 0.85, Dur: 1},

@@ -452,7 +452,7 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	// independent of the mathematical distributions of the exploitative EXP3 model
 	const scoutRate = 0.10
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if total <= 0 || rand.Float64() < scoutRate {
 			// Scout: Uniform random assignment
 			pop.Pool[i] = rand.IntN(k)

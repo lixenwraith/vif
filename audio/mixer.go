@@ -305,7 +305,7 @@ func (m *Mixer) renderTick(mixBuf []float64, outBytes []byte, n int, pauseStep, 
 		duckTarget = MusicDuckAmount
 	}
 
-	for i := 0; i < n; i++ {
+	for i := range n {
 		coef := duckRel
 		if duckTarget < m.duckGain {
 			coef = duckAtk

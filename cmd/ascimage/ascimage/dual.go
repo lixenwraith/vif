@@ -83,8 +83,8 @@ func convertBackgroundDual(img image.Image, cells []DualCell, outW, outH int) {
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
-	for y := 0; y < outH; y++ {
-		for x := 0; x < outW; x++ {
+	for y := range outH {
+		for x := range outW {
 			sx := bounds.Min.X + (x*srcW+srcW/2)/outW
 			sy := bounds.Min.Y + (y*srcH+srcH/2)/outH
 
@@ -119,8 +119,8 @@ func convertQuadrantDual(img image.Image, cells []DualCell, outW, outH int) {
 	gridW := outW * 2
 	gridH := outH * 2
 
-	for y := 0; y < outH; y++ {
-		for x := 0; x < outW; x++ {
+	for y := range outH {
+		for x := range outW {
 			var pixels [4]lcolor.RGB
 			allTransparent := true
 
@@ -290,7 +290,7 @@ func ReadDualMode(r io.Reader) (*DualModeImage, error) {
 	cells := make([]DualCell, cellCount)
 	cellBuf := make([]byte, cellBytes)
 
-	for i := 0; i < cellCount; i++ {
+	for i := range cellCount {
 		if _, err := io.ReadFull(br, cellBuf); err != nil {
 			return nil, fmt.Errorf("read cell %d: %w", i, err)
 		}
@@ -338,4 +338,3 @@ func LoadDualMode(path string) (*DualModeImage, error) {
 
 	return ReadDualMode(f)
 }
-

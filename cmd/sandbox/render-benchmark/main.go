@@ -131,7 +131,7 @@ func main() {
 
 		// Base background: Deep space gradient (Dark Blue -> Black)
 		// Iterating 1D array is faster than 2D loop
-		for y := 0; y < h; y++ {
+		for y := range h {
 			// Precompute row factors
 			rowOffset := y * w
 			// Vertical gradient factor (0.0 to 1.0)
@@ -142,7 +142,7 @@ func main() {
 			baseG := uint8(5 + gy*10)
 			baseB := uint8(15 + gy*20)
 
-			for x := 0; x < w; x++ {
+			for x := range w {
 				cells[rowOffset+x] = terminal.Cell{
 					Rune: ' ',
 					Bg:   color.RGB{R: baseR, G: baseG, B: baseB},
@@ -304,4 +304,3 @@ func main() {
 	fmt.Printf("Total Alloc:  %d bytes\n", m.TotalAlloc)
 	fmt.Printf("Mallocs:      %d\n", m.Mallocs)
 }
-

@@ -58,7 +58,7 @@ func (s *NetworkSystem) Update() {
 		return
 	}
 	n := s.port.Drain(s.buf[:])
-	for i := 0; i < n; i++ {
+	for i := range n {
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:

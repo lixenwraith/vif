@@ -154,13 +154,13 @@ func drawBlendMode() {
 	drawText(2, startY, "Preview on BG:", fg, bg)
 	startY++
 	// TC preview
-	for x := 0; x < 20; x++ {
+	for x := range 20 {
 		buf.SetWithBg(2+x, startY, ' ', result, bgColor)
 		buf.SetWithBg(2+x, startY+1, ' ', result, bgColor)
 	}
 	drawText(2, startY, "  TC  ", color.RGB{0, 0, 0}, result)
 	// 256 preview
-	for x := 0; x < 20; x++ {
+	for x := range 20 {
 		buf.SetWithBg(25+x, startY, ' ', info.Redmean256Bg, bgColor)
 		buf.SetWithBg(25+x, startY+1, ' ', info.Redmean256Bg, bgColor)
 	}
@@ -173,4 +173,3 @@ func drawBlendMode() {
 		drawText(22, 13, "Enter:Apply Esc:Cancel", color.RGB{100, 100, 100}, color.RGB{40, 40, 60})
 	}
 }
-

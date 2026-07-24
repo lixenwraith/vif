@@ -277,13 +277,13 @@ func (v *Viewer) Render(buf *render.RenderBuffer, termW, termH int) {
 		offsetY = (availH - v.converted.Height) / 2
 	}
 
-	for y := 0; y < availH; y++ {
+	for y := range availH {
 		srcY := y + v.ViewportY - offsetY
 		if srcY < 0 || srcY >= v.converted.Height {
 			continue
 		}
 
-		for x := 0; x < termW; x++ {
+		for x := range termW {
 			srcX := x + v.ViewportX - offsetX
 			if srcX < 0 || srcX >= v.converted.Width {
 				continue
@@ -308,7 +308,7 @@ func (v *Viewer) renderStatus(buf *render.RenderBuffer, termW, termH int) {
 	statusFg := lcolor.RGB{R: 200, G: 200, B: 200}
 	keyFg := lcolor.RGB{R: 100, G: 180, B: 255}
 
-	for x := 0; x < termW; x++ {
+	for x := range termW {
 		buf.Set(x, y, ' ', statusFg, statusBg, render.BlendReplace, 1.0, terminal.AttrNone)
 	}
 
@@ -388,4 +388,3 @@ func (v *Viewer) NeedsPanning(termW, termH int) bool {
 	}
 	return v.converted.Width > termW || v.converted.Height > availH
 }
-

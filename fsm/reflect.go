@@ -19,12 +19,12 @@ func fieldIndex(t reflect.Type) map[string]int {
 	idx := make(map[string]int, n*2)
 
 	// Go names first, toml tags second: a tag always wins over a field name
-	for i := 0; i < n; i++ {
+	for i := range n {
 		if f := t.Field(i); f.IsExported() {
 			idx[f.Name] = i
 		}
 	}
-	for i := 0; i < n; i++ {
+	for i := range n {
 		f := t.Field(i)
 		if !f.IsExported() {
 			continue

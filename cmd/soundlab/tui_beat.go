@@ -232,7 +232,7 @@ func (a *tuiApp) renderBeat(r tui.Region) {
 	if b.trk >= vis {
 		top = b.trk - vis + 1
 	}
-	for row := 0; row < vis; row++ {
+	for row := range vis {
 		ti := top + row
 		if ti >= len(d.Track) {
 			break
@@ -244,7 +244,7 @@ func (a *tuiApp) renderBeat(r tui.Region) {
 		}
 		r.Text(0, row, fmt.Sprintf("%-6s", tui.Truncate(tr.Instr, 6)), labFg, a.theme.Bg, terminal.AttrNone)
 
-		for st := 0; st < d.Steps; st++ {
+		for st := range d.Steps {
 			x := labW + st + st/4 // beat gap every 4 steps
 			if x >= r.W {
 				break

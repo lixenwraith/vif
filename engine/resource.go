@@ -319,7 +319,7 @@ func (ar *AdaptationResource) PopRoute(id uint32, subType uint8) int {
 		} else {
 			// Uniform fallback
 			uniform := 1.0 / float64(entry.RouteCount)
-			for i := 0; i < entry.RouteCount; i++ {
+			for i := range entry.RouteCount {
 				pop.Weights[i] = uniform
 			}
 		}

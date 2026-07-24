@@ -372,7 +372,7 @@ func (a *tuiApp) toggleMusic() {
 	}
 	a.exec("music start")
 	silent := true
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if a.s.eng.SlotPattern(i) != audio.PatternSilence {
 			silent = false
 			break
@@ -495,14 +495,14 @@ func (a *tuiApp) playPattern() {
 		return
 	}
 	if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if a.s.eng.SlotPattern(i) == id {
 				a.toggleMusic()
 				return
 			}
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if a.s.eng.SlotPattern(i) == audio.PatternSilence {
 			a.assignSlot(i)
 			return
@@ -528,7 +528,7 @@ func (a *tuiApp) assignSlot(slot int) {
 			return
 		}
 		// Enforce exclusivity: clear from any other active slots
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if i != slot && a.s.eng.SlotPattern(i) == id {
 				a.exec(fmt.Sprintf("slot %d -", i))
 			}

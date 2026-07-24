@@ -423,7 +423,7 @@ var SnakeHoming = HomingProfile{
 var EyeHomingProfiles [parameter.EyeTypeCount]HomingProfile
 
 func init() {
-	for i := 0; i < parameter.EyeTypeCount; i++ {
+	for i := range parameter.EyeTypeCount {
 		p := parameter.EyeTypeTable[i]
 		EyeHomingProfiles[i] = HomingProfile{
 			BaseSpeed:   vmath.FromFloat(p.BaseSpeed),
@@ -432,4 +432,3 @@ func init() {
 		}
 	}
 }
-

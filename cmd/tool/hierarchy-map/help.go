@@ -186,7 +186,7 @@ func (app *AppState) renderHelp(r tui.Region) {
 		// Vertical separator between columns (except last)
 		if ci < len(columns)-1 {
 			sepX := colW - 1
-			for y := 0; y < colRegion.H; y++ {
+			for y := range colRegion.H {
 				colRegion.Cell(sepX, y, '│', app.Theme.Border, app.Theme.Bg, terminal.AttrDim)
 			}
 		}
@@ -264,3 +264,4 @@ func (app *AppState) ToggleHelp() {
 	app.Help.Visible = !app.Help.Visible
 	app.Help.Scroll = 0
 }
+

@@ -28,8 +28,8 @@ func WriteANSI(converted *ConvertedImage, output string, colorMode terminal.Colo
 	var lastFg, lastBg lcolor.RGB
 	lastValid := false
 
-	for y := 0; y < converted.Height; y++ {
-		for x := 0; x < converted.Width; x++ {
+	for y := range converted.Height {
+		for x := range converted.Width {
 			cell := converted.Cells[y*converted.Width+x]
 
 			fgChanged := !lastValid || cell.Fg != lastFg
@@ -68,4 +68,3 @@ func WriteANSI(converted *ConvertedImage, output string, colorMode terminal.Colo
 
 	return nil
 }
-

@@ -252,7 +252,7 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 // compactMembers removes tombstones via swap-remove
 func (s *CompositeSystem) compactMembers(headerComp *component.HeaderComponent) {
 	write := 0
-	for read := 0; read < len(headerComp.MemberEntries); read++ {
+	for read := range len(headerComp.MemberEntries) {
 		if headerComp.MemberEntries[read].Entity != 0 {
 			if write != read {
 				headerComp.MemberEntries[write] = headerComp.MemberEntries[read]

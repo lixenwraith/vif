@@ -568,7 +568,7 @@ func isKeyword(name string) bool {
 
 // sortFoldRegions sorts by start line, then by end line (larger regions first)
 func sortFoldRegions(regions []FoldRegion) {
-	for i := 0; i < len(regions); i++ {
+	for i := range len(regions) {
 		for j := i + 1; j < len(regions); j++ {
 			if regions[j].StartLine < regions[i].StartLine ||
 				(regions[j].StartLine == regions[i].StartLine && regions[j].EndLine > regions[i].EndLine) {
@@ -582,7 +582,7 @@ func sortFoldRegions(regions []FoldRegion) {
 func (v *FileViewerState) visibleLines() []ViewerLine {
 	result := make([]ViewerLine, 0, len(v.Lines))
 
-	for i := 0; i < len(v.Lines); i++ {
+	for i := range len(v.Lines) {
 		line := v.Lines[i]
 
 		// Check if this line is hidden by a collapsed fold
@@ -815,7 +815,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 	}
 
 	// Render visible lines
-	for y := 0; y < textArea.H; y++ {
+	for y := range textArea.H {
 		idx := v.Scroll + y
 		if idx >= len(visible) {
 			break
@@ -835,7 +835,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 		}
 
 		// Clear gutter
-		for x := 0; x < gutter.W; x++ {
+		for x := range gutter.W {
 			gutter.Cell(x, y, ' ', app.Theme.StatusFg, gutterBg, terminal.AttrNone)
 		}
 
@@ -849,7 +849,7 @@ func (app *AppState) renderFileViewer(r tui.Region) {
 		gutter.Cell(gutterW, y, '│', app.Theme.Border, gutterBg, terminal.AttrDim)
 
 		// Clear text area
-		for x := 0; x < textArea.W; x++ {
+		for x := range textArea.W {
 			textArea.Cell(x, y, ' ', app.Theme.Fg, bg, terminal.AttrNone)
 		}
 
@@ -1011,4 +1011,3 @@ func formatFoldInfo(collapsed, total int) string {
 	}
 	return "[" + formatLineNumber(collapsed, 1) + "/" + formatLineNumber(total, 1) + " folded]"
 }
-

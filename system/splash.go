@@ -215,7 +215,7 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 
 	var glyphEntity core.Entity
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if s.world.Components.Glyph.HasEntity(buf[i]) {
 			glyphEntity = buf[i]
 			break
@@ -335,7 +335,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 
 	var entity core.Entity
 
-	for i := 0; i < count; i++ {
+	for i := range count {
 		if s.world.Components.Glyph.HasEntity(buf[i]) {
 			entity = buf[i]
 			break
@@ -547,4 +547,3 @@ func (s *SplashSystem) findSplashEntityBySlot(slot component.SplashSlot) core.En
 	}
 	return 0
 }
-

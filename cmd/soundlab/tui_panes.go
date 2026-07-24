@@ -185,7 +185,7 @@ func (a *tuiApp) emitField(name, key string, fv reflect.Value, segs []string, de
 			Data: &nodeMeta{segs: segs, slice: true},
 		})
 		if exp {
-			for i := 0; i < n; i++ {
+			for i := range n {
 				a.emitElem(name, fv.Index(i), append(slices.Clone(segs), strconv.Itoa(i)), i, depth+1, unset)
 			}
 		}
@@ -435,7 +435,7 @@ func (a *tuiApp) renderBrowser(r tui.Region) {
 			}
 
 			if id := audio.PatternIDByName(n); id != audio.PatternSilence {
-				for si := 0; si < 3; si++ {
+				for si := range 3 {
 					if a.s.eng.SlotPattern(si) == id {
 						it.Icon = rune('0' + si)
 						if isDirty {
@@ -512,11 +512,8 @@ func (a *tuiApp) renderLog(r tui.Region) {
 		}
 		a.logScroll = maxUp
 	}
-	start := len(lines) - content.H - a.logScroll
-	if start < 0 {
-		start = 0
-	}
-	for y := 0; y < content.H; y++ {
+	start := max(len(lines)-content.H-a.logScroll, 0)
+	for y := range content.H {
 		li := start + y
 		if li >= len(lines) {
 			break

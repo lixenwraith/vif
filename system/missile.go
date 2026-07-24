@@ -309,7 +309,7 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 	}
 	startAngle := -spread / 2
 
-	for i := 0; i < p.Count; i++ {
+	for i := range p.Count {
 		angle := startAngle + step*int64(i)
 		dirX, dirY := vmath.RotateVector(baseDirX, baseDirY, angle)
 
@@ -363,7 +363,7 @@ func (s *MissileSystem) pushTrail(m *component.MissileComponent, x, y int64) {
 }
 
 func (s *MissileSystem) ageTrail(m *component.MissileComponent, dt time.Duration) {
-	for i := 0; i < m.TrailLen; i++ {
+	for i := range m.TrailLen {
 		idx := (m.TrailHead - m.TrailLen + i + component.TrailCapacity) % component.TrailCapacity
 		m.Trail[idx].Age += dt
 	}

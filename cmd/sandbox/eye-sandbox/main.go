@@ -98,7 +98,7 @@ func paletteIdx(b byte) int {
 
 func computePerimeter(w, h int) []borderCell {
 	cells := make([]borderCell, 0, 2*w+2*(h-2))
-	for x := 0; x < w; x++ {
+	for x := range w {
 		cells = append(cells, borderCell{x, 0})
 	}
 	for y := 1; y < h-1; y++ {

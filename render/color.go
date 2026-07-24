@@ -12,7 +12,7 @@ var HeatGradientLUT [256]color.RGB
 
 func init() {
 	// Pre-calculate heat gradient
-	for i := 0; i < 256; i++ {
+	for i := range 256 {
 		progress := float64(i) / 255.0
 		HeatGradientLUT[i] = calculateHeatColor(progress)
 	}
@@ -30,10 +30,7 @@ func RainbowIndexColor(index, total int64, fallback color.RGB) color.RGB {
 	if total <= 1 {
 		return fallback
 	}
-	lutIdx := visual.RainbowLUTMin + int((index*visual.RainbowLUTRange)/(total-1))
-	if lutIdx > visual.RainbowLUTMax {
-		lutIdx = visual.RainbowLUTMax
-	}
+	lutIdx := min(visual.RainbowLUTMin+int((index*visual.RainbowLUTRange)/(total-1)), visual.RainbowLUTMax)
 	return HeatGradientLUT[lutIdx]
 }
 

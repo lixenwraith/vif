@@ -35,7 +35,7 @@ func NaiveCube256(c color.RGB) uint8 {
 }
 
 func snapToCube(v int) int {
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		if v < cubeMidpoints[i+1] {
 			return i
 		}
@@ -136,7 +136,7 @@ func drawTextFg(x, y int, text string, fg color.RGB) {
 }
 
 func drawSwatch(x, y, w int, c color.RGB) {
-	for i := 0; i < w; i++ {
+	for i := range w {
 		if x+i >= 0 && x+i < state.width && y >= 0 && y < state.height {
 			buf.SetWithBg(x+i, y, ' ', c, c)
 		}
@@ -213,4 +213,3 @@ func drawColorInfo(x, y int, info ColorInfo) int {
 
 	return line
 }
-

@@ -273,7 +273,7 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 		if !ok {
 			continue
 		}
-		for i := 0; i < component.StormCircleCount; i++ {
+		for i := range component.StormCircleCount {
 			if !stormComp.CirclesAlive[i] {
 				continue
 			}
@@ -516,4 +516,3 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 
 	return vmath.Mul(dirX, accelMag), vmath.Mul(dirY, accelMag), true
 }
-
