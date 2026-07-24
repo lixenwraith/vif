@@ -119,6 +119,12 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 }
 
 // Handle processes an Intent and returns false if game should exit
+// SYNC: caller MUST hold World.updateMutex — App.handleIntent wraps this
+// in World.RunSafe. Nothing reachable from Handle may call World.RunSafe,
+// World.Lock, or Positions.Lock: the mutex is non-reentrant and would
+// deadlock. All world/component/position access below is safe by that
+// invariant. CI guard: rg 'RunSafe|World\.Lock|Positions\.Lock' mode/
+// must return zero hits.
 func (r *Router) Handle(intent *input.Intent) bool {
 	if intent == nil {
 		return true
@@ -174,7 +180,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentToggleMusicMute:
 		return r.handleToggleMusicMute()
 	case input.IntentResize:
-		r.ctx.HandleResize()
+		// Caller already holds the world lock
+		r.ctx.HandleResizeLocked()
 		return true
 
 	// Normal mode navigation
@@ -380,15 +387,10 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 
 	r.captureForUndo()
 
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
 		OpMove(r.ctx, result)
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -405,22 +407,16 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 
 	r.captureForUndo()
 
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		result := charFn(r.ctx, pos.X, pos.Y, intent.Count, intent.Char)
 		OpMove(r.ctx, result)
-
 		// Track for ; and , repeat
 		if result.Valid {
 			r.lastFindChar = intent.Char
 			r.lastFindType = motionOpToRune(intent.Motion)
 			r.lastFindForward = intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward
 		}
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -445,12 +441,7 @@ func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 
 	r.captureForUndo()
 
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		var glyphType component.GlyphType = -1 // -1 = any
 		switch intent.Char {
 		case 'r':
@@ -463,7 +454,7 @@ func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 
 		result := MotionColoredGlyph(r.ctx, pos.X, pos.Y, intent.Count, intent.Motion, glyphType)
 		OpMove(r.ctx, result)
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -493,19 +484,14 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 		return true
 	}
 
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
 
 		switch intent.Operator {
 		case input.OperatorDelete:
 			OpDelete(r.ctx, result)
 		}
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -515,12 +501,7 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 }
 
 func (r *Router) handleOperatorLine(intent *input.Intent) bool {
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		endY := pos.Y + intent.Count - 1
 		if endY >= r.ctx.World.Resources.Config.MapHeight {
 			endY = r.ctx.World.Resources.Config.MapHeight - 1
@@ -537,7 +518,7 @@ func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 		case input.OperatorDelete:
 			OpDelete(r.ctx, result)
 		}
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -552,12 +533,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 		return true
 	}
 
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		result := charFn(r.ctx, pos.X, pos.Y, intent.Count, intent.Char)
 
 		switch intent.Operator {
@@ -571,7 +547,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 			r.lastFindType = motionOpToRune(intent.Motion)
 			r.lastFindForward = (intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward)
 		}
-	})
+	}
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -583,12 +559,7 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 // --- Special Command Handlers ---
 
 func (r *Router) handleSpecial(intent *input.Intent) bool {
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 		switch intent.Special {
 		case input.SpecialDeleteChar:
 			// x = delete chars forward
@@ -621,8 +592,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 		case input.SpecialRepeatFindRev:
 			r.executeRepeatFind(true)
 		}
-	})
-
+	}
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
 	}
@@ -689,12 +659,10 @@ func (r *Router) handleAppend() bool {
 	r.captureForUndo()
 
 	// 1. Move cursor right
-	r.ctx.World.RunSafe(func() {
-		if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
-			result := MotionRight(r.ctx, pos.X, pos.Y, 1)
-			OpMove(r.ctx, result)
-		}
-	})
+	if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
+		result := MotionRight(r.ctx, pos.X, pos.Y, 1)
+		OpMove(r.ctx, result)
+	}
 
 	// 2. Switch to Insert mode via centralized transition
 	r.transitionMode(core.ModeInsert)
@@ -814,11 +782,9 @@ func (r *Router) handleTextConfirm() bool {
 	case core.ModeSearch:
 		searchText := r.ctx.GetSearchText()
 		if searchText != "" {
-			r.ctx.World.RunSafe(func() {
-				if PerformSearch(r.ctx, searchText, true) {
-					r.lastSearchText = searchText
-				}
-			})
+			if PerformSearch(r.ctx, searchText, true) {
+				r.lastSearchText = searchText
+			}
 		}
 		r.ctx.SetSearchText("")
 		r.ctx.SetMode(core.ModeNormal)
@@ -831,10 +797,7 @@ func (r *Router) handleTextConfirm() bool {
 		r.pushCommandHistory(commandText)
 		r.resetCommandHistoryBrowse()
 
-		var result CommandResult
-		r.ctx.World.RunSafe(func() {
-			result = ExecuteCommand(r.ctx, commandText)
-		})
+		result := ExecuteCommand(r.ctx, commandText)
 
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
@@ -892,75 +855,65 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 
 		r.captureForUndo()
 
-		r.ctx.World.RunSafe(func() {
-			pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-			if !ok {
-				return
-			}
+		if pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity); ok {
 			result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
 			OpMove(r.ctx, result)
-		})
+		}
 	}
 
 	return true
 }
 
 func (r *Router) handleInsertDeleteCurrent() bool {
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-		result := MotionResult{
-			StartX: pos.X, StartY: pos.Y,
-			EndX: pos.X, EndY: pos.Y,
-			Type: RangeChar, Style: StyleInclusive,
-			Valid: true,
-		}
-		OpDelete(r.ctx, result)
-	})
+	pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
+	if !ok {
+		return true
+	}
+	result := MotionResult{
+		StartX: pos.X, StartY: pos.Y,
+		EndX: pos.X, EndY: pos.Y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+	OpDelete(r.ctx, result)
 	return true
 }
 
 func (r *Router) handleInsertDeleteForward() bool {
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok {
-			return
-		}
-		// Delete at current position
-		result := MotionResult{
-			StartX: pos.X, StartY: pos.Y,
-			EndX: pos.X, EndY: pos.Y,
-			Type: RangeChar, Style: StyleInclusive,
-			Valid: true,
-		}
-		OpDelete(r.ctx, result)
-		// Move cursor right
-		moveResult := MotionRight(r.ctx, pos.X, pos.Y, 1)
-		OpMove(r.ctx, moveResult)
-	})
+	pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
+	if !ok {
+		return true
+	}
+	// Delete at current position
+	result := MotionResult{
+		StartX: pos.X, StartY: pos.Y,
+		EndX: pos.X, EndY: pos.Y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+	OpDelete(r.ctx, result)
+	// Move cursor right
+	moveResult := MotionRight(r.ctx, pos.X, pos.Y, 1)
+	OpMove(r.ctx, moveResult)
 	return true
 }
 
 func (r *Router) handleInsertDeleteBack() bool {
-	r.ctx.World.RunSafe(func() {
-		pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
-		if !ok || pos.X == 0 {
-			return
-		}
-		// Delete at pos-1
-		result := MotionResult{
-			StartX: pos.X - 1, StartY: pos.Y,
-			EndX: pos.X - 1, EndY: pos.Y,
-			Type: RangeChar, Style: StyleInclusive,
-			Valid: true,
-		}
-		OpDelete(r.ctx, result)
-		// Move to pos-1
-		moveResult := MotionLeft(r.ctx, pos.X, pos.Y, 1)
-		OpMove(r.ctx, moveResult)
-	})
+	pos, ok := r.ctx.World.Positions.GetPosition(r.ctx.World.Resources.Player.Entity)
+	if !ok || pos.X == 0 {
+		return true
+	}
+	// Delete at pos-1
+	result := MotionResult{
+		StartX: pos.X - 1, StartY: pos.Y,
+		EndX: pos.X - 1, EndY: pos.Y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+	OpDelete(r.ctx, result)
+	// Move to pos-1
+	moveResult := MotionLeft(r.ctx, pos.X, pos.Y, 1)
+	OpMove(r.ctx, moveResult)
 	return true
 }
 
@@ -1008,11 +961,9 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 		x, y = r.undoRing[r.undoHead].x, r.undoRing[r.undoHead].y
 	}
 
-	r.ctx.World.RunSafe(func() {
-		r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
-			X: x,
-			Y: y,
-		})
+	r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
+		X: x,
+		Y: y,
 	})
 
 	r.ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})

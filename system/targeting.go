@@ -97,18 +97,18 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 	groups := make(map[core.Entity]*TargetGroup)
 
 	// 1. Simple combat entities (no Header, no Member component)
-	for _, e := range w.Components.Combat.GetAllEntities() {
-		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
+	for _, memberEntity := range w.Components.Member.Entities() {
+		if w.Components.Header.HasEntity(memberEntity) || w.Components.Member.HasEntity(memberEntity) {
 			continue
 		}
-		if isOwnedBy(w, e, ownerEntity) {
+		if isOwnedBy(w, memberEntity, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(e)
+		pos, ok := w.Positions.GetPosition(memberEntity)
 		if !ok || !vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
-		groups[e] = &TargetGroup{Target: e, Members: []core.Entity{e}}
+		groups[memberEntity] = &TargetGroup{Target: memberEntity, Members: []core.Entity{memberEntity}}
 	}
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
@@ -181,7 +181,7 @@ func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEnt
 	}
 
 	// 2. Composite members — closest member per header
-	for _, memberEntity := range w.Components.Member.GetAllEntities() {
+	for _, memberEntity := range w.Components.Member.Entities() {
 		memberComp, ok := w.Components.Member.GetComponent(memberEntity)
 		if !ok {
 			continue

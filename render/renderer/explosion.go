@@ -52,12 +52,9 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 		gameCtx: ctx,
 	}
 
-	r.bufWidth = r.gameCtx.World.Resources.Config.MapWidth
-	r.bufHeight = r.gameCtx.World.Resources.Config.MapHeight
-	r.bufCapacity = r.bufWidth * r.bufHeight
-	if r.bufCapacity < 1 {
-		r.bufCapacity = 1
-	}
+	r.bufWidth = r.gameCtx.World.Resources.Config.ViewportWidth
+	r.bufHeight = r.gameCtx.World.Resources.Config.ViewportHeight
+	r.bufCapacity = max(r.bufWidth*r.bufHeight, 1)
 	r.accBufferDust = make([]int64, r.bufCapacity)
 	r.accBufferMissile = make([]int64, r.bufCapacity)
 	r.accBufferEye = make([]int64, r.bufCapacity)
@@ -132,15 +129,13 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 	// Transform center from map coords to viewport coords
 	centerVX, centerVY, visible := ctx.MapToViewport(c.X, c.Y)
 	if !visible {
+		// TODO: visible unused
 		// Center off-screen but explosion might still be visible at edges
 		// Continue with clamped bounds
 	}
 
 	// Time decay via LUT
-	ageIndex := int(c.Age * 100 / durationNano)
-	if ageIndex > 100 {
-		ageIndex = 100
-	}
+	ageIndex := min(int(c.Age*100/durationNano), 100)
 	timeDecay := vmath.ExpDecay(ageIndex)
 
 	// Bounding box (aspect-corrected)

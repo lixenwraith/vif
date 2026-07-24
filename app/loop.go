@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/render"
 )
@@ -49,12 +50,12 @@ func (a *App) Loop() error {
 		case ev := <-eventChan:
 			// Dumb pipe: key event → machine → intent → router
 			if intent := a.inputMachine.Process(ev); intent != nil {
-				if !a.router.Handle(intent) {
+				if !a.handleIntent(intent) {
 					return nil // player quit
 				}
 			}
 
-			// Input events bypass the game tick wait
+			// Input events bypass the game tick wait, acquires lock
 			a.scheduler.DispatchEventsImmediately()
 
 			if want := a.wantMouseMode(); want != lastMouseMode {
@@ -77,6 +78,18 @@ func (a *App) Loop() error {
 	}
 }
 
+// handleIntent runs one intent under the world lock.
+// The entire router path (motions, operators, mouse cursor writes, undo
+// capture, mode transitions) is serialized against tick/event/render by
+// construction — mode/ must never acquire the world lock itself.
+func (a *App) handleIntent(intent *input.Intent) bool {
+	cont := true
+	a.world.RunSafe(func() {
+		cont = a.router.Handle(intent)
+	})
+	return cont
+}
+
 // wantMouseMode derives terminal mouse reporting from context flags
 func (a *App) wantMouseMode() terminal.MouseMode {
 	if a.ctx.MouseDisabled.Load() {
@@ -97,7 +110,7 @@ func (a *App) frame() bool {
 
 	macroIntents := a.router.ProcessMacroTick()
 	for _, intent := range macroIntents {
-		if !a.router.Handle(intent) {
+		if !a.handleIntent(intent) {
 			return false
 		}
 	}

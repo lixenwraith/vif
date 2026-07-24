@@ -173,54 +173,58 @@ func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	return gameWidth, gameHeight
 }
 
-// HandleResize handles terminal resize events
+// HandleResize handles terminal resize events (acquires world lock)
+// Direct-call path: main loop terminal.EventResize
 func (ctx *GameContext) HandleResize() {
+	ctx.World.RunSafe(ctx.HandleResizeLocked)
+}
+
+// HandleResizeLocked is the resize body; caller MUST hold updateMutex
+// Router path: Handle runs under the lock, so IntentResize calls this
+func (ctx *GameContext) HandleResizeLocked() {
 	// New Height and Width already set in context by main
 	viewportWidth, viewportHeight := ctx.updateGameArea()
 
-	ctx.World.RunSafe(func() {
-		config := ctx.World.Resources.Config
-		config.ViewportWidth = viewportWidth
-		config.ViewportHeight = viewportHeight
+	config := ctx.World.Resources.Config
+	config.ViewportWidth = viewportWidth
+	config.ViewportHeight = viewportHeight
 
-		if config.CropOnResize {
-			// Resize map to match viewport, cleanup OOB entities
-			config.MapWidth = viewportWidth
-			config.MapHeight = viewportHeight
-			ctx.cleanupOutOfBoundsEntities(config.MapWidth, config.MapHeight)
-			// Reset camera
-			config.CameraX = 0
-			config.CameraY = 0
-		} else {
-			// Map persists, clamp camera to valid range
-			ctx.clampCamera(config)
+	if config.CropOnResize {
+		// Resize map to match viewport, cleanup OOB entities
+		config.MapWidth = viewportWidth
+		config.MapHeight = viewportHeight
+		ctx.cleanupOutOfBoundsEntities(config.MapWidth, config.MapHeight)
+		// Reset camera
+		config.CameraX = 0
+		config.CameraY = 0
+	} else {
+		// Map persists, clamp camera to valid range
+		ctx.clampCamera(config)
+	}
+
+	// Grid tracks map dimensions (grow-only backing, §8)
+	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+
+	// Clamp cursor to Map bounds
+	cursorEntity := ctx.World.Resources.Player.Entity
+	if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
+		newX := max(0, min(pos.X, config.MapWidth-1))
+		newY := max(0, min(pos.Y, config.MapHeight-1))
+
+		if newX != pos.X || newY != pos.Y {
+			pos.X = newX
+			pos.Y = newY
+			ctx.World.Positions.SetPosition(cursorEntity, pos)
 		}
 
-		// Clamp cursor to Map bounds
-		cursorEntity := ctx.World.Resources.Player.Entity
-		if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
-			newX := max(0, min(pos.X, config.MapWidth-1))
-			newY := max(0, min(pos.Y, config.MapHeight-1))
+		// Always emit cursor moved after resize to trigger camera adjustment
+		ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: pos.X, Y: pos.Y})
+	}
 
-			if newX != pos.X || newY != pos.Y {
-				pos.X = newX
-				pos.Y = newY
-				ctx.World.Positions.SetPosition(cursorEntity, pos)
-			}
-
-			// Always emit cursor moved after resize to trigger camera adjustment
-			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: pos.X, Y: pos.Y})
-		}
-
-		// Free cursor if blocked
-		if newX, newY, moved := ctx.World.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
-			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
-		}
-	})
-
-	// TODO: re-evaluate grid resize. do we need very large grids?
-	// Resize spatial grid to match new dimensions
-	// ctx.World.Positions.ResizeGrid(width, height)
+	// Free cursor if blocked
+	if newX, newY, moved := ctx.World.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
+		ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
+	}
 }
 
 // clampCamera constrains camera position to valid range
