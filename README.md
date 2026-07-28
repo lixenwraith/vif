@@ -14,7 +14,7 @@ Built from scratch using the Go standard library, featuring a custom game engine
 *   **Data-Driven Logic:** Game phases and states controlled by a custom Hierarchical Finite State Machine (HFSM) defined in TOML.
 *   **Vi/Vim Emulation:** Accurate input parsing for normal, insert, visual, and command modes, including macros and motion operators.
 *   **Mouse Support:** Mixed keyboard and mouse, keyboard-only, mouse-only (free and click-based) gameplay.
-*   **Platform**:** Linux, FreeBSD, and WASM (limited to embedded data file usage).
+*   **Platform:** Linux, FreeBSD, and WASM (limited to embedded data file usage).
 
 ## Build and run
 

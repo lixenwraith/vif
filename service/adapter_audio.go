@@ -57,11 +57,17 @@ func (s *AudioService) Start() error {
 	if s.disabled.Load() || s.audioEngine == nil {
 		return nil // Sfx stays SoundNone: every Play is a no-op
 	}
-	// Registration completes inside Start before backend probing, so IDs are
-	// valid even when the engine falls through to silent mode.
-	startErr := s.audioEngine.Start()
-	startErr = errors.Join(startErr, s.audioEngine.SpecError(), parameter.ResolveSounds())
-	return startErr
+
+	// No backend is a degradation, not a failure. The engine has already
+	// latched silent mode, Play is a no-op, and the AudioResource bound in
+	// Contribute stays valid. Only a broken subsystem (built-in sound
+	// registry) aborts startup.
+	if err := s.audioEngine.Start(); err != nil && !errors.Is(err, audio.ErrNoAudioBackend) {
+		return err
+	}
+
+	// Non-fatal diagnostics: surfaced, never returned. Need change in service
+	return nil
 }
 
 func (s *AudioService) Stop() error {

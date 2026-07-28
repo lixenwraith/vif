@@ -1,6 +1,6 @@
 module github.com/lixenwraith/vi-fighter
 
-go 1.26.4
+go 1.26.5
 
 require (
 	github.com/lixenwraith/color v0.0.0-20260719094342-615e11bc7897
