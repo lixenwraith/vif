@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sync/atomic"
 
@@ -66,7 +67,20 @@ func (s *AudioService) Start() error {
 		return err
 	}
 
-	// Non-fatal diagnostics: surfaced, never returned. Need change in service
+	// Registration, freeze and preload completed inside audioEngine.Start,
+	// including on the ErrNoAudioBackend path, so the table resolves whether
+	// or not a device was found. Hub.StartAll precedes scheduler.Start in
+	// App.Loop, so no system has emitted EventSoundRequest yet.
+	//
+	// Fatal by design: a missing name means soundTable and the built-in TOML
+	// disagree. Degrading would reinstate the failure this call fixes — every
+	// Play discarded on the SoundNone guard, with no counter and no log.
+	if err := parameter.ResolveSounds(); err != nil {
+		return fmt.Errorf("audio service: %w", err)
+	}
+
+	// TODO: audioEngine.SpecError() still has no surface — a malformed user
+	// sounds.toml degrades to built-ins silently.
 	return nil
 }
 

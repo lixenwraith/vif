@@ -16,8 +16,7 @@ func buildActionRegistry() map[string]KeyEntry {
 		// System
 		"quit":               {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentQuit},
 		"escape":             {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentEscape},
-		"toggle_effect_mute": {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleEffectMute},
-		"toggle_music_mute":  {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleMusicMute},
+		"toggle_audio_cycle": {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentToggleAudioCycle},
 
 		// Basic motions
 		"motion_left":             {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},

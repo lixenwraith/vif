@@ -9,8 +9,7 @@ const (
 	// System-level intents
 	IntentQuit             // Ctrl+Q, Ctrl+C
 	IntentEscape           // ESC key (context-dependent)
-	IntentToggleEffectMute // Ctrl+S
-	IntentToggleMusicMute  // Ctrl+G
+	IntentToggleAudioCycle // Ctrl+S
 	IntentResize           // Terminal resize event
 
 	// Normal mode navigation

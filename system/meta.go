@@ -337,7 +337,7 @@ func (s *MetaSystem) handleHelpRequest() {
 		Entries: []core.CardEntry{
 			{Key: "TAB", Value: "Jump to nugget (10 energy)"},
 			{Key: "ENTER", Value: "Fire directional cleaners"},
-			{Key: "Ctrl+S", Value: "Toggle audio mute"},
+			{Key: "Ctrl+S", Value: "Cycle audio (All/Music/SFX/None)"},
 		},
 	})
 
@@ -411,4 +411,3 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 	}
 	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
 }
-

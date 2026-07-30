@@ -9,5 +9,7 @@ const (
 	AudioChanNone    uint8 = 0
 )
 
-// AudioMaskCycle advances the rotation: all -> music -> effects -> silence -> all
-func AudioMaskCycle(m uint8) uint8 { return (m - 1) & AudioChanAll }
+// AudioMaskCycle advances the rotation: silence -> effects -> music -> all -> silence
+func AudioMaskCycle(m uint8) uint8 {
+	return (m + 1) & AudioChanAll
+}

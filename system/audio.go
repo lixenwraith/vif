@@ -25,8 +25,9 @@ type AudioSystem struct {
 	statPlayed  *atomic.Int64
 	statDropped *atomic.Int64
 	statMask    *atomic.Int64 // -1 = audio unavailable
-	statEffMute *atomic.Bool  // derived from mask; debug-overlay readability
+	statSfxMute *atomic.Bool  // derived from mask; debug-overlay readability
 	statMusMute *atomic.Bool
+	statReject  [audio.RejectCount]*atomic.Int64
 }
 
 // NewAudioSystem creates an audio system with the given player
@@ -43,8 +44,11 @@ func NewAudioSystem(world *engine.World) engine.System {
 	s.statPlayed = reg.Ints.Get("audio.played")
 	s.statDropped = reg.Ints.Get("audio.dropped")
 	s.statMask = reg.Ints.Get("audio.mask")
-	s.statEffMute = reg.Bools.Get("audio.effect_muted")
+	s.statSfxMute = reg.Bools.Get("audio.effect_muted")
 	s.statMusMute = reg.Bools.Get("audio.music_muted")
+	for i, n := range audio.RejectNames() {
+		s.statReject[i] = reg.Ints.Get("audio.rej_" + n)
+	}
 
 	s.Init()
 	return s
@@ -65,6 +69,9 @@ func (s *AudioSystem) Init() {
 	if !s.player.IsMusicMuted() {
 		s.mask |= parameter.AudioChanMusic
 	}
+	// Force-apply rather than seed: SetEffectMuted is idempotent, and this is
+	// the only thing preventing a mask/engine divergence from latching.
+	s.player.SetEffectMuted(s.mask&parameter.AudioChanEffects == 0)
 	s.publishMask()
 }
 
@@ -160,7 +167,7 @@ func (s *AudioSystem) applyMask(m uint8) {
 // when Update does not run.
 func (s *AudioSystem) publishMask() {
 	s.statMask.Store(int64(s.mask))
-	s.statEffMute.Store(s.mask&parameter.AudioChanEffects == 0)
+	s.statSfxMute.Store(s.mask&parameter.AudioChanEffects == 0)
 	s.statMusMute.Store(s.mask&parameter.AudioChanMusic == 0)
 }
 
@@ -173,6 +180,10 @@ func (s *AudioSystem) Update() {
 	p, d := s.player.Stats()
 	s.statPlayed.Store(int64(p))
 	s.statDropped.Store(int64(d))
+	r := s.player.Rejections()
+	for i := range r {
+		s.statReject[i].Store(int64(r[i]))
+	}
 	s.statBackend.Store(s.player.BackendName())
 	s.statSilent.Store(s.player.IsSilent())
 }

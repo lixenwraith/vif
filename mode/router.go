@@ -175,10 +175,8 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return false
 	case input.IntentEscape:
 		return r.handleEscape()
-	case input.IntentToggleEffectMute:
-		return r.handleToggleEffectMute()
-	case input.IntentToggleMusicMute:
-		return r.handleToggleMusicMute()
+	case input.IntentToggleAudioCycle:
+		return r.handleToggleAudioCycle()
 	case input.IntentResize:
 		// Caller already holds the world lock
 		r.ctx.HandleResizeLocked()
@@ -363,17 +361,10 @@ func (r *Router) handleEscape() bool {
 	return true
 }
 
-func (r *Router) handleToggleEffectMute() bool {
-	r.ctx.PushEvent(event.EventSoundMuteToggle, &event.SoundMuteTogglePayload{
-		Mode: event.MuteToggle, Mask: parameter.AudioChanEffects,
-	})
-	return true
-}
-
-func (r *Router) handleToggleMusicMute() bool {
-	r.ctx.PushEvent(event.EventSoundMuteToggle, &event.SoundMuteTogglePayload{
-		Mode: event.MuteToggle, Mask: parameter.AudioChanMusic,
-	})
+// Replace handleToggleEffectMute and handleToggleMusicMute with:
+func (r *Router) handleToggleAudioCycle() bool {
+	// A nil payload forces AudioSystem to default to parameter.AudioMaskCycle
+	r.ctx.PushEvent(event.EventSoundMuteToggle, nil)
 	return true
 }
 
@@ -797,6 +788,12 @@ func (r *Router) handleTextConfirm() bool {
 		r.pushCommandHistory(commandText)
 		r.resetCommandHistoryBrowse()
 
+		// Unpause ahead of execution: the command's own events are queued
+		// before this intent's dispatch, so a trailing unpause is applied too
+		// late and every EventSoundRequest the command produces is gated.
+		// KeepPaused commands re-pause from their own handlers.
+		r.ctx.SetPaused(false)
+
 		result := ExecuteCommand(r.ctx, commandText)
 
 		r.ctx.SetCommandText("")
@@ -805,9 +802,6 @@ func (r *Router) handleTextConfirm() bool {
 		if r.ctx.GetMode() != core.ModeOverlay {
 			r.ctx.SetMode(core.ModeNormal)
 			r.machine.SetMode(input.ModeNormal)
-			if !result.KeepPaused {
-				r.ctx.SetPaused(false)
-			}
 		} else {
 			r.machine.SetMode(input.ModeOverlay)
 		}

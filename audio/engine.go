@@ -20,6 +20,30 @@ const maxPreStartCmds = 64
 // terminal in raw mode; on timeout Stop proceeds and leaks the goroutine.
 const mixerStopTimeout = 5 * AudioBufferDuration
 
+// Play rejection reasons, index-aligned with RejectNames. Exported so the
+// embedder can publish them without mirroring the enum.
+const (
+	RejNotRunning = iota
+	RejSilent
+	RejPaused
+	RejMuted
+	RejBadID
+	RejQueueFull
+	RejectCount
+)
+
+var rejectNames = [RejectCount]string{
+	RejNotRunning: "not_running",
+	RejSilent:     "silent",
+	RejPaused:     "paused",
+	RejMuted:      "muted",
+	RejBadID:      "bad_id",
+	RejQueueFull:  "queue_full",
+}
+
+// RejectNames returns the reason labels, index-aligned with Rejections.
+func RejectNames() [RejectCount]string { return rejectNames }
+
 // AudioEngine manages audio via pipe to system tools
 // Control flows through one command channel into the mixer goroutine;
 // sequencer, tracks, and voices are mixer-confined and lock-free
@@ -57,6 +81,11 @@ type AudioEngine struct {
 	effectMuted atomic.Bool
 	musicMuted  atomic.Bool
 	silentMode  atomic.Bool
+
+	// rejected counts Play rejections by reason. The pre-mixer gates leave no
+	// trace in played/dropped, which is what let a zeroed SoundID table go
+	// unnoticed across revisions.
+	rejected [RejectCount]atomic.Uint64
 
 	stopChan chan struct{}
 	stopOnce sync.Once
@@ -340,14 +369,27 @@ func (ae *AudioEngine) resolveVolumes() {
 	ae.mu.Unlock()
 }
 
-// Play queues a sound effect; volume computed here, dampening at the mixer
+// Play queues a sound effect; volume computed here, dampening at the mixer.
+// Every rejection path is counted — see Rejections.
 func (ae *AudioEngine) Play(id SoundID) bool {
-	if !ae.running.Load() || ae.paused.Load() || ae.effectMuted.Load() || ae.silentMode.Load() {
+	switch {
+	case !ae.running.Load():
+		ae.rejected[RejNotRunning].Add(1)
+		return false
+	case ae.silentMode.Load():
+		ae.rejected[RejSilent].Add(1)
+		return false
+	case ae.paused.Load():
+		ae.rejected[RejPaused].Add(1)
+		return false
+	case ae.effectMuted.Load():
+		ae.rejected[RejMuted].Add(1)
+		return false
+	case ae.mixer == nil:
+		ae.rejected[RejNotRunning].Add(1)
 		return false
 	}
-	if ae.mixer == nil {
-		return false
-	}
+
 	ae.mu.RLock()
 	vol := ae.config.MasterVolume
 	ok := id > 0 && int(id) < len(ae.volumes)
@@ -356,10 +398,24 @@ func (ae *AudioEngine) Play(id SoundID) bool {
 	}
 	ae.mu.RUnlock()
 	if !ok {
+		ae.rejected[RejBadID].Add(1)
 		return false
 	}
-	ae.mixer.Send(audioCmd{op: cmdPlay, sound: id, f1: vol})
+
+	if !ae.mixer.Send(audioCmd{op: cmdPlay, sound: id, f1: vol}) {
+		ae.rejected[RejQueueFull].Add(1) // Send also bumps dropped for cmdPlay
+		return false
+	}
 	return true
+}
+
+// Rejections returns Play rejection counts, index-aligned with RejectNames.
+func (ae *AudioEngine) Rejections() [RejectCount]uint64 {
+	var out [RejectCount]uint64
+	for i := range ae.rejected {
+		out[i] = ae.rejected[i].Load()
+	}
+	return out
 }
 
 // SoundID resolves a name for callers to cache at wiring time.
