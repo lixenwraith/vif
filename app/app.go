@@ -62,13 +62,19 @@ func (a *App) init() error {
 	if a.cfg.ColorModeSet {
 		colorMode = a.cfg.ColorMode
 	}
-
 	termSvc := service.NewTerminalService(colorMode)
-	netSvc := service.NewNetworkService(nil) // disabled by default (RoleNone)
 	_ = a.hub.Register(termSvc)
+
+	netSvc := service.NewNetworkService(nil) // disabled by default (RoleNone)
 	_ = a.hub.Register(netSvc)
+
 	_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
-	_ = a.hub.Register(service.NewContentService(a.cfg.ContentPath))
+
+	contentSrc, err := ResolveContent(a.cfg)
+	if err != nil {
+		return fmt.Errorf("content path: %w", err)
+	}
+	_ = a.hub.Register(service.NewContentService(contentSrc))
 
 	// 2. World creation
 	// Services take no world argument, so placement relative to InitAll is free
@@ -91,6 +97,10 @@ func (a *App) init() error {
 	// 6. GameContext initializes the remaining world resources
 	a.ctx = engine.NewGameContext(a.world, width, height)
 	a.world.Resources.Config.ColorMode = a.term.ColorMode()
+
+	// Corpus telemetry needs the registry NewGameContext creates
+	service.MustGet[*service.ContentService](a.hub, "content").
+		PublishStatus(a.world.Resources.Status)
 
 	// TODO: wire event handling in network system
 

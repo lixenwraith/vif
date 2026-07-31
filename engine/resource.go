@@ -376,11 +376,9 @@ func (gr *GeneticResource) SampleScout(speciesID uint8, populationID uint32) ([]
 
 // === Bridged Resources from Service ===
 
-// ContentProvider defines the interface for content access
-// Matches content.Service public API
+// ContentProvider supplies spawn content; implementations are goroutine-safe
 type ContentProvider interface {
-	CurrentContent() *core.PreparedContent
-	NotifyConsumed(count int)
+	NextBlock() (core.CodeBlock, bool)
 }
 
 // ContentResource wraps a ContentProvider for the Resource

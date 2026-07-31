@@ -20,13 +20,14 @@ type Config struct {
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
 
-	// ContentPath is a file path or glob for typing content; "" = default discovery
+	// ContentPath is a corpus directory or a single content file;
+	// "" = discovery, falling back to the embedded corpus
 	ContentPath string
 
 	// GameScript is a game.toml path or a map directory; "" = config discovery
 	GameScript string
 
-	// ForceDefault selects the embedded FSM config and ignores GameScript
+	// ForceDefault selects the embedded FSM config and corpus, ignoring GameScript and ContentPath
 	ForceDefault bool
 
 	// KeymapPath is a keymap TOML path; "" = keymap discovery
@@ -35,8 +36,8 @@ type Config struct {
 
 // Validate reports configuration conflicts
 func (c Config) Validate() error {
-	if c.ForceDefault && c.GameScript != "" {
-		return errors.New("game script and forced default are mutually exclusive")
+	if c.ForceDefault && (c.GameScript != "" || c.ContentPath != "") {
+		return errors.New("-d is mutually exclusive with -g and -f")
 	}
 	return nil
 }

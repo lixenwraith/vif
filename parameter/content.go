@@ -9,12 +9,35 @@ var AlphanumericRunes = []rune{
 	'0', '1', '2', '3', '4', '5', '6', '7', '8', '9',
 }
 
+// Content block shaping
 const (
-	ContentBlockSize        = 30   // Default number of lines per content block (20-50 range)
-	MinProcessedLines       = 10   // Minimum number of valid lines required after processing
-	MaxLineLength           = 80   // Maximum line length to match game width
-	MaxRetries              = 5    // Maximum number of retries when selecting content blocks
-	MaxBlockSize            = 1000 // Maximum number of lines in a content block to prevent memory issues
-	CircuitBreakerThreshold = 10   // Number of consecutive failures before circuit breaker trips
-	TabWidth                = 4
+	// ContentMinBlockLines is the minimum lines for a block to be emitted
+	ContentMinBlockLines = 2
+
+	// ContentMaxBlockLines is the maximum lines in a single block
+	ContentMaxBlockLines = 5
+
+	// ContentIndentDelta is the indent shift in columns that starts a new block
+	ContentIndentDelta = 2
+
+	// TabWidth is the column expansion applied to a leading tab
+	TabWidth = 4
 )
+
+// Content ingest limits
+const (
+	// ContentMaxLineRunes caps a stored line; glyph placement crops to map width
+	ContentMaxLineRunes = 256
+
+	// ContentMaxFileBytes skips any single content file larger than this
+	ContentMaxFileBytes = 4 << 20
+
+	// ContentMaxCorpusBytes stops ingest once the loaded corpus exceeds this
+	ContentMaxCorpusBytes = 32 << 20
+
+	// ContentMaxFiles caps the files admitted from one corpus directory
+	ContentMaxFiles = 256
+)
+
+// ContentCommentPrefixes marks lines dropped during plain-text ingest
+var ContentCommentPrefixes = []string{"//", "#", "/*"}

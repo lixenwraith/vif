@@ -1,0 +1,120 @@
+# Embedded corpus: typed as gameplay, read as a primer.
+# Lines must be printable ASCII. Blocks longer than five lines are split.
+schema = 1
+
+[[blocks]]
+id = "modes"
+lines = [
+  "i enters insert mode",
+  "esc returns to normal mode",
+  "esc in normal mode pings the grid",
+]
+
+[[blocks]]
+id = "motion-hjkl"
+lines = [
+  "h moves the cursor left",
+  "j moves down and k moves up",
+  "l moves right",
+]
+
+[[blocks]]
+id = "motion-word"
+lines = [
+  "w jumps forward one word",
+  "b jumps back one word",
+  "e lands on the word end",
+]
+
+[[blocks]]
+id = "motion-line"
+lines = [
+  "0 goes to the start of the line",
+  "$ goes to the end of the line",
+  "^ finds the first non blank",
+]
+
+[[blocks]]
+id = "motion-screen"
+lines = [
+  "gg jumps to the top",
+  "G jumps to the bottom",
+  "M centers you vertically",
+]
+
+[[blocks]]
+id = "motion-find"
+lines = [
+  "f then a char jumps onto it",
+  "t stops just before it",
+  "F and T search backward",
+  "; repeats and , reverses",
+]
+
+[[blocks]]
+id = "delete"
+lines = [
+  "x deletes the char under you",
+  "d plus a motion deletes a range",
+  "dd clears the whole line",
+  "D deletes to the end of line",
+]
+
+[[blocks]]
+id = "counts"
+lines = [
+  "a count goes before a motion",
+  "3w moves three words on",
+  "5x deletes five chars",
+]
+
+[[blocks]]
+id = "search"
+lines = [
+  "/ opens search mode",
+  "enter jumps to the first match",
+  "n and N walk the matches",
+]
+
+[[blocks]]
+id = "combat"
+lines = [
+  "tab jumps to the nearest nugget",
+  "enter fires the main weapon",
+  "auto fire is on by default",
+]
+
+[[blocks]]
+id = "state"
+lines = [
+  "heat rises when you mistype",
+  "energy feeds the shield",
+  "visual mode widens the ping",
+]
+
+[[blocks]]
+id = "macro"
+lines = [
+  "q then a letter records a macro",
+  "q again stops recording",
+  "@ plus the letter replays it",
+]
+
+[[blocks]]
+id = "command"
+lines = [
+  ": opens command mode",
+  ":h shows the help overlay",
+  ":d shows the debug overlay",
+  ":n starts a new game",
+  ":q quits",
+]
+
+[[blocks]]
+id = "corpus"
+lines = [
+  "drop txt files into data/",
+  "pass -f dir to pick a corpus",
+  "this text ships in the binary",
+]
+

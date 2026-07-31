@@ -59,6 +59,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleHelpCommand(ctx)
 	case "about":
 		return handleAboutCommand(ctx)
+	case "content":
+		return handleContentCommand(ctx)
 	case "energy":
 		return handleEnergyCommand(ctx, args)
 	case "heat":
@@ -327,6 +329,21 @@ func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetPaused(true)
 	ctx.PushEvent(event.EventMetaAboutRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleContentCommand reports corpus telemetry in the status bar
+func handleContentCommand(ctx *engine.GameContext) CommandResult {
+	reg := ctx.World.Resources.Status
+	msg := fmt.Sprintf("content %s | files %d | blocks %d | served %d | now %s",
+		reg.Strings.Get("content.source").Load(),
+		reg.Ints.Get("content.files").Load(),
+		reg.Ints.Get("content.blocks").Load(),
+		reg.Ints.Get("content.served").Load(),
+		reg.Strings.Get("content.file").Load(),
+	)
+	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetLastCommand(":content")
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleEnergyCommand sets the energy to a specified value

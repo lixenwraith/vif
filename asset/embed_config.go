@@ -5,8 +5,8 @@ import (
 	"io/fs"
 )
 
-//go:embed default/*.toml
-var defaultFS embed.FS
+//go:embed config/*.toml
+var configFS embed.FS
 
 // DefaultFSMConfig is the embedded fallback FSM configuration filesystem
 var DefaultFSMConfig fs.FS
@@ -15,7 +15,7 @@ var DefaultFSMConfig fs.FS
 const DefaultFSMEntry = "game.toml"
 
 func init() {
-	sub, err := fs.Sub(defaultFS, "default")
+	sub, err := fs.Sub(configFS, "config")
 	if err != nil {
 		panic("asset: embedded FSM config missing")
 	}

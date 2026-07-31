@@ -17,4 +17,7 @@ const (
 	MusicConfigFile = "music.toml"
 
 	SoundConfigFile = "sounds.toml"
+
+	// ContentDataDir is the default corpus directory, relative to CWD
+	ContentDataDir = "data"
 )

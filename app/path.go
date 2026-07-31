@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/service"
 )
 
 // ResolveGameConfig returns the FSM entry config path
@@ -61,6 +62,46 @@ func ResolveKeymap(cfg Config) string {
 		}
 	}
 	return ""
+}
+
+// ResolveContent locates the corpus: explicit flag > ./data > user config.
+// A zero Dir selects the embedded corpus.
+func ResolveContent(cfg Config) (service.ContentSource, error) {
+	if cfg.ForceDefault {
+		return service.ContentSource{}, nil
+	}
+
+	if p := cfg.ContentPath; p != "" {
+		info, err := os.Stat(p)
+		if err != nil {
+			return service.ContentSource{}, err
+		}
+		if info.IsDir() {
+			return service.ContentSource{Dir: p, Explicit: true}, nil
+		}
+		return service.ContentSource{
+			Dir:      filepath.Dir(p),
+			Pin:      filepath.Base(p),
+			Explicit: true,
+		}, nil
+	}
+
+	candidates := []string{parameter.ContentDataDir}
+	if base, err := os.UserConfigDir(); err == nil {
+		candidates = append(candidates,
+			filepath.Join(base, parameter.AppConfigDirName, parameter.ContentDataDir))
+	}
+	for _, p := range candidates {
+		if dirExists(p) {
+			return service.ContentSource{Dir: p}, nil
+		}
+	}
+	return service.ContentSource{}, nil
+}
+
+func dirExists(p string) bool {
+	info, err := os.Stat(p)
+	return err == nil && info.IsDir()
 }
 
 func fileExists(p string) bool {

@@ -52,12 +52,8 @@ const (
 
 // Character Spawn Logic
 const (
-	SpawnIntervalMs         = 1000
-	MinBlockLines           = 2
-	MaxBlockLines           = 5
-	MaxPlacementTries       = 3
-	MinIndentChange         = 2
-	ContentRefreshThreshold = 0.8
+	SpawnIntervalMs   = 1000
+	MaxPlacementTries = 3
 )
 
 // Spawn Exclusion Zones

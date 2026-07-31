@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
-	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
@@ -14,18 +13,48 @@ import (
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
-// GlyphKey represents a unique glyph type+level combination
+// GlyphKey is a spawnable glyph type/level pair
 type GlyphKey struct {
 	Type  component.GlyphType
 	Level component.GlyphLevel
 }
 
-// GlyphCensus holds entity counts for each type/level combination
-type GlyphCensus map[GlyphKey]int
+// Spawnable types and levels; census slots are indexed by position here,
+// so the enum values themselves are free to change
+var glyphSpawnTypes = [...]component.GlyphType{component.GlyphBlue, component.GlyphGreen}
+var glyphSpawnLevels = [...]component.GlyphLevel{component.GlyphDark, component.GlyphNormal, component.GlyphBright}
 
-// Allowed to spawn types and levels used as census keys
-var glyphSpawnTypes = []component.GlyphType{component.GlyphBlue, component.GlyphGreen}
-var glyphSpawnLevels = []component.GlyphLevel{component.GlyphDark, component.GlyphNormal, component.GlyphBright}
+const glyphCensusSlots = len(glyphSpawnTypes) * len(glyphSpawnLevels)
+
+// glyphCensus counts live glyphs per type/level slot
+type glyphCensus [glyphCensusSlots]int
+
+// censusSlot maps a type/level pair to its slot, -1 when not spawnable
+func censusSlot(t component.GlyphType, l component.GlyphLevel) int {
+	ti := -1
+	for i, st := range glyphSpawnTypes {
+		if st == t {
+			ti = i
+			break
+		}
+	}
+	if ti < 0 {
+		return -1
+	}
+	for i, sl := range glyphSpawnLevels {
+		if sl == l {
+			return ti*len(glyphSpawnLevels) + i
+		}
+	}
+	return -1
+}
+
+// glyphPlacement is a staged entity awaiting batch position commit
+type glyphPlacement struct {
+	entity core.Entity
+	pos    component.PositionComponent
+	char   rune
+}
 
 // GlyphSystem handles glyph sequence generation and spawning
 type GlyphSystem struct {
@@ -34,16 +63,14 @@ type GlyphSystem struct {
 	rng *vmath.FastRand
 
 	// Glyph census
-	census map[GlyphKey]int
+	census glyphCensus
 
 	// Spawn timing and rate
 	nextSpawnTimer time.Duration
 	rateMultiplier float64 // 0.5x, 1.0x, 2.0x based on screen fill
 
-	// Content consumption tracking (frame-local)
-	localGeneration int64
-	localIndex      int
-	frameContent    *content.PreparedContent // Snapshot for current frame
+	// Reused placement scratch
+	placement []glyphPlacement
 
 	// Cached metric pointers
 	statEnabled     *atomic.Bool
@@ -75,29 +102,17 @@ func NewGlyphSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
 	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
-	s.census = make(map[GlyphKey]int)
-	s.initCensus()
+	s.census = glyphCensus{}
 
 	s.nextSpawnTimer = time.Duration(0)
 	s.rateMultiplier = 1.0
-	s.localGeneration = 0
-	s.localIndex = 0
-	s.frameContent = nil
+	s.placement = s.placement[:0]
 	s.statEnabled.Store(true)
 	s.statDensity.Set(0)
 	s.statRateMult.Set(0)
 	s.statNextSpawnMS.Store(0)
 	s.statOrphanGlyph.Store(0)
 	s.enabled = true
-}
-
-// initCensus prepares an empty census with spawn keys
-func (s *GlyphSystem) initCensus() {
-	for _, spawnType := range glyphSpawnTypes {
-		for _, spawnLevel := range glyphSpawnLevels {
-			s.census[GlyphKey{Type: spawnType, Level: spawnLevel}] = 0
-		}
-	}
 }
 
 // Name returns system's name
@@ -139,10 +154,6 @@ func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
 	if !s.enabled {
 		return
 	}
-
-	// switch ev.Type {
-	//
-	// }
 }
 
 // Update runs the spawn system logic
@@ -174,15 +185,6 @@ func (s *GlyphSystem) Update() {
 		return
 	}
 	s.nextSpawnTimer = maybeNewSpawnTimer
-
-	// Snapshot content at frame start to prevent mid-frame race
-	s.frameContent = s.world.Resources.Content.Provider.CurrentContent()
-
-	// Detect content swap and reset index
-	if s.frameContent != nil && s.frameContent.Generation != s.localGeneration {
-		s.localGeneration = s.frameContent.Generation
-		s.localIndex = 0
-	}
 
 	// Generate and spawn a new sequence of glyphs
 	s.spawnGlyphs()
@@ -216,35 +218,13 @@ func (s *GlyphSystem) calculateNextSpawn() time.Duration {
 	return adjustedDelay
 }
 
-// getNextBlock retrieves the next logical code block
-func (s *GlyphSystem) getNextBlock() content.CodeBlock {
-	if s.frameContent == nil || len(s.frameContent.Blocks) == 0 {
-		return content.CodeBlock{}
-	}
-
-	// Bounds check and wrap
-	if s.localIndex >= len(s.frameContent.Blocks) {
-		s.localIndex = 0
-	}
-
-	block := s.frameContent.Blocks[s.localIndex]
-	s.localIndex++
-
-	// Notify service of consumption
-	s.world.Resources.Content.Provider.NotifyConsumed(1)
-
-	return block
-}
-
-// updateCensus iterates all glyph entities and counts types/levels
-// Called once per spawn check, O(n)
+// updateCensus counts live glyphs per spawn slot, called once per spawn, O(n)
 func (s *GlyphSystem) updateCensus() {
-	s.initCensus()
+	s.census = glyphCensus{}
 
 	var orphanGlyph int64
 
-	glyphEntities := s.world.Components.Glyph.GetAllEntities()
-	for _, glyphEntity := range glyphEntities {
+	for _, glyphEntity := range s.world.Components.Glyph.GetAllEntities() {
 		if !s.world.Positions.HasPosition(glyphEntity) {
 			orphanGlyph++
 			continue
@@ -255,179 +235,131 @@ func (s *GlyphSystem) updateCensus() {
 			continue
 		}
 
-		if glyphComp.Type != component.GlyphBlue && glyphComp.Type != component.GlyphGreen {
-			continue
+		if slot := censusSlot(glyphComp.Type, glyphComp.Level); slot >= 0 {
+			s.census[slot]++
 		}
-		key := GlyphKey{Type: glyphComp.Type, Level: glyphComp.Level}
-		s.census[key]++
-
 	}
 
 	s.statOrphanGlyph.Store(orphanGlyph)
-
 }
 
-// nextGlyphToSpawn returns color/level combinations not present on screen
+// nextGlyphToSpawn returns the least represented type/level pair on the map.
+// Ties break uniformly at random so equal counts don't lock onto one slot
 func (s *GlyphSystem) nextGlyphToSpawn() GlyphKey {
-	minGlyphCount := -1
-	var minGlyphKey GlyphKey
-	for key, count := range s.census {
-		if minGlyphCount == -1 {
-			minGlyphCount = count
-			minGlyphKey = key
-		} else if count < minGlyphCount {
-			minGlyphCount = count
+	best, ties := 0, 1
+	for slot := 1; slot < len(s.census); slot++ {
+		switch {
+		case s.census[slot] < s.census[best]:
+			best, ties = slot, 1
+		case s.census[slot] == s.census[best]:
+			ties++
+			if s.rng.Intn(ties) == 0 {
+				best = slot
+			}
 		}
 	}
-	return minGlyphKey
+	return GlyphKey{
+		Type:  glyphSpawnTypes[best/len(glyphSpawnLevels)],
+		Level: glyphSpawnLevels[best%len(glyphSpawnLevels)],
+	}
 }
 
-// spawnGlyphs generates and spawns a new glyph block from file
+// spawnGlyphs pulls the next content block and places its lines
 func (s *GlyphSystem) spawnGlyphs() {
-	// Census for glyph counters
+	res := s.world.Resources.Content
+	if res == nil || res.Provider == nil {
+		return
+	}
+
+	block, ok := res.Provider.NextBlock()
+	if !ok {
+		return
+	}
+
 	s.updateCensus()
-	glyphKey := s.nextGlyphToSpawn()
+	key := s.nextGlyphToSpawn()
 
-	// Check if we have content (already snapshotted in Update)
-	if s.frameContent == nil || len(s.frameContent.Blocks) == 0 {
-		return
-	}
-
-	// Get next logical code block
-	block := s.getNextBlock()
-	if len(block.Lines) == 0 {
-		return
-	}
-
-	// Try to place each line from the block on the screen
 	for _, line := range block.Lines {
-		s.placeLine(line, glyphKey.Type, glyphKey.Level)
+		s.placeLine(line, key.Type, key.Level)
 	}
 }
 
-// placeLine attempts to place a single line on the screen
-// Lines exceeding MapWidth are cropped to fit available space
+// placeLine attempts to place a single line on the map
+// Lines wider than the map are cropped; the map width is the only crop policy
 func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyphLevel component.GlyphLevel) bool {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
 
 	lineRunes := []rune(line)
+	if len(lineRunes) == 0 {
+		return false
+	}
+	if len(lineRunes) > config.MapWidth {
+		lineRunes = lineRunes[:config.MapWidth]
+	}
 	lineLength := len(lineRunes)
 
-	if lineLength == 0 {
+	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+	if !ok {
 		return false
 	}
 
-	// Crop line if it exceeds game width
-	if lineLength > config.MapWidth {
-		lineRunes = lineRunes[:config.MapWidth]
-		lineLength = config.MapWidth
-	}
-
-	// Try up to MaxPlacementTries times to find a valid position
 	for range parameter.MaxPlacementTries {
-		// Random row selection
-		// TODO: convert to fast rand
 		row := s.rng.Intn(config.MapHeight)
+		startCol := s.rng.Intn(config.MapWidth - lineLength + 1)
 
-		// Check if line fits and find available columns
-		if lineLength > config.MapWidth {
-			// Line too long for screen, skip
+		// Cursor exclusion: interval overlap on X, distance on Y
+		if vmath.IntAbs(row-cursorPos.Y) <= parameter.CursorExclusionY &&
+			startCol <= cursorPos.X+parameter.CursorExclusionX &&
+			startCol+lineLength > cursorPos.X-parameter.CursorExclusionX {
 			continue
 		}
 
-		// Random column selection (must have room for full line)
-		maxStartCol := config.MapWidth - lineLength
-		if maxStartCol < 0 {
-			// Line still too long after crop, skip
-			return false
-		}
-
-		startCol := s.rng.Intn(maxStartCol + 1)
-
-		// Check for overlaps
-		hasOverlap := false
+		blocked := false
 		for i := range lineLength {
 			if s.world.Positions.IsBlocked(startCol+i, row, component.WallBlockSpawn) {
-				hasOverlap = true
+				blocked = true
 				break
 			}
 		}
-
-		// Check if too close to cursor
-		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-		if !ok {
-			return false
-		}
-		for i := range lineLength {
-			col := startCol + i
-			// if math.Abs(float64(col-cursorPos.X)) <= parameter.CursorExclusionX &&
-			// 	math.Abs(float64(row-cursorPos.Y)) <= parameter.CursorExclusionY {
-			if vmath.IntAbs(col-cursorPos.X) <= parameter.CursorExclusionX &&
-				vmath.IntAbs(row-cursorPos.Y) <= parameter.CursorExclusionY {
-				hasOverlap = true
-				break
-			}
-		}
-
-		if hasOverlap {
+		if blocked {
 			continue
 		}
 
-		// Valid position found, create entities
-
-		// 1. Create entities and prepare components
-		type entityData struct {
-			entity core.Entity
-			pos    component.PositionComponent
-			char   rune
-		}
-
-		entities := make([]entityData, 0, lineLength)
-
+		// 1. Stage entities, skipping spaces
+		s.placement = s.placement[:0]
 		for i := range lineLength {
-			// Skip space characters - don't create entities for them
 			if lineRunes[i] == ' ' {
 				continue
 			}
-
-			entity := s.world.CreateEntity()
-			entities = append(entities, entityData{
-				entity: entity,
-				pos: component.PositionComponent{
-					X: startCol + i,
-					Y: row,
-				},
-				char: lineRunes[i],
+			s.placement = append(s.placement, glyphPlacement{
+				entity: s.world.CreateEntity(),
+				pos:    component.PositionComponent{X: startCol + i, Y: row},
+				char:   lineRunes[i],
 			})
 		}
 
 		// 2. Batch position validation and commit
 		batch := s.world.Positions.BeginBatch()
-		for _, ed := range entities {
-			batch.Add(ed.entity, ed.pos)
+		for _, gp := range s.placement {
+			batch.Add(gp.entity, gp.pos)
 		}
-
 		if err := batch.Commit(); err != nil {
-			// Collision detected - cleanup entities and try next attempt
-			for _, ed := range entities {
-				s.world.DestroyEntity(ed.entity)
+			for _, gp := range s.placement {
+				s.world.DestroyEntity(gp.entity)
 			}
 			continue
 		}
 
-		// 3. Set glyph components
-		for _, ed := range entities {
-			s.world.Components.Glyph.SetComponent(ed.entity, component.GlyphComponent{
-				Rune:  ed.char,
+		// 3. Attach glyph components
+		for _, gp := range s.placement {
+			s.world.Components.Glyph.SetComponent(gp.entity, component.GlyphComponent{
+				Rune:  gp.char,
 				Type:  glyphType,
 				Level: glyphLevel,
 			})
 		}
-
 		return true
 	}
 
-	// Failed to place after MaxPlacementTries attempts
 	return false
 }

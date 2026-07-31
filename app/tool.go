@@ -14,18 +14,27 @@ import (
 	"github.com/lixenwraith/vi-fighter/fsm"
 	"github.com/lixenwraith/vi-fighter/fsm/std"
 	"github.com/lixenwraith/vi-fighter/manifest"
+	"github.com/lixenwraith/vi-fighter/service"
 )
 
 // schemaVersion is the FSM schema contract version consumed by the map editor
 const schemaVersion = 1
 
-// Check validates the resolved FSM config without starting the game
+// Check validates the resolved FSM config and content corpus without starting the game
 func Check(cfg Config, w io.Writer) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
 	event.InitRegistry()
 
+	if err := checkFSM(cfg, w); err != nil {
+		return err
+	}
+	return checkContent(cfg, w)
+}
+
+// checkFSM loads the resolved FSM config and reports its source
+func checkFSM(cfg Config, w io.Writer) error {
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)
 
@@ -44,6 +53,31 @@ func Check(cfg Config, w io.Writer) error {
 		return err
 	}
 	fmt.Fprintln(w, "config ok:", path)
+	return nil
+}
+
+// checkContent loads the corpus and reports accepted and rejected files
+func checkContent(cfg Config, w io.Writer) error {
+	src, err := ResolveContent(cfg)
+	if err != nil {
+		return fmt.Errorf("content path: %w", err)
+	}
+
+	svc := service.NewContentService(src)
+	if err := svc.Init(); err != nil {
+		return err
+	}
+
+	c := svc.Corpus()
+	fmt.Fprintf(w, "content ok: %s (%d files, %d blocks, %d lines)\n",
+		svc.Label(), len(c.Sources), c.BlockCount(), c.LineCount())
+
+	for _, s := range c.Sources {
+		fmt.Fprintf(w, "  ok    %-32s %4d blocks %6d lines\n", s.Name, len(s.Blocks), s.Lines)
+	}
+	for _, r := range c.Rejected {
+		fmt.Fprintf(w, "  skip  %-32s %s\n", r.Name, r.Reason)
+	}
 	return nil
 }
 

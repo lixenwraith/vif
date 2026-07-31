@@ -310,7 +310,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "MOVEMENT",
 		Entries: []core.CardEntry{
-			{Key: "h/j/k/l", Value: "MoveEntity left/down/up/right"},
+			{Key: "h/j/k/l", Value: "Move left/down/up/right"},
 			{Key: "w/b", Value: "Word forward/backward"},
 			{Key: "0/$", Value: "Line start/end"},
 			{Key: "gg/G", Value: "Top/bottom of screen"},
@@ -359,6 +359,7 @@ func (s *MetaSystem) handleHelpRequest() {
 			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
 			{Key: ":a[uto] [on|off]", Value: "Auto-fire main + special (default on)"},
 			{Key: ":m[ouse] enable|disable|free", Value: "Mouse input master switch"},
+			{Key: ":content", Value: "Corpus source and counters"},
 			{Key: ":energy N", Value: "Set energy"},
 			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},

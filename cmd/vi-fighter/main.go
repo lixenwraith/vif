@@ -16,11 +16,11 @@ var (
 	flagAudioBackend = flag.String("ab", "", "Force audio backend by name")
 	flagAudioMute    = flag.Bool("am", false, "Start with audio muted")
 	flagAudioUnmute  = flag.Bool("au", false, "Start with audio unmuted")
-	flagContentPath  = flag.String("f", "", "Content file path or glob pattern")
+	flagContentPath  = flag.String("f", "", "Content directory or single content file")
 	flagGameScript   = flag.String("g", "", "Game config: game.toml path or map directory")
-	flagGameDefault  = flag.Bool("gd", false, "Force embedded default FSM script")
+	flagDefault      = flag.Bool("d", false, "Force embedded FSM script and content, ignore -g and -f")
 	flagKeymapPath   = flag.String("k", "", "Keymap config file path (TOML)")
-	flagCheck        = flag.Bool("check", false, "Validate FSM config and exit")
+	flagCheck        = flag.Bool("check", false, "Validate FSM and content config, then exit")
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 )
 
@@ -50,7 +50,7 @@ func buildConfig() app.Config {
 		AudioMuted:   true, // default muted
 		ContentPath:  *flagContentPath,
 		GameScript:   *flagGameScript,
-		ForceDefault: *flagGameDefault,
+		ForceDefault: *flagDefault,
 		KeymapPath:   *flagKeymapPath,
 	}
 
