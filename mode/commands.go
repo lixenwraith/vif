@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vi-fighter/component"
@@ -42,6 +43,10 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleQuitCommand(ctx)
 	case "n", "new":
 		return handleNewCommand(ctx)
+	case "f", "free":
+		return handleFreeCommand(ctx, args)
+	case "a", "auto":
+		return handleAutoCommand(ctx, args)
 	case "s", "system":
 		return handleSystemCommand(ctx, args)
 	case "m", "mouse":
@@ -52,7 +57,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDebugCommand(ctx)
 	case "h", "help", "?":
 		return handleHelpCommand(ctx)
-	case "a", "about":
+	case "about":
 		return handleAboutCommand(ctx)
 	case "energy":
 		return handleEnergyCommand(ctx, args)
@@ -97,6 +102,64 @@ func handleNewCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
+// handleFreeCommand toggles or sets mouse motion cursor tracking
+func handleFreeCommand(ctx *engine.GameContext, args []string) CommandResult {
+	return applyToggle(ctx, &ctx.MouseFreeMode, args, "free", "Mouse free mode")
+}
+
+// handleAutoCommand toggles or sets auto-fire (main + special)
+func handleAutoCommand(ctx *engine.GameContext, args []string) CommandResult {
+	return applyToggle(ctx, &ctx.AutoFire, args, "auto", "Auto-fire")
+}
+
+// applyToggle resolves a bare toggle or an explicit on|off argument against a
+// context flag. The explicit form exists so macros and scripts are idempotent
+// now that both flags default to on.
+func applyToggle(ctx *engine.GameContext, flag *atomic.Bool, args []string, cmd, label string) CommandResult {
+	desired, explicit, ok := parseToggleArg(args)
+	if !ok {
+		setCommandError(ctx, fmt.Sprintf("Usage: :%s [on|off]", cmd))
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if !explicit {
+		desired = !flag.Load()
+	}
+	flag.Store(desired)
+
+	state := "disabled"
+	if desired {
+		state = "enabled"
+	}
+	ctx.SetStatusMessage(label+" "+state, parameter.StatusMessageDefaultTimeout, false)
+	ctx.SetLastCommand(fmt.Sprintf(":%s %s", cmd, toggleWord(desired)))
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// parseToggleArg accepts an empty argument list (toggle) or a single on|off
+// token. Returns the requested value, whether it was explicit, and validity.
+func parseToggleArg(args []string) (value, explicit, ok bool) {
+	if len(args) == 0 {
+		return false, false, true
+	}
+	if len(args) > 1 {
+		return false, false, false
+	}
+	switch strings.ToLower(args[0]) {
+	case "on", "e", "enable", "enabled", "1", "true", "y", "yes":
+		return true, true, true
+	case "off", "d", "disable", "disabled", "0", "false", "n", "no":
+		return false, true, true
+	}
+	return false, false, false
+}
+
+func toggleWord(v bool) string {
+	if v {
+		return "on"
+	}
+	return "off"
+}
+
 // handleSystemCommand sets the energy to a specified value
 func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) != 2 {
@@ -129,54 +192,39 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
+// handleMouseCommand controls mouse input
 func handleMouseCommand(ctx *engine.GameContext, args []string) CommandResult {
-	if len(args) != 1 {
-		setCommandError(ctx, "Usage: :mouse free|auto|enable|disable")
+	if len(args) == 0 {
+		setCommandError(ctx, "Usage: :mouse enable|disable|free")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	var msg string
 	switch args[0] {
 	case "free":
-		newState := !ctx.MouseFreeMode.Load()
-		ctx.MouseFreeMode.Store(newState)
-		if newState {
-			msg = "Mouse free mode enabled"
-		} else {
-			msg = "Mouse free mode disabled"
-		}
-
-	case "auto":
-		newState := !ctx.MouseAutoMode.Load()
-		ctx.MouseAutoMode.Store(newState)
-		if newState {
-			msg = "Mouse auto-fire enabled"
-		} else {
-			msg = "Mouse auto-fire disabled"
-		}
+		res := handleFreeCommand(ctx, args[1:])
+		return res
 
 	case "enable":
+		msg := "Mouse already enabled"
 		if ctx.MouseDisabled.Load() {
 			ctx.MouseDisabled.Store(false)
 			msg = "Mouse enabled"
-		} else {
-			msg = "Mouse already enabled"
 		}
+		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
 
 	case "disable":
+		msg := "Mouse already disabled"
 		if !ctx.MouseDisabled.Load() {
 			ctx.MouseDisabled.Store(true)
 			msg = "Mouse disabled"
-		} else {
-			msg = "Mouse already disabled"
 		}
+		ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
 
 	default:
-		setCommandError(ctx, "Usage: :mouse free|auto|enable|disable")
+		setCommandError(ctx, "Usage: :mouse enable|disable|free")
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, false)
 	ctx.SetLastCommand(":mouse " + args[0])
 	return CommandResult{Continue: true, KeepPaused: false}
 }

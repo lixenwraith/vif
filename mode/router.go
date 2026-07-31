@@ -19,6 +19,17 @@ type undoPosition struct {
 
 const cmdHistorySize = 256
 
+// MouseModeApplier is terminal-side sink for mouse reporting state
+type MouseModeApplier func(enabled, motion bool)
+
+// mouseModeState caches the last applied reporting state
+// applied=false forces the first reconcile (lazy init), prevent access before context exists
+type mouseModeState struct {
+	applied bool
+	enabled bool
+	motion  bool
+}
+
 // Router interprets Intents and executes game logic
 // Authoritative owner of game mode state
 type Router struct {
@@ -45,10 +56,16 @@ type Router struct {
 	cmdHistSaved  string // preserves in-progress input during browsing
 
 	// Mouse hold state for repeat firing
-	mouseLeftHeld     bool
-	mouseRightHeld    bool
-	mouseLastFireMain time.Time
-	mouseLastFireSpec time.Time
+	mouseLeftHeld  bool
+	mouseRightHeld bool
+
+	// Fire anchors, shared by auto-fire and held-button preventing stacked requests
+	lastFireMain time.Time
+	lastFireSpec time.Time
+
+	// Terminal mouse reporting, reconciled on the input tick
+	applyMouseMode MouseModeApplier
+	mouseMode      mouseModeState
 
 	apm apmGate
 
@@ -137,6 +154,17 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		r.ctx.MacroPlaying.Store(false)
 	}
 
+	// Pointer admission gate. Dropped input is not an action
+	if isMouseIntent(intent.Type) && (r.ctx.MouseDisabled.Load() || r.inputSuspended()) {
+		switch intent.Type {
+		case input.IntentMouseLeftDown, input.IntentMouseLeftUp:
+			r.mouseLeftHeld = false
+		case input.IntentMouseRightDown, input.IntentMouseRightUp:
+			r.mouseRightHeld = false
+		}
+		return true
+	}
+
 	// Clear status message on any action
 	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.SetStatusMessage("", 0, false)
@@ -162,11 +190,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	// Record intent if recording (exclude macro control intents and playback-originated)
 	if r.macro.IsRecording() && !isMacroControlIntent(intent.Type) && !intent.MacroPlayback {
 		r.macro.Record(*intent)
-	}
-
-	// Skip mouse input when disabled
-	if r.ctx.MouseDisabled.Load() && isMouseIntent(intent.Type) {
-		return true
 	}
 
 	switch intent.Type {
@@ -291,9 +314,8 @@ func intentSig(in *input.Intent) uint64 {
 	return uint64(in.Type)<<48 ^ uint64(in.Motion)<<32 ^ uint64(in.Special)<<24 ^ uint64(uint32(in.Char))
 }
 
-// recordAPM is the admission point for APM, which exists to drive adaptive
-// music. Machine-generated activity is excluded: macro playback here,
-// mouse auto-fire by construction (ProcessMouseTick emits events, not intents)
+// recordAPM is the admission point for APM, which exists to drive adaptive music
+// Machine-generated activity is excluded: macro playback here, mouse auto-fire by construction
 func (r *Router) recordAPM(intent *input.Intent) {
 	if intent.MacroPlayback {
 		return // 4.a: machine input; mouse auto-fire excluded by construction (events, not intents)
@@ -1079,7 +1101,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	r.moveMouseCursor(intent)
 	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
 	r.mouseLeftHeld = true
-	r.mouseLastFireMain = r.ctx.PausableClock.Now()
+	r.lastFireMain = r.ctx.PausableClock.Now()
 	return true
 }
 
@@ -1092,7 +1114,7 @@ func (r *Router) handleMouseRightDown() bool {
 	// Fire special at current cursor position, no movement
 	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
 	r.mouseRightHeld = true
-	r.mouseLastFireSpec = r.ctx.PausableClock.Now()
+	r.lastFireSpec = r.ctx.PausableClock.Now()
 	return true
 }
 
@@ -1121,25 +1143,67 @@ func (r *Router) handleMouseMove(intent *input.Intent) bool {
 	return true
 }
 
-// ProcessMouseTick handles repeat firing for held mouse buttons
-// Called from main loop each frame
-func (r *Router) ProcessMouseTick() {
-	if r.ctx.MouseDisabled.Load() {
+// inputSuspended reports whether machine-driven and pointer input must be withheld
+func (r *Router) inputSuspended() bool {
+	return r.ctx.IsPaused.Load() || r.ctx.IsCommandMode() || r.ctx.IsOverlayMode()
+}
+
+// SetMouseModeApplier installs the terminal reporting sink. Optional: a nil
+func (r *Router) SetMouseModeApplier(fn MouseModeApplier) {
+	r.applyMouseMode = fn
+}
+
+// syncMouseMode pushes reporting state to the host when it diverges from the last applied value
+// First call always applies — post context availability lazy init
+// Runs regardless of pause: reporting tracks the flags even while the simulation is frozen
+func (r *Router) syncMouseMode() {
+	if r.applyMouseMode == nil {
 		return
+	}
+	enabled := !r.ctx.MouseDisabled.Load()
+	motion := enabled && r.ctx.MouseFreeMode.Load()
+
+	if r.mouseMode.applied && r.mouseMode.enabled == enabled && r.mouseMode.motion == motion {
+		return
+	}
+	r.mouseMode = mouseModeState{applied: true, enabled: enabled, motion: motion}
+	r.applyMouseMode(enabled, motion)
+}
+
+// ProcessInputTick checks mouse reports and emits repeat fire requests for auto-fire and held buttons
+func (r *Router) ProcessInputTick() bool {
+	r.syncMouseMode()
+
+	if r.inputSuspended() {
+		return false
 	}
 
 	now := r.ctx.PausableClock.Now()
-	autoMode := r.ctx.MouseAutoMode.Load()
+	auto := r.ctx.AutoFire.Load()
+	mouse := !r.ctx.MouseDisabled.Load()
 
-	if (r.mouseLeftHeld || autoMode) && now.Sub(r.mouseLastFireMain) >= parameter.MouseRepeatInterval {
+	emitted := false
+	if r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld) {
 		r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
-		r.mouseLastFireMain = now
+		emitted = true
 	}
-
-	if (r.mouseRightHeld || autoMode) && now.Sub(r.mouseLastFireSpec) >= parameter.MouseRepeatInterval {
+	if r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld) {
 		r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
-		r.mouseLastFireSpec = now
+		emitted = true
 	}
+	return emitted
+}
+
+// fireDue reports whether a repeat request is due for a weapon slot and advances its anchor
+// Auto-fire and held-button repeat carry independent intervals, first elapse wins, don't fire in same slot in one cooldown
+func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) bool {
+	elapsed := now.Sub(*last)
+	if !((auto && elapsed >= parameter.AutoFireInterval) ||
+		(held && elapsed >= parameter.MouseRepeatInterval)) {
+		return false
+	}
+	*last = now
+	return true
 }
 
 // moveMouseCursor handles coordinate conversion, bounds check, and cursor movement
@@ -1165,6 +1229,13 @@ func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 	// Map bounds check (defensive, should not exceed given viewport clamp)
 	if gameX < 0 || gameX >= config.MapWidth || gameY < 0 || gameY >= config.MapHeight {
 		return false
+	}
+
+	player := r.ctx.World.Resources.Player.Entity
+
+	// Same-cell motion is a no-op, reduce free mode reporting
+	if cur, ok := r.ctx.World.Positions.GetPosition(player); ok && cur.X == gameX && cur.Y == gameY {
+		return true
 	}
 
 	// Block check
@@ -1248,7 +1319,7 @@ func (r *Router) updateMacroPlayingState() {
 }
 
 func (r *Router) ProcessMacroTick() []*input.Intent {
-	if r.ctx.IsPaused.Load() || r.ctx.IsCommandMode() {
+	if r.ctx.IsPaused.Load() || r.inputSuspended() || r.ctx.IsCommandMode() {
 		return nil
 	}
 	now := r.ctx.PausableClock.Now()

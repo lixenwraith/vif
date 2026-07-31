@@ -42,8 +42,10 @@ func (a *App) Loop() error {
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
+	inputTicker := time.NewTicker(parameter.InputTickInterval)
+	defer inputTicker.Stop()
+
 	eventChan := a.termSvc.Events()
-	lastMouseMode := defaultMouseMode
 
 	for {
 		select {
@@ -53,14 +55,8 @@ func (a *App) Loop() error {
 				if !a.handleIntent(intent) {
 					return nil // player quit
 				}
-			}
-
-			// Input events bypass the game tick wait, acquires lock
-			a.scheduler.DispatchEventsImmediately()
-
-			if want := a.wantMouseMode(); want != lastMouseMode {
-				a.term.SetMouseMode(want)
-				lastMouseMode = want
+				// Input events bypass the game tick wait, acquires lock
+				a.scheduler.DispatchEventsImmediately()
 			}
 
 			if ev.Type == terminal.EventResize {
@@ -68,6 +64,11 @@ func (a *App) Loop() error {
 				a.ctx.Height = ev.Height
 				a.ctx.HandleResize()
 				a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
+			}
+
+		case <-inputTicker.C:
+			if !a.inputTick() {
+				return nil
 			}
 
 		case <-frameTicker.C:
@@ -90,33 +91,9 @@ func (a *App) handleIntent(intent *input.Intent) bool {
 	return cont
 }
 
-// wantMouseMode derives terminal mouse reporting from context flags
-func (a *App) wantMouseMode() terminal.MouseMode {
-	if a.ctx.MouseDisabled.Load() {
-		return 0
-	}
-	want := defaultMouseMode
-	if a.ctx.MouseFreeMode.Load() {
-		want |= terminal.MouseModeMotion
-	}
-	return want
-}
-
 // frame advances one render frame; false means the player quit
 func (a *App) frame() bool {
 	a.ctx.IncrementFrameNumber()
-
-	a.router.ProcessMouseTick()
-
-	macroIntents := a.router.ProcessMacroTick()
-	for _, intent := range macroIntents {
-		if !a.handleIntent(intent) {
-			return false
-		}
-	}
-	if len(macroIntents) > 0 {
-		a.scheduler.DispatchEventsImmediately()
-	}
 
 	// Snapshot shared state under the world lock: minimal hold time, and
 	// RenderContext is built from a consistent view
@@ -163,6 +140,39 @@ func (a *App) frame() bool {
 		case a.frameReady <- struct{}{}:
 		default: // channel full, skip signal
 		}
+	}
+	return true
+}
+
+// applyMouseMode is the Router's terminal sink for mouse reporting state
+func (a *App) applyMouseMode(enabled, motion bool) {
+	if !enabled {
+		a.term.SetMouseMode(0)
+		return
+	}
+	mode := defaultMouseMode
+	if motion {
+		mode |= terminal.MouseModeMotion
+	}
+	a.term.SetMouseMode(mode)
+}
+
+// inputTick advances input-driven work: mouse reporting reconciliation,
+// auto-fire and button repeat, macro playback. Runs on its own ticker so
+// input cadence is independent of the render loop.
+// Returns false when the player quit.
+func (a *App) inputTick() bool {
+	emitted := a.router.ProcessInputTick()
+
+	macroIntents := a.router.ProcessMacroTick()
+	for _, intent := range macroIntents {
+		if !a.handleIntent(intent) {
+			return false
+		}
+	}
+
+	if emitted || len(macroIntents) > 0 {
+		a.scheduler.DispatchEventsImmediately()
 	}
 	return true
 }

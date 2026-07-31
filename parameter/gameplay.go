@@ -98,5 +98,16 @@ const (
 
 	// MouseRepeatInterval is the delay between mouse events when click button is held
 	MouseRepeatInterval = WeaponCooldownMain
+
+	// AutoFireInterval is the delay between fire requests while auto-fire is active
+	AutoFireInterval = WeaponCooldownMain
 )
 
+// Initial input state, applied once at GameContext construction, changed state persist through game reset
+const (
+	// DefaultAutoFire enables main/special auto-fire at startup
+	DefaultAutoFire = true
+
+	// DefaultMouseFreeMode enables cursor tracking of bare mouse motion at startup
+	DefaultMouseFreeMode = true
+)

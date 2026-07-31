@@ -356,10 +356,12 @@ func (s *MetaSystem) handleHelpRequest() {
 		Entries: []core.CardEntry{
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
+			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
+			{Key: ":a[uto] [on|off]", Value: "Auto-fire main + special (default on)"},
+			{Key: ":m[ouse] enable|disable|free", Value: "Mouse input master switch"},
 			{Key: ":energy N", Value: "Set energy"},
 			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},
-			{Key: ":spawn on/off", Value: "Toggle spawning"},
 			{Key: ":d", Value: "Debug overlay"},
 			{Key: ":h", Value: "This help"},
 		},

@@ -86,7 +86,6 @@ func (a *App) init() error {
 	a.termSvc = termSvc
 	a.term = a.termSvc.Terminal()
 	core.SetCrashTerminal(a.term)
-	a.term.SetMouseMode(defaultMouseMode)
 	width, height := a.term.Size()
 
 	// 6. GameContext initializes the remaining world resources
@@ -115,6 +114,7 @@ func (a *App) init() error {
 		return err
 	}
 	a.router = mode.NewRouter(a.ctx, a.inputMachine)
+	a.router.SetMouseModeApplier(a.applyMouseMode)
 
 	// 10. Clock scheduler and frame synchronization
 	a.frameReady = make(chan struct{}, 1)

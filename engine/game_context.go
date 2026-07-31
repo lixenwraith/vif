@@ -37,8 +37,9 @@ type GameContext struct {
 	MacroClearFlag      atomic.Bool  // Set by :new to signal macro reset
 
 	MouseFreeMode atomic.Bool // Free cursor movement (motion tracking)
-	MouseAutoMode atomic.Bool // Auto-fire (continuous weapon fire)
 	MouseDisabled atomic.Bool // All mouse input ignored
+
+	AutoFire atomic.Bool // Auto-fire (continuous weapon/special fire)
 
 	// === Main-Loop Exclusive ===
 
@@ -145,7 +146,11 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 9. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 10. Initialize FPS tracking
+	// 10. Initial input state - Not restored by EventGameReset: user-owned for the session
+	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
+	ctx.AutoFire.Store(parameter.DefaultAutoFire)
+
+	// 11. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
@@ -156,19 +161,12 @@ func NewGameContext(world *World, width, height int) *GameContext {
 
 // updateGameArea calculates the game area dimensions
 func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
-	// Calculate line number width based on height
-	gameHeight = ctx.Height - parameter.BottomMargin - parameter.TopMargin
-	if gameHeight < 1 {
-		gameHeight = 1
-	}
-
 	ctx.GameXOffset = parameter.LeftMargin
 	ctx.GameYOffset = parameter.TopMargin
-	gameWidth = ctx.Width - ctx.GameXOffset
 
-	if gameWidth < 1 {
-		gameWidth = 1
-	}
+	// Calculate line number width based on height
+	gameHeight = max(ctx.Height-parameter.BottomMargin-parameter.TopMargin, 1)
+	gameWidth = max(ctx.Width-ctx.GameXOffset, 1)
 
 	return gameWidth, gameHeight
 }
