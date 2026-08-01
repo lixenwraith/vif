@@ -59,13 +59,13 @@ func ComputeRouteGraph(
 	}
 
 	size := mapW * mapH
-	tolerance := routeTolerance(mapW, mapH)
+	tolerance := 0
 	penalty := make([]int, size)
 	usedDilated := make([]bool, size)
 	var acceptedPaths [][]int
 	optDist := -1
 
-	maxAttempts := parameter.RouteGraphMaxRoutes * 2
+	maxAttempts := parameter.RouteGraphMaxRoutes + parameter.RouteGraphExtraAttempts
 	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < parameter.RouteGraphMaxRoutes; attempt++ {
 		path, trueCost := penalizedShortestPath(sourceX, sourceY, targetX, targetY, mapW, mapH, isBlocked, penalty)
 		if path == nil {
@@ -73,6 +73,7 @@ func ComputeRouteGraph(
 		}
 		if optDist < 0 {
 			optDist = trueCost // first pass: zero penalties → true optimum
+			tolerance = routeTolerance(optDist)
 		}
 		// Penalized-optimal whose TRUE cost exceeds the band ⇒ no in-tolerance
 		// disjoint (zero-penalty) candidate remains
@@ -217,7 +218,7 @@ func dilate(path []int, radius, mapW, mapH int, isBlocked WallChecker, fn func(i
 		var next []int
 		for _, idx := range frontier {
 			cx, cy := idx%mapW, idx/mapW
-			for d := int8(0); d < DirCount; d++ {
+			for d := range DirCount {
 				nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
 				if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
 					continue
@@ -316,9 +317,7 @@ func computeRouteWeights(rg *RouteGraph) {
 	}
 }
 
-// routeTolerance returns additive distance tolerance for band inclusion
-// Formula: 0.5 * max(mapW, mapH) * CostDiagonal
-func routeTolerance(mapW, mapH int) int {
-	m := max(mapW, mapH)
-	return (m * CostDiagonal) / 2
+// routeTolerance returns additive distance tolerance relative to the optimum
+func routeTolerance(optDist int) int {
+	return (optDist * parameter.RouteTolerancePct) / 100
 }

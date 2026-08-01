@@ -11,8 +11,8 @@ import (
 
 // TargetGroup holds a combat target with hit members for area attacks
 type TargetGroup struct {
-	Target  core.Entity   // Header for composites, entity itself for singles
 	Members []core.Entity // Members within area, or entity itself for singles
+	Target  core.Entity   // Header for composites, entity itself for singles
 }
 
 // TargetAssignment holds a resolved target with closest member for directed attacks
@@ -97,23 +97,23 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 	groups := make(map[core.Entity]*TargetGroup)
 
 	// 1. Simple combat entities (no Header, no Member component)
-	for _, memberEntity := range w.Components.Member.Entities() {
-		if w.Components.Header.HasEntity(memberEntity) || w.Components.Member.HasEntity(memberEntity) {
+	for _, e := range w.Components.Combat.Entities() {
+		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
-		if isOwnedBy(w, memberEntity, ownerEntity) {
+		if isOwnedBy(w, e, ownerEntity) {
 			continue
 		}
-		pos, ok := w.Positions.GetPosition(memberEntity)
+		pos, ok := w.Positions.GetPosition(e)
 		if !ok || !vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
-		groups[memberEntity] = &TargetGroup{Target: memberEntity, Members: []core.Entity{memberEntity}}
+		groups[e] = &TargetGroup{Target: e, Members: []core.Entity{e}}
 	}
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
 	// Container children are filtered by header type check.
-	for _, memberEntity := range w.Components.Member.GetAllEntities() {
+	for _, memberEntity := range w.Components.Member.Entities() {
 		memberComp, ok := w.Components.Member.GetComponent(memberEntity)
 		if !ok {
 			continue

@@ -353,6 +353,8 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		Behavior:      component.BehaviorEye,
 		Type:          component.CompositeTypeUnit,
 		MemberEntries: members,
+		// EyeSystem propagates member positions on header cell change
+		SkipPositionSync: true,
 	})
 
 	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
@@ -610,6 +612,10 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 	if !s.world.Components.Eye.HasEntity(headerEntity) {
 		return
 	}
+
+	// Latch: destruction is deferred to the event loop; drop the tag so a
+	// re-entrant Update cannot emit EnemyKilled twice
+	s.world.Components.Eye.RemoveEntity(headerEntity)
 
 	s.world.PushEvent(event.EventEyeDestroyed, &event.EyeDestroyedPayload{
 		HeaderEntity: headerEntity,

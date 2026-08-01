@@ -30,8 +30,14 @@ const (
 	// RouteGraphMinWeightFloor ensures every route gets minimum traffic share
 	RouteGraphMinWeightFloor = 0.05
 
-	// RouteGraphMaxRoutes caps accepted routes per graph (attempt budget = 2×)
-	RouteGraphMaxRoutes = 64
+	// RouteGraphMaxRoutes caps accepted routes per graph
+	RouteGraphMaxRoutes = 8
+
+	// RouteGraphExtraAttempts is the rejected-candidate budget above the route cap
+	RouteGraphExtraAttempts = 8
+
+	// RouteTolerancePct caps route length as a percentage above the optimum
+	RouteTolerancePct = 50
 
 	// RouteGraphMaxOverlapPct: reject route candidate sharing more than this
 	// percentage of its cells with already-accepted routes (dilated)

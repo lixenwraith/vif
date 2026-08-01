@@ -189,6 +189,15 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+			if s.compositePassability == nil {
+				s.compositePassability = navigation.NewCompositePassability(
+					payload.Width, payload.Height,
+					parameter.EyeWidth, parameter.EyeHeight,
+					parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+				)
+				DebugCompositePassability = s.compositePassability
+			}
+
 			s.compositePassability.Resize(payload.Width, payload.Height)
 			s.recomputeCompositePassability()
 			for _, g := range s.groups {
@@ -234,9 +243,24 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 		for _, g := range s.groups {
 			g.compositeFlowCache.MarkDirty()
 		}
+
+		// RouteIDs do not survive a rebuild: detach before invalidating
+		s.clearAllRouteAssignments()
 		s.world.Resources.RouteGraph.Clear()
-		s.rebuildGatewayRouteGraphs()
+		// Staged rebuild; refreshRouteGraphs drains one graph per interval
+		s.routeRebuildTicks = parameter.NavRouteRebuildInterval
 	}
+}
+
+// clearAllRouteAssignments detaches every routed entity; used when all graphs are invalidated
+func (s *NavigationSystem) clearAllRouteAssignments() {
+	s.world.Components.Navigation.Each(func(_ core.Entity, nav *component.NavigationComponent) bool {
+		if nav.UseRouteGraph {
+			nav.UseRouteGraph = false
+			nav.RouteID = -1
+		}
+		return true
+	})
 }
 
 // recomputeCompositePassabilityROI recomputes passability for header positions
@@ -278,13 +302,16 @@ func (s *NavigationSystem) Update() {
 
 	config := s.world.Resources.Config
 
-	// Handle map resize
+	// Handle map resize: one passability rebuild, then per-group caches
+	if s.compositePassability != nil &&
+		(config.MapWidth != s.compositePassability.Width || config.MapHeight != s.compositePassability.Height) {
+		s.compositePassability.Resize(config.MapWidth, config.MapHeight)
+		s.recomputeCompositePassability()
+	}
 	for _, g := range s.groups {
 		if config.MapWidth != g.pointFlowCache.Field.Width || config.MapHeight != g.pointFlowCache.Field.Height {
 			g.pointFlowCache.Resize(config.MapWidth, config.MapHeight)
 			g.compositeFlowCache.Resize(config.MapWidth, config.MapHeight)
-			s.compositePassability.Resize(config.MapWidth, config.MapHeight)
-			s.recomputeCompositePassability()
 		}
 	}
 

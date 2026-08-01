@@ -168,6 +168,11 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		}
 	}
 
+	towerType := payload.Type
+	if towerType >= component.TowerTypeCount {
+		towerType = component.TowerCyan
+	}
+
 	cursorEntity := s.world.Resources.Player.Entity
 
 	// Create header entity
@@ -185,6 +190,7 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 		RadiusY: radiusY,
 		MinHP:   minHP,
 		MaxHP:   maxHP,
+		Type:    towerType,
 	})
 
 	s.world.Components.Target.SetComponent(headerEntity, component.TargetComponent{

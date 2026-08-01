@@ -244,20 +244,20 @@ func (s *GatewaySystem) Update() {
 // emitSpawnEvent routes to the appropriate species spawn request event
 // routeDistID enables per-route assignment from bandit pool
 func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType uint8, x, y int, groupID uint8, routeDistID uint32, populationID uint32) {
-	// Sample GA if available
-	var evalID uint64
-	var genes []float64
-	if s.world.Resources.Genetics != nil {
-		// Periodic probe keeps all phenotype bins under evaluation
-		if rand.Float64() < parameter.GAScoutRate {
-			genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species), populationID)
-		} else {
-			genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
-		}
-	}
-
 	switch species {
 	case component.SpeciesEye:
+		// Sample GA if available
+		var evalID uint64
+		var genes []float64
+		if s.world.Resources.Genetics != nil {
+			// Periodic probe keeps all phenotype bins under evaluation
+			if rand.Float64() < parameter.GAScoutRate {
+				genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species), populationID)
+			} else {
+				genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)
+			}
+		}
+
 		// 1. Resolve phenotype
 		// Phenotype translation: map continuous gene [0.0, 0.99] to discrete EyeType [0..6]
 		eyeType := component.EyeType(subType) // Fallback to base configuration
