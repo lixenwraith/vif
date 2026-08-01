@@ -382,7 +382,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Wall collision - reflect and stop (BEFORE entity checks)
-				if s.world.Positions.HasBlockingWallAtUnsafe(currX, currY, component.WallBlockParticle) {
+				if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockParticle) {
 					dx := currX - lastSafeX
 					dy := currY - lastSafeY
 					if dx != 0 {
@@ -407,7 +407,7 @@ func (s *DustSystem) Update() {
 				}
 
 				// Only query grid if flags indicate targets present, unsafe-access while holding lock
-				n := s.world.Positions.GetAllAtIntoUnsafe(currX, currY, collisionBuf[:])
+				n := s.world.Positions.GetAllEntitiesAtInto(currX, currY, collisionBuf[:])
 
 				for i := range n {
 					target := collisionBuf[i]

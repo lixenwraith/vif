@@ -16,6 +16,9 @@ import (
 type TypingSystem struct {
 	world *engine.World
 
+	// Reusable delete collection scratch
+	deleteBuf []core.Entity
+
 	statCorrect   *atomic.Int64
 	statErrors    *atomic.Int64
 	statMaxStreak *atomic.Int64
@@ -40,6 +43,7 @@ func NewTypingSystem(world *engine.World) engine.System {
 }
 
 func (s *TypingSystem) Init() {
+	s.deleteBuf = s.deleteBuf[:0]
 	s.currentStreak = 0
 	s.statCorrect.Store(0)
 	s.statErrors.Store(0)
@@ -360,82 +364,47 @@ func (s *TypingSystem) isLeftmostMember(entity core.Entity, header *component.He
 	return leftmost == entity
 }
 
-// handleDeleteRequest processes deletion of entities in a range
+// handleDeleteRequest destroys glyphs whose position falls inside the requested range
+// Store-driven: Glyph+Position are authoritative, the spatial grid is not consulted
 func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) {
-	config := s.world.Resources.Config
+	lineRange := payload.RangeType == event.DeleteRangeLine
 
-	entitiesToDelete := make([]core.Entity, 0)
+	startX, startY := payload.StartX, payload.StartY
+	endX, endY := payload.EndX, payload.EndY
+	if startY > endY || (startY == endY && startX > endX) {
+		startX, startY, endX, endY = endX, endY, startX, startY
+	}
 
-	// Helper to check and mark entity for deletion
-	checkEntity := func(entity core.Entity) {
-		if !s.world.Components.Glyph.HasEntity(entity) {
-			return
+	s.deleteBuf = s.deleteBuf[:0]
+
+	s.world.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
+		pos, ok := s.world.Positions.GetPosition(e)
+		if !ok {
+			return true // orphan glyph: no position, not a positional target
 		}
-
-		// Check protection
-		if prot, ok := s.world.Components.Protection.GetComponent(entity); ok {
+		if pos.Y < startY || pos.Y > endY {
+			return true
+		}
+		// Char ranges clamp X on the first and last rows only
+		if !lineRange {
+			if pos.Y == startY && pos.X < startX {
+				return true
+			}
+			if pos.Y == endY && pos.X > endX {
+				return true
+			}
+		}
+		if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 			if prot.Mask&component.ProtectFromDelete != 0 || prot.Mask == component.ProtectAll {
-				return
+				// TODO: DEBUG check
+				return true
 			}
 		}
+		s.deleteBuf = append(s.deleteBuf, e)
+		return true
+	})
 
-		entitiesToDelete = append(entitiesToDelete, entity)
-	}
-
-	cellEntitiesBuf := make([]core.Entity, parameter.MaxEntitiesPerCell)
-
-	if payload.RangeType == event.DeleteRangeLine {
-		// Line deletion (inclusive rows)
-		startY, endY := payload.StartY, payload.EndY
-		// Ensure normalized order
-		if startY > endY {
-			startY, endY = endY, startY
-		}
-
-		// Query all glyphs to find those in the row range
-		entities := s.world.Components.Glyph.GetAllEntities()
-		for _, entity := range entities {
-			pos, _ := s.world.Positions.GetPosition(entity)
-			if pos.Y >= startY && pos.Y <= endY {
-				checkEntity(entity)
-			}
-		}
-
-	} else {
-		// Char deletion (can span multiple lines)
-		p1x, p1y := payload.StartX, payload.StartY
-		p2x, p2y := payload.EndX, payload.EndY
-
-		// Normalize: P1 should be textually before P2
-		if p1y > p2y || (p1y == p2y && p1x > p2x) {
-			p1x, p1y, p2x, p2y = p2x, p2y, p1x, p1y
-		}
-
-		// Iterate through all rows involved
-		for y := p1y; y <= p2y; y++ {
-			// Determine X bounds for this row
-			minX := 0
-			maxX := config.MapWidth - 1
-
-			if y == p1y {
-				minX = p1x
-			}
-			if y == p2y {
-				maxX = p2x
-			}
-
-			// Optimization: Get entities by cell for the range on this row
-			for x := minX; x <= maxX; x++ {
-				s.world.Positions.GetAllEntitiesAtInto(x, y, cellEntitiesBuf)
-				for _, entity := range cellEntitiesBuf {
-					checkEntity(entity)
-				}
-			}
-		}
-	}
-
-	// Batch deletion via DeathSystem (silent)
-	if len(entitiesToDelete) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, entitiesToDelete)
+	if len(s.deleteBuf) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.deleteBuf)
 	}
 }

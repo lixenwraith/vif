@@ -176,7 +176,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
 			s.world.Positions.Lock()
-			n := s.world.Positions.GetAllAtIntoUnsafe(payload.X, payload.Y, entityBuf[:])
+			n := s.world.Positions.GetAllEntitiesAtInto(payload.X, payload.Y, entityBuf[:])
 			s.world.Positions.Unlock()
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
@@ -293,7 +293,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 		s.world.Positions.Lock()
 		for _, rc := range resolved {
-			n := s.world.Positions.GetAllAtIntoUnsafe(rc.x, rc.y, entityBuf[:])
+			n := s.world.Positions.GetAllEntitiesAtInto(rc.x, rc.y, entityBuf[:])
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])

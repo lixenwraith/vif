@@ -123,12 +123,6 @@ func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	return result
 }
 
-// GetAllEntitiesAtInto copies entities into a caller-provided buffer and returns number copied
-// Zero-alloc if buf is on stack; identical to GetAllAtIntoUnsafe
-func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
-	return p.GetAllAtIntoUnsafe(x, y, buf)
-}
-
 // HasAnyEntityAt O(1) returns true if any entity exists at the given coordinates
 func (p *Position) HasAnyEntityAt(x, y int) bool {
 	return p.grid.HasAnyEntityAt(x, y)
@@ -185,13 +179,8 @@ func (p *Position) ClearAllComponents() {
 
 // HasBlockingWallAt returns true if a wall exists at (x, y) that blocks the given mask
 // O(k) where k = entities at cell (typically 1-3)
-func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
-	return p.HasBlockingWallAtUnsafe(x, y, mask)
-}
-
-// HasBlockingWallAtUnsafe checks wall presence at (x, y)
 // SYNC: caller holds World.updateMutex; "Unsafe" name retained for compatibility
-func (p *Position) HasBlockingWallAtUnsafe(x, y int, mask component.WallBlockMask) bool {
+func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) bool {
 	if p.world == nil {
 		return false
 	}
@@ -312,7 +301,7 @@ func (p *Position) IsBlocked(x, y int, mask component.WallBlockMask) bool {
 	if p.IsOutOfBounds(x, y) {
 		return true
 	}
-	return p.HasBlockingWallAtUnsafe(x, y, mask)
+	return p.HasBlockingWallAt(x, y, mask)
 }
 
 // isAreaFreeUnsafe checks bounds and wall presence
@@ -341,7 +330,7 @@ func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlo
 			result[i] = true
 			continue
 		}
-		result[i] = p.HasBlockingWallAtUnsafe(pt.X, pt.Y, mask)
+		result[i] = p.HasBlockingWallAt(pt.X, pt.Y, mask)
 	}
 	return result
 }
@@ -350,7 +339,7 @@ func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlo
 // Short-circuits on first blocked position
 func (p *Position) IsAnyBlockedInSet(points []core.Point, mask component.WallBlockMask) bool {
 	for _, pt := range points {
-		if p.IsOutOfBounds(pt.X, pt.Y) || p.HasBlockingWallAtUnsafe(pt.X, pt.Y, mask) {
+		if p.IsOutOfBounds(pt.X, pt.Y) || p.HasBlockingWallAt(pt.X, pt.Y, mask) {
 			return true
 		}
 	}
@@ -391,7 +380,7 @@ func (p *Position) HasLineOfSightUnsafe(x0, y0, x1, y1 int, mask component.WallB
 		}
 
 		// Check intermediate cells (skip origin)
-		if (x != x0 || y != y0) && p.HasBlockingWallAtUnsafe(x, y, mask) {
+		if (x != x0 || y != y0) && p.HasBlockingWallAt(x, y, mask) {
 			return false
 		}
 
@@ -439,8 +428,8 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	_ = p.grid.Set(e, newPos.X, newPos.Y)
 }
 
-// GetAllAtIntoUnsafe copies entities at (x,y) into buf without locking, caller MUST hold Lock/RLock, returns number of entities copied
-func (p *Position) GetAllAtIntoUnsafe(x, y int, buf []core.Entity) int {
+// GetAllEntitiesAtInto copies entities at (x,y) into a caller-provided buffer and returns number copied, Zero-alloc if buf is on stack
+func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
 	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
 		return 0
 	}
@@ -1071,7 +1060,7 @@ func (p *Position) FindLastFreeOnRay(startX, startY, endX, endY int, mask compon
 
 	for {
 		// Check current cell (skip origin)
-		if (x != startX || y != startY) && p.HasBlockingWallAtUnsafe(x, y, mask) {
+		if (x != startX || y != startY) && p.HasBlockingWallAt(x, y, mask) {
 			return lastFreeX, lastFreeY, false
 		}
 
@@ -1140,7 +1129,7 @@ func (p *Position) IsPathBlocked(x0, y0, x1, y1 int, mask component.WallBlockMas
 		}
 
 		// Check intermediate cell
-		if p.HasBlockingWallAtUnsafe(x, y, mask) {
+		if p.HasBlockingWallAt(x, y, mask) {
 			return true
 		}
 	}
@@ -1152,7 +1141,7 @@ func (p *Position) IsPointValidForOrbit(x, y int, mask component.WallBlockMask) 
 	if x < 0 || x >= config.MapWidth || y < 0 || y >= config.MapHeight {
 		return false
 	}
-	return !p.HasBlockingWallAtUnsafe(x, y, mask)
+	return !p.HasBlockingWallAt(x, y, mask)
 }
 
 // HasAreaLineOfSight checks if rectangular entity can traverse unobstructed from (x0,y0) to (x1,y1)

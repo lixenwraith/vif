@@ -198,15 +198,27 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	deathEntities := s.world.Components.Death.GetAllEntities()
-	if len(deathEntities) == 0 {
+	// deathEntities := s.world.Components.Death.GetAllEntities()
+	// if len(deathEntities) == 0 {
+	// 	return
+	// }
+	//
+	// for _, deathEntity := range deathEntities {
+	// 	// Route through markForDeath to ensure protection checks and visual effects are applied
+	// 	s.markForDeath(deathEntity, 0)
+	// }
+
+	deaths := s.world.Components.Death
+	if deaths.CountEntities() == 0 {
 		return
 	}
 
-	for _, deathEntity := range deathEntities {
-		// Route through markForDeath to ensure protection checks and visual effects are applied
-		s.markForDeath(deathEntity, 0)
+	// Detach before destroying: markForDeath mutates this store
+	s.destroyBuf = append(s.destroyBuf[:0], deaths.Entities()...)
+	for _, e := range s.destroyBuf {
+		s.markForDeath(e, 0)
 	}
+	s.destroyBuf = s.destroyBuf[:0]
 }
 
 // --- Batch processing (two-pass: collect → destroy → emit) ---
@@ -272,11 +284,10 @@ func processBatchWith[T any](s *DeathSystem, pool *event.BatchPool[T], eventType
 		if entity == 0 || s.isProtected(entity) {
 			continue
 		}
-		entry, ok := extract(entity)
-		if !ok {
-			continue
+		// Effect data is optional; destruction is unconditional
+		if entry, ok := extract(entity); ok {
+			batch.Entries = append(batch.Entries, entry)
 		}
-		batch.Entries = append(batch.Entries, entry)
 		s.destroyBuf = append(s.destroyBuf, entity)
 	}
 
@@ -388,4 +399,3 @@ func (s *DeathSystem) destroyCollected() {
 	s.world.DestroyEntitiesBatch(s.destroyBuf)
 	s.statKilled.Add(int64(len(s.destroyBuf)))
 }
-

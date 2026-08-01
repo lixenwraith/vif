@@ -59,6 +59,14 @@ func (w *World) AddComponentMask(e core.Entity, bit uint64) {
 	w.componentMask[e] |= bit
 }
 
+// TODO: for DEBUG
+// GetComponentMask returns the entity signature and whether the entity is tracked
+// Caller MUST hold updateMutex
+func (w *World) GetComponentMask(e core.Entity) (uint64, bool) {
+	bit, ok := w.componentMask[e]
+	return bit, ok
+}
+
 // RemoveComponentMask clears a component bit for the specified entity
 // Caller MUST hold updateMutex
 func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
