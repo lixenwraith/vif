@@ -164,14 +164,14 @@ const (
 // Intent represents a parsed semantic action
 // Pure data struct with no function pointers or engine dependencies
 type Intent struct {
+	Command       string // Captured sequence for visual feedback
 	Type          IntentType
 	Motion        MotionOp
 	Operator      OperatorOp
 	Special       SpecialOp
 	ModeTarget    ModeTarget
 	ScrollDir     ScrollDir
-	Count         int    // Effective count (minimum 1)
-	Char          rune   // Target char for f/t motions or typed char
-	Command       string // Captured sequence for visual feedback
-	MacroPlayback bool   // True if intent originated from macro playback
+	Count         int  // Effective count (minimum 1)
+	Char          rune // Target char for f/t motions or typed char
+	MacroPlayback bool // True if intent originated from macro playback
 }

@@ -36,14 +36,14 @@ func benchMagnitude() {
 
 	start := time.Now()
 	var rQ int64
-	for i := range iterations {
+	for range iterations {
 		rQ = vmath.Magnitude(dx, dy)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rF float64
-	for i := range iterations {
+	for range iterations {
 		rF = math.Sqrt(dxF*dxF + dyF*dyF)
 	}
 	floatTime := time.Since(start)
@@ -58,14 +58,14 @@ func benchMagnitudeApprox() {
 
 	start := time.Now()
 	var rQ int64
-	for i := range iterations {
+	for range iterations {
 		rQ = vmath.MagnitudeApprox(dx, dy)
 	}
 	q32Time := time.Since(start)
 
 	start = time.Now()
 	var rF float64
-	for i := range iterations {
+	for range iterations {
 		rF = math.Sqrt(dxF*dxF + dyF*dyF)
 	}
 	floatTime := time.Since(start)
@@ -324,4 +324,3 @@ func printResult(name string, q32Time, floatTime time.Duration) {
 	ratio := float64(q32Time) / float64(floatTime)
 	fmt.Printf("%-28s %14s %14s %9.2fx\n", name, q32Time, floatTime, ratio)
 }
-

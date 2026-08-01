@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/render"
 	"github.com/lixenwraith/vi-fighter/service"
 	"github.com/lixenwraith/vi-fighter/system"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // App owns the wired runtime: services, world, renderer, input, and scheduler
@@ -54,6 +55,8 @@ func New(cfg Config) (*App, error) {
 }
 
 func (a *App) init() error {
+	vlog.Info("app", "msg", "init begin")
+
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.InitRegistry()
 
@@ -153,16 +156,22 @@ func (a *App) init() error {
 		}
 	}
 
+	vlog.Info("app", "msg", "init complete",
+		"width", a.ctx.Width,
+		"height", a.ctx.Height,
+		"systems", len(a.world.Systems()))
 	return nil
 }
 
 // Close stops the scheduler before the services it depends on
 // Safe on a partially constructed App
 func (a *App) Close() {
+	vlog.Info("app", "msg", "shutdown begin")
 	if a.scheduler != nil {
 		a.scheduler.Stop()
 	}
 	a.hub.StopAll()
+	vlog.Info("app", "msg", "shutdown complete")
 }
 
 // loadKeymap merges an external key table over the defaults

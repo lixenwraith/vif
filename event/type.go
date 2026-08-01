@@ -2,8 +2,8 @@ package event
 
 // GameEvent represents a single game event with metadata
 type GameEvent struct {
-	Type    EventType
 	Payload any
+	Type    EventType
 }
 
 // EventType represents the type of game event

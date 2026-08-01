@@ -20,4 +20,7 @@ const (
 
 	// ContentDataDir is the default corpus directory, relative to CWD
 	ContentDataDir = "data"
+
+	// LogDir is the default log directory, relative to CWD
+	LogDir = "./log"
 )

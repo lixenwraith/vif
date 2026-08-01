@@ -3,10 +3,11 @@ SRC := ./cmd/vi-fighter
 BIN_DIR := bin
 GOFLAGS := -trimpath
 LDFLAGS := -s -w
+TAGS ?=
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release wasm windows run clean check-go
+.PHONY: help generate dev release nolog wasm windows run test verify clean check-go
 
 help:
 	@echo "Usage: make [target]"
@@ -14,8 +15,9 @@ help:
 	@echo "Targets:"
 	@echo "  dev      Build with race detector and debug symbols"
 	@echo "  release  Build optimized binary (stripped, trimmed)"
-	@echo "  wasm     Build WebAssembly binary for xterm.js"
-	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal)"
+	@echo "  nolog    release build without logger"
+	@echo "  wasm     Build WebAssembly binary for xterm.js (sound and logging disabled)"
+	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound and logging disabled)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  clean    Remove build artifacts"
 
@@ -45,7 +47,7 @@ check-go:
 			esac; \
 		else \
 			echo "Automatic installation unavailable (or apt packages outdated)."; \
-			echo "Install Go 1.25+ manually:"; \
+			echo "Install Go 1.26+ manually:"; \
 			echo "  1. Download: https://go.dev/dl/"; \
 			echo "  2. Extract to /usr/local"; \
 			echo "  3. Add /usr/local/go/bin to PATH"; \
@@ -57,16 +59,33 @@ generate: check-go
 	go generate ./manifest/...
 
 dev: generate | $(BIN_DIR)
-	go build -race -o $(BIN_DIR)/$(BINARY) $(SRC)
+	go build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 release: generate | $(BIN_DIR)
-	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+	go build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
+# nolog strips logging; lixenwraith/log is not linked
+nolog: generate | $(BIN_DIR)
+	go build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
+
+# wasm selects vlog/stub.go automatically
 wasm: generate | $(BIN_DIR)
 	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).wasm $(SRC)
 
+# windows is experimental and untested
 windows: generate | $(BIN_DIR)
+	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
 	GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+
+test: generate
+	go test -race ./...
+
+# verify covers the build-tag matrix a single-target build would miss
+verify: generate
+	go build ./...
+	go build -tags novlog ./...
+	GOOS=js GOARCH=wasm go build ./...
+	go vet ./...
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)

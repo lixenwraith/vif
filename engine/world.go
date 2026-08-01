@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vlog"
 	"github.com/lixenwraith/vi-fighter/vmath"
 )
 
@@ -179,6 +180,10 @@ func (w *World) UpdateLocked() {
 func (w *World) PushEvent(eventType event.EventType, payload any) {
 	if w.Resources.Event.Queue == nil {
 		return // Not yet initialized
+	}
+
+	if vlog.E(vlog.LevelTrace) {
+		vlog.Trace("push", vlog.LevelTrace, 3, "msg", "push", "ev", event.GetEventName(eventType)) // 3 levels deep in trace to start trace from the producing system
 	}
 
 	w.Resources.Event.Queue.Push(event.GameEvent{

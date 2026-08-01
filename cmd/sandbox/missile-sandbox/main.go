@@ -567,7 +567,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 		if bounced {
 			m.Bounces--
 			// Bounce spark
-			for i := range 6 {
+			for range 6 {
 				angle := float64(globalRng.Intn(628)) / 100
 				m.Trail = append(m.Trail, Particle{
 					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,

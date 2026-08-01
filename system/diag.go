@@ -7,9 +7,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
-const diagnosticsSampleInterval = 100
+const (
+	diagnosticsSampleInterval = 100
+	diagSnapshotInterval      = 20 // ~1s at a 50ms tick
+)
 
 // DiagSystem collects ECS telemetry for memory leak detection
 type DiagSystem struct {
@@ -136,6 +140,10 @@ func (s *DiagSystem) Update() {
 
 	s.tickCounter++
 
+	if s.tickCounter%diagSnapshotInterval == 0 {
+		s.logSnapshot()
+	}
+
 	// Sample expensive operations
 	if s.tickCounter%diagnosticsSampleInterval != 0 {
 		return
@@ -145,6 +153,34 @@ func (s *DiagSystem) Update() {
 	s.collectGridMetrics()
 	s.collectConsistencyChecks()
 	s.collectLifecycleMetrics()
+}
+
+// logSnapshot emits the whole status registry as one keyed record.
+// The argument slice is freshly allocated every call: records are formatted
+// asynchronously, so a reused scratch buffer would be overwritten mid-format.
+func (s *DiagSystem) logSnapshot() {
+	if !vlog.E(vlog.LevelInfo) {
+		return
+	}
+	reg := s.world.Resources.Status
+
+	args := make([]any, 0, 2+2*reg.TotalCount())
+	args = append(args, "msg", "stat")
+
+	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
+		args = append(args, key, ptr.Load())
+	})
+	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
+		args = append(args, key, ptr.Load())
+	})
+	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
+		args = append(args, key, ptr.Get())
+	})
+	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
+		args = append(args, key, ptr.Load())
+	})
+
+	vlog.Info("stat", args...)
 }
 
 // TODO: add to code gen

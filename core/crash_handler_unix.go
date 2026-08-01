@@ -16,6 +16,13 @@ func HandleCrash(r any) {
 		return
 	}
 
+	stack := debug.Stack()
+
+	// Observer runs first: it may need to flush before teardown
+	if crashHook != nil {
+		crashHook(r, stack)
+	}
+
 	// Terminal cleanup if available
 	if crashTerminal != nil {
 		crashTerminal.Fini()
@@ -25,7 +32,8 @@ func HandleCrash(r any) {
 	}
 
 	fmt.Fprintf(os.Stderr, "\n\x1b[31mCRASH DETECTED: %v\x1b[0m\n", r)
-	fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", debug.Stack())
+	fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", stack)
 
 	os.Exit(1)
 }
+

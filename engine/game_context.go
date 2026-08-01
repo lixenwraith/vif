@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // GameContext holds all game state including the ECS world
@@ -284,7 +285,9 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 		ctx.lastFPSUpdate = now
 	}
 
-	return ctx.FrameNumber.Add(1)
+	n := ctx.FrameNumber.Add(1)
+	vlog.SetFrame(uint64(n))
+	return n
 }
 
 // === EVENT QUEUE METHODS ===

@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // defaultMouseMode is the reporting mode used outside free-look
@@ -47,8 +48,15 @@ func (a *App) Loop() error {
 
 	eventChan := a.termSvc.Events()
 
+	sigChan, stopSignals := notifySignals()
+	defer stopSignals()
+
 	for {
 		select {
+		case sig := <-sigChan:
+			vlog.Info("app", "msg", "signal received", "signal", sig.String())
+			return nil
+
 		case ev := <-eventChan:
 			// Dumb pipe: key event → machine → intent → router
 			if intent := a.inputMachine.Process(ev); intent != nil {

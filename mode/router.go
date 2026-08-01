@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/component"
@@ -9,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/input"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 const undoStackSize = 256
@@ -145,6 +147,22 @@ func NewRouter(ctx *engine.GameContext, machine *input.Machine) *Router {
 func (r *Router) Handle(intent *input.Intent) bool {
 	if intent == nil {
 		return true
+	}
+
+	if vlog.E(vlog.LevelDebug) {
+		// Format char nicely if it's printable, otherwise leave as int (mouse coordinates use this field)
+		charDisplay := fmt.Sprintf("%d", intent.Char)
+		if intent.Char >= 32 && intent.Char <= 126 {
+			charDisplay = fmt.Sprintf("'%c' (%d)", intent.Char, intent.Char)
+		}
+
+		vlog.Debug("input", "msg", "intent",
+			"type", intent.Type.String(),
+			"motion", intent.Motion.String(),
+			"count", intent.Count,
+			"char", charDisplay,
+			"cmd", intent.Command,
+			"macro", intent.MacroPlayback)
 	}
 
 	// Macro reset check (triggered by :new)

@@ -18,6 +18,8 @@ type EventQueue struct {
 	published [parameter.EventQueueSize]atomic.Bool // True = slot fully written
 	head      atomic.Uint64                         // Read index
 	tail      atomic.Uint64                         // Write index
+
+	overwritten atomic.Uint64 // Events evicted unread by producer overrun
 }
 
 func NewEventQueue() *EventQueue {
@@ -43,7 +45,12 @@ func (eq *EventQueue) Push(event GameEvent) {
 			// Advance head if overwriting unread events
 			currentHead := eq.head.Load()
 			if nextTail-currentHead > parameter.EventQueueSize {
-				eq.head.CompareAndSwap(currentHead, nextTail-parameter.EventQueueSize)
+				newHead := nextTail - parameter.EventQueueSize
+				// Count on the winning CAS only; a loser's eviction is
+				// already accounted by the producer that advanced head
+				if eq.head.CompareAndSwap(currentHead, newHead) {
+					eq.overwritten.Add(newHead - currentHead)
+				}
 			}
 			return
 		}
@@ -102,4 +109,10 @@ func (eq *EventQueue) Len() int {
 		return parameter.EventQueueSize
 	}
 	return diff
+}
+
+// Dropped returns the monotonic count of events evicted unread.
+// Non-zero means producers outran the consumer and game state was lost.
+func (eq *EventQueue) Dropped() uint64 {
+	return eq.overwritten.Load()
 }

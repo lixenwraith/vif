@@ -1,6 +1,10 @@
 package input
 
-import "github.com/lixenwraith/terminal"
+import (
+	"maps"
+
+	"github.com/lixenwraith/terminal"
+)
 
 // KeyBehavior classifies how a key is processed
 type KeyBehavior uint8
@@ -247,16 +251,12 @@ func (kt *KeyTable) Clone() *KeyTable {
 
 func cloneRuneMap(m map[rune]KeyEntry) map[rune]KeyEntry {
 	c := make(map[rune]KeyEntry, len(m))
-	for k, v := range m {
-		c[k] = v
-	}
+	maps.Copy(c, m)
 	return c
 }
 
 func cloneKeyMap(m map[terminal.Key]KeyEntry) map[terminal.Key]KeyEntry {
 	c := make(map[terminal.Key]KeyEntry, len(m))
-	for k, v := range m {
-		c[k] = v
-	}
+	maps.Copy(c, m)
 	return c
 }

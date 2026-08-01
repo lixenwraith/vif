@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/engine"
 	"github.com/lixenwraith/vi-fighter/event"
 	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // CommandResult represents the outcome of command execution
@@ -39,6 +40,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleFlowCommand(ctx, args)
 	case "graph":
 		return handleGraphCommand(ctx, args)
+	case "l", "log":
+		return handleLogCommand(ctx, args)
 	case "q", "quit":
 		return handleQuitCommand(ctx)
 	case "n", "new":
@@ -83,6 +86,60 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
+}
+
+// handleLogCommand controls the session logger
+// Usage: :log | :log on|off | :log <level>
+func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) == 0 {
+		reportLogState(ctx)
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	switch strings.ToLower(args[0]) {
+	case "on", "start":
+		if vlog.Enabled() {
+			ctx.SetStatusMessage("Logging already active", parameter.StatusMessageDefaultTimeout, true)
+			break
+		}
+		// Opens a file under the world lock; a deliberate operator cost
+		path, err := vlog.Start()
+		if err != nil {
+			setCommandError(ctx, "Logging failed: "+err.Error())
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		vlog.Info("app", "msg", "logging started", "path", path, "level", vlog.LevelName())
+		ctx.SetStatusMessage("Logging to "+path, parameter.StatusMessageDefaultTimeout, true)
+
+	case "off", "stop":
+		if !vlog.Enabled() {
+			ctx.SetStatusMessage("Logging already stopped", parameter.StatusMessageDefaultTimeout, true)
+			break
+		}
+		vlog.Info("app", "msg", "logging stopped by command")
+		vlog.Stop() // drains asynchronously; never blocks the world lock
+		ctx.SetStatusMessage("Logging stopped", parameter.StatusMessageDefaultTimeout, true)
+
+	default:
+		if err := vlog.SetLevelName(args[0]); err != nil {
+			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error]")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		vlog.Info("app", "msg", "log level changed", "level", vlog.LevelName())
+		reportLogState(ctx)
+	}
+
+	ctx.SetLastCommand(":log " + strings.Join(args, " "))
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// reportLogState shows session state in the status bar
+func reportLogState(ctx *engine.GameContext) {
+	msg := "Logging off (level " + vlog.LevelName() + ")"
+	if vlog.Enabled() {
+		msg = fmt.Sprintf("Logging %s -> %s", vlog.LevelName(), vlog.Path())
+	}
+	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
 }
 
 // setCommandError sets an error message in the status message

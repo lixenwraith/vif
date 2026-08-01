@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/fsm"
 	"github.com/lixenwraith/vi-fighter/parameter"
 	"github.com/lixenwraith/vi-fighter/status"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // ClockScheduler manages game logic on a fixed tick
@@ -57,6 +58,11 @@ type ClockScheduler struct {
 	statEntityCount   *atomic.Int64
 	statQueueLen      *atomic.Int64
 	statGameElapsedMs *atomic.Int64
+	statEvDropped     *atomic.Int64
+
+	// Log state: transition and overflow edge detection
+	lastFSMName   string
+	lastEvDropped uint64
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -108,6 +114,7 @@ func NewClockScheduler(
 		statEntityCount:   statusReg.Ints.Get("entity.count"),
 		statQueueLen:      statusReg.Ints.Get("event.queue_len"),
 		statGameElapsedMs: statusReg.Ints.Get("time.game_elapsed_ms"),
+		statEvDropped:     statusReg.Ints.Get("event.dropped"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -335,7 +342,18 @@ func (cs *ClockScheduler) dispatchOnePass() int {
 		return 0
 	}
 
+	// Gate hoisted out of the loop: one atomic load per pass.
+	// Payloads are pooled and released by their handlers, so only the type
+	// is logged — retaining ev.Payload would race the next Acquire.
+	trace := vlog.E(vlog.LevelDebug)
+
 	for _, ev := range eventsList {
+		if trace {
+			vlog.Debug("event", "msg", "dispatch",
+				"ev", event.GetEventName(ev.Type),
+				"handlers", cs.eventRouter.HandlerCount(ev.Type))
+		}
+
 		cs.fsm.HandleEvent(cs.world, ev)
 
 		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
@@ -361,6 +379,11 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
+	// New session: correlation stamp for every record below
+	vlog.NextRun()
+	cs.lastFSMName = ""
+	vlog.Info("fsm", "msg", "session reset")
+
 	// NOTE: Do not use RunSafe if called from a blocking systems
 	// 1. Synchronize with world lock
 	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
@@ -405,6 +428,10 @@ func (cs *ClockScheduler) processTick() {
 		return
 	}
 
+	// Stamp the tick being executed; the counter is committed at the end of
+	// this function, so records inside would otherwise carry the previous one
+	vlog.SetTick(cs.world.Resources.Game.State.GetGameTicks() + 1)
+
 	var entityCount int
 
 	cs.world.RunSafe(func() {
@@ -445,6 +472,16 @@ func (cs *ClockScheduler) processTick() {
 		}
 		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
 
+		// Transition edge; state names are region-unique in practice
+		if stateName != cs.lastFSMName {
+			vlog.Info("fsm", "msg", "state",
+				"from", cs.lastFSMName,
+				"to", stateName,
+				"index", cs.statFSMIndex.Load(),
+				"max_ms", time.Duration(cs.statFSMMaxDur.Load()).Milliseconds())
+			cs.lastFSMName = stateName
+		}
+
 		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
 		cs.dispatchAndProcessEvents()
 
@@ -469,4 +506,15 @@ func (cs *ClockScheduler) processTick() {
 	cs.statTicks.Store(int64(ticks))
 	cs.statEntityCount.Store(int64(entityCount))
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
+
+	// Queue overflow is silent state loss; report every increase.
+	// The counter is monotonic across sessions — the queue outlives reset
+	dropped := cs.world.Resources.Event.Queue.Dropped()
+	cs.statEvDropped.Store(int64(dropped))
+	if dropped > cs.lastEvDropped {
+		vlog.Warn("event", "msg", "queue overflow",
+			"dropped", dropped,
+			"delta", dropped-cs.lastEvDropped)
+		cs.lastEvDropped = dropped
+	}
 }

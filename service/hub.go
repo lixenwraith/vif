@@ -2,23 +2,24 @@ package service
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/engine"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // Hub is the runtime container for service instances
 // Manages lifecycle and provides type-safe access
 type Hub struct {
-	mu          sync.RWMutex
 	services    map[string]Service
 	sorted      []string // Topological order, computed on InitAll
 	initialized []string // completed Init(), for teardown
 	started     []string // Services that completed Start(), for rollback
+	mu          sync.RWMutex
 }
-
-// TODO: service telemetry
 
 // NewHub creates an empty service hub
 func NewHub() *Hub {
@@ -88,13 +89,16 @@ func (h *Hub) InitAll() error {
 	var initialized []string
 	for _, name := range h.sorted {
 		svc := h.services[name]
+		start := time.Now()
 		if err := svc.Init(); err != nil {
+			vlog.Error("service", "msg", "init failed", "service", name, "error", err.Error())
 			// Rollback: stop already-initialized in reverse order
 			for i := len(initialized) - 1; i >= 0; i-- {
 				h.services[initialized[i]].Stop()
 			}
 			return fmt.Errorf("service %s init failed: %w", name, err)
 		}
+		vlog.Info("service", "msg", "init", "service", name, "ms", time.Since(start).Milliseconds())
 		initialized = append(initialized, name)
 	}
 	h.initialized = initialized
@@ -112,13 +116,15 @@ func (h *Hub) StartAll() error {
 
 	for _, name := range h.sorted {
 		svc := h.services[name]
+		start := time.Now()
 		if err := svc.Start(); err != nil {
-			// Rollback: stop already-started in reverse order
-			for i := len(h.started) - 1; i >= 0; i-- {
-				h.services[h.started[i]].Stop()
+			vlog.Error("service", "msg", "start failed", "service", name, "error", err.Error())
+			for _, serviceID := range slices.Backward(h.started) {
+				h.services[serviceID].Stop()
 			}
 			return fmt.Errorf("service %s start failed: %w", name, err)
 		}
+		vlog.Info("service", "msg", "start", "service", name, "ms", time.Since(start).Milliseconds())
 		h.started = append(h.started, name)
 	}
 
@@ -133,10 +139,16 @@ func (h *Hub) StopAll() {
 
 	// initialized is a superset of started and Stop is contractually
 	// idempotent, so one reverse pass releases everything Init acquired.
-	for i := len(h.initialized) - 1; i >= 0; i-- {
-		if svc, ok := h.services[h.initialized[i]]; ok {
-			svc.Stop()
+	for _, name := range slices.Backward(h.initialized) {
+		svc, ok := h.services[name]
+		if !ok {
+			continue
 		}
+		if err := svc.Stop(); err != nil {
+			vlog.Error("service", "msg", "stop failed", "service", name, "error", err.Error())
+			continue
+		}
+		vlog.Info("service", "msg", "stop", "service", name)
 	}
 	h.initialized, h.started = nil, nil
 }
