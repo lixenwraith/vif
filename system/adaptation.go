@@ -214,6 +214,16 @@ func (s *AdaptationSystem) handleGraphComputed(graphID uint32, routeCount int) {
 		ar.Entries = make(map[uint32]*engine.AdaptationEntry)
 	}
 
+	// Recompute invalidates prior arms: drop stale tracking and buffered outcomes
+	if _, existed := ar.Entries[graphID]; existed {
+		for entity, t := range s.tracking {
+			if t.GraphID == graphID {
+				delete(s.tracking, entity)
+			}
+		}
+		delete(s.outcomes, graphID)
+	}
+
 	entry := &engine.AdaptationEntry{
 		RouteCount:  routeCount,
 		Populations: make(map[uint8]*engine.RoutePopulation),

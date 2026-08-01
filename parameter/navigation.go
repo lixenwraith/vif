@@ -11,6 +11,9 @@ const (
 
 	// NavFlowDirtyDistance triggers immediate recompute if target moves this far (cells)
 	NavFlowDirtyDistance = 5
+
+	// NavRouteRebuildInterval is minimum game ticks between gateway route graph recomputes
+	NavRouteRebuildInterval = 20
 )
 
 var (

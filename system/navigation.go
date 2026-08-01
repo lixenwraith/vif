@@ -62,6 +62,12 @@ type NavigationSystem struct {
 	// Composite passability grid (shared, recomputed on wall changes)
 	compositePassability *navigation.CompositePassability
 
+	// Per-tick resolved target snapshot; avoids per-entity TargetResource locking
+	targets [component.MaxTargetGroups]engine.TargetGroupState
+
+	// Ticks since last gateway route graph recompute (rebuild budget)
+	routeRebuildTicks int
+
 	// Cached cursor position
 	cursorX, cursorY int
 	cursorValid      bool
@@ -90,6 +96,8 @@ func NewNavigationSystem(world *engine.World) engine.System {
 func (s *NavigationSystem) Init() {
 	s.enabled = true
 	s.groups = make(map[uint8]*targetGroupNav)
+	s.targets = [component.MaxTargetGroups]engine.TargetGroupState{}
+	s.routeRebuildTicks = 0
 
 	s.getOrCreateGroup(0)
 
@@ -281,6 +289,8 @@ func (s *NavigationSystem) Update() {
 	}
 
 	s.resolveGroupTargets()
+	s.snapshotTargets()
+	s.refreshRouteGraphs()
 
 	// Wall checker for point entities
 	isBlockedPoint := func(x, y int) bool {
@@ -402,7 +412,7 @@ func (s *NavigationSystem) Update() {
 
 		// Route graph: use per-route flow field when assigned
 		if navComp.UseRouteGraph && navComp.RouteID >= 0 {
-			if field := s.resolveRouteField(navComp.RouteGraphID, navComp.RouteID); field != nil {
+			if field := s.resolveRouteField(navComp.RouteGraphID, navComp.RouteID, groupID); field != nil {
 				var fx, fy int64
 				if isComposite {
 					fx, fy = s.getCompositeFlowDirection(preciseX, preciseY, field)
@@ -446,11 +456,21 @@ func (s *NavigationSystem) handleGroupUpdate(payload *event.TargetGroupUpdatePay
 	g.pointFlowCache.MarkDirty()
 	g.compositeFlowCache.MarkDirty()
 
+	posX, posY := payload.PosX, payload.PosY
+	if payload.Type == component.TargetEntity && payload.Entity != 0 {
+		// Retarget payloads carry no coordinates; resolve now to avoid a (0,0) tick
+		pos, ok := s.world.Positions.GetPosition(payload.Entity)
+		if !ok {
+			return // dead entity: keep the current target
+		}
+		posX, posY = pos.X, pos.Y
+	}
+
 	var state engine.TargetGroupState
 	state.Type = payload.Type
 	state.Valid = true
 	state.Count = 1
-	state.Targets[0] = engine.TargetData{Entity: payload.Entity, PosX: payload.PosX, PosY: payload.PosY}
+	state.Targets[0] = engine.TargetData{Entity: payload.Entity, PosX: posX, PosY: posY}
 
 	s.world.Resources.Target.SetGroup(payload.GroupID, state)
 }
@@ -499,14 +519,13 @@ func (s *NavigationSystem) resolveGroupTargets() {
 		tr.SetGroupTarget(0, 0, engine.TargetData{PosX: s.cursorX, PosY: s.cursorY})
 	}
 
-	// Scan TargetAnchor components — entity-based group registration
-	anchorEntities := s.world.Components.TargetAnchor.GetAllEntities()
-	anchoredGroups := make(map[uint8]bool, len(anchorEntities))
-	var groupCounts [component.MaxTargetGroups]int
+	// Accumulate anchors per group, publish once: per-anchor SetGroup zeroed earlier slots
+	var anchorStates [component.MaxTargetGroups]engine.TargetGroupState
+	var anchored [component.MaxTargetGroups]bool
 
-	for _, entity := range anchorEntities {
+	for _, entity := range s.world.Components.TargetAnchor.GetAllEntities() {
 		anchor, ok := s.world.Components.TargetAnchor.GetComponent(entity)
-		if !ok || anchor.GroupID == 0 {
+		if !ok || anchor.GroupID == 0 || int(anchor.GroupID) >= component.MaxTargetGroups {
 			continue
 		}
 
@@ -517,29 +536,22 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 		// Ensure flow caches exist for anchored groups
 		s.getOrCreateGroup(anchor.GroupID)
+		anchored[anchor.GroupID] = true
 
-		if groupCounts[anchor.GroupID] < engine.MaxTargetsPerGroup {
-			idx := groupCounts[anchor.GroupID]
-			tgState := engine.TargetGroupState{
-				Type:  component.TargetEntity,
-				Valid: true,
-			}
-			tgState.Targets[idx] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
-
-			tr.SetGroup(anchor.GroupID, tgState)
-
-			groupCounts[anchor.GroupID]++
+		st := &anchorStates[anchor.GroupID]
+		if st.Count >= engine.MaxTargetsPerGroup {
+			continue
 		}
-		anchoredGroups[anchor.GroupID] = true
+		st.Type = component.TargetEntity
+		st.Valid = true
+		st.Targets[st.Count] = engine.TargetData{Entity: entity, PosX: pos.X, PosY: pos.Y}
+		st.Count++
 	}
 
 	// Resolve non-anchored groups and clean up obsolete anchors
 	for groupID := uint8(1); groupID < component.MaxTargetGroups; groupID++ {
-		if anchoredGroups[groupID] {
-			tr.SetGroupCount(groupID, groupCounts[groupID])
-			if groupCounts[groupID] == 0 {
-				tr.SetGroupValidity(groupID, false)
-			}
+		if anchored[groupID] {
+			tr.SetGroup(groupID, anchorStates[groupID])
 			continue
 		}
 
@@ -556,13 +568,11 @@ func (s *NavigationSystem) resolveGroupTargets() {
 			} else {
 				state.Valid = false
 			}
-			// tr.Groups[groupID] = state
 			tr.SetGroup(groupID, state)
 
 		case component.TargetCursor:
 			state.Targets[0].PosX = s.cursorX
 			state.Targets[0].PosY = s.cursorY
-			// tr.Groups[groupID] = state
 			tr.SetGroup(groupID, state)
 		}
 	}
@@ -574,8 +584,12 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, s
 	x0 := vmath.ToInt(preciseX)
 	y0 := vmath.ToInt(preciseY)
 
-	// Check if primary cell is blocked/unvisited — escape to best neighbor
 	dir := src.GetDirection(x0, y0)
+	// At goal: zero flow lets the caller home directly instead of orbiting the cell
+	if dir == navigation.DirTarget {
+		return 0, 0
+	}
+	// Blocked/unvisited — escape to best neighbor
 	if dir < 0 || dir >= navigation.DirCount {
 		escDir := s.findBestNeighborDirection(x0, y0, src)
 		if escDir < 0 || escDir >= navigation.DirCount {
@@ -722,8 +736,9 @@ func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (i
 }
 
 // resolveRouteField returns the per-route flow field for an entity's route assignment
-// Returns nil if route graph or route ID is invalid, triggering fallback to shared flow field
-func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navigation.FlowField {
+// Returns nil for invalid routes or graphs whose goal no longer matches the group
+// target (retargeted tower), forcing fallback to the shared group flow field
+func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int, groupID uint8) *navigation.FlowField {
 	if graphID == 0 {
 		return nil
 	}
@@ -733,12 +748,89 @@ func (s *NavigationSystem) resolveRouteField(graphID uint32, routeID int) *navig
 		return nil
 	}
 
+	if !s.routeGraphFresh(graph, groupID) {
+		return nil
+	}
+
 	field := graph.Routes[routeID].Field
 	if field == nil || !field.Valid {
 		return nil
 	}
 
 	return field
+}
+
+// snapshotTargets caches resolved group state for the tick
+func (s *NavigationSystem) snapshotTargets() {
+	tr := s.world.Resources.Target
+	for gid := range s.targets {
+		s.targets[gid] = tr.GetGroup(uint8(gid))
+	}
+}
+
+// routeGraphFresh reports whether a graph's goal still matches a live target of the group
+func (s *NavigationSystem) routeGraphFresh(graph *navigation.RouteGraph, groupID uint8) bool {
+	if int(groupID) >= len(s.targets) {
+		return false
+	}
+	state := &s.targets[groupID]
+	if !state.Valid || state.Count == 0 {
+		return false
+	}
+	for i := 0; i < state.Count; i++ {
+		if state.Targets[i].PosX == graph.TargetX && state.Targets[i].PosY == graph.TargetY {
+			return true
+		}
+	}
+	return false
+}
+
+// clearRouteAssignments detaches entities from a graph so they use the shared group field
+func (s *NavigationSystem) clearRouteAssignments(graphID uint32) {
+	for _, e := range s.world.Components.Navigation.GetAllEntities() {
+		nav, ok := s.world.Components.Navigation.GetComponent(e)
+		if !ok || !nav.UseRouteGraph || nav.RouteGraphID != graphID {
+			continue
+		}
+		nav.UseRouteGraph = false
+		nav.RouteID = -1
+		s.world.Components.Navigation.SetComponent(e, nav)
+	}
+}
+
+// refreshRouteGraphs recomputes one stale gateway route graph per interval
+// Dijkstra + per-route field cost forbids an unbudgeted sweep
+func (s *NavigationSystem) refreshRouteGraphs() {
+	s.routeRebuildTicks++
+	if s.routeRebuildTicks < parameter.NavRouteRebuildInterval {
+		return
+	}
+
+	for _, e := range s.world.Components.Gateway.GetAllEntities() {
+		gw, ok := s.world.Components.Gateway.GetComponent(e)
+		if !ok || gw.RouteDistID == 0 {
+			continue
+		}
+
+		graph := s.world.Resources.RouteGraph.Get(gw.RouteDistID)
+		if graph != nil && s.routeGraphFresh(graph, gw.GroupID) {
+			continue
+		}
+
+		anchorPos, ok := s.world.Positions.GetPosition(gw.AnchorEntity)
+		if !ok {
+			continue
+		}
+
+		s.routeRebuildTicks = 0
+		s.handleRouteGraphRequest(&event.RouteGraphRequestPayload{
+			RouteGraphID:  gw.RouteDistID,
+			SourceX:       anchorPos.X + gw.OffsetX,
+			SourceY:       anchorPos.Y + gw.OffsetY,
+			TargetGroupID: gw.GroupID,
+		})
+		return
+	}
 }
 
 // handleRouteGraphRequest computes a route graph for a gateway-target pair
@@ -762,10 +854,20 @@ func (s *NavigationSystem) handleRouteGraphRequest(payload *event.RouteGraphRequ
 		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
 		s.compositePassability.IsBlocked,
 	)
+	replacing := s.world.Resources.RouteGraph.Get(payload.RouteGraphID) != nil
 	if rg == nil {
+		// Unreachable target: drop the stale graph rather than leave it authoritative
+		if replacing {
+			s.world.Resources.RouteGraph.Remove(payload.RouteGraphID)
+			s.clearRouteAssignments(payload.RouteGraphID)
+		}
 		return
 	}
 
+	// Route indices change on recompute: detach in-flight assignments
+	if replacing {
+		s.clearRouteAssignments(payload.RouteGraphID)
+	}
 	s.world.Resources.RouteGraph.Set(payload.RouteGraphID, rg)
 
 	s.world.PushEvent(event.EventRouteGraphComputed, &event.RouteGraphComputedPayload{
