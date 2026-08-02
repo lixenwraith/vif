@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/rand/v2"
-	"sort"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/core"
@@ -35,6 +35,9 @@ type AdaptationSystem struct {
 	outcomes      map[uint32]map[uint8][]routeOutcome // Buffer: graphID -> subType -> outcomes
 	tracking      map[core.Entity]trackedRoute
 	pendingDeaths []event.EnemyKilledPayload
+
+	// Ticks since last telemetry refresh
+	telemetryTicks int
 
 	// Telemetry
 	statGraphs      *atomic.Int64
@@ -76,6 +79,7 @@ func (s *AdaptationSystem) Init() {
 	clear(s.outcomes)
 	clear(s.tracking)
 	s.pendingDeaths = s.pendingDeaths[:0]
+	s.telemetryTicks = 0
 
 	s.statGraphs.Store(0)
 	s.statPopulations.Store(0)
@@ -203,7 +207,13 @@ func (s *AdaptationSystem) Update() {
 	}
 
 	s.pruneDrained(ar)
-	s.updateTelemetry(ar)
+
+	// Debug overlay only; 2 Hz avoids per-tick sort/format garbage
+	s.telemetryTicks++
+	if s.telemetryTicks >= parameter.AdaptTelemetryInterval {
+		s.telemetryTicks = 0
+		s.updateTelemetry(ar)
+	}
 }
 
 // handleGraphComputed creates the bandit entry for a computed graph and seeds
@@ -515,7 +525,7 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 			graphIDs = append(graphIDs, id)
 		}
 	}
-	sort.Slice(graphIDs, func(i, j int) bool { return graphIDs[i] < graphIDs[j] })
+	slices.Sort(graphIDs)
 
 	groupStrs := make([]string, 0, 4)
 
@@ -548,7 +558,8 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 		if bestPop != nil {
 			wCopy := make([]float64, len(bestPop.Weights))
 			copy(wCopy, bestPop.Weights)
-			sort.Sort(sort.Reverse(sort.Float64Slice(wCopy)))
+			slices.Sort(wCopy)
+			slices.Reverse(wCopy)
 			rc := len(wCopy)
 
 			str := ""

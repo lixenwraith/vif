@@ -25,10 +25,10 @@ const (
 	// Heat penalty when eye occupies cursor cell without shield
 	EyeDamageHeat = 5
 
-	// TODO: integrate this
-	// EyeContactCheckDistSq is squared distance threshold for target contact member iteration
-	// Avoids per-member spatial queries when eye is far from target
-	EyeContactCheckDistSq = 100
+	// EyeContactCheckDist gates target-contact member iteration for targets with no
+	// known footprint; sized for the default tower half-extent + self-destruct radius
+	EyeContactCheckDist   = TowerDefaultRadiusX + EyeSelfDestructRadius
+	EyeContactCheckDistSq = EyeContactCheckDist * EyeContactCheckDist
 
 	// TODO: make the radii flexible
 
@@ -71,4 +71,3 @@ var EyeTypeTable = [EyeTypeCount]EyeTypeParams{
 	// 6: Abyss — shifty (over-curve accel, matched drag: snappier turns, same terminal)
 	{HP: 17, BaseSpeed: 2.4, HomingAccel: 5.5, Drag: 2.3, FrameCount: 4, FrameDuration: 600 * time.Millisecond},
 }
-

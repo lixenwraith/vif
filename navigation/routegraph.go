@@ -59,6 +59,7 @@ func ComputeRouteGraph(
 	}
 
 	size := mapW * mapH
+	sc := newRouteScratch(size)
 	tolerance := 0
 	penalty := make([]int, size)
 	usedDilated := make([]bool, size)
@@ -67,7 +68,7 @@ func ComputeRouteGraph(
 
 	maxAttempts := parameter.RouteGraphMaxRoutes + parameter.RouteGraphExtraAttempts
 	for attempt := 0; attempt < maxAttempts && len(rg.Routes) < parameter.RouteGraphMaxRoutes; attempt++ {
-		path, trueCost := penalizedShortestPath(sourceX, sourceY, targetX, targetY, mapW, mapH, isBlocked, penalty)
+		path, trueCost := sc.penalizedShortestPath(sourceX, sourceY, targetX, targetY, mapW, mapH, isBlocked, penalty)
 		if path == nil {
 			break
 		}
@@ -91,7 +92,7 @@ func ComputeRouteGraph(
 			shared*100 <= len(path)*parameter.RouteGraphMaxOverlapPct
 
 		// Penalize regardless of acceptance to drive out near-duplicates
-		dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
 			penalty[idx] += routeCellPenalty
 		})
 
@@ -99,7 +100,7 @@ func ComputeRouteGraph(
 			continue
 		}
 
-		dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
 			usedDilated[idx] = true
 		})
 
@@ -116,77 +117,8 @@ func ComputeRouteGraph(
 	}
 
 	computeRouteWeights(rg)
-	computePathFields(rg, acceptedPaths, mapW, mapH, isBlocked)
+	computePathFields(rg, acceptedPaths, mapW, mapH, isBlocked, sc)
 	return rg
-}
-
-// penalizedShortestPath is Dijkstra over (dirCost + penalty), predecessor extraction, corner-cut rule kept
-func penalizedShortestPath(
-	sx, sy, tx, ty, mapW, mapH int,
-	isBlocked WallChecker,
-	penalty []int,
-) ([]int, int) {
-	size := mapW * mapH
-	dist := make([]int, size)
-	prev := make([]int32, size)
-	for i := range dist {
-		dist[i] = CostUnreachable
-		prev[i] = -1
-	}
-
-	start := sy*mapW + sx
-	goal := ty*mapW + tx
-	dist[start] = 0
-	h := make(minHeap, 0, size/8)
-	h.push(heapEntry{idx: start, dist: 0})
-
-	for len(h) > 0 {
-		e := h.pop()
-		if e.dist > dist[e.idx] {
-			continue
-		}
-		if e.idx == goal {
-			break
-		}
-		cx, cy := e.idx%mapW, e.idx/mapW
-		for d := range int8(DirCount) {
-			dx, dy := DirVectors[d][0], DirVectors[d][1]
-			nx, ny := cx+dx, cy+dy
-			if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
-				continue
-			}
-			if dx != 0 && dy != 0 {
-				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
-					continue
-				}
-			}
-			nIdx := ny*mapW + nx
-			nd := e.dist + dirCosts[d] + penalty[nIdx]
-			if nd < dist[nIdx] {
-				dist[nIdx] = nd
-				prev[nIdx] = int32(e.idx)
-				h.push(heapEntry{idx: nIdx, dist: nd})
-			}
-		}
-	}
-
-	if dist[goal] >= CostUnreachable {
-		return nil, 0
-	}
-
-	var path []int
-	trueCost := 0
-	for cur := goal; cur != start; {
-		path = append(path, cur)
-		p := int(prev[cur])
-		trueCost += stepCost(p, cur, mapW)
-		cur = p
-	}
-	path = append(path, start)
-	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
-		path[i], path[j] = path[j], path[i]
-	}
-	return path, trueCost
 }
 
 // stepCost returns the aspect-weighted cost of one step between adjacent flat indices
@@ -200,38 +132,6 @@ func stepCost(from, to, mapW int) int {
 		return CostX
 	default:
 		return CostY
-	}
-}
-
-// dilate performs BFS dilation over passable cells to radius; fn invoked once per unique cell
-func dilate(path []int, radius, mapW, mapH int, isBlocked WallChecker, fn func(idx int)) {
-	seen := make([]bool, mapW*mapH)
-	frontier := make([]int, 0, len(path)*2)
-	for _, idx := range path {
-		if !seen[idx] {
-			seen[idx] = true
-			fn(idx)
-			frontier = append(frontier, idx)
-		}
-	}
-	for depth := 0; depth < radius && len(frontier) > 0; depth++ {
-		var next []int
-		for _, idx := range frontier {
-			cx, cy := idx%mapW, idx/mapW
-			for d := range DirCount {
-				nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
-				if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
-					continue
-				}
-				nIdx := ny*mapW + nx
-				if !seen[nIdx] {
-					seen[nIdx] = true
-					fn(nIdx)
-					next = append(next, nIdx)
-				}
-			}
-		}
-		frontier = next
 	}
 }
 
@@ -251,21 +151,20 @@ func decimateWaypoints(path []int, mapW int) []Waypoint {
 
 // computePathFields computes per-route flow fields constrained to each route's
 // dilated corridor; every accepted route receives a valid Field
-func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker) {
+func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker, sc *routeScratch) {
 	targets := []core.Point{{X: rg.TargetX, Y: rg.TargetY}}
-	size := mapW * mapH
+	allowed := make([]uint32, mapW*mapH)
+	var gen uint32
 
 	for ri, path := range paths {
-		allowed := make([]bool, size)
-		dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
-			allowed[idx] = true
+		gen++
+		g := gen
+		sc.dilate(path, parameter.RouteCorridorRadius, mapW, mapH, isBlocked, func(idx int) {
+			allowed[idx] = g
 		})
 
 		routeBlocked := func(x, y int) bool {
-			if isBlocked(x, y) {
-				return true
-			}
-			return !allowed[y*mapW+x]
+			return isBlocked(x, y) || allowed[y*mapW+x] != g
 		}
 
 		field := NewFlowField(mapW, mapH)
@@ -320,4 +219,133 @@ func computeRouteWeights(rg *RouteGraph) {
 // routeTolerance returns additive distance tolerance relative to the optimum
 func routeTolerance(optDist int) int {
 	return (optDist * parameter.RouteTolerancePct) / 100
+}
+
+// routeScratch holds reusable buffers for one ComputeRouteGraph invocation
+type routeScratch struct {
+	dist           []int
+	prev           []int32
+	stamp          []uint32 // dilate visited marks, generation-stamped
+	frontA, frontB []int
+	heap           minHeap
+	gen            uint32
+}
+
+func newRouteScratch(size int) *routeScratch {
+	return &routeScratch{
+		dist:   make([]int, size),
+		prev:   make([]int32, size),
+		stamp:  make([]uint32, size),
+		frontA: make([]int, 0, 1024),
+		frontB: make([]int, 0, 1024),
+		heap:   make(minHeap, 0, size/8),
+	}
+}
+
+// dilate performs BFS dilation over passable cells to radius; fn invoked once per unique cell
+func (sc *routeScratch) dilate(path []int, radius, mapW, mapH int, isBlocked WallChecker, fn func(idx int)) {
+	sc.gen++
+	if sc.gen == 0 {
+		clear(sc.stamp)
+		sc.gen = 1
+	}
+
+	cur, next := sc.frontA[:0], sc.frontB[:0]
+	for _, idx := range path {
+		if sc.stamp[idx] != sc.gen {
+			sc.stamp[idx] = sc.gen
+			fn(idx)
+			cur = append(cur, idx)
+		}
+	}
+
+	for depth := 0; depth < radius && len(cur) > 0; depth++ {
+		next = next[:0]
+		for _, idx := range cur {
+			cx, cy := idx%mapW, idx/mapW
+			for d := range DirCount {
+				nx, ny := cx+DirVectors[d][0], cy+DirVectors[d][1]
+				if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
+					continue
+				}
+				nIdx := ny*mapW + nx
+				if sc.stamp[nIdx] != sc.gen {
+					sc.stamp[nIdx] = sc.gen
+					fn(nIdx)
+					next = append(next, nIdx)
+				}
+			}
+		}
+		cur, next = next, cur
+	}
+	sc.frontA, sc.frontB = cur[:0], next[:0]
+}
+
+// penalizedShortestPath is Dijkstra over (dirCost + penalty), predecessor extraction, corner-cut rule kept
+func (sc *routeScratch) penalizedShortestPath(
+	sx, sy, tx, ty, mapW, mapH int,
+	isBlocked WallChecker,
+	penalty []int,
+) ([]int, int) {
+	dist, prev := sc.dist, sc.prev
+	for i := range dist {
+		dist[i] = CostUnreachable
+	}
+	// prev needs no reset: it is written on every dist write, and the goal→start
+	// walk only visits cells relaxed this pass (start terminates the walk)
+
+	start := sy*mapW + sx
+	goal := ty*mapW + tx
+	dist[start] = 0
+
+	sc.heap = sc.heap[:0]
+	sc.heap.push(heapEntry{idx: start, dist: 0})
+
+	for len(sc.heap) > 0 {
+		e := sc.heap.pop()
+		if e.dist > dist[e.idx] {
+			continue
+		}
+		if e.idx == goal {
+			break
+		}
+		cx, cy := e.idx%mapW, e.idx/mapW
+		for d := range int8(DirCount) {
+			dx, dy := DirVectors[d][0], DirVectors[d][1]
+			nx, ny := cx+dx, cy+dy
+			if nx < 0 || nx >= mapW || ny < 0 || ny >= mapH || isBlocked(nx, ny) {
+				continue
+			}
+			if dx != 0 && dy != 0 {
+				if isBlocked(cx+dx, cy) || isBlocked(cx, cy+dy) {
+					continue
+				}
+			}
+			nIdx := ny*mapW + nx
+			nd := e.dist + dirCosts[d] + penalty[nIdx]
+			if nd < dist[nIdx] {
+				dist[nIdx] = nd
+				prev[nIdx] = int32(e.idx)
+				sc.heap.push(heapEntry{idx: nIdx, dist: nd})
+			}
+		}
+	}
+
+	if dist[goal] >= CostUnreachable {
+		return nil, 0
+	}
+
+	var path []int
+	trueCost := 0
+	for cur := goal; cur != start; {
+		path = append(path, cur)
+		p := int(prev[cur])
+		trueCost += stepCost(p, cur, mapW)
+		cur = p
+	}
+	path = append(path, start)
+	for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+		path[i], path[j] = path[j], path[i]
+	}
+	return path, trueCost
 }

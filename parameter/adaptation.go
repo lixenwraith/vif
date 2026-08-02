@@ -17,4 +17,7 @@ const (
 
 	// RouteDrainTimeout is max time to retain draining route state after gateway death
 	RouteDrainTimeout = 60 * time.Second
+
+	// AdaptTelemetryInterval is game ticks between bandit telemetry refreshes
+	AdaptTelemetryInterval = 10
 )

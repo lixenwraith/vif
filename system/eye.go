@@ -17,8 +17,6 @@ import (
 type EyeSystem struct {
 	world *engine.World
 
-	rng *vmath.FastRand
-
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
@@ -39,7 +37,6 @@ func NewEyeSystem(world *engine.World) engine.System {
 }
 
 func (s *EyeSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -112,6 +109,7 @@ func (s *EyeSystem) Update() {
 		dtFixed = dtCap
 	}
 
+	// Detached copy: despawnEye may remove from the Eye store mid-iteration
 	headerEntities := s.world.Components.Eye.GetAllEntities()
 	activeCount := 0
 
@@ -122,6 +120,11 @@ func (s *EyeSystem) Update() {
 		}
 
 		combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+		if !ok {
+			continue
+		}
+
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
@@ -150,10 +153,10 @@ func (s *EyeSystem) Update() {
 		s.updateAnimationFrame(&eyeComp)
 
 		// Homing movement
-		s.updateHomingMovement(headerEntity, &eyeComp, &combatComp, dtFixed)
+		s.updateHomingMovement(headerEntity, &eyeComp, &combatComp, kineticComp, dtFixed)
 
 		// Physics integration and member position sync
-		s.integrateAndSync(headerEntity, dtFixed)
+		s.integrateAndSync(headerEntity, kineticComp, dtFixed)
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {
@@ -172,7 +175,7 @@ func (s *EyeSystem) Update() {
 				})
 			}
 			combatComp.HitPoints = 0
-			s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+			// s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 			s.despawnEye(headerEntity)
 			activeCount++
 			continue
@@ -182,7 +185,7 @@ func (s *EyeSystem) Update() {
 		s.handleCursorInteraction(headerEntity)
 
 		// Persist animation state
-		s.world.Components.Eye.SetComponent(headerEntity, eyeComp)
+		// s.world.Components.Eye.SetComponent(headerEntity, eyeComp)
 
 		activeCount++
 	}
@@ -237,8 +240,8 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 
-	for row := 0; row < parameter.EyeHeight; row++ {
-		for col := 0; col < parameter.EyeWidth; col++ {
+	for row := range parameter.EyeHeight {
+		for col := range parameter.EyeWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 
@@ -303,6 +306,8 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		navComp.UseRouteGraph = true
 		navComp.RouteGraphID = routeGraphID
 		navComp.RouteID = routeID
+	} else {
+		navComp.RouteID = -1
 	}
 	s.world.Components.Navigation.SetComponent(headerEntity, navComp)
 
@@ -323,8 +328,8 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	// Build member entities (5×3 = 15)
 	members := make([]component.MemberEntry, 0, parameter.EyeWidth*parameter.EyeHeight)
 
-	for row := 0; row < parameter.EyeHeight; row++ {
-		for col := 0; col < parameter.EyeWidth; col++ {
+	for row := range parameter.EyeHeight {
+		for col := range parameter.EyeWidth {
 			memberX := topLeftX + col
 			memberY := topLeftY + row
 			offsetX := col - parameter.EyeHeaderOffsetX
@@ -370,18 +375,19 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 
 // === Movement ===
 
-func (s *EyeSystem) updateHomingMovement(headerEntity core.Entity, eyeComp *component.EyeComponent, combatComp *component.CombatComponent, dtFixed int64) {
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
-
+func (s *EyeSystem) updateHomingMovement(
+	headerEntity core.Entity,
+	eyeComp *component.EyeComponent,
+	combatComp *component.CombatComponent,
+	kineticComp *component.KineticComponent,
+	dtFixed int64,
+) {
 	// Skip homing during kinetic immunity (knockback in progress)
 	if combatComp.RemainingKineticImmunity > 0 {
 		return
 	}
 
-	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
+	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, kineticComp)
 
 	// Cornering drag
 	var extraDrag int64
@@ -412,24 +418,14 @@ func (s *EyeSystem) updateHomingMovement(headerEntity core.Entity, eyeComp *comp
 	)
 
 	if extraDrag > 0 {
-		dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
-		if dragFactor < 0 {
-			dragFactor = 0
-		}
+		dragFactor := max(vmath.Scale-vmath.Mul(extraDrag, dtFixed), 0)
 		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
 		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
 	}
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
-func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) {
+func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *component.KineticComponent, dtFixed int64) {
 	config := s.world.Resources.Config
-
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
-	if !ok {
-		return
-	}
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
@@ -458,8 +454,6 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) {
 		parameter.EyeRestitution,
 		wallCheck,
 	)
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 
 	if newX != headerPos.X || newY != headerPos.Y {
 		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
@@ -520,9 +514,23 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 
 	radiusSq := parameter.EyeSelfDestructRadiusSq
 
-	for i := 0; i < state.Count; i++ {
+	for i := range state.Count {
 		targetEntity := state.Targets[i].Entity
 		if targetEntity == 0 || !s.world.Components.Combat.HasEntity(targetEntity) {
+			continue
+		}
+
+		// Header-distance gate: avoids per-member iteration for distant targets.
+		// Gate radius = target half-extent + self-destruct radius, so it never
+		// rejects a member that would actually be in range
+		gateSq := parameter.EyeContactCheckDistSq
+		if tower, ok := s.world.Components.Tower.GetComponent(targetEntity); ok {
+			r := max(tower.RadiusX, tower.RadiusY) + parameter.EyeSelfDestructRadius
+			gateSq = r * r
+		}
+		gdx := eyePos.X - state.Targets[i].PosX
+		gdy := eyePos.Y - state.Targets[i].PosY
+		if gdx*gdx+gdy*gdy > gateSq {
 			continue
 		}
 

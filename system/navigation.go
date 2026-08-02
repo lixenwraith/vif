@@ -812,17 +812,15 @@ func (s *NavigationSystem) routeGraphFresh(graph *navigation.RouteGraph, groupID
 	return false
 }
 
-// clearRouteAssignments detaches entities from a graph so they use the shared group field
+// clearRouteAssignments detaches entities from one graph so they use the shared group field
 func (s *NavigationSystem) clearRouteAssignments(graphID uint32) {
-	for _, e := range s.world.Components.Navigation.GetAllEntities() {
-		nav, ok := s.world.Components.Navigation.GetComponent(e)
-		if !ok || !nav.UseRouteGraph || nav.RouteGraphID != graphID {
-			continue
+	s.world.Components.Navigation.Each(func(_ core.Entity, nav *component.NavigationComponent) bool {
+		if nav.UseRouteGraph && nav.RouteGraphID == graphID {
+			nav.UseRouteGraph = false
+			nav.RouteID = -1
 		}
-		nav.UseRouteGraph = false
-		nav.RouteID = -1
-		s.world.Components.Navigation.SetComponent(e, nav)
-	}
+		return true
+	})
 }
 
 // refreshRouteGraphs recomputes one stale gateway route graph per interval
