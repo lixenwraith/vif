@@ -395,8 +395,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 			}
 		}
 		if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-			if prot.Mask&component.ProtectFromDelete != 0 || prot.Mask == component.ProtectAll {
-				// TODO: DEBUG check
+			if prot.Mask&component.ProtectFromDelete != 0 {
 				return true
 			}
 		}

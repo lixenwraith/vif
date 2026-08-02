@@ -520,7 +520,7 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 
 				// Member protection
 				s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-					Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
+					Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
 				})
 
 				// Ablative health: per-member HP for combat damage

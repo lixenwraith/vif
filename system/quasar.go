@@ -383,7 +383,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 			// MemberEntries are not from death, composite system manages lifecycle
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
+				Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
 			})
 
 			// Backlink to header
@@ -715,7 +715,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 
 				// Check protection
 				if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
-					if protComp.Mask == component.ProtectAll || protComp.Mask&component.ProtectFromSpecies != 0 {
+					if protComp.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}
 				}

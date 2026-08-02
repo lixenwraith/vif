@@ -14,7 +14,7 @@ const (
 	// ProtectFromSpecies makes entity immune to species interactions (e.g. destruction by collision)
 	ProtectFromSpecies
 
-	// ProtectFromDelete makes entity immune to delete operators
+	// ProtectFromDelete makes entity with glyph component immune to delete operators
 	ProtectFromDelete
 
 	// ProtectFromDeath makes entity immune to death (e.g. out-of-bounds cleanup)

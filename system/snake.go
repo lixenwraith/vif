@@ -387,7 +387,7 @@ func (s *SnakeSystem) createHeadMembers(headEntity core.Entity, headX, headY int
 			s.world.Positions.SetPosition(memberEntity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
+				Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
 			})
 
 			s.world.Components.Member.SetComponent(memberEntity, component.MemberComponent{
@@ -516,7 +516,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		s.world.Positions.SetPosition(memberEntity, component.PositionComponent{X: memberX, Y: memberY})
 
 		s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-			Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
+			Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
 		})
 
 		s.world.Components.Combat.SetComponent(memberEntity, component.CombatComponent{

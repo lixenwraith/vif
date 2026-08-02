@@ -371,7 +371,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 
 	// Protection
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
-		Mask: component.ProtectFromSpecies | component.ProtectFromDecay | component.ProtectFromDelete,
+		Mask: component.ProtectFromSpecies | component.ProtectFromDecay,
 	})
 
 	// Navigation for wall-aware pathfinding (no GA tracking - loot doesn't emit EnemyCreated)

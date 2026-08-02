@@ -114,5 +114,5 @@ func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor color
 	})
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 	s.world.Components.Protection.SetComponent(entity,
-		component.ProtectionComponent{Mask: component.ProtectFromDecay | component.ProtectFromDelete})
+		component.ProtectionComponent{Mask: component.ProtectFromDecay})
 }

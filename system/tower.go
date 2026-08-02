@@ -333,7 +333,7 @@ func (s *TowerSystem) createDiscMembers(
 			})
 
 			s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
-				Mask: component.ProtectFromDecay | component.ProtectFromDelete | component.ProtectFromSpecies,
+				Mask: component.ProtectFromDecay | component.ProtectFromSpecies,
 			})
 
 			// Per-member ablative combat, owned by player
