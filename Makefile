@@ -1,13 +1,15 @@
-BINARY := vi-fighter
-SRC := ./cmd/vi-fighter
+BINARY := vif
+SRC := ./cmd/vif
 BIN_DIR := bin
+WEB_DIR := web
 GOFLAGS := -trimpath
 LDFLAGS := -s -w
 TAGS ?=
+PORT ?= 8080
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify clean check-go
+.PHONY: help generate dev release nolog wasm windows run test verify clean check-go tools serve
 
 help:
 	@echo "Usage: make [target]"
@@ -15,14 +17,20 @@ help:
 	@echo "Targets:"
 	@echo "  dev      Build with race detector and debug symbols"
 	@echo "  release  Build optimized binary (stripped, trimmed)"
-	@echo "  nolog    release build without logger"
+	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for xterm.js (sound and logging disabled)"
-	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound and logging disabled)"
+	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound/log disabled)"
+	@echo "  tools    Build all auxiliary tools and cmds"
+	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
+	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
 	@echo "  clean    Remove build artifacts"
 
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
+
+$(WEB_DIR):
+	mkdir -p $(WEB_DIR)
 
 check-go:
 	@if ! command -v go >/dev/null 2>&1; then \
@@ -56,32 +64,38 @@ check-go:
 	fi
 
 generate: check-go
-	go generate ./manifest/...
+	go generate ./internal/manifest/...
 
 dev: generate | $(BIN_DIR)
 	go build -race -tags "$(TAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
+serve: wasm | $(BIN_DIR)
+	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/http-server ./tool/http-server
+	./$(BIN_DIR)/http-server -dir $(WEB_DIR) -port $(PORT)
+
 release: generate | $(BIN_DIR)
 	go build $(GOFLAGS) -tags "$(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
-# nolog strips logging; lixenwraith/log is not linked
+# nolog strips logging; internal/vlog is not linked
 nolog: generate | $(BIN_DIR)
 	go build $(GOFLAGS) -tags "novlog $(TAGS)" -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY) $(SRC)
 
 # wasm selects vlog/stub.go automatically
-wasm: generate | $(BIN_DIR)
-	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).wasm $(SRC)
+wasm: generate | $(WEB_DIR)
+	GOOS=js GOARCH=wasm go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(WEB_DIR)/$(BINARY).wasm $(SRC)
 
 # windows is experimental and untested
 windows: generate | $(BIN_DIR)
 	CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
-	GOOS=windows GOARCH=amd64 go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/$(BINARY).exe $(SRC)
+
+tools: | $(BIN_DIR)
+	go build $(GOFLAGS) -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/ ./cmd/ascimage ./cmd/soundlab ./tool/...
 
 test: generate
 	go test -race ./...
 
 # verify covers the build-tag matrix a single-target build would miss
-verify: generate
+verify: generate test
 	go build ./...
 	go build -tags novlog ./...
 	GOOS=js GOARCH=wasm go build ./...
@@ -92,3 +106,4 @@ run: dev
 
 clean:
 	rm -rf $(BIN_DIR)
+

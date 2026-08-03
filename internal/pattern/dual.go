@@ -1,0 +1,70 @@
+package pattern
+
+import (
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
+)
+
+// FromDualModeImage converts dual-mode image to pattern using specified color mode
+func FromDualModeImage(img *ascimage.DualModeImage, colorMode terminal.ColorMode) PatternResult {
+	if img == nil || len(img.Cells) == 0 {
+		return PatternResult{}
+	}
+
+	cells := make([]PatternCell, 0, len(img.Cells))
+
+	for y := range img.Height {
+		for x := range img.Width {
+			idx := y*img.Width + x
+			src := img.Cells[idx]
+
+			if src.Transparent {
+				continue
+			}
+
+			renderFg := src.Rune != 0 && src.Rune != ' '
+			renderBg := true
+
+			var fg, bg color.RGB
+			var attrs terminal.Attr
+
+			if colorMode == terminal.ColorMode256 {
+				fg = color.RGB{R: src.Palette256Fg}
+				bg = color.RGB{R: src.Palette256Bg}
+				attrs = terminal.AttrFg256 | terminal.AttrBg256
+			} else {
+				fg = src.TrueFg
+				bg = src.TrueBg
+			}
+
+			cells = append(cells, PatternCell{
+				OffsetX:  x,
+				OffsetY:  y,
+				Rune:     src.Rune,
+				Fg:       fg,
+				Bg:       bg,
+				Attrs:    attrs,
+				RenderFg: renderFg,
+				RenderBg: renderBg,
+			})
+		}
+	}
+
+	return PatternResult{
+		Cells:   cells,
+		Width:   img.Width,
+		Height:  img.Height,
+		AnchorX: img.AnchorX,
+		AnchorY: img.AnchorY,
+	}
+}
+
+// LoadDualModePattern loads a .vifimg file and converts to pattern
+func LoadDualModePattern(path string, colorMode terminal.ColorMode) (PatternResult, error) {
+	img, err := ascimage.LoadDualMode(path)
+	if err != nil {
+		return PatternResult{}, err
+	}
+	return FromDualModeImage(img, colorMode), nil
+}

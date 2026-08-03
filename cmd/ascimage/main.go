@@ -11,8 +11,8 @@ import (
 	"strings"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/cmd/ascimage/ascimage"
-	"github.com/lixenwraith/vi-fighter/render"
+	"github.com/lixenwraith/vi-fighter/pkg/ascimage"
+	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
 func main() {
@@ -32,7 +32,7 @@ func main() {
 	flag.StringVar(&modeStr, "m", "quadrant", "Render mode: 'bg' or 'quadrant'")
 	flag.StringVar(&colorStr, "c", "auto", "Color depth: 'auto', 'true', or '256'")
 	flag.IntVar(&width, "w", 0, "Output width (file mode only, 0 = 80)")
-	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vfimg file")
+	flag.StringVar(&dualOutput, "dual", "", "Output dual-mode .vifimg file")
 	flag.StringVar(&output, "o", "", "Output ANSI to file ('-' for stdout), omit for interactive")
 	flag.BoolVar(&fitMode, "fit", true, "Start in fit-to-screen mode (interactive only)")
 	flag.BoolVar(&noStatus, "no-status", false, "Hide status bar (interactive only)")
@@ -58,13 +58,13 @@ func main() {
 }
 
 func isVfimg(path string) bool {
-	return strings.HasSuffix(strings.ToLower(path), ".vfimg")
+	return strings.HasSuffix(strings.ToLower(path), ".vifimg")
 }
 
 func runVfimgInput(path string, colorMode terminal.ColorMode, output string, noStatus bool) {
 	dual, err := ascimage.LoadDualMode(path)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Error loading vfimg: %v\n", err)
+		fmt.Fprintf(os.Stderr, "Error loading vifimg: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -131,17 +131,17 @@ func runDualOutput(img image.Image, renderMode ascimage.RenderMode, width int, o
 }
 
 func printUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.vfimg>")
-	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .vfimg (view/convert)")
+	fmt.Fprintln(os.Stderr, "Usage: ascimage [options] <image|file.vifimg>")
+	fmt.Fprintln(os.Stderr, "\nSupported formats: PNG, JPEG, GIF (input), .vifimg (view/convert)")
 	fmt.Fprintln(os.Stderr, "\nOptions:")
 	flag.PrintDefaults()
 	fmt.Fprintln(os.Stderr, "\nModes:")
 	fmt.Fprintln(os.Stderr, "  Image input:")
-	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vfimg for vi-fighter pattern system")
+	fmt.Fprintln(os.Stderr, "    Dual-mode (-dual): write .vifimg for vi-fighter pattern system")
 	fmt.Fprintln(os.Stderr, "    File output (-o):  write ANSI sequences to file")
 	fmt.Fprintln(os.Stderr, "    Interactive:        view image with zoom/pan controls (default)")
-	fmt.Fprintln(os.Stderr, "  .vfimg input:")
-	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .vfimg to ANSI sequences")
+	fmt.Fprintln(os.Stderr, "  .vifimg input:")
+	fmt.Fprintln(os.Stderr, "    File output (-o):  convert .vifimg to ANSI sequences")
 	fmt.Fprintln(os.Stderr, "    Interactive:        view with color mode toggle (default)")
 	fmt.Fprintln(os.Stderr, "\nInteractive controls:")
 	fmt.Fprintln(os.Stderr, "  q, Esc, Ctrl+C    Quit")

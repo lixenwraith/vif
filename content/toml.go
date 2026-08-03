@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/core"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
 // SchemaVersion is the accepted value of the corpus schema key

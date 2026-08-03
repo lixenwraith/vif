@@ -11,7 +11,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 const beatDefaultVel = 0.8

@@ -1,0 +1,53 @@
+package renderer
+
+import (
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/terminal"
+)
+
+// GlyphRenderer draws typeable spawned content entities
+type GlyphRenderer struct {
+	gameCtx *engine.GameContext
+}
+
+// NewGlyphRenderer creates a new glyph renderer
+func NewGlyphRenderer(gameCtx *engine.GameContext) *GlyphRenderer {
+	return &GlyphRenderer{
+		gameCtx: gameCtx,
+	}
+}
+
+// Render draws all glyph entities
+func (r *GlyphRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	buf.SetWriteMask(visual.MaskGlyph)
+
+	entities := r.gameCtx.World.Components.Glyph.GetAllEntities()
+	for _, entity := range entities {
+		glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(entity)
+		if !ok {
+			continue
+		}
+
+		// Gold is handled in its own composite renderer with a different mask
+		if glyph.Type == component.GlyphGold {
+			continue
+		}
+
+		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+		if !ok {
+			continue
+		}
+
+		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+		if !visible {
+			continue
+		}
+
+		fg := visual.GlyphColorLUT[glyph.Type][glyph.Level]
+
+		buf.SetFgOnly(screenX, screenY, glyph.Rune, fg, terminal.AttrNone)
+	}
+}

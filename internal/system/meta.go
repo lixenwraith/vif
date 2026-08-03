@@ -1,0 +1,401 @@
+package system
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"sync/atomic"
+
+	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
+)
+
+// MetaSystem handles meta-game commands like Reset, Debug, and Help
+type MetaSystem struct {
+	ctx *engine.GameContext
+
+	world *engine.World
+}
+
+// NewMetaSystem creates a new meta system
+func NewMetaSystem(ctx *engine.GameContext) engine.System {
+	s := &MetaSystem{
+		ctx:   ctx,
+		world: ctx.World,
+	}
+	s.Init()
+	return s
+}
+
+// Init resets session state for new game
+func (s *MetaSystem) Init() {
+	// No-op
+}
+
+// Name returns system's name
+func (s *MetaSystem) Name() string {
+	return "meta"
+}
+
+// Priority returns the system's priority
+func (s *MetaSystem) Priority() int {
+	return parameter.PriorityUI
+}
+
+// EventTypes returns the event types MetaSystem handles
+func (s *MetaSystem) EventTypes() []event.EventType {
+	return []event.EventType{
+		event.EventDebugFlowToggle,
+		event.EventDebugGraphToggle,
+		event.EventMetaStatusMessageRequest,
+		event.EventLevelSetup,
+		event.EventMetaDebugRequest,
+		event.EventMetaHelpRequest,
+		event.EventMetaAboutRequest,
+		event.EventGamePauseRequest,
+		event.EventGameReset,
+	}
+}
+
+// HandleEvent processes command events
+func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
+	switch ev.Type {
+	case event.EventGameReset:
+		s.handleGameReset()
+
+	case event.EventMetaStatusMessageRequest:
+		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
+			s.handleMessageRequest(payload)
+		}
+
+	case event.EventLevelSetup:
+		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
+			s.handleLevelSetup(payload)
+		}
+
+	case event.EventDebugFlowToggle:
+		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
+			DebugFlowGroupID = payload.GroupID
+			DebugShowFlow = true
+		} else {
+			DebugShowFlow = !DebugShowFlow
+		}
+
+	case event.EventDebugGraphToggle:
+		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
+			DebugFlowGroupID = payload.GroupID
+			DebugShowCompositeNav = true
+		} else {
+			DebugShowCompositeNav = !DebugShowCompositeNav
+		}
+
+	case event.EventMetaDebugRequest:
+		s.handleDebugRequest()
+
+	case event.EventMetaHelpRequest:
+		s.handleHelpRequest()
+
+	case event.EventMetaAboutRequest:
+		s.handleAboutRequest()
+
+	case event.EventGamePauseRequest:
+		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
+			s.handlePauseRequest(p.Paused)
+		}
+	}
+}
+
+// Update implements System interface
+func (s *MetaSystem) Update() {
+	// No tick-based logic
+}
+
+// handleGameReset performs full game reset with deterministic ordering
+// Execution sequence (race-free):
+//  1. Entity cleanup (drains, world entities)
+//  2. GameState reset (counters, timers)
+//  3. Cursor recreation
+//  4. FSM reset (emits spawn request, dispatched immediately)
+//
+// Other systems handle EventGameReset after this completes
+func (s *MetaSystem) handleGameReset() {
+	// 1. Pause and stop audio
+	s.ctx.SetPaused(true)
+
+	// 2. Synchronous World Cleanup
+	// Already inside world.RunSafe from main -> DispatchEventsImmediately
+	s.ctx.World.Clear()
+
+	// 3. GameState reset (counters, NextID → 1)
+	s.ctx.State.Reset()
+
+	// 4. Config reset (map dimensions to viewport)
+	config := s.ctx.World.Resources.Config
+	config.MapWidth = config.ViewportWidth
+	config.MapHeight = config.ViewportHeight
+	config.CameraX = 0
+	config.CameraY = 0
+	config.CropOnResize = true
+
+	// 5. Cursor recreation
+	s.ctx.World.CreateCursorEntity()
+
+	// 6. Reset mode and status
+	s.ctx.SetMode(core.ModeNormal)
+	s.ctx.SetCommandText("")
+	s.ctx.SetSearchText("")
+	s.ctx.SetStatusMessage("", 0, false)
+	s.ctx.SetOverlayContent(nil)
+
+	// 7. Signal FSM reset - Non-blocking
+
+	// On return from this function main releases the world lock and scheduler acquires it for reset
+	select {
+	case s.ctx.ResetChan <- struct{}{}:
+	default:
+	}
+}
+
+// handleMessageRequest displays a message in status bar
+func (s *MetaSystem) handleMessageRequest(payload *event.MetaStatusMessagePayload) {
+	if payload.Duration < 0 {
+		payload.Duration = 0
+	}
+	s.ctx.SetStatusMessage(payload.Message, payload.Duration, payload.DurationOverride)
+}
+
+// handleLevelSetup reconfigures map dimensions and clears entities
+func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
+	width := payload.Width
+	height := payload.Height
+	cropOnResize := payload.CropOnResize
+
+	// Zero dimensions = reset to viewport with crop enabled
+	if width <= 0 || height <= 0 {
+		width = s.world.Resources.Config.ViewportWidth
+		height = s.world.Resources.Config.ViewportHeight
+		cropOnResize = true
+	}
+
+	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
+}
+
+// handleDebugRequest shows debug information overlay with auto-discovered stats
+func (s *MetaSystem) handleDebugRequest() {
+	content := &core.OverlayContent{
+		Title: "DEBUG",
+	}
+
+	// Collect all stats into groups by prefix
+	groups := make(map[string][]core.CardEntry)
+
+	// Context stats
+	groups["context"] = []core.CardEntry{
+		{Key: "frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
+		{Key: "screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
+		{Key: "game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.MapWidth, s.ctx.World.Resources.Config.MapHeight)},
+		{Key: "paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
+	}
+
+	// Player stats from cursor entity components
+	cursorEntity := s.ctx.World.Resources.Player.Entity
+	var playerEntries []core.CardEntry
+	if ec, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "energy", Value: fmt.Sprintf("%d", ec.Current),
+		})
+	}
+	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "heat", Value: fmt.Sprintf("%d/%d", hc.Current, parameter.HeatMax),
+		})
+	}
+	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {
+		playerEntries = append(playerEntries, core.CardEntry{
+			Key: "shield", Value: fmt.Sprintf("%v", sc.Active),
+		})
+	}
+	if len(playerEntries) > 0 {
+		groups["player"] = playerEntries
+	}
+
+	// Status registry stats
+	reg := s.world.Resources.Status
+
+	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
+		prefix, name := status.SplitKey(key)
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: fmt.Sprintf("%v", ptr.Load()),
+		})
+	})
+
+	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
+		prefix, name := status.SplitKey(key)
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: status.FormatInt(key, ptr.Load()),
+		})
+	})
+
+	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
+		prefix, name := status.SplitKey(key)
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: fmt.Sprintf("%.3f", ptr.Get()),
+		})
+	})
+
+	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
+		prefix, name := status.SplitKey(key)
+		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
+	})
+
+	// Sort prefixes alphabetically
+	prefixes := make([]string, 0, len(groups))
+	for prefix := range groups {
+		prefixes = append(prefixes, prefix)
+	}
+	sort.Strings(prefixes)
+
+	// Build cards in sorted order with sorted entries
+	for _, prefix := range prefixes {
+		entries := groups[prefix]
+		sort.Slice(entries, func(i, j int) bool {
+			return entries[i].Key < entries[j].Key
+		})
+		content.Items = append(content.Items, core.OverlayCard{
+			Title:   strings.ToUpper(prefix),
+			Entries: entries,
+		})
+	}
+
+	s.ctx.SetOverlayContent(content)
+}
+
+// handleHelpRequest shows help information overlay
+func (s *MetaSystem) handleHelpRequest() {
+	content := &core.OverlayContent{
+		Title: "HELP",
+	}
+
+	// Card: Modes
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "MODES",
+		Entries: []core.CardEntry{
+			{Key: "i", Value: "Enter INSERT mode"},
+			{Key: "ESC", Value: "Return to NORMAL / Show grid"},
+			{Key: "/", Value: "Enter SEARCH mode"},
+			{Key: ":", Value: "Enter COMMAND mode"},
+		},
+	})
+
+	// Card: Movement
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "MOVEMENT",
+		Entries: []core.CardEntry{
+			{Key: "h/j/k/l", Value: "Move left/down/up/right"},
+			{Key: "w/b", Value: "Word forward/backward"},
+			{Key: "0/$", Value: "Line start/end"},
+			{Key: "gg/G", Value: "Top/bottom of screen"},
+			{Key: "f/F{c}", Value: "Find char forward/backward"},
+			{Key: "t/T{c}", Value: "Till char forward/backward"},
+			{Key: ";/,", Value: "Repeat find / reverse"},
+		},
+	})
+
+	// Card: Delete
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "DELETE",
+		Entries: []core.CardEntry{
+			{Key: "d{motion}", Value: "Delete with motion"},
+			{Key: "dd", Value: "Delete current line"},
+			{Key: "D", Value: "Delete to end of line"},
+			{Key: "x", Value: "Delete char at cursor"},
+		},
+	})
+
+	// Card: Game
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "GAME",
+		Entries: []core.CardEntry{
+			{Key: "TAB", Value: "Jump to nugget (10 energy)"},
+			{Key: "ENTER", Value: "Fire directional cleaners"},
+			{Key: "Ctrl+S", Value: "Cycle audio (All/Music/SFX/None)"},
+		},
+	})
+
+	// Card: Search
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "SEARCH",
+		Entries: []core.CardEntry{
+			{Key: "/text", Value: "Search for text"},
+			{Key: "n/N", Value: "Next/previous match"},
+		},
+	})
+
+	// Card: Commands
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "COMMANDS",
+		Entries: []core.CardEntry{
+			{Key: ":log [on|off|lvl|scope|stat]", Value: "Session logging"},
+			{Key: ":q", Value: "Quit game"},
+			{Key: ":n", Value: "New game"},
+			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
+			{Key: ":a[uto] [on|off]", Value: "Auto-fire main + special (default on)"},
+			{Key: ":m[ouse] enable|disable|free", Value: "Mouse input master switch"},
+			{Key: ":content", Value: "Corpus source and counters"},
+			{Key: ":energy N", Value: "Set energy"},
+			{Key: ":heat N", Value: "Set heat"},
+			{Key: ":boost", Value: "Enable boost"},
+			{Key: ":d [save]", Value: "Debug overlay / save snapshot"},
+			{Key: ":h", Value: "This help"},
+		},
+	})
+
+	s.ctx.SetOverlayContent(content)
+}
+
+// === About (placeholder) ===
+
+// handleAboutRequest shows about information overlay
+func (s *MetaSystem) handleAboutRequest() {
+	content := &core.OverlayContent{
+		Title:  "ABOUT",
+		Custom: true,
+	}
+
+	// Store info as entries for the renderer to extract
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "VI-FIGHTER",
+		Entries: []core.CardEntry{
+			{Key: "desc", Value: "A terminal-based rouge-like action typing game with vi-style keybindings. Made with love for terminal, Go, VIM, and Games :)"},
+			{Key: "version", Value: "0.1.0-alpha"},
+			{Key: "engine", Value: "Custom ECS, Data-driven HFSM, Double-buffered ANSI renderer"},
+			{Key: "go", Value: "1.25+"},
+			{Key: "github", Value: "github.com/lixenwraith/vi-fighter"},
+			{Key: "author", Value: "Lixen Wraith"},
+			{Key: "website", Value: "lixen.com"},
+			{Key: "license", Value: "BSD-3"},
+		},
+	})
+
+	s.ctx.SetOverlayContent(content)
+}
+
+// === Pause ===
+
+// handlePauseRequest applies pause to game state and clock, then announces
+// the change; each system applies it to its own domain (audio → AudioSystem)
+func (s *MetaSystem) handlePauseRequest(paused bool) {
+	if s.ctx.IsPaused.Load() == paused {
+		return
+	}
+	s.ctx.IsPaused.Store(paused)
+	if paused {
+		s.ctx.PausableClock.Pause()
+	} else {
+		s.ctx.PausableClock.Resume()
+	}
+	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
+}

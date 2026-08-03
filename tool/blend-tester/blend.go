@@ -1,0 +1,175 @@
+package main
+
+import (
+	"fmt"
+
+	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
+)
+
+func handleBlendInput(ev terminal.Event) {
+	switch ev.Key {
+	case terminal.KeyUp:
+		state.blendSrcIdx--
+		if state.blendSrcIdx < 0 {
+			state.blendSrcIdx = len(gamePalette) - 1
+		}
+	case terminal.KeyDown:
+		state.blendSrcIdx++
+		if state.blendSrcIdx >= len(gamePalette) {
+			state.blendSrcIdx = 0
+		}
+	case terminal.KeyLeft:
+		if ev.Modifiers&terminal.ModShift != 0 {
+			state.blendAlpha -= 0.1
+		} else {
+			state.blendAlpha -= 0.01
+		}
+		if state.blendAlpha < 0 {
+			state.blendAlpha = 0
+		}
+	case terminal.KeyRight:
+		if ev.Modifiers&terminal.ModShift != 0 {
+			state.blendAlpha += 0.1
+		} else {
+			state.blendAlpha += 0.01
+		}
+		if state.blendAlpha > 1 {
+			state.blendAlpha = 1
+		}
+	case terminal.KeyRune:
+		switch ev.Rune {
+		case 's', 'S':
+			state.blendSrcIdx = (state.blendSrcIdx + 1) % len(gamePalette)
+		case 'd', 'D':
+			state.blendDstIdx = (state.blendDstIdx + 1) % len(gamePalette)
+		case 'o', 'O':
+			state.blendOp = (state.blendOp + 1) % len(blendOps)
+		case 'b', 'B':
+			state.blendBgIdx = (state.blendBgIdx + 1) % len(bgPresets)
+		case 'h', 'H':
+			// Enter hex input for custom bg
+			if state.blendBgIdx == 3 {
+				state.hexInputActive = true
+				state.hexInputTarget = 0
+				state.hexInputBuffer = ""
+			}
+		case 'r', 'R':
+			state.blendAlpha = 1.0
+		}
+	}
+}
+
+func drawBlendMode() {
+	startY := 2
+	fg := color.RGB{R: 180, G: 180, B: 180}
+	bg := color.RGB{R: 20, G: 20, B: 30}
+
+	// Keys help
+	drawText(1, startY, "S:Src D:Dst O:Op ←→:Alpha(±0.01) Shift:±0.1 B:Bg H:HexInput R:Reset", color.RGB{R: 100, G: 100, B: 100}, bg)
+	startY += 2
+
+	srcColor := gamePalette[state.blendSrcIdx].Color
+	dstColor := gamePalette[state.blendDstIdx].Color
+	op := blendOps[state.blendOp]
+
+	bgColor := bgPresets[state.blendBgIdx].color
+	if state.blendBgIdx == 3 {
+		bgColor = state.blendCustomBg
+	}
+
+	// Source
+	drawText(1, startY, fmt.Sprintf("SRC: %-18s", gamePalette[state.blendSrcIdx].Name), fg, bg)
+	drawSwatch(25, startY, 5, srcColor)
+	drawText(31, startY, fmt.Sprintf("(%3d,%3d,%3d)", srcColor.R, srcColor.G, srcColor.B), color.RGB{R: 150, G: 150, B: 150}, bg)
+	startY++
+
+	// Destination
+	drawText(1, startY, fmt.Sprintf("DST: %-18s", gamePalette[state.blendDstIdx].Name), fg, bg)
+	drawSwatch(25, startY, 5, dstColor)
+	drawText(31, startY, fmt.Sprintf("(%3d,%3d,%3d)", dstColor.R, dstColor.G, dstColor.B), color.RGB{R: 150, G: 150, B: 150}, bg)
+	startY++
+
+	// Operation
+	drawText(1, startY, fmt.Sprintf("OP:  %-12s", op.name), color.RGB{R: 255, G: 200, B: 100}, bg)
+	drawText(20, startY, fmt.Sprintf("α: %.2f", state.blendAlpha), color.RGB{R: 100, G: 200, B: 255}, bg)
+	startY++
+
+	// Background
+	bgName := bgPresets[state.blendBgIdx].name
+	if state.blendBgIdx == 3 {
+		bgName = fmt.Sprintf("Custom #%02X%02X%02X", state.blendCustomBg.R, state.blendCustomBg.G, state.blendCustomBg.B)
+	}
+	drawText(1, startY, fmt.Sprintf("BG:  %s", bgName), fg, bg)
+	drawSwatch(25, startY, 5, bgColor)
+	startY += 2
+
+	// Formula
+	drawBox(0, startY, 80, 3, " Formula ", color.RGB{R: 80, G: 80, B: 80}, bg)
+	drawText(2, startY+1, op.formula, color.RGB{R: 200, G: 200, B: 100}, bg)
+	startY += 4
+
+	// Compute result using actual render functions
+	var result color.RGB
+	switch state.blendOp {
+	case 0: // Replace
+		result = srcColor
+	case 1: // Alpha
+		result = color.Blend(dstColor, srcColor, state.blendAlpha)
+	case 2: // Set
+		result = color.Add(dstColor, srcColor, state.blendAlpha)
+	case 3: // Max
+		result = color.Max(dstColor, srcColor, state.blendAlpha)
+	case 4: // SoftLight
+		result = color.SoftLight(dstColor, srcColor, state.blendAlpha)
+	case 5: // Screen
+		result = color.Screen(dstColor, srcColor, state.blendAlpha)
+	case 6: // Overlay
+		result = color.Overlay(dstColor, srcColor, state.blendAlpha)
+	}
+
+	// Results box
+	drawBox(0, startY, 80, 10, " Result ", color.RGB{R: 80, G: 80, B: 80}, bg)
+	startY++
+
+	// TrueColor result
+	drawText(2, startY, "TrueColor:", fg, bg)
+	drawSwatch(15, startY, 8, result)
+	drawText(24, startY, fmt.Sprintf("(%3d,%3d,%3d) #%02X%02X%02X", result.R, result.G, result.B, result.R, result.G, result.B), color.RGB{R: 150, G: 150, B: 150}, bg)
+	startY++
+
+	// 256 result
+	info := AnalyzeColor(result)
+	drawText(2, startY, "256 Redmean:", fg, bg)
+	drawSwatch(15, startY, 8, info.Redmean256Bg)
+	drawText(24, startY, fmt.Sprintf("idx=%3d → (%3d,%3d,%3d)", info.Redmean256, info.Redmean256Bg.R, info.Redmean256Bg.G, info.Redmean256Bg.B), color.RGB{R: 150, G: 150, B: 150}, bg)
+	startY++
+
+	drawText(2, startY, "256 Naive:", fg, bg)
+	drawSwatch(15, startY, 8, info.Naive256RGB)
+	drawText(24, startY, fmt.Sprintf("idx=%3d → (%3d,%3d,%3d)", info.Naive256, info.Naive256RGB.R, info.Naive256RGB.G, info.Naive256RGB.B), color.RGB{R: 150, G: 150, B: 150}, bg)
+	startY += 2
+
+	// Side-by-side preview on background
+	drawText(2, startY, "Preview on BG:", fg, bg)
+	startY++
+	// TC preview
+	for x := range 20 {
+		buf.SetWithBg(2+x, startY, ' ', result, bgColor)
+		buf.SetWithBg(2+x, startY+1, ' ', result, bgColor)
+	}
+	drawText(2, startY, "  TC  ", color.RGB{R: 0, G: 0, B: 0}, result)
+	// 256 preview
+	for x := range 20 {
+		buf.SetWithBg(25+x, startY, ' ', info.Redmean256Bg, bgColor)
+		buf.SetWithBg(25+x, startY+1, ' ', info.Redmean256Bg, bgColor)
+	}
+	drawText(25, startY, "  256 ", color.RGB{R: 0, G: 0, B: 0}, info.Redmean256Bg)
+
+	// Hex input overlay
+	if state.hexInputActive && state.hexInputTarget == 0 {
+		drawBox(20, 10, 30, 5, " Hex Input ", color.RGB{R: 255, G: 255, B: 0}, color.RGB{R: 40, G: 40, B: 60})
+		drawText(22, 12, "#"+state.hexInputBuffer+"_", color.RGB{R: 255, G: 255, B: 255}, color.RGB{R: 40, G: 40, B: 60})
+		drawText(22, 13, "Enter:Apply Esc:Cancel", color.RGB{R: 100, G: 100, B: 100}, color.RGB{R: 40, G: 40, B: 60})
+	}
+}

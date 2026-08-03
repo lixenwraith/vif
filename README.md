@@ -1,4 +1,4 @@
-# vi-fighter
+# vif
 
 A terminal-based game built with Go that combines vi/vim motion commands with fast-paced typing and rogue-like 2D shooter action gameplay.
 
@@ -22,7 +22,7 @@ Built from scratch using the Go standard library, featuring a custom game engine
 git clone https://github.com/lixenwraith/vi-fighter --depth 1
 cd vi-fighter
 make release
-bin/vi-fighter
+bin/vif
 ```
 
 ## License

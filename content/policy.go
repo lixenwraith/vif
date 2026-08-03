@@ -1,7 +1,7 @@
 package content
 
 import (
-	"github.com/lixenwraith/vi-fighter/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // File extensions recognised during corpus load

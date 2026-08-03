@@ -1,6 +1,6 @@
 package content
 
-import "github.com/lixenwraith/vi-fighter/core"
+import "github.com/lixenwraith/vi-fighter/internal/core"
 
 // Source is one loaded content file; every Source holds at least one block
 type Source struct {

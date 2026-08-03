@@ -12,7 +12,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 func newTestSession(t *testing.T, out *bytes.Buffer) *Session {

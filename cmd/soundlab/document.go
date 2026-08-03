@@ -5,7 +5,7 @@ import (
 	"path"
 	"slices"
 
-	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // doc is an ordered, name-keyed working set. Order is document order — it is

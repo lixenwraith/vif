@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/lixenwraith/toml"
-	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // Session owns the engine and the two working documents. Single-goroutine by

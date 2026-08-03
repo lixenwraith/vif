@@ -1,0 +1,533 @@
+package engine
+
+import (
+	"fmt"
+	"io/fs"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/fsm"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/internal/vlog"
+)
+
+// ClockScheduler manages game logic on a fixed tick
+// Provides infrastructure for phase transitions and state ownership
+// Handles pause-aware scheduling without busy-wait
+type ClockScheduler struct {
+	world *World
+
+	pausableClock *PausableClock
+	isPaused      *atomic.Bool
+
+	// Tick configuration
+	tickInterval     time.Duration
+	lastGameTickTime time.Time // Last tick in game time
+	gameStartTime    time.Time // Game session start for elapsed calculation
+	nextTickDeadline time.Time // Next tick deadline for drift correction
+
+	// Control channels
+	stopChan  chan struct{}
+	stopOnce  sync.Once
+	wg        sync.WaitGroup
+	running   atomic.Bool
+	resetChan <-chan struct{}
+
+	// Frame synchronization channels
+	frameReady <-chan struct{} // Receive signal that frame is ready
+	updateDone chan<- struct{} // Send signal that update is complete
+
+	// Event routing
+	eventRouter *event.Router
+
+	// Finite GameState Machine
+	fsm *fsm.Machine[*World]
+
+	// Event loop configuration
+	eventLoopInterval   time.Duration
+	eventLoopBackoffMax int
+
+	// Cached metric pointers
+	statTicks           *atomic.Int64
+	statEvBackoffs      *atomic.Int64
+	statEvDispatches    *atomic.Int64
+	statEntityCount     *atomic.Int64
+	statEntityCreated   *atomic.Int64
+	statEntityDestroyed *atomic.Int64
+	statQueueLen        *atomic.Int64
+	statGameElapsedMs   *atomic.Int64
+	statEvDropped       *atomic.Int64
+
+	// Log state: transition and overflow edge detection
+	lastFSMName   string
+	lastEvDropped uint64
+
+	// FSM telemetry
+	statFSMName    *status.AtomicString
+	statFSMElapsed *atomic.Int64
+	statFSMMaxDur  *atomic.Int64
+	statFSMIndex   *atomic.Int64
+	statFSMTotal   *atomic.Int64
+}
+
+// NewClockScheduler creates a new clock scheduler with specified tick interval
+// Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
+func NewClockScheduler(
+	world *World,
+	pausableClock *PausableClock,
+	isPaused *atomic.Bool,
+	tickInterval time.Duration,
+	frameReady <-chan struct{},
+) (*ClockScheduler, <-chan struct{}, chan<- struct{}) {
+	updateDone := make(chan struct{}, 1)
+	resetChan := make(chan struct{}, 1)
+
+	statusReg := world.Resources.Status
+
+	cs := &ClockScheduler{
+		world: world,
+
+		pausableClock: pausableClock,
+		isPaused:      isPaused,
+		tickInterval:  tickInterval,
+
+		lastGameTickTime: pausableClock.Now(),
+		gameStartTime:    pausableClock.Now(),
+
+		eventRouter: event.NewRouter(world.Resources.Event.Queue),
+
+		frameReady: frameReady,
+		updateDone: updateDone,
+		resetChan:  resetChan,
+		stopChan:   make(chan struct{}),
+
+		fsm: fsm.NewMachine[*World](),
+
+		eventLoopInterval:   parameter.EventLoopInterval,
+		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
+
+		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
+		statEntityCount:     statusReg.Ints.Get("entity.count"),
+		statEntityCreated:   statusReg.Ints.Get("entity.created_total"),
+		statEntityDestroyed: statusReg.Ints.Get("entity.destroyed_total"),
+		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
+		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
+		statEvDropped:       statusReg.Ints.Get("event.dropped"),
+
+		statFSMName:    statusReg.Strings.Get("fsm.state"),
+		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
+		statFSMMaxDur:  statusReg.Ints.Get("fsm.max_duration"),
+		statFSMIndex:   statusReg.Ints.Get("fsm.state_index"),
+		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
+	}
+
+	return cs, updateDone, resetChan
+}
+
+// RegisterEventHandler adds an event handler to router, must be called before Start()
+func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
+	cs.eventRouter.Register(handler)
+}
+
+// LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
+func (cs *ClockScheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
+	registerComponents(cs.fsm)
+	if err := fsm.LoadConfigFromFS(cs.fsm, fsys, entry); err != nil {
+		return fmt.Errorf("failed to load FSM: %w", err)
+	}
+	return cs.initLoadedFSM()
+}
+
+// LoadFSMFromPath initializes HFSM from an external entry config
+// Region file includes resolve relative to the file's directory
+func (cs *ClockScheduler) LoadFSMFromPath(configPath string, registerComponents func(*fsm.Machine[*World])) error {
+	registerComponents(cs.fsm)
+
+	if err := fsm.LoadConfigFromPath(cs.fsm, configPath); err != nil {
+		return fmt.Errorf("failed to load FSM: %w", err)
+	}
+	return cs.initLoadedFSM()
+}
+
+// initLoadedFSM is common post-load initialization
+func (cs *ClockScheduler) initLoadedFSM() error {
+	if err := cs.fsm.Init(cs.world); err != nil {
+		return fmt.Errorf("failed to init FSM: %w", err)
+	}
+	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
+	return nil
+}
+
+// Start begins the scheduler loop
+func (cs *ClockScheduler) Start() {
+	if cs.running.CompareAndSwap(false, true) {
+		cs.world.Seal() // no system registration once the goroutines are live
+		cs.wg.Add(2)    // 2 Goroutines
+		// Use core.Go for safe execution with centralized crash handling
+		core.Go(cs.schedulerLoop)
+		core.Go(cs.eventLoop)
+	}
+}
+
+// Stop halts the scheduler loop
+func (cs *ClockScheduler) Stop() {
+	cs.stopOnce.Do(func() {
+		if cs.running.CompareAndSwap(true, false) {
+			close(cs.stopChan)
+			cs.wg.Wait()
+		}
+	})
+}
+
+// schedulerLoop runs the main scheduling loop with pause awareness
+func (cs *ClockScheduler) schedulerLoop() {
+	defer cs.wg.Done()
+
+	cs.nextTickDeadline = cs.pausableClock.Now().Add(cs.tickInterval)
+	cs.lastGameTickTime = cs.pausableClock.Now()
+
+	timer := time.NewTimer(0)
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-cs.stopChan:
+			return
+
+		case <-cs.resetChan:
+			// Execute reset regardless of current pause state to prevent channel clogging
+			cs.executeReset()
+			continue
+
+		default:
+		}
+
+		var sleepDuration time.Duration
+
+		if cs.isPaused.Load() {
+			// Increase sleep interval while paused to save CPU
+			sleepDuration = cs.tickInterval * 2
+		} else {
+			gameNow := cs.pausableClock.Now()
+
+			deadline := cs.nextTickDeadline
+
+			if !gameNow.Before(deadline) {
+				select {
+				case <-cs.frameReady:
+				case <-time.After(cs.tickInterval * 2):
+				case <-cs.stopChan:
+					return
+				}
+
+				cs.processTick()
+
+				cs.lastGameTickTime = gameNow
+				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
+
+				maxBehind := cs.tickInterval * 2
+				if gameNow.Sub(cs.nextTickDeadline) > maxBehind {
+					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
+				}
+				deadline = cs.nextTickDeadline
+
+				select {
+				case cs.updateDone <- struct{}{}:
+				default:
+				}
+
+				sleepDuration = deadline.Sub(cs.pausableClock.Now())
+				if sleepDuration < 0 {
+					sleepDuration = 0
+				}
+			} else {
+				sleepDuration = deadline.Sub(gameNow)
+			}
+		}
+
+		if sleepDuration > 0 {
+			timer.Reset(sleepDuration)
+			select {
+			case <-timer.C:
+			case <-cs.resetChan:
+				if !timer.Stop() {
+					select {
+					case <-timer.C:
+					default:
+					}
+				}
+				cs.executeReset()
+			case <-cs.stopChan:
+				return
+			}
+		}
+	}
+}
+
+// eventLoop settles queued events between ticks so a frame renders a settled
+// world. Runs regardless of pause: pause freezes the simulation (processTick),
+// not delivery.
+//
+// The world lock is mandatory here, not merely for component safety:
+// EventQueue.Consume is single-consumer, and updateMutex is what serializes
+// this goroutine against processTick, DispatchEventsImmediately, and
+// executeReset. Never Consume without holding it.
+//
+// TryLock first — short holds (frame snapshot, router RunSafe) are cheaper to
+// skip and retry than to queue behind. Escalate to a blocking acquire after
+// EventLoopBackoffMax misses: a hold that long means a tick is in progress,
+// and its post-UpdateLocked events need settling before the next frame.
+// Without the escalation the only guaranteed consumer is processTick, i.e.
+// one tick of latency on exactly the ticks that need it least.
+func (cs *ClockScheduler) eventLoop() {
+	defer cs.wg.Done()
+
+	ticker := time.NewTicker(cs.eventLoopInterval)
+	defer ticker.Stop()
+
+	backoffCount := 0
+
+	for {
+		select {
+		case <-cs.stopChan:
+			return
+
+		case <-ticker.C:
+			// Skip if queue empty (prevents busy-wait contention)
+			if cs.world.Resources.Event.Queue.Len() == 0 {
+				backoffCount = 0
+				continue
+			}
+
+			// Attempt non-blocking lock
+			if cs.world.TryLock() {
+				cs.dispatchOnePass()
+				cs.world.Unlock()
+				backoffCount = 0
+				continue
+			}
+
+			// Backoff tracking
+			backoffCount++
+			cs.statEvBackoffs.Add(1)
+
+			// Force progress after threshold
+			if backoffCount >= cs.eventLoopBackoffMax {
+				// Check shutdown before blocking lock to prevent Stop() hang
+				if !cs.running.Load() {
+					return
+				}
+				cs.world.Lock()
+				cs.dispatchOnePass()
+				cs.world.Unlock()
+				backoffCount = 0
+			}
+		}
+	}
+}
+
+// dispatchOnePass consumes and dispatches pending events exactly once
+// Returns number of events processed
+func (cs *ClockScheduler) dispatchOnePass() int {
+	eventsList := cs.world.Resources.Event.Queue.Consume()
+	if len(eventsList) == 0 {
+		return 0
+	}
+
+	// Gate hoisted out of the loop: one atomic load per pass.
+	// Payloads are pooled and released by their handlers, so only the type
+	// is logged — retaining ev.Payload would race the next Acquire.
+	trace := vlog.On("event", vlog.LevelDebug)
+
+	for _, ev := range eventsList {
+		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
+
+		// "sys" counts registered systems only. The FSM receives every event
+		// unconditionally, so sys=0 is not an unconsumed event
+		if trace {
+			vlog.Debug("event", "msg", "dispatch",
+				"ev", event.GetEventName(ev.Type),
+				"sys", len(handlers))
+		}
+
+		cs.fsm.HandleEvent(cs.world, ev)
+
+		for _, h := range handlers {
+			h.HandleEvent(ev)
+		}
+	}
+
+	cs.statEvDispatches.Add(int64(len(eventsList)))
+	return len(eventsList)
+}
+
+// dispatchAndProcessEvents settles pending events with iteration cap
+// Used by reset path where immediate settling is required
+func (cs *ClockScheduler) dispatchAndProcessEvents() {
+	for range parameter.EventLoopIterations {
+		if cs.dispatchOnePass() == 0 {
+			return
+		}
+	}
+}
+
+// executeReset performs FSM reset while scheduler mutex is held
+func (cs *ClockScheduler) executeReset() {
+	// New session: correlation stamp for every record below
+	vlog.NextRun()
+	cs.lastFSMName = ""
+	vlog.Info("fsm", "msg", "session reset")
+
+	// NOTE: Do not use RunSafe if called from a blocking systems
+	// 1. Synchronize with world lock
+	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
+	cs.world.Lock()
+	defer cs.world.Unlock()
+
+	// 2. Drain and discard stale events from the previous game session
+	_ = cs.world.Resources.Event.Queue.Consume()
+
+	// 3. Reset Scheduler internal timing
+	cs.lastGameTickTime = cs.pausableClock.Now()
+	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
+	cs.gameStartTime = cs.lastGameTickTime
+
+	// 4. Reset FSM state - This will trigger OnEnter actions
+	if err := cs.fsm.Reset(cs.world); err != nil {
+		panic(fmt.Errorf("FSM reset failed: %v", err))
+	}
+
+	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
+	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
+	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
+
+	// 6. Unpause via the single owner so clock, context, and audio move
+	//    together; settled below while the world lock is still held.
+	cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
+
+	// 7. Settle FSM-reset and unpause events before releasing the lock
+	cs.dispatchAndProcessEvents()
+}
+
+// DispatchEventsImmediately processes all pending events synchronously
+func (cs *ClockScheduler) DispatchEventsImmediately() {
+	cs.world.RunSafe(func() {
+		cs.dispatchAndProcessEvents()
+	})
+}
+
+// processTick executes one clock cycle
+func (cs *ClockScheduler) processTick() {
+	if cs.isPaused.Load() {
+		return
+	}
+
+	// Stamp the tick being executed; the counter is committed at the end of
+	// this function, so records inside would otherwise carry the previous one
+	vlog.SetTick(cs.world.Resources.Game.State.GetGameTicks() + 1)
+
+	var entityCount int
+
+	cs.world.RunSafe(func() {
+		now := cs.pausableClock.Now()
+
+		// 1. Sync Time
+		cs.world.Resources.Time.Update(
+			now,
+			cs.pausableClock.RealTime(),
+			cs.tickInterval,
+		)
+
+		// 2. Update game elapsed time status
+		elapsedMs := now.Sub(cs.gameStartTime).Milliseconds()
+		cs.statGameElapsedMs.Store(elapsedMs)
+
+		// 3. Initial Settling: Resolve everything accumulated during game tick
+
+		// Ensures FSM and Systems start with a consistent, settled world
+		cs.dispatchAndProcessEvents()
+
+		// 4. FSM Update: Advance state machine (may emit new events via Actions)
+		cs.fsm.Update(cs.world, cs.tickInterval)
+
+		// 5. FSM Telemetry (after update, before post-settling)
+		stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
+		cs.statFSMName.Store(stateName)
+		cs.statFSMElapsed.Store(int64(timeInState))
+		if maxDur, ok := cs.fsm.StateDurations[stateID]; ok {
+			cs.statFSMMaxDur.Store(int64(maxDur))
+		} else {
+			cs.statFSMMaxDur.Store(0)
+		}
+		if idx, ok := cs.fsm.StateIndices[stateID]; ok {
+			cs.statFSMIndex.Store(int64(idx))
+		} else {
+			cs.statFSMIndex.Store(0)
+		}
+		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
+
+		// Transition edge; state names are region-unique in practice
+		if stateName != cs.lastFSMName {
+			vlog.Info("fsm", "msg", "state",
+				"from", cs.lastFSMName,
+				"to", stateName,
+				"index", cs.statFSMIndex.Load(),
+				"max_ms", time.Duration(cs.statFSMMaxDur.Load()).Milliseconds())
+			cs.lastFSMName = stateName
+		}
+
+		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
+		cs.dispatchAndProcessEvents()
+
+		// 7. System Execution: Systems run on the final, settled state for this tick
+		cs.world.UpdateLocked()
+
+		// 8. Snapshot store-derived stats while the lock is held
+		// Position has no internal locking; CountEntities outside this
+		// closure races removeAt on the event-loop/main goroutines
+		entityCount = cs.world.Positions.CountEntities()
+	})
+
+	// Lock-free / internally synchronized paths only below this line
+	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
+
+	// Update APM based on game time
+	cs.world.Resources.Game.State.UpdateAPM(
+		cs.world.Resources.Status,
+		cs.pausableClock.Now(),
+	)
+
+	cs.statTicks.Store(int64(ticks))
+	cs.statEntityCount.Store(int64(entityCount))
+	cs.statEntityCreated.Store(cs.world.CreatedCount())
+	cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
+	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
+
+	// Queue overflow is silent state loss; report every increase.
+	// The counter is monotonic across sessions — the queue outlives reset
+	dropped := cs.world.Resources.Event.Queue.Dropped()
+	cs.statEvDropped.Store(int64(dropped))
+	if dropped > cs.lastEvDropped {
+		vlog.Warn("event", "msg", "queue overflow",
+			"dropped", dropped,
+			"delta", dropped-cs.lastEvDropped)
+		cs.lastEvDropped = dropped
+	}
+
+	// Status snapshot: world lock released and every stat above committed,
+	// so the reading belongs to exactly this tick. Lock-free by construction.
+	cs.world.Resources.Status.Tick(ticks)
+}

@@ -5,7 +5,7 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/lixenwraith/vi-fighter/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 func cmdLoad(s *Session, a []string) error {

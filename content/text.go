@@ -5,8 +5,8 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lixenwraith/vi-fighter/core"
-	"github.com/lixenwraith/vi-fighter/vmath"
+	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // ANSI stripping states
