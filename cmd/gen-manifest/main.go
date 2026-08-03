@@ -363,8 +363,6 @@ func (w *World) wipeAll() {
 	w.Positions.ClearAllComponents()
 	
 	// Clear component mask
-	w.mu.Lock()
-	defer w.mu.Unlock()
 	clear(w.componentMask)
 }
 `))

@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -37,54 +38,27 @@ var (
 
 	flagLog   logFlag
 	flagLevel levelFlag
+	flagScope scopeFlag
+	flagStat  statFlag
+	flagDev   devFlag
 )
 
 func init() {
-	// works: `-l`, `-lv info`, `-l=./tmp -lv trace`
+	// works: `-l`, `-lv info`, `-l=./tmp -lv trace -ls=afs -lt 1`
 	usage := "Enable logging; -l=DIR overrides " + parameter.LogDir
 	flag.Var(&flagLog, "l", usage)
 	flag.Var(&flagLog, "log", "Alias of -l")
 	flag.Var(&flagLevel, "lv", "Log level: trace, debug, info, warn, error; implies -l")
-}
-
-// logFlag is a boolean flag that also accepts an optional directory.
-// The space form (-l DIR) is not supported by the flag package; use -l=DIR.
-type logFlag struct {
-	dir string
-	set bool
-}
-
-func (f *logFlag) String() string   { return f.dir }
-func (f *logFlag) IsBoolFlag() bool { return true }
-
-// levelFlag records that a level was given, so -lv alone enables logging
-type levelFlag struct {
-	value string
-	set   bool
-}
-
-func (f *levelFlag) String() string { return f.value }
-func (f *levelFlag) Set(v string) error {
-	f.set, f.value = true, v
-	return nil
-}
-
-func (f *logFlag) Set(v string) error {
-	switch v {
-	case "false":
-		f.set, f.dir = false, ""
-	case "", "true":
-		f.set = true
-	default:
-		f.set, f.dir = true, v
-	}
-	return nil
+	flag.Var(&flagScope, "ls", "Log scope: app+fsm+stat | afs | all | none | +event | -lock; implies -l")
+	flag.Var(&flagScope, "log-scope", "Alias of -ls")
+	flag.Var(&flagStat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
+	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
 }
 
 func main() {
 	flag.Parse()
 
-	logStatus := setupLogging()
+	logStatus := setupDiagnostics()
 
 	var err error
 	switch {
@@ -96,7 +70,7 @@ func main() {
 		err = app.Run(buildConfig())
 	}
 
-	vlog.Shutdown(logShutdownTimeout)
+	shutdownDiagnostics()
 
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -105,11 +79,11 @@ func main() {
 	os.Exit(logStatus)
 }
 
-// setupLogging installs the crash hook and session defaults unconditionally,
-// then starts a session if either log flag was given. The defaults are stored
-// even when logging is off so ':log on' can start one later.
-// Failure is non-fatal: the game runs unlogged and main exits exitLogSetup.
-func setupLogging() int {
+// setupDiagnostics installs the crash hook and session defaults unconditionally,
+// starts a log session if any log flag was given, and starts runtime capture if
+// enabled. Runs before the terminal enters the alternate screen.
+// Log failure is non-fatal: the game runs unlogged and main exits exitLogSetup.
+func setupDiagnostics() int {
 	core.SetCrashHook(vlog.CrashHook)
 
 	dir := flagLog.dir
@@ -119,6 +93,7 @@ func setupLogging() int {
 	vlog.Configure(vlog.Config{
 		Dir:   dir,
 		Level: flagLevel.value,
+		Scope: flagScope.value,
 		Spawn: core.Go, // processor panics reach HandleCrash, terminal restored
 	})
 
@@ -127,17 +102,61 @@ func setupLogging() int {
 		fmt.Fprintf(os.Stderr, "ignoring arguments %v; use -l=DIR\n", flag.Args())
 	}
 
-	if !flagLog.set && !flagLevel.set {
-		return 0
+	status := 0
+	if flagLog.set || flagLevel.set || flagScope.set || flagStat.set {
+		path, err := vlog.Start()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "logging disabled: %v\n", err)
+			status = exitLogSetup
+		} else {
+			fmt.Printf("logging enabled: %s (level %s, scope %s)\n",
+				path, vlog.LevelName(), vlog.ScopeString(vlog.Scopes()))
+		}
 	}
 
-	path, err := vlog.Start()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "logging disabled: %v\n", err)
-		return exitLogSetup
+	if flagDev.enabled() {
+		path, err := core.CaptureStderr(dir)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
+			return status
+		}
+		reason := "-dev"
+		if !flagDev.set {
+			reason = "race build"
+		}
+		fmt.Printf("runtime capture: %s (%s)\n", path, reason)
+		vlog.Info("app", "msg", "runtime capture",
+			"path", path, "reason", reason, "race", core.RaceEnabled)
+		core.StartStderrDrain(parameter.DevDrainInterval, logRuntimeReport)
 	}
-	fmt.Printf("logging enabled: %s (level %s)\n", path, vlog.LevelName())
-	return 0
+	return status
+}
+
+// shutdownDiagnostics drains what the runtime wrote, closes the logger, then
+// hands fd 2 back so late runtime output reaches the restored terminal
+func shutdownDiagnostics() {
+	core.StopStderrDrain()
+	core.DrainStderr(logRuntimeReport) // last blocks, while the sink lives
+
+	vlog.Shutdown(logShutdownTimeout)
+
+	if path := core.CloseCapture(); path != "" {
+		fmt.Fprintf(os.Stderr, "runtime output captured: %s (%d report(s))\n",
+			path, core.CaptureCount())
+	}
+}
+
+// logRuntimeReport records a pointer to one captured block
+// Error level so the scope mask never filters a race or fatal report
+func logRuntimeReport(r core.RuntimeReport) {
+	vlog.Error("race", "msg", "runtime report",
+		"kind", r.Kind,
+		"path", r.Path,
+		"offset", r.Offset,
+		"bytes", r.Bytes,
+		"lines", r.Lines,
+		"head", r.Head,
+		"at", r.At)
 }
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -149,6 +168,8 @@ func buildConfig() app.Config {
 		GameScript:   *flagGameScript,
 		ForceDefault: *flagDefault,
 		KeymapPath:   *flagKeymapPath,
+		LogScope:     flagScope.value,
+		StatTicks:    flagStat.value,
 	}
 
 	if *flagAudioUnmute {
@@ -166,4 +187,96 @@ func buildConfig() app.Config {
 	// Neither flag: terminal auto-detects
 
 	return cfg
+}
+
+// --- Flag types ---
+
+// logFlag is a boolean flag that also accepts an optional directory.
+// The space form (-l DIR) is not supported by the flag package; use -l=DIR.
+type logFlag struct {
+	dir string
+	set bool
+}
+
+func (f *logFlag) String() string   { return f.dir }
+func (f *logFlag) IsBoolFlag() bool { return true }
+
+func (f *logFlag) Set(v string) error {
+	switch v {
+	case "false":
+		f.set, f.dir = false, ""
+	case "", "true":
+		f.set = true
+	default:
+		f.set, f.dir = true, v
+	}
+	return nil
+}
+
+// levelFlag records that a level was given, so -lv alone enables logging
+type levelFlag struct {
+	value string
+	set   bool
+}
+
+func (f *levelFlag) String() string { return f.value }
+func (f *levelFlag) Set(v string) error {
+	f.set, f.value = true, v
+	return nil
+}
+
+// scopeFlag records a scope spec, so -ls alone enables logging
+type scopeFlag struct {
+	value string
+	set   bool
+}
+
+func (f *scopeFlag) String() string { return f.value }
+func (f *scopeFlag) Set(v string) error {
+	if _, err := vlog.ParseScopes(v, vlog.ScopeAll); err != nil {
+		return err
+	}
+	f.set, f.value = true, v
+	return nil
+}
+
+// statFlag records a snapshot period, so -lt alone enables logging
+type statFlag struct {
+	value int
+	set   bool
+}
+
+func (f *statFlag) String() string { return strconv.Itoa(f.value) }
+func (f *statFlag) Set(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("must be a non-negative tick count")
+	}
+	f.set, f.value = true, n
+	return nil
+}
+
+// devFlag is tri-state: unset defers to the build, -dev forces on, -dev=false off
+type devFlag struct {
+	value bool
+	set   bool
+}
+
+func (f *devFlag) String() string   { return strconv.FormatBool(f.value) }
+func (f *devFlag) IsBoolFlag() bool { return true }
+func (f *devFlag) Set(v string) error {
+	b, err := strconv.ParseBool(v)
+	if err != nil {
+		return err
+	}
+	f.set, f.value = true, b
+	return nil
+}
+
+// enabled resolves capture: an explicit flag wins, otherwise race builds capture
+func (f *devFlag) enabled() bool {
+	if f.set {
+		return f.value
+	}
+	return core.RaceEnabled
 }

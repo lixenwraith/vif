@@ -9,16 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
-// WorldMutex wraps sync.RWMutex for entity/system registration
-type WorldMutex struct {
-	mu sync.RWMutex
-}
-
-func (m *WorldMutex) Lock()    { m.mu.Lock() }
-func (m *WorldMutex) Unlock()  { m.mu.Unlock() }
-func (m *WorldMutex) RLock()   { m.mu.RLock() }
-func (m *WorldMutex) RUnlock() { m.mu.RUnlock() }
-
 // // UpdateMutex wraps sync.Mutex for game tick serialization
 // type UpdateMutex struct {
 // 	mu sync.Mutex
@@ -60,7 +50,7 @@ func (m *UpdateMutex) Unlock() {
 
 // mark stamps the acquisition when sampling is active
 func (m *UpdateMutex) mark() {
-	if vlog.E(vlog.LevelDebug) {
+	if vlog.On("lock", vlog.LevelDebug) {
 		m.acquired = time.Now()
 		return
 	}

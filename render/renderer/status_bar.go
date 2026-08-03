@@ -26,11 +26,9 @@ type StatusBarRenderer struct {
 	statAudioMask *atomic.Int64
 
 	// Cached metric pointers (zero-lock reads)
-	statFPS        *atomic.Int64
-	statAPM        *atomic.Int64
-	statTicks      *atomic.Int64
-	statPhase      *atomic.Int64
-	statDecayTimer *atomic.Int64
+	statFPS   *atomic.Int64
+	statAPM   *atomic.Int64
+	statTicks *atomic.Int64
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -58,11 +56,9 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 
 		statAudioMask: statusReg.Ints.Get("audio.mask"),
 
-		statFPS:        statusReg.Ints.Get("engine.fps"),
-		statAPM:        statusReg.Ints.Get("engine.apm"),
-		statTicks:      statusReg.Ints.Get("engine.ticks"),
-		statPhase:      statusReg.Ints.Get("engine.phase"),
-		statDecayTimer: statusReg.Ints.Get("decay.timer"),
+		statFPS:   statusReg.Ints.Get("engine.fps"),
+		statAPM:   statusReg.Ints.Get("engine.apm"),
+		statTicks: statusReg.Ints.Get("engine.ticks"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -114,10 +110,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 		var timerVal float64
 		if maxDur > 0 {
-			remaining := maxDur - elapsed
-			if remaining < 0 {
-				remaining = 0
-			}
+			remaining := max(maxDur-elapsed, 0)
 			timerVal = remaining.Seconds()
 		} else {
 			timerVal = elapsed.Seconds()
@@ -370,10 +363,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 	}
 
-	textAvailableWidth := availableTotal - rightFitWidth
-	if textAvailableWidth < 0 {
-		textAvailableWidth = 0
-	}
+	textAvailableWidth := max(availableTotal-rightFitWidth, 0)
 
 	// === RENDER TEXT CONTENT ===
 	var textEndX int
@@ -509,10 +499,7 @@ func computeInputWindow(textLen, cursorPos, maxWidth int) (winStart, contentSlot
 			continue
 		}
 		if cursorPos >= winStart+contentSlots {
-			winStart = cursorPos - contentSlots + 1
-			if winStart < 0 {
-				winStart = 0
-			}
+			winStart = max(cursorPos-contentSlots+1, 0)
 			continue
 		}
 

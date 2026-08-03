@@ -149,7 +149,7 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return true
 	}
 
-	if vlog.E(vlog.LevelDebug) {
+	if vlog.On("input", vlog.LevelDebug) {
 		// Format char nicely if it's printable, otherwise leave as int (mouse coordinates use this field)
 		charDisplay := fmt.Sprintf("%d", intent.Char)
 		if intent.Char >= 32 && intent.Char <= 126 {

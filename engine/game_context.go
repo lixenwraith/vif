@@ -99,6 +99,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 
 	// 1. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
+	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
 
 	// 2. Config Resource
 	// Initial: Map = Viewport, CropOnResize enabled for backward compat

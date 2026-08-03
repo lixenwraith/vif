@@ -57,7 +57,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 	case "e", "emit", "event":
 		return handleEmitCommand(ctx, args)
 	case "d", "debug":
-		return handleDebugCommand(ctx)
+		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
 		return handleHelpCommand(ctx)
 	case "about":
@@ -89,7 +89,7 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 }
 
 // handleLogCommand controls the session logger
-// Usage: :log | :log on|off | :log <level>
+// Usage: :log | :log on|off | :log <level> | :log scope [spec] | :log stat [ticks]
 func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
 		reportLogState(ctx)
@@ -120,9 +120,45 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		vlog.Stop() // drains asynchronously; never blocks the world lock
 		ctx.SetStatusMessage("Logging stopped", parameter.StatusMessageDefaultTimeout, true)
 
+	case "scope", "sc":
+		if len(args) < 2 {
+			reportLogState(ctx)
+			break
+		}
+		s, err := vlog.ParseScopes(strings.Join(args[1:], "+"), vlog.Scopes())
+		if err != nil {
+			setCommandError(ctx, "Usage: :log scope [+|-]app+fsm+stat | afs | all | none")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		vlog.SetScopes(s)
+		vlog.Info("app", "msg", "log scope changed", "scope", vlog.ScopeString(s))
+		reportLogState(ctx)
+
+	case "level", "lvl":
+		if len(args) < 2 || vlog.SetLevelName(args[1]) != nil {
+			setCommandError(ctx, "Usage: :log level trace|debug|info|warn|error")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		vlog.Info("app", "msg", "log level changed", "level", vlog.LevelName())
+		reportLogState(ctx)
+
+	case "stat", "snap":
+		if len(args) < 2 {
+			reportLogState(ctx)
+			break
+		}
+		n, err := strconv.Atoi(args[1])
+		if err != nil || n < 0 {
+			setCommandError(ctx, "Usage: :log stat <ticks> (0 disables)")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		ctx.World.Resources.Status.SetSnapshotInterval(uint64(n))
+		vlog.Info("app", "msg", "stat interval changed", "ticks", n)
+		reportLogState(ctx)
+
 	default:
 		if err := vlog.SetLevelName(args[0]); err != nil {
-			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error]")
+			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error|scope|level|stat]")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		vlog.Info("app", "msg", "log level changed", "level", vlog.LevelName())
@@ -135,11 +171,16 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // reportLogState shows session state in the status bar
 func reportLogState(ctx *engine.GameContext) {
-	msg := "Logging off (level " + vlog.LevelName() + ")"
+	target := "off"
 	if vlog.Enabled() {
-		msg = fmt.Sprintf("Logging %s -> %s", vlog.LevelName(), vlog.Path())
+		target = vlog.Path()
 	}
-	ctx.SetStatusMessage(msg, parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetStatusMessage(fmt.Sprintf("log %s | level %s | scope %s | stat %d",
+		target,
+		vlog.LevelName(),
+		vlog.ScopeString(vlog.Scopes()),
+		ctx.World.Resources.Status.SnapshotInterval()),
+		parameter.StatusMessageDefaultTimeout, true)
 }
 
 // setCommandError sets an error message in the status message
@@ -364,12 +405,41 @@ func parseEventPayload(et event.EventType, raw string) (any, error) {
 	return payload, nil
 }
 
-// handleDebugCommand triggers debug overlay event
-func handleDebugCommand(ctx *engine.GameContext) CommandResult {
+// handleDebugCommand opens the debug overlay, or saves a status snapshot
+func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "s", "save", "snap":
+			return handleDebugSaveCommand(ctx)
+		default:
+			setCommandError(ctx, "Usage: :debug [save]")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+	}
+
 	ctx.SetMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushEvent(event.EventMetaDebugRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleDebugSaveCommand writes a standalone status snapshot to its own file
+// Command mode still holds the world lock and the pause, so the values are a
+// single coherent tick. Opens a second logger: a deliberate operator cost
+func handleDebugSaveCommand(ctx *engine.GameContext) CommandResult {
+	path, err := vlog.Dump(func(emit func(sub string, args ...any)) {
+		ctx.SnapshotContext(emit)
+		ctx.World.Resources.Status.Snapshot(emit)
+	})
+	if err != nil {
+		setCommandError(ctx, "Snapshot failed: "+err.Error())
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	vlog.Info("app", "msg", "snapshot saved", "path", path)
+	ctx.SetStatusMessage("Snapshot saved to "+path, parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetLastCommand(":debug save")
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleHelpCommand triggers help overlay event

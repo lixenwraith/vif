@@ -13,22 +13,34 @@ import (
 
 // World contains all entities and their components using typed stores
 type World struct {
-	nextEntityID core.Entity
-	// mu           sync.RWMutex
-	mu WorldMutex
+	// === Immutable after init ===
+	// Pointers set once in NewWorld; the state they reference is
+	// update-mutex guarded, the pointers themselves are not
 
-	Resources *Resource
-
+	Resources  *Resource
 	Components Component
 	Positions  *Position
-	// Used for O(1) identification of components during destruction routines, preventing unnecessary component store check
-	componentMask map[core.Entity]uint64
 
+	// systems is appended only by AddSystem during single-threaded
+	// construction, then frozen by Seal. UpdateLocked ranges it every tick
+	// without synchronization, so runtime registration is not permitted
 	systems []System
-	// updateMutex sync.Mutex
-	updateMutex UpdateMutex
+	sealed  atomic.Bool
 
-	// Stats
+	// === Update-mutex guarded ===
+	// Entity ids, component stores, positions and masks.
+	// The tick, event, input and render paths all acquire it.
+	// There is no inner locking.
+
+	nextEntityID  core.Entity
+	componentMask map[core.Entity]uint64
+	updateMutex   UpdateMutex
+
+	// === Self-synchronized ===
+	// Readable from any goroutine, including the post-tick telemetry tail
+	// that runs after the update mutex is released
+
+	createdCount   atomic.Int64
 	destroyedCount atomic.Int64
 }
 
@@ -51,6 +63,8 @@ func NewWorld() *World {
 func (w *World) CreateEntity() core.Entity {
 	id := w.nextEntityID
 	w.nextEntityID++
+	// Mirror the count so telemetry never reads nextEntityID off-lock
+	w.createdCount.Add(1)
 	return id
 }
 
@@ -92,17 +106,21 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 }
 
 // Clear removes all entities and components from the world
+// Caller MUST hold updateMutex: nextEntityID is update-mutex state
+// Session counters reset with the entities they describe
 func (w *World) Clear() {
-	w.mu.Lock()
 	w.nextEntityID = 1
-	w.mu.Unlock()
+	w.createdCount.Store(0)
+	w.destroyedCount.Store(0)
 	w.wipeAll()
 }
 
-// AddSystem adds a systems to the world and sorts by priority
+// AddSystem adds a system to the world and sorts by priority
+// Construction only; panics once Seal has frozen the set
 func (w *World) AddSystem(system System) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+	if w.sealed.Load() {
+		panic("engine: AddSystem after Seal")
+	}
 
 	w.systems = append(w.systems, system)
 
@@ -116,11 +134,15 @@ func (w *World) AddSystem(system System) {
 	}
 }
 
+// Seal freezes the system set; called by ClockScheduler.Start before the
+// scheduler and event goroutines begin ranging it
+func (w *World) Seal() {
+	w.sealed.Store(true)
+}
+
 // HasSystem reports whether a system with the given name is registered
 // Validation source for command-mode and config system references
 func (w *World) HasSystem(name string) bool {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
 	for _, s := range w.systems {
 		if s.Name() == name {
 			return true
@@ -132,8 +154,6 @@ func (w *World) HasSystem(name string) bool {
 // Systems returns a copy of all registered systems
 // Used by ClockScheduler for event handler auto-registration
 func (w *World) Systems() []System {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
 	result := make([]System, len(w.systems))
 	copy(result, w.systems)
 	return result
@@ -182,7 +202,7 @@ func (w *World) PushEvent(eventType event.EventType, payload any) {
 		return // Not yet initialized
 	}
 
-	if vlog.E(vlog.LevelTrace) {
+	if vlog.On("push", vlog.LevelTrace) {
 		vlog.Trace("push", vlog.LevelTrace, 3, "msg", "push", "ev", event.GetEventName(eventType)) // 3 levels deep in trace to start trace from the producing system
 	}
 
@@ -192,11 +212,10 @@ func (w *World) PushEvent(eventType event.EventType, payload any) {
 	})
 }
 
-// CreatedCount returns total entities ever created
+// CreatedCount returns total entities created this session
+// Lock-free: safe from any goroutine, including the post-tick telemetry tail
 func (w *World) CreatedCount() int64 {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-	return int64(w.nextEntityID) - 1
+	return w.createdCount.Load()
 }
 
 // DestroyedCount returns total entities destroyed

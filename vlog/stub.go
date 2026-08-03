@@ -18,6 +18,24 @@ const (
 	LevelError int64 = 8
 )
 
+// Scope mirrors the real build's record categories
+type Scope uint32
+
+const (
+	ScopeApp Scope = 1 << iota
+	ScopeFSM
+	ScopeEvent
+	ScopeInput
+	ScopeStat
+	ScopeLock
+	ScopeTap
+)
+
+const (
+	ScopeNone Scope = 0
+	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeInput | ScopeStat | ScopeLock | ScopeTap
+)
+
 // ErrDisabled reports that this build carries no logger
 var ErrDisabled = errors.New("vlog: built without logging support")
 
@@ -26,6 +44,7 @@ type Config struct {
 	Spawn func(func())
 	Dir   string
 	Level string
+	Scope string
 }
 
 func Init(Config) (string, error)      { return "", ErrDisabled }
@@ -34,9 +53,11 @@ func Start() (string, error)           { return "", ErrDisabled }
 func Stop()                            {}
 func Enabled() bool                    { return false }
 func Path() string                     { return "" }
+func Dir() string                      { return "" }
 func LevelName() string                { return "OFF" }
 func SetLevelName(string) error        { return ErrDisabled }
 func E(int64) bool                     { return false }
+func On(string, int64) bool            { return false }
 func Debug(string, ...any)             {}
 func Info(string, ...any)              {}
 func Warn(string, ...any)              {}
@@ -49,3 +70,12 @@ func CrashHook(any, []byte)            {}
 func Shutdown(time.Duration)           {}
 func Trace(string, int64, int, ...any) {}
 func NextRun() uint64                  { return 0 }
+
+func ScopeOf(string) Scope                            { return ScopeTap }
+func Scopes() Scope                                   { return ScopeNone }
+func SetScopes(Scope)                                 {}
+func ScopeString(Scope) string                        { return "none" }
+func Dump(func(func(string, ...any))) (string, error) { return "", ErrDisabled }
+
+// ParseScopes validates a spec so CLI parsing behaves identically
+func ParseScopes(spec string, cur Scope) (Scope, error) { return cur, nil }

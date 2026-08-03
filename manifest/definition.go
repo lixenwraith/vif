@@ -171,9 +171,6 @@ var Systems = []SystemDef{
 	// --- Audio ---
 	{"audio", "NewAudioSystem"},
 	{"music", "NewMusicSystem"},
-
-	// --- Diagnostics ---
-	{"diag", "NewDiagSystem"},
 }
 
 // Renderers is the authoritative renderer list

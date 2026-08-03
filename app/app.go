@@ -57,6 +57,13 @@ func New(cfg Config) (*App, error) {
 func (a *App) init() error {
 	vlog.Info("app", "msg", "init begin")
 
+	// Embedder path; the CLI applies scope through vlog.Configure
+	if a.cfg.LogScope != "" {
+		if s, err := vlog.ParseScopes(a.cfg.LogScope, vlog.ScopeAll); err == nil {
+			vlog.SetScopes(s)
+		}
+	}
+
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.InitRegistry()
 
@@ -100,6 +107,9 @@ func (a *App) init() error {
 	// 6. GameContext initializes the remaining world resources
 	a.ctx = engine.NewGameContext(a.world, width, height)
 	a.world.Resources.Config.ColorMode = a.term.ColorMode()
+	if a.cfg.StatTicks > 0 {
+		a.world.Resources.Status.SetSnapshotInterval(uint64(a.cfg.StatTicks))
+	}
 
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").

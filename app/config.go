@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/vlog"
 )
 
 // Config is the resolved startup configuration
@@ -32,12 +33,26 @@ type Config struct {
 
 	// KeymapPath is a keymap TOML path; "" = keymap discovery
 	KeymapPath string
+
+	// LogScope is the initial scope spec; "" = all
+	LogScope string
+
+	// StatTicks overrides the status snapshot period in game ticks; 0 = parameter default
+	StatTicks int
 }
 
 // Validate reports configuration conflicts
 func (c Config) Validate() error {
 	if c.ForceDefault && (c.GameScript != "" || c.ContentPath != "") {
 		return errors.New("-d is mutually exclusive with -g and -f")
+	}
+	if c.LogScope != "" {
+		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
+			return err
+		}
+	}
+	if c.StatTicks < 0 {
+		return errors.New("-lt must be >= 0")
 	}
 	return nil
 }

@@ -64,7 +64,6 @@ func BuildSystems(w *engine.World) []engine.System {
 		system.NewGeneticSystem(w),
 		system.NewAudioSystem(w),
 		system.NewMusicSystem(w),
-		system.NewDiagSystem(w),
 	}
 }
 
@@ -170,6 +169,5 @@ func ActiveSystems() []string {
 		"genetic",
 		"audio",
 		"music",
-		"diag",
 	}
 }

@@ -5,7 +5,6 @@ import (
 	"sort"
 	"strings"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/core"
 	"github.com/lixenwraith/vi-fighter/engine"
@@ -227,33 +226,28 @@ func (s *MetaSystem) handleDebugRequest() {
 	reg := s.world.Resources.Status
 
 	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
-		prefix, name := splitStatKey(key)
+		prefix, name := status.SplitKey(key)
 		groups[prefix] = append(groups[prefix], core.CardEntry{
 			Key: name, Value: fmt.Sprintf("%v", ptr.Load()),
 		})
 	})
 
 	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
-		val := ptr.Load()
-		prefix, name := splitStatKey(key)
-		var valStr string
-		if strings.HasSuffix(key, ".timer") || strings.HasSuffix(key, ".duration") {
-			valStr = time.Duration(val).String()
-		} else {
-			valStr = fmt.Sprintf("%d", val)
-		}
-		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: valStr})
+		prefix, name := status.SplitKey(key)
+		groups[prefix] = append(groups[prefix], core.CardEntry{
+			Key: name, Value: status.FormatInt(key, ptr.Load()),
+		})
 	})
 
 	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
-		prefix, name := splitStatKey(key)
+		prefix, name := status.SplitKey(key)
 		groups[prefix] = append(groups[prefix], core.CardEntry{
 			Key: name, Value: fmt.Sprintf("%.3f", ptr.Get()),
 		})
 	})
 
 	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
-		prefix, name := splitStatKey(key)
+		prefix, name := status.SplitKey(key)
 		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
 	})
 
@@ -277,16 +271,6 @@ func (s *MetaSystem) handleDebugRequest() {
 	}
 
 	s.ctx.SetOverlayContent(content)
-}
-
-// splitStatKey splits "prefix.name" into prefix and name
-// Returns ("misc", key) if no dot found
-func splitStatKey(key string) (prefix, name string) {
-	idx := strings.Index(key, ".")
-	if idx < 0 {
-		return "misc", key
-	}
-	return key[:idx], key[idx+1:]
 }
 
 // handleHelpRequest shows help information overlay
@@ -354,7 +338,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "COMMANDS",
 		Entries: []core.CardEntry{
-			{Key: ":log [on|off|lvl]", Value: "Session logging"},
+			{Key: ":log [on|off|lvl|scope|stat]", Value: "Session logging"},
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
 			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
@@ -364,7 +348,7 @@ func (s *MetaSystem) handleHelpRequest() {
 			{Key: ":energy N", Value: "Set energy"},
 			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},
-			{Key: ":d", Value: "Debug overlay"},
+			{Key: ":d [save]", Value: "Debug overlay / save snapshot"},
 			{Key: ":h", Value: "This help"},
 		},
 	})

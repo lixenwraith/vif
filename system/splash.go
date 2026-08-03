@@ -274,9 +274,9 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	timerBBoxes := s.getTimerBBoxes(0)
 	s.calculateTimerOffset(&splashComp, timerBBoxes)
 
-	entity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(entity, splashComp)
-	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
+	splashEntity := s.world.CreateEntity()
+	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
+	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,
 	})
 }
@@ -388,9 +388,9 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 	splashComp.Content[0] = glyphComp.Rune
 
-	newEntity := s.world.CreateEntity()
-	s.world.Components.Splash.SetComponent(newEntity, splashComp)
-	s.world.Components.Protection.SetComponent(newEntity, component.ProtectionComponent{
+	splashEntity := s.world.CreateEntity()
+	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
+	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,
 	})
 }

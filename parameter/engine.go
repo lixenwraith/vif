@@ -21,6 +21,13 @@ const (
 
 	// EventLoopIterations is the cycles event loop attempts to consume events for immediate settling
 	EventLoopIterations = 16
+
+	// StatSnapshotTicks is the game-tick period between status snapshots; 0 disables
+	// 1 = every tick (20 Hz at a 50ms tick), 5 = 4 Hz, 20 = 1 Hz
+	StatSnapshotTicks = 20
+
+	// DevDrainInterval is the poll period for captured stderr in dev mode
+	DevDrainInterval = 500 * time.Millisecond
 )
 
 // ECS & Resources Limits

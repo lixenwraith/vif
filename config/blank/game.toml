@@ -6,18 +6,18 @@ disabled_systems = ["glyph","nugget","gold","audio","music"]
 
 [states.MainStart]
 parent = "Root"
-on_enter = [
-	{ action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Start" } },
-]
+#on_enter = [
+#	{ action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Start" } },
+#]
 transitions = [
     { trigger = "Tick", target = "MainRepeat", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
 
 [states.MainRepeat]
 parent = "Root"
-on_enter = [
-	{ action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Repeat" } },
-]
+#on_enter = [
+#	{ action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "Repeat" } },
+#]
 transitions = [
     { trigger = "Tick", target = "MainStart", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]

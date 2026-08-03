@@ -32,6 +32,7 @@ const (
 // File naming: one JSON object per line, not a JSON document
 const (
 	filePrefix     = "vif-log-"
+	snapPrefix     = "vif-snap-"
 	fileTimeFormat = "060102-150405"
 	fileExtension  = "jsonl"
 )
@@ -62,6 +63,7 @@ type Config struct {
 	Spawn func(func()) // goroutine launcher owning panic recovery
 	Dir   string
 	Level string // debug, info, warn, error; empty means debug
+	Scope string // scope spec; empty means all. Pre-validate with ParseScopes
 }
 
 var (
@@ -84,6 +86,7 @@ var (
 
 // Configure stores the session setup without touching the filesystem.
 // Call once at startup so a session can be started later by command.
+// Scope is applied best-effort; callers surface errors via ParseScopes first.
 func Configure(c Config) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -95,12 +98,51 @@ func Configure(c Config) {
 	if lv, err := log.Level(c.Level); err == nil {
 		level.Store(lv)
 	}
+	if c.Scope != "" {
+		if s, err := ParseScopes(c.Scope, ScopeAll); err == nil {
+			scopes.Store(uint32(s))
+		}
+	}
 }
 
 // Init configures and starts a session in one call
 func Init(c Config) (string, error) {
 	Configure(c)
 	return Start()
+}
+
+// buildLogger constructs a configured, unstarted logger and its resolved path
+func buildLogger(dir, name, levelName string) (*log.Logger, string, error) {
+	l, err := log.NewBuilder().
+		Directory(dir).
+		Name(name).
+		Extension(fileExtension).
+		Format("json").
+		Sanitization(log.PolicyRaw). // json transport escaping is unconditional
+		LevelString(levelName).
+		EnableFile(true).
+		EnableConsole(false). // console writes corrupt the alternate screen
+		InternalErrorsToStderr(false).
+		BufferSize(bufferSize).
+		MaxSizeMB(maxSizeMB).
+		MaxTotalSizeMB(maxTotalSizeMB).
+		MinDiskFreeMB(minDiskFreeMB).
+		FlushIntervalMs(flushIntervalMs).
+		EnablePeriodicSync(true).
+		RetentionPeriodHrs(retentionHrs).
+		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
+		HeartbeatIntervalS(heartbeatS).
+		ContextKeys("sub", "run", "tick", "frame").
+		Build()
+	if err != nil {
+		return nil, "", err
+	}
+
+	p := filepath.Join(dir, name+"."+fileExtension)
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	return l, p, nil
 }
 
 // Start opens a new log file and begins processing, returning its path.
@@ -121,28 +163,7 @@ func Start() (string, error) {
 	}
 
 	name := filePrefix + time.Now().Format(fileTimeFormat)
-
-	l, err := log.NewBuilder().
-		Directory(cfg.Dir).
-		Name(name).
-		Extension(fileExtension).
-		Format("json").
-		Sanitization(log.PolicyRaw). // json transport escaping is unconditional
-		LevelString(cfg.Level).
-		EnableFile(true).
-		EnableConsole(false). // console writes corrupt the alternate screen
-		InternalErrorsToStderr(false).
-		BufferSize(bufferSize).
-		MaxSizeMB(maxSizeMB).
-		MaxTotalSizeMB(maxTotalSizeMB).
-		MinDiskFreeMB(minDiskFreeMB).
-		FlushIntervalMs(flushIntervalMs).
-		EnablePeriodicSync(true).
-		RetentionPeriodHrs(retentionHrs).
-		HeartbeatLevel(1). // drop and rotation counters, one-way into the log
-		HeartbeatIntervalS(heartbeatS).
-		ContextKeys("sub", "run", "tick", "frame").
-		Build()
+	l, p, err := buildLogger(cfg.Dir, name, cfg.Level)
 	if err != nil {
 		return "", err
 	}
@@ -159,10 +180,6 @@ func Start() (string, error) {
 	// A level set while stopped is honoured by the new session
 	l.SetLevel(level.Load())
 
-	p := filepath.Join(cfg.Dir, name+"."+fileExtension)
-	if abs, err := filepath.Abs(p); err == nil {
-		p = abs
-	}
 	path.Store(&p)
 	sink.Store(l)
 	return p, nil
@@ -196,6 +213,13 @@ func Stop() {
 
 // Enabled reports whether a session is running
 func Enabled() bool { return sink.Load() != nil }
+
+// Dir returns the configured log directory, empty when unconfigured
+func Dir() string {
+	mu.Lock()
+	defer mu.Unlock()
+	return cfg.Dir
+}
 
 // Path returns the active log file, empty when stopped
 func Path() string { return currentPath() }
@@ -252,11 +276,19 @@ func Shutdown(timeout time.Duration) {
 	}
 }
 
-// E reports whether a record at level would be written. Guard hot call sites
-// with it: the variadic slice is built before the call and escapes to the heap.
+// E reports whether a record at level would be written, ignoring scope.
+// Prefer On at scoped call sites.
 func E(level int64) bool {
 	l := sink.Load()
 	return l != nil && l.Enabled(level)
+}
+
+// On reports whether a record with this sub and level would be written.
+// Guard hot call sites with it: the variadic slice is built before the call
+// and escapes to the heap.
+func On(sub string, level int64) bool {
+	l := sink.Load()
+	return l != nil && l.Enabled(level) && scopeEnabled(sub)
 }
 
 func Debug(sub string, args ...any) { emit(sub, LevelDebug, args) }
@@ -265,12 +297,29 @@ func Warn(sub string, args ...any)  { emit(sub, LevelWarn, args) }
 func Error(sub string, args ...any) { emit(sub, LevelError, args) }
 
 // emit stamps the record with the current correlation values and queues it
+// Scopes filter noise, not failures: error and above always emit
 func emit(sub string, level int64, args []any) {
 	l := sink.Load()
 	if l == nil || !l.Enabled(level) {
 		return
 	}
+	if level < LevelError && !scopeEnabled(sub) {
+		return
+	}
 	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, 0, args...)
+}
+
+// Trace emits a record carrying a stack trace of depth frames
+// Depth is raised by one to cover this wrapper, which appears as the innermost trace entry.
+func Trace(sub string, level int64, depth int, args ...any) {
+	l := sink.Load()
+	if l == nil || !l.Enabled(level) {
+		return
+	}
+	if level < LevelError && !scopeEnabled(sub) {
+		return
+	}
+	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, int64(depth)+1, args...)
 }
 
 func context(sub string) log.Context {
@@ -305,16 +354,6 @@ func CrashHook(r any, stack []byte) {
 
 // recordInternalError holds logger diagnostics until shutdown
 func recordInternalError(msg string) { lastErr.Store(&msg) }
-
-// Trace emits a record carrying a stack trace of depth frames
-// Depth is raised by one to cover this wrapper, which appears as the innermost trace entry.
-func Trace(sub string, level int64, depth int, args ...any) {
-	l := sink.Load()
-	if l == nil || !l.Enabled(level) {
-		return
-	}
-	l.LogContext(context(sub), l.Flags()|log.FlagKV, level, int64(depth)+1, args...)
-}
 
 // NextRun advances the session counter stamped on subsequent records
 func NextRun() uint64 { return run.Add(1) }

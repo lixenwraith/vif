@@ -569,10 +569,10 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
-		// TODO: centralize protection via entity factory
 		s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 			Mask: component.ProtectFromSpecies | component.ProtectFromDeath,
 		})
+		s.statSpawned.Add(1)
 	}
 }
 

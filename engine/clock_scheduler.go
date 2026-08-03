@@ -52,13 +52,15 @@ type ClockScheduler struct {
 	eventLoopBackoffMax int
 
 	// Cached metric pointers
-	statTicks         *atomic.Int64
-	statEvBackoffs    *atomic.Int64
-	statEvDispatches  *atomic.Int64
-	statEntityCount   *atomic.Int64
-	statQueueLen      *atomic.Int64
-	statGameElapsedMs *atomic.Int64
-	statEvDropped     *atomic.Int64
+	statTicks           *atomic.Int64
+	statEvBackoffs      *atomic.Int64
+	statEvDispatches    *atomic.Int64
+	statEntityCount     *atomic.Int64
+	statEntityCreated   *atomic.Int64
+	statEntityDestroyed *atomic.Int64
+	statQueueLen        *atomic.Int64
+	statGameElapsedMs   *atomic.Int64
+	statEvDropped       *atomic.Int64
 
 	// Log state: transition and overflow edge detection
 	lastFSMName   string
@@ -108,13 +110,15 @@ func NewClockScheduler(
 		eventLoopInterval:   parameter.EventLoopInterval,
 		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
-		statTicks:         statusReg.Ints.Get("engine.ticks"),
-		statEvBackoffs:    statusReg.Ints.Get("event.backoffs"),
-		statEvDispatches:  statusReg.Ints.Get("event.dispatches"),
-		statEntityCount:   statusReg.Ints.Get("entity.count"),
-		statQueueLen:      statusReg.Ints.Get("event.queue_len"),
-		statGameElapsedMs: statusReg.Ints.Get("time.game_elapsed_ms"),
-		statEvDropped:     statusReg.Ints.Get("event.dropped"),
+		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
+		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
+		statEntityCount:     statusReg.Ints.Get("entity.count"),
+		statEntityCreated:   statusReg.Ints.Get("entity.created_total"),
+		statEntityDestroyed: statusReg.Ints.Get("entity.destroyed_total"),
+		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
+		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
+		statEvDropped:       statusReg.Ints.Get("event.dropped"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -164,7 +168,8 @@ func (cs *ClockScheduler) initLoadedFSM() error {
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
-		cs.wg.Add(2) // 2 Goroutines
+		cs.world.Seal() // no system registration once the goroutines are live
+		cs.wg.Add(2)    // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
 		core.Go(cs.schedulerLoop)
 		core.Go(cs.eventLoop)
@@ -345,21 +350,23 @@ func (cs *ClockScheduler) dispatchOnePass() int {
 	// Gate hoisted out of the loop: one atomic load per pass.
 	// Payloads are pooled and released by their handlers, so only the type
 	// is logged — retaining ev.Payload would race the next Acquire.
-	trace := vlog.E(vlog.LevelDebug)
+	trace := vlog.On("event", vlog.LevelDebug)
 
 	for _, ev := range eventsList {
+		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
+
+		// "sys" counts registered systems only. The FSM receives every event
+		// unconditionally, so sys=0 is not an unconsumed event
 		if trace {
 			vlog.Debug("event", "msg", "dispatch",
 				"ev", event.GetEventName(ev.Type),
-				"handlers", cs.eventRouter.HandlerCount(ev.Type))
+				"sys", len(handlers))
 		}
 
 		cs.fsm.HandleEvent(cs.world, ev)
 
-		if handlers, ok := cs.eventRouter.GetHandlers(ev.Type); ok {
-			for _, h := range handlers {
-				h.HandleEvent(ev)
-			}
+		for _, h := range handlers {
+			h.HandleEvent(ev)
 		}
 	}
 
@@ -505,6 +512,8 @@ func (cs *ClockScheduler) processTick() {
 
 	cs.statTicks.Store(int64(ticks))
 	cs.statEntityCount.Store(int64(entityCount))
+	cs.statEntityCreated.Store(cs.world.CreatedCount())
+	cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
 	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
 
 	// Queue overflow is silent state loss; report every increase.
@@ -517,4 +526,8 @@ func (cs *ClockScheduler) processTick() {
 			"delta", dropped-cs.lastEvDropped)
 		cs.lastEvDropped = dropped
 	}
+
+	// Status snapshot: world lock released and every stat above committed,
+	// so the reading belongs to exactly this tick. Lock-free by construction.
+	cs.world.Resources.Status.Tick(ticks)
 }

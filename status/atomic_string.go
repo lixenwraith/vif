@@ -4,20 +4,18 @@ import (
 	"sync/atomic"
 )
 
-// MaxStringLen is the maximum length for atomic strings
+// MaxStringLen is the display width fixed-layout consumers should assume.
+// The store is unbounded; truncation is a rendering concern, not a storage one.
 const MaxStringLen = 20
 
-// AtomicString provides atomic string access with fixed max length
+// AtomicString provides atomic string access
 // Zero value is ready to use (represents empty string)
 type AtomicString struct {
 	ptr atomic.Pointer[string]
 }
 
-// Store sets the string value, truncating to MaxStringLen
+// Store sets the string value
 func (s *AtomicString) Store(val string) {
-	if len(val) > MaxStringLen {
-		val = val[:MaxStringLen]
-	}
 	s.ptr.Store(&val)
 }
 
@@ -28,3 +26,4 @@ func (s *AtomicString) Load() string {
 	}
 	return ""
 }
+

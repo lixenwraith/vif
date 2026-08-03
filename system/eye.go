@@ -18,8 +18,7 @@ type EyeSystem struct {
 	world *engine.World
 
 	// Telemetry
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
+	statCount *atomic.Int64
 
 	enabled bool
 }
@@ -29,7 +28,6 @@ func NewEyeSystem(world *engine.World) engine.System {
 		world: world,
 	}
 
-	s.statActive = world.Resources.Status.Bools.Get("eye.active")
 	s.statCount = world.Resources.Status.Ints.Get("eye.count")
 
 	s.Init()
@@ -37,7 +35,6 @@ func NewEyeSystem(world *engine.World) engine.System {
 }
 
 func (s *EyeSystem) Init() {
-	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
 }
@@ -191,7 +188,6 @@ func (s *EyeSystem) Update() {
 	}
 
 	s.statCount.Store(int64(activeCount))
-	s.statActive.Store(activeCount > 0)
 }
 
 // === Spawn ===

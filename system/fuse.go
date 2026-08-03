@@ -225,11 +225,11 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 }
 
 func (s *FuseSystem) handleQuasarFuse() {
-	drains := s.world.Components.Drain.GetAllEntities()
-	sources := make([]core.Point, 0, len(drains))
+	drainEntities := s.world.Components.Drain.GetAllEntities()
+	sources := make([]core.Point, 0, len(drainEntities))
 
-	for _, e := range drains {
-		if pos, ok := s.world.Positions.GetPosition(e); ok {
+	for _, drainEntity := range drainEntities {
+		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
 			sources = append(sources, core.Point{X: pos.X, Y: pos.Y})
 		}
 	}
@@ -271,10 +271,10 @@ func (s *FuseSystem) handleQuasarFuse() {
 	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
 
 	// Emit EventEnemyKilled for each drain (enables loot drops)
-	for _, e := range drains {
-		if pos, ok := s.world.Positions.GetPosition(e); ok {
+	for _, drainEntity := range drainEntities {
+		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
 			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-				Entity:  e,
+				Entity:  drainEntity,
 				Species: component.SpeciesDrain,
 				X:       pos.X,
 				Y:       pos.Y,
@@ -282,8 +282,8 @@ func (s *FuseSystem) handleQuasarFuse() {
 		}
 	}
 
-	if len(drains) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drains)
+	if len(drainEntities) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, drainEntities)
 	}
 
 	s.fusions = append(s.fusions, pendingFusion{
@@ -291,17 +291,6 @@ func (s *FuseSystem) handleQuasarFuse() {
 		TargetX: cX,
 		TargetY: cY,
 		Timer:   parameter.SpiritAnimationDuration + parameter.SpiritSafetyBuffer,
-	})
-}
-
-func (s *FuseSystem) spawnConvergenceSpirit(startX, startY, targetX, targetY int) {
-	s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
-		StartX:    startX,
-		StartY:    startY,
-		TargetX:   targetX,
-		TargetY:   targetY,
-		Char:      visual.DrainChar,
-		BaseColor: component.SpiritCyan,
 	})
 }
 

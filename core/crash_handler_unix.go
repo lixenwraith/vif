@@ -31,9 +31,14 @@ func HandleCrash(r any) {
 		terminal.EmergencyReset(os.Stdout)
 	}
 
+	// Dev capture owns fd 2; give it back so the banner reaches the terminal
+	RestoreStderr()
+
 	fmt.Fprintf(os.Stderr, "\n\x1b[31mCRASH DETECTED: %v\x1b[0m\n", r)
 	fmt.Fprintf(os.Stderr, "Stack Trace:\n%s\n", stack)
+	if p := StderrCapturePath(); p != "" {
+		fmt.Fprintf(os.Stderr, "captured stderr: %s\n", p)
+	}
 
 	os.Exit(1)
 }
-
