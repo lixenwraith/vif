@@ -6,6 +6,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
 )
 
+const eps = 1e-12
+
+func approx(t *testing.T, got, want float64) {
+	t.Helper()
+	if d := got - want; d > eps || d < -eps {
+		t.Errorf("expected %v, got %v", want, got)
+	}
+}
+
 func TestWeightedAggregator_Calculate(t *testing.T) {
 	agg := &WeightedAggregator{
 		Weights: map[string]float64{
@@ -19,12 +28,7 @@ func TestWeightedAggregator_Calculate(t *testing.T) {
 		"energy":   0.6,
 	}
 
-	fitness := agg.Calculate(metrics, nil)
-	expected := 0.5*0.8 + 0.5*0.6 // 0.7
-
-	if fitness != expected {
-		t.Errorf("expected %v, got %v", expected, fitness)
-	}
+	approx(t, agg.Calculate(metrics, nil), 0.5*0.8+0.5*0.6)
 }
 
 func TestWeightedAggregator_WithNormalizers(t *testing.T) {
@@ -38,100 +42,48 @@ func TestWeightedAggregator_WithNormalizers(t *testing.T) {
 	}
 
 	// 50 ticks with cap at 100 = 0.5 normalized
-	metrics := tracking.MetricBundle{
-		tracking.MetricTicksAlive: 50,
-	}
-
-	fitness := agg.Calculate(metrics, nil)
-	if fitness != 0.5 {
-		t.Errorf("expected 0.5, got %v", fitness)
-	}
+	metrics := tracking.MetricBundle{tracking.MetricTicksAlive: 50}
+	approx(t, agg.Calculate(metrics, nil), 0.5)
 
 	// 150 ticks capped at 1.0
 	metrics[tracking.MetricTicksAlive] = 150
-	fitness = agg.Calculate(metrics, nil)
-	if fitness != 1.0 {
-		t.Errorf("expected 1.0 (capped), got %v", fitness)
-	}
+	approx(t, agg.Calculate(metrics, nil), 1.0)
 }
 
 func TestWeightedAggregator_ContextAdjuster(t *testing.T) {
 	agg := &WeightedAggregator{
-		Weights: map[string]float64{
-			"attack":  0.5,
-			"defense": 0.5,
-		},
-		ContextAdjuster: func(w map[string]float64, ctx Context) map[string]float64 {
-			threat, ok := ctx.Get(ContextThreatLevel)
-			if !ok {
-				return w
+		Weights: map[string]float64{"attack": 0.5, "defense": 0.5},
+		WeightAdjuster: func(key string, w float64, ctx Context) float64 {
+			if threat, ok := ctx.Get(ContextThreatLevel); ok && threat > 0.7 && key == "defense" {
+				return w * 2.0
 			}
-			adjusted := make(map[string]float64)
-			for k, v := range w {
-				adjusted[k] = v
-			}
-			if threat > 0.7 {
-				adjusted["defense"] *= 2.0 // Double defense weight for skilled players
-			}
-			return adjusted
+			return w
 		},
 	}
 
-	metrics := tracking.MetricBundle{
-		"attack":  1.0,
-		"defense": 1.0,
-	}
+	metrics := tracking.MetricBundle{"attack": 1.0, "defense": 1.0}
 
 	// Low threat: normal weights
-	ctx := MapContext{ContextThreatLevel: 0.3}
-	fitness := agg.Calculate(metrics, ctx)
-	if fitness != 1.0 {
-		t.Errorf("expected 1.0 for low threat, got %v", fitness)
-	}
+	approx(t, agg.Calculate(metrics, MapContext{ContextThreatLevel: 0.3}), 1.0)
 
-	// High threat: defense doubled (0.5*1 + 1.0*1 = 1.5)
-	ctx = MapContext{ContextThreatLevel: 0.8}
-	fitness = agg.Calculate(metrics, ctx)
-	if fitness != 1.5 {
-		t.Errorf("expected 1.5 for high threat, got %v", fitness)
-	}
+	// High threat: defense doubled (0.5*1 + 1.0*1)
+	approx(t, agg.Calculate(metrics, MapContext{ContextThreatLevel: 0.8}), 1.5)
 }
 
 func TestNormalizeInverse(t *testing.T) {
 	norm := NormalizeInverse(100.0)
 
-	// At 0: 1/(1+0) = 1.0
-	if v := norm(0); v != 1.0 {
-		t.Errorf("expected 1.0 at 0, got %v", v)
-	}
-
-	// At 100: 1/(1+1) = 0.5
-	if v := norm(100); v != 0.5 {
-		t.Errorf("expected 0.5 at scale, got %v", v)
-	}
-
-	// At 300: 1/(1+3) = 0.25
-	if v := norm(300); v != 0.25 {
-		t.Errorf("expected 0.25 at 3x scale, got %v", v)
-	}
+	approx(t, norm(0), 1.0)   // 1/(1+0)
+	approx(t, norm(100), 0.5) // 1/(1+1)
+	approx(t, norm(300), 0.25)
 }
 
 func TestNormalizeLinear(t *testing.T) {
 	norm := NormalizeLinear(10, 20)
 
-	if v := norm(10); v != 0.0 {
-		t.Errorf("expected 0.0 at min, got %v", v)
-	}
-	if v := norm(20); v != 1.0 {
-		t.Errorf("expected 1.0 at max, got %v", v)
-	}
-	if v := norm(15); v != 0.5 {
-		t.Errorf("expected 0.5 at midpoint, got %v", v)
-	}
-	if v := norm(5); v != 0.0 {
-		t.Errorf("expected 0.0 below min, got %v", v)
-	}
-	if v := norm(25); v != 1.0 {
-		t.Errorf("expected 1.0 above max, got %v", v)
-	}
+	approx(t, norm(10), 0.0)
+	approx(t, norm(20), 1.0)
+	approx(t, norm(15), 0.5)
+	approx(t, norm(5), 0.0)  // below min
+	approx(t, norm(25), 1.0) // above max
 }

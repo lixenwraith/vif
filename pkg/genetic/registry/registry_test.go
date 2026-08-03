@@ -6,11 +6,12 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/pkg/genetic"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/fitness"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic/persistence"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
 )
 
 func TestRegistry_RegisterAndSample(t *testing.T) {
-	reg := NewRegistry(t.TempDir())
+	reg := NewRegistry(nil)
 
 	config := SpeciesConfig{
 		ID:                 1,
@@ -46,7 +47,7 @@ func TestRegistry_RegisterAndSample(t *testing.T) {
 }
 
 func TestRegistry_DuplicateRegistration(t *testing.T) {
-	reg := NewRegistry(t.TempDir())
+	reg := NewRegistry(nil)
 
 	config := SpeciesConfig{ID: 1, Name: "test", GeneCount: 1, Bounds: []genetic.ParameterBounds{{Min: 0, Max: 1}}}
 
@@ -60,7 +61,7 @@ func TestRegistry_DuplicateRegistration(t *testing.T) {
 }
 
 func TestRegistry_BoundsMismatch(t *testing.T) {
-	reg := NewRegistry(t.TempDir())
+	reg := NewRegistry(nil)
 
 	config := SpeciesConfig{
 		ID:        1,
@@ -75,8 +76,8 @@ func TestRegistry_BoundsMismatch(t *testing.T) {
 }
 
 func TestRegistry_FullLifecycle(t *testing.T) {
-	tmpDir := t.TempDir()
-	reg := NewRegistry(tmpDir)
+	store := persistence.NewManager(t.TempDir(), nil)
+	reg := NewRegistry(store)
 
 	agg := &fitness.WeightedAggregator{
 		Weights: map[string]float64{
@@ -131,7 +132,7 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 	reg.Stop()
 
 	// Reload
-	reg2 := NewRegistry(tmpDir)
+	reg2 := NewRegistry(store)
 	reg2.Register(config, agg)
 	reg2.Start()
 	defer reg2.Stop()
@@ -152,68 +153,59 @@ func TestRegistry_FullLifecycle(t *testing.T) {
 }
 
 func TestRegistry_Evolution(t *testing.T) {
-	reg := NewRegistry(t.TempDir())
+	cfg := genetic.DefaultStreamingConfig()
+	cfg.PoolSize = 16
+	cfg.MinOutcomesPerGen = 2
+	cfg.PerturbationRate = 0.6
+	cfg.PerturbationStrength = 0.15
+	cfg.Seed = 0xC0FFEE
 
-	// Aggregator rewards higher gene values
-	agg := &fitness.WeightedAggregator{
-		Weights: map[string]float64{
-			"gene_value": 1.0,
-		},
-	}
-
+	reg := NewRegistry(nil)
 	config := SpeciesConfig{
-		ID:                 1,
-		Name:               "evolution_test",
-		GeneCount:          1,
-		Bounds:             []genetic.ParameterBounds{{Min: 0, Max: 100}},
-		PerturbationStdDev: 0.2,
-		EngineConfig: &genetic.StreamingConfig{
-			EngineConfig: genetic.EngineConfig{
-				PoolSize:             16,
-				EliteCount:           2,
-				PerturbationRate:     0.3,
-				PerturbationStrength: 0.2,
-			},
-			MinOutcomesPerGen: 2,
-		},
+		ID:             1,
+		Name:           "evolution_test",
+		GeneCount:      1,
+		Bounds:         []genetic.ParameterBounds{{Min: 0, Max: 100}},
+		TournamentSize: 3,
+		MixProbability: 0.5,
+		EngineConfig:   &cfg,
 	}
-
-	reg.Register(config, agg)
+	if err := reg.Register(config, nil); err != nil {
+		t.Fatal(err)
+	}
 	reg.Start()
 	defer reg.Stop()
 
-	initialStats := reg.Stats(1)
-
-	// Run multiple generations
-	for range 10 { // gen
-		for range 4 { // i
-			genes, evalID := reg.Sample(1)
-			if evalID == 0 {
-				continue
-			}
-
-			collector := reg.BeginTracking(1, evalID)
-			// Report gene value as fitness metric
-			collector.Collect(tracking.MetricBundle{"gene_value": genes[0]}, time.Second)
-
-			reg.CompleteTracking(1, evalID, tracking.MetricBundle{}, nil)
+	// Fitness is the gene value: the archive must drift toward the upper bound
+	var early, late float64
+	for i := range 400 {
+		genes, evalID := reg.Sample(1)
+		if evalID == 0 {
+			t.Fatal("expected proposal")
 		}
-		// Small delay to let streaming engine process
-		time.Sleep(10 * time.Millisecond)
+		reg.ReportFitness(1, evalID, genes[0])
+
+		if i == 40 {
+			early = reg.Stats(1).AvgFitness
+		}
 	}
+	late = reg.Stats(1).AvgFitness
 
-	finalStats := reg.Stats(1)
-
-	if finalStats.TotalEvals <= initialStats.TotalEvals {
-		t.Error("expected evaluations to increase")
+	st := reg.Stats(1)
+	if st.PoolSize != cfg.PoolSize {
+		t.Fatalf("archive not saturated: %d", st.PoolSize)
 	}
-
-	// Evolution should have progressed
-	if finalStats.Generation <= initialStats.Generation {
-		t.Logf("generations: %d -> %d", initialStats.Generation, finalStats.Generation)
+	if st.BestFitness < st.AvgFitness || st.AvgFitness < st.WorstFitness {
+		t.Fatalf("archive not sorted: best=%v avg=%v worst=%v",
+			st.BestFitness, st.AvgFitness, st.WorstFitness)
 	}
-
-	t.Logf("Evolution test: evals=%d, gen=%d, best=%.2f, avg=%.2f",
-		finalStats.TotalEvals, finalStats.Generation, finalStats.BestFitness, finalStats.AvgFitness)
+	if late <= early {
+		t.Fatalf("no convergence: %v -> %v", early, late)
+	}
+	if st.BestFitness < 90 {
+		t.Errorf("expected convergence near upper bound, got %v", st.BestFitness)
+	}
+	if st.PendingCount != 0 {
+		t.Errorf("expected no pending evaluations, got %d", st.PendingCount)
+	}
 }
-

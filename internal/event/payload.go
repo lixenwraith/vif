@@ -5,9 +5,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/color"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // --- Engine ---
@@ -996,6 +996,12 @@ type GeneticRegisterSpeciesPayload struct {
 	ProbeBins          int                   `toml:"probe_bins"` // scout stratification bins for gene[0] (0 = uniform)
 	Species            component.SpeciesType `toml:"species"`
 	IsComposite        bool                  `toml:"is_composite"`
+}
+
+// GeneticAbandonEvalPayload is the information of species type evaluation that should be abandoned
+type GeneticAbandonEvalPayload struct {
+	EvalID  uint64                `toml:"eval_id"`
+	Species component.SpeciesType `toml:"species"`
 }
 
 // --- Debug ---

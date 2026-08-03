@@ -4,69 +4,35 @@ import (
 	"context"
 	"errors"
 	"math/rand/v2"
+	"slices"
 	"sync"
-
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// --- Algorithm Engine ---
+// ErrNoCandidates is returned when the pool has not been initialized
+var ErrNoCandidates = errors.New("genetic: pool is empty")
 
-// Engine is the main genetic algorithm execution engine
-// It coordinates all operators and manages the evolution process
+// Engine runs a generational GA with synchronous evaluation.
+// Use StreamingEngine when scoring is asynchronous and caller-driven.
+// The evaluator must be goroutine-safe when Parallelism exceeds 1
 type Engine[S Solution, F Numeric] struct {
-	// Core operators
 	evaluator   EvaluatorFunc[S, F]
 	initializer InitializerFunc[S]
 	selector    Selector[S, F]
 	combiner    Combiner[S, F]
 	perturbator Perturbator[S]
 	terminator  TerminationFunc[S, F]
+	diversity   DiversityFunc[S, F]
 
-	// Configuration
-	config EngineConfig
+	cfg EngineConfig
+	rng *rand.Rand
 
-	// State
-	rng         *rand.Rand
-	currentPool *Pool[S, F]
-	history     []PoolStats[F]
-
-	// Concurrency control
-	workerPool *sync.Pool
-	semaphore  chan struct{}
+	pool    Pool[S, F]
+	next    []Candidate[S, F]
+	parents []Candidate[S, F]
+	buf     []S
+	history []PoolStats[F]
 }
 
-// EngineConfig holds configuration parameters for the algorithm
-type EngineConfig struct {
-	// PoolSize is the number of candidates maintained in each generation
-	PoolSize int
-	// EliteCount is the number of best solutions preserved unchanged
-	EliteCount int
-	// PerturbationRate is the probability of applying perturbation (0-1)
-	PerturbationRate float64
-	// PerturbationStrength controls the intensity of perturbations (0-1)
-	PerturbationStrength float64
-	// MaxIterations is the maximum number of generations to run
-	MaxIterations int
-	// Parallelism controls the number of concurrent evaluations
-	Parallelism int
-	// Seed for random number generation (0 for random seed)
-	Seed uint64
-}
-
-// DefaultConfig returns a reasonable default configuration.
-func DefaultConfig() EngineConfig {
-	return EngineConfig{
-		PoolSize:             parameter.GAPoolSize,
-		EliteCount:           parameter.GAEliteCount,
-		PerturbationRate:     parameter.GAPerturbationRate,
-		PerturbationStrength: parameter.GAPerturbationStrength,
-		MaxIterations:        parameter.GAMaxIterations,
-		Parallelism:          parameter.GAParallelism,
-		Seed:                 0,
-	}
-}
-
-// NewEngine creates a new genetic algorithm engine with the specified operators
 func NewEngine[S Solution, F Numeric](
 	evaluator EvaluatorFunc[S, F],
 	initializer InitializerFunc[S],
@@ -75,16 +41,12 @@ func NewEngine[S Solution, F Numeric](
 	perturbator Perturbator[S],
 	config EngineConfig,
 ) *Engine[S, F] {
-	// Initialize random number generator
-	var rng *rand.Rand
-	if config.Seed == 0 {
-		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	} else {
-		rng = rand.New(rand.NewPCG(config.Seed, config.Seed))
-	}
+	cfg := config.Normalize()
 
-	// Create semaphore for parallelism control
-	semaphore := make(chan struct{}, config.Parallelism)
+	seed := cfg.Seed
+	if seed == 0 {
+		seed = rand.Uint64()
+	}
 
 	return &Engine[S, F]{
 		evaluator:   evaluator,
@@ -92,208 +54,143 @@ func NewEngine[S Solution, F Numeric](
 		selector:    selector,
 		combiner:    combiner,
 		perturbator: perturbator,
-		config:      config,
-		rng:         rng,
-		semaphore:   semaphore,
-		history:     make([]PoolStats[F], 0, config.MaxIterations),
+		cfg:         cfg,
+		rng:         rand.New(rand.NewPCG(seed, seed^0x9E3779B97F4A7C15)),
+		parents:     make([]Candidate[S, F], 2),
+		buf:         make([]S, 2),
+		next:        make([]Candidate[S, F], 0, cfg.PoolSize),
+		history:     make([]PoolStats[F], 0, cfg.MaxIterations),
 	}
 }
 
-// SetTerminator sets a custom termination condition
-func (e *Engine[S, F]) SetTerminator(terminator TerminationFunc[S, F]) {
-	e.terminator = terminator
-}
+func (e *Engine[S, F]) SetTerminator(fn TerminationFunc[S, F]) { e.terminator = fn }
+func (e *Engine[S, F]) SetDiversity(fn DiversityFunc[S, F])    { e.diversity = fn }
 
-// Run executes the genetic algorithm until termination
+// Run evolves until MaxIterations, the terminator, or context cancellation
 func (e *Engine[S, F]) Run(ctx context.Context) (*Pool[S, F], error) {
-	// Initialize population
-	if err := e.initializePool(); err != nil {
-		return nil, err
-	}
+	e.initialize()
 
-	// Main evolution loop
-	for iteration := range e.config.MaxIterations {
-		// Check context cancellation
+	for i := range e.cfg.MaxIterations {
 		select {
 		case <-ctx.Done():
-			return e.currentPool, ctx.Err()
+			return &e.pool, ctx.Err()
 		default:
 		}
-
-		// Check termination condition
-		if e.terminator != nil && e.terminator(e.currentPool, iteration) {
+		if e.terminator != nil && e.terminator(&e.pool, i) {
 			break
 		}
-
-		// Evolve one generation
-		if err := e.evolveGeneration(); err != nil {
-			return e.currentPool, err
-		}
-
-		// Record statistics
-		e.history = append(e.history, e.currentPool.Stats)
+		e.step()
+		e.history = append(e.history, e.pool.Stats)
 	}
-
-	return e.currentPool, nil
+	return &e.pool, nil
 }
 
-// initializePool creates the initial population of candidates
-func (e *Engine[S, F]) initializePool() error {
-	candidates := make([]Candidate[S, F], e.config.PoolSize)
-
-	// Generate initial solutions in parallel
-	var wg sync.WaitGroup
-	errs := make(chan error, e.config.PoolSize)
-
-	for i := range e.config.PoolSize {
-		wg.Add(1)
-		e.semaphore <- struct{}{} // Acquire semaphore
-
-		go func(idx int) {
-			defer wg.Done()
-			defer func() { <-e.semaphore }() // Release semaphore
-
-			// Generate random solution
-			solution := e.initializer(e.rng)
-
-			// Evaluate fitness
-			score := e.evaluator(solution)
-
-			candidates[idx] = Candidate[S, F]{
-				Data:     solution,
-				Score:    score,
-				Metadata: make(map[string]any),
-			}
-		}(i)
+// Best returns the top-scoring candidate
+func (e *Engine[S, F]) Best() (Candidate[S, F], error) {
+	if len(e.pool.Members) == 0 {
+		return Candidate[S, F]{}, ErrNoCandidates
 	}
-
-	wg.Wait()
-	close(errs)
-
-	// Check for errors
-	for err := range errs {
-		if err != nil {
-			return err
-		}
-	}
-
-	e.currentPool = &Pool[S, F]{
-		Members:    candidates,
-		Generation: 0,
-		Stats:      e.calculateStats(candidates),
-	}
-
-	return nil
+	return e.pool.Members[0], nil
 }
 
-// evolveGeneration creates the next generation of candidates
-func (e *Engine[S, F]) evolveGeneration() error {
-	nextGen := make([]Candidate[S, F], 0, e.config.PoolSize)
+// History returns per-generation statistics
+func (e *Engine[S, F]) History() []PoolStats[F] { return e.history }
 
-	// Preserve elite solutions (best performers)
-	elite := e.selectElite()
-	nextGen = append(nextGen, elite...)
+// initialize seeds the pool. Solutions are generated serially because rng is
+// not goroutine-safe; scoring is parallel
+func (e *Engine[S, F]) initialize() {
+	members := make([]Candidate[S, F], e.cfg.PoolSize)
+	for i := range members {
+		members[i].Data = e.initializer(e.rng)
+	}
+	e.evaluate(members)
 
-	// Generate new offspring to fill the pool
-	for len(nextGen) < e.config.PoolSize {
-		// Select parents
-		parents := e.selector.Select(e.currentPool, 2, e.rng)
+	e.pool.Members = members
+	e.pool.Generation = 0
+	e.finish()
+}
 
-		// Create offspring through recombination
-		offspring := e.combiner.Combine(parents, e.rng)
+// step builds one generation: the sorted head is carried over as elites,
+// the remainder comes from selection, recombination and mutation
+func (e *Engine[S, F]) step() {
+	elite := min(e.cfg.EliteCount, len(e.pool.Members))
+	e.next = append(e.next[:0], e.pool.Members[:elite]...)
 
-		// Apply perturbation based on probability
-		for i := range offspring {
-			if e.rng.Float64() < e.config.PerturbationRate {
-				e.perturbator.Perturb(&offspring[i], e.config.PerturbationStrength, e.rng)
-			}
-
-			// Evaluate and add to next generation
-			score := e.evaluator(offspring[i])
-			nextGen = append(nextGen, Candidate[S, F]{
-				Data:     offspring[i],
-				Score:    score,
-				Metadata: make(map[string]any),
-			})
-
-			if len(nextGen) >= e.config.PoolSize {
+	var zero S
+	for len(e.next) < e.cfg.PoolSize {
+		e.selector.Select(e.pool.Members, e.parents, e.rng)
+		n := e.combiner.Combine(e.parents, e.buf, e.rng)
+		if n == 0 {
+			break
+		}
+		for j := range n {
+			e.perturbator.Perturb(&e.buf[j],
+				e.cfg.PerturbationRate, e.cfg.PerturbationStrength, e.rng)
+			e.next = append(e.next, Candidate[S, F]{Data: e.buf[j]})
+			e.buf[j] = zero // Ownership transferred; combiner reallocates
+			if len(e.next) == e.cfg.PoolSize {
 				break
 			}
 		}
 	}
 
-	// Update current pool
-	e.currentPool = &Pool[S, F]{
-		Members:    nextGen[:e.config.PoolSize],
-		Generation: e.currentPool.Generation + 1,
-		Stats:      e.calculateStats(nextGen[:e.config.PoolSize]),
-	}
-
-	return nil
+	e.evaluate(e.next[elite:])
+	e.pool.Members = append(e.pool.Members[:0], e.next...)
+	e.pool.Generation++
+	e.finish()
 }
 
-// selectElite returns the best performing candidates for preservation
-func (e *Engine[S, F]) selectElite() []Candidate[S, F] {
-	if e.config.EliteCount <= 0 {
-		return []Candidate[S, F]{}
+// evaluate scores candidates, bounded by Parallelism
+func (e *Engine[S, F]) evaluate(members []Candidate[S, F]) {
+	if len(members) == 0 {
+		return
 	}
-
-	// Sort by fitness (simplified - use sort.Slice in real code)
-	// This would sort e.currentPool.Members by Score descending
-
-	// Return top performers
-	eliteCount := min(e.config.EliteCount, len(e.currentPool.Members))
-	return e.currentPool.Members[:eliteCount]
-}
-
-// calculateStats computes statistical measures for a candidate pool
-func (e *Engine[S, F]) calculateStats(candidates []Candidate[S, F]) PoolStats[F] {
-	if len(candidates) == 0 {
-		return PoolStats[F]{}
-	}
-
-	stats := PoolStats[F]{
-		BestScore:  candidates[0].Score,
-		WorstScore: candidates[0].Score,
-	}
-
-	total := F(0)
-	for _, c := range candidates {
-		if c.Score > stats.BestScore {
-			stats.BestScore = c.Score
+	if e.cfg.Parallelism <= 1 {
+		for i := range members {
+			members[i].Score = e.evaluator(members[i].Data)
 		}
-		if c.Score < stats.WorstScore {
-			stats.WorstScore = c.Score
+		return
+	}
+
+	var wg sync.WaitGroup
+	sem := make(chan struct{}, e.cfg.Parallelism)
+	for i := range members {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(c *Candidate[S, F]) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			c.Score = e.evaluator(c.Data)
+		}(&members[i])
+	}
+	wg.Wait()
+}
+
+// finish sorts the pool by score descending and refreshes statistics
+func (e *Engine[S, F]) finish() {
+	slices.SortFunc(e.pool.Members, func(a, b Candidate[S, F]) int {
+		switch {
+		case a.Score > b.Score:
+			return -1
+		case a.Score < b.Score:
+			return 1
 		}
-		total += c.Score
-	}
+		return 0
+	})
 
-	stats.AverageScore = total / F(len(candidates))
-
-	// Diversity calculation would go here
-	// (e.g., average pairwise distance between solutions)
-
-	return stats
-}
-
-// GetHistory returns the statistical history of the evolution process
-func (e *Engine[S, F]) GetHistory() []PoolStats[F] {
-	return e.history
-}
-
-// GetBest returns the best candidate found so far
-func (e *Engine[S, F]) GetBest() (Candidate[S, F], error) {
-	if e.currentPool == nil || len(e.currentPool.Members) == 0 {
-		return Candidate[S, F]{}, errors.New("no candidates available")
-	}
-
-	best := e.currentPool.Members[0]
-	for _, c := range e.currentPool.Members[1:] {
-		if c.Score > best.Score {
-			best = c
+	m := e.pool.Members
+	s := PoolStats[F]{Size: len(m), Generation: e.pool.Generation}
+	if len(m) > 0 {
+		s.BestScore = m[0].Score
+		s.WorstScore = m[len(m)-1].Score
+		var total F
+		for i := range m {
+			total += m[i].Score
 		}
+		s.AverageScore = total / F(len(m))
 	}
-
-	return best, nil
+	if e.diversity != nil {
+		s.Diversity = e.diversity(m)
+	}
+	e.pool.Stats = s
 }
-

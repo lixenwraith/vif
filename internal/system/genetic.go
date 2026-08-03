@@ -3,31 +3,30 @@ package system
 import (
 	"fmt"
 	"math"
+	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/genetic"
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
 )
 
 // --- Tracked Entity ---
 
+// trackedEntity accumulates fitness signal between spawn and death
 type trackedEntity struct {
-	collector     tracking.Collector
 	evalID        uint64
 	species       component.SpeciesType
 	subType       uint8
-	isComposite   bool
-	targetGroupID uint8   // Target group for distance measurement (0 = cursor)
-	dealtDamage   float64 // Tracks damage dealt before death
+	targetGroupID uint8
+	dealtDamage   float64
+	minDistSq     float64 // Closest approach to the target group over the lifetime
 }
 
 // --- Genetic System ---
@@ -35,15 +34,16 @@ type trackedEntity struct {
 type GeneticSystem struct {
 	world *engine.World
 
-	mu sync.RWMutex
+	mu sync.Mutex
 
-	registry      *registry.Registry
-	collectorPool *tracking.CollectorPool
+	registry *registry.Registry
 
 	tracking      map[core.Entity]*trackedEntity
 	pendingDeaths []event.EnemyKilledPayload
 
-	// Telemetry (generic species, currently mapped to eye)
+	eyeTracked     int64
+	telemetryTicks int
+
 	statGeneration *atomic.Int64
 	statBest       *atomic.Int64
 	statAvg        *atomic.Int64
@@ -53,24 +53,22 @@ type GeneticSystem struct {
 
 	typeFitEMA  [parameter.EyeTypeCount]float64
 	statTypeFit *status.AtomicString
+	typeFitBuf  []byte
 
 	enabled bool
 }
 
 func NewGeneticSystem(world *engine.World) engine.System {
-	reg := registry.NewRegistry(parameter.GeneticPersistencePath)
+	reg := registry.NewRegistry(nil) // Populations are per-run; maps are generated fresh
 
-	// Expose registry synchronously to ECS
-	world.Resources.Genetics = &engine.GeneticResource{
-		Registry: reg,
-	}
+	world.Resources.Genetics = &engine.GeneticResource{Registry: reg}
 
 	s := &GeneticSystem{
 		world:         world,
 		registry:      reg,
-		collectorPool: tracking.NewCollectorPool(32),
-		tracking:      make(map[core.Entity]*trackedEntity),
+		tracking:      make(map[core.Entity]*trackedEntity, 64),
 		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
+		typeFitBuf:    make([]byte, 0, 64),
 	}
 
 	s.statGeneration = world.Resources.Status.Ints.Get("eye.ga.generation")
@@ -79,6 +77,7 @@ func NewGeneticSystem(world *engine.World) engine.System {
 	s.statPending = world.Resources.Status.Ints.Get("eye.ga.pending")
 	s.statOutcomes = world.Resources.Status.Ints.Get("eye.ga.outcomes")
 	s.statTracked = world.Resources.Status.Ints.Get("eye.ga.tracked")
+	s.statTypeFit = world.Resources.Status.Strings.Get("eye.ga.typefit")
 
 	s.Init()
 	return s
@@ -87,23 +86,25 @@ func NewGeneticSystem(world *engine.World) engine.System {
 func (s *GeneticSystem) Init() {
 	clear(s.tracking)
 	s.pendingDeaths = s.pendingDeaths[:0]
+	clear(s.typeFitEMA[:])
+	s.eyeTracked = 0
+	s.telemetryTicks = 0
 	s.enabled = true
+
+	s.registry.Reset() // Drop evaluations belonging to the previous run
 	_ = s.registry.Start()
 }
 
-func (s *GeneticSystem) Name() string {
-	return "genetic"
-}
+func (s *GeneticSystem) Name() string { return "genetic" }
 
-func (s *GeneticSystem) Priority() int {
-	return parameter.PriorityGenetic
-}
+func (s *GeneticSystem) Priority() int { return parameter.PriorityGenetic }
 
 func (s *GeneticSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventGameReset,
 		event.EventMetaSystemCommandRequest,
 		event.EventGeneticRegisterSpecies,
+		event.EventGeneticAbandonEval,
 		event.EventEnemyCreated,
 		event.EventEnemyKilled,
 		event.EventCombatAttackAreaRequest,
@@ -121,6 +122,13 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 			if payload.SystemName == s.Name() {
 				s.enabled = payload.Enabled
 			}
+		}
+		return
+	}
+
+	if ev.Type == event.EventGeneticAbandonEval {
+		if payload, ok := ev.Payload.(*event.GeneticAbandonEvalPayload); ok {
+			s.registry.AbandonFitness(registry.SpeciesID(payload.Species), payload.EvalID)
 		}
 		return
 	}
@@ -154,11 +162,10 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCombatAttackAreaRequest:
 		if payload, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok {
 			s.mu.Lock()
-			if tracked, ok := s.tracking[payload.OwnerEntity]; ok {
-				// Only reward successful self-destructs against targets (ignores cursor shield bumps)
-				if payload.AttackType == component.CombatAttackSelfDestruct {
-					tracked.dealtDamage += float64(parameter.CombatDamageEyeSelfDestruct)
-				}
+			// Only reward successful self-destructs against targets (ignores cursor shield bumps)
+			if tracked, ok := s.tracking[payload.OwnerEntity]; ok &&
+				payload.AttackType == component.CombatAttackSelfDestruct {
+				tracked.dealtDamage += float64(parameter.CombatDamageEyeSelfDestruct)
 			}
 			s.mu.Unlock()
 		}
@@ -171,31 +178,33 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 		bounds[i] = genetic.ParameterBounds{Min: b.Min, Max: b.Max}
 	}
 
+	cfg := parameter.GAStreamingConfig()
 	config := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(payload.Species),
 		Name:               fmt.Sprintf("species_%d", payload.Species),
 		GeneCount:          payload.GeneCount,
 		ProbeBins:          payload.ProbeBins,
 		Bounds:             bounds,
+		Boundary:           parameter.GABoundaryMode,
 		PerturbationStdDev: payload.PerturbationStdDev,
+		TournamentSize:     parameter.GATournamentSize,
+		MixProbability:     parameter.GACrossoverMixProbability,
 		IsComposite:        payload.IsComposite,
+		EngineConfig:       &cfg,
 	}
 
-	if err := s.registry.Register(config, nil); err == nil {
-		_ = s.registry.Start()
-	}
+	// Start is idempotent; run it even when this species was already registered
+	_ = s.registry.Register(config, nil)
+	_ = s.registry.Start()
 }
 
 func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8, evalID uint64, genes []float64) {
+	if evalID == 0 {
+		return // Not GA-managed
+	}
 	if _, exists := s.tracking[entity]; exists {
 		return
 	}
-
-	// Bail out if GA isn't managing this entity
-	if evalID == 0 {
-		return
-	}
-
 	if speciesType >= component.SpeciesCount {
 		speciesType = component.SpeciesNone
 	}
@@ -205,22 +214,12 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		groupID = tc.GroupID
 	}
 
-	isComposite := s.world.Components.Header.HasEntity(entity)
-
-	var collector tracking.Collector
-	if isComposite {
-		collector = s.collectorPool.AcquireComposite()
-	} else {
-		collector = s.collectorPool.AcquireStandard()
-	}
-
 	s.tracking[entity] = &trackedEntity{
+		evalID:        evalID,
 		species:       speciesType,
 		subType:       subType,
-		evalID:        evalID,
-		collector:     collector,
-		isComposite:   isComposite,
 		targetGroupID: groupID,
+		minDistSq:     math.MaxFloat64,
 	}
 
 	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
@@ -237,14 +236,11 @@ func (s *GeneticSystem) Update() {
 		return
 	}
 
-	dt := s.world.Resources.Time.DeltaTime
-
 	s.mu.Lock()
-	defer s.mu.Unlock()
-
 	s.processPendingDeaths()
-	s.cleanupStaleTracking()
-	s.processTracking(dt)
+	s.processTracking()
+	s.mu.Unlock()
+
 	s.updateTelemetry()
 }
 
@@ -260,9 +256,11 @@ func (s *GeneticSystem) processPendingDeaths() {
 	s.pendingDeaths = s.pendingDeaths[:0]
 }
 
-// cleanupStaleTracking ends tracking for entities that lost NavigationComponent (OOB, resize, level change)
-// Uses last known position if available; reports zero fitness otherwise
-func (s *GeneticSystem) cleanupStaleTracking() {
+// processTracking updates closest approach and retires entities that lost
+// NavigationComponent (OOB, resize, level change)
+func (s *GeneticSystem) processTracking() {
+	eyes := 0
+
 	for entity, tracked := range s.tracking {
 		if !s.world.Components.Navigation.HasEntity(entity) {
 			if pos, ok := s.world.Positions.GetPosition(entity); ok {
@@ -271,123 +269,109 @@ func (s *GeneticSystem) cleanupStaleTracking() {
 				s.completeTracking(tracked, -1, -1)
 			}
 			delete(s.tracking, entity)
+			continue
 		}
-	}
-}
 
-// processTracking collects per-tick metrics for all tracked entities
-// Distance and member count recorded for telemetry and future route-fitness analysis
-func (s *GeneticSystem) processTracking(dt time.Duration) {
-	for entity, tracked := range s.tracking {
+		if tracked.species == component.SpeciesEye {
+			eyes++
+		}
+
 		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
 			continue
 		}
-
-		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-		if !groupState.Valid || groupState.Count == 0 {
+		group := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+		if !group.Valid || group.Count == 0 {
 			continue
 		}
 
-		bestDistSq := -1.0
-		for i := range groupState.Count {
-			dx := float64(pos.X - groupState.Targets[i].PosX)
-			dy := float64(pos.Y - groupState.Targets[i].PosY)
-			distSq := dx*dx + dy*dy
-			if bestDistSq < 0 || distSq < bestDistSq {
-				bestDistSq = distSq
+		for i := range group.Count {
+			dx := float64(pos.X - group.Targets[i].PosX)
+			dy := float64(pos.Y - group.Targets[i].PosY)
+			if d := dx*dx + dy*dy; d < tracked.minDistSq {
+				tracked.minDistSq = d
 			}
 		}
-
-		metrics := tracking.MetricBundle{
-			"distance_sq": bestDistSq,
-		}
-
-		if tracked.isComposite {
-			if header, ok := s.world.Components.Header.GetComponent(entity); ok {
-				liveMembers := 0
-				for _, m := range header.MemberEntries {
-					if m.Entity != 0 {
-						liveMembers++
-					}
-				}
-				metrics[tracking.MetricMemberCount] = float64(liveMembers)
-			}
-		}
-
-		tracked.collector.Collect(metrics, dt)
 	}
+
+	s.eyeTracked = int64(eyes)
 }
 
-// completeTracking finalizes entity tracking and reports absolute cartesian distance-at-death fitness
-// Reports directly to GA registry
-// Bandits are handled asynchronously by AdaptationSystem
+// completeTracking converts closest approach and dealt damage into fitness.
+// Evaluations with no positional signal are abandoned rather than scored zero
 func (s *GeneticSystem) completeTracking(tracked *trackedEntity, deathX, deathY int) {
-	// Finalize collector, release accumulated metrics
-	_ = tracked.collector.Finalize(tracking.MetricBundle{})
-
-	fitnessVal := 0.0
+	speciesID := registry.SpeciesID(tracked.species)
+	bestDistSq := tracked.minDistSq
 
 	if deathX >= 0 && deathY >= 0 {
-		groupState := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
-		if groupState.Valid && groupState.Count > 0 {
-			bestDistSq := math.MaxFloat64
-			for i := range groupState.Count {
-				dx := float64(deathX - groupState.Targets[i].PosX)
-				dy := float64(deathY - groupState.Targets[i].PosY)
-				distSq := dx*dx + dy*dy
-				if distSq < bestDistSq {
-					bestDistSq = distSq
-				}
-			}
-
-			config := s.world.Resources.Config
-			maxDistSq := float64(config.MapWidth*config.MapWidth + config.MapHeight*config.MapHeight)
-			if maxDistSq > 0 {
-				fitnessVal = 1.0 - (bestDistSq / maxDistSq)
-				if fitnessVal < 0 {
-					fitnessVal = 0
+		group := s.world.Resources.Target.GetGroup(tracked.targetGroupID)
+		if group.Valid {
+			for i := range group.Count {
+				dx := float64(deathX - group.Targets[i].PosX)
+				dy := float64(deathY - group.Targets[i].PosY)
+				if d := dx*dx + dy*dy; d < bestDistSq {
+					bestDistSq = d
 				}
 			}
 		}
 	}
 
-	// Calculate final fitness: Distance (0.0 to 1.0) + Damage Dealt
-	finalFitness := fitnessVal + tracked.dealtDamage
+	if bestDistSq == math.MaxFloat64 {
+		s.registry.AbandonFitness(speciesID, tracked.evalID)
+		return
+	}
+
+	config := s.world.Resources.Config
+	maxDistSq := float64(config.MapWidth*config.MapWidth + config.MapHeight*config.MapHeight)
+
+	proximity := 0.0
+	if maxDistSq > 0 {
+		if proximity = 1.0 - bestDistSq/maxDistSq; proximity < 0 {
+			proximity = 0
+		}
+	}
+
+	damage := tracked.dealtDamage / parameter.GAFitnessDamageRef
+	if damage > 1 {
+		damage = 1
+	}
+	fitness := proximity + parameter.GAFitnessDamageWeight*damage
 
 	// Per-subtype fitness EMA for probe/distribution evaluation
 	if tracked.species == component.SpeciesEye && int(tracked.subType) < parameter.EyeTypeCount {
 		const alpha = 0.1
-		s.typeFitEMA[tracked.subType] = (1-alpha)*s.typeFitEMA[tracked.subType] + alpha*finalFitness
+		s.typeFitEMA[tracked.subType] = (1-alpha)*s.typeFitEMA[tracked.subType] + alpha*fitness
 	}
 
-	// GA registry (telemetry path)
-	s.registry.ReportFitness(registry.SpeciesID(tracked.species), tracked.evalID, finalFitness)
-
-	if tracked.isComposite {
-		if c, ok := tracked.collector.(*tracking.CompositeCollector); ok {
-			s.collectorPool.ReleaseComposite(c)
-		}
-	} else {
-		if c, ok := tracked.collector.(*tracking.StandardCollector); ok {
-			s.collectorPool.ReleaseStandard(c)
-		}
-	}
+	s.registry.ReportFitness(speciesID, tracked.evalID, fitness)
 }
 
 func (s *GeneticSystem) updateTelemetry() {
-	stats := s.registry.Stats(registry.SpeciesID(component.SpeciesEye))
-	s.statGeneration.Store(int64(stats.Generation))
-	s.statBest.Store(int64(stats.BestFitness * 1000))
-	s.statAvg.Store(int64(stats.AvgFitness * 1000))
-	s.statPending.Store(int64(stats.PendingCount))
-	s.statOutcomes.Store(int64(stats.TotalEvals))
+	st := s.registry.Stats(registry.SpeciesID(component.SpeciesEye))
+	s.statGeneration.Store(int64(st.Generation))
+	s.statBest.Store(int64(st.BestFitness * 1000))
+	s.statAvg.Store(int64(st.AvgFitness * 1000))
+	s.statPending.Store(int64(st.PendingCount))
+	s.statOutcomes.Store(int64(st.TotalEvals))
+	s.statTracked.Store(s.eyeTracked)
 
-	eyeTracked := int64(0)
-	for _, t := range s.tracking {
-		if t.species == component.SpeciesEye {
-			eyeTracked++
-		}
+	// Per-type EMA is string-formatted; publish at the snapshot rate, not per tick
+	if parameter.StatSnapshotTicks == 0 {
+		return
 	}
-	s.statTracked.Store(eyeTracked)
+	s.telemetryTicks++
+	if s.telemetryTicks < parameter.StatSnapshotTicks {
+		return
+	}
+	s.telemetryTicks = 0
+
+	buf := s.typeFitBuf[:0]
+	for i, v := range s.typeFitEMA {
+		if i > 0 {
+			buf = append(buf, '/')
+		}
+		buf = strconv.AppendInt(buf, int64(v*100), 10)
+	}
+	s.typeFitBuf = buf
+	s.statTypeFit.Store(string(buf))
 }

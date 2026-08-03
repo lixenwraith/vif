@@ -1,8 +1,11 @@
 package registry
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/pkg/genetic"
@@ -11,174 +14,161 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
 )
 
-// Registry manages species registration and evolution
+const maxSpecies = 256
+
+// Registry manages species registration and evolution.
+// Sampling and stats are lock-free; registration takes a mutex
 type Registry struct {
-	species     map[SpeciesID]*TrackedSpecies
-	persistence *persistence.Manager
-	mu          sync.RWMutex
+	mu    sync.Mutex
+	slots [maxSpecies]atomic.Pointer[TrackedSpecies]
+	store persistence.Store
 }
 
-// NewRegistry creates a registry with the given persistence path
-func NewRegistry(persistPath string) *Registry {
-	return &Registry{
-		species:     make(map[SpeciesID]*TrackedSpecies),
-		persistence: persistence.NewManager(persistPath),
-	}
+// NewRegistry creates a registry over the given store; nil disables persistence
+func NewRegistry(store persistence.Store) *Registry {
+	return &Registry{store: store}
 }
 
-// Register adds a species to the registry (must be called before Start)
+// Register adds a species; may be called before or after Start
 func (r *Registry) Register(config SpeciesConfig, aggregator fitness.Aggregator) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, exists := r.species[config.ID]; exists {
+	if r.slots[config.ID].Load() != nil {
 		return fmt.Errorf("species %d already registered", config.ID)
 	}
-
 	if config.GeneCount != len(config.Bounds) {
 		return fmt.Errorf("species %d: gene count %d != bounds count %d",
 			config.ID, config.GeneCount, len(config.Bounds))
 	}
 
-	ts := NewTrackedSpecies(config, aggregator)
-	r.species[config.ID] = ts
+	r.slots[config.ID].Store(NewTrackedSpecies(config.normalize(), aggregator))
 	return nil
 }
 
-// Start initializes all engines and loads persisted populations
+// Start loads persisted populations and starts every species not yet running.
+// Idempotent: re-running never re-injects an already started species
 func (r *Registry) Start() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	for _, ts := range r.species {
-		dto, err := r.persistence.Load(ts.Config.Name)
-		if err == nil && len(dto.Candidates) > 0 {
-			candidates := dto.ToPool()
-			ts.Engine.InjectPopulation(candidates, dto.Generation)
+	var lastErr error
+	for i := range r.slots {
+		ts := r.slots[i].Load()
+		if ts == nil || ts.Started() {
+			continue
+		}
+		if r.store != nil {
+			dto, err := r.store.Load(ts.Config.Name)
+			switch {
+			case err == nil && len(dto.Candidates) > 0:
+				ts.Engine.Inject(dto.ToPool(), dto.Generation)
+			case err != nil && !errors.Is(err, fs.ErrNotExist):
+				lastErr = err // Missing file is normal on first run
+			}
 		}
 		ts.Start()
 	}
-	return nil
+	return lastErr
 }
 
-// Stop halts all engines
 func (r *Registry) Stop() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	for _, ts := range r.species {
-		ts.Stop()
+	for i := range r.slots {
+		if ts := r.slots[i].Load(); ts != nil {
+			ts.Stop()
+		}
 	}
 }
 
-// Sample returns genotype for evaluation
-func (r *Registry) Sample(id SpeciesID) ([]float64, uint64) {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
+// Reset drops in-flight evaluations for every species; archives are retained
+func (r *Registry) Reset() {
+	for i := range r.slots {
+		if ts := r.slots[i].Load(); ts != nil {
+			ts.Engine.Reset()
+		}
+	}
+}
 
-	if !ok {
+func (r *Registry) get(id SpeciesID) *TrackedSpecies { return r.slots[id].Load() }
+
+// Sample returns a caller-owned genotype and its evaluation id
+func (r *Registry) Sample(id SpeciesID) ([]float64, uint64) {
+	ts := r.get(id)
+	if ts == nil {
 		return nil, 0
 	}
 	return ts.Sample()
 }
 
-// BeginTracking starts metric collection
-func (r *Registry) BeginTracking(id SpeciesID, evalID uint64) tracking.Collector {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
+// SampleScout returns a stratified probe genotype
+func (r *Registry) SampleScout(id SpeciesID) ([]float64, uint64) {
+	ts := r.get(id)
+	if ts == nil {
+		return nil, 0
+	}
+	return ts.SampleScout()
+}
 
-	if !ok || evalID == 0 {
+// ReportFitness completes an evaluation directly, bypassing the aggregator
+func (r *Registry) ReportFitness(id SpeciesID, evalID uint64, value float64) {
+	if ts := r.get(id); ts != nil {
+		ts.Engine.CompleteEvaluation(genetic.EvalID(evalID), value)
+	}
+}
+
+// AbandonFitness discards an evaluation whose subject never materialized
+func (r *Registry) AbandonFitness(id SpeciesID, evalID uint64) {
+	if ts := r.get(id); ts != nil {
+		ts.Engine.AbandonEvaluation(genetic.EvalID(evalID))
+	}
+}
+
+func (r *Registry) BeginTracking(id SpeciesID, evalID uint64) tracking.Collector {
+	ts := r.get(id)
+	if ts == nil || evalID == 0 {
 		return nil
 	}
 	return ts.BeginTracking(evalID)
 }
 
-// CompleteTracking finalizes and calculates fitness
-func (r *Registry) CompleteTracking(id SpeciesID, evalID uint64, deathCondition tracking.MetricBundle, ctx fitness.Context) {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
-
-	if !ok {
-		return
+func (r *Registry) CollectMetrics(id SpeciesID, evalID uint64, m tracking.MetricBundle, dt time.Duration) {
+	if ts := r.get(id); ts != nil {
+		ts.CollectMetrics(evalID, m, dt)
 	}
-	ts.CompleteTracking(evalID, deathCondition, ctx)
 }
 
-// CollectMetrics pushes metrics for active evaluation
-func (r *Registry) CollectMetrics(id SpeciesID, evalID uint64, metrics tracking.MetricBundle, dt time.Duration) {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
-
-	if !ok {
-		return
+func (r *Registry) CompleteTracking(id SpeciesID, evalID uint64, death tracking.MetricBundle, ctx fitness.Context) {
+	if ts := r.get(id); ts != nil {
+		ts.CompleteTracking(evalID, death, ctx)
 	}
-	ts.CollectMetrics(evalID, metrics, dt)
 }
 
-// ReportFitness directly reports fitness (bypasses aggregator)
-func (r *Registry) ReportFitness(id SpeciesID, evalID uint64, fitnessVal float64) {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
-
-	if !ok {
-		return
-	}
-	ts.Engine.CompleteEvaluation(genetic.EvalID(evalID), fitnessVal)
-}
-
-// Stats returns population statistics
+// Stats returns a lock-free statistics snapshot
 func (r *Registry) Stats(id SpeciesID) Stats {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
-
-	if !ok {
+	ts := r.get(id)
+	if ts == nil {
 		return Stats{}
 	}
 	return ts.Stats()
 }
 
-// SaveAll persists all populations
+// SaveAll persists every registered population
 func (r *Registry) SaveAll() error {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+	if r.store == nil {
+		return nil
+	}
 
 	var lastErr error
-	for _, ts := range r.species {
-		pool := ts.Engine.GetPoolSnapshot()
-		if pool == nil {
+	for i := range r.slots {
+		ts := r.slots[i].Load()
+		if ts == nil {
 			continue
 		}
-
-		dto := persistence.FromPool(pool)
-		if err := r.persistence.Save(ts.Config.Name, dto); err != nil {
+		if err := r.store.Save(ts.Config.Name, persistence.FromPool(ts.Engine.Snapshot())); err != nil {
 			lastErr = err
 		}
 	}
 	return lastErr
 }
 
-// GetTracker returns tracker for direct access (testing, telemetry)
-func (r *Registry) GetTracker(id SpeciesID) *TrackedSpecies {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	return r.species[id]
-}
-
-// SampleScout returns a stratified probe genotype for evaluation.
-func (r *Registry) SampleScout(id SpeciesID) ([]float64, uint64) {
-	r.mu.RLock()
-	ts, ok := r.species[id]
-	r.mu.RUnlock()
-
-	if !ok {
-		return nil, 0
-	}
-	return ts.SampleScout()
-}
-
+func (r *Registry) GetTracker(id SpeciesID) *TrackedSpecies { return r.get(id) }

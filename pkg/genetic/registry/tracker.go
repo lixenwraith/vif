@@ -11,224 +11,190 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/tracking"
 )
 
-// TrackedSpecies manages evolution for a single species
+// TrackedSpecies owns the engine and optional metric pipeline for one species
 type TrackedSpecies struct {
-	pool *tracking.CollectorPool
-
 	Config     SpeciesConfig
 	Engine     *genetic.StreamingEngine[[]float64, float64]
 	Aggregator fitness.Aggregator
 
-	active   map[uint64]*activeEval
-	activeMu sync.RWMutex
+	started atomic.Bool
 
-	// Round-robin cursor for scout bin stratification
-	probeCounter atomic.Uint64
+	probeMu      sync.Mutex
+	probeRng     *rand.Rand
+	probeCounter uint64
+
+	trackMu sync.Mutex
+	active  map[uint64]tracking.Collector
+	pool    *tracking.CollectorPool
 }
 
-type activeEval struct {
-	collector tracking.Collector
-	startTime time.Time
-	evalID    uint64
-}
-
-// NewTrackedSpecies creates a tracker with configured engine
 func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecies {
-	perturbator := &genetic.BoundedPerturbator{
-		Bounds:            cfg.Bounds,
-		StandardDeviation: cfg.PerturbationStdDev,
+	engineCfg := genetic.DefaultStreamingConfig()
+	if cfg.EngineConfig != nil {
+		engineCfg = *cfg.EngineConfig
+	}
+	if cfg.PerturbationStdDev > 0 {
+		engineCfg.PerturbationStrength = cfg.PerturbationStdDev
 	}
 
+	// Pin the seed so engine and probe streams are jointly reproducible
+	if engineCfg.Seed == 0 {
+		engineCfg.Seed = rand.Uint64()
+	}
+
+	bounds := cfg.Bounds
 	initializer := func(rng *rand.Rand) []float64 {
 		g := make([]float64, cfg.GeneCount)
-		for i, b := range cfg.Bounds {
-			if i < cfg.GeneCount {
-				g[i] = b.Min + rng.Float64()*(b.Max-b.Min)
+		for i := range g {
+			if i < len(bounds) {
+				g[i] = bounds[i].Min + rng.Float64()*(bounds[i].Max-bounds[i].Min)
 			}
 		}
 		return g
 	}
 
-	selector := &genetic.TournamentSelector[[]float64, float64]{
-		TournamentSize:  3,
-		WithReplacement: true,
-	}
-
-	combiner := &genetic.UniformCombiner[[]float64, float64, float64]{
-		MixProbability: 0.5,
-	}
-
-	engineCfg := genetic.DefaultStreamingConfig()
-	if cfg.EngineConfig != nil {
-		engineCfg = *cfg.EngineConfig
-	}
-
-	engine := genetic.NewStreamingEngine(
-		initializer,
-		selector,
-		combiner,
-		perturbator,
-		engineCfg,
-	)
-
 	return &TrackedSpecies{
 		Config:     cfg,
-		Engine:     engine,
 		Aggregator: agg,
-		active:     make(map[uint64]*activeEval),
-		pool:       tracking.NewCollectorPool(32),
+		probeRng:   rand.New(rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)),
+		Engine: genetic.NewStreamingEngine[[]float64, float64](
+			initializer,
+			&genetic.TournamentSelector[[]float64, float64]{TournamentSize: cfg.TournamentSize},
+			&genetic.UniformCombiner[[]float64, float64, float64]{MixProbability: cfg.MixProbability},
+			&genetic.BoundedPerturbator{Bounds: bounds, Boundary: cfg.Boundary},
+			genetic.SliceCloner[[]float64, float64]{},
+			engineCfg,
+		),
 	}
 }
 
-// Sample returns genotype and evaluation ID
+func (ts *TrackedSpecies) Start() {
+	ts.Engine.Start()
+	ts.started.Store(true)
+}
+
+func (ts *TrackedSpecies) Stop() {
+	ts.Engine.Stop()
+	ts.started.Store(false)
+}
+
+func (ts *TrackedSpecies) Started() bool { return ts.started.Load() }
+
+// Sample returns a genotype and evaluation id, falling back to bound midpoints
+// with a zero id when the engine is stopped
 func (ts *TrackedSpecies) Sample() ([]float64, uint64) {
-	samples := ts.Engine.SamplePopulation(1)
-	if len(samples) == 0 {
-		g := make([]float64, ts.Config.GeneCount)
-		for i, b := range ts.Config.Bounds {
-			g[i] = (b.Min + b.Max) / 2
-		}
-		return g, 0
+	g, id := ts.Engine.Propose()
+	if id == 0 {
+		return ts.midpoint(), 0
+	}
+	return g, uint64(id)
+}
+
+// SampleScout synthesizes a probe genotype. gene[0] is stratified round-robin
+// across ProbeBins (bin center); remaining genes are uniform within bounds
+func (ts *TrackedSpecies) SampleScout() ([]float64, uint64) {
+	n := ts.Config.GeneCount
+	if n == 0 || len(ts.Config.Bounds) == 0 || !ts.started.Load() {
+		return nil, 0
 	}
 
-	evalID := ts.Engine.BeginEvaluation(samples[0])
-	return samples[0], uint64(evalID)
+	g := make([]float64, n)
+
+	ts.probeMu.Lock()
+	for i := 0; i < n && i < len(ts.Config.Bounds); i++ {
+		b := ts.Config.Bounds[i]
+		g[i] = b.Min + ts.probeRng.Float64()*(b.Max-b.Min)
+	}
+	if bins := ts.Config.ProbeBins; bins > 0 {
+		bin := int(ts.probeCounter % uint64(bins))
+		ts.probeCounter++
+		g[0] = ts.Config.Bounds[0].BinCenter(bin, bins)
+	}
+	ts.probeMu.Unlock()
+
+	return g, uint64(ts.Engine.BeginEvaluation(g))
+}
+
+func (ts *TrackedSpecies) midpoint() []float64 {
+	g := make([]float64, ts.Config.GeneCount)
+	for i := range g {
+		if i < len(ts.Config.Bounds) {
+			g[i] = (ts.Config.Bounds[i].Min + ts.Config.Bounds[i].Max) / 2
+		}
+	}
+	return g
 }
 
 // BeginTracking starts metric collection for an evaluation
 func (ts *TrackedSpecies) BeginTracking(evalID uint64) tracking.Collector {
-	var collector tracking.Collector
+	ts.trackMu.Lock()
+	defer ts.trackMu.Unlock()
+
+	if ts.pool == nil {
+		ts.pool = tracking.NewCollectorPool(16)
+		ts.active = make(map[uint64]tracking.Collector, 16)
+	}
+
+	var c tracking.Collector
 	if ts.Config.IsComposite {
-		collector = ts.pool.AcquireComposite()
+		c = ts.pool.AcquireComposite()
 	} else {
-		collector = ts.pool.AcquireStandard()
+		c = ts.pool.AcquireStandard()
 	}
-
-	ts.activeMu.Lock()
-	ts.active[evalID] = &activeEval{
-		evalID:    evalID,
-		collector: collector,
-		startTime: time.Now(),
-	}
-	ts.activeMu.Unlock()
-
-	return collector
+	ts.active[evalID] = c
+	return c
 }
 
-// CompleteTracking finalizes and reports fitness
-func (ts *TrackedSpecies) CompleteTracking(evalID uint64, deathCondition tracking.MetricBundle, ctx fitness.Context) {
-	ts.activeMu.Lock()
-	active, ok := ts.active[evalID]
-	if ok {
-		delete(ts.active, evalID)
+func (ts *TrackedSpecies) CollectMetrics(evalID uint64, m tracking.MetricBundle, dt time.Duration) {
+	ts.trackMu.Lock()
+	c := ts.active[evalID]
+	ts.trackMu.Unlock()
+
+	if c != nil {
+		c.Collect(m, dt)
 	}
-	ts.activeMu.Unlock()
+}
+
+// CompleteTracking finalizes collection and reports aggregated fitness.
+// A nil aggregator abandons the evaluation rather than scoring it zero
+func (ts *TrackedSpecies) CompleteTracking(evalID uint64, death tracking.MetricBundle, ctx fitness.Context) {
+	ts.trackMu.Lock()
+	c, ok := ts.active[evalID]
+	delete(ts.active, evalID)
+	ts.trackMu.Unlock()
 
 	if !ok {
 		return
 	}
 
-	metrics := active.collector.Finalize(deathCondition)
-
-	var fitnessVal float64
-	if ts.Aggregator != nil {
-		fitnessVal = ts.Aggregator.Calculate(metrics, ctx)
-	}
-
-	ts.Engine.CompleteEvaluation(genetic.EvalID(evalID), fitnessVal)
-
-	// Return collector to pool
-	if ts.Config.IsComposite {
-		if c, ok := active.collector.(*tracking.CompositeCollector); ok {
-			ts.pool.ReleaseComposite(c)
-		}
+	metrics := c.Finalize(death)
+	if ts.Aggregator == nil {
+		ts.Engine.AbandonEvaluation(genetic.EvalID(evalID))
 	} else {
-		if c, ok := active.collector.(*tracking.StandardCollector); ok {
-			ts.pool.ReleaseStandard(c)
-		}
+		ts.Engine.CompleteEvaluation(genetic.EvalID(evalID), ts.Aggregator.Calculate(metrics, ctx))
 	}
+
+	ts.trackMu.Lock()
+	switch v := c.(type) {
+	case *tracking.CompositeCollector:
+		ts.pool.ReleaseComposite(v)
+	case *tracking.StandardCollector:
+		ts.pool.ReleaseStandard(v)
+	}
+	ts.trackMu.Unlock()
 }
 
-// CollectMetrics pushes metrics to active evaluation
-func (ts *TrackedSpecies) CollectMetrics(evalID uint64, metrics tracking.MetricBundle, dt time.Duration) {
-	ts.activeMu.RLock()
-	active, ok := ts.active[evalID]
-	ts.activeMu.RUnlock()
-
-	if ok {
-		active.collector.Collect(metrics, dt)
-	}
-}
-
-// Stats returns population statistics
 func (ts *TrackedSpecies) Stats() Stats {
-	best, worst, avg, _ := ts.Engine.PoolStats()
+	s := ts.Engine.Stats()
 	return Stats{
-		Generation:   ts.Engine.Generation(),
-		BestFitness:  best,
-		WorstFitness: worst,
-		AvgFitness:   avg,
-		PendingCount: ts.Engine.PendingCount(),
-		TotalEvals:   ts.Engine.EvaluationsStarted(),
+		Generation:   s.Generation,
+		BestFitness:  s.BestScore,
+		WorstFitness: s.WorstScore,
+		AvgFitness:   s.AverageScore,
+		Diversity:    s.Diversity,
+		PoolSize:     s.Size,
+		PendingCount: s.Pending,
+		TotalEvals:   s.Evaluations,
+		Evicted:      s.Evicted,
 	}
 }
-
-// Start begins the evolution engine
-func (ts *TrackedSpecies) Start() {
-	ts.Engine.Start()
-}
-
-// Stop halts the evolution engine
-func (ts *TrackedSpecies) Stop() {
-	ts.Engine.Stop()
-}
-
-// AcquireCollector gets a standard collector from pool
-func (ts *TrackedSpecies) AcquireCollector() *tracking.StandardCollector {
-	return ts.pool.AcquireStandard()
-}
-
-// ReleaseCollector returns standard collector to pool
-func (ts *TrackedSpecies) ReleaseCollector(c *tracking.StandardCollector) {
-	ts.pool.ReleaseStandard(c)
-}
-
-// AcquireCompositeCollector gets a composite collector from pool
-func (ts *TrackedSpecies) AcquireCompositeCollector() *tracking.CompositeCollector {
-	return ts.pool.AcquireComposite()
-}
-
-// ReleaseCompositeCollector returns composite collector to pool
-func (ts *TrackedSpecies) ReleaseCompositeCollector(c *tracking.CompositeCollector) {
-	ts.pool.ReleaseComposite(c)
-}
-
-// SampleScout synthesizes a probe genotype and registers it for evaluation.
-// gene[0] is stratified round-robin across ProbeBins (bin center); remaining
-// genes are uniform within bounds. The probe enters the normal generation pool
-// via BeginEvaluation and survives only if its fitness is competitive.
-// Returns evalID 0 if no genes/bounds are configured.
-func (ts *TrackedSpecies) SampleScout() ([]float64, uint64) {
-	n := ts.Config.GeneCount
-	if n == 0 || len(ts.Config.Bounds) == 0 {
-		return nil, 0
-	}
-
-	g := make([]float64, n)
-	for i := 0; i < n && i < len(ts.Config.Bounds); i++ {
-		b := ts.Config.Bounds[i]
-		g[i] = b.Min + rand.Float64()*(b.Max-b.Min)
-	}
-
-	// Stratify gene[0] to the next bin center; falls back to the uniform draw above
-	if bins := ts.Config.ProbeBins; bins > 0 {
-		b := ts.Config.Bounds[0]
-		idx := ts.probeCounter.Add(1) - 1
-		bin := int(idx % uint64(bins))
-		g[0] = b.Min + (float64(bin)+0.5)/float64(bins)*(b.Max-b.Min)
-	}
-
-	evalID := ts.Engine.BeginEvaluation(g)
-	return g, uint64(evalID)
-}
-

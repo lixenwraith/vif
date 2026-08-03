@@ -69,9 +69,16 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 				s.enabled = payload.Enabled
 			}
 		}
+		return
 	}
 
 	if !s.enabled {
+		// Release GA evaluations for spawn requests dropped while disabled
+		if ev.Type == event.EventEyeSpawnRequest {
+			if payload, ok := ev.Payload.(*event.EyeSpawnRequestPayload); ok {
+				s.abandonEval(payload)
+			}
+		}
 		return
 	}
 
@@ -194,6 +201,7 @@ func (s *EyeSystem) Update() {
 
 func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	if int(payload.Type) >= parameter.EyeTypeCount {
+		s.abandonEval(payload)
 		return
 	}
 
@@ -215,6 +223,7 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 			0,
 		)
 		if !found {
+			s.abandonEval(payload)
 			return
 		}
 		headerX = topLeftX + parameter.EyeHeaderOffsetX
@@ -226,6 +235,17 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 
 	s.world.PushEvent(event.EventEyeSpawned, &event.EyeSpawnedPayload{
 		HeaderEntity: headerEntity,
+	})
+}
+
+// abandonEval releases a GA evaluation whose eye never spawned
+func (s *EyeSystem) abandonEval(payload *event.EyeSpawnRequestPayload) {
+	if payload.EvalID == 0 {
+		return
+	}
+	s.world.PushEvent(event.EventGeneticAbandonEval, &event.GeneticAbandonEvalPayload{
+		EvalID:  payload.EvalID,
+		Species: component.SpeciesEye,
 	})
 }
 

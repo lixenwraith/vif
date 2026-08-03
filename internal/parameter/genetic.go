@@ -1,53 +1,70 @@
 package parameter
 
-import "time"
+import (
+	"time"
 
-// Set persistence path constant after existing constants
-const (
-	// GeneticPersistencePath is the directory for population save files
-	GeneticPersistencePath = "./config/genetic"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic"
 )
 
-// Genetic Algorithm - Engine Configuration
+// Genetic Algorithm - Persistence
 const (
-	// GAPoolSize is the number of candidates in each population
-	GAPoolSize = 32
+	GeneticPersistencePath = "./config/genetic"
 
-	// GAEliteCount is preserved best performers per generation
-	GAEliteCount = 4
+	// GeneticAutosaveTicks is the tick period between population saves; 0 disables
+	GeneticAutosaveTicks = 1200
+)
 
-	// GAPerturbationRate is probability of mutation (0.0-1.0)
-	GAPerturbationRate = 0.2
-
-	// GAPerturbationStrength controls mutation intensity (0.0-1.0)
-	GAPerturbationStrength = 0.15
-
-	// GAMaxIterations caps synchronous evolution runs
-	GAMaxIterations = 1000
-
-	// GAParallelism for batch evaluation (unused in streaming)
-	GAParallelism = 4
-
-	// GATournamentSize for selection pressure
-	GATournamentSize = 3
-
-	// GACrossoverMixProbability for uniform crossover
+// Genetic Algorithm - Population
+const (
+	GAPoolSize                = 32
+	GAPerturbationRate        = 0.2
+	GAPerturbationStrength    = 0.15
+	GATournamentSize          = 3
 	GACrossoverMixProbability = 0.5
+	GAParallelism             = 4 // Batch engine only; unused by the streaming path
 
 	// GAScoutRate is the fraction of gateway samples replaced by probe genotypes
-	// covering all phenotype bins (mirrors the route bandit scout wave)
 	GAScoutRate = 0.08
 )
 
-// Genetic Algorithm - Streaming Configuration
+// Genetic Algorithm - Streaming
 const (
-	// GATickBudget is max time for evolution step between frames
-	GATickBudget = 6 * time.Millisecond
+	// GATickBudget caps proposal generation per refill
+	GATickBudget = 400 * time.Microsecond
 
-	// GAOutcomeBufferSize is channel capacity for deferred evaluations
-	GAOutcomeBufferSize = 256
+	GAProposalCapacity = 32
+	GAPendingCapacity  = 1024
 
-	// GAMinOutcomesPerGen triggers evolution after N fitness results
+	// GAMinOutcomesPerGen advances a generation after N fitness reports
 	GAMinOutcomesPerGen = 5
 )
 
+// Genetic Algorithm - Fitness shaping
+const (
+	// GAFitnessDamageRef is the dealt-damage value that saturates the damage term
+	GAFitnessDamageRef = 100.0
+
+	// GAFitnessDamageWeight scales the saturated damage term against proximity (0..1)
+	GAFitnessDamageWeight = 1.0
+)
+
+// GAStreamingConfig returns package defaults overridden by game parameters
+func GAStreamingConfig() genetic.StreamingConfig {
+	c := genetic.DefaultStreamingConfig()
+	c.PoolSize = GAPoolSize
+	c.PerturbationRate = GAPerturbationRate
+	c.PerturbationStrength = GAPerturbationStrength
+	c.TickBudget = GATickBudget
+	c.ProposalCapacity = GAProposalCapacity
+	c.PendingCapacity = GAPendingCapacity
+	c.MinOutcomesPerGen = GAMinOutcomesPerGen
+	return c
+}
+
+// GeneBounds is the interval for gene[0] of the species;
+// decoded to species type via ParameterBounds.Bin. Must match bounds[0] at registration
+var GeneBounds = genetic.ParameterBounds{Min: 0, Max: 1}
+
+// GABoundaryMode folds out-of-range mutations instead of pinning them to a bound,
+// which would over-weight the first and last phenotype bins
+const GABoundaryMode = genetic.BoundaryReflect

@@ -259,16 +259,10 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 		}
 
 		// 1. Resolve phenotype
-		// Phenotype translation: map continuous gene [0.0, 0.99] to discrete EyeType [0..6]
 		eyeType := component.EyeType(subType) // Fallback to base configuration
 		if evalID != 0 && len(genes) > 0 {
-			typeIdx := int(genes[0] * float64(parameter.EyeTypeCount))
-			if typeIdx >= parameter.EyeTypeCount {
-				typeIdx = parameter.EyeTypeCount - 1
-			} else if typeIdx < 0 {
-				typeIdx = 0
-			}
-			eyeType = component.EyeType(typeIdx)
+			eyeType = component.EyeType(
+				parameter.GeneBounds.Bin(genes[0], parameter.EyeTypeCount))
 		}
 
 		// 2. Pop route using the resolved phenotype

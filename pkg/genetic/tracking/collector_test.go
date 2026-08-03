@@ -106,3 +106,17 @@ func TestCollectorPool_Reuse(t *testing.T) {
 		t.Error("expected collector to be reset on acquire")
 	}
 }
+
+func TestStandardCollector_NegativeMax(t *testing.T) {
+	c := NewStandardCollector()
+	c.Collect(MetricBundle{"v": -5.0}, time.Millisecond)
+	c.Collect(MetricBundle{"v": -2.0}, time.Millisecond)
+
+	result := c.Finalize(nil)
+	if result["max_v"] != -2.0 {
+		t.Errorf("expected max -2.0, got %v", result["max_v"])
+	}
+	if result["min_v"] != -5.0 {
+		t.Errorf("expected min -5.0, got %v", result["min_v"])
+	}
+}

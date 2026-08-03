@@ -1,90 +1,82 @@
 package genetic
 
-import (
-	"math/rand/v2"
-)
+import "math/rand/v2"
 
-// --- Core Type Constraints ---
-
-// Solution represents any type that can be used as a solution encoding
-// This is the most general constraint - any type can be a solution
+// Solution is any candidate encoding
 type Solution any
 
-// Numeric constrains types to numeric values for fitness scores
+// Numeric constrains fitness score types
 type Numeric interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 |
 		~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64 |
 		~float32 | ~float64
 }
 
-// --- Core Data Structures ---
-
-// Candidate represents a potential solution with its evaluated quality score
-// S is the solution type, F is the fitness/quality score type
+// Candidate pairs an encoded solution with its evaluated score
 type Candidate[S Solution, F Numeric] struct {
-	// Data holds the encoded solution representation
-	Data S
-	// Score represents the quality/fitness of this solution (higher = better)
+	Data  S
 	Score F
-	// Metadata can store additional information about this candidate
-	Metadata map[string]any
 }
 
-// Pool represents a collection of solution candidates
-// This is the working set of solutions at any given iteration
+// Pool is a scored candidate set. Engines maintain Members sorted by Score descending
 type Pool[S Solution, F Numeric] struct {
-	// Members contains all candidates in this pool
-	Members []Candidate[S, F]
-	// Generation tracks the iteration number this pool represents
+	Members    []Candidate[S, F]
 	Generation int
-	// Stats holds statistical information about this pool
-	Stats PoolStats[F]
+	Stats      PoolStats[F]
 }
 
-// PoolStats contains statistical information about a candidate pool
+// PoolStats is an immutable engine state snapshot
 type PoolStats[F Numeric] struct {
 	BestScore    F
 	WorstScore   F
 	AverageScore F
-	Diversity    float64 // Measure of solution diversity (0-1)
+	Diversity    float64
+	Size         int
+	Generation   int
+	Pending      int
+	Evaluations  uint64
+	Evicted      uint64
 }
 
-// --- Function Types for Flexibility ---
+type (
+	InitializerFunc[S Solution]            func(rng *rand.Rand) S
+	EvaluatorFunc[S Solution, F Numeric]   func(solution S) F
+	TerminationFunc[S Solution, F Numeric] func(pool *Pool[S, F], iteration int) bool
+	DiversityFunc[S Solution, F Numeric]   func(members []Candidate[S, F]) float64
+)
 
-// EvaluatorFunc defines a function that calculates the quality score for a solution
-// This is passed as a function to allow maximum flexibility in fitness calculation
-type EvaluatorFunc[S Solution, F Numeric] func(solution S) F
-
-// InitializerFunc creates an initial solution candidate
-// Used for generating the initial population with various strategies
-type InitializerFunc[S Solution] func(rng *rand.Rand) S
-
-// TerminationFunc determines if the algorithm should stop
-// Returns true when termination criteria are met
-type TerminationFunc[S Solution, F Numeric] func(pool *Pool[S, F], iteration int) bool
-
-// --- Core Operators as Interfaces ---
-
-// Selector defines the selection operator for choosing candidates for reproduction
-// Multiple selection strategies can be implemented (tournament, roulette, rank, etc.)
+// Selector fills dst with parents drawn from members. Implementations must not allocate
 type Selector[S Solution, F Numeric] interface {
-	// Select chooses candidates from the pool for reproduction
-	// The size parameter indicates how many candidates to select
-	Select(pool *Pool[S, F], size int, rng *rand.Rand) []Candidate[S, F]
+	Select(members []Candidate[S, F], dst []Candidate[S, F], rng *rand.Rand)
 }
 
-// Combiner defines the recombination operator for creating new solutions
-// This combines information from parent solutions to create offspring
+// Combiner writes offspring into dst, reusing dst buffers when shape-compatible.
+// Returns the number of entries written
 type Combiner[S Solution, F Numeric] interface {
-	// Combine creates offspring from parent solutions
-	// Returns one or more new solution encodings
-	Combine(parents []Candidate[S, F], rng *rand.Rand) []S
+	Combine(parents []Candidate[S, F], dst []S, rng *rand.Rand) int
 }
 
-// Perturbator defines the mutation operator for introducing variation
-// This makes small random changes to maintain diversity in the solution space
+// Perturbator mutates a solution in place.
+// rate is the per-element probability, strength the magnitude scale
 type Perturbator[S Solution] interface {
-	// Perturb modifies a solution in-place to introduce variation
-	// The rate parameter controls the intensity of perturbation (0-1)
-	Perturb(solution *S, rate float64, rng *rand.Rand)
+	Perturb(solution *S, rate, strength float64, rng *rand.Rand)
 }
+
+// Cloner copies src into dst, reusing dst capacity when possible.
+// Engines require it to separate caller-owned from engine-owned solutions
+type Cloner[S Solution] interface {
+	Clone(dst, src S) S
+}
+
+// SliceCloner implements Cloner for slice-encoded genotypes
+type SliceCloner[S ~[]T, T any] struct{}
+
+func (SliceCloner[S, T]) Clone(dst, src S) S {
+	if cap(dst) < len(src) {
+		dst = make(S, len(src))
+	}
+	dst = dst[:len(src)]
+	copy(dst, src)
+	return dst
+}
+

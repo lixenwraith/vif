@@ -5,374 +5,386 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// EvalID identifies a pending evaluation
+// EvalID identifies an in-flight evaluation; 0 is never issued
 type EvalID uint64
 
-// EvalOutcome contains deferred evaluation result
-type EvalOutcome[F Numeric] struct {
-	ID    EvalID
-	Score F
-}
-
-// StreamingConfig extends EngineConfig with async parameters
-type StreamingConfig struct {
-	EngineConfig
-	TickBudget        time.Duration
-	OutcomeBufferSize int
-	MinOutcomesPerGen int
-}
-
-func DefaultStreamingConfig() StreamingConfig {
-	return StreamingConfig{
-		EngineConfig:      DefaultConfig(),
-		TickBudget:        parameter.GATickBudget,
-		OutcomeBufferSize: parameter.GAOutcomeBufferSize,
-		MinOutcomesPerGen: parameter.GAMinOutcomesPerGen,
-	}
-}
-
-// StreamingEngine provides non-blocking evolution
+// StreamingEngine implements a steady-state (mu+lambda) GA with caller-driven,
+// asynchronous evaluation. Proposals are drawn by the caller, scored out of band,
+// and returned via CompleteEvaluation. All state transitions run on the caller's
+// goroutine under one mutex; there are no background workers.
+//
+// The archive holds only scored candidates, sorted by score descending, and is
+// therefore elitist by construction. Unevaluated offspring live in a separate
+// bounded proposal queue and never affect statistics or selection.
 type StreamingEngine[S Solution, F Numeric] struct {
 	initializer InitializerFunc[S]
 	selector    Selector[S, F]
 	combiner    Combiner[S, F]
 	perturbator Perturbator[S]
+	cloner      Cloner[S]
+	diversity   DiversityFunc[S, F]
 
-	config StreamingConfig
+	cfg StreamingConfig
 
-	poolMu      sync.RWMutex
-	rng         *rand.Rand
-	currentPool *Pool[S, F]
+	mu       sync.Mutex
+	rng      *rand.Rand
+	archive  []Candidate[S, F]
+	gen      int
+	outcomes int
+	lastDiv  float64
+	aggBest  F
+	aggWorst F
+	aggAvg   F
+	aggDirty bool
 
-	outcomesChan chan EvalOutcome[F]
-	requestChan  chan struct{}
-	bestChan     chan Candidate[S, F]
+	proposals ring[S]
+	free      []S
+	parents   []Candidate[S, F]
+	offspring []S
+	pending   pendingTable[S]
 
-	pendingMu  sync.RWMutex
-	pending    map[EvalID]*Candidate[S, F]
-	nextEvalID atomic.Uint64
+	nextID  uint64
+	evicted uint64
 
-	stopChan chan struct{}
-	stopOnce sync.Once
-	running  atomic.Bool
+	stats   atomic.Pointer[PoolStats[F]]
+	started atomic.Bool
 }
 
+// NewStreamingEngine builds an engine. cloner may be nil, in which case solutions
+// handed to callers alias engine memory and must be treated as read-only.
 func NewStreamingEngine[S Solution, F Numeric](
 	initializer InitializerFunc[S],
 	selector Selector[S, F],
 	combiner Combiner[S, F],
 	perturbator Perturbator[S],
+	cloner Cloner[S],
 	config StreamingConfig,
 ) *StreamingEngine[S, F] {
-	var rng *rand.Rand
-	if config.Seed == 0 {
-		rng = rand.New(rand.NewPCG(rand.Uint64(), rand.Uint64()))
-	} else {
-		rng = rand.New(rand.NewPCG(config.Seed, config.Seed))
+	cfg := config.Normalize()
+
+	seed := cfg.Seed
+	if seed == 0 {
+		seed = rand.Uint64()
 	}
 
-	return &StreamingEngine[S, F]{
-		initializer:  initializer,
-		selector:     selector,
-		combiner:     combiner,
-		perturbator:  perturbator,
-		config:       config,
-		rng:          rng,
-		outcomesChan: make(chan EvalOutcome[F], config.OutcomeBufferSize),
-		requestChan:  make(chan struct{}, 1),
-		bestChan:     make(chan Candidate[S, F], 1),
-		pending:      make(map[EvalID]*Candidate[S, F]),
-		stopChan:     make(chan struct{}),
+	e := &StreamingEngine[S, F]{
+		initializer: initializer,
+		selector:    selector,
+		combiner:    combiner,
+		perturbator: perturbator,
+		cloner:      cloner,
+		cfg:         cfg,
+		rng:         rand.New(rand.NewPCG(seed, seed^0x9E3779B97F4A7C15)),
+		archive:     make([]Candidate[S, F], 0, cfg.PoolSize),
+		parents:     make([]Candidate[S, F], 2),
+		offspring:   make([]S, 2),
+		free:        make([]S, 0, cfg.PoolSize),
 	}
+	e.proposals.init(cfg.ProposalCapacity)
+	e.pending.init(cfg.PendingCapacity)
+	e.publishLocked()
+	return e
 }
 
+// SetDiversity installs an optional diversity metric, recomputed once per generation
+func (e *StreamingEngine[S, F]) SetDiversity(fn DiversityFunc[S, F]) {
+	e.mu.Lock()
+	e.diversity = fn
+	e.mu.Unlock()
+}
+
+// Start enables proposal issuance and primes the queue. Idempotent and restartable
 func (e *StreamingEngine[S, F]) Start() {
-	if !e.running.CompareAndSwap(false, true) {
+	if !e.started.CompareAndSwap(false, true) {
 		return
 	}
-	// Only initialize if pool doesn't exist (preserves population on restart/reset)
-	if e.currentPool == nil {
-		e.initializePool()
-	}
-	go e.evolutionLoop()
+	e.mu.Lock()
+	e.fillLocked()
+	e.publishLocked()
+	e.mu.Unlock()
 }
 
-func (e *StreamingEngine[S, F]) Stop() {
-	e.stopOnce.Do(func() {
-		if e.running.CompareAndSwap(true, false) {
-			close(e.stopChan)
+// Stop halts proposal issuance; the archive is retained
+func (e *StreamingEngine[S, F]) Stop() { e.started.Store(false) }
+
+func (e *StreamingEngine[S, F]) Running() bool { return e.started.Load() }
+
+// Propose returns the next unevaluated genotype and its evaluation id.
+// The returned value is owned by the caller. A zero id means the engine is stopped
+func (e *StreamingEngine[S, F]) Propose() (S, EvalID) {
+	var zero S
+	if !e.started.Load() {
+		return zero, 0
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	sol, ok := e.proposals.pop()
+	if !ok {
+		e.produceLocked()
+		if sol, ok = e.proposals.pop(); !ok {
+			return zero, 0
 		}
-	})
-}
-
-func (e *StreamingEngine[S, F]) BeginEvaluation(solution S) EvalID {
-	id := EvalID(e.nextEvalID.Add(1))
-
-	candidate := &Candidate[S, F]{
-		Data:     solution,
-		Metadata: make(map[string]any),
 	}
 
-	e.pendingMu.Lock()
-	e.pending[id] = candidate
-	e.pendingMu.Unlock()
+	// Caller receives a recycled buffer; the engine retains the ring slice
+	out := sol
+	if e.cloner != nil {
+		out = e.cloner.Clone(e.takeFreeLocked(), sol)
+	}
+	id := e.beginLocked(sol)
+	e.publishLocked()
+	return out, id
+}
 
+// BeginEvaluation registers an externally built genotype. The engine keeps a copy
+func (e *StreamingEngine[S, F]) BeginEvaluation(sol S) EvalID {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	kept := sol
+	if e.cloner != nil {
+		kept = e.cloner.Clone(e.takeFreeLocked(), sol)
+	}
+	id := e.beginLocked(kept)
+	e.publishLocked()
 	return id
 }
 
+// CompleteEvaluation admits a scored genotype into the archive
 func (e *StreamingEngine[S, F]) CompleteEvaluation(id EvalID, score F) {
-	select {
-	case e.outcomesChan <- EvalOutcome[F]{ID: id, Score: score}:
-	default:
-	}
-}
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-func (e *StreamingEngine[S, F]) GetBestImmediate() (Candidate[S, F], bool) {
-	e.poolMu.RLock()
-	defer e.poolMu.RUnlock()
-
-	if e.currentPool == nil || len(e.currentPool.Members) == 0 {
-		return Candidate[S, F]{}, false
-	}
-
-	best := e.currentPool.Members[0]
-	for _, c := range e.currentPool.Members[1:] {
-		if c.Score > best.Score {
-			best = c
-		}
-	}
-	return best, true
-}
-
-func (e *StreamingEngine[S, F]) SamplePopulation(n int) []S {
-	e.poolMu.RLock()
-	defer e.poolMu.RUnlock()
-
-	if e.currentPool == nil {
-		return nil
-	}
-
-	poolSize := len(e.currentPool.Members)
-	samples := make([]S, 0, n)
-
-	for i := 0; i < n && i < poolSize; i++ {
-		idx := e.rng.IntN(poolSize)
-		samples = append(samples, e.currentPool.Members[idx].Data)
-	}
-
-	return samples
-}
-
-func (e *StreamingEngine[S, F]) ReceiveBest() <-chan Candidate[S, F] {
-	return e.bestChan
-}
-
-func (e *StreamingEngine[S, F]) initializePool() {
-	// Called only from Start() before evolutionLoop goroutine starts,
-	// or from evolutionLoop itself — lock still required since InjectPopulation
-	// can race with the early Start() path if called concurrently
-	e.poolMu.Lock()
-	defer e.poolMu.Unlock()
-
-	candidates := make([]Candidate[S, F], e.config.PoolSize)
-
-	for i := range e.config.PoolSize {
-		candidates[i] = Candidate[S, F]{
-			Data:     e.initializer(e.rng),
-			Score:    F(0),
-			Metadata: make(map[string]any),
-		}
-	}
-
-	e.currentPool = &Pool[S, F]{
-		Members:    candidates,
-		Generation: 0,
-	}
-}
-
-func (e *StreamingEngine[S, F]) evolutionLoop() {
-	completedThisGen := 0
-
-	for {
-		select {
-		case <-e.stopChan:
-			return
-
-		case outcome := <-e.outcomesChan:
-			e.processOutcome(outcome)
-			completedThisGen++
-
-			if completedThisGen >= e.config.MinOutcomesPerGen {
-				e.evolveWithBudget()
-				completedThisGen = 0
-			}
-
-		case <-e.requestChan:
-			if best, ok := e.GetBestImmediate(); ok {
-				select {
-				case e.bestChan <- best:
-				default:
-				}
-			}
-		}
-	}
-}
-
-func (e *StreamingEngine[S, F]) processOutcome(outcome EvalOutcome[F]) {
-	e.pendingMu.Lock()
-	candidate, ok := e.pending[outcome.ID]
-	if ok {
-		candidate.Score = outcome.Score
-		delete(e.pending, outcome.ID)
-	}
-	e.pendingMu.Unlock()
-
+	sol, ok := e.pending.take(id)
 	if !ok {
 		return
 	}
+	e.insertLocked(sol, score)
 
-	e.poolMu.Lock()
-	defer e.poolMu.Unlock()
-
-	worstIdx := 0
-	worstScore := e.currentPool.Members[0].Score
-	for i, c := range e.currentPool.Members {
-		if c.Score < worstScore {
-			worstScore = c.Score
-			worstIdx = i
+	e.outcomes++
+	if e.outcomes >= e.cfg.MinOutcomesPerGen {
+		e.outcomes = 0
+		e.gen++
+		if e.diversity != nil {
+			e.lastDiv = e.diversity(e.archive)
 		}
+		e.fillLocked()
 	}
-
-	if candidate.Score > worstScore {
-		e.currentPool.Members[worstIdx] = *candidate
-	}
+	e.publishLocked()
 }
 
-func (e *StreamingEngine[S, F]) evolveWithBudget() {
-	deadline := time.Now().Add(e.config.TickBudget)
-	maxOffspring := e.config.PoolSize / 4
-
-	e.poolMu.Lock()
-	defer e.poolMu.Unlock()
-
-	for i := 0; i < maxOffspring && time.Now().Before(deadline); i++ {
-		parents := e.selector.Select(e.currentPool, 2, e.rng)
-		offspring := e.combiner.Combine(parents, e.rng)
-
-		for j := range offspring {
-			if e.rng.Float64() < e.config.PerturbationRate {
-				e.perturbator.Perturb(&offspring[j], e.config.PerturbationStrength, e.rng)
-			}
-
-			replaceIdx := e.config.EliteCount + e.rng.IntN(e.config.PoolSize-e.config.EliteCount)
-			e.currentPool.Members[replaceIdx] = Candidate[S, F]{
-				Data:     offspring[j],
-				Score:    F(0),
-				Metadata: make(map[string]any),
-			}
-		}
+// AbandonEvaluation discards an in-flight evaluation without scoring it
+func (e *StreamingEngine[S, F]) AbandonEvaluation(id EvalID) {
+	e.mu.Lock()
+	if sol, ok := e.pending.take(id); ok {
+		e.recycleLocked(sol)
 	}
-
-	e.currentPool.Generation++
+	e.publishLocked()
+	e.mu.Unlock()
 }
 
-// Generation returns current evolution generation
-func (e *StreamingEngine[S, F]) Generation() int {
-	e.poolMu.RLock()
-	defer e.poolMu.RUnlock()
-
-	if e.currentPool == nil {
-		return 0
+// Reset drops in-flight evaluations and queued proposals; archive and generation persist
+func (e *StreamingEngine[S, F]) Reset() {
+	e.mu.Lock()
+	e.pending.clear()
+	e.proposals.clear()
+	e.free = e.free[:0]
+	e.outcomes = 0
+	if e.started.Load() {
+		e.fillLocked()
 	}
-	return e.currentPool.Generation
+	e.publishLocked()
+	e.mu.Unlock()
 }
 
-// PoolStats returns current population statistics
-func (e *StreamingEngine[S, F]) PoolStats() (best, worst, avg F, size int) {
-	e.poolMu.RLock()
-	defer e.poolMu.RUnlock()
+// Stats returns the latest published snapshot without locking
+func (e *StreamingEngine[S, F]) Stats() PoolStats[F] { return *e.stats.Load() }
 
-	if e.currentPool == nil || len(e.currentPool.Members) == 0 {
-		return
-	}
-
-	size = len(e.currentPool.Members)
-	best = e.currentPool.Members[0].Score
-	worst = e.currentPool.Members[0].Score
-	var total F
-
-	for _, c := range e.currentPool.Members {
-		if c.Score > best {
-			best = c.Score
-		}
-		if c.Score < worst {
-			worst = c.Score
-		}
-		total += c.Score
-	}
-
-	avg = total / F(size)
-	return
-}
-
-// PendingCount returns number of evaluations awaiting completion
-func (e *StreamingEngine[S, F]) PendingCount() int {
-	e.pendingMu.RLock()
-	defer e.pendingMu.RUnlock()
-	return len(e.pending)
-}
-
-// EvaluationsStarted returns total evaluations begun (not completed)
+func (e *StreamingEngine[S, F]) Generation() int   { return e.stats.Load().Generation }
+func (e *StreamingEngine[S, F]) PendingCount() int { return e.stats.Load().Pending }
 func (e *StreamingEngine[S, F]) EvaluationsStarted() uint64 {
-	return e.nextEvalID.Load()
+	return e.stats.Load().Evaluations
 }
 
-// GetPoolSnapshot returns a copy of the current population for persistence
-func (e *StreamingEngine[S, F]) GetPoolSnapshot() *Pool[S, F] {
-	e.poolMu.RLock()
-	defer e.poolMu.RUnlock()
+// Best returns a copy of the top archive member
+func (e *StreamingEngine[S, F]) Best() (Candidate[S, F], bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 
-	if e.currentPool == nil {
-		return nil
+	if len(e.archive) == 0 {
+		return Candidate[S, F]{}, false
 	}
-
-	// Return shallow copy (Members slice is shared but candidates are value types)
-	snapshot := &Pool[S, F]{
-		Members:    make([]Candidate[S, F], len(e.currentPool.Members)),
-		Generation: e.currentPool.Generation,
-		Stats:      e.currentPool.Stats,
+	c := e.archive[0]
+	if e.cloner != nil {
+		var zero S
+		c.Data = e.cloner.Clone(zero, c.Data)
 	}
-	copy(snapshot.Members, e.currentPool.Members)
-	return snapshot
+	return c, true
 }
 
-// InjectPopulation replaces the current pool with loaded data
-func (e *StreamingEngine[S, F]) InjectPopulation(candidates []Candidate[S, F], generation int) {
-	if len(candidates) == 0 {
+// Snapshot returns a deep copy of the archive for persistence
+func (e *StreamingEngine[S, F]) Snapshot() *Pool[S, F] {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	p := &Pool[S, F]{
+		Members:    make([]Candidate[S, F], len(e.archive)),
+		Generation: e.gen,
+		Stats:      *e.stats.Load(),
+	}
+	for i, c := range e.archive {
+		if e.cloner != nil {
+			var zero S
+			c.Data = e.cloner.Clone(zero, c.Data)
+		}
+		p.Members[i] = c
+	}
+	return p
+}
+
+// Inject replaces the archive with persisted candidates and takes ownership of
+// them. Queued proposals derived from the old archive are discarded
+func (e *StreamingEngine[S, F]) Inject(candidates []Candidate[S, F], generation int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	for i := range e.archive {
+		e.recycleLocked(e.archive[i].Data)
+	}
+	e.archive = e.archive[:0]
+	e.aggDirty = true
+
+	for _, c := range candidates {
+		e.insertLocked(c.Data, c.Score)
+	}
+	e.gen = generation
+
+	e.proposals.clear()
+	if e.started.Load() {
+		e.fillLocked()
+	}
+	e.publishLocked()
+}
+
+// --- internals (mu held) ---
+
+func (e *StreamingEngine[S, F]) beginLocked(sol S) EvalID {
+	e.nextID++
+	id := EvalID(e.nextID)
+	if old, hit := e.pending.put(id, sol); hit {
+		e.evicted++
+		e.recycleLocked(old)
+	}
+	return id
+}
+
+// insertLocked places a scored candidate into the descending archive,
+// evicting the tail when full
+func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
+	n := len(e.archive)
+	if n == cap(e.archive) {
+		if score <= e.archive[n-1].Score {
+			e.recycleLocked(sol)
+			return
+		}
+		e.recycleLocked(e.archive[n-1].Data)
+		n--
+		e.archive = e.archive[:n]
+	}
+
+	idx := n
+	for idx > 0 && e.archive[idx-1].Score < score {
+		idx--
+	}
+	e.archive = e.archive[:n+1]
+	copy(e.archive[idx+1:], e.archive[idx:n])
+	e.archive[idx] = Candidate[S, F]{Data: sol, Score: score}
+	e.aggDirty = true
+}
+
+// fillLocked tops up the proposal queue within the tick budget
+func (e *StreamingEngine[S, F]) fillLocked() {
+	if e.proposals.free() == 0 {
 		return
 	}
+	deadline := time.Now().Add(e.cfg.TickBudget)
+	for i := 0; e.proposals.free() > 0; i++ {
+		if !e.produceLocked() {
+			return
+		}
+		if i&3 == 3 && time.Now().After(deadline) {
+			return
+		}
+	}
+}
 
-	// Resize to match config pool size
-	poolSize := e.config.PoolSize
-	if len(candidates) > poolSize {
-		candidates = candidates[:poolSize]
+// produceLocked queues one offspring batch, or a random genotype while the
+// archive is too small for selection. Reports whether anything was queued
+func (e *StreamingEngine[S, F]) produceLocked() bool {
+	if len(e.archive) < 2 {
+		return e.proposals.push(e.initializer(e.rng))
 	}
 
-	// Pad with random if insufficient
-	for len(candidates) < poolSize {
-		candidates = append(candidates, Candidate[S, F]{
-			Data:     e.initializer(e.rng),
-			Score:    F(0),
-			Metadata: make(map[string]any),
-		})
-	}
+	e.selector.Select(e.archive, e.parents, e.rng)
+	n := e.combiner.Combine(e.parents, e.offspring, e.rng)
 
-	e.currentPool = &Pool[S, F]{
-		Members:    candidates,
-		Generation: generation,
+	pushed := false
+	for j := range n {
+		e.perturbator.Perturb(&e.offspring[j],
+			e.cfg.PerturbationRate, e.cfg.PerturbationStrength, e.rng)
+		if !e.proposals.push(e.offspring[j]) {
+			return pushed
+		}
+		pushed = true
+		e.offspring[j] = e.takeFreeLocked()
 	}
+	return pushed
+}
+
+func (e *StreamingEngine[S, F]) publishLocked() {
+	if e.aggDirty {
+		e.aggDirty = false
+		e.aggBest, e.aggWorst, e.aggAvg = 0, 0, 0
+		if n := len(e.archive); n > 0 {
+			var total F
+			for i := range e.archive {
+				total += e.archive[i].Score
+			}
+			e.aggBest, e.aggWorst, e.aggAvg = e.archive[0].Score, e.archive[n-1].Score, total/F(n)
+		}
+	}
+	e.stats.Store(&PoolStats[F]{
+		BestScore:    e.aggBest,
+		WorstScore:   e.aggWorst,
+		AverageScore: e.aggAvg,
+		Diversity:    e.lastDiv,
+		Size:         len(e.archive),
+		Generation:   e.gen,
+		Pending:      e.pending.live,
+		Evaluations:  e.nextID,
+		Evicted:      e.evicted,
+	})
+}
+
+func (e *StreamingEngine[S, F]) recycleLocked(sol S) {
+	if e.cloner == nil || len(e.free) == cap(e.free) {
+		return
+	}
+	e.free = append(e.free, sol)
+}
+
+func (e *StreamingEngine[S, F]) takeFreeLocked() S {
+	var zero S
+	n := len(e.free)
+	if n == 0 {
+		return zero
+	}
+	v := e.free[n-1]
+	e.free[n-1] = zero
+	e.free = e.free[:n-1]
+	return v
 }

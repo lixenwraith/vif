@@ -531,6 +531,8 @@ const (
 
 	// EventGeneticRegisterSpecies (GeneticRegisterSpeciesPayload) dynamically registers a species for evolution
 	EventGeneticRegisterSpecies
+	// EventGeneticAbandonEval (GeneticAbandonEvalPayload) abandons evaluation of the species
+	EventGeneticAbandonEval
 
 	// --- Debug ---
 
