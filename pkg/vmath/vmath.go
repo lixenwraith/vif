@@ -7,6 +7,12 @@
 // sanctioned cell -> precise-position conversion; it applies the half-cell
 // offset that keeps physics and rendering aligned.
 //
+// Several Q32.32 entry points evaluate in float64 internally. Hardware
+// SQRT/DIV and the FPU pipeline beat multi-step int64 emulation for square
+// roots, division, magnitudes, dot products, ellipse tests and atan2; only
+// plain multiply and comparison are faster in fixed point, which is why Mul
+// and the sin/cos LUTs stay integer. Signatures and results are unchanged.
+//
 // The package depends only on the standard library.
 package vmath
 
@@ -22,6 +28,11 @@ const (
 
 	// ScaleF is Scale as float64 for conversion helpers
 	ScaleF = float64(Scale)
+
+	// invScale and invScaleSq rescale float64 products back to Q32.32.
+	// Both are exact powers of two, so the rescale introduces no error.
+	invScale   = 1.0 / ScaleF
+	invScaleSq = invScale * invScale
 
 	// CellCenter is the offset from a cell origin to its center (0.5)
 	CellCenter int64 = Half

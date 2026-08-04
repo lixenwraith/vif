@@ -30,7 +30,7 @@ func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset i
 // soft builds an inter-species repulsion profile (scatter, not combat)
 func soft(impactor, target Mass) physics.CollisionProfile {
 	return physics.CollisionProfile{
-		MassRatio:        massRatio(impactor, target),
+		MassRatio:        softRatio(impactor, target),
 		ImpulseMin:       parameter.SoftCollisionImpulseMin,
 		ImpulseMax:       parameter.SoftCollisionImpulseMax,
 		AngleVariance:    parameter.SoftCollisionAngleVar,
@@ -78,16 +78,16 @@ var (
 
 // --- Explosion (also used by missile impact) ---
 // Additive throughout: explosions accumulate rather than redirect.
-// Immunity is the hit-flash window, used for per-blast deduplication.
+// Kinetic immunity gates the knockback; damage dedup is separate and uses RemainingDamageImmunity.
 
 var (
 	ExplosionToDrain     = member(MassExplosion, MassDrain, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToSwarm     = member(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, parameter.CombatHitFlashDuration)
-	ExplosionToQuasar    = member(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, parameter.CombatHitFlashDuration)
-	ExplosionToStorm     = member(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, parameter.CombatHitFlashDuration)
-	ExplosionToSnakeHead = kinetic(MassExplosion, MassSnakeHead, physics.ImpulseAdditive, parameter.DrainDeflectAngleVar, OffsetInfluenceDefault, parameter.CombatHitFlashDuration)
-	ExplosionToSnakeBody = member(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, parameter.CombatHitFlashDuration)
-	ExplosionToEye       = member(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, parameter.CombatHitFlashDuration)
+	ExplosionToSwarm     = member(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ExplosionToQuasar    = member(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ExplosionToStorm     = member(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ExplosionToSnakeHead = kinetic(MassExplosion, MassSnakeHead, physics.ImpulseAdditive, parameter.DrainDeflectAngleVar, OffsetInfluenceDefault, parameter.CombatKineticImmunityDuration)
+	ExplosionToSnakeBody = member(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ExplosionToEye       = member(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
 )
 
 // --- Dust ---

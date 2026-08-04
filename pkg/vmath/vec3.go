@@ -22,12 +22,16 @@ func V3Scale(v Vec3, s int64) Vec3 {
 	return Vec3{Mul(v.X, s), Mul(v.Y, s), Mul(v.Z, s)}
 }
 
+// V3Dot and V3MagSq evaluate in float64; three Mul calls are slower
 func V3Dot(a, b Vec3) int64 {
-	return Mul(a.X, b.X) + Mul(a.Y, b.Y) + Mul(a.Z, b.Z)
+	return int64((float64(a.X)*float64(b.X) +
+		float64(a.Y)*float64(b.Y) +
+		float64(a.Z)*float64(b.Z)) * invScale)
 }
 
 func V3MagSq(v Vec3) int64 {
-	return Mul(v.X, v.X) + Mul(v.Y, v.Y) + Mul(v.Z, v.Z)
+	fx, fy, fz := float64(v.X), float64(v.Y), float64(v.Z)
+	return int64((fx*fx + fy*fy + fz*fz) * invScale)
 }
 
 func V3Mag(v Vec3) int64 {

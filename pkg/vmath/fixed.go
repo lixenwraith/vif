@@ -98,7 +98,8 @@ func DistanceApprox(dx, dy int64) int64 {
 	return dx + (dy >> 2) + (dy >> 3)
 }
 
-// Sqrt uses hardware SQRT instructions (~300x faster than iterative)
+// Sqrt returns the square root in Q32.32
+// Evaluated in float64: hardware SQRT is ~300x faster than iterative integer
 func Sqrt(x int64) int64 {
 	if x <= 0 {
 		return 0

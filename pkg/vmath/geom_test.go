@@ -386,3 +386,45 @@ func TestArcFixedFloatParity(t *testing.T) {
 		}
 	}
 }
+
+func TestScaleCircularParity(t *testing.T) {
+	// Aspect correction must agree between the fixed and float paths, or
+	// physics and rendering drift on the Y axis
+	for _, f := range []float64{0, 1, 2.5, -3.75, 100} {
+		v := FromFloat(f)
+		if got, want := ToFloat(ScaleToCircular(v)), ScaleToCircularF(f); math.Abs(got-want) > 1e-9 {
+			t.Errorf("ScaleToCircular(%v) = %v, want %v", f, got, want)
+		}
+		if got, want := ToFloat(ScaleFromCircular(v)), ScaleFromCircularF(f); math.Abs(got-want) > 1e-9 {
+			t.Errorf("ScaleFromCircular(%v) = %v, want %v", f, got, want)
+		}
+	}
+}
+
+func TestEllipseContainsPointSymmetric(t *testing.T) {
+	// Grid-index containment takes cell indices on both sides, so the result
+	// must be symmetric about the center; asymmetry means a half-cell offset
+	// leaked into the conversion
+	invRx, invRy := EllipseInvRadiiSq(FromFloat(4), FromFloat(2))
+	const cx, cy = 20, 20
+	for dy := -4; dy <= 4; dy++ {
+		for dx := -6; dx <= 6; dx++ {
+			a := EllipseContainsPoint(cx+dx, cy+dy, cx, cy, invRx, invRy)
+			b := EllipseContainsPoint(cx-dx, cy-dy, cx, cy, invRx, invRy)
+			if a != b {
+				t.Fatalf("asymmetric at offset (%d,%d): %v vs %v", dx, dy, a, b)
+			}
+		}
+	}
+}
+
+func TestDotProductPerpendicularExact(t *testing.T) {
+	rng := NewFastRand(0xD07)
+	for range 20000 {
+		x, y := signedRand(rng, 1<<34), signedRand(rng, 1<<34)
+		px, py := Perpendicular(x, y)
+		if d := DotProduct(x, y, px, py); d != 0 {
+			t.Fatalf("DotProduct(%d,%d,perp) = %d, want exact 0", x, y, d)
+		}
+	}
+}

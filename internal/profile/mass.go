@@ -28,8 +28,9 @@ const (
 	MassExplosion Mass = vmath.Scale * 10
 	MassStorm     Mass = vmath.Scale * 100
 
-	// MassPylon is a soft-collision source only; the pylon is stationary and
-	// is never a knockback target. Reserved for future cursor pushback.
+	// MassPylon marks the pylon effectively immovable. It is a soft-collision
+	// source only, never a knockback target, and SoftRatioMax is what actually
+	// bounds its push. Reserved for future cursor pushback.
 	MassPylon Mass = vmath.Scale * 1000
 )
 
@@ -38,7 +39,22 @@ const (
 const (
 	MassRatioMin = vmath.Scale / 64
 	MassRatioMax = vmath.Scale * 16
+
+	// SoftRatioMax bounds inter-species scatter. Soft collision separates
+	// stacked entities rather than transferring momentum, so a heavy source
+	// must not launch a light target. Replaces the fourth-root dampening
+	// previously applied in SoftCollisionSystem.
+	SoftRatioMax = vmath.Scale * 2
 )
+
+// softRatio is massRatio under the tighter scatter bound
+func softRatio(impactor, target Mass) int64 {
+	r := massRatio(impactor, target)
+	if r > SoftRatioMax {
+		return SoftRatioMax
+	}
+	return r
+}
 
 // massRatio returns impactor/target mass clamped to the usable band
 func massRatio(impactor, target Mass) int64 {

@@ -6,10 +6,10 @@ package vmath
 // EllipseDistSq returns normalized squared distance for ellipse containment
 // Result <= Scale means point is inside ellipse
 // invRxSq and invRySq are precomputed as Scale / (radius * radius)
+// Evaluated in float64: the four-Mul fixed path benchmarks ~6.7x slower
 func EllipseDistSq(dx, dy, invRxSq, invRySq int64) int64 {
-	dxSq := Mul(dx, dx)
-	dySq := Mul(dy, dy)
-	return Mul(dxSq, invRxSq) + Mul(dySq, invRySq)
+	fdx, fdy := float64(dx), float64(dy)
+	return int64((fdx*fdx*float64(invRxSq) + fdy*fdy*float64(invRySq)) * invScaleSq)
 }
 
 // EllipseContains returns true if point (dx, dy) is inside or on ellipse boundary
@@ -49,8 +49,10 @@ func ScaleFromCircular(dy int64) int64 {
 
 // CircleDistSq returns squared distance for circular containment
 // Use after ScaleToCircular on Y to convert ellipse to circle check
+// Evaluated in float64 for the same reason as EllipseDistSq
 func CircleDistSq(dx, dy int64) int64 {
-	return Mul(dx, dx) + Mul(dy, dy)
+	fdx, fdy := float64(dx), float64(dy)
+	return int64((fdx*fdx + fdy*fdy) * invScale)
 }
 
 // CircleContains returns true if point is inside circle of given radius
