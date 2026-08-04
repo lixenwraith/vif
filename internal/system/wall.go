@@ -8,10 +8,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/maze"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/pattern"
+	"github.com/lixenwraith/vi-fighter/pkg/maze"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -501,7 +501,7 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 	var fadeoutTargets []core.Entity
 	var silentTargets []core.Entity
 
-	wallEntities := s.world.Components.Wall.GetAllEntities()
+	wallEntities := s.world.Components.Wall.Entities()
 	for _, entity := range wallEntities {
 		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
@@ -513,12 +513,12 @@ func (s *WallSystem) handleDespawn(payload *event.WallDespawnRequestPayload) {
 			continue
 		}
 
-		wall, ok := s.world.Components.Wall.GetComponent(entity)
+		wall, ok := s.world.Components.Wall.GetPtr(entity)
 		if !ok {
 			continue
 		}
 
-		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
+		s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
 	}
 
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
@@ -548,15 +548,15 @@ func (s *WallSystem) despawnAllWalls() {
 	var fadeoutTargets []core.Entity
 	var silentTargets []core.Entity
 
-	wallEntities := s.world.Components.Wall.GetAllEntities()
+	wallEntities := s.world.Components.Wall.Entities()
 	for _, entity := range wallEntities {
-		wall, ok := s.world.Components.Wall.GetComponent(entity)
+		wall, ok := s.world.Components.Wall.GetPtr(entity)
 		if !ok {
 			silentTargets = append(silentTargets, entity)
 			continue
 		}
 
-		s.classifyWallForDespawn(entity, wall, &flashTargets, &fadeoutTargets, &silentTargets)
+		s.classifyWallForDespawn(entity, *wall, &flashTargets, &fadeoutTargets, &silentTargets)
 	}
 
 	count := len(flashTargets) + len(fadeoutTargets) + len(silentTargets)
@@ -609,7 +609,7 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 	width := max(1, payload.Width)
 	height := max(1, payload.Height)
 
-	wallEntities := s.world.Components.Wall.GetAllEntities()
+	wallEntities := s.world.Components.Wall.Entities()
 	for _, entity := range wallEntities {
 		pos, ok := s.world.Positions.GetPosition(entity)
 		if !ok {
@@ -621,14 +621,13 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 			continue
 		}
 
-		wall, ok := s.world.Components.Wall.GetComponent(entity)
+		wall, ok := s.world.Components.Wall.GetPtr(entity)
 		if !ok {
 			continue
 		}
 
 		wasBlocking := wall.BlockMask != component.WallBlockNone
 		wall.BlockMask = payload.BlockMask
-		s.world.Components.Wall.SetComponent(entity, wall)
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: pos.X, Y: pos.Y})
@@ -656,9 +655,9 @@ func (s *WallSystem) processPendingPushChecks() {
 func (s *WallSystem) runFullPushCheck() {
 	var pushCount int64
 
-	wallEntities := s.world.Components.Wall.GetAllEntities()
+	wallEntities := s.world.Components.Wall.Entities()
 	for _, wallEntity := range wallEntities {
-		wallComp, ok := s.world.Components.Wall.GetComponent(wallEntity)
+		wallComp, ok := s.world.Components.Wall.GetPtr(wallEntity)
 		if !ok || wallComp.BlockMask == component.WallBlockNone {
 			continue
 		}
@@ -689,8 +688,10 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 	}
 
 	// Check other entities
-	entities := s.world.Positions.GetAllEntityAt(x, y)
-	for _, entity := range entities {
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	for i := range count {
+		entity := entities[i]
 		if entity == cursorEntity {
 			continue
 		}
@@ -909,16 +910,17 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	}
 
 	// Iterate cells in area
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
-			entities := s.world.Positions.GetAllEntityAt(cx, cy)
-			for _, e := range entities {
-				wall, ok := s.world.Components.Wall.GetComponent(e)
+			count := s.world.Positions.GetAllEntitiesAtInto(cx, cy, entities[:])
+			for i := range count {
+				e := entities[i]
+				wall, ok := s.world.Components.Wall.GetPtr(e)
 				if !ok || wall.BoxStyle != style {
 					continue
 				}
 				wall.Rune = s.computeBoxChar(cx, cy, style)
-				s.world.Components.Wall.SetComponent(e, wall)
 			}
 		}
 	}
@@ -930,7 +932,8 @@ func (s *WallSystem) handleDespawnAllSilent() {
 	if len(wallEntities) == 0 {
 		return
 	}
-	// Direct destruction without protection check - death pipeline freezes on large map clears
+	// Detached copy is required because batch destruction mutates Wall.Entities().
+	// Direct destruction bypasses protection; the death pipeline freezes on large map clears.
 	s.world.DestroyEntitiesBatch(wallEntities)
 
 	config := s.world.Resources.Config
@@ -1060,9 +1063,10 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 		return false
 	}
 
-	entities := s.world.Positions.GetAllEntityAt(x, y)
-	for _, e := range entities {
-		if wall, ok := s.world.Components.Wall.GetComponent(e); ok {
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	for i := range count {
+		if wall, ok := s.world.Components.Wall.GetPtr(entities[i]); ok {
 			if wall.BoxStyle == style {
 				return true
 			}
@@ -1086,6 +1090,7 @@ func (s *WallSystem) isPerimeterWall(x, y int, style component.BoxDrawStyle) boo
 func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 	config := s.world.Resources.Config
 	offsets := [4][2]int{{0, -1}, {1, 0}, {0, 1}, {-1, 0}}
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for _, off := range offsets {
 		nx, ny := x+off[0], y+off[1]
@@ -1093,14 +1098,14 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			continue
 		}
 
-		entities := s.world.Positions.GetAllEntityAt(nx, ny)
-		for _, e := range entities {
-			wall, ok := s.world.Components.Wall.GetComponent(e)
+		count := s.world.Positions.GetAllEntitiesAtInto(nx, ny, entities[:])
+		for i := range count {
+			e := entities[i]
+			wall, ok := s.world.Components.Wall.GetPtr(e)
 			if !ok || wall.BoxStyle == component.BoxDrawNone {
 				continue
 			}
 			wall.Rune = s.computeBoxChar(nx, ny, wall.BoxStyle)
-			s.world.Components.Wall.SetComponent(e, wall)
 		}
 	}
 }

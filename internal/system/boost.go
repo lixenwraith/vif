@@ -99,7 +99,7 @@ func (s *BoostSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	cursorEntity := s.world.Resources.Player.Entity
 
-	boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity)
+	boostComp, ok := s.world.Components.Boost.GetPtr(cursorEntity)
 	if !ok || !boostComp.Active {
 		return
 	}
@@ -109,8 +109,6 @@ func (s *BoostSystem) Update() {
 		boostComp.Remaining = 0
 		boostComp.Active = false
 	}
-
-	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 
 	s.statActive.Store(boostComp.Active)
 	s.statRemaining.Store(int64(boostComp.Remaining))
@@ -162,4 +160,3 @@ func (s *BoostSystem) extend(duration time.Duration) {
 
 	s.world.Components.Boost.SetComponent(cursorEntity, boostComp)
 }
-

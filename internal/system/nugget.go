@@ -150,7 +150,7 @@ func (s *NuggetSystem) Update() {
 	}
 
 	// Emit beacon when interval elapses
-	nugget, ok := s.world.Components.Nugget.GetComponent(s.activeNuggetEntity)
+	nugget, ok := s.world.Components.Nugget.GetPtr(s.activeNuggetEntity)
 	if ok {
 		nugget.BeaconRemaining -= dt
 		if nugget.BeaconRemaining <= 0 {
@@ -164,7 +164,6 @@ func (s *NuggetSystem) Update() {
 			}
 			nugget.BeaconRemaining = parameter.NuggetBeaconInterval
 		}
-		s.world.Components.Nugget.SetComponent(s.activeNuggetEntity, nugget)
 	}
 
 	s.statActive.Store(s.activeNuggetEntity != 0)

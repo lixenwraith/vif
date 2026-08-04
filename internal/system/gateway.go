@@ -102,9 +102,9 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 	}
 
 	// Enforce single gateway per anchor
-	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
+	gatewayEntities := s.world.Components.Gateway.Entities()
 	for _, e := range gatewayEntities {
-		if gw, ok := s.world.Components.Gateway.GetComponent(e); ok {
+		if gw, ok := s.world.Components.Gateway.GetPtr(e); ok {
 			if gw.AnchorEntity == anchorEntity {
 				return
 			}
@@ -162,16 +162,20 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 }
 
 func (s *GatewaySystem) handleDespawnRequest(anchorEntity core.Entity) {
-	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
-	for _, e := range gatewayEntities {
-		gw, ok := s.world.Components.Gateway.GetComponent(e)
+	gateways := s.world.Components.Gateway
+	var matched core.Entity
+	for _, e := range gateways.Entities() {
+		gw, ok := gateways.GetPtr(e)
 		if !ok {
 			continue
 		}
 		if gw.AnchorEntity == anchorEntity {
-			s.despawnGateway(e, anchorEntity)
-			return
+			matched = e
+			break
 		}
+	}
+	if matched != 0 {
+		s.despawnGateway(matched, anchorEntity)
 	}
 }
 
@@ -181,12 +185,15 @@ func (s *GatewaySystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	gatewayEntities := s.world.Components.Gateway.GetAllEntities()
+	// despawnGateway destroys the current gateway immediately, so preserve the
+	// tick-start entity order while mutating surviving components in place.
+	gateways := s.world.Components.Gateway
+	gatewayEntities := gateways.GetAllEntities()
 
 	activeCount := 0
 
 	for _, gwEntity := range gatewayEntities {
-		gw, ok := s.world.Components.Gateway.GetComponent(gwEntity)
+		gw, ok := gateways.GetPtr(gwEntity)
 		if !ok {
 			continue
 		}
@@ -233,7 +240,6 @@ func (s *GatewaySystem) Update() {
 			s.emitSpawnEvent(gw.Species, gw.SubType, spawnX, spawnY, gw.GroupID, gw.RouteDistID, gw.PopulationID)
 		}
 
-		s.world.Components.Gateway.SetComponent(gwEntity, gw)
 		activeCount++
 	}
 

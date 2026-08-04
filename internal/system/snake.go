@@ -108,11 +108,12 @@ func (s *SnakeSystem) Update() {
 		dtFixed = dtCap
 	}
 
-	snakeEntities := s.world.Components.Snake.GetAllEntities()
+	snakes := s.world.Components.Snake
+	snakeEntities := snakes.Entities()
 	activeCount := 0
 
 	for _, rootEntity := range snakeEntities {
-		snakeComp, ok := s.world.Components.Snake.GetComponent(rootEntity)
+		snakeComp, ok := snakes.GetPtr(rootEntity)
 		if !ok {
 			continue
 		}
@@ -123,13 +124,15 @@ func (s *SnakeSystem) Update() {
 			continue
 		}
 
-		headComp, ok := s.world.Components.SnakeHead.GetComponent(snakeComp.HeadEntity)
+		headComp, ok := s.world.Components.SnakeHead.GetPtr(snakeComp.HeadEntity)
 		if !ok {
 			s.terminateSnake(rootEntity)
 			continue
 		}
 
 		// Head combat state
+		// Growth can append Combat components later in this iteration, so keep the
+		// head value detached until the growth phase has finished.
 		headCombat, ok := s.world.Components.Combat.GetComponent(snakeComp.HeadEntity)
 		if !ok {
 			continue
@@ -137,18 +140,18 @@ func (s *SnakeSystem) Update() {
 
 		// Check head death (unshielded and HP <= 0)
 		if !snakeComp.IsShielded && headCombat.HitPoints <= 0 {
-			s.handleSnakeDeath(rootEntity, &snakeComp)
+			s.handleSnakeDeath(rootEntity, snakeComp)
 			continue
 		}
 
 		// Process spawn sequence
 		if !snakeComp.SpawnComplete {
-			s.processSpawnSequence(&snakeComp, &headComp)
+			s.processSpawnSequence(snakeComp, headComp)
 		}
 
 		// Update head movement (stun check)
 		if headCombat.StunnedRemaining <= 0 {
-			s.updateHeadMovement(snakeComp.HeadEntity, &headComp, dtFixed)
+			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtFixed)
 		}
 
 		// Sync head members to header position (CompositeSystem already ran this tick)
@@ -167,7 +170,7 @@ func (s *SnakeSystem) Update() {
 		}
 
 		// Update trail
-		s.updateTrail(snakeComp.HeadEntity, &headComp)
+		s.updateTrail(snakeComp.HeadEntity, headComp)
 
 		// Process body if exists
 		if snakeComp.BodyEntity != 0 && s.world.Components.Header.HasEntity(snakeComp.BodyEntity) {
@@ -178,24 +181,22 @@ func (s *SnakeSystem) Update() {
 				})
 			}
 
-			bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
+			bodyComp, ok := s.world.Components.SnakeBody.GetPtr(snakeComp.BodyEntity)
 			if ok {
 				// Resolve living members from HeaderComponent (single source of truth) and emit deaths for HP<=0 members in one pass
 				resolved := s.resolveAndProcessCombat(snakeComp.BodyEntity, len(bodyComp.Segments))
 
 				// Update segment rest positions from trail
-				s.updateSegmentRestPositions(&headComp, &bodyComp)
+				s.updateSegmentRestPositions(headComp, bodyComp)
 
 				// Cascade disconnection from first dead segment
-				s.checkConnectivity(snakeComp.BodyEntity, &bodyComp, resolved)
+				s.checkConnectivity(snakeComp.BodyEntity, bodyComp, resolved)
 
 				// Apply spring physics to living connected members
-				s.applyBodySpringPhysics(&bodyComp, &headComp, resolved, dtFixed)
+				s.applyBodySpringPhysics(bodyComp, headComp, resolved, dtFixed)
 
 				// Update shield state from resolved liveness
-				s.updateShieldState(&snakeComp, &bodyComp, resolved)
-
-				s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
+				s.updateShieldState(snakeComp, bodyComp, resolved)
 			}
 		} else {
 			// No body: unshield head
@@ -211,14 +212,12 @@ func (s *SnakeSystem) Update() {
 		}
 
 		// Process interactions
-		s.handleInteractions(&snakeComp)
+		s.handleInteractions(snakeComp)
 
 		// Process growth
-		s.processGrowth(&snakeComp, &headComp)
+		s.processGrowth(snakeComp, headComp)
 
-		s.world.Components.SnakeHead.SetComponent(snakeComp.HeadEntity, headComp)
 		s.world.Components.Combat.SetComponent(snakeComp.HeadEntity, headCombat)
-		s.world.Components.Snake.SetComponent(rootEntity, snakeComp)
 
 		activeCount++
 	}
@@ -450,7 +449,7 @@ func (s *SnakeSystem) processSpawnSequence(snakeComp *component.SnakeComponent, 
 	}
 	snakeComp.SpawnTickCounter = 0
 
-	bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
+	bodyComp, ok := s.world.Components.SnakeBody.GetPtr(snakeComp.BodyEntity)
 	if !ok {
 		snakeComp.SpawnComplete = true
 		return
@@ -477,7 +476,6 @@ func (s *SnakeSystem) processSpawnSequence(snakeComp *component.SnakeComponent, 
 		snakeComp.SpawnComplete = true
 	}
 
-	s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
 }
 
 // calculateSegmentHP returns HP for segment based on position (head-adjacent = max, tail = min)
@@ -567,14 +565,14 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		return
 	}
 
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headEntity)
 	if !ok {
 		return
 	}
 
 	// Group-based target resolution + navigation routing
 	// (direct path vs flow field vs stuck fallback)
-	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, &kineticComp)
+	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headEntity, kineticComp)
 
 	// Apply homing
 	physics.ApplyHomingScaled(
@@ -624,7 +622,6 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		s.world.Positions.SetPosition(headEntity, component.PositionComponent{X: newX, Y: newY})
 	}
 
-	s.world.Components.Kinetic.SetComponent(headEntity, kineticComp)
 }
 
 func (s *SnakeSystem) updateTrail(headEntity core.Entity, headComp *component.SnakeHeadComponent) {
@@ -699,7 +696,7 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 				continue
 			}
 
-			kineticComp, ok := s.world.Components.Kinetic.GetComponent(memberEntity)
+			kineticComp, ok := s.world.Components.Kinetic.GetPtr(memberEntity)
 			if !ok {
 				continue
 			}
@@ -758,7 +755,6 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 				}
 			}
 
-			s.world.Components.Kinetic.SetComponent(memberEntity, kineticComp)
 		}
 	}
 }
@@ -912,7 +908,7 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 		return
 	}
 
-	bodyComp, ok := s.world.Components.SnakeBody.GetComponent(snakeComp.BodyEntity)
+	bodyComp, ok := s.world.Components.SnakeBody.GetPtr(snakeComp.BodyEntity)
 	if !ok {
 		return
 	}
@@ -944,7 +940,6 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 			Connected: true,
 		})
 		headComp.GrowthPending--
-		s.world.Components.SnakeBody.SetComponent(snakeComp.BodyEntity, bodyComp)
 	}
 }
 
@@ -967,9 +962,9 @@ func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *compon
 
 func (s *SnakeSystem) handleIntegrityBreach(payload *event.CompositeIntegrityBreachPayload) {
 	// Find root for this header
-	rootEntities := s.world.Components.Snake.GetAllEntities()
+	rootEntities := s.world.Components.Snake.Entities()
 	for _, rootEntity := range rootEntities {
-		snakeComp, ok := s.world.Components.Snake.GetComponent(rootEntity)
+		snakeComp, ok := s.world.Components.Snake.GetPtr(rootEntity)
 		if !ok {
 			continue
 		}
@@ -978,7 +973,6 @@ func (s *SnakeSystem) handleIntegrityBreach(payload *event.CompositeIntegrityBre
 			// Body breach: update shield state
 			if payload.HeaderEntity == snakeComp.BodyEntity && payload.RemainingCount == 0 {
 				snakeComp.IsShielded = false
-				s.world.Components.Snake.SetComponent(rootEntity, snakeComp)
 			}
 			return
 		}
@@ -1019,7 +1013,7 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 }
 
 func (s *SnakeSystem) terminateAll() {
-	for _, entity := range s.world.Components.Snake.GetAllEntities() {
+	for _, entity := range s.world.Components.Snake.Entities() {
 		s.terminateSnake(entity)
 	}
 }
@@ -1030,14 +1024,16 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for row := range height {
 		for col := range width {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, e := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+			for i := range count {
+				e := entities[i]
 				if e == 0 || e == cursorEntity {
 					continue
 				}

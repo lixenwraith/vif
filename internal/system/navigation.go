@@ -7,8 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -328,11 +328,14 @@ func (s *NavigationSystem) Update() {
 	isBlockedComposite := s.compositePassability.IsBlocked
 
 	// Phase 1: Classify entities, perform LOS checks
-	entities := s.world.Components.Navigation.GetAllEntities()
+	navigations := s.world.Components.Navigation
+	// Navigation membership is stable across all three phases; event delivery
+	// occurs outside Update, and these phases only overwrite existing values.
+	entities := navigations.Entities()
 	s.statEntities.Store(int64(len(entities)))
 
 	for _, entity := range entities {
-		navComp, ok := s.world.Components.Navigation.GetComponent(entity)
+		navComp, ok := navigations.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -385,7 +388,6 @@ func (s *NavigationSystem) Update() {
 		} else {
 			navComp.HasDirectPath = false
 		}
-		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 
 	// Phase 2: Update flow fields
@@ -415,7 +417,7 @@ func (s *NavigationSystem) Update() {
 
 	// Phase 3: Update flow directions from cached fields
 	for _, entity := range entities {
-		navComp, ok := s.world.Components.Navigation.GetComponent(entity)
+		navComp, ok := navigations.GetPtr(entity)
 		if !ok || navComp.HasDirectPath {
 			continue
 		}
@@ -451,7 +453,6 @@ func (s *NavigationSystem) Update() {
 				// instead of stalling
 				if fx != 0 || fy != 0 {
 					navComp.FlowX, navComp.FlowY = fx, fy
-					s.world.Components.Navigation.SetComponent(entity, navComp)
 					continue
 				}
 			}
@@ -464,7 +465,6 @@ func (s *NavigationSystem) Update() {
 			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.pointFlowCache)
 		}
 
-		s.world.Components.Navigation.SetComponent(entity, navComp)
 	}
 
 	// Update debug pointers for selected group
@@ -550,8 +550,8 @@ func (s *NavigationSystem) resolveGroupTargets() {
 	var anchorStates [component.MaxTargetGroups]engine.TargetGroupState
 	var anchored [component.MaxTargetGroups]bool
 
-	for _, entity := range s.world.Components.TargetAnchor.GetAllEntities() {
-		anchor, ok := s.world.Components.TargetAnchor.GetComponent(entity)
+	for _, entity := range s.world.Components.TargetAnchor.Entities() {
+		anchor, ok := s.world.Components.TargetAnchor.GetPtr(entity)
 		if !ok || anchor.GroupID == 0 || int(anchor.GroupID) >= component.MaxTargetGroups {
 			continue
 		}
@@ -831,8 +831,8 @@ func (s *NavigationSystem) refreshRouteGraphs() {
 		return
 	}
 
-	for _, e := range s.world.Components.Gateway.GetAllEntities() {
-		gw, ok := s.world.Components.Gateway.GetComponent(e)
+	for _, e := range s.world.Components.Gateway.Entities() {
+		gw, ok := s.world.Components.Gateway.GetPtr(e)
 		if !ok || gw.RouteDistID == 0 {
 			continue
 		}
@@ -911,9 +911,9 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 	}
 
 	// Fallback: scan TargetAnchor components (handles same-tick registration)
-	anchorEntities := s.world.Components.TargetAnchor.GetAllEntities()
+	anchorEntities := s.world.Components.TargetAnchor.Entities()
 	for _, e := range anchorEntities {
-		anchor, ok := s.world.Components.TargetAnchor.GetComponent(e)
+		anchor, ok := s.world.Components.TargetAnchor.GetPtr(e)
 		if !ok || anchor.GroupID != groupID {
 			continue
 		}
@@ -929,8 +929,8 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 
 // rebuildGatewayRouteGraphs recomputes route graphs for all route-enabled gateways
 func (s *NavigationSystem) rebuildGatewayRouteGraphs() {
-	for _, e := range s.world.Components.Gateway.GetAllEntities() {
-		gw, ok := s.world.Components.Gateway.GetComponent(e)
+	for _, e := range s.world.Components.Gateway.Entities() {
+		gw, ok := s.world.Components.Gateway.GetPtr(e)
 		if !ok || gw.RouteDistID == 0 {
 			continue
 		}

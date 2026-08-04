@@ -104,6 +104,8 @@ func (s *CleanerSystem) Update() {
 
 	config := s.world.Resources.Config
 
+	// Cleaners are destroyed immediately to free their spatial cells for later
+	// cleaners in this tick, so the entity order must remain detached.
 	cleanerEntities := s.world.Components.Cleaner.GetAllEntities()
 	s.statActive.Store(int64(len(cleanerEntities)))
 
@@ -118,7 +120,7 @@ func (s *CleanerSystem) Update() {
 	gameHeight := config.MapHeight
 
 	for _, cleanerEntity := range cleanerEntities {
-		cleanerComp, ok := s.world.Components.Cleaner.GetComponent(cleanerEntity)
+		cleanerComp, ok := s.world.Components.Cleaner.GetPtr(cleanerEntity)
 		if !ok {
 			continue
 		}
@@ -130,12 +132,11 @@ func (s *CleanerSystem) Update() {
 				s.world.DestroyEntity(cleanerEntity)
 				continue
 			}
-			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
 			continue
 		}
 
 		// --- Active phase ---
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(cleanerEntity)
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(cleanerEntity)
 		if !ok {
 			continue
 		}
@@ -254,8 +255,6 @@ func (s *CleanerSystem) Update() {
 			}
 
 			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: blockGridX, Y: blockGridY})
-			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
-			s.world.Components.Kinetic.SetComponent(cleanerEntity, kineticComp)
 			continue
 		}
 
@@ -286,14 +285,10 @@ func (s *CleanerSystem) Update() {
 
 		if shouldDestroy {
 			s.world.DestroyEntity(cleanerEntity)
-		} else {
-			s.world.Components.Cleaner.SetComponent(cleanerEntity, cleanerComp)
-			s.world.Components.Kinetic.SetComponent(cleanerEntity, kineticComp)
 		}
 	}
 
-	cleanerEntities = s.world.Components.Cleaner.GetAllEntities()
-	if len(cleanerEntities) == 0 {
+	if s.world.Components.Cleaner.CountEntities() == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 	}
 }
@@ -384,10 +379,12 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 // Returns true if a combat entity was hit (blocks cleaner head)
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorType component.CleanerColorType) bool {
 	cursorEntity := s.world.Resources.Player.Entity
-	entities := s.world.Positions.GetAllEntityAt(x, y)
-	if len(entities) == 0 {
+	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
+	n := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
+	if n == 0 {
 		return false
 	}
+	entities := entityBuf[:n]
 
 	blocked := false
 
@@ -465,14 +462,13 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 			continue
 		}
 
-		glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity)
+		glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity)
 		if !ok || glyphComp.Type != component.GlyphBlue {
 			continue
 		}
 
 		// Mutate Blue → Green, preserving level
 		glyphComp.Type = component.GlyphGreen
-		s.world.Components.Glyph.SetComponent(targetEntity, glyphComp)
 
 		// Spawn decay at same position (particle skips starting cell via LastIntX/Y)
 		s.world.PushEvent(event.EventDecaySpawnOne, &event.DecaySpawnPayload{
@@ -593,7 +589,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 
 	targetRows := make(map[int]bool)
 
-	entities := s.world.Components.Glyph.GetAllEntities()
+	entities := s.world.Components.Glyph.Entities()
 
 	for _, entity := range entities {
 		glyph, ok := s.world.Components.Glyph.GetComponent(entity)

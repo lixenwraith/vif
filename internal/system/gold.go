@@ -368,11 +368,6 @@ func (s *GoldSystem) handleGoldComplete() {
 		HeaderEntity: headerEntity,
 	})
 
-	// // Play sound
-	// if s.world.Resources.Audio != nil && s.world.Resources.Audio.Player != nil {
-	// 	s.world.Resources.Audio.Player.Play(audio.SoundCoin)
-	// }
-
 	// Silent destruction - members already dead from typing
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,

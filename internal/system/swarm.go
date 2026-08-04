@@ -101,7 +101,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventSwarmCancelRequest:
-		headerEntities := s.world.Components.Swarm.GetAllEntities()
+		headerEntities := s.world.Components.Swarm.Entities()
 		for _, headerEntity := range headerEntities {
 			s.despawnSwarm(headerEntity)
 		}
@@ -129,16 +129,17 @@ func (s *SwarmSystem) Update() {
 		dtFixed = dtCap
 	}
 
-	headerEntities := s.world.Components.Swarm.GetAllEntities()
+	swarms := s.world.Components.Swarm
+	headerEntities := swarms.Entities()
 	activeCount := 0
 
 	for _, headerEntity := range headerEntities {
-		swarmComp, ok := s.world.Components.Swarm.GetComponent(headerEntity)
+		swarmComp, ok := swarms.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
 
-		combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+		combatComp, ok := s.world.Components.Combat.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
@@ -146,10 +147,9 @@ func (s *SwarmSystem) Update() {
 		if combatComp.StunnedRemaining > 0 {
 			// Reset state machine on first stunned tick
 			if swarmComp.State != component.SwarmStateChase {
-				s.resetSwarmState(&swarmComp)
+				s.resetSwarmState(swarmComp)
 			}
 			// Animation frozen during stun - no pattern cycle update via updatePatternCycle
-			s.world.Components.Swarm.SetComponent(headerEntity, swarmComp)
 			continue
 		}
 
@@ -178,31 +178,27 @@ func (s *SwarmSystem) Update() {
 		}
 
 		// Pattern cycling (all states)
-		s.updatePatternCycle(&swarmComp, dt)
+		s.updatePatternCycle(swarmComp, dt)
 
 		// State machine
 		switch swarmComp.State {
 		case component.SwarmStateChase:
-			s.updateChaseState(headerEntity, &swarmComp, &combatComp, dtFixed, dt)
+			s.updateChaseState(headerEntity, swarmComp, combatComp, dtFixed, dt)
 		case component.SwarmStateLock:
-			s.updateLockState(headerEntity, &swarmComp, &combatComp, dt)
+			s.updateLockState(headerEntity, swarmComp, combatComp, dt)
 		case component.SwarmStateCharge:
-			s.updateChargeState(headerEntity, &swarmComp, &combatComp, dtFixed, dt)
+			s.updateChargeState(headerEntity, swarmComp, combatComp, dtFixed, dt)
 		case component.SwarmStateTeleport:
-			s.updateTeleportState(headerEntity, &swarmComp, &combatComp, dt)
+			s.updateTeleportState(headerEntity, swarmComp, combatComp, dt)
 		case component.SwarmStateDecelerate:
-			s.updateDecelerateState(headerEntity, &swarmComp, &combatComp, dtFixed, dt)
+			s.updateDecelerateState(headerEntity, swarmComp, combatComp, dtFixed, dt)
 		}
 
 		// Interactions with cursor and shield
 		s.handleCursorInteractions(headerEntity)
 
 		// Drain absorption check
-		s.checkDrainAbsorption(headerEntity, &combatComp)
-
-		// Persist components
-		s.world.Components.Swarm.SetComponent(headerEntity, swarmComp)
-		s.world.Components.Combat.SetComponent(headerEntity, combatComp)
+		s.checkDrainAbsorption(headerEntity, combatComp)
 
 		activeCount++
 	}
@@ -258,14 +254,16 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for row := range parameter.SwarmHeight {
 		for col := range parameter.SwarmWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, e := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+			for i := range count {
+				e := entities[i]
 				if e == 0 || e == cursorEntity {
 					continue
 				}
@@ -459,7 +457,7 @@ func (s *SwarmSystem) updateChargeState(
 	}
 
 	// Linear interpolation toward target
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -475,8 +473,6 @@ func (s *SwarmSystem) updateChargeState(
 
 	kineticComp.VelX = vmath.Div(dx, vmath.FromFloat(remainingSec))
 	kineticComp.VelY = vmath.Div(dy, vmath.FromFloat(remainingSec))
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 
 	// Integrate and sync - Check for wall impact
 	hitWall := s.integrateAndSync(headerEntity, dtFixed)
@@ -511,7 +507,7 @@ func (s *SwarmSystem) updateDecelerateState(
 	}
 
 	// Apply heavy drag
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -520,8 +516,6 @@ func (s *SwarmSystem) updateDecelerateState(
 	dragFactor := vmath.FromFloat(0.1)
 	kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
 	kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 
 	// Integrate and sync (minimal movement due to drag)
 	s.integrateAndSync(headerEntity, dtFixed)
@@ -541,10 +535,9 @@ func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *compon
 	swarmComp.LockedTargetY = baseY
 
 	// Zero velocity during lock
-	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
+	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
-		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 	}
 }
 
@@ -568,7 +561,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	}
 
 	// Normal charge
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -589,7 +582,6 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	kineticComp.VelX = vmath.Div(dx, vmath.FromFloat(chargeSec))
 	kineticComp.VelY = vmath.Div(dy, vmath.FromFloat(chargeSec))
 
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
 // enterTeleportState initiates teleport to locked target
@@ -619,10 +611,9 @@ func (s *SwarmSystem) enterTeleportState(headerEntity core.Entity, swarmComp *co
 	swarmComp.TeleportTargetY = headerTargetY
 
 	// Zero velocity
-	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
+	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
-		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 	}
 }
 
@@ -646,11 +637,10 @@ func (s *SwarmSystem) updateTeleportState(
 
 	s.clearSwarmSpawnArea(newX, newY)
 
-	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity); ok {
+	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity); ok {
 		kineticComp.PreciseX, kineticComp.PreciseY = vmath.CenteredFromGrid(newX, newY)
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
-		s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 	}
 
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})
@@ -668,14 +658,14 @@ func (s *SwarmSystem) enterDecelerateState(swarmComp *component.SwarmComponent) 
 
 // applyHomingMovement applies homing physics toward cursor
 func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int64) {
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
 
 	// Group-based target resolution + navigation routing
 	// (direct path vs flow field vs stuck fallback)
-	targetX, targetY, _ := ResolveMovementTarget(s.world, headerEntity, &kineticComp)
+	targetX, targetY, _ := ResolveMovementTarget(s.world, headerEntity, kineticComp)
 
 	// Cornering drag
 	var extraDrag int64
@@ -713,14 +703,13 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
 	}
 
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 }
 
 // integrateAndSync integrates physics and syncs member positions, returns true if a wall/boundary was hit
 func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) bool {
 	config := s.world.Resources.Config
 
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(headerEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
 		return false
 	}
@@ -759,8 +748,6 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 		restitution,
 		wallCheck,
 	)
-
-	s.world.Components.Kinetic.SetComponent(headerEntity, kineticComp)
 
 	// Update positions
 	if newX != headerPos.X || newY != headerPos.Y {
@@ -801,6 +788,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 	}
 
 	// Check each active member position for drain collision
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity == 0 {
 			continue
@@ -811,8 +799,9 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			continue
 		}
 
-		entities := s.world.Positions.GetAllEntityAt(memberPos.X, memberPos.Y)
-		for _, entity := range entities {
+		count := s.world.Positions.GetAllEntitiesAtInto(memberPos.X, memberPos.Y, entities[:])
+		for i := range count {
+			entity := entities[i]
 			if entity == 0 || entity == member.Entity || entity == headerEntity {
 				continue
 			}

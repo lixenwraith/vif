@@ -101,19 +101,6 @@ func (s *TransientSystem) Update() {
 		return
 	}
 
-	// // Decay logic: to be wired in if required
-	// grayout := &s.world.Resources.Transient.Grayout
-	// if grayout.Active && grayout.Intensity > 0 {
-	// 	dt := s.world.Resources.Time.DeltaTime.Seconds()
-	// 	decay := dt / visual.GrayoutDuration.Seconds()
-	// 	grayout.Intensity -= decay
-	// 	if grayout.Intensity <= 0 {
-	// 		grayout.Intensity = 0
-	// 		grayout.Active = false
-	// 		s.statGrayoutActive.Store(false)
-	// 	}
-	// }
-
 	strobe := &s.world.Resources.Transient.Strobe
 	if !strobe.Active {
 		return
@@ -153,4 +140,3 @@ func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
 
 	s.statStrobeActive.Store(true)
 }
-

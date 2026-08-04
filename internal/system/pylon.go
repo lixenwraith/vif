@@ -108,8 +108,8 @@ func (s *PylonSystem) Update() {
 		return
 	}
 
-	pylonEntities := s.world.Components.Pylon.GetAllEntities()
-	if len(pylonEntities) == 0 {
+	pylons := s.world.Components.Pylon
+	if pylons.CountEntities() == 0 {
 		s.statActive.Store(false)
 		s.statCount.Store(0)
 		return
@@ -117,15 +117,15 @@ func (s *PylonSystem) Update() {
 
 	activeCount := 0
 
-	for _, headerEntity := range pylonEntities {
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	for _, headerEntity := range pylons.Entities() {
+		headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
 
 		// Process member combat (HP <= 0 detection)
 		// Deaths routed through CompositeSystem; IntegrityBreach triggers handlePylonDeath
-		s.processAblativeCombat(headerEntity, &headerComp)
+		s.processAblativeCombat(headerEntity, headerComp)
 
 		// Cursor/shield interaction
 		s.handleInteractions(headerEntity)
@@ -496,7 +496,7 @@ func (s *PylonSystem) terminatePylon(headerEntity core.Entity) {
 }
 
 func (s *PylonSystem) terminateAll() {
-	for _, entity := range s.world.Components.Pylon.GetAllEntities() {
+	for _, entity := range s.world.Components.Pylon.Entities() {
 		s.terminatePylon(entity)
 	}
 }

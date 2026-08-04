@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -86,20 +87,21 @@ func (s *FlashSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	entities := s.world.Components.Flash.GetAllEntities()
-	for _, entity := range entities {
-		flash, ok := s.world.Components.Flash.GetComponent(entity)
+	flashes := s.world.Components.Flash
+	var toDestroy []core.Entity
+	for _, entity := range flashes.Entities() {
+		flash, ok := flashes.GetPtr(entity)
 		if !ok {
 			continue
 		}
 
 		flash.Remaining -= dt
 		if flash.Remaining <= 0 {
-			s.world.DestroyEntity(entity)
-		} else {
-			s.world.Components.Flash.SetComponent(entity, flash)
+			toDestroy = append(toDestroy, entity)
 		}
 	}
+
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 // spawnDestructionFlash creates a flash effect at the given position

@@ -58,12 +58,10 @@ func (s *HeatSystem) Update() {
 	}
 
 	cursorEntity := s.world.Resources.Player.Entity
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+	heatComp, ok := s.world.Components.Heat.GetPtr(cursorEntity)
 	if !ok {
 		return
 	}
-
-	modified := false
 
 	// Handle burst flash timeout
 	if heatComp.BurstFlashRemaining > 0 {
@@ -72,7 +70,6 @@ func (s *HeatSystem) Update() {
 		if heatComp.BurstFlashRemaining <= 0 {
 			heatComp.BurstFlashRemaining = 0
 		}
-		modified = true
 	}
 
 	// Handle ember decay
@@ -96,12 +93,7 @@ func (s *HeatSystem) Update() {
 			s.statCurrent.Store(int64(heatComp.Current))
 			s.statOverheat.Store(int64(heatComp.Overheat))
 			s.statAtMax.Store(heatComp.Current >= parameter.HeatMax)
-			modified = true
 		}
-	}
-
-	if modified {
-		s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
 	}
 }
 

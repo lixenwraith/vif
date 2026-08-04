@@ -74,8 +74,8 @@ func (s *BulletSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
-	entities := s.world.Components.Bullet.GetAllEntities()
-	if len(entities) == 0 {
+	bullets := s.world.Components.Bullet
+	if bullets.CountEntities() == 0 {
 		return
 	}
 
@@ -88,12 +88,14 @@ func (s *BulletSystem) Update() {
 
 	var toDestroy []core.Entity
 
-	for _, e := range entities {
-		bullet, ok := s.world.Components.Bullet.GetComponent(e)
+	// Collision events are queued, and destruction is deferred until the live
+	// view has been exhausted, so neither component pointer can be invalidated.
+	for _, e := range bullets.Entities() {
+		bullet, ok := bullets.GetPtr(e)
 		if !ok {
 			continue
 		}
-		kinetic, ok := s.world.Components.Kinetic.GetComponent(e)
+		kinetic, ok := s.world.Components.Kinetic.GetPtr(e)
 		if !ok {
 			continue
 		}
@@ -109,7 +111,7 @@ func (s *BulletSystem) Update() {
 		kinetic.PreciseY += vmath.Mul(kinetic.VelY, dtFixed)
 
 		destroyed := s.traverseAndCollide(
-			&bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY,
+			bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY,
 			hasCursor, shieldActive, cursorPos, shieldComp,
 		)
 		if destroyed {
@@ -124,8 +126,6 @@ func (s *BulletSystem) Update() {
 			s.world.Positions.SetPosition(e, component.PositionComponent{X: gridX, Y: gridY})
 		}
 
-		s.world.Components.Bullet.SetComponent(e, bullet)
-		s.world.Components.Kinetic.SetComponent(e, kinetic)
 	}
 
 	s.world.DestroyEntitiesBatch(toDestroy)
@@ -209,4 +209,3 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 		Y: vmath.ToInt(p.OriginY),
 	})
 }
-

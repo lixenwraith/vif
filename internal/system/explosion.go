@@ -138,7 +138,7 @@ func (s *ExplosionSystem) Update() {
 }
 
 func (s *ExplosionSystem) fireFromDust() {
-	dustEntities := s.world.Components.Dust.GetAllEntities()
+	dustEntities := s.world.Components.Dust.Entities()
 	if len(dustEntities) == 0 {
 		return
 	}
@@ -270,6 +270,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	hitComposites := make(map[core.Entity][]core.Entity)
 
 	// Single-pass area sweep
+	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
 			dx := vmath.FromInt(x - centerX)
@@ -281,8 +282,9 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 				continue
 			}
 
-			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, entity := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
+			for i := range count {
+				entity := entityBuf[i]
 				// Drain - collect for combat
 				if s.world.Components.Drain.HasEntity(entity) {
 					hitDrains = append(hitDrains, entity)

@@ -75,9 +75,9 @@ func (s *MarkerSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 	dtFixed := vmath.FromFloat(dt.Seconds())
 
-	markerEntities := s.world.Components.Marker.GetAllEntities()
-	for _, markerEntity := range markerEntities {
-		markerComp, ok := s.world.Components.Marker.GetComponent(markerEntity)
+	markers := s.world.Components.Marker
+	for _, markerEntity := range markers.Entities() {
+		markerComp, ok := markers.GetPtr(markerEntity)
 		if !ok {
 			continue
 		}
@@ -112,7 +112,6 @@ func (s *MarkerSystem) Update() {
 			}
 		}
 
-		s.world.Components.Marker.SetComponent(markerEntity, markerComp)
 	}
 }
 
@@ -154,8 +153,7 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 }
 
 func (s *MarkerSystem) destroyAllMarkers() {
+	// Batch destruction mutates the live marker slice, so detach it first.
 	entities := s.world.Components.Marker.GetAllEntities()
-	for _, entity := range entities {
-		s.world.DestroyEntity(entity)
-	}
+	s.world.DestroyEntitiesBatch(entities)
 }

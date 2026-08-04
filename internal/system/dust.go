@@ -195,8 +195,8 @@ func (s *DustSystem) Update() {
 		return
 	}
 
-	dustEntities := s.world.Components.Dust.GetAllEntities()
-	if len(dustEntities) == 0 {
+	dusts := s.world.Components.Dust
+	if dusts.CountEntities() == 0 {
 		s.statActive.Store(0)
 		return
 	}
@@ -258,8 +258,10 @@ func (s *DustSystem) Update() {
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	// 4. MAIN LOOP
-	for _, dustEntity := range dustEntities {
-		dustComp, ok := s.world.Components.Dust.GetComponent(dustEntity)
+	// A missing Sigil exits after position work but intentionally skips Dust and
+	// Kinetic write-back, so those cross-store values must remain detached.
+	for _, dustEntity := range dusts.Entities() {
+		dustComp, ok := dusts.GetComponent(dustEntity)
 		if !ok {
 			continue
 		}
@@ -472,7 +474,7 @@ func (s *DustSystem) Update() {
 		}
 
 		// --- Color Update ---
-		sigilComp, ok := s.world.Components.Sigil.GetComponent(dustEntity)
+		sigilComp, ok := s.world.Components.Sigil.GetPtr(dustEntity)
 		if !ok {
 			continue
 		}
@@ -483,13 +485,11 @@ func (s *DustSystem) Update() {
 
 		if sigilComp.Color == visual.RgbDustBright && timerComp.Remaining < parameter.DustTimerNormal {
 			sigilComp.Color = visual.RgbDustNormal
-			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
 		} else if sigilComp.Color == visual.RgbDustNormal && timerComp.Remaining < parameter.DustTimerDark {
 			sigilComp.Color = visual.RgbDustDark
-			s.world.Components.Sigil.SetComponent(dustEntity, sigilComp)
 		}
 
-		s.world.Components.Dust.SetComponent(dustEntity, dustComp)
+		dusts.SetComponent(dustEntity, dustComp)
 		s.world.Components.Kinetic.SetComponent(dustEntity, kineticComp)
 	}
 
@@ -500,7 +500,7 @@ func (s *DustSystem) Update() {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
 	}
 
-	s.statActive.Store(int64(len(dustEntities)))
+	s.statActive.Store(int64(dusts.CountEntities()))
 	s.statDestroyed.Add(destroyedCount)
 }
 
@@ -513,15 +513,15 @@ func (s *DustSystem) buildCollisionContext() *collisionContext {
 	}
 
 	// Drains
-	for _, e := range s.world.Components.Drain.GetAllEntities() {
+	for _, e := range s.world.Components.Drain.Entities() {
 		if pos, ok := s.world.Positions.GetPosition(e); ok {
 			ctx.cellFlags[posKey(pos.X, pos.Y)] |= cellFlagDrain
 		}
 	}
 
 	// Combat composites (Quasar, Swarm, future Storm)
-	for _, headerEntity := range s.world.Components.Header.GetAllEntities() {
-		header, ok := s.world.Components.Header.GetComponent(headerEntity)
+	for _, headerEntity := range s.world.Components.Header.Entities() {
+		header, ok := s.world.Components.Header.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
@@ -561,7 +561,7 @@ func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
 		if acc.hits == 0 {
 			continue
 		}
-		kc, ok := s.world.Components.Kinetic.GetComponent(entity)
+		kc, ok := s.world.Components.Kinetic.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -572,7 +572,6 @@ func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
 		kc.VelX += vmath.Div(acc.vx, scaleFactor)
 		kc.VelY += vmath.Div(acc.vy, scaleFactor)
 
-		s.world.Components.Kinetic.SetComponent(entity, kc)
 	}
 }
 
@@ -592,7 +591,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 		level  component.GlyphLevel
 	}
 
-	glyphEntities := s.world.Components.Glyph.GetAllEntities()
+	glyphEntities := s.world.Components.Glyph.Entities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
 	toFlashKill := make([]core.Entity, len(glyphEntities))
 
@@ -640,7 +639,6 @@ func (s *DustSystem) transformGlyphsToDust() {
 		deathEntities[i] = gd.entity
 	}
 	s.world.DestroyEntitiesBatch(deathEntities)
-	// event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, deathEntities)
 
 	// Use batch creation for transformation dust
 	posBatch := s.world.Positions.BeginBatch()

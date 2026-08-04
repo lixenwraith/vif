@@ -195,6 +195,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 
 	gameWidth := s.world.Resources.Config.MapWidth
 
+	// Blossoms and collided decay entities are destroyed during traversal. A
+	// detached entity/component snapshot avoids invalidating either dense store.
 	blossomEntities := s.world.Components.Blossom.GetAllEntities()
 
 	// Clear frame deduplication maps
@@ -292,9 +294,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			if s.rng.Float64() < parameter.ParticleChangeChance {
 				blossomComp.Rune = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
 				// Must update the component used by the renderer
-				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
+				if sigil, ok := s.world.Components.Sigil.GetPtr(entity); ok {
 					sigil.Rune = blossomComp.Rune
-					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}
 			blossomComp.LastIntX = curX
@@ -311,7 +312,7 @@ func (s *BlossomSystem) updateBlossomEntities() {
 // TODO: check if this can be refactored
 // applyBlossomToCharacter applies blossom effect to a glyph character, returns true if blossom should be destroyed (hit Red)
 func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
-	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
+	glyphComp, ok := s.world.Components.Glyph.GetPtr(entity)
 	if !ok {
 		return false
 	}
@@ -331,7 +332,6 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	// Increase level (inverse of decay)
 	if glyphComp.Level < component.GlyphBright {
 		glyphComp.Level++
-		s.world.Components.Glyph.SetComponent(entity, glyphComp)
 		s.statApplied.Add(1)
 	}
 	// At Bright: no effect, blossom continues

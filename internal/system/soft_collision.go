@@ -247,29 +247,29 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 	s.clearCaches()
 
 	// Drains
-	for _, entity := range s.world.Components.Drain.GetAllEntities() {
+	for _, entity := range s.world.Components.Drain.Entities() {
 		if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			s.drains = append(s.drains, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
 		}
 	}
 
 	// Swarms (header positions)
-	for _, entity := range s.world.Components.Swarm.GetAllEntities() {
+	for _, entity := range s.world.Components.Swarm.Entities() {
 		if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			s.swarms = append(s.swarms, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
 		}
 	}
 
 	// Quasars (header positions)
-	for _, entity := range s.world.Components.Quasar.GetAllEntities() {
+	for _, entity := range s.world.Components.Quasar.Entities() {
 		if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			s.quasars = append(s.quasars, collisionEntry{entity: entity, x: pos.X, y: pos.Y})
 		}
 	}
 
 	// Storms (circle positions, not root)
-	for _, rootEntity := range s.world.Components.Storm.GetAllEntities() {
-		stormComp, ok := s.world.Components.Storm.GetComponent(rootEntity)
+	for _, rootEntity := range s.world.Components.Storm.Entities() {
+		stormComp, ok := s.world.Components.Storm.GetPtr(rootEntity)
 		if !ok {
 			continue
 		}
@@ -285,8 +285,8 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 	}
 
 	// Pylons (use spawn position - stationary)
-	for _, entity := range s.world.Components.Pylon.GetAllEntities() {
-		pylonComp, ok := s.world.Components.Pylon.GetComponent(entity)
+	for _, entity := range s.world.Components.Pylon.Entities() {
+		pylonComp, ok := s.world.Components.Pylon.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -360,13 +360,13 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	rule *SoftCollisionRule,
 ) {
 	// Get target kinetic component
-	kineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
+	kineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity)
 	if !ok {
 		return
 	}
 
 	// Get target combat component for immunity/enrage check
-	combatComp, ok := s.world.Components.Combat.GetComponent(targetEntity)
+	combatComp, ok := s.world.Components.Combat.GetPtr(targetEntity)
 	if !ok {
 		return
 	}
@@ -414,9 +414,6 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	// Set immunity
 	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration
 
-	// Write back components
-	s.world.Components.Kinetic.SetComponent(targetEntity, kineticComp)
-	s.world.Components.Combat.SetComponent(targetEntity, combatComp)
 }
 
 // processAllFlocking calculates and integrates continuous separation acceleration
@@ -437,7 +434,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtFixed int64) {
 				continue
 			}
 
-			kineticComp, ok := s.world.Components.Kinetic.GetComponent(tgt.entity)
+			kineticComp, ok := s.world.Components.Kinetic.GetPtr(tgt.entity)
 			if !ok {
 				continue
 			}
@@ -472,7 +469,6 @@ func (s *SoftCollisionSystem) processAllFlocking(dtFixed int64) {
 			if hasFlocking {
 				kineticComp.VelX += vmath.Mul(totalAccelX, dtFixed)
 				kineticComp.VelY += vmath.Mul(totalAccelY, dtFixed)
-				s.world.Components.Kinetic.SetComponent(tgt.entity, kineticComp)
 			}
 		}
 	}

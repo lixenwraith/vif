@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -107,13 +108,14 @@ func (s *MaterializeSystem) Update() {
 	durationFixed := vmath.FromFloat(parameter.MaterializeAnimationDuration.Seconds())
 	progressDelta := vmath.Div(dtFixed, durationFixed)
 
-	matEntities := s.world.Components.Materialize.GetAllEntities()
-	if len(matEntities) == 0 {
+	materializes := s.world.Components.Materialize
+	if materializes.CountEntities() == 0 {
 		return
 	}
 
-	for _, matEntity := range matEntities {
-		matComp, ok := s.world.Components.Materialize.GetComponent(matEntity)
+	var toDestroy []core.Entity
+	for _, matEntity := range materializes.Entities() {
+		matComp, ok := materializes.GetPtr(matEntity)
 		if !ok {
 			continue
 		}
@@ -127,12 +129,12 @@ func (s *MaterializeSystem) Update() {
 				Type: matComp.Type,
 				// Note: MaterializeCompletedPayload may need AreaWidth/Height if consumers need it
 			})
-			s.world.DestroyEntity(matEntity)
+			toDestroy = append(toDestroy, matEntity)
 			continue
 		}
-
-		s.world.Components.Materialize.SetComponent(matEntity, matComp)
 	}
+
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 // spawnMaterializeEffect creates a single materialize effect entity
@@ -166,4 +168,3 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, 
 		Type:       spawnType,
 	})
 }
-

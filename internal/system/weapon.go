@@ -108,7 +108,7 @@ func (s *WeaponSystem) Update() {
 	}
 
 	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursorEntity)
 	if !ok {
 		return
 	}
@@ -134,15 +134,11 @@ func (s *WeaponSystem) Update() {
 		}
 	}
 
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
-
 	// Update pulse effect timer
-	if pulseComp, ok := s.world.Components.Pulse.GetComponent(cursorEntity); ok {
+	if pulseComp, ok := s.world.Components.Pulse.GetPtr(cursorEntity); ok {
 		pulseComp.Remaining -= dt
 		if pulseComp.Remaining <= 0 {
 			s.world.Components.Pulse.RemoveEntity(cursorEntity, false)
-		} else {
-			s.world.Components.Pulse.SetComponent(cursorEntity, pulseComp)
 		}
 	}
 
@@ -201,13 +197,12 @@ func (s *WeaponSystem) removeAllWeapons() {
 
 // triggerOrbFlash activates flash effect on specified orb
 func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
-	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
+	orbComp, ok := s.world.Components.Orb.GetPtr(orbEntity)
 	if !ok {
 		return
 	}
 
 	orbComp.FlashRemaining = parameter.OrbFlashDuration
-	s.world.Components.Orb.SetComponent(orbEntity, orbComp)
 }
 
 // ensureOrbs creates missing orbs for active weapons and triggers redistribution if needed
@@ -319,7 +314,6 @@ func (s *WeaponSystem) updateOrbs() {
 	// Collect active orbs in STABLE order (sort by weapon type)
 	type orbEntry struct {
 		entity core.Entity
-		comp   component.OrbComponent
 		weapon component.WeaponType
 	}
 	var entries []orbEntry
@@ -327,8 +321,8 @@ func (s *WeaponSystem) updateOrbs() {
 		if orbEntity == 0 {
 			continue
 		}
-		if orb, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
-			entries = append(entries, orbEntry{entity: orbEntity, comp: orb, weapon: component.WeaponType(weapon)})
+		if s.world.Components.Orb.HasEntity(orbEntity) {
+			entries = append(entries, orbEntry{entity: orbEntity, weapon: component.WeaponType(weapon)})
 		}
 	}
 
@@ -341,9 +335,13 @@ func (s *WeaponSystem) updateOrbs() {
 		return int(a.weapon) - int(b.weapon)
 	})
 
-	// Use first orb's radius (all orbs share same orbit)
-	radiusX := entries[0].comp.OrbitRadiusX
-	radiusY := entries[0].comp.OrbitRadiusY
+	// Use first orb's radius (all orbs share the same orbit).
+	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0].entity)
+	if !ok {
+		return
+	}
+	radiusX := firstOrb.OrbitRadiusX
+	radiusY := firstOrb.OrbitRadiusY
 
 	// Sample orbital ellipse for blockage
 	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
@@ -369,7 +367,10 @@ func (s *WeaponSystem) updateOrbs() {
 	// Update each orb
 	for i := range entries {
 		orbEntity := entries[i].entity
-		orb := entries[i].comp
+		orb, ok := s.world.Components.Orb.GetPtr(orbEntity)
+		if !ok {
+			continue
+		}
 		targetAngle := targetAngles[i]
 
 		// Check if redistribution needed (with hysteresis)
@@ -417,7 +418,6 @@ func (s *WeaponSystem) updateOrbs() {
 				targetGridX, targetGridY = currentPos.X, currentPos.Y
 			} else {
 				// Both invalid - skip position update, keep component state
-				s.world.Components.Orb.SetComponent(orbEntity, orb)
 				continue
 			}
 		} else if hasPos && (currentPos.X != targetGridX || currentPos.Y != targetGridY) {
@@ -439,7 +439,6 @@ func (s *WeaponSystem) updateOrbs() {
 					if hasPos {
 						targetGridX, targetGridY = currentPos.X, currentPos.Y
 					} else {
-						s.world.Components.Orb.SetComponent(orbEntity, orb)
 						continue
 					}
 				}
@@ -451,9 +450,8 @@ func (s *WeaponSystem) updateOrbs() {
 		targetGridY = max(0, min(targetGridY, config.MapHeight-1))
 
 		// Update kinetic position
-		if kinetic, ok := s.world.Components.Kinetic.GetComponent(orbEntity); ok {
+		if kinetic, ok := s.world.Components.Kinetic.GetPtr(orbEntity); ok {
 			kinetic.PreciseX, kinetic.PreciseY = vmath.CenteredFromGrid(targetGridX, targetGridY)
-			s.world.Components.Kinetic.SetComponent(orbEntity, kinetic)
 		}
 
 		// Update grid position
@@ -467,7 +465,6 @@ func (s *WeaponSystem) updateOrbs() {
 			}
 		}
 
-		s.world.Components.Orb.SetComponent(orbEntity, orb)
 	}
 }
 
@@ -487,7 +484,7 @@ func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
 }
 
 func (s *WeaponSystem) destroyAllOrbs() {
-	orbEntities := s.world.Components.Orb.GetAllEntities()
+	orbEntities := s.world.Components.Orb.Entities()
 	for _, orbEntity := range orbEntities {
 		s.destroyOrb(orbEntity)
 	}

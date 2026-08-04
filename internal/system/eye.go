@@ -89,6 +89,7 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventEyeCancelRequest:
+		// despawnEye removes from Eye immediately.
 		headerEntities := s.world.Components.Eye.GetAllEntities()
 		for _, headerEntity := range headerEntities {
 			s.despawnEye(headerEntity)
@@ -118,7 +119,7 @@ func (s *EyeSystem) Update() {
 	activeCount := 0
 
 	for _, headerEntity := range headerEntities {
-		eyeComp, ok := s.world.Components.Eye.GetComponent(headerEntity)
+		eyeComp, ok := s.world.Components.Eye.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
@@ -154,10 +155,10 @@ func (s *EyeSystem) Update() {
 		}
 
 		// Animation frame cycling
-		s.updateAnimationFrame(&eyeComp)
+		s.updateAnimationFrame(eyeComp)
 
 		// Homing movement
-		s.updateHomingMovement(headerEntity, &eyeComp, &combatComp, kineticComp, dtFixed)
+		s.updateHomingMovement(headerEntity, eyeComp, &combatComp, kineticComp, dtFixed)
 
 		// Physics integration and member position sync
 		s.integrateAndSync(headerEntity, kineticComp, dtFixed)
@@ -179,7 +180,6 @@ func (s *EyeSystem) Update() {
 				})
 			}
 			combatComp.HitPoints = 0
-			// s.world.Components.Combat.SetComponent(headerEntity, combatComp)
 			s.despawnEye(headerEntity)
 			activeCount++
 			continue
@@ -187,9 +187,6 @@ func (s *EyeSystem) Update() {
 
 		// Cursor/shield interaction (incidental, not target-related)
 		s.handleCursorInteraction(headerEntity)
-
-		// Persist animation state
-		// s.world.Components.Eye.SetComponent(headerEntity, eyeComp)
 
 		activeCount++
 	}
@@ -255,14 +252,16 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for row := range parameter.EyeHeight {
 		for col := range parameter.EyeWidth {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			entities := s.world.Positions.GetAllEntityAt(x, y)
-			for _, e := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+			for i := range count {
+				e := entities[i]
 				if e == 0 || e == cursorEntity {
 					continue
 				}

@@ -154,6 +154,8 @@ func (s *StormSystem) Update() {
 	// Process pending blue spawns regardless of root entity state
 	s.processPendingBlueSpawns()
 
+	// When termination is requested, liveness edits intentionally are not
+	// committed; retain the detached root value across that early return.
 	stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity)
 	if !ok {
 		s.rootEntity = 0
@@ -394,6 +396,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 
 	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for y := -radiusY; y <= radiusY; y++ {
 		for x := -radiusX; x <= radiusX; x++ {
@@ -408,8 +411,9 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 			cellX := centerX + x
 			cellY := centerY + y
 
-			entities := s.world.Positions.GetAllEntityAt(cellX, cellY)
-			for _, e := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(cellX, cellY, entities[:])
+			for i := range count {
+				e := entities[i]
 				if e == 0 || e == cursorEntity {
 					continue
 				}
@@ -580,12 +584,14 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		stunned bool
 	}
 
+	// StormCircle lifecycle changes are event-queued, so all direct pointers stay
+	// valid through the physics, collision, and synchronization phases below.
 	var circles []circleState
 	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
-		circleComp, ok := s.world.Components.StormCircle.GetComponent(stormComp.Circles[i])
+		circleComp, ok := s.world.Components.StormCircle.GetPtr(stormComp.Circles[i])
 		if !ok {
 			stormComp.CirclesAlive[i] = false
 			continue
@@ -597,7 +603,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		}
 		circles = append(circles, circleState{
 			entity:  stormComp.Circles[i],
-			circle:  &circleComp,
+			circle:  circleComp,
 			index:   i,
 			stunned: stunned,
 		})
@@ -618,8 +624,6 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 	for i := range circles {
 		// 0. Stunned circles: skip physics, velocity already zeroed by combat system
 		if circles[i].stunned {
-			// Still need to sync position to 2D components
-			s.world.Components.StormCircle.SetComponent(circles[i].entity, *circles[i].circle)
 			continue
 		}
 
@@ -762,15 +766,12 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		}
 
 		// Update kinetic for 2D collision compatibility
-		if kinetic, ok := s.world.Components.Kinetic.GetComponent(circleEntity); ok {
+		if kinetic, ok := s.world.Components.Kinetic.GetPtr(circleEntity); ok {
 			kinetic.PreciseX = circle.Pos3D.X
 			kinetic.PreciseY = circle.Pos3D.Y
 			kinetic.VelX = circle.Vel3D.X
 			kinetic.VelY = circle.Vel3D.Y
-			s.world.Components.Kinetic.SetComponent(circleEntity, kinetic)
 		}
-
-		s.world.Components.StormCircle.SetComponent(circles[i].entity, *circles[i].circle)
 	}
 }
 
@@ -827,6 +828,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 	}
 
 	var toDestroy []core.Entity
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
 	for y := -radiusY; y <= radiusY; y++ {
 		for x := -radiusX; x <= radiusX; x++ {
@@ -840,8 +842,9 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 			cellX := newGridX + x
 			cellY := newGridY + y
 
-			entities := s.world.Positions.GetAllEntityAt(cellX, cellY)
-			for _, e := range entities {
+			count := s.world.Positions.GetAllEntitiesAtInto(cellX, cellY, entities[:])
+			for i := range count {
+				e := entities[i]
 				_, excluded := s.memberExcludeSet[e]
 				if e == 0 || e == cursorEntity || excluded {
 					continue
@@ -970,7 +973,7 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 		return
 	}
 
-	stormComp, ok := s.world.Components.Storm.GetComponent(s.rootEntity)
+	stormComp, ok := s.world.Components.Storm.GetPtr(s.rootEntity)
 	if !ok {
 		return
 	}
@@ -986,13 +989,12 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 				Index:        i,
 			})
 
-			if s.AliveCount(&stormComp) == 0 {
+			if s.AliveCount(stormComp) == 0 {
 				s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 					RootEntity: s.rootEntity,
 				})
 			}
 
-			s.world.Components.Storm.SetComponent(s.rootEntity, stormComp)
 			return
 		}
 	}
@@ -1068,6 +1070,8 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			}
 
 			// Set immunity on members
+			// Missing Header membership exits after local timing work and deliberately
+			// skips the StormCircle commit.
 			headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
 			if !ok {
 				continue
@@ -1077,12 +1081,11 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 				if member.Entity == 0 {
 					continue
 				}
-				memberCombat, ok := s.world.Components.Combat.GetComponent(member.Entity)
+				memberCombat, ok := s.world.Components.Combat.GetPtr(member.Entity)
 				if !ok {
 					continue
 				}
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-				s.world.Components.Combat.SetComponent(member.Entity, memberCombat)
 			}
 		} else {
 			// Reset invulnerability tracking when vulnerable
@@ -1107,7 +1110,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 		}
 
 		circleEntity := stormComp.Circles[i]
-		circleComp, ok := s.world.Components.StormCircle.GetComponent(circleEntity)
+		circleComp, ok := s.world.Components.StormCircle.GetPtr(circleEntity)
 		if !ok {
 			continue
 		}
@@ -1145,14 +1148,14 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 
 					// Blue: init attack (calculate target, trigger spawn)
 					if circleType == component.StormCircleBlue {
-						s.initBlueAttack(&circleComp, circlePos.X, circlePos.Y)
+						s.initBlueAttack(circleComp, circlePos.X, circlePos.Y)
 					}
 				}
 			}
 
 		case component.StormCircleAttackActive:
 			// ACTIVE: Run the attack, lock physics in convex
-			s.processCircleAttack(&circleComp, circlePos.X, circlePos.Y, cursorEntity, cursorPos)
+			s.processCircleAttack(circleComp, circlePos.X, circlePos.Y, cursorEntity, cursorPos)
 
 			circleComp.AttackRemaining -= dt
 			if circleComp.AttackRemaining <= 0 {
@@ -1163,7 +1166,6 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 			}
 		}
 
-		s.world.Components.StormCircle.SetComponent(circleEntity, circleComp)
 	}
 }
 

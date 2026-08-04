@@ -80,16 +80,14 @@ func (s *PingSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Ping.GetAllEntities()
+	pings := s.world.Components.Ping
 	dt := s.world.Resources.Time.DeltaTime
 
-	for _, entity := range entities {
-		ping, ok := s.world.Components.Ping.GetComponent(entity)
+	for _, entity := range pings.Entities() {
+		ping, ok := pings.GetPtr(entity)
 		if !ok {
 			continue
 		}
-
-		changed := false
 
 		// Update Grid Timer
 		if ping.GridActive {
@@ -98,12 +96,6 @@ func (s *PingSystem) Update() {
 				ping.GridRemaining = 0
 				ping.GridActive = false
 			}
-			changed = true
-		}
-
-		// Commit changes back to store
-		if changed {
-			s.world.Components.Ping.SetComponent(entity, ping)
 		}
 	}
 }
@@ -122,4 +114,3 @@ func (s *PingSystem) handleGridRequest(duration time.Duration) {
 	ping.GridRemaining = duration
 	s.world.Components.Ping.SetComponent(entity, ping)
 }
-

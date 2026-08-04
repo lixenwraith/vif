@@ -102,9 +102,9 @@ func (s *CombatSystem) Update() {
 
 	dt := s.world.Resources.Time.DeltaTime
 
-	combatEntities := s.world.Components.Combat.GetAllEntities()
-	for _, combatEntity := range combatEntities {
-		combatComp, ok := s.world.Components.Combat.GetComponent(combatEntity)
+	combats := s.world.Components.Combat
+	for _, combatEntity := range combats.Entities() {
+		combatComp, ok := combats.GetPtr(combatEntity)
 		if !ok {
 			continue
 		}
@@ -141,9 +141,7 @@ func (s *CombatSystem) Update() {
 			}
 		}
 
-		s.world.Components.Combat.SetComponent(combatEntity, combatComp)
 	}
-
 }
 
 // applyHitDirect applies combat hit to a target
@@ -623,4 +621,3 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 
 	return true
 }
-

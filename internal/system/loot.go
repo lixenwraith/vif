@@ -143,6 +143,8 @@ func (s *LootSystem) Update() {
 		return
 	}
 
+	// collectLoot destroys the current entity immediately, so iteration needs a
+	// detached entity list even though surviving kinetic components mutate in place.
 	lootEntities := s.world.Components.Loot.GetAllEntities()
 	if len(lootEntities) == 0 {
 		s.statActive.Store(0)
@@ -165,12 +167,12 @@ func (s *LootSystem) Update() {
 
 	var activeCount int64
 	for _, lootEntity := range lootEntities {
-		lootComp, ok := s.world.Components.Loot.GetComponent(lootEntity)
+		lootComp, ok := s.world.Components.Loot.GetPtr(lootEntity)
 		if !ok {
 			continue
 		}
 
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(lootEntity)
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(lootEntity)
 		if !ok {
 			continue
 		}
@@ -218,7 +220,6 @@ func (s *LootSystem) Update() {
 			},
 		)
 
-		s.world.Components.Kinetic.SetComponent(lootEntity, kineticComp)
 		if newGridX != curX || newGridY != curY {
 			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
@@ -538,9 +539,9 @@ type candidate struct {
 // getActiveLootTypes returns set of loot types currently on map
 func (s *LootSystem) getActiveLootTypes() map[component.LootType]bool {
 	active := make(map[component.LootType]bool)
-	lootEntities := s.world.Components.Loot.GetAllEntities()
+	lootEntities := s.world.Components.Loot.Entities()
 	for _, entity := range lootEntities {
-		lootComp, ok := s.world.Components.Loot.GetComponent(entity)
+		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
 		if !ok {
 			continue
 		}

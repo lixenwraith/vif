@@ -132,7 +132,7 @@ func (s *ShieldSystem) Update() {
 
 	cursorEntity := s.world.Resources.Player.Entity
 
-	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
+	shieldComp, ok := s.world.Components.Shield.GetPtr(cursorEntity)
 	if !ok || !shieldComp.Active {
 		return
 	}
@@ -146,6 +146,5 @@ func (s *ShieldSystem) Update() {
 			Type:       component.EnergyDeltaPassive,
 		})
 		shieldComp.LastDrainTime = now
-		s.world.Components.Shield.SetComponent(cursorEntity, shieldComp)
 	}
 }

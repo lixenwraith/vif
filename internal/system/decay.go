@@ -194,7 +194,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 	gameWidth := s.world.Resources.Config.MapWidth
 
-	decayEntities := s.world.Components.Decay.GetAllEntities()
+	decays := s.world.Components.Decay
 
 	// Clear frame deduplication maps
 	clear(s.processedGridCells)
@@ -204,8 +204,10 @@ func (s *DecaySystem) updateDecayEntities() {
 	var deathCandidates []core.Entity
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
-	for _, entity := range decayEntities {
-		decayComp, ok := s.world.Components.Decay.GetComponent(entity)
+	// Wall-death exits intentionally skip component write-back while destruction
+	// remains queued, so movement values stay detached even though iteration is live.
+	for _, entity := range decays.Entities() {
+		decayComp, ok := decays.GetComponent(entity)
 		if !ok {
 			continue
 		}
@@ -282,9 +284,8 @@ func (s *DecaySystem) updateDecayEntities() {
 		if decayComp.LastIntX != curX || decayComp.LastIntY != curY {
 			if s.rng.Float64() < parameter.ParticleChangeChance {
 				decayComp.Rune = parameter.AlphanumericRunes[s.rng.Intn(len(parameter.AlphanumericRunes))]
-				if sigil, ok := s.world.Components.Sigil.GetComponent(entity); ok {
+				if sigil, ok := s.world.Components.Sigil.GetPtr(entity); ok {
 					sigil.Rune = decayComp.Rune
-					s.world.Components.Sigil.SetComponent(entity, sigil)
 				}
 			}
 			decayComp.LastIntX = curX
@@ -293,7 +294,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 		// Grid Sync: Update Positions for spatial queries
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: curX, Y: curY})
-		s.world.Components.Decay.SetComponent(entity, decayComp)
+		decays.SetComponent(entity, decayComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	}
 
@@ -314,7 +315,7 @@ func (s *DecaySystem) shouldDieByDecay(entity core.Entity) bool {
 
 // applyDecayToCharacter applies decay logic to a single character entity
 func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
-	glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
+	glyphComp, ok := s.world.Components.Glyph.GetPtr(entity)
 	if !ok {
 		return
 	}
@@ -330,19 +331,16 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 	if glyphComp.Level > component.GlyphDark {
 		// Decrease level if not level dark
 		glyphComp.Level--
-		s.world.Components.Glyph.SetComponent(entity, glyphComp)
 	} else {
 		// Dark level: type chain Blue→Green→Red→destroy
 		switch glyphComp.Type {
 		case component.GlyphBlue:
 			glyphComp.Type = component.GlyphGreen
 			glyphComp.Level = component.GlyphBright
-			s.world.Components.Glyph.SetComponent(entity, glyphComp)
 
 		case component.GlyphGreen:
 			glyphComp.Type = component.GlyphRed
 			glyphComp.Level = component.GlyphBright
-			s.world.Components.Glyph.SetComponent(entity, glyphComp)
 
 		default:
 			// Fallback: Red or other: destroy

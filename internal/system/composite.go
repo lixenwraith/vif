@@ -88,6 +88,8 @@ func (s *CompositeSystem) Update() {
 		return
 	}
 
+	// syncMembers and destroyHead can structurally mutate Header/Member stores;
+	// preserve the original header order and keep component values detached.
 	headerEntities := s.world.Components.Header.GetAllEntities()
 
 	for _, headerEntity := range headerEntities {
@@ -218,7 +220,6 @@ func (s *CompositeSystem) syncMembers(headerComp *component.HeaderComponent, hea
 
 		// Liveness check: if entity no longer has position, it was destroyed
 		if !s.world.Components.Member.HasEntity(memberEntry.Entity) {
-			//	if !s.world.Positions.HasPosition(memberEntry.Entity) {
 			memberEntry.Entity = 0 // Tombstone
 			headerComp.Dirty = true
 			continue

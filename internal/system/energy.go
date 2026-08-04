@@ -146,29 +146,30 @@ func (s *EnergySystem) Update() {
 	cursorEntity := s.world.Resources.Player.Entity
 
 	// Clear error flash after timeout
-	cursorComp, ok := s.world.Components.Cursor.GetComponent(cursorEntity)
+	cursorComp, ok := s.world.Components.Cursor.GetPtr(cursorEntity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorComp.ErrorFlashRemaining -= dt
 		if cursorComp.ErrorFlashRemaining <= 0 {
 			cursorComp.ErrorFlashRemaining = 0
 		}
-		s.world.Components.Cursor.SetComponent(cursorEntity, cursorComp)
 	}
 
 	// Clear energy blink after timeout
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
-	if ok && energyComp.BlinkActive {
+	energyComp, hasEnergy := s.world.Components.Energy.GetPtr(cursorEntity)
+	if hasEnergy && energyComp.BlinkActive {
 		remaining := energyComp.BlinkRemaining - dt
 		if remaining <= 0 {
 			remaining = 0
 			energyComp.BlinkActive = false
 		}
 		energyComp.BlinkRemaining = remaining
-		s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 	}
 
 	// Evaluate shield activation state
-	energy := energyComp.Current
+	var energy int64
+	if hasEnergy {
+		energy = energyComp.Current
+	}
 	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
 	if ok {
 		shieldActive := shieldComp.Active

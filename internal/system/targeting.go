@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -74,8 +75,10 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 // HasCombatTargetAt returns true if any enemy combat entity exists at (x, y).
 // Excludes selfEntity from resolution and ownerEntity-owned entities from results.
 func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.Entity) bool {
-	entities := w.Positions.GetAllEntityAt(x, y)
-	for _, e := range entities {
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	count := w.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	for i := range count {
+		e := entities[i]
 		target, _, valid := ResolveTargetFromEntity(w, e, selfEntity)
 		if !valid {
 			continue
@@ -164,7 +167,7 @@ func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEnt
 	var singles []TargetAssignment
 
 	// 1. Simple combat entities
-	for _, e := range w.Components.Combat.GetAllEntities() {
+	for _, e := range w.Components.Combat.Entities() {
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}

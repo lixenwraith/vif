@@ -3,6 +3,7 @@ package system
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -86,21 +87,22 @@ func (s *FadeoutSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	entities := s.world.Components.Fadeout.GetAllEntities()
+	fadeouts := s.world.Components.Fadeout
+	var toDestroy []core.Entity
 
-	for _, entity := range entities {
-		fadeout, ok := s.world.Components.Fadeout.GetComponent(entity)
+	for _, entity := range fadeouts.Entities() {
+		fadeout, ok := fadeouts.GetPtr(entity)
 		if !ok {
 			continue
 		}
 
 		fadeout.Remaining -= dt
 		if fadeout.Remaining <= 0 {
-			s.world.DestroyEntity(entity)
-		} else {
-			s.world.Components.Fadeout.SetComponent(entity, fadeout)
+			toDestroy = append(toDestroy, entity)
 		}
 	}
+
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor color.RGB) {

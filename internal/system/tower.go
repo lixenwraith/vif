@@ -102,8 +102,8 @@ func (s *TowerSystem) Update() {
 		return
 	}
 
-	towerEntities := s.world.Components.Tower.GetAllEntities()
-	if len(towerEntities) == 0 {
+	towers := s.world.Components.Tower
+	if towers.CountEntities() == 0 {
 		s.statActive.Store(false)
 		s.statCount.Store(0)
 		return
@@ -111,14 +111,14 @@ func (s *TowerSystem) Update() {
 
 	activeCount := 0
 
-	for _, headerEntity := range towerEntities {
-		headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	for _, headerEntity := range towers.Entities() {
+		headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
 
 		// Ablative combat: detect member HP<=0 and route deaths
-		s.processAblativeCombat(headerEntity, &headerComp)
+		s.processAblativeCombat(headerEntity, headerComp)
 
 		activeCount++
 	}
@@ -429,7 +429,7 @@ func (s *TowerSystem) terminateTower(headerEntity core.Entity) {
 }
 
 func (s *TowerSystem) terminateAll() {
-	for _, entity := range s.world.Components.Tower.GetAllEntities() {
+	for _, entity := range s.world.Components.Tower.Entities() {
 		s.terminateTower(entity)
 	}
 }

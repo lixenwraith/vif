@@ -49,16 +49,16 @@ func (s *LightningSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Lightning.GetAllEntities()
-	if len(entities) == 0 {
+	lightnings := s.world.Components.Lightning
+	if lightnings.CountEntities() == 0 {
 		return
 	}
 
 	deltaTime := s.world.Resources.Time.DeltaTime
 	var toDestroy []core.Entity
 
-	for _, e := range entities {
-		lc, ok := s.world.Components.Lightning.GetComponent(e)
+	for _, e := range lightnings.Entities() {
+		lc, ok := lightnings.GetPtr(e)
 		if !ok {
 			continue
 		}
@@ -66,7 +66,6 @@ func (s *LightningSystem) Update() {
 		// Advance animation frame for tracked mode (dancing effect)
 		if lc.Duration == 0 {
 			lc.AnimFrame++
-			s.world.Components.Lightning.SetComponent(e, lc)
 			continue // Tracked mode: no duration decrement
 		}
 
@@ -74,14 +73,10 @@ func (s *LightningSystem) Update() {
 		lc.Remaining -= deltaTime
 		if lc.Remaining <= 0 {
 			toDestroy = append(toDestroy, e)
-		} else {
-			s.world.Components.Lightning.SetComponent(e, lc)
 		}
 	}
 
-	for _, e := range toDestroy {
-		s.world.DestroyEntity(e)
-	}
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 func (s *LightningSystem) EventTypes() []event.EventType {
@@ -166,14 +161,14 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) 
 
 func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 	// Find lightning by owner
-	for _, e := range s.world.Components.Lightning.GetAllEntities() {
-		lc, ok := s.world.Components.Lightning.GetComponent(e)
+	lightnings := s.world.Components.Lightning
+	for _, e := range lightnings.Entities() {
+		lc, ok := lightnings.GetPtr(e)
 		if !ok || lc.Owner != p.Owner {
 			continue
 		}
 		lc.TargetX = p.TargetX
 		lc.TargetY = p.TargetY
-		s.world.Components.Lightning.SetComponent(e, lc)
 		return
 	}
 }
@@ -181,23 +176,23 @@ func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
 // despawnLightning removes lightning matching criteria
 // target=0 removes all lightning from owner, otherwise only matching target
 func (s *LightningSystem) despawnLightning(owner, target core.Entity) {
-	for _, lightningEntity := range s.world.Components.Lightning.GetAllEntities() {
-		lightningComp, ok := s.world.Components.Lightning.GetComponent(lightningEntity)
+	lightnings := s.world.Components.Lightning
+	var toDestroy []core.Entity
+	for _, lightningEntity := range lightnings.Entities() {
+		lightningComp, ok := lightnings.GetPtr(lightningEntity)
 		if !ok || lightningComp.Owner != owner {
 			continue
 		}
 		if target != 0 && lightningComp.TargetEntity != target {
 			continue
 		}
-		s.world.Components.Lightning.RemoveEntity(lightningEntity)
-		s.world.DestroyEntity(lightningEntity)
+		toDestroy = append(toDestroy, lightningEntity)
 	}
+	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
 func (s *LightningSystem) destroyAll() {
+	// Batch destruction mutates the live lightning slice, so detach it first.
 	entities := s.world.Components.Lightning.GetAllEntities()
-	for _, e := range entities {
-		s.world.Components.Lightning.RemoveEntity(e)
-		s.world.DestroyEntity(e)
-	}
+	s.world.DestroyEntitiesBatch(entities)
 }

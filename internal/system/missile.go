@@ -77,21 +77,15 @@ func (s *MissileSystem) Update() {
 		return
 	}
 
-	// missileEntities := s.world.Components.Missile.GetAllEntities()
-
 	var toDestroy []core.Entity
-
-	// for _, missileEntity := range missileEntities {
 
 	// Live view: no removals during the loop (deferred to toDestroy),
 	// no missile spawns during Update (spawn is event-driven)
 	for _, missileEntity := range missiles.Entities() {
-		// missileComp, ok := s.world.Components.Missile.GetComponent(missileEntity)
 		missileComp, ok := missiles.GetPtr(missileEntity)
 		if !ok {
 			continue
 		}
-		// kineticComp, ok := s.world.Components.Kinetic.GetComponent(missileEntity)
 		kineticComp, ok := s.world.Components.Kinetic.GetPtr(missileEntity)
 		if !ok {
 			continue
@@ -99,7 +93,6 @@ func (s *MissileSystem) Update() {
 
 		missileComp.Lifetime += dt
 
-		// if s.updateMissile(&missileComp, &kineticComp, dtFixed) {
 		if s.updateMissile(missileComp, kineticComp, dtFixed) {
 			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 				X:      vmath.ToInt(kineticComp.PreciseX),
@@ -125,28 +118,13 @@ func (s *MissileSystem) Update() {
 			s.world.Positions.SetPosition(missileEntity, component.PositionComponent{X: gridX, Y: gridY})
 		}
 
-		// // Trail emission based on elapsed time
-		// if missileComp.Lifetime-missileComp.LastTrailEmit >= parameter.MissileTrailInterval {
-		// 	s.pushTrail(&missileComp, kineticComp.PreciseX, kineticComp.PreciseY)
-		// 	missileComp.LastTrailEmit = missileComp.Lifetime
-		// }
-		// s.ageTrail(&missileComp, dt)
-		//
-		// s.world.Components.Missile.SetComponent(missileEntity, missileComp)
-		// s.world.Components.Kinetic.SetComponent(missileEntity, kineticComp)
-
 		// Trail emission based on elapsed time
 		if missileComp.Lifetime-missileComp.LastTrailEmit >= parameter.MissileTrailInterval {
 			s.pushTrail(missileComp, kineticComp.PreciseX, kineticComp.PreciseY)
 			missileComp.LastTrailEmit = missileComp.Lifetime
 		}
 		s.ageTrail(missileComp, dt)
-		// Mutations through pointers persist; no SetComponent write-back
 	}
-
-	// for _, e := range toDestroy {
-	// 	s.world.DestroyEntity(e)
-	// }
 
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
@@ -392,7 +370,7 @@ func (s *MissileSystem) ageTrail(m *component.MissileComponent, dt time.Duration
 }
 
 func (s *MissileSystem) destroyAll() {
-	for _, e := range s.world.Components.Missile.GetAllEntities() {
-		s.world.DestroyEntity(e)
-	}
+	// Batch destruction mutates the live missile slice, so detach it first.
+	entities := s.world.Components.Missile.GetAllEntities()
+	s.world.DestroyEntitiesBatch(entities)
 }

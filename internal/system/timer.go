@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -82,11 +83,12 @@ func (s *TimerSystem) Update() {
 		return
 	}
 
-	entities := s.world.Components.Timer.GetAllEntities()
+	timers := s.world.Components.Timer
 	dt := s.world.Resources.Time.DeltaTime
+	var expired []core.Entity
 
-	for _, entity := range entities {
-		timer, ok := s.world.Components.Timer.GetComponent(entity)
+	for _, entity := range timers.Entities() {
+		timer, ok := timers.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -94,11 +96,10 @@ func (s *TimerSystem) Update() {
 		timer.Remaining -= dt
 
 		if timer.Remaining <= 0 {
-			// Timer expired
-			s.world.Components.Timer.RemoveEntity(entity, false)
 			s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
-		} else {
-			s.world.Components.Timer.SetComponent(entity, timer)
+			expired = append(expired, entity)
 		}
 	}
+
+	timers.RemoveBatch(expired)
 }

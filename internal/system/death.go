@@ -198,22 +198,12 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	// deathEntities := s.world.Components.Death.GetAllEntities()
-	// if len(deathEntities) == 0 {
-	// 	return
-	// }
-	//
-	// for _, deathEntity := range deathEntities {
-	// 	// Route through markForDeath to ensure protection checks and visual effects are applied
-	// 	s.markForDeath(deathEntity, 0)
-	// }
-
 	deaths := s.world.Components.Death
 	if deaths.CountEntities() == 0 {
 		return
 	}
 
-	// Detach before destroying: markForDeath mutates this store
+	// markForDeath removes from this store, so preserve the tick-start order.
 	s.destroyBuf = append(s.destroyBuf[:0], deaths.Entities()...)
 	for _, e := range s.destroyBuf {
 		s.markForDeath(e, 0)

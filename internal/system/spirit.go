@@ -88,20 +88,16 @@ func (s *SpiritSystem) Update() {
 	}
 
 	// Destroy entities marked last tick
-	for _, entity := range s.destroyNextTick {
-		s.world.DestroyEntity(entity)
-	}
+	s.world.DestroyEntitiesBatch(s.destroyNextTick)
 	s.destroyNextTick = s.destroyNextTick[:0]
 
-	spiritEntities := s.world.Components.Spirit.GetAllEntities()
-	if len(spiritEntities) == 0 {
+	spirits := s.world.Components.Spirit
+	if spirits.CountEntities() == 0 {
 		return
 	}
 
-	var toDestroy []core.Entity
-
-	for _, entity := range spiritEntities {
-		spirit, ok := s.world.Components.Spirit.GetComponent(entity)
+	for _, entity := range spirits.Entities() {
+		spirit, ok := spirits.GetPtr(entity)
 		if !ok {
 			continue
 		}
@@ -113,12 +109,6 @@ func (s *SpiritSystem) Update() {
 			// Mark for destruction next tick - allows final frame render
 			s.destroyNextTick = append(s.destroyNextTick, entity)
 		}
-		s.world.Components.Spirit.SetComponent(entity, spirit)
-	}
-
-	// Destroy completed spirits
-	for _, entity := range toDestroy {
-		s.world.DestroyEntity(entity)
 	}
 }
 
@@ -161,8 +151,7 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 }
 
 func (s *SpiritSystem) destroyAllSpirits() {
+	// Batch destruction mutates the live spirit slice, so detach it first.
 	entities := s.world.Components.Spirit.GetAllEntities()
-	for _, entity := range entities {
-		s.world.DestroyEntity(entity)
-	}
+	s.world.DestroyEntitiesBatch(entities)
 }

@@ -225,7 +225,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 }
 
 func (s *FuseSystem) handleQuasarFuse() {
-	drainEntities := s.world.Components.Drain.GetAllEntities()
+	drainEntities := s.world.Components.Drain.Entities()
 	sources := make([]core.Point, 0, len(drainEntities))
 
 	for _, drainEntity := range drainEntities {
