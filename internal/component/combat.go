@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 )
 
@@ -186,7 +187,7 @@ var CombatAttackCleanerToDrain = CombatAttackProfile{
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToDrain,
 	// TODO: migrate collision to matrix
-	CollisionProfile: &physics.CleanerToDrain,
+	CollisionProfile: &profile.CleanerToDrain,
 }
 
 var CombatAttackCleanerToQuasar = CombatAttackProfile{
@@ -197,7 +198,7 @@ var CombatAttackCleanerToQuasar = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToQuasar,
-	CollisionProfile:   &physics.CleanerToQuasar,
+	CollisionProfile:   &profile.CleanerToQuasar,
 }
 
 var CombatAttackCleanerToSwarm = CombatAttackProfile{
@@ -208,7 +209,7 @@ var CombatAttackCleanerToSwarm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToSwarm,
-	CollisionProfile:   &physics.CleanerToSwarm,
+	CollisionProfile:   &profile.CleanerToSwarm,
 }
 
 var CombatAttackCleanerToStorm = CombatAttackProfile{
@@ -219,7 +220,7 @@ var CombatAttackCleanerToStorm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToStorm,
-	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.CleanerToStorm,
 }
 
 var CombatAttackCleanerToPylon = CombatAttackProfile{
@@ -240,7 +241,7 @@ var CombatAttackCleanerToSnakeHead = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToSnakeHead,
-	CollisionProfile:   &physics.CleanerToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.CleanerToSnakeHead,
 }
 
 var CombatAttackCleanerToSnakeBody = CombatAttackProfile{
@@ -251,7 +252,7 @@ var CombatAttackCleanerToSnakeBody = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToSnakeBody,
-	CollisionProfile:   &physics.CleanerToSwarm, // Reuse swarm profile for body
+	CollisionProfile:   &profile.CleanerToSnakeBody,
 }
 
 var CombatAttackCleanerToEye = CombatAttackProfile{
@@ -262,7 +263,7 @@ var CombatAttackCleanerToEye = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageCleaner,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        &CombatAttackLightningToEye,
-	CollisionProfile:   &physics.CleanerToEye,
+	CollisionProfile:   &profile.CleanerToEye,
 }
 
 // Lightning attack profiles
@@ -363,7 +364,7 @@ var CombatAttackShieldToDrain = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ShieldToDrain,
+	CollisionProfile:   &profile.ShieldToDrain,
 }
 
 var CombatAttackShieldToQuasar = CombatAttackProfile{
@@ -374,7 +375,7 @@ var CombatAttackShieldToQuasar = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ShieldToQuasar,
+	CollisionProfile:   &profile.ShieldToQuasar,
 }
 
 var CombatAttackShieldToSwarm = CombatAttackProfile{
@@ -385,7 +386,7 @@ var CombatAttackShieldToSwarm = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ShieldToSwarm,
+	CollisionProfile:   &profile.ShieldToSwarm,
 }
 
 var CombatAttackShieldToStorm = CombatAttackProfile{
@@ -395,7 +396,7 @@ var CombatAttackShieldToStorm = CombatAttackProfile{
 	DamageType:         CombatDamageArea,
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
-	CollisionProfile:   &physics.ShieldToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.ShieldToStorm,
 }
 
 var CombatAttackShieldToSnakeHead = CombatAttackProfile{
@@ -406,7 +407,7 @@ var CombatAttackShieldToSnakeHead = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ShieldToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.ShieldToSnakeHead,
 }
 
 var CombatAttackShieldToSnakeBody = CombatAttackProfile{
@@ -417,7 +418,7 @@ var CombatAttackShieldToSnakeBody = CombatAttackProfile{
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ShieldToSwarm, // Reuse swarm profile
+	CollisionProfile:   &profile.ShieldToSnakeBody,
 }
 
 var CombatAttackShieldToPylon = CombatAttackProfile{
@@ -438,7 +439,7 @@ var CombatAttackShieldToEye = CombatAttackProfile{
 	DamageType:         CombatDamageArea,
 	DamageValue:        0,
 	EffectMask:         CombatEffectKinetic,
-	CollisionProfile:   &physics.ShieldToEye,
+	CollisionProfile:   &profile.ShieldToEye,
 }
 
 // Explosion attack profiles
@@ -451,7 +452,7 @@ var CombatAttackExplosionToDrain = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToDrain,
+	CollisionProfile:   &profile.ExplosionToDrain,
 }
 
 var CombatAttackExplosionToQuasar = CombatAttackProfile{
@@ -462,7 +463,7 @@ var CombatAttackExplosionToQuasar = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar,
+	CollisionProfile:   &profile.ExplosionToQuasar,
 }
 
 var CombatAttackExplosionToSwarm = CombatAttackProfile{
@@ -473,7 +474,7 @@ var CombatAttackExplosionToSwarm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToSwarm,
+	CollisionProfile:   &profile.ExplosionToSwarm,
 }
 
 var CombatAttackExplosionToStorm = CombatAttackProfile{
@@ -484,7 +485,7 @@ var CombatAttackExplosionToStorm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.ExplosionToStorm,
 }
 
 var CombatAttackExplosionToPylon = CombatAttackProfile{
@@ -506,7 +507,7 @@ var CombatAttackExplosionToSnakeHead = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar, // Reuse quasar profile
+	CollisionProfile:   &profile.ExplosionToSnakeHead,
 }
 
 var CombatAttackExplosionToSnakeBody = CombatAttackProfile{
@@ -517,7 +518,7 @@ var CombatAttackExplosionToSnakeBody = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToSwarm,
+	CollisionProfile:   &profile.ExplosionToSwarm,
 }
 
 var CombatAttackExplosionToEye = CombatAttackProfile{
@@ -527,7 +528,7 @@ var CombatAttackExplosionToEye = CombatAttackProfile{
 	DamageType:         CombatDamageArea,
 	DamageValue:        parameter.CombatDamageExplosion,
 	EffectMask:         CombatEffectKinetic,
-	CollisionProfile:   &physics.ExplosionToEye,
+	CollisionProfile:   &profile.ExplosionToEye,
 }
 
 // Missile attack profiles
@@ -540,7 +541,7 @@ var CombatAttackMissileToDrain = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToDrain,
+	CollisionProfile:   &profile.ExplosionToDrain,
 }
 
 var CombatAttackMissileToQuasar = CombatAttackProfile{
@@ -551,7 +552,7 @@ var CombatAttackMissileToQuasar = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar,
+	CollisionProfile:   &profile.ExplosionToQuasar,
 }
 
 var CombatAttackMissileToSwarm = CombatAttackProfile{
@@ -562,7 +563,7 @@ var CombatAttackMissileToSwarm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToSwarm,
+	CollisionProfile:   &profile.ExplosionToSwarm,
 }
 
 var CombatAttackMissileToStorm = CombatAttackProfile{
@@ -573,7 +574,7 @@ var CombatAttackMissileToStorm = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar,
+	CollisionProfile:   &profile.ExplosionToQuasar,
 }
 
 var CombatAttackMissileToPylon = CombatAttackProfile{
@@ -593,7 +594,7 @@ var CombatAttackMissileToSnakeHead = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToQuasar,
+	CollisionProfile:   &profile.ExplosionToQuasar,
 }
 
 var CombatAttackMissileToSnakeBody = CombatAttackProfile{
@@ -604,7 +605,7 @@ var CombatAttackMissileToSnakeBody = CombatAttackProfile{
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
 	ChainAttack:        nil,
-	CollisionProfile:   &physics.ExplosionToSwarm,
+	CollisionProfile:   &profile.ExplosionToSwarm,
 }
 
 var CombatAttackMissileToEye = CombatAttackProfile{
@@ -614,7 +615,7 @@ var CombatAttackMissileToEye = CombatAttackProfile{
 	DamageType:         CombatDamageArea,
 	DamageValue:        parameter.CombatDamageMissile,
 	EffectMask:         CombatEffectNone,
-	CollisionProfile:   &physics.ExplosionToEye,
+	CollisionProfile:   &profile.ExplosionToEye,
 }
 
 // Pulse

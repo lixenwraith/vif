@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -256,7 +257,7 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	preciseX, preciseY := vmath.CenteredFromGrid(gridX, gridY)
 
 	kineticComp := component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
 			PreciseY: preciseY,
 		},

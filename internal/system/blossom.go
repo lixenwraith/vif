@@ -156,7 +156,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		LastIntY: lastY,
 	})
 
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelY:     velY,

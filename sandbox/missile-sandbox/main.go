@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/render"
+	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -56,7 +57,7 @@ type Particle struct {
 type Missile struct {
 	Type   MissileType
 	Active bool
-	Pos    core.Kinetic
+	Pos    physics.Kinetic
 	Origin vmath.Point
 	Target vmath.Point
 

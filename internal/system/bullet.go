@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -196,7 +197,7 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 	})
 
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: p.OriginX,
 			PreciseY: p.OriginY,
 			VelX:     p.VelX,

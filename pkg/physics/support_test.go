@@ -3,13 +3,12 @@ package physics
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // kin localizes the only internal dependency in the physics test suite.
 // Phase 3 moves Kinetic into this package; this alias is the single edit.
-type kin = core.Kinetic
+type kin = Kinetic
 
 func newKin(px, py, vx, vy float64) kin {
 	return kin{

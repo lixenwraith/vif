@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -305,7 +306,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	// Kinetic with centered position
 	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
 			PreciseY: preciseY,
 		},
@@ -422,7 +423,7 @@ func (s *EyeSystem) updateHomingMovement(
 		}
 	}
 
-	homingProfile := &physics.EyeHomingProfiles[eyeComp.Type]
+	homingProfile := &profile.EyeHomingProfiles[eyeComp.Type]
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,

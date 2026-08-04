@@ -3,7 +3,6 @@ package physics
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -32,7 +31,7 @@ type CollisionProfile struct {
 // ApplyCollision calculates and applies collision impulse
 // dirX, dirY: impact direction (impactor velocity or radial vector)
 func ApplyCollision(
-	k *core.Kinetic,
+	k *Kinetic,
 	dirX, dirY int64,
 	profile *CollisionProfile,
 	rng *vmath.FastRand,
@@ -66,7 +65,7 @@ func ApplyCollision(
 // dirX, dirY: impact direction (impactor velocity or radial vector)
 // offsetX, offsetY: hit point offset from anchor in integer cells
 func ApplyOffsetCollision(
-	k *core.Kinetic,
+	k *Kinetic,
 	dirX, dirY int64,
 	offsetX, offsetY int,
 	profile *CollisionProfile,
@@ -236,4 +235,13 @@ func ApplyOffsetCollisionImpulse(
 	magnitude = vmath.Mul(magnitude, massRatio)
 
 	return vmath.Mul(baseX, magnitude), vmath.Mul(baseY, magnitude)
+}
+
+// ImpulseFromProfile computes a collision impulse without applying it.
+// For callers that accumulate or defer application.
+func ImpulseFromProfile(dirX, dirY int64, p *CollisionProfile, rng *vmath.FastRand) (impulseX, impulseY int64) {
+	if dirX == 0 && dirY == 0 {
+		dirX = vmath.Scale
+	}
+	return ApplyCollisionImpulse(dirX, dirY, p.MassRatio, p.AngleVariance, p.ImpulseMin, p.ImpulseMax, rng)
 }

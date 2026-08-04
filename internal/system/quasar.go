@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -355,7 +356,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 	// Set kinetic component with centered position
 	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
 	}
@@ -494,7 +495,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	settled := physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
-		&physics.QuasarHoming,
+		&profile.QuasarHoming,
 		quasarComp.SpeedMultiplier,
 		dtFixed,
 		usingDirectPath, // Only apply homing drag on direct path

@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -311,7 +312,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 
 	// Initialize kinetic with cell-centered position
 	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
 	}
@@ -689,7 +690,7 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 	physics.ApplyHoming(
 		&kineticComp.Kinetic,
 		targetX, targetY,
-		&physics.SwarmHoming,
+		&profile.SwarmHoming,
 		dtFixed,
 	)
 

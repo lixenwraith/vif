@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -465,7 +466,7 @@ func (s *StormSystem) createCircleHeader(
 	// Kinetic component for 2D collision compatibility
 	preciseX, preciseY := pos3D.X, pos3D.Y
 	s.world.Components.Kinetic.SetComponent(circleEntity, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
 			PreciseY: preciseY,
 		},
@@ -636,7 +637,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			accel := physics.GravitationalAccelWithRepulsion3D(
 				circles[i].circle.Pos3D,
 				circles[j].circle.Pos3D,
-				physics.MassStorm,
+				profile.MassStorm,
 				parameter.StormGravity,
 				parameter.StormRepulsionRadius,
 				parameter.StormRepulsionStrength,
@@ -789,7 +790,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	newPosA, newPosB, separated := physics.SeparateOverlap3D(
 		a.Pos3D, b.Pos3D,
 		parameter.StormCollisionRadius, parameter.StormCollisionRadius,
-		physics.MassStorm, physics.MassStorm,
+		profile.MassStorm, profile.MassStorm,
 	)
 	if separated {
 		a.Pos3D = newPosA
@@ -800,7 +801,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	collided := physics.ElasticCollision3DInPlace(
 		&a.Pos3D, &b.Pos3D,
 		&a.Vel3D, &b.Vel3D,
-		physics.MassStorm, physics.MassStorm,
+		profile.MassStorm, profile.MassStorm,
 		parameter.StormRestitution,
 	)
 	if collided {

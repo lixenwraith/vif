@@ -356,7 +356,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 			Rune:      visual.CleanerChar,
 			ColorType: colorType,
 		}
-		kinetic := core.Kinetic{
+		kinetic := physics.Kinetic{
 			PreciseX: startX,
 			PreciseY: rowFixed,
 			VelX:     velX,
@@ -552,7 +552,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 			Rune:      visual.CleanerChar,
 			ColorType: colorType,
 		}
-		kinetic := core.Kinetic{
+		kinetic := physics.Kinetic{
 			PreciseX: dir.startX,
 			PreciseY: dir.startY,
 			VelX:     dir.velX,

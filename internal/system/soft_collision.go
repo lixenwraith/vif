@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -80,70 +81,70 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 func (s *SoftCollisionSystem) initMatrix() {
 	// Quasar pushes Drain
 	s.matrix[component.SpeciesQuasar][component.SpeciesDrain] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionQuasarToDrain,
+		Profile:     &profile.SoftQuasarToDrain,
 		SourceInvRx: parameter.QuasarCollisionInvRxSq,
 		SourceInvRy: parameter.QuasarCollisionInvRySq,
 	}
 
 	// Swarm pushes Swarm (bidirectional via separate entries)
 	s.matrix[component.SpeciesSwarm][component.SpeciesSwarm] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionSwarmToSwarm,
+		Profile:     &profile.SoftSwarmToSwarm,
 		SourceInvRx: parameter.SwarmCollisionInvRxSq,
 		SourceInvRy: parameter.SwarmCollisionInvRySq,
 	}
 
 	// Swarm pushes Quasar
 	s.matrix[component.SpeciesSwarm][component.SpeciesQuasar] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionSwarmToQuasar,
+		Profile:     &profile.SoftSwarmToQuasar,
 		SourceInvRx: parameter.SwarmCollisionInvRxSq,
 		SourceInvRy: parameter.SwarmCollisionInvRySq,
 	}
 
 	// Quasar pushes Swarm
 	s.matrix[component.SpeciesQuasar][component.SpeciesSwarm] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionQuasarToSwarm,
+		Profile:     &profile.SoftQuasarToSwarm,
 		SourceInvRx: parameter.QuasarCollisionInvRxSq,
 		SourceInvRy: parameter.QuasarCollisionInvRySq,
 	}
 
 	// Quasar pushes Quasar (bidirectional)
 	s.matrix[component.SpeciesQuasar][component.SpeciesQuasar] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionQuasarToQuasar,
+		Profile:     &profile.SoftQuasarToQuasar,
 		SourceInvRx: parameter.QuasarCollisionInvRxSq,
 		SourceInvRy: parameter.QuasarCollisionInvRySq,
 	}
 
 	// Storm pushes Swarm (reuse quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesSwarm] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionQuasarToSwarm,
+		Profile:     &profile.SoftQuasarToSwarm,
 		SourceInvRx: parameter.StormCollisionInvRxSq,
 		SourceInvRy: parameter.StormCollisionInvRySq,
 	}
 
 	// Storm pushes Quasar (reuse swarm-to-quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesQuasar] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionSwarmToQuasar,
+		Profile:     &profile.SoftSwarmToQuasar,
 		SourceInvRx: parameter.StormCollisionInvRxSq,
 		SourceInvRy: parameter.StormCollisionInvRySq,
 	}
 
 	// Pylon pushes Drain
 	s.matrix[component.SpeciesPylon][component.SpeciesDrain] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionPylonToDrain,
+		Profile:     &profile.SoftPylonToDrain,
 		SourceInvRx: parameter.PylonCollisionInvRxSq,
 		SourceInvRy: parameter.PylonCollisionInvRySq,
 	}
 
 	// Pylon pushes Swarm
 	s.matrix[component.SpeciesPylon][component.SpeciesSwarm] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionPylonToSwarm,
+		Profile:     &profile.SoftPylonToSwarm,
 		SourceInvRx: parameter.PylonCollisionInvRxSq,
 		SourceInvRy: parameter.PylonCollisionInvRySq,
 	}
 
 	// Pylon pushes Quasar
 	s.matrix[component.SpeciesPylon][component.SpeciesQuasar] = &SoftCollisionRule{
-		Profile:     &physics.SoftCollisionPylonToQuasar,
+		Profile:     &profile.SoftPylonToQuasar,
 		SourceInvRx: parameter.PylonCollisionInvRxSq,
 		SourceInvRy: parameter.PylonCollisionInvRySq,
 	}
@@ -392,22 +393,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	// Dampen mass ratio using fourth root to compress extreme values
-	// Preserves proportionality: heavier still pushes harder, but not catastrophically
-	dampenedRatio := rule.Profile.MassRatio
-	if dampenedRatio > vmath.Scale {
-		dampenedRatio = vmath.Sqrt(vmath.Sqrt(dampenedRatio))
-	}
-
-	// Calculate impulse with dampened ratio
-	impulseX, impulseY := physics.ApplyCollisionImpulse(
-		radialX, radialY,
-		dampenedRatio,
-		rule.Profile.AngleVariance,
-		rule.Profile.ImpulseMin,
-		rule.Profile.ImpulseMax,
-		s.rng,
-	)
+	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile, s.rng)
 
 	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
 

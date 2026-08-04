@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -155,7 +156,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		}
 
 		// Homing via physics
-		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &physics.MissileHoming, dt)
+		physics.ApplyHoming(&k.Kinetic, targetX, targetY, &profile.MissileHoming, dt)
 		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileMaxSpeed)
 
 		// Integrate position
@@ -341,7 +342,7 @@ func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy int
 	})
 
 	s.world.Components.Kinetic.SetComponent(e, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: x,
 			PreciseY: y,
 			VelX:     vx,

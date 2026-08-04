@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -341,7 +342,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 	// Kinetic component
 	preciseX, preciseY := vmath.CenteredFromGrid(headX, headY)
 	s.world.Components.Kinetic.SetComponent(headEntity, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
 			PreciseY: preciseY,
 		},
@@ -525,7 +526,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 
 		preciseX, preciseY := vmath.CenteredFromGrid(memberX, memberY)
 		s.world.Components.Kinetic.SetComponent(memberEntity, component.KineticComponent{
-			Kinetic: core.Kinetic{
+			Kinetic: physics.Kinetic{
 				PreciseX: preciseX,
 				PreciseY: preciseY,
 			},
@@ -578,7 +579,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
-		&physics.SnakeHoming,
+		&profile.SnakeHoming,
 		vmath.Scale,
 		dtFixed,
 		usingDirectPath,

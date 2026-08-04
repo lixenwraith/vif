@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -191,13 +192,13 @@ func (s *LootSystem) Update() {
 
 		if hasNav && navComp.HasDirectPath {
 			// Direct LOS: standard homing
-			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &physics.LootHoming, dtFixed)
+			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &profile.LootHoming, dtFixed)
 		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
 			// No LOS but have flow field: follow flow with lookahead
 			lookahead := vmath.FromFloat(5.0)
 			targetX := kineticComp.PreciseX + vmath.Mul(navComp.FlowX, lookahead)
 			targetY := kineticComp.PreciseY + vmath.Mul(navComp.FlowY, lookahead)
-			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &physics.LootHoming, dtFixed)
+			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtFixed)
 		} else {
 			// No nav or no flow: velocity bleed (stuck/lost)
 			bleedFactor := vmath.FromFloat(6.0)
@@ -342,7 +343,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 
 	// Kinetic with initial burst velocity
 	s.world.Components.Kinetic.SetComponent(entity, component.KineticComponent{
-		Kinetic: core.Kinetic{
+		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
 			PreciseY: preciseY,
 			VelX:     velX,

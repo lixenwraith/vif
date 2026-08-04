@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -674,7 +675,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		LastIntX:      spawnX,
 		LastIntY:      spawnY,
 	}
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
 		// VelX, VelY, AccelX, AccelY zero-initialized
@@ -928,7 +929,7 @@ func (s *DrainSystem) updateDrainMovement() {
 			physics.ApplyHomingScaled(
 				&kineticComp.Kinetic,
 				targetX, targetY,
-				&physics.DrainHoming,
+				&profile.DrainHoming,
 				vmath.Scale,
 				dtFixed,
 				true,
@@ -1014,7 +1015,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 // reflectOffWall reflects kinetic velocity when hitting wall at (wallX, wallY) from (fromX, fromY)
 // Snaps position back to fromX/fromY cell center
-func (s *DrainSystem) reflectOffWall(k *core.Kinetic, fromX, fromY, wallX, wallY int) {
+func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wallY int) {
 	dx := wallX - fromX
 	dy := wallY - fromY
 

@@ -3,7 +3,6 @@ package physics
 import (
 	"math"
 
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -40,7 +39,7 @@ type WallQueryFunc func(topLeftX, topLeftY int) bool
 //   - finalGridX, finalGridY: The integer grid coordinates after integration
 //   - hitWall: True if any wall or boundary collision occurred
 func IntegrateWithBounce(
-	k *core.Kinetic,
+	k *Kinetic,
 	dtFixed int64,
 	headerOffsetX, headerOffsetY int,
 	boundMinX, boundMaxX int,

@@ -1,7 +1,6 @@
 package physics
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -25,7 +24,7 @@ type HomingProfile struct {
 // targetX, targetY: target position in Q32.32
 // dt: delta time in Q32.32 seconds
 func ApplyHoming(
-	k *core.Kinetic,
+	k *Kinetic,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	dt int64,
@@ -37,7 +36,7 @@ func ApplyHoming(
 // speedMultiplier: Q32.32 scale factor (Scale = 1.0x)
 // applyDrag: if false, skip drag application (for immunity-gated drag)
 func ApplyHomingScaled(
-	k *core.Kinetic,
+	k *Kinetic,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	speedMultiplier int64,
@@ -49,7 +48,7 @@ func ApplyHomingScaled(
 
 // applyHomingInternal is the shared implementation
 func applyHomingInternal(
-	k *core.Kinetic,
+	k *Kinetic,
 	targetX, targetY int64,
 	profile *HomingProfile,
 	speedMultiplier int64,

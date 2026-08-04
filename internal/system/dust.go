@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
+	"github.com/lixenwraith/vi-fighter/internal/profile"
 	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -424,14 +425,9 @@ func (s *DustSystem) Update() {
 					// --- Drain (flag bit 0) ---
 					if flags&cellFlagDrain != 0 && s.world.Components.Drain.HasEntity(target) {
 						// Accumulate impulse instead of immediate apply
-						// TODO: change this to use collision profile instead
-						impulseX, impulseY := physics.ApplyCollisionImpulse(
+						impulseX, impulseY := physics.ImpulseFromProfile(
 							kineticComp.VelX, kineticComp.VelY,
-							vmath.Div(physics.MassDust, physics.MassDrain),
-							parameter.DrainDeflectAngleVar,
-							parameter.CollisionKineticImpulseMin,
-							parameter.CollisionKineticImpulseMax,
-							s.rng,
+							&profile.DustToDrain, s.rng,
 						)
 						collisionCtx.accumulateImpulse(target, impulseX, impulseY)
 						continue
@@ -441,14 +437,10 @@ func (s *DustSystem) Update() {
 					if flags&cellFlagCombatComposite != 0 {
 						if member, ok := s.world.Components.Member.GetComponent(target); ok {
 							if collisionCtx.combatHeaders[member.HeaderEntity] {
-								// TODO: change collision usage
-								impulseX, impulseY := physics.ApplyCollisionImpulse(
+
+								impulseX, impulseY := physics.ImpulseFromProfile(
 									kineticComp.VelX, kineticComp.VelY,
-									vmath.Div(physics.MassDust, physics.MassQuasar),
-									parameter.DrainDeflectAngleVar,
-									parameter.CollisionKineticImpulseMin,
-									parameter.CollisionKineticImpulseMax,
-									s.rng,
+									&profile.DustToComposite, s.rng,
 								)
 								collisionCtx.accumulateImpulse(member.HeaderEntity, impulseX, impulseY)
 							}
@@ -690,7 +682,7 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 	}
 
 	// Kinetic component
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelX:     vx,

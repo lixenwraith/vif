@@ -156,7 +156,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		LastIntY: lastY,
 	})
 
-	kinetic := core.Kinetic{
+	kinetic := physics.Kinetic{
 		PreciseX: vmath.FromInt(x),
 		PreciseY: vmath.FromInt(y),
 		VelY:     velY,
