@@ -116,3 +116,8 @@ func ExpDecayF(count int) float64 {
 	// Linear interpolation between the two closest values
 	return v0 + (v1-v0)*frac
 }
+
+// ExpDecayScaledF returns 1 + boostMax * e^(-count/k)
+func ExpDecayScaledF(count int, boostMax float64) float64 {
+	return 1.0 + boostMax*ExpDecayF(count)
+}

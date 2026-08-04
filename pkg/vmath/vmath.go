@@ -36,6 +36,8 @@ const (
 
 	// CellCenter is the offset from a cell origin to its center (0.5)
 	CellCenter int64 = Half
+	// CellCenterF is CellCenter on the float path
+	CellCenterF = 0.5
 )
 
 // === Lookup tables ===
@@ -75,6 +77,11 @@ func (p Point) Center() (px, py int64) {
 	return FromInt(p.X) + CellCenter, FromInt(p.Y) + CellCenter
 }
 
+// CenterF returns the float64 position of the cell's center
+func (p Point) CenterF() (px, py float64) {
+	return float64(p.X) + CellCenterF, float64(p.Y) + CellCenterF
+}
+
 // Add returns the component-wise sum
 func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y} }
 
@@ -83,6 +90,12 @@ func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y} }
 
 // PointAt returns the cell containing the Q32.32 position
 func PointAt(px, py int64) Point { return Point{X: ToInt(px), Y: ToInt(py)} }
+
+// PointAtF returns the cell containing the float64 position
+// Floor, not truncation: ToInt's arithmetic shift floors for negative coordinates
+func PointAtF(px, py float64) Point {
+	return Point{X: int(math.Floor(px)), Y: int(math.Floor(py))}
+}
 
 // Area is a rectangular grid region anchored at its top-left cell
 type Area struct {

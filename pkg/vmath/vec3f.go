@@ -56,3 +56,38 @@ func V3ToFloat(v Vec3) Vec3F {
 		Z: ToFloat(v.Z),
 	}
 }
+
+// V3FDot returns the dot product
+func V3FDot(a, b Vec3F) float64 {
+	return a.X*b.X + a.Y*b.Y + a.Z*b.Z
+}
+
+// V3FXY extracts X,Y components for 2D projection
+func V3FXY(v Vec3F) (x, y float64) {
+	return v.X, v.Y
+}
+
+// V3FFrom2D creates Vec3F from separate x,y with specified z
+func V3FFrom2D(x, y, z float64) Vec3F {
+	return Vec3F{X: x, Y: y, Z: z}
+}
+
+// V3FClampMagnitude limits vector magnitude
+func V3FClampMagnitude(v Vec3F, maxMag float64) Vec3F {
+	if V3FMagSq(v) <= maxMag*maxMag {
+		return v
+	}
+	return V3FScale(V3FNormalize(v), maxMag)
+}
+
+// V3FDamp reduces vector magnitude by factor (1.0 = no damp, 0 = full damp)
+func V3FDamp(v Vec3F, factor float64) Vec3F {
+	return Vec3F{v.X * factor, v.Y * factor, v.Z * factor}
+}
+
+// V3FDampDt applies frame-rate independent damping: v * factor^dt
+// Linear approximation v * (1 - (1-factor)*dt), valid for dt << 1 second
+func V3FDampDt(v Vec3F, factor, dt float64) Vec3F {
+	decay := ClampF(1.0-(1.0-factor)*dt, 0.0, 1.0)
+	return Vec3F{v.X * decay, v.Y * decay, v.Z * decay}
+}

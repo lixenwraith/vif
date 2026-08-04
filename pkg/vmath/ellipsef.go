@@ -44,3 +44,8 @@ func ScaleToCircularF(dy float64) float64 {
 func ScaleFromCircularF(dy float64) float64 {
 	return dy * 0.5
 }
+
+// EllipseContainsPointF checks if grid point (x,y) is inside ellipse centered at (cx,cy)
+func EllipseContainsPointF(x, y, cx, cy int, invRxSq, invRySq float64) bool {
+	return EllipseContainsF(float64(x-cx), float64(y-cy), invRxSq, invRySq)
+}
