@@ -37,13 +37,14 @@ func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
 
 // Render implements SystemRenderer
 func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(visual.MaskUI)
-
 	// Calculate Fill Limit from HeatComponent
-	heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(r.gameCtx.World.Resources.Player.Entity)
+	heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(r.gameCtx.World.Resources.Player.Entity)
 	if !ok {
 		return
 	}
+
+	buf.SetWriteMask(visual.MaskUI)
+
 	heat := heatComp.Current
 	overheat := heatComp.Overheat
 	r.burstBlink = heatComp.BurstFlashRemaining > 0
@@ -116,4 +117,3 @@ func segmentIndex(x, width int) int {
 	}
 	return segment
 }
-

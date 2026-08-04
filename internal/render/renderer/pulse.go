@@ -36,7 +36,7 @@ func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 
-	pulseComp, ok := r.gameCtx.World.Components.Pulse.GetComponent(cursorEntity)
+	pulseComp, ok := r.gameCtx.World.Components.Pulse.GetPtr(cursorEntity)
 	if !ok {
 		return
 	}
@@ -53,7 +53,7 @@ func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 	}
 
 	negativeEnergy := false
-	if energyComp, ok := r.gameCtx.World.Components.Energy.GetComponent(cursorEntity); ok {
+	if energyComp, ok := r.gameCtx.World.Components.Energy.GetPtr(cursorEntity); ok {
 		negativeEnergy = energyComp.Current < 0
 	}
 
@@ -148,4 +148,3 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 		}
 	}
 }
-

@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -32,17 +33,16 @@ func NewTeleportLineRenderer(ctx *engine.GameContext) *TeleportLineRenderer {
 }
 
 func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headerEntities := r.gameCtx.World.Components.Swarm.GetAllEntities()
-	if len(headerEntities) == 0 {
+	swarms := r.gameCtx.World.Components.Swarm
+	if swarms.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, headerEntity := range headerEntities {
-		swarmComp, ok := r.gameCtx.World.Components.Swarm.GetComponent(headerEntity)
-		if !ok || swarmComp.State != component.SwarmStateTeleport {
-			continue
+	swarms.Each(func(_ core.Entity, swarmComp *component.SwarmComponent) bool {
+		if swarmComp.State != component.SwarmStateTeleport {
+			return true
 		}
 
 		elapsed := parameter.SwarmTeleportDuration - swarmComp.TeleportRemaining
@@ -60,7 +60,8 @@ func (r *TeleportLineRenderer) Render(ctx render.RenderContext, buf *render.Rend
 			parameter.SwarmWidth, parameter.SwarmHeight,
 			parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 			progress)
-	}
+		return true
+	})
 }
 
 // renderBeam draws single line with phase-based visibility, excluding entity bounding boxes

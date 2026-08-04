@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -42,8 +43,8 @@ func NewLightningRenderer(ctx *engine.GameContext) *LightningRenderer {
 
 // Render draws all active lightning bolts using the mode-appropriate renderer
 func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Lightning.GetAllEntities()
-	if len(entities) == 0 {
+	lightnings := r.gameCtx.World.Components.Lightning
+	if lightnings.CountEntities() == 0 {
 		return
 	}
 
@@ -51,10 +52,9 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	// Works for 256, if any issue, branch and switch 256 back to MaskTransient
 	buf.SetWriteMask(visual.MaskNone)
 
-	for _, e := range entities {
-		l, ok := r.gameCtx.World.Components.Lightning.GetComponent(e)
-		if !ok || l.Remaining <= 0 {
-			continue
+	lightnings.Each(func(_ core.Entity, l *component.LightningComponent) bool {
+		if l.Remaining <= 0 {
+			return true
 		}
 
 		// Resolve origin position (map coords)
@@ -84,7 +84,8 @@ func (r *LightningRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 		// Dispatch to mode-specific renderer
 		r.renderLightning(ctx, buf, points, l.ColorType, parameter.LightningAlpha)
-	}
+		return true
+	})
 }
 
 // generateFractalPath creates a jagged lightning path using midpoint displacement

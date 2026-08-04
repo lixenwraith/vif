@@ -3,6 +3,8 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -22,32 +24,27 @@ func NewFlashRenderer(gameCtx *engine.GameContext) *FlashRenderer {
 
 // Render draws brief flash effects when characters are removed
 func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	flashEntities := r.gameCtx.World.Components.Flash.GetAllEntities()
-	if len(flashEntities) == 0 {
+	flashes := r.gameCtx.World.Components.Flash
+	if flashes.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, flashEntity := range flashEntities {
-		flashComp, ok := r.gameCtx.World.Components.Flash.GetComponent(flashEntity)
-		if !ok {
-			continue
-		}
-
+	flashes.Each(func(flashEntity core.Entity, flashComp *component.FlashComponent) bool {
 		if flashComp.Remaining <= 0 {
-			continue
+			return true
 		}
 
 		posComp, ok := r.gameCtx.World.Positions.GetPosition(flashEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Transform map coords to screen coords with visibility check
 		screenX, screenY, visible := ctx.MapToScreen(posComp.X, posComp.Y)
 		if !visible {
-			continue
+			return true
 		}
 
 		// Opacity fades from 1.0 to 0.0 over duration (bright to transparent)
@@ -60,5 +57,6 @@ func (r *FlashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 		// Additive blend on foreground only, preserves background
 		buf.Set(screenX, screenY, flashComp.Rune, flashColor, visual.RgbBlack, render.BlendAddFg, 1.0, terminal.AttrNone)
-	}
+		return true
+	})
 }

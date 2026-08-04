@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -32,27 +33,22 @@ func NewSwarmRenderer(gameCtx *engine.GameContext) *SwarmRenderer {
 
 // Render draws all active swarm entities
 func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headerEntities := r.gameCtx.World.Components.Swarm.GetAllEntities()
-	if len(headerEntities) == 0 {
+	swarms := r.gameCtx.World.Components.Swarm
+	if swarms.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, headerEntity := range headerEntities {
-		swarmComp, ok := r.gameCtx.World.Components.Swarm.GetComponent(headerEntity)
+	swarms.Each(func(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		// Determine color: hit flash > enraged > normal
@@ -66,8 +62,9 @@ func (r *SwarmRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			c = visual.RgbDrain
 		}
 
-		r.renderMembers(ctx, buf, &headerComp, &swarmComp, c)
-	}
+		r.renderMembers(ctx, buf, headerComp, swarmComp, c)
+		return true
+	})
 }
 
 // renderMembers draws swarm members based on current pattern

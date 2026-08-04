@@ -1,12 +1,13 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // ChargeLineRenderer draws pulsing bg-only warning lines from swarm to locked target
@@ -25,8 +26,8 @@ func NewChargeLineRenderer(ctx *engine.GameContext) *ChargeLineRenderer {
 }
 
 func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headerEntities := r.gameCtx.World.Components.Swarm.GetAllEntities()
-	if len(headerEntities) == 0 {
+	swarms := r.gameCtx.World.Components.Swarm
+	if swarms.CountEntities() == 0 {
 		return
 	}
 
@@ -39,16 +40,15 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 	}
 	pulseWindow := parameter.SwarmChargeLinePulseCount * pulseDur
 
-	for _, headerEntity := range headerEntities {
-		swarmComp, ok := r.gameCtx.World.Components.Swarm.GetComponent(headerEntity)
-		if !ok || swarmComp.State != component.SwarmStateLock {
-			continue
+	swarms.Each(func(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
+		if swarmComp.State != component.SwarmStateLock {
+			return true
 		}
 
 		lockElapsed := parameter.SwarmLockDuration - swarmComp.LockRemaining
 		pulseElapsed := lockElapsed - showDelay
 		if pulseElapsed < 0 || pulseElapsed >= pulseWindow {
-			continue
+			return true
 		}
 
 		pulseIndex := int(pulseElapsed / pulseDur)
@@ -63,14 +63,15 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 
 		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		r.tracePulse(ctx, buf,
 			headerPos.X, headerPos.Y,
 			swarmComp.LockedTargetX, swarmComp.LockedTargetY,
 			headT, alpha)
-	}
+		return true
+	})
 }
 
 // tracePulse draws a single pulse via Bresenham, skipping cells inside swarm footprint

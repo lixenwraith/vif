@@ -1,11 +1,12 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/terminal"
 )
 
 // GoldRenderer draws gold sequence composite entities
@@ -22,17 +23,16 @@ func NewGoldRenderer(gameCtx *engine.GameContext) *GoldRenderer {
 
 // Render draws all gold sequence members
 func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headers := r.gameCtx.World.Components.Header.GetAllEntities()
-	if len(headers) == 0 {
+	headers := r.gameCtx.World.Components.Header
+	if headers.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, anchor := range headers {
-		header, ok := r.gameCtx.World.Components.Header.GetComponent(anchor)
-		if !ok || header.Behavior != component.BehaviorGold {
-			continue
+	headers.Each(func(_ core.Entity, header *component.HeaderComponent) bool {
+		if header.Behavior != component.BehaviorGold {
+			return true
 		}
 
 		for _, member := range header.MemberEntries {
@@ -45,7 +45,7 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 				continue
 			}
 
-			glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(member.Entity)
+			glyph, ok := r.gameCtx.World.Components.Glyph.GetPtr(member.Entity)
 			if !ok {
 				continue
 			}
@@ -57,5 +57,6 @@ func (r *GoldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 			buf.SetFgOnly(screenX, screenY, glyph.Rune, visual.RgbGlyphGold, terminal.AttrNone)
 		}
-	}
+		return true
+	})
 }

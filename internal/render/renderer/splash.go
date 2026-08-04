@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -27,17 +28,20 @@ func NewSplashRenderer(gameCtx *engine.GameContext) *SplashRenderer {
 
 // Render draws all splash effects to background channel
 func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	splashes := r.gameCtx.World.Components.Splash
+	if splashes.CountEntities() == 0 {
+		return
+	}
+
 	buf.SetWriteMask(visual.MaskTransient)
 
-	entities := r.gameCtx.World.Components.Splash.GetAllEntities()
-	for _, entity := range entities {
-		splash, ok := r.gameCtx.World.Components.Splash.GetComponent(entity)
-		if !ok || splash.Length == 0 {
-			continue
+	splashes.Each(func(_ core.Entity, splash *component.SplashComponent) bool {
+		if splash.Length == 0 {
+			return true
 		}
 
 		// Resolve anchor position (map coords)
-		anchorX, anchorY := r.resolveAnchor(&splash)
+		anchorX, anchorY := r.resolveAnchor(splash)
 
 		// Use Slot for countdown detection
 		if splash.Slot == component.SlotTimer {
@@ -56,7 +60,8 @@ func (r *SplashRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				r.renderChar(ctx, buf, splash.Content[i], charX, anchorY, splash.Color)
 			}
 		}
-	}
+		return true
+	})
 }
 
 // resolveAnchor determines the screen position for a splash

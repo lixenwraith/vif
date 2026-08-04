@@ -5,6 +5,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -25,27 +27,27 @@ func NewDrainRenderer(gameCtx *engine.GameContext) *DrainRenderer {
 
 // Render draws all drain entities
 func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Drain.GetAllEntities()
-	if len(entities) == 0 {
+	drains := r.gameCtx.World.Components.Drain
+	if drains.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, entity := range entities {
+	drains.Each(func(entity core.Entity, _ *component.DrainComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
-			continue
+			return true
 		}
 
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
-			continue
+			return true
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(entity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Priority: hit flash > enraged > normal
@@ -60,7 +62,8 @@ func (r *DrainRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		buf.SetFgOnly(screenX, screenY, visual.DrainChar, c, terminal.AttrNone)
-	}
+		return true
+	})
 }
 
 // calculateFlashColor returns yellow with pulse effect

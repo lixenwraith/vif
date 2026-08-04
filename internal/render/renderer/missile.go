@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -35,23 +36,20 @@ func NewMissileRenderer(ctx *engine.GameContext) *MissileRenderer {
 }
 
 func (r *MissileRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Missile.GetAllEntities()
-	if len(entities) == 0 {
+	missiles := r.gameCtx.World.Components.Missile
+	if missiles.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
-	for _, e := range entities {
-		missile, ok := r.gameCtx.World.Components.Missile.GetComponent(e)
+	missiles.Each(func(e core.Entity, missile *component.MissileComponent) bool {
+		kinetic, ok := r.gameCtx.World.Components.Kinetic.GetPtr(e)
 		if !ok {
-			continue
+			return true
 		}
-		kinetic, ok := r.gameCtx.World.Components.Kinetic.GetComponent(e)
-		if !ok {
-			continue
-		}
-		r.renderMissile(ctx, buf, &missile, &kinetic)
-	}
+		r.renderMissile(ctx, buf, missile, kinetic)
+		return true
+	})
 }
 
 // --- TrueColor ---

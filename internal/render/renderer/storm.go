@@ -66,23 +66,21 @@ func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
 }
 
 func (r *StormRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	stormEntities := r.gameCtx.World.Components.Storm.GetAllEntities()
-	if len(stormEntities) == 0 {
+	storms := r.gameCtx.World.Components.Storm
+	if storms.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, rootEntity := range stormEntities {
-		stormComp, ok := r.gameCtx.World.Components.Storm.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-		r.renderStorm(ctx, buf, &stormComp)
-	}
+	storms.Each(func(_ core.Entity, stormComp *component.StormComponent) bool {
+		r.renderStorm(ctx, buf, stormComp)
+		return true
+	})
 }
 
 func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.RenderBuffer, stormComp *component.StormComponent) {
+	// Drawing order depends on a stable z-depth snapshot, kept in this reusable buffer.
 	r.sortBuffer = r.sortBuffer[:0]
 
 	for i := range component.StormCircleCount {
@@ -91,7 +89,7 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 		}
 
 		circleEntity := stormComp.Circles[i]
-		circleComp, ok := r.gameCtx.World.Components.StormCircle.GetComponent(circleEntity)
+		circleComp, ok := r.gameCtx.World.Components.StormCircle.GetPtr(circleEntity)
 		if !ok {
 			continue
 		}
@@ -127,15 +125,15 @@ func (r *StormRenderer) renderStorm(ctx render.RenderContext, buf *render.Render
 func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender) {
 
 	// Render attack effects before body (background layer)
-	circleComp, ok := r.gameCtx.World.Components.StormCircle.GetComponent(circle.entity)
+	circleComp, ok := r.gameCtx.World.Components.StormCircle.GetPtr(circle.entity)
 	if ok && circleComp.AttackState == component.StormCircleAttackActive {
 		switch circle.index {
 		case 0: // Green - area pulse
-			r.renderGreenPulse(ctx, buf, circle, &circleComp)
+			r.renderGreenPulse(ctx, buf, circle, circleComp)
 		case 1: // Red - cone projectile
-			r.renderRedCone(ctx, buf, circle, &circleComp)
+			r.renderRedCone(ctx, buf, circle, circleComp)
 		case 2: // Blue - orbiting glow
-			r.renderBlueGlow(ctx, buf, circle, &circleComp)
+			r.renderBlueGlow(ctx, buf, circle, circleComp)
 		}
 	}
 
@@ -194,7 +192,7 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 	}
 
 	// Render members (sphere body)
-	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(circle.entity)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(circle.entity)
 	if !ok {
 		return
 	}

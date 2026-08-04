@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -44,8 +45,8 @@ func NewOrbRenderer(gameCtx *engine.GameContext) *OrbRenderer {
 
 // Render draws all weapon orbs
 func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Orb.GetAllEntities()
-	if len(entities) == 0 {
+	orbs := r.gameCtx.World.Components.Orb
+	if orbs.CountEntities() == 0 {
 		return
 	}
 
@@ -58,53 +59,45 @@ func (r *OrbRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 		coronaRotDirX := vmath.Cos(angleFixed)
 		coronaRotDirY := vmath.Sin(angleFixed)
 
-		for _, entity := range entities {
-			orbComp, ok := r.gameCtx.World.Components.Orb.GetComponent(entity)
-			if !ok {
-				continue
-			}
-
+		orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
 			pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 			if !ok {
-				continue
+				return true
 			}
 
 			if !ctx.IsInViewport(pos.X, pos.Y) {
-				continue
+				return true
 			}
 
-			glyph := r.chargeGlyph(&orbComp)
-			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, &orbComp, glyph, coronaRotDirX, coronaRotDirY)
-		}
+			glyph := r.chargeGlyph(orbComp)
+			r.renderOrbTrueColor(ctx, buf, pos.X, pos.Y, orbComp, glyph, coronaRotDirX, coronaRotDirY)
+			return true
+		})
 		return
 	}
 
 	// 256-color path: simple sigil only
-	for _, entity := range entities {
-		orbComp, ok := r.gameCtx.World.Components.Orb.GetComponent(entity)
-		if !ok {
-			continue
-		}
-
+	orbs.Each(func(entity core.Entity, orbComp *component.OrbComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
-			continue
+			return true
 		}
 
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
-			continue
+			return true
 		}
 
-		glyph := r.chargeGlyph(&orbComp)
-		r.renderOrb256(buf, screenX, screenY, &orbComp, glyph)
-	}
+		glyph := r.chargeGlyph(orbComp)
+		r.renderOrb256(buf, screenX, screenY, orbComp, glyph)
+		return true
+	})
 }
 
 // chargeGlyph resolves the ASCII digit for stacked sub-max charges (1-9), or the base
 // bullseye at max charge (Disruptor's max is 1, so it always renders as bullseye)
 func (r *OrbRenderer) chargeGlyph(orb *component.OrbComponent) rune {
-	weaponComp, ok := r.gameCtx.World.Components.Weapon.GetComponent(orb.OwnerEntity)
+	weaponComp, ok := r.gameCtx.World.Components.Weapon.GetPtr(orb.OwnerEntity)
 	if !ok {
 		return visual.CircleBullsEye
 	}

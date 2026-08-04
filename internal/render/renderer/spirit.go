@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -22,8 +23,8 @@ func NewSpiritRenderer(gameCtx *engine.GameContext) *SpiritRenderer {
 }
 
 func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	spiritEntities := r.gameCtx.World.Components.Spirit.GetAllEntities()
-	if len(spiritEntities) == 0 {
+	spirits := r.gameCtx.World.Components.Spirit
+	if spirits.CountEntities() == 0 {
 		return
 	}
 
@@ -36,12 +37,7 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		trailLag   = vmath.Scale / 60 // Fixed progress lag per segment (~1.6%)
 	)
 
-	for _, spiritEntity := range spiritEntities {
-		spiritComp, ok := r.gameCtx.World.Components.Spirit.GetComponent(spiritEntity)
-		if !ok {
-			continue
-		}
-
+	spirits.Each(func(_ core.Entity, spiritComp *component.SpiritComponent) bool {
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
 		relY := spiritComp.StartY - spiritComp.TargetY
@@ -106,22 +102,20 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				trailPos := float64(i) / float64(trailSteps)
 
 				fade := 1.0 - trailPos
-				// fade = fade * fade // Quadratic falloff: (1 - x)^2
-				fade = fade * 1.3 // Boost instead of quadratic squash
+				fade = fade * 1.3
 				if fade > 1.0 {
 					fade = 1.0
 				}
 
 				c = color.Scale(c, fade)
-				// Reduce alpha blend weight for tail to make it ghostly
-				// alpha = fade
-				alpha = 0.4 + fade*0.6 // Higher base alpha
+				alpha = 0.4 + fade*0.6
 			}
 
 			// Additive blend for glow effect
 			buf.Set(screenX, screenY, spiritComp.Rune, c, visual.RgbBlack, render.BlendAddFg, alpha, terminal.AttrNone)
 		}
-	}
+		return true
+	})
 }
 
 // spiritProgressColor returns gradient color based on base and animation progress

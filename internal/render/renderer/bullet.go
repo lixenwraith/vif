@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -12,7 +13,7 @@ import (
 type bulletRenderFunc func(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
-	pos *component.PositionComponent,
+	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
 )
@@ -33,38 +34,35 @@ func NewBulletRenderer(gameCtx *engine.GameContext) *BulletRenderer {
 }
 
 func (r *BulletRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Bullet.GetAllEntities()
-	if len(entities) == 0 {
+	bullets := r.gameCtx.World.Components.Bullet
+	if bullets.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, e := range entities {
-		bullet, ok := r.gameCtx.World.Components.Bullet.GetComponent(e)
-		if !ok {
-			continue
-		}
+	bullets.Each(func(e core.Entity, bullet *component.BulletComponent) bool {
 		pos, ok := r.gameCtx.World.Positions.GetPosition(e)
 		if !ok {
-			continue
+			return true
 		}
-		kinetic, ok := r.gameCtx.World.Components.Kinetic.GetComponent(e)
+		kinetic, ok := r.gameCtx.World.Components.Kinetic.GetPtr(e)
 		if !ok {
-			continue
+			return true
 		}
-		r.renderBullet(ctx, buf, &pos, &kinetic, &bullet)
-	}
+		r.renderBullet(ctx, buf, pos.X, pos.Y, kinetic, bullet)
+		return true
+	})
 }
 
 func (r *BulletRenderer) renderBulletTrueColor(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
-	pos *component.PositionComponent,
+	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
 ) {
-	screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if !visible {
 		return
 	}
@@ -91,11 +89,11 @@ func (r *BulletRenderer) renderBulletTrueColor(
 func (r *BulletRenderer) renderBullet256(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
-	pos *component.PositionComponent,
+	mapX, mapY int,
 	kinetic *component.KineticComponent,
 	bullet *component.BulletComponent,
 ) {
-	screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
+	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if !visible {
 		return
 	}

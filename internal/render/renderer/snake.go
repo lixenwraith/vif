@@ -32,6 +32,9 @@ type SnakeRenderer struct {
 	// Index 0 = head-adjacent, index 255 = max tail
 	bodyColorLUT [256]snakeBodyColorEntry
 
+	// Render traversal is serial; reuse the system-capped segment mapping buffer.
+	resolvedBuffer [parameter.SnakeMaxSegments]snakeResolvedSegment
+
 	renderFunc snakeRenderFunc
 }
 
@@ -69,8 +72,8 @@ func (r *SnakeRenderer) buildBodyColorLUT() {
 }
 
 func (r *SnakeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	snakeEntities := r.gameCtx.World.Components.Snake.GetAllEntities()
-	if len(snakeEntities) == 0 {
+	snakes := r.gameCtx.World.Components.Snake
+	if snakes.CountEntities() == 0 {
 		return
 	}
 
@@ -79,15 +82,10 @@ func (r *SnakeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 }
 
 func (r *SnakeRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, rootEntity := range r.gameCtx.World.Components.Snake.GetAllEntities() {
-		snakeComp, ok := r.gameCtx.World.Components.Snake.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-
+	r.gameCtx.World.Components.Snake.Each(func(_ core.Entity, snakeComp *component.SnakeComponent) bool {
 		headPos, ok := r.gameCtx.World.Positions.GetPosition(snakeComp.HeadEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Shield glow (background layer)
@@ -102,7 +100,8 @@ func (r *SnakeRenderer) renderTrueColor(ctx render.RenderContext, buf *render.Re
 
 		// Head members (foreground)
 		r.renderHeadTrueColor(ctx, buf, snakeComp.HeadEntity, snakeComp.IsShielded)
-	}
+		return true
+	})
 }
 
 func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.RenderBuffer, centerX, centerY int) {
@@ -178,7 +177,7 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 }
 
 func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, bodyEntity core.Entity) {
-	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetComponent(bodyEntity)
+	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetPtr(bodyEntity)
 	if !ok {
 		return
 	}
@@ -189,7 +188,10 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 	}
 
 	resolved := r.resolveBodyMembers(bodyEntity, segmentCount)
-	connectedCount := r.countConnectedSegments(&bodyComp, resolved)
+	if len(resolved) != segmentCount {
+		return
+	}
+	connectedCount := r.countConnectedSegments(bodyComp, resolved)
 	if connectedCount == 0 {
 		return
 	}
@@ -220,7 +222,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 				continue
 			}
 
-			combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(memberEntity)
+			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
 			if !ok || combatComp.HitPoints <= 0 {
 				continue
 			}
@@ -245,7 +247,7 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 
 			// Health modulation
 			maxHP := parameter.CombatInitialHPSnakeMemberMin
-			if snakeMemberComp, ok := r.gameCtx.World.Components.SnakeMember.GetComponent(memberEntity); ok && snakeMemberComp.MaxHitPoints > 0 {
+			if snakeMemberComp, ok := r.gameCtx.World.Components.SnakeMember.GetPtr(memberEntity); ok && snakeMemberComp.MaxHitPoints > 0 {
 				maxHP = snakeMemberComp.MaxHitPoints
 			}
 			healthRatio := float64(combatComp.HitPoints) / float64(maxHP)
@@ -265,12 +267,12 @@ func (r *SnakeRenderer) renderBodyTrueColor(ctx render.RenderContext, buf *rende
 }
 
 func (r *SnakeRenderer) renderHeadTrueColor(ctx render.RenderContext, buf *render.RenderBuffer, headEntity core.Entity, isShielded bool) {
-	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headEntity)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headEntity)
 	if !ok {
 		return
 	}
 
-	combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headEntity)
+	combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(headEntity)
 	if !ok {
 		return
 	}
@@ -348,12 +350,7 @@ func (r *SnakeRenderer) countConnectedSegments(bodyComp *component.SnakeBodyComp
 // --- 256-Color Path ---
 
 func (r *SnakeRenderer) render256Color(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, rootEntity := range r.gameCtx.World.Components.Snake.GetAllEntities() {
-		snakeComp, ok := r.gameCtx.World.Components.Snake.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-
+	r.gameCtx.World.Components.Snake.Each(func(_ core.Entity, snakeComp *component.SnakeComponent) bool {
 		// Body
 		if snakeComp.BodyEntity != 0 {
 			r.renderBody256Color(ctx, buf, snakeComp.BodyEntity)
@@ -361,11 +358,12 @@ func (r *SnakeRenderer) render256Color(ctx render.RenderContext, buf *render.Ren
 
 		// Head
 		r.renderHead256Color(ctx, buf, snakeComp.HeadEntity)
-	}
+		return true
+	})
 }
 
 func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render.RenderBuffer, bodyEntity core.Entity) {
-	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetComponent(bodyEntity)
+	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetPtr(bodyEntity)
 	if !ok {
 		return
 	}
@@ -376,6 +374,9 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 	}
 
 	resolved := r.resolveBodyMembers(bodyEntity, segmentCount)
+	if len(resolved) != segmentCount {
+		return
+	}
 
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
@@ -400,7 +401,7 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 				continue
 			}
 
-			combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(memberEntity)
+			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
 			if !ok || combatComp.HitPoints <= 0 {
 				continue
 			}
@@ -421,7 +422,7 @@ func (r *SnakeRenderer) renderBody256Color(ctx render.RenderContext, buf *render
 }
 
 func (r *SnakeRenderer) renderHead256Color(ctx render.RenderContext, buf *render.RenderBuffer, headEntity core.Entity) {
-	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headEntity)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headEntity)
 	if !ok {
 		return
 	}
@@ -448,12 +449,7 @@ func (r *SnakeRenderer) renderHead256Color(ctx render.RenderContext, buf *render
 // --- Basic Color Path ---
 
 func (r *SnakeRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, rootEntity := range r.gameCtx.World.Components.Snake.GetAllEntities() {
-		snakeComp, ok := r.gameCtx.World.Components.Snake.GetComponent(rootEntity)
-		if !ok {
-			continue
-		}
-
+	r.gameCtx.World.Components.Snake.Each(func(_ core.Entity, snakeComp *component.SnakeComponent) bool {
 		// Body
 		if snakeComp.BodyEntity != 0 {
 			r.renderBodyBasicColor(ctx, buf, snakeComp.BodyEntity)
@@ -461,11 +457,12 @@ func (r *SnakeRenderer) renderBasicColor(ctx render.RenderContext, buf *render.R
 
 		// Head
 		r.renderHeadBasicColor(ctx, buf, snakeComp.HeadEntity)
-	}
+		return true
+	})
 }
 
 func (r *SnakeRenderer) renderBodyBasicColor(ctx render.RenderContext, buf *render.RenderBuffer, bodyEntity core.Entity) {
-	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetComponent(bodyEntity)
+	bodyComp, ok := r.gameCtx.World.Components.SnakeBody.GetPtr(bodyEntity)
 	if !ok {
 		return
 	}
@@ -476,6 +473,9 @@ func (r *SnakeRenderer) renderBodyBasicColor(ctx render.RenderContext, buf *rend
 	}
 
 	resolved := r.resolveBodyMembers(bodyEntity, segmentCount)
+	if len(resolved) != segmentCount {
+		return
+	}
 
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
@@ -488,7 +488,7 @@ func (r *SnakeRenderer) renderBodyBasicColor(ctx render.RenderContext, buf *rend
 				continue
 			}
 
-			combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(memberEntity)
+			combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(memberEntity)
 			if !ok || combatComp.HitPoints <= 0 {
 				continue
 			}
@@ -509,7 +509,7 @@ func (r *SnakeRenderer) renderBodyBasicColor(ctx render.RenderContext, buf *rend
 }
 
 func (r *SnakeRenderer) renderHeadBasicColor(ctx render.RenderContext, buf *render.RenderBuffer, headEntity core.Entity) {
-	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headEntity)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headEntity)
 	if !ok {
 		return
 	}
@@ -544,9 +544,13 @@ type snakeResolvedSegment struct {
 
 // resolveBodyMembers builds per-segment member mapping from HeaderComponent + SnakeMemberComponent
 func (r *SnakeRenderer) resolveBodyMembers(bodyEntity core.Entity, segmentCount int) []snakeResolvedSegment {
-	resolved := make([]snakeResolvedSegment, segmentCount)
+	if segmentCount > len(r.resolvedBuffer) {
+		return nil
+	}
+	resolved := r.resolvedBuffer[:segmentCount]
+	clear(resolved)
 
-	headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(bodyEntity)
+	headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(bodyEntity)
 	if !ok {
 		return resolved
 	}
@@ -555,7 +559,7 @@ func (r *SnakeRenderer) resolveBodyMembers(bodyEntity core.Entity, segmentCount 
 		if entry.Entity == 0 {
 			continue
 		}
-		sm, ok := r.gameCtx.World.Components.SnakeMember.GetComponent(entry.Entity)
+		sm, ok := r.gameCtx.World.Components.SnakeMember.GetPtr(entry.Entity)
 		if !ok || sm.SegmentIndex >= segmentCount {
 			continue
 		}

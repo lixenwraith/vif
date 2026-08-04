@@ -90,8 +90,8 @@ func computeTowerColorEntry(visualType int, healthRatio float64) towerColorEntry
 }
 
 func (r *TowerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	towerEntities := r.gameCtx.World.Components.Tower.GetAllEntities()
-	if len(towerEntities) == 0 {
+	towers := r.gameCtx.World.Components.Tower
+	if towers.CountEntities() == 0 {
 		return
 	}
 
@@ -179,15 +179,10 @@ func calculateTowerMemberMetrics(towerComp *component.TowerComponent, memberHP, 
 // === TrueColor ===
 
 func (r *TowerRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Tower.GetAllEntities() {
-		towerComp, ok := r.gameCtx.World.Components.Tower.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Tower.Each(func(headerEntity core.Entity, towerComp *component.TowerComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		visualType := clampVisualType(towerComp.Type)
@@ -210,9 +205,10 @@ func (r *TowerRenderer) renderTrueColor(ctx render.RenderContext, buf *render.Re
 			periodMs = visual.TowerGlowPeriodMs
 		}
 
-		r.renderGlow(ctx, buf, &towerComp, glowColor, intensityMin, intensityMax, periodMs)
-		r.renderMembersTrueColor(ctx, buf, &towerComp, &headerComp, visualType)
-	}
+		r.renderGlow(ctx, buf, towerComp, glowColor, intensityMin, intensityMax, periodMs)
+		r.renderMembersTrueColor(ctx, buf, towerComp, headerComp, visualType)
+		return true
+	})
 }
 
 func (r *TowerRenderer) renderGlow(
@@ -311,7 +307,7 @@ func (r *TowerRenderer) renderMembersTrueColor(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
@@ -347,20 +343,16 @@ func (r *TowerRenderer) renderMembersTrueColor(
 // === 256-Color ===
 
 func (r *TowerRenderer) render256Color(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Tower.GetAllEntities() {
-		towerComp, ok := r.gameCtx.World.Components.Tower.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Tower.Each(func(headerEntity core.Entity, towerComp *component.TowerComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		visualType := clampVisualType(towerComp.Type)
-		r.renderMembers256Color(ctx, buf, &towerComp, &headerComp, visualType)
-	}
+		r.renderMembers256Color(ctx, buf, towerComp, headerComp, visualType)
+		return true
+	})
 }
 
 func (r *TowerRenderer) renderMembers256Color(
@@ -377,7 +369,7 @@ func (r *TowerRenderer) renderMembers256Color(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
@@ -411,20 +403,16 @@ func (r *TowerRenderer) renderMembers256Color(
 // === Basic Color ===
 
 func (r *TowerRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Tower.GetAllEntities() {
-		towerComp, ok := r.gameCtx.World.Components.Tower.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Tower.Each(func(headerEntity core.Entity, towerComp *component.TowerComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		visualType := clampVisualType(towerComp.Type)
-		r.renderMembersBasicColor(ctx, buf, &towerComp, &headerComp, visualType)
-	}
+		r.renderMembersBasicColor(ctx, buf, towerComp, headerComp, visualType)
+		return true
+	})
 }
 
 func (r *TowerRenderer) renderMembersBasicColor(
@@ -441,7 +429,7 @@ func (r *TowerRenderer) renderMembersBasicColor(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}

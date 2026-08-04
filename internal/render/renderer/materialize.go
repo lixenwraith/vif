@@ -4,6 +4,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -41,27 +42,23 @@ func NewMaterializeRenderer(ctx *engine.GameContext) *MaterializeRenderer {
 }
 
 func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Materialize.GetAllEntities()
-	if len(entities) == 0 {
+	materializes := r.gameCtx.World.Components.Materialize
+	if materializes.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, entity := range entities {
-		mat, ok := r.gameCtx.World.Components.Materialize.GetComponent(entity)
-		if !ok {
-			continue
-		}
-
+	materializes.Each(func(_ core.Entity, mat *component.MaterializeComponent) bool {
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirUp)
-		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirDown)
-		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirLeft)
-		r.renderBeam(ctx, buf, &mat, targetVX, targetVY, dirRight)
-	}
+		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirUp)
+		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirDown)
+		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirLeft)
+		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirRight)
+		return true
+	})
 }
 
 func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
@@ -208,4 +205,3 @@ func (r *MaterializeRenderer) calcIntensity(progress int64, cellOffset, segStart
 		return vmath.Div(vmath.FromInt(cellPos), vmath.FromInt(segLen))
 	}
 }
-

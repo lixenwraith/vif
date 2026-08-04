@@ -2,7 +2,9 @@ package renderer
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
@@ -18,29 +20,25 @@ func NewMarkerRenderer(ctx *engine.GameContext) *MarkerRenderer {
 }
 
 func (r *MarkerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Marker.GetAllEntities()
-	if len(entities) == 0 {
+	markers := r.gameCtx.World.Components.Marker
+	if markers.CountEntities() == 0 {
 		return
 	}
 
-	for _, entity := range entities {
-		marker, ok := r.gameCtx.World.Components.Marker.GetComponent(entity)
-		if !ok {
-			continue
-		}
-
+	markers.Each(func(_ core.Entity, marker *component.MarkerComponent) bool {
 		switch marker.Shape {
 		case component.MarkerShapeNone:
 			// Invisible - no rendering
-			continue
+			return true
 		case component.MarkerShapeRectangle:
 			buf.SetWriteMask(visual.MaskTransient)
-			r.renderRectangle(ctx, buf, &marker)
+			r.renderRectangle(ctx, buf, marker)
 		case component.MarkerShapeInvert:
 			buf.SetWriteMask(visual.MaskUI) // Motion markers render above splash
-			r.renderInvert(ctx, buf, &marker)
+			r.renderInvert(ctx, buf, marker)
 		}
-	}
+		return true
+	})
 }
 
 func (r *MarkerRenderer) renderRectangle(ctx render.RenderContext, buf *render.RenderBuffer, marker *component.MarkerComponent) {
@@ -72,6 +70,7 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 		return
 	}
 
+	var entitiesBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for dy := range marker.Height {
 		for dx := range marker.Width {
 			mapX := marker.X + dx
@@ -82,26 +81,26 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 				continue
 			}
 
-			// Query world for entity at position
-			entities := r.gameCtx.World.Positions.GetAllEntityAt(mapX, mapY)
+			count := r.gameCtx.World.Positions.GetAllEntitiesAtInto(mapX, mapY, entitiesBuf[:])
 
 			var char rune
 			var fg, bg = visual.RgbWhite, visual.RgbBackground
 
-			for _, e := range entities {
+			for i := range count {
+				e := entitiesBuf[i]
 				if e == 0 {
 					continue
 				}
 
 				// Check glyph first
-				if glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(e); ok {
+				if glyph, ok := r.gameCtx.World.Components.Glyph.GetPtr(e); ok {
 					char = glyph.Rune
 					fg = visual.GlyphColorLUT[glyph.Type][glyph.Level]
 					break
 				}
 
 				// Fallback to sigil
-				if sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(e); ok {
+				if sigil, ok := r.gameCtx.World.Components.Sigil.GetPtr(e); ok {
 					char = sigil.Rune
 					fg = sigil.Color
 					break
@@ -117,4 +116,3 @@ func (r *MarkerRenderer) renderInvert(ctx render.RenderContext, buf *render.Rend
 		}
 	}
 }
-

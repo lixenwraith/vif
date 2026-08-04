@@ -3,6 +3,8 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
@@ -31,35 +33,31 @@ func NewWallRenderer(ctx *engine.GameContext) *WallRenderer {
 }
 
 func (r *WallRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	wallEntities := r.gameCtx.World.Components.Wall.GetAllEntities()
-	if len(wallEntities) == 0 {
+	walls := r.gameCtx.World.Components.Wall
+	if walls.CountEntities() == 0 {
 		return
 	}
 
-	for _, wallEntity := range wallEntities {
-		wallComp, ok := r.gameCtx.World.Components.Wall.GetComponent(wallEntity)
-		if !ok {
-			continue
-		}
-
+	walls.Each(func(wallEntity core.Entity, wallComp *component.WallComponent) bool {
 		if !(wallComp.RenderFg || wallComp.RenderBg) {
-			continue
+			return true
 		}
 
 		pos, ok := r.gameCtx.World.Positions.GetPosition(wallEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Transform map coords to screen coords with visibility check
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
-			continue
+			return true
 		}
 
 		r.renderCell(buf, screenX, screenY, wallComp.Rune, wallComp.FgColor, wallComp.BgColor,
 			wallComp.RenderFg, wallComp.RenderBg, wallComp.Attrs)
-	}
+		return true
+	})
 }
 
 func (r *WallRenderer) renderCellTrueColor(buf *render.RenderBuffer, screenX, screenY int,
@@ -102,4 +100,3 @@ func (r *WallRenderer) renderCell256(buf *render.RenderBuffer, screenX, screenY 
 			color.RGB{R: fgIdx}, terminal.AttrFg256)
 	}
 }
-

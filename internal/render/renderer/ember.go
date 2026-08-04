@@ -6,6 +6,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -70,24 +72,24 @@ func NewEmberRenderer(gameCtx *engine.GameContext) *EmberRenderer {
 
 // Render draws all active ember effects
 func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(visual.MaskField)
-
-	shieldEntities := r.gameCtx.World.Components.Shield.GetAllEntities()
-	if len(shieldEntities) == 0 {
+	shields := r.gameCtx.World.Components.Shield
+	if shields.CountEntities() == 0 {
 		return
 	}
 
+	buf.SetWriteMask(visual.MaskField)
+
 	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 
-	for _, entity := range shieldEntities {
-		heatComp, ok := r.gameCtx.World.Components.Heat.GetComponent(entity)
+	shields.Each(func(entity core.Entity, _ *component.ShieldComponent) bool {
+		heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(entity)
 		if !ok || !heatComp.EmberActive {
-			continue
+			return true
 		}
 
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
-			continue
+			return true
 		}
 
 		skipX, skipY := -1, -1
@@ -97,7 +99,8 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		}
 
 		r.painter.Paint(buf, ctx, pos.X, pos.Y, heatComp.Current, skipX, skipY)
-	}
+		return true
+	})
 }
 
 // emberColors holds interpolated colors for current heat level

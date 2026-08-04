@@ -5,6 +5,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -124,32 +126,27 @@ func NewEyeRenderer(gameCtx *engine.GameContext) *EyeRenderer {
 
 // Render draws all active eye entities
 func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headerEntities := r.gameCtx.World.Components.Eye.GetAllEntities()
-	if len(headerEntities) == 0 {
+	eyes := r.gameCtx.World.Components.Eye
+	if eyes.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, headerEntity := range headerEntities {
-		eyeComp, ok := r.gameCtx.World.Components.Eye.GetComponent(headerEntity)
+	eyes.Each(func(headerEntity core.Entity, eyeComp *component.EyeComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		typeIdx := int(eyeComp.Type)
 		if typeIdx >= parameter.EyeTypeCount {
-			continue
+			return true
 		}
 
 		tr := &eyeRenderTable[typeIdx]
@@ -185,7 +182,8 @@ func (r *EyeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer)
 
 			r.renderCell(buf, screenX, screenY, &frame[row][col], tr, flashColor, hasFlash)
 		}
-	}
+		return true
+	})
 }
 
 // cellTrueColor renders with per-cell palette colors and attributes

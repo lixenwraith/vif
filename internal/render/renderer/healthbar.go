@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -62,15 +63,14 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		return
 	}
 
+	combats := r.gameCtx.World.Components.Combat
+	if combats.CountEntities() == 0 {
+		return
+	}
+
 	buf.SetWriteMask(visual.MaskHealthBar)
 
-	entities := r.gameCtx.World.Components.Combat.GetAllEntities()
-	for _, entity := range entities {
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(entity)
-		if !ok {
-			continue
-		}
-
+	combats.Each(func(entity core.Entity, combatComp *component.CombatComponent) bool {
 		// Filter: only Drain, Swarm, Quasar
 		var width, height, maxHP, offsetX, offsetY int
 		switch combatComp.CombatEntityType {
@@ -84,12 +84,12 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			width, height, maxHP = parameter.QuasarWidth, parameter.QuasarHeight, parameter.CombatInitialHPQuasar
 			offsetX, offsetY = parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY
 		default:
-			continue
+			return true
 		}
 
 		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Health ratio clamped to [0, 1]
@@ -115,7 +115,8 @@ func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		}
 
 		r.renderHealthBar(ctx, buf, barX, barY, barLength, ratio, position)
-	}
+		return true
+	})
 }
 
 // calculateBar computes bar parameters for a given position

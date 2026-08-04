@@ -75,7 +75,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 	// 3. Resolve Visuals
 	if glyphEntity != 0 {
-		if glyph, ok := r.gameCtx.World.Components.Glyph.GetComponent(glyphEntity); ok {
+		if glyph, ok := r.gameCtx.World.Components.Glyph.GetPtr(glyphEntity); ok {
 			charAtCursor = glyph.Rune
 			fg := visual.GlyphColorLUT[glyph.Type][glyph.Level]
 
@@ -91,7 +91,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			}
 		}
 	} else if sigilEntity != 0 {
-		if sigil, ok := r.gameCtx.World.Components.Sigil.GetComponent(sigilEntity); ok {
+		if sigil, ok := r.gameCtx.World.Components.Sigil.GetPtr(sigilEntity); ok {
 			charAtCursor = sigil.Rune
 			// Cursor background takes the sigil's color
 			cursorBgColor = sigil.Color
@@ -100,7 +100,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	}
 
 	// 4. Error Flash Overlay
-	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetComponent(r.gameCtx.World.Resources.Player.Entity)
+	cursorComp, ok := r.gameCtx.World.Components.Cursor.GetPtr(r.gameCtx.World.Resources.Player.Entity)
 	if ok && cursorComp.ErrorFlashRemaining > 0 {
 		cursorBgColor = visual.RgbCursorError
 		charFgColor = visual.RgbBlack

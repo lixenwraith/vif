@@ -42,7 +42,7 @@ type ShieldPainter struct {
 	renderCell shieldCellFunc
 
 	// Per-Paint transient state
-	style            *ShieldStyle
+	style            ShieldStyle
 	glowActive       bool
 	rotDirX, rotDirY int64
 	cellDx, cellDy   int64
@@ -61,7 +61,7 @@ func NewShieldPainter(colorMode terminal.ColorMode) *ShieldPainter {
 
 // Paint renders a shield halo centered at (centerX, centerY) in map coordinates
 // Caller must set write mask
-func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style *ShieldStyle) {
+func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext, centerX, centerY int, style ShieldStyle) {
 	p.style = style
 	cfg := style.Config
 
@@ -147,12 +147,6 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 		return
 	}
 
-	// TODO: benchmark compare
-
-	// edgeFactor := vmath.Div(normalizedDistSq-visual.ShieldGlowEdgeThreshold, vmath.Scale-visual.ShieldGlowEdgeThreshold)
-	// intensity := vmath.Mul(vmath.Mul(dot, edgeFactor), cfg.GlowIntensityQ32)
-	// buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, vmath.ToFloat(intensity), terminal.AttrNone)
-
 	// Float division replaces vmath.Div for performance
 	edgeFactor := float64(normalizedDistSq-visual.ShieldGlowEdgeThreshold) / float64(vmath.Scale-visual.ShieldGlowEdgeThreshold)
 	intensity := vmath.ToFloat(dot) * edgeFactor * vmath.ToFloat(cfg.GlowIntensityQ32)
@@ -196,22 +190,21 @@ func NewShieldRenderer(gameCtx *engine.GameContext) *ShieldRenderer {
 
 // Render draws all active player shields
 func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	buf.SetWriteMask(visual.MaskField)
-
-	shieldEntities := r.gameCtx.World.Components.Shield.GetAllEntities()
-	if len(shieldEntities) == 0 {
+	shields := r.gameCtx.World.Components.Shield
+	if shields.CountEntities() == 0 {
 		return
 	}
 
+	buf.SetWriteMask(visual.MaskField)
+
 	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 
-	for _, shieldEntity := range shieldEntities {
-		shieldComp, ok := r.gameCtx.World.Components.Shield.GetComponent(shieldEntity)
-		if !ok || !shieldComp.Active {
-			continue
+	shields.Each(func(shieldEntity core.Entity, shieldComp *component.ShieldComponent) bool {
+		if !shieldComp.Active {
+			return true
 		}
 
-		heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetComponent(shieldEntity)
+		heatComp, hasHeat := r.gameCtx.World.Components.Heat.GetPtr(shieldEntity)
 		emberActive := hasHeat && heatComp.EmberActive
 
 		// Track ember transition state (player only)
@@ -223,12 +216,12 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 		// Skip shield render when ember is active
 		if emberActive {
-			continue
+			return true
 		}
 
 		shieldPos, ok := r.gameCtx.World.Positions.GetPosition(shieldEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		cfg := &visual.ShieldConfigs[shieldComp.Type]
@@ -253,12 +246,12 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 		switch shieldComp.Type {
 		case component.ShieldTypePlayer:
 			// Color based on energy polarity
-			if energy, ok := r.gameCtx.World.Components.Energy.GetComponent(shieldEntity); ok && energy.Current < 0 {
+			if energy, ok := r.gameCtx.World.Components.Energy.GetPtr(shieldEntity); ok && energy.Current < 0 {
 				style.Color = cfg.ColorAlt
 				style.Palette256 = cfg.Palette256Alt
 			}
 			// Glow based on boost state
-			if boost, ok := r.gameCtx.World.Components.Boost.GetComponent(shieldEntity); ok && boost.Active {
+			if boost, ok := r.gameCtx.World.Components.Boost.GetPtr(shieldEntity); ok && boost.Active {
 				style.GlowPeriod = parameter.ShieldBoostRotationDuration
 			} else {
 				style.GlowPeriod = 0
@@ -266,20 +259,21 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 
 		case component.ShieldTypeLoot:
 			// GlowColor from loot visual definition
-			if loot, ok := r.gameCtx.World.Components.Loot.GetComponent(shieldEntity); ok {
+			if loot, ok := r.gameCtx.World.Components.Loot.GetPtr(shieldEntity); ok {
 				if vis, exists := visual.LootVisuals[loot.Type]; exists {
 					style.GlowColor = vis.GlowColor
 				}
 			}
 		}
 
-		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, &style)
+		r.painter.Paint(buf, ctx, shieldPos.X, shieldPos.Y, style)
 
 		// Apply ember-to-shield transition overlay
 		if transitionIntensity > 0.001 {
 			r.renderTransitionOverlay(buf, ctx, shieldPos.X, shieldPos.Y, cfg, transitionIntensity)
 		}
-	}
+		return true
+	})
 }
 
 // getOrCreateTransition returns existing or new transition state for entity
@@ -333,7 +327,7 @@ func (r *ShieldRenderer) transitionEnvelope(progress float64) float64 {
 		return (progress / rise) * visual.EmberTransitionMaxIntensity
 	}
 
-	// // Slow fall: max → 0 in remaining 90%
+	// Slow fall: max → 0 in remaining 90%
 	fallProgress := (progress - rise) / (1.0 - rise)
 	return (1.0 - fallProgress) * visual.EmberTransitionMaxIntensity
 }
@@ -379,4 +373,3 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 		}
 	}
 }
-

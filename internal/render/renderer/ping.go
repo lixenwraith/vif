@@ -3,6 +3,8 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -30,7 +32,7 @@ func NewPingRenderer(gameCtx *engine.GameContext) *PingRenderer {
 // Render draws the ping highlights and grid
 func (r *PingRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	// Get PingComponent from cursor (Single player assumption: ID 1/CursorEntity)
-	pingComp, ok := r.gameCtx.World.Components.Ping.GetComponent(r.gameCtx.World.Resources.Player.Entity)
+	pingComp, ok := r.gameCtx.World.Components.Ping.GetPtr(r.gameCtx.World.Resources.Player.Entity)
 	if !ok {
 		return
 	}
@@ -83,16 +85,18 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 	}
 
 	// Rasterize all active shields into the mask
-	shieldEntities := r.gameCtx.World.Components.Shield.GetAllEntities()
-	for _, shieldEntity := range shieldEntities {
-		shieldComp, ok := r.gameCtx.World.Components.Shield.GetComponent(shieldEntity)
-		if !ok || !shieldComp.Active {
-			continue
+	shields := world.Components.Shield
+	if shields.CountEntities() == 0 {
+		return
+	}
+	shields.Each(func(shieldEntity core.Entity, shieldComp *component.ShieldComponent) bool {
+		if !shieldComp.Active {
+			return true
 		}
 
 		shieldPos, ok := world.Positions.GetPosition(shieldEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Shield center in viewport coords
@@ -100,7 +104,7 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 		if !shieldVisible {
 			// Shield center off-screen, but edges might be visible
 			// For simplicity, skip entirely; can refine later if needed
-			continue
+			return true
 		}
 
 		// Bounding box
@@ -143,7 +147,8 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 				}
 			}
 		}
-	}
+		return true
+	})
 }
 
 // isExcluded checks if a viewport coordinate is inside a shield

@@ -3,6 +3,8 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -20,32 +22,27 @@ func NewFadeoutRenderer(gameCtx *engine.GameContext) *FadeoutRenderer {
 }
 
 func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	fadeoutEntities := r.gameCtx.World.Components.Fadeout.GetAllEntities()
-	if len(fadeoutEntities) == 0 {
+	fadeouts := r.gameCtx.World.Components.Fadeout
+	if fadeouts.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskTransient)
 
-	for _, fadeoutEntity := range fadeoutEntities {
-		fadeoutComp, ok := r.gameCtx.World.Components.Fadeout.GetComponent(fadeoutEntity)
-		if !ok {
-			continue
-		}
-
+	fadeouts.Each(func(fadeoutEntity core.Entity, fadeoutComp *component.FadeoutComponent) bool {
 		if fadeoutComp.Remaining <= 0 {
-			continue
+			return true
 		}
 
 		posComp, ok := r.gameCtx.World.Positions.GetPosition(fadeoutEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Transform map coords to screen coords with visibility check
 		screenX, screenY, visible := ctx.MapToScreen(posComp.X, posComp.Y)
 		if !visible {
-			continue
+			return true
 		}
 
 		// Opacity fades from 1.0 to 0.0 over duration
@@ -65,5 +62,6 @@ func (r *FadeoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			// Bg-only fadeout
 			buf.Set(screenX, screenY, 0, visual.RgbBlack, scaledBg, render.BlendAlpha, opacity, terminal.AttrNone)
 		}
-	}
+		return true
+	})
 }

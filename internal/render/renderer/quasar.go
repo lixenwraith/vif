@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -27,40 +28,36 @@ func NewQuasarRenderer(gameCtx *engine.GameContext) *QuasarRenderer {
 
 // Render draws quasar composite parts (zap range and members)
 func (r *QuasarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	headerEntities := r.gameCtx.World.Components.Quasar.GetAllEntities()
-	if len(headerEntities) == 0 {
+	quasars := r.gameCtx.World.Components.Quasar
+	if quasars.CountEntities() == 0 {
 		return
 	}
 
 	buf.SetWriteMask(visual.MaskComposite)
 
-	for _, headerEntity := range headerEntities {
-		quasarComp, ok := r.gameCtx.World.Components.Quasar.GetComponent(headerEntity)
+	quasars.Each(func(headerEntity core.Entity, quasarComp *component.QuasarComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(headerEntity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
 		// Zap range border renders (background layer)
-		r.renderZapRange(ctx, buf, headerPos.X, headerPos.Y, &quasarComp)
+		r.renderZapRange(ctx, buf, headerPos.X, headerPos.Y, quasarComp)
 
 		// Member characters render to foreground layer
-		r.renderMembers(ctx, buf, &headerComp, &combatComp)
-	}
+		r.renderMembers(ctx, buf, headerComp, combatComp)
+		return true
+	})
 }
 
 // renderZapRange renders zap range ellipse boundary

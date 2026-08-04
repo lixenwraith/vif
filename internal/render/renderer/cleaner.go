@@ -3,6 +3,7 @@ package renderer
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -48,8 +49,8 @@ func (r *CleanerRenderer) buildGradients() {
 
 // Render draws cleaner animation using trail of grid points
 func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	entities := r.gameCtx.World.Components.Cleaner.GetAllEntities()
-	if len(entities) == 0 {
+	cleaners := r.gameCtx.World.Components.Cleaner
+	if cleaners.CountEntities() == 0 {
 		return
 	}
 
@@ -58,12 +59,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	gradientLen := len(r.gradientPositive)
 	maxGradientIdx := gradientLen - 1
 
-	for _, entity := range entities {
-		cleaner, ok := r.gameCtx.World.Components.Cleaner.GetComponent(entity)
-		if !ok {
-			continue
-		}
-
+	cleaners.Each(func(_ core.Entity, cleaner *component.CleanerComponent) bool {
 		// Select gradient based on color type
 		var gradient []color.RGB
 		switch cleaner.ColorType {
@@ -74,7 +70,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		case component.CleanerColorNugget:
 			gradient = r.gradientNugget
 		default:
-			continue
+			return true
 		}
 
 		// Determine visible trail length
@@ -105,5 +101,6 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			// Cleaners are opaque (solid background)
 			buf.SetWithBg(screenX, screenY, cleaner.Rune, gradient[gradientIndex], visual.RgbBackground)
 		}
-	}
+		return true
+	})
 }

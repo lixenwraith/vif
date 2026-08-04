@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -96,8 +97,8 @@ func (r *PylonRenderer) computeColorEntry(healthRatio float64) pylonColorEntry {
 }
 
 func (r *PylonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	pylonEntities := r.gameCtx.World.Components.Pylon.GetAllEntities()
-	if len(pylonEntities) == 0 {
+	pylons := r.gameCtx.World.Components.Pylon
+	if pylons.CountEntities() == 0 {
 		return
 	}
 
@@ -106,23 +107,19 @@ func (r *PylonRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 }
 
 func (r *PylonRenderer) renderTrueColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Pylon.GetAllEntities() {
-		pylonComp, ok := r.gameCtx.World.Components.Pylon.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Pylon.Each(func(headerEntity core.Entity, pylonComp *component.PylonComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
-		}
-
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
+			return true
 		}
 
 		// Render glow first (background layer)
-		r.renderGlow(ctx, buf, &pylonComp)
+		r.renderGlow(ctx, buf, pylonComp)
 
 		// Render members
-		r.renderMembersTrueColor(ctx, buf, &pylonComp, &headerComp)
-	}
+		r.renderMembersTrueColor(ctx, buf, pylonComp, headerComp)
+		return true
+	})
 }
 
 func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderBuffer, pylonComp *component.PylonComponent) {
@@ -237,7 +234,7 @@ func (r *PylonRenderer) renderMembersTrueColor(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
@@ -305,19 +302,15 @@ func (r *PylonRenderer) renderMembersTrueColor(
 }
 
 func (r *PylonRenderer) render256Color(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Pylon.GetAllEntities() {
-		pylonComp, ok := r.gameCtx.World.Components.Pylon.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Pylon.Each(func(headerEntity core.Entity, pylonComp *component.PylonComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
-		}
-
-		r.renderMembers256Color(ctx, buf, &pylonComp, &headerComp)
-	}
+		r.renderMembers256Color(ctx, buf, pylonComp, headerComp)
+		return true
+	})
 }
 
 func (r *PylonRenderer) renderMembers256Color(
@@ -347,7 +340,7 @@ func (r *PylonRenderer) renderMembers256Color(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
@@ -404,19 +397,15 @@ func (r *PylonRenderer) renderMembers256Color(
 }
 
 func (r *PylonRenderer) renderBasicColor(ctx render.RenderContext, buf *render.RenderBuffer) {
-	for _, headerEntity := range r.gameCtx.World.Components.Pylon.GetAllEntities() {
-		pylonComp, ok := r.gameCtx.World.Components.Pylon.GetComponent(headerEntity)
+	r.gameCtx.World.Components.Pylon.Each(func(headerEntity core.Entity, pylonComp *component.PylonComponent) bool {
+		headerComp, ok := r.gameCtx.World.Components.Header.GetPtr(headerEntity)
 		if !ok {
-			continue
+			return true
 		}
 
-		headerComp, ok := r.gameCtx.World.Components.Header.GetComponent(headerEntity)
-		if !ok {
-			continue
-		}
-
-		r.renderMembersBasicColor(ctx, buf, &pylonComp, &headerComp)
-	}
+		r.renderMembersBasicColor(ctx, buf, pylonComp, headerComp)
+		return true
+	})
 }
 
 func (r *PylonRenderer) renderMembersBasicColor(
@@ -446,7 +435,7 @@ func (r *PylonRenderer) renderMembersBasicColor(
 			continue
 		}
 
-		combatComp, ok := r.gameCtx.World.Components.Combat.GetComponent(member.Entity)
+		combatComp, ok := r.gameCtx.World.Components.Combat.GetPtr(member.Entity)
 		if !ok || combatComp.HitPoints <= 0 {
 			continue
 		}
