@@ -8,12 +8,16 @@ Entry config search order:
 2. `./game.toml`
 3. `./config/game.toml`
 4. `$XDG_CONFIG_HOME/vi-fighter/game.toml` (`~/.config/vi-fighter/` default)
-5. Embedded default (`asset/default/`; forced with `-gd`)
+5. Embedded default (`internal/asset/config/`; forced with `-d`)
+
+`-d` is mutually exclusive with both `-g` and `-f`; by itself it selects the
+embedded FSM and content corpus. For the runtime design behind this reference, see
+[`doc/fsm-and-configuration.md`](../doc/fsm-and-configuration.md).
 
 Region `file` references resolve relative to the entry config's directory and
 cannot escape it (`..` is rejected). Flat layout:
 
-```
+```text
 ~/.config/vi-fighter/
 ├── game.toml
 ├── main.toml
@@ -79,9 +83,11 @@ Extract event payload fields into FSM variables when a transition matches:
 
 `capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
 
-Supported field types: `int`, `int64`, `uint`, `uint64` (including `core.Entity`), `float64`, `bool` (true=1, false=0)
+Supported field kinds: all signed and unsigned integer widths (including
+`core.Entity`), `float32`, `float64`, and `bool` (`true` = 1, `false` = 0).
 
 Combine with guards and payload injection:
+
 ```toml
 # Capture entity from spawn response, then inject into follow-up request
 { trigger = "EventPylonSpawned", target = "AttachGateway", capture_vars = { header_entity = "anchor_id" } }
@@ -94,7 +100,7 @@ Combine with guards and payload injection:
 Actions attached to a transition execute between the exit and enter phases:
 
 ```toml
-{ trigger = "EventWaveCleared", target = "NextWave", actions = [
+{ trigger = "EventGoldCompleted", target = "NextWave", actions = [
     { action = "IncrementVar", payload = { name = "wave" } },
 ] }
 ```
@@ -126,7 +132,6 @@ below higher-priority transitions of the same trigger. An internal `Tick`
 transition with a passing guard executes every tick and shadows all outer
 `Tick` transitions — equivalent to a guarded `on_update`.
 
-
 ---
 
 ## Lifecycle Hooks
@@ -146,6 +151,7 @@ target state; internal-transition actions by the active leaf.
 ## Actions
 
 ### Event Emission
+
 ```toml
 { action = "EmitEvent", event = "EventName" }
 { action = "EmitEvent", event = "EventName", payload = { field = value, ... } }
@@ -155,6 +161,7 @@ target state; internal-transition actions by the active leaf.
 `payload_vars` — injects FSM variable value into payload field at runtime.
 
 ### Region Control
+
 ```toml
 { action = "SpawnRegion", region = "region_name", initial_state = "StateName" }
 { action = "TerminateRegion", region = "region_name" }
@@ -163,6 +170,7 @@ target state; internal-transition actions by the active leaf.
 ```
 
 ### Variables
+
 ```toml
 { action = "SetVar", payload = { name = "var_name", value = 0 } }
 { action = "IncrementVar", payload = { name = "var_name", delta = 1 } }
@@ -207,6 +215,7 @@ Apply bounds with `min`/`max` (optional, independent):
 ```
 
 ### Config to Variable
+
 ```toml
 { action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } }
 ```
@@ -233,6 +242,7 @@ struct tag first, then Go field name. Numeric segments index into slices.
 ```
 
 **Path resolution per segment:**
+
 - Struct field: matches `toml:"tag_name"`, falls back to Go field name
 - Slice index: numeric literal (0-based), must be within pre-defined slice bounds
 - Pointer: auto-dereferenced
@@ -242,12 +252,14 @@ elements. `payload_vars` overwrites individual fields; it does not append
 elements. Flat keys (no dots) behave identically to the original implementation.
 
 ### System Control
+
 ```toml
 { action = "EnableSystem", payload = { system_name = "name" } }
 { action = "DisableSystem", payload = { system_name = "name" } }
 ```
 
 ### Status Registry Actions
+
 ```toml
 { action = "SetStatusInt", payload = { key = "status.key", value = 100 } }
 { action = "ResetStatusInt", payload = { key = "status.key" } }
@@ -298,6 +310,7 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 Combine multiple guards with logical operators.
 
 ### And (all must pass)
+
 ```toml
 { trigger = "Tick", target = "TargetState", guard = "And", guard_args = { guards = [
     { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
@@ -306,14 +319,16 @@ Combine multiple guards with logical operators.
 ```
 
 ### Or (at least one must pass)
+
 ```toml
-{ trigger = "EventDamage", target = "Critical", guard = "Or", guard_args = { guards = [
+{ trigger = "Tick", target = "Critical", guard = "Or", guard_args = { guards = [
     { name = "StatusIntCompare", args = { key = "health", op = "lte", value = 10 } },
     { name = "VarEquals", args = { var = "shield_broken", value = 1 } }
 ]}}
 ```
 
 Compound guards support nesting:
+
 ```toml
 { trigger = "Tick", target = "Special", guard = "And", guard_args = { guards = [
     { name = "StateTimeExceeds", args = { ms = 1000 } },
@@ -335,35 +350,41 @@ struct tag first, then Go field name — identical to `capture_vars` and
 `payload_vars`.
 
 ### PayloadIntCompare
+
 ```toml
-{ trigger = "EventEnemyKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "EntityType", op = "eq", value = 5 } }
+{ trigger = "EventEnemyKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
 ```
 
 ### PayloadBoolEquals
+
 ```toml
-{ trigger = "EventGoldCompleted", target = "PerfectComplete", guard = "PayloadBoolEquals", guard_args = { field = "Perfect", value = true } }
+{ trigger = "EventGamePauseChanged", target = "Paused", guard = "PayloadBoolEquals", guard_args = { field = "paused", value = true } }
 ```
 
 ### PayloadStringEquals
+
 ```toml
-{ trigger = "EventNetworkEvent", target = "HandleJoin", guard = "PayloadStringEquals", guard_args = { field = "Action", value = "join" } }
+{ trigger = "EventNetworkError", target = "ConnectionFailed", guard = "PayloadStringEquals", guard_args = { field = "error", value = "connection failed" } }
 ```
 
 ### PayloadExists
+
 ```toml
-{ trigger = "EventCustom", target = "HasData", guard = "PayloadExists" }
+{ trigger = "EventGoldCompleted", target = "HasData", guard = "PayloadExists" }
 ```
 
 Payload guards return `false` if:
+
 - No payload present (Tick transitions, nil payload)
 - Field does not exist
 - Field type mismatch
 
 Combine with compound guards:
+
 ```toml
-{ trigger = "EventEnemyKilled", target = "EliteBossKilled", guard = "And", guard_args = { guards = [
-    { name = "PayloadIntCompare", args = { field = "EntityType", op = "eq", value = 5 } },
-    { name = "PayloadBoolEquals", args = { field = "IsElite", value = true } }
+{ trigger = "EventMetaSystemCommandRequest", target = "EnableMotion", guard = "And", guard_args = { guards = [
+    { name = "PayloadStringEquals", args = { field = "system_name", value = "motion" } },
+    { name = "PayloadBoolEquals", args = { field = "enabled", value = true } }
 ]}}
 ```
 
@@ -389,7 +410,8 @@ Inject FSM variable values into event payloads:
 { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 0 }, payload_vars = { delta = "damage_multiplier" } }
 ```
 
-Supported field types: `int`, `int64`, `uint`, `float64`
+Supported field kinds: all signed and unsigned integer widths, `float32`,
+`float64`, and `bool`. Negative values are ignored for unsigned fields.
 
 ---
 
@@ -455,9 +477,9 @@ Available fields for `ConfigBoolCompare`:
 - One transition per region per tick or per event; a matching leaf transition
   shadows ancestors
 - Paused regions drop events entirely (no queueing)
-- Keep `Root` free of actions: its hooks run on every region spawn/terminate
+- `Root` lifecycle actions are rejected during loading because `Root` is shared
+  by every region; put one-shot setup in a dedicated region's initial state
 - Event payloads are shared compiled templates: handlers must treat them as
   immutable; `payload_vars` produces an isolated copy
 - Region-control actions (`TerminateRegion` on self) are supported in
   `on_enter`/`on_exit`/transition actions; unsupported in `on_update`
-

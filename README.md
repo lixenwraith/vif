@@ -1,31 +1,76 @@
-# vif
+# Vi-Fighter
 
-A terminal-based game built with Go that combines vi/vim motion commands with fast-paced typing and rogue-like 2D shooter action gameplay.
+Vi-Fighter is a real-time terminal game that combines Vim-style navigation and
+text operations with typing, shooting, procedural encounters, adaptive enemy
+movement, and generative audio.
 
-Built from scratch using the Go standard library, featuring a custom game engine with zero CGO dependencies.
+The game is written in Go and has no application CGO requirement. Terminal,
+TOML, color, and logging primitives are maintained as separate Go modules;
+Vi-Fighter owns the ECS, gameplay, input semantics, compositor, scenario
+configuration, audio policy, and reusable simulation libraries.
 
-## Features
+## Highlights
 
-*   **Custom ECS Engine:** High-performance Entity-Component-System architecture with zero-allocation hot paths.
-*   **Terminal Rendering:** Double-buffered ANSI renderer with TrueColor/256-color support and sub-pixel Unicode manipulation.
-*   **Deterministic Physics:** Q32.32 fixed-point mathematics driving 2D and 3D kinetic interactions, flocking, and collisions.
-*   **Adaptive AI:** Enemies evolve via Genetic Algorithms and utilize Flow Field pathing with EXP3 multi-armed bandit route selection.
-*   **Procedural Audio:** Pure Go PCM synthesizer featuring dynamic, APM-driven background music and real-time sound effect mixing.
-*   **Data-Driven Logic:** Game phases and states controlled by a custom Hierarchical Finite State Machine (HFSM) defined in TOML.
-*   **Vi/Vim Emulation:** Accurate input parsing for normal, insert, visual, and command modes, including macros and motion operators.
-*   **Mouse Support:** Mixed keyboard and mouse, keyboard-only, mouse-only (free and click-based) gameplay.
-*   **Platform:** Linux, FreeBSD, and WASM (limited to embedded data file usage).
+- Vim-inspired Normal, Insert, Visual, Search, Command, and Overlay modes with
+  counts, motions, delete operators, find/search repeat, undo, and concurrent
+  recorded macros.
+- A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
+  spatial grid, composite actors, and a single explicit world-lock boundary.
+- TOML-authored hierarchical state machines with parallel regions, dynamic
+  encounters, payload capture/injection, guards, delayed actions, and system
+  control.
+- A layered terminal-cell compositor with truecolor/xterm-256 support, blend
+  modes, semantic masks, camera transforms, and post-processing.
+- Pure-Go synthesis, SFX mixing, and a three-slot sequencer whose tempo and
+  arrangement respond to player APM; PCM is streamed to common host audio
+  tools, FreeBSD OSS, a null sink, or WAV capture.
+- Aspect-aware flow fields, footprint-aware route graphs, online route
+  adaptation, streaming genetic optimization, Q32.32 storage, and both fixed
+  and floating-point physics/math paths.
+- Plain-text and authored TOML typing corpora, embedded fallback scenarios and
+  tutorial content, image-to-terminal wall assets, and dedicated audio/image/
+  visual authoring tools.
+
+The simulation is not advertised as globally bit-for-bit deterministic: several
+Q32.32 operations intentionally use hardware floating point, and real-time
+scheduling/random seeds are part of normal play.
 
 ## Build and run
+
+The module currently declares Go 1.26.5.
 
 ```bash
 git clone https://github.com/lixenwraith/vi-fighter --depth 1
 cd vi-fighter
 make release
-bin/vif
+./bin/vif
 ```
+
+Useful targets include `make dev`, `make test`, `make verify`, `make tools`,
+`make wasm`, and `make serve`. Audio starts muted; press `Ctrl-S` to cycle audio
+channels or launch with `-au`. Run `./bin/vif -h` for all flags.
+
+Primary native targets are Linux and FreeBSD. The repository also contains a
+constrained xterm.js/WASM build and an experimental Windows cross-build.
+
+## Configuration and tools
+
+- `-g <game.toml|directory>` selects an encounter configuration.
+- `-f <content-file|directory>` selects typeable `.txt`/`.toml` content.
+- `-k <keymap.toml>` applies sparse key overrides.
+- `-check` validates resolved FSM/content without opening the game.
+- `-schema` exports the current event/action/guard schema as JSON.
+- `cmd/soundlab` authors and auditions sounds/music.
+- `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
+
+## Documentation
+
+Start with the [engineering documentation index](doc/README.md). It links the
+high-level architecture, medium-level package/runtime diagrams, and detailed
+references for gameplay, ECS/events, input, FSM configuration, rendering,
+audio, navigation/evolution, content/assets, services/networking, and
+development.
 
 ## License
 
-BSD-3 Clause
-
+BSD-3-Clause.
