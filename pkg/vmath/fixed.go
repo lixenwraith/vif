@@ -83,22 +83,6 @@ func Cos(angle int64) int64 {
 
 // --- Fast Approximations ---
 
-// NOTE: used by dust system, lightning renderer, targeting system. to be considered in float migration.
-// DistanceApprox uses alpha-max-beta-min (1, 0.375); peak error +6.8% at min/max = 0.375
-func DistanceApprox(dx, dy int64) int64 {
-	if dx < 0 {
-		dx = -dx
-	}
-	if dy < 0 {
-		dy = -dy
-	}
-	if dx < dy {
-		dx, dy = dy, dx
-	}
-	// dist = max + 0.375*min
-	return dx + (dy >> 2) + (dy >> 3)
-}
-
 // Sqrt returns the square root in Q32.32
 // Evaluated in float64: hardware SQRT is ~300x faster than iterative integer
 func Sqrt(x int64) int64 {

@@ -384,12 +384,6 @@ func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *com
 		return tx, ty, false
 	}
 
-	// Flow zero (stuck): snap to target if close
-	dist := vmath.DistanceApprox(kineticComp.PreciseX-baseXFixed, kineticComp.PreciseY-baseYFixed)
-	if dist < vmath.FromInt(2) {
-		return baseXFixed, baseYFixed, true
-	}
-
 	return baseXFixed, baseYFixed, true
 }
 

@@ -120,94 +120,16 @@ func (t *GridTraverser) Pos() (int, int) {
 
 // --- 2D Traversal (Supercover DDA) ---
 
-// Traverse visits every grid cell intersected by a line from (x1, y1) to (x2, y2), coordinates are Q32.32 fixed point
-// Uses Supercover DDA to ensure no skipped cells, guaranteed to terminate by checking target bounds before stepping
+// Traverse visits every grid cell intersected by a line from (x1, y1) to (x2, y2),
+// coordinates are Q32.32 fixed point. Callback returning false stops the walk.
+// Thin wrapper over GridTraverser; no float twin by design — float call sites use
+// NewGridTraverserF directly and this disappears with the fixed path.
 func Traverse(x1, y1, x2, y2 int64, callback func(x, y int) bool) {
-	ix, iy := ToInt(x1), ToInt(y1)
-	targetX, targetY := ToInt(x2), ToInt(y2)
-
-	if ix == targetX && iy == targetY {
-		callback(ix, iy)
-		return
-	}
-
-	dx := x2 - x1
-	dy := y2 - y1
-
-	stepX, stepY := 1, 1
-	if dx < 0 {
-		stepX = -1
-		dx = -dx
-	}
-	if dy < 0 {
-		stepY = -1
-		dy = -dy
-	}
-
-	// Calculate initial tMax and tDelta
-	var tMaxX, tMaxY, tDeltaX, tDeltaY int64
-	if dx == 0 {
-		tMaxX = math.MaxInt64
-	} else {
-		tDeltaX = Div(Scale, dx)
-		if stepX > 0 {
-			tMaxX = Mul(Scale-(x1&Mask), tDeltaX)
-		} else {
-			tMaxX = Mul(x1&Mask, tDeltaX)
-		}
-	}
-
-	if dy == 0 {
-		tMaxY = math.MaxInt64
-	} else {
-		tDeltaY = Div(Scale, dy)
-		if stepY > 0 {
-			tMaxY = Mul(Scale-(y1&Mask), tDeltaY)
-		} else {
-			tMaxY = Mul((y1 & Mask), tDeltaY)
-		}
-	}
-
-	if !callback(ix, iy) {
-		return
-	}
-
-	// Loop until both indices match targets
-	for ix != targetX || iy != targetY {
-		if tMaxX < tMaxY {
-			// Try stepping X
-			if ix != targetX {
-				ix += stepX
-				tMaxX += tDeltaX
-			} else {
-				// X is done, forced to step Y
-				iy += stepY
-				tMaxY += tDeltaY
-			}
-		} else if tMaxX > tMaxY {
-			// Try stepping Y
-			if iy != targetY {
-				iy += stepY
-				tMaxY += tDeltaY
-			} else {
-				// Y is done, forced to step X
-				ix += stepX
-				tMaxX += tDeltaX
-			}
-		} else {
-			// Diagonal step (tMaxX == tMaxY)
-			if ix != targetX {
-				ix += stepX
-				tMaxX += tDeltaX
-			}
-			if iy != targetY {
-				iy += stepY
-				tMaxY += tDeltaY
-			}
-		}
-
-		if !callback(ix, iy) {
-			break
+	t := NewGridTraverser(x1, y1, x2, y2)
+	for t.Next() {
+		x, y := t.Pos()
+		if !callback(x, y) {
+			return
 		}
 	}
 }

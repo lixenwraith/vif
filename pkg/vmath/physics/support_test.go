@@ -70,3 +70,33 @@ var (
 )
 
 func noWall(int, int) bool { return false }
+
+// --- Float profiles ---
+
+// Float twins of the test profiles; values identical, representation differs
+var (
+	profBrakedF = HomingProfileF{
+		HomingAccel:      20.0,
+		Drag:             4.0,
+		ArrivalRadius:    3.0,
+		ArrivalDragBoost: 5.0,
+		DeadZone:         0.5,
+	}
+
+	profCruiseF = HomingProfileF{
+		BaseSpeed:        5.0,
+		HomingAccel:      20.0,
+		Drag:             4.0,
+		ArrivalRadius:    3.0,
+		ArrivalDragBoost: 5.0,
+		DeadZone:         0.5,
+	}
+
+	profImpulseF = CollisionProfileF{
+		MassRatio:     1.0,
+		ImpulseMin:    10.0,
+		ImpulseMax:    10.0,
+		AngleVariance: 0,
+		Mode:          ImpulseAdditive,
+	}
+)

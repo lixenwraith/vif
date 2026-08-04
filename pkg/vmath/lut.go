@@ -25,9 +25,6 @@ var (
 	CosLUT [LUTSize]int64
 )
 
-// radToRotation converts radians to Q32.32 rotation units (Scale = one turn)
-const radToRotation = ScaleF / TwoPi
-
 // Exponential decay LUT for performance-critical scaling
 // Usage: speed multiplier based on entity count, damage falloff, etc.
 
@@ -64,27 +61,4 @@ func ExpDecay(count int) int64 {
 // boostMax: Q32.32 maximum additional multiplier at count=0
 func ExpDecayScaled(count int, boostMax int64) int64 {
 	return Scale + Mul(boostMax, ExpDecay(count))
-}
-
-// Atan2 returns the angle in [0, Scale) for (dy, dx), Scale = full rotation
-// Axes are handled in integer form to keep quarter-turns exact; the general
-// case delegates to Atan2F, which is ~3.6x faster than the int64 octant LUT
-func Atan2(dy, dx int64) int64 {
-	if dx == 0 {
-		if dy > 0 {
-			return Scale / 4
-		}
-		if dy < 0 {
-			return 3 * Scale / 4
-		}
-		return 0
-	}
-	if dy == 0 {
-		if dx > 0 {
-			return 0
-		}
-		return Scale / 2
-	}
-	// Mask handles the 2pi -> 0 wrap when rounding lands on a full turn
-	return int64(Atan2F(float64(dy), float64(dx))*radToRotation+0.5) & Mask
 }

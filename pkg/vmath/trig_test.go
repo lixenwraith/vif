@@ -61,65 +61,46 @@ func TestSinFCosFMatchFixed(t *testing.T) {
 	}
 }
 
-func TestAtan2Range(t *testing.T) {
+func TestAtan2FRange(t *testing.T) {
 	rng := NewFastRand(0xA7A2)
 	for range 50000 {
-		dx := signedRand(rng, 1<<33)
-		dy := signedRand(rng, 1<<33)
-		if a := Atan2(dy, dx); a < 0 || a >= Scale {
-			t.Fatalf("Atan2(%d,%d) = %d out of [0, Scale)", dy, dx, a)
+		dx := float64(signedRand(rng, 1<<33))
+		dy := float64(signedRand(rng, 1<<33))
+		if a := Atan2F(dy, dx); a < 0 || a >= TwoPi {
+			t.Fatalf("Atan2F(%v,%v) = %v out of [0, 2pi)", dy, dx, a)
 		}
 	}
 	// regression: near-zero |dy| with dx > 0 quantized the ratio to zero and
 	// returned a full rotation instead of zero
-	if a := Atan2(-1, 1<<40); a != 0 {
-		t.Fatalf("Atan2 Q4 boundary = %d, want 0", a)
+	if a := Atan2F(-1, 1<<40); a != 0 {
+		t.Fatalf("Atan2F Q4 boundary = %v, want 0", a)
 	}
 }
 
-func TestAtan2Axes(t *testing.T) {
-	cases := []struct {
-		dy, dx, want int64
-	}{
-		{0, 0, 0},
-		{0, Scale, 0},
-		{Scale, 0, Scale / 4},
-		{0, -Scale, Scale / 2},
-		{-Scale, 0, 3 * Scale / 4},
+func TestAtan2FAxes(t *testing.T) {
+	cases := []struct{ dy, dx, want float64 }{
+		{0, 0, 0}, {0, 1, 0}, {1, 0, math.Pi / 2},
+		{0, -1, math.Pi}, {-1, 0, 3 * math.Pi / 2},
 	}
 	for _, c := range cases {
-		if got := Atan2(c.dy, c.dx); got != c.want {
-			t.Errorf("Atan2(%d,%d) = %d, want %d", c.dy, c.dx, got, c.want)
+		if got := Atan2F(c.dy, c.dx); math.Abs(got-c.want) > 1e-12 {
+			t.Errorf("Atan2F(%v,%v) = %v, want %v", c.dy, c.dx, got, c.want)
 		}
 	}
 }
 
-func TestAtan2AgainstMath(t *testing.T) {
+func TestAtan2FAgainstMath(t *testing.T) {
 	// one octant spans 1024 entries: |d atan/dr| <= 1 bounds the error at 1/1023
 	const tol = 0.0025
 	rng := NewFastRand(0xA7A3)
 	for range 50000 {
-		dx := signedRand(rng, 1<<33)
-		dy := signedRand(rng, 1<<33)
+		dx := float64(signedRand(rng, 1<<33))
+		dy := float64(signedRand(rng, 1<<33))
 		if dx == 0 && dy == 0 {
 			continue
 		}
-		got := rotToRad(Atan2(dy, dx))
-		want := math.Atan2(float64(dy), float64(dx))
-		if e := angDelta(got, want); e > tol {
-			t.Fatalf("Atan2(%d,%d) = %v rad, want %v (delta %g)", dy, dx, got, want, e)
-		}
-	}
-}
-
-func TestAtan2FMatchesAtan2(t *testing.T) {
-	const tol = 0.0035
-	rng := NewFastRand(0xA7A4)
-	for range 20000 {
-		dx := signedRand(rng, 1<<33)
-		dy := signedRand(rng, 1<<33)
-		if e := angDelta(rotToRad(Atan2(dy, dx)), Atan2F(float64(dy), float64(dx))); e > tol {
-			t.Fatalf("Atan2/Atan2F diverge at (%d,%d) by %g", dy, dx, e)
+		if e := angDelta(Atan2F(dy, dx), math.Atan2(dy, dx)); e > tol {
+			t.Fatalf("Atan2F(%v,%v) delta %g", dy, dx, e)
 		}
 	}
 }

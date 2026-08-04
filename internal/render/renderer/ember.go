@@ -14,6 +14,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
+// radToJaggedIdx maps radians to the 256-bucket jagged/radii LUT index
+const radToJaggedIdx = 256.0 / vmath.TwoPi
+
 // emberLayerColors holds pre-blended intensities for cached 1D mapping
 type emberLayerColors struct {
 	Core color.RGB
@@ -211,17 +214,17 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - centerX)
-			dy := vmath.FromInt(mapY - centerY)
+			cellDX := mapX - centerX
+			cellDY := mapY - centerY
 
-			// TODO: Atan2 is 50% slower than Atan2F, convert to renderer to full float
-			// Placeholder to deprecate Atan2
-			theta := vmath.FromFloat(vmath.Atan2F(vmath.ToFloat(dy), vmath.ToFloat(dx)))
-			// theta := vmath.Atan2(dy, dx)
-			lutIdx := (theta >> (vmath.Shift - 8)) & 255
+			// Atan2F depends only on the ratio, so raw cell deltas are fine here
+			theta := vmath.Atan2F(float64(cellDY), float64(cellDX))
+			lutIdx := int(theta*radToJaggedIdx) & 255
 			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq
 			invRySq := p.invRadiiSqLUT[lutIdx].invRySq
 
+			dx := vmath.FromInt(cellDX)
+			dy := vmath.FromInt(cellDY)
 			normDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
 
 			if normDistSq > vmath.Scale+vmath.Scale/4 {
@@ -241,22 +244,13 @@ func (p *EmberPainter) buildColorLUT() {
 	for i := range 256 {
 		normDist := (int64(i) * vmath.Scale) / 255
 
-		coreT := vmath.Scale - vmath.Mul(normDist, params.CoreFalloff)
-		if coreT < 0 {
-			coreT = 0
-		}
+		coreT := max(vmath.Scale-vmath.Mul(normDist, params.CoreFalloff), 0)
 		coreInt := p.powFixed(coreT, params.CorePower)
 
-		midT := vmath.Scale - vmath.Mul(normDist, params.MidFalloff)
-		if midT < 0 {
-			midT = 0
-		}
+		midT := max(vmath.Scale-vmath.Mul(normDist, params.MidFalloff), 0)
 		midInt := vmath.Mul(p.powFixed(midT, params.MidPower), params.MidIntensity)
 
-		edgeT := vmath.Scale - normDist
-		if edgeT < 0 {
-			edgeT = 0
-		}
+		edgeT := max(vmath.Scale-normDist, 0)
 		coronaInt := vmath.Mul(p.powFixed(edgeT, params.EdgePower), params.EdgeIntensity)
 
 		p.colorLUT[i] = emberLayerColors{
@@ -305,16 +299,10 @@ func (p *EmberPainter) computeRingVisibility(normDistF, dxF, dyF float64) float6
 
 // emberCellTrueColor renders with layered gradients and rings
 func emberCellTrueColor(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY int, normDistSq, dx, dy int64) {
-	normDist := vmath.Sqrt(normDistSq)
-	if normDist > vmath.Scale {
-		normDist = vmath.Scale
-	}
+	normDist := min(vmath.Sqrt(normDistSq), vmath.Scale)
 
 	// Query 1D color mapping cache
-	lutIdx := (normDist * 255) >> vmath.Shift
-	if lutIdx > 255 {
-		lutIdx = 255
-	}
+	lutIdx := min((normDist*255)>>vmath.Shift, 255)
 	layerColors := &p.colorLUT[lutIdx]
 
 	// Apply corona (additive)
@@ -368,10 +356,7 @@ func (p *EmberPainter) computeJaggedDisplacement(theta int64) int64 {
 
 	// Eruption spikes
 	eruptAngle := vmath.Mul(theta, 3*vmath.Scale) + vmath.Mul(timePhase, 3*vmath.Scale/2)
-	eruptBase := vmath.Sin(eruptAngle)
-	if eruptBase < 0 {
-		eruptBase = 0
-	}
+	eruptBase := min(vmath.Sin(eruptAngle), 0)
 	eruption := p.powFixed(eruptBase, p.params.EruptionPower)
 	eruption = vmath.Mul(eruption, 6*vmath.Scale/5)
 
@@ -385,13 +370,7 @@ func emberCell256(p *EmberPainter, buf *render.RenderBuffer, screenX, screenY in
 	}
 
 	// Derive heat from RingAlpha (0.5 at heat=0, 0 at heat=100)
-	heat := 100 - int(vmath.ToFloat(p.params.RingAlpha)*200)
-	if heat < 0 {
-		heat = 0
-	}
-	if heat > 100 {
-		heat = 100
-	}
+	heat := min(max(100-int(vmath.ToFloat(p.params.RingAlpha)*200), 0), 100)
 
 	buf.SetBg256(screenX, screenY, visual.Ember256PaletteIndex(heat))
 }

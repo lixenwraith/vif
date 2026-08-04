@@ -12,8 +12,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 const (
@@ -226,8 +226,8 @@ func (s *DustSystem) Update() {
 	s.lastCursorX = cursorPos.X
 	s.lastCursorY = cursorPos.Y
 
-	cursorDisplacement := vmath.DistanceApprox(vmath.FromInt(cursorDeltaX), vmath.FromInt(cursorDeltaY))
-	applyChaseBoost := cursorDisplacement > vmath.FromInt(parameter.DustChaseThreshold)
+	cursorDisplacement := vmath.MagnitudeF(float64(cursorDeltaX), float64(cursorDeltaY))
+	applyChaseBoost := cursorDisplacement > float64(parameter.DustChaseThreshold)
 
 	// Stagger tick advancement on cursor jump
 	if applyChaseBoost {

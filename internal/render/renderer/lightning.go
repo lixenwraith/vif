@@ -100,19 +100,13 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	dxFixed := vmath.FromInt(dx)
 	dyFixed := vmath.FromInt(dy)
 
-	distFixed := vmath.DistanceApprox(dxFixed, dyFixed)
+	distFixed := vmath.Magnitude(dxFixed, dyFixed)
 	if distFixed < vmath.Scale {
 		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
 	}
 
-	// Segment count: ~1 per 10 sub-pixels
-	segments := vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(10)))
-	if segments < 4 {
-		segments = 4
-	}
-	if segments > 32 {
-		segments = 32 // Cap for very long lines
-	}
+	// Segment count: ~1 per 10 sub-pixels, capped min and max segments
+	segments := min(max(vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(10))), 4), 32)
 
 	// Normalized perpendicular: (-dy/dist, dx/dist)
 	perpXFixed := vmath.Div(-dyFixed, distFixed)

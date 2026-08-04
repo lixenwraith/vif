@@ -106,12 +106,6 @@ func BenchmarkSinStdlib(b *testing.B) {
 	}
 }
 
-func BenchmarkAtan2(b *testing.B) {
-	for b.Loop() {
-		sinkI = Atan2(by, bx)
-	}
-}
-
 func BenchmarkAtan2F(b *testing.B) {
 	for b.Loop() {
 		sinkF = Atan2F(bfy, bfx)
