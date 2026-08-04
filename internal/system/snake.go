@@ -9,9 +9,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
+
+// snakeLateralCells are the perpendicular offsets of a segment's three members
+var snakeLateralCells = [3]int{0, -1, 1}
+
+// snakeLateralOffsets are snakeLateralCells in Q32.32 for rest-position math
+var snakeLateralOffsets = [3]int64{0, -vmath.Scale, vmath.Scale}
 
 // SnakeSystem manages snake entity lifecycle
 type SnakeSystem struct {
@@ -499,11 +505,10 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		return false
 	}
 
-	perpX, perpY := s.calculatePerpendicular(headComp.FacingX, headComp.FacingY)
+	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
 	createdAny := false
 
-	offsets := []int{0, -1, 1}
-	for _, lateralOffset := range offsets {
+	for _, lateralOffset := range snakeLateralCells {
 		memberX := centerX + vmath.ToInt(vmath.Mul(perpX, vmath.FromInt(lateralOffset)))
 		memberY := centerY + vmath.ToInt(vmath.Mul(perpY, vmath.FromInt(lateralOffset)))
 
@@ -553,11 +558,6 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 
 	s.world.Components.Header.SetComponent(bodyEntity, bodyHeader)
 	return createdAny
-}
-
-func (s *SnakeSystem) calculatePerpendicular(facingX, facingY int64) (int64, int64) {
-	// Rotate 90 degrees: (x, y) → (-y, x)
-	return -facingY, facingX
 }
 
 func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, dtFixed int64) {
@@ -655,10 +655,7 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 		return
 	}
 
-	spacingCells := vmath.ToInt(parameter.SnakeSegmentSpacing)
-	if spacingCells < 1 {
-		spacingCells = 1
-	}
+	spacingCells := max(vmath.ToInt(parameter.SnakeSegmentSpacing), 1)
 
 	for i := range bodyComp.Segments {
 		// Sample trail at position based on segment index
@@ -679,7 +676,7 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 }
 
 func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, headComp *component.SnakeHeadComponent, resolved []resolvedSegment, dtFixed int64) {
-	perpX, perpY := s.calculatePerpendicular(headComp.FacingX, headComp.FacingY)
+	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
 
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
@@ -687,7 +684,6 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			continue
 		}
 
-		offsets := []int64{0, -vmath.Scale, vmath.Scale}
 		members := [3]core.Entity{resolved[i].Center, resolved[i].Left, resolved[i].Right}
 
 		for j, memberEntity := range members {
@@ -701,41 +697,18 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			}
 
 			// Per-member rest position with perpendicular offset
-			memberRestX := seg.RestX + vmath.Mul(perpX, offsets[j])
-			memberRestY := seg.RestY + vmath.Mul(perpY, offsets[j])
+			memberRestX := seg.RestX + vmath.Mul(perpX, snakeLateralOffsets[j])
+			memberRestY := seg.RestY + vmath.Mul(perpY, snakeLateralOffsets[j])
 
 			// Check if member was knocked away (has kinetic immunity from combat hit)
 			combatComp, hasCombat := s.world.Components.Combat.GetComponent(memberEntity)
 			isDisplaced := hasCombat && combatComp.RemainingKineticImmunity > 0
 
 			if isDisplaced {
-				// Spring force toward rest position
-				dx := memberRestX - kineticComp.PreciseX
-				dy := memberRestY - kineticComp.PreciseY
-
-				// F = k * displacement
-				forceX := vmath.Mul(dx, parameter.SnakeSpringStiffness)
-				forceY := vmath.Mul(dy, parameter.SnakeSpringStiffness)
-
-				// Clamp force magnitude
-				forceMag := vmath.Magnitude(forceX, forceY)
-				if forceMag > parameter.SnakeSpringMaxForce {
-					scale := vmath.Div(parameter.SnakeSpringMaxForce, forceMag)
-					forceX = vmath.Mul(forceX, scale)
-					forceY = vmath.Mul(forceY, scale)
-				}
-
-				// Apply as acceleration
-				kineticComp.VelX += vmath.Mul(forceX, dtFixed)
-				kineticComp.VelY += vmath.Mul(forceY, dtFixed)
-
-				// Damping
-				kineticComp.VelX = vmath.Mul(kineticComp.VelX, parameter.SnakeSpringDamping)
-				kineticComp.VelY = vmath.Mul(kineticComp.VelY, parameter.SnakeSpringDamping)
-
-				// Integrate position
-				kineticComp.PreciseX += vmath.Mul(kineticComp.VelX, dtFixed)
-				kineticComp.PreciseY += vmath.Mul(kineticComp.VelY, dtFixed)
+				physics.SpringToRest(&kineticComp.Kinetic, memberRestX, memberRestY,
+					parameter.SnakeSpringStiffness, parameter.SnakeSpringDamping,
+					parameter.SnakeSpringMaxForce, dtFixed)
+				physics.IntegratePosition(&kineticComp.Kinetic, dtFixed)
 			} else {
 				// Direct follow: snap to rest position
 				kineticComp.PreciseX = memberRestX

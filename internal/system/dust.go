@@ -244,7 +244,7 @@ func (s *DustSystem) Update() {
 	var (
 		baseStiffness    = parameter.DustAttractionBase
 		boostedStiffness = vmath.Mul(baseStiffness, parameter.DustChaseBoost)
-		dragDtBase       = vmath.Mul(parameter.DustGlobalDrag, dtFixed)
+		// dragDtBase       = vmath.Mul(parameter.DustGlobalDrag, dtFixed)
 	)
 
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
@@ -319,49 +319,21 @@ func (s *DustSystem) Update() {
 		}
 
 		// --- Global Drag (v² model) ---
-		speed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-		if speed > 0 {
-			// dragDtBase = DustGlobalDrag * dt (pre-computed)
-			dragAmount := vmath.Mul(dragDtBase, speed)
-			if dragAmount > vmath.Scale {
-				dragAmount = vmath.Scale
-			}
-			scaleFactor := vmath.Scale - dragAmount
-			kineticComp.VelX = vmath.Mul(kineticComp.VelX, scaleFactor)
-			kineticComp.VelY = vmath.Mul(kineticComp.VelY, scaleFactor)
-		}
+		physics.ApplyQuadraticDrag(&kineticComp.Kinetic, parameter.DustGlobalDrag, dtFixed)
 
 		// --- Positions Integration ---
 		prevX, prevY := kineticComp.PreciseX, kineticComp.PreciseY
-
-		kineticComp.PreciseX += vmath.Mul(kineticComp.VelX, dtFixed)
-		kineticComp.PreciseY += vmath.Mul(kineticComp.VelY, dtFixed)
-
-		newX := vmath.ToInt(kineticComp.PreciseX)
-		newY := vmath.ToInt(kineticComp.PreciseY)
+		newX, newY := physics.IntegratePosition(&kineticComp.Kinetic, dtFixed)
 
 		gameWidth := s.world.Resources.Config.MapWidth
 		gameHeight := s.world.Resources.Config.MapHeight
 
 		// Boundary reflection
-		if newX < 0 {
-			newX = 0
-			kineticComp.PreciseX = 0
-			kineticComp.VelX = -kineticComp.VelX / 2
-		} else if newX >= gameWidth {
-			newX = gameWidth - 1
-			kineticComp.PreciseX = vmath.FromInt(newX)
-			kineticComp.VelX = -kineticComp.VelX / 2
+		if physics.ReflectBoundsDampedX(&kineticComp.Kinetic, 0, gameWidth, parameter.DustWallRestitution) {
+			newX = vmath.ToInt(kineticComp.PreciseX)
 		}
-
-		if newY < 0 {
-			newY = 0
-			kineticComp.PreciseY = 0
-			kineticComp.VelY = -kineticComp.VelY / 2
-		} else if newY >= gameHeight {
-			newY = gameHeight - 1
-			kineticComp.PreciseY = vmath.FromInt(newY)
-			kineticComp.VelY = -kineticComp.VelY / 2
+		if physics.ReflectBoundsDampedY(&kineticComp.Kinetic, 0, gameHeight, parameter.DustWallRestitution) {
+			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
 		// --- Collision Traversal with Wall Check ---
@@ -386,13 +358,11 @@ func (s *DustSystem) Update() {
 
 				// Wall collision - reflect and stop (BEFORE entity checks)
 				if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockParticle) {
-					dx := currX - lastSafeX
-					dy := currY - lastSafeY
-					if dx != 0 {
-						kineticComp.VelX = -kineticComp.VelX / 2
+					if currX != lastSafeX {
+						physics.ReflectVelocityX(&kineticComp.Kinetic, parameter.DustWallRestitution)
 					}
-					if dy != 0 {
-						kineticComp.VelY = -kineticComp.VelY / 2
+					if currY != lastSafeY {
+						physics.ReflectVelocityY(&kineticComp.Kinetic, parameter.DustWallRestitution)
 					}
 					kineticComp.PreciseX, kineticComp.PreciseY = vmath.CenteredFromGrid(lastSafeX, lastSafeY)
 					hitWall = true

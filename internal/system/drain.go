@@ -11,8 +11,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // pendingDrainSpawn represents a queued drain materialize spawn awaiting materialization
@@ -905,45 +905,16 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		// 2. Physics with GA-optimized cornering
 		if combatComp.RemainingKineticImmunity == 0 {
-			appliedDrag := parameter.DrainDrag
+			// Cornering drag scales the base drag by turn severity
+			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+				parameter.NavCorneringThreshold, vmath.Scale)
 
-			// Cornering drag: check turn alignment when moving
-			currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-			if currentSpeed > vmath.Scale { // Moving at least 1 cell/sec
-				// Normalized velocity
-				nx := vmath.Div(kineticComp.VelX, currentSpeed)
-				ny := vmath.Div(kineticComp.VelY, currentSpeed)
-				// Direction to target
-				dx := targetX - kineticComp.PreciseX
-				dy := targetY - kineticComp.PreciseY
-				dnx, dny := vmath.Normalize2D(dx, dy)
-				// Dot product: 1.0 = aligned, 0 = perpendicular, -1 = opposite
-				alignment := vmath.DotProduct(nx, ny, dnx, dny)
-				if alignment < parameter.NavCorneringThreshold {
-					turnSeverity := parameter.NavCorneringThreshold - alignment
-					brakeMult := vmath.Scale + vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
-					appliedDrag = vmath.Mul(parameter.DrainDrag, brakeMult)
-				}
-			}
+			physics.ApplyHomingScaled(&kineticComp.Kinetic, targetX, targetY,
+				&profile.DrainHoming, vmath.Scale, dtFixed, true)
 
-			physics.ApplyHomingScaled(
-				&kineticComp.Kinetic,
-				targetX, targetY,
-				&profile.DrainHoming,
-				vmath.Scale,
-				dtFixed,
-				true,
-			)
-
-			// Apply cornering drag separately if higher than base
-			if appliedDrag > parameter.DrainDrag {
-				extraDrag := appliedDrag - parameter.DrainDrag
-				dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
-				if dragFactor < 0 {
-					dragFactor = 0
-				}
-				kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
-				kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+			if turnSeverity > 0 {
+				brake := vmath.Mul(vmath.Mul(turnSeverity, parameter.NavCorneringBrake), parameter.DrainDrag)
+				physics.ApplyLinearDrag(&kineticComp.Kinetic, brake, dtFixed)
 			}
 		}
 
@@ -951,13 +922,10 @@ func (s *DrainSystem) updateDrainMovement() {
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
 		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
 
-		// Boundary Reflection
-		if newX < 0 || newX >= gameWidth {
-			physics.ReflectBoundsX(&kineticComp.Kinetic, 0, gameWidth)
+		if physics.ReflectBoundsX(&kineticComp.Kinetic, 0, gameWidth) {
 			newX = vmath.ToInt(kineticComp.PreciseX)
 		}
-		if newY < 0 || newY >= gameHeight {
-			physics.ReflectBoundsY(&kineticComp.Kinetic, 0, gameHeight)
+		if physics.ReflectBoundsY(&kineticComp.Kinetic, 0, gameHeight) {
 			newY = vmath.ToInt(kineticComp.PreciseY)
 		}
 
@@ -1013,21 +981,14 @@ func (s *DrainSystem) updateDrainMovement() {
 	}
 }
 
-// reflectOffWall reflects kinetic velocity when hitting wall at (wallX, wallY) from (fromX, fromY)
-// Snaps position back to fromX/fromY cell center
+// reflectOffWall reflects velocity on the approach axis and snaps back to the safe cell
 func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wallY int) {
-	dx := wallX - fromX
-	dy := wallY - fromY
-
-	// Reflect based on approach axis
-	if dx != 0 {
-		k.VelX = -k.VelX
+	if wallX != fromX {
+		physics.ReflectVelocityX(k, vmath.Scale)
 	}
-	if dy != 0 {
-		k.VelY = -k.VelY
+	if wallY != fromY {
+		physics.ReflectVelocityY(k, vmath.Scale)
 	}
-
-	// Snap back to safe cell center
 	k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(fromX, fromY)
 }
 

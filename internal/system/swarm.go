@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // SwarmSystem manages the elite enemy entity lifecycle
@@ -513,10 +513,8 @@ func (s *SwarmSystem) updateDecelerateState(
 		return
 	}
 
-	// Drag factor: reduce velocity by 90% per 100ms
-	dragFactor := vmath.FromFloat(0.1)
-	kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
-	kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+	// Reduce velocity by 90% per 100ms
+	physics.ScaleVelocity(&kineticComp.Kinetic, parameter.SwarmDecelDrag)
 
 	// Integrate and sync (minimal movement due to drag)
 	s.integrateAndSync(headerEntity, dtFixed)
@@ -669,41 +667,15 @@ func (s *SwarmSystem) applyHomingMovement(headerEntity core.Entity, dtFixed int6
 	targetX, targetY, _ := ResolveMovementTarget(s.world, headerEntity, kineticComp)
 
 	// Cornering drag
-	var extraDrag int64
-	currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-	if currentSpeed > vmath.Scale {
-		nx := vmath.Div(kineticComp.VelX, currentSpeed)
-		ny := vmath.Div(kineticComp.VelY, currentSpeed)
+	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+		parameter.NavCorneringThreshold, vmath.Scale)
 
-		dx := targetX - kineticComp.PreciseX
-		dy := targetY - kineticComp.PreciseY
-		dnx, dny := vmath.Normalize2D(dx, dy)
+	physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.SwarmHoming, dtFixed)
 
-		alignment := vmath.DotProduct(nx, ny, dnx, dny)
-
-		if alignment < parameter.NavCorneringThreshold {
-			turnSeverity := parameter.NavCorneringThreshold - alignment
-			extraDrag = vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
-		}
+	if turnSeverity > 0 {
+		physics.ApplyLinearDrag(&kineticComp.Kinetic,
+			vmath.Mul(turnSeverity, parameter.NavCorneringBrake), dtFixed)
 	}
-
-	physics.ApplyHoming(
-		&kineticComp.Kinetic,
-		targetX, targetY,
-		&profile.SwarmHoming,
-		dtFixed,
-	)
-
-	// Apply cornering drag
-	if extraDrag > 0 {
-		dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
-		if dragFactor < 0 {
-			dragFactor = 0
-		}
-		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
-		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
-	}
-
 }
 
 // integrateAndSync integrates physics and syncs member positions, returns true if a wall/boundary was hit
@@ -735,10 +707,6 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 	minHeaderY := parameter.SwarmHeaderOffsetY
 	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
-	// TODO: magic number
-	// Restitution: 0.5 (Dampens the "Super-Knockback" significantly)
-	restitution := vmath.Scale / 2
-
 	// Integrate with Bounce
 	newX, newY, hitWall := physics.IntegrateWithBounce(
 		&kineticComp.Kinetic,
@@ -746,7 +714,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtFixed int64) 
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
 		minHeaderX, maxHeaderX,
 		minHeaderY, maxHeaderY,
-		restitution,
+		parameter.SwarmRestitution,
 		wallCheck,
 	)
 

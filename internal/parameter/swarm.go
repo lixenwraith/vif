@@ -64,6 +64,11 @@ const (
 	SwarmDragFloat = 2.0
 	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
 	SwarmDeflectAngleVarFloat = 0.25
+
+	// SwarmRestitutionFloat is velocity retained on wall/boundary bounce
+	SwarmRestitutionFloat = 0.5
+	// SwarmDecelDragFloat is the per-tick velocity scale during the decelerate phase
+	SwarmDecelDragFloat = 0.1
 )
 
 // Swarm Teleport
@@ -85,6 +90,8 @@ var (
 	SwarmHomingAccel     = vmath.FromFloat(SwarmHomingAccelFloat)
 	SwarmDrag            = vmath.FromFloat(SwarmDragFloat)
 	SwarmDeflectAngleVar = vmath.FromFloat(SwarmDeflectAngleVarFloat)
+	SwarmRestitution     = vmath.FromFloat(SwarmRestitutionFloat)
+	SwarmDecelDrag       = vmath.FromFloat(SwarmDecelDragFloat)
 )
 
 // Entity collision radii (ellipse semi-axes for overlap detection)

@@ -14,15 +14,19 @@ const (
 
 	// NavRouteRebuildInterval is minimum game ticks between gateway route graph recomputes
 	NavRouteRebuildInterval = 20
+
+	// NavCorneringBrakeFloat is the drag multiplier per unit of turn severity
+	NavCorneringBrakeFloat = 0.8
+	// NavCorneringThresholdFloat is the alignment below which cornering drag activates
+	NavCorneringThresholdFloat = 3.0
+	// NavFlowLookaheadDefaultFloat is flow-field target lookahead (cells)
+	NavFlowLookaheadDefaultFloat = 12.0
 )
 
 var (
-	// Drag multiplier applied per unit of turn severity
-	NavCorneringBrake = vmath.FromFloat(0.8)
-	// Alignment threshold below which cornering drag activates
-	NavCorneringThreshold = vmath.FromFloat(3.0)
-	// LookAhead cells
-	NavFlowLookaheadDefault = vmath.FromFloat(12.0)
+	NavCorneringBrake       = vmath.FromFloat(NavCorneringBrakeFloat)
+	NavCorneringThreshold   = vmath.FromFloat(NavCorneringThresholdFloat)
+	NavFlowLookaheadDefault = vmath.FromFloat(NavFlowLookaheadDefaultFloat)
 )
 
 // Route Graph — Computation

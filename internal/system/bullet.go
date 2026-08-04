@@ -5,8 +5,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // BulletSystem manages linear projectile lifecycle
@@ -108,8 +108,7 @@ func (s *BulletSystem) Update() {
 		}
 
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
-		kinetic.PreciseX += vmath.Mul(kinetic.VelX, dtFixed)
-		kinetic.PreciseY += vmath.Mul(kinetic.VelY, dtFixed)
+		gridX, gridY := physics.IntegratePosition(&kinetic.Kinetic, dtFixed)
 
 		destroyed := s.traverseAndCollide(
 			bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY,
@@ -121,8 +120,6 @@ func (s *BulletSystem) Update() {
 		}
 
 		// Sync grid position
-		gridX := vmath.ToInt(kinetic.PreciseX)
-		gridY := vmath.ToInt(kinetic.PreciseY)
 		if pos, ok := s.world.Positions.GetPosition(e); !ok || pos.X != gridX || pos.Y != gridY {
 			s.world.Positions.SetPosition(e, component.PositionComponent{X: gridX, Y: gridY})
 		}

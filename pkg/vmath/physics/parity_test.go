@@ -342,3 +342,49 @@ func TestReflectAxis3DFParity(t *testing.T) {
 		}
 	}
 }
+
+func TestSteeringHelperParity(t *testing.T) {
+	dtF := vmath.FromFloat(tickDt)
+
+	k := newKin(2.5, -3.25, 9, -4)
+	kf := KineticF{PreciseX: 2.5, PreciseY: -3.25, VelX: 9, VelY: -4}
+
+	for range 200 {
+		ApplyQuadraticDrag(&k, vmath.FromFloat(0.02), dtF)
+		ApplyQuadraticDragF(&kf, 0.02, tickDt)
+		ApplyLinearDrag(&k, vmath.FromFloat(1.5), dtF)
+		ApplyLinearDragF(&kf, 1.5, tickDt)
+		gx, gy := IntegratePosition(&k, dtF)
+		fx, fy := IntegratePositionF(&kf, tickDt)
+		if gx != fx || gy != fy {
+			t.Fatalf("grid (%d,%d) vs (%d,%d)", gx, gy, fx, fy)
+		}
+	}
+	px, py := posOf(&k)
+	if math.Abs(px-kf.PreciseX) > posTolerance || math.Abs(py-kf.PreciseY) > posTolerance {
+		t.Fatalf("precise (%v,%v) vs (%v,%v)", px, py, kf.PreciseX, kf.PreciseY)
+	}
+
+	for _, tgt := range [][2]float64{{20, 0}, {-5, -5}, {2.5, -3.25}} {
+		a := vmath.ToFloat(TurnSeverity(&k, vmath.FromFloat(tgt[0]), vmath.FromFloat(tgt[1]),
+			vmath.FromFloat(3.0), vmath.Scale))
+		b := TurnSeverityF(&kf, tgt[0], tgt[1], 3.0, 1.0)
+		if math.Abs(a-b) > 1e-5 {
+			t.Fatalf("TurnSeverity toward %v: %v vs %v", tgt, a, b)
+		}
+	}
+
+	sk := newKin(1, 1, 0, 0)
+	skf := KineticF{PreciseX: 1, PreciseY: 1}
+	for range 100 {
+		SpringToRest(&sk, vmath.FromFloat(4), vmath.FromFloat(-2),
+			vmath.FromFloat(18), vmath.FromFloat(0.82), vmath.FromFloat(40), dtF)
+		Integrate(&sk, dtF)
+		SpringToRestF(&skf, 4, -2, 18, 0.82, 40, tickDt)
+		IntegrateF(&skf, tickDt)
+	}
+	px, py = posOf(&sk)
+	if math.Abs(px-skf.PreciseX) > posTolerance || math.Abs(py-skf.PreciseY) > posTolerance {
+		t.Fatalf("spring (%v,%v) vs (%v,%v)", px, py, skf.PreciseX, skf.PreciseY)
+	}
+}

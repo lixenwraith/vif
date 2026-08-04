@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // MissileSystem manages missile lifecycle
@@ -143,8 +143,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 
 	if !hasTarget {
 		// Ballistic drift if target is lost
-		k.PreciseX += vmath.Mul(k.VelX, dt)
-		k.PreciseY += vmath.Mul(k.VelY, dt)
+		physics.IntegratePosition(&k.Kinetic, dt)
 	} else {
 		// Impact check before homing (specific target proximity)
 		dx := targetX - k.PreciseX
@@ -160,8 +159,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		k.VelX, k.VelY = physics.CapSpeed(k.VelX, k.VelY, parameter.MissileMaxSpeed)
 
 		// Integrate position
-		k.PreciseX += vmath.Mul(k.VelX, dt)
-		k.PreciseY += vmath.Mul(k.VelY, dt)
+		physics.IntegratePosition(&k.Kinetic, dt)
 	}
 
 	// General Enemy Collision: missile detonates on any combatant contact

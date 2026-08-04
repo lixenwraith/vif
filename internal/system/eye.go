@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // EyeSystem manages eye composite entity lifecycle
@@ -406,37 +406,21 @@ func (s *EyeSystem) updateHomingMovement(
 	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, kineticComp)
 
 	// Cornering drag
-	var extraDrag int64
-	currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-	if currentSpeed > vmath.Scale {
-		nx := vmath.Div(kineticComp.VelX, currentSpeed)
-		ny := vmath.Div(kineticComp.VelY, currentSpeed)
+	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+		parameter.NavCorneringThreshold, vmath.Scale)
 
-		dx := targetX - kineticComp.PreciseX
-		dy := targetY - kineticComp.PreciseY
-		dnx, dny := vmath.Normalize2D(dx, dy)
-
-		alignment := vmath.DotProduct(nx, ny, dnx, dny)
-		if alignment < parameter.NavCorneringThreshold {
-			turnSeverity := parameter.NavCorneringThreshold - alignment
-			extraDrag = vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
-		}
-	}
-
-	homingProfile := &profile.EyeHomingProfiles[eyeComp.Type]
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
-		homingProfile,
+		&profile.EyeHomingProfiles[eyeComp.Type],
 		vmath.Scale,
 		dtFixed,
 		usingDirectPath,
 	)
 
-	if extraDrag > 0 {
-		dragFactor := max(vmath.Scale-vmath.Mul(extraDrag, dtFixed), 0)
-		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
-		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+	if turnSeverity > 0 {
+		physics.ApplyLinearDrag(&kineticComp.Kinetic,
+			vmath.Mul(turnSeverity, parameter.NavCorneringBrake), dtFixed)
 	}
 }
 

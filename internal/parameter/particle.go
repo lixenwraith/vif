@@ -50,4 +50,7 @@ const (
 	DustTimerDark   = 2 * time.Second
 	DustTimerNormal = 4 * time.Second
 	DustTimerBright = 8 * time.Second
+
+	// DustWallRestitutionFloat is velocity retained on wall/boundary bounce
+	DustWallRestitutionFloat = 0.5
 )

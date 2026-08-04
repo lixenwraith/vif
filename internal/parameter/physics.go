@@ -26,15 +26,16 @@ var (
 
 // Dust physics
 var (
-	DustAttractionBase = vmath.FromFloat(DustAttractionBaseFloat)
-	DustOrbitRadiusMin = vmath.FromFloat(DustOrbitRadiusMinFloat)
-	DustOrbitRadiusMax = vmath.FromFloat(DustOrbitRadiusMaxFloat)
-	DustDamping        = vmath.FromFloat(DustDampingFloat)
-	DustChaseBoost     = vmath.FromFloat(DustChaseBoostFloat)
-	DustChaseDecay     = vmath.FromFloat(DustChaseDecayFloat)
-	DustInitialSpeed   = vmath.FromFloat(DustInitialSpeedFloat)
-	DustGlobalDrag     = vmath.FromFloat(DustGlobalDragFloat)
-	DustJitter         = vmath.FromFloat(DustJitterFloat)
+	DustAttractionBase  = vmath.FromFloat(DustAttractionBaseFloat)
+	DustOrbitRadiusMin  = vmath.FromFloat(DustOrbitRadiusMinFloat)
+	DustOrbitRadiusMax  = vmath.FromFloat(DustOrbitRadiusMaxFloat)
+	DustDamping         = vmath.FromFloat(DustDampingFloat)
+	DustChaseBoost      = vmath.FromFloat(DustChaseBoostFloat)
+	DustChaseDecay      = vmath.FromFloat(DustChaseDecayFloat)
+	DustInitialSpeed    = vmath.FromFloat(DustInitialSpeedFloat)
+	DustGlobalDrag      = vmath.FromFloat(DustGlobalDragFloat)
+	DustJitter          = vmath.FromFloat(DustJitterFloat)
+	DustWallRestitution = vmath.FromFloat(DustWallRestitutionFloat)
 )
 
 // Explosion field VFX
@@ -73,12 +74,6 @@ var (
 	MissileImpactRadius    = vmath.FromFloat(MissileImpactRadiusFloat)
 	MissileImpactRadiusSq  = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
 	MissileExplosionRadius = vmath.FromFloat(MissileExplosionRadiusFloat)
-)
-
-// Loot physics
-var (
-	LootChaseSpeed  = vmath.FromFloat(LootHomingMaxSpeedFloat)
-	LootHomingAccel = vmath.FromFloat(LootHomingAccelFloat)
 )
 
 // Pulse physics
