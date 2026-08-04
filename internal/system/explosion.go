@@ -173,7 +173,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 
 		dx := centerX - vmath.FromInt(c.X)
 		dy := centerY - vmath.FromInt(c.Y)
-		distSq := vmath.Mul(dx, dx) + vmath.Mul(dy, dy)
+		distSq := vmath.MagnitudeSq(dx, dy)
 
 		if distSq <= parameter.ExplosionMergeThresholdSq {
 			c.Age = 0
@@ -181,15 +181,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 			if c.Intensity > parameter.ExplosionIntensityCap {
 				c.Intensity = parameter.ExplosionIntensityCap
 			}
-			newRadius := c.Radius
-			if radius > newRadius {
-				newRadius = radius
-			}
-			newRadius += parameter.ExplosionRadiusBoost
-			if newRadius > s.radiusCap {
-				newRadius = s.radiusCap
-			}
-			c.Radius = newRadius
+			c.Radius = min(max(c.Radius, radius)+parameter.ExplosionRadiusBoost, s.radiusCap)
 
 			s.statMerged.Add(1)
 			return
@@ -334,6 +326,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 			OriginEntity: cursorEntity,
 			TargetEntity: drainEntity,
 			HitEntities:  []core.Entity{drainEntity},
+			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,
 		})
@@ -347,6 +340,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 			OriginEntity: cursorEntity,
 			TargetEntity: headerEntity,
 			HitEntities:  hitMembers,
+			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,
 		})

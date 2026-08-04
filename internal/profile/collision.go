@@ -1,102 +1,97 @@
 package profile
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// OffsetInfluenceDefault blends hit-point offset into impulse direction
-// Scale/3 ≈ 0.33: offset contributes one third of the final direction
-const OffsetInfluenceDefault = vmath.Scale / 3
+// Offset blends the hit point into the impulse direction. It applies only
+// when the target's Kinetic lives on a header separate from the hit cell;
+// single-cell entities and ablative members with their own Kinetic get none.
+const (
+	OffsetNone int64 = 0
+	OffsetBody int64 = vmath.Scale / 3 // hit point contributes 1/3 of direction
+)
 
 // kinetic builds a combat knockback profile.
-// Override redirects a composite as a unit; Additive accumulates on members.
-// Offset is nonzero only when the hit point should angle the impulse.
-func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset int64, immunity time.Duration) physics.CollisionProfile {
+// mode is the attack family's accumulation rule; offset is the target's shape.
+func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset int64) physics.CollisionProfile {
 	return physics.CollisionProfile{
-		MassRatio:        massRatio(impactor, target),
-		ImpulseMin:       parameter.CollisionKineticImpulseMin,
-		ImpulseMax:       parameter.CollisionKineticImpulseMax,
-		AngleVariance:    angleVar,
-		Mode:             mode,
-		ImmunityDuration: immunity,
-		OffsetInfluence:  offset,
+		MassRatio:       massRatio(impactor, target),
+		ImpulseMin:      parameter.CollisionKineticImpulseMin,
+		ImpulseMax:      parameter.CollisionKineticImpulseMax,
+		AngleVariance:   angleVar,
+		Mode:            mode,
+		OffsetInfluence: offset,
 	}
+}
+
+// redirect sends the target off as a unit (cleaner, shield)
+func redirect(impactor, target Mass, angleVar, offset int64) physics.CollisionProfile {
+	return kinetic(impactor, target, physics.ImpulseOverride, angleVar, offset)
+}
+
+// accumulate adds to existing velocity (explosion, dust)
+func accumulate(impactor, target Mass, angleVar, offset int64) physics.CollisionProfile {
+	return kinetic(impactor, target, physics.ImpulseAdditive, angleVar, offset)
 }
 
 // soft builds an inter-species repulsion profile (scatter, not combat)
 func soft(impactor, target Mass) physics.CollisionProfile {
 	return physics.CollisionProfile{
-		MassRatio:        softRatio(impactor, target),
-		ImpulseMin:       parameter.SoftCollisionImpulseMin,
-		ImpulseMax:       parameter.SoftCollisionImpulseMax,
-		AngleVariance:    parameter.SoftCollisionAngleVar,
-		Mode:             physics.ImpulseAdditive,
-		ImmunityDuration: parameter.SoftCollisionImmunityDuration,
-		OffsetInfluence:  0,
+		MassRatio:       softRatio(impactor, target),
+		ImpulseMin:      parameter.SoftCollisionImpulseMin,
+		ImpulseMax:      parameter.SoftCollisionImpulseMax,
+		AngleVariance:   parameter.SoftCollisionAngleVar,
+		Mode:            physics.ImpulseAdditive,
+		OffsetInfluence: 0,
 	}
 }
 
-// unit and member select impulse mode by target composition:
-// a unit composite redirects wholesale, an ablative member takes a local push.
-func unit(impactor, target Mass, angleVar int64, immunity time.Duration) physics.CollisionProfile {
-	return kinetic(impactor, target, physics.ImpulseOverride, angleVar, OffsetInfluenceDefault, immunity)
-}
-
-func member(impactor, target Mass, angleVar int64, immunity time.Duration) physics.CollisionProfile {
-	return kinetic(impactor, target, physics.ImpulseAdditive, angleVar, 0, immunity)
-}
-
 // --- Cleaner (projectile) ---
-
 var (
-	CleanerToDrain     = member(MassCleaner, MassDrain, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToSwarm     = unit(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToQuasar    = unit(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToStorm     = unit(MassCleaner, MassStorm, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToSnakeHead = unit(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToSnakeBody = member(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	CleanerToEye       = unit(MassCleaner, MassEye, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Shield ---
 // The shield is a cursor extension with no mass of its own; knockback is
 // computed from cursor mass against the target.
-
 var (
-	ShieldToDrain     = member(MassCursor, MassDrain, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToSwarm     = unit(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToQuasar    = unit(MassCursor, MassQuasar, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToStorm     = unit(MassCursor, MassStorm, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToSnakeHead = unit(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToSnakeBody = member(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ShieldToEye       = unit(MassCursor, MassEye, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ShieldToDrain     = accumulate(MassCursor, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	ShieldToSwarm     = redirect(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	ShieldToQuasar    = redirect(MassCursor, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToStorm     = redirect(MassCursor, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToSnakeHead = redirect(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToSnakeBody = accumulate(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	ShieldToEye       = redirect(MassCursor, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Explosion (also used by missile impact) ---
 // Additive throughout: explosions accumulate rather than redirect.
-// Kinetic immunity gates the knockback; damage dedup is separate and uses RemainingDamageImmunity.
-
+// Kinetic immunity gates the knockback; damage dedup uses RemainingDamageImmunity.
 var (
-	ExplosionToDrain     = member(MassExplosion, MassDrain, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToSwarm     = member(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToQuasar    = member(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToStorm     = member(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToSnakeHead = kinetic(MassExplosion, MassSnakeHead, physics.ImpulseAdditive, parameter.DrainDeflectAngleVar, OffsetInfluenceDefault, parameter.CombatKineticImmunityDuration)
-	ExplosionToSnakeBody = member(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
-	ExplosionToEye       = member(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, parameter.CombatKineticImmunityDuration)
+	ExplosionToDrain     = accumulate(MassExplosion, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	ExplosionToSwarm     = accumulate(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	ExplosionToQuasar    = accumulate(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToStorm     = accumulate(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToSnakeHead = accumulate(MassExplosion, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToSnakeBody = accumulate(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	ExplosionToEye       = accumulate(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Dust ---
 // Dust impulses are accumulated per tick by DustSystem and applied in bulk;
-// no immunity window (the accumulator provides the rate limit).
-
+// ApplyCollisionImpulse ignores OffsetInfluence, so shape is irrelevant here.
 var (
-	DustToDrain     = kinetic(MassDust, MassDrain, physics.ImpulseAdditive, parameter.DrainDeflectAngleVar, 0, 0)
-	DustToComposite = kinetic(MassDust, MassQuasar, physics.ImpulseAdditive, parameter.DrainDeflectAngleVar, 0, 0)
+	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVar, OffsetNone)
 )
 
 // --- Soft collision (inter-species scatter) ---

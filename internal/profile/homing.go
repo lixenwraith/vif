@@ -2,7 +2,7 @@ package profile
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 

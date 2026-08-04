@@ -65,10 +65,9 @@ func applyHomingInternal(
 		deadZone = vmath.Scale / 2 // Default: 0.5 cells
 	}
 
-	speed := vmath.Magnitude(k.VelX, k.VelY)
-	settleSpeedThreshold := vmath.Scale / 2 // 0.5 cells/sec
-
-	if dist < deadZone && speed < settleSpeedThreshold {
+	// Squared comparison: avoids a sqrt on the settle check
+	const settleSpeedSq = (vmath.Scale / 2) * (vmath.Scale / 2) >> vmath.Shift
+	if dist < deadZone && vmath.MagnitudeSq(k.VelX, k.VelY) < settleSpeedSq {
 		// Snap to exact target
 		k.PreciseX = targetX
 		k.PreciseY = targetY
@@ -80,8 +79,9 @@ func applyHomingInternal(
 	// Calculate effective acceleration and drag
 	effectiveAccel := vmath.Mul(profile.HomingAccel, speedMultiplier)
 	effectiveDrag := profile.Drag
+	effectiveBaseSpeed := vmath.Mul(profile.BaseSpeed, speedMultiplier)
 
-	// Arrival steering: ramp down accel, ramp up drag when near target
+	// Arrival steering: ramp down accel and cruise speed, ramp up drag
 	if profile.ArrivalRadius > 0 && dist < profile.ArrivalRadius {
 		// Factor: 0 at target, Scale at edge of arrival radius
 		factor := vmath.Div(dist, profile.ArrivalRadius)
@@ -92,6 +92,10 @@ func applyHomingInternal(
 		// Ramp down acceleration
 		effectiveAccel = vmath.Mul(effectiveAccel, accelFactor)
 
+		// Cruise speed ramps to zero at the target so drag engages below BaseSpeed;
+		// Without this the actor orbits at cruise speed forever
+		effectiveBaseSpeed = vmath.Mul(effectiveBaseSpeed, factor)
+
 		// Ramp up drag: base + boost * (1 - factor)
 		if profile.ArrivalDragBoost > 0 {
 			boostFactor := vmath.Scale - factor
@@ -100,25 +104,21 @@ func applyHomingInternal(
 		}
 	}
 
-	// Apply homing acceleration
-	dirX, dirY := vmath.Normalize2D(dx, dy)
+	// Apply homing acceleration; dist is already the magnitude, so reuse it
+	// instead of paying a second sqrt inside Normalize2D
+	dirX, dirY := vmath.Div(dx, dist), vmath.Div(dy, dist)
 	k.VelX += vmath.Mul(vmath.Mul(dirX, effectiveAccel), dt)
 	k.VelY += vmath.Mul(vmath.Mul(dirY, effectiveAccel), dt)
 
 	// Apply drag if enabled and overspeed
 	if applyDrag {
-		effectiveBaseSpeed := vmath.Mul(profile.BaseSpeed, speedMultiplier)
 		currentSpeed := vmath.Magnitude(k.VelX, k.VelY)
 
 		if currentSpeed > effectiveBaseSpeed && currentSpeed > 0 {
 			excess := currentSpeed - effectiveBaseSpeed
 			dragScale := vmath.Div(excess, currentSpeed)
-			dragAmount := vmath.Mul(vmath.Mul(effectiveDrag, dt), dragScale)
-
 			// Clamp drag to prevent overshoot
-			if dragAmount > vmath.Scale {
-				dragAmount = vmath.Scale
-			}
+			dragAmount := min(vmath.Mul(vmath.Mul(effectiveDrag, dt), dragScale), vmath.Scale)
 
 			k.VelX -= vmath.Mul(k.VelX, dragAmount)
 			k.VelY -= vmath.Mul(k.VelY, dragAmount)

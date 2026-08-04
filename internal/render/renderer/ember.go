@@ -214,6 +214,7 @@ func (p *EmberPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext,
 			dx := vmath.FromInt(mapX - centerX)
 			dy := vmath.FromInt(mapY - centerY)
 
+			// TODO: Atan2 is 50% slower than Atan2F, convert to renderer to full float
 			theta := vmath.Atan2(dy, dx)
 			lutIdx := (theta >> (vmath.Shift - 8)) & 255
 			invRxSq := p.invRadiiSqLUT[lutIdx].invRxSq

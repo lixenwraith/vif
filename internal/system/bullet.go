@@ -5,7 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 

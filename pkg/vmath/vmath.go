@@ -59,10 +59,6 @@ const (
 	// TwoPi is a full rotation in radians (float path)
 	TwoPi = 2.0 * math.Pi
 
-	// TerminalAspect is a terminal cell's width:height ratio (1:2)
-	TerminalAspect    int64 = Scale / 2
-	TerminalAspectInv int64 = Scale * 2
-
 	// EllipseSampleCount is the number of points sampled for arc availability
 	EllipseSampleCount = 64
 )

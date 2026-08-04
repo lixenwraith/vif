@@ -59,28 +59,6 @@ func TestMagnitudeSqConsistency(t *testing.T) {
 	}
 }
 
-func TestMagnitudeApproxErrorBound(t *testing.T) {
-	// alpha-max-beta-min with (1, 0.375) peaks at +6.8%, NOT the ~4% claimed in
-	// older doc comments; DistanceApprox callers must tolerate this
-	const maxRel = 0.07
-	rng := NewFastRand(9)
-	worst := 0.0
-	for range 20000 {
-		x, y := signedRand(rng, 1<<34), signedRand(rng, 1<<34)
-		exact := float64(Magnitude(x, y))
-		approx := float64(MagnitudeApprox(x, y))
-		if exact < 1 {
-			continue
-		}
-		rel := math.Abs(approx-exact) / exact
-		worst = math.Max(worst, rel)
-		if rel > maxRel {
-			t.Fatalf("MagnitudeApprox(%d,%d) rel error %g", x, y, rel)
-		}
-	}
-	t.Logf("worst observed relative error: %.4f", worst)
-}
-
 func TestPerpendicularOrthogonal(t *testing.T) {
 	rng := NewFastRand(10)
 	for range 5000 {

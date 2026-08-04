@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -575,6 +575,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 					OriginEntity: headerEntity,
 					TargetEntity: targetEntity,
 					HitEntities:  hitMembers,
+					HasOrigin:    true,
 					OriginX:      eyePos.X,
 					OriginY:      eyePos.Y,
 				})

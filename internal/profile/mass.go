@@ -26,7 +26,9 @@ const (
 	MassSnakeHead Mass = vmath.Scale * 8
 	MassQuasar    Mass = vmath.Scale * 10
 	MassExplosion Mass = vmath.Scale * 10
-	MassStorm     Mass = vmath.Scale * 100
+	// TODO: move to physics, rewire storm system
+	// StormSystem folds 2D impulses back into its 3D velocity (see absorbExternalImpulse)
+	MassStorm Mass = vmath.Scale * 100
 
 	// MassPylon marks the pylon effectively immovable. It is a soft-collision
 	// source only, never a knockback target, and SoftRatioMax is what actually

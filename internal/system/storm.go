@@ -11,8 +11,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // pendingBlueSpawn tracks storm-initiated swarm spawns waiting for visual completion
@@ -464,11 +464,13 @@ func (s *StormSystem) createCircleHeader(
 	})
 
 	// Kinetic component for 2D collision compatibility
-	preciseX, preciseY := pos3D.X, pos3D.Y
 	s.world.Components.Kinetic.SetComponent(circleEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
-			PreciseX: preciseX,
-			PreciseY: preciseY,
+			PreciseX: pos3D.X,
+			PreciseY: pos3D.Y,
+			// Seeded so the first impulse-absorption delta is zero
+			VelX: vel3D.X,
+			VelY: vel3D.Y,
 		},
 	})
 
@@ -623,12 +625,15 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 	boundMaxY := vmath.FromInt(config.MapHeight - 1 - insetY)
 
 	for i := range circles {
-		// 0. Stunned circles: skip physics, velocity already zeroed by combat system
+		// 1. Stunned circles: skip physics, velocity already zeroed by combat system
 		if circles[i].stunned {
 			continue
 		}
 
-		// 1. Accumulate gravitational acceleration with repulsion
+		// 2. Fold combat/dust knockback from the 2D Kinetic into Vel3D
+		s.absorbExternalImpulse(circles[i].entity, circles[i].circle)
+
+		// 3. Accumulate gravitational acceleration with repulsion
 		var accelX, accelY, accelZ int64
 		for j := range circles {
 			if i == j {
@@ -647,23 +652,23 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			accelZ += accel.Z
 		}
 
-		// 1b. Z-axis equilibrium spring: accelZ += stiffness * (zMid - z)
+		// 4. Z-axis equilibrium spring: accelZ += stiffness * (zMid - z)
 		// Provides restoring force toward vulnerability boundary
 		zDelta := parameter.StormZMid - circles[i].circle.Pos3D.Z
 		accelZ += vmath.Mul(parameter.StormZEquilibriumStiffness, zDelta)
 
-		// 2. Integrate velocity
+		// 5. Integrate velocity
 		circles[i].circle.Vel3D.X += vmath.Mul(accelX, dtFixed)
 		circles[i].circle.Vel3D.Y += vmath.Mul(accelY, dtFixed)
 		circles[i].circle.Vel3D.Z += vmath.Mul(accelZ, dtFixed)
 
-		// 3. Apply damping
+		// 6. Apply damping
 		circles[i].circle.Vel3D = vmath.V3DampDt(circles[i].circle.Vel3D, parameter.StormDamping, dtFixed)
 
-		// 4. Clamp velocity
+		// 7. Clamp velocity
 		circles[i].circle.Vel3D = vmath.V3ClampMagnitude(circles[i].circle.Vel3D, parameter.StormMaxVelocity)
 
-		// 5. Axis-separated position integration with collision
+		// 8. Axis-separated position integration with collision
 
 		// --- X Axis ---
 		oldPosX := circles[i].circle.Pos3D.X
@@ -774,6 +779,26 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			kinetic.VelY = circle.Vel3D.Y
 		}
 	}
+}
+
+// absorbExternalImpulse folds knockback written to the 2D Kinetic into the
+// authoritative 3D velocity. The end-of-tick sync leaves Kinetic.Vel equal to
+// Vel3D.XY, so any difference is an external impulse from combat or dust.
+// Z is untouched: knockback sources act in the terminal plane.
+func (s *StormSystem) absorbExternalImpulse(circleEntity core.Entity, circle *component.StormCircleComponent) {
+	kinetic, ok := s.world.Components.Kinetic.GetPtr(circleEntity)
+	if !ok {
+		return
+	}
+
+	deltaX := kinetic.VelX - circle.Vel3D.X
+	deltaY := kinetic.VelY - circle.Vel3D.Y
+	if deltaX == 0 && deltaY == 0 {
+		return
+	}
+
+	circle.Vel3D.X += deltaX
+	circle.Vel3D.Y += deltaY
 }
 
 // resolveCircleCollision handles elastic collision between two circles

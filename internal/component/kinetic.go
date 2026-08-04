@@ -1,6 +1,6 @@
 package component
 
-import "github.com/lixenwraith/vi-fighter/pkg/physics"
+import "github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 
 // KineticComponent provides a reusable kinematic container for entities requiring sub-pixel motion
 // Uses Q32.32 fixed-point arithmetic for deterministic integration and high-performance physics updates

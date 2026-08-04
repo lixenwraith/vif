@@ -72,31 +72,20 @@ func TestApplyHomingBrakedProfileDoesNotOvershoot(t *testing.T) {
 	}
 }
 
-// TestApplyHomingCruiseProfileOrbits characterizes the shipped species pattern:
-// drag engages only above BaseSpeed, so nothing decelerates the actor inside the
-// arrival radius and it settles into a residual orbit instead of stopping.
-// The assertion is the bound (no divergence), which survives a future fix.
-func TestApplyHomingCruiseProfileStaysBounded(t *testing.T) {
+func TestApplyHomingCruiseProfileSettles(t *testing.T) {
 	tx, ty := vmath.FromFloat(20), vmath.FromFloat(0)
 	k := newKin(0, 0, 0, 0)
 	dt := vmath.FromFloat(tickDt)
 
-	settled := false
-	lateMax := 0.0
 	for i := range 3000 {
 		if ApplyHoming(&k, tx, ty, &profCruise, dt) {
-			settled = true
-			break
+			t.Logf("settled after %d steps (%.2fs)", i, float64(i)*tickDt)
+			return
 		}
 		Integrate(&k, dt)
-		if i >= 2000 {
-			lateMax = math.Max(lateMax, distTo(&k, 20, 0))
-		}
 	}
-	if lateMax > 3.0 {
-		t.Fatalf("cruise homing diverged: residual distance %.3f cells", lateMax)
-	}
-	t.Logf("cruise profile: settled=%v residual=%.3f cells", settled, lateMax)
+	t.Fatalf("cruise profile failed to settle; distance %.3f cells, speed %.3f",
+		distTo(&k, 20, 0), speedOf(&k))
 }
 
 func TestApplyHomingScaledSpeedMultiplier(t *testing.T) {

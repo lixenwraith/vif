@@ -37,7 +37,7 @@ flowchart TD
     App --> Runtime["World, scheduler, FSM, input router"]
     App --> IO["Service hub: terminal, content, audio, network"]
     Runtime --> Presentation["Render orchestrator and renderers"]
-    Runtime --> Libraries["audio, navigation, physics, genetics, math"]
+    Runtime --> Libraries["audio, navigation, vmath, physics, genetics"]
 ```
 
 The main architectural planes are:

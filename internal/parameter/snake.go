@@ -91,4 +91,7 @@ var (
 	SnakeHeadCollisionRadiusY = vmath.FromFloat(SnakeHeadCollisionRadiusYFloat)
 	SnakeHeadCollisionInvRxSq,
 	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSq(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
+
+	// Squared for distance comparison without sqrt
+	SnakeTrailSampleIntervalSq = vmath.Mul(SnakeTrailSampleInterval, SnakeTrailSampleInterval)
 )

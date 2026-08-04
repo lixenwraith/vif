@@ -1,8 +1,6 @@
 package physics
 
 import (
-	"time"
-
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -19,13 +17,12 @@ const (
 // CollisionProfile defines collision interaction parameters
 // Profiles are typically pre-defined as package variables for zero allocation
 type CollisionProfile struct {
-	MassRatio        int64         // Impactor/target mass ratio (Q32.32, Scale = equal)
-	ImpulseMin       int64         // Minimum impulse magnitude (Q32.32 cells/sec)
-	ImpulseMax       int64         // Maximum impulse magnitude (Q32.32 cells/sec)
-	AngleVariance    int64         // Random angle spread in Q32.32 radians
-	Mode             ImpulseMode   // Additive or Override
-	ImmunityDuration time.Duration // Post-collision immunity window
-	OffsetInfluence  int64         // Blend factor for offset-based direction (0 = none)
+	MassRatio       int64       // Impactor/target mass ratio (Q32.32, Scale = equal)
+	ImpulseMin      int64       // Minimum impulse magnitude (Q32.32 cells/sec)
+	ImpulseMax      int64       // Maximum impulse magnitude (Q32.32 cells/sec)
+	AngleVariance   int64       // Random angle spread in Q32.32 radians
+	Mode            ImpulseMode // Additive or Override
+	OffsetInfluence int64       // Blend factor for offset-based direction (0 = none)
 }
 
 // ApplyCollision calculates and applies collision impulse

@@ -262,3 +262,41 @@ func TestFastRandFloat64Range(t *testing.T) {
 		}
 	}
 }
+
+func TestFastRandIntnUniform(t *testing.T) {
+	const n, draws = 16, 1 << 20
+	r := NewFastRand(0x1234)
+	var counts [n]int
+	for range draws {
+		counts[r.Intn(n)]++
+	}
+	expected := float64(draws) / n
+	for i, c := range counts {
+		if dev := math.Abs(float64(c)-expected) / expected; dev > 0.02 {
+			t.Errorf("bucket %d deviates %.3f from uniform", i, dev)
+		}
+	}
+}
+
+func TestFastRandSeedDecorrelation(t *testing.T) {
+	// Systems constructed in the same tick get near-identical nanosecond
+	// seeds; their first draws must not correlate
+	const streams, depth = 64, 8
+	for d := range depth {
+		var seen [streams]uint64
+		for s := range streams {
+			r := NewFastRand(uint64(1_700_000_000_000_000_000 + s))
+			for range d + 1 {
+				seen[s] = r.Next()
+			}
+		}
+		// Top 8 bits of each stream should not collapse to a few values
+		var distinct = make(map[uint8]bool)
+		for _, v := range seen {
+			distinct[uint8(v>>56)] = true
+		}
+		if len(distinct) < streams/2 {
+			t.Errorf("draw %d: only %d distinct high bytes across %d streams", d, len(distinct), streams)
+		}
+	}
+}

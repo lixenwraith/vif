@@ -57,22 +57,7 @@ func ClampMagnitude(x, y, maxMag int64) (cx, cy int64) {
 	return int64(fx * scale), int64(fy * scale)
 }
 
-// MagnitudeApprox returns approximate vector length (~4% error)
-// Uses alpha-max-beta-min; faster than Sqrt and Magnitude for non-critical paths
-func MagnitudeApprox(x, y int64) int64 {
-	return DistanceApprox(x, y)
-}
-
-// ClampMagnitudeApprox limits vector using approximate magnitude (~4% error)
-// Faster than ClampMagnitude for non-critical physics
-func ClampMagnitudeApprox(x, y, maxMag int64) (cx, cy int64) {
-	mag := MagnitudeApprox(x, y)
-	if mag <= maxMag || mag == 0 {
-		return x, y
-	}
-	scale := Div(maxMag, mag)
-	return Mul(x, scale), Mul(y, scale)
-}
+// NOTE: MagnitudeApprox ClampMagnitudeApprox removed, only used in benchmarks, note kept due to asymmetry with float. To be deleted after float migration.
 
 // RotateVector rotates vector by angle using precomputed Sin/Cos LUT
 // angle is in Q32.32 where Scale = 2π (full rotation)

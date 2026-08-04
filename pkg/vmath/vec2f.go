@@ -2,18 +2,21 @@ package vmath
 
 import "math"
 
-// Normalize2DF returns a unit vector, zero-safe
+// Normalize2DF returns a unit vector
 func Normalize2DF(x, y float64) (float64, float64) {
-	mag := math.Hypot(x, y)
-	if mag == 0 {
+	magSq := x*x + y*y
+	if magSq == 0 {
 		return 0, 0
 	}
-	return x / mag, y / mag
+	inv := 1.0 / math.Sqrt(magSq)
+	return x * inv, y * inv
 }
 
-// MagnitudeF returns exact vector length using hypotenuse
+// MagnitudeF returns vector length.
+// math.Sqrt over math.Hypot: grid magnitudes are nowhere near float64
+// overflow, and Hypot's rescale branches cost ~3.5x
 func MagnitudeF(x, y float64) float64 {
-	return math.Hypot(x, y)
+	return math.Sqrt(x*x + y*y)
 }
 
 // MagnitudeSqF returns squared magnitude without sqrt

@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -631,13 +631,11 @@ func (s *SnakeSystem) updateTrail(headEntity core.Entity, headComp *component.Sn
 		return
 	}
 
-	// Check if moved enough to sample
-	dx := headPos.X - headComp.LastTrailX
-	dy := headPos.Y - headComp.LastTrailY
-	distSq := dx*dx + dy*dy
-
-	threshold := vmath.ToInt(parameter.SnakeTrailSampleInterval)
-	if distSq < threshold*threshold {
+	// Compare in Q32.32: the sample interval is sub-cell and truncates to
+	// zero in cell integers
+	dx := vmath.FromInt(headPos.X - headComp.LastTrailX)
+	dy := vmath.FromInt(headPos.Y - headComp.LastTrailY)
+	if vmath.MagnitudeSq(dx, dy) < parameter.SnakeTrailSampleIntervalSq {
 		return
 	}
 

@@ -7,9 +7,8 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -219,7 +218,7 @@ func SpawnMissile(t MissileType, origin, target vmath.Point) *Missile {
 		Active: true,
 		Origin: origin,
 		Target: target,
-		Pos: core.Kinetic{
+		Pos: physics.Kinetic{
 			PreciseX: vmath.FromInt(origin.X),
 			PreciseY: vmath.FromInt(origin.Y),
 		},
@@ -440,7 +439,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 					Active: true,
 					Origin: vmath.Point{X: vmath.ToInt(m.Pos.PreciseX), Y: vmath.ToInt(m.Pos.PreciseY)},
 					Target: m.Target,
-					Pos: core.Kinetic{
+					Pos: physics.Kinetic{
 						PreciseX: m.Pos.PreciseX,
 						PreciseY: m.Pos.PreciseY,
 						VelX:     vmath.FromFloat(math.Cos(angle) * 20),

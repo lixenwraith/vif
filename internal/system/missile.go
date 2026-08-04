@@ -9,7 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/physics"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -166,11 +166,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 
 	// General Enemy Collision: missile detonates on any combatant contact
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY)
-	if hitType == impactWall {
-		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
-		return true
-	}
-	if hitType == impactEnemy {
+	if hitType != impactNone {
 		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
 		return true
 	}

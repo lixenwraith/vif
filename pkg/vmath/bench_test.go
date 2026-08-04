@@ -64,15 +64,15 @@ func BenchmarkMagnitude(b *testing.B) {
 	}
 }
 
-func BenchmarkMagnitudeApprox(b *testing.B) {
-	for b.Loop() {
-		sinkI = MagnitudeApprox(bx, by)
-	}
-}
-
 func BenchmarkMagnitudeF(b *testing.B) {
 	for b.Loop() {
 		sinkF = MagnitudeF(bfx, bfy)
+	}
+}
+
+func BenchmarkMagnitudeHypot(b *testing.B) {
+	for b.Loop() {
+		sinkF = math.Hypot(bfx, bfy)
 	}
 }
 

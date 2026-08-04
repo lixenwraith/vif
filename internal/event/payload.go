@@ -593,10 +593,11 @@ type CombatAttackAreaRequestPayload struct {
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
-	// Optional explicit origin position for knockback direction (e.g., explosion center)
-	// When both are 0, uses OriginEntity position
-	OriginX int `toml:"origin_x"`
-	OriginY int `toml:"origin_y"`
+	// HasOrigin marks origin position for knockback direction (e.g., explosion center)
+	// Without it OriginEntity position is used
+	HasOrigin bool `toml:"has_origin"`
+	OriginX   int  `toml:"origin_x"`
+	OriginY   int  `toml:"origin_y"`
 }
 
 // EnemyKilledPayload carries entity type and death position for loot resolution

@@ -303,6 +303,6 @@ the resulting boolean grid and solution metadata into ECS walls/level state.
 | Genetic engines | `pkg/genetic/*.go`, `pkg/genetic/README.md` |
 | Registry/tracking/persistence | `pkg/genetic/{registry,tracking,fitness,persistence}` |
 | Game genetic adapter | `internal/system/genetic.go`, `internal/system/eye.go` |
-| Physics | `pkg/physics/*.go` |
+| Physics | `pkg/vmath/physics/*.go` |
 | Numeric/geometry | `pkg/vmath/*.go` |
 | Mazes | `pkg/maze/generator.go` |
