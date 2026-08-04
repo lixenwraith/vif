@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/pattern"
 	"github.com/lixenwraith/vi-fighter/pkg/maze"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // WallSystem manages wall lifecycle, spawning, and entity displacement
@@ -19,7 +20,7 @@ type WallSystem struct {
 	world *engine.World
 
 	// Push-out tracking - positions needing entity check this tick
-	pendingPushChecks []core.Point
+	pendingPushChecks []vmath.Point
 
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
@@ -47,7 +48,7 @@ func NewWallSystem(world *engine.World) engine.System {
 }
 
 func (s *WallSystem) Init() {
-	s.pendingPushChecks = make([]core.Point, 0, 64)
+	s.pendingPushChecks = make([]vmath.Point, 0, 64)
 	s.pushCheckEveryTick = false
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
@@ -223,7 +224,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 	}
 
 	if payload.BlockMask != component.WallBlockNone {
-		s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: payload.X, Y: payload.Y})
+		s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: payload.X, Y: payload.Y})
 	}
 
 	s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
@@ -274,9 +275,9 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	// 2. Collision handling based on mode
 	switch payload.CollisionMode {
 	case event.WallBatchSkipBlocked:
-		points := make([]core.Point, len(resolved))
+		points := make([]vmath.Point, len(resolved))
 		for i, rc := range resolved {
-			points[i] = core.Point{X: rc.x, Y: rc.y}
+			points[i] = vmath.Point{X: rc.x, Y: rc.y}
 		}
 		blocked := s.world.Positions.CheckBlockedBatch(points, component.WallBlockAll)
 		filtered := resolved[:0]
@@ -307,9 +308,9 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		}
 
 	case event.WallBatchFailIfBlocked:
-		points := make([]core.Point, len(resolved))
+		points := make([]vmath.Point, len(resolved))
 		for i, rc := range resolved {
-			points[i] = core.Point{X: rc.x, Y: rc.y}
+			points[i] = vmath.Point{X: rc.x, Y: rc.y}
 		}
 		if s.world.Positions.IsAnyBlockedInSet(points, component.WallBlockAll) {
 			return result
@@ -384,7 +385,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 		}
 
 		if payload.BlockMask != component.WallBlockNone {
-			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: rc.x, Y: rc.y})
+			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: rc.x, Y: rc.y})
 		}
 
 		result.count++
@@ -630,7 +631,7 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 		wall.BlockMask = payload.BlockMask
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
-			s.pendingPushChecks = append(s.pendingPushChecks, core.Point{X: pos.X, Y: pos.Y})
+			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: pos.X, Y: pos.Y})
 		}
 	}
 }

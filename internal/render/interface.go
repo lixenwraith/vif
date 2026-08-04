@@ -15,4 +15,3 @@ type Registration struct {
 	Renderer SystemRenderer
 	Priority RenderPriority
 }
-

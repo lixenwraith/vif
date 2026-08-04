@@ -1,7 +1,7 @@
 (function() {
     'use strict';
 
-    const WASM_PATH = 'vi-fighter.wasm';
+    const WASM_PATH = 'vif.wasm';
 
     let term;
     let fitAddon;

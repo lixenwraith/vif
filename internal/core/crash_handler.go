@@ -27,4 +27,3 @@ func Go(fn func()) {
 		fn()
 	}()
 }
-

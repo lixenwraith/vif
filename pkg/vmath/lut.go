@@ -39,17 +39,6 @@ var (
 // Exponential decay LUT for performance-critical scaling
 // Usage: speed multiplier based on entity count, damage falloff, etc.
 
-// ExpLUTSize defines resolution of exponential decay lookup table
-const ExpLUTSize = 256
-
-// ExpLUTMaxInput is the maximum input value mapped to LUT
-// Beyond this, output saturates at minimum value
-const ExpLUTMaxInput = 512
-
-// ExpLUTDecayK controls curve steepness (saturation point)
-// Higher K = slower decay, lower K = faster decay
-const ExpLUTDecayK = 30.0
-
 // ExpDecayLUT contains pre-computed e^(-x/k) values scaled to Q32.32
 // Index maps linearly to input range [0, ExpLUTMaxInput]
 var ExpDecayLUT [ExpLUTSize]int64
@@ -109,18 +98,12 @@ func Atan2(dy, dx int64) int64 {
 			baseAngle = 0
 		} else {
 			// Index = (ady * (LUTSize-1)) / adx
-			idx := (ady * LUTMask) / adx
-			if idx > LUTMask {
-				idx = LUTMask
-			}
+			idx := min((ady*LUTMask)/adx, LUTMask)
 			baseAngle = atan2LUT[idx]
 		}
 	} else {
 		// Octants 1,2,5,6: ratio = |dx/dy| in [0,1], angle = π/4 - atan(ratio)
-		idx := (adx * LUTMask) / ady
-		if idx > LUTMask {
-			idx = LUTMask
-		}
+		idx := min((adx*LUTMask)/ady, LUTMask)
 		baseAngle = Scale/4 - atan2LUT[idx] // π/2 - atan(ratio)
 	}
 
@@ -134,6 +117,9 @@ func Atan2(dy, dx int64) int64 {
 		if dy >= 0 {
 			return baseAngle // Q1
 		}
+		if baseAngle == 0 {
+			return 0 // Q4 boundary: 2pi wraps to 0
+		}
 		return Scale - baseAngle // Q4
 	} else if dx < 0 {
 		if dy >= 0 {
@@ -146,4 +132,3 @@ func Atan2(dy, dx int64) int64 {
 	}
 	return 3 * Scale / 4 // -Y axis = 3π/2
 }
-

@@ -36,4 +36,3 @@ type SplashComponent struct {
 	Remaining time.Duration // Time remaining until expiration (Delta-based)
 	Duration  time.Duration // Total initial duration (for progress/animations)
 }
-

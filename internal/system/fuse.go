@@ -136,7 +136,7 @@ func (s *FuseSystem) hasQuasarFusion() bool {
 }
 
 // applyEffect dispatches to effect-specific implementation
-func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []core.Point, area core.Area, spiritColor component.SpiritColor) {
+func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []vmath.Point, area vmath.Area, spiritColor component.SpiritColor) {
 	switch effect {
 	case event.FuseEffectSpirit:
 		s.effectSpiritArea(sources, area, spiritColor)
@@ -147,9 +147,9 @@ func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []core.Point, 
 	}
 }
 
-func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, c component.SpiritColor) {
+func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
 	for i, src := range sources {
-		dest := vmath.AreaDistributePoint(area, i, s.rng)
+		dest := area.DistributePoint(i, s.rng)
 
 		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
 			StartX:    src.X,
@@ -162,7 +162,7 @@ func (s *FuseSystem) effectSpiritArea(sources []core.Point, area core.Area, c co
 	}
 }
 
-func (s *FuseSystem) effectMaterialize(area core.Area) {
+func (s *FuseSystem) effectMaterialize(area vmath.Area) {
 	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
 		X:          area.X,
 		Y:          area.Y,
@@ -212,8 +212,8 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, []core.Entity{drainA, drainB})
 
-	sources := []core.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
-	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}
+	sources := []vmath.Point{{X: posA.X, Y: posA.Y}, {X: posB.X, Y: posB.Y}}
+	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.SwarmWidth, Height: parameter.SwarmHeight}
 	s.applyEffect(effect, sources, area, component.SpiritCyan)
 
 	s.fusions = append(s.fusions, pendingFusion{
@@ -226,11 +226,11 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 
 func (s *FuseSystem) handleQuasarFuse() {
 	drainEntities := s.world.Components.Drain.Entities()
-	sources := make([]core.Point, 0, len(drainEntities))
+	sources := make([]vmath.Point, 0, len(drainEntities))
 
 	for _, drainEntity := range drainEntities {
 		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-			sources = append(sources, core.Point{X: pos.X, Y: pos.Y})
+			sources = append(sources, vmath.Point{X: pos.X, Y: pos.Y})
 		}
 	}
 
@@ -267,7 +267,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 	cX = topLeftX + parameter.QuasarHeaderOffsetX
 	cY = topLeftY + parameter.QuasarHeaderOffsetY
 
-	area := core.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
+	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
 	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
 
 	// Emit EventEnemyKilled for each drain (enables loot drops)

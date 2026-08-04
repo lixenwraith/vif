@@ -1,8 +1,6 @@
 package navigation
 
-import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-)
+import "github.com/lixenwraith/vi-fighter/pkg/vmath"
 
 // Direction constants for flow field
 // Index into NavSenseDirections: N=0, NE=1, E=2, SE=3, S=4, SW=5, W=6, NW=7
@@ -203,7 +201,7 @@ func (f *FlowField) GetDistance(x, y int) int {
 type WallChecker func(x, y int) bool
 
 // Compute performs weighted Dijkstra from all target points across the entire valid field
-func (f *FlowField) Compute(targets []core.Point, isBlocked WallChecker) {
+func (f *FlowField) Compute(targets []vmath.Point, isBlocked WallChecker) {
 	if len(targets) == 0 {
 		f.Valid = false
 		return
@@ -348,4 +346,3 @@ func abs(x int) int {
 	}
 	return x
 }
-

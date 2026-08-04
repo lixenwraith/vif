@@ -181,4 +181,3 @@ func Ember256PaletteIndex(heat int) uint8 {
 	}
 	return Heat256LUT[idx]
 }
-

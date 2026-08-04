@@ -323,7 +323,7 @@ func (p *Position) IsOutOfBounds(x, y int) bool {
 
 // CheckBlockedBatch checks multiple points for blocking (OOB or wall)
 // Returns bool slice aligned with input where true = position is blocked
-func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlockMask) []bool {
+func (p *Position) CheckBlockedBatch(points []vmath.Point, mask component.WallBlockMask) []bool {
 	result := make([]bool, len(points))
 	for i, pt := range points {
 		if p.IsOutOfBounds(pt.X, pt.Y) {
@@ -337,7 +337,7 @@ func (p *Position) CheckBlockedBatch(points []core.Point, mask component.WallBlo
 
 // IsAnyBlockedInSet returns true if any point is blocked (OOB or wall)
 // Short-circuits on first blocked position
-func (p *Position) IsAnyBlockedInSet(points []core.Point, mask component.WallBlockMask) bool {
+func (p *Position) IsAnyBlockedInSet(points []vmath.Point, mask component.WallBlockMask) bool {
 	for _, pt := range points {
 		if p.IsOutOfBounds(pt.X, pt.Y) || p.HasBlockingWallAt(pt.X, pt.Y, mask) {
 			return true

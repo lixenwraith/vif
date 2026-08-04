@@ -17,7 +17,7 @@ type MotionMarkerSystem struct {
 
 	// Base markers (always visible, first glyph each direction)
 	baseMarkers   []core.Entity
-	basePositions []core.Point
+	basePositions []vmath.Point
 
 	// Colored markers (shown after g+direction)
 	coloredMarkers []core.Entity
@@ -29,7 +29,7 @@ func NewMotionMarkerSystem(world *engine.World) engine.System {
 	s := &MotionMarkerSystem{
 		world:          world,
 		baseMarkers:    make([]core.Entity, 0, 4),
-		basePositions:  make([]core.Point, 0, 4),
+		basePositions:  make([]vmath.Point, 0, 4),
 		coloredMarkers: make([]core.Entity, 0, 12),
 	}
 	s.Init()
@@ -179,7 +179,7 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 
 		if found {
 			s.spawnMarker(x, y, &s.baseMarkers)
-			s.basePositions = append(s.basePositions, core.Point{X: x, Y: y})
+			s.basePositions = append(s.basePositions, vmath.Point{X: x, Y: y})
 		}
 	}
 }
@@ -228,7 +228,7 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 	directions := [][2]int{{0, -1}, {0, 1}, {-1, 0}, {1, 0}}
 
 	// Compute expected positions for all 4 directions
-	var expectedPositions [4]core.Point
+	var expectedPositions [4]vmath.Point
 	var expectedFound [4]bool
 	expectedCount := 0
 
@@ -236,7 +236,7 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 		_, x, y, found := s.world.Positions.FindClosestEntityInDirection(cursorPos.X, cursorPos.Y, dir[0], dir[1], bounds, glyphFilter)
 		expectedFound[i] = found
 		if found {
-			expectedPositions[i] = core.Point{X: x, Y: y}
+			expectedPositions[i] = vmath.Point{X: x, Y: y}
 			expectedCount++
 		}
 	}
@@ -266,4 +266,3 @@ func (s *MotionMarkerSystem) validateBaseMarkers() {
 		}
 	}
 }
-

@@ -1,18 +1,16 @@
 package navigation
 
-import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
-)
+import "github.com/lixenwraith/vi-fighter/pkg/vmath"
 
 // FlowFieldCache manages flow field recomputation with throttling
 type FlowFieldCache struct {
 	Field *FlowField
 
 	// Recomputation throttling
-	LastTargets            []core.Point // Tracks previously requested target coords
-	TicksSinceCompute      int          // Ticks since last computation
-	MinTicksBetweenCompute int          // Minimum ticks between recomputes
-	DirtyDistance          int          // Target must move this many cells to trigger immediate recompute
+	LastTargets            []vmath.Point // Tracks previously requested target coords
+	TicksSinceCompute      int           // Ticks since last computation
+	MinTicksBetweenCompute int           // Minimum ticks between recomputes
+	DirtyDistance          int           // Target must move this many cells to trigger immediate recompute
 
 	// PendingUpdate latches true on any state change, cleared after compute
 	PendingUpdate bool
@@ -22,7 +20,7 @@ type FlowFieldCache struct {
 func NewFlowFieldCache(width, height, minTicks, dirtyDist int) *FlowFieldCache {
 	return &FlowFieldCache{
 		Field:                  NewFlowField(width, height),
-		LastTargets:            make([]core.Point, 0, 8),
+		LastTargets:            make([]vmath.Point, 0, 8),
 		TicksSinceCompute:      minTicks, // Allow immediate first compute
 		MinTicksBetweenCompute: minTicks,
 		DirtyDistance:          dirtyDist,
@@ -40,7 +38,7 @@ func (c *FlowFieldCache) Resize(width, height int) {
 // Update recomputes the field when dirty state and throttling allow
 // targets: goal points the field converges toward
 // Returns true if field was recomputed this tick
-func (c *FlowFieldCache) Update(targets []core.Point, isBlocked WallChecker) bool {
+func (c *FlowFieldCache) Update(targets []vmath.Point, isBlocked WallChecker) bool {
 	c.TicksSinceCompute++
 
 	if len(targets) != len(c.LastTargets) {
@@ -95,4 +93,3 @@ func (c *FlowFieldCache) GetDistance(x, y int) int {
 func (c *FlowFieldCache) IsValid() bool {
 	return c.Field.Valid
 }
-

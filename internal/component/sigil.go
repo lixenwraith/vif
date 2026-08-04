@@ -9,4 +9,3 @@ type SigilComponent struct {
 	Rune  rune
 	Color color.RGB
 }
-

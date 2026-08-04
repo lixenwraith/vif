@@ -43,4 +43,3 @@ var LootVisuals = map[component.LootType]LootVisualDef{
 		GlowColor:  RgbLootEnergyGlow,
 	},
 }
-

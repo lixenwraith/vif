@@ -43,4 +43,3 @@ func (dto PopulationDTO) ToPool() []genetic.Candidate[[]float64, float64] {
 	}
 	return out
 }
-

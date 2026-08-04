@@ -57,8 +57,8 @@ type Missile struct {
 	Type   MissileType
 	Active bool
 	Pos    core.Kinetic
-	Origin core.Point
-	Target core.Point
+	Origin vmath.Point
+	Target vmath.Point
 
 	Age       int64
 	Phase     int64
@@ -95,12 +95,12 @@ func main() {
 	buf := render.NewRenderBuffer(terminal.ColorModeTrueColor, screenWidth, screenHeight)
 
 	missiles := make([]*Missile, 0)
-	targets := make([]core.Point, 3)
+	targets := make([]vmath.Point, 3)
 	updateTargets(targets)
 
 	currentTargetIdx := 1
 	currentType := MissileKinetic
-	origin := core.Point{X: 10, Y: screenHeight / 2}
+	origin := vmath.Point{X: 10, Y: screenHeight / 2}
 
 	inputCh := make(chan terminal.Event, 10)
 	go func() {
@@ -147,7 +147,7 @@ func main() {
 			screenWidth, screenHeight = resize.Width, resize.Height
 			buf.Resize(screenWidth, screenHeight)
 			updateTargets(targets)
-			origin = core.Point{X: 10, Y: screenHeight / 2}
+			origin = vmath.Point{X: 10, Y: screenHeight / 2}
 			term.Sync()
 
 		case <-ticker.C:
@@ -206,13 +206,13 @@ func hasActiveChildren(m *Missile) bool {
 	return false
 }
 
-func updateTargets(targets []core.Point) {
-	targets[0] = core.Point{X: screenWidth - 10, Y: 5}
-	targets[1] = core.Point{X: screenWidth - 10, Y: screenHeight / 2}
-	targets[2] = core.Point{X: screenWidth - 10, Y: screenHeight - 5}
+func updateTargets(targets []vmath.Point) {
+	targets[0] = vmath.Point{X: screenWidth - 10, Y: 5}
+	targets[1] = vmath.Point{X: screenWidth - 10, Y: screenHeight / 2}
+	targets[2] = vmath.Point{X: screenWidth - 10, Y: screenHeight - 5}
 }
 
-func SpawnMissile(t MissileType, origin, target core.Point) *Missile {
+func SpawnMissile(t MissileType, origin, target vmath.Point) *Missile {
 	m := &Missile{
 		Type:   t,
 		Active: true,
@@ -437,7 +437,7 @@ func updateSingleMissile(m *Missile, dt int64) {
 				child := &Missile{
 					Type:   MissileSeeker,
 					Active: true,
-					Origin: core.Point{X: vmath.ToInt(m.Pos.PreciseX), Y: vmath.ToInt(m.Pos.PreciseY)},
+					Origin: vmath.Point{X: vmath.ToInt(m.Pos.PreciseX), Y: vmath.ToInt(m.Pos.PreciseY)},
 					Target: m.Target,
 					Pos: core.Kinetic{
 						PreciseX: m.Pos.PreciseX,

@@ -32,4 +32,3 @@ const (
 	RainbowLUTMax   = 220
 	RainbowLUTRange = RainbowLUTMax - RainbowLUTMin // 180
 )
-

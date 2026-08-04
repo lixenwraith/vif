@@ -44,4 +44,3 @@ type DecaySpawnEntry struct {
 	Char          rune
 	SkipStartCell bool
 }
-

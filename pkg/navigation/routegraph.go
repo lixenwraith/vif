@@ -1,8 +1,8 @@
 package navigation
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Waypoint is a navigation decision point along a route
@@ -152,7 +152,7 @@ func decimateWaypoints(path []int, mapW int) []Waypoint {
 // computePathFields computes per-route flow fields constrained to each route's
 // dilated corridor; every accepted route receives a valid Field
 func computePathFields(rg *RouteGraph, paths [][]int, mapW, mapH int, isBlocked WallChecker, sc *routeScratch) {
-	targets := []core.Point{{X: rg.TargetX, Y: rg.TargetY}}
+	targets := []vmath.Point{{X: rg.TargetX, Y: rg.TargetY}}
 	allowed := make([]uint32, mapW*mapH)
 	var gen uint32
 

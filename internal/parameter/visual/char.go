@@ -165,4 +165,3 @@ var BoxDrawDoubleLUT = [16]rune{
 	14: '╦', // E+S+W
 	15: '╬', // All
 }
-

@@ -24,4 +24,3 @@ type WeaponComponent struct {
 	Orbs             [WeaponCount]core.Entity // Orb entity per charged weapon, 0 = none
 	MainFireCooldown time.Duration
 }
-

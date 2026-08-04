@@ -248,7 +248,7 @@ func (s *CleanerSystem) Update() {
 			// Trail update to block position
 			if blockGridX != oldPos.X || blockGridY != oldPos.Y {
 				cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
-				cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: blockGridX, Y: blockGridY}
+				cleanerComp.TrailRing[cleanerComp.TrailHead] = vmath.Point{X: blockGridX, Y: blockGridY}
 				if cleanerComp.TrailLen < parameter.CleanerTrailLength {
 					cleanerComp.TrailLen++
 				}
@@ -264,7 +264,7 @@ func (s *CleanerSystem) Update() {
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
-			cleanerComp.TrailRing[cleanerComp.TrailHead] = core.Point{X: newGridX, Y: newGridY}
+			cleanerComp.TrailRing[cleanerComp.TrailHead] = vmath.Point{X: newGridX, Y: newGridY}
 			if cleanerComp.TrailLen < parameter.CleanerTrailLength {
 				cleanerComp.TrailLen++
 			}
@@ -344,8 +344,8 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		startGridY := row
 
 		// Initialize trail ring buffer with starting position
-		var trailRing [parameter.CleanerTrailLength]core.Point
-		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
+		var trailRing [parameter.CleanerTrailLength]vmath.Point
+		trailRing[0] = vmath.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
 			TargetX:   targetX,
@@ -540,8 +540,8 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 		startGridY := vmath.ToInt(dir.startY)
 
 		// Initialize trail ring buffer with starting position
-		var trailRing [parameter.CleanerTrailLength]core.Point
-		trailRing[0] = core.Point{X: startGridX, Y: startGridY}
+		var trailRing [parameter.CleanerTrailLength]vmath.Point
+		trailRing[0] = vmath.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
 			TargetX:   dir.targetX,

@@ -74,6 +74,9 @@ func Atan2F(dy, dx float64) float64 {
 		if dy >= 0 {
 			return baseAngle // Q1
 		}
+		if baseAngle == 0 {
+			return 0.0 // Q4 boundary: 2pi wraps to 0
+		}
 		return (2.0 * math.Pi) - baseAngle // Q4
 	} else if dx < 0 {
 		if dy >= 0 {

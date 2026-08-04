@@ -8,9 +8,6 @@ type ArcSegment struct {
 	Length     int64
 }
 
-// EllipseSampleCount is points sampled for arc availability
-const EllipseSampleCount = 64
-
 // SampleEllipseGrid returns grid coordinates for N points along ellipse
 // centerX, centerY: ellipse center (grid coords)
 // radiusX, radiusY: semi-axes in Q32.32
@@ -173,15 +170,9 @@ func AngleToGridPos(angle int64, centerX, centerY int, radiusX, radiusY int64) (
 	return ToInt(px), ToInt(py)
 }
 
-// NormalizeAngle wraps angle to [0, Scale)
+// NormalizeAngle wraps angle to [0, Scale); exact for any int64 since Scale is 2^32
 func NormalizeAngle(angle int64) int64 {
-	for angle >= Scale {
-		angle -= Scale
-	}
-	for angle < 0 {
-		angle += Scale
-	}
-	return angle
+	return angle & Mask
 }
 
 // AngleDiff returns shortest signed difference between angles
@@ -195,4 +186,3 @@ func AngleDiff(from, to int64) int64 {
 	}
 	return diff
 }
-

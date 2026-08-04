@@ -1,10 +1,10 @@
 package renderer
 
 import (
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/terminal"
 )
 
 type strobeRenderFunc func(r *StrobeRenderer, ctx render.RenderContext, buf *render.RenderBuffer)

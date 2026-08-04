@@ -90,4 +90,3 @@ func (s *EnvironmentSystem) Update() {
 	}
 
 }
-

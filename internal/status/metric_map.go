@@ -108,4 +108,3 @@ func (m *MetricMap[T]) Count() int {
 	defer m.mu.RUnlock()
 	return len(m.items)
 }
-

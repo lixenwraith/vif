@@ -106,4 +106,3 @@ func (p *PatternResult) Count() int {
 func (p *PatternResult) Empty() bool {
 	return len(p.Cells) == 0
 }
-

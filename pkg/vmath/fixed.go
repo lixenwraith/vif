@@ -3,25 +3,6 @@ package vmath
 import (
 	"math"
 	"math/bits"
-	"unsafe"
-)
-
-// Q32.32 Fixed Point constants
-const (
-	Shift int64 = 32
-	Scale int64 = 1 << Shift
-	Mask  int64 = Scale - 1
-	Half  int64 = 1 << (Shift - 1)
-
-	ScaleF = float64(Scale) // Helper for float ops
-
-	// CellCenter is the fixed-point offset to the center of a grid cell (0.5 in Q32.32)
-	CellCenter int64 = Half
-)
-
-const (
-	LUTSize = 1024
-	LUTMask = LUTSize - 1
 )
 
 // --- Arithmetic ---
@@ -32,9 +13,8 @@ func FromFloat(f float64) int64 { return int64(f * ScaleF) }
 func ToFloat(f int64) float64   { return float64(f) / ScaleF }
 
 // Mul performs fixed point multiplication
-// Optimization: streamlined logic to encourage inlining
+// Valid while |a*b| < 2^96; truncates toward zero
 func Mul(a, b int64) int64 {
-	// Fast path: check sign to use unsigned multiplication
 	sign := int64(1)
 	if a < 0 {
 		a = -a
@@ -46,8 +26,7 @@ func Mul(a, b int64) int64 {
 	}
 
 	hi, lo := bits.Mul64(uint64(a), uint64(b))
-	// Q32.32 * Q32.32 = Q64.64. Result is bits [32:95]
-	// We want (hi << 32) | (lo >> 32)
+	// Q32.32 * Q32.32 = Q64.64; result is bits [32:95]
 	res := int64((hi << 32) | (lo >> 32))
 
 	if sign < 0 {
@@ -56,22 +35,19 @@ func Mul(a, b int64) int64 {
 	return res
 }
 
-// Div now uses hardware float division (~25x faster than 128-bit int div)
+// Div uses hardware float division (~25x faster than 128-bit int div)
 func Div(a, b int64) int64 {
 	if b == 0 {
 		return 0
 	}
-	// Convert to float, divide, scale back
 	return int64((float64(a) / float64(b)) * ScaleF)
 }
 
-// MulDiv computes (a * b) / c
-// Optimization: Switched to float64 from 128-bit precision for performance (~100x speedup)
+// MulDiv computes (a * b) / c via float64 batching
 func MulDiv(a, b, c int64) int64 {
 	if c == 0 {
 		return 0
 	}
-	// Use float64 batching for speed
 	return int64((float64(a) * float64(b)) / float64(c))
 }
 
@@ -96,7 +72,7 @@ func Sign(x int64) int64 {
 
 // --- Trigonometry ---
 
-// Sin returns sine of an angle where angle 0..Scale maps to 0..2pi
+// Sin returns sine of an angle where 0..Scale maps to 0..2pi
 func Sin(angle int64) int64 {
 	return SinLUT[(angle>>(Shift-10))&LUTMask]
 }
@@ -107,21 +83,7 @@ func Cos(angle int64) int64 {
 
 // --- Fast Approximations ---
 
-// InvSqrt implements the fast inverse square root (Quake III algorithm)
-func InvSqrt(n float32) float32 {
-	if n == 0 {
-		return 0
-	}
-	n2 := n * 0.5
-	y := n
-	i := *(*int64)(unsafe.Pointer(&y))
-	i = 0x5f3759df - (i >> 1)
-	y = *(*float32)(unsafe.Pointer(&i))
-	y = y * (1.5 - (n2 * y * y))
-	return y
-}
-
-// DistanceApprox uses Alpha max plus beta min algorithm (error ~4%)
+// DistanceApprox uses alpha-max-beta-min (1, 0.375); peak error +6.8% at min/max = 0.375
 func DistanceApprox(dx, dy int64) int64 {
 	if dx < 0 {
 		dx = -dx
@@ -136,18 +98,16 @@ func DistanceApprox(dx, dy int64) int64 {
 	return dx + (dy >> 2) + (dy >> 3)
 }
 
-// Sqrt now uses hardware SQRT instructions (~300x faster)
+// Sqrt uses hardware SQRT instructions (~300x faster than iterative)
 func Sqrt(x int64) int64 {
 	if x <= 0 {
 		return 0
 	}
-	// Math derivation: sqrt(x / 2^32) * 2^32  ==  sqrt(x) * 2^16
-	// We use 65536.0 constant for 2^16
+	// sqrt(x / 2^32) * 2^32 == sqrt(x) * 2^16
 	return int64(math.Sqrt(float64(x)) * 65536.0)
 }
 
-// Lerp performs linear interpolation between a and b
-// t is in [0, Scale] where 0 returns a, Scale returns b
+// Lerp interpolates between a and b; t in [0, Scale]
 func Lerp(a, b, t int64) int64 {
 	return a + Mul(b-a, t)
 }
@@ -170,7 +130,6 @@ func CenteredFromGrid(x, y int) (int64, int64) {
 }
 
 // GridFromCentered converts centered Q32.32 position to integer grid coordinates
-// Equivalent to ToInt but named for semantic clarity in physics contexts
 func GridFromCentered(px, py int64) (int, int) {
 	return ToInt(px), ToInt(py)
 }

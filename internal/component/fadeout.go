@@ -14,4 +14,3 @@ type FadeoutComponent struct {
 	Remaining time.Duration
 	Duration  time.Duration
 }
-

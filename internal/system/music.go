@@ -3,10 +3,10 @@ package system
 import (
 	"time"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 const (

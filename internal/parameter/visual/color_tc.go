@@ -250,4 +250,3 @@ var GlyphColorLUT = [5][3]color.RGB{
 	{RgbGlyphWhite, RgbGlyphWhite, RgbGlyphWhite},
 	{RgbGlyphGold, RgbGlyphGold, RgbGlyphGold},
 }
-

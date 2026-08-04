@@ -70,4 +70,3 @@ func (r *TransientResource) ExplosionCenters() []ExplosionCenter {
 func (r *TransientResource) ClearExplosions() {
 	r.ExplosionCount = 0
 }
-

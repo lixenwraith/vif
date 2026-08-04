@@ -888,4 +888,3 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 		Valid: found,
 	}
 }
-

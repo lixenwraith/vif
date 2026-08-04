@@ -302,4 +302,3 @@ func keyToString(k terminal.Key) string {
 		return fmt.Sprintf("Key(%d)", k)
 	}
 }
-

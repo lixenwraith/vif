@@ -246,4 +246,3 @@ func (m *MacroManager) Reset() {
 	m.active = make(map[rune]*PlaybackState)
 	m.startCounter = 0
 }
-

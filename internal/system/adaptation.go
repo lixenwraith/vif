@@ -10,9 +10,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 

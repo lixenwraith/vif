@@ -35,4 +35,3 @@ func NewRegistry() *Registry {
 func (r *Registry) TotalCount() int {
 	return r.Bools.Count() + r.Ints.Count() + r.Floats.Count() + r.Strings.Count()
 }
-

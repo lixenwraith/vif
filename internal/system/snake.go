@@ -325,7 +325,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 	}
 	// Seed trail with spawn point, enough copies for initial body formation
 	for i := range component.SnakeTrailCapacity {
-		headComp.Trail[i] = core.Point{X: headX, Y: headY}
+		headComp.Trail[i] = vmath.Point{X: headX, Y: headY}
 	}
 	headComp.TrailHead = 0
 	headComp.TrailLen = component.SnakeTrailCapacity
@@ -641,7 +641,7 @@ func (s *SnakeSystem) updateTrail(headEntity core.Entity, headComp *component.Sn
 	}
 
 	// Add to ring buffer
-	headComp.Trail[headComp.TrailHead] = core.Point{X: headPos.X, Y: headPos.Y}
+	headComp.Trail[headComp.TrailHead] = vmath.Point{X: headPos.X, Y: headPos.Y}
 	headComp.TrailHead = (headComp.TrailHead + 1) % component.SnakeTrailCapacity
 	if headComp.TrailLen < component.SnakeTrailCapacity {
 		headComp.TrailLen++

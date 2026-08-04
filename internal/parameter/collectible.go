@@ -33,4 +33,3 @@ const (
 	// NuggetBeaconInterval is the interval between directional cleaner emissions
 	NuggetBeaconInterval = 2 * time.Second
 )
-

@@ -25,4 +25,3 @@ type MarkerComponent struct {
 	PulseRate int64 // Q32.32, 0 = no pulse, >0 = Hz
 	FadeMode  uint8 // 0=none, 1=fade out, 2=fade in
 }
-

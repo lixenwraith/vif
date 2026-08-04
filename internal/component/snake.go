@@ -2,6 +2,7 @@ package component
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Snake trail buffer sizing
@@ -27,7 +28,7 @@ type SnakeComponent struct {
 // SnakeHeadComponent holds head-specific state, attached to head header entity
 type SnakeHeadComponent struct {
 	// Movement trail (ring buffer of segment center positions)
-	Trail     [SnakeTrailCapacity]core.Point
+	Trail     [SnakeTrailCapacity]vmath.Point
 	TrailHead int // Next write index
 	TrailLen  int // Current valid entries
 

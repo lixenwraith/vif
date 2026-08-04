@@ -3,11 +3,11 @@ package system
 import (
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // AudioSystem consumes sound request events and plays audio

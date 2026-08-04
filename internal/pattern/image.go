@@ -87,4 +87,3 @@ func FromImageWithFilter(img *ascimage.ConvertedImage, skip func(cell terminal.C
 		Height: img.Height,
 	}
 }
-

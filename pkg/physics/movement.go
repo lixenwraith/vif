@@ -116,4 +116,3 @@ func IntegrateWithBounce(
 
 	return vmath.ToInt(k.PreciseX), vmath.ToInt(k.PreciseY), hitAny
 }
-

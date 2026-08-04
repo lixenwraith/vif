@@ -4,10 +4,10 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/system"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 )
 
 var flowDirArrows = [8]rune{

@@ -31,4 +31,3 @@ func (a *WeightedAggregator) Calculate(metrics tracking.MetricBundle, ctx Contex
 	}
 	return fitness
 }
-

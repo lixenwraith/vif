@@ -82,4 +82,3 @@ func (r *Router) GetHandlers(t EventType) ([]Handler, bool) {
 	h := r.handlers[t]
 	return h, len(h) > 0
 }
-

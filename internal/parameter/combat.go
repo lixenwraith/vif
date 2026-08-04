@@ -135,4 +135,3 @@ const (
 	// PulseEffectDuration is pulse visual effect duration
 	PulseEffectDuration = 250 * time.Millisecond
 )
-

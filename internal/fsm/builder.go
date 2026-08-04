@@ -57,4 +57,3 @@ func (m *Machine[T]) CompilePaths() error {
 	}
 	return nil
 }
-

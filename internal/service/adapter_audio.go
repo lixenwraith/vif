@@ -6,9 +6,9 @@ import (
 	"os"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 type AudioService struct {

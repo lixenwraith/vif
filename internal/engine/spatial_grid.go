@@ -179,4 +179,3 @@ func (g *SpatialGrid) ComputeStats() GridStats {
 	}
 	return stats
 }
-

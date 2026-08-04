@@ -36,12 +36,6 @@ func EllipseAlpha(dx, dy, invRxSq, invRySq, maxAlpha int64) int64 {
 	return Mul(distSq, maxAlpha)
 }
 
-// AspectRatio constants for terminal character cells (width:height = 1:2)
-const (
-	TerminalAspect    int64 = Scale / 2 // 0.5 in Q32.32
-	TerminalAspectInv int64 = Scale * 2 // 2.0 in Q32.32
-)
-
 // ScaleToCircular transforms Y coordinate to make ellipse checks circular
 // For terminal aspect 1:2, this doubles Y to normalize the space
 func ScaleToCircular(dy int64) int64 {

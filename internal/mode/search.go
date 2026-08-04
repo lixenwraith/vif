@@ -2,9 +2,9 @@ package mode
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // PerformSearch searches for a text pattern and moves cursor to first match
@@ -57,8 +57,8 @@ func RepeatSearch(ctx *engine.GameContext, lastSearchText string, forward bool) 
 }
 
 // buildCharacterGrid builds a 2D map of characters from the ECS
-func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
-	grid := make(map[core.Point]rune)
+func buildCharacterGrid(ctx *engine.GameContext) map[vmath.Point]rune {
+	grid := make(map[vmath.Point]rune)
 	glyphStore := ctx.World.Components.Glyph
 
 	entities := ctx.World.Components.Glyph.GetAllEntities()
@@ -69,14 +69,14 @@ func buildCharacterGrid(ctx *engine.GameContext) map[core.Point]rune {
 		if !pOk || !gOk {
 			continue
 		}
-		grid[core.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
+		grid[vmath.Point{X: pos.X, Y: pos.Y}] = glyph.Rune
 	}
 
 	return grid
 }
 
 // searchForward searches forward from the given position
-func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []rune, startX, startY int) bool {
+func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int) bool {
 	// Search from start position to end of screen
 	for y := startY; y < ctx.World.Resources.Config.MapHeight; y++ {
 		xStart := 0
@@ -128,7 +128,7 @@ func searchForward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []
 }
 
 // searchBackward searches backward from the given position
-func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern []rune, startX, startY int) bool {
+func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern []rune, startX, startY int) bool {
 	// Search from start position to beginning of screen
 	for y := startY; y >= 0; y-- {
 		xEnd := ctx.World.Resources.Config.MapWidth - len(pattern)
@@ -181,9 +181,9 @@ func searchBackward(ctx *engine.GameContext, grid map[core.Point]rune, pattern [
 }
 
 // matchesPattern checks if the pattern matches at the given position
-func matchesPattern(grid map[core.Point]rune, x, y int, pattern []rune) bool {
+func matchesPattern(grid map[vmath.Point]rune, x, y int, pattern []rune) bool {
 	for i, r := range pattern {
-		gridRune, exists := grid[core.Point{X: x + i, Y: y}]
+		gridRune, exists := grid[vmath.Point{X: x + i, Y: y}]
 		if !exists || gridRune != r {
 			return false
 		}

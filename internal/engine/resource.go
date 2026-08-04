@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
-	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 )
 
 // Resource holds singleton game resources, initialized during GameContext creation, accessed via World.Resources

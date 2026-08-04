@@ -42,4 +42,3 @@ type GatewayComponent struct {
 	// Allows pre-sampling N route genes then distributing across spawns
 	SpawnPoolSize int
 }
-

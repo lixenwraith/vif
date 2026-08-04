@@ -50,4 +50,3 @@ const (
 	PylonHealthThresholdDamaged  = 0.6
 	PylonHealthThresholdCritical = 0.3
 )
-

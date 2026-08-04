@@ -9,7 +9,7 @@ PORT ?= 8080
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify clean check-go tools serve
+.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve
 
 help:
 	@echo "Usage: make [target]"
@@ -24,6 +24,7 @@ help:
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
+	@echo "  arch-check Verify pkg/ packages do not import internal/ (non-blocking)"
 	@echo "  clean    Remove build artifacts"
 
 $(BIN_DIR):
@@ -104,6 +105,14 @@ verify: generate test
 run: dev
 	./$(BIN_DIR)/$(BINARY)
 
+# arch-check covers architectural boundaries, isolated from standard build blockers.
+# The list of packages is snapshot dynamically at execution to avoid build delays across other targets.
+arch-check:
+	@pkgs="$(if $(ARCH_LEAF_PKGS),$(ARCH_LEAF_PKGS),$$(go list ./pkg/... 2>/dev/null | tr '\n' ' '))"; \
+	if [ -z "$$pkgs" ]; then echo "arch-check: no packages found in pkg/"; exit 0; fi; \
+	bad=$$(go list -deps $$pkgs | grep 'vi-fighter/internal' || true); \
+	if [ -n "$$bad" ]; then echo "FAIL: leaf package(s) import internal:"; echo "$$bad"; exit 1; fi; \
+	echo "arch-check: $$pkgs clean"
+
 clean:
 	rm -rf $(BIN_DIR)
-

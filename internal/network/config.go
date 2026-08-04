@@ -71,4 +71,3 @@ func DebugConfig(role Role, addr string) *Config {
 	cfg.TLS = nil
 	return cfg
 }
-

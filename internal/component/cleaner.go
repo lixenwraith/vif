@@ -1,8 +1,8 @@
 package component
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // CleanerColorType determines cleaner visual gradient
@@ -20,7 +20,7 @@ type CleanerComponent struct {
 	TargetY int64
 
 	// Ring buffer trail (zero-allocation updates)
-	TrailRing [parameter.CleanerTrailLength]core.Point
+	TrailRing [parameter.CleanerTrailLength]vmath.Point
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
 

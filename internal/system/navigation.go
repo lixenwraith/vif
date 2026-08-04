@@ -392,7 +392,7 @@ func (s *NavigationSystem) Update() {
 
 	// Phase 2: Update flow fields
 	totalRecomputes := int64(0)
-	var targetsBuffer [engine.MaxTargetsPerGroup]core.Point
+	var targetsBuffer [engine.MaxTargetsPerGroup]vmath.Point
 
 	for groupID, g := range s.groups {
 		groupState := s.world.Resources.Target.GetGroup(groupID)
@@ -401,7 +401,7 @@ func (s *NavigationSystem) Update() {
 		}
 
 		for i := range groupState.Count {
-			targetsBuffer[i] = core.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
+			targetsBuffer[i] = vmath.Point{X: groupState.Targets[i].PosX, Y: groupState.Targets[i].PosY}
 		}
 		targetsSlice := targetsBuffer[:groupState.Count]
 

@@ -65,4 +65,3 @@ type WallVisualConfig struct {
 	RenderBg bool         `toml:"render_bg"`
 	BoxStyle BoxDrawStyle `toml:"box_style"`
 }
-

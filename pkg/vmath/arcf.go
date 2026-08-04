@@ -2,8 +2,6 @@ package vmath
 
 import "math"
 
-const TwoPi = 2.0 * math.Pi
-
 // ArcSegmentF represents a contiguous unblocked arc on an ellipse in radians
 type ArcSegmentF struct {
 	StartAngle float64

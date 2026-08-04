@@ -146,4 +146,3 @@ func Merge(patterns ...PatternResult) PatternResult {
 		Height: maxH,
 	}
 }
-
