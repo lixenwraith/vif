@@ -9,9 +9,9 @@ import (
 
 // Precomputed inverse squared radii for ellipse containment
 var (
-	EmberRadiusX               = vmath.FromFloat(parameter.PlayerFieldRadiusX)
-	EmberRadiusY               = vmath.FromFloat(parameter.PlayerFieldRadiusY)
-	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSq(EmberRadiusX, EmberRadiusY)
+	EmberRadiusX               = parameter.PlayerShieldRadiusX
+	EmberRadiusY               = parameter.PlayerShieldRadiusX
+	EmberInvRxSq, EmberInvRySq = vmath.EllipseInvRadiiSqF(EmberRadiusX, EmberRadiusY)
 
 	// Precomputed constants
 	NanoPerSecond     int64   = 1_000_000_000

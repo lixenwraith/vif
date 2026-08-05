@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // DecaySystem handles character decay animation and logic
@@ -135,10 +135,10 @@ func (s *DecaySystem) Update() {
 // spawnSingleDecay creates one decay entity at specified position
 func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
-	// Note: Speed is converted to Q32.32. Decay moves DOWN by default, so velocity is positive
-	speedFloat := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
-	velY := vmath.FromFloat(speedFloat)
-	accelY := vmath.FromFloat(parameter.ParticleAcceleration)
+	// Decay moves DOWN by default, so velocity is positive
+	speed := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
+	velY := speed
+	accelY := parameter.ParticleAcceleration
 
 	entity := s.world.CreateEntity()
 
@@ -156,9 +156,10 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 		LastIntY: lastY,
 	})
 
+	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 	kinetic := physics.Kinetic{
-		PreciseX: vmath.FromInt(x),
-		PreciseY: vmath.FromInt(y),
+		PreciseX: preciseX,
+		PreciseY: preciseY,
 		VelY:     velY,
 		AccelY:   accelY,
 	}
@@ -185,12 +186,8 @@ func (s *DecaySystem) spawnDecayWave() {
 
 // updateDecayEntities updates entity positions and applies decay
 func (s *DecaySystem) updateDecayEntities() {
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
-	dtCap := vmath.FromFloat(0.1)
-	if dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	gameWidth := s.world.Resources.Config.MapWidth
 
@@ -217,27 +214,29 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
-		// Physics Integration (Fixed Point)
-		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
+		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtSec)
 
 		destroyEntity := false
 
 		// Swept Traversal via Supercover DDA
-		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
+		traverser := vmath.NewGridTraverserF(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY)
+		for traverser.Next() {
+			x, y := traverser.Pos()
+
 			// Wall or OOB - destroy particle
 			if s.world.Positions.IsBlocked(x, y, component.WallBlockSpawn) {
 				destroyEntity = true
-				return false
+				break
 			}
 
 			// Skip cell from previous frame (already processed)
 			if x == decayComp.LastIntX && y == decayComp.LastIntY {
-				return true
+				continue
 			}
 
 			flatIdx := (y * gameWidth) + x
 			if s.processedGridCells[flatIdx] {
-				return true
+				continue
 			}
 
 			n := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
@@ -272,8 +271,7 @@ func (s *DecaySystem) updateDecayEntities() {
 			}
 
 			s.processedGridCells[flatIdx] = true
-			return true
-		})
+		}
 
 		if destroyEntity {
 			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)

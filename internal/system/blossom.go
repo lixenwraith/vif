@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // BlossomSystem handles blossom entity movement and collision logic
@@ -135,10 +135,10 @@ func (s *BlossomSystem) Update() {
 // spawnSingleBlossom creates one blossom entity at specified position
 func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bool) {
 	// Random speed between ParticleMinSpeed and ParticleMaxSpeed
-	// Note: Speed is converted to Q32.32. Blossom moves UP by default, so velocity is negative
-	speedFloat := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
-	velY := -vmath.FromFloat(speedFloat)
-	accelY := -vmath.FromFloat(parameter.ParticleAcceleration)
+	// Blossom moves UP by default, so velocity is negative
+	speed := parameter.ParticleMinSpeed + s.rng.Float64()*(parameter.ParticleMaxSpeed-parameter.ParticleMinSpeed)
+	velY := -speed
+	accelY := -parameter.ParticleAcceleration
 
 	entity := s.world.CreateEntity()
 
@@ -156,9 +156,10 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 		LastIntY: lastY,
 	})
 
+	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 	kinetic := physics.Kinetic{
-		PreciseX: vmath.FromInt(x),
-		PreciseY: vmath.FromInt(y),
+		PreciseX: preciseX,
+		PreciseY: preciseY,
 		VelY:     velY,
 		AccelY:   accelY,
 	}
@@ -186,12 +187,8 @@ func (s *BlossomSystem) spawnBlossomWave() {
 
 // updateBlossomEntities updates entity positions and applies blossom effects
 func (s *BlossomSystem) updateBlossomEntities() {
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
-	dtCap := vmath.FromFloat(0.1)
-	if dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	gameWidth := s.world.Resources.Config.MapWidth
 
@@ -216,27 +213,29 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		}
 
 		oldX, oldY := kineticComp.PreciseX, kineticComp.PreciseY
-		// Physics Integration (Fixed Point)
-		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
+		curX, curY := physics.Integrate(&kineticComp.Kinetic, dtSec)
 
 		destroyBlossom := false
 		// Swept Traversal: Check every grid cell intersected by the movement vector
-		vmath.Traverse(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
+		traverser := vmath.NewGridTraverserF(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY)
+		for traverser.Next() {
+			x, y := traverser.Pos()
+
 			// Wall or OOB - destroy particle
 			if s.world.Positions.IsBlocked(x, y, component.WallBlockParticle) {
 				destroyBlossom = true
-				return false
+				break
 			}
 
 			// Skip cell from previous frame (already processed)
 			if x == blossomComp.LastIntX && y == blossomComp.LastIntY {
-				return true
+				continue
 			}
 
 			// Global frame deduplication: skip if this cell was already processed by ANY blossom this tick
 			flatIdx := (y * gameWidth) + x
 			if s.processedGridCells[flatIdx] {
-				return true
+				continue
 			}
 
 			// Query entities at position using zero-alloc buffer
@@ -281,8 +280,10 @@ func (s *BlossomSystem) updateBlossomEntities() {
 			}
 
 			s.processedGridCells[flatIdx] = true
-			return !destroyBlossom // Stop traversal if blossom destroyed
-		})
+			if destroyBlossom {
+				break
+			}
+		}
 
 		if destroyBlossom {
 			s.world.DestroyEntity(entity)

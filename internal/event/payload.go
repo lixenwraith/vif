@@ -369,7 +369,7 @@ const (
 type ExplosionRequestPayload struct {
 	X      int           `toml:"x"`
 	Y      int           `toml:"y"`
-	Radius int64         `toml:"radius"` // Q32.32, 0 = use default
+	Radius float64       `toml:"radius"` // 0 = use default
 	Type   ExplosionType `toml:"type"`   // Explosion variant
 }
 
@@ -645,10 +645,10 @@ type MissileSpawnRequestPayload struct {
 
 // BulletSpawnRequestPayload requests creation of a linear projectile
 type BulletSpawnRequestPayload struct {
-	OriginX     int64                  `toml:"origin_x"` // Q32.32 spawn position
-	OriginY     int64                  `toml:"origin_y"`
-	VelX        int64                  `toml:"vel_x"`
-	VelY        int64                  `toml:"vel_y"` // Q32.32 velocity
+	OriginX     float64                `toml:"origin_x"`
+	OriginY     float64                `toml:"origin_y"`
+	VelX        float64                `toml:"vel_x"`
+	VelY        float64                `toml:"vel_y"`
 	Owner       core.Entity            `toml:"owner"`
 	MaxLifetime time.Duration          `toml:"max_lifetime"`
 	Damage      component.BulletDamage `toml:"damage"`

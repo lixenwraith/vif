@@ -15,8 +15,8 @@ const (
 func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset float64) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       massRatio(impactor, target),
-		ImpulseMin:      parameter.CollisionKineticImpulseMinFloat,
-		ImpulseMax:      parameter.CollisionKineticImpulseMaxFloat,
+		ImpulseMin:      parameter.CollisionKineticImpulseMin,
+		ImpulseMax:      parameter.CollisionKineticImpulseMax,
 		AngleVariance:   angleVar,
 		Mode:            mode,
 		OffsetInfluence: offset,
@@ -37,9 +37,9 @@ func accumulate(impactor, target Mass, angleVar, offset float64) physics.Collisi
 func soft(impactor, target Mass) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       softRatio(impactor, target),
-		ImpulseMin:      parameter.SoftCollisionImpulseMinFloat,
-		ImpulseMax:      parameter.SoftCollisionImpulseMaxFloat,
-		AngleVariance:   parameter.SoftCollisionAngleVarFloat,
+		ImpulseMin:      parameter.SoftCollisionImpulseMin,
+		ImpulseMax:      parameter.SoftCollisionImpulseMax,
+		AngleVariance:   parameter.SoftCollisionAngleVar,
 		Mode:            physics.ImpulseAdditive,
 		OffsetInfluence: 0,
 	}
@@ -47,41 +47,41 @@ func soft(impactor, target Mass) physics.CollisionProfile {
 
 // --- Cleaner (projectile) ---
 var (
-	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
-	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Shield ---
 var (
-	ShieldToDrain     = accumulate(MassCursor, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	ShieldToSwarm     = redirect(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
-	ShieldToQuasar    = redirect(MassCursor, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ShieldToStorm     = redirect(MassCursor, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ShieldToSnakeHead = redirect(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ShieldToSnakeBody = accumulate(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	ShieldToEye       = redirect(MassCursor, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ShieldToDrain     = accumulate(MassCursor, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	ShieldToSwarm     = redirect(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	ShieldToQuasar    = redirect(MassCursor, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToStorm     = redirect(MassCursor, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToSnakeHead = redirect(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToSnakeBody = accumulate(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	ShieldToEye       = redirect(MassCursor, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Explosion (also used by missile impact) ---
 var (
-	ExplosionToDrain     = accumulate(MassExplosion, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	ExplosionToSwarm     = accumulate(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
-	ExplosionToQuasar    = accumulate(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ExplosionToStorm     = accumulate(MassExplosion, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ExplosionToSnakeHead = accumulate(MassExplosion, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
-	ExplosionToSnakeBody = accumulate(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	ExplosionToEye       = accumulate(MassExplosion, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ExplosionToDrain     = accumulate(MassExplosion, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	ExplosionToSwarm     = accumulate(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
+	ExplosionToQuasar    = accumulate(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToStorm     = accumulate(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToSnakeHead = accumulate(MassExplosion, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToSnakeBody = accumulate(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
+	ExplosionToEye       = accumulate(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
 )
 
 // --- Dust ---
 var (
-	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
-	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
+	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVar, OffsetNone)
 )
 
 // --- Soft collision (inter-species scatter) ---

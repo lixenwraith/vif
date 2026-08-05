@@ -2,13 +2,13 @@ name: Test with Race Detection
 
 on:
   push:
-    branches: [ main, master, develop, claude/* ]
+    branches: [ main, master, develop, 'claude/*' ]
   pull_request:
     branches: [ main, master, develop ]
 
 jobs:
   test:
-    name: Test on Latest Stable Go
+    name: Build and Test on Go 1.26
     runs-on: ubuntu-latest
 
     steps:
@@ -18,64 +18,22 @@ jobs:
     - name: Set up Go
       uses: actions/setup-go@v5
       with:
-        go-version: 'stable'
-
-    - name: Install ALSA dependencies
-      run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-    - name: Cache Go modules
-      uses: actions/cache@v4
-      with:
-        path: |
-          ~/.cache/go-build
-          ~/go/pkg/mod
-        key: ${{ runner.os }}-go-stable-${{ hashFiles('**/go.sum') }}
-        restore-keys: |
-          ${{ runner.os }}-go-stable-
+        go-version: '1.26.x'
+        cache: true
 
     - name: Download dependencies
       run: go mod download
 
-    - name: Run tests without race detector
-      run: go test -v ./...
+    - name: Vet code
+      run: go vet ./...
+
+    - name: Build code
+      run: go build ./...
 
     - name: Run tests with race detector
       run: go test -race -v ./...
       env:
-        GORACE: "halt_on_error=1"
-
-    - name: Run critical system tests
-      run: |
-        go test -race -v ./systems -run "TestConcurrent|TestRace|TestSnapshot"
-        go test -race -v ./engine -run "TestIntegration|TestClock|TestPhase"
-        go test -race -v ./systems -run "TestSpawn|TestCleaner|TestEnergy"
-      env:
-        GORACE: "halt_on_error=1"
-
-  race-stress-test:
-    name: Extended Race Stress Test
-    runs-on: ubuntu-latest
-
-    steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-
-    - name: Set up Go
-      uses: actions/setup-go@v5
-      with:
-        go-version: 'stable'
-
-    - name: Install ALSA dependencies
-      run: sudo apt-get update && sudo apt-get install -y libasound2-dev
-
-    - name: Download dependencies
-      run: go mod download
-
-    - name: Run stress tests with race detector
-      run: |
-        echo "Running stress test suite with race detector..."
-        go test -race -v -timeout 5m -run "TestStress|TestConcurrent" ./...
-      env:
+        # Halt immediately on race condition and output logs to files prefixed with "race"
         GORACE: "halt_on_error=1 log_path=race"
 
     - name: Upload race detector logs on failure
@@ -85,3 +43,4 @@ jobs:
         name: race-detector-logs
         path: race.*
         retention-days: 7
+

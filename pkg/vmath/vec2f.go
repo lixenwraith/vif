@@ -42,8 +42,8 @@ func ClampMagnitudeF(x, y, maxMag float64) (float64, float64) {
 
 // RotateVectorF rotates vector by angle in radians
 func RotateVectorF(x, y, angleRad float64) (float64, float64) {
-	cos := math.Cos(angleRad)
-	sin := math.Sin(angleRad)
+	cos := CosF(angleRad)
+	sin := SinF(angleRad)
 	return x*cos - y*sin, x*sin + y*cos
 }
 

@@ -54,11 +54,11 @@ const (
 
 // Kinetic Collision Impulse
 const (
-	// CollisionKineticImpulseMinFloat is minimum knockback velocity (cells/sec)
-	CollisionKineticImpulseMinFloat = 15.0
+	// CollisionKineticImpulseMin is minimum knockback velocity (cells/sec)
+	CollisionKineticImpulseMin = 15.0
 
-	// CollisionKineticImpulseMaxFloat is maximum knockback velocity (cells/sec)
-	CollisionKineticImpulseMaxFloat = 40.0
+	// CollisionKineticImpulseMax is maximum knockback velocity (cells/sec)
+	CollisionKineticImpulseMax = 40.0
 )
 
 // Soft collision parameters (inter-enemy repulsion)
@@ -66,26 +66,20 @@ const (
 	// SoftCollisionImmunityDuration is immunity window after soft repulsion
 	SoftCollisionImmunityDuration = 100 * time.Millisecond
 
-	// SoftCollisionImpulseMinFloat is minimum repulsion velocity (cells/sec)
-	SoftCollisionImpulseMinFloat = 5.0
+	// SoftCollisionImpulseMin is minimum repulsion velocity (cells/sec)
+	SoftCollisionImpulseMin = 5.0
 
-	// SoftCollisionImpulseMaxFloat is maximum repulsion velocity (cells/sec)
-	SoftCollisionImpulseMaxFloat = 16.0
+	// SoftCollisionImpulseMax is maximum repulsion velocity (cells/sec)
+	SoftCollisionImpulseMax = 16.0
 
-	// SoftCollisionAngleVarFloat is random angle spread (radians, ~8°)
-	SoftCollisionAngleVarFloat = 0.15
+	// SoftCollisionAngleVar is random angle spread (radians, ~8°)
+	SoftCollisionAngleVar = 0.15
 )
 
 // Swarm flocking separation parameters
 const (
-	// SwarmSeparationRadiusXFloat is horizontal separation zone (cells)
-	SwarmSeparationRadiusXFloat = 8.0
-
-	// SwarmSeparationRadiusYFloat is vertical separation zone (cells, aspect-corrected)
-	SwarmSeparationRadiusYFloat = 4.0
-
-	// SwarmSeparationStrengthFloat is separation acceleration (cells/sec²)
-	SwarmSeparationStrengthFloat = 3.0
+	// SwarmSeparationStrength is separation acceleration (cells/sec²)
+	SwarmSeparationStrength = 3.0
 
 	// SwarmQuasarSeparationWeight is weight multiplier for quasar in separation calc
 	SwarmQuasarSeparationWeight = 0.3
@@ -93,20 +87,20 @@ const (
 
 // Entity collision radii (ellipse semi-axes from center)
 const (
-	// QuasarCollisionRadiusXFloat is quasar horizontal collision radius (5/2 cells)
-	QuasarCollisionRadiusXFloat = 2.5
+	// QuasarCollisionRadiusX is quasar horizontal collision radius (5/2 cells)
+	QuasarCollisionRadiusX = 2.5
 
-	// QuasarCollisionRadiusYFloat is quasar vertical collision radius (3/2 cells)
-	QuasarCollisionRadiusYFloat = 1.5
+	// QuasarCollisionRadiusY is quasar vertical collision radius (3/2 cells)
+	QuasarCollisionRadiusY = 1.5
 
-	// SwarmCollisionRadiusXFloat is swarm horizontal collision radius (4/2 cells)
-	SwarmCollisionRadiusXFloat = 2.0
+	// SwarmCollisionRadiusX is swarm horizontal collision radius (4/2 cells)
+	SwarmCollisionRadiusX = 2.0
 
-	// SwarmCollisionRadiusYFloat is swarm vertical collision radius (2/2 cells)
-	SwarmCollisionRadiusYFloat = 1.0
+	// SwarmCollisionRadiusY is swarm vertical collision radius (2/2 cells)
+	SwarmCollisionRadiusY = 1.0
 
-	// DrainCollisionRadiusFloat is drain collision radius (point entity with small area)
-	DrainCollisionRadiusFloat = 0.5
+	// DrainCollisionRadius is drain collision radius (point entity with small area)
+	DrainCollisionRadius = 0.5
 )
 
 // Vampire Drain
@@ -117,8 +111,8 @@ const (
 
 // Missile
 const (
-	// MissileImpactRadiusFloat is hit detection threshold (cells)
-	MissileImpactRadiusFloat = 1.5
+	// MissileImpactRadius is hit detection threshold (cells)
+	MissileImpactRadius = 1.5
 )
 
 // Pulse
@@ -126,11 +120,11 @@ const (
 	// PulseStunDuration is the duration of disruptor weapon stun effect
 	PulseStunDuration = 2000 * time.Millisecond
 
-	// PulseRadiusXFloat is disruptor weapon horizontal radius (2× shield)
-	PulseRadiusXFloat = ShieldRadiusXFloat * 3.5
+	// PulseRadiusX is disruptor weapon horizontal radius (2× shield)
+	PulseRadiusX = PlayerShieldRadiusX * 3.5
 
-	// PulseRadiusYFloat is disruptor weapon vertical radius (2× shield, aspect corrected)
-	PulseRadiusYFloat = ShieldRadiusYFloat * 3.5
+	// PulseRadiusY is disruptor weapon vertical radius (2× shield, aspect corrected)
+	PulseRadiusY = PlayerShieldRadiusY * 3.5
 
 	// PulseEffectDuration is pulse visual effect duration
 	PulseEffectDuration = 250 * time.Millisecond

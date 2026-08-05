@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -13,11 +14,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// snakeLateralCells are the perpendicular offsets of a segment's three members
-var snakeLateralCells = [3]int{0, -1, 1}
-
-// snakeLateralOffsets are snakeLateralCells in Q32.32 for rest-position math
-var snakeLateralOffsets = [3]int64{0, -vmath.Scale, vmath.Scale}
+// snakeLateralOffsets are the perpendicular offsets of a segment's three members
+var snakeLateralOffsets = [3]int{0, -1, 1}
 
 // SnakeSystem manages snake entity lifecycle
 type SnakeSystem struct {
@@ -110,10 +108,7 @@ func (s *SnakeSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(dt.Seconds(), 0.1)
 
 	snakes := s.world.Components.Snake
 	snakeEntities := snakes.Entities()
@@ -158,7 +153,7 @@ func (s *SnakeSystem) Update() {
 
 		// Update head movement (stun check)
 		if headCombat.StunnedRemaining <= 0 {
-			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtFixed)
+			s.updateHeadMovement(snakeComp.HeadEntity, headComp, dtSec)
 		}
 
 		// Sync head members to header position (CompositeSystem already ran this tick)
@@ -200,7 +195,7 @@ func (s *SnakeSystem) Update() {
 				s.checkConnectivity(snakeComp.BodyEntity, bodyComp, resolved)
 
 				// Apply spring physics to living connected members
-				s.applyBodySpringPhysics(bodyComp, headComp, resolved, dtFixed)
+				s.applyBodySpringPhysics(bodyComp, headComp, resolved, dtSec)
 
 				// Update shield state from resolved liveness
 				s.updateShieldState(snakeComp, bodyComp, resolved)
@@ -325,7 +320,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 
 	// Snake head component with initial trail
 	headComp := component.SnakeHeadComponent{
-		FacingX:    vmath.Scale, // Initial facing right
+		FacingX:    1.0, // Initial facing right
 		FacingY:    0,
 		LastTrailX: headX,
 		LastTrailY: headY,
@@ -346,7 +341,7 @@ func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.
 	})
 
 	// Kinetic component
-	preciseX, preciseY := vmath.CenteredFromGrid(headX, headY)
+	preciseX, preciseY := vmath.Point{X: headX, Y: headY}.CenterF()
 	s.world.Components.Kinetic.SetComponent(headEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
@@ -471,7 +466,7 @@ func (s *SnakeSystem) processSpawnSequence(snakeComp *component.SnakeComponent, 
 		return
 	}
 
-	restX, restY := vmath.CenteredFromGrid(snakeComp.SpawnOriginX, snakeComp.SpawnOriginY)
+	restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.CenterF()
 	bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
 		RestX:     restX,
 		RestY:     restY,
@@ -505,12 +500,13 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 		return false
 	}
 
-	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
+	perpX, perpY := vmath.PerpendicularF(headComp.FacingX, headComp.FacingY)
 	createdAny := false
 
-	for _, lateralOffset := range snakeLateralCells {
-		memberX := centerX + vmath.ToInt(vmath.Mul(perpX, vmath.FromInt(lateralOffset)))
-		memberY := centerY + vmath.ToInt(vmath.Mul(perpY, vmath.FromInt(lateralOffset)))
+	for _, lateralOffset := range snakeLateralOffsets {
+		// Floor, not truncation: ToInt's arithmetic shift floored for negative offsets
+		memberX := centerX + int(math.Floor(perpX*float64(lateralOffset)))
+		memberY := centerY + int(math.Floor(perpY*float64(lateralOffset)))
 
 		if s.world.Positions.HasBlockingWallAt(memberX, memberY, component.WallBlockSpawn) {
 			continue
@@ -529,7 +525,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 			HitPoints:        memberHP,
 		})
 
-		preciseX, preciseY := vmath.CenteredFromGrid(memberX, memberY)
+		preciseX, preciseY := vmath.Point{X: memberX, Y: memberY}.CenterF()
 		s.world.Components.Kinetic.SetComponent(memberEntity, component.KineticComponent{
 			Kinetic: physics.Kinetic{
 				PreciseX: preciseX,
@@ -560,7 +556,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 	return createdAny
 }
 
-func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, dtFixed int64) {
+func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *component.SnakeHeadComponent, dtSec float64) {
 	headPos, ok := s.world.Positions.GetPosition(headEntity)
 	if !ok {
 		return
@@ -580,8 +576,8 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		&kineticComp.Kinetic,
 		targetX, targetY,
 		&profile.SnakeHoming,
-		vmath.Scale,
-		dtFixed,
+		1.0,
+		dtSec,
 		usingDirectPath,
 	)
 
@@ -589,9 +585,9 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	kineticComp.VelX, kineticComp.VelY = physics.CapSpeed(kineticComp.VelX, kineticComp.VelY, parameter.SnakeMaxSpeed)
 
 	// Update facing direction from velocity
-	velMag := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-	if velMag > vmath.FromFloat(0.5) {
-		headComp.FacingX, headComp.FacingY = vmath.Normalize2D(kineticComp.VelX, kineticComp.VelY)
+	velMag := vmath.MagnitudeF(kineticComp.VelX, kineticComp.VelY)
+	if velMag > 0.5 {
+		headComp.FacingX, headComp.FacingY = vmath.Normalize2DF(kineticComp.VelX, kineticComp.VelY)
 	}
 
 	// Wall collision check
@@ -611,7 +607,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 
 	newX, newY, _ := physics.IntegrateWithBounce(
 		&kineticComp.Kinetic,
-		dtFixed,
+		dtSec,
 		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY,
 		minHeaderX, maxHeaderX,
 		minHeaderY, maxHeaderY,
@@ -631,11 +627,10 @@ func (s *SnakeSystem) updateTrail(headEntity core.Entity, headComp *component.Sn
 		return
 	}
 
-	// Compare in Q32.32: the sample interval is sub-cell and truncates to
-	// zero in cell integers
-	dx := vmath.FromInt(headPos.X - headComp.LastTrailX)
-	dy := vmath.FromInt(headPos.Y - headComp.LastTrailY)
-	if vmath.MagnitudeSq(dx, dy) < parameter.SnakeTrailSampleIntervalSq {
+	// Sub-cell threshold against a cell-integer delta: any cell change passes
+	dx := float64(headPos.X - headComp.LastTrailX)
+	dy := float64(headPos.Y - headComp.LastTrailY)
+	if vmath.MagnitudeSqF(dx, dy) < parameter.SnakeTrailSampleIntervalSq {
 		return
 	}
 
@@ -655,7 +650,7 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 		return
 	}
 
-	spacingCells := max(vmath.ToInt(parameter.SnakeSegmentSpacing), 1)
+	spacingCells := int(parameter.SnakeSegmentSpacing)
 
 	for i := range bodyComp.Segments {
 		// Sample trail at position based on segment index
@@ -671,12 +666,12 @@ func (s *SnakeSystem) updateSegmentRestPositions(headComp *component.SnakeHeadCo
 		}
 
 		pos := headComp.Trail[idx]
-		bodyComp.Segments[i].RestX, bodyComp.Segments[i].RestY = vmath.CenteredFromGrid(pos.X, pos.Y)
+		bodyComp.Segments[i].RestX, bodyComp.Segments[i].RestY = pos.CenterF()
 	}
 }
 
-func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, headComp *component.SnakeHeadComponent, resolved []resolvedSegment, dtFixed int64) {
-	perpX, perpY := vmath.Perpendicular(headComp.FacingX, headComp.FacingY)
+func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyComponent, headComp *component.SnakeHeadComponent, resolved []resolvedSegment, dtSec float64) {
+	perpX, perpY := vmath.PerpendicularF(headComp.FacingX, headComp.FacingY)
 
 	for i := range bodyComp.Segments {
 		seg := &bodyComp.Segments[i]
@@ -697,8 +692,8 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			}
 
 			// Per-member rest position with perpendicular offset
-			memberRestX := seg.RestX + vmath.Mul(perpX, snakeLateralOffsets[j])
-			memberRestY := seg.RestY + vmath.Mul(perpY, snakeLateralOffsets[j])
+			memberRestX := seg.RestX + perpX*float64(snakeLateralOffsets[j])
+			memberRestY := seg.RestY + perpY*float64(snakeLateralOffsets[j])
 
 			// Check if member was knocked away (has kinetic immunity from combat hit)
 			combatComp, hasCombat := s.world.Components.Combat.GetComponent(memberEntity)
@@ -707,8 +702,8 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			if isDisplaced {
 				physics.SpringToRest(&kineticComp.Kinetic, memberRestX, memberRestY,
 					parameter.SnakeSpringStiffness, parameter.SnakeSpringDamping,
-					parameter.SnakeSpringMaxForce, dtFixed)
-				physics.IntegratePosition(&kineticComp.Kinetic, dtFixed)
+					parameter.SnakeSpringMaxForce, dtSec)
+				physics.IntegratePosition(&kineticComp.Kinetic, dtSec)
 			} else {
 				// Direct follow: snap to rest position
 				kineticComp.PreciseX = memberRestX
@@ -718,8 +713,7 @@ func (s *SnakeSystem) applyBodySpringPhysics(bodyComp *component.SnakeBodyCompon
 			}
 
 			// Update grid position
-			newX := vmath.ToInt(kineticComp.PreciseX)
-			newY := vmath.ToInt(kineticComp.PreciseY)
+			newX, newY := physics.GridPos(&kineticComp.Kinetic)
 
 			if pos, ok := s.world.Positions.GetPosition(memberEntity); ok {
 				if pos.X != newX || pos.Y != newY {
@@ -893,8 +887,8 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 	var tailX, tailY int
 	if len(bodyComp.Segments) > 0 {
 		lastSeg := &bodyComp.Segments[len(bodyComp.Segments)-1]
-		tailX = vmath.ToInt(lastSeg.RestX)
-		tailY = vmath.ToInt(lastSeg.RestY)
+		tail := vmath.PointAtF(lastSeg.RestX, lastSeg.RestY)
+		tailX, tailY = tail.X, tail.Y
 	} else {
 		headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity)
 		if !ok {
@@ -905,7 +899,7 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 	}
 
 	if s.createBodySegmentMembers(snakeComp.BodyEntity, tailX, tailY, len(bodyComp.Segments), headComp, parameter.CombatInitialHPSnakeMemberMin) {
-		restX, restY := vmath.CenteredFromGrid(tailX, tailY)
+		restX, restY := vmath.Point{X: snakeComp.SpawnOriginX, Y: snakeComp.SpawnOriginY}.CenterF()
 		bodyComp.Segments = append(bodyComp.Segments, component.SnakeSegment{
 			RestX:     restX,
 			RestY:     restY,

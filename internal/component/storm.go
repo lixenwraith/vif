@@ -35,8 +35,8 @@ const (
 
 // StormCircleComponent holds per-circle 3D physics state, attached to each circle header entity
 type StormCircleComponent struct {
-	Pos3D vmath.Vec3
-	Vel3D vmath.Vec3
+	Pos3D vmath.Vec3F
+	Vel3D vmath.Vec3F
 	Index int // 0, 1, or 2 - position in parent storm
 
 	IsInvulnerable bool

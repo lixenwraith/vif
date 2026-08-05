@@ -7,8 +7,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // collisionEntry holds cached entity data for soft collision processing
@@ -20,8 +20,8 @@ type collisionEntry struct {
 // SoftCollisionRule defines a single soft collision interaction
 type SoftCollisionRule struct {
 	Profile     *physics.CollisionProfile
-	SourceInvRx int64 // Source collision radius (inverse squared X)
-	SourceInvRy int64 // Source collision radius (inverse squared Y)
+	SourceInvRx float64 // Source collision radius (inverse squared X)
+	SourceInvRy float64 // Source collision radius (inverse squared Y)
 }
 
 // SoftCollisionMatrix maps [Source][Target] → Rule
@@ -30,11 +30,11 @@ type SoftCollisionMatrix [component.SpeciesCount][component.SpeciesCount]*SoftCo
 
 // FlockingRule defines a single flocking separation interaction
 type FlockingRule struct {
-	InvRxSq    int64 // Separation ellipse inverse X radius squared (Q32.32)
-	InvRySq    int64 // Separation ellipse inverse Y radius squared (Q32.32)
-	MaxDist    int64 // Q32.32 max distance for weight calculation
-	Strength   int64 // Q32.32 base acceleration strength
-	WeightMult int64 // Q32.32 multiplier (e.g. for lower quasar influence)
+	InvRxSq    float64 // Separation ellipse inverse X radius squared
+	InvRySq    float64 // Separation ellipse inverse Y radius squared
+	MaxDist    float64 // Max distance (cells) for weight calculation
+	Strength   float64 // Base acceleration strength (cells/sec²)
+	WeightMult float64 // Multiplier (e.g. for lower quasar influence)
 }
 
 // FlockingMatrix maps → Rule
@@ -117,15 +117,15 @@ func (s *SoftCollisionSystem) initMatrix() {
 	// Storm pushes Swarm (reuse quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftQuasarToSwarm,
-		SourceInvRx: parameter.StormCollisionInvRxSq,
-		SourceInvRy: parameter.StormCollisionInvRySq,
+		SourceInvRx: parameter.StormCircleCollisionInvRxSq,
+		SourceInvRy: parameter.StormCircleCollisionInvRySq,
 	}
 
 	// Storm pushes Quasar (reuse swarm-to-quasar profile per existing code)
 	s.matrix[component.SpeciesStorm][component.SpeciesQuasar] = &SoftCollisionRule{
 		Profile:     &profile.SoftSwarmToQuasar,
-		SourceInvRx: parameter.StormCollisionInvRxSq,
-		SourceInvRy: parameter.StormCollisionInvRySq,
+		SourceInvRx: parameter.StormCircleCollisionInvRxSq,
+		SourceInvRy: parameter.StormCircleCollisionInvRySq,
 	}
 
 	// Pylon pushes Drain
@@ -165,7 +165,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 		InvRySq:    parameter.FlockingSeparationInvRySq,
 		MaxDist:    parameter.FlockingSeparationRadiusX,
 		Strength:   parameter.SwarmSeparationStrength,
-		WeightMult: vmath.Scale,
+		WeightMult: 1.0,
 	}
 
 	for _, src := range flockingSpecies {
@@ -175,7 +175,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 
 			// Specific overrides based on behavioral design
 			if src == component.SpeciesQuasar && tgt == component.SpeciesSwarm {
-				rule.WeightMult = vmath.FromFloat(parameter.SwarmQuasarSeparationWeight)
+				rule.WeightMult = parameter.SwarmQuasarSeparationWeight
 			}
 
 			s.flockMatrix[src][tgt] = &rule
@@ -224,14 +224,11 @@ func (s *SoftCollisionSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	s.rebuildCaches()
 	s.processAllCollisions()
-	s.processAllFlocking(dtFixed)
+	s.processAllFlocking(dtSec)
 }
 
 // clearCaches resets all cache slices
@@ -403,7 +400,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 }
 
 // processAllFlocking calculates and integrates continuous separation acceleration
-func (s *SoftCollisionSystem) processAllFlocking(dtFixed int64) {
+func (s *SoftCollisionSystem) processAllFlocking(dtSec float64) {
 	// Loop over targets first to accumulate acceleration and minimize ECS writes
 	for targetType := component.SpeciesType(1); targetType < component.SpeciesCount; targetType++ {
 		targets := s.getCache(targetType)
@@ -425,7 +422,7 @@ func (s *SoftCollisionSystem) processAllFlocking(dtFixed int64) {
 				continue
 			}
 
-			var totalAccelX, totalAccelY int64
+			var totalAccelX, totalAccelY float64
 			hasFlocking := false
 
 			// Accumulate repulsion from all active sources
@@ -453,8 +450,8 @@ func (s *SoftCollisionSystem) processAllFlocking(dtFixed int64) {
 
 			// Integrate and apply accumulated acceleration
 			if hasFlocking {
-				kineticComp.VelX += vmath.Mul(totalAccelX, dtFixed)
-				kineticComp.VelY += vmath.Mul(totalAccelY, dtFixed)
+				kineticComp.VelX += totalAccelX * dtSec
+				kineticComp.VelY += totalAccelY * dtSec
 			}
 		}
 	}
@@ -465,36 +462,29 @@ func (s *SoftCollisionSystem) calculateFlockingAccel(
 	sourceX, sourceY int,
 	targetX, targetY int,
 	rule *FlockingRule,
-) (accelX, accelY int64, applied bool) {
+) (accelX, accelY float64, applied bool) {
 	// Source is the center. Does its ellipse overlap the target?
-	if !vmath.EllipseContainsPoint(targetX, targetY, sourceX, sourceY, rule.InvRxSq, rule.InvRySq) {
+	if !vmath.EllipseContainsPointF(targetX, targetY, sourceX, sourceY, rule.InvRxSq, rule.InvRySq) {
 		return 0, 0, false
 	}
 
 	// Vector points from Source to Target (pushing Target away)
-	dx := vmath.FromInt(targetX - sourceX)
-	dy := vmath.FromInt(targetY - sourceY)
+	dx := float64(targetX - sourceX)
+	dy := float64(targetY - sourceY)
 
 	if dx == 0 && dy == 0 {
-		dx = vmath.Scale // Fallback rightwards to prevent stacking lock
+		dx = 1.0 // Fallback rightwards to prevent stacking lock
 	}
 
-	dist := vmath.Magnitude(dx, dy)
-	if dist == 0 {
-		dist = 1
-	}
-
-	dirX, dirY := vmath.Normalize2D(dx, dy)
+	dist := vmath.MagnitudeF(dx, dy)
+	dirX, dirY := dx/dist, dy/dist
 
 	// Weight inversely proportional to distance: (MaxDist - dist) / MaxDist
-	weight := vmath.Div(rule.MaxDist-dist, rule.MaxDist)
-	if weight < 0 {
-		weight = 0
-	}
+	weight := max((rule.MaxDist-dist)/rule.MaxDist, 0)
 
 	// Apply species-specific interaction modifier and base strength
-	weight = vmath.Mul(weight, rule.WeightMult)
-	accelMag := vmath.Mul(rule.Strength, weight)
+	weight *= rule.WeightMult
+	accelMag := rule.Strength * weight
 
-	return vmath.Mul(dirX, accelMag), vmath.Mul(dirY, accelMag), true
+	return dirX * accelMag, dirY * accelMag, true
 }

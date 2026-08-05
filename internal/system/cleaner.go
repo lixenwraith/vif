@@ -9,15 +9,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // CleanerSystem manages the cleaner animation and logic using vector physics
 type CleanerSystem struct {
 	world *engine.World
-
-	rng *vmath.FastRand
 
 	statActive  *atomic.Int64
 	statSpawned *atomic.Int64
@@ -40,7 +38,6 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *CleanerSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
 	s.enabled = true
@@ -115,7 +112,7 @@ func (s *CleanerSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
 
@@ -127,7 +124,7 @@ func (s *CleanerSystem) Update() {
 
 		// --- Drain phase: head stationary, trail shrinking ---
 		if cleanerComp.Blocked {
-			cleanerComp.DrainRemaining -= vmath.Mul(cleanerComp.DrainSpeed, dtFixed)
+			cleanerComp.DrainRemaining -= cleanerComp.DrainSpeed * dtSec
 			if cleanerComp.DrainRemaining <= 0 {
 				s.world.DestroyEntity(cleanerEntity)
 				continue
@@ -149,7 +146,9 @@ func (s *CleanerSystem) Update() {
 		// Physics integration
 		prevPreciseX := kineticComp.PreciseX
 		prevPreciseY := kineticComp.PreciseY
-		physics.Integrate(&kineticComp.Kinetic, dtFixed)
+		physics.Integrate(&kineticComp.Kinetic, dtSec)
+		prevCell := vmath.PointAtF(prevPreciseX, prevPreciseY)
+		newCell := vmath.PointAtF(kineticComp.PreciseX, kineticComp.PreciseY)
 
 		// Swept collision with wall/enemy blocking
 		blocked := false
@@ -157,8 +156,7 @@ func (s *CleanerSystem) Update() {
 
 		if kineticComp.VelY != 0 && kineticComp.VelX == 0 {
 			// Vertical sweep
-			fromY := vmath.ToInt(prevPreciseY)
-			toY := vmath.ToInt(kineticComp.PreciseY)
+			fromY, toY := prevCell.Y, newCell.Y
 			x := oldPos.X
 			step := 1
 			if kineticComp.VelY < 0 {
@@ -190,8 +188,7 @@ func (s *CleanerSystem) Update() {
 			}
 		} else if kineticComp.VelX != 0 {
 			// Horizontal sweep
-			fromX := vmath.ToInt(prevPreciseX)
-			toX := vmath.ToInt(kineticComp.PreciseX)
+			fromX, toX := prevCell.X, newCell.X
 			y := oldPos.Y
 			step := 1
 			if kineticComp.VelX < 0 {
@@ -236,12 +233,12 @@ func (s *CleanerSystem) Update() {
 			}
 			cleanerComp.DrainSpeed = drainSpeed
 
-			drainDist := vmath.FromInt(cleanerComp.TrailLen)
+			drainDist := float64(cleanerComp.TrailLen)
 			cleanerComp.DrainRemaining = drainDist
 			cleanerComp.DrainTotal = drainDist
 
 			// Update precise position to block point (velocity preserved for combat resolution)
-			blockPreciseX, blockPreciseY := vmath.CenteredFromGrid(blockGridX, blockGridY)
+			blockPreciseX, blockPreciseY := vmath.Point{X: blockGridX, Y: blockGridY}.CenterF()
 			kineticComp.PreciseX = blockPreciseX
 			kineticComp.PreciseY = blockPreciseY
 
@@ -259,8 +256,7 @@ func (s *CleanerSystem) Update() {
 		}
 
 		// --- Unblocked: normal trail update and grid sync ---
-		newGridX := vmath.ToInt(kineticComp.PreciseX)
-		newGridY := vmath.ToInt(kineticComp.PreciseY)
+		newGridX, newGridY := newCell.X, newCell.Y
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
 			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
@@ -319,28 +315,29 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		}
 	}
 
-	gameWidthFixed := vmath.FromInt(config.MapWidth)
-	trailLenFixed := parameter.CleanerTrailLenFixed
+	gameWidthCells := float64(config.MapWidth)
+	trailLen := parameter.CleanerTrailLength
 	baseSpeed := parameter.CleanerBaseHorizontalSpeed
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
 	for _, row := range rows {
-		var startX, targetX, velX int64
-		rowFixed := vmath.FromInt(row)
+		var startX, targetX, velX float64
+		// Row index -> precise Y at the cell center
+		_, rowCenterY := vmath.Point{Y: row}.CenterF()
 
 		if row%2 != 0 {
 			// Left to right
-			startX = -trailLenFixed
-			targetX = gameWidthFixed + trailLenFixed*2
+			startX = -trailLen
+			targetX = gameWidthCells + trailLen*2
 			velX = baseSpeed
 		} else {
 			// Right to left
-			startX = gameWidthFixed + trailLenFixed
-			targetX = -trailLenFixed * 2
+			startX = gameWidthCells + trailLen
+			targetX = -trailLen * 2
 			velX = -baseSpeed
 		}
 
-		startGridX := vmath.ToInt(startX)
+		startGridX := vmath.PointAtF(startX, rowCenterY).X
 		startGridY := row
 
 		// Initialize trail ring buffer with starting position
@@ -349,7 +346,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 		cleanerComp := component.CleanerComponent{
 			TargetX:   targetX,
-			TargetY:   rowFixed,
+			TargetY:   rowCenterY,
 			TrailRing: trailRing,
 			TrailHead: 0,
 			TrailLen:  1,
@@ -358,7 +355,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		}
 		kinetic := physics.Kinetic{
 			PreciseX: startX,
-			PreciseY: rowFixed,
+			PreciseY: rowCenterY,
 			VelX:     velX,
 			VelY:     0,
 		}
@@ -510,34 +507,33 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 		ID: parameter.Sfx.Bullet,
 	})
 
-	gameWidthFixed := vmath.FromInt(config.MapWidth)
-	gameHeightFixed := vmath.FromInt(config.MapHeight)
-	trailLenFixed := parameter.CleanerTrailLenFixed
+	gameWidthCells := float64(config.MapWidth)
+	gameHeightCells := float64(config.MapHeight)
+	trailLen := parameter.CleanerTrailLength
 
 	horizontalSpeed := parameter.CleanerBaseHorizontalSpeed
 	verticalSpeed := parameter.CleanerBaseVerticalSpeed
 
 	// Shift for cell center precise coordinate adjustment
-	oxFixed := vmath.FromInt(originX) + vmath.Scale>>1
-	oyFixed := vmath.FromInt(originY) + vmath.Scale>>1
+	ox, oy := vmath.Point{X: originX, Y: originY}.CenterF()
 
 	type dirDef struct {
-		velX, velY       int64
-		startX, startY   int64
-		targetX, targetY int64
+		velX, velY       float64
+		startX, startY   float64
+		targetX, targetY float64
 	}
 
 	directions := []dirDef{
-		{horizontalSpeed, 0, oxFixed, oyFixed, gameWidthFixed + 2*trailLenFixed, oyFixed},
-		{-horizontalSpeed, 0, oxFixed, oyFixed, -trailLenFixed * 2, oyFixed},
-		{0, verticalSpeed, oxFixed, oyFixed, oxFixed, gameHeightFixed + trailLenFixed*2},
-		{0, -verticalSpeed, oxFixed, oyFixed, oxFixed, -trailLenFixed * 2},
+		{horizontalSpeed, 0, ox, oy, gameWidthCells + 2*trailLen, oy},
+		{-horizontalSpeed, 0, ox, oy, -trailLen * 2, oy},
+		{0, verticalSpeed, ox, oy, ox, gameHeightCells + trailLen*2},
+		{0, -verticalSpeed, ox, oy, ox, -trailLen * 2},
 	}
 
 	// Spawn 4 cleaners from origin, each traveling in a cardinal direction
 	for _, dir := range directions {
-		startGridX := vmath.ToInt(dir.startX)
-		startGridY := vmath.ToInt(dir.startY)
+		startCell := vmath.PointAtF(dir.startX, dir.startY)
+		startGridX, startGridY := startCell.X, startCell.Y
 
 		// Initialize trail ring buffer with starting position
 		var trailRing [parameter.CleanerTrailLength]vmath.Point

@@ -39,8 +39,8 @@ type StrobeState struct {
 // ExplosionCenter represents a single explosion for rendering
 type ExplosionCenter struct {
 	X, Y      int
-	Radius    int64               // Q32.32 cells
-	Intensity int64               // Q32.32, Scale = 1.0 base
+	Radius    float64             // Cells
+	Intensity float64             // Scale = 1.0 base
 	Age       int64               // Nanoseconds since spawn
 	Type      event.ExplosionType // Explosion variant for palette selection
 }

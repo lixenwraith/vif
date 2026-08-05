@@ -20,7 +20,7 @@ type TargetGroup struct {
 type TargetAssignment struct {
 	Target core.Entity // Header for composites, entity itself for singles
 	Hit    core.Entity // Closest member, or entity itself for singles
-	DistSq int64       // Squared distance from query origin to Hit
+	DistSq float64     // Squared distance from query origin to Hit
 }
 
 // ResolveTargetFromEntity resolves combat target chain for a single entity found at a position
@@ -96,7 +96,7 @@ func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.E
 // ownerEntity-owned entities excluded
 //
 // Iterates Combat store (singles) and Member store (composites) for species-agnostic resolution
-func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, ownerEntity core.Entity) []TargetGroup {
+func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, ownerEntity core.Entity) []TargetGroup {
 	groups := make(map[core.Entity]*TargetGroup)
 
 	// 1. Simple combat entities (no Header, no Member component)
@@ -108,7 +108,7 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 			continue
 		}
 		pos, ok := w.Positions.GetPosition(e)
-		if !ok || !vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
+		if !ok || !vmath.EllipseContainsPointF(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
 		groups[e] = &TargetGroup{Target: e, Members: []core.Entity{e}}
@@ -133,7 +133,7 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 			continue
 		}
 		pos, ok := w.Positions.GetPosition(memberEntity)
-		if !ok || !vmath.EllipseContainsPoint(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
+		if !ok || !vmath.EllipseContainsPointF(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
 
@@ -158,7 +158,7 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq int64, o
 // Composites prioritized over distance-sorted singles.
 // If count exceeds available targets, results cycle through available targets (overflow distribution)
 // ownerEntity-owned entities excluded
-func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEntity core.Entity) []TargetAssignment {
+func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerEntity core.Entity) []TargetAssignment {
 	if count <= 0 {
 		return nil
 	}
@@ -178,8 +178,8 @@ func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEnt
 		if !ok {
 			continue
 		}
-		px, py := vmath.CenteredFromGrid(pos.X, pos.Y)
-		distSq := vmath.MagnitudeSq(px-fromX, py-fromY)
+		px, py := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
 		singles = append(singles, TargetAssignment{Target: e, Hit: e, DistSq: distSq})
 	}
 
@@ -204,8 +204,8 @@ func FindNearestTargets(w *engine.World, fromX, fromY int64, count int, ownerEnt
 		if !ok {
 			continue
 		}
-		px, py := vmath.CenteredFromGrid(pos.X, pos.Y)
-		distSq := vmath.MagnitudeSq(px-fromX, py-fromY)
+		px, py := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
 
 		if existing, exists := composites[headerEntity]; exists {
 			if distSq < existing.DistSq {
@@ -279,15 +279,15 @@ func isOwnedBy(w *engine.World, entity, ownerEntity core.Entity) bool {
 }
 
 // ResolveClosestMember finds the nearest living member of a composite header
-func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, fromY int64) (core.Entity, int64, int64, bool) {
+func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, fromY float64) (core.Entity, float64, float64, bool) {
 	headerComp, ok := w.Components.Header.GetComponent(headerEntity)
 	if !ok {
 		return 0, 0, 0, false
 	}
 
 	var best core.Entity
-	var bestX, bestY int64
-	var bestDistSq int64 = -1
+	var bestX, bestY float64
+	bestDistSq := -1.0
 
 	for _, member := range headerComp.MemberEntries {
 		if member.Entity == 0 {
@@ -297,8 +297,8 @@ func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, from
 		if !ok {
 			continue
 		}
-		mx, my := vmath.CenteredFromGrid(pos.X, pos.Y)
-		d := vmath.MagnitudeSq(mx-fromX, my-fromY)
+		mx, my := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+		d := vmath.MagnitudeSqF(mx-fromX, my-fromY)
 		if bestDistSq < 0 || d < bestDistSq {
 			bestDistSq = d
 			best = member.Entity
@@ -360,41 +360,41 @@ func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid boo
 
 // ResolveMovementTarget computes the effective homing target for a kinetic entity
 // Encapsulates the target resolution + navigation routing pattern shared by all species
-// Returns (targetX, targetY int64, usingDirectPath bool)
-func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *component.KineticComponent) (int64, int64, bool) {
+// Returns (targetX, targetY in cells, usingDirectPath bool)
+func ResolveMovementTarget(w *engine.World, entity core.Entity, kineticComp *component.KineticComponent) (float64, float64, bool) {
 	baseX, baseY, ok := resolveBaseTarget(w, entity)
 	if !ok {
 		return kineticComp.PreciseX, kineticComp.PreciseY, true
 	}
 
-	baseXFixed, baseYFixed := vmath.CenteredFromGrid(baseX, baseY)
+	baseCenterX, baseCenterY := vmath.Point{X: baseX, Y: baseY}.CenterF()
 
 	navComp, hasNav := w.Components.Navigation.GetComponent(entity)
 	if !hasNav {
-		return baseXFixed, baseYFixed, true
+		return baseCenterX, baseCenterY, true
 	}
 
 	if navComp.HasDirectPath {
-		return baseXFixed, baseYFixed, true
+		return baseCenterX, baseCenterY, true
 	}
 
 	if navComp.FlowX != 0 || navComp.FlowY != 0 {
-		tx := kineticComp.PreciseX + vmath.Mul(navComp.FlowX, navComp.FlowLookahead)
-		ty := kineticComp.PreciseY + vmath.Mul(navComp.FlowY, navComp.FlowLookahead)
+		tx := kineticComp.PreciseX + navComp.FlowX*navComp.FlowLookahead
+		ty := kineticComp.PreciseY + navComp.FlowY*navComp.FlowLookahead
 		return tx, ty, false
 	}
 
-	return baseXFixed, baseYFixed, true
+	return baseCenterX, baseCenterY, true
 }
 
-// ResolveBaseTargetFixed returns centered Q32.32 target coordinates for an entity
+// ResolveBaseTargetPrecise returns centered sub-cell target coordinates for an entity
 // For use when species systems need the raw target position without navigation routing
 // (e.g. swarm lock phase, quasar zap range check, homing settled snap)
-func ResolveBaseTargetFixed(w *engine.World, entity core.Entity) (int64, int64, bool) {
+func ResolveBaseTargetPrecise(w *engine.World, entity core.Entity) (float64, float64, bool) {
 	x, y, ok := resolveBaseTarget(w, entity)
 	if !ok {
 		return 0, 0, false
 	}
-	fx, fy := vmath.CenteredFromGrid(x, y)
-	return fx, fy, true
+	px, py := vmath.Point{X: x, Y: y}.CenterF()
+	return px, py, true
 }

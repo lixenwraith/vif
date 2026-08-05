@@ -9,17 +9,17 @@ type NavigationComponent struct {
 	// True when straight-line path to target is walkable
 	HasDirectPath bool
 
-	// Flow direction (Q32.32 normalized), valid when HasDirectPath is false
-	FlowX int64
-	FlowY int64
+	// Flow direction, valid when HasDirectPath is false
+	FlowX float64
+	FlowY float64
 
 	// Entity dimensions for area-based LOS (set at spawn)
 	Width  int
 	Height int
 
 	// FlowLookahead: aspect-weighted distance threshold below which flow routing yields to direct homing
-	// Entity converges via optimal flow within this distance of target (Q32.32)
-	FlowLookahead int64
+	// Entity converges via optimal flow within this distance of target
+	FlowLookahead float64
 
 	// UseRouteGraph enables per-route flow field navigation instead of shared optimal field
 	// Default false: entity uses shared group flow field (backward compatible)
@@ -42,9 +42,9 @@ type SpeciesDimensions struct {
 var SpeciesDimensionsLUT = [SpeciesCount]SpeciesDimensions{
 	{1, 1}, // 0: SpeciesNone (unused)
 	{1, 1}, // 1: SpeciesDrain
-	{parameter.SwarmWidth, parameter.SwarmHeight},                                            // 2: SpeciesSwarm
-	{parameter.QuasarWidth, parameter.QuasarHeight},                                          // 3: SpeciesQuasar
-	{int(parameter.StormCircleRadiusXFloat * 2), int(parameter.StormCircleRadiusYFloat * 2)}, // 4: SpeciesStorm
+	{parameter.SwarmWidth, parameter.SwarmHeight},                                  // 2: SpeciesSwarm
+	{parameter.QuasarWidth, parameter.QuasarHeight},                                // 3: SpeciesQuasar
+	{int(parameter.StormCircleRadiusX * 2), int(parameter.StormCircleRadiusY * 2)}, // 4: SpeciesStorm
 	{1, 1}, // 5: SpeciesPylon
 	{parameter.SnakeHeadWidth, parameter.SnakeHeadHeight}, // 6: SpeciesSnake
 	{parameter.EyeWidth, parameter.EyeHeight},             // 7: SpeciesEye

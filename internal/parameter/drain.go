@@ -2,8 +2,6 @@ package parameter
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Drain System
@@ -32,34 +30,20 @@ const (
 
 	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
 	// Equivalent to previous 1 cell per DrainMoveInterval
-	DrainBaseSpeedFloat = 2.0
+	DrainBaseSpeed = 2.0
 
 	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
 	// Higher values = snappier homing, lower = more floaty
-	DrainHomingAccelFloat = 3.0
+	DrainHomingAccel = 3.0
 
 	// DrainDrag is deceleration rate when speed exceeds DrainBaseSpeed (1/sec)
 	// Applied proportionally to excess speed for smooth convergence
-	DrainDragFloat = 2.0
+	DrainDrag = 2.0
 
 	// DrainDeflectAngleVar is half-angle of random deflection cone (radians)
 	// ±0.35 rad ≈ ±20° spread for visual variety
-	DrainDeflectAngleVarFloat = 0.35
+	DrainDeflectAngleVar = 0.35
 
 	// DrainEnrageThreshold is HP below which drain becomes enraged
 	DrainEnrageThreshold = 5
-)
-
-// Drain physics
-var (
-	// Drain physics
-	DrainBaseSpeed       = vmath.FromFloat(DrainBaseSpeedFloat)
-	DrainHomingAccel     = vmath.FromFloat(DrainHomingAccelFloat)
-	DrainDrag            = vmath.FromFloat(DrainDragFloat)
-	DrainDeflectAngleVar = vmath.FromFloat(DrainDeflectAngleVarFloat)
-)
-
-// Entity collision radii (ellipse semi-axes for overlap detection)
-var (
-	DrainCollisionRadius = vmath.FromFloat(DrainCollisionRadiusFloat)
 )

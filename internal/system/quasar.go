@@ -11,8 +11,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // QuasarSystem manages quasar boss entity lifecycle
@@ -120,7 +120,7 @@ func (s *QuasarSystem) Update() {
 	// Zap range calculations, dynamic resize based on map
 	width := s.world.Resources.Config.MapWidth
 	height := s.world.Resources.Config.MapHeight
-	currentRadius := vmath.FromInt(max(width/2, height))
+	currentRadius := float64(max(width/2, height))
 
 	dt := s.world.Resources.Time.DeltaTime
 
@@ -333,7 +333,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 
 	// Set quasar components
 	s.world.Components.Quasar.SetComponent(headerEntity, component.QuasarComponent{
-		SpeedMultiplier: vmath.Scale,
+		SpeedMultiplier: 1.0,
 	})
 
 	// Add ShieldComponent (inactive by default), uses pre-calculated config
@@ -355,7 +355,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	})
 
 	// Set kinetic component with centered position
-	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
+	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.CenterF()
 	kinetic := physics.Kinetic{
 		PreciseX: preciseX,
 		PreciseY: preciseY,
@@ -450,20 +450,15 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta to prevent tunneling
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	// Periodic speed scaling with cap (game logic, not physics)
 	speedIncreaseInterval := time.Duration(parameter.QuasarSpeedIncreaseTicks) * parameter.GameUpdateInterval
 	if now.Sub(quasarComp.LastSpeedIncreaseAt) >= speedIncreaseInterval {
-		newMultiplier := vmath.Mul(quasarComp.SpeedMultiplier, parameter.QuasarSpeedIncreasePercent)
-		if newMultiplier > parameter.QuasarSpeedMultiplierMaxFixed {
-			newMultiplier = parameter.QuasarSpeedMultiplierMaxFixed
-		}
-		quasarComp.SpeedMultiplier = newMultiplier
+		quasarComp.SpeedMultiplier = min(
+			quasarComp.SpeedMultiplier*(1.0+parameter.QuasarSpeedIncreasePercent),
+			parameter.QuasarSpeedMultiplierMax)
 		quasarComp.LastSpeedIncreaseAt = now
 	}
 
@@ -472,23 +467,8 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	targetX, targetY, usingDirectPath := ResolveMovementTarget(s.world, headerEntity, kineticComp)
 
 	// Cornering drag
-	var extraDrag int64
-	currentSpeed := vmath.Magnitude(kineticComp.VelX, kineticComp.VelY)
-	if currentSpeed > vmath.Scale {
-		nx := vmath.Div(kineticComp.VelX, currentSpeed)
-		ny := vmath.Div(kineticComp.VelY, currentSpeed)
-
-		dx := targetX - kineticComp.PreciseX
-		dy := targetY - kineticComp.PreciseY
-		dnx, dny := vmath.Normalize2D(dx, dy)
-
-		alignment := vmath.DotProduct(nx, ny, dnx, dny)
-
-		if alignment < parameter.NavCorneringThreshold {
-			turnSeverity := parameter.NavCorneringThreshold - alignment
-			extraDrag = vmath.Mul(turnSeverity, parameter.NavCorneringBrake)
-		}
-	}
+	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+		+parameter.NavCorneringThreshold, 1.0)
 
 	// Homing with arrival steering
 	// Disable homing drag when navigating via flow field - cornering drag handles turns
@@ -497,27 +477,21 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		targetX, targetY,
 		&profile.QuasarHoming,
 		quasarComp.SpeedMultiplier,
-		dtFixed,
+		dtSec,
 		usingDirectPath, // Only apply homing drag on direct path
 	)
 
 	// Apply cornering drag
-	if extraDrag > 0 {
-		dragFactor := vmath.Scale - vmath.Mul(extraDrag, dtFixed)
-		if dragFactor < 0 {
-			dragFactor = 0
-		}
-		kineticComp.VelX = vmath.Mul(kineticComp.VelX, dragFactor)
-		kineticComp.VelY = vmath.Mul(kineticComp.VelY, dragFactor)
+	if turnSeverity > 0 {
+		physics.ApplyLinearDrag(&kineticComp.Kinetic,
+			turnSeverity*parameter.NavCorneringBrake, dtSec)
 	}
 
 	if settled {
 		// Snap to exact target center
 		baseX, baseY, baseOK := resolveBaseTarget(s.world, headerEntity)
 		if baseOK {
-			baseXFixed, baseYFixed := vmath.CenteredFromGrid(baseX, baseY)
-			kineticComp.PreciseX = baseXFixed
-			kineticComp.PreciseY = baseYFixed
+			kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: baseX, Y: baseY}.CenterF()
 			kineticComp.VelX = 0
 			kineticComp.VelY = 0
 			// Sync grid position if snap crossed cell boundary
@@ -552,7 +526,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	// Integrate with Bounce
 	newX, newY, _ := physics.IntegrateWithBounce(
 		&kineticComp.Kinetic,
-		dtFixed,
+		dtSec,
 		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
 		minHeaderX, maxHeaderX,
 		minHeaderY, maxHeaderY,
@@ -582,12 +556,10 @@ func (s *QuasarSystem) isCursorInZapRange(headerEntity core.Entity, quasarComp *
 		return true
 	}
 
-	dx := vmath.FromInt(cursorPos.X - headerPos.X)
-	dy := vmath.FromInt(cursorPos.Y - headerPos.Y)
-
 	// Inside visual circle = in range (no zap)
-	dyCirc := vmath.ScaleToCircular(dy) // Aspect correction: dy * 2
-	dist := vmath.Magnitude(dx, dyCirc)
+	dx := float64(cursorPos.X - headerPos.X)
+	dyCirc := vmath.ScaleToCircularF(float64(cursorPos.Y - headerPos.Y)) // Aspect correction
+	dist := vmath.MagnitudeF(dx, dyCirc)
 	return dist <= quasarComp.ZapRadius
 }
 

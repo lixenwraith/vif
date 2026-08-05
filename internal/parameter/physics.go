@@ -2,90 +2,38 @@ package parameter
 
 import "github.com/lixenwraith/vi-fighter/pkg/vmath"
 
-// Collision kinetic impulse
-var (
-	CollisionKineticImpulseMin = vmath.FromFloat(CollisionKineticImpulseMinFloat)
-	CollisionKineticImpulseMax = vmath.FromFloat(CollisionKineticImpulseMaxFloat)
-)
-
-// Soft collision impulse (inter-enemy repulsion)
-var (
-	SoftCollisionImpulseMin = vmath.FromFloat(SoftCollisionImpulseMinFloat)
-	SoftCollisionImpulseMax = vmath.FromFloat(SoftCollisionImpulseMaxFloat)
-	SoftCollisionAngleVar   = vmath.FromFloat(SoftCollisionAngleVarFloat)
-)
-
 // Flocking separation
 var (
-	FlockingSeparationRadiusX = vmath.FromFloat(SwarmSeparationRadiusXFloat)
-	FlockingSeparationRadiusY = vmath.FromFloat(SwarmSeparationRadiusYFloat)
-	SwarmSeparationStrength   = vmath.FromFloat(SwarmSeparationStrengthFloat)
-	// Pre-computed inverse squared radii for ellipse overlap checks
-	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSq(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
-)
+	// FlockingSeparationRadiusX is horizontal separation zone (cells)
+	FlockingSeparationRadiusX = 8.0
 
-// Dust physics
-var (
-	DustAttractionBase  = vmath.FromFloat(DustAttractionBaseFloat)
-	DustOrbitRadiusMin  = vmath.FromFloat(DustOrbitRadiusMinFloat)
-	DustOrbitRadiusMax  = vmath.FromFloat(DustOrbitRadiusMaxFloat)
-	DustDamping         = vmath.FromFloat(DustDampingFloat)
-	DustChaseBoost      = vmath.FromFloat(DustChaseBoostFloat)
-	DustChaseDecay      = vmath.FromFloat(DustChaseDecayFloat)
-	DustInitialSpeed    = vmath.FromFloat(DustInitialSpeedFloat)
-	DustGlobalDrag      = vmath.FromFloat(DustGlobalDragFloat)
-	DustJitter          = vmath.FromFloat(DustJitterFloat)
-	DustWallRestitution = vmath.FromFloat(DustWallRestitutionFloat)
+	// FlockingSeparationRadiusY is vertical separation zone (cells, aspect-corrected)
+	FlockingSeparationRadiusY = 4.0
+
+	// Pre-computed inverse squared radii for ellipse overlap checks
+	FlockingSeparationInvRxSq, FlockingSeparationInvRySq = vmath.EllipseInvRadiiSqF(FlockingSeparationRadiusX, FlockingSeparationRadiusY)
 )
 
 // Explosion field VFX
 var (
-	ExplosionFieldRadius      = vmath.FromFloat(ExplosionFieldRadiusFloat)
-	ExplosionMergeThreshold   = vmath.FromFloat(ExplosionMergeThresholdFloat)
-	ExplosionMergeThresholdSq = vmath.Mul(ExplosionMergeThreshold, ExplosionMergeThreshold)
-	ExplosionIntensityBoost   = vmath.FromFloat(ExplosionIntensityBoostFloat)
-	ExplosionRadiusBoost      = vmath.FromFloat(ExplosionRadiusBoostFloat)
-	ExplosionIntensityCap     = vmath.FromFloat(ExplosionIntensityCapFloat)
-	ExplosionRadiusCapFixed   = vmath.Mul(ExplosionFieldRadius, vmath.FromFloat(ExplosionRadiusCapMultiplier))
-	ExplosionEdgeThreshold    = vmath.FromFloat(ExplosionEdgeThresholdFloat)
+	ExplosionMergeThresholdSq = ExplosionMergeThreshold * ExplosionMergeThreshold
+	ExplosionRadiusCapFixed   = ExplosionFieldRadius * ExplosionRadiusCapMultiplier
 
-	// Visual fixed-point constants
-	ExplosionAlphaMax         = vmath.FromFloat(ExplosionAlphaMaxFloat)
-	ExplosionAlphaMin         = vmath.FromFloat(ExplosionAlphaMinFloat)
-	ExplosionGradientMidpoint = vmath.FromFloat(ExplosionGradientMidpointFloat)
 	// Factor = 1.0 / Midpoint (2.0 for 0.5)
-	ExplosionGradientFactor = vmath.FromFloat(1.0 / ExplosionGradientMidpointFloat)
-)
-
-// Orb physics
-var (
-	OrbOrbitRadiusX = vmath.FromFloat(OrbOrbitRadiusXFloat)
-	OrbOrbitRadiusY = vmath.FromFloat(OrbOrbitRadiusYFloat)
-	OrbOrbitSpeed   = vmath.FromFloat(OrbOrbitSpeedFloat)
+	ExplosionGradientFactor = 1.0 / ExplosionGradientMidpoint
 )
 
 // Missile physics
 var (
-	MissileMaxSpeed        = vmath.FromFloat(MissileMaxSpeedFloat)
-	MissileHomingAccel     = vmath.FromFloat(MissileHomingAccelFloat)
-	MissileDrag            = vmath.FromFloat(MissileDragFloat)
-	MissileSpreadAngle     = vmath.FromFloat(MissileSpreadAngleFloat)
-	MissileArrivalRadius   = vmath.FromFloat(MissileArrivalRadiusFloat)
-	MissileImpactRadius    = vmath.FromFloat(MissileImpactRadiusFloat)
-	MissileImpactRadiusSq  = vmath.Mul(MissileImpactRadius, MissileImpactRadius)
-	MissileExplosionRadius = vmath.FromFloat(MissileExplosionRadiusFloat)
+	MissileImpactRadiusSq = MissileImpactRadius * MissileImpactRadius
 )
 
 // Pulse physics
 var (
-	PulseRadiusX                           = vmath.FromFloat(PulseRadiusXFloat)
-	PulseRadiusY                           = vmath.FromFloat(PulseRadiusYFloat)
-	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSq(PulseRadiusX, PulseRadiusY)
+	PulseRadiusInvRxSq, PulseRadiusInvRySq = vmath.EllipseInvRadiiSqF(PulseRadiusX, PulseRadiusY)
 )
 
 // Pylon collision
 var (
-	PylonCollisionRadiusX                        = vmath.FromFloat(PylonCollisionRadiusXFloat)
-	PylonCollisionRadiusY                        = vmath.FromFloat(PylonCollisionRadiusYFloat)
-	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSq(PylonCollisionRadiusX, PylonCollisionRadiusY)
+	PylonCollisionInvRxSq, PylonCollisionInvRySq = vmath.EllipseInvRadiiSqF(PylonCollisionRadiusX, PylonCollisionRadiusY)
 )

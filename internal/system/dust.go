@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math"
 	"sync/atomic"
 	"time"
 
@@ -35,7 +36,7 @@ type collisionContext struct {
 }
 
 type impulseAcc struct {
-	vx, vy int64
+	vx, vy float64
 	hits   int
 }
 
@@ -227,7 +228,7 @@ func (s *DustSystem) Update() {
 	s.lastCursorY = cursorPos.Y
 
 	cursorDisplacement := vmath.MagnitudeF(float64(cursorDeltaX), float64(cursorDeltaY))
-	applyChaseBoost := cursorDisplacement > float64(parameter.DustChaseThreshold)
+	applyChaseBoost := cursorDisplacement > parameter.DustChaseThreshold
 
 	// Stagger tick advancement on cursor jump
 	if applyChaseBoost {
@@ -235,20 +236,15 @@ func (s *DustSystem) Update() {
 	}
 
 	// 2. Setup Physics Constants
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
-	// Pre-computed invariants for hot loop
-	var (
+	const (
 		baseStiffness    = parameter.DustAttractionBase
-		boostedStiffness = vmath.Mul(baseStiffness, parameter.DustChaseBoost)
-		// dragDtBase       = vmath.Mul(parameter.DustGlobalDrag, dtFixed)
+		boostedStiffness = parameter.DustAttractionBase * parameter.DustChaseBoost
 	)
 
 	// Cursor position precise adjustment at the center of the cell to avoid skewed render
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+	cursorCenterX, cursorCenterY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 
 	// 3. LOCK Spatial Grid (Optimization: Global Batch Lock)
 	s.world.Positions.Lock()
@@ -272,68 +268,64 @@ func (s *DustSystem) Update() {
 		}
 
 		// --- Positions relative to cursor (orbital physics input) ---
-		dx := kineticComp.PreciseX - cursorXFixed
-		dy := kineticComp.PreciseY - cursorYFixed
+		dx := kineticComp.PreciseX - cursorCenterX
+		dy := kineticComp.PreciseY - cursorCenterY
 
 		// --- Per-Particle Jitter (always active) ---
-		jitterAngle := int64(s.rng.Intn(vmath.LUTSize)) << (vmath.Shift - 10)
-		kineticComp.VelX += vmath.Mul(vmath.Cos(jitterAngle), parameter.DustJitter)
-		kineticComp.VelY += vmath.Mul(vmath.Sin(jitterAngle), parameter.DustJitter)
+		jitterAngle := s.rng.Float64() * vmath.TwoPi
+		kineticComp.VelX += vmath.CosF(jitterAngle) * parameter.DustJitter
+		kineticComp.VelY += vmath.SinF(jitterAngle) * parameter.DustJitter
 
 		// --- Orbital Physics (only when energy != 0 / shield active) ---
 		if hasAttraction {
 			// Staggered chase boost: only activate for matching group
 			if applyChaseBoost && dustComp.ResponseGroup == s.staggerTick {
 				dustComp.ChaseBoost = parameter.DustChaseBoost
-			} else if dustComp.ChaseBoost > vmath.Scale {
-				dustComp.ChaseBoost -= vmath.Mul(parameter.DustChaseDecay, dtFixed)
-				if dustComp.ChaseBoost < vmath.Scale {
-					dustComp.ChaseBoost = vmath.Scale
-				}
+			} else if dustComp.ChaseBoost > 1.0 {
+				dustComp.ChaseBoost = max(dustComp.ChaseBoost-parameter.DustChaseDecay*dtSec, 1.0)
 			}
 
 			// Equilibrium-seeking force toward target orbit radius
 			// Scale Y to circular space for visually circular orbit
 			stiffness := baseStiffness
-			if dustComp.ChaseBoost > vmath.Scale {
+			if dustComp.ChaseBoost > 1.0 {
 				// Interpolate: base + (boosted - base) * (boost - 1) / (maxBoost - 1)
-				boostFactor := dustComp.ChaseBoost - vmath.Scale
-				stiffness = baseStiffness + vmath.Mul(boostedStiffness-baseStiffness,
-					vmath.Div(boostFactor, parameter.DustChaseBoost-vmath.Scale))
+				boostFactor := dustComp.ChaseBoost - 1.0
+				stiffness = baseStiffness + (boostedStiffness-baseStiffness)*
+					(boostFactor/(parameter.DustChaseBoost-1.0))
 			}
 
-			dyCirc := vmath.ScaleToCircular(dy)
+			dyCirc := vmath.ScaleToCircularF(dy)
 			ax, ayCirc := physics.OrbitalEquilibrium(dx, dyCirc, dustComp.OrbitRadius, stiffness)
 
-			kineticComp.VelX += vmath.Mul(ax, dtFixed)
-			kineticComp.VelY += vmath.Mul(vmath.ScaleFromCircular(ayCirc), dtFixed)
+			kineticComp.VelX += ax * dtSec
+			kineticComp.VelY += vmath.ScaleFromCircularF(ayCirc) * dtSec
 
 			// Orbital damping (converts radial velocity to tangential)
-			velYCirc := vmath.ScaleToCircular(kineticComp.VelY)
+			velYCirc := vmath.ScaleToCircularF(kineticComp.VelY)
 			kineticComp.VelX, velYCirc = physics.OrbitalDamp(
 				kineticComp.VelX, velYCirc,
 				dx, dyCirc,
-				parameter.DustDamping, dtFixed,
+				parameter.DustDamping, dtSec,
 			)
-			kineticComp.VelY = vmath.ScaleFromCircular(velYCirc)
+			kineticComp.VelY = vmath.ScaleFromCircularF(velYCirc)
 		}
 
 		// --- Global Drag (v² model) ---
-		physics.ApplyQuadraticDrag(&kineticComp.Kinetic, parameter.DustGlobalDrag, dtFixed)
+		physics.ApplyQuadraticDrag(&kineticComp.Kinetic, parameter.DustGlobalDrag, dtSec)
 
 		// --- Positions Integration ---
 		prevX, prevY := kineticComp.PreciseX, kineticComp.PreciseY
-		newX, newY := physics.IntegratePosition(&kineticComp.Kinetic, dtFixed)
+		newX, newY := physics.IntegratePosition(&kineticComp.Kinetic, dtSec)
 
 		gameWidth := s.world.Resources.Config.MapWidth
 		gameHeight := s.world.Resources.Config.MapHeight
 
 		// Boundary reflection
-		if physics.ReflectBoundsDampedX(&kineticComp.Kinetic, 0, gameWidth, parameter.DustWallRestitution) {
-			newX = vmath.ToInt(kineticComp.PreciseX)
-		}
-		if physics.ReflectBoundsDampedY(&kineticComp.Kinetic, 0, gameHeight, parameter.DustWallRestitution) {
-			newY = vmath.ToInt(kineticComp.PreciseY)
+		rx := physics.ReflectBoundsDampedX(&kineticComp.Kinetic, 0, gameWidth, parameter.DustWallRestitution)
+		ry := physics.ReflectBoundsDampedY(&kineticComp.Kinetic, 0, gameHeight, parameter.DustWallRestitution)
+		if rx || ry {
+			newX, newY = physics.GridPos(&kineticComp.Kinetic)
 		}
 
 		// --- Collision Traversal with Wall Check ---
@@ -341,7 +333,7 @@ func (s *DustSystem) Update() {
 		hitWall := false
 
 		if newX != dustComp.LastIntX || newY != dustComp.LastIntY {
-			traverser := vmath.NewGridTraverser(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
+			traverser := vmath.NewGridTraverserF(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
 
 			for traverser.Next() {
 				currX, currY := traverser.Pos()
@@ -364,7 +356,7 @@ func (s *DustSystem) Update() {
 					if currY != lastSafeY {
 						physics.ReflectVelocityY(&kineticComp.Kinetic, parameter.DustWallRestitution)
 					}
-					kineticComp.PreciseX, kineticComp.PreciseY = vmath.CenteredFromGrid(lastSafeX, lastSafeY)
+					kineticComp.PreciseX, kineticComp.PreciseY = vmath.Point{X: lastSafeX, Y: lastSafeY}.CenterF()
 					hitWall = true
 					break
 				}
@@ -507,7 +499,7 @@ func (s *DustSystem) buildCollisionContext() *collisionContext {
 }
 
 // accumulateImpulse adds velocity delta to target's accumulator
-func (ctx *collisionContext) accumulateImpulse(target core.Entity, vx, vy int64) {
+func (ctx *collisionContext) accumulateImpulse(target core.Entity, vx, vy float64) {
 	if acc, exists := ctx.impulses[target]; exists {
 		acc.vx += vx
 		acc.vy += vy
@@ -530,10 +522,9 @@ func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
 
 		// Scale impulse by hit count with diminishing returns: sqrt(hits)
 		// Prevents excessive knockback from dust swarm while preserving impact
-		scaleFactor := vmath.Sqrt(vmath.FromInt(acc.hits))
-		kc.VelX += vmath.Div(acc.vx, scaleFactor)
-		kc.VelY += vmath.Div(acc.vy, scaleFactor)
-
+		scaleFactor := math.Sqrt(float64(acc.hits))
+		kc.VelX += acc.vx / scaleFactor
+		kc.VelY += acc.vy / scaleFactor
 	}
 }
 
@@ -619,33 +610,29 @@ func (s *DustSystem) transformGlyphsToDust() {
 // setDustComponents calculates physics and component state for a new dust particle
 func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
 	// Random orbit radius in [min, max]
-	radiusRange := int(parameter.DustOrbitRadiusMax - parameter.DustOrbitRadiusMin)
-	orbitRadius := parameter.DustOrbitRadiusMin
-	if radiusRange > 0 {
-		orbitRadius += int64(s.rng.Intn(radiusRange))
-	}
+	orbitRadius := parameter.DustOrbitRadiusMin +
+		s.rng.Float64()*(parameter.DustOrbitRadiusMax-parameter.DustOrbitRadiusMin)
 
 	// Position relative to cursor center for orbital calculation
-	cursorXFixed, cursorYFixed := vmath.CenteredFromGrid(cursorX, cursorY)
-	spawnXFixed, spawnYFixed := vmath.CenteredFromGrid(x, y)
-	dx := spawnXFixed - cursorXFixed
-	dy := spawnYFixed - cursorYFixed
+	cursorCenterX, cursorCenterY := vmath.Point{X: cursorX, Y: cursorY}.CenterF()
+	spawnX, spawnY := vmath.Point{X: x, Y: y}.CenterF()
+	dx := spawnX - cursorCenterX
+	dy := spawnY - cursorCenterY
 
 	// Initial tangential velocity for orbit, random direction
 	clockwise := s.rng.Intn(2) == 0
 	vx, vy := physics.OrbitalInsert(dx, dy, parameter.DustAttractionBase, clockwise)
 
 	// Scale to initial speed
-	mag := vmath.Magnitude(vx, vy)
-	if mag > 0 {
-		vx = vmath.Mul(vmath.Div(vx, mag), parameter.DustInitialSpeed)
-		vy = vmath.Mul(vmath.Div(vy, mag), parameter.DustInitialSpeed)
+	if dirX, dirY := vmath.Normalize2DF(vx, vy); dirX != 0 || dirY != 0 {
+		vx = dirX * parameter.DustInitialSpeed
+		vy = dirY * parameter.DustInitialSpeed
 	}
 
 	// Dust component
 	dustComp := component.DustComponent{
 		OrbitRadius:   orbitRadius,
-		ChaseBoost:    vmath.Scale,
+		ChaseBoost:    1.0,
 		LastIntX:      x,
 		LastIntY:      y,
 		ResponseGroup: uint8(s.rng.Intn(3)),
@@ -653,8 +640,8 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 	// Kinetic component
 	kinetic := physics.Kinetic{
-		PreciseX: vmath.FromInt(x),
-		PreciseY: vmath.FromInt(y),
+		PreciseX: spawnX,
+		PreciseY: spawnY,
 		VelX:     vx,
 		VelY:     vy,
 	}

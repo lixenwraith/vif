@@ -71,7 +71,7 @@ func (s *MissileSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtSec := dt.Seconds()
 
 	missiles := s.world.Components.Missile
 	if missiles.CountEntities() == 0 {
@@ -94,10 +94,11 @@ func (s *MissileSystem) Update() {
 
 		missileComp.Lifetime += dt
 
-		if s.updateMissile(missileComp, kineticComp, dtFixed) {
+		if s.updateMissile(missileComp, kineticComp, dtSec) {
+			x, y := physics.GridPos(&kineticComp.Kinetic)
 			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
-				X:      vmath.ToInt(kineticComp.PreciseX),
-				Y:      vmath.ToInt(kineticComp.PreciseY),
+				X:      x,
+				Y:      y,
 				Radius: parameter.MissileExplosionRadius,
 				Type:   event.ExplosionTypeMissile,
 			})
@@ -105,8 +106,7 @@ func (s *MissileSystem) Update() {
 			continue
 		}
 
-		gridX := vmath.ToInt(kineticComp.PreciseX)
-		gridY := vmath.ToInt(kineticComp.PreciseY)
+		gridX, gridY := physics.GridPos(&kineticComp.Kinetic)
 
 		// OOB check only (wall collision handled in traversal)
 		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
@@ -130,7 +130,7 @@ func (s *MissileSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt int64) (impacted bool) {
+func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *component.KineticComponent, dt float64) (impacted bool) {
 	// Lifetime timeout for orphaned missiles
 	if m.Lifetime > parameter.MissileMaxLifetime {
 		return true
@@ -148,7 +148,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		// Impact check before homing (specific target proximity)
 		dx := targetX - k.PreciseX
 		dy := targetY - k.PreciseY
-		if vmath.MagnitudeSq(dx, dy) < parameter.MissileImpactRadiusSq {
+		if vmath.MagnitudeSqF(dx, dy) < parameter.MissileImpactRadiusSq {
 			k.PreciseX = targetX
 			k.PreciseY = targetY
 			return true
@@ -165,7 +165,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 	// General Enemy Collision: missile detonates on any combatant contact
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY)
 	if hitType != impactNone {
-		k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(impactX, impactY)
+		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.CenterF()
 		return true
 	}
 
@@ -181,24 +181,24 @@ const (
 )
 
 // traverseForImpact walks path checking for wall/enemy collisions
-func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY int64) (x, y int, hit impactType) {
-	fromGridX, fromGridY := vmath.ToInt(fromX), vmath.ToInt(fromY)
-	toGridX, toGridY := vmath.ToInt(toX), vmath.ToInt(toY)
+func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64) (x, y int, hit impactType) {
+	from := vmath.PointAtF(fromX, fromY)
+	to := vmath.PointAtF(toX, toY)
 
 	// No movement or same cell
-	if fromGridX == toGridX && fromGridY == toGridY {
+	if from == to {
 		return 0, 0, impactNone
 	}
 
 	cursorEntity := s.world.Resources.Player.Entity
-	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
-	lastSafeX, lastSafeY := fromGridX, fromGridY
+	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
+	lastSafeX, lastSafeY := from.X, from.Y
 
 	for traverser.Next() {
 		currX, currY := traverser.Pos()
 
 		// Skip starting cell
-		if currX == fromGridX && currY == fromGridY {
+		if currX == from.X && currY == from.Y {
 			continue
 		}
 
@@ -219,11 +219,11 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY int64) (x, y in
 }
 
 // resolveTarget updates target/hit entity state and returns homing coordinates
-func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, missileY int64) (int64, int64, bool) {
+func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, missileY float64) (float64, float64, bool) {
 	// 1. Sticky hit entity
 	if m.HitEntity != 0 {
 		if pos, ok := s.world.Positions.GetPosition(m.HitEntity); ok {
-			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+			x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
 			return x, y, true
 		}
 		m.HitEntity = 0
@@ -239,7 +239,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 			}
 			m.TargetEntity = 0
 		} else if pos, ok := s.world.Positions.GetPosition(m.TargetEntity); ok {
-			x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+			x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
 			m.HitEntity = m.TargetEntity
 			return x, y, true
 		} else {
@@ -259,7 +259,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 	m.HitEntity = nearest.Hit
 
 	if pos, ok := s.world.Positions.GetPosition(nearest.Hit); ok {
-		x, y := vmath.CenteredFromGrid(pos.X, pos.Y)
+		x, y := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
 		return x, y, true
 	}
 
@@ -274,46 +274,46 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 	}
 
 	// Calculate centroid of targets to aim the center of the spread arc
-	sumX, sumY, validCount := int64(0), int64(0), 0
+	sumX, sumY, validCount := 0.0, 0.0, 0
 	for _, t := range p.Targets {
 		if pos, ok := s.world.Positions.GetPosition(t); ok {
-			sumX += vmath.FromInt(pos.X) + vmath.CellCenter
-			sumY += vmath.FromInt(pos.Y) + vmath.CellCenter
+			cx, cy := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
+			sumX += cx
+			sumY += cy
 			validCount++
 		}
 	}
 
-	originX := vmath.FromInt(p.OriginX) + vmath.CellCenter
-	originY := vmath.FromInt(p.OriginY) + vmath.CellCenter
+	originX, originY := vmath.Point{X: p.OriginX, Y: p.OriginY}.CenterF()
 
-	baseDirX, baseDirY := int64(0), -vmath.Scale // Default UP
+	baseDirX, baseDirY := 0.0, -1.0 // Default UP
 	if validCount > 0 {
-		centroidX := sumX / int64(validCount)
-		centroidY := sumY / int64(validCount)
-		dirX, dirY := vmath.Normalize2D(centroidX-originX, centroidY-originY)
+		centroidX := sumX / float64(validCount)
+		centroidY := sumY / float64(validCount)
+		dirX, dirY := vmath.Normalize2DF(centroidX-originX, centroidY-originY)
 		if dirX != 0 || dirY != 0 {
 			baseDirX, baseDirY = dirX, dirY
 		}
 	}
 
-	// Calculate spread arc
+	// Spread arc; angles are in rotation units (1.0 = full turn)
 	spread := parameter.MissileSpreadAngle
-	step := int64(0)
+	step := 0.0
 	if p.Count > 1 {
-		step = spread / int64(p.Count-1)
+		step = spread / float64(p.Count-1)
 	}
 	startAngle := -spread / 2
 
 	for i := range p.Count {
-		angle := startAngle + step*int64(i)
-		dirX, dirY := vmath.RotateVector(baseDirX, baseDirY, angle)
+		angle := startAngle + step*float64(i)
+		dirX, dirY := vmath.RotateVectorF(baseDirX, baseDirY, angle*vmath.TwoPi)
 
 		// Stagger initial speed slightly for visual spread
-		speedFactor := vmath.Scale - vmath.FromFloat(parameter.MissileStaggerFactor*float64(i))
-		speed := vmath.Mul(parameter.MissileMaxSpeed, speedFactor)
+		speedFactor := 1.0 - parameter.MissileStaggerFactor*float64(i)
+		speed := parameter.MissileMaxSpeed * speedFactor
 
-		vx := vmath.Mul(dirX, speed)
-		vy := vmath.Mul(dirY, speed)
+		vx := dirX * speed
+		vy := dirY * speed
 
 		var target, hit core.Entity
 		if len(p.Targets) > 0 {
@@ -325,7 +325,7 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 	}
 }
 
-func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy int64, target, hit core.Entity) {
+func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy float64, target, hit core.Entity) {
 	e := s.world.CreateEntity()
 
 	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
@@ -344,12 +344,13 @@ func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy int
 		},
 	})
 
-	s.world.Positions.SetPosition(e, component.PositionComponent{X: vmath.ToInt(x), Y: vmath.ToInt(y)})
+	cell := vmath.PointAtF(x, y)
+	s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
 }
 
 // --- Helpers ---
 
-func (s *MissileSystem) pushTrail(m *component.MissileComponent, x, y int64) {
+func (s *MissileSystem) pushTrail(m *component.MissileComponent, x, y float64) {
 	m.Trail[m.TrailHead] = component.MissileTrailPoint{X: x, Y: y, Age: 0}
 	m.TrailHead = (m.TrailHead + 1) % component.TrailCapacity
 	if m.TrailLen < component.TrailCapacity {

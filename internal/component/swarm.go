@@ -33,11 +33,9 @@ type SwarmComponent struct {
 	LockedTargetY int
 
 	// Charge phase (for linear interpolation)
-	ChargeRemaining time.Duration
-	ChargeStartX    int64 // Q32.32 position at charge start
-	ChargeStartY    int64
-	ChargeTargetX   int64 // Q32.32 locked target position
-	ChargeTargetY   int64
+	ChargeRemaining              time.Duration
+	ChargeStartX, ChargeStartY   float64 // Sub-cell position at charge start
+	ChargeTargetX, ChargeTargetY float64 // Locked target position in cells
 
 	// Deceleration phase
 	DecelRemaining time.Duration

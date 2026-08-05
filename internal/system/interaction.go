@@ -46,7 +46,7 @@ func CheckCursorOverlap(w *engine.World, entity core.Entity) CursorOverlap {
 				result.CursorMembers = append(result.CursorMembers, member.Entity)
 			}
 
-			if shieldActive && vmath.EllipseContainsPoint(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+			if shieldActive && vmath.EllipseContainsPointF(memberPos.X, memberPos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 				result.ShieldMembers = append(result.ShieldMembers, member.Entity)
 			}
 		}
@@ -64,7 +64,7 @@ func CheckCursorOverlap(w *engine.World, entity core.Entity) CursorOverlap {
 		result.CursorMembers = append(result.CursorMembers, entity)
 	}
 
-	if shieldActive && vmath.EllipseContainsPoint(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+	if shieldActive && vmath.EllipseContainsPointF(pos.X, pos.Y, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
 		result.ShieldMembers = append(result.ShieldMembers, entity)
 	}
 

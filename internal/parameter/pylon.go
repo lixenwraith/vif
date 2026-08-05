@@ -8,11 +8,11 @@ const (
 	// PylonDefaultRadiusY is default vertical radius (cells, aspect-corrected)
 	PylonDefaultRadiusY = 3
 
-	// PylonCollisionRadiusXFloat is horizontal collision zone (cells)
-	PylonCollisionRadiusXFloat = 4.0
+	// PylonCollisionRadiusX is horizontal collision zone (cells)
+	PylonCollisionRadiusX = 4.0
 
-	// PylonCollisionRadiusYFloat is vertical collision zone (cells, aspect-corrected)
-	PylonCollisionRadiusYFloat = 2.0
+	// PylonCollisionRadiusY is vertical collision zone (cells, aspect-corrected)
+	PylonCollisionRadiusY = 2.0
 
 	// PylonSpawnMaxAttempts is random position attempts before spiral fallback
 	PylonSpawnMaxAttempts = 30

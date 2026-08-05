@@ -2,8 +2,6 @@ package parameter
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Eye Dimensions (shared across all types)
@@ -17,7 +15,7 @@ const (
 const (
 	EyeTypeCount = 7
 
-	EyeRestitutionFloat = 0.5
+	EyeRestitution = 0.5
 
 	// Shield drain per tick when any eye member overlaps cursor shield
 	EyeShieldDrain = 500
@@ -30,18 +28,12 @@ const (
 	EyeContactCheckDist   = TowerDefaultRadiusX + EyeSelfDestructRadius
 	EyeContactCheckDistSq = EyeContactCheckDist * EyeContactCheckDist
 
-	// TODO: make the radii flexible
-
 	// EyeSelfDestructRadius is the proximity trigger distance (cells) for entity target contact
 	// Sized to cover default tower footprint (radiusX=6) + 1 cell buffer
 	// Used for both combat trigger and visual explosion effect
-	EyeSelfDestructRadius   = 7
+	EyeSelfDestructRadius   = 7.0
 	EyeSelfDestructRadiusSq = EyeSelfDestructRadius * EyeSelfDestructRadius
 )
-
-var EyeExplosionRadius = vmath.FromFloat(float64(EyeSelfDestructRadius))
-
-var EyeRestitution = vmath.FromFloat(EyeRestitutionFloat)
 
 // EyeTypeParams holds per-type configuration
 type EyeTypeParams struct {

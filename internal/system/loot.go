@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // DropResult holds a single drop outcome
@@ -159,12 +159,9 @@ func (s *LootSystem) Update() {
 	}
 
 	config := s.world.Resources.Config
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
-	cursorCenterX, cursorCenterY := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+	cursorCenterX, cursorCenterY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 
 	var activeCount int64
 	for _, lootEntity := range lootEntities {
@@ -178,7 +175,7 @@ func (s *LootSystem) Update() {
 			continue
 		}
 
-		curX, curY := vmath.ToInt(kineticComp.PreciseX), vmath.ToInt(kineticComp.PreciseY)
+		curX, curY := physics.GridPos(&kineticComp.Kinetic)
 
 		// Collection check
 		if vmath.IntAbs(curX-cursorPos.X) <= parameter.LootCollectRadius &&
@@ -192,30 +189,28 @@ func (s *LootSystem) Update() {
 
 		if hasNav && navComp.HasDirectPath {
 			// Direct LOS: standard homing
-			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &profile.LootHoming, dtFixed)
+			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &profile.LootHoming, dtSec)
 		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
 			// No LOS but have flow field: follow flow with lookahead
-			lookahead := vmath.FromFloat(5.0)
-			targetX := kineticComp.PreciseX + vmath.Mul(navComp.FlowX, lookahead)
-			targetY := kineticComp.PreciseY + vmath.Mul(navComp.FlowY, lookahead)
-			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtFixed)
+			targetX := kineticComp.PreciseX + navComp.FlowX*parameter.LootFlowLookahead
+			targetY := kineticComp.PreciseY + navComp.FlowY*parameter.LootFlowLookahead
+			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtSec)
 		} else {
 			// No nav or no flow: velocity bleed (stuck/lost)
-			bleedFactor := vmath.FromFloat(6.0)
-			kineticComp.VelX -= vmath.Mul(vmath.Mul(kineticComp.VelX, bleedFactor), dtFixed)
-			kineticComp.VelY -= vmath.Mul(vmath.Mul(kineticComp.VelY, bleedFactor), dtFixed)
-			if vmath.Abs(kineticComp.VelX) < vmath.FromFloat(0.1) && vmath.Abs(kineticComp.VelY) < vmath.FromFloat(0.1) {
+			physics.ApplyLinearDrag(&kineticComp.Kinetic, parameter.LootVelocityBleed, dtSec)
+			if vmath.AbsF(kineticComp.VelX) < parameter.LootStopSpeed &&
+				vmath.AbsF(kineticComp.VelY) < parameter.LootStopSpeed {
 				kineticComp.VelX, kineticComp.VelY = 0, 0
 			}
 		}
 
 		newGridX, newGridY, _ := physics.IntegrateWithBounce(
 			&kineticComp.Kinetic,
-			dtFixed,
+			dtSec,
 			0, 0,
 			0, config.MapWidth,
 			0, config.MapHeight,
-			vmath.FromFloat(0.4),
+			parameter.LootRestitution,
 			func(tx, ty int) bool {
 				return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
 			},
@@ -323,15 +318,14 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	}
 
 	entity := s.world.CreateEntity()
-	preciseX, preciseY := vmath.CenteredFromGrid(x, y)
+	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 
 	// Calculate initial burst velocity
-	var velX, velY int64
+	var velX, velY float64
 	if burstDirX != 0 || burstDirY != 0 {
-		dirX, dirY := vmath.Normalize2D(vmath.FromInt(burstDirX), vmath.FromInt(burstDirY))
-		burstSpeed := vmath.FromFloat(8.0) // 8 cells/sec initial burst
-		velX = vmath.Mul(dirX, burstSpeed)
-		velY = vmath.Mul(dirY, burstSpeed)
+		dirX, dirY := vmath.Normalize2DF(float64(burstDirX), float64(burstDirY))
+		velX = dirX * parameter.LootBurstSpeed
+		velY = dirY * parameter.LootBurstSpeed
 	}
 
 	// Loot component

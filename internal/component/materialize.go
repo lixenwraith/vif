@@ -8,8 +8,8 @@ type MaterializeComponent struct {
 	AreaWidth  int // Target width (1 = single column)
 	AreaHeight int // Target height (1 = single row)
 
-	// Animation progress in Q32.32: 0 = start, Scale = complete
-	Progress int64
+	// Animation progress: 0 = start, Scale = complete
+	Progress float64
 
 	// Visual parameters
 	BeamWidth int // Beam thickness perpendicular to direction (1 = thin)

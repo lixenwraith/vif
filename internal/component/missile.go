@@ -11,7 +11,7 @@ const TrailCapacity = 24
 
 // MissileTrailPoint stores position snapshot for trail rendering
 type MissileTrailPoint struct {
-	X, Y int64         // Q32.32 precise position
+	X, Y float64       // Sub-cell precise position
 	Age  time.Duration // Time since creation
 }
 

@@ -23,12 +23,12 @@ const (
 const (
 	SnakeMaxSegments = 20
 
-	// SnakeSegmentSpacingFloat: distance between segment centers in cells
+	// SnakeSegmentSpacing: distance between segment centers in cells
 	// Configurable for testing; lower = tighter body
-	SnakeSegmentSpacingFloat = 1.0
+	SnakeSegmentSpacing = 1.0
 
 	// SnakeTrailSampleInterval: minimum distance head must move before trail sample
-	SnakeTrailSampleIntervalFloat = 0.5
+	SnakeTrailSampleInterval = 0.5
 )
 
 // Snake spawn parameters
@@ -39,16 +39,16 @@ const (
 
 // Snake physics (floats for parameter definition)
 const (
-	SnakeBaseSpeedFloat   = 12.0
-	SnakeMaxSpeedFloat    = 25.0
-	SnakeHomingAccelFloat = 8.0
-	SnakeDragFloat        = 0.94
-	SnakeRestitutionFloat = 0.3
+	SnakeBaseSpeed   = 12.0
+	SnakeMaxSpeed    = 25.0
+	SnakeHomingAccel = 8.0
+	SnakeDrag        = 0.94
+	SnakeRestitution = 0.3
 
 	// Spring constants for body member kinetic behavior
-	SnakeSpringStiffnessFloat = 18.0
-	SnakeSpringDampingFloat   = 0.82
-	SnakeSpringMaxForceFloat  = 40.0 // Clamp to prevent explosion
+	SnakeSpringStiffness = 18.0
+	SnakeSpringDamping   = 0.82
+	SnakeSpringMaxForce  = 40.0 // Clamp to prevent explosion
 )
 
 // Snake combat
@@ -57,8 +57,8 @@ const (
 	CombatInitialHPSnakeMemberMax = 50 // Head-adjacent segment (10x base)
 	CombatInitialHPSnakeMemberMin = 5  // Tail segment (base)
 
-	SnakeHeadCollisionRadiusXFloat = 2.5  // Half of 5
-	SnakeHeadCollisionRadiusYFloat = 1.25 // Half of 3, aspect adjusted
+	SnakeHeadCollisionRadiusX = 2.5  // Half of 5
+	SnakeHeadCollisionRadiusY = 1.25 // Half of 3, aspect adjusted
 )
 
 // Snake damage values
@@ -72,26 +72,11 @@ const (
 	SnakeGrowthCooldown = 500 * time.Millisecond // Min time between growth events
 )
 
-// Pre-computed Q32.32 values
+// Pre-computed values
 var (
-	SnakeBaseSpeed   = vmath.FromFloat(SnakeBaseSpeedFloat)
-	SnakeMaxSpeed    = vmath.FromFloat(SnakeMaxSpeedFloat)
-	SnakeHomingAccel = vmath.FromFloat(SnakeHomingAccelFloat)
-	SnakeDrag        = vmath.FromFloat(SnakeDragFloat)
-	SnakeRestitution = vmath.FromFloat(SnakeRestitutionFloat)
-
-	SnakeSpringStiffness = vmath.FromFloat(SnakeSpringStiffnessFloat)
-	SnakeSpringDamping   = vmath.FromFloat(SnakeSpringDampingFloat)
-	SnakeSpringMaxForce  = vmath.FromFloat(SnakeSpringMaxForceFloat)
-
-	SnakeSegmentSpacing      = vmath.FromFloat(SnakeSegmentSpacingFloat)
-	SnakeTrailSampleInterval = vmath.FromFloat(SnakeTrailSampleIntervalFloat)
-
-	SnakeHeadCollisionRadiusX = vmath.FromFloat(SnakeHeadCollisionRadiusXFloat)
-	SnakeHeadCollisionRadiusY = vmath.FromFloat(SnakeHeadCollisionRadiusYFloat)
 	SnakeHeadCollisionInvRxSq,
-	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSq(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
+	SnakeHeadCollisionInvRySq = vmath.EllipseInvRadiiSqF(SnakeHeadCollisionRadiusX, SnakeHeadCollisionRadiusY)
 
 	// Squared for distance comparison without sqrt
-	SnakeTrailSampleIntervalSq = vmath.Mul(SnakeTrailSampleInterval, SnakeTrailSampleInterval)
+	SnakeTrailSampleIntervalSq = SnakeTrailSampleInterval * SnakeTrailSampleInterval
 )

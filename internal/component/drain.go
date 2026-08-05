@@ -8,7 +8,7 @@ type DrainComponent struct {
 	LastDrainTime time.Time
 
 	// Monotonic counter for LIFO despawn ordering (higher = newer)
-	SpawnOrder int64
+	SpawnOrder int
 
 	// Cell-entry detection for interaction dedup
 	LastIntX int

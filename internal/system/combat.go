@@ -9,8 +9,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // CombatSystem manages interaction logic with combat entities
@@ -517,11 +517,11 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	}
 
 	// Radial direction: origin → target (pushes outward)
-	radialX := vmath.FromInt(targetPos.X - originX)
-	radialY := vmath.FromInt(targetPos.Y - originY)
+	radialX := float64(targetPos.X - originX)
+	radialY := float64(targetPos.Y - originY)
 
 	if radialX == 0 && radialY == 0 {
-		radialX = vmath.Scale // Fallback direction
+		radialX = 1.0 // Fallback direction
 	}
 
 	// Single entity - direct radial knockback

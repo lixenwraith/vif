@@ -8,7 +8,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // World contains all entities and their components using typed stores
@@ -262,8 +261,8 @@ func (w *World) CreateCursorEntity() {
 
 	// 8. Set shield component
 	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
-		RadiusX:       vmath.FromFloat(parameter.ShieldRadiusXFloat),
-		RadiusY:       vmath.FromFloat(parameter.ShieldRadiusYFloat),
+		RadiusX:       parameter.PlayerShieldRadiusX,
+		RadiusY:       parameter.PlayerShieldRadiusY,
 		LastDrainTime: w.Resources.Time.GameTime,
 	})
 
@@ -298,8 +297,8 @@ func (w *World) UpdateBoundsRadius() {
 	}
 
 	player.SetBounds(PingBounds{
-		RadiusX: vmath.ToInt(shield.RadiusX) / parameter.PingBoundFactor,
-		RadiusY: vmath.ToInt(shield.RadiusY) / parameter.PingBoundFactor,
+		RadiusX: int(shield.RadiusX) / parameter.PingBoundFactor,
+		RadiusY: int(shield.RadiusY) / parameter.PingBoundFactor,
 		Active:  true,
 	})
 }

@@ -44,7 +44,7 @@ type DrainSystem struct {
 	pendingSpawns []pendingDrainSpawn
 
 	// Monotonic counter for LIFO materialize spawn ordering
-	nextSpawnOrder int64
+	nextSpawnOrder int
 
 	// Spawn failure backoff (game ticks)
 	spawnCooldownUntil uint64
@@ -431,7 +431,7 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 	// Sort by SpawnOrder descending (LIFO - highest order first)
 	type drainWithOrder struct {
 		entity core.Entity
-		order  int64
+		order  int
 	}
 
 	ordered := make([]drainWithOrder, 0, len(entities))
@@ -668,7 +668,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.nextSpawnOrder++
 
 	// Initialize Kinetic with centered spawn position, zero velocity
-	preciseX, preciseY := vmath.CenteredFromGrid(spawnX, spawnY)
+	preciseX, preciseY := vmath.Point{X: spawnX, Y: spawnY}.CenterF()
 	drainComp := component.DrainComponent{
 		LastDrainTime: now,
 		SpawnOrder:    s.nextSpawnOrder,
@@ -864,10 +864,8 @@ func (s *DrainSystem) handleEntityCollisions() {
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	// TODO: cap dtSec to become configurable, live game tick change
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
@@ -907,26 +905,23 @@ func (s *DrainSystem) updateDrainMovement() {
 		if combatComp.RemainingKineticImmunity == 0 {
 			// Cornering drag scales the base drag by turn severity
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-				parameter.NavCorneringThreshold, vmath.Scale)
+				parameter.NavCorneringThreshold, 1.0)
 
 			physics.ApplyHomingScaled(&kineticComp.Kinetic, targetX, targetY,
-				&profile.DrainHoming, vmath.Scale, dtFixed, true)
+				&profile.DrainHoming, 1.0, dtSec, true)
 
 			if turnSeverity > 0 {
-				brake := vmath.Mul(vmath.Mul(turnSeverity, parameter.NavCorneringBrake), parameter.DrainDrag)
-				physics.ApplyLinearDrag(&kineticComp.Kinetic, brake, dtFixed)
+				brake := turnSeverity * parameter.NavCorneringBrake * parameter.DrainDrag
+				physics.ApplyLinearDrag(&kineticComp.Kinetic, brake, dtSec)
 			}
 		}
 
 		// 3. Integration & Collision
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
-		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtFixed)
+		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtSec)
 
-		if physics.ReflectBoundsX(&kineticComp.Kinetic, 0, gameWidth) {
-			newX = vmath.ToInt(kineticComp.PreciseX)
-		}
-		if physics.ReflectBoundsY(&kineticComp.Kinetic, 0, gameHeight) {
-			newY = vmath.ToInt(kineticComp.PreciseY)
+		if physics.ReflectBounds(&kineticComp.Kinetic, gameWidth, gameHeight) {
+			newX, newY = physics.GridPos(&kineticComp.Kinetic)
 		}
 
 		// Wall Collision (Traversal)
@@ -936,18 +931,21 @@ func (s *DrainSystem) updateDrainMovement() {
 		// Cursor exclusion for entity-entity collision (not targeting)
 		cursorEntity := s.world.Resources.Player.Entity
 
-		vmath.Traverse(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY, func(x, y int) bool {
+		traverser := vmath.NewGridTraverserF(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY)
+		for traverser.Next() {
+			x, y := traverser.Pos()
+
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
-				return true
+				continue
 			}
 			if x == drainComp.LastIntX && y == drainComp.LastIntY {
-				return true
+				continue
 			}
 
 			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
 				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
 				hitWall = true
-				return false
+				break
 			}
 
 			lastSafeX, lastSafeY = x, y
@@ -964,8 +962,7 @@ func (s *DrainSystem) updateDrainMovement() {
 				}
 				s.handleCollisionAtPosition(target)
 			}
-			return true
-		})
+		}
 
 		if hitWall {
 			newX, newY = lastSafeX, lastSafeY
@@ -984,12 +981,12 @@ func (s *DrainSystem) updateDrainMovement() {
 // reflectOffWall reflects velocity on the approach axis and snaps back to the safe cell
 func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wallY int) {
 	if wallX != fromX {
-		physics.ReflectVelocityX(k, vmath.Scale)
+		physics.ReflectVelocityX(k, 1.0)
 	}
 	if wallY != fromY {
-		physics.ReflectVelocityY(k, vmath.Scale)
+		physics.ReflectVelocityY(k, 1.0)
 	}
-	k.PreciseX, k.PreciseY = vmath.CenteredFromGrid(fromX, fromY)
+	k.PreciseX, k.PreciseY = vmath.Point{X: fromX, Y: fromY}.CenterF()
 }
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position

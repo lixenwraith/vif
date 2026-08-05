@@ -21,69 +21,52 @@ const (
 )
 
 // Shield visual feather zone (renderer-only, does NOT affect game logic)
-// Derived from ratio constants to maintain single source of truth
-var (
+// Normalized distSq thresholds derived from the ratio constants
+const (
 	// ShieldFeatherStart is normalized distSq where fade begins
-	ShieldFeatherStart int64
+	ShieldFeatherStart = parameter.ShieldFeatherStartRatio * parameter.ShieldFeatherStartRatio
 	// ShieldFeatherEnd is max normalized distSq for visual rendering
-	ShieldFeatherEnd int64
+	ShieldFeatherEnd = parameter.ShieldFeatherEndRatio * parameter.ShieldFeatherEndRatio
 	// ShieldFeatherRange is (End - Start) for fade interpolation
-	ShieldFeatherRange int64
-
-	// Shield256Threshold is Q32.32 threshold for 256-color rim visibility
-	Shield256Threshold int64
-	// ShieldGlowEdgeThreshold is Q32.32 threshold below which glow is suppressed
-	ShieldGlowEdgeThreshold int64
+	ShieldFeatherRange = ShieldFeatherEnd - ShieldFeatherStart
 )
 
 // ShieldConfig holds pre-calculated geometric and visual parameters
 // Field order: geometry (hot), visual params (warm), colors (cold)
 type ShieldConfig struct {
 	// Geometry - accessed per-cell for containment
-	InvRxSq int64 // 8 bytes
-	InvRySq int64 // 8 bytes
-	RadiusX int64 // 8 bytes
-	RadiusY int64 // 8 bytes
+	InvRxSq float64
+	InvRySq float64
+	RadiusX float64
+	RadiusY float64
 
 	// Visual params - accessed per-cell for alpha
-	MaxOpacityQ32    int64 // 8 bytes
-	GlowIntensityQ32 int64 // 8 bytes
+	MaxOpacity    float64
+	GlowIntensity float64
 
 	// Iteration bounds - accessed once per entity
-	VisualRadiusXInt int // 8 bytes
-	VisualRadiusYInt int // 8 bytes
+	VisualRadiusXInt int
+	VisualRadiusYInt int
 
 	// Timing - accessed once per entity
-	GlowPeriod time.Duration // 8 bytes
+	GlowPeriod time.Duration
 
 	// Colors - accessed once per entity or per-cell for blend
-	Color         color.RGB // 3 bytes
-	ColorAlt      color.RGB // 3 bytes
-	GlowColor     color.RGB // 3 bytes
-	_             [5]byte   // padding to 8-byte boundary
-	Palette256    uint8     // 1 byte
-	Palette256Alt uint8     // 1 byte
+	Color         color.RGB
+	ColorAlt      color.RGB
+	GlowColor     color.RGB
+	Palette256    uint8
+	Palette256Alt uint8
 }
-
-// Total: 64 + 8 + 9 + 5 + 2 = 88 bytes (fits in ~1.5 cache lines)
 
 // ShieldConfigs indexed by ShieldType
 var ShieldConfigs [3]ShieldConfig
 
 func init() {
-	startRatio := vmath.FromFloat(parameter.ShieldFeatherStartRatio)
-	endRatio := vmath.FromFloat(parameter.ShieldFeatherEndRatio)
-	ShieldFeatherStart = vmath.Mul(startRatio, startRatio)
-	ShieldFeatherEnd = vmath.Mul(endRatio, endRatio)
-	ShieldFeatherRange = ShieldFeatherEnd - ShieldFeatherStart
-
-	Shield256Threshold = vmath.FromFloat(Shield256ThresholdFloat)
-	ShieldGlowEdgeThreshold = vmath.FromFloat(ShieldGlowEdgeThresholdFloat)
-
 	// Player
 	ShieldConfigs[component.ShieldTypePlayer] = buildShieldConfig(
-		parameter.PlayerFieldRadiusX,
-		parameter.PlayerFieldRadiusY,
+		parameter.PlayerShieldRadiusX,
+		parameter.PlayerShieldRadiusY,
 		parameter.ShieldMaxOpacity,
 		RgbCleanerBasePositive, RgbCleanerBaseNegative,
 		Shield256Positive, Shield256Negative,
@@ -119,22 +102,20 @@ func init() {
 }
 
 func buildShieldConfig(rxF, ryF, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
-	rx := vmath.FromFloat(rxF)
-	ry := vmath.FromFloat(ryF)
-	invRxSq, invRySq := vmath.EllipseInvRadiiSq(rx, ry)
+	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rxF, ryF)
 
 	visualRxInt := int(math.Ceil(rxF*parameter.ShieldFeatherEndRatio)) + 1
 	visualRyInt := int(math.Ceil(ryF*parameter.ShieldFeatherEndRatio)) + 1
 
 	return ShieldConfig{
-		RadiusX:          rx,
-		RadiusY:          ry,
+		RadiusX:          rxF,
+		RadiusY:          ryF,
 		InvRxSq:          invRxSq,
 		InvRySq:          invRySq,
 		VisualRadiusXInt: visualRxInt,
 		VisualRadiusYInt: visualRyInt,
-		MaxOpacityQ32:    vmath.FromFloat(maxOpacity),
-		GlowIntensityQ32: vmath.FromFloat(glowIntensity),
+		MaxOpacity:       maxOpacity,
+		GlowIntensity:    glowIntensity,
 		GlowPeriod:       glowPeriod,
 		Color:            colorMain,
 		ColorAlt:         colorAlt,

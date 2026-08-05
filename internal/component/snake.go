@@ -32,8 +32,8 @@ type SnakeHeadComponent struct {
 	TrailHead int // Next write index
 	TrailLen  int // Current valid entries
 
-	// Facing direction for perpendicular member placement (Q32.32 normalized)
-	FacingX, FacingY int64
+	// Facing direction for perpendicular member placement
+	FacingX, FacingY float64
 
 	// Growth queue (pending segments from glyph consumption)
 	GrowthPending int
@@ -45,8 +45,8 @@ type SnakeHeadComponent struct {
 // SnakeSegment represents a 3-cell wide body segment (metadata only)
 // Member entity resolution via HeaderComponent.MemberEntries + SnakeMemberComponent
 type SnakeSegment struct {
-	// Rest position from trail (Q32.32)
-	RestX, RestY int64
+	// Rest position from trail
+	RestX, RestY float64
 
 	// Connectivity state
 	Connected bool

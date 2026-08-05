@@ -8,7 +8,7 @@ import (
 type QuasarComponent struct {
 	LastSpeedIncreaseAt time.Time // For periodic speed scaling
 
-	SpeedMultiplier int64 // Q32.32, current speed scale factor (starts at Scale)
+	SpeedMultiplier float64 // Current speed scale factor (starts at 1.0)
 
 	// Quasar state
 	IsZapping  bool // True if zapping cursor outside range
@@ -19,5 +19,5 @@ type QuasarComponent struct {
 	ChargeRemaining time.Duration
 
 	// Dynamic resize support
-	ZapRadius int64 // Q32.32, visual radius of zap circle (dynamic on resize)
+	ZapRadius float64 // Visual radius of zap circle in cells (dynamic on resize)
 }

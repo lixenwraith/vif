@@ -10,8 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // WeaponSystem manages the cursor gained effects and abilities, it resets on energy getting to or crossing zero
@@ -253,8 +253,8 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	}
 
 	// Initial position at angle 0
-	gridX, gridY := vmath.AngleToGridPos(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
-	preciseX, preciseY := vmath.CenteredFromGrid(gridX, gridY)
+	gridX, gridY := vmath.AngleToGridPosF(0, ownerPos.X, ownerPos.Y, orbComp.OrbitRadiusX, orbComp.OrbitRadiusY)
+	preciseX, preciseY := vmath.Point{X: gridX, Y: gridY}.CenterF()
 
 	kineticComp := component.KineticComponent{
 		Kinetic: physics.Kinetic{
@@ -345,25 +345,25 @@ func (s *WeaponSystem) updateOrbs() {
 	radiusY := firstOrb.OrbitRadiusY
 
 	// Sample orbital ellipse for blockage
-	samplePoints := vmath.SampleEllipseGrid(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
+	samplePoints := vmath.SampleEllipseGridF(cursorPos.X, cursorPos.Y, radiusX, radiusY, vmath.EllipseSampleCount)
 	blocked := make([]bool, len(samplePoints))
 	for i, pt := range samplePoints {
 		blocked[i] = !s.world.Positions.IsPointValidForOrbit(pt[0], pt[1], component.WallBlockKinetic)
 	}
 
 	// Find available arcs
-	arcs := vmath.FindUnblockedArcs(blocked)
-	fullCircle := vmath.IsFullCircle(arcs)
+	arcs := vmath.FindUnblockedArcsF(blocked)
+	fullCircle := vmath.IsFullCircleF(arcs)
 
 	// Distribute target angles
-	targetAngles := vmath.DistributeAngles(arcs, len(entries))
+	targetAngles := vmath.DistributeAnglesF(arcs, len(entries))
 	if targetAngles == nil {
 		// Fully blocked - orbs stay in place
 		return
 	}
 
 	// Hysteresis threshold to prevent jitter (~11 degrees)
-	const angleThreshold = vmath.Scale / 32
+	const angleThreshold = vmath.TwoPi / 32
 
 	// Update each orb
 	for i := range entries {
@@ -375,8 +375,8 @@ func (s *WeaponSystem) updateOrbs() {
 		targetAngle := targetAngles[i]
 
 		// Check if redistribution needed (with hysteresis)
-		angleDiff := vmath.Abs(vmath.AngleDiff(orb.TargetAngle, targetAngle))
-		if angleDiff > angleThreshold || orb.TargetAngle < 0 {
+		angleDiff := vmath.AbsF(vmath.AngleDiffF(orb.TargetAngle, targetAngle))
+		if angleDiff > angleThreshold || orb.TargetAngle < 0 { // TargetAngle -1 is sentinel, never a returned value
 			orb.StartAngle = orb.OrbitAngle
 			orb.TargetAngle = targetAngle
 			orb.RedistributeRemaining = parameter.OrbRedistributeDuration
@@ -385,9 +385,7 @@ func (s *WeaponSystem) updateOrbs() {
 		// Handle movement based on arc availability
 		if fullCircle && orb.RedistributeRemaining <= 0 {
 			// Free orbit - advance angle
-			dtFixed := vmath.FromFloat(dt.Seconds())
-			angleAdvance := vmath.Mul(orb.OrbitSpeed, dtFixed)
-			orb.OrbitAngle = vmath.NormalizeAngle(orb.OrbitAngle + angleAdvance)
+			orb.OrbitAngle = vmath.NormalizeAngleF(orb.OrbitAngle + orb.OrbitSpeed*dt.Seconds())
 		} else if orb.RedistributeRemaining > 0 {
 			// Animating to new position
 			orb.RedistributeRemaining -= dt
@@ -395,10 +393,10 @@ func (s *WeaponSystem) updateOrbs() {
 				orb.RedistributeRemaining = 0
 				orb.OrbitAngle = orb.TargetAngle
 			} else {
-				t := vmath.FromFloat(1.0 - orb.RedistributeRemaining.Seconds()/parameter.OrbRedistributeDuration.Seconds())
+				t := 1.0 - orb.RedistributeRemaining.Seconds()/parameter.OrbRedistributeDuration.Seconds()
 				// Use shortest path interpolation
-				diff := vmath.AngleDiff(orb.StartAngle, orb.TargetAngle)
-				orb.OrbitAngle = vmath.NormalizeAngle(orb.StartAngle + vmath.Mul(diff, t))
+				diff := vmath.AngleDiffF(orb.StartAngle, orb.TargetAngle)
+				orb.OrbitAngle = vmath.NormalizeAngleF(orb.StartAngle + diff*t)
 			}
 		} else {
 			// Partial arc, stationary - snap to target
@@ -406,7 +404,7 @@ func (s *WeaponSystem) updateOrbs() {
 		}
 
 		// Calculate world position from angle
-		targetGridX, targetGridY := vmath.AngleToGridPos(orb.OrbitAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+		targetGridX, targetGridY := vmath.AngleToGridPosF(orb.OrbitAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
 
 		// Get current position
 		currentPos, hasPos := s.world.Positions.GetPosition(orbEntity)
@@ -432,7 +430,7 @@ func (s *WeaponSystem) updateOrbs() {
 				// Isolated - teleport to target (no flash, reserved for firing)
 				orb.OrbitAngle = targetAngle
 				orb.RedistributeRemaining = 0
-				targetGridX, targetGridY = vmath.AngleToGridPos(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
+				targetGridX, targetGridY = vmath.AngleToGridPosF(targetAngle, cursorPos.X, cursorPos.Y, radiusX, radiusY)
 
 				// Re-validate teleport destination
 				if !s.world.Positions.IsPointValidForOrbit(targetGridX, targetGridY, component.WallBlockKinetic) {
@@ -452,7 +450,7 @@ func (s *WeaponSystem) updateOrbs() {
 
 		// Update kinetic position
 		if kinetic, ok := s.world.Components.Kinetic.GetPtr(orbEntity); ok {
-			kinetic.PreciseX, kinetic.PreciseY = vmath.CenteredFromGrid(targetGridX, targetGridY)
+			kinetic.PreciseX, kinetic.PreciseY = vmath.Point{X: targetGridX, Y: targetGridY}.CenterF()
 		}
 
 		// Update grid position
@@ -540,7 +538,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 	}
 
 	// Resolve targets once for all weapons
-	fromX, fromY := vmath.CenteredFromGrid(cursorPos.X, cursorPos.Y)
+	fromX, fromY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 
 	// Single shared fetch for Rod+Launcher, sized to whichever needs more targets this tick
 	// collapses two Combat/Member store scans+sorts into one per fire cycle

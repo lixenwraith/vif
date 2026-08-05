@@ -17,9 +17,9 @@ type EnvironmentSystem struct {
 	rng *vmath.FastRand
 
 	WindActive bool
-	// Global wind velocity in Q32.32
-	WindVelX int64
-	WindVelY int64
+	// Global wind velocity
+	WindVelX float64
+	WindVelY float64
 
 	// Telemetry
 	statWindActive *atomic.Bool

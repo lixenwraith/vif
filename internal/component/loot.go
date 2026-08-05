@@ -14,8 +14,8 @@ type DropEntry struct {
 
 // DropTier represents a priority level in the drop table
 type DropTier struct {
-	Unique  bool // If true, skip tier when all entries owned/active
 	Entries []DropEntry
+	Unique  bool // If true, skip tier when all entries owned/active
 }
 
 // SpeciesDropTable defines ordered tiers for a species
@@ -104,13 +104,6 @@ type LootProfile struct {
 // LootComponent represents a collectible loot drop entity
 type LootComponent struct {
 	Type LootType
-
-	// Homing state
-	Homing   bool
-	PreciseX int64 // Q32.32
-	PreciseY int64
-	VelX     int64
-	VelY     int64
 
 	// Grid tracking
 	LastIntX int

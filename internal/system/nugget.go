@@ -328,7 +328,7 @@ func (s *NuggetSystem) isNuggetInCollectionRange(nuggetX, nuggetY int) bool {
 
 	// Ember takes precedence (larger radius)
 	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok && heatComp.EmberActive {
-		return vmath.EllipseContainsPoint(
+		return vmath.EllipseContainsPointF(
 			nuggetX, nuggetY,
 			cursorPos.X, cursorPos.Y,
 			visual.EmberInvRxSq, visual.EmberInvRySq,
@@ -337,7 +337,7 @@ func (s *NuggetSystem) isNuggetInCollectionRange(nuggetX, nuggetY int) bool {
 
 	// Shield ellipse when active
 	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok && shieldComp.Active {
-		return vmath.EllipseContainsPoint(
+		return vmath.EllipseContainsPointF(
 			nuggetX, nuggetY,
 			cursorPos.X, cursorPos.Y,
 			shieldComp.InvRxSq, shieldComp.InvRySq,

@@ -2,6 +2,8 @@ package parameter
 
 import (
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Shield
@@ -18,13 +20,10 @@ const (
 
 // Shield visuals
 const (
-	ShieldRadiusXFloat = 10.0
-	ShieldRadiusYFloat = 5.0
-
-	// PlayerFieldRadiusX is horizontal cell radius for shield and ember
-	PlayerFieldRadiusX = 10.0
-	// PlayerFieldRadiusY is vertical cell radius (aspect-corrected)
-	PlayerFieldRadiusY = 5.0
+	// PlayerShieldRadiusX is horizontal cell radius for shield and ember
+	PlayerShieldRadiusX = 10.0
+	// PlayerShieldRadiusY is vertical cell radius (aspect-corrected)
+	PlayerShieldRadiusY = 5.0
 
 	// ShieldMaxOpacity is peak alpha at ellipse edge
 	ShieldMaxOpacity = 0.3
@@ -56,14 +55,17 @@ var WeaponMaxCharges = [3]int{WeaponMaxChargeRod, WeaponMaxChargeLauncher, Weapo
 
 // Weapon Orb Configuration
 const (
-	// OrbOrbitRadiusXFloat is horizontal orbital radius in cells
-	OrbOrbitRadiusXFloat = 12.0
+	// OrbOrbitRadiusX is horizontal orbital radius in cells
+	OrbOrbitRadiusX = 12.0
 
-	// OrbOrbitRadiusYFloat is vertical orbital radius in cells (aspect-corrected)
-	OrbOrbitRadiusYFloat = 6.0
+	// OrbOrbitRadiusY is vertical orbital radius in cells (aspect-corrected)
+	OrbOrbitRadiusY = 6.0
 
-	// OrbOrbitSpeed is rotations per second (Q32.32 Scale = 1 rot/sec)
-	OrbOrbitSpeedFloat = 0.5
+	// OrbOrbitRotationsPerSec is the orbit rate in full rotations per second
+	OrbOrbitRotationsPerSec = 0.5
+
+	// OrbOrbitSpeed is the orbit rate in radians per second
+	OrbOrbitSpeed = OrbOrbitRotationsPerSec * vmath.TwoPi
 
 	// OrbRedistributeDuration is time for orbs to animate to new positions
 	OrbRedistributeDuration = 200 * time.Millisecond
@@ -71,17 +73,17 @@ const (
 	// OrbFlashDuration is visual flash duration when orb fires
 	OrbFlashDuration = 100 * time.Millisecond
 
-	// OrbCoronaRadiusXFloat is horizontal glow radius in cells
-	OrbCoronaRadiusXFloat = 3.0
+	// OrbCoronaRadiusX is horizontal glow radius in cells
+	OrbCoronaRadiusX = 3.0
 
-	// OrbCoronaRadiusYFloat is vertical glow radius in cells (2:1 aspect)
-	OrbCoronaRadiusYFloat = 1.5
+	// OrbCoronaRadiusY is vertical glow radius in cells (2:1 aspect)
+	OrbCoronaRadiusY = 1.5
 
-	// OrbBurstRadiusXFloat is horizontal burst radius in cells
-	OrbBurstRadiusXFloat = 3.0
+	// OrbBurstRadiusX is horizontal burst radius in cells
+	OrbBurstRadiusX = 3.0
 
-	// OrbBurstRadiusYFloat is vertical burst radius in cells
-	OrbBurstRadiusYFloat = 1.5
+	// OrbBurstRadiusY is vertical burst radius in cells
+	OrbBurstRadiusY = 1.5
 
 	// OrbCoronaPeriodMs is corona rotation period (ms)
 	OrbCoronaPeriodMs = int64(500)

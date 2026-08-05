@@ -12,19 +12,18 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// LUT for normalized Q32.32 flow vectors
-var flowDirLUT [8][2]int64
+// LUT for normalized flow direction vectors
+var flowDirLUT [8][2]float64
 
 func init() {
 	// Y halved for terminal 2:1 cell aspect before normalization
-	aspectY := vmath.Scale / 2
 	for i, vec := range navigation.DirVectors {
-		fx := vmath.FromInt(vec[0])
-		fy := vmath.Mul(vmath.FromInt(vec[1]), aspectY)
+		fx := float64(vec[0])
+		fy := float64(vec[1]) * 0.5
 		if fx != 0 || fy != 0 {
-			fx, fy = vmath.Normalize2D(fx, fy)
+			fx, fy = vmath.Normalize2DF(fx, fy)
 		}
-		flowDirLUT[i] = [2]int64{fx, fy}
+		flowDirLUT[i] = [2]float64{fx, fy}
 	}
 }
 
@@ -358,7 +357,8 @@ func (s *NavigationSystem) Update() {
 
 		var gridX, gridY int
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
-			gridX, gridY = vmath.GridFromCentered(kinetic.PreciseX, kinetic.PreciseY)
+			cell := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
+			gridX, gridY = cell.X, cell.Y
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
 			gridX, gridY = pos.X, pos.Y
 		} else {
@@ -428,11 +428,11 @@ func (s *NavigationSystem) Update() {
 			group = s.groups[0]
 		}
 
-		var preciseX, preciseY int64
+		var preciseX, preciseY float64
 		if kinetic, ok := s.world.Components.Kinetic.GetComponent(entity); ok {
 			preciseX, preciseY = kinetic.PreciseX, kinetic.PreciseY
 		} else if pos, ok := s.world.Positions.GetPosition(entity); ok {
-			preciseX, preciseY = vmath.CenteredFromGrid(pos.X, pos.Y)
+			preciseX, preciseY = vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
 		} else {
 			continue
 		}
@@ -442,7 +442,7 @@ func (s *NavigationSystem) Update() {
 		// Route graph: use per-route flow field when assigned
 		if navComp.UseRouteGraph && navComp.RouteID >= 0 {
 			if field := s.resolveRouteField(navComp.RouteGraphID, navComp.RouteID, groupID); field != nil {
-				var fx, fy int64
+				var fx, fy float64
 				if isComposite {
 					fx, fy = s.getCompositeFlowDirection(preciseX, preciseY, field)
 				} else {
@@ -607,9 +607,9 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 // getCompositeFlowDirection returns flow direction from composite-aware flow field
 // Handles case where entity's current cell is blocked in passability
-func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, src flowSource) (int64, int64) {
-	x0 := vmath.ToInt(preciseX)
-	y0 := vmath.ToInt(preciseY)
+func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64, src flowSource) (float64, float64) {
+	cell := vmath.PointAtF(preciseX, preciseY)
+	x0, y0 := cell.X, cell.Y
 
 	dir := src.GetDirection(x0, y0)
 	// At goal: zero flow lets the caller home directly instead of orbiting the cell
@@ -626,41 +626,41 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, s
 	}
 
 	// Bilinear interpolation, header-anchored (no half-cell offset, unlike point entities)
-	u := preciseX & vmath.Mask
-	v := preciseY & vmath.Mask
-	invU := vmath.Scale - u
-	invV := vmath.Scale - v
+	u := preciseX - float64(x0)
+	v := preciseY - float64(y0)
+	invU := 1.0 - u
+	invV := 1.0 - v
 
-	w00 := vmath.Mul(invU, invV)
-	w10 := vmath.Mul(u, invV)
-	w01 := vmath.Mul(invU, v)
-	w11 := vmath.Mul(u, v)
+	w00 := invU * invV
+	w10 := u * invV
+	w01 := invU * v
+	w11 := u * v
 
 	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
 	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
 	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
 	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
 
-	var sumX, sumY, totalWeight int64
+	var sumX, sumY, totalWeight float64
 
 	if valid00 {
-		sumX += vmath.Mul(v00x, w00)
-		sumY += vmath.Mul(v00y, w00)
+		sumX += v00x * w00
+		sumY += v00y * w00
 		totalWeight += w00
 	}
 	if valid10 {
-		sumX += vmath.Mul(v10x, w10)
-		sumY += vmath.Mul(v10y, w10)
+		sumX += v10x * w10
+		sumY += v10y * w10
 		totalWeight += w10
 	}
 	if valid01 {
-		sumX += vmath.Mul(v01x, w01)
-		sumY += vmath.Mul(v01y, w01)
+		sumX += v01x * w01
+		sumY += v01y * w01
 		totalWeight += w01
 	}
 	if valid11 {
-		sumX += vmath.Mul(v11x, w11)
-		sumY += vmath.Mul(v11y, w11)
+		sumX += v11x * w11
+		sumY += v11y * w11
 		totalWeight += w11
 	}
 
@@ -668,11 +668,11 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY int64, s
 		return 0, 0
 	}
 
-	resX := vmath.Div(sumX, totalWeight)
-	resY := vmath.Div(sumY, totalWeight)
+	resX := sumX / totalWeight
+	resY := sumY / totalWeight
 
 	if resX != 0 || resY != 0 {
-		return vmath.Normalize2D(resX, resY)
+		return vmath.Normalize2DF(resX, resY)
 	}
 	return 0, 0
 }
@@ -695,49 +695,49 @@ func (s *NavigationSystem) findBestNeighborDirection(x, y int, src flowSource) i
 }
 
 // getInterpolatedFlowDirection performs bilinear interpolation for point entities
-func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64, src flowSource) (int64, int64) {
-	sampleX := preciseX - vmath.CellCenter
-	sampleY := preciseY - vmath.CellCenter
+func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY float64, src flowSource) (float64, float64) {
+	sampleX := preciseX - vmath.CellCenterF
+	sampleY := preciseY - vmath.CellCenterF
 
-	x0 := vmath.ToInt(sampleX)
-	y0 := vmath.ToInt(sampleY)
+	cell := vmath.PointAtF(sampleX, sampleY)
+	x0, y0 := cell.X, cell.Y
 
-	u := sampleX & vmath.Mask
-	v := sampleY & vmath.Mask
+	u := sampleX - float64(x0)
+	v := sampleY - float64(y0)
 
-	invU := vmath.Scale - u
-	invV := vmath.Scale - v
+	invU := 1.0 - u
+	invV := 1.0 - v
 
-	w00 := vmath.Mul(invU, invV)
-	w10 := vmath.Mul(u, invV)
-	w01 := vmath.Mul(invU, v)
-	w11 := vmath.Mul(u, v)
+	w00 := invU * invV
+	w10 := u * invV
+	w01 := invU * v
+	w11 := u * v
 
 	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
 	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
 	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
 	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
 
-	var sumX, sumY, totalWeight int64
+	var sumX, sumY, totalWeight float64
 
 	if valid00 {
-		sumX += vmath.Mul(v00x, w00)
-		sumY += vmath.Mul(v00y, w00)
+		sumX += v00x * w00
+		sumY += v00y * w00
 		totalWeight += w00
 	}
 	if valid10 {
-		sumX += vmath.Mul(v10x, w10)
-		sumY += vmath.Mul(v10y, w10)
+		sumX += v10x * w10
+		sumY += v10y * w10
 		totalWeight += w10
 	}
 	if valid01 {
-		sumX += vmath.Mul(v01x, w01)
-		sumY += vmath.Mul(v01y, w01)
+		sumX += v01x * w01
+		sumY += v01y * w01
 		totalWeight += w01
 	}
 	if valid11 {
-		sumX += vmath.Mul(v11x, w11)
-		sumY += vmath.Mul(v11y, w11)
+		sumX += v11x * w11
+		sumY += v11y * w11
 		totalWeight += w11
 	}
 
@@ -745,16 +745,16 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY int64
 		return 0, 0
 	}
 
-	resX := vmath.Div(sumX, totalWeight)
-	resY := vmath.Div(sumY, totalWeight)
+	resX := sumX * totalWeight
+	resY := sumY * totalWeight
 
 	if resX != 0 || resY != 0 {
-		return vmath.Normalize2D(resX, resY)
+		return vmath.Normalize2DF(resX, resY)
 	}
 	return 0, 0
 }
 
-func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (int64, int64, bool) {
+func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (float64, float64, bool) {
 	dir := src.GetDirection(x, y)
 	if dir < 0 || dir >= navigation.DirCount {
 		return 0, 0, false
@@ -925,24 +925,4 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 	}
 
 	return 0, 0, false
-}
-
-// rebuildGatewayRouteGraphs recomputes route graphs for all route-enabled gateways
-func (s *NavigationSystem) rebuildGatewayRouteGraphs() {
-	for _, e := range s.world.Components.Gateway.Entities() {
-		gw, ok := s.world.Components.Gateway.GetPtr(e)
-		if !ok || gw.RouteDistID == 0 {
-			continue
-		}
-		anchorPos, ok := s.world.Positions.GetPosition(gw.AnchorEntity)
-		if !ok {
-			continue
-		}
-		s.handleRouteGraphRequest(&event.RouteGraphRequestPayload{
-			RouteGraphID:  gw.RouteDistID,
-			SourceX:       anchorPos.X + gw.OffsetX,
-			SourceY:       anchorPos.Y + gw.OffsetY,
-			TargetGroupID: gw.GroupID,
-		})
-	}
 }

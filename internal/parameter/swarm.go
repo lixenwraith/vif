@@ -39,11 +39,11 @@ const (
 	// Negative value means pulses extend before lock (clamp to 0 at runtime)
 	SwarmChargeLineShowDelay = SwarmLockDuration - SwarmChargeLinePulseCount*SwarmChargeDuration
 	// Trail fade length as fraction of total line distance
-	SwarmChargeLineTrailFloat = 0.25
+	SwarmChargeLineTrail = 0.25
 	// Peak bg alpha for first pulse
-	SwarmChargeLineAlpha1Float = 0.25
+	SwarmChargeLineAlpha1 = 0.25
 	// Peak bg alpha for second pulse (escalation)
-	SwarmChargeLineAlpha2Float = 0.40
+	SwarmChargeLineAlpha2 = 0.40
 	// 256-color visibility threshold
 	SwarmChargeLine256Threshold = 0.15
 
@@ -58,17 +58,17 @@ const (
 	// SwarmFuseAnimationDuration matches spirit convergence timing
 	SwarmFuseAnimationDuration = 500 * time.Millisecond
 
-	// SwarmHomingAccelFloat is acceleration toward cursor (cells/sec²)
-	SwarmHomingAccelFloat = 6.0
-	// SwarmDragFloat is deceleration when overspeed (1/sec)
-	SwarmDragFloat = 2.0
-	// SwarmDeflectAngleVarFloat is half-angle of random deflection cone (radians)
-	SwarmDeflectAngleVarFloat = 0.25
+	// SwarmHomingAccel is acceleration toward cursor (cells/sec²)
+	SwarmHomingAccel = 6.0
+	// SwarmDrag is deceleration when overspeed (1/sec)
+	SwarmDrag = 2.0
+	// SwarmDeflectAngleVar is half-angle of random deflection cone (radians)
+	SwarmDeflectAngleVar = 0.25
 
-	// SwarmRestitutionFloat is velocity retained on wall/boundary bounce
-	SwarmRestitutionFloat = 0.5
-	// SwarmDecelDragFloat is the per-tick velocity scale during the decelerate phase
-	SwarmDecelDragFloat = 0.1
+	// SwarmRestitution is velocity retained on wall/boundary bounce
+	SwarmRestitution = 0.5
+	// SwarmDecelDrag is the per-tick velocity scale during the decelerate phase
+	SwarmDecelDrag = 0.1
 )
 
 // Swarm Teleport
@@ -76,27 +76,14 @@ const (
 	// SwarmTeleportDuration is visual effect duration before instant move
 	SwarmTeleportDuration = 400 * time.Millisecond
 
-	// SwarmTeleportBeamAlphaFloat is peak beam opacity
-	SwarmTeleportBeamAlphaFloat = 0.5
-	// SwarmTeleportBeamTrailFloat is trail length fraction
-	SwarmTeleportBeamTrailFloat = 0.3
+	// SwarmTeleportBeamAlpha is peak beam opacity
+	SwarmTeleportBeamAlpha = 0.5
+	// SwarmTeleportBeamTrail is trail length fraction
+	SwarmTeleportBeamTrail = 0.3
 	// SwarmTeleport256Threshold for 256-color visibility
 	SwarmTeleport256Threshold = 0.15
 )
 
-// Swarm physics
-var (
-	SwarmChaseSpeed      = vmath.Mul(DrainBaseSpeed, vmath.FromInt(SwarmChaseSpeedMultiplier))
-	SwarmHomingAccel     = vmath.FromFloat(SwarmHomingAccelFloat)
-	SwarmDrag            = vmath.FromFloat(SwarmDragFloat)
-	SwarmDeflectAngleVar = vmath.FromFloat(SwarmDeflectAngleVarFloat)
-	SwarmRestitution     = vmath.FromFloat(SwarmRestitutionFloat)
-	SwarmDecelDrag       = vmath.FromFloat(SwarmDecelDragFloat)
-)
-
 // Entity collision radii (ellipse semi-axes for overlap detection)
-var (
-	SwarmCollisionRadiusX                        = vmath.FromFloat(SwarmCollisionRadiusXFloat)
-	SwarmCollisionRadiusY                        = vmath.FromFloat(SwarmCollisionRadiusYFloat)
-	SwarmCollisionInvRxSq, SwarmCollisionInvRySq = vmath.EllipseInvRadiiSq(SwarmCollisionRadiusX, SwarmCollisionRadiusY)
-)
+var SwarmCollisionInvRxSq, SwarmCollisionInvRySq = vmath.EllipseInvRadiiSqF(
+	SwarmCollisionRadiusX, SwarmCollisionRadiusY)

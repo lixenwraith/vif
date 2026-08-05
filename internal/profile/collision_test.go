@@ -1,32 +1,33 @@
 package profile
 
 import (
+	"math"
 	"testing"
 
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 func TestMassRatioClamped(t *testing.T) {
 	if got := massRatio(MassPylon, MassDrain); got != MassRatioMax {
-		t.Errorf("pylon/drain = %d, want clamp %d", got, MassRatioMax)
+		t.Errorf("pylon/drain = %v, want clamp %v", got, MassRatioMax)
 	}
 	if got := massRatio(MassDust, MassStorm); got != MassRatioMin {
-		t.Errorf("dust/storm = %d, want clamp %d", got, MassRatioMin)
+		t.Errorf("dust/storm = %v, want clamp %v", got, MassRatioMin)
 	}
-	if got := massRatio(MassDrain, MassDrain); got != vmath.Scale {
-		t.Errorf("equal masses = %d, want Scale", got)
+	if got := massRatio(MassDrain, MassDrain); got != 1.0 {
+		t.Errorf("equal masses = %v, want 1.0", got)
 	}
 }
 
 func TestMassRatioMonotonic(t *testing.T) {
 	// heavier target absorbs more: ratio must not increase
 	targets := []Mass{MassDrain, MassSwarm, MassEye, MassQuasar, MassStorm}
-	prev := int64(1) << 62
+	prev := math.MaxFloat64
 	for _, tgt := range targets {
 		r := massRatio(MassCleaner, tgt)
 		if r > prev {
-			t.Fatalf("ratio rose with target mass: %d > %d", r, prev)
+			t.Fatalf("ratio rose with target mass: %v > %v", r, prev)
 		}
 		prev = r
 	}
@@ -60,16 +61,16 @@ func allProfiles() map[string]*physics.CollisionProfile {
 func TestProfileInvariants(t *testing.T) {
 	for name, p := range allProfiles() {
 		if p.MassRatio < MassRatioMin || p.MassRatio > MassRatioMax {
-			t.Errorf("%s: MassRatio %d outside clamp band", name, p.MassRatio)
+			t.Errorf("%s: MassRatio %v outside clamp band", name, p.MassRatio)
 		}
 		if p.ImpulseMin <= 0 || p.ImpulseMax < p.ImpulseMin {
-			t.Errorf("%s: impulse bounds [%d, %d]", name, p.ImpulseMin, p.ImpulseMax)
+			t.Errorf("%s: impulse bounds [%v, %v]", name, p.ImpulseMin, p.ImpulseMax)
 		}
 		if p.AngleVariance < 0 {
 			t.Errorf("%s: negative angle variance", name)
 		}
-		if p.OffsetInfluence < 0 || p.OffsetInfluence > vmath.Scale {
-			t.Errorf("%s: OffsetInfluence %d outside [0, Scale]", name, p.OffsetInfluence)
+		if p.OffsetInfluence < 0 || p.OffsetInfluence > 1.0 {
+			t.Errorf("%s: OffsetInfluence %v outside [0, 1]", name, p.OffsetInfluence)
 		}
 	}
 }
@@ -77,12 +78,12 @@ func TestProfileInvariants(t *testing.T) {
 func TestProfilesProduceUsableImpulse(t *testing.T) {
 	rng := vmath.NewFastRand(0xB0A7)
 	for name, p := range allProfiles() {
-		ix, iy := physics.ImpulseFromProfile(vmath.FromFloat(1), vmath.FromFloat(1), p, rng)
+		ix, iy := physics.ImpulseFromProfile(1, 1, p, rng)
 		if ix == 0 && iy == 0 {
 			t.Errorf("%s: produced zero impulse", name)
 		}
-		if m := vmath.Magnitude(ix, iy); m > vmath.FromFloat(1000) {
-			t.Errorf("%s: impulse magnitude %v cells/sec is implausible", name, vmath.ToFloat(m))
+		if m := vmath.MagnitudeF(ix, iy); m > 1000 {
+			t.Errorf("%s: impulse magnitude %v cells/sec is implausible", name, m)
 		}
 	}
 }

@@ -15,8 +15,8 @@ import (
 type ExplosionSystem struct {
 	world *engine.World
 
-	baseRadius int64 // Default radius Q32.32
-	radiusCap  int64 // Maximum radius after merges Q32.32
+	baseRadius float64 // Default radius in cells
+	radiusCap  float64 // Maximum radius after merges (cells)
 
 	// Reusable buffers to avoid allocation in hot path
 	entityBuf    []core.Entity
@@ -159,10 +159,10 @@ func (s *ExplosionSystem) fireFromDust() {
 	}
 }
 
-func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.ExplosionType) {
+func (s *ExplosionSystem) addCenter(x, y int, radius float64, explosionType event.ExplosionType) {
 	transRes := s.world.Resources.Transient
-	centerX := vmath.FromInt(x)
-	centerY := vmath.FromInt(y)
+	centerX := float64(x)
+	centerY := float64(y)
 
 	// Merge check - only merge same type
 	for i := range transRes.ExplosionCount {
@@ -171,16 +171,14 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 			continue
 		}
 
-		dx := centerX - vmath.FromInt(c.X)
-		dy := centerY - vmath.FromInt(c.Y)
-		distSq := vmath.MagnitudeSq(dx, dy)
+		dx := centerX - float64(c.X)
+		dy := centerY - float64(c.Y)
+		distSq := vmath.MagnitudeSqF(dx, dy)
 
 		if distSq <= parameter.ExplosionMergeThresholdSq {
 			c.Age = 0
-			c.Intensity += parameter.ExplosionIntensityBoost
-			if c.Intensity > parameter.ExplosionIntensityCap {
-				c.Intensity = parameter.ExplosionIntensityCap
-			}
+
+			c.Intensity = min(c.Intensity+parameter.ExplosionIntensityBoost, parameter.ExplosionIntensityCap)
 			c.Radius = min(max(c.Radius, radius)+parameter.ExplosionRadiusBoost, s.radiusCap)
 
 			s.statMerged.Add(1)
@@ -209,7 +207,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 		X:         x,
 		Y:         y,
 		Radius:    radius,
-		Intensity: vmath.Scale,
+		Intensity: 1.0,
 		Age:       0,
 		Type:      explosionType,
 	}
@@ -222,7 +220,7 @@ func (s *ExplosionSystem) addCenter(x, y int, radius int64, explosionType event.
 
 // processExplosionArea handles entity collection and event emission for explosion effects
 // Single-pass sweep: collects combat entities (always), converts glyphs (dust only)
-func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int64, explosionType event.ExplosionType) {
+func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius float64, explosionType event.ExplosionType) {
 	config := s.world.Resources.Config
 	cursorEntity := s.world.Resources.Player.Entity
 
@@ -243,7 +241,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	}
 
 	// Calculate bounds with aspect correction
-	radiusCells := vmath.ToInt(radius)
+	radiusCells := int(radius)
 	radiusCellsY := radiusCells / 2
 
 	minX := max(0, centerX-radiusCells)
@@ -251,7 +249,7 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	minY := max(0, centerY-radiusCellsY)
 	maxY := min(config.MapHeight-1, centerY+radiusCellsY)
 
-	radiusSq := vmath.Mul(radius, radius)
+	radiusSq := radius * radius
 
 	// Clear reuse buffers
 	s.entityBuf = s.entityBuf[:0]
@@ -265,10 +263,9 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius int6
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for y := minY; y <= maxY; y++ {
 		for x := minX; x <= maxX; x++ {
-			dx := vmath.FromInt(x - centerX)
-			dy := vmath.FromInt(y - centerY)
-			dyCirc := vmath.ScaleToCircular(dy)
-			distSq := vmath.CircleDistSq(dx, dyCirc)
+			dx := float64(x - centerX)
+			dyCirc := vmath.ScaleToCircularF(float64(y - centerY))
+			distSq := vmath.CircleDistSqF(dx, dyCirc)
 
 			if distSq > radiusSq {
 				continue

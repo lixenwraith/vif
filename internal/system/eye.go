@@ -110,10 +110,7 @@ func (s *EyeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
-	if dtCap := vmath.FromFloat(0.1); dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
 	// Detached copy: despawnEye may remove from the Eye store mid-iteration
 	headerEntities := s.world.Components.Eye.GetAllEntities()
@@ -159,10 +156,10 @@ func (s *EyeSystem) Update() {
 		s.updateAnimationFrame(eyeComp)
 
 		// Homing movement
-		s.updateHomingMovement(headerEntity, eyeComp, &combatComp, kineticComp, dtFixed)
+		s.updateHomingMovement(headerEntity, eyeComp, &combatComp, kineticComp, dtSec)
 
 		// Physics integration and member position sync
-		s.integrateAndSync(headerEntity, kineticComp, dtFixed)
+		s.integrateAndSync(headerEntity, kineticComp, dtSec)
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {
@@ -176,7 +173,7 @@ func (s *EyeSystem) Update() {
 				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 					X:      headerPos.X,
 					Y:      headerPos.Y,
-					Radius: parameter.EyeExplosionRadius,
+					Radius: parameter.EyeSelfDestructRadius,
 					Type:   event.ExplosionTypeEye,
 				})
 			}
@@ -304,7 +301,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	})
 
 	// Kinetic with centered position
-	preciseX, preciseY := vmath.CenteredFromGrid(headerX, headerY)
+	preciseX, preciseY := vmath.Point{X: headerX, Y: headerY}.CenterF()
 	s.world.Components.Kinetic.SetComponent(headerEntity, component.KineticComponent{
 		Kinetic: physics.Kinetic{
 			PreciseX: preciseX,
@@ -396,7 +393,7 @@ func (s *EyeSystem) updateHomingMovement(
 	eyeComp *component.EyeComponent,
 	combatComp *component.CombatComponent,
 	kineticComp *component.KineticComponent,
-	dtFixed int64,
+	dtSec float64,
 ) {
 	// Skip homing during kinetic immunity (knockback in progress)
 	if combatComp.RemainingKineticImmunity > 0 {
@@ -407,24 +404,24 @@ func (s *EyeSystem) updateHomingMovement(
 
 	// Cornering drag
 	turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
-		parameter.NavCorneringThreshold, vmath.Scale)
+		parameter.NavCorneringThreshold, 1.0)
 
 	physics.ApplyHomingScaled(
 		&kineticComp.Kinetic,
 		targetX, targetY,
 		&profile.EyeHomingProfiles[eyeComp.Type],
-		vmath.Scale,
-		dtFixed,
+		1.0,
+		dtSec,
 		usingDirectPath,
 	)
 
 	if turnSeverity > 0 {
 		physics.ApplyLinearDrag(&kineticComp.Kinetic,
-			vmath.Mul(turnSeverity, parameter.NavCorneringBrake), dtFixed)
+			turnSeverity*parameter.NavCorneringBrake, dtSec)
 	}
 }
 
-func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *component.KineticComponent, dtFixed int64) {
+func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *component.KineticComponent, dtSec float64) {
 	config := s.world.Resources.Config
 
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
@@ -447,7 +444,7 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 
 	newX, newY, _ := physics.IntegrateWithBounce(
 		&kineticComp.Kinetic,
-		dtFixed,
+		dtSec,
 		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
 		minHeaderX, maxHeaderX,
 		minHeaderY, maxHeaderY,

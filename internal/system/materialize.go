@@ -6,7 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // MaterializeSystem manages materializer animations and triggering spawn completion
@@ -97,16 +96,11 @@ func (s *MaterializeSystem) Update() {
 		return
 	}
 
-	dtFixed := vmath.FromFloat(s.world.Resources.Time.DeltaTime.Seconds())
 	// Cap delta time to prevent tunneling on lag spikes
-	dtCap := vmath.FromFloat(0.1)
-	if dtFixed > dtCap {
-		dtFixed = dtCap
-	}
+	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
-	// Progress velocity in Q32.32: full progress (Scale) over duration
-	durationFixed := vmath.FromFloat(parameter.MaterializeAnimationDuration.Seconds())
-	progressDelta := vmath.Div(dtFixed, durationFixed)
+	// Full progress (1.0) over the animation duration
+	progressDelta := dtSec / parameter.MaterializeAnimationDuration.Seconds()
 
 	materializes := s.world.Components.Materialize
 	if materializes.CountEntities() == 0 {
@@ -122,7 +116,7 @@ func (s *MaterializeSystem) Update() {
 
 		matComp.Progress += progressDelta
 
-		if matComp.Progress >= vmath.Scale {
+		if matComp.Progress >= 1.0 {
 			s.world.PushEvent(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
 				X:    matComp.TargetX,
 				Y:    matComp.TargetY,

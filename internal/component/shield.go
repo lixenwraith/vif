@@ -16,15 +16,14 @@ const (
 // ShieldComponent holds runtime state for game mechanics
 // Visual parameters looked up via Type in visual.ShieldConfigs
 type ShieldComponent struct {
-	Active bool
-	Type   ShieldType
-
-	// Q32.32 fixed-point geometry (game mechanics)
-	RadiusX int64
-	RadiusY int64
-	InvRxSq int64
-	InvRySq int64
-
 	// Player-specific runtime state
 	LastDrainTime time.Time
+
+	RadiusX float64
+	RadiusY float64
+	InvRxSq float64
+	InvRySq float64
+
+	Type   ShieldType
+	Active bool
 }

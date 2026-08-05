@@ -73,7 +73,7 @@ func (s *BulletSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtSec := dt.Seconds()
 
 	bullets := s.world.Components.Bullet
 	if bullets.CountEntities() == 0 {
@@ -108,7 +108,7 @@ func (s *BulletSystem) Update() {
 		}
 
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
-		gridX, gridY := physics.IntegratePosition(&kinetic.Kinetic, dtFixed)
+		gridX, gridY := physics.IntegratePosition(&kinetic.Kinetic, dtSec)
 
 		destroyed := s.traverseAndCollide(
 			bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY,
@@ -133,19 +133,19 @@ func (s *BulletSystem) Update() {
 // Returns true if bullet should be destroyed
 func (s *BulletSystem) traverseAndCollide(
 	bullet *component.BulletComponent,
-	fromX, fromY, toX, toY int64,
+	fromX, fromY, toX, toY float64,
 	hasCursor, shieldActive bool,
 	cursorPos component.PositionComponent,
 	shieldComp component.ShieldComponent,
 ) bool {
-	startGridX, startGridY := vmath.ToInt(fromX), vmath.ToInt(fromY)
+	start := vmath.PointAtF(fromX, fromY)
 
-	traverser := vmath.NewGridTraverser(fromX, fromY, toX, toY)
+	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
 	for traverser.Next() {
 		cx, cy := traverser.Pos()
 
 		// Skip origin cell
-		if cx == startGridX && cy == startGridY {
+		if cx == start.X && cy == start.Y {
 			continue
 		}
 
@@ -162,7 +162,7 @@ func (s *BulletSystem) traverseAndCollide(
 		}
 
 		// Shield containment (checked before direct hit; shield area encloses cursor)
-		if shieldActive && vmath.EllipseContainsPoint(
+		if shieldActive && vmath.EllipseContainsPointF(
 			cx, cy, cursorPos.X, cursorPos.Y,
 			shieldComp.InvRxSq, shieldComp.InvRySq,
 		) {
@@ -202,8 +202,6 @@ func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
 		},
 	})
 
-	s.world.Positions.SetPosition(e, component.PositionComponent{
-		X: vmath.ToInt(p.OriginX),
-		Y: vmath.ToInt(p.OriginY),
-	})
+	origin := vmath.PointAtF(p.OriginX, p.OriginY)
+	s.world.Positions.SetPosition(e, component.PositionComponent{X: origin.X, Y: origin.Y})
 }

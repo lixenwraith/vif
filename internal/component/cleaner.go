@@ -15,9 +15,9 @@ const (
 )
 
 type CleanerComponent struct {
-	// Destruction target (tail must clear screen) - Q32.32
-	TargetX int64
-	TargetY int64
+	// Destruction target (tail must clear screen)
+	TargetX float64
+	TargetY float64
 
 	// Ring buffer trail (zero-allocation updates)
 	TrailRing [parameter.CleanerTrailLength]vmath.Point
@@ -32,7 +32,7 @@ type CleanerComponent struct {
 
 	// Blocking state: head stopped, trail draining to stop point
 	Blocked        bool
-	DrainSpeed     int64 // Q32.32 absolute velocity for drain rate
-	DrainRemaining int64 // Q32.32 remaining drain distance; entity destroyed at 0
-	DrainTotal     int64 // Q32.32 initial drain distance (renderer ratio = Remaining/Total)
+	DrainSpeed     float64 // Absolute velocity for drain rate
+	DrainRemaining float64 // Remaining drain distance; entity destroyed at 0
+	DrainTotal     float64 // Initial drain distance (renderer ratio = Remaining/Total)
 }

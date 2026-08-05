@@ -2,11 +2,11 @@ package component
 
 // DustComponent represents orbital dust particles from glyph transformation
 type DustComponent struct {
-	// Target orbit radius, randomized per entity (Q32.32)
-	OrbitRadius int64
+	// Target orbit radius in cells, randomized per entity
+	OrbitRadius float64
 
-	// Chase boost multiplier, decays over time (Q32.32, Scale = 1.0)
-	ChaseBoost int64
+	// Chase boost multiplier, decays over time (1.0 = no boost)
+	ChaseBoost float64
 
 	// Grid tracking for spatial index sync
 	LastIntX int
