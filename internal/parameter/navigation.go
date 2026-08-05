@@ -1,9 +1,5 @@
 package parameter
 
-import (
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
-)
-
 // Navigation - Flow Field
 const (
 	// NavFlowMinTicksBetweenCompute is minimum game ticks between flow field recomputation
@@ -15,18 +11,12 @@ const (
 	// NavRouteRebuildInterval is minimum game ticks between gateway route graph recomputes
 	NavRouteRebuildInterval = 20
 
-	// NavCorneringBrakeFloat is the drag multiplier per unit of turn severity
-	NavCorneringBrakeFloat = 0.8
-	// NavCorneringThresholdFloat is the alignment below which cornering drag activates
-	NavCorneringThresholdFloat = 3.0
-	// NavFlowLookaheadDefaultFloat is flow-field target lookahead (cells)
-	NavFlowLookaheadDefaultFloat = 12.0
-)
-
-var (
-	NavCorneringBrake       = vmath.FromFloat(NavCorneringBrakeFloat)
-	NavCorneringThreshold   = vmath.FromFloat(NavCorneringThresholdFloat)
-	NavFlowLookaheadDefault = vmath.FromFloat(NavFlowLookaheadDefaultFloat)
+	// NavCorneringBrake is the drag multiplier per unit of turn severity
+	NavCorneringBrake = 0.8
+	// NavCorneringThreshold is the alignment below which cornering drag activates
+	NavCorneringThreshold = 3.0
+	// NavFlowLookaheadDefault is flow-field target lookahead (cells)
+	NavFlowLookaheadDefault = 12.0
 )
 
 // Route Graph — Computation

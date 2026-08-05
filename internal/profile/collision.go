@@ -2,25 +2,21 @@ package profile
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// Offset blends the hit point into the impulse direction. It applies only
-// when the target's Kinetic lives on a header separate from the hit cell;
-// single-cell entities and ablative members with their own Kinetic get none.
+// Offset blend; mirrors collision.go
 const (
-	OffsetNone int64 = 0
-	OffsetBody int64 = vmath.Scale / 3 // hit point contributes 1/3 of direction
+	OffsetNone float64 = 0
+	OffsetBody float64 = 1.0 / 3.0
 )
 
-// kinetic builds a combat knockback profile.
-// mode is the attack family's accumulation rule; offset is the target's shape.
-func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset int64) physics.CollisionProfile {
+// kineticF builds a combat knockback profile
+func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset float64) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       massRatio(impactor, target),
-		ImpulseMin:      parameter.CollisionKineticImpulseMin,
-		ImpulseMax:      parameter.CollisionKineticImpulseMax,
+		ImpulseMin:      parameter.CollisionKineticImpulseMinFloat,
+		ImpulseMax:      parameter.CollisionKineticImpulseMaxFloat,
 		AngleVariance:   angleVar,
 		Mode:            mode,
 		OffsetInfluence: offset,
@@ -28,12 +24,12 @@ func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset i
 }
 
 // redirect sends the target off as a unit (cleaner, shield)
-func redirect(impactor, target Mass, angleVar, offset int64) physics.CollisionProfile {
+func redirect(impactor, target Mass, angleVar, offset float64) physics.CollisionProfile {
 	return kinetic(impactor, target, physics.ImpulseOverride, angleVar, offset)
 }
 
 // accumulate adds to existing velocity (explosion, dust)
-func accumulate(impactor, target Mass, angleVar, offset int64) physics.CollisionProfile {
+func accumulate(impactor, target Mass, angleVar, offset float64) physics.CollisionProfile {
 	return kinetic(impactor, target, physics.ImpulseAdditive, angleVar, offset)
 }
 
@@ -41,9 +37,9 @@ func accumulate(impactor, target Mass, angleVar, offset int64) physics.Collision
 func soft(impactor, target Mass) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       softRatio(impactor, target),
-		ImpulseMin:      parameter.SoftCollisionImpulseMin,
-		ImpulseMax:      parameter.SoftCollisionImpulseMax,
-		AngleVariance:   parameter.SoftCollisionAngleVar,
+		ImpulseMin:      parameter.SoftCollisionImpulseMinFloat,
+		ImpulseMax:      parameter.SoftCollisionImpulseMaxFloat,
+		AngleVariance:   parameter.SoftCollisionAngleVarFloat,
 		Mode:            physics.ImpulseAdditive,
 		OffsetInfluence: 0,
 	}
@@ -51,51 +47,44 @@ func soft(impactor, target Mass) physics.CollisionProfile {
 
 // --- Cleaner (projectile) ---
 var (
-	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
-	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
-	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
-	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
+	CleanerToDrain     = accumulate(MassCleaner, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	CleanerToSwarm     = redirect(MassCleaner, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
+	CleanerToQuasar    = redirect(MassCleaner, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	CleanerToStorm     = redirect(MassCleaner, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	CleanerToSnakeHead = redirect(MassCleaner, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	CleanerToSnakeBody = accumulate(MassCleaner, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	CleanerToEye       = redirect(MassCleaner, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
 )
 
 // --- Shield ---
-// The shield is a cursor extension with no mass of its own; knockback is
-// computed from cursor mass against the target.
 var (
-	ShieldToDrain     = accumulate(MassCursor, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	ShieldToSwarm     = redirect(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
-	ShieldToQuasar    = redirect(MassCursor, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
-	ShieldToStorm     = redirect(MassCursor, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
-	ShieldToSnakeHead = redirect(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
-	ShieldToSnakeBody = accumulate(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
-	ShieldToEye       = redirect(MassCursor, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
+	ShieldToDrain     = accumulate(MassCursor, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	ShieldToSwarm     = redirect(MassCursor, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
+	ShieldToQuasar    = redirect(MassCursor, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ShieldToStorm     = redirect(MassCursor, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ShieldToSnakeHead = redirect(MassCursor, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ShieldToSnakeBody = accumulate(MassCursor, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	ShieldToEye       = redirect(MassCursor, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
 )
 
 // --- Explosion (also used by missile impact) ---
-// Additive throughout: explosions accumulate rather than redirect.
-// Kinetic immunity gates the knockback; damage dedup uses RemainingDamageImmunity.
 var (
-	ExplosionToDrain     = accumulate(MassExplosion, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	ExplosionToSwarm     = accumulate(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVar, OffsetBody)
-	ExplosionToQuasar    = accumulate(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVar, OffsetBody)
-	ExplosionToStorm     = accumulate(MassExplosion, MassStorm, parameter.DrainDeflectAngleVar, OffsetBody)
-	ExplosionToSnakeHead = accumulate(MassExplosion, MassSnakeHead, parameter.DrainDeflectAngleVar, OffsetBody)
-	ExplosionToSnakeBody = accumulate(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVar, OffsetNone)
-	ExplosionToEye       = accumulate(MassExplosion, MassEye, parameter.DrainDeflectAngleVar, OffsetBody)
+	ExplosionToDrain     = accumulate(MassExplosion, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	ExplosionToSwarm     = accumulate(MassExplosion, MassSwarm, parameter.SwarmDeflectAngleVarFloat, OffsetBody)
+	ExplosionToQuasar    = accumulate(MassExplosion, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ExplosionToStorm     = accumulate(MassExplosion, MassStorm, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ExplosionToSnakeHead = accumulate(MassExplosion, MassSnakeHead, parameter.DrainDeflectAngleVarFloat, OffsetBody)
+	ExplosionToSnakeBody = accumulate(MassExplosion, MassSnakeBody, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	ExplosionToEye       = accumulate(MassExplosion, MassEye, parameter.DrainDeflectAngleVarFloat, OffsetBody)
 )
 
 // --- Dust ---
-// Dust impulses are accumulated per tick by DustSystem and applied in bulk;
-// ApplyCollisionImpulse ignores OffsetInfluence, so shape is irrelevant here.
 var (
-	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVar, OffsetNone)
+	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVarFloat, OffsetNone)
+	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVarFloat, OffsetNone)
 )
 
 // --- Soft collision (inter-species scatter) ---
-
 var (
 	SoftDrainToQuasar  = soft(MassDrain, MassQuasar)
 	SoftSwarmToSwarm   = soft(MassSwarm, MassSwarm)
