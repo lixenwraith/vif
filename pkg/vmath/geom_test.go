@@ -160,6 +160,16 @@ func TestEllipseContainsMatchesFloatVariant(t *testing.T) {
 	}
 }
 
+func TestEllipseInvRadiiSqFZeroRadiusMatchesFixedGuard(t *testing.T) {
+	invX, invY := EllipseInvRadiiSqF(0, 2)
+	if invX != 0 || invY != 0.25 {
+		t.Fatalf("EllipseInvRadiiSqF(0, 2) = (%v,%v), want (0,0.25)", invX, invY)
+	}
+	if !EllipseContainsF(0, 0, invX, invY) {
+		t.Fatal("zero-radius ellipse must not produce NaN at its center")
+	}
+}
+
 func TestEllipseContainsPointCentered(t *testing.T) {
 	invRx, invRy := EllipseInvRadiiSq(FromFloat(3), FromFloat(1.5))
 	if !EllipseContainsPoint(10, 10, 10, 10, invRx, invRy) {

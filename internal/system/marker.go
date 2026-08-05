@@ -73,7 +73,7 @@ func (s *MarkerSystem) Update() {
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	dtFixed := vmath.FromFloat(dt.Seconds())
+	dtSeconds := dt.Seconds()
 
 	markers := s.world.Components.Marker
 	for _, markerEntity := range markers.Entities() {
@@ -84,13 +84,12 @@ func (s *MarkerSystem) Update() {
 
 		// Pulse update
 		if markerComp.PulseRate > 0 {
-			// Sine pulse modulation
+			// PulseRate is cycles per second; SinF accepts radians.
 			gameTime := s.world.Resources.Time.GameTimeNano()
-			pulsePhase := vmath.FromFloat(float64(gameTime) / 1e9)
-			pulseAngle := vmath.Mul(pulsePhase, markerComp.PulseRate)
-			pulseMod := vmath.Sin(pulseAngle)
-			// Map [-Scale, Scale] to [0.5, 1.0]
-			markerComp.Intensity = vmath.Scale/2 + vmath.Div(pulseMod, 4)
+			pulseAngle := float64(gameTime) / 1e9 * markerComp.PulseRate * vmath.TwoPi
+			pulseMod := vmath.SinF(pulseAngle)
+			// Preserve the fixed-path range: [-1,1] maps to [0.25,0.75].
+			markerComp.Intensity = 0.5 + pulseMod*0.25
 		}
 
 		// Fade update
@@ -103,8 +102,8 @@ func (s *MarkerSystem) Update() {
 				// Note: actual timer countdown handled by TimeKeeper
 				if markerComp.FadeMode == 1 {
 					// Intensity decreases as timer expires
-					fadeRate := vmath.Div(vmath.Scale, vmath.FromFloat(timer.Remaining.Seconds()))
-					markerComp.Intensity -= vmath.Mul(fadeRate, dtFixed)
+					fadeRate := 1.0 / timer.Remaining.Seconds()
+					markerComp.Intensity -= fadeRate * dtSeconds
 					if markerComp.Intensity < 0 {
 						markerComp.Intensity = 0
 					}
@@ -127,7 +126,7 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 
 	intensity := p.Intensity
 	if intensity <= 0 {
-		intensity = vmath.Scale
+		intensity = 1.0
 	}
 
 	entity := s.world.CreateEntity()

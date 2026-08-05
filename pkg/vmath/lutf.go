@@ -34,15 +34,15 @@ func init() {
 
 // SinF returns the sine of angleRad using O(1) LUT lookup.
 func SinF(angleRad float64) float64 {
-	// Fast conversion to index.
-	// Go's bitwise AND handles negative numbers correctly via two's complement.
-	idx := int(angleRad*radToIndex) & LUTMask
+	// Floor to preserve the arithmetic right-shift behavior of the fixed path
+	// for negative angles. Go's int conversion would truncate toward zero.
+	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
 	return SinF_LUT[idx]
 }
 
 // CosF returns the cosine of angleRad using O(1) LUT lookup.
 func CosF(angleRad float64) float64 {
-	idx := int(angleRad*radToIndex) & LUTMask
+	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
 	return CosF_LUT[idx]
 }
 

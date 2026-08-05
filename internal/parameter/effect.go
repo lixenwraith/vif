@@ -82,8 +82,8 @@ const (
 	// MissileDrag is velocity damping for stable turns
 	MissileDrag = 4.0
 
-	// MissileSpreadAngle is arc spread for children spawn (radians, ~120°)
-	MissileSpreadAngle = 2.1
+	// MissileSpreadTurns preserves the original full-turn spread value.
+	MissileSpreadTurns = 2.1
 
 	// MissileStaggerFactor is velocity reduction per child index (0.05 = 5%)
 	MissileStaggerFactor = 0.05

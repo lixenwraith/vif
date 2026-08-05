@@ -28,25 +28,25 @@ const (
 // Positions presence is at StartX/StartY to avoid target saturation
 // Actual render position is calculated via Lerp from Start to Target
 type SpiritComponent struct {
-	// Starting position in Q32.32 (where the spirit spawned)
-	StartX, StartY int64
+	// Starting precise position in cells (where the spirit spawned)
+	StartX, StartY float64
 
-	// Target position in Q32.32 (convergence point)
-	TargetX, TargetY int64
+	// Target precise position in cells (convergence point)
+	TargetX, TargetY float64
 
-	// Animation progress in Q32.32: 0 = start, Scale = complete
-	Progress int64
+	// Animation progress: 0.0 = start, 1.0 = complete
+	Progress float64
 
 	Pattern   SpiritPattern
-	Amplitude int64 // (Q32.32, for wave/bounce magnitude)
-	Frequency int64 // (Q32.32, oscillation rate)
+	Amplitude float64 // Wave/bounce magnitude in cells
+	Frequency float64 // Oscillation rate
 
-	// Speed increment per tick in Q32.32 (distance-dependent)
-	Speed int64
+	// Progress increment per tick (distance-independent)
+	Speed float64
 
-	// Total rotation angle in Q32.32 radians (Scale = 2pi)
+	// Total rotation angle in radians
 	// Positive = CW, Negative = CCW
-	Spin int64
+	Spin float64
 
 	// Visual properties
 	Rune       rune

@@ -13,7 +13,14 @@ func EllipseContainsF(dx, dy, invRxSq, invRySq float64) bool {
 
 // EllipseInvRadiiSqF precomputes inverse squared radii for repeated checks
 func EllipseInvRadiiSqF(rx, ry float64) (float64, float64) {
-	return 1.0 / (rx * rx), 1.0 / (ry * ry)
+	var invRxSq, invRySq float64
+	if rx != 0 {
+		invRxSq = 1.0 / (rx * rx)
+	}
+	if ry != 0 {
+		invRySq = 1.0 / (ry * ry)
+	}
+	return invRxSq, invRySq
 }
 
 // EllipseAlphaF returns opacity for gradient rendering [0.0, maxAlpha]

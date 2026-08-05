@@ -11,7 +11,7 @@ const (
 	OffsetBody float64 = 1.0 / 3.0
 )
 
-// kineticF builds a combat knockback profile
+// kinetic builds a combat knockback profile
 func kinetic(impactor, target Mass, mode physics.ImpulseMode, angleVar, offset float64) physics.CollisionProfile {
 	return physics.CollisionProfile{
 		MassRatio:       massRatio(impactor, target),

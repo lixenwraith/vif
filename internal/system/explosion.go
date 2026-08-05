@@ -161,8 +161,6 @@ func (s *ExplosionSystem) fireFromDust() {
 
 func (s *ExplosionSystem) addCenter(x, y int, radius float64, explosionType event.ExplosionType) {
 	transRes := s.world.Resources.Transient
-	centerX := float64(x)
-	centerY := float64(y)
 
 	// Merge check - only merge same type
 	for i := range transRes.ExplosionCount {
@@ -171,8 +169,8 @@ func (s *ExplosionSystem) addCenter(x, y int, radius float64, explosionType even
 			continue
 		}
 
-		dx := centerX - float64(c.X)
-		dy := centerY - float64(c.Y)
+		dx := float64(x - c.X)
+		dy := float64(y - c.Y)
 		distSq := vmath.MagnitudeSqF(dx, dy)
 
 		if distSq <= parameter.ExplosionMergeThresholdSq {

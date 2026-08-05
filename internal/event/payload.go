@@ -662,9 +662,9 @@ type MarkerSpawnRequestPayload struct {
 	Y         int                   `toml:"y"`
 	Width     int                   `toml:"width"`
 	Height    int                   `toml:"height"`
-	Intensity int64                 `toml:"intensity"` // Q32.32
+	Intensity float64               `toml:"intensity"` // 0.0-1.0
 	Duration  time.Duration         `toml:"duration"`
-	PulseRate int64                 `toml:"pulse_rate"` // Q32.32, 0 = none
+	PulseRate float64               `toml:"pulse_rate"` // Hz, 0 = none
 	Color     color.RGB             `toml:"color"`
 	Shape     component.MarkerShape `toml:"shape"`
 	FadeMode  uint8                 `toml:"fade_mode"` // 0=none, 1=out, 2=in

@@ -70,12 +70,6 @@ const (
 	QuasarShield256Palette uint8 = 250
 )
 
-// Quasar physics
-var (
-	// QuasarSpeedMultiplierMaxFixed caps progressive speed increase (10x = Scale * 10)
-	QuasarSpeedMultiplierMaxFixed = vmath.Scale * QuasarSpeedMultiplierMax
-)
-
 // Pre-computed inverse squared radii for ellipse overlap checks
 var (
 	QuasarCollisionInvRxSq, QuasarCollisionInvRySq = vmath.EllipseInvRadiiSqF(QuasarCollisionRadiusX, QuasarCollisionRadiusY)

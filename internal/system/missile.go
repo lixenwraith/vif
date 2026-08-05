@@ -296,8 +296,8 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 		}
 	}
 
-	// Spread arc; angles are in rotation units (1.0 = full turn)
-	spread := parameter.MissileSpreadAngle
+	// Preserve the fixed-path contract: spread is measured in full turns.
+	spread := parameter.MissileSpreadTurns
 	step := 0.0
 	if p.Count > 1 {
 		step = spread / float64(p.Count-1)

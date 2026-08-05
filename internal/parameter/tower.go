@@ -2,8 +2,8 @@ package parameter
 
 // Tower Entity
 const (
-	TowerDefaultRadiusX = 6.0
-	TowerDefaultRadiusY = 3.0
+	TowerDefaultRadiusX = 6
+	TowerDefaultRadiusY = 3
 
 	TowerSpawnMaxAttempts     = 30
 	TowerSpawnSpiralMaxRadius = 30

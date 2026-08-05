@@ -226,6 +226,7 @@ func (s *StormSystem) spawnStorm() {
 	config := s.world.Resources.Config
 	centerX := config.MapWidth / 2
 	centerY := config.MapHeight / 2
+	centerPX, centerPY := (vmath.Point{X: centerX, Y: centerY}).CenterF()
 
 	// Pre-calculate circle spawn parameters
 	angleOffsets := [3]float64{0, vmath.TwoPi / 3, 2 * vmath.TwoPi / 3}
@@ -248,8 +249,8 @@ func (s *StormSystem) spawnStorm() {
 		offsetX := initialRadius * vmath.CosF(angle)
 		offsetY := initialRadius * vmath.SinF(angle) * 0.5 // Terminal aspect ratio
 
-		targetX := int(float64(centerX) + offsetX)
-		targetY := int(float64(centerY) + offsetY)
+		target := vmath.PointAtF(centerPX+offsetX, centerPY+offsetY)
+		targetX, targetY := target.X, target.Y
 
 		// Find valid position via spiral search
 		foundX, foundY, found := s.findCirclePosition(targetX, targetY)
@@ -560,11 +561,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		return
 	}
 
-	// Precompute boundary limits accounting for ellipse radius
-	boundMinX := parameter.StormBoundaryInsetX
-	boundMaxX := float64(config.MapWidth-1) - parameter.StormBoundaryInsetX
-	boundMinY := parameter.StormBoundaryInsetY
-	boundMaxY := float64(config.MapHeight-1) - parameter.StormBoundaryInsetY
+	// Precompute center-aligned boundary limits accounting for ellipse radius.
+	minX, minY := (vmath.Point{X: 0, Y: 0}).CenterF()
+	maxX, maxY := (vmath.Point{X: config.MapWidth - 1, Y: config.MapHeight - 1}).CenterF()
+	boundMinX := minX + parameter.StormBoundaryInsetX
+	boundMaxX := maxX - parameter.StormBoundaryInsetX
+	boundMinY := minY + parameter.StormBoundaryInsetY
+	boundMaxY := maxY - parameter.StormBoundaryInsetY
 
 	for i := range circles {
 		// 1. Stunned circles: skip physics, velocity already zeroed by combat system
@@ -1279,8 +1282,12 @@ func (s *StormSystem) initBlueAttack(
 	angle := s.rng.Float64() * vmath.TwoPi
 	distance := parameter.StormBlueSpawnDistance
 
-	targetX := circleX + int(distance*vmath.CosF(angle))
-	targetY := circleY + int(distance*vmath.SinF(angle)*0.5)
+	circlePX, circlePY := (vmath.Point{X: circleX, Y: circleY}).CenterF()
+	target := vmath.PointAtF(
+		circlePX+distance*vmath.CosF(angle),
+		circlePY+distance*vmath.SinF(angle)*0.5,
+	)
+	targetX, targetY := target.X, target.Y
 
 	if targetX < 0 {
 		targetX = 0

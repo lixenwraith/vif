@@ -39,7 +39,7 @@ var SnakeHoming = physics.HomingProfile{
 	DeadZone:         0.5,
 }
 
-// LootHomingF: aggressive arrival drag kills orbital momentum for reliable capture
+// LootHoming: aggressive arrival drag kills orbital momentum for reliable capture
 var LootHoming = physics.HomingProfile{
 	BaseSpeed:        parameter.LootHomingMaxSpeed,
 	HomingAccel:      parameter.LootHomingAccel,

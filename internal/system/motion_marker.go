@@ -150,7 +150,7 @@ func (s *MotionMarkerSystem) spawnMarker(x, y int, slice *[]core.Entity) {
 		Height:    1,
 		Shape:     component.MarkerShapeInvert,
 		Color:     visual.RgbWhite,
-		Intensity: vmath.Scale,
+		Intensity: 1.0,
 		PulseRate: 0,
 		FadeMode:  0,
 	})

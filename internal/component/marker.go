@@ -21,7 +21,7 @@ type MarkerComponent struct {
 	Height    int // Area height (minimum 1)
 	Shape     MarkerShape
 	Color     color.RGB
-	Intensity int64 // Q32.32, 0-Scale for alpha/fade control
-	PulseRate int64 // Q32.32, 0 = no pulse, >0 = Hz
-	FadeMode  uint8 // 0=none, 1=fade out, 2=fade in
+	Intensity float64 // 0.0-1.0 for alpha/fade control
+	PulseRate float64 // 0 = no pulse, >0 = Hz
+	FadeMode  uint8   // 0=none, 1=fade out, 2=fade in
 }

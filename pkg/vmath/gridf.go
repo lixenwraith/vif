@@ -4,7 +4,7 @@ import "math"
 
 // CenteredFromGridF converts integer grid coordinates to centered float64 position
 func CenteredFromGridF(x, y int) (float64, float64) {
-	return float64(x) + 0.5, float64(y) + 0.5
+	return (Point{X: x, Y: y}).CenterF()
 }
 
 // GridTraverserF implements a zero-allocation iterator for Supercover DDA grid traversal
@@ -22,12 +22,12 @@ type GridTraverserF struct {
 
 // NewGridTraverserF creates a new iterator from (x1, y1) to (x2, y2) in float64 space
 func NewGridTraverserF(x1, y1, x2, y2 float64) GridTraverserF {
-	ix, iy := int(math.Floor(x1)), int(math.Floor(y1))
-	targetX, targetY := int(math.Floor(x2)), int(math.Floor(y2))
+	start := PointAtF(x1, y1)
+	target := PointAtF(x2, y2)
 
 	t := GridTraverserF{
-		currX: ix, currY: iy,
-		targetX: targetX, targetY: targetY,
+		currX: start.X, currY: start.Y,
+		targetX: target.X, targetY: target.Y,
 	}
 
 	dx := x2 - x1
@@ -134,5 +134,6 @@ func CalculateCentroidF(coords []float64) (float64, float64) {
 
 // GridFromCenteredF converts centered float64 position to integer grid coordinates
 func GridFromCenteredF(px, py float64) (int, int) {
-	return int(math.Floor(px)), int(math.Floor(py))
+	p := PointAtF(px, py)
+	return p.X, p.Y
 }

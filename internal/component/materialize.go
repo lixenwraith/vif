@@ -8,7 +8,7 @@ type MaterializeComponent struct {
 	AreaWidth  int // Target width (1 = single column)
 	AreaHeight int // Target height (1 = single row)
 
-	// Animation progress: 0 = start, Scale = complete
+	// Animation progress: 0.0 = start, 1.0 = complete
 	Progress float64
 
 	// Visual parameters

@@ -132,6 +132,24 @@ func TestGridTraverserFInvariants(t *testing.T) {
 	}
 }
 
+func TestFloatGridConversionsUseCellCentersAndFloor(t *testing.T) {
+	for _, p := range []Point{{X: 0, Y: 0}, {X: 3, Y: -4}, {X: -9, Y: 9}} {
+		x, y := CenteredFromGridF(p.X, p.Y)
+		wantX, wantY := p.CenterF()
+		if x != wantX || y != wantY {
+			t.Errorf("CenteredFromGridF(%v) = (%v,%v), want (%v,%v)", p, x, y, wantX, wantY)
+		}
+		gx, gy := GridFromCenteredF(x, y)
+		if gx != p.X || gy != p.Y {
+			t.Errorf("GridFromCenteredF(%v.CenterF()) = (%d,%d)", p, gx, gy)
+		}
+	}
+
+	if x, y := GridFromCenteredF(-0.25, -1.75); x != -1 || y != -2 {
+		t.Errorf("GridFromCenteredF negative = (%d,%d), want (-1,-2)", x, y)
+	}
+}
+
 func TestCalculateCentroid(t *testing.T) {
 	if x, y := CalculateCentroid([]int{0, 0, 4, 8}); x != 2 || y != 4 {
 		t.Errorf("centroid = (%d,%d), want (2,4)", x, y)

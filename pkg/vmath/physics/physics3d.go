@@ -63,6 +63,10 @@ func ElasticCollision3D(
 	velA, velB *vmath.Vec3F,
 	massA, massB, restitution float64,
 ) bool {
+	if massA <= 0 || massB <= 0 {
+		return false
+	}
+
 	dx := posB.X - posA.X
 	dy := posB.Y - posA.Y
 	dz := posB.Z - posA.Z
@@ -107,6 +111,10 @@ const separateMargin = 0.0625
 
 // SeparateOverlap3D pushes overlapping spheres apart in place, returns true if moved
 func SeparateOverlap3D(posA, posB *vmath.Vec3F, radiusA, radiusB, massA, massB float64) bool {
+	if massA <= 0 || massB <= 0 {
+		return false
+	}
+
 	dx := posB.X - posA.X
 	dy := posB.Y - posA.Y
 	dz := posB.Z - posA.Z

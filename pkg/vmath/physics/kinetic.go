@@ -1,10 +1,6 @@
 package physics
 
-import (
-	"math"
-
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
-)
+import "github.com/lixenwraith/vi-fighter/pkg/vmath"
 
 // Kinetic is a 2D point-mass state in float64.
 // Position is a sub-cell coordinate in cells; grid cells are vmath.Point.
@@ -42,14 +38,14 @@ func SetImpulse(k *Kinetic, vx, vy float64) {
 // ReflectBoundsX handles horizontal boundary collision, returns true if reflection occurred
 // Clamps to centered position within valid cell range [minX, maxX)
 func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
-	x := int(math.Floor(k.PreciseX))
-	if x < minX {
-		k.PreciseX = float64(minX) + vmath.CellCenterF
+	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	if p.X < minX {
+		k.PreciseX, _ = (vmath.Point{X: minX}).CenterF()
 		k.VelX = -k.VelX
 		return true
 	}
-	if x >= maxX {
-		k.PreciseX = float64(maxX-1) + vmath.CellCenterF
+	if p.X >= maxX {
+		k.PreciseX, _ = (vmath.Point{X: maxX - 1}).CenterF()
 		k.VelX = -k.VelX
 		return true
 	}
@@ -58,14 +54,14 @@ func ReflectBoundsX(k *Kinetic, minX, maxX int) bool {
 
 // ReflectBoundsY handles vertical boundary collision, returns true if reflection occurred
 func ReflectBoundsY(k *Kinetic, minY, maxY int) bool {
-	y := int(math.Floor(k.PreciseY))
-	if y < minY {
-		k.PreciseY = float64(minY) + vmath.CellCenterF
+	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
+	if p.Y < minY {
+		_, k.PreciseY = (vmath.Point{Y: minY}).CenterF()
 		k.VelY = -k.VelY
 		return true
 	}
-	if y >= maxY {
-		k.PreciseY = float64(maxY-1) + vmath.CellCenterF
+	if p.Y >= maxY {
+		_, k.PreciseY = (vmath.Point{Y: maxY - 1}).CenterF()
 		k.VelY = -k.VelY
 		return true
 	}

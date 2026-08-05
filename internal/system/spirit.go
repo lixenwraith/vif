@@ -104,8 +104,8 @@ func (s *SpiritSystem) Update() {
 
 		// Advance progress
 		spirit.Progress += spirit.Speed
-		if spirit.Progress >= vmath.Scale {
-			spirit.Progress = vmath.Scale
+		if spirit.Progress >= 1.0 {
+			spirit.Progress = 1.0
 			// Mark for destruction next tick - allows final frame render
 			s.destroyNextTick = append(s.destroyNextTick, entity)
 		}
@@ -119,16 +119,14 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration
 	durationTicks := int64(parameter.SpiritAnimationDuration / parameter.GameUpdateInterval)
-	if durationTicks == 0 {
+	if durationTicks <= 0 {
 		durationTicks = 1
 	}
-	// Adding one extra tick for the last position frame to be visible
-	// speed := vmath.Scale / (durationTicks + 1)
-	speed := vmath.Scale / durationTicks
+	speed := 1.0 / float64(durationTicks)
 
-	// Calculate Spin: ~1.5 rotations (Scale * 1.5)
+	// Calculate spin: 1.5 rotations in radians.
 	// Alternating direction based on position parity to create chaotic implosion
-	spinMag := vmath.Scale * 3 / 2
+	spinMag := 1.5 * vmath.TwoPi
 	if (p.StartX^p.StartY)&1 != 0 {
 		spinMag = -spinMag
 	}
@@ -137,11 +135,14 @@ func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
 
+	startX, startY := (vmath.Point{X: p.StartX, Y: p.StartY}).CenterF()
+	targetX, targetY := (vmath.Point{X: p.TargetX, Y: p.TargetY}).CenterF()
+
 	s.world.Components.Spirit.SetComponent(entity, component.SpiritComponent{
-		StartX:    vmath.FromInt(p.StartX),
-		StartY:    vmath.FromInt(p.StartY),
-		TargetX:   vmath.FromInt(p.TargetX),
-		TargetY:   vmath.FromInt(p.TargetY),
+		StartX:    startX,
+		StartY:    startY,
+		TargetX:   targetX,
+		TargetY:   targetY,
 		Progress:  0,
 		Speed:     speed,
 		Spin:      spinMag,

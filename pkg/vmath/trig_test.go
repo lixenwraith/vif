@@ -61,6 +61,19 @@ func TestSinFCosFMatchFixed(t *testing.T) {
 	}
 }
 
+func TestSinFCosFFloorNegativeAngles(t *testing.T) {
+	step := TwoPi / float64(LUTSize)
+	for _, angle := range []float64{-0.25 * step, -0.75 * step, -1.25 * step} {
+		wantIdx := int(math.Floor(angle*radToIndex)) & LUTMask
+		if got := SinF(angle); got != SinF_LUT[wantIdx] {
+			t.Errorf("SinF(%v) = %v, want LUT[%d] = %v", angle, got, wantIdx, SinF_LUT[wantIdx])
+		}
+		if got := CosF(angle); got != CosF_LUT[wantIdx] {
+			t.Errorf("CosF(%v) = %v, want LUT[%d] = %v", angle, got, wantIdx, CosF_LUT[wantIdx])
+		}
+	}
+}
+
 func TestAtan2FRange(t *testing.T) {
 	rng := NewFastRand(0xA7A2)
 	for range 50000 {

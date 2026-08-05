@@ -10,10 +10,10 @@ import (
 const tickDt = 1.0 / 60.0
 
 func TestApplyHomingDeadZoneSnap(t *testing.T) {
-	tx, ty := vmath.FromFloat(10), vmath.FromFloat(10)
+	const tx, ty = 10.0, 10.0
 	k := newKin(10.2, 10.1, 0.1, 0)
 
-	if !ApplyHoming(&k, tx, ty, &profBraked, vmath.FromFloat(tickDt)) {
+	if !ApplyHoming(&k, tx, ty, &profBraked, tickDt) {
 		t.Fatal("inside dead zone at low speed must settle")
 	}
 	if k.PreciseX != tx || k.PreciseY != ty {
@@ -25,26 +25,23 @@ func TestApplyHomingDeadZoneSnap(t *testing.T) {
 }
 
 func TestApplyHomingDeadZoneRequiresLowSpeed(t *testing.T) {
-	tx, ty := vmath.FromFloat(10), vmath.FromFloat(10)
-	k := newKin(10.2, 10.0, 20, 0) // inside dead zone but fast
-	if ApplyHoming(&k, tx, ty, &profBraked, vmath.FromFloat(tickDt)) {
+	k := newKin(10.2, 10.0, 20, 0)
+	if ApplyHoming(&k, 10, 10, &profBraked, tickDt) {
 		t.Fatal("fast transit through the dead zone must not settle")
 	}
 }
 
 func TestApplyHomingBrakedProfileSettles(t *testing.T) {
-	tx, ty := vmath.FromFloat(20), vmath.FromFloat(0)
 	k := newKin(0, 0, 0, 0)
-	dt := vmath.FromFloat(tickDt)
 
 	settled := false
 	steps := 0
 	for i := range 3000 {
-		if ApplyHoming(&k, tx, ty, &profBraked, dt) {
+		if ApplyHoming(&k, 20, 0, &profBraked, tickDt) {
 			settled, steps = true, i
 			break
 		}
-		Integrate(&k, dt)
+		Integrate(&k, tickDt)
 	}
 	if !settled {
 		t.Fatalf("continuous-drag profile failed to settle; final distance %.3f cells, speed %.3f",
@@ -54,16 +51,14 @@ func TestApplyHomingBrakedProfileSettles(t *testing.T) {
 }
 
 func TestApplyHomingBrakedProfileDoesNotOvershoot(t *testing.T) {
-	tx, ty := vmath.FromFloat(20), vmath.FromFloat(0)
 	k := newKin(0, 0, 0, 0)
-	dt := vmath.FromFloat(tickDt)
 
 	maxX := 0.0
 	for range 3000 {
-		if ApplyHoming(&k, tx, ty, &profBraked, dt) {
+		if ApplyHoming(&k, 20, 0, &profBraked, tickDt) {
 			break
 		}
-		Integrate(&k, dt)
+		Integrate(&k, tickDt)
 		x, _ := posOf(&k)
 		maxX = math.Max(maxX, x)
 	}
@@ -73,32 +68,27 @@ func TestApplyHomingBrakedProfileDoesNotOvershoot(t *testing.T) {
 }
 
 func TestApplyHomingCruiseProfileSettles(t *testing.T) {
-	tx, ty := vmath.FromFloat(20), vmath.FromFloat(0)
 	k := newKin(0, 0, 0, 0)
-	dt := vmath.FromFloat(tickDt)
 
 	for i := range 3000 {
-		if ApplyHoming(&k, tx, ty, &profCruise, dt) {
+		if ApplyHoming(&k, 20, 0, &profCruise, tickDt) {
 			t.Logf("settled after %d steps (%.2fs)", i, float64(i)*tickDt)
 			return
 		}
-		Integrate(&k, dt)
+		Integrate(&k, tickDt)
 	}
 	t.Fatalf("cruise profile failed to settle; distance %.3f cells, speed %.3f",
 		distTo(&k, 20, 0), speedOf(&k))
 }
 
 func TestApplyHomingScaledSpeedMultiplier(t *testing.T) {
-	tx := vmath.FromFloat(50)
-	dt := vmath.FromFloat(tickDt)
-
 	slow := newKin(0, 0, 0, 0)
 	fast := newKin(0, 0, 0, 0)
 	for range 30 {
-		ApplyHomingScaled(&slow, tx, 0, &profCruise, vmath.Scale, dt, true)
-		ApplyHomingScaled(&fast, tx, 0, &profCruise, vmath.Scale*2, dt, true)
-		Integrate(&slow, dt)
-		Integrate(&fast, dt)
+		ApplyHomingScaled(&slow, 50, 0, &profCruise, 1, tickDt, true)
+		ApplyHomingScaled(&fast, 50, 0, &profCruise, 2, tickDt, true)
+		Integrate(&slow, tickDt)
+		Integrate(&fast, tickDt)
 	}
 	if speedOf(&fast) <= speedOf(&slow) {
 		t.Fatalf("speed multiplier had no effect: %.3f vs %.3f", speedOf(&fast), speedOf(&slow))
@@ -106,16 +96,13 @@ func TestApplyHomingScaledSpeedMultiplier(t *testing.T) {
 }
 
 func TestApplyHomingScaledDragDisabled(t *testing.T) {
-	tx := vmath.FromFloat(500)
-	dt := vmath.FromFloat(tickDt)
-
 	dragged := newKin(0, 0, 0, 0)
 	free := newKin(0, 0, 0, 0)
 	for range 600 {
-		ApplyHomingScaled(&dragged, tx, 0, &profCruise, vmath.Scale, dt, true)
-		ApplyHomingScaled(&free, tx, 0, &profCruise, vmath.Scale, dt, false)
-		Integrate(&dragged, dt)
-		Integrate(&free, dt)
+		ApplyHomingScaled(&dragged, 500, 0, &profCruise, 1, tickDt, true)
+		ApplyHomingScaled(&free, 500, 0, &profCruise, 1, tickDt, false)
+		Integrate(&dragged, tickDt)
+		Integrate(&free, tickDt)
 	}
 	if speedOf(&free) <= speedOf(&dragged) {
 		t.Fatalf("applyDrag=false did not raise terminal speed: %.3f vs %.3f",
@@ -127,28 +114,26 @@ func TestApplyHomingScaledDragDisabled(t *testing.T) {
 
 func TestIntegrateWithBounceBoundaryRestitution(t *testing.T) {
 	k := newKin(5.5, 5.5, 100, 0)
-	_, _, hit := IntegrateWithBounce(&k, vmath.FromFloat(0.1), 0, 0, 0, 10, 0, 10,
-		vmath.Scale, noWall)
+	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 10, 0, 10, 1, noWall)
 	if !hit {
 		t.Fatal("boundary collision not reported")
 	}
 	if vx, _ := velOf(&k); vx >= 0 {
 		t.Fatalf("velocity not reflected: %v", vx)
 	}
-	if m := math.Abs(func() float64 { vx, _ := velOf(&k); return vx }()); math.Abs(m-100) > 1 {
+	if m := math.Abs(k.VelX); math.Abs(m-100) > 1 {
 		t.Fatalf("elastic restitution changed speed: %v", m)
 	}
 }
 
 func TestIntegrateWithBounceZeroRestitution(t *testing.T) {
 	k := newKin(5.5, 5.5, 100, 0)
-	_, _, hit := IntegrateWithBounce(&k, vmath.FromFloat(0.1), 0, 0, 0, 10, 0, 10,
-		0, noWall)
+	_, _, hit := IntegrateWithBounce(&k, 0.1, 0, 0, 0, 10, 0, 10, 0, noWall)
 	if !hit {
 		t.Fatal("boundary collision not reported")
 	}
 	if k.VelX != 0 {
-		t.Fatalf("zero restitution left velocity %d", k.VelX)
+		t.Fatalf("zero restitution left velocity %v", k.VelX)
 	}
 }
 
@@ -156,8 +141,7 @@ func TestIntegrateWithBounceNoWallTunneling(t *testing.T) {
 	wall := func(x, _ int) bool { return x == 7 }
 	k := newKin(2.5, 5.5, 50, 0)
 
-	gx, _, hit := IntegrateWithBounce(&k, vmath.FromFloat(0.2), 0, 0, 0, 40, 0, 20,
-		vmath.Scale, wall)
+	gx, _, hit := IntegrateWithBounce(&k, 0.2, 0, 0, 0, 40, 0, 20, 1, wall)
 	if !hit {
 		t.Fatal("wall collision not reported")
 	}
@@ -170,13 +154,12 @@ func TestIntegrateWithBounceNoWallTunneling(t *testing.T) {
 }
 
 func TestIntegrateWithBounceRespectsHeaderOffset(t *testing.T) {
-	// footprint top-left is 2 cells left of the header; the wall test receives
-	// the top-left, so the header must stop 2 cells earlier
+	// Footprint top-left is 2 cells left of the header; the wall test receives
+	// the top-left, so the header must stop 2 cells earlier.
 	wall := func(x, _ int) bool { return x == 7 }
 	k := newKin(4.5, 5.5, 50, 0)
 
-	gx, _, hit := IntegrateWithBounce(&k, vmath.FromFloat(0.2), 2, 1, 0, 40, 0, 20,
-		vmath.Scale, wall)
+	gx, _, hit := IntegrateWithBounce(&k, 0.2, 2, 1, 0, 40, 0, 20, 1, wall)
 	if !hit {
 		t.Fatal("offset wall collision not reported")
 	}
@@ -187,8 +170,7 @@ func TestIntegrateWithBounceRespectsHeaderOffset(t *testing.T) {
 
 func TestIntegrateWithBounceStaysInBounds(t *testing.T) {
 	k := newKin(5.5, 5.5, 4000, -3000)
-	gx, gy, _ := IntegrateWithBounce(&k, vmath.FromFloat(0.05), 0, 0, 0, 10, 0, 10,
-		vmath.FromFloat(0.5), noWall)
+	gx, gy, _ := IntegrateWithBounce(&k, 0.05, 0, 0, 0, 10, 0, 10, 0.5, noWall)
 	if gx < 0 || gx >= 10 || gy < 0 || gy >= 10 {
 		t.Fatalf("extreme velocity escaped bounds: (%d,%d)", gx, gy)
 	}
@@ -198,78 +180,76 @@ func TestIntegrateWithBounceStaysInBounds(t *testing.T) {
 
 func TestOrbitalVelocity(t *testing.T) {
 	// v = sqrt(a*r): a = 2, r = 4 -> v = sqrt(8)
-	got := vmath.ToFloat(OrbitalVelocity(vmath.FromFloat(2), vmath.FromFloat(4)))
+	got := OrbitalVelocity(2, 4)
 	if math.Abs(got-math.Sqrt(8)) > 1e-5 {
 		t.Fatalf("OrbitalVelocity = %v, want %v", got, math.Sqrt(8))
 	}
 }
 
 func TestOrbitalInsertIsTangential(t *testing.T) {
-	dx, dy := vmath.FromFloat(4), int64(0)
-	vx, vy := OrbitalInsert(dx, dy, vmath.FromFloat(2), false)
+	const dx, dy = 4.0, 0.0
+	vx, vy := OrbitalInsert(dx, dy, 2, false)
 
-	if d := vmath.DotProduct(dx, dy, vx, vy); vmath.Abs(d) > vmath.Scale {
-		t.Fatalf("insertion velocity not tangential (dot = %v)", vmath.ToFloat(d))
+	if d := vmath.DotProductF(dx, dy, vx, vy); math.Abs(d) > 1e-6 {
+		t.Fatalf("insertion velocity not tangential (dot = %v)", d)
 	}
-	if m := math.Hypot(vmath.ToFloat(vx), vmath.ToFloat(vy)); math.Abs(m-math.Sqrt(8)) > 1e-4 {
+	if m := math.Hypot(vx, vy); math.Abs(m-math.Sqrt(8)) > 1e-4 {
 		t.Fatalf("insertion speed = %v, want %v", m, math.Sqrt(8))
 	}
 
-	cwX, cwY := OrbitalInsert(dx, dy, vmath.FromFloat(2), true)
+	cwX, cwY := OrbitalInsert(dx, dy, 2, true)
 	if cwX != -vx || cwY != -vy {
 		t.Fatal("clockwise insertion must invert the tangent")
 	}
 
-	if x, y := OrbitalInsert(0, 0, vmath.FromFloat(2), false); x != 0 || y != 0 {
+	if x, y := OrbitalInsert(0, 0, 2, false); x != 0 || y != 0 {
 		t.Fatal("zero radius must yield zero velocity")
 	}
 }
 
 func TestOrbitalAttractionPointsInward(t *testing.T) {
-	ax, ay := OrbitalAttraction(vmath.FromFloat(3), vmath.FromFloat(4), vmath.FromFloat(10))
+	ax, ay := OrbitalAttraction(3, 4, 10)
 	if ax >= 0 || ay >= 0 {
-		t.Fatalf("attraction = (%v,%v), want inward", vmath.ToFloat(ax), vmath.ToFloat(ay))
+		t.Fatalf("attraction = (%v,%v), want inward", ax, ay)
 	}
-	if m := math.Hypot(vmath.ToFloat(ax), vmath.ToFloat(ay)); math.Abs(m-10) > 1e-4 {
+	if m := math.Hypot(ax, ay); math.Abs(m-10) > 1e-4 {
 		t.Fatalf("attraction magnitude = %v, want 10 (linear, not inverse square)", m)
 	}
-	if x, y := OrbitalAttraction(0, 0, vmath.FromFloat(10)); x != 0 || y != 0 {
+	if x, y := OrbitalAttraction(0, 0, 10); x != 0 || y != 0 {
 		t.Fatal("zero offset must yield zero attraction")
 	}
 }
 
 func TestOrbitalDampReducesRadialComponent(t *testing.T) {
-	// pure radial velocity, damping*dt = 0.5 -> radial halved
-	vx, vy := OrbitalDamp(vmath.FromFloat(1), 0, vmath.FromFloat(4), 0,
-		vmath.FromFloat(1.0), vmath.FromFloat(0.5))
-	if math.Abs(vmath.ToFloat(vx)-0.5) > 1e-6 || vy != 0 {
-		t.Fatalf("damped velocity = (%v,%v), want (0.5,0)", vmath.ToFloat(vx), vmath.ToFloat(vy))
+	// Pure radial velocity, damping*dt = 0.5 -> radial halved.
+	vx, vy := OrbitalDamp(1, 0, 4, 0, 1, 0.5)
+	if math.Abs(vx-0.5) > 1e-6 || vy != 0 {
+		t.Fatalf("damped velocity = (%v,%v), want (0.5,0)", vx, vy)
 	}
 }
 
 func TestOrbitalDampPreservesTangential(t *testing.T) {
-	// velocity perpendicular to the radius has no radial component to damp
-	vx, vy := OrbitalDamp(0, vmath.FromFloat(3), vmath.FromFloat(4), 0,
-		vmath.FromFloat(1.0), vmath.FromFloat(0.5))
-	if math.Abs(vmath.ToFloat(vy)-3) > 1e-5 || math.Abs(vmath.ToFloat(vx)) > 1e-5 {
-		t.Fatalf("tangential velocity altered: (%v,%v)", vmath.ToFloat(vx), vmath.ToFloat(vy))
+	// Velocity perpendicular to the radius has no radial component to damp.
+	vx, vy := OrbitalDamp(0, 3, 4, 0, 1, 0.5)
+	if math.Abs(vy-3) > 1e-5 || math.Abs(vx) > 1e-5 {
+		t.Fatalf("tangential velocity altered: (%v,%v)", vx, vy)
 	}
 }
 
 func TestOrbitalEquilibriumSign(t *testing.T) {
-	// outside the target radius: pull inward
-	ax, _ := OrbitalEquilibrium(vmath.FromFloat(10), 0, vmath.FromFloat(5), vmath.Scale)
+	// Outside the target radius: pull inward.
+	ax, _ := OrbitalEquilibrium(10, 0, 5, 1)
 	if ax >= 0 {
-		t.Fatalf("outside target: ax = %v, want inward", vmath.ToFloat(ax))
+		t.Fatalf("outside target: ax = %v, want inward", ax)
 	}
-	// inside the target radius: push outward
-	ax, _ = OrbitalEquilibrium(vmath.FromFloat(2), 0, vmath.FromFloat(5), vmath.Scale)
+	// Inside the target radius: push outward.
+	ax, _ = OrbitalEquilibrium(2, 0, 5, 1)
 	if ax <= 0 {
-		t.Fatalf("inside target: ax = %v, want outward", vmath.ToFloat(ax))
+		t.Fatalf("inside target: ax = %v, want outward", ax)
 	}
-	// at the target radius: no force
-	ax, _ = OrbitalEquilibrium(vmath.FromFloat(5), 0, vmath.FromFloat(5), vmath.Scale)
-	if vmath.Abs(ax) > vmath.Scale/1000 {
-		t.Fatalf("at target: ax = %v, want ~0", vmath.ToFloat(ax))
+	// At the target radius: no force.
+	ax, _ = OrbitalEquilibrium(5, 0, 5, 1)
+	if math.Abs(ax) > 0.001 {
+		t.Fatalf("at target: ax = %v, want ~0", ax)
 	}
 }

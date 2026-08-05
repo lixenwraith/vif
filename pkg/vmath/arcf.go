@@ -11,15 +11,20 @@ type ArcSegmentF struct {
 
 // SampleEllipseGridF returns grid coordinates for N points along an ellipse
 func SampleEllipseGridF(centerX, centerY int, radiusX, radiusY float64, count int) [][2]int {
+	if count <= 0 {
+		return nil
+	}
+
 	points := make([][2]int, count)
 	angleStep := TwoPi / float64(count)
-	cx, cy := CenteredFromGridF(centerX, centerY)
+	cx, cy := (Point{X: centerX, Y: centerY}).CenterF()
 
 	for i := range count {
 		angle := float64(i) * angleStep
 		px := cx + math.Cos(angle)*radiusX
 		py := cy + math.Sin(angle)*radiusY
-		points[i] = [2]int{int(math.Floor(px)), int(math.Floor(py))}
+		p := PointAtF(px, py)
+		points[i] = [2]int{p.X, p.Y}
 	}
 	return points
 }
@@ -169,7 +174,8 @@ func AngleToEllipsePosF(angle, centerX, centerY, radiusX, radiusY float64) (floa
 
 // AngleToGridPosF converts angle to grid coordinates on ellipse
 func AngleToGridPosF(angle float64, centerX, centerY int, radiusX, radiusY float64) (int, int) {
-	cx, cy := CenteredFromGridF(centerX, centerY)
+	cx, cy := (Point{X: centerX, Y: centerY}).CenterF()
 	px, py := AngleToEllipsePosF(angle, cx, cy, radiusX, radiusY)
-	return int(math.Floor(px)), int(math.Floor(py))
+	p := PointAtF(px, py)
+	return p.X, p.Y
 }

@@ -28,11 +28,11 @@ const (
 	// DrainEnergyDrainInterval is the duration between energy drain ticks
 	DrainEnergyDrainInterval = 1000 * time.Millisecond
 
-	// DrainBaseSpeed is the normal homing velocity in cells/sec (Q32.32 via vmath.FromFloat)
+	// DrainBaseSpeed is the normal homing velocity in cells/sec
 	// Equivalent to previous 1 cell per DrainMoveInterval
 	DrainBaseSpeed = 2.0
 
-	// DrainHomingAccel is acceleration toward cursor in cells/sec² (Q32.32)
+	// DrainHomingAccel is acceleration toward cursor in cells/sec²
 	// Higher values = snappier homing, lower = more floaty
 	DrainHomingAccel = 3.0
 

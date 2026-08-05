@@ -744,6 +744,10 @@ func (s *WallSystem) SetPushCheckEveryTick(enabled bool) {
 
 // handleMazeSpawn generates maze and spawns wall blocks via batch
 func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
+	if payload.CellWidth <= 0 || payload.CellHeight <= 0 {
+		return
+	}
+
 	config := s.world.Resources.Config
 
 	mazeWidth := config.MapWidth / payload.CellWidth
