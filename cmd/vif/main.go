@@ -49,7 +49,7 @@ func init() {
 	flag.Var(&flagLog, "l", usage)
 	flag.Var(&flagLog, "log", "Alias of -l")
 	flag.Var(&flagLevel, "lv", "Log level: trace, debug, info, warn, error; implies -l")
-	flag.Var(&flagScope, "ls", "Log scope: app+fsm+stat | afs | all | none | +event | -lock; implies -l")
+	flag.Var(&flagScope, "ls", "Log scope: app+fsm+stat | afs | all | none | +dispatch | -event; implies -l")
 	flag.Var(&flagScope, "log-scope", "Alias of -ls")
 	flag.Var(&flagStat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")

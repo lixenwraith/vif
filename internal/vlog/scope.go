@@ -17,15 +17,19 @@ const (
 	ScopeApp Scope = 1 << iota
 	ScopeFSM
 	ScopeEvent
+	ScopeDispatch
+	ScopePush
 	ScopeInput
 	ScopeStat
+	ScopeRec
 	ScopeLock
 	ScopeTap
 )
 
 const (
 	ScopeNone Scope = 0
-	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeInput | ScopeStat | ScopeLock | ScopeTap
+	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeDispatch | ScopePush |
+		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeTap
 )
 
 // scopeDef is the canonical name table; short letters are unique
@@ -37,24 +41,29 @@ var scopeDef = []struct {
 	{ScopeApp, "app", 'a'},
 	{ScopeFSM, "fsm", 'f'},
 	{ScopeEvent, "event", 'e'},
+	{ScopeDispatch, "dispatch", 'd'},
+	{ScopePush, "push", 'p'},
 	{ScopeInput, "input", 'i'},
 	{ScopeStat, "stat", 's'},
+	{ScopeRec, "rec", 'r'},
 	{ScopeLock, "lock", 'l'},
 	{ScopeTap, "tap", 't'},
 }
 
 // subScope binds a record's sub tag to its scope
 var subScope = map[string]Scope{
-	"race":    ScopeApp,
-	"crash":   ScopeApp,
-	"app":     ScopeApp,
-	"service": ScopeApp,
-	"fsm":     ScopeFSM,
-	"event":   ScopeEvent,
-	"push":    ScopeEvent,
-	"input":   ScopeInput,
-	"stat":    ScopeStat,
-	"lock":    ScopeLock,
+	"race":     ScopeApp,
+	"crash":    ScopeApp,
+	"app":      ScopeApp,
+	"service":  ScopeApp,
+	"fsm":      ScopeFSM,
+	"event":    ScopeEvent,
+	"dispatch": ScopeDispatch,
+	"push":     ScopePush,
+	"input":    ScopeInput,
+	"stat":     ScopeStat,
+	"rec":      ScopeRec,
+	"lock":     ScopeLock,
 }
 
 var scopes atomic.Uint32

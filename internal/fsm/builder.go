@@ -22,6 +22,7 @@ func (m *Machine[T]) AddState(id StateID, name string, parentID StateID) *Node[T
 func (m *Machine[T]) AddTransition(sourceID StateID, t Transition[T]) {
 	if node, ok := m.nodes[sourceID]; ok {
 		node.Transitions = append(node.Transitions, t)
+		node.triggers.set(t.Event)
 	}
 }
 
@@ -54,6 +55,13 @@ func (m *Machine[T]) CompilePaths() error {
 		}
 
 		node.Path = path
+
+		// Trigger mask: the event types this node alone reacts to. Regions
+		// union these along the active path.
+		node.triggers.clear()
+		for i := range node.Transitions {
+			node.triggers.set(node.Transitions[i].Event)
+		}
 	}
 	return nil
 }

@@ -21,6 +21,8 @@ type RegionState struct {
 	TimeInState   time.Duration
 	ActivePath    []StateID
 	Paused        bool
+
+	triggers triggerMask // union over ActivePath; rebuilt on every commit
 }
 
 // Machine is the generic Hierarchical Finite State Machine runtime with parallel region support
@@ -66,6 +68,19 @@ type Machine[T any] struct {
 	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
 	StateIndices   map[StateID]int           // Deterministic index for color mapping
 	StateCount     int                       // Total non-Root states for normalization
+
+	// active is the union of unpaused regions' trigger sets; HandleEvent
+	// rejects an unmatched event with one probe and no graph walk
+	active triggerMask
+
+	// OnTransition observes committed state changes. Fires before the exit
+	// phase, so a transition record precedes the records its actions emit.
+	// trigger is EventNone for tick transitions. nil disables.
+	OnTransition func(region string, from, to StateID, trigger event.EventType, internal bool)
+
+	// OnRegion observes region lifecycle: init, spawn, terminate, pause,
+	// resume. nil disables.
+	OnRegion func(op, region string, state StateID)
 }
 
 // Node represents a state in the hierarchy
@@ -85,6 +100,8 @@ type Node[T any] struct {
 
 	// Transitions sorted by evaluation priority
 	Transitions []Transition[T]
+
+	triggers triggerMask // event types this node's transitions react to
 }
 
 // Transition defines a link between states
@@ -130,3 +147,46 @@ type ArgCompiler[T any] func(m *Machine[T], cfg ActionConfig, resolve StateResol
 // StateResolver maps a state name to its ID during load
 // Valid only for the duration of the compile call
 type StateResolver func(name string) (StateID, bool)
+
+// triggerMask is the set of event types a node, region, or machine reacts to.
+// EventNone is never recorded: tick transitions are evaluated by Update, not
+// by HandleEvent, so bit 0 stays clear and rejects the sentinel for free.
+type triggerMask [(event.EventTypeCount + 63) / 64]uint64
+
+func (t *triggerMask) set(e event.EventType) {
+	if e > 0 && int(e) < event.EventTypeCount {
+		t[e>>6] |= 1 << uint(e&63)
+	}
+}
+
+func (t *triggerMask) or(o *triggerMask) {
+	for i := range t {
+		t[i] |= o[i]
+	}
+}
+
+func (t *triggerMask) clear() {
+	for i := range t {
+		t[i] = 0
+	}
+}
+
+// has reports whether e can match a transition in this set.
+func (t *triggerMask) has(e event.EventType) bool {
+	if e <= 0 || int(e) >= event.EventTypeCount {
+		return false
+	}
+	return t[e>>6]&(1<<uint(e&63)) != 0
+}
+
+// RegionTelemetry is a per-region runtime snapshot for status publication.
+// Active is false when the region is not currently instantiated.
+type RegionTelemetry struct {
+	State       string
+	StateID     StateID
+	TimeInState time.Duration
+	MaxDuration time.Duration
+	Index       int
+	Paused      bool
+	Active      bool
+}

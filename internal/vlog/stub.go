@@ -25,15 +25,19 @@ const (
 	ScopeApp Scope = 1 << iota
 	ScopeFSM
 	ScopeEvent
+	ScopeDispatch
+	ScopePush
 	ScopeInput
 	ScopeStat
+	ScopeRec
 	ScopeLock
 	ScopeTap
 )
 
 const (
 	ScopeNone Scope = 0
-	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeInput | ScopeStat | ScopeLock | ScopeTap
+	ScopeAll        = ScopeApp | ScopeFSM | ScopeEvent | ScopeDispatch | ScopePush |
+		ScopeInput | ScopeStat | ScopeRec | ScopeLock | ScopeTap
 )
 
 // ErrDisabled reports that this build carries no logger
@@ -70,6 +74,7 @@ func CrashHook(any, []byte)            {}
 func Shutdown(time.Duration)           {}
 func Trace(string, int64, int, ...any) {}
 func NextRun() uint64                  { return 0 }
+func Detail(string, ...any)            {}
 
 func ScopeOf(string) Scope                            { return ScopeTap }
 func Scopes() Scope                                   { return ScopeNone }

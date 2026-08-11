@@ -44,6 +44,7 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 	m.regionConfigs = make(map[string]*RegionConfig)
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
+	m.active.clear()
 
 	// 3. Store systems config
 	m.systemsConfig = config.Systems
@@ -184,6 +185,42 @@ func (m *Machine[T]) GetStateID(name string) (StateID, bool) {
 		}
 	}
 	return StateNone, false
+}
+
+// StateName resolves a state id to its configured name; "" when unknown.
+func (m *Machine[T]) StateName(id StateID) string {
+	if n, ok := m.nodes[id]; ok {
+		return n.Name
+	}
+	return ""
+}
+
+// DeclaredRegions returns the configured region names in sorted order.
+// Regions without an initial state are included: they are spawn targets.
+func (m *Machine[T]) DeclaredRegions() []string {
+	names := make([]string, 0, len(m.regionConfigs))
+	for n := range m.regionConfigs {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// RegionTelemetry reports one region's runtime state for status publication.
+func (m *Machine[T]) RegionTelemetry(name string) RegionTelemetry {
+	r, ok := m.regions[name]
+	if !ok {
+		return RegionTelemetry{}
+	}
+	return RegionTelemetry{
+		State:       m.StateName(r.ActiveStateID),
+		StateID:     r.ActiveStateID,
+		TimeInState: r.TimeInState,
+		MaxDuration: m.StateDurations[r.ActiveStateID],
+		Index:       m.StateIndices[r.ActiveStateID],
+		Paused:      r.Paused,
+		Active:      true,
+	}
 }
 
 func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]StateID) ([]Action[T], error) {

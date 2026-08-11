@@ -357,3 +357,7 @@ func recordInternalError(msg string) { lastErr.Store(&msg) }
 
 // NextRun advances the session counter stamped on subsequent records
 func NextRun() uint64 { return run.Add(1) }
+
+// Detail emits at the trace level without a stack trace, for per-item taps
+// gated by scope rather than by call site. Trace is for call chains.
+func Detail(sub string, args ...any) { emit(sub, LevelTrace, args) }

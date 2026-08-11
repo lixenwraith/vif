@@ -106,7 +106,7 @@ func (m *Machine[T]) Init(ctx T) error {
 	sort.Strings(names)
 
 	for _, regionName := range names {
-		if err := m.initRegion(ctx, regionName, m.regionInitials[regionName]); err != nil {
+		if err := m.initRegion(ctx, regionName, m.regionInitials[regionName], "init"); err != nil {
 			return fmt.Errorf("region '%s': %w", regionName, err)
 		}
 	}
@@ -114,8 +114,8 @@ func (m *Machine[T]) Init(ctx T) error {
 	return nil
 }
 
-// initRegion initializes a single region
-func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) error {
+// initRegion initializes a single region; op labels the cause for observers.
+func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID, op string) error {
 	node, ok := m.nodes[initialID]
 	if !ok {
 		return fmt.Errorf("initial state ID %d not found", initialID)
@@ -129,6 +129,7 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 		Paused:        false,
 	}
 	copy(region.ActivePath, node.Path)
+	m.refreshRegionMask(region)
 
 	// Track insertion order; idempotent for re-init of an existing name
 	if _, exists := m.regions[regionName]; !exists {
@@ -136,6 +137,10 @@ func (m *Machine[T]) initRegion(ctx T, regionName string, initialID StateID) err
 	}
 	m.regions[regionName] = region
 	m.delayedActions[regionName] = nil
+	m.refreshActive()
+
+	// Observed before OnEnter so the region record precedes what it emits
+	m.notifyRegion(op, regionName, initialID)
 
 	// Execute OnEnter for the entire chain from Root to Initial
 	for _, id := range region.ActivePath {
@@ -193,10 +198,14 @@ func (m *Machine[T]) updateRegion(ctx T, region *RegionState, dt time.Duration) 
 				if trans.Guard == nil || trans.Guard(ctx, region, nil) {
 					if trans.Internal {
 						// Actions only, no state change
+						if m.OnTransition != nil {
+							m.OnTransition(region.Name, region.ActiveStateID,
+								region.ActiveStateID, event.EventNone, true)
+						}
 						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
 						return
 					}
-					m.transitionRegion(ctx, region, trans.TargetID, trans.Actions)
+					m.transitionRegion(ctx, region, trans.TargetID, event.EventNone, trans.Actions)
 					return
 				}
 			}
@@ -258,21 +267,22 @@ func (m *Machine[T]) processDelayedActions(ctx T, region *RegionState, dt time.D
 	m.delayedActions[region.Name] = remaining
 }
 
-// HandleEvent routes an external event through all active regions
-// Returns true if the event triggered a transition or was consumed
+// HandleEvent routes an external event through all active regions.
+// Returns true if some region consumed it via a transition or internal action.
+// The machine-wide mask rejects unmatched types before any graph walk.
 func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
+	if !m.active.has(ev.Type) {
+		return false
+	}
+
 	// Reusable deterministic snapshot; excludes regions spawned by this event
 	m.eventOrder = append(m.eventOrder[:0], m.regionOrder...)
 
 	handled := false
-
 	for _, name := range m.eventOrder {
 		region, ok := m.regions[name]
-		if !ok {
-			continue // Region terminated during this event's handling
-		}
-		if region.Paused {
-			continue
+		if !ok || region.Paused {
+			continue // terminated during this event's handling, or suspended
 		}
 		if m.handleEventInRegion(ctx, region, ev) {
 			handled = true
@@ -284,7 +294,7 @@ func (m *Machine[T]) HandleEvent(ctx T, ev event.GameEvent) bool {
 
 // handleEventInRegion processes event in a single region
 func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.GameEvent) bool {
-	if region.ActiveStateID == StateNone {
+	if region.ActiveStateID == StateNone || !region.triggers.has(ev.Type) {
 		return false
 	}
 
@@ -303,10 +313,14 @@ func (m *Machine[T]) handleEventInRegion(ctx T, region *RegionState, ev event.Ga
 					}
 					if trans.Internal {
 						// Consume event; no exit/enter, TimeInState unaffected
+						if m.OnTransition != nil {
+							m.OnTransition(region.Name, region.ActiveStateID,
+								region.ActiveStateID, ev.Type, true)
+						}
 						m.executeActions(ctx, region, region.ActiveStateID, trans.Actions)
 						return true
 					}
-					m.transitionRegion(ctx, region, trans.TargetID, trans.Actions)
+					m.transitionRegion(ctx, region, trans.TargetID, ev.Type, trans.Actions)
 					return true
 				}
 			}
@@ -357,10 +371,16 @@ func (m *Machine[T]) capturePayloadVars(payload any, captureVars map[string]stri
 }
 
 // transitionRegion performs state change within a specific region
-// Order: exit (leaf→LCA) → delayed cleanup → commit → transition actions → enter (LCA→leaf)
-func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID, transActions []Action[T]) {
+// Order: notify → exit (leaf→LCA) → delayed cleanup → commit → transition
+// actions → enter (LCA→leaf)
+func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID StateID,
+	trigger event.EventType, transActions []Action[T]) {
+
 	if region.ActiveStateID == targetID {
 		// Self-transition degrades to internal — actions only
+		if m.OnTransition != nil {
+			m.OnTransition(region.Name, targetID, targetID, trigger, true)
+		}
 		m.executeActions(ctx, region, targetID, transActions)
 		return
 	}
@@ -368,6 +388,11 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 	targetNode, ok := m.nodes[targetID]
 	if !ok {
 		panic(fmt.Sprintf("FSM: Attempted transition to unknown state ID %d in region '%s'", targetID, region.Name))
+	}
+
+	// Observed before the exit phase so the record precedes what its actions emit
+	if m.OnTransition != nil {
+		m.OnTransition(region.Name, region.ActiveStateID, targetID, trigger, false)
 	}
 
 	// Find LCA
@@ -422,6 +447,8 @@ func (m *Machine[T]) transitionRegion(ctx T, region *RegionState, targetID State
 		copy(region.ActivePath, targetPath)
 	}
 	region.TimeInState = 0
+	m.refreshRegionMask(region)
+	m.refreshActive()
 
 	// Transition actions between exit and enter; delayed owner = target leaf
 	m.executeActions(ctx, region, targetID, transActions)
@@ -456,6 +483,7 @@ func (m *Machine[T]) Reset(ctx T) error {
 	m.regionOrder = m.regionOrder[:0]
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
+	m.active.clear()
 
 	// Clear telemetry cache
 	m.lastTelemetryRegion = ""
@@ -525,6 +553,36 @@ func (m *Machine[T]) IncrementVar(name string, delta int64) int64 {
 	return m.variables[name]
 }
 
+// === Trigger Masks and Observation ===
+
+// refreshRegionMask recomputes the union of trigger sets along the active path.
+func (m *Machine[T]) refreshRegionMask(r *RegionState) {
+	r.triggers.clear()
+	for _, id := range r.ActivePath {
+		if n, ok := m.nodes[id]; ok {
+			r.triggers.or(&n.triggers)
+		}
+	}
+}
+
+// refreshActive recomputes the machine-wide trigger set from unpaused regions.
+// Called after every change to region composition, pause state or active path.
+func (m *Machine[T]) refreshActive() {
+	m.active.clear()
+	for _, r := range m.regions {
+		if !r.Paused {
+			m.active.or(&r.triggers)
+		}
+	}
+}
+
+// notifyRegion reports a region lifecycle event to the observer.
+func (m *Machine[T]) notifyRegion(op, region string, state StateID) {
+	if m.OnRegion != nil {
+		m.OnRegion(op, region, state)
+	}
+}
+
 // === System Configuration ===
 
 // GetSystemsConfig returns the loaded systems configuration
@@ -544,7 +602,7 @@ func (m *Machine[T]) SpawnRegion(ctx T, regionName string, initialID StateID) er
 	if _, exists := m.regions[regionName]; exists {
 		return fmt.Errorf("region '%s' already exists", regionName)
 	}
-	return m.initRegion(ctx, regionName, initialID)
+	return m.initRegion(ctx, regionName, initialID, "spawn")
 }
 
 // TerminateRegion destroys a region, executing exit actions
@@ -553,6 +611,8 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 	if !ok {
 		return fmt.Errorf("region '%s' not found", regionName)
 	}
+
+	m.notifyRegion("terminate", regionName, region.ActiveStateID)
 
 	// Execute OnExit for entire path
 	for i := len(region.ActivePath) - 1; i >= 0; i-- {
@@ -570,6 +630,7 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 			break
 		}
 	}
+	m.refreshActive()
 	return nil
 }
 
@@ -577,6 +638,8 @@ func (m *Machine[T]) TerminateRegion(ctx T, regionName string) error {
 func (m *Machine[T]) PauseRegion(regionName string) {
 	if region, ok := m.regions[regionName]; ok {
 		region.Paused = true
+		m.refreshActive()
+		m.notifyRegion("pause", regionName, region.ActiveStateID)
 	}
 }
 
@@ -584,6 +647,8 @@ func (m *Machine[T]) PauseRegion(regionName string) {
 func (m *Machine[T]) ResumeRegion(regionName string) {
 	if region, ok := m.regions[regionName]; ok {
 		region.Paused = false
+		m.refreshActive()
+		m.notifyRegion("resume", regionName, region.ActiveStateID)
 	}
 }
 

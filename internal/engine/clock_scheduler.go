@@ -55,6 +55,7 @@ type ClockScheduler struct {
 	statTicks           *atomic.Int64
 	statEvBackoffs      *atomic.Int64
 	statEvDispatches    *atomic.Int64
+	statEvDead          *atomic.Int64
 	statEntityCount     *atomic.Int64
 	statEntityCreated   *atomic.Int64
 	statEntityDestroyed *atomic.Int64
@@ -62,16 +63,28 @@ type ClockScheduler struct {
 	statGameElapsedMs   *atomic.Int64
 	statEvDropped       *atomic.Int64
 
-	// Log state: transition and overflow edge detection
-	lastFSMName   string
+	// Log state: overflow edge detection
 	lastEvDropped uint64
 
-	// FSM telemetry
+	// FSM telemetry: foreground summary plus one metric set per declared region
 	statFSMName    *status.AtomicString
 	statFSMElapsed *atomic.Int64
 	statFSMMaxDur  *atomic.Int64
 	statFSMIndex   *atomic.Int64
 	statFSMTotal   *atomic.Int64
+	regionStats    []regionStat
+}
+
+// regionStat caches the status pointers for one declared FSM region.
+// Keys are "fsm.<region>.<field>", so SplitKey folds every region into the
+// single "fsm" stat record and the viewer drills down without new machinery.
+type regionStat struct {
+	name    string
+	state   *status.AtomicString
+	index   *atomic.Int64
+	elapsed *atomic.Int64
+	maxDur  *atomic.Int64
+	paused  *atomic.Bool
 }
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
@@ -113,6 +126,7 @@ func NewClockScheduler(
 		statTicks:           statusReg.Ints.Get("engine.ticks"),
 		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
 		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
+		statEvDead:          statusReg.Ints.Get("event.dead"),
 		statEntityCount:     statusReg.Ints.Get("entity.count"),
 		statEntityCreated:   statusReg.Ints.Get("entity.created_total"),
 		statEntityDestroyed: statusReg.Ints.Get("entity.destroyed_total"),
@@ -157,12 +171,91 @@ func (cs *ClockScheduler) LoadFSMFromPath(configPath string, registerComponents 
 
 // initLoadedFSM is common post-load initialization
 func (cs *ClockScheduler) initLoadedFSM() error {
+	// Before Init: the initial region entries must reach the observer
+	cs.bindFSMTelemetry()
+
 	if err := cs.fsm.Init(cs.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
 	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
 	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
 	return nil
+}
+
+// bindFSMTelemetry installs the transition taps and pre-registers one metric
+// set per declared region, so no status key appears after the first tick.
+func (cs *ClockScheduler) bindFSMTelemetry() {
+	reg := cs.world.Resources.Status
+	names := cs.fsm.DeclaredRegions()
+	cs.regionStats = make([]regionStat, 0, len(names))
+	for _, n := range names {
+		k := "fsm." + n + "."
+		cs.regionStats = append(cs.regionStats, regionStat{
+			name:    n,
+			state:   reg.Strings.Get(k + "state"),
+			index:   reg.Ints.Get(k + "index"),
+			elapsed: reg.Ints.Get(k + "elapsed"),
+			maxDur:  reg.Ints.Get(k + "max_duration"),
+			paused:  reg.Bools.Get(k + "paused"),
+		})
+	}
+
+	// region is the first string field on every record, so vif-log's follow
+	// key (f/F) walks one region's path
+	cs.fsm.OnTransition = func(region string, from, to fsm.StateID, trigger event.EventType, internal bool) {
+		if internal {
+			if !vlog.On("fsm", vlog.LevelDebug) {
+				return
+			}
+			vlog.Debug("fsm", "msg", "internal",
+				"region", region,
+				"state", cs.fsm.StateName(from),
+				"via", event.GetEventName(trigger))
+			return
+		}
+		if !vlog.On("fsm", vlog.LevelInfo) {
+			return
+		}
+		vlog.Info("fsm", "msg", "transition",
+			"region", region,
+			"from", cs.fsm.StateName(from),
+			"to", cs.fsm.StateName(to),
+			"via", event.GetEventName(trigger),
+			"index", cs.fsm.StateIndices[to],
+			"max_ms", cs.fsm.StateDurations[to].Milliseconds())
+	}
+
+	cs.fsm.OnRegion = func(op, region string, state fsm.StateID) {
+		if !vlog.On("fsm", vlog.LevelInfo) {
+			return
+		}
+		vlog.Info("fsm", "msg", "region",
+			"region", region,
+			"op", op,
+			"state", cs.fsm.StateName(state))
+	}
+}
+
+// publishRegionStats mirrors every declared region into the status registry.
+// Caller MUST hold updateMutex: reads live FSM state.
+func (cs *ClockScheduler) publishRegionStats() {
+	for i := range cs.regionStats {
+		rs := &cs.regionStats[i]
+		t := cs.fsm.RegionTelemetry(rs.name)
+		if !t.Active {
+			rs.state.Store("-")
+			rs.index.Store(-1)
+			rs.elapsed.Store(0)
+			rs.maxDur.Store(0)
+			rs.paused.Store(false)
+			continue
+		}
+		rs.state.Store(t.State)
+		rs.index.Store(int64(t.Index))
+		rs.elapsed.Store(int64(t.TimeInState))
+		rs.maxDur.Store(int64(t.MaxDuration))
+		rs.paused.Store(t.Paused)
+	}
 }
 
 // Start begins the scheduler loop
@@ -314,7 +407,7 @@ func (cs *ClockScheduler) eventLoop() {
 
 			// Attempt non-blocking lock
 			if cs.world.TryLock() {
-				cs.dispatchOnePass()
+				cs.dispatchOnePass("loop")
 				cs.world.Unlock()
 				backoffCount = 0
 				continue
@@ -331,7 +424,7 @@ func (cs *ClockScheduler) eventLoop() {
 					return
 				}
 				cs.world.Lock()
-				cs.dispatchOnePass()
+				cs.dispatchOnePass("loop")
 				cs.world.Unlock()
 				backoffCount = 0
 			}
@@ -339,46 +432,71 @@ func (cs *ClockScheduler) eventLoop() {
 	}
 }
 
-// dispatchOnePass consumes and dispatches pending events exactly once
-// Returns number of events processed
-func (cs *ClockScheduler) dispatchOnePass() int {
+// dispatchOnePass consumes and dispatches pending events exactly once.
+// src labels the caller so a pass record identifies what produced the batch.
+// Returns number of events processed.
+func (cs *ClockScheduler) dispatchOnePass(src string) int {
 	eventsList := cs.world.Resources.Event.Queue.Consume()
 	if len(eventsList) == 0 {
 		return 0
 	}
 
-	// Gate hoisted out of the loop: one atomic load per pass.
+	// Gates hoisted out of the loop: one atomic load each per pass.
 	// Payloads are pooled and released by their handlers, so only the type
 	// is logged — retaining ev.Payload would race the next Acquire.
-	trace := vlog.On("event", vlog.LevelDebug)
+	perEvent := vlog.On("dispatch", vlog.LevelTrace)
+	summary := vlog.On("event", vlog.LevelDebug)
 
+	var nFSM, nSys, nDead int
 	for _, ev := range eventsList {
 		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
 
-		// "sys" counts registered systems only. The FSM receives every event
-		// unconditionally, so sys=0 is not an unconsumed event
-		if trace {
-			vlog.Debug("event", "msg", "dispatch",
-				"ev", event.GetEventName(ev.Type),
-				"sys", len(handlers))
+		// FSM first, and its result is what makes sys=0 meaningful
+		took := cs.fsm.HandleEvent(cs.world, ev)
+
+		if took {
+			nFSM++
+		}
+		if len(handlers) > 0 {
+			nSys++
+		}
+		if !took && len(handlers) == 0 {
+			nDead++
 		}
 
-		cs.fsm.HandleEvent(cs.world, ev)
+		// Emitted after HandleEvent so the fsm verdict is known; any transition
+		// record it produced carries via=<this event> and reads as the cause
+		if perEvent {
+			vlog.Detail("dispatch", "msg", "ev",
+				"ev", event.GetEventName(ev.Type),
+				"sys", len(handlers),
+				"fsm", took)
+		}
 
 		for _, h := range handlers {
 			h.HandleEvent(ev)
 		}
 	}
 
+	if summary {
+		vlog.Debug("event", "msg", "pass",
+			"src", src,
+			"n", len(eventsList),
+			"fsm", nFSM,
+			"sys", nSys,
+			"dead", nDead)
+	}
+
 	cs.statEvDispatches.Add(int64(len(eventsList)))
+	cs.statEvDead.Add(int64(nDead))
 	return len(eventsList)
 }
 
 // dispatchAndProcessEvents settles pending events with iteration cap
 // Used by reset path where immediate settling is required
-func (cs *ClockScheduler) dispatchAndProcessEvents() {
+func (cs *ClockScheduler) dispatchAndProcessEvents(src string) {
 	for range parameter.EventLoopIterations {
-		if cs.dispatchOnePass() == 0 {
+		if cs.dispatchOnePass(src) == 0 {
 			return
 		}
 	}
@@ -388,7 +506,6 @@ func (cs *ClockScheduler) dispatchAndProcessEvents() {
 func (cs *ClockScheduler) executeReset() {
 	// New session: correlation stamp for every record below
 	vlog.NextRun()
-	cs.lastFSMName = ""
 	vlog.Info("fsm", "msg", "session reset")
 
 	// NOTE: Do not use RunSafe if called from a blocking systems
@@ -419,13 +536,13 @@ func (cs *ClockScheduler) executeReset() {
 	cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
 
 	// 7. Settle FSM-reset and unpause events before releasing the lock
-	cs.dispatchAndProcessEvents()
+	cs.dispatchAndProcessEvents("reset")
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
 func (cs *ClockScheduler) DispatchEventsImmediately() {
 	cs.world.RunSafe(func() {
-		cs.dispatchAndProcessEvents()
+		cs.dispatchAndProcessEvents("input")
 	})
 }
 
@@ -458,39 +575,24 @@ func (cs *ClockScheduler) processTick() {
 		// 3. Initial Settling: Resolve everything accumulated during game tick
 
 		// Ensures FSM and Systems start with a consistent, settled world
-		cs.dispatchAndProcessEvents()
+		cs.dispatchAndProcessEvents("pre")
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
 		cs.fsm.Update(cs.world, cs.tickInterval)
 
-		// 5. FSM Telemetry (after update, before post-settling)
+		// 5. FSM telemetry (after update, before post-settling)
+		// Transitions are reported by the OnTransition tap, not sampled here:
+		// sampling collapses intra-tick chains and cannot see background regions
 		stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
 		cs.statFSMName.Store(stateName)
 		cs.statFSMElapsed.Store(int64(timeInState))
-		if maxDur, ok := cs.fsm.StateDurations[stateID]; ok {
-			cs.statFSMMaxDur.Store(int64(maxDur))
-		} else {
-			cs.statFSMMaxDur.Store(0)
-		}
-		if idx, ok := cs.fsm.StateIndices[stateID]; ok {
-			cs.statFSMIndex.Store(int64(idx))
-		} else {
-			cs.statFSMIndex.Store(0)
-		}
+		cs.statFSMMaxDur.Store(int64(cs.fsm.StateDurations[stateID]))
+		cs.statFSMIndex.Store(int64(cs.fsm.StateIndices[stateID]))
 		cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
-
-		// Transition edge; state names are region-unique in practice
-		if stateName != cs.lastFSMName {
-			vlog.Info("fsm", "msg", "state",
-				"from", cs.lastFSMName,
-				"to", stateName,
-				"index", cs.statFSMIndex.Load(),
-				"max_ms", time.Duration(cs.statFSMMaxDur.Load()).Milliseconds())
-			cs.lastFSMName = stateName
-		}
+		cs.publishRegionStats()
 
 		// 6. Post-FSM Settling: Resolve events emitted by FSM state transitions
-		cs.dispatchAndProcessEvents()
+		cs.dispatchAndProcessEvents("post")
 
 		// 7. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()

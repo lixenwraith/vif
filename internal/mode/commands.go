@@ -127,7 +127,7 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		}
 		s, err := vlog.ParseScopes(strings.Join(args[1:], "+"), vlog.Scopes())
 		if err != nil {
-			setCommandError(ctx, "Usage: :log scope [+|-]app+fsm+stat | afs | all | none")
+			setCommandError(ctx, "Usage: :log scope [+|-]app+fsm+event+dispatch+push+input+stat+rec+lock+tap | afs | all | none")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 		vlog.SetScopes(s)
