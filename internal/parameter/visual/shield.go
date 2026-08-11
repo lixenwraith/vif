@@ -14,10 +14,10 @@ import (
 const (
 	// ShieldPlayerGlowIntensity
 	ShieldPlayerGlowIntensity = 0.7
-	// Shield256ThresholdFloat is normalized distSq below which 256-color rim is transparent
-	Shield256ThresholdFloat = 0.64
-	// ShieldGlowEdgeThresholdFloat is normalized distSq below which glow is suppressed
-	ShieldGlowEdgeThresholdFloat = 0.36
+	// Shield256Threshold is normalized distSq below which 256-color rim is transparent
+	Shield256Threshold = 0.64
+	// ShieldGlowEdgeThreshold is normalized distSq below which glow is suppressed
+	ShieldGlowEdgeThreshold = 0.36
 )
 
 // Shield visual feather zone (renderer-only, does NOT affect game logic)
@@ -101,15 +101,15 @@ func init() {
 	)
 }
 
-func buildShieldConfig(rxF, ryF, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
-	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rxF, ryF)
+func buildShieldConfig(rx, ry, maxOpacity float64, colorMain, colorAlt color.RGB, palette, paletteAlt uint8, glowColor color.RGB, glowIntensity float64, glowPeriod time.Duration) ShieldConfig {
+	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(rx, ry)
 
-	visualRxInt := int(math.Ceil(rxF*parameter.ShieldFeatherEndRatio)) + 1
-	visualRyInt := int(math.Ceil(ryF*parameter.ShieldFeatherEndRatio)) + 1
+	visualRxInt := int(math.Ceil(rx*parameter.ShieldFeatherEndRatio)) + 1
+	visualRyInt := int(math.Ceil(ry*parameter.ShieldFeatherEndRatio)) + 1
 
 	return ShieldConfig{
-		RadiusX:          rxF,
-		RadiusY:          ryF,
+		RadiusX:          rx,
+		RadiusY:          ry,
 		InvRxSq:          invRxSq,
 		InvRySq:          invRySq,
 		VisualRadiusXInt: visualRxInt,

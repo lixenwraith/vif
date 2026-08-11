@@ -62,7 +62,7 @@ const (
 	// ExplosionRadiusCapMultiplier caps radius growth (× base)
 	ExplosionRadiusCapMultiplier = 1.5
 
-	// Render intensity thresholds (0.0-1.0, mapped to Scale)
+	// Render intensity thresholds (0.0-1.0)
 	ExplosionEdgeThreshold = 0.03
 
 	// Explosion Visual Parameters (0.0-1.0)
@@ -73,10 +73,10 @@ const (
 
 // Missile Phase
 const (
-	// MissileMaxSpeedFloat is base homing velocity (cells/sec)
+	// MissileMaxSpeed is base homing velocity (cells/sec).
 	MissileMaxSpeed = 180.0
 
-	// MissileHomingAccelFloat is steering acceleration (cells/sec²)
+	// MissileHomingAccel is steering acceleration (cells/sec²).
 	MissileHomingAccel = 400.0
 
 	// MissileDrag is velocity damping for stable turns

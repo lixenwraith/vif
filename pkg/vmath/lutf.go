@@ -3,7 +3,7 @@ package vmath
 import "math"
 
 var (
-	// Float64 Look-Up Tables to prevent int64<->float64 conversion at runtime
+	// Float64 look-up tables avoid per-call transcendental calculations.
 	SinF_LUT      [LUTSize]float64
 	CosF_LUT      [LUTSize]float64
 	Atan2F_LUT    [LUTSize]float64
@@ -14,7 +14,7 @@ var (
 const radToIndex = float64(LUTSize) / (2.0 * math.Pi)
 
 func init() {
-	// Initialize Float64 Trigonometric LUTs
+	// Initialize trigonometric LUTs.
 	for i := range LUTSize {
 		rad := 2.0 * math.Pi * float64(i) / float64(LUTSize)
 		SinF_LUT[i] = math.Sin(rad)
@@ -25,7 +25,7 @@ func init() {
 		Atan2F_LUT[i] = math.Atan(ratio)
 	}
 
-	// Initialize Float64 Exponential Decay LUT
+	// Initialize the exponential decay LUT.
 	for i := range ExpLUTSize {
 		x := float64(i) * float64(ExpLUTMaxInput) / float64(ExpLUTSize-1)
 		ExpDecayF_LUT[i] = math.Exp(-x / ExpLUTDecayK)
@@ -34,8 +34,8 @@ func init() {
 
 // SinF returns the sine of angleRad using O(1) LUT lookup.
 func SinF(angleRad float64) float64 {
-	// Floor to preserve the arithmetic right-shift behavior of the fixed path
-	// for negative angles. Go's int conversion would truncate toward zero.
+	// Floor keeps negative angles in the preceding angular bin instead of
+	// truncating them toward zero.
 	idx := int(math.Floor(angleRad*radToIndex)) & LUTMask
 	return SinF_LUT[idx]
 }
@@ -47,7 +47,7 @@ func CosF(angleRad float64) float64 {
 }
 
 // Atan2F returns angle in [0, 2π) for (dy, dx) using LUT.
-// Mimics the exact octant-based logic of the fixed-point Atan2 for speed.
+// The octant reduction keeps the lookup table compact.
 func Atan2F(dy, dx float64) float64 {
 	if dx == 0 && dy == 0 {
 		return 0.0
@@ -93,7 +93,7 @@ func Atan2F(dy, dx float64) float64 {
 }
 
 // ExpDecayF returns e^(-count/k) using LUT linear interpolation.
-// Matches the fixed-point behavior but returns continuous float64 [0.0, 1.0].
+// The result is clamped to the LUT domain and lies in [0.0, 1.0].
 func ExpDecayF(count int) float64 {
 	if count <= 0 {
 		return 1.0

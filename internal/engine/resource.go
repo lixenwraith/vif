@@ -74,8 +74,7 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 	tr.DeltaTime = deltaTime
 }
 
-// GameTimeNano returns game time as Unix nanoseconds
-// Retained for fixed-point and integer comparison paths
+// GameTimeNano returns game time as Unix nanoseconds for integer comparison paths.
 func (tr *TimeResource) GameTimeNano() int64 { return tr.GameTime.UnixNano() }
 
 // RealTimeNano returns wall-clock time as Unix nanoseconds

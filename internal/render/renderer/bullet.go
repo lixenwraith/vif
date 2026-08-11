@@ -67,6 +67,9 @@ func (r *BulletRenderer) renderBulletTrueColor(
 		return
 	}
 
+	if bullet.MaxLifetime <= 0 {
+		return
+	}
 	lifetimeRatio := float64(bullet.Lifetime) / float64(bullet.MaxLifetime)
 
 	// Fade alpha in final 30%
@@ -99,6 +102,9 @@ func (r *BulletRenderer) renderBullet256(
 	}
 
 	// Binary visibility: hide in final 20%
+	if bullet.MaxLifetime <= 0 {
+		return
+	}
 	lifetimeRatio := float64(bullet.Lifetime) / float64(bullet.MaxLifetime)
 	if lifetimeRatio > 0.8 {
 		return
@@ -108,7 +114,7 @@ func (r *BulletRenderer) renderBullet256(
 	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Bullet256StormRed}, terminal.AttrFg256|terminal.AttrBold)
 }
 
-func (r *BulletRenderer) directionChar(velX, velY int64) rune {
+func (r *BulletRenderer) directionChar(velX, velY float64) rune {
 	if velX == 0 && velY == 0 {
 		return '•'
 	}
@@ -121,7 +127,7 @@ func (r *BulletRenderer) directionChar(velX, velY int64) rune {
 		absY = -absY
 	}
 
-	threshold := absX / 2
+	threshold := absX / 2.0
 
 	if absY < threshold {
 		if velX > 0 {
@@ -148,7 +154,7 @@ func (r *BulletRenderer) directionChar(velX, velY int64) rune {
 	return '◤'
 }
 
-func (r *BulletRenderer) directionChar256(velX, velY int64) rune {
+func (r *BulletRenderer) directionChar256(velX, velY float64) rune {
 	if velX == 0 && velY == 0 {
 		return '*'
 	}
@@ -161,7 +167,7 @@ func (r *BulletRenderer) directionChar256(velX, velY int64) rune {
 		absY = -absY
 	}
 
-	threshold := absX / 2
+	threshold := absX / 2.0
 
 	if absY < threshold {
 		return '-'

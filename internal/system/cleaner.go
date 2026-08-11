@@ -514,7 +514,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 	horizontalSpeed := parameter.CleanerBaseHorizontalSpeed
 	verticalSpeed := parameter.CleanerBaseVerticalSpeed
 
-	// Shift for cell center precise coordinate adjustment
+	// Launch from the origin cell center.
 	ox, oy := vmath.Point{X: originX, Y: originY}.CenterF()
 
 	type dirDef struct {

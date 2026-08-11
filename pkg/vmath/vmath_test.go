@@ -2,129 +2,26 @@ package vmath
 
 import (
 	"math"
-	"math/big"
 	"testing"
 )
-
-// mulRef is an exact 128-bit oracle mirroring Mul's truncate-toward-zero semantics
-func mulRef(a, b int64) int64 {
-	neg := (a < 0) != (b < 0)
-	p := new(big.Int).Mul(
-		new(big.Int).Abs(big.NewInt(a)),
-		new(big.Int).Abs(big.NewInt(b)),
-	)
-	p.Rsh(p, uint(Shift))
-	r := p.Int64()
-	if neg {
-		return -r
-	}
-	return r
-}
 
 // signedRand returns a value in [-bound, bound)
 func signedRand(rng *FastRand, bound int64) int64 {
 	return int64(rng.Next()%uint64(2*bound)) - bound
 }
 
-func TestMulMatchesExactOracle(t *testing.T) {
-	rng := NewFastRand(0xC0FFEE)
-	const bound = int64(1) << 46 // product stays below 2^93
-	for range 50000 {
-		a, b := signedRand(rng, bound), signedRand(rng, bound)
-		if got, want := Mul(a, b), mulRef(a, b); got != want {
-			t.Fatalf("Mul(%d,%d) = %d, want %d", a, b, got, want)
-		}
+func TestScalarFHelpers(t *testing.T) {
+	if got := LerpF(-3, 11, 0.5); math.Abs(got-4) > 1e-12 {
+		t.Errorf("LerpF midpoint = %v, want 4", got)
 	}
-}
-
-func TestMulIdentity(t *testing.T) {
-	for _, v := range []int64{0, 1, -1, Half, -Half, Scale, -Scale, Scale * 7, 123456789} {
-		if got := Mul(v, Scale); got != v {
-			t.Errorf("Mul(%d, Scale) = %d", v, got)
-		}
-		if got := Mul(Scale, v); got != v {
-			t.Errorf("Mul(Scale, %d) = %d", v, got)
-		}
-		if got := Mul(v, 0); got != 0 {
-			t.Errorf("Mul(%d, 0) = %d", v, got)
-		}
+	if ClampF(-2, -1, 1) != -1 || ClampF(2, -1, 1) != 1 || ClampF(0.5, -1, 1) != 0.5 {
+		t.Error("ClampF")
 	}
-}
-
-func TestFromToFloatRoundTrip(t *testing.T) {
-	const tol = 2.0 / ScaleF
-	for _, f := range []float64{0, 0.5, -0.5, 1, -1, 1e-6, 1234.5678, -9876.54321, 65536.125} {
-		if got := ToFloat(FromFloat(f)); math.Abs(got-f) > tol {
-			t.Errorf("round trip %v -> %v (delta %g)", f, got, got-f)
-		}
+	if SignF(-5) != -1 || SignF(0) != 0 || SignF(5) != 1 {
+		t.Error("SignF")
 	}
-}
-
-func TestFromToIntRoundTrip(t *testing.T) {
-	for _, i := range []int{0, 1, -1, 7, -7, 4095, -4095} {
-		if got := ToInt(FromInt(i)); got != i {
-			t.Errorf("round trip %d -> %d", i, got)
-		}
-	}
-}
-
-func TestDivPrecision(t *testing.T) {
-	rng := NewFastRand(7)
-	for range 20000 {
-		a := signedRand(rng, 1<<44)
-		b := signedRand(rng, 1<<40)
-		if b > -(1<<20) && b < (1<<20) {
-			continue // keep |a/b| well inside Q32.32 range
-		}
-		got := ToFloat(Div(a, b))
-		want := float64(a) / float64(b)
-		if math.Abs(got-want) > math.Abs(want)*1e-9+1e-9 {
-			t.Fatalf("Div(%d,%d) = %g, want %g", a, b, got, want)
-		}
-	}
-}
-
-func TestDivByZero(t *testing.T) {
-	if got := Div(Scale, 0); got != 0 {
-		t.Errorf("Div(Scale, 0) = %d, want 0", got)
-	}
-	if got := MulDiv(Scale, Scale, 0); got != 0 {
-		t.Errorf("MulDiv(_, _, 0) = %d, want 0", got)
-	}
-}
-
-func TestSqrt(t *testing.T) {
-	for _, f := range []float64{0.25, 1, 2, 10, 1000, 65536} {
-		got := ToFloat(Sqrt(FromFloat(f)))
-		want := math.Sqrt(f)
-		if math.Abs(got-want) > want*1e-9 {
-			t.Errorf("Sqrt(%v) = %v, want %v", f, got, want)
-		}
-	}
-	if Sqrt(0) != 0 || Sqrt(-Scale) != 0 {
-		t.Error("Sqrt of non-positive must be 0")
-	}
-}
-
-func TestLerpEndpoints(t *testing.T) {
-	a, b := FromFloat(-3), FromFloat(11)
-	if got := Lerp(a, b, 0); got != a {
-		t.Errorf("Lerp t=0 = %d, want %d", got, a)
-	}
-	if got := Lerp(a, b, Scale); got != b {
-		t.Errorf("Lerp t=Scale = %d, want %d", got, b)
-	}
-	if got := ToFloat(Lerp(a, b, Half)); math.Abs(got-4) > 1e-6 {
-		t.Errorf("Lerp t=0.5 = %v, want 4", got)
-	}
-}
-
-func TestSignAbs(t *testing.T) {
-	if Sign(-5) != -Scale || Sign(0) != 0 || Sign(5) != Scale {
-		t.Error("Sign")
-	}
-	if Abs(-5) != 5 || Abs(5) != 5 || IntAbs(-5) != 5 {
-		t.Error("Abs")
+	if AbsF(-5) != 5 || AbsF(5) != 5 {
+		t.Error("AbsF")
 	}
 }
 
@@ -132,18 +29,19 @@ func TestSignAbs(t *testing.T) {
 
 func TestPointCenterRoundTrip(t *testing.T) {
 	for _, p := range []Point{{0, 0}, {1, 2}, {-1, -2}, {-7, 13}, {1000, -1000}} {
-		if got := PointAt(p.Center()); got != p {
-			t.Errorf("PointAt(%v.Center()) = %v", p, got)
+		px, py := p.CenterF()
+		if got := PointAtF(px, py); got != p {
+			t.Errorf("PointAtF(%v.CenterF()) = %v", p, got)
 		}
 	}
 }
 
 func TestPointCenterMatchesCenteredFromGrid(t *testing.T) {
 	for _, p := range []Point{{0, 0}, {3, -4}, {-9, 9}} {
-		px, py := p.Center()
-		cx, cy := CenteredFromGrid(p.X, p.Y)
+		px, py := p.CenterF()
+		cx, cy := CenteredFromGridF(p.X, p.Y)
 		if px != cx || py != cy {
-			t.Errorf("%v: (%d,%d) != (%d,%d)", p, px, py, cx, cy)
+			t.Errorf("%v: (%v,%v) != (%v,%v)", p, px, py, cx, cy)
 		}
 	}
 }

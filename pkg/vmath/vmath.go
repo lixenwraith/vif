@@ -1,44 +1,26 @@
-// Package vmath provides fixed-point (Q32.32) and float64 primitives for
-// grid-based simulation: arithmetic, LUT trigonometry, 2D/3D vectors,
-// ellipses, arcs, grid traversal and a fast seeded RNG.
+// Package vmath provides float64 primitives for grid-based simulation:
+// scalar math, LUT trigonometry, vectors, ellipses, arcs, grid traversal,
+// and deterministic randomness.
 //
-// Fixed-point values are int64 with 32 fractional bits; Scale is 1.0.
-// Grid coordinates are plain int cell indices. Point.Center is the only
-// sanctioned cell -> precise-position conversion; it applies the half-cell
+// Grid coordinates are plain integer cell indices. Point.CenterF is the
+// sanctioned cell-to-precise-position conversion and applies the half-cell
 // offset that keeps physics and rendering aligned.
-//
-// Several Q32.32 entry points evaluate in float64 internally. Hardware
-// SQRT/DIV and the FPU pipeline beat multi-step int64 emulation for square
-// roots, division, magnitudes, dot products, ellipse tests and atan2; only
-// plain multiply and comparison are faster in fixed point, which is why Mul
-// and the sin/cos LUTs stay integer. Signatures and results are unchanged.
 //
 // The package depends only on the standard library.
 package vmath
 
 import "math"
 
-// === Q32.32 representation ===
+// CellCenterF is the offset from a cell origin to its center.
+const CellCenterF = 0.5
 
-const (
-	Shift int64 = 32
-	Scale int64 = 1 << Shift
-	Mask  int64 = Scale - 1
-	Half  int64 = 1 << (Shift - 1)
-
-	// ScaleF is Scale as float64 for conversion helpers
-	ScaleF = float64(Scale)
-
-	// invScale and invScaleSq rescale float64 products back to Q32.32.
-	// Both are exact powers of two, so the rescale introduces no error.
-	invScale   = 1.0 / ScaleF
-	invScaleSq = invScale * invScale
-
-	// CellCenter is the offset from a cell origin to its center (0.5)
-	CellCenter int64 = Half
-	// CellCenterF is CellCenter on the float path
-	CellCenterF = 0.5
-)
+// IntAbs returns the absolute value of a grid integer.
+func IntAbs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
 
 // === Lookup tables ===
 
@@ -72,11 +54,6 @@ type Point struct {
 	X, Y int
 }
 
-// Center returns the Q32.32 position of the cell's center
-func (p Point) Center() (px, py int64) {
-	return FromInt(p.X) + CellCenter, FromInt(p.Y) + CellCenter
-}
-
 // CenterF returns the float64 position of the cell's center
 func (p Point) CenterF() (px, py float64) {
 	return float64(p.X) + CellCenterF, float64(p.Y) + CellCenterF
@@ -88,11 +65,8 @@ func (p Point) Add(q Point) Point { return Point{X: p.X + q.X, Y: p.Y + q.Y} }
 // Sub returns the component-wise difference
 func (p Point) Sub(q Point) Point { return Point{X: p.X - q.X, Y: p.Y - q.Y} }
 
-// PointAt returns the cell containing the Q32.32 position
-func PointAt(px, py int64) Point { return Point{X: ToInt(px), Y: ToInt(py)} }
-
 // PointAtF returns the cell containing the float64 position
-// Floor, not truncation: ToInt's arithmetic shift floors for negative coordinates
+// Floor preserves cell mapping for negative coordinates.
 func PointAtF(px, py float64) Point {
 	return Point{X: int(math.Floor(px)), Y: int(math.Floor(py))}
 }

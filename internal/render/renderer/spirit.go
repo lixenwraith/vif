@@ -33,20 +33,20 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	// TODO: move to parameter
 	// Configuration for the trail effect
 	const (
-		trailSteps = 10               // Number of segments (Head + 9 trail segments)
-		trailLag   = vmath.Scale / 60 // Fixed progress lag per segment (~1.6%)
+		trailSteps = 10         // Number of segments (Head + 9 trail segments)
+		trailLag   = 1.0 / 60.0 // Progress lag per segment (~1.6%)
 	)
 
 	spirits.Each(func(_ core.Entity, spiritComp *component.SpiritComponent) bool {
 		// Pre-calculate invariant vector and aspect-corrected Y for spiral math
 		relX := spiritComp.StartX - spiritComp.TargetX
 		relY := spiritComp.StartY - spiritComp.TargetY
-		relYCirc := vmath.ScaleToCircular(relY)
+		relYCirc := vmath.ScaleToCircularF(relY)
 
 		// Render loop: Draw head (i=0) and trailing segments (i>0)
 		for i := range trailSteps {
 			// Calculate progress for this segment
-			p := spiritComp.Progress - int64(i)*trailLag
+			p := spiritComp.Progress - float64(i)*trailLag
 			if p < 0 {
 				continue // Segment hasn't spawned yet
 			}
@@ -54,24 +54,25 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			// --- Spiral Trajectory Calculation ---
 
 			// 1. Calculate rotation at current progress
-			currentRot := vmath.Mul(p, spiritComp.Spin)
+			currentRot := p * spiritComp.Spin
 
 			// 2. Rotate the aspect-corrected relative vector
-			rotX, rotYCirc := vmath.RotateVector(relX, relYCirc, currentRot)
+			rotX, rotYCirc := vmath.RotateVectorF(relX, relYCirc, currentRot)
 
 			// 3. Apply convergence scale (1.0 at start -> 0.0 at target)
-			scale := vmath.Scale - p
-			rotX = vmath.Mul(rotX, scale)
-			rotYCirc = vmath.Mul(rotYCirc, scale)
+			scale := 1.0 - p
+			rotX *= scale
+			rotYCirc *= scale
 
 			// 4. Restore aspect ratio (Circular -> Elliptical)
-			rotY := vmath.ScaleFromCircular(rotYCirc)
+			rotY := vmath.ScaleFromCircularF(rotYCirc)
 
 			// 5. Map to screen space
 
 			// Compute map position
-			mapX := vmath.ToInt(spiritComp.TargetX + rotX)
-			mapY := vmath.ToInt(spiritComp.TargetY + rotY)
+			mapPoint := vmath.PointAtF(spiritComp.TargetX+rotX, spiritComp.TargetY+rotY)
+			mapX := mapPoint.X
+			mapY := mapPoint.Y
 
 			// Transform to screen coords
 			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
@@ -88,11 +89,11 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 				// Head: color cycle through gradient based on progress
 				c = spiritProgressColor(spiritComp.BaseColor, p)
 				// Intensity increases as it approaches target (0.5 -> 1.0)
-				intensity := 0.5 + (vmath.ToFloat(p) * 0.5)
+				intensity := 0.5 + p*0.5
 				c = color.Scale(c, intensity)
 			} else {
 				// Trail: inherit cycled color with linear fade + boosted alpha
-				trailProgress := p - int64(i-1)*trailLag
+				trailProgress := p - float64(i-1)*trailLag
 				if trailProgress < 0 {
 					trailProgress = 0
 				}
@@ -119,10 +120,10 @@ func (r *SpiritRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 // spiritProgressColor returns gradient color based on base and animation progress
-func spiritProgressColor(base component.SpiritColor, progress int64) color.RGB {
+func spiritProgressColor(base component.SpiritColor, progress float64) color.RGB {
 	offset := visual.SpiritBaseOffsets[base]
 	// Progress adds 0-128 to cycle through ~half the gradient
-	progressOffset := int((progress * 128) >> vmath.Shift)
+	progressOffset := int(progress * 128.0)
 	lutIdx := (offset + progressOffset) & 0xFF
 
 	return render.HeatGradientLUT[lutIdx]

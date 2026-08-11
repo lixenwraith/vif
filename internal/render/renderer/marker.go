@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // MarkerRenderer draws visual area indicators
@@ -42,7 +41,7 @@ func (r *MarkerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 }
 
 func (r *MarkerRenderer) renderRectangle(ctx render.RenderContext, buf *render.RenderBuffer, marker *component.MarkerComponent) {
-	alpha := vmath.ToFloat(marker.Intensity)
+	alpha := marker.Intensity
 	if alpha <= 0 {
 		return
 	}

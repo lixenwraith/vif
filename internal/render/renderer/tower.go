@@ -229,17 +229,19 @@ func (r *TowerRenderer) renderGlow(
 		radiusY = 1
 	}
 
-	glowOuterRadiusX := radiusX + visual.TowerGlowExtendFloat
-	glowOuterRadiusY := radiusY + visual.TowerGlowExtendFloat
+	glowOuterRadiusX := radiusX + visual.TowerGlowExtend
+	glowOuterRadiusY := radiusY + visual.TowerGlowExtend
 
 	invRxSq := 1.0 / (radiusX * radiusX)
 	invRySq := 1.0 / (radiusY * radiusY)
 
 	// Pulse intensity using game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	sinVal := vmath.Sin(angleFixed)
-	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal)
+	pulse := 0.5
+	if periodMs > 0 {
+		angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
+		pulse = 0.5 + 0.5*vmath.SinF(angle)
+	}
 
 	glowIntensity := intensityMin + (intensityMax-intensityMin)*pulse
 

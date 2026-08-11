@@ -34,6 +34,9 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 	buf.SetWriteMask(visual.MaskTransient)
 
 	pulseDur := parameter.SwarmChargeDuration
+	if pulseDur <= 0 {
+		return
+	}
 	showDelay := parameter.SwarmChargeLineShowDelay
 	if showDelay < 0 {
 		showDelay = 0
@@ -56,9 +59,9 @@ func (r *ChargeLineRenderer) Render(ctx render.RenderContext, buf *render.Render
 		headT := float64(pulseLocalT) / float64(pulseDur)
 
 		// Escalating alpha per pulse
-		alpha := parameter.SwarmChargeLineAlpha1Float
+		alpha := parameter.SwarmChargeLineAlpha1
 		if pulseIndex > 0 {
-			alpha = parameter.SwarmChargeLineAlpha2Float
+			alpha = parameter.SwarmChargeLineAlpha2
 		}
 
 		headerPos, ok := r.gameCtx.World.Positions.GetPosition(headerEntity)
@@ -110,7 +113,10 @@ func (r *ChargeLineRenderer) tracePulse(
 	bboxMaxY := bboxMinY + parameter.SwarmHeight - 1
 
 	invSteps := 1.0 / float64(totalSteps)
-	trailLen := parameter.SwarmChargeLineTrailFloat
+	trailLen := parameter.SwarmChargeLineTrail
+	if trailLen <= 0.0 {
+		return
+	}
 
 	err := absDx - absDy
 	mapX, mapY := x0, y0

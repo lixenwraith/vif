@@ -114,7 +114,7 @@ const (
 
 // Glow parameters (normal state)
 const (
-	TowerGlowExtendFloat    = 1.5
+	TowerGlowExtend         = 1.5
 	TowerGlowIntensityMin   = 0.3
 	TowerGlowIntensityMax   = 0.6
 	TowerGlowFalloffMult    = 2.0

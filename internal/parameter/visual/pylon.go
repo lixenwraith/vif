@@ -38,7 +38,7 @@ const (
 
 // Pylon glow parameters (reuse storm values for consistency)
 const (
-	PylonGlowExtendFloat    = 1.5
+	PylonGlowExtend         = 1.5
 	PylonGlowIntensityMin   = 0.3
 	PylonGlowIntensityMax   = 0.6
 	PylonGlowFalloffMult    = 2.0

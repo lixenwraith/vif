@@ -30,7 +30,7 @@ func NewCleanerRenderer(gameCtx *engine.GameContext) *CleanerRenderer {
 
 // buildGradients builds gradients for cleaner trail rendering
 func (r *CleanerRenderer) buildGradients() {
-	length := parameter.CleanerTrailLength
+	length := int(parameter.CleanerTrailLength)
 
 	r.gradientPositive = make([]color.RGB, length)
 	r.gradientNegative = make([]color.RGB, length)
@@ -77,7 +77,7 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		visibleLen := cleaner.TrailLen
 		if cleaner.Blocked && cleaner.DrainTotal > 0 {
 			// Shrink trail proportionally to drain progress
-			ratio := float64(cleaner.DrainRemaining) / float64(cleaner.DrainTotal)
+			ratio := cleaner.DrainRemaining / cleaner.DrainTotal
 			if ratio < 0 {
 				ratio = 0
 			}

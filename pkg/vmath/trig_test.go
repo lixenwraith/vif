@@ -5,9 +5,6 @@ import (
 	"testing"
 )
 
-// rotToRad converts Q32.32 rotation units (Scale = 2pi) to radians
-func rotToRad(a int64) float64 { return ToFloat(a) * TwoPi }
-
 // angDelta returns the shortest absolute difference between two radian angles
 func angDelta(a, b float64) float64 {
 	d := math.Mod(a-b, TwoPi)
@@ -25,38 +22,21 @@ func TestSinCosAgainstMath(t *testing.T) {
 	const tol = 0.0065
 	for i := range 8192 {
 		turn := float64(i) / 8192
-		a := int64(turn * ScaleF)
 		rad := turn * TwoPi
-		if e := math.Abs(ToFloat(Sin(a)) - math.Sin(rad)); e > tol {
-			t.Fatalf("Sin(%v turn) error %g", turn, e)
+		if e := math.Abs(SinF(rad) - math.Sin(rad)); e > tol {
+			t.Fatalf("SinF(%v turn) error %g", turn, e)
 		}
-		if e := math.Abs(ToFloat(Cos(a)) - math.Cos(rad)); e > tol {
-			t.Fatalf("Cos(%v turn) error %g", turn, e)
+		if e := math.Abs(CosF(rad) - math.Cos(rad)); e > tol {
+			t.Fatalf("CosF(%v turn) error %g", turn, e)
 		}
 	}
 }
 
 func TestSinCosUnitCircle(t *testing.T) {
 	for i := range LUTSize {
-		a := int64(i) << (Shift - 10)
-		s, c := ToFloat(Sin(a)), ToFloat(Cos(a))
+		s, c := SinF_LUT[i], CosF_LUT[i]
 		if e := math.Abs(s*s + c*c - 1); e > 1e-6 {
 			t.Fatalf("index %d: sin^2+cos^2 off by %g", i, e)
-		}
-	}
-}
-
-func TestSinFCosFMatchFixed(t *testing.T) {
-	const tol = 0.0065 // allows a one-index disagreement between the two paths
-	for i := range 4096 {
-		turn := float64(i) / 4096
-		a := int64(turn * ScaleF)
-		rad := turn * TwoPi
-		if e := math.Abs(ToFloat(Sin(a)) - SinF(rad)); e > tol {
-			t.Fatalf("Sin/SinF diverge at %v turn by %g", turn, e)
-		}
-		if e := math.Abs(ToFloat(Cos(a)) - CosF(rad)); e > tol {
-			t.Fatalf("Cos/CosF diverge at %v turn by %g", turn, e)
 		}
 	}
 }
@@ -119,17 +99,17 @@ func TestAtan2FAgainstMath(t *testing.T) {
 }
 
 func TestExpDecayBoundsAndMonotonicity(t *testing.T) {
-	if got := ExpDecay(0); got != Scale {
-		t.Errorf("ExpDecay(0) = %d, want Scale", got)
+	if got := ExpDecayF(0); got != 1.0 {
+		t.Errorf("ExpDecayF(0) = %v, want 1", got)
 	}
-	prev := int64(math.MaxInt64)
+	prev := math.Inf(1)
 	for c := range ExpLUTMaxInput + 64 {
-		v := ExpDecay(c)
-		if v < 0 || v > Scale {
-			t.Fatalf("ExpDecay(%d) = %d out of [0, Scale]", c, v)
+		v := ExpDecayF(c)
+		if v < 0 || v > 1.0 {
+			t.Fatalf("ExpDecayF(%d) = %v out of [0, 1]", c, v)
 		}
 		if v > prev {
-			t.Fatalf("ExpDecay not monotonic at %d: %d > %d", c, v, prev)
+			t.Fatalf("ExpDecayF not monotonic at %d: %v > %v", c, v, prev)
 		}
 		prev = v
 	}
@@ -139,27 +119,19 @@ func TestExpDecayAgainstMathExp(t *testing.T) {
 	for _, c := range []int{0, 1, 10, 30, 100, 255, 400, 511, 512, 5000} {
 		x := float64(min(c, ExpLUTMaxInput))
 		want := math.Exp(-x / ExpLUTDecayK)
-		got := ToFloat(ExpDecay(c))
+		got := ExpDecayF(c)
 		if math.Abs(got-want) > want*5e-3+1e-9 {
-			t.Errorf("ExpDecay(%d) = %g, want %g", c, got, want)
+			t.Errorf("ExpDecayF(%d) = %g, want %g", c, got, want)
 		}
 	}
 }
 
-func TestExpDecayFMatchesExpDecay(t *testing.T) {
-	for c := range 600 {
-		if e := math.Abs(ToFloat(ExpDecay(c)) - ExpDecayF(c)); e > 1e-6 {
-			t.Fatalf("ExpDecay/ExpDecayF diverge at %d by %g", c, e)
-		}
+func TestExpDecayScaledFBounds(t *testing.T) {
+	const boost = 3.0
+	if got := ExpDecayScaledF(0, boost); got != 1.0+boost {
+		t.Errorf("ExpDecayScaledF(0) = %v, want %v", got, 1.0+boost)
 	}
-}
-
-func TestExpDecayScaled(t *testing.T) {
-	boost := FromFloat(3.0)
-	if got := ExpDecayScaled(0, boost); got != Scale+boost {
-		t.Errorf("ExpDecayScaled(0) = %d, want %d", got, Scale+boost)
-	}
-	if got := ExpDecayScaled(ExpLUTMaxInput, boost); got <= Scale || got > Scale+boost {
-		t.Errorf("ExpDecayScaled saturation = %d", got)
+	if got := ExpDecayScaledF(ExpLUTMaxInput, boost); got <= 1.0 || got > 1.0+boost {
+		t.Errorf("ExpDecayScaledF saturation = %v", got)
 	}
 }

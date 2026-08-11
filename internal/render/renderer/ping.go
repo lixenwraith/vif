@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"math"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -8,7 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // PingRenderer draws cursor row/column highlights and optional grid lines
@@ -108,8 +109,8 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 		}
 
 		// Bounding box
-		rx := vmath.ToInt(shieldComp.RadiusX)
-		ry := vmath.ToInt(shieldComp.RadiusY)
+		rx := int(math.Floor(shieldComp.RadiusX))
+		ry := int(math.Floor(shieldComp.RadiusY))
 
 		// Bounding box in viewport coords
 		startX := shieldVX - rx
@@ -132,16 +133,16 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 		}
 
 		for y := startY; y <= endY; y++ {
-			dy := vmath.FromInt(y - shieldVY)
-			dySq := vmath.Mul(dy, dy)
+			dy := float64(y - shieldVY)
+			dySq := dy * dy
 			rowOffset := y * w
 
 			for x := startX; x <= endX; x++ {
-				dx := vmath.FromInt(x - shieldVX)
-				dxSq := vmath.Mul(dx, dx)
+				dx := float64(x - shieldVX)
+				dxSq := dx * dx
 
 				// Ellipse containment: (dx²*invRxSq + dy²*invRySq) <= 1.0
-				if (vmath.Mul(dxSq, shieldComp.InvRxSq) + vmath.Mul(dySq, shieldComp.InvRySq)) <= vmath.Scale {
+				if dxSq*shieldComp.InvRxSq+dySq*shieldComp.InvRySq <= 1.0 {
 					idx := rowOffset + x
 					r.exclusionMask[idx/64] |= (1 << (idx % 64))
 				}

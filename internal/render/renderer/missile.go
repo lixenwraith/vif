@@ -62,6 +62,10 @@ func (r *MissileRenderer) renderMissileTrueColor(
 ) {
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
+	if maxAge <= 0 {
+		r.renderBody(ctx, buf, missile, kinetic, true)
+		return
+	}
 
 	startCol, endCol := visual.RgbMissileChildTrailStart, visual.RgbMissileChildTrailEnd
 
@@ -77,10 +81,10 @@ func (r *MissileRenderer) renderMissileTrueColor(
 
 		tFactor := float64(pt.Age) / float64(maxAge)
 		alpha := 1.0 - tFactor
-		color := render.LerpRGBFixed(startCol, endCol, vmath.FromFloat(tFactor))
+		color := render.LerpRGB(startCol, endCol, tFactor)
 
 		// Step-DDA iterator (thinner diagonal profile than Supercover Traverse)
-		traverser := vmath.NewGridTraverser(prevX, prevY, pt.X, pt.Y)
+		traverser := vmath.NewGridTraverserF(prevX, prevY, pt.X, pt.Y)
 		for traverser.Next() {
 			mapX, mapY := traverser.Pos()
 
@@ -109,28 +113,28 @@ func (r *MissileRenderer) renderBody(
 	kinetic *component.KineticComponent,
 	trueColor bool,
 ) {
-	mapX := vmath.ToInt(kinetic.PreciseX)
-	mapY := vmath.ToInt(kinetic.PreciseY)
+	point := vmath.PointAtF(kinetic.PreciseX, kinetic.PreciseY)
+	mapX := point.X
+	mapY := point.Y
 
 	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 	if !visible {
 		return
 	}
 
-	var color color.RGB
+	var bodyColor color.RGB
 	char := r.directionChar(kinetic.VelX, kinetic.VelY)
 
 	if trueColor {
-		buf.Set(screenX, screenY, char, color, visual.RgbBackground,
+		buf.Set(screenX, screenY, char, bodyColor, visual.RgbBackground,
 			render.BlendReplace, 1.0, terminal.AttrBold)
 	} else {
-		// 256-color fallback remains as is or mapped to similar indices
-		buf.SetFgOnly(screenX, screenY, char, visual.RgbMissileChildBody, terminal.AttrFg256|terminal.AttrBold)
+		buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
 	}
 }
 
 // directionChar returns arrow character based on velocity direction
-func (r *MissileRenderer) directionChar(velX, velY int64) rune {
+func (r *MissileRenderer) directionChar(velX, velY float64) rune {
 	// 8-direction quantization
 	if velX == 0 && velY == 0 {
 		return visual.MissileBaseChar
@@ -147,7 +151,7 @@ func (r *MissileRenderer) directionChar(velX, velY int64) rune {
 	}
 
 	// Threshold for diagonal vs cardinal (tan(22.5°) ≈ 0.414)
-	threshold := absX / 2 // Approximation
+	threshold := absX / 2.0 // Approximation
 
 	if absY < threshold {
 		// Horizontal
@@ -187,6 +191,10 @@ func (r *MissileRenderer) renderMissile256(
 ) {
 	// === Trail ===
 	maxAge := parameter.MissileTrailMaxAge
+	if maxAge <= 0 {
+		r.renderBody(ctx, buf, missile, kinetic, false)
+		return
+	}
 
 	for i := range missile.TrailLen {
 		idx := (missile.TrailHead - missile.TrailLen + i + component.TrailCapacity) % component.TrailCapacity
@@ -196,8 +204,9 @@ func (r *MissileRenderer) renderMissile256(
 			continue
 		}
 
-		mapX := vmath.ToInt(pt.X)
-		mapY := vmath.ToInt(pt.Y)
+		point := vmath.PointAtF(pt.X, pt.Y)
+		mapX := point.X
+		mapY := point.Y
 
 		screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
 		if !visible {
@@ -212,15 +221,5 @@ func (r *MissileRenderer) renderMissile256(
 	}
 
 	// === Body ===
-	mapX := vmath.ToInt(kinetic.PreciseX)
-	mapY := vmath.ToInt(kinetic.PreciseY)
-
-	screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
-	if !visible {
-		return
-	}
-
-	char := r.directionChar(kinetic.VelX, kinetic.VelY)
-
-	buf.SetFgOnly(screenX, screenY, char, color.RGB{R: visual.Missile256Base}, terminal.AttrFg256|terminal.AttrBold)
+	r.renderBody(ctx, buf, missile, kinetic, false)
 }

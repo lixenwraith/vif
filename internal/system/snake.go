@@ -504,7 +504,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 	createdAny := false
 
 	for _, lateralOffset := range snakeLateralOffsets {
-		// Floor, not truncation: ToInt's arithmetic shift floored for negative offsets
+		// Floor keeps negative offsets in the preceding grid cell.
 		memberX := centerX + int(math.Floor(perpX*float64(lateralOffset)))
 		memberY := centerY + int(math.Floor(perpY*float64(lateralOffset)))
 

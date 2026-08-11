@@ -18,9 +18,9 @@ import (
 // stormCircleRender holds data for depth-sorted rendering
 type stormCircleRender struct {
 	entity core.Entity
-	x, y   int   // Grid position
-	z      int64 // Z depth for sorting (Q32.32)
-	index  int   // Circle index for color selection
+	x, y   int     // Grid position
+	z      float64 // Z depth for sorting
+	index  int     // Circle index for color selection
 }
 
 // StormRenderer draws the storm boss entity with depth-based rendering
@@ -41,11 +41,11 @@ type StormRenderer struct {
 }
 
 func NewStormRenderer(gameCtx *engine.GameContext) *StormRenderer {
-	rx := parameter.StormCircleRadiusXFloat
-	ry := parameter.StormCircleRadiusYFloat
-	haloExtendX := parameter.StormConcaveHaloExtendFloat
+	rx := parameter.StormCircleRadiusX
+	ry := parameter.StormCircleRadiusY
+	haloExtendX := parameter.StormConcaveHaloExtend
 	haloExtendY := haloExtendX * (ry / rx)
-	glowExtend := parameter.StormConvexGlowExtendFloat
+	glowExtend := parameter.StormConvexGlowExtend
 
 	return &StormRenderer{
 		gameCtx:    gameCtx,
@@ -139,17 +139,17 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 
 	// Depth factor: 0 = far, 1 = near
 	zRange := parameter.StormZMax - parameter.StormZMin
-	if zRange <= 0 {
-		zRange = vmath.Scale
+	if zRange <= 0.0 {
+		zRange = 1.0
 	}
-	zNorm := vmath.Div(circle.z-parameter.StormZMin, zRange)
-	if zNorm < 0 {
-		zNorm = 0
+	zNorm := (circle.z - parameter.StormZMin) / zRange
+	if zNorm < 0.0 {
+		zNorm = 0.0
 	}
-	if zNorm > vmath.Scale {
-		zNorm = vmath.Scale
+	if zNorm > 1.0 {
+		zNorm = 1.0
 	}
-	depthFactor := vmath.ToFloat(vmath.Scale - zNorm)
+	depthFactor := 1.0 - zNorm
 
 	// Depth brightness: 0.6 to 1.0
 	depthBright := 0.6 + depthFactor*0.4
@@ -216,7 +216,7 @@ func (r *StormRenderer) renderCircle(ctx render.RenderContext, buf *render.Rende
 		ny := float64(member.OffsetY) * r.invRadiusY
 		distSq := nx*nx + ny*ny
 
-		// Members validated at creation via Q32.32; clamp for shading math only
+		// Members are validated at creation; clamp for shading math only.
 		if distSq > 1.0 {
 			distSq = 1.0
 		}
@@ -349,13 +349,14 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 	mapStartY := max(0, circle.y-int(r.glowMaxRadiusY)-1)
 	mapEndY := min(ctx.MapHeight-1, circle.y+int(r.glowMaxRadiusY)+1)
 
-	// Pulse via GameTime and vmath.Sin LUT
-	// angle ∈ [0, Scale) maps to [0, 2π), Sin returns [-Scale, Scale]
+	// Pulse via game time and the sine LUT.
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	sinVal := vmath.Sin(angleFixed)          // Q32.32 in [-Scale, Scale]
-	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal) // Normalized to [0, 1]
+	if periodMs <= 0 {
+		return
+	}
+	angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
+	pulse := 0.5 + 0.5*vmath.SinF(angle)
 
 	glowIntensity := depthBright * (parameter.StormConvexGlowIntensityMin +
 		(parameter.StormConvexGlowIntensityMax-parameter.StormConvexGlowIntensityMin)*pulse)
@@ -371,7 +372,7 @@ func (r *StormRenderer) renderConvexGlow(ctx render.RenderContext, buf *render.R
 			ny := float64(mapY-circle.y) * r.invRadiusY
 			distSq := nx*nx + ny*ny
 
-			if distSq <= 1.0 || distSq > parameter.StormConvexGlowOuterDistSqFloat {
+			if distSq <= 1.0 || distSq > parameter.StormConvexGlowOuterDistSq {
 				continue
 			}
 
@@ -485,9 +486,9 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 	dirX, dirY := dx/dist, dy/dist
 
 	// Spawn point at ellipse exterior
-	angle := math.Atan2(dy, dx)
-	spawnX := float64(circle.x) + r.radiusX*math.Cos(angle)
-	spawnY := float64(circle.y) + r.radiusY*math.Sin(angle)
+	angle := vmath.Atan2F(dy, dx)
+	spawnX := float64(circle.x) + r.radiusX*vmath.CosF(angle)
+	spawnY := float64(circle.y) + r.radiusY*vmath.SinF(angle)
 
 	// Short muzzle flash: 4 cells, narrow wedge
 	const flashLength = 4.0
@@ -497,7 +498,8 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 
 	// Time-based flicker using game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
-	flicker := 0.85 + 0.15*vmath.ToFloat(vmath.Sin((gameTimeMs*vmath.Scale/80)%vmath.Scale))
+	flickerAngle := float64(gameTimeMs%80) / 80.0 * vmath.TwoPi
+	flicker := 0.85 + 0.15*vmath.SinF(flickerAngle)
 
 	for step := 0; step <= int(flashLength); step++ {
 		t := float64(step) / flashLength
@@ -516,7 +518,8 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 			wFrac := float64(w) / float64(widthSteps+1)
 
 			// Add chaotic displacement for flame effect
-			jitter := vmath.ToFloat(vmath.Sin((gameTimeMs/20+int64(step*7+w*13))*vmath.Scale/100%vmath.Scale)) * 0.3
+			jitterPhase := (gameTimeMs/20 + int64(step*7+w*13)) % 100
+			jitter := vmath.SinF(float64(jitterPhase)*vmath.TwoPi/100.0) * 0.3
 			cellX := axisX + perpX*(wFrac+jitter)*widthMult
 			cellY := axisY + perpY*(wFrac+jitter)*widthMult
 
@@ -541,7 +544,7 @@ func (r *StormRenderer) renderRedCone(ctx render.RenderContext, buf *render.Rend
 	}
 }
 
-// renderBlueBeam renamed and rewritten - replace entire function
+// renderBlueGlow draws the rotating amber highlights around the blue circle.
 func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.RenderBuffer, circle *stormCircleRender, circleComp *component.StormCircleComponent) {
 	progress := circleComp.AttackProgress
 	if progress <= 0.01 {
@@ -560,16 +563,19 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 	// Fast rotation via game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := parameter.StormBlueGlowRotationPeriod.Milliseconds()
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	cosA := vmath.Cos(angleFixed)
-	sinA := vmath.Sin(angleFixed)
+	if periodMs <= 0 {
+		return
+	}
+	angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
+	cosA := vmath.CosF(angle)
+	sinA := vmath.SinF(angle)
 
 	// Warm amber glow contrasting blue body
 	glowColor := color.RGB{R: 255, G: 190, B: 70}
 
 	// Render ring around circle edge
-	outerRx := r.radiusX + parameter.StormConvexGlowExtendFloat + 1.0
-	outerRy := r.radiusY + (parameter.StormConvexGlowExtendFloat+1.0)*(r.radiusY/r.radiusX)
+	outerRx := r.radiusX + parameter.StormConvexGlowExtend + 1.0
+	outerRy := r.radiusY + (parameter.StormConvexGlowExtend+1.0)*(r.radiusY/r.radiusX)
 
 	mapStartX := max(0, circle.x-int(outerRx)-1)
 	mapEndX := min(ctx.MapWidth-1, circle.x+int(outerRx)+1)
@@ -596,12 +602,9 @@ func (r *StormRenderer) renderBlueGlow(ctx render.RenderContext, buf *render.Ren
 			cellDirX := nx / dist
 			cellDirY := ny / dist
 
-			dirXFixed := vmath.FromFloat(cellDirX)
-			dirYFixed := vmath.FromFloat(cellDirY)
-
 			// Double glow: dot with both opposite directions
-			dot1 := vmath.ToFloat(vmath.DotProduct(dirXFixed, dirYFixed, cosA, sinA))
-			dot2 := vmath.ToFloat(vmath.DotProduct(dirXFixed, dirYFixed, -cosA, -sinA))
+			dot1 := vmath.DotProductF(cellDirX, cellDirY, cosA, sinA)
+			dot2 := vmath.DotProductF(cellDirX, cellDirY, -cosA, -sinA)
 
 			dot := math.Max(dot1, dot2)
 			if dot <= 0.1 {

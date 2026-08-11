@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"math"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -14,22 +16,22 @@ import (
 type PulseRenderer struct {
 	gameCtx *engine.GameContext
 
-	// Cached Q32.32 constants (avoid FromFloat in hot path)
-	radiusMultMin   int64 // 0.3
-	radiusMultRange int64 // 0.7
-	alphaMax        int64 // 0.9
-	alphaThreshold  int64 // 0.03
-	ringCount       int64 // 6
+	// Cached animation constants
+	radiusMultMin   float64 // 0.3
+	radiusMultRange float64 // 0.7
+	alphaMax        float64 // 0.9
+	alphaThreshold  float64 // 0.03
+	ringCount       float64 // 6
 }
 
 func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 	return &PulseRenderer{
 		gameCtx:         gameCtx,
-		radiusMultMin:   vmath.FromFloat(0.3),
-		radiusMultRange: vmath.FromFloat(0.7),
-		alphaMax:        vmath.FromFloat(0.9),
-		alphaThreshold:  vmath.FromFloat(0.03),
-		ringCount:       vmath.FromInt(6),
+		radiusMultMin:   0.3,
+		radiusMultRange: 0.7,
+		alphaMax:        0.9,
+		alphaThreshold:  0.03,
+		ringCount:       6.0,
 	}
 }
 
@@ -41,14 +43,14 @@ func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 		return
 	}
 
-	// Progress: 0 (start) -> Scale (end) in Q32.32
+	// Progress runs from zero at the start to one at the end.
 	remainingNs := pulseComp.Remaining.Nanoseconds()
 	durationNs := pulseComp.Duration.Nanoseconds()
 	if durationNs == 0 {
 		return
 	}
-	progress := vmath.Scale - vmath.MulDiv(remainingNs, vmath.Scale, durationNs)
-	if progress < 0 || progress > vmath.Scale {
+	progress := 1.0 - float64(remainingNs)/float64(durationNs)
+	if progress < 0.0 || progress > 1.0 {
 		return
 	}
 
@@ -62,21 +64,21 @@ func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 }
 
 func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.RenderBuffer,
-	originX, originY int, progress int64, negativeEnergy bool) {
+	originX, originY int, progress float64, negativeEnergy bool) {
 
 	// Two-phase animation: expand (0-0.5) then fade (0.5-1.0)
-	pulsePhase := progress << 1
+	pulsePhase := progress * 2.0
 
-	var radiusMult, baseAlpha int64
-	if pulsePhase < vmath.Scale {
+	var radiusMult, baseAlpha float64
+	if pulsePhase < 1.0 {
 		// radiusMult = 0.3 + 0.7 * phase
-		radiusMult = r.radiusMultMin + vmath.Mul(r.radiusMultRange, pulsePhase)
+		radiusMult = r.radiusMultMin + r.radiusMultRange*pulsePhase
 		// baseAlpha = 0.9 * phase
-		baseAlpha = vmath.Mul(r.alphaMax, pulsePhase)
+		baseAlpha = r.alphaMax * pulsePhase
 	} else {
-		radiusMult = vmath.Scale
+		radiusMult = 1.0
 		// baseAlpha = 0.9 * (2.0 - phase)
-		baseAlpha = vmath.Mul(r.alphaMax, (vmath.Scale<<1)-pulsePhase)
+		baseAlpha = r.alphaMax * (2.0 - pulsePhase)
 	}
 
 	if baseAlpha <= r.alphaThreshold {
@@ -92,24 +94,27 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 
 	// Scale precomputed inverse radii by 1/radiusMult²
 	// invRxSq_scaled = invRxSq_base / radiusMult²
-	radiusMultSq := vmath.Mul(radiusMult, radiusMult)
-	invRxSq := vmath.Div(parameter.PulseRadiusInvRxSq, radiusMultSq)
-	invRySq := vmath.Div(parameter.PulseRadiusInvRySq, radiusMultSq)
+	radiusMultSq := radiusMult * radiusMult
+	if radiusMultSq == 0.0 {
+		return
+	}
+	invRxSq := parameter.PulseRadiusInvRxSq / radiusMultSq
+	invRySq := parameter.PulseRadiusInvRySq / radiusMultSq
 
 	// Integer bounds from scaled radii
-	intRadiusX := vmath.ToInt(vmath.Mul(parameter.PulseRadiusX, radiusMult)) + 1
-	intRadiusY := vmath.ToInt(vmath.Mul(parameter.PulseRadiusY, radiusMult)) + 1
+	intRadiusX := int(math.Floor(parameter.PulseRadiusX*radiusMult)) + 1
+	intRadiusY := int(math.Floor(parameter.PulseRadiusY*radiusMult)) + 1
 
 	mapStartX := max(0, originX-intRadiusX)
 	mapEndX := min(ctx.MapWidth-1, originX+intRadiusX)
 	mapStartY := max(0, originY-intRadiusY)
 	mapEndY := min(ctx.MapHeight-1, originY+intRadiusY)
 
-	// Ripple phase offset: progress * 2 rotations (Scale = 2π)
-	phaseOffset := progress << 1
+	// Ripple phase offset advances by two rotations over the effect.
+	phaseOffset := progress * 2.0 * vmath.TwoPi
 
 	for mapY := mapStartY; mapY <= mapEndY; mapY++ {
-		dy := vmath.FromInt(mapY - originY)
+		dy := float64(mapY - originY)
 
 		for mapX := mapStartX; mapX <= mapEndX; mapX++ {
 			screenX, screenY, visible := ctx.MapToScreen(mapX, mapY)
@@ -117,34 +122,34 @@ func (r *PulseRenderer) renderPulse(ctx render.RenderContext, buf *render.Render
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - originX)
+			dx := float64(mapX - originX)
 
-			// Normalized squared distance (<=Scale means inside ellipse)
-			distSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
-			if distSq > vmath.Scale {
+			// Normalized squared distance (<=1 means inside ellipse)
+			distSq := vmath.EllipseDistSqF(dx, dy, invRxSq, invRySq)
+			if distSq > 1.0 {
 				continue
 			}
 
-			// Normalized distance [0, Scale]
-			dist := vmath.Sqrt(distSq)
+			// Normalized distance [0, 1]
+			dist := math.Sqrt(distSq)
 
 			// Concentric ripples: sin(dist * ringCount - phaseOffset)
-			angle := vmath.Mul(dist, r.ringCount) - phaseOffset
-			rippleSin := vmath.Sin(angle)
+			angle := dist*r.ringCount*vmath.TwoPi - phaseOffset
+			rippleSin := vmath.SinF(angle)
 
-			// rippleIntensity = 0.5 + 0.5 * sin = (Scale + sin) / 2
-			rippleIntensity := (vmath.Scale + rippleSin) >> 1
+			// rippleIntensity = 0.5 + 0.5 * sin
+			rippleIntensity := (1.0 + rippleSin) / 2.0
 
 			// Edge falloff: 1.0 - dist
-			edgeFalloff := vmath.Scale - dist
+			edgeFalloff := 1.0 - dist
 
 			// Final alpha
-			cellAlpha := vmath.Mul(vmath.Mul(baseAlpha, rippleIntensity), edgeFalloff)
+			cellAlpha := baseAlpha * rippleIntensity * edgeFalloff
 			if cellAlpha < r.alphaThreshold {
 				continue
 			}
 
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseColor, render.BlendScreen, vmath.ToFloat(cellAlpha), terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, pulseColor, render.BlendScreen, cellAlpha, terminal.AttrNone)
 		}
 	}
 }

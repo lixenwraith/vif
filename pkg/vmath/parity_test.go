@@ -5,36 +5,28 @@ import (
 	"testing"
 )
 
-func assertV3(t *testing.T, name string, a Vec3, b Vec3F, tol float64) {
-	t.Helper()
-	if math.Abs(ToFloat(a.X)-b.X) > tol ||
-		math.Abs(ToFloat(a.Y)-b.Y) > tol ||
-		math.Abs(ToFloat(a.Z)-b.Z) > tol {
-		t.Errorf("%s: fixed %v != float %v", name, V3ToFloat(a), b)
-	}
-}
+func TestV3FOperations(t *testing.T) {
+	a := Vec3F{X: 3, Y: -4, Z: 12} // magnitude 13
+	b := Vec3F{X: -1.5, Y: 2, Z: 0.25}
 
-func TestV3FloatParity(t *testing.T) {
-	a := Vec3{FromFloat(3), FromFloat(-4), FromFloat(12)} // magnitude 13
-	b := Vec3{FromFloat(-1.5), FromFloat(2), FromFloat(0.25)}
-	af, bf := V3ToFloat(a), V3ToFloat(b)
-
-	if e := math.Abs(ToFloat(V3Dot(a, b)) - V3FDot(af, bf)); e > 1e-6 {
-		t.Errorf("V3Dot/V3FDot diverge by %g", e)
+	if got, want := V3FDot(a, b), -9.5; math.Abs(got-want) > 1e-12 {
+		t.Errorf("V3FDot = %g, want %g", got, want)
 	}
-	assertV3(t, "V3ClampMagnitude",
-		V3ClampMagnitude(a, FromFloat(5)), V3FClampMagnitude(af, 5), 1e-4)
-	assertV3(t, "V3ClampMagnitude under limit",
-		V3ClampMagnitude(a, FromFloat(100)), V3FClampMagnitude(af, 100), 1e-9)
-	assertV3(t, "V3Damp", V3Damp(a, Scale/4), V3FDamp(af, 0.25), 1e-6)
-	assertV3(t, "V3DampDt",
-		V3DampDt(a, FromFloat(0.5), FromFloat(0.5)), V3FDampDt(af, 0.5, 0.5), 1e-6)
+	if got := V3FMag(V3FClampMagnitude(a, 5)); math.Abs(got-5) > 1e-12 {
+		t.Errorf("V3FClampMagnitude magnitude = %g, want 5", got)
+	}
+	if got := V3FClampMagnitude(a, 100); got != a {
+		t.Errorf("under-limit clamp = %v, want %v", got, a)
+	}
+	if got := V3FDamp(a, 0.25); got != (Vec3F{0.75, -1, 3}) {
+		t.Errorf("V3FDamp = %v", got)
+	}
 
 	// over-decay must clamp at zero, not invert
-	if d := V3FDampDt(af, 0, 10); d != (Vec3F{}) {
+	if d := V3FDampDt(a, 0, 10); d != (Vec3F{}) {
 		t.Errorf("V3FDampDt over-decay = %v, want zero", d)
 	}
-	if x, y := V3FXY(af); x != af.X || y != af.Y {
+	if x, y := V3FXY(a); x != a.X || y != a.Y {
 		t.Error("V3FXY")
 	}
 	if V3FFrom2D(1, 2, 3) != (Vec3F{1, 2, 3}) {
@@ -42,38 +34,33 @@ func TestV3FloatParity(t *testing.T) {
 	}
 }
 
-func TestExpDecayScaledFMatchesFixed(t *testing.T) {
+func TestExpDecayScaledF(t *testing.T) {
 	for _, c := range []int{0, 1, 37, 255, 512, 5000} {
 		got := ExpDecayScaledF(c, 3.0)
-		want := ToFloat(ExpDecayScaled(c, FromFloat(3.0)))
-		if math.Abs(got-want) > 1e-6 {
-			t.Errorf("ExpDecayScaled(%d) = %v fixed, %v float", c, want, got)
+		want := 1.0 + 3.0*ExpDecayF(c)
+		if math.Abs(got-want) > 1e-12 {
+			t.Errorf("ExpDecayScaledF(%d) = %v, want %v", c, got, want)
 		}
 	}
 }
 
-func TestEllipseContainsPointFMatchesFixed(t *testing.T) {
-	invRx, invRy := EllipseInvRadiiSq(FromFloat(4), FromFloat(2))
+func TestEllipseContainsPointFSymmetric(t *testing.T) {
 	fInvRx, fInvRy := EllipseInvRadiiSqF(4, 2)
 	const cx, cy = 20, 20
 	for dy := -4; dy <= 4; dy++ {
 		for dx := -6; dx <= 6; dx++ {
-			a := EllipseContainsPoint(cx+dx, cy+dy, cx, cy, invRx, invRy)
-			b := EllipseContainsPointF(cx+dx, cy+dy, cx, cy, fInvRx, fInvRy)
+			a := EllipseContainsPointF(cx+dx, cy+dy, cx, cy, fInvRx, fInvRy)
+			b := EllipseContainsPointF(cx-dx, cy-dy, cx, cy, fInvRx, fInvRy)
 			if a != b {
-				t.Fatalf("offset (%d,%d): fixed %v, float %v", dx, dy, a, b)
+				t.Fatalf("offset (%d,%d): asymmetric %v vs %v", dx, dy, a, b)
 			}
 		}
 	}
 }
 
-func TestPointCenterFParity(t *testing.T) {
+func TestPointCenterFRoundTrip(t *testing.T) {
 	for _, p := range []Point{{0, 0}, {3, -4}, {-9, 9}, {1000, -1000}} {
-		fx, fy := p.Center()
 		px, py := p.CenterF()
-		if math.Abs(ToFloat(fx)-px) > 1e-9 || math.Abs(ToFloat(fy)-py) > 1e-9 {
-			t.Errorf("%v: fixed (%v,%v) != float (%v,%v)", p, ToFloat(fx), ToFloat(fy), px, py)
-		}
 		if got := PointAtF(px, py); got != p {
 			t.Errorf("PointAtF(%v.CenterF()) = %v", p, got)
 		}

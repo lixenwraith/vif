@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/color"
@@ -71,21 +72,22 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	}
 
 	// Adaptive threshold calculation for consistent visual border width, target visual width in cells
-	borderHalfWidth := vmath.FromFloat(parameter.QuasarZapBorderWidthCells / 2.0)
+	borderHalfWidth := float64(parameter.QuasarZapBorderWidthCells) / 2.0
 
 	// Calculate delta in normalized space: visual_width / radius
-	if quasar.ZapRadius == 0 {
+	if quasar.ZapRadius == 0.0 {
 		return
 	}
-	borderDelta := vmath.Div(borderHalfWidth, quasar.ZapRadius)
+	borderDelta := borderHalfWidth / quasar.ZapRadius
 
-	innerThreshold := vmath.Scale - borderDelta
-	outerThreshold := vmath.Scale + borderDelta
+	innerThreshold := 1.0 - borderDelta
+	outerThreshold := 1.0 + borderDelta
 
 	// Dynamic bounding box in grid cells
 	rVisual := quasar.ZapRadius
-	rxCells := vmath.ToInt(rVisual) + parameter.QuasarBorderPaddingCells
-	ryCells := vmath.ToInt(rVisual)/2 + parameter.QuasarBorderPaddingCells
+	radiusCells := int(math.Floor(rVisual))
+	rxCells := radiusCells + parameter.QuasarBorderPaddingCells
+	ryCells := radiusCells/2 + parameter.QuasarBorderPaddingCells
 
 	// Bounding box in map coords
 	mapMinX := headerX - rxCells
@@ -100,12 +102,12 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - headerX)
-			dy := vmath.FromInt(mapY - headerY)
-			dyCirc := vmath.ScaleToCircular(dy)
-			dist := vmath.Magnitude(dx, dyCirc)
+			dx := float64(mapX - headerX)
+			dy := float64(mapY - headerY)
+			dyCirc := vmath.ScaleToCircularF(dy)
+			dist := vmath.MagnitudeF(dx, dyCirc)
 
-			normDist := vmath.Div(dist, quasar.ZapRadius)
+			normDist := dist / quasar.ZapRadius
 
 			if normDist >= innerThreshold && normDist <= outerThreshold {
 				buf.Set(screenX, screenY, 0, visual.RgbBlack, borderColor,

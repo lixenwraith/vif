@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/color"
@@ -117,21 +118,21 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 	glowRadiusY := baseRadiusY + glowExtend/2.0 // Half extension for Y due to aspect
 
 	// Pre-compute inverse squared for ellipse distance
-	invRxSq := vmath.FromFloat(1.0 / (glowRadiusX * glowRadiusX))
-	invRySq := vmath.FromFloat(1.0 / (glowRadiusY * glowRadiusY))
+	invRxSq, invRySq := vmath.EllipseInvRadiiSqF(glowRadiusX, glowRadiusY)
 
 	// Inner ellipse (head bounds) for exclusion
 	innerRadiusX := baseRadiusX * 0.8
 	innerRadiusY := baseRadiusY * 0.8
-	invInnerRxSq := vmath.FromFloat(1.0 / (innerRadiusX * innerRadiusX))
-	invInnerRySq := vmath.FromFloat(1.0 / (innerRadiusY * innerRadiusY))
+	invInnerRxSq, invInnerRySq := vmath.EllipseInvRadiiSqF(innerRadiusX, innerRadiusY)
 
 	// Pulse intensity
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	sinVal := vmath.Sin(angleFixed)
-	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal)
+	pulse := 0.5
+	if periodMs > 0 {
+		angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
+		pulse = 0.5 + 0.5*vmath.SinF(angle)
+	}
 	glowIntensity := 0.3 + 0.4*pulse
 
 	// Bounding box
@@ -147,23 +148,23 @@ func (r *SnakeRenderer) renderShieldGlow(ctx render.RenderContext, buf *render.R
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - centerX)
-			dy := vmath.FromInt(mapY - centerY)
+			dx := float64(mapX - centerX)
+			dy := float64(mapY - centerY)
 
 			// Ellipse distance: (dx/rx)² + (dy/ry)²
-			outerDistSq := vmath.EllipseDistSq(dx, dy, invRxSq, invRySq)
-			innerDistSq := vmath.EllipseDistSq(dx, dy, invInnerRxSq, invInnerRySq)
+			outerDistSq := vmath.EllipseDistSqF(dx, dy, invRxSq, invRySq)
+			innerDistSq := vmath.EllipseDistSqF(dx, dy, invInnerRxSq, invInnerRySq)
 
 			// Skip inside head or outside glow
-			if innerDistSq <= vmath.Scale || outerDistSq > vmath.Scale {
+			if innerDistSq <= 1.0 || outerDistSq > 1.0 {
 				continue
 			}
 
 			// Falloff from inner edge toward outer edge
-			innerDist := vmath.Sqrt(innerDistSq)
+			innerDist := math.Sqrt(innerDistSq)
 
 			// Alpha: strongest at inner edge, fades to outer
-			t := vmath.ToFloat(vmath.Div(innerDist-vmath.Scale, vmath.Scale))
+			t := innerDist - 1.0
 			alpha := 1.0 - t
 			if alpha <= 0 {
 				continue

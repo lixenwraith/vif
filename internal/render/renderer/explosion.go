@@ -1,6 +1,8 @@
 package renderer
 
 import (
+	"math"
+
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -16,9 +18,9 @@ type ExplosionRenderer struct {
 	gameCtx *engine.GameContext
 
 	// Per-type accumulation buffers
-	accBufferDust    []int64
-	accBufferMissile []int64
-	accBufferEye     []int64
+	accBufferDust    []float64
+	accBufferMissile []float64
+	accBufferEye     []float64
 	bufWidth         int
 	bufHeight        int
 	bufCapacity      int
@@ -55,9 +57,9 @@ func NewExplosionRenderer(ctx *engine.GameContext) *ExplosionRenderer {
 	r.bufWidth = r.gameCtx.World.Resources.Config.ViewportWidth
 	r.bufHeight = r.gameCtx.World.Resources.Config.ViewportHeight
 	r.bufCapacity = max(r.bufWidth*r.bufHeight, 1)
-	r.accBufferDust = make([]int64, r.bufCapacity)
-	r.accBufferMissile = make([]int64, r.bufCapacity)
-	r.accBufferEye = make([]int64, r.bufCapacity)
+	r.accBufferDust = make([]float64, r.bufCapacity)
+	r.accBufferMissile = make([]float64, r.bufCapacity)
+	r.accBufferEye = make([]float64, r.bufCapacity)
 
 	return r
 }
@@ -73,9 +75,9 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	requiredSize := ctx.ViewportWidth * ctx.ViewportHeight
 	if requiredSize > r.bufCapacity {
 		r.bufCapacity = requiredSize
-		r.accBufferDust = make([]int64, r.bufCapacity)
-		r.accBufferMissile = make([]int64, r.bufCapacity)
-		r.accBufferEye = make([]int64, r.bufCapacity)
+		r.accBufferDust = make([]float64, r.bufCapacity)
+		r.accBufferMissile = make([]float64, r.bufCapacity)
+		r.accBufferEye = make([]float64, r.bufCapacity)
 	}
 	r.bufWidth = ctx.ViewportWidth
 	r.bufHeight = ctx.ViewportHeight
@@ -136,10 +138,10 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 
 	// Time decay via LUT
 	ageIndex := min(int(c.Age*100/durationNano), 100)
-	timeDecay := vmath.ExpDecay(ageIndex)
+	timeDecay := vmath.ExpDecayF(ageIndex)
 
 	// Bounding box (aspect-corrected)
-	radiusCells := vmath.ToInt(c.Radius)
+	radiusCells := int(math.Floor(c.Radius))
 	radiusCellsY := radiusCells / 2
 
 	minX := centerVX - radiusCells
@@ -167,7 +169,7 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 	}
 
 	// Select buffer and update dirty rect based on type
-	var accBuffer []int64
+	var accBuffer []float64
 	switch c.Type {
 	case event.ExplosionTypeMissile:
 		accBuffer = r.accBufferMissile
@@ -213,40 +215,40 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 		}
 	}
 
-	radiusSq := vmath.Mul(c.Radius, c.Radius)
-	if radiusSq == 0 {
+	radiusSq := c.Radius * c.Radius
+	if radiusSq == 0.0 {
 		return
 	}
 
-	centerVXFixed := vmath.FromInt(centerVX)
-	centerVYFixed := vmath.FromInt(centerVY)
+	centerVXF := float64(centerVX)
+	centerVYF := float64(centerVY)
 
 	for vy := minY; vy <= maxY; vy++ {
 		rowOffset := vy * r.bufWidth
-		dy := vmath.FromInt(vy) - centerVYFixed
-		dyCirc := vmath.ScaleToCircular(dy)
-		dyCircSq := vmath.Mul(dyCirc, dyCirc)
+		dy := float64(vy) - centerVYF
+		dyCirc := vmath.ScaleToCircularF(dy)
+		dyCircSq := dyCirc * dyCirc
 
 		for vx := minX; vx <= maxX; vx++ {
-			dx := vmath.FromInt(vx) - centerVXFixed
-			distSq := vmath.Mul(dx, dx) + dyCircSq
+			dx := float64(vx) - centerVXF
+			distSq := dx*dx + dyCircSq
 
 			if distSq > radiusSq {
 				continue
 			}
 
 			// Falloff calculation differs by type
-			var distFalloff int64
+			var distFalloff float64
 			if c.Type == event.ExplosionTypeMissile {
 				// Quadratic falloff for sharper edge (sharper edge)
-				linearFalloff := vmath.Scale - vmath.Div(distSq, radiusSq)
-				distFalloff = vmath.Mul(linearFalloff, linearFalloff)
+				linearFalloff := 1.0 - distSq/radiusSq
+				distFalloff = linearFalloff * linearFalloff
 			} else {
 				// Linear falloff for dust (softer, more diffuse)
-				distFalloff = vmath.Scale - vmath.Div(distSq, radiusSq)
+				distFalloff = 1.0 - distSq/radiusSq
 			}
 
-			cellIntensity := vmath.Mul(vmath.Mul(c.Intensity, timeDecay), distFalloff)
+			cellIntensity := c.Intensity * timeDecay * distFalloff
 			accBuffer[rowOffset+vx] += cellIntensity
 		}
 	}
@@ -255,7 +257,7 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 func (r *ExplosionRenderer) renderTypeBuffer(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
-	accBuffer []int64,
+	accBuffer []float64,
 	explosionType event.ExplosionType,
 	minX, maxX, minY, maxY int,
 ) {
@@ -279,33 +281,31 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 			}
 
 			val := intensity
-			if val > vmath.Scale {
-				val = vmath.Scale
+			if val > 1.0 {
+				val = 1.0
 			}
 
 			// Gradient mapping
 			var c color.RGB
-			var tFixed int64
+			var blend float64
 
 			if val < parameter.ExplosionGradientMidpoint {
-				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
-				c = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
+				blend = val * parameter.ExplosionGradientFactor
+				c = render.LerpRGB(palette.Edge, palette.Mid, blend)
 			} else {
 				base := val - parameter.ExplosionGradientMidpoint
-				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
-				c = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
+				blend = base * parameter.ExplosionGradientFactor
+				c = render.LerpRGB(palette.Mid, palette.Core, blend)
 			}
 
 			// Alpha mapping
-			alphaFixed := vmath.Mul(val, parameter.ExplosionAlphaMax)
-			if alphaFixed < parameter.ExplosionAlphaMin {
-				alphaFixed = parameter.ExplosionAlphaMin
+			alpha := val * parameter.ExplosionAlphaMax
+			if alpha < parameter.ExplosionAlphaMin {
+				alpha = parameter.ExplosionAlphaMin
 			}
 
 			screenX := ctx.GameXOffset + vx
-			alphaFloat := vmath.ToFloat(alphaFixed)
-
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, blendMode, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, blendMode, alpha, terminal.AttrNone)
 		}
 	}
 }
@@ -315,7 +315,7 @@ func (r *ExplosionRenderer) renderTypeBuffer(
 func (r *ExplosionRenderer) renderEyeBuffer(
 	ctx render.RenderContext,
 	buf *render.RenderBuffer,
-	accBuffer []int64,
+	accBuffer []float64,
 	minX, maxX, minY, maxY int,
 ) {
 	palette := explosionPalettes[event.ExplosionTypeEye]
@@ -331,44 +331,43 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 			}
 
 			val := intensity
-			if val > vmath.Scale {
-				val = vmath.Scale
+			if val > 1.0 {
+				val = 1.0
 			}
 
 			// Gradient mapping (Edge → Mid → Core)
 			var c color.RGB
-			var tFixed int64
+			var blend float64
 
 			if val < parameter.ExplosionGradientMidpoint {
-				tFixed = vmath.Mul(val, parameter.ExplosionGradientFactor)
-				c = render.LerpRGBFixed(palette.Edge, palette.Mid, tFixed)
+				blend = val * parameter.ExplosionGradientFactor
+				c = render.LerpRGB(palette.Edge, palette.Mid, blend)
 			} else {
 				base := val - parameter.ExplosionGradientMidpoint
-				tFixed = vmath.Mul(base, parameter.ExplosionGradientFactor)
-				c = render.LerpRGBFixed(palette.Mid, palette.Core, tFixed)
+				blend = base * parameter.ExplosionGradientFactor
+				c = render.LerpRGB(palette.Mid, palette.Core, blend)
 			}
 
 			// Alpha mapping
-			alphaFixed := vmath.Mul(val, parameter.ExplosionAlphaMax)
-			if alphaFixed < parameter.ExplosionAlphaMin {
-				alphaFixed = parameter.ExplosionAlphaMin
+			alpha := val * parameter.ExplosionAlphaMax
+			if alpha < parameter.ExplosionAlphaMin {
+				alpha = parameter.ExplosionAlphaMin
 			}
 
 			screenX := ctx.GameXOffset + vx
-			alphaFloat := vmath.ToFloat(alphaFixed)
 
 			// Background glow layer (screen blend like missile)
-			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alphaFloat, terminal.AttrNone)
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, c, render.BlendScreen, alpha, terminal.AttrNone)
 
 			// Character noise layer
 			seed := uint32(vx*7919 + vy*104729)
-			hash := seed ^ uint32(val>>20)
+			hash := seed ^ uint32(val*4096.0)
 
 			// Density: higher intensity = more cells receive characters [1..7] out of 8
-			densitySlot := uint32(1 + val*7/(vmath.Scale+1))
+			densitySlot := 1 + min(uint32(val*7.0), uint32(6))
 			if hash%8 < densitySlot {
 				// Block char band [0..3] from intensity, jittered ±1
-				band := int(val * 4 / (vmath.Scale + 1))
+				band := min(int(val*4.0), 3)
 				jitter := int(hash/8%3) - 1
 				band += jitter
 				if band < 0 {
@@ -379,7 +378,7 @@ func (r *ExplosionRenderer) renderEyeBuffer(
 				}
 
 				// Fg brightness tracks intensity for natural fade at edges
-				fgColor := color.Scale(palette.Core, alphaFloat)
+				fgColor := color.Scale(palette.Core, alpha)
 				buf.SetFgOnly(screenX, screenY, eyeBlockChars[band], fgColor, terminal.AttrNone)
 			}
 		}

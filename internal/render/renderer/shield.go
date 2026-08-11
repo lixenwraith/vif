@@ -1,6 +1,7 @@
 package renderer
 
 import (
+	"math"
 	"time"
 
 	"github.com/lixenwraith/color"
@@ -35,7 +36,7 @@ type ShieldStyle struct {
 // Total: 8 + 3 + 3 + 8 + 1 + 1 + 2 + 2 = 28 bytes (fits in half cache line)
 
 // shieldCellFunc renders a single cell within the shield ellipse
-type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
+type shieldCellFunc func(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64)
 
 // ShieldPainter is a reusable shield halo renderer
 type ShieldPainter struct {
@@ -44,8 +45,8 @@ type ShieldPainter struct {
 	// Per-Paint transient state
 	style            ShieldStyle
 	glowActive       bool
-	rotDirX, rotDirY int64
-	cellDx, cellDy   int64
+	rotDirX, rotDirY float64
+	cellDx, cellDy   float64
 }
 
 // NewShieldPainter creates a painter dispatching to the appropriate color mode
@@ -69,9 +70,9 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 	if p.glowActive {
 		period := int64(style.GlowPeriod)
 		phase := ctx.GameTime.UnixNano() % period
-		angle := (phase * vmath.Scale) / period
-		p.rotDirX = vmath.Cos(angle)
-		p.rotDirY = vmath.Sin(angle)
+		angle := float64(phase) / float64(period) * vmath.TwoPi
+		p.rotDirX = vmath.CosF(angle)
+		p.rotDirY = vmath.SinF(angle)
 	}
 
 	// Bounding box uses visual radius from config (includes feather zone)
@@ -91,9 +92,9 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - centerX)
-			dy := vmath.FromInt(mapY - centerY)
-			normalizedDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
+			dx := float64(mapX - centerX)
+			dy := float64(mapY - centerY)
+			normalizedDistSq := vmath.EllipseDistSqF(dx, dy, cfg.InvRxSq, cfg.InvRySq)
 
 			if normalizedDistSq > visual.ShieldFeatherEnd {
 				continue
@@ -107,32 +108,35 @@ func (p *ShieldPainter) Paint(buf *render.RenderBuffer, ctx render.RenderContext
 }
 
 // shieldCellTrueColor renders linear gradient with feather fade
-func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
+func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
 	cfg := p.style.Config
 
 	// Linear distance for smoother falloff
-	normDist := vmath.Sqrt(normalizedDistSq)
-	if normDist > vmath.Scale {
-		normDist = vmath.Scale
+	normDist := math.Sqrt(normalizedDistSq)
+	if normDist > 1.0 {
+		normDist = 1.0
 	}
 
 	// Compute alpha with feather fade
-	var alphaFixed int64
+	var alpha float64
 	if normalizedDistSq <= visual.ShieldFeatherStart {
 		// Core zone: linear falloff
-		alphaFixed = vmath.Mul(normDist, cfg.MaxOpacityQ32)
+		alpha = normDist * cfg.MaxOpacity
 	} else {
 		// Feather zone: fade from edge alpha to zero
-		edgeAlpha := vmath.Mul(vmath.Sqrt(visual.ShieldFeatherStart), cfg.MaxOpacityQ32)
-		fadeProgress := vmath.Div(normalizedDistSq-visual.ShieldFeatherStart, visual.ShieldFeatherRange)
-		alphaFixed = vmath.Mul(edgeAlpha, vmath.Scale-fadeProgress)
+		if visual.ShieldFeatherRange == 0.0 {
+			return
+		}
+		edgeAlpha := math.Sqrt(visual.ShieldFeatherStart) * cfg.MaxOpacity
+		fadeProgress := (normalizedDistSq - visual.ShieldFeatherStart) / visual.ShieldFeatherRange
+		alpha = edgeAlpha * (1.0 - fadeProgress)
 	}
 
-	if alphaFixed <= 0 {
+	if alpha <= 0.0 {
 		return
 	}
 
-	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, vmath.ToFloat(alphaFixed), terminal.AttrNone)
+	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.Color, render.BlendScreen, alpha, terminal.AttrNone)
 
 	// Glow overlay
 	if !p.glowActive || normalizedDistSq <= visual.ShieldGlowEdgeThreshold {
@@ -140,22 +144,25 @@ func shieldCellTrueColor(p *ShieldPainter, buf *render.RenderBuffer, screenX, sc
 	}
 
 	// Vector normalization
-	cellDirX, cellDirY := vmath.Normalize2D(p.cellDx, p.cellDy)
+	cellDirX, cellDirY := vmath.Normalize2DF(p.cellDx, p.cellDy)
 
-	dot := vmath.DotProduct(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
+	dot := vmath.DotProductF(cellDirX, cellDirY, p.rotDirX, p.rotDirY)
 	if dot <= 0 {
 		return
 	}
 
-	// Float division replaces vmath.Div for performance
-	edgeFactor := float64(normalizedDistSq-visual.ShieldGlowEdgeThreshold) / float64(vmath.Scale-visual.ShieldGlowEdgeThreshold)
-	intensity := vmath.ToFloat(dot) * edgeFactor * vmath.ToFloat(cfg.GlowIntensityQ32)
+	edgeRange := 1.0 - visual.ShieldGlowEdgeThreshold
+	if edgeRange == 0.0 {
+		return
+	}
+	edgeFactor := (normalizedDistSq - visual.ShieldGlowEdgeThreshold) / edgeRange
+	intensity := dot * edgeFactor * cfg.GlowIntensity
 
 	buf.Set(screenX, screenY, 0, visual.RgbBlack, p.style.GlowColor, render.BlendSoftLight, intensity, terminal.AttrNone)
 }
 
 // shieldCell256 renders discrete rim for 256-color terminals
-func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64) {
+func shieldCell256(p *ShieldPainter, buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq float64) {
 	if normalizedDistSq < visual.Shield256Threshold {
 		return
 	}
@@ -350,9 +357,9 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 				continue
 			}
 
-			dx := vmath.FromInt(mapX - centerX)
-			dy := vmath.FromInt(mapY - centerY)
-			normDistSq := vmath.EllipseDistSq(dx, dy, cfg.InvRxSq, cfg.InvRySq)
+			dx := float64(mapX - centerX)
+			dy := float64(mapY - centerY)
+			normDistSq := vmath.EllipseDistSqF(dx, dy, cfg.InvRxSq, cfg.InvRySq)
 
 			// Only within shield boundary (with small margin)
 			if normDistSq > visual.ShieldFeatherEnd {
@@ -360,11 +367,11 @@ func (r *ShieldRenderer) renderTransitionOverlay(buf *render.RenderBuffer, ctx r
 			}
 
 			// Radial falloff: stronger at edges, weaker at center
-			normDist := vmath.Sqrt(normDistSq)
-			if normDist > vmath.Scale {
-				normDist = vmath.Scale
+			normDist := math.Sqrt(normDistSq)
+			if normDist > 1.0 {
+				normDist = 1.0
 			}
-			radialFactor := vmath.ToFloat(normDist) // 0 at center, 1 at edge
+			radialFactor := normDist // 0 at center, 1 at edge
 
 			// Combine intensity with radial falloff
 			cellIntensity := intensity * (0.3 + 0.7*radialFactor)

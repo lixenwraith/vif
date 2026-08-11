@@ -97,64 +97,54 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 	dx := sx2 - sx1
 	dy := sy2 - sy1
 
-	dxFixed := vmath.FromInt(dx)
-	dyFixed := vmath.FromInt(dy)
-
-	distFixed := vmath.Magnitude(dxFixed, dyFixed)
-	if distFixed < vmath.Scale {
+	dxF := float64(dx)
+	dyF := float64(dy)
+	dist := vmath.MagnitudeF(dxF, dyF)
+	if dist < 1.0 {
 		return []struct{ X, Y int }{{sx1, sy1}, {sx2, sy2}}
 	}
 
 	// Segment count: ~1 per 10 sub-pixels, capped min and max segments
-	segments := min(max(vmath.ToInt(vmath.Div(distFixed, vmath.FromInt(10))), 4), 32)
+	segments := min(max(int(dist/10.0), 4), 32)
 
 	// Normalized perpendicular: (-dy/dist, dx/dist)
-	perpXFixed := vmath.Div(-dyFixed, distFixed)
-	perpYFixed := vmath.Div(dxFixed, distFixed)
+	perpX := -dyF / dist
+	perpY := dxF / dist
 
 	// === Two-octave jitter ===
 	// Octave 1: Coherent spine offset (single random value for whole path)
 	// Creates gentle arc, prevents "straight bundle" appearance
 	spineRand := rng.Next()
-	spineOffset := int64(spineRand>>32) - vmath.Scale>>1
-	spineOffset <<= 1                  // [-1.0, 1.0) in Q32.32
-	spineMagnitude := vmath.FromInt(4) // Max 4 sub-pixel spine curve
-	spineFixed := vmath.Mul(spineOffset, spineMagnitude)
+	spineOffset := float64(int64(spineRand>>32))/(1<<31) - 1.0
+	spine := spineOffset * 4.0 // Max 4 sub-pixel spine curve
 
 	// Octave 2: Per-segment detail jitter
-	detailMagnitude := vmath.FromInt(6) // Max 6 sub-pixel detail
+	detailMagnitude := 6.0 // Max 6 sub-pixel detail
 
 	points := make([]struct{ X, Y int }, 0, segments+1)
 	points = append(points, struct{ X, Y int }{sx1, sy1})
 
-	sx1Fixed := vmath.FromInt(sx1)
-	sy1Fixed := vmath.FromInt(sy1)
-	segmentsFixed := vmath.FromInt(segments)
-
 	for i := 1; i < segments; i++ {
-		tFixed := vmath.Div(vmath.FromInt(i), segmentsFixed)
+		t := float64(i) / float64(segments)
 
 		// Base point on line
-		bxFixed := sx1Fixed + vmath.Mul(dxFixed, tFixed)
-		byFixed := sy1Fixed + vmath.Mul(dyFixed, tFixed)
+		bx := float64(sx1) + dxF*t
+		by := float64(sy1) + dyF*t
 
 		// === Sine envelope: sin(t * π) ===
 		// Maps t ∈ [0,1] to envelope ∈ [0,1], max at t=0.5
-		// vmath.Sin expects angle where Scale = 2π, so t*Scale/2 = t*π
-		envelopeAngle := tFixed >> 1 // t * 0.5 in angle space (t*π when Sin expects 0..Scale = 0..2π)
-		envelope := vmath.Sin(envelopeAngle)
+		envelope := vmath.SinF(t * vmath.TwoPi / 2.0)
 		if envelope < 0 {
 			envelope = -envelope // Ensure positive (shouldn't happen in [0, 0.5] but safety)
 		}
 
 		// Spine contribution: coherent arc, modulated by envelope
 		// Parabolic envelope for spine: 4*t*(1-t), peaks at 0.5
-		oneMinusT := vmath.Scale - tFixed
-		spineEnvelope := vmath.Mul(vmath.Mul(tFixed, oneMinusT), vmath.FromInt(4))
-		spineJitter := vmath.Mul(spineFixed, spineEnvelope)
+		spineEnvelope := 4.0 * t * (1.0 - t)
+		spineJitter := spine * spineEnvelope
 
 		// Floor envelope to prevent static endpoints
-		envelopeFloor := vmath.FromFloat(0.15)
+		envelopeFloor := 0.15
 		if envelope < envelopeFloor {
 			envelope = envelopeFloor
 		}
@@ -164,20 +154,20 @@ func (r *LightningRenderer) generateFractalPath(x1, y1, x2, y2 int, rng *vmath.F
 
 		// Detail contribution: random per-segment, modulated by envelope
 		detailRand := rng.Next()
-		detailFrac := int64(detailRand>>32) - vmath.Scale>>1
-		detailFrac <<= 1
-		detailJitter := vmath.Mul(vmath.Mul(detailFrac, detailMagnitude), envelope)
+		detailFrac := float64(int64(detailRand>>32))/(1<<31) - 1.0
+		detailJitter := detailFrac * detailMagnitude * envelope
 
 		// Combined jitter
 		totalJitter := spineJitter + detailJitter
 
 		// Apply perpendicular displacement
-		jxFixed := vmath.Mul(perpXFixed, totalJitter)
-		jyFixed := vmath.Mul(perpYFixed, totalJitter)
+		jx := perpX * totalJitter
+		jy := perpY * totalJitter
+		point := vmath.PointAtF(bx+jx, by+jy)
 
 		points = append(points, struct{ X, Y int }{
-			vmath.ToInt(bxFixed + jxFixed),
-			vmath.ToInt(byFixed + jyFixed),
+			point.X,
+			point.Y,
 		})
 	}
 

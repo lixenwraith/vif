@@ -3,7 +3,6 @@ package render
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // HeatGradientLUT holds the pre-calculated rainbow gradient
@@ -18,9 +17,9 @@ func init() {
 	}
 }
 
-// LerpRGBFixed delegates to color.LerpFixed; retains vmath-typed signature for callers
-func LerpRGBFixed(a, b color.RGB, t int64) color.RGB {
-	return color.LerpFixed(a, b, t, uint(vmath.Shift))
+// LerpRGB interpolates between two colors with a normalized blend factor.
+func LerpRGB(a, b color.RGB, t float64) color.RGB {
+	return a.Lerp(b, t)
 }
 
 // RainbowIndexColor returns a color from HeatGradientLUT mapped to index/total

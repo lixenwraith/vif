@@ -43,7 +43,7 @@ const (
 	// QuasarDrag is deceleration when overspeed (1/sec)
 	QuasarDrag = 1.5
 
-	// QuasarSpeedMultiplierMax caps progressive speed increase (10x = Scale * 10)
+	// QuasarSpeedMultiplierMax caps progressive speed increase at 10x.
 	QuasarSpeedMultiplierMax = 10
 
 	// QuasarChargeDuration is the delay before zapping starts when cursor exits range

@@ -13,15 +13,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
-// swarmCellRenderer callback forcolor.RGB animated ASCII composite rendering (256 vs TrueColor)
-type swarmCellRenderer func(buf *render.RenderBuffer, screenX, screenY int, normalizedDistSq int64)
-
 // SwarmRenderer draws the swarm composite
 type SwarmRenderer struct {
 	gameCtx *engine.GameContext
-
-	// Shield rendering strategy selected at init
-	renderSwarmCells swarmCellRenderer
 }
 
 // NewSwarmRenderer creates a new swarm renderer

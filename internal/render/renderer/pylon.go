@@ -133,7 +133,7 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 		radiusY = 1
 	}
 
-	glowExtend := visual.PylonGlowExtendFloat
+	glowExtend := visual.PylonGlowExtend
 	glowOuterRadiusX := radiusX + glowExtend
 	glowOuterRadiusY := radiusY + glowExtend
 
@@ -144,9 +144,11 @@ func (r *PylonRenderer) renderGlow(ctx render.RenderContext, buf *render.RenderB
 	// Pulse intensity using game time
 	gameTimeMs := r.gameCtx.World.Resources.Time.GameTime.UnixMilli()
 	periodMs := int64(parameter.StormConvexGlowPeriodMs)
-	angleFixed := ((gameTimeMs % periodMs) * vmath.Scale) / periodMs
-	sinVal := vmath.Sin(angleFixed)
-	pulse := 0.5 + 0.5*vmath.ToFloat(sinVal)
+	pulse := 0.5
+	if periodMs > 0 {
+		angle := float64(gameTimeMs%periodMs) / float64(periodMs) * vmath.TwoPi
+		pulse = 0.5 + 0.5*vmath.SinF(angle)
+	}
 
 	glowIntensity := visual.PylonGlowIntensityMin +
 		(visual.PylonGlowIntensityMax-visual.PylonGlowIntensityMin)*pulse
