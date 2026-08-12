@@ -43,7 +43,7 @@ const (
 	maxSizeMB       = 64
 	maxTotalSizeMB  = 512
 	minDiskFreeMB   = 100
-	flushIntervalMs = 250
+	flushIntervalMs = 50 // one game tick; a crash loses at most one tick of records
 	retentionHrs    = 24.0
 	heartbeatS      = 60
 
@@ -338,9 +338,16 @@ func SetTick(n uint64) { tick.Store(n) }
 // SetFrame publishes the render frame stamped on subsequent records
 func SetFrame(n uint64) { frame.Store(n) }
 
+// Stamp returns the live correlation values, for callers that emit a set of
+// records describing one instant and need them to share a stamp.
+func Stamp() (uint64, uint64, uint64) { return run.Load(), tick.Load(), frame.Load() }
+
 // CrashHook records a panic and flushes before the host restores the terminal.
 // Registered with core.SetCrashHook.
 func CrashHook(r any, stack []byte) {
+	if p := crashFlush.Load(); p != nil {
+		(*p)()
+	}
 	l := sink.Load()
 	if l == nil {
 		return
@@ -351,6 +358,13 @@ func CrashHook(r any, stack []byte) {
 		"stack", string(stack))
 	_ = l.Flush(crashFlushTimeout)
 }
+
+// crashFlush runs inside CrashHook before the panic record
+var crashFlush atomic.Pointer[func()]
+
+// SetCrashFlush registers a drain callback invoked while the sink is still
+// live, so a flight recorder reaches disk ahead of the panic record.
+func SetCrashFlush(fn func()) { crashFlush.Store(&fn) }
 
 // recordInternalError holds logger diagnostics until shutdown
 func recordInternalError(msg string) { lastErr.Store(&msg) }

@@ -14,7 +14,9 @@ type MetricMap[T any] struct {
 	keys   []string // sorted view, rebuilt lazily after registration
 	sorted bool
 
-	gen atomic.Uint64 // bumped per new key; invalidates cached views
+	gen    atomic.Uint64 // bumped per new key; invalidates cached views
+	frozen atomic.Bool
+	late   atomic.Int64
 }
 
 // NewMetricMap creates an initialized MetricMap
@@ -35,13 +37,23 @@ func (m *MetricMap[T]) Get(key string) *T {
 	}
 	m.mu.RUnlock()
 
+	// Frozen: detached cell, counted; the caller still gets a usable pointer
+	if m.frozen.Load() {
+		m.late.Add(1)
+		return new(T)
+	}
+
 	// Slow path: Lock and create
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	// Double-check after acquiring write lock
 	if ptr, ok := m.items[key]; ok {
 		return ptr
+	}
+	// Re-check under the write lock: Freeze may have run since the fast path
+	if m.frozen.Load() {
+		m.late.Add(1)
+		return new(T)
 	}
 
 	ptr := new(T)
@@ -108,3 +120,14 @@ func (m *MetricMap[T]) Count() int {
 	defer m.mu.RUnlock()
 	return len(m.items)
 }
+
+// Freeze closes the map to new keys. The write lock orders it against an
+// in-flight Get, so a registration is either indexed or counted late.
+func (m *MetricMap[T]) Freeze() {
+	m.mu.Lock()
+	m.frozen.Store(true)
+	m.mu.Unlock()
+}
+
+// Late returns the number of registrations rejected since Freeze
+func (m *MetricMap[T]) Late() int64 { return m.late.Load() }

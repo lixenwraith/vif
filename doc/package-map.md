@@ -62,7 +62,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/core` | Small shared value types, entity ID, modes, code blocks, kinetic state, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable clock, scheduler, locking. |
 | `internal/event` | Event type catalog, payloads, generated name/payload registry, MPSC queue, handler router, pooled/batched payload support. |
-| `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables. |
+| `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, default key table, keymap decoding/merging. It does not import the ECS. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
@@ -74,9 +74,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and adapters for terminal, content, audio, and experimental network transport. |
-| `internal/status` | Dynamically registered atomic metrics, sorted/grouped snapshots, duration formatting. |
+| `internal/status` | Registered atomic metrics closed by `Freeze`, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
-| `internal/vlog` | Build-tagged facade over the external logger, scopes, correlation stamps, snapshots, crash flush; no-op on WASM/`novlog`. |
+| `internal/vlog` | Build-tagged facade over the external logger: levels, scopes, correlation stamps, correlated emission sets, standalone files, crash flush; no-op on WASM/`novlog`. |
 
 ## 5. Reusable `pkg` libraries
 

@@ -81,6 +81,12 @@ func Scopes() Scope                                   { return ScopeNone }
 func SetScopes(Scope)                                 {}
 func ScopeString(Scope) string                        { return "none" }
 func Dump(func(func(string, ...any))) (string, error) { return "", ErrDisabled }
+func Stamp() (uint64, uint64, uint64)                 { return 0, 0, 0 }
+func SetCrashFlush(func())                            {}
+
+func EmitSet(string, uint64, uint64, uint64, func(func(...any))) (string, error) {
+	return "", ErrDisabled
+}
 
 // ParseScopes validates a spec so CLI parsing behaves identically
 func ParseScopes(spec string, cur Scope) (Scope, error) { return cur, nil }

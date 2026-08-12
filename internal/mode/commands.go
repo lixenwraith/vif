@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -156,6 +157,9 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 		vlog.Info("app", "msg", "stat interval changed", "ticks", n)
 		reportLogState(ctx)
 
+	case "rec", "recorder":
+		return handleLogRec(ctx, args[1:])
+
 	default:
 		if err := vlog.SetLevelName(args[0]); err != nil {
 			setCommandError(ctx, "Usage: :log [on|off|trace|debug|info|warn|error|scope|level|stat]")
@@ -169,17 +173,73 @@ func handleLogCommand(ctx *engine.GameContext, args []string) CommandResult {
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
+// handleLogRec controls the flight recorder
+// Usage: :log rec | :log rec <ticks> | :log rec flush | :log rec fsm [on|off]
+func handleLogRec(ctx *engine.GameContext, args []string) CommandResult {
+	reg := ctx.World.Resources.Status
+	if len(args) == 0 {
+		reportLogState(ctx)
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	switch strings.ToLower(args[0]) {
+	case "flush", "f":
+		rc := reg.Recorder()
+		if rc == nil {
+			setCommandError(ctx, "Recorder disabled")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		// Command mode holds the world lock; the ring belongs to the tick
+		// goroutine, which owns sample. Request, do not flush here.
+		rc.Trigger(status.TrigManual)
+		ctx.SetStatusMessage("Recorder flush requested", parameter.StatusMessageDefaultTimeout, true)
+
+	case "fsm":
+		rc := reg.Recorder()
+		if rc == nil {
+			setCommandError(ctx, "Recorder disabled")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		desired, explicit, ok := parseToggleArg(args[1:])
+		if !ok {
+			setCommandError(ctx, "Usage: :log rec fsm [on|off]")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		if !explicit {
+			desired = !rc.FSMTrigger()
+		}
+		rc.SetFSMTrigger(desired)
+		ctx.SetStatusMessage("Recorder FSM trigger "+toggleWord(desired),
+			parameter.StatusMessageDefaultTimeout, true)
+
+	default:
+		n, err := strconv.Atoi(args[0])
+		if err != nil || n < 0 {
+			setCommandError(ctx, "Usage: :log rec [<ticks>|flush|fsm]")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		// Relayout discards history; the metric set is already frozen
+		reg.EnableRecorder(n)
+		vlog.Info("app", "msg", "recorder depth changed", "ticks", n)
+		reportLogState(ctx)
+	}
+
+	ctx.SetLastCommand(":log rec " + strings.Join(args, " "))
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
 // reportLogState shows session state in the status bar
 func reportLogState(ctx *engine.GameContext) {
 	target := "off"
 	if vlog.Enabled() {
 		target = vlog.Path()
 	}
-	ctx.SetStatusMessage(fmt.Sprintf("log %s | level %s | scope %s | stat %d",
+	ctx.SetStatusMessage(fmt.Sprintf("log %s | level %s | scope %s | stat %d | rec %d",
 		target,
 		vlog.LevelName(),
 		vlog.ScopeString(vlog.Scopes()),
-		ctx.World.Resources.Status.SnapshotInterval()),
+		ctx.World.Resources.Status.SnapshotInterval(),
+		ctx.World.Resources.Status.RecorderDepth()),
 		parameter.StatusMessageDefaultTimeout, true)
 }
 

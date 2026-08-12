@@ -213,6 +213,7 @@ func (cs *ClockScheduler) bindFSMTelemetry() {
 				"via", event.GetEventName(trigger))
 			return
 		}
+		status.TriggerFSM(region)
 		if !vlog.On("fsm", vlog.LevelInfo) {
 			return
 		}
@@ -243,14 +244,14 @@ func (cs *ClockScheduler) publishRegionStats() {
 		rs := &cs.regionStats[i]
 		t := cs.fsm.RegionTelemetry(rs.name)
 		if !t.Active {
-			rs.state.Store("-")
+			rs.state.StoreIfChanged("-")
 			rs.index.Store(-1)
 			rs.elapsed.Store(0)
 			rs.maxDur.Store(0)
 			rs.paused.Store(false)
 			continue
 		}
-		rs.state.Store(t.State)
+		rs.state.StoreIfChanged(t.State)
 		rs.index.Store(int64(t.Index))
 		rs.elapsed.Store(int64(t.TimeInState))
 		rs.maxDur.Store(int64(t.MaxDuration))
@@ -262,7 +263,10 @@ func (cs *ClockScheduler) publishRegionStats() {
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
 		cs.world.Seal() // no system registration once the goroutines are live
-		cs.wg.Add(2)    // 2 Goroutines
+		// Metric set is closed here: Seal precedes the first tick, and every
+		// system and renderer has registered by construction
+		cs.world.Resources.Status.Freeze()
+		cs.wg.Add(2) // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
 		core.Go(cs.schedulerLoop)
 		core.Go(cs.eventLoop)
@@ -556,6 +560,9 @@ func (cs *ClockScheduler) processTick() {
 	// this function, so records inside would otherwise carry the previous one
 	vlog.SetTick(cs.world.Resources.Game.State.GetGameTicks() + 1)
 
+	// Lock sampling is a per-tick decision, not a per-acquire probe
+	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
+
 	var entityCount int
 
 	cs.world.RunSafe(func() {
@@ -584,7 +591,7 @@ func (cs *ClockScheduler) processTick() {
 		// Transitions are reported by the OnTransition tap, not sampled here:
 		// sampling collapses intra-tick chains and cannot see background regions
 		stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
-		cs.statFSMName.Store(stateName)
+		cs.statFSMName.StoreIfChanged(stateName)
 		cs.statFSMElapsed.Store(int64(timeInState))
 		cs.statFSMMaxDur.Store(int64(cs.fsm.StateDurations[stateID]))
 		cs.statFSMIndex.Store(int64(cs.fsm.StateIndices[stateID]))
@@ -627,6 +634,7 @@ func (cs *ClockScheduler) processTick() {
 			"dropped", dropped,
 			"delta", dropped-cs.lastEvDropped)
 		cs.lastEvDropped = dropped
+		status.Trigger(status.TrigDrop)
 	}
 
 	// Status snapshot: world lock released and every stat above committed,

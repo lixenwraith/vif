@@ -100,6 +100,7 @@ useful CI addition even though the current workflow does not perform one.
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
 | `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |
 | `-lt <ticks>` | Status snapshot period; zero disables; implies logging. |
+| `-lr <ticks>` | Flight recorder depth in ticks; zero disables; implies logging. |
 | `-dev[=bool]` | Capture runtime stderr; defaults on in race builds. |
 
 When both color flags are passed, truecolor wins because config translation
@@ -188,7 +189,7 @@ asynchronous JSON Lines files named `vif-log-<timestamp>.jsonl`.
 | Policy | Current value |
 |---|---|
 | Queue | 8,192 records |
-| Flush | 250 ms |
+| Flush | 50 ms |
 | File rotation | 64 MiB |
 | Total log budget | 512 MiB |
 | Minimum free disk | 100 MiB |
@@ -198,9 +199,13 @@ asynchronous JSON Lines files named `vif-log-<timestamp>.jsonl`.
 | Panic flush | 200 ms |
 
 Every record can carry subsystem plus run/tick/frame correlation stamps.
-Scopes are `app`, `fsm`, `event`, `input`, `stat`, `lock`, and `tap`; unknown
-subsystem labels fall into tap. Errors bypass scope filtering, while level still
-applies.
+Scopes are `app`, `fsm`, `event`, `dispatch`, `push`, `input`, `stat`, `rec`,
+`lock`, and `tap`; unknown subsystem labels fall into tap. Errors bypass scope
+filtering, while level still applies.
+
+[Logging and diagnostics](logging-and-diagnostics.md) is the full reference for
+record shapes, scopes, the status registry, the flight recorder, and the
+diagnostic playbooks. This section covers only the build-facing policy.
 
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
 log arguments are formatted asynchronously: call sites must pass primitive
@@ -217,21 +222,27 @@ command goroutine.
 float, and string metrics. Systems cache returned pointers during initialization
 and update them without map lookups in hot paths.
 
-Snapshot indexing groups keys by prefix, sorts groups/members, and rebuilds only
-when metric registration generation changes. Periodic snapshots run after a
-completed tick and after releasing the world lock, so all tick-owned writes are
-settled and async logging cannot extend lock time.
+Snapshot indexing groups keys by prefix and sorts groups/members.
+`Registry.Freeze`, called from `ClockScheduler.Start`, closes the metric set and
+caches that index permanently; a registration afterwards yields a detached cell
+and increments `stat.late`. Periodic snapshots run after a completed tick and
+after releasing the world lock, so all tick-owned writes are settled and async
+logging cannot extend lock time.
 
-`-lt`/`:log stat` controls periodic emission. `:debug save` writes an on-demand
+`-lt`/`:log stat` controls periodic emission; the default period is a coarse
+heartbeat because the flight recorder holds fine-grained history. `-lr`/`:log
+rec` controls the recorder, which keeps the last N ticks of the full registry
+in memory and writes only on a trigger. `:d save` writes an on-demand
 standalone context plus registry snapshot while command mode has a stable paused
-view. Status is observability, not authoritative gameplay storage—even though
-the FSM deliberately reads selected status counters for campaign policy.
+view.
 
 ## 10. Crash and runtime capture
 
 Application goroutines should start through `core.Go`, which recovers panics,
 invokes the logging crash hook, restores/finalizes the terminal, prints the
-stack, and exits according to platform behavior. The terminal poll service has
+stack, and exits according to platform behavior. The crash hook first runs a
+registered flush callback, so the flight-recorder window reaches disk ahead of
+the panic record.
 an additional emergency reset because its blocking loop is especially capable
 of stranding raw mode.
 
@@ -274,5 +285,5 @@ boundaries.
 | CI | `.github/workflows/test.yml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
-| Metrics | `internal/status/*.go`, `internal/engine/snapshot.go` |
+| Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
 | Crash/runtime capture | `internal/core/crash_handler*.go`, `dev.go`, `redirect_*.go` |

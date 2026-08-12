@@ -22,9 +22,13 @@ const (
 	// EventLoopIterations is the cycles event loop attempts to consume events for immediate settling
 	EventLoopIterations = 16
 
-	// StatSnapshotTicks is the game-tick period between status snapshots; 0 disables
-	// 1 = every tick (20 Hz at a 50ms tick), 5 = 4 Hz, 20 = 1 Hz
-	StatSnapshotTicks = 20
+	// StatSnapshotTicks is the game-tick period between status snapshots; 0 disables.
+	// The flight recorder holds fine-grained history, so the periodic snapshot
+	// is a coarse heartbeat: 200 = 0.1 Hz at a 50ms tick
+	StatSnapshotTicks = 200
+
+	// RecorderDepthTicks is the flight-recorder ring depth in game ticks; 0 disables
+	RecorderDepthTicks = 200
 
 	// DevDrainInterval is the poll period for captured stderr in dev mode
 	DevDrainInterval = 500 * time.Millisecond

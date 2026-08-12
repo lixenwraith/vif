@@ -37,8 +37,13 @@ type Config struct {
 	// LogScope is the initial scope spec; "" = all
 	LogScope string
 
-	// StatTicks overrides the status snapshot period in game ticks; 0 = parameter default
+	// StatTicks overrides the status snapshot period in game ticks;
+	// 0 = parameter default, negative = disabled
 	StatTicks int
+
+	// RecTicks overrides the flight-recorder depth in game ticks;
+	// 0 = parameter default, negative = disabled
+	RecTicks int
 }
 
 // Validate reports configuration conflicts
@@ -50,9 +55,6 @@ func (c Config) Validate() error {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
 			return err
 		}
-	}
-	if c.StatTicks < 0 {
-		return errors.New("-lt must be >= 0")
 	}
 	return nil
 }

@@ -57,7 +57,9 @@ func New(cfg Config) (*App, error) {
 func (a *App) init() error {
 	vlog.Info("app", "msg", "init begin")
 
-	// Embedder path; the CLI applies scope through vlog.Configure
+	// Embedders never call vlog.Configure, so the scope is applied here.
+	// The CLI reaches this too and applies it twice; both resolve the spec
+	// against ScopeAll, so the second application is a no-op.
 	if a.cfg.LogScope != "" {
 		if s, err := vlog.ParseScopes(a.cfg.LogScope, vlog.ScopeAll); err == nil {
 			vlog.SetScopes(s)
@@ -107,9 +109,22 @@ func (a *App) init() error {
 	// 6. GameContext initializes the remaining world resources
 	a.ctx = engine.NewGameContext(a.world, width, height)
 	a.world.Resources.Config.ColorMode = a.term.ColorMode()
-	if a.cfg.StatTicks > 0 {
-		a.world.Resources.Status.SetSnapshotInterval(uint64(a.cfg.StatTicks))
+	if n := a.cfg.StatTicks; n != 0 {
+		if n < 0 {
+			n = 0 // explicit disable
+		}
+		a.world.Resources.Status.SetSnapshotInterval(uint64(n))
 	}
+
+	// Recorder is laid out at Freeze; enabling it here only sizes the ring.
+	// Opt-in: an explicit depth always wins, the default applies only when a
+	// log session is configured. A bare run installs no recorder, so no
+	// trigger can write a file the operator did not ask for.
+	recDepth := a.cfg.RecTicks
+	if recDepth == 0 && vlog.Enabled() {
+		recDepth = parameter.RecorderDepthTicks
+	}
+	a.world.Resources.Status.EnableRecorder(recDepth)
 
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").

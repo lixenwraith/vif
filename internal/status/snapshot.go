@@ -57,23 +57,40 @@ func (r *Registry) SetSnapshotInterval(ticks uint64) { r.snapEvery.Store(ticks) 
 // SnapshotInterval returns the current period in game ticks
 func (r *Registry) SnapshotInterval() uint64 { return r.snapEvery.Load() }
 
-// Tick reports a completed game tick and emits on the configured period.
-// Every read is atomic, caller MUST NOT hold the world lock;
-// call it once the tick's writes are settled or the snapshot straddles two ticks.
+// Tick reports a completed game tick: samples the flight recorder, emits the
+// periodic snapshot on its period, then drains any pending flush request.
+// Every read is atomic, caller MUST NOT hold the world lock; call it once the
+// tick's writes are settled or the readings straddle two ticks.
 func (r *Registry) Tick(n uint64) {
-	every := r.snapEvery.Load()
-	if every == 0 || n%every != 0 {
-		return
+	rc := r.rec.Load()
+	if rc != nil {
+		rc.sample(n)
 	}
-	if !vlog.On(SubStat, vlog.LevelInfo) {
-		return
+	if late := r.lateCount(); late != 0 {
+		r.statLate.Store(late)
 	}
-	r.Snapshot(vlog.Info)
+
+	if every := r.snapEvery.Load(); every != 0 && n%every == 0 &&
+		vlog.On(SubStat, vlog.LevelInfo) {
+		// One explicit stamp for the whole snapshot: the frame counter belongs
+		// to the render goroutine and can advance mid-emission
+		run, tick, frame := vlog.Stamp()
+		_, _ = vlog.EmitSet(SubStat, run, tick, frame, r.emitGroups)
+	}
+
+	if rc != nil {
+		rc.drain(n)
+	}
 }
 
 // Snapshot emits one record per group, ordered by group then metric name.
 // emit matches vlog.Info so an alternate sink can be substituted.
 func (r *Registry) Snapshot(emit func(sub string, args ...any)) {
+	r.emitGroups(func(args ...any) { emit(SubStat, args...) })
+}
+
+// emitGroups writes the grouped records through a stamp-bound emitter
+func (r *Registry) emitGroups(emit func(args ...any)) {
 	for _, g := range r.groups() {
 		// Fresh slice per record: vlog formats asynchronously
 		args := make([]any, 0, 2+2*len(g.members))
@@ -81,13 +98,18 @@ func (r *Registry) Snapshot(emit func(sub string, args ...any)) {
 		for i := range g.members {
 			args = append(args, g.members[i].name, g.members[i].value())
 		}
-		emit(SubStat, args...)
+		emit(args...)
 	}
 }
 
-// groups returns the cached index, rebuilt only after a new registration
+// groups returns the cached index; immutable and lock-free after Freeze
 func (r *Registry) groups() []statGroup {
-	gen := r.Bools.Gen() + r.Ints.Gen() + r.Floats.Gen() + r.Strings.Gen()
+	if r.frozen.Load() {
+		if p := r.idxFast.Load(); p != nil {
+			return *p
+		}
+	}
+	gen := r.gen()
 
 	r.idxMu.Lock()
 	defer r.idxMu.Unlock()
@@ -97,6 +119,11 @@ func (r *Registry) groups() []statGroup {
 	r.idx = r.buildIndex()
 	r.idxGen = gen
 	return r.idx
+}
+
+// gen combines the four registration counters into one invalidation key
+func (r *Registry) gen() uint64 {
+	return r.Bools.Gen() + r.Ints.Gen() + r.Floats.Gen() + r.Strings.Gen()
 }
 
 // buildIndex flattens all four maps into group-ordered metric references

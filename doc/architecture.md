@@ -107,6 +107,11 @@ Exceptions are explicit:
 - service transports publish into bounded channels and never mutate the world
   from an I/O goroutine.
 
+Diagnostics observe this model rather than participating in it. Status metrics
+are per-value atomics; the periodic snapshot and the flight-recorder sample
+both run after the world lock is released, so asynchronous logging can never
+extend a critical section. See [Logging and diagnostics](logging-and-diagnostics.md).
+
 Terminal output and other potentially blocking I/O happen outside the world
 lock. Code reachable from `mode.Router.Handle` must not acquire that lock again,
 because it is already held by the application and is non-reentrant.

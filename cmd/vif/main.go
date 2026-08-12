@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/app"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -40,6 +41,7 @@ var (
 	flagLevel levelFlag
 	flagScope scopeFlag
 	flagStat  statFlag
+	flagRec   recFlag
 	flagDev   devFlag
 )
 
@@ -52,6 +54,7 @@ func init() {
 	flag.Var(&flagScope, "ls", "Log scope: app+fsm+stat | afs | all | none | +dispatch | -event; implies -l")
 	flag.Var(&flagScope, "log-scope", "Alias of -ls")
 	flag.Var(&flagStat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
+	flag.Var(&flagRec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
 }
 
@@ -85,6 +88,7 @@ func main() {
 // Log failure is non-fatal: the game runs unlogged and main exits exitLogSetup.
 func setupDiagnostics() int {
 	core.SetCrashHook(vlog.CrashHook)
+	vlog.SetCrashFlush(status.CrashFlush) // drains while the sink is still live
 
 	dir := flagLog.dir
 	if dir == "" {
@@ -102,12 +106,12 @@ func setupDiagnostics() int {
 		fmt.Fprintf(os.Stderr, "ignoring arguments %v; use -l=DIR\n", flag.Args())
 	}
 
-	status := 0
-	if flagLog.set || flagLevel.set || flagScope.set || flagStat.set {
+	diagStatus := 0
+	if flagLog.set || flagLevel.set || flagScope.set || flagStat.set || flagRec.set {
 		path, err := vlog.Start()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "logging disabled: %v\n", err)
-			status = exitLogSetup
+			diagStatus = exitLogSetup
 		} else {
 			fmt.Printf("logging enabled: %s (level %s, scope %s)\n",
 				path, vlog.LevelName(), vlog.ScopeString(vlog.Scopes()))
@@ -118,7 +122,7 @@ func setupDiagnostics() int {
 		path, err := core.CaptureStderr(dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
-			return status
+			return diagStatus
 		}
 		reason := "-dev"
 		if !flagDev.set {
@@ -129,7 +133,7 @@ func setupDiagnostics() int {
 			"path", path, "reason", reason, "race", core.RaceEnabled)
 		core.StartStderrDrain(parameter.DevDrainInterval, logRuntimeReport)
 	}
-	return status
+	return diagStatus
 }
 
 // shutdownDiagnostics drains what the runtime wrote, closes the logger, then
@@ -157,6 +161,7 @@ func logRuntimeReport(r core.RuntimeReport) {
 		"lines", r.Lines,
 		"head", r.Head,
 		"at", r.At)
+	status.Trigger(status.TrigRace)
 }
 
 // buildConfig translates parsed flags into the runtime configuration
@@ -170,6 +175,7 @@ func buildConfig() app.Config {
 		KeymapPath:   *flagKeymapPath,
 		LogScope:     flagScope.value,
 		StatTicks:    flagStat.value,
+		RecTicks:     flagRec.value,
 	}
 
 	if *flagAudioUnmute {
@@ -240,7 +246,8 @@ func (f *scopeFlag) Set(v string) error {
 	return nil
 }
 
-// statFlag records a snapshot period, so -lt alone enables logging
+// statFlag records a snapshot period, so -lt alone enables logging.
+// 0 maps to -1 so an explicit disable survives the zero-value default.
 type statFlag struct {
 	value int
 	set   bool
@@ -251,6 +258,29 @@ func (f *statFlag) Set(v string) error {
 	n, err := strconv.Atoi(v)
 	if err != nil || n < 0 {
 		return fmt.Errorf("must be a non-negative tick count")
+	}
+	if n == 0 {
+		n = -1
+	}
+	f.set, f.value = true, n
+	return nil
+}
+
+// recFlag records a recorder depth, so -lr alone enables logging.
+// 0 maps to -1 so an explicit disable survives the zero-value default.
+type recFlag struct {
+	value int
+	set   bool
+}
+
+func (f *recFlag) String() string { return strconv.Itoa(f.value) }
+func (f *recFlag) Set(v string) error {
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		return fmt.Errorf("must be a non-negative tick count")
+	}
+	if n == 0 {
+		n = -1
 	}
 	f.set, f.value = true, n
 	return nil

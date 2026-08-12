@@ -135,21 +135,38 @@ flowchart TD
     Systems --> Stats["Publish counters, APM, queue and status snapshots"]
 ```
 
-`ClockScheduler.processTick` holds the world lock for the first five phases:
+`ClockScheduler.processTick` holds the world lock for phases 1–7:
 
 1. update pause-aware `GameTime`, wall-clock `RealTime`, and fixed `DeltaTime`;
 2. update elapsed-time status;
 3. consume/dispatch events accumulated before the tick until the queue is empty
    or the settling cap is reached;
-4. advance the FSM by the fixed interval and publish its foreground telemetry;
+4. advance the FSM by the fixed interval, then publish foreground telemetry and
+   one metric set per declared region;
 5. settle events emitted by state transitions and actions;
 6. run all systems sequentially against that settled state;
 7. snapshot position-derived entity counts before unlocking.
 
+Phase 7 is inside the critical section deliberately: `Position` has no internal
+lock, so counting entities after unlocking would race removals on the
+event-loop and main goroutines.
+
 After the lock is released, the scheduler uses only atomic or internally
 synchronized paths to increment tick count, roll APM windows, publish entity
-and event counters, report queue overflow, and optionally emit a grouped status
-snapshot.
+and event counters, report queue overflow, sample the flight recorder,
+optionally emit a grouped status snapshot, and drain any pending recorder
+flush request.
+
+That tail is not a barrier. Because the lock is already released, the event
+loop, input path and render goroutine can commit between phase 7 and the
+sample, so a status snapshot or recorder window is stamped with tick *n* but
+reads "at or after tick *n*" for anything not written inside the locked body.
+See [Logging and diagnostics](logging-and-diagnostics.md) §6.
+
+`ClockScheduler.Start` calls `Registry.Freeze` immediately after `World.Seal`.
+Both close a registration surface before the goroutines that read it start:
+`Seal` freezes the system list, `Freeze` freezes the metric set and lays out
+the recorder ring.
 
 Systems may emit events during `Update`. Those events are normally handled by
 the inter-tick event loop before the next frame; if contention delays that loop,
@@ -171,9 +188,12 @@ On each event-loop interval:
 - one consume/dispatch pass runs, then the lock is released.
 
 Each dispatched event goes to the HFSM first and then to registered handlers in
-registration order. A handler may enqueue another event; bounded settling loops
-repeat consume passes up to `EventLoopIterations` (currently 16) for immediate
-paths. The queue capacity is 2,048. Producers that overrun it evict the oldest
+registration order. The FSM's answer — whether any active region consumed the
+event — is recorded in the pass summary, so a system-handler count of zero is
+no longer ambiguous.
+A handler may enqueue another event; bounded settling loops repeat consume 
+passes up to `EventLoopIterations` (currently 16) for immediate paths.
+The queue capacity is 2,048. Producers that overrun it evict the oldest
 unread events and increment a monotonic dropped counter; this represents real
 state loss and is logged when observed.
 
@@ -189,7 +209,7 @@ state loss and is logged when observed.
 | Context flags/counters | Atomics | Cross-goroutine reads for pause, macros, mouse, auto-fire, frame/status strings. |
 | APM history | `GameState.mu` plus atomic published totals | Scheduler rolls history; router atomically admits weighted actions. |
 | Target groups | `TargetResource` RW lock | Navigation writes; species/genetic code reads snapshots. |
-| Status metric values | Per-value atomics | Systems cache pointers after first registration; snapshots load atomically. |
+| Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
 | Audio sequencer, voices, active effects | Mixer-goroutine confinement | Other goroutines send bounded commands or read atomic mirrors. |
 | Service registry/lifecycle | `service.Hub.mu` | Composition/start/stop paths only. |
 | Network inbound buffer | Bounded channel | Transport callbacks push without blocking; a future active `NetworkSystem` drains on tick. |
@@ -201,6 +221,17 @@ state loss and is logged when observed.
 `World.RunSafe`, `World.Lock`, or another lock wrapper for the same mutex. The
 router can directly access stores because its caller already provides the
 critical section.
+
+### Operator commands hold the lock
+
+`App.handleIntent` runs command mode under the world lock, so a command that
+performs I/O stalls the tick, the event loop and rendering for its duration.
+Two do: `:log on` opens the session file, and `:d save` opens a second logger,
+fills it, drains it and closes it, bounded by a 3 s drain timeout. Both are
+deliberate operator costs and neither is reachable from gameplay input.
+`:log off` and `:log rec flush` are explicitly not in this class — the first
+detaches the sink and drains on another goroutine, the second only sets a flag
+the tick goroutine reads.
 
 ### Pointer and slice lifetime rules
 

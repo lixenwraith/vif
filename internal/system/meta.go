@@ -338,7 +338,7 @@ func (s *MetaSystem) handleHelpRequest() {
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "COMMANDS",
 		Entries: []core.CardEntry{
-			{Key: ":log [on|off|lvl|scope|stat]", Value: "Session logging"},
+			{Key: ":log [on|off|lvl|scope|stat|rec]", Value: "Session logging"},
 			{Key: ":q", Value: "Quit game"},
 			{Key: ":n", Value: "New game"},
 			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
