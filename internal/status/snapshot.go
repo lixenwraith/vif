@@ -2,6 +2,7 @@ package status
 
 import (
 	"sort"
+	"strconv"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -26,6 +27,7 @@ type metricRef struct {
 	i    *atomic.Int64
 	f    *AtomicFloat
 	s    *AtomicString
+	key  string // Full "group.name"; carries the unit convention
 	name string
 	kind uint8
 }
@@ -131,7 +133,7 @@ func (r *Registry) buildIndex() []statGroup {
 	byGroup := make(map[string][]metricRef, 48)
 	add := func(key string, ref metricRef) {
 		g, name := SplitKey(key)
-		ref.name = name
+		ref.key, ref.name = key, name
 		byGroup[g] = append(byGroup[g], ref)
 	}
 
@@ -154,4 +156,20 @@ func (r *Registry) buildIndex() []statGroup {
 		groups = append(groups, statGroup{name: g, members: members})
 	}
 	return groups
+}
+
+// display renders the current reading for a UI consumer; int metrics resolve
+// their unit through the key convention
+func (m *metricRef) display() string {
+	switch m.kind {
+	case kindBool:
+		return strconv.FormatBool(m.b.Load())
+	case kindInt:
+		return FormatInt(m.key, m.i.Load())
+	case kindFloat:
+		return strconv.FormatFloat(m.f.Get(), 'f', 3, 64)
+	case kindString:
+		return m.s.Load()
+	}
+	return ""
 }

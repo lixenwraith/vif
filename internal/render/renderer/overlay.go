@@ -84,17 +84,28 @@ func (a *TUIAdapter) Height() int {
 	return a.height
 }
 
-// cardLayout holds calculated position and size for a card
-type cardLayout struct {
-	x, y, w, h int
-	card       core.OverlayCard
+// overlayCardBreakpoints maps content width to masonry column count
+var overlayCardBreakpoints = map[int]int{
+	parameter.OverlayCardCols4: 4,
+	parameter.OverlayCardCols3: 3,
+	parameter.OverlayCardCols2: 2,
 }
 
 // OverlayRenderer draws the modal overlay window
 type OverlayRenderer struct {
 	gameCtx *engine.GameContext
 	adapter *TUIAdapter
+
+	// Layout cache, rebuilt when the content or the content viewport changes
+	content *core.OverlayContent
+	cards   []core.OverlayCard
+	items   []tui.MasonryItem
+	blocks  []tui.DocBlock
 	masonry *tui.MasonryState
+	doc     *tui.DocState
+	layoutW int
+	layoutH int
+	selKey  string // Last selection scrolled into view
 }
 
 // NewOverlayRenderer creates a new overlay renderer
@@ -104,27 +115,23 @@ func NewOverlayRenderer(gameCtx *engine.GameContext) *OverlayRenderer {
 	}
 }
 
+// IsVisible implements render.VisibilityToggle
+func (r *OverlayRenderer) IsVisible() bool {
+	return r.gameCtx.IsOverlayActive()
+}
+
 // Render draws the overlay window using TUI primitives
 func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	// Calculate overlay dimensions
-	overlayW := int(float64(ctx.ScreenWidth) * parameter.OverlayWidthPercent)
-	overlayH := int(float64(ctx.ScreenHeight) * parameter.OverlayHeightPercent)
-	if overlayW < 40 {
-		overlayW = 40
-	}
-	if overlayH < 15 {
-		overlayH = 15
+	g := r.gameCtx.OverlayGeometry()
+	if !g.Valid {
+		return // Terminal too small to draw a legible window
 	}
 
-	startX := (ctx.ScreenWidth - overlayW) / 2
-	startY := (ctx.ScreenHeight - overlayH) / 2
-
-	// Ensure adapter sized
-	if r.adapter == nil || r.adapter.Width() != overlayW || r.adapter.Height() != overlayH {
-		r.adapter = NewTUIAdapter(overlayW, overlayH)
+	if r.adapter == nil {
+		r.adapter = NewTUIAdapter(g.W, g.H)
+	} else if r.adapter.Width() != g.W || r.adapter.Height() != g.H {
+		r.adapter.Resize(g.W, g.H)
 	}
-
-	// Clear adapter for fresh frame
 	r.adapter.Clear(visual.RgbOverlayBg)
 
 	root := r.adapter.Region()
@@ -135,7 +142,7 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 		title = content.Title
 	}
 
-	result := root.Overlay(tui.OverlayOpts{
+	root.Overlay(tui.OverlayOpts{
 		Style:   tui.OverlayBorderTitle,
 		Title:   title,
 		Border:  tui.LineDouble,
@@ -145,158 +152,200 @@ func (r *OverlayRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 	})
 
 	if content != nil {
-		r.renderContent(root, result.Content, content)
+		r.renderContent(root, g, content)
 	}
 
-	r.adapter.FlushTo(buf, startX, startY, visual.MaskUI)
+	r.adapter.FlushTo(buf, g.X, g.Y, visual.MaskUI)
 }
 
-// IsVisible implements render.VisibilityToggle
-func (r *OverlayRenderer) IsVisible() bool {
-	return r.gameCtx.IsOverlayActive()
-}
+// renderContent dispatches on the content's layout and draws the chrome
+func (r *OverlayRenderer) renderContent(root tui.Region, g engine.OverlayGeometry, data *core.OverlayContent) {
+	r.syncLayout(g, data)
 
-func (r *OverlayRenderer) renderContent(outer, content tui.Region, data *core.OverlayContent) {
-	// Custom rendering for special overlays
-	if data.Custom && data.Title == "ABOUT" {
-		r.renderAboutContent(outer, content, data)
+	body := root.Sub(g.ContentX, g.ContentY, g.ContentW, g.ContentH)
+
+	switch data.Layout {
+	case core.OverlayLayoutAbout:
+		r.renderAbout(body)
+		r.renderHint(root, g, parameter.OverlayHintsAbout)
 		return
-	}
 
-	padded := content.Sub(
-		parameter.OverlayPaddingX,
-		parameter.OverlayPaddingY,
-		content.W-2*parameter.OverlayPaddingX,
-		content.H-2*parameter.OverlayPaddingY-1,
-	)
+	case core.OverlayLayoutDoc:
+		r.renderDoc(body)
+		r.renderScrollBar(root, g, r.doc.Viewport)
+		r.renderHint(root, g, parameter.OverlayHintsDoc)
 
-	cards := data.Cards()
-	if len(cards) == 0 {
-		return
-	}
-
-	// Convert to masonry items
-	items := make([]tui.MasonryItem, len(cards))
-	for i, card := range cards {
-		items[i] = tui.MasonryItem{
-			Key:    card.Title,
-			Height: 2 + len(card.Entries), // border + entries
-			Data:   card,
+	default:
+		r.renderCards(body)
+		if r.masonry != nil {
+			r.renderScrollBar(root, g, r.masonry.Viewport)
 		}
+		r.renderHint(root, g, parameter.OverlayHintsCards)
 	}
+}
 
-	// Get or create masonry state (should be stored in renderer)
+// syncLayout rebuilds the cached layout when the content or viewport changes
+func (r *OverlayRenderer) syncLayout(g engine.OverlayGeometry, data *core.OverlayContent) {
+	if r.content == data && r.layoutW == g.ContentW && r.layoutH == g.ContentH {
+		return
+	}
+	r.content, r.layoutW, r.layoutH = data, g.ContentW, g.ContentH
+	r.cards = data.Cards()
+
+	switch data.Layout {
+	case core.OverlayLayoutAbout:
+		r.gameCtx.SetOverlayContentH(0)
+	case core.OverlayLayoutDoc:
+		r.buildDoc(g)
+	default:
+		r.buildCards(g)
+	}
+}
+
+// buildCards computes the masonry layout and publishes the card index
+func (r *OverlayRenderer) buildCards(g engine.OverlayGeometry) {
 	if r.masonry == nil {
 		r.masonry = tui.NewMasonryState()
 	}
 
-	// Calculate layout
-	r.masonry.CalculateLayout(items, padded.W, tui.MasonryOpts{
-		Gap: 2,
-		Breakpoints: map[int]int{
-			140: 4,
-			100: 3,
-			60:  2,
-		},
-	})
+	r.items = r.items[:0]
+	for i := range r.cards {
+		r.items = append(r.items, tui.MasonryItem{
+			Key:    r.cards[i].Key,
+			Height: parameter.OverlayCardFrameRows + len(r.cards[i].Entries),
+			Data:   &r.cards[i],
+		})
+	}
 
-	// Sync scroll from game context
+	r.masonry.CalculateLayout(r.items, g.ContentW, tui.MasonryOpts{
+		GapX:        parameter.OverlayCardGapX,
+		GapY:        parameter.OverlayCardGapY,
+		Breakpoints: overlayCardBreakpoints,
+	})
+	r.masonry.SetViewport(g.ContentH)
+	r.gameCtx.SetOverlayContentH(r.masonry.Viewport.ContentH)
+
+	// Input resolves selection against this index; rebuilt only on relayout
+	refs := make([]engine.OverlayCardRef, 0, len(r.masonry.Layouts))
+	for i := range r.masonry.Layouts {
+		l := &r.masonry.Layouts[i]
+		refs = append(refs, engine.OverlayCardRef{Key: l.Item.Key, X: l.X, Y: l.Y, W: l.W, H: l.H})
+	}
+	r.gameCtx.SetOverlayCards(refs)
+
+	r.selKey = "" // Force the selection back into view after a relayout
+}
+
+// buildDoc flattens cards into document blocks and publishes the row count
+func (r *OverlayRenderer) buildDoc(g engine.OverlayGeometry) {
+	if r.doc == nil {
+		r.doc = tui.NewDocState()
+	}
+
+	r.blocks = r.blocks[:0]
+	for i := range r.cards {
+		r.blocks = append(r.blocks, tui.DocBlock{Kind: tui.DocSection, Text: r.cards[i].Title})
+		for _, e := range r.cards[i].Entries {
+			r.blocks = append(r.blocks, tui.DocBlock{Kind: tui.DocEntry, Key: e.Key, Text: e.Value})
+		}
+	}
+
+	r.doc.Layout(r.blocks, g.ContentW, r.docOpts())
+	r.doc.SetViewport(g.ContentH)
+	r.gameCtx.SetOverlayContentH(r.doc.Viewport.ContentH)
+}
+
+// docOpts returns the document styling; layout-affecting fields match buildDoc
+func (r *OverlayRenderer) docOpts() tui.DocOpts {
+	bg := visual.RgbOverlayBg
+	return tui.DocOpts{
+		HeaderStyle: tui.Style{Fg: visual.RgbOverlayHeader, Bg: bg, Attr: terminal.AttrBold},
+		KeyStyle:    tui.Style{Fg: visual.RgbOverlayKey, Bg: bg},
+		TextStyle:   tui.Style{Fg: visual.RgbOverlayValue, Bg: bg},
+		RuleStyle:   tui.Style{Fg: visual.RgbOverlaySeparator, Bg: bg, Attr: terminal.AttrDim},
+		Rule:        tui.LineSingle,
+		KeyMaxW:     parameter.HelpKeyMaxWidth,
+		MinTextW:    parameter.HelpMinTextWidth,
+		Gap:         parameter.HelpColumnGap,
+		Indent:      parameter.HelpIndent,
+		StackIndent: parameter.HelpStackIndent,
+		SectionGap:  parameter.HelpSectionGap,
+		MaxWidth:    parameter.HelpMaxWidth,
+		Center:      true,
+	}
+}
+
+// renderCards draws the visible masonry slice, keeping the selection in view
+func (r *OverlayRenderer) renderCards(body tui.Region) {
+	if r.masonry == nil || len(r.cards) == 0 {
+		return
+	}
+
+	r.masonry.SetViewport(body.H)
 	r.masonry.Viewport.ScrollTo(r.gameCtx.GetOverlayScroll())
 
-	// Render visible items
-	padded.Masonry(r.masonry, func(region tui.Region, layout tui.MasonryLayout, contentOffset int) {
-		card := layout.Item.Data.(core.OverlayCard)
-		r.renderCard(region, card, contentOffset, region.H)
+	// Scroll only when the selection moved, so paging stays free
+	sel := r.gameCtx.GetOverlaySelection()
+	if sel != r.selKey {
+		r.selKey = sel
+		if l := r.findLayout(sel); l != nil {
+			r.masonry.Viewport.EnsureRange(l.Y, l.H)
+		}
+	}
+
+	body.Masonry(r.masonry, func(region tui.Region, layout tui.MasonryLayout, contentOffset int) {
+		card, ok := layout.Item.Data.(*core.OverlayCard)
+		if !ok {
+			return
+		}
+		r.renderCard(region, card, layout.H, contentOffset, card.Key == sel)
 	})
 
-	// Sync clamped scroll back to GameContext to prevent drift
 	r.gameCtx.SetOverlayScroll(r.masonry.Viewport.Offset)
-
-	// Navigation hints
-	hints := "ESC close · j/k scroll · PgUp/PgDn page"
-	hintsX := (outer.W - tui.RuneLen(hints)) / 2
-	outer.Text(hintsX, outer.H-2, hints, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
-
-	// Scroll indicator
-	if indicator := r.masonry.ScrollIndicator(); indicator != "" {
-		indX := outer.W - tui.RuneLen(indicator) - 1
-		outer.Text(indX, outer.H-1, indicator, visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
-	}
 }
 
-func (r *OverlayRenderer) calculateCardLayouts(cards []core.OverlayCard, availW, availH int) []cardLayout {
-	// Determine column count based on width
-	var cols int
-	switch {
-	case availW >= 140:
-		cols = 4
-	case availW >= 100:
-		cols = 3
-	case availW >= 60:
-		cols = 2
-	default:
-		cols = 1
+// findLayout returns the layout of a card by key, nil when absent
+func (r *OverlayRenderer) findLayout(key string) *tui.MasonryLayout {
+	if key == "" {
+		return nil
 	}
-
-	gap := 2
-	colW := (availW - (cols-1)*gap) / cols
-
-	layouts := make([]cardLayout, 0, len(cards))
-	colHeights := make([]int, cols) // Track height used in each column
-
-	for _, card := range cards {
-		// Card height: 2 (border) + entries
-		cardH := 2 + len(card.Entries)
-		if cardH < 3 {
-			cardH = 3
+	for i := range r.masonry.Layouts {
+		if r.masonry.Layouts[i].Item.Key == key {
+			return &r.masonry.Layouts[i]
 		}
-
-		// Find shortest column
-		minCol := 0
-		minH := colHeights[0]
-		for i := 1; i < cols; i++ {
-			if colHeights[i] < minH {
-				minH = colHeights[i]
-				minCol = i
-			}
-		}
-
-		x := minCol * (colW + gap)
-		y := colHeights[minCol]
-
-		layouts = append(layouts, cardLayout{
-			x: x, y: y, w: colW, h: cardH,
-			card: card,
-		})
-
-		colHeights[minCol] += cardH + 1 // +1 for gap between cards
 	}
-
-	return layouts
+	return nil
 }
 
-func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, entryOffset, visibleH int) {
-	// Draw card frame if top border visible
-	if entryOffset == 0 {
-		region.Box(tui.LineSingle, visual.RgbOverlayBorder)
+// renderCard draws one card slice; totalH is the card's full height and off the
+// rows clipped from its top, so the frame stays correct at either fold
+func (r *OverlayRenderer) renderCard(region tui.Region, card *core.OverlayCard, totalH, off int, selected bool) {
+	line, fg := tui.LineSingle, visual.RgbOverlayBorder
+	if card.Pinned {
+		line, fg = tui.LineDouble, visual.RgbOverlayPinned
+	}
+	if selected {
+		fg = visual.RgbOverlaySelected
+	}
+	region.BoxClipped(line, fg, totalH, off)
 
-		// Title in top border
-		if card.Title != "" && region.W > 4 {
-			title := " " + card.Title + " "
-			if tui.RuneLen(title) > region.W-4 {
-				title = tui.Truncate(title, region.W-4)
-			}
-			titleX := 2
-			region.Text(titleX, 0, title, visual.RgbOverlayHeader, visual.RgbOverlayBg, terminal.AttrBold)
+	// Title sits on the top border row, drawn only when that row is in view
+	if off == 0 && card.Title != "" && region.W > 4 {
+		title := " " + card.Title + " "
+		if card.Pinned {
+			title = " " + string(parameter.OverlayPinMarker) + " " + card.Title + " "
 		}
+		if tui.RuneLen(title) > region.W-4 {
+			title = tui.Truncate(title, region.W-4)
+		}
+		attr := terminal.AttrBold
+		if selected {
+			attr |= terminal.AttrReverse
+		}
+		region.Text(2, 0, title, visual.RgbOverlayHeader, visual.RgbOverlayBg, attr)
 	}
 
-	// Content area inside card
-	innerX := 1
-	innerY := 1 - entryOffset
 	innerW := region.W - 2
-	innerH := region.H
-
 	if innerW < 1 {
 		return
 	}
@@ -304,85 +353,98 @@ func (r *OverlayRenderer) renderCard(region tui.Region, card core.OverlayCard, e
 	keyStyle := tui.Style{Fg: visual.RgbOverlayKey, Bg: visual.RgbOverlayBg}
 	valStyle := tui.Style{Fg: visual.RgbOverlayValue, Bg: visual.RgbOverlayBg}
 
-	for i, entry := range card.Entries {
-		y := innerY + i
+	// Entry i occupies card row 1+i; only region bounds gate it
+	for i := range card.Entries {
+		y := 1 + i - off
 		if y < 0 {
 			continue
 		}
-		if y >= innerH-1 { // -1 for bottom border
+		if y >= region.H {
 			break
 		}
-
-		inner := region.Sub(innerX, y, innerW, 1)
-		inner.KeyValue(0, entry.Key, entry.Value, keyStyle, valStyle, ':')
-	}
-
-	// Draw bottom border if visible
-	bottomY := 1 + len(card.Entries) - entryOffset
-	if bottomY >= 0 && bottomY < region.H {
-		for x := 1; x < region.W-1; x++ {
-			region.Cell(x, bottomY, '─', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
-		}
-		region.Cell(0, bottomY, '└', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
-		region.Cell(region.W-1, bottomY, '┘', visual.RgbOverlayBorder, visual.RgbOverlayBg, terminal.AttrNone)
+		row := region.Sub(1, y, innerW, 1)
+		row.KeyValue(0, card.Entries[i].Key, card.Entries[i].Value, keyStyle, valStyle, ':')
 	}
 }
 
-func (r *OverlayRenderer) renderAboutContent(outer, content tui.Region, data *core.OverlayContent) {
+// renderDoc draws the visible document slice and syncs the clamped scroll back
+func (r *OverlayRenderer) renderDoc(body tui.Region) {
+	if r.doc == nil {
+		return
+	}
+	r.doc.SetViewport(body.H)
+	r.doc.Viewport.ScrollTo(r.gameCtx.GetOverlayScroll())
+	body.Doc(r.doc, r.docOpts())
+	r.gameCtx.SetOverlayScroll(r.doc.Viewport.Offset)
+}
+
+// renderScrollBar draws the reserved scroll column, hidden when content fits
+func (r *OverlayRenderer) renderScrollBar(root tui.Region, g engine.OverlayGeometry, v *tui.ViewportScroll) {
+	if g.ScrollW < 1 || v == nil {
+		return
+	}
+	bar := root.Sub(g.ScrollX, g.ContentY, g.ScrollW, g.ContentH)
+	bar.ScrollBarStyled(0, v.Offset, v.ViewportH, v.ContentH, tui.ScrollBarOpts{
+		ThumbFg:  visual.RgbOverlayScrollThumb,
+		TrackFg:  visual.RgbOverlayScrollTrack,
+		Bg:       visual.RgbOverlayBg,
+		HideIdle: true,
+	})
+}
+
+// renderHint draws the widest hint variant that fits, or none at all
+func (r *OverlayRenderer) renderHint(root tui.Region, g engine.OverlayGeometry, tiers []string) {
+	if g.HintY < 0 {
+		return
+	}
+	avail := g.W - 2
+	for _, hint := range tiers {
+		n := tui.RuneLen(hint)
+		if n > avail {
+			continue
+		}
+		root.Text(1+(avail-n)/2, g.HintY, hint, visual.RgbOverlayHint, visual.RgbOverlayBg, terminal.AttrDim)
+		return
+	}
+}
+
+// renderAbout draws the logo and info panel, stacking them on narrow windows
+func (r *OverlayRenderer) renderAbout(body tui.Region) {
+	if len(r.cards) == 0 {
+		return
+	}
+	card := &r.cards[0]
+
 	bg := visual.RgbOverlayBg
 	fg := visual.RgbOverlayValue
 	dimFg := visual.RgbOverlayHint
 	headerFg := visual.RgbOverlayHeader
 
-	cards := data.Cards()
-	if len(cards) == 0 {
-		return
-	}
-	card := cards[0]
-
-	logoW, logoH := logoPatternW, logoPatternH
-	padX, padY := parameter.OverlayPaddingX, parameter.OverlayPaddingY
-	innerW := content.W - 2*padX
-	innerH := content.H - 2*padY - 1
-
-	if innerW < 30 || innerH < 10 {
-		region := content.Sub(padX, padY, innerW, innerH)
-		region.TextCenter(0, card.Title, headerFg, bg, terminal.AttrBold)
+	if body.W < 30 || body.H < 10 {
+		body.TextCenter(0, card.Title, headerFg, bg, terminal.AttrBold)
 		if len(card.Entries) > 0 {
-			region.TextBlock(0, 2, card.Entries[0].Value, fg, bg, terminal.AttrNone)
+			body.TextBlock(0, 2, card.Entries[0].Value, fg, bg, terminal.AttrNone)
 		}
 		return
 	}
 
-	if innerW < 50 {
-		logoX := (innerW - logoW) / 2
-		logoRegion := content.Sub(padX+logoX, padY, logoW, logoH)
-		r.renderLogo(logoRegion, bg)
-
-		infoY := padY + logoH + 1
-		infoH := innerH - logoH - 1
-		infoRegion := content.Sub(padX, infoY, innerW, infoH)
-		r.renderAboutInfo(infoRegion, bg, fg, dimFg, headerFg, card)
-	} else {
-		logoY := (innerH - logoH) / 2
-		logoRegion := content.Sub(padX, padY+logoY, logoW, logoH)
-		r.renderLogo(logoRegion, bg)
-
-		infoX := padX + logoW + 3
-		infoW := innerW - logoW - 3
-		infoRegion := content.Sub(infoX, padY, infoW, innerH)
-		r.renderAboutInfo(infoRegion, bg, fg, dimFg, headerFg, card)
+	if body.W < 50 {
+		logoX := (body.W - logoPatternW) / 2
+		r.renderLogo(body.Sub(logoX, 0, logoPatternW, logoPatternH), bg)
+		info := body.Sub(0, logoPatternH+1, body.W, body.H-logoPatternH-1)
+		r.renderAboutInfo(info, bg, fg, dimFg, headerFg, card)
+		return
 	}
 
-	hints := "ESC close"
-	hintsX := (outer.W - tui.RuneLen(hints)) / 2
-	outer.Text(hintsX, outer.H-2, hints, visual.RgbOverlayHint, bg, terminal.AttrDim)
+	logoY := (body.H - logoPatternH) / 2
+	r.renderLogo(body.Sub(0, logoY, logoPatternW, logoPatternH), bg)
+	info := body.Sub(logoPatternW+3, 0, body.W-logoPatternW-3, body.H)
+	r.renderAboutInfo(info, bg, fg, dimFg, headerFg, card)
 }
 
-func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg color.RGB, card core.OverlayCard) {
+func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, headerFg color.RGB, card *core.OverlayCard) {
 	y := 0
 
-	// Title
 	region.Text(0, y, card.Title, headerFg, bg, terminal.AttrBold)
 	y += 2
 
@@ -390,18 +452,16 @@ func (r *OverlayRenderer) renderAboutInfo(region tui.Region, bg, fg, dimFg, head
 		return
 	}
 
-	// First entry as description (wrapped)
+	// First entry is the description, wrapped
 	if y < region.H-4 {
-		lines := region.TextBlock(0, y, card.Entries[0].Value, fg, bg, terminal.AttrNone)
-		y += lines + 1
+		y += region.TextBlock(0, y, card.Entries[0].Value, fg, bg, terminal.AttrNone) + 1
 	}
 
-	// Remaining entries as key-value pairs
 	keyStyle := tui.Style{Fg: dimFg, Bg: bg}
 	valStyle := tui.Style{Fg: fg, Bg: bg}
 
 	for i := 1; i < len(card.Entries); i++ {
-		if y >= region.H-1 {
+		if y >= region.H {
 			break
 		}
 		e := card.Entries[i]

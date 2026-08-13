@@ -1,8 +1,7 @@
 package system
 
 import (
-	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"sync/atomic"
 
@@ -18,6 +17,15 @@ type MetaSystem struct {
 	ctx *engine.GameContext
 
 	world *engine.World
+
+	// Context and player telemetry, published for the debug overlay and HUD
+	statPaused  *atomic.Bool
+	statMapW    *atomic.Int64
+	statMapH    *atomic.Int64
+	statCameraX *atomic.Int64
+	statCameraY *atomic.Int64
+	statPlayerX *atomic.Int64
+	statPlayerY *atomic.Int64
 }
 
 // NewMetaSystem creates a new meta system
@@ -30,9 +38,16 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 	return s
 }
 
-// Init resets session state for new game
+// Init caches the telemetry pointers; runs at construction, before Freeze
 func (s *MetaSystem) Init() {
-	// No-op
+	reg := s.world.Resources.Status
+	s.statPaused = reg.Bools.Get("context.paused")
+	s.statMapW = reg.Ints.Get("context.map_w")
+	s.statMapH = reg.Ints.Get("context.map_h")
+	s.statCameraX = reg.Ints.Get("context.camera_x")
+	s.statCameraY = reg.Ints.Get("context.camera_y")
+	s.statPlayerX = reg.Ints.Get("player.x")
+	s.statPlayerY = reg.Ints.Get("player.y")
 }
 
 // Name returns system's name
@@ -108,9 +123,20 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Update implements System interface
+// Update publishes context and player telemetry; every read is world state
+// already guarded by the update mutex
 func (s *MetaSystem) Update() {
-	// No tick-based logic
+	cfg := s.world.Resources.Config
+	s.statMapW.Store(int64(cfg.MapWidth))
+	s.statMapH.Store(int64(cfg.MapHeight))
+	s.statCameraX.Store(int64(cfg.CameraX))
+	s.statCameraY.Store(int64(cfg.CameraY))
+
+	player := s.world.Resources.Player.Entity
+	if pos, ok := s.world.Positions.GetPosition(player); ok {
+		s.statPlayerX.Store(int64(pos.X))
+		s.statPlayerY.Store(int64(pos.Y))
+	}
 }
 
 // handleGameReset performs full game reset with deterministic ordering
@@ -183,100 +209,52 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
 }
 
-// handleDebugRequest shows debug information overlay with auto-discovered stats
+// handleDebugRequest shows the debug overlay, pinned groups first
 func (s *MetaSystem) handleDebugRequest() {
+	reg := s.world.Resources.Status
+	views := reg.Views()
+	pins := s.ctx.OverlayPins()
+
 	content := &core.OverlayContent{
 		Title: "DEBUG",
+		Items: make([]core.OverlayItem, 0, len(views)),
 	}
 
-	// Collect all stats into groups by prefix
-	groups := make(map[string][]core.CardEntry)
-
-	// Context stats
-	groups["context"] = []core.CardEntry{
-		{Key: "frame", Value: fmt.Sprintf("%d", s.ctx.GetFrameNumber())},
-		{Key: "screen", Value: fmt.Sprintf("%dx%d", s.ctx.Width, s.ctx.Height)},
-		{Key: "game", Value: fmt.Sprintf("%dx%d", s.ctx.World.Resources.Config.MapWidth, s.ctx.World.Resources.Config.MapHeight)},
-		{Key: "paused", Value: fmt.Sprintf("%v", s.ctx.IsPaused.Load())},
+	// Pinned groups lead in pin order; the rest keep the registry's sorted order
+	for _, key := range pins {
+		if v, ok := reg.GroupView(key); ok {
+			content.Items = append(content.Items, debugCard(v, true))
+		}
 	}
-
-	// Player stats from cursor entity components
-	cursorEntity := s.ctx.World.Resources.Player.Entity
-	var playerEntries []core.CardEntry
-	if ec, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
-		playerEntries = append(playerEntries, core.CardEntry{
-			Key: "energy", Value: fmt.Sprintf("%d", ec.Current),
-		})
-	}
-	if hc, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok {
-		playerEntries = append(playerEntries, core.CardEntry{
-			Key: "heat", Value: fmt.Sprintf("%d/%d", hc.Current, parameter.HeatMax),
-		})
-	}
-	if sc, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok {
-		playerEntries = append(playerEntries, core.CardEntry{
-			Key: "shield", Value: fmt.Sprintf("%v", sc.Active),
-		})
-	}
-	if len(playerEntries) > 0 {
-		groups["player"] = playerEntries
-	}
-
-	// Status registry stats
-	reg := s.world.Resources.Status
-
-	reg.Bools.Range(func(key string, ptr *atomic.Bool) {
-		prefix, name := status.SplitKey(key)
-		groups[prefix] = append(groups[prefix], core.CardEntry{
-			Key: name, Value: fmt.Sprintf("%v", ptr.Load()),
-		})
-	})
-
-	reg.Ints.Range(func(key string, ptr *atomic.Int64) {
-		prefix, name := status.SplitKey(key)
-		groups[prefix] = append(groups[prefix], core.CardEntry{
-			Key: name, Value: status.FormatInt(key, ptr.Load()),
-		})
-	})
-
-	reg.Floats.Range(func(key string, ptr *status.AtomicFloat) {
-		prefix, name := status.SplitKey(key)
-		groups[prefix] = append(groups[prefix], core.CardEntry{
-			Key: name, Value: fmt.Sprintf("%.3f", ptr.Get()),
-		})
-	})
-
-	reg.Strings.Range(func(key string, ptr *status.AtomicString) {
-		prefix, name := status.SplitKey(key)
-		groups[prefix] = append(groups[prefix], core.CardEntry{Key: name, Value: ptr.Load()})
-	})
-
-	// Sort prefixes alphabetically
-	prefixes := make([]string, 0, len(groups))
-	for prefix := range groups {
-		prefixes = append(prefixes, prefix)
-	}
-	sort.Strings(prefixes)
-
-	// Build cards in sorted order with sorted entries
-	for _, prefix := range prefixes {
-		entries := groups[prefix]
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Key < entries[j].Key
-		})
-		content.Items = append(content.Items, core.OverlayCard{
-			Title:   strings.ToUpper(prefix),
-			Entries: entries,
-		})
+	for i := range views {
+		if slices.Contains(pins, views[i].Name()) {
+			continue
+		}
+		content.Items = append(content.Items, debugCard(views[i], false))
 	}
 
 	s.ctx.SetOverlayContent(content)
 }
 
+// debugCard projects one metric group into an overlay card
+func debugCard(v status.GroupView, pinned bool) core.OverlayCard {
+	entries := make([]core.CardEntry, v.Len())
+	for i := range entries {
+		entries[i] = core.CardEntry{Key: v.MetricName(i), Value: v.Value(i)}
+	}
+	return core.OverlayCard{
+		Key:     v.Name(),
+		Title:   strings.ToUpper(v.Name()),
+		Entries: entries,
+		Pinned:  pinned,
+	}
+}
+
 // handleHelpRequest shows help information overlay
 func (s *MetaSystem) handleHelpRequest() {
 	content := &core.OverlayContent{
-		Title: "HELP",
+		Title:  "HELP",
+		Layout: core.OverlayLayoutDoc,
 	}
 
 	// Card: Modes
@@ -334,6 +312,18 @@ func (s *MetaSystem) handleHelpRequest() {
 		},
 	})
 
+	// Card: Overlay
+	content.Items = append(content.Items, core.OverlayCard{
+		Title: "OVERLAY",
+		Entries: []core.CardEntry{
+			{Key: "h/j/k/l", Value: "Select card (debug overlay)"},
+			{Key: "g/G", Value: "First/last card, or top/bottom of the page"},
+			{Key: "SPACE", Value: "Pin the selected card to the top and to the live HUD"},
+			{Key: "PgUp/PgDn", Value: "Scroll a page"},
+			{Key: "ESC/q", Value: "Close the overlay"},
+		},
+	})
+
 	// Card: Commands
 	content.Items = append(content.Items, core.OverlayCard{
 		Title: "COMMANDS",
@@ -348,7 +338,7 @@ func (s *MetaSystem) handleHelpRequest() {
 			{Key: ":energy N", Value: "Set energy"},
 			{Key: ":heat N", Value: "Set heat"},
 			{Key: ":boost", Value: "Enable boost"},
-			{Key: ":d [save]", Value: "Debug overlay / save snapshot"},
+			{Key: ":d [save|hud|unpin]", Value: "Debug overlay, snapshot, live HUD, clear pins"},
 			{Key: ":h", Value: "This help"},
 		},
 	})
@@ -362,7 +352,7 @@ func (s *MetaSystem) handleHelpRequest() {
 func (s *MetaSystem) handleAboutRequest() {
 	content := &core.OverlayContent{
 		Title:  "ABOUT",
-		Custom: true,
+		Layout: core.OverlayLayoutAbout,
 	}
 
 	// Store info as entries for the renderer to extract
@@ -392,6 +382,7 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 		return
 	}
 	s.ctx.IsPaused.Store(paused)
+	s.statPaused.Store(paused)
 	if paused {
 		s.ctx.PausableClock.Pause()
 	} else {

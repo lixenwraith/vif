@@ -201,14 +201,23 @@ func DefaultKeyTable() *KeyTable {
 		},
 
 		OverlayRunes: map[rune]KeyEntry{
+			'h': {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},
 			'j': {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
 			'k': {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
+			'l': {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
+			'g': {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
+			'G': {BehaviorMotion, MotionScreenBottom, SpecialNone, ModeTargetNone, IntentNone},
+			' ': {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayActivate},
 			'q': {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
 		},
 
 		OverlayKeys: map[terminal.Key]KeyEntry{
 			terminal.KeyUp:       {BehaviorMotion, MotionUp, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyDown:     {BehaviorMotion, MotionDown, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyLeft:     {BehaviorMotion, MotionLeft, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyRight:    {BehaviorMotion, MotionRight, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyHome:     {BehaviorMotion, MotionScreenTop, SpecialNone, ModeTargetNone, IntentNone},
+			terminal.KeyEnd:      {BehaviorMotion, MotionScreenBottom, SpecialNone, ModeTargetNone, IntentNone},
 			terminal.KeyEscape:   {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayClose},
 			terminal.KeyEnter:    {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayActivate},
 			terminal.KeyPageUp:   {BehaviorSystem, MotionNone, SpecialNone, ModeTargetNone, IntentOverlayPageUp},

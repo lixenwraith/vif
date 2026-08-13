@@ -37,5 +37,6 @@ const (
 	BlendAddFg  = BlendMode(opAdd | flagFg)     // Add Fg, Keep Bg
 
 	// Background-only modes
-	BlendMaxBg = BlendMode(opMax | flagBg) // Max blend background only, preserve fg
+	BlendMaxBg   = BlendMode(opMax | flagBg)   // Max blend background only, preserve fg
+	BlendAlphaBg = BlendMode(opAlpha | flagBg) // Alpha blend background only, preserve fg
 )

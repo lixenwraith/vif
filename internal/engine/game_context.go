@@ -73,8 +73,25 @@ type GameContext struct {
 	overlayScroll  atomic.Int32
 	overlayContent atomic.Pointer[core.OverlayContent]
 
-	// Cached FPS state
-	statFPS *atomic.Int64
+	// Overlay geometry, recomputed on resize; content height published by the renderer
+	overlayGeom     atomic.Pointer[OverlayGeometry]
+	overlayContentH atomic.Int32
+
+	// Card selection and pinning; snapshots are immutable once published
+	overlaySelectable atomic.Bool
+	overlaySelKey     atomic.Pointer[string]
+	overlayCards      atomic.Pointer[[]OverlayCardRef]
+	overlayPins       atomic.Pointer[[]string]
+
+	// OverlayHUD draws pinned metric groups over the game area
+	OverlayHUD atomic.Bool
+
+	// Cached status pointers
+	statFPS     *atomic.Int64
+	statFrame   *atomic.Int64
+	statScreenW *atomic.Int64
+	statScreenH *atomic.Int64
+	statMode    *status.AtomicString
 }
 
 // NewGameContext creates a GameContext using an existing ECS World
@@ -101,7 +118,15 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	world.Resources.Status = status.NewRegistry()
 	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
 
-	// 2. Config Resource
+	// 2. Context metrics; registered before Freeze, written by their owners
+	reg := world.Resources.Status
+	ctx.statFPS = reg.Ints.Get("engine.fps")
+	ctx.statFrame = reg.Ints.Get("context.frame")
+	ctx.statScreenW = reg.Ints.Get("context.screen_w")
+	ctx.statScreenH = reg.Ints.Get("context.screen_h")
+	ctx.statMode = reg.Strings.Get("context.mode")
+
+	// 3. Config Resource
 	// Initial: Map = Viewport, CropOnResize enabled for backward compat
 	world.Resources.Config = &ConfigResource{
 		MapWidth:       viewportWidth,
@@ -113,7 +138,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		CropOnResize:   true,
 	}
 
-	// 3. Time Resource (Initial state)
+	// 4. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{}
 	world.Resources.Time.Update(
 		pausableClock.Now(),
@@ -121,23 +146,23 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		parameter.GameUpdateInterval,
 	)
 
-	// 4. Event Queue Resource
+	// 5. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
 
-	// 5. Game GameState
+	// 6. Game GameState
 	ctx.State = NewGameState()
 	world.Resources.Game = &GameStateResource{State: ctx.State}
 
-	// 6. Transient Resource
+	// 7. Transient Resource
 	world.Resources.Transient = NewTransientResource()
 
-	// 7. Cursor Entity
+	// 8. Cursor Entity
 	ctx.World.CreateCursorEntity()
 
-	// 8. Target Resource
+	// 9. Target Resource
 	world.Resources.Target = &TargetResource{}
 
-	// 8. Initialize atomic string pointers to empty strings
+	// 10. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
@@ -145,14 +170,19 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 9. Initialize pause state
+	// 11. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 10. Initial input state - Not restored by EventGameReset: user-owned for the session
+	// 12. Overlay geometry and mode for the initial terminal size
+	ctx.recomputeOverlayGeometry()
+	ctx.SetMode(core.ModeNormal)
+	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
+
+	// 13. Initial input state - Not restored by EventGameReset: user-owned for the session
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
 	ctx.AutoFire.Store(parameter.DefaultAutoFire)
 
-	// 11. Initialize FPS tracking
+	// 14. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
@@ -184,6 +214,7 @@ func (ctx *GameContext) HandleResize() {
 func (ctx *GameContext) HandleResizeLocked() {
 	// New Height and Width already set in context by main
 	viewportWidth, viewportHeight := ctx.updateGameArea()
+	ctx.recomputeOverlayGeometry()
 
 	config := ctx.World.Resources.Config
 	config.ViewportWidth = viewportWidth
@@ -226,6 +257,112 @@ func (ctx *GameContext) HandleResizeLocked() {
 		ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
 	}
 }
+
+// === Overlay ===
+
+// OverlayGeometry returns the overlay window placement for the current terminal size
+func (ctx *GameContext) OverlayGeometry() OverlayGeometry {
+	if g := ctx.overlayGeom.Load(); g != nil {
+		return *g
+	}
+	return OverlayGeometry{}
+}
+
+// recomputeOverlayGeometry republishes window placement and screen telemetry
+func (ctx *GameContext) recomputeOverlayGeometry() {
+	g := ComputeOverlayGeometry(ctx.Width, ctx.Height)
+	ctx.overlayGeom.Store(&g)
+	ctx.statScreenW.Store(int64(ctx.Width))
+	ctx.statScreenH.Store(int64(ctx.Height))
+}
+
+// GetOverlayContentH returns the laid-out overlay content height in rows
+func (ctx *GameContext) GetOverlayContentH() int {
+	return int(ctx.overlayContentH.Load())
+}
+
+// SetOverlayContentH publishes the laid-out content height; renderer-owned
+func (ctx *GameContext) SetOverlayContentH(h int) {
+	ctx.overlayContentH.Store(int32(h))
+}
+
+// OverlayCardRef locates one laid-out overlay card in content coordinates,
+// published by the renderer so input can resolve selection without geometry
+type OverlayCardRef struct {
+	Key        string
+	X, Y, W, H int
+}
+
+// IsOverlaySelectable reports whether the active overlay supports card selection
+func (ctx *GameContext) IsOverlaySelectable() bool {
+	return ctx.overlaySelectable.Load()
+}
+
+// GetOverlaySelection returns the selected card key, empty when none
+func (ctx *GameContext) GetOverlaySelection() string {
+	if p := ctx.overlaySelKey.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// SetOverlaySelection selects a card by key
+func (ctx *GameContext) SetOverlaySelection(key string) {
+	ctx.overlaySelKey.Store(&key)
+}
+
+// OverlayCards returns the published card index; the slice is immutable
+func (ctx *GameContext) OverlayCards() []OverlayCardRef {
+	if p := ctx.overlayCards.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// SetOverlayCards publishes a fresh card index; renderer-owned
+func (ctx *GameContext) SetOverlayCards(refs []OverlayCardRef) {
+	ctx.overlayCards.Store(&refs)
+}
+
+// OverlayPins returns the pinned group keys in pin order; the slice is immutable
+func (ctx *GameContext) OverlayPins() []string {
+	if p := ctx.overlayPins.Load(); p != nil {
+		return *p
+	}
+	return nil
+}
+
+// OverlayPinsRef returns the pin snapshot pointer, for consumers that rebind on change
+func (ctx *GameContext) OverlayPinsRef() *[]string {
+	return ctx.overlayPins.Load()
+}
+
+// ToggleOverlayPin adds or removes a group key, preserving pin order.
+// Copy-on-write: readers keep the snapshot they loaded.
+func (ctx *GameContext) ToggleOverlayPin(key string) {
+	cur := ctx.OverlayPins()
+	next := make([]string, 0, len(cur)+1)
+	found := false
+	for _, k := range cur {
+		if k == key {
+			found = true
+			continue
+		}
+		next = append(next, k)
+	}
+	if !found {
+		next = append(next, key)
+	}
+	ctx.overlayPins.Store(&next)
+}
+
+// ClearOverlayPins removes every pin
+func (ctx *GameContext) ClearOverlayPins() {
+	var empty []string
+	ctx.overlayPins.Store(&empty)
+}
+
+// === Viewport and Bounds ===
 
 // clampCamera constrains camera position to valid range
 // TODO: renderer handling viewport larger than map
@@ -287,6 +424,7 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 	}
 
 	n := ctx.FrameNumber.Add(1)
+	ctx.statFrame.Store(n)
 	vlog.SetFrame(uint64(n))
 	return n
 }
@@ -308,6 +446,9 @@ func (ctx *GameContext) GetMode() core.GameMode {
 // SetMode sets the current game mode
 func (ctx *GameContext) SetMode(m core.GameMode) {
 	ctx.World.Resources.Game.State.SetMode(m)
+	if int(m) < len(core.ModeNames) {
+		ctx.statMode.StoreIfChanged(core.ModeNames[m])
+	}
 }
 
 // IsInsertMode returns true if in insert mode
@@ -464,6 +605,40 @@ func (ctx *GameContext) SetOverlayContent(content *core.OverlayContent) {
 		ctx.overlayTitle.Store(&empty)
 	}
 	ctx.overlayScroll.Store(0)
+	ctx.overlayContentH.Store(0)
+	ctx.overlayCards.Store(nil)
+	ctx.syncOverlaySelection(content)
+}
+
+// syncOverlaySelection keeps the selected card across a rebuild, falling back
+// to the first card when the previous key is gone
+func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
+	if content == nil || content.Layout != core.OverlayLayoutCards {
+		ctx.overlaySelectable.Store(false)
+		ctx.SetOverlaySelection("")
+		return
+	}
+
+	prev := ctx.GetOverlaySelection()
+	first, keep := "", false
+	for _, item := range content.Items {
+		card, ok := item.(core.OverlayCard)
+		if !ok {
+			continue
+		}
+		if first == "" {
+			first = card.Key
+		}
+		if card.Key == prev && prev != "" {
+			keep = true
+			break
+		}
+	}
+
+	ctx.overlaySelectable.Store(first != "")
+	if !keep {
+		ctx.SetOverlaySelection(first)
+	}
 }
 
 // === Pause ===

@@ -59,8 +59,8 @@ const (
 	IntentUndo // u - motion undo, return to previous position
 
 	// Overlay mode
-	IntentOverlayScroll   // j/k/arrows
-	IntentOverlayActivate // Enter/Space (future: section toggle)
+	IntentOverlayScroll   // hjkl/arrows/g/G - row scroll or card selection
+	IntentOverlayActivate // Enter/Space - pin toggle on the selected card
 	IntentOverlayClose    // ESC/q
 	IntentOverlayPageUp   // PgUp
 	IntentOverlayPageDown // PgDn

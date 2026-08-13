@@ -81,6 +81,15 @@ func (b *RenderBuffer) SetWriteMask(mask uint8) {
 	b.currentMask = mask
 }
 
+// ResetMask replaces a cell's mask with the current write mask, discarding
+// tags left by lower layers so post-processing treats the cell as this layer only
+func (b *RenderBuffer) ResetMask(x, y int) {
+	if !b.inBounds(x, y) {
+		return
+	}
+	b.masks[y*b.width+x] = b.currentMask
+}
+
 // SetBackgroundOverlay configures overlay for untouched cells applied in finalize()
 // Intensity is pre-computed by caller (envelope already applied)
 func (b *RenderBuffer) SetBackgroundOverlay(c color.RGB, intensity float64) {

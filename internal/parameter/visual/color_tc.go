@@ -159,15 +159,25 @@ var (
 	RgbEnergyBlinkWhite = color.White
 
 	// Overlay colors
-	RgbOverlayBorder    = color.Cyan
-	RgbOverlayBg        = color.Obsidian
-	RgbOverlayText      = color.White
-	RgbOverlayTitle     = color.Yellow
-	RgbOverlayHeader    = color.Gold
-	RgbOverlayKey       = color.Silver
-	RgbOverlayValue     = color.PastelGreen
-	RgbOverlayHint      = color.Gray
-	RgbOverlaySeparator = color.IronGray
+	RgbOverlayBorder      = color.Cyan
+	RgbOverlayBg          = color.Obsidian
+	RgbOverlayText        = color.White
+	RgbOverlayTitle       = color.Yellow
+	RgbOverlayHeader      = color.Gold
+	RgbOverlayKey         = color.Silver
+	RgbOverlayValue       = color.PastelGreen
+	RgbOverlayHint        = color.Gray
+	RgbOverlaySeparator   = color.IronGray
+	RgbOverlayPinned      = color.Gold
+	RgbOverlaySelected    = color.Orange
+	RgbOverlayScrollThumb = color.Cyan
+	RgbOverlayScrollTrack = color.IronGray
+
+	// Pinned stats HUD
+	RgbHudBg     = color.Obsidian
+	RgbHudHeader = color.Gold
+	RgbHudKey    = color.Silver
+	RgbHudValue  = color.PastelGreen
 
 	// Status bar auxiliary colors
 	RgbColorModeIndicator = color.LightGray

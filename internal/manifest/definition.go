@@ -238,6 +238,7 @@ var Renderers = []RendererDef{
 	{"cursor", "NewCursorRenderer", "PriorityCursor"},
 
 	// --- Debug ---
-	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
 	{"flowfield", "NewFlowFieldDebugRenderer", "PriorityFlowField"},
+	{"pinned_state", "NewPinnedStatsRenderer", "PriorityPinnedState"},
+	{"overlay", "NewOverlayRenderer", "PriorityOverlay"},
 }

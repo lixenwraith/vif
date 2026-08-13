@@ -671,15 +671,21 @@ func (m *Machine) processOverlay(ev terminal.Event) *Intent {
 	return nil
 }
 
+// handleOverlayEntry emits overlay intents; Motion carries the axis so the
+// router can resolve it against the overlay's layout
 func (m *Machine) handleOverlayEntry(entry KeyEntry) *Intent {
 	switch entry.Behavior {
 	case BehaviorMotion:
-		dir := ScrollDown
-		if entry.Motion == MotionUp {
+		dir := ScrollNone
+		switch entry.Motion {
+		case MotionUp:
 			dir = ScrollUp
+		case MotionDown:
+			dir = ScrollDown
 		}
 		return &Intent{
 			Type:      IntentOverlayScroll,
+			Motion:    entry.Motion,
 			ScrollDir: dir,
 		}
 	case BehaviorSystem:

@@ -110,8 +110,9 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 		{Renderer: renderer.NewIndicatorRenderer(ctx), Priority: render.PriorityIndicator},
 		{Renderer: renderer.NewStatusBarRenderer(ctx), Priority: render.PriorityStatusBar},
 		{Renderer: renderer.NewCursorRenderer(ctx), Priority: render.PriorityCursor},
-		{Renderer: renderer.NewOverlayRenderer(ctx), Priority: render.PriorityOverlay},
 		{Renderer: renderer.NewFlowFieldDebugRenderer(ctx), Priority: render.PriorityFlowField},
+		{Renderer: renderer.NewPinnedStatsRenderer(ctx), Priority: render.PriorityPinnedState},
+		{Renderer: renderer.NewOverlayRenderer(ctx), Priority: render.PriorityOverlay},
 	}
 }
 

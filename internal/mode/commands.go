@@ -465,14 +465,21 @@ func parseEventPayload(et event.EventType, raw string) (any, error) {
 	return payload, nil
 }
 
-// handleDebugCommand opens the debug overlay, or saves a status snapshot
+// handleDebugCommand opens the debug overlay, or runs a debug subcommand
 func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) > 0 {
 		switch strings.ToLower(args[0]) {
 		case "s", "save", "snap":
 			return handleDebugSaveCommand(ctx)
+		case "hud":
+			return applyToggle(ctx, &ctx.OverlayHUD, args[1:], "d hud", "Debug HUD")
+		case "unpin", "clear":
+			ctx.ClearOverlayPins()
+			ctx.SetStatusMessage("Pins cleared", parameter.StatusMessageDefaultTimeout, false)
+			ctx.SetLastCommand(":d unpin")
+			return CommandResult{Continue: true, KeepPaused: false}
 		default:
-			setCommandError(ctx, "Usage: :debug [save]")
+			setCommandError(ctx, "Usage: :debug [save|hud|unpin]")
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
 	}

@@ -1076,43 +1076,6 @@ func (r *Router) handleOverlayClose() bool {
 	return true
 }
 
-// TODO: future implementation
-func (r *Router) handleOverlayActivate() bool {
-	// Stub: future section toggle/expand functionality
-	return true
-}
-
-func (r *Router) handleOverlayPageScroll(direction int) bool {
-	// Calculate visible height based on overlay dimensions
-	overlayH := int(float64(r.ctx.Height) * parameter.OverlayHeightPercent)
-
-	// Subtract border (2) + padding (2) + hints row (1)
-	visibleH := overlayH - 2 - (2 * parameter.OverlayPaddingY) - 1
-	pageSize := visibleH / 2
-	if pageSize < 1 {
-		pageSize = 1
-	}
-
-	newScroll := r.ctx.GetOverlayScroll() + (direction * pageSize)
-	if newScroll < 0 {
-		newScroll = 0
-	}
-
-	r.ctx.SetOverlayScroll(newScroll)
-	return true
-}
-
-func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
-	newScroll := r.ctx.GetOverlayScroll() + int(intent.ScrollDir)
-
-	if newScroll < 0 {
-		newScroll = 0
-	}
-
-	r.ctx.SetOverlayScroll(newScroll)
-	return true
-}
-
 // --- Mouse ---
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {

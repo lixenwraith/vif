@@ -72,7 +72,8 @@ const (
 	PriorityCursor
 
 	// === Debug/Overlay ===
-	PriorityOverlay
 	PriorityFlowField
+	PriorityPinnedState
+	PriorityOverlay
 	PriorityDebug
 )
