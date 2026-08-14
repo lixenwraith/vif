@@ -15,6 +15,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
+// statusItem is one right-aligned run of status bar cells
+type statusItem struct {
+	text string
+	fg   color.RGB
+	bg   color.RGB
+}
+
 // StatusBarRenderer draws the status bar at the bottom
 type StatusBarRenderer struct {
 	gameCtx *engine.GameContext
@@ -29,6 +36,11 @@ type StatusBarRenderer struct {
 	statFPS   *atomic.Int64
 	statAPM   *atomic.Int64
 	statTicks *atomic.Int64
+
+	// Time control telemetry
+	statSpeed *status.AtomicString
+	statStep  *atomic.Int64
+	statBreak *status.AtomicString
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -60,6 +72,10 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statAPM:   statusReg.Ints.Get("engine.apm"),
 		statTicks: statusReg.Ints.Get("engine.ticks"),
 
+		statSpeed: statusReg.Strings.Get("engine.speed"),
+		statStep:  statusReg.Ints.Get("engine.step"),
+		statBreak: statusReg.Strings.Get("engine.breakpoint"),
+
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
 		statFSMMaxDur:  statusReg.Ints.Get("fsm.max_duration"),
@@ -85,7 +101,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		buf.SetWithBg(x, statusY, ' ', visual.RgbBackground, visual.RgbBackground)
 	}
 
-	// Update cursor blink state (250ms cycle, uses real time - continues during pause)
+	// Cursor blink runs on wall time: it must continue while the world is paused
 	realNow := r.gameCtx.PausableClock.RealTime()
 	if realNow.Sub(r.lastBlinkToggle) >= parameter.StatusCursorBlinkDuration {
 		r.cursorBlinkOn = !r.cursorBlinkOn
@@ -93,12 +109,13 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// === BUILD RIGHT-SIDE ITEMS ===
-	type statusItem struct {
-		text string
-		fg   color.RGB
-		bg   color.RGB
-	}
+
 	var rightItems []statusItem
+
+	// Priority 0: time control; absent at real time with nothing pending
+	if item, ok := r.timeItem(); ok {
+		rightItems = append(rightItems, item)
+	}
 
 	// Priority 1: FSM Phase
 	phaseName := r.statFSMName.Load()
@@ -321,7 +338,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		textFg = visual.RgbCommandInputText
 		isInputMode = true
 	} else {
-		textContent = r.getActiveStatusMessage(realNow)
+		textContent = r.getActiveStatusMessage(r.gameCtx.PausableClock.Now())
 		textFg = visual.RgbStatusMessageText
 		isInputMode = false
 	}
@@ -402,15 +419,44 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// getActiveStatusMessage returns status message if not expired
-func (r *StatusBarRenderer) getActiveStatusMessage(now time.Time) string {
+// timeItem builds the time control indicator, present only when the simulation is
+// off real time or a step request is pending
+func (r *StatusBarRenderer) timeItem() (statusItem, bool) {
+	if step := r.statStep.Load(); step > 0 {
+		return statusItem{
+			text: fmt.Sprintf(" STEP %d ", step),
+			fg:   visual.RgbBlack,
+			bg:   visual.RgbCursorError,
+		}, true
+	}
+
+	speed := r.statSpeed.Load()
+	if brk := r.statBreak.Load(); brk != "" && brk != "-" {
+		return statusItem{
+			text: fmt.Sprintf(" %sx>%s ", speed, brk),
+			fg:   visual.RgbBlack,
+			bg:   visual.RgbCursorError,
+		}, true
+	}
+	if speed != "" && speed != "1" {
+		return statusItem{
+			text: fmt.Sprintf(" %sx ", speed),
+			fg:   visual.RgbBlack,
+			bg:   visual.RgbGtBg,
+		}, true
+	}
+	return statusItem{}, false
+}
+
+// getActiveStatusMessage returns the status message if its game-time expiry has not passed
+func (r *StatusBarRenderer) getActiveStatusMessage(gameNow time.Time) string {
 	msg := r.gameCtx.GetStatusMessage()
 	if msg == "" {
 		return ""
 	}
 
 	expiry := r.gameCtx.GetStatusMessageExpiry()
-	if expiry > 0 && now.UnixNano() > expiry {
+	if expiry > 0 && gameNow.UnixNano() > expiry {
 		// Expired - clear it
 		r.gameCtx.ClearStatusMessage()
 		return ""

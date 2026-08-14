@@ -509,9 +509,10 @@ func (ctx *GameContext) SetSearchText(text string) {
 	ctx.searchText.Store(&text)
 }
 
-// SetStatusMessage sets status message with optional duration and override
+// SetStatusMessage sets status message with optional duration and override.
+// Expiry is game time: a message dilates with the rate and holds while paused.
 func (ctx *GameContext) SetStatusMessage(msg string, duration time.Duration, override bool) {
-	now := ctx.PausableClock.RealTime().UnixNano()
+	now := ctx.PausableClock.Now().UnixNano()
 	currentExpiry := ctx.statusMessageExpiry.Load()
 
 	// Reject write if current message has unexpired duration and no override

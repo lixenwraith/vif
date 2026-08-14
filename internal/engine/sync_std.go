@@ -22,7 +22,7 @@ import (
 
 // ===
 
-// LockHoldWarn is the update-mutex hold time above which a hold is reported
+// LockHoldWarn [wall] is the update-mutex hold time above which a hold is reported
 const LockHoldWarn = 20 * time.Millisecond
 
 // sampleLocks gates hold-time stamping. Refreshed once per tick rather than

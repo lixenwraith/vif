@@ -2,8 +2,10 @@ package app
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -44,6 +46,9 @@ type Config struct {
 	// RecTicks overrides the flight-recorder depth in game ticks;
 	// 0 = parameter default, negative = disabled
 	RecTicks int
+
+	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time
+	TimeScaleSpec string
 }
 
 // Validate reports configuration conflicts
@@ -54,6 +59,11 @@ func (c Config) Validate() error {
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
 			return err
+		}
+	}
+	if c.TimeScaleSpec != "" {
+		if _, ok := engine.ParseScale(c.TimeScaleSpec); !ok {
+			return fmt.Errorf("-speed %q is not a ladder rate (1/8 1/4 1/2 1 2 4 8)", c.TimeScaleSpec)
 		}
 	}
 	return nil

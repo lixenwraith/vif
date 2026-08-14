@@ -136,6 +136,11 @@ func (a *App) init() error {
 	// Post-Context wiring: Connect network service to the initialized event queue
 	// netSvc.SetEventQueue(a.world.Resources.Event.Queue)
 
+	// Initial rate; ParseScale rejects "" so a bare run stays at real time
+	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
+		a.ctx.TimeCtl.SetScale(s)
+	}
+
 	// 7. Systems; AddSystem sorts by Priority(), manifest order breaks ties
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys)
@@ -173,9 +178,9 @@ func (a *App) init() error {
 	}
 
 	// 12. Event handlers
-	// MetaSystem is event-only and deliberately absent from the manifest
+	// MetaSystem is context-scoped, so it joins the set here rather than via the manifest
 	metaSystem := system.NewMetaSystem(a.ctx)
-	a.scheduler.RegisterEventHandler(metaSystem.(event.Handler))
+	a.world.AddSystem(metaSystem)
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
 			a.scheduler.RegisterEventHandler(h)

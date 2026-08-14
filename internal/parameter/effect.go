@@ -22,9 +22,9 @@ const (
 const (
 	LightningAlpha = 0.8
 
-	// LightningZapDuration is visual duration for short zap effects (vampire, buff)
-	// 2 frames at 60fps for perceptible but brief flash
-	LightningZapDuration = 2 * FrameUpdateInterval
+	// LightningZapDuration is the visual duration of short zap effects (vampire, buff)
+	// One tick: the shortest interval a game-time duration can span
+	LightningZapDuration = GameUpdateInterval
 )
 
 // Spirit Entity

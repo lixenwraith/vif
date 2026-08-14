@@ -381,7 +381,7 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 	case "fsm":
 		bs.Mode = engine.StepFSM
 		bs.Region = p.Region
-		bs.Label = "fsm " + regionLabel(p.Region)
+		bs.Label = "fsm:" + regionLabel(p.Region)
 	case "event", "ev":
 		et, ok := event.GetEventType(p.Event)
 		if !ok || et == event.EventNone {
@@ -390,17 +390,15 @@ func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
 		}
 		bs.Mode = engine.StepEvent
 		bs.Event = et
-		bs.Label = "ev " + event.GetEventName(et)
+		bs.Label = "ev:" + strings.TrimPrefix(event.GetEventName(et), "Event")
 	default:
 		return
 	}
-
-	bs.Label += " @" + run.String()
 	if bs.Pause {
-		bs.Label += " pause"
+		bs.Label += "!"
 	}
 	s.ctx.TimeCtl.Arm(bs, run)
-	vlog.Info("app", "msg", "break armed", "on", bs.Label, "expiry", bs.Expiry)
+	vlog.Info("app", "msg", "break armed", "on", bs.Label, "scale", run.String(), "expiry", bs.Expiry)
 	s.ctx.SetStatusMessage("Run until "+bs.Label, 0, true)
 }
 

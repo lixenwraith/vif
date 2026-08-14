@@ -28,7 +28,6 @@ type ClockScheduler struct {
 	// Tick configuration
 	tickInterval     time.Duration
 	stepping         bool      // scheduler-goroutine only; opens the pause gate for one tick
-	lastGameTickTime time.Time // Last tick in game time
 	gameStartTime    time.Time // Game session start for elapsed calculation
 	nextTickDeadline time.Time // Next tick deadline for drift correction
 
@@ -113,8 +112,7 @@ func NewClockScheduler(
 		isPaused:     isPaused,
 		tickInterval: tickInterval,
 
-		lastGameTickTime: clock.Now(),
-		gameStartTime:    clock.Now(),
+		gameStartTime: clock.Now(),
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -220,19 +218,19 @@ func (cs *ClockScheduler) bindFSMTelemetry() {
 			return
 		}
 		status.TriggerFSM(region)
+		if vlog.On("fsm", vlog.LevelInfo) {
+			vlog.Info("fsm", "msg", "transition",
+				"region", region,
+				"from", cs.fsm.StateName(from),
+				"to", cs.fsm.StateName(to),
+				"via", event.GetEventName(trigger),
+				"index", cs.fsm.StateIndices[to],
+				"max_ms", cs.fsm.StateDurations[to].Milliseconds())
+		}
+		// After the transition record, so the breakpoint reads as its consequence
 		if bs := cs.ctl.Trip(StepFSM, region, event.EventNone); bs != nil {
 			cs.breakHit(bs, region+" "+cs.fsm.StateName(from)+" -> "+cs.fsm.StateName(to))
 		}
-		if !vlog.On("fsm", vlog.LevelInfo) {
-			return
-		}
-		vlog.Info("fsm", "msg", "transition",
-			"region", region,
-			"from", cs.fsm.StateName(from),
-			"to", cs.fsm.StateName(to),
-			"via", event.GetEventName(trigger),
-			"index", cs.fsm.StateIndices[to],
-			"max_ms", cs.fsm.StateDurations[to].Milliseconds())
 	}
 
 	cs.fsm.OnRegion = func(op, region string, state fsm.StateID) {
@@ -299,7 +297,6 @@ func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
 	cs.nextTickDeadline = cs.clock.Now().Add(cs.tickInterval)
-	cs.lastGameTickTime = cs.clock.Now()
 
 	timer := stoppedTimer()
 	defer timer.Stop()
@@ -348,7 +345,6 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 				cs.processTick()
 
-				cs.lastGameTickTime = gameNow
 				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
 
 				maxBehind := cs.tickInterval * 2
@@ -613,9 +609,9 @@ func (cs *ClockScheduler) executeReset() {
 	vlog.NextRun()
 	vlog.Info("fsm", "msg", "session reset")
 
-	// NOTE: Do not use RunSafe if called from a blocking systems
 	// 1. Synchronize with world lock
 	// Acquire lock, wait till MetaSystem finishes synchronous cleanup and releases the lock
+	// NOTE: Do not use RunSafe if called from a blocking systems
 	cs.world.Lock()
 	defer cs.world.Unlock()
 
@@ -623,9 +619,9 @@ func (cs *ClockScheduler) executeReset() {
 	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 3. Reset Scheduler internal timing
-	cs.lastGameTickTime = cs.clock.Now()
-	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
-	cs.gameStartTime = cs.lastGameTickTime
+	now := cs.clock.Now()
+	cs.nextTickDeadline = now.Add(cs.tickInterval)
+	cs.gameStartTime = now
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
 	if err := cs.fsm.Reset(cs.world); err != nil {

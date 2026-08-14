@@ -36,6 +36,7 @@ var (
 	flagKeymapPath   = flag.String("k", "", "Keymap config file path (TOML)")
 	flagCheck        = flag.Bool("check", false, "Validate FSM and content config, then exit")
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
+	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
 
 	flagLog   logFlag
 	flagLevel levelFlag
@@ -167,15 +168,16 @@ func logRuntimeReport(r core.RuntimeReport) {
 // buildConfig translates parsed flags into the runtime configuration
 func buildConfig() app.Config {
 	cfg := app.Config{
-		AudioBackend: *flagAudioBackend,
-		AudioMuted:   true, // default muted
-		ContentPath:  *flagContentPath,
-		GameScript:   *flagGameScript,
-		ForceDefault: *flagDefault,
-		KeymapPath:   *flagKeymapPath,
-		LogScope:     flagScope.value,
-		StatTicks:    flagStat.value,
-		RecTicks:     flagRec.value,
+		AudioBackend:  *flagAudioBackend,
+		AudioMuted:    true, // default muted
+		ContentPath:   *flagContentPath,
+		GameScript:    *flagGameScript,
+		ForceDefault:  *flagDefault,
+		KeymapPath:    *flagKeymapPath,
+		LogScope:      flagScope.value,
+		StatTicks:     flagStat.value,
+		RecTicks:      flagRec.value,
+		TimeScaleSpec: *flagSpeed,
 	}
 
 	if *flagAudioUnmute {

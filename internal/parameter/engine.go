@@ -2,12 +2,15 @@ package parameter
 
 import "time"
 
+// Time domain convention: durations in this package are game time and dilate
+// with the simulation rate. Wall-clock durations are marked [wall].
+
 // Game Loop & Engine Timing
 const (
 	// FrameUpdateInterval is the rendering frame rate interval (~60 FPS)
 	FrameUpdateInterval = 16 * time.Millisecond
 
-	// GameUpdateInterval is the game logic update interval (clock tick)
+	// GameUpdateInterval is the game logic update interval (clock tick) [game]
 	GameUpdateInterval = 50 * time.Millisecond
 
 	// EventLoopInterval is the frequency at which events are attempted to be processed

@@ -118,6 +118,9 @@ func (a *App) frame() bool {
 		}
 		// Plain struct copy; TimeResource holds no locks
 		snapTime = *a.world.Resources.Time
+		// Render on the continuous clock: the tick-written GameTime is quantized to
+		// the tick, which shows as stepped animation once the rate is slowed
+		snapTime.GameTime = a.ctx.PausableClock.Now()
 		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
 			cursorX, cursorY = pos.X, pos.Y
 		}
