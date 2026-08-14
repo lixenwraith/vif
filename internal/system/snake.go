@@ -62,12 +62,12 @@ func (s *SnakeSystem) EventTypes() []event.EventType {
 		event.EventSnakeCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

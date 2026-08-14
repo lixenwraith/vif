@@ -103,8 +103,8 @@ const (
 
 	// --- Meta ---
 
-	// EventGameReset signals a request to reset the game state
-	EventGameReset
+	// EventGameResetRequest (GameResetPayload) signals a request to reset the game state
+	EventGameResetRequest
 	// EventMetaDebugRequest signals a request to show debug overlay
 	EventMetaDebugRequest
 	// EventMetaHelpRequest signals a request to show help overlay

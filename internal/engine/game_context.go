@@ -177,7 +177,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 12. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 13. Overlay geometry and mode for the initial terminal size
+	// 13. Operator session state; see the session state contract above ResetSessionState
 	ctx.recomputeOverlayGeometry()
 	ctx.SetMode(core.ModeNormal)
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
@@ -364,6 +364,30 @@ func (ctx *GameContext) ToggleOverlayPin(key string) {
 func (ctx *GameContext) ClearOverlayPins() {
 	var empty []string
 	ctx.overlayPins.Store(&empty)
+}
+
+// Session state is operator-owned: it describes how the game is being observed and
+// driven, not the game itself, so it survives EventGameReset.
+// The list below is its definition; anything not named is world state and is rebuilt by reset.
+//
+//	MouseFreeMode, AutoFire   input preferences
+//	TimeCtl scale             simulation rate
+//	OverlayHUD, overlay pins  debug overlay layout
+//
+// Logging is excluded because target, level, scope and recorder depth are process
+// configuration, and clearing them mid-session would close the log being read.
+// Pending step requests are excluded in the other direction: they name an FSM region
+// or event stream that reset destroys, so they are cancelled rather than kept.
+
+// ResetSessionState restores every operator toggle to its startup value.
+// Called only on the purge path, never by a plain reset.
+func (ctx *GameContext) ResetSessionState() {
+	ctx.MouseFreeMode.Store(false)
+	ctx.AutoFire.Store(false)
+	ctx.OverlayHUD.Store(false)
+	ctx.ClearOverlayPins()
+	ctx.SetOverlayContent(nil)
+	ctx.TimeCtl.SetScale(ScaleNormal)
 }
 
 // === Viewport and Bounds ===

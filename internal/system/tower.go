@@ -58,12 +58,12 @@ func (s *TowerSystem) EventTypes() []event.EventType {
 		event.EventTowerCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

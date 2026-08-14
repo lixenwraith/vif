@@ -177,6 +177,17 @@ func (tc *TimeControl) disarm() {
 	}
 }
 
+// CancelBreak drops a pending step allowance and disarms any run-until request,
+// reinstating the rate it was armed from. Reset uses this because the FSM region
+// or event stream the request named no longer exists after a restart.
+func (tc *TimeControl) CancelBreak() {
+	tc.budget.Store(0)
+	tc.statStep.Store(0)
+	if bs := tc.brk.Load(); bs != nil {
+		tc.take(bs)
+	}
+}
+
 // Scale returns the active rate
 func (tc *TimeControl) Scale() TimeScale { return tc.clock.Scale() }
 

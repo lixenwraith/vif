@@ -79,13 +79,13 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventCycleDamageMultiplierIncrease,
 		event.EventCycleDamageMultiplierReset,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes input-related events from the router
 func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

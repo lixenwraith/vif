@@ -56,12 +56,12 @@ func (s *MotionMarkerSystem) EventTypes() []event.EventType {
 		event.EventMotionMarkerShowColored,
 		event.EventMotionMarkerClearColored,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *MotionMarkerSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

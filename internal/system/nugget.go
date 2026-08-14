@@ -74,13 +74,13 @@ func (s *NuggetSystem) EventTypes() []event.EventType {
 		event.EventNuggetCollected,
 		event.EventNuggetDestroyed,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes nugget-related events
 func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

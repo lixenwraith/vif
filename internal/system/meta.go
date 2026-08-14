@@ -75,15 +75,16 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
 		event.EventGameStepRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes command events
 func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameReset:
-		s.handleGameReset()
+	case event.EventGameResetRequest:
+		p, _ := ev.Payload.(*event.GameResetPayload)
+		s.handleGameReset(p != nil && p.Purge)
 
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
@@ -151,15 +152,15 @@ func (s *MetaSystem) Update() {
 	}
 }
 
-// handleGameReset performs full game reset with deterministic ordering
+// handleGameReset rebuilds world state; purge additionally clears operator session state
 // Execution sequence (race-free):
 //  1. Entity cleanup (drains, world entities)
 //  2. GameState reset (counters, timers)
 //  3. Cursor recreation
 //  4. FSM reset (emits spawn request, dispatched immediately)
 //
-// Other systems handle EventGameReset after this completes
-func (s *MetaSystem) handleGameReset() {
+// Other systems handle EventGameResetRequest after this completes
+func (s *MetaSystem) handleGameReset(purge bool) {
 	// 1. Pause and stop audio
 	s.ctx.SetPaused(true)
 
@@ -188,8 +189,8 @@ func (s *MetaSystem) handleGameReset() {
 	s.ctx.SetStatusMessage("", 0, false)
 	s.ctx.SetOverlayContent(nil)
 
-	// 7. Restore real-time pacing; speed is a debugging aid, not session state
-	s.handleSpeedRequest(nil)
+	// 7. Cancel pending step requests; the rate itself is operator-owned and survives
+	s.ctx.TimeCtl.CancelBreak()
 
 	// 8. Signal FSM reset - Non-blocking
 
@@ -197,6 +198,12 @@ func (s *MetaSystem) handleGameReset() {
 	select {
 	case s.ctx.ResetChan <- struct{}{}:
 	default:
+	}
+
+	// 9. Purge operator session state; last, so it wins over anything reset restored
+	if purge {
+		s.ctx.ResetSessionState()
+		vlog.Info("app", "msg", "session purge")
 	}
 }
 

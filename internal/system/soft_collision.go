@@ -199,13 +199,13 @@ func (s *SoftCollisionSystem) Priority() int {
 
 func (s *SoftCollisionSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
+		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 	}
 }
 
 func (s *SoftCollisionSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

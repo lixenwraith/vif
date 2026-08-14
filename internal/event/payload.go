@@ -145,6 +145,12 @@ type NetworkErrorPayload struct {
 
 // --- Meta ---
 
+// GameResetPayload requests a game restart; Purge additionally clears operator
+// session state
+type GameResetPayload struct {
+	Purge bool `toml:"purge"`
+}
+
 // MetaStatusMessagePayload contains message to be displayed in status bar
 type MetaStatusMessagePayload struct {
 	Message          string        `toml:"message"`

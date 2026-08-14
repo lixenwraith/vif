@@ -73,13 +73,13 @@ func (s *DecaySystem) EventTypes() []event.EventType {
 		event.EventDecaySpawnOne,
 		event.EventDecaySpawnBatch,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes decay-related events
 func (s *DecaySystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

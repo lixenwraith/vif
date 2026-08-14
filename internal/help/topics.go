@@ -154,7 +154,8 @@ var topics = []topicDef{
 		Entries: []entryDef{
 			{Keys: ":h  :?", Desc: "This help"},
 			{Keys: ":about", Desc: "Version, engine and licence"},
-			{Keys: ":n", Desc: "New game"},
+			{Keys: ":new  :n", Desc: "New game"},
+			{Keys: ":new! :n!", Desc: "Restart and clear operator state: mouse, auto-fire, rate, overlay pins. Logging is untouched"},
 			{Keys: ":q", Desc: "Quit"},
 			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
@@ -169,7 +170,7 @@ var topics = []topicDef{
 			{Keys: ":d save", Desc: "Write a standalone status snapshot file"},
 			{Keys: ":d hud [on|off]", Desc: "Draw the pinned cards live over the game area"},
 			{Keys: ":d unpin", Desc: "Clear every pinned card"},
-			{Keys: ":speed [rate]  :sp [rate]", Desc: "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; :new restores 1"},
+			{Keys: ":speed [rate]  :sp [rate]", Desc: "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; survives :new, cleared by :new!"},
 			{Keys: ":step [n]  :st [n]", Desc: "Pause and advance n game ticks; the world settles fully between each"},
 			{Keys: ":step [rate] fsm [region] [pause]", Desc: "Run at rate until the next FSM transition, then restore; pause stops there"},
 			{Keys: ":step [rate] ev <Event> [pause]", Desc: "Run at rate until the event is dispatched, then restore"},

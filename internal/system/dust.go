@@ -112,12 +112,12 @@ func (s *DustSystem) EventTypes() []event.EventType {
 		event.EventDustSpawnBatchRequest,
 		event.EventDustAllRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *DustSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

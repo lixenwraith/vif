@@ -57,13 +57,13 @@ func (s *ShieldSystem) EventTypes() []event.EventType {
 		event.EventShieldDeactivate,
 		event.EventShieldDrainRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes shield-related events from the router
 func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

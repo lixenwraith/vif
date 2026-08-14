@@ -334,12 +334,11 @@ func intentSig(in *input.Intent) uint64 {
 
 // recordAPM is the admission point for APM, which exists to drive adaptive music.
 // Gates are wall-clock: they measure human effort. GameState buckets the result in
-// game time, so a slowed simulation reports proportionally higher APM, and a
-// fast-forwarded one lower.
-// Machine-generated activity is excluded: macro playback here, mouse auto-fire by construction
+// game time, so a slowed simulation reports proportionally higher APM.
+// Input while paused is discarded: the world is not advancing, so it is not gameplay.
 func (r *Router) recordAPM(intent *input.Intent) {
-	if intent.MacroPlayback {
-		return // 4.a: machine input; mouse auto-fire excluded by construction (events, not intents)
+	if intent.MacroPlayback || r.ctx.IsPaused.Load() {
+		return
 	}
 	now := r.ctx.PausableClock.RealTime()
 

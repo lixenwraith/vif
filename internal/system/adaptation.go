@@ -101,7 +101,7 @@ func (s *AdaptationSystem) Priority() int {
 
 func (s *AdaptationSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventGameReset,
+		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventRouteGraphComputed,
 		event.EventGatewayDespawned,
@@ -111,7 +111,7 @@ func (s *AdaptationSystem) EventTypes() []event.EventType {
 }
 
 func (s *AdaptationSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

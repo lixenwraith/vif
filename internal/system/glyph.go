@@ -129,13 +129,13 @@ func (s *GlyphSystem) Priority() int {
 func (s *GlyphSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes spawn configuration events
 func (s *GlyphSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		s.statRateMult.Set(1.0)
 		s.statDensity.Set(0.0)

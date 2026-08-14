@@ -13,5 +13,8 @@ const (
 	APMRepeatWindow = 250 * time.Millisecond // identical actions inside window: dropped
 	APMMaxPerSecond = 5000                   // ceiling: 5 full actions/s ~= TierPeakAPM
 
+	// APMPendingBurstMax caps actions folded into a single APM bucket
+	APMPendingBurstMax = 4 * APMMaxPerSecond
+
 	MouseAPMSampleInterval = 150 * time.Millisecond
 )

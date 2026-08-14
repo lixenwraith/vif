@@ -48,12 +48,12 @@ func (s *SpiritSystem) EventTypes() []event.EventType {
 		event.EventSpiritSpawn,
 		event.EventSpiritDespawn,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.destroyAllSpirits()
 		s.Init()
 		return

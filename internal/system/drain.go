@@ -107,13 +107,13 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 		event.EventDrainPause,
 		event.EventDrainResume,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes events
 func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

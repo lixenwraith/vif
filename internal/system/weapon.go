@@ -67,12 +67,12 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 		event.EventWeaponFireRequest,
 		event.EventWeaponFireRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

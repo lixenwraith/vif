@@ -47,12 +47,12 @@ func (s *CompositeSystem) EventTypes() []event.EventType {
 		event.EventCompositeMemberDestroyed,
 		event.EventCompositeDestroyRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *CompositeSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

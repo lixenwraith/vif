@@ -119,7 +119,9 @@ func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time)
 	gs.lastAPMTime = currentTime // Advance time anchor
 
 	// Atomically swap pending actions to 0 to start new bucket
-	actions := gs.PendingActions.Swap(0)
+	// Clamp the fold: a stalled tick, a step burst, or a resume must not deliver a
+	// spike bucket that misreads as a burst of play
+	actions := min(gs.PendingActions.Swap(0), parameter.APMPendingBurstMax)
 
 	// Update history ring buffer
 	gs.apmHistory[gs.apmHistoryIndex] = actions

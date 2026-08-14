@@ -73,13 +73,13 @@ func (s *BlossomSystem) EventTypes() []event.EventType {
 		event.EventBlossomSpawnOne,
 		event.EventBlossomSpawnBatch,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes blossom-related events
 func (s *BlossomSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

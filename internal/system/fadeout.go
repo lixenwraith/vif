@@ -41,12 +41,12 @@ func (s *FadeoutSystem) EventTypes() []event.EventType {
 		event.EventFadeoutSpawnOne,
 		event.EventFadeoutSpawnBatch,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *FadeoutSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

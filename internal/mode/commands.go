@@ -26,8 +26,8 @@ type CommandResult struct {
 // the switch so the two move together; TestCommandsDocumented cross-checks it
 // against internal/help.
 var commandNames = []string{
-	"flow", "graph", "l", "log", "q", "quit", "n", "new", "f", "free",
-	"a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
+	"flow", "graph", "l", "log", "q", "quit", "n", "new", "new!", "n!",
+	"f", "free", "a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
@@ -59,8 +59,10 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleLogCommand(ctx, args)
 	case "q", "quit":
 		return handleQuitCommand(ctx)
-	case "n", "new":
-		return handleNewCommand(ctx)
+	case "new", "n":
+		return handleNewCommand(ctx, false)
+	case "new!", "n!":
+		return handleNewCommand(ctx, true)
 	case "f", "free":
 		return handleFreeCommand(ctx, args)
 	case "a", "auto":
@@ -272,10 +274,14 @@ func handleQuitCommand(ctx *engine.GameContext) CommandResult {
 	return CommandResult{Continue: false, KeepPaused: true}
 }
 
-// handleNewCommand resets the game state via event
-func handleNewCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventGameReset, nil)
-	ctx.SetLastCommand(":new")
+// handleNewCommand resets the game state via event; purge also clears operator session state
+func handleNewCommand(ctx *engine.GameContext, purge bool) CommandResult {
+	ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	cmd := ":new"
+	if purge {
+		cmd = ":new!"
+	}
+	ctx.SetLastCommand(cmd)
 	ctx.MacroClearFlag.Store(true) // Signal macro reset
 	return CommandResult{Continue: true, KeepPaused: true}
 }

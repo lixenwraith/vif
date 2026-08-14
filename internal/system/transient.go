@@ -54,12 +54,12 @@ func (s *TransientSystem) EventTypes() []event.EventType {
 		event.EventGrayoutEnd,
 		event.EventStrobeRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

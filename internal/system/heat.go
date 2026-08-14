@@ -102,12 +102,12 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

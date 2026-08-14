@@ -82,13 +82,13 @@ func (s *GoldSystem) EventTypes() []event.EventType {
 		event.EventCompositeMemberDestroyed,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes gold events
 func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

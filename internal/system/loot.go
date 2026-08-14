@@ -103,12 +103,12 @@ func (s *LootSystem) EventTypes() []event.EventType {
 		event.EventEnemyKilled,
 		event.EventLootSpawnRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *LootSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

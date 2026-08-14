@@ -61,12 +61,12 @@ func (s *CombatSystem) EventTypes() []event.EventType {
 		event.EventCombatAttackDirectRequest,
 		event.EventCombatAttackAreaRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

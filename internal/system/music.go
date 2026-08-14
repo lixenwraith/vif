@@ -101,13 +101,13 @@ func (s *MusicSystem) EventTypes() []event.EventType {
 		event.EventMusicSeedRequest,
 		event.EventMusicSwingRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes music events
 func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		wasPlaying := s.player != nil && s.player.IsMusicPlaying()
 		s.Init()
 		if wasPlaying {

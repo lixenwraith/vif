@@ -73,12 +73,12 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 		event.EventSwarmCancelRequest,
 		event.EventCompositeIntegrityBreach,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

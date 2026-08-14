@@ -44,13 +44,13 @@ func (s *PingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventPingGridRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes ping-related events
 func (s *PingSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}

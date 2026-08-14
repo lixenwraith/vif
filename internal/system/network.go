@@ -37,14 +37,14 @@ func (s *NetworkSystem) Priority() int { return parameter.PriorityUI }
 func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 		// Outbound request events registered here when protocol lands
 	}
 }
 
 func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameReset:
+	case event.EventGameResetRequest:
 		s.Init()
 	case event.EventMetaSystemCommandRequest:
 		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {

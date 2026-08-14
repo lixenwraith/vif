@@ -92,14 +92,14 @@ func (s *AudioSystem) EventTypes() []event.EventType {
 		event.EventGamePauseChanged,
 		event.EventSoundMuteToggle,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes sound request events
 func (s *AudioSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
-	case event.EventGameReset:
+	case event.EventGameResetRequest:
 		s.Init()
 		return
 

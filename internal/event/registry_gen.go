@@ -32,7 +32,7 @@ func InitRegistry() {
 	RegisterType("EventStateSync", EventStateSync, &StateSyncPayload{})
 	RegisterType("EventNetworkEvent", EventNetworkEvent, &NetworkEventPayload{})
 	RegisterType("EventNetworkError", EventNetworkError, &NetworkErrorPayload{})
-	RegisterType("EventGameReset", EventGameReset, nil)
+	RegisterType("EventGameResetRequest", EventGameResetRequest, &GameResetPayload{})
 	RegisterType("EventMetaDebugRequest", EventMetaDebugRequest, nil)
 	RegisterType("EventMetaHelpRequest", EventMetaHelpRequest, nil)
 	RegisterType("EventMetaAboutRequest", EventMetaAboutRequest, nil)

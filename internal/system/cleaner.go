@@ -59,13 +59,13 @@ func (s *CleanerSystem) EventTypes() []event.EventType {
 		event.EventCleanerSweepingRequest,
 		event.EventCleanerDirectionalRequest,
 		event.EventMetaSystemCommandRequest,
-		event.EventGameReset,
+		event.EventGameResetRequest,
 	}
 }
 
 // HandleEvent processes cleaner-related events from the router
 func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
-	if ev.Type == event.EventGameReset {
+	if ev.Type == event.EventGameResetRequest {
 		s.Init()
 		return
 	}
