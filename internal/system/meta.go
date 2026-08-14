@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/help"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
@@ -250,98 +251,25 @@ func debugCard(v status.GroupView, pinned bool) core.OverlayCard {
 	}
 }
 
-// handleHelpRequest shows help information overlay
+// handleHelpRequest projects the help topics against the active key bindings
 func (s *MetaSystem) handleHelpRequest() {
+	topics := help.Topics(help.KeyTable())
+
 	content := &core.OverlayContent{
 		Title:  "HELP",
 		Layout: core.OverlayLayoutDoc,
+		Items:  make([]core.OverlayItem, 0, len(topics)),
 	}
 
-	// Card: Modes
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "MODES",
-		Entries: []core.CardEntry{
-			{Key: "i", Value: "Enter INSERT mode"},
-			{Key: "ESC", Value: "Return to NORMAL / Show grid"},
-			{Key: "/", Value: "Enter SEARCH mode"},
-			{Key: ":", Value: "Enter COMMAND mode"},
-		},
-	})
-
-	// Card: Movement
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "MOVEMENT",
-		Entries: []core.CardEntry{
-			{Key: "h/j/k/l", Value: "Move left/down/up/right"},
-			{Key: "w/b", Value: "Word forward/backward"},
-			{Key: "0/$", Value: "Line start/end"},
-			{Key: "gg/G", Value: "Top/bottom of screen"},
-			{Key: "f/F{c}", Value: "Find char forward/backward"},
-			{Key: "t/T{c}", Value: "Till char forward/backward"},
-			{Key: ";/,", Value: "Repeat find / reverse"},
-		},
-	})
-
-	// Card: Delete
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "DELETE",
-		Entries: []core.CardEntry{
-			{Key: "d{motion}", Value: "Delete with motion"},
-			{Key: "dd", Value: "Delete current line"},
-			{Key: "D", Value: "Delete to end of line"},
-			{Key: "x", Value: "Delete char at cursor"},
-		},
-	})
-
-	// Card: Game
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "GAME",
-		Entries: []core.CardEntry{
-			{Key: "TAB", Value: "Jump to nugget (10 energy)"},
-			{Key: "ENTER", Value: "Fire directional cleaners"},
-			{Key: "Ctrl+S", Value: "Cycle audio (All/Music/SFX/None)"},
-		},
-	})
-
-	// Card: Search
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "SEARCH",
-		Entries: []core.CardEntry{
-			{Key: "/text", Value: "Search for text"},
-			{Key: "n/N", Value: "Next/previous match"},
-		},
-	})
-
-	// Card: Overlay
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "OVERLAY",
-		Entries: []core.CardEntry{
-			{Key: "h/j/k/l", Value: "Select card (debug overlay)"},
-			{Key: "g/G", Value: "First/last card, or top/bottom of the page"},
-			{Key: "SPACE", Value: "Pin the selected card to the top and to the live HUD"},
-			{Key: "PgUp/PgDn", Value: "Scroll a page"},
-			{Key: "ESC/q", Value: "Close the overlay"},
-		},
-	})
-
-	// Card: Commands
-	content.Items = append(content.Items, core.OverlayCard{
-		Title: "COMMANDS",
-		Entries: []core.CardEntry{
-			{Key: ":log [on|off|lvl|scope|stat|rec]", Value: "Session logging"},
-			{Key: ":q", Value: "Quit game"},
-			{Key: ":n", Value: "New game"},
-			{Key: ":f[ree] [on|off]", Value: "Mouse cursor tracking (default on)"},
-			{Key: ":a[uto] [on|off]", Value: "Auto-fire main + special (default on)"},
-			{Key: ":m[ouse] enable|disable|free", Value: "Mouse input master switch"},
-			{Key: ":content", Value: "Corpus source and counters"},
-			{Key: ":energy N", Value: "Set energy"},
-			{Key: ":heat N", Value: "Set heat"},
-			{Key: ":boost", Value: "Enable boost"},
-			{Key: ":d [save|hud|unpin]", Value: "Debug overlay, snapshot, live HUD, clear pins"},
-			{Key: ":h", Value: "This help"},
-		},
-	})
+	for _, t := range topics {
+		entries := make([]core.CardEntry, len(t.Entries))
+		for i, e := range t.Entries {
+			entries[i] = core.CardEntry{Key: e.Keys, Value: e.Desc}
+		}
+		content.Items = append(content.Items, core.OverlayCard{
+			Key: t.Key, Title: t.Title, Entries: entries,
+		})
+	}
 
 	s.ctx.SetOverlayContent(content)
 }

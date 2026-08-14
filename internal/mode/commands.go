@@ -22,6 +22,19 @@ type CommandResult struct {
 	KeepPaused bool // true = caller should not unpause
 }
 
+// commandNames lists every case label below, aliases included. Kept adjacent to
+// the switch so the two move together; TestCommandsDocumented cross-checks it
+// against internal/help.
+var commandNames = []string{
+	"flow", "graph", "l", "log", "q", "quit", "n", "new", "f", "free",
+	"a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
+	"d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
+	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
+}
+
+// CommandNames returns the recognised command names and aliases
+func CommandNames() []string { return commandNames }
+
 // ExecuteCommand parses and executes a command string
 // Returns CommandResult indicating whether game should continue and pause state
 func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {

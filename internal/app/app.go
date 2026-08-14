@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/help"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
@@ -219,7 +220,9 @@ func (a *App) loadKeymap() error {
 	if err != nil {
 		return fmt.Errorf("keymap config %s: %w", path, err)
 	}
-	a.inputMachine.SetKeyTable(input.MergeKeyTable(input.DefaultKeyTable(), override))
+	kt := input.MergeKeyTable(input.DefaultKeyTable(), override)
+	a.inputMachine.SetKeyTable(kt)
+	help.SetKeyTable(kt) // Help documents the bindings actually in force
 	return nil
 }
 

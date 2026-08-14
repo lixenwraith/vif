@@ -145,7 +145,7 @@ const (
 // Overlay hint variants per layout, longest first; the renderer draws the widest that fits
 var (
 	OverlayHintsCards = []string{
-		"ESC close · hjkl select · SPACE pin · PgUp/PgDn page",
+		"ESC close · hjkl select · SPACE pin · :h keys",
 		"ESC close · hjkl select · SPACE pin",
 		"ESC close · SPACE pin",
 		"ESC close",

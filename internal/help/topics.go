@@ -1,0 +1,196 @@
+package help
+
+import "github.com/lixenwraith/vi-fighter/internal/input"
+
+// topics is the documentation source of truth. Key columns come from the live
+// key table wherever an action owns them; literals cover input the table does
+// not describe — counts, prefixed sequences, pointer buttons and commands.
+// Command entries mirror the ExecuteCommand switch in internal/mode/commands.go.
+var topics = []topicDef{
+	{
+		Key: "general", Title: "GENERAL",
+		Entries: []entryDef{
+			{Keys: "[count]", Desc: "Repeat the next motion or operator, e.g. 3w or d2j"},
+			{Actions: []string{"escape"}, Desc: "Return to NORMAL; already in NORMAL, flash the ping grid"},
+			{Actions: []string{"toggle_audio_cycle"}, Desc: "Cycle audio: music and effects, music only, effects only, silent"},
+			{Actions: []string{"quit"}, All: true, Desc: "Quit the game"},
+		},
+	},
+	{
+		Key: "modes", Title: "MODES",
+		Entries: []entryDef{
+			{Actions: []string{"mode_insert"}, Desc: "INSERT mode: typed characters become glyphs at the cursor"},
+			{Actions: []string{"append"}, Desc: "Move one cell right, then INSERT mode"},
+			{Actions: []string{"mode_visual"}, Desc: "Toggle VISUAL mode: motions step by the shield radius instead of one cell"},
+			{Actions: []string{"mode_search"}, Desc: "SEARCH mode: type a pattern and press Enter to jump to it"},
+			{Actions: []string{"mode_command"}, Desc: "COMMAND mode: the simulation pauses while the line is open"},
+		},
+	},
+	{
+		Key: "movement", Title: "MOVEMENT",
+		Entries: []entryDef{
+			{Actions: []string{"motion_left", "motion_down", "motion_up", "motion_right"},
+				Desc: "Move one cell left, down, up, right; the arrow keys do the same"},
+			{Actions: []string{"motion_word_forward", "motion_word_back"}, Desc: "Next and previous word start"},
+			{Actions: []string{"motion_word_forward_big", "motion_word_back_big"}, Desc: "Next and previous WORD start, punctuation ignored"},
+			{Actions: []string{"motion_word_end", "motion_word_end_big"}, Desc: "Word and WORD end"},
+			{Actions: []string{"motion_line_start"}, Desc: "First column of the row"},
+			{Actions: []string{"motion_first_non_ws"}, Desc: "First non-blank cell in range"},
+			{Actions: []string{"motion_line_end"}, Desc: "Last glyph on the row, then the right edge"},
+			{Actions: []string{"motion_half_page_left", "motion_half_page_right"}, Desc: "Half a viewport left and right"},
+			{Actions: []string{"motion_half_page_up", "motion_half_page_down"}, Desc: "Half a viewport up and down; PgUp and PgDn do the same"},
+			{Actions: []string{"motion_screen_vertical_mid", "motion_screen_horizontal_mid"}, Desc: "Middle row and middle column"},
+			{Actions: []string{"motion_screen_top"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top row of the map"},
+			{Actions: []string{"motion_screen_bottom"}, Desc: "Bottom row of the map"},
+			{Actions: []string{"motion_origin"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Top-left corner"},
+			{Actions: []string{"motion_end"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Bottom-right corner"},
+			{Actions: []string{"motion_center"}, Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Centre of the map"},
+			{Actions: []string{"motion_para_back", "motion_para_forward"}, Desc: "Previous and next empty row"},
+			{Actions: []string{"motion_match_bracket"}, Desc: "Jump to the matching bracket under the cursor"},
+			{Actions: []string{"motion_column_up"}, All: true, Desc: "Nearest glyph above in the same column"},
+			{Actions: []string{"motion_column_down"}, All: true, Desc: "Nearest glyph below in the same column"},
+			{Actions: []string{"char_find_forward", "char_find_back"}, Suffix: "{c}", Desc: "Jump to the next and previous occurrence of a character"},
+			{Actions: []string{"char_till_forward", "char_till_back"}, Suffix: "{c}", Desc: "Jump just before and just after the next occurrence"},
+			{Actions: []string{"special_repeat_find", "special_repeat_find_rev"}, Desc: "Repeat the last find, forward and reversed"},
+		},
+	},
+	{
+		Key: "markers", Title: "GLYPH MARKERS",
+		Entries: []entryDef{
+			{Actions: []string{"marker_glyph_left", "marker_glyph_down", "marker_glyph_up", "marker_glyph_right"},
+				Scope: input.SectionPrefixG, PrefixAction: "prefix_g", Desc: "Highlight the coloured glyphs reachable in that direction"},
+			{Keys: "r  g  b", Desc: "With markers shown, jump to the nearest red, green or blue glyph"},
+			{Keys: "gll  ghh  gkk  gjj", Desc: "Repeat the direction key instead to jump to the nearest glyph of any colour"},
+		},
+	},
+	{
+		Key: "editing", Title: "EDITING",
+		Entries: []entryDef{
+			{Keys: "d{motion}", Desc: "Delete over a motion; counts and find motions apply, e.g. dw, d3j, df;"},
+			{Keys: "dd", Desc: "Delete the entire row"},
+			{Actions: []string{"special_delete_to_end"}, Desc: "Delete from the cursor to the end of the row"},
+			{Actions: []string{"special_delete_char"}, Desc: "Delete the glyph under the cursor; a count deletes that many forward"},
+			{Actions: []string{"undo"}, Desc: "Step back through previous cursor positions"},
+		},
+	},
+	{
+		Key: "combat", Title: "COMBAT",
+		Entries: []entryDef{
+			{Actions: []string{"fire_main"}, Desc: "Fire the main weapon"},
+			{Actions: []string{"fire_special"}, All: true, Desc: "Fire the special weapon"},
+			{Actions: []string{"nugget_jump"}, Desc: "Jump to the nearest nugget"},
+			{Actions: []string{"gold_jump"}, Desc: "Jump to the nearest gold glyph"},
+			{Keys: ":auto on", Desc: "Fire both weapons continuously without holding a key; on by default"},
+		},
+	},
+	{
+		Key: "insert", Title: "INSERT MODE",
+		Entries: []entryDef{
+			{Keys: "Printable", Desc: "Type the character as a glyph at the cursor"},
+			{Keys: "Space", Desc: "Delete the glyph at the cursor and move right"},
+			{Keys: "Backspace", Desc: "Delete the glyph to the left and move there"},
+			{Actions: []string{"text_delete_current"}, Scope: input.SectionText, Desc: "Delete the glyph at the cursor without moving"},
+			{Keys: "Arrows Home End PgUp PgDn", Desc: "Move the cursor without leaving INSERT"},
+			{Keys: "Tab  Shift+Tab  Enter", Desc: "Nugget jump, gold jump and main fire still work"},
+			{Keys: "ESC", Desc: "Return to NORMAL"},
+		},
+	},
+	{
+		Key: "search", Title: "SEARCH",
+		Entries: []entryDef{
+			{Keys: "/{text} Enter", Desc: "Move the cursor to the first match, wrapping around the map"},
+			{Actions: []string{"special_search_next", "special_search_prev"}, Desc: "Next and previous match of the last pattern"},
+			{Keys: "Backspace  ESC", Desc: "Edit the pattern, or cancel the search"},
+		},
+	},
+	{
+		Key: "cmdline", Title: "COMMAND LINE",
+		Entries: []entryDef{
+			{Keys: ":{command} Enter", Desc: "Run a command; the game resumes when it completes"},
+			{Keys: "Up  Down", Desc: "Walk the command history"},
+			{Keys: "Left Right Home End", Desc: "Move within the line"},
+			{Keys: "ESC", Desc: "Discard the line and resume the game"},
+		},
+	},
+	{
+		Key: "macros", Title: "MACROS",
+		Entries: []entryDef{
+			{Keys: "q{a-z}", Desc: "Start recording input into a register"},
+			{Keys: "q", Desc: "Stop recording"},
+			{Keys: "[count]@{a-z}", Desc: "Replay a register, count times"},
+			{Keys: "@@{a-z}", Desc: "Replay a register until it is stopped"},
+			{Keys: "@@@", Desc: "Replay every recorded register until stopped"},
+			{Keys: "q{a-z}", Desc: "While that register plays, stop it and record over it"},
+			{Keys: "q@", Desc: "Stop every playing register"},
+			{Keys: "Ctrl+Space", Desc: "Stop every playing register, from any mode"},
+		},
+	},
+	{
+		Key: "mouse", Title: "MOUSE",
+		Entries: []entryDef{
+			{Keys: "Left", Desc: "Move the cursor there and fire the main weapon; hold to repeat"},
+			{Keys: "Left drag", Desc: "Drag the cursor with the button held"},
+			{Keys: "Right", Desc: "Fire the special weapon where the cursor already is; hold to repeat"},
+			{Keys: "Wheel", Desc: "Move the cursor without firing"},
+			{Keys: "Motion", Desc: "Track the cursor with no button held; toggled by :free"},
+			{Keys: ":mouse disable", Desc: "Ignore all pointer input"},
+		},
+	},
+	{
+		Key: "overlay", Title: "OVERLAY",
+		Entries: []entryDef{
+			{Actions: []string{"motion_left", "motion_down", "motion_up", "motion_right"}, Scope: input.SectionOverlay,
+				Desc: "Select a card in DEBUG, or scroll a row in HELP; the arrow keys do the same"},
+			{Actions: []string{"motion_screen_top", "motion_screen_bottom"}, Scope: input.SectionOverlay,
+				Desc: "First and last card, or the top and bottom of the page"},
+			{Actions: []string{"overlay_activate"}, Scope: input.SectionOverlay, All: true,
+				Desc: "Pin or unpin the selected card; pins lead the overlay and feed the live HUD"},
+			{Actions: []string{"overlay_page_up", "overlay_page_down"}, Scope: input.SectionOverlay, Desc: "Scroll a page"},
+			{Actions: []string{"overlay_close"}, Scope: input.SectionOverlay, All: true, Desc: "Close the overlay"},
+		},
+	},
+	{
+		Key: "commands", Title: "COMMANDS",
+		Entries: []entryDef{
+			{Keys: ":h  :?", Desc: "This help"},
+			{Keys: ":about", Desc: "Version, engine and licence"},
+			{Keys: ":n", Desc: "New game"},
+			{Keys: ":q", Desc: "Quit"},
+			{Keys: ":content", Desc: "Corpus source, file counts and served blocks in the status bar"},
+			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
+			{Keys: ":auto [on|off]", Desc: "Auto-fire both weapons; on by default"},
+			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
+		},
+	},
+	{
+		Key: "debug", Title: "DEBUG COMMANDS",
+		Entries: []entryDef{
+			{Keys: ":d", Desc: "Open the debug overlay"},
+			{Keys: ":d save", Desc: "Write a standalone status snapshot file"},
+			{Keys: ":d hud [on|off]", Desc: "Draw the pinned cards live over the game area"},
+			{Keys: ":d unpin", Desc: "Clear every pinned card"},
+			{Keys: ":energy N", Desc: "Set player energy; negative values are valid"},
+			{Keys: ":heat N", Desc: "Set player heat, clamped to the maximum"},
+			{Keys: ":boost", Desc: "Max heat and activate boost"},
+			{Keys: ":god  :demon", Desc: "Max heat, full positive or negative energy, and every weapon"},
+			{Keys: ":blossom  :decay", Desc: "Trigger a blossom or decay wave"},
+			{Keys: ":cleaner  :dust", Desc: "Sweep cleaners, or transform every glyph to dust"},
+			{Keys: ":system <name> enable|disable", Desc: "Toggle one registered system"},
+			{Keys: ":emit <Event> [{payload}]", Desc: "Emit an event with an inline TOML payload"},
+			{Keys: ":flow [group]  :graph [group]", Desc: "Flow field and navigation graph overlays for a target group"},
+		},
+	},
+	{
+		Key: "logging", Title: "LOGGING",
+		Entries: []entryDef{
+			{Keys: ":log", Desc: "Report the session log target, level, scope and recorder depth"},
+			{Keys: ":log on|off", Desc: "Start or stop the session log; each start opens a new file"},
+			{Keys: ":log level <lvl>", Desc: "trace, debug, info, warn or error"},
+			{Keys: ":log scope <spec>", Desc: "app fsm event dispatch push input stat rec lock tap; also all, none, short letters, +x, -x"},
+			{Keys: ":log stat <ticks>", Desc: "Periodic status snapshot period in game ticks; 0 disables"},
+			{Keys: ":log rec <ticks>", Desc: "Flight recorder ring depth in game ticks; 0 disables"},
+			{Keys: ":log rec flush", Desc: "Write the current recorder window on the next tick"},
+			{Keys: ":log rec fsm [on|off]", Desc: "Flush the recorder on every FSM transition"},
+		},
+	},
+}
