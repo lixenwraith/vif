@@ -170,6 +170,19 @@ type GameSpeedPayload struct {
 	Den int64 `toml:"den"`
 }
 
+// GameStepPayload arms a debug step: Ticks > 0 advances that many game ticks
+// while paused, otherwise Mode selects a run-until condition
+type GameStepPayload struct {
+	Mode   string `toml:"mode"`   // "", "fsm", "event"
+	Region string `toml:"region"` // fsm: "" matches any region
+	Event  string `toml:"event"`  // event: event name
+	Ticks  int64  `toml:"ticks"`
+	Num    int64  `toml:"num"` // run rate; 0 keeps the current rate
+	Den    int64  `toml:"den"`
+	Pause  bool   `toml:"pause"` // pause when the condition trips
+	Off    bool   `toml:"off"`   // disarm any pending request
+}
+
 // --- Nugget ---
 
 // NuggetCollectedPayload signals successful nugget collection

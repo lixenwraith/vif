@@ -74,6 +74,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventMetaAboutRequest,
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
+		event.EventGameStepRequest,
 		event.EventGameReset,
 	}
 }
@@ -127,6 +128,10 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGameSpeedRequest:
 		p, _ := ev.Payload.(*event.GameSpeedPayload)
 		s.handleSpeedRequest(p)
+
+	case event.EventGameStepRequest:
+		p, _ := ev.Payload.(*event.GameStepPayload)
+		s.handleStepRequest(p)
 	}
 }
 
@@ -184,7 +189,7 @@ func (s *MetaSystem) handleGameReset() {
 	s.ctx.SetOverlayContent(nil)
 
 	// 7. Restore real-time pacing; speed is a debugging aid, not session state
-	s.ctx.TimeCtl.SetScale(engine.ScaleNormal)
+	s.handleSpeedRequest(nil)
 
 	// 8. Signal FSM reset - Non-blocking
 
@@ -335,10 +340,74 @@ func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 	if p != nil && p.Num > 0 && p.Den > 0 {
 		scale = engine.TimeScale{Num: p.Num, Den: p.Den}
 	}
-	if s.ctx.TimeCtl.Scale() == scale {
+	// if s.ctx.TimeCtl.Scale() == scale {
+	if s.ctx.TimeCtl.Scale() == scale && s.ctx.TimeCtl.Armed() == nil {
 		return
 	}
 	s.ctx.TimeCtl.SetScale(scale)
 	vlog.Info("app", "msg", "time scale", "scale", scale.String())
 	s.ctx.PushEvent(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
+}
+
+// handleStepRequest arms a tick allowance or a run-until breakpoint; pause and
+// rate move through their single owner here
+func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
+	if p == nil || p.Off {
+		s.handleSpeedRequest(nil) // restores 1x and disarms
+		return
+	}
+
+	if p.Ticks > 0 {
+		n := min(p.Ticks, int64(parameter.StepBurstMax))
+		s.handlePauseRequest(true)
+		s.ctx.TimeCtl.StepTicks(n)
+		vlog.Info("app", "msg", "step", "ticks", n)
+		return
+	}
+
+	cur := s.ctx.TimeCtl.Scale()
+	run := cur
+	if p.Num > 0 && p.Den > 0 {
+		run = engine.TimeScale{Num: p.Num, Den: p.Den}
+	}
+
+	bs := &engine.BreakState{
+		Restore: cur,
+		Pause:   p.Pause,
+		Expiry:  s.world.Resources.Game.State.GetGameTicks() + parameter.StepRunMaxTicks,
+	}
+
+	switch strings.ToLower(p.Mode) {
+	case "fsm":
+		bs.Mode = engine.StepFSM
+		bs.Region = p.Region
+		bs.Label = "fsm " + regionLabel(p.Region)
+	case "event", "ev":
+		et, ok := event.GetEventType(p.Event)
+		if !ok || et == event.EventNone {
+			s.ctx.SetStatusMessage("Unknown event: "+p.Event, 0, true)
+			return
+		}
+		bs.Mode = engine.StepEvent
+		bs.Event = et
+		bs.Label = "ev " + event.GetEventName(et)
+	default:
+		return
+	}
+
+	bs.Label += " @" + run.String()
+	if bs.Pause {
+		bs.Label += " pause"
+	}
+	s.ctx.TimeCtl.Arm(bs, run)
+	vlog.Info("app", "msg", "break armed", "on", bs.Label, "expiry", bs.Expiry)
+	s.ctx.SetStatusMessage("Run until "+bs.Label, 0, true)
+}
+
+// regionLabel renders an empty region filter as the wildcard it is
+func regionLabel(r string) string {
+	if r == "" {
+		return "any"
+	}
+	return r
 }

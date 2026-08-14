@@ -30,7 +30,7 @@ var commandNames = []string{
 	"a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
-	"speed", "sp",
+	"sp", "speed", "st", "step",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -67,6 +67,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleAutoCommand(ctx, args)
 	case "sp", "speed":
 		return handleSpeedCommand(ctx, args)
+	case "st", "step":
+		return handleStepCommand(ctx, args)
 	case "s", "system":
 		return handleSystemCommand(ctx, args)
 	case "m", "mouse":
@@ -730,5 +732,78 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 	ctx.PushEvent(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
 	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusMessageDefaultTimeout, true)
 	ctx.SetLastCommand(":speed " + next.String())
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleStepCommand advances the paused simulation or arms a run-until breakpoint
+// Usage: :step [n] | :step [rate] fsm [region] [pause] | :step [rate] ev <Event> [pause] | :step off
+func handleStepCommand(ctx *engine.GameContext, args []string) CommandResult {
+	p := &event.GameStepPayload{}
+
+	switch {
+	case len(args) == 0:
+		p.Ticks = 1
+
+	case strings.EqualFold(args[0], "off"), strings.EqualFold(args[0], "clear"):
+		p.Off = true
+
+	default:
+		rest := args
+		if s, ok := engine.ParseScale(args[0]); ok && len(args) > 1 {
+			p.Num, p.Den = s.Num, s.Den
+			rest = args[1:]
+		}
+		if p.Num == 0 && len(rest) == 1 {
+			if n, err := strconv.Atoi(rest[0]); err == nil {
+				if n < 1 {
+					return stepUsage(ctx)
+				}
+				p.Ticks = int64(n)
+				break
+			}
+		}
+		if !parseStepCond(p, rest) {
+			return stepUsage(ctx)
+		}
+	}
+
+	ctx.PushEvent(event.EventGameStepRequest, p)
+	ctx.SetLastCommand(":step " + strings.Join(args, " "))
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// parseStepCond fills the run-until fields from "fsm [region]" or "ev <Event>",
+// with an optional trailing "pause"
+func parseStepCond(p *event.GameStepPayload, args []string) bool {
+	if len(args) > 0 && strings.EqualFold(args[len(args)-1], "pause") {
+		p.Pause = true
+		args = args[:len(args)-1]
+	}
+	if len(args) == 0 {
+		return false
+	}
+	switch strings.ToLower(args[0]) {
+	case "fsm":
+		p.Mode = "fsm"
+		if len(args) > 1 {
+			p.Region = args[1]
+		}
+		return len(args) <= 2
+	case "ev", "event":
+		if len(args) != 2 {
+			return false
+		}
+		p.Mode = "event"
+		p.Event = args[1]
+		if !strings.HasPrefix(p.Event, "Event") {
+			p.Event = "Event" + p.Event
+		}
+		return true
+	}
+	return false
+}
+
+func stepUsage(ctx *engine.GameContext) CommandResult {
+	setCommandError(ctx, "Usage: :step [n] | :step [rate] fsm [region] [pause] | :step [rate] ev <Event> [pause] | :step off")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

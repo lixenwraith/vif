@@ -21,13 +21,13 @@ import (
 type ClockScheduler struct {
 	world *World
 
-	clock Clock
-	ctl   *TimeControl
-	// pausableClock *PausableClock
+	clock    Clock
+	ctl      *TimeControl
 	isPaused *atomic.Bool
 
 	// Tick configuration
 	tickInterval     time.Duration
+	stepping         bool      // scheduler-goroutine only; opens the pause gate for one tick
 	lastGameTickTime time.Time // Last tick in game time
 	gameStartTime    time.Time // Game session start for elapsed calculation
 	nextTickDeadline time.Time // Next tick deadline for drift correction
@@ -220,6 +220,9 @@ func (cs *ClockScheduler) bindFSMTelemetry() {
 			return
 		}
 		status.TriggerFSM(region)
+		if bs := cs.ctl.Trip(StepFSM, region, event.EventNone); bs != nil {
+			cs.breakHit(bs, region+" "+cs.fsm.StateName(from)+" -> "+cs.fsm.StateName(to))
+		}
 		if !vlog.On("fsm", vlog.LevelInfo) {
 			return
 		}
@@ -303,6 +306,8 @@ func (cs *ClockScheduler) schedulerLoop() {
 	frameTimer := stoppedTimer()
 	defer frameTimer.Stop()
 
+	wasPaused := false
+
 	for {
 		select {
 		case <-cs.stopChan:
@@ -319,9 +324,20 @@ func (cs *ClockScheduler) schedulerLoop() {
 		var sleepDuration time.Duration // wall clock
 
 		if cs.isPaused.Load() {
+			if cs.ctl.TakeStep() {
+				cs.stepTick()
+				continue // drain the allowance without sleeping
+			}
+			wasPaused = true
 			// Game time is frozen, so no game duration converts; poll on wall time
 			sleepDuration = parameter.PausedPollInterval
 		} else {
+			if wasPaused {
+				// Game time stood still or was stepped; re-anchor so the first
+				// live tick is not owed a burst
+				cs.nextTickDeadline = cs.clock.Now().Add(cs.tickInterval)
+				wasPaused = false
+			}
 			gameNow := cs.clock.Now()
 			deadline := cs.nextTickDeadline
 
@@ -373,6 +389,36 @@ func (cs *ClockScheduler) schedulerLoop() {
 	}
 }
 
+// stepTick advances frozen game time by one interval and runs the tick past the
+// pause gate. Render backpressure is skipped: the render loop grants no frame
+// while paused, and a step is an inspection request, not a paced one.
+func (cs *ClockScheduler) stepTick() {
+	cs.clock.Step(cs.tickInterval)
+	cs.stepping = true
+	cs.processTick()
+	cs.stepping = false
+
+	select {
+	case cs.updateDone <- struct{}{}:
+	default:
+	}
+}
+
+// breakHit applies a tripped request: flush the recorder window, report the
+// cause, and pause when asked
+func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
+	status.Trigger(status.TrigBreak)
+	vlog.Info("app", "msg", "breakpoint",
+		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
+
+	if bs.Pause {
+		cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: true})
+	}
+	cs.world.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+		Message: "Break: " + cause, DurationOverride: true,
+	})
+}
+
 // awaitFrame applies render backpressure: at real time and slower a tick waits
 // for the render loop, bounded by a timeout so a stalled terminal cannot freeze
 // the simulation. Above real time the operator has asked the world to outrun the
@@ -392,6 +438,7 @@ func (cs *ClockScheduler) awaitFrame(t *time.Timer) bool {
 	select {
 	case <-cs.frameReady:
 	case <-t.C:
+	case <-cs.ctl.Wake(): // rate or pause changed; recompute rather than wait it out
 	case <-cs.stopChan:
 		return false
 	}
@@ -492,6 +539,12 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 	perEvent := vlog.On("dispatch", vlog.LevelTrace)
 	summary := vlog.On("event", vlog.LevelDebug)
 
+	// Breakpoint probe: one pointer load per pass, one compare per event
+	var brkEv event.EventType
+	if bs := cs.ctl.Armed(); bs != nil && bs.Mode == StepEvent {
+		brkEv = bs.Event
+	}
+
 	var nFSM, nSys, nDead int
 	for _, ev := range eventsList {
 		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
@@ -520,6 +573,13 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 
 		for _, h := range handlers {
 			h.HandleEvent(ev)
+		}
+
+		if brkEv != 0 && ev.Type == brkEv {
+			if bs := cs.ctl.Trip(StepEvent, "", ev.Type); bs != nil {
+				cs.breakHit(bs, event.GetEventName(ev.Type))
+			}
+			brkEv = 0
 		}
 	}
 
@@ -593,7 +653,7 @@ func (cs *ClockScheduler) DispatchEventsImmediately() {
 
 // processTick executes one clock cycle
 func (cs *ClockScheduler) processTick() {
-	if cs.isPaused.Load() {
+	if cs.isPaused.Load() && !cs.stepping {
 		return
 	}
 
@@ -653,6 +713,9 @@ func (cs *ClockScheduler) processTick() {
 
 	// Lock-free / internally synchronized paths only below this line
 	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
+	if bs := cs.ctl.Expire(ticks); bs != nil {
+		cs.breakHit(bs, "expired")
+	}
 
 	// Update APM based on game time
 	cs.world.Resources.Game.State.UpdateAPM(

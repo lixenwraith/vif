@@ -25,6 +25,7 @@ const (
 	TrigRace   = "race"
 	TrigCrash  = "crash"
 	TrigManual = "manual"
+	TrigBreak  = "break"
 )
 
 // active is the process-wide recorder, so triggers reach it from packages

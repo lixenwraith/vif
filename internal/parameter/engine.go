@@ -19,6 +19,12 @@ const (
 	// PausedPollInterval is the scheduler's wall-clock poll period while paused
 	PausedPollInterval = 50 * time.Millisecond
 
+	// StepBurstMax caps the ticks one :step request may advance
+	StepBurstMax = 10000
+
+	// StepRunMaxTicks is the tick budget a run-until request spends before self-disarming
+	StepRunMaxTicks = 20000
+
 	// EventLoopBackoffMax is the maximum number of intervals that failure to acquire lock is tolerated (deferred to next event tick)
 	EventLoopBackoffMax = 2
 

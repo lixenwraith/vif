@@ -123,6 +123,8 @@ const (
 	EventGameSpeedRequest
 	// EventGameSpeedChanged (GameSpeedPayload) announces the applied time scale
 	EventGameSpeedChanged
+	// EventGameStepRequest (GameStepPayload) asks MetaSystem to step ticks or arm a run-until breakpoint
+	EventGameStepRequest
 
 	// --- FSM ---
 
