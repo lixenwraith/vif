@@ -11,21 +11,17 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
-
-// Vec3 is a 3D vector in Q32.32
-type Vec3 struct {
-	X, Y, Z int64
-}
 
 // Part represents one composite sphere entity
 type Part struct {
-	Pos, Vel Vec3
-	Mass     int64 // Q32.32
-	Radius   int64 // Q32.32
+	Pos, Vel vmath.Vec3F
+	Mass     float64
+	Radius   float64
 	Color    color.RGB
 	Frozen   bool
-	Flash    int64 // Q32.32 remaining flash seconds
+	Flash    float64
 }
 
 type projected struct {
@@ -38,23 +34,23 @@ const (
 	framePeriod  = time.Second / targetFPS
 	flashSeconds = 0.2
 	hudRows      = 2
+
+	boundsX    = 16.0
+	boundsY    = 8.0
+	boundsZMin = 3.0
+	boundsZMax = 32.0
+
+	focalLen            = 14.0
+	restitution         = 0.8
+	partRadius          = 2.8
+	massDefault         = 5.0
+	massStep            = 0.5
+	massMin             = 0.1
+	massMax             = 20.0
+	frozenCollisionMass = math.MaxFloat64
 )
 
 var (
-	boundsX    = vmath.FromFloat(16.0)
-	boundsY    = vmath.FromFloat(8.0)
-	boundsZMin = vmath.FromFloat(3.0)
-	boundsZMax = vmath.FromFloat(32.0)
-
-	focalLen    = vmath.FromFloat(14.0)
-	restitution = vmath.FromFloat(0.8)
-	partRadius  = vmath.FromFloat(2.8)
-	massDefault = vmath.FromFloat(5.0)
-	massStep    = vmath.FromFloat(0.5)
-	massMin     = vmath.FromFloat(0.1)
-	massMax     = vmath.FromFloat(20.0)
-	flashDur    = vmath.FromFloat(flashSeconds)
-
 	// Precomputed lighting (float64 for per-pixel shading path)
 	lightX, lightY, lightZ float64
 	halfX, halfY, halfZ    float64
@@ -71,56 +67,7 @@ func initLighting() {
 	halfX, halfY, halfZ = hx/m, hy/m, hz/m
 }
 
-// --- Vec3 operations using vmath primitives ---
-
-func v3Sub(a, b Vec3) Vec3 {
-	return Vec3{a.X - b.X, a.Y - b.Y, a.Z - b.Z}
-}
-
-func v3Add(a, b Vec3) Vec3 {
-	return Vec3{a.X + b.X, a.Y + b.Y, a.Z + b.Z}
-}
-
-func v3Scale(v Vec3, s int64) Vec3 {
-	return Vec3{vmath.Mul(v.X, s), vmath.Mul(v.Y, s), vmath.Mul(v.Z, s)}
-}
-
-func v3Dot(a, b Vec3) int64 {
-	return vmath.Mul(a.X, b.X) + vmath.Mul(a.Y, b.Y) + vmath.Mul(a.Z, b.Z)
-}
-
-func v3MagSq(v Vec3) int64 {
-	return vmath.Mul(v.X, v.X) + vmath.Mul(v.Y, v.Y) + vmath.Mul(v.Z, v.Z)
-}
-
-func v3Mag(v Vec3) int64 {
-	return vmath.Sqrt(v3MagSq(v))
-}
-
-func v3Normalize(v Vec3) Vec3 {
-	m := v3Mag(v)
-	if m == 0 {
-		return Vec3{}
-	}
-	return Vec3{vmath.Div(v.X, m), vmath.Div(v.Y, m), vmath.Div(v.Z, m)}
-}
-
 // --- Physics ---
-
-// reflectAxis clamps position and reflects velocity on boundary contact
-func reflectAxis(pos, vel *int64, lo, hi, e int64) {
-	if *pos < lo {
-		*pos = lo
-		if *vel < 0 {
-			*vel = -vmath.Mul(*vel, e)
-		}
-	} else if *pos > hi {
-		*pos = hi
-		if *vel > 0 {
-			*vel = -vmath.Mul(*vel, e)
-		}
-	}
-}
 
 // resolveCollision performs 3D elastic sphere-sphere collision
 func resolveCollision(a, b *Part) {
@@ -128,84 +75,43 @@ func resolveCollision(a, b *Part) {
 		return
 	}
 
-	delta := v3Sub(b.Pos, a.Pos)
-	dist := v3Mag(delta)
-	minDist := a.Radius + b.Radius
-
-	if dist >= minDist || dist == 0 {
-		return
-	}
-
-	// Collision normal from a toward b
-	n := Vec3{
-		vmath.Div(delta.X, dist),
-		vmath.Div(delta.Y, dist),
-		vmath.Div(delta.Z, dist),
-	}
-
-	// Separate overlap unconditionally
-	overlap := minDist - dist
-	separateParts(a, b, n, overlap)
-
-	// Impulse only if approaching
-	relVel := v3Sub(a.Vel, b.Vel)
-	vn := v3Dot(relVel, n)
-	if vn <= 0 {
-		return
-	}
-
-	// Inverse masses (frozen = infinite mass → zero inverse)
-	var invA, invB int64
-	if !a.Frozen {
-		invA = vmath.Div(vmath.Scale, a.Mass)
-	}
-	if !b.Frozen {
-		invB = vmath.Div(vmath.Scale, b.Mass)
-	}
-	invSum := invA + invB
-	if invSum == 0 {
-		return
-	}
-
-	// j = (1 + e) * vn / (1/mA + 1/mB)
-	j := vmath.Div(vmath.Mul(vmath.Scale+restitution, vn), invSum)
-
-	if !a.Frozen {
-		a.Vel = v3Sub(a.Vel, v3Scale(n, vmath.Mul(j, invA)))
-	}
-	if !b.Frozen {
-		b.Vel = v3Add(b.Vel, v3Scale(n, vmath.Mul(j, invB)))
-	}
-
-	a.Flash = flashDur
-	b.Flash = flashDur
-}
-
-func separateParts(a, b *Part, n Vec3, overlap int64) {
-	if overlap <= 0 {
-		return
-	}
-	margin := vmath.Scale / 16
-
+	massA, massB := a.Mass, b.Mass
 	if a.Frozen {
-		b.Pos = v3Add(b.Pos, v3Scale(n, overlap+margin))
-	} else if b.Frozen {
-		a.Pos = v3Sub(a.Pos, v3Scale(n, overlap+margin))
-	} else {
-		half := overlap/2 + margin
-		a.Pos = v3Sub(a.Pos, v3Scale(n, half))
-		b.Pos = v3Add(b.Pos, v3Scale(n, half))
+		massA = frozenCollisionMass
+	}
+	if b.Frozen {
+		massB = frozenCollisionMass
+	}
+
+	if !physics.SeparateOverlap3D(&a.Pos, &b.Pos, a.Radius, b.Radius, massA, massB) {
+		return
+	}
+
+	collided := physics.ElasticCollision3D(
+		&a.Pos, &b.Pos,
+		&a.Vel, &b.Vel,
+		massA, massB, restitution,
+	)
+	if a.Frozen {
+		a.Vel = vmath.Vec3F{}
+	}
+	if b.Frozen {
+		b.Vel = vmath.Vec3F{}
+	}
+	if collided {
+		a.Flash = flashSeconds
+		b.Flash = flashSeconds
 	}
 }
 
 // --- Projection ---
 
 func projectPart(p *Part, idx, screenW, screenH int) projected {
-	z := vmath.ToFloat(p.Pos.Z)
-	x := vmath.ToFloat(p.Pos.X)
-	y := vmath.ToFloat(p.Pos.Y)
-	r := vmath.ToFloat(p.Radius)
-	f := vmath.ToFloat(focalLen)
+	z := p.Pos.Z
+	x := p.Pos.X
+	y := p.Pos.Y
+	r := p.Radius
+	f := focalLen
 
 	denom := z + f
 	if denom < 0.5 {
@@ -243,8 +149,8 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 	maxY := min(viewH-1, int(proj.cy+prY+1))
 
 	// Neon: boost saturation, use depth for intensity not darkness
-	zMin := vmath.ToFloat(boundsZMin)
-	zMax := vmath.ToFloat(boundsZMax)
+	zMin := boundsZMin
+	zMax := boundsZMax
 	depthT := (proj.depth - zMin) / (zMax - zMin)
 	depthT = math.Max(0, math.Min(1, depthT))
 	depthBright := 1.0 - depthT*0.4 // Less depth falloff
@@ -256,7 +162,7 @@ func renderSphere(buf *render.RenderBuffer, p *Part, proj projected, isSelected 
 
 	flashT := 0.0
 	if p.Flash > 0 {
-		flashT = vmath.ToFloat(p.Flash) / flashSeconds
+		flashT = p.Flash / flashSeconds
 	}
 
 	sphereRadiusSq := 1.0
@@ -397,7 +303,7 @@ func renderHUD(buf *render.RenderBuffer, parts *[3]Part, selected, screenW, scre
 		if parts[i].Frozen {
 			frozen = " [F]"
 		}
-		s := fmt.Sprintf("%sPart%d m=%.1f%s", marker, i+1, vmath.ToFloat(parts[i].Mass), frozen)
+		s := fmt.Sprintf("%sPart%d m=%.1f%s", marker, i+1, parts[i].Mass, frozen)
 
 		fg := parts[i].Color
 		if parts[i].Frozen {
@@ -489,7 +395,7 @@ func main() {
 					case ev.Key == terminal.KeyRune && ev.Rune == 'f':
 						parts[selected].Frozen = !parts[selected].Frozen
 						if parts[selected].Frozen {
-							parts[selected].Vel = Vec3{}
+							parts[selected].Vel = vmath.Vec3F{}
 						}
 					case ev.Key == terminal.KeyUp:
 						parts[selected].Mass += massStep
@@ -522,10 +428,8 @@ func main() {
 			if dtSec > 0.1 {
 				dtSec = 0.1
 			}
-			dt := vmath.FromFloat(dtSec)
-
 			if !paused {
-				simulate(&parts, dt)
+				simulate(&parts, dtSec)
 			}
 
 			// Render
@@ -536,51 +440,25 @@ func main() {
 	}
 }
 
-// func initParts() [3]Part {
-// 	return [3]Part{
-// 		{
-// 			Pos:    Vec3{vmath.FromFloat(-4.0), vmath.FromFloat(-2.0), vmath.FromFloat(10.0)},
-// 			Vel:    Vec3{vmath.FromFloat(5.0), vmath.FromFloat(2.0), vmath.FromFloat(-3.0)},
-// 			Mass:   massDefault,
-// 			Radius: partRadius,
-// 			Color:  color.RGB{R: 80, G: 160, B: 255}, // Blue
-// 		},
-// 		{
-// 			Pos:    Vec3{vmath.FromFloat(3.0), vmath.FromFloat(1.5), vmath.FromFloat(18.0)},
-// 			Vel:    Vec3{vmath.FromFloat(-3.0), vmath.FromFloat(-4.0), vmath.FromFloat(4.0)},
-// 			Mass:   massDefault,
-// 			Radius: partRadius,
-// 			Color:  color.RGB{R: 255, G: 90, B: 90}, // Red
-// 		},
-// 		{
-// 			Pos:    Vec3{vmath.FromFloat(0.0), vmath.FromFloat(0.0), vmath.FromFloat(24.0)},
-// 			Vel:    Vec3{vmath.FromFloat(2.0), vmath.FromFloat(3.5), vmath.FromFloat(-6.0)},
-// 			Mass:   massDefault,
-// 			Radius: partRadius,
-// 			Color:  color.RGB{R: 90, G: 255, B: 120}, // Green
-// 		},
-// 	}
-// }
-
 func initParts() [3]Part {
 	return [3]Part{
 		{
-			Pos:    Vec3{vmath.FromFloat(-4.0), vmath.FromFloat(-2.0), vmath.FromFloat(10.0)},
-			Vel:    Vec3{vmath.FromFloat(5.0), vmath.FromFloat(2.0), vmath.FromFloat(-3.0)},
+			Pos:    vmath.Vec3F{X: -4.0, Y: -2.0, Z: 10.0},
+			Vel:    vmath.Vec3F{X: 5.0, Y: 2.0, Z: -3.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 40, G: 180, B: 255}, // Cyan
 		},
 		{
-			Pos:    Vec3{vmath.FromFloat(3.0), vmath.FromFloat(1.5), vmath.FromFloat(18.0)},
-			Vel:    Vec3{vmath.FromFloat(-3.0), vmath.FromFloat(-4.0), vmath.FromFloat(4.0)},
+			Pos:    vmath.Vec3F{X: 3.0, Y: 1.5, Z: 18.0},
+			Vel:    vmath.Vec3F{X: -3.0, Y: -4.0, Z: 4.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 255, G: 60, B: 120}, // Magenta
 		},
 		{
-			Pos:    Vec3{vmath.FromFloat(0.0), vmath.FromFloat(0.0), vmath.FromFloat(24.0)},
-			Vel:    Vec3{vmath.FromFloat(2.0), vmath.FromFloat(3.5), vmath.FromFloat(-6.0)},
+			Pos:    vmath.Vec3F{X: 0.0, Y: 0.0, Z: 24.0},
+			Vel:    vmath.Vec3F{X: 2.0, Y: 3.5, Z: -6.0},
 			Mass:   massDefault,
 			Radius: partRadius,
 			Color:  color.RGB{R: 120, G: 255, B: 80}, // Lime
@@ -588,13 +466,13 @@ func initParts() [3]Part {
 	}
 }
 
-func simulate(parts *[3]Part, dt int64) {
+func simulate(parts *[3]Part, dt float64) {
 	// Integrate positions
 	for i := range parts {
 		if parts[i].Frozen {
 			continue
 		}
-		parts[i].Pos = v3Add(parts[i].Pos, v3Scale(parts[i].Vel, dt))
+		parts[i].Pos = vmath.V3FAdd(parts[i].Pos, vmath.V3FScale(parts[i].Vel, dt))
 	}
 
 	// Boundary reflection per axis
@@ -602,9 +480,9 @@ func simulate(parts *[3]Part, dt int64) {
 		if parts[i].Frozen {
 			continue
 		}
-		reflectAxis(&parts[i].Pos.X, &parts[i].Vel.X, -boundsX, boundsX, restitution)
-		reflectAxis(&parts[i].Pos.Y, &parts[i].Vel.Y, -boundsY, boundsY, restitution)
-		reflectAxis(&parts[i].Pos.Z, &parts[i].Vel.Z, boundsZMin, boundsZMax, restitution)
+		physics.ReflectAxis3D(&parts[i].Pos.X, &parts[i].Vel.X, -boundsX, boundsX, restitution)
+		physics.ReflectAxis3D(&parts[i].Pos.Y, &parts[i].Vel.Y, -boundsY, boundsY, restitution)
+		physics.ReflectAxis3D(&parts[i].Pos.Z, &parts[i].Vel.Z, boundsZMin, boundsZMax, restitution)
 	}
 
 	// Pair-wise sphere collisions

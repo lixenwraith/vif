@@ -8,8 +8,8 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
 // --- Visual Constants ---
@@ -43,8 +43,8 @@ const (
 )
 
 type Particle struct {
-	X, Y       int64
-	VelX, VelY int64
+	X, Y       float64
+	VelX, VelY float64
 	Age        int
 	MaxAge     int
 	Char       rune
@@ -60,10 +60,8 @@ type Missile struct {
 	Origin vmath.Point
 	Target vmath.Point
 
-	Age       int64
-	Phase     int64
-	SteerVecX int64
-	SteerVecY int64
+	Age   int
+	Phase float64
 
 	// Cluster submunitions
 	Children []*Missile
@@ -72,7 +70,7 @@ type Missile struct {
 	Bounces int
 
 	// Spiral state
-	Angle int64
+	Angle float64
 
 	Trail []Particle
 }
@@ -213,67 +211,62 @@ func updateTargets(targets []vmath.Point) {
 }
 
 func SpawnMissile(t MissileType, origin, target vmath.Point) *Missile {
+	originX, originY := origin.CenterF()
+	targetX, targetY := target.CenterF()
 	m := &Missile{
 		Type:   t,
 		Active: true,
 		Origin: origin,
 		Target: target,
 		Pos: physics.Kinetic{
-			PreciseX: vmath.FromInt(origin.X),
-			PreciseY: vmath.FromInt(origin.Y),
+			PreciseX: originX,
+			PreciseY: originY,
 		},
 		Trail: make([]Particle, 0, 100),
 	}
 
-	dx := vmath.FromInt(target.X - origin.X)
-	dy := vmath.FromInt(target.Y - origin.Y)
-	dist := vmath.Magnitude(dx, dy)
-	if dist == 0 {
-		dist = vmath.Scale
-	}
-	dirX := vmath.Div(dx, dist)
-	dirY := vmath.Div(dy, dist)
+	dirX, dirY := vmath.Normalize2DF(targetX-originX, targetY-originY)
 
 	switch t {
 	case MissileKinetic:
-		speed := vmath.FromInt(55)
-		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed) - vmath.FromInt(15)
+		const speed = 55.0
+		m.Pos.VelX = dirX * speed
+		m.Pos.VelY = dirY*speed - 15.0
 
 	case MissileHelix:
-		speed := vmath.FromInt(35)
-		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed)
+		const speed = 35.0
+		m.Pos.VelX = dirX * speed
+		m.Pos.VelY = dirY * speed
 
 	case MissileSeeker:
-		speed := vmath.FromInt(12)
-		perpX, perpY := vmath.Perpendicular(dirX, dirY)
+		const speed = 12.0
+		perpX, perpY := vmath.PerpendicularF(dirX, dirY)
 		if origin.Y > target.Y {
 			perpX, perpY = -perpX, -perpY
 		}
-		m.Pos.VelX = vmath.Mul(perpX, speed)
-		m.Pos.VelY = vmath.Mul(perpY, speed)
+		m.Pos.VelX = perpX * speed
+		m.Pos.VelY = perpY * speed
 
 	case MissileCluster:
-		speed := vmath.FromInt(40)
-		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed) - vmath.FromInt(8)
+		const speed = 40.0
+		m.Pos.VelX = dirX * speed
+		m.Pos.VelY = dirY*speed - 8.0
 
 	case MissileLaser:
 		// Instant - no velocity, handled in update
 
 	case MissileWave:
-		speed := vmath.FromInt(45)
-		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed)
+		const speed = 45.0
+		m.Pos.VelX = dirX * speed
+		m.Pos.VelY = dirY * speed
 
 	case MissileSpiral:
 		m.Angle = 0
 
 	case MissileBounce:
-		speed := vmath.FromInt(50)
-		m.Pos.VelX = vmath.Mul(dirX, speed)
-		m.Pos.VelY = vmath.Mul(dirY, speed)
+		const speed = 50.0
+		m.Pos.VelX = dirX * speed
+		m.Pos.VelY = dirY * speed
 		m.Bounces = 3
 	}
 
@@ -281,26 +274,26 @@ func SpawnMissile(t MissileType, origin, target vmath.Point) *Missile {
 }
 
 func UpdateMissiles(missiles []*Missile) {
-	dt := vmath.FromFloat(1.0 / 60.0)
+	const dt = 1.0 / 60.0
 
 	for _, m := range missiles {
 		if !m.Active {
-			UpdateTrail(m)
+			UpdateTrail(m, dt)
 			for _, c := range m.Children {
 				if c.Active {
 					updateSingleMissile(c, dt)
 				}
-				UpdateTrail(c)
+				UpdateTrail(c, dt)
 			}
 			continue
 		}
 
 		updateSingleMissile(m, dt)
-		UpdateTrail(m)
+		UpdateTrail(m, dt)
 	}
 }
 
-func updateSingleMissile(m *Missile, dt int64) {
+func updateSingleMissile(m *Missile, dt float64) {
 	if !m.Active {
 		return
 	}
@@ -308,15 +301,13 @@ func updateSingleMissile(m *Missile, dt int64) {
 
 	switch m.Type {
 	case MissileKinetic:
-		gravity := vmath.FromInt(25)
-		m.Pos.VelY += vmath.Mul(gravity, dt)
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+		m.Pos.VelY += 25.0 * dt
+		physics.IntegratePosition(&m.Pos, dt)
 
 		// Dense smoke trail
 		if m.Age%2 == 0 {
-			speed := vmath.Magnitude(m.Pos.VelX, m.Pos.VelY)
-			intensity := float64(speed) / float64(vmath.FromInt(80))
+			speed := vmath.MagnitudeF(m.Pos.VelX, m.Pos.VelY)
+			intensity := speed / 80.0
 			if intensity > 1 {
 				intensity = 1
 			}
@@ -333,93 +324,90 @@ func updateSingleMissile(m *Missile, dt int64) {
 		if m.Age%4 == 0 {
 			m.Trail = append(m.Trail, Particle{
 				X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
-				VelX:   int64(globalRng.Intn(int(vmath.Scale*2))) - vmath.Scale,
-				VelY:   int64(globalRng.Intn(int(vmath.Scale*2))) - vmath.Scale,
+				VelX:   globalRng.Float64()*2.0 - 1.0,
+				VelY:   globalRng.Float64()*2.0 - 1.0,
 				MaxAge: 8, Char: '·',
 				ColorStart: ColorFire, ColorEnd: ColorRed,
 			})
 		}
 
 	case MissileHelix:
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
-		m.Phase += vmath.FromInt(12)
+		physics.IntegratePosition(&m.Pos, dt)
+		m.Phase += vmath.DegToRad(12.0)
 
-		baseX, baseY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
-		perpX, perpY := vmath.Perpendicular(baseX, baseY)
+		baseX, baseY := vmath.Normalize2DF(m.Pos.VelX, m.Pos.VelY)
+		perpX, perpY := vmath.PerpendicularF(baseX, baseY)
 
 		// Triple helix with phase offsets
 		for i := range 3 {
-			phase := m.Phase + vmath.FromInt(i*120)
-			amp := vmath.FromFloat(2.5)
-			sinVal := vmath.Sin(phase)
-			cosVal := vmath.Cos(phase)
+			phase := m.Phase + vmath.DegToRad(float64(i)*120.0)
+			sinVal := vmath.SinF(phase)
+			cosVal := vmath.CosF(phase)
 
-			offX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
-			offY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
+			offX := perpX * 2.5 * sinVal
+			offY := perpY * 2.5 * sinVal
 
 			colors := []color.RGB{ColorCyan, ColorPink, ColorPurple}
 			m.Trail = append(m.Trail, Particle{
 				X: m.Pos.PreciseX + offX, Y: m.Pos.PreciseY + offY,
 				MaxAge: 18, Char: '∘',
 				ColorStart: colors[i], ColorEnd: color.RGB{R: 20, G: 20, B: 40},
-				Scale: 0.5 + 0.5*float64(cosVal)/float64(vmath.Scale),
+				Scale: 0.5 + 0.5*cosVal,
 			})
 		}
 
 	case MissileSeeker:
-		targetX := vmath.FromInt(m.Target.X)
-		targetY := vmath.FromInt(m.Target.Y)
+		targetX, targetY := m.Target.CenterF()
 		dx := targetX - m.Pos.PreciseX
 		dy := targetY - m.Pos.PreciseY
-		dist := vmath.Magnitude(dx, dy)
+		dist := vmath.MagnitudeF(dx, dy)
 
-		if dist < vmath.FromInt(2) {
+		if dist < 2.0 {
 			m.Active = false
 			spawnExplosion(m)
 			return
 		}
 
-		maxSpeed := vmath.FromInt(50)
-		steerForce := vmath.FromInt(100)
+		const (
+			maxSpeed   = 50.0
+			steerForce = 100.0
+		)
 
-		desiredX, desiredY := vmath.Normalize2D(dx, dy)
-		desiredX = vmath.Mul(desiredX, maxSpeed)
-		desiredY = vmath.Mul(desiredY, maxSpeed)
+		desiredX, desiredY := vmath.Normalize2DF(dx, dy)
+		desiredX *= maxSpeed
+		desiredY *= maxSpeed
 
 		steerX := desiredX - m.Pos.VelX
 		steerY := desiredY - m.Pos.VelY
-		steerX, steerY = vmath.ClampMagnitude(steerX, steerY, steerForce)
+		steerX, steerY = vmath.ClampMagnitudeF(steerX, steerY, steerForce)
 
-		m.Pos.VelX += vmath.Mul(steerX, dt)
-		m.Pos.VelY += vmath.Mul(steerY, dt)
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+		m.Pos.VelX += steerX * dt
+		m.Pos.VelY += steerY * dt
+		m.Pos.VelX, m.Pos.VelY = physics.CapSpeed(m.Pos.VelX, m.Pos.VelY, maxSpeed)
+		physics.IntegratePosition(&m.Pos, dt)
 
 		// Engine flare
-		velX, velY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
+		velX, velY := vmath.Normalize2DF(m.Pos.VelX, m.Pos.VelY)
 		m.Trail = append(m.Trail, Particle{
-			X:      m.Pos.PreciseX - vmath.Mul(velX, vmath.Scale),
-			Y:      m.Pos.PreciseY - vmath.Mul(velY, vmath.Scale),
+			X:      m.Pos.PreciseX - velX,
+			Y:      m.Pos.PreciseY - velY,
 			MaxAge: 10, Char: '▓',
 			ColorStart: ColorWhite, ColorEnd: ColorFire,
 		})
 		// Side exhaust
-		perpX, perpY := vmath.Perpendicular(velX, velY)
-		for _, sign := range []int64{1, -1} {
+		perpX, perpY := vmath.PerpendicularF(velX, velY)
+		for _, sign := range []float64{1, -1} {
 			m.Trail = append(m.Trail, Particle{
-				X:      m.Pos.PreciseX - vmath.Mul(velX, vmath.Scale/2) + sign*vmath.Mul(perpX, vmath.Scale/3),
-				Y:      m.Pos.PreciseY - vmath.Mul(velY, vmath.Scale/2) + sign*vmath.Mul(perpY, vmath.Scale/3),
+				X:      m.Pos.PreciseX - velX/2.0 + sign*perpX/3.0,
+				Y:      m.Pos.PreciseY - velY/2.0 + sign*perpY/3.0,
 				MaxAge: 6, Char: '·',
 				ColorStart: ColorCyan, ColorEnd: ColorBg,
 			})
 		}
 
 	case MissileCluster:
-		gravity := vmath.FromInt(18)
-		m.Pos.VelY += vmath.Mul(gravity, dt)
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+		m.Pos.VelY += 18.0 * dt
+		physics.IntegratePosition(&m.Pos, dt)
 
 		if m.Age%3 == 0 {
 			m.Trail = append(m.Trail, Particle{
@@ -437,13 +425,13 @@ func updateSingleMissile(m *Missile, dt int64) {
 				child := &Missile{
 					Type:   MissileSeeker,
 					Active: true,
-					Origin: vmath.Point{X: vmath.ToInt(m.Pos.PreciseX), Y: vmath.ToInt(m.Pos.PreciseY)},
+					Origin: vmath.PointAtF(m.Pos.PreciseX, m.Pos.PreciseY),
 					Target: m.Target,
 					Pos: physics.Kinetic{
 						PreciseX: m.Pos.PreciseX,
 						PreciseY: m.Pos.PreciseY,
-						VelX:     vmath.FromFloat(math.Cos(angle) * 20),
-						VelY:     vmath.FromFloat(math.Sin(angle) * 20),
+						VelX:     math.Cos(angle) * 20.0,
+						VelY:     math.Sin(angle) * 20.0,
 					},
 					Trail: make([]Particle, 0, 50),
 				}
@@ -454,8 +442,8 @@ func updateSingleMissile(m *Missile, dt int64) {
 				angle := float64(i) * math.Pi / 6
 				m.Trail = append(m.Trail, Particle{
 					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
-					VelX:   vmath.FromFloat(math.Cos(angle) * 3),
-					VelY:   vmath.FromFloat(math.Sin(angle) * 3),
+					VelX:   math.Cos(angle) * 3.0,
+					VelY:   math.Sin(angle) * 3.0,
 					MaxAge: 12, Char: '*',
 					ColorStart: ColorWhite, ColorEnd: ColorGold,
 				})
@@ -470,8 +458,8 @@ func updateSingleMissile(m *Missile, dt int64) {
 			steps := max(vmath.IntAbs(x2-x1), vmath.IntAbs(y2-y1))
 			for i := 0; i <= steps; i++ {
 				t := float64(i) / float64(steps)
-				px := vmath.FromFloat(float64(x1) + t*float64(x2-x1))
-				py := vmath.FromFloat(float64(y1) + t*float64(y2-y1))
+				px := float64(x1) + t*float64(x2-x1)
+				py := float64(y1) + t*float64(y2-y1)
 				m.Trail = append(m.Trail, Particle{
 					X: px, Y: py,
 					MaxAge: 15 - i/4, Char: '═',
@@ -482,10 +470,11 @@ func updateSingleMissile(m *Missile, dt int64) {
 			// Impact flash
 			for i := range 8 {
 				angle := float64(i) * math.Pi / 4
+				impactX, impactY := m.Target.CenterF()
 				m.Trail = append(m.Trail, Particle{
-					X: vmath.FromInt(x2), Y: vmath.FromInt(y2),
-					VelX:   vmath.FromFloat(math.Cos(angle) * 4),
-					VelY:   vmath.FromFloat(math.Sin(angle) * 4),
+					X: impactX, Y: impactY,
+					VelX:   math.Cos(angle) * 4.0,
+					VelY:   math.Sin(angle) * 4.0,
 					MaxAge: 10, Char: '✦',
 					ColorStart: ColorWhite, ColorEnd: ColorCyan,
 				})
@@ -496,18 +485,18 @@ func updateSingleMissile(m *Missile, dt int64) {
 		}
 
 	case MissileWave:
-		m.Phase += vmath.FromInt(8)
-		baseVelX, baseVelY := vmath.Normalize2D(m.Pos.VelX, m.Pos.VelY)
-		perpX, perpY := vmath.Perpendicular(baseVelX, baseVelY)
+		m.Phase += vmath.DegToRad(8.0)
+		baseVelX, baseVelY := vmath.Normalize2DF(m.Pos.VelX, m.Pos.VelY)
+		perpX, perpY := vmath.PerpendicularF(baseVelX, baseVelY)
 
 		// Sinusoidal offset
-		amp := vmath.FromFloat(4.0)
-		sinVal := vmath.Sin(m.Phase)
-		offsetX := vmath.Mul(vmath.Mul(perpX, amp), sinVal)
-		offsetY := vmath.Mul(vmath.Mul(perpY, amp), sinVal)
+		sinVal := vmath.SinF(m.Phase)
+		offsetX := perpX * 4.0 * sinVal
+		offsetY := perpY * 4.0 * sinVal
 
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt) + vmath.Mul(offsetX, dt*3)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt) + vmath.Mul(offsetY, dt*3)
+		physics.IntegratePosition(&m.Pos, dt)
+		m.Pos.PreciseX += offsetX * dt * 3.0
+		m.Pos.PreciseY += offsetY * dt * 3.0
 
 		// Rainbow trail
 		hue := int(m.Age) % 256
@@ -519,20 +508,19 @@ func updateSingleMissile(m *Missile, dt int64) {
 		})
 
 	case MissileSpiral:
-		m.Angle += vmath.FromFloat(0.15)
-		radius := vmath.FromFloat(float64(m.Age) * 0.3)
-		if radius > vmath.FromInt(25) {
+		m.Angle += 0.15
+		radius := float64(m.Age) * 0.3
+		if radius > 25.0 {
 			m.Active = false
 			return
 		}
 
-		centerX := vmath.FromInt(m.Origin.X)
-		centerY := vmath.FromInt(m.Origin.Y)
-		cos := vmath.Cos(m.Angle)
-		sin := vmath.Sin(m.Angle)
+		centerX, centerY := m.Origin.CenterF()
+		cos := vmath.CosF(m.Angle)
+		sin := vmath.SinF(m.Angle)
 
-		m.Pos.PreciseX = centerX + vmath.Mul(cos, radius)
-		m.Pos.PreciseY = centerY + vmath.Mul(sin, radius)/2 // Aspect correction
+		m.Pos.PreciseX = centerX + cos*radius
+		m.Pos.PreciseY = centerY + sin*radius/2.0 // Aspect correction
 
 		// Dual spiral trail
 		m.Trail = append(m.Trail, Particle{
@@ -542,25 +530,17 @@ func updateSingleMissile(m *Missile, dt int64) {
 		})
 		// Opposite arm
 		m.Trail = append(m.Trail, Particle{
-			X:      centerX - vmath.Mul(cos, radius),
-			Y:      centerY - vmath.Mul(sin, radius)/2,
+			X:      centerX - cos*radius,
+			Y:      centerY - sin*radius/2.0,
 			MaxAge: 30, Char: '◦',
 			ColorStart: ColorPurple, ColorEnd: ColorBg,
 		})
 
 	case MissileBounce:
-		m.Pos.PreciseX += vmath.Mul(m.Pos.VelX, dt)
-		m.Pos.PreciseY += vmath.Mul(m.Pos.VelY, dt)
+		physics.IntegratePosition(&m.Pos, dt)
 
-		px, py := vmath.ToInt(m.Pos.PreciseX), vmath.ToInt(m.Pos.PreciseY)
-		bounced := false
-
-		if px <= 0 || px >= screenWidth-1 {
-			m.Pos.VelX = -m.Pos.VelX
-			bounced = true
-		}
-		if py <= 0 || py >= screenHeight-2 {
-			m.Pos.VelY = -m.Pos.VelY
+		bounced := physics.ReflectBoundsX(&m.Pos, 0, screenWidth)
+		if physics.ReflectBoundsY(&m.Pos, 0, screenHeight-1) {
 			bounced = true
 		}
 
@@ -571,8 +551,8 @@ func updateSingleMissile(m *Missile, dt int64) {
 				angle := float64(globalRng.Intn(628)) / 100
 				m.Trail = append(m.Trail, Particle{
 					X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
-					VelX:   vmath.FromFloat(math.Cos(angle) * 5),
-					VelY:   vmath.FromFloat(math.Sin(angle) * 5),
+					VelX:   math.Cos(angle) * 5.0,
+					VelY:   math.Sin(angle) * 5.0,
 					MaxAge: 8, Char: '✧',
 					ColorStart: ColorWhite, ColorEnd: ColorGold,
 				})
@@ -594,11 +574,12 @@ func updateSingleMissile(m *Missile, dt int64) {
 	}
 
 	// Bounds and hit check
-	px, py := vmath.ToInt(m.Pos.PreciseX), vmath.ToInt(m.Pos.PreciseY)
+	px, py := physics.GridPos(&m.Pos)
 	if m.Type != MissileLaser && m.Type != MissileSpiral {
-		tDx := px - m.Target.X
-		tDy := py - m.Target.Y
-		if tDx*tDx+tDy*tDy < 4 {
+		targetX, targetY := m.Target.CenterF()
+		tDx := targetX - m.Pos.PreciseX
+		tDy := targetY - m.Pos.PreciseY
+		if vmath.MagnitudeSqF(tDx, tDy) < 4.0 {
 			m.Active = false
 			spawnExplosion(m)
 		}
@@ -614,22 +595,22 @@ func spawnExplosion(m *Missile) {
 		speed := 2.0 + float64(globalRng.Intn(30))/10
 		m.Trail = append(m.Trail, Particle{
 			X: m.Pos.PreciseX, Y: m.Pos.PreciseY,
-			VelX:   vmath.FromFloat(math.Cos(angle) * speed),
-			VelY:   vmath.FromFloat(math.Sin(angle) * speed),
+			VelX:   math.Cos(angle) * speed,
+			VelY:   math.Sin(angle) * speed,
 			MaxAge: 15, Char: '✦',
 			ColorStart: ColorWhite, ColorEnd: ColorFire,
 		})
 	}
 }
 
-func UpdateTrail(m *Missile) {
+func UpdateTrail(m *Missile, dt float64) {
 	live := m.Trail[:0]
 	for i := range m.Trail {
 		p := &m.Trail[i]
 		p.Age++
 		if p.Age < p.MaxAge {
-			p.X += p.VelX
-			p.Y += p.VelY
+			p.X += p.VelX * dt
+			p.Y += p.VelY * dt
 			live = append(live, *p)
 		}
 	}
@@ -650,16 +631,16 @@ func RenderMissiles(buf *render.RenderBuffer, missiles []*Missile) {
 
 func renderMissileTrail(buf *render.RenderBuffer, m *Missile) {
 	for _, p := range m.Trail {
-		screenX := vmath.ToInt(p.X)
-		screenY := vmath.ToInt(p.Y)
+		point := vmath.PointAtF(p.X, p.Y)
+		screenX, screenY := point.X, point.Y
 
 		if screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight-1 {
 			continue
 		}
 
-		t := int64(p.Age) * vmath.Scale / int64(p.MaxAge)
-		c := render.LerpRGBFixed(p.ColorStart, p.ColorEnd, t)
-		alpha := 1.0 - float64(p.Age)/float64(p.MaxAge)
+		t := float64(p.Age) / float64(p.MaxAge)
+		c := render.LerpRGB(p.ColorStart, p.ColorEnd, t)
+		alpha := 1.0 - t
 		if p.Scale > 0 {
 			alpha *= p.Scale
 		}
@@ -682,8 +663,7 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 		return
 	}
 
-	screenX := vmath.ToInt(m.Pos.PreciseX)
-	screenY := vmath.ToInt(m.Pos.PreciseY)
+	screenX, screenY := physics.GridPos(&m.Pos)
 
 	if screenX < 0 || screenX >= screenWidth || screenY < 0 || screenY >= screenHeight-1 {
 		return
@@ -691,7 +671,7 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 
 	var char rune
 	var c color.RGB
-	angle := math.Atan2(float64(m.Pos.VelY), float64(m.Pos.VelX))
+	angle := math.Atan2(m.Pos.VelY, m.Pos.VelX)
 
 	switch m.Type {
 	case MissileKinetic:
@@ -700,7 +680,7 @@ func renderMissileBody(buf *render.RenderBuffer, m *Missile) {
 	case MissileHelix:
 		chars := []rune{'✧', '✦', '★'}
 		char = chars[(m.Age/4)%3]
-		c = render.LerpRGBFixed(ColorCyan, ColorPink, vmath.Sin(m.Phase))
+		c = render.LerpRGB(ColorCyan, ColorPink, (vmath.SinF(m.Phase)+1.0)/2.0)
 	case MissileSeeker:
 		char = AngleToArrow(angle)
 		c = ColorFire
