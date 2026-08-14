@@ -21,6 +21,7 @@ type GameContext struct {
 	World         *World         // ECS world; has internal lock
 	State         *GameState     // Centralized game state; has internal lock
 	PausableClock *PausableClock // Pausable time source; has internal sync
+	TimeCtl       *TimeControl   // Rate control and scheduler wake; registry-bound
 
 	// === Channels ===
 
@@ -126,7 +127,10 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.statScreenH = reg.Ints.Get("context.screen_h")
 	ctx.statMode = reg.Strings.Get("context.mode")
 
-	// 3. Config Resource
+	// 3. Time control; registers its metrics before Freeze
+	ctx.TimeCtl = NewTimeControl(pausableClock, reg)
+
+	// 4. Config Resource
 	// Initial: Map = Viewport, CropOnResize enabled for backward compat
 	world.Resources.Config = &ConfigResource{
 		MapWidth:       viewportWidth,
@@ -138,7 +142,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		CropOnResize:   true,
 	}
 
-	// 4. Time Resource (Initial state)
+	// 5. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{}
 	world.Resources.Time.Update(
 		pausableClock.Now(),
@@ -146,23 +150,23 @@ func NewGameContext(world *World, width, height int) *GameContext {
 		parameter.GameUpdateInterval,
 	)
 
-	// 5. Event Queue Resource
+	// 6. Event Queue Resource
 	world.Resources.Event = &EventQueueResource{Queue: event.NewEventQueue()}
 
-	// 6. Game GameState
+	// 7. Game GameState
 	ctx.State = NewGameState()
 	world.Resources.Game = &GameStateResource{State: ctx.State}
 
-	// 7. Transient Resource
+	// 8. Transient Resource
 	world.Resources.Transient = NewTransientResource()
 
-	// 8. Cursor Entity
+	// 9. Cursor Entity
 	ctx.World.CreateCursorEntity()
 
-	// 9. Target Resource
+	// 10. Target Resource
 	world.Resources.Target = &TargetResource{}
 
-	// 10. Initialize atomic string pointers to empty strings
+	// 11. Initialize atomic string pointers to empty strings
 	empty := ""
 	ctx.commandText.Store(&empty)
 	ctx.searchText.Store(&empty)
@@ -170,19 +174,19 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 11. Initialize pause state
+	// 12. Initialize pause state
 	ctx.IsPaused.Store(false)
 
-	// 12. Overlay geometry and mode for the initial terminal size
+	// 13. Overlay geometry and mode for the initial terminal size
 	ctx.recomputeOverlayGeometry()
 	ctx.SetMode(core.ModeNormal)
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
-	// 13. Initial input state - Not restored by EventGameReset: user-owned for the session
+	// 14. Initial input state - Not restored by EventGameReset: user-owned for the session
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
 	ctx.AutoFire.Store(parameter.DefaultAutoFire)
 
-	// 14. Initialize FPS tracking
+	// 15. Initialize FPS tracking
 	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
 	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 

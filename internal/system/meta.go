@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/help"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
+	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 // MetaSystem handles meta-game commands like Reset, Debug, and Help
@@ -72,6 +73,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventMetaHelpRequest,
 		event.EventMetaAboutRequest,
 		event.EventGamePauseRequest,
+		event.EventGameSpeedRequest,
 		event.EventGameReset,
 	}
 }
@@ -121,6 +123,10 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.GamePausePayload); ok {
 			s.handlePauseRequest(p.Paused)
 		}
+
+	case event.EventGameSpeedRequest:
+		p, _ := ev.Payload.(*event.GameSpeedPayload)
+		s.handleSpeedRequest(p)
 	}
 }
 
@@ -177,7 +183,10 @@ func (s *MetaSystem) handleGameReset() {
 	s.ctx.SetStatusMessage("", 0, false)
 	s.ctx.SetOverlayContent(nil)
 
-	// 7. Signal FSM reset - Non-blocking
+	// 7. Restore real-time pacing; speed is a debugging aid, not session state
+	s.ctx.TimeCtl.SetScale(engine.ScaleNormal)
+
+	// 8. Signal FSM reset - Non-blocking
 
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
@@ -317,4 +326,19 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 		s.ctx.PausableClock.Resume()
 	}
 	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
+}
+
+// handleSpeedRequest applies the time scale through its single owner, then
+// announces it; a nil or non-positive payload restores real time
+func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
+	scale := engine.ScaleNormal
+	if p != nil && p.Num > 0 && p.Den > 0 {
+		scale = engine.TimeScale{Num: p.Num, Den: p.Den}
+	}
+	if s.ctx.TimeCtl.Scale() == scale {
+		return
+	}
+	s.ctx.TimeCtl.SetScale(scale)
+	vlog.Info("app", "msg", "time scale", "scale", scale.String())
+	s.ctx.PushEvent(event.EventGameSpeedChanged, &event.GameSpeedPayload{Num: scale.Num, Den: scale.Den})
 }

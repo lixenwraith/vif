@@ -30,6 +30,7 @@ var commandNames = []string{
 	"a", "auto", "s", "system", "m", "mouse", "e", "emit", "event",
 	"d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
+	"speed", "sp",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -64,6 +65,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleFreeCommand(ctx, args)
 	case "a", "auto":
 		return handleAutoCommand(ctx, args)
+	case "sp", "speed":
+		return handleSpeedCommand(ctx, args)
 	case "s", "system":
 		return handleSystemCommand(ctx, args)
 	case "m", "mouse":
@@ -695,5 +698,37 @@ func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 			GroupID: uint8(groupID),
 		})
 	}
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleSpeedCommand reports or sets the simulation time scale
+// Usage: :speed | :speed <1/8|1/4|1/2|1|2|4|8> | :speed +|- | :speed reset
+func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
+	cur := ctx.TimeCtl.Scale()
+	if len(args) == 0 {
+		ctx.SetStatusMessage("Speed "+cur.String()+"x", parameter.StatusMessageDefaultTimeout, true)
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
+	var next engine.TimeScale
+	switch strings.ToLower(args[0]) {
+	case "+", "up", "faster":
+		next = engine.ScaleStep(cur, 1)
+	case "-", "down", "slower":
+		next = engine.ScaleStep(cur, -1)
+	case "reset", "normal":
+		next = engine.ScaleNormal
+	default:
+		s, ok := engine.ParseScale(args[0])
+		if !ok {
+			setCommandError(ctx, "Usage: :speed [1/8|1/4|1/2|1|2|4|8|+|-|reset]")
+			return CommandResult{Continue: true, KeepPaused: false}
+		}
+		next = s
+	}
+
+	ctx.PushEvent(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
+	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusMessageDefaultTimeout, true)
+	ctx.SetLastCommand(":speed " + next.String())
 	return CommandResult{Continue: true, KeepPaused: false}
 }

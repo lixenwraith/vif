@@ -169,6 +169,7 @@ var topics = []topicDef{
 			{Keys: ":d save", Desc: "Write a standalone status snapshot file"},
 			{Keys: ":d hud [on|off]", Desc: "Draw the pinned cards live over the game area"},
 			{Keys: ":d unpin", Desc: "Clear every pinned card"},
+			{Keys: ":speed [rate]  :sp [rate]", Desc: "Simulation rate: 1/8 1/4 1/2 1 2 4 8, or + - reset; :new restores 1"},
 			{Keys: ":energy N", Desc: "Set player energy; negative values are valid"},
 			{Keys: ":heat N", Desc: "Set player heat, clamped to the maximum"},
 			{Keys: ":boost", Desc: "Max heat and activate boost"},

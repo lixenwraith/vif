@@ -119,6 +119,10 @@ const (
 	EventGamePauseRequest
 	// EventGamePauseChanged (GamePausePayload) announces applied pause state; systems react in their own domain
 	EventGamePauseChanged
+	// EventGameSpeedRequest (GameSpeedPayload) asks MetaSystem to change the time scale
+	EventGameSpeedRequest
+	// EventGameSpeedChanged (GameSpeedPayload) announces the applied time scale
+	EventGameSpeedChanged
 
 	// --- FSM ---
 

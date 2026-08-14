@@ -160,7 +160,7 @@ func (a *App) init() error {
 	var resetChan chan<- struct{}
 	a.scheduler, a.gameUpdateDone, resetChan = engine.NewClockScheduler(
 		a.world,
-		a.ctx.PausableClock,
+		a.ctx.TimeCtl,
 		&a.ctx.IsPaused,
 		parameter.GameUpdateInterval,
 		a.frameReady,

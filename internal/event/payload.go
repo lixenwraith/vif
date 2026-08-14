@@ -163,6 +163,13 @@ type GamePausePayload struct {
 	Paused bool `toml:"paused"`
 }
 
+// GameSpeedPayload carries a time scale as an exact rational;
+// a non-positive Num or Den selects real time
+type GameSpeedPayload struct {
+	Num int64 `toml:"num"`
+	Den int64 `toml:"den"`
+}
+
 // --- Nugget ---
 
 // NuggetCollectedPayload signals successful nugget collection

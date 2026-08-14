@@ -21,8 +21,10 @@ import (
 type ClockScheduler struct {
 	world *World
 
-	pausableClock *PausableClock
-	isPaused      *atomic.Bool
+	clock Clock
+	ctl   *TimeControl
+	// pausableClock *PausableClock
+	isPaused *atomic.Bool
 
 	// Tick configuration
 	tickInterval     time.Duration
@@ -62,6 +64,7 @@ type ClockScheduler struct {
 	statQueueLen        *atomic.Int64
 	statGameElapsedMs   *atomic.Int64
 	statEvDropped       *atomic.Int64
+	statTickSlips       *atomic.Int64
 
 	// Log state: overflow edge detection
 	lastEvDropped uint64
@@ -91,7 +94,7 @@ type regionStat struct {
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
 func NewClockScheduler(
 	world *World,
-	pausableClock *PausableClock,
+	ctl *TimeControl,
 	isPaused *atomic.Bool,
 	tickInterval time.Duration,
 	frameReady <-chan struct{},
@@ -100,16 +103,18 @@ func NewClockScheduler(
 	resetChan := make(chan struct{}, 1)
 
 	statusReg := world.Resources.Status
+	clock := ctl.Clock()
 
 	cs := &ClockScheduler{
 		world: world,
 
-		pausableClock: pausableClock,
-		isPaused:      isPaused,
-		tickInterval:  tickInterval,
+		clock:        clock,
+		ctl:          ctl,
+		isPaused:     isPaused,
+		tickInterval: tickInterval,
 
-		lastGameTickTime: pausableClock.Now(),
-		gameStartTime:    pausableClock.Now(),
+		lastGameTickTime: clock.Now(),
+		gameStartTime:    clock.Now(),
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -133,6 +138,7 @@ func NewClockScheduler(
 		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
 		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
 		statEvDropped:       statusReg.Ints.Get("event.dropped"),
+		statTickSlips:       statusReg.Ints.Get("engine.tick_slips"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -283,21 +289,19 @@ func (cs *ClockScheduler) Stop() {
 	})
 }
 
-// schedulerLoop runs the main scheduling loop with pause awareness
+// schedulerLoop runs the main scheduling loop with pause awareness.
+// Deadlines live in game time; sleeps live in wall time, so every wait
+// converts through the clock's current rate.
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
-	cs.nextTickDeadline = cs.pausableClock.Now().Add(cs.tickInterval)
-	cs.lastGameTickTime = cs.pausableClock.Now()
+	cs.nextTickDeadline = cs.clock.Now().Add(cs.tickInterval)
+	cs.lastGameTickTime = cs.clock.Now()
 
-	timer := time.NewTimer(0)
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
+	timer := stoppedTimer()
 	defer timer.Stop()
+	frameTimer := stoppedTimer()
+	defer frameTimer.Stop()
 
 	for {
 		select {
@@ -312,21 +316,17 @@ func (cs *ClockScheduler) schedulerLoop() {
 		default:
 		}
 
-		var sleepDuration time.Duration
+		var sleepDuration time.Duration // wall clock
 
 		if cs.isPaused.Load() {
-			// Increase sleep interval while paused to save CPU
-			sleepDuration = cs.tickInterval * 2
+			// Game time is frozen, so no game duration converts; poll on wall time
+			sleepDuration = parameter.PausedPollInterval
 		} else {
-			gameNow := cs.pausableClock.Now()
-
+			gameNow := cs.clock.Now()
 			deadline := cs.nextTickDeadline
 
 			if !gameNow.Before(deadline) {
-				select {
-				case <-cs.frameReady:
-				case <-time.After(cs.tickInterval * 2):
-				case <-cs.stopChan:
+				if !cs.awaitFrame(frameTimer) {
 					return
 				}
 
@@ -337,7 +337,9 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 				maxBehind := cs.tickInterval * 2
 				if gameNow.Sub(cs.nextTickDeadline) > maxBehind {
+					// Systems cannot sustain this rate; drop the debt and count it
 					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
+					cs.statTickSlips.Add(1)
 				}
 				deadline = cs.nextTickDeadline
 
@@ -346,12 +348,12 @@ func (cs *ClockScheduler) schedulerLoop() {
 				default:
 				}
 
-				sleepDuration = deadline.Sub(cs.pausableClock.Now())
-				if sleepDuration < 0 {
-					sleepDuration = 0
-				}
+				sleepDuration = cs.clock.ToReal(deadline.Sub(cs.clock.Now()))
 			} else {
-				sleepDuration = deadline.Sub(gameNow)
+				sleepDuration = cs.clock.ToReal(deadline.Sub(gameNow))
+			}
+			if sleepDuration < 0 {
+				sleepDuration = 0
 			}
 		}
 
@@ -359,17 +361,56 @@ func (cs *ClockScheduler) schedulerLoop() {
 			timer.Reset(sleepDuration)
 			select {
 			case <-timer.C:
+			case <-cs.ctl.Wake():
+				drainTimer(timer) // rate changed; recompute against the new one
 			case <-cs.resetChan:
-				if !timer.Stop() {
-					select {
-					case <-timer.C:
-					default:
-					}
-				}
+				drainTimer(timer)
 				cs.executeReset()
 			case <-cs.stopChan:
 				return
 			}
+		}
+	}
+}
+
+// awaitFrame applies render backpressure: at real time and slower a tick waits
+// for the render loop, bounded by a timeout so a stalled terminal cannot freeze
+// the simulation. Above real time the operator has asked the world to outrun the
+// display, so the handshake is skipped and the tick deadline is the only pacing.
+// Returns false on shutdown.
+func (cs *ClockScheduler) awaitFrame(t *time.Timer) bool {
+	if cs.clock.Scale().Faster() {
+		return true
+	}
+	timeout := cs.clock.ToReal(cs.tickInterval * 2)
+	if timeout <= 0 {
+		timeout = cs.tickInterval * 2
+	}
+	t.Reset(timeout)
+	defer drainTimer(t)
+
+	select {
+	case <-cs.frameReady:
+	case <-t.C:
+	case <-cs.stopChan:
+		return false
+	}
+	return true
+}
+
+// stoppedTimer returns an armed-but-drained timer ready for Reset
+func stoppedTimer() *time.Timer {
+	t := time.NewTimer(0)
+	drainTimer(t)
+	return t
+}
+
+// drainTimer stops a timer and clears a fire that may already be queued
+func drainTimer(t *time.Timer) {
+	if !t.Stop() {
+		select {
+		case <-t.C:
+		default:
 		}
 	}
 }
@@ -522,7 +563,7 @@ func (cs *ClockScheduler) executeReset() {
 	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 3. Reset Scheduler internal timing
-	cs.lastGameTickTime = cs.pausableClock.Now()
+	cs.lastGameTickTime = cs.clock.Now()
 	cs.nextTickDeadline = cs.lastGameTickTime.Add(cs.tickInterval)
 	cs.gameStartTime = cs.lastGameTickTime
 
@@ -566,12 +607,12 @@ func (cs *ClockScheduler) processTick() {
 	var entityCount int
 
 	cs.world.RunSafe(func() {
-		now := cs.pausableClock.Now()
+		now := cs.clock.Now()
 
 		// 1. Sync Time
 		cs.world.Resources.Time.Update(
 			now,
-			cs.pausableClock.RealTime(),
+			cs.clock.RealTime(),
 			cs.tickInterval,
 		)
 
@@ -616,7 +657,7 @@ func (cs *ClockScheduler) processTick() {
 	// Update APM based on game time
 	cs.world.Resources.Game.State.UpdateAPM(
 		cs.world.Resources.Status,
-		cs.pausableClock.Now(),
+		cs.clock.Now(),
 	)
 
 	cs.statTicks.Store(int64(ticks))

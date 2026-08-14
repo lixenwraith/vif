@@ -16,6 +16,9 @@ const (
 	// InputTickInterval drives the router input tick: auto-fire, macro playback, etc.
 	InputTickInterval = 16 * time.Millisecond
 
+	// PausedPollInterval is the scheduler's wall-clock poll period while paused
+	PausedPollInterval = 50 * time.Millisecond
+
 	// EventLoopBackoffMax is the maximum number of intervals that failure to acquire lock is tolerated (deferred to next event tick)
 	EventLoopBackoffMax = 2
 
