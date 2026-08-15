@@ -337,10 +337,10 @@ func intentSig(in *input.Intent) uint64 {
 // game time, so a slowed simulation reports proportionally higher APM.
 // Input while paused is discarded: the world is not advancing, so it is not gameplay.
 func (r *Router) recordAPM(intent *input.Intent) {
-	if intent.MacroPlayback || r.ctx.IsPaused.Load() {
+	if intent.MacroPlayback || r.ctx.TimeCtl.IsPaused() {
 		return
 	}
-	now := r.ctx.PausableClock.RealTime()
+	now := r.ctx.TimeCtl.RealTime()
 
 	switch intent.Type {
 	case input.IntentMouseMove, input.IntentMouseDrag, input.IntentMouseWheelMove:
@@ -1084,7 +1084,7 @@ func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	r.moveMouseCursor(intent)
 	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
 	r.mouseLeftHeld = true
-	r.lastFireMain = r.ctx.PausableClock.Now()
+	r.lastFireMain = r.ctx.TimeCtl.Now()
 	return true
 }
 
@@ -1097,7 +1097,7 @@ func (r *Router) handleMouseRightDown() bool {
 	// Fire special at current cursor position, no movement
 	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
 	r.mouseRightHeld = true
-	r.lastFireSpec = r.ctx.PausableClock.Now()
+	r.lastFireSpec = r.ctx.TimeCtl.Now()
 	return true
 }
 
@@ -1128,7 +1128,7 @@ func (r *Router) handleMouseMove(intent *input.Intent) bool {
 
 // inputSuspended reports whether machine-driven and pointer input must be withheld
 func (r *Router) inputSuspended() bool {
-	return r.ctx.IsPaused.Load() || r.ctx.IsCommandMode() || r.ctx.IsOverlayMode()
+	return r.ctx.TimeCtl.IsPaused() || r.ctx.IsCommandMode() || r.ctx.IsOverlayMode()
 }
 
 // SetMouseModeApplier installs the terminal reporting sink. Optional: a nil
@@ -1161,7 +1161,7 @@ func (r *Router) ProcessInputTick() bool {
 		return false
 	}
 
-	now := r.ctx.PausableClock.Now()
+	now := r.ctx.TimeCtl.Now()
 	auto := r.ctx.AutoFire.Load()
 	mouse := !r.ctx.MouseDisabled.Load()
 
@@ -1262,7 +1262,7 @@ func (r *Router) handleMacroRecordStop() bool {
 }
 
 func (r *Router) handleMacroPlay(intent *input.Intent) bool {
-	now := r.ctx.PausableClock.Now()
+	now := r.ctx.TimeCtl.Now()
 	if r.macro.StartPlayback(intent.Char, intent.Count, now) {
 		r.ctx.MacroPlaying.Store(true)
 	}
@@ -1270,7 +1270,7 @@ func (r *Router) handleMacroPlay(intent *input.Intent) bool {
 }
 
 func (r *Router) handleMacroPlayInfinite(intent *input.Intent) bool {
-	now := r.ctx.PausableClock.Now()
+	now := r.ctx.TimeCtl.Now()
 	if r.macro.StartPlayback(intent.Char, 0, now) { // 0 = infinite
 		r.ctx.MacroPlaying.Store(true)
 	}
@@ -1278,7 +1278,7 @@ func (r *Router) handleMacroPlayInfinite(intent *input.Intent) bool {
 }
 
 func (r *Router) handleMacroPlayAll() bool {
-	now := r.ctx.PausableClock.Now()
+	now := r.ctx.TimeCtl.Now()
 	if r.macro.StartAllPlayback(now) > 0 {
 		r.ctx.MacroPlaying.Store(true)
 	}
@@ -1302,10 +1302,10 @@ func (r *Router) updateMacroPlayingState() {
 }
 
 func (r *Router) ProcessMacroTick() []*input.Intent {
-	if r.ctx.IsPaused.Load() || r.inputSuspended() || r.ctx.IsCommandMode() {
+	if r.inputSuspended() {
 		return nil
 	}
-	now := r.ctx.PausableClock.Now()
+	now := r.ctx.TimeCtl.Now()
 	intents := r.macro.Tick(now)
 	r.updateMacroPlayingState()
 	return intents

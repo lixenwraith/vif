@@ -102,7 +102,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Cursor blink runs on wall time: it must continue while the world is paused
-	realNow := r.gameCtx.PausableClock.RealTime()
+	realNow := r.gameCtx.TimeCtl.RealTime()
 	if realNow.Sub(r.lastBlinkToggle) >= parameter.StatusCursorBlinkDuration {
 		r.cursorBlinkOn = !r.cursorBlinkOn
 		r.lastBlinkToggle = realNow
@@ -338,7 +338,7 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		textFg = visual.RgbCommandInputText
 		isInputMode = true
 	} else {
-		textContent = r.getActiveStatusMessage(r.gameCtx.PausableClock.Now())
+		textContent = r.getActiveStatusMessage(r.gameCtx.TimeCtl.Now())
 		textFg = visual.RgbStatusMessageText
 		isInputMode = false
 	}

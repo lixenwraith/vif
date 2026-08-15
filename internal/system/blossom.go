@@ -2,7 +2,6 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -48,7 +47,7 @@ func NewBlossomSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *BlossomSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = s.world.Rand(s.Name())
 	clear(s.blossomedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)

@@ -53,7 +53,7 @@ func (s *ExplosionSystem) Init() {
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
 
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)

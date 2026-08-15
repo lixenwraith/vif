@@ -184,7 +184,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 }
 
 func (s *SoftCollisionSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.clearCaches()
 	s.enabled = true
 }

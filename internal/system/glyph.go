@@ -101,7 +101,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.census = glyphCensus{}
 
 	s.nextSpawnTimer = time.Duration(0)

@@ -76,7 +76,7 @@ func NewStormSystem(world *engine.World) engine.System {
 
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	clear(s.memberExcludeSet)
 	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)

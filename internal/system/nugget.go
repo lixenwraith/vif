@@ -47,7 +47,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)

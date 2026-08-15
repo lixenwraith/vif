@@ -62,7 +62,7 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResour
 	return RenderContext{
 		GameTime:  timeRes.GameTime,
 		DeltaTime: timeRes.DeltaTime.Seconds(),
-		IsPaused:  ctx.IsPaused.Load(),
+		IsPaused:  ctx.TimeCtl.IsPaused(),
 
 		CursorX: cursorX,
 		CursorY: cursorY,

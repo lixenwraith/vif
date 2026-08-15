@@ -51,7 +51,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 func (s *SwarmSystem) Init() {
 	s.active = false
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)

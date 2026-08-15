@@ -52,7 +52,7 @@ func NewGoldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
 	s.active = false
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}

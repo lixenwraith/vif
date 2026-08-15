@@ -89,7 +89,7 @@ func NewDustSystem(world *engine.World) engine.System {
 func (s *DustSystem) Init() {
 	s.lastCursorX = 0
 	s.lastCursorY = 0
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.staggerTick = 0
 	s.statCreated.Store(0)
 	s.statActive.Store(0)

@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
@@ -58,6 +59,13 @@ func New(cfg Config) (*App, error) {
 func (a *App) init() error {
 	vlog.Info("app", "msg", "init begin")
 
+	// Root RNG seed; resolved first, since services and systems both derive
+	// from it. A drawn seed is logged so any run replays with -seed.
+	if a.cfg.Seed == 0 {
+		a.cfg.Seed = uint64(time.Now().UnixNano()) // [wall] once per process
+	}
+	vlog.Info("app", "msg", "seed", "seed", a.cfg.Seed)
+
 	// Embedders never call vlog.Configure, so the scope is applied here.
 	// The CLI reaches this too and applies it twice; both resolve the spec
 	// against ScopeAll, so the second application is a no-op.
@@ -87,11 +95,12 @@ func (a *App) init() error {
 	if err != nil {
 		return fmt.Errorf("content path: %w", err)
 	}
-	_ = a.hub.Register(service.NewContentService(contentSrc))
+	_ = a.hub.Register(service.NewContentService(contentSrc, a.cfg.Seed))
 
 	// 2. World creation
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
+	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 
 	// 3. Service init in dependency order; rolls back internally on failure
 	if err := a.hub.InitAll(); err != nil {
@@ -145,6 +154,8 @@ func (a *App) init() error {
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys)
 	}
+	// This game's streams are drawn; advance so the next game differs
+	a.world.Resources.Rand.NextSession()
 
 	// 8. Renderers; Register sorts by priority, manifest order breaks ties
 	a.orchestrator = render.NewRenderOrchestrator(a.term, a.ctx.Width, a.ctx.Height)
@@ -166,7 +177,6 @@ func (a *App) init() error {
 	a.scheduler, a.gameUpdateDone, resetChan = engine.NewClockScheduler(
 		a.world,
 		a.ctx.TimeCtl,
-		&a.ctx.IsPaused,
 		parameter.GameUpdateInterval,
 		a.frameReady,
 	)

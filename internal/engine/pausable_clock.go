@@ -99,9 +99,7 @@ func (a *clockAnchor) project(now time.Time) time.Time {
 type PausableClock struct {
 	anchor atomic.Pointer[clockAnchor]
 
-	mu          sync.Mutex // serializes anchor swaps
-	pauseStart  time.Time  // wall instant of the current pause, zero when running
-	totalPaused time.Duration
+	mu sync.Mutex // serializes anchor swaps
 }
 
 // NewPausableClock creates a clock running at real time from now
@@ -180,7 +178,6 @@ func (pc *PausableClock) Pause() {
 	if pc.anchor.Load().paused {
 		return
 	}
-	pc.pauseStart = time.Now()
 	pc.reanchor(func(a *clockAnchor) { a.paused = true })
 }
 
@@ -191,33 +188,8 @@ func (pc *PausableClock) Resume() {
 	if !pc.anchor.Load().paused {
 		return
 	}
-	if !pc.pauseStart.IsZero() {
-		pc.totalPaused += time.Since(pc.pauseStart)
-		pc.pauseStart = time.Time{}
-	}
 	pc.reanchor(func(a *clockAnchor) { a.paused = false })
 }
 
 // IsPaused returns current pause state
 func (pc *PausableClock) IsPaused() bool { return pc.anchor.Load().paused }
-
-// GetTotalPauseDuration returns cumulative real time spent paused
-func (pc *PausableClock) GetTotalPauseDuration() time.Duration {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-	total := pc.totalPaused
-	if !pc.pauseStart.IsZero() {
-		total += time.Since(pc.pauseStart)
-	}
-	return total
-}
-
-// GetCurrentPauseDuration returns the length of the current pause, 0 if running
-func (pc *PausableClock) GetCurrentPauseDuration() time.Duration {
-	pc.mu.Lock()
-	defer pc.mu.Unlock()
-	if pc.pauseStart.IsZero() {
-		return 0
-	}
-	return time.Since(pc.pauseStart)
-}

@@ -63,7 +63,7 @@ func checkContent(cfg Config, w io.Writer) error {
 		return fmt.Errorf("content path: %w", err)
 	}
 
-	svc := service.NewContentService(src)
+	svc := service.NewContentService(src, 0) // validation only; block order is irrelevant
 	if err := svc.Init(); err != nil {
 		return err
 	}

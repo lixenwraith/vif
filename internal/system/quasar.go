@@ -44,7 +44,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 }
 
 func (s *QuasarSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true

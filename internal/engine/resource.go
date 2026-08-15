@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"math/rand/v2"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
 	"github.com/lixenwraith/vi-fighter/pkg/navigation"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // Resource holds singleton game resources, initialized during GameContext creation, accessed via World.Resources
@@ -25,6 +26,7 @@ type Resource struct {
 	Game   *GameStateResource
 	Player *PlayerResource
 	Event  *EventQueueResource
+	Rand   *RandResource
 
 	// Targeting
 	Target *TargetResource
@@ -55,11 +57,14 @@ type Resource struct {
 // --- Time Resource ---
 
 // TimeResource is time data snapshot for systems and is updated by ClockScheduler at the start of a tick
+// Simulation code must not read wall time. CI guard:
+// rg 'time\.Now\(\)|time\.Since' internal/system internal/mode must return zero hits.
 type TimeResource struct {
 	// GameTime is the current time in the game world (affected by pause)
 	GameTime time.Time
 
-	// RealTime is the wall-clock time (unaffected by pause)
+	// RealTime is the clock's unpaused, unscaled instant. Wall time under
+	// PausableClock, virtual under ManualClock — never read time.Now() instead.
 	RealTime time.Time
 
 	// DeltaTime is the duration since the last update
@@ -76,9 +81,6 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 
 // GameTimeNano returns game time as Unix nanoseconds for integer comparison paths.
 func (tr *TimeResource) GameTimeNano() int64 { return tr.GameTime.UnixNano() }
-
-// RealTimeNano returns wall-clock time as Unix nanoseconds
-func (tr *TimeResource) RealTimeNano() int64 { return tr.RealTime.UnixNano() }
 
 // DeltaTimeNano returns the tick delta in nanoseconds
 func (tr *TimeResource) DeltaTimeNano() int64 { return int64(tr.DeltaTime) }
@@ -160,6 +162,45 @@ func (pr *PlayerResource) GetBounds() PingBounds {
 // SetBounds atomically updates bounds
 func (pr *PlayerResource) SetBounds(b PingBounds) {
 	pr.bounds.Store(&b)
+}
+
+// --- Random Resource ---
+
+// RandResource is the root of every simulation RNG stream.
+// Systems draw a labelled generator in Init and keep it for their lifetime; no
+// simulation path seeds from a clock.
+type RandResource struct {
+	root    uint64
+	session atomic.Uint64
+}
+
+// NewRandResource creates the stream factory for a root seed
+func NewRandResource(root uint64) *RandResource {
+	return &RandResource{root: root}
+}
+
+// Root returns the seed the run was started with
+func (r *RandResource) Root() uint64 { return r.root }
+
+// Session returns the current session counter
+func (r *RandResource) Session() uint64 { return r.session.Load() }
+
+// NextSession advances the session counter. Called once a game's systems have
+// finished initializing, so the next game draws different streams from one root.
+func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
+
+// Stream returns the labelled generator for the current session
+func (r *RandResource) Stream(label string) *vmath.FastRand {
+	return vmath.NewSeededRand(r.sessionRoot(), label)
+}
+
+// sessionRoot folds the session counter into the root; session 0 is the root itself
+func (r *RandResource) sessionRoot() uint64 {
+	s := r.session.Load()
+	if s == 0 {
+		return r.root
+	}
+	return vmath.DeriveSeed(r.root, "session:"+strconv.FormatUint(s, 10))
 }
 
 // === Target Resource ===
@@ -280,6 +321,7 @@ type RoutePopulation struct {
 	Weights []float64 // Read-only for consumers, written by AdaptationSystem
 	Pool    []int     // Pre-sampled route assignments
 	Head    int       // Consumer index
+	spin    int       // Fallback rotation when the pool is exhausted
 }
 
 // AdaptationResource provides lock-free route allocations for spawners.
@@ -327,8 +369,11 @@ func (ar *AdaptationResource) PopRoute(id uint32, subType uint8) int {
 	}
 
 	if pop.Head >= len(pop.Pool) {
-		// Exhausted pool fallback
-		return rand.IntN(entry.RouteCount)
+		// Exhausted pool: rotate deterministically rather than draw from a
+		// global generator no seed reaches
+		route := pop.spin % entry.RouteCount
+		pop.spin++
+		return route
 	}
 
 	route := pop.Pool[pop.Head]

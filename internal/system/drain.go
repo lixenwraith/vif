@@ -2,7 +2,6 @@ package system
 
 import (
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -79,7 +78,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *DrainSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(time.Now().UnixNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0

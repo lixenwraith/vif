@@ -260,7 +260,7 @@ events aligned.
 
 ## 9. Reset semantics
 
-A `:new` command emits `EventGameReset` and requests scheduler reset without
+A `:new` command emits `EventGameResetRequest` and requests scheduler reset without
 reconstructing the process. Reset is serialized with the same world lock:
 
 1. advance the diagnostic run correlation ID;
@@ -271,7 +271,7 @@ reconstructing the process. Reset is serialized with the same world lock:
 6. enqueue an unpause request;
 7. settle reset/unpause events before releasing the lock.
 
-Systems that handle `EventGameReset` reinitialize their session state.
+Systems that handle `EventGameResetRequest` reinitialize their session state.
 `MetaSystem` performs the world-level entity/resource cleanup, while user-owned
 session preferences such as mouse free mode and auto-fire are intentionally
 stored in context flags rather than reconstructed. The mode router observes a

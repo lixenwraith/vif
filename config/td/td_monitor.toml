@@ -55,12 +55,12 @@ on_enter = [
     { action = "TerminateRegion", region = "td_esc" },
     { action = "TerminateRegion", region = "td_storm" },
     # full engine reset — clears cursor state (weapons/charges/energy/heat)
-    # LAST action: if EventGameReset triggers FSM Reset(), regions restart from
+    # LAST action: if EventGameResetRequest triggers FSM Reset(), regions restart from
     # config initials and the MonRespawn SpawnRegion calls below fail with
     # "already exists" (ignored) — both paths converge on a clean restart
-    { action = "EmitEvent", event = "EventGameReset" },
+    { action = "EmitEvent", event = "EventGameResetRequest" },
 
-    # ALTERNATIVE (if EventGameReset misbehaves): zero energy (removes weapons) and heat
+    # ALTERNATIVE (if EventGameResetRequest misbehaves): zero energy (removes weapons) and heat
     # { action = "EmitEvent", event = "EventEnergySetRequest", payload = { value = 0 } },
     # { action = "EmitEvent", event = "EventHeatSetRequest", payload = { value = 0 } },
 ]

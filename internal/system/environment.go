@@ -40,7 +40,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 }
 
 func (s *EnvironmentSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.statWindActive.Store(false)
 	s.enabled = true
 }

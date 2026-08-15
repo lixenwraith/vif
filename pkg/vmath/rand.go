@@ -49,3 +49,29 @@ func (r *FastRand) Intn(n int) int {
 func (r *FastRand) Float64() float64 {
 	return float64(r.Next()>>11) / (1 << 53)
 }
+
+// NewSeededRand returns a generator for the labelled stream of a root seed.
+func NewSeededRand(root uint64, label string) *FastRand {
+	return NewFastRand(DeriveSeed(root, label))
+}
+
+// DeriveSeed produces an independent, reproducible stream seed from a root seed and
+// a label. Splitting by label keeps one system's draws from shifting another's when
+// call counts change.
+func DeriveSeed(root uint64, label string) uint64 {
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(label); i++ {
+		h ^= uint64(label[i])
+		h *= 1099511628211
+	}
+	x := root + h
+	x ^= x >> 30
+	x *= 0xbf58476d1ce4e5b9
+	x ^= x >> 27
+	x *= 0x94d049bb133111eb
+	x ^= x >> 31
+	if x == 0 {
+		x = 0x9e3779b97f4a7c15
+	}
+	return x
+}

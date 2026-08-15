@@ -112,15 +112,11 @@ func (a *App) frame() bool {
 	)
 
 	a.world.RunSafe(func() {
-		if a.ctx.IsPaused.Load() {
-			// Keep wall-clock advancing so paused frames still animate
-			a.world.Resources.Time.RealTime = a.ctx.PausableClock.RealTime()
-		}
-		// Plain struct copy; TimeResource holds no locks
-		snapTime = *a.world.Resources.Time
-		// Render on the continuous clock: the tick-written GameTime is quantized to
-		// the tick, which shows as stepped animation once the rate is slowed
-		snapTime.GameTime = a.ctx.PausableClock.Now()
+		// Render on the continuous clock: the tick-written stamps are quantized to
+		// the tick, which shows as stepped animation once the rate is slowed.
+		// Local copy only: the render loop never writes tick-owned resources.
+		snapTime.GameTime = a.ctx.TimeCtl.Now()
+		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
 			cursorX, cursorY = pos.X, pos.Y
 		}
@@ -130,7 +126,8 @@ func (a *App) frame() bool {
 		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY)
 	})
 
-	if a.ctx.IsPaused.Load() {
+	paused := a.ctx.TimeCtl.IsPaused()
+	if paused {
 		// Pause overlay still renders
 		a.orchestrator.RenderFrame(renderCtx, a.world)
 		return true
@@ -146,7 +143,7 @@ func (a *App) frame() bool {
 	// All updates complete; RenderFrame locks internally for component access
 	a.orchestrator.RenderFrame(renderCtx, a.world)
 
-	if !updatePending && !a.ctx.IsPaused.Load() {
+	if !updatePending && !paused {
 		select {
 		case a.frameReady <- struct{}{}:
 		default: // channel full, skip signal

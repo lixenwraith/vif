@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // World contains all entities and their components using typed stores
@@ -48,7 +49,7 @@ func NewWorld() *World {
 	w := &World{
 		nextEntityID:  1,
 		componentMask: make(map[core.Entity]uint64, 16384), // reasonable small screen size that doesn't require increase
-		Resources:     &Resource{},
+		Resources:     &Resource{Rand: NewRandResource(0)}, // app overwrites with the run seed
 		systems:       make([]System, 0),
 	}
 
@@ -193,6 +194,12 @@ func (w *World) UpdateLocked() {
 	for _, system := range w.systems {
 		system.Update()
 	}
+}
+
+// Rand returns the labelled RNG stream for the current session.
+// Single seeding entry point for systems: never seed from a clock.
+func (w *World) Rand(label string) *vmath.FastRand {
+	return w.Resources.Rand.Stream(label)
 }
 
 // PushEvent emits a game event using direct cached pointers. HOT-PATH for all systems communication

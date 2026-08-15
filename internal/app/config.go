@@ -49,6 +49,9 @@ type Config struct {
 
 	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time
 	TimeScaleSpec string
+
+	// System seed for RNG
+	Seed uint64
 }
 
 // Validate reports configuration conflicts

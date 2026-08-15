@@ -37,6 +37,7 @@ var (
 	flagCheck        = flag.Bool("check", false, "Validate FSM and content config, then exit")
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
+	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 
 	flagLog   logFlag
 	flagLevel levelFlag
@@ -178,6 +179,7 @@ func buildConfig() app.Config {
 		StatTicks:     flagStat.value,
 		RecTicks:      flagRec.value,
 		TimeScaleSpec: *flagSpeed,
+		Seed:          *flagSeed,
 	}
 
 	if *flagAudioUnmute {

@@ -12,7 +12,7 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 
 	emit(status.SubStat, "msg", "context",
 		"frame", ctx.GetFrameNumber(),
-		"paused", ctx.IsPaused.Load(),
+		"paused", ctx.TimeCtl.IsPaused(),
 		"mode", int(ctx.GetMode()),
 		"screen_w", ctx.Width, "screen_h", ctx.Height,
 		"game_x", ctx.GameXOffset, "game_y", ctx.GameYOffset,

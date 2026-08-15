@@ -26,8 +26,9 @@ type Registry struct {
 	frozen  atomic.Bool
 	idxFast atomic.Pointer[[]statGroup]
 
-	rec      atomic.Pointer[Recorder]
-	statLate *atomic.Int64
+	rec         atomic.Pointer[Recorder]
+	statLate    *atomic.Int64
+	statLateKey *AtomicString
 }
 
 // NewRegistry creates an initialized Registry with snapshots disabled
@@ -39,6 +40,7 @@ func NewRegistry() *Registry {
 		Strings: NewMetricMap[AtomicString](),
 	}
 	r.statLate = r.Ints.Get("stat.late")
+	r.statLateKey = r.Strings.Get("stat.late_key")
 	// Reserve the recorder's counters even when none is installed: EnableRecorder
 	// can run after Freeze (":log rec N"), and detached cells would make the
 	// recorder invisible to its own windows.
@@ -92,6 +94,20 @@ func (r *Registry) Frozen() bool { return r.frozen.Load() }
 // regression, not a supported path
 func (r *Registry) lateCount() int64 {
 	return r.Bools.Late() + r.Ints.Late() + r.Floats.Late() + r.Strings.Late()
+}
+
+// lateKey returns the first rejected key across the four maps
+func (r *Registry) lateKey() string {
+	if k := r.Ints.LateKey(); k != "" {
+		return k
+	}
+	if k := r.Bools.LateKey(); k != "" {
+		return k
+	}
+	if k := r.Floats.LateKey(); k != "" {
+		return k
+	}
+	return r.Strings.LateKey()
 }
 
 // EnableRecorder installs a flight recorder of the given tick depth; 0 removes

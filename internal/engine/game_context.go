@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // GameContext holds all game state including the ECS world
@@ -18,10 +19,9 @@ type GameContext struct {
 
 	// Set once in NewGameContext, and pointers/values never modified, safe for concurrent read without sync
 
-	World         *World         // ECS world; has internal lock
-	State         *GameState     // Centralized game state; has internal lock
-	PausableClock *PausableClock // Pausable time source; has internal sync
-	TimeCtl       *TimeControl   // Rate control and scheduler wake; registry-bound
+	World   *World       // ECS world; has internal lock
+	State   *GameState   // Centralized game state; has internal lock
+	TimeCtl *TimeControl // Sole time surface: reads, rate, pause, step; registry-bound
 
 	// === Channels ===
 
@@ -30,8 +30,6 @@ type GameContext struct {
 	// === Atomic (Self-Synchronized) ===
 
 	FrameNumber atomic.Int64 // Render frame counter; incremented by main loop
-
-	IsPaused atomic.Bool // Pause flag; actual timing handled by PausableClock
 
 	MacroRecording      atomic.Bool  // True when macro is recording
 	MacroRecordingLabel atomic.Int32 // Current recording label (rune), 0 if not recording
@@ -95,18 +93,18 @@ type GameContext struct {
 	statMode    *status.AtomicString
 }
 
-// NewGameContext creates a GameContext using an existing ECS World
-// Component must be registered before context creation
-// width/height are initial terminal dimensions
+// NewGameContext creates a GameContext on the interactive clock
 func NewGameContext(world *World, width, height int) *GameContext {
-	// Create pausable clock
-	pausableClock := NewPausableClock()
+	return NewGameContextWithClock(world, width, height, NewPausableClock())
+}
 
+// NewGameContextWithClock creates a GameContext on a caller-supplied time source.
+// Headless and replay runs pass a ManualClock.
+func NewGameContextWithClock(world *World, width, height int, clock Clock) *GameContext {
 	ctx := &GameContext{
-		World:         world,
-		PausableClock: pausableClock,
-		Width:         width,
-		Height:        height,
+		World:  world,
+		Width:  width,
+		Height: height,
 	}
 
 	// Calculate game area
@@ -128,7 +126,7 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.statMode = reg.Strings.Get("context.mode")
 
 	// 3. Time control; registers its metrics before Freeze
-	ctx.TimeCtl = NewTimeControl(pausableClock, reg)
+	ctx.TimeCtl = NewTimeControl(clock, reg)
 
 	// 4. Config Resource
 	// Initial: Map = Viewport, CropOnResize enabled for backward compat
@@ -145,8 +143,8 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	// 5. Time Resource (Initial state)
 	world.Resources.Time = &TimeResource{}
 	world.Resources.Time.Update(
-		pausableClock.Now(),
-		pausableClock.RealTime(),
+		ctx.TimeCtl.Now(),
+		ctx.TimeCtl.RealTime(),
 		parameter.GameUpdateInterval,
 	)
 
@@ -174,21 +172,14 @@ func NewGameContext(world *World, width, height int) *GameContext {
 	ctx.lastCommand.Store(&empty)
 	ctx.overlayTitle.Store(&empty)
 
-	// 12. Initialize pause state
-	ctx.IsPaused.Store(false)
-
-	// 13. Operator session state; see the session state contract above ResetSessionState
+	// 12. Operator session state; see the session state contract above ResetSessionState
 	ctx.recomputeOverlayGeometry()
 	ctx.SetMode(core.ModeNormal)
-	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
+	ctx.lastFPSUpdate = ctx.TimeCtl.RealTime()
 
-	// 14. Initial input state - Not restored by EventGameReset: user-owned for the session
+	// 13. Initial input state - Not restored by EventGameResetRequest: user-owned for the session
 	ctx.MouseFreeMode.Store(parameter.DefaultMouseFreeMode)
 	ctx.AutoFire.Store(parameter.DefaultAutoFire)
-
-	// 15. Initialize FPS tracking
-	ctx.statFPS = ctx.World.Resources.Status.Ints.Get("engine.fps")
-	ctx.lastFPSUpdate = ctx.PausableClock.RealTime()
 
 	return ctx
 }
@@ -367,7 +358,7 @@ func (ctx *GameContext) ClearOverlayPins() {
 }
 
 // Session state is operator-owned: it describes how the game is being observed and
-// driven, not the game itself, so it survives EventGameReset.
+// driven, not the game itself, so it survives EventGameResetRequest.
 // The list below is its definition; anything not named is world state and is rebuilt by reset.
 //
 //	MouseFreeMode, AutoFire   input preferences
@@ -444,7 +435,7 @@ func (ctx *GameContext) GetFrameNumber() int64 {
 func (ctx *GameContext) IncrementFrameNumber() int64 {
 	// FPS calculation (once per second)
 	ctx.frameCountFPS++
-	now := ctx.PausableClock.RealTime()
+	now := ctx.TimeCtl.RealTime()
 	if now.Sub(ctx.lastFPSUpdate) >= time.Second {
 		ctx.statFPS.Store(ctx.frameCountFPS)
 		ctx.frameCountFPS = 0
@@ -458,6 +449,9 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 }
 
 // === EVENT QUEUE METHODS ===
+
+// Rand returns the labelled RNG stream; the world owns the root seed
+func (ctx *GameContext) Rand(label string) *vmath.FastRand { return ctx.World.Rand(label) }
 
 // PushEvent adds an event to the event queue using the World's optimized dispatcher, ensuring consistent frame-stamping across game space and input sources
 func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
@@ -536,7 +530,7 @@ func (ctx *GameContext) SetSearchText(text string) {
 // SetStatusMessage sets status message with optional duration and override.
 // Expiry is game time: a message dilates with the rate and holds while paused.
 func (ctx *GameContext) SetStatusMessage(msg string, duration time.Duration, override bool) {
-	now := ctx.PausableClock.Now().UnixNano()
+	now := ctx.TimeCtl.Now().UnixNano()
 	currentExpiry := ctx.statusMessageExpiry.Load()
 
 	// Reject write if current message has unexpired duration and no override

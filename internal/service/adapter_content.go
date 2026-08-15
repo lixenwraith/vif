@@ -6,7 +6,6 @@ import (
 	"os"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
@@ -29,6 +28,7 @@ type ContentSource struct {
 type ContentService struct {
 	src   ContentSource
 	label string
+	seed  uint64
 
 	corpus *content.Corpus
 
@@ -39,9 +39,10 @@ type ContentService struct {
 	statFile   *status.AtomicString
 }
 
-// NewContentService creates the service for a resolved corpus source
-func NewContentService(src ContentSource) *ContentService {
-	return &ContentService{src: src}
+// NewContentService creates the service for a resolved corpus source.
+// The seed is the run's root: block order is simulation input, not I/O.
+func NewContentService(src ContentSource, seed uint64) *ContentService {
+	return &ContentService{src: src, seed: seed}
 }
 
 func (s *ContentService) Name() string           { return "content" }
@@ -75,7 +76,7 @@ func (s *ContentService) Init() error {
 	}
 
 	s.corpus, s.label = corpus, label
-	s.cursor = content.NewCursor(corpus, vmath.NewFastRand(uint64(time.Now().UnixNano())))
+	s.cursor = content.NewCursor(corpus, vmath.NewSeededRand(s.seed, "content"))
 
 	if s.src.Pin != "" && !s.cursor.Pin(s.src.Pin) {
 		return fmt.Errorf("content %s: %s has no usable blocks", label, s.src.Pin)

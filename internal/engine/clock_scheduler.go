@@ -21,9 +21,7 @@ import (
 type ClockScheduler struct {
 	world *World
 
-	clock    Clock
-	ctl      *TimeControl
-	isPaused *atomic.Bool
+	ctl *TimeControl // sole time surface; pause is read from the clock it schedules
 
 	// Tick configuration
 	tickInterval     time.Duration
@@ -94,7 +92,6 @@ type regionStat struct {
 func NewClockScheduler(
 	world *World,
 	ctl *TimeControl,
-	isPaused *atomic.Bool,
 	tickInterval time.Duration,
 	frameReady <-chan struct{},
 ) (*ClockScheduler, <-chan struct{}, chan<- struct{}) {
@@ -102,17 +99,13 @@ func NewClockScheduler(
 	resetChan := make(chan struct{}, 1)
 
 	statusReg := world.Resources.Status
-	clock := ctl.Clock()
 
 	cs := &ClockScheduler{
-		world: world,
-
-		clock:        clock,
+		world:        world,
 		ctl:          ctl,
-		isPaused:     isPaused,
 		tickInterval: tickInterval,
 
-		gameStartTime: clock.Now(),
+		gameStartTime: ctl.Now(),
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -269,15 +262,40 @@ func (cs *ClockScheduler) publishRegionStats() {
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
-		cs.world.Seal() // no system registration once the goroutines are live
-		// Metric set is closed here: Seal precedes the first tick, and every
-		// system and renderer has registered by construction
-		cs.world.Resources.Status.Freeze()
+		cs.prepare()
 		cs.wg.Add(2) // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
 		core.Go(cs.schedulerLoop)
 		core.Go(cs.eventLoop)
 	}
+}
+
+// prepare closes the system and metric sets before the first tick. Both are
+// idempotent, so a harness driving ticks directly may call it repeatedly.
+func (cs *ClockScheduler) prepare() {
+	cs.world.Seal() // no system registration once the goroutines are live
+	cs.world.Resources.Status.Freeze()
+}
+
+// RunTicks advances the simulation by n ticks as fast as the caller's goroutine
+// allows. Requires a manual clock: Step is a no-op on the interactive clock
+// while it is running. The caller owns the loop, so Start must not be running —
+// a concurrent scheduler or event goroutine reintroduces the nondeterminism
+// this exists to avoid.
+func (cs *ClockScheduler) RunTicks(n int) {
+	cs.prepare()
+	for range n {
+		cs.stepTick()
+	}
+}
+
+// Settle dispatches queued events without advancing time. Use after injecting
+// input so its effects land before the next tick. Must not be called from a
+// path already holding the world lock.
+func (cs *ClockScheduler) Settle() {
+	cs.world.RunSafe(func() {
+		cs.dispatchAndProcessEvents("settle")
+	})
 }
 
 // Stop halts the scheduler loop
@@ -296,7 +314,7 @@ func (cs *ClockScheduler) Stop() {
 func (cs *ClockScheduler) schedulerLoop() {
 	defer cs.wg.Done()
 
-	cs.nextTickDeadline = cs.clock.Now().Add(cs.tickInterval)
+	cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
 
 	timer := stoppedTimer()
 	defer timer.Stop()
@@ -320,7 +338,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 		var sleepDuration time.Duration // wall clock
 
-		if cs.isPaused.Load() {
+		if cs.ctl.IsPaused() {
 			if cs.ctl.TakeStep() {
 				cs.stepTick()
 				continue // drain the allowance without sleeping
@@ -332,10 +350,10 @@ func (cs *ClockScheduler) schedulerLoop() {
 			if wasPaused {
 				// Game time stood still or was stepped; re-anchor so the first
 				// live tick is not owed a burst
-				cs.nextTickDeadline = cs.clock.Now().Add(cs.tickInterval)
+				cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
 				wasPaused = false
 			}
-			gameNow := cs.clock.Now()
+			gameNow := cs.ctl.Now()
 			deadline := cs.nextTickDeadline
 
 			if !gameNow.Before(deadline) {
@@ -347,8 +365,10 @@ func (cs *ClockScheduler) schedulerLoop() {
 
 				cs.nextTickDeadline = cs.nextTickDeadline.Add(cs.tickInterval)
 
-				maxBehind := cs.tickInterval * 2
-				if gameNow.Sub(cs.nextTickDeadline) > maxBehind {
+				// Re-read after the tick: the debt is what the tick consumed,
+				// not what was owed when it started
+				gameNow = cs.ctl.Now()
+				if gameNow.Sub(cs.nextTickDeadline) > cs.tickInterval*2 {
 					// Systems cannot sustain this rate; drop the debt and count it
 					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
 					cs.statTickSlips.Add(1)
@@ -360,13 +380,8 @@ func (cs *ClockScheduler) schedulerLoop() {
 				default:
 				}
 
-				sleepDuration = cs.clock.ToReal(deadline.Sub(cs.clock.Now()))
-			} else {
-				sleepDuration = cs.clock.ToReal(deadline.Sub(gameNow))
 			}
-			if sleepDuration < 0 {
-				sleepDuration = 0
-			}
+			sleepDuration = max(cs.ctl.ToReal(deadline.Sub(gameNow)), 0)
 		}
 
 		if sleepDuration > 0 {
@@ -389,7 +404,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 // pause gate. Render backpressure is skipped: the render loop grants no frame
 // while paused, and a step is an inspection request, not a paced one.
 func (cs *ClockScheduler) stepTick() {
-	cs.clock.Step(cs.tickInterval)
+	cs.ctl.Step(cs.tickInterval)
 	cs.stepping = true
 	cs.processTick()
 	cs.stepping = false
@@ -399,6 +414,10 @@ func (cs *ClockScheduler) stepTick() {
 	default:
 	}
 }
+
+// Reset rebuilds world state on the caller's goroutine, for harnesses that drive
+// ticks directly rather than through the reset channel
+func (cs *ClockScheduler) Reset() { cs.executeReset() }
 
 // breakHit applies a tripped request: flush the recorder window, report the
 // cause, and pause when asked
@@ -421,10 +440,10 @@ func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
 // display, so the handshake is skipped and the tick deadline is the only pacing.
 // Returns false on shutdown.
 func (cs *ClockScheduler) awaitFrame(t *time.Timer) bool {
-	if cs.clock.Scale().Faster() {
+	if cs.ctl.Scale().Faster() {
 		return true
 	}
-	timeout := cs.clock.ToReal(cs.tickInterval * 2)
+	timeout := cs.ctl.ToReal(cs.tickInterval * 2)
 	if timeout <= 0 {
 		timeout = cs.tickInterval * 2
 	}
@@ -619,7 +638,7 @@ func (cs *ClockScheduler) executeReset() {
 	_ = cs.world.Resources.Event.Queue.Consume()
 
 	// 3. Reset Scheduler internal timing
-	now := cs.clock.Now()
+	now := cs.ctl.Now()
 	cs.nextTickDeadline = now.Add(cs.tickInterval)
 	cs.gameStartTime = now
 
@@ -638,6 +657,10 @@ func (cs *ClockScheduler) executeReset() {
 
 	// 7. Settle FSM-reset and unpause events before releasing the lock
 	cs.dispatchAndProcessEvents("reset")
+
+	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
+	//    next game's streams differ while staying a function of the root seed
+	vlog.Info("app", "msg", "rng session", "session", cs.world.Resources.Rand.NextSession())
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
@@ -649,7 +672,7 @@ func (cs *ClockScheduler) DispatchEventsImmediately() {
 
 // processTick executes one clock cycle
 func (cs *ClockScheduler) processTick() {
-	if cs.isPaused.Load() && !cs.stepping {
+	if cs.ctl.IsPaused() && !cs.stepping {
 		return
 	}
 
@@ -660,21 +683,23 @@ func (cs *ClockScheduler) processTick() {
 	// Lock sampling is a per-tick decision, not a per-acquire probe
 	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
 
-	var entityCount int
+	var (
+		entityCount int
+		tickTime    time.Time // this tick's game instant, read once under the lock
+	)
 
 	cs.world.RunSafe(func() {
-		now := cs.clock.Now()
+		tickTime = cs.ctl.Now()
 
 		// 1. Sync Time
 		cs.world.Resources.Time.Update(
-			now,
-			cs.clock.RealTime(),
+			tickTime,
+			cs.ctl.RealTime(),
 			cs.tickInterval,
 		)
 
 		// 2. Update game elapsed time status
-		elapsedMs := now.Sub(cs.gameStartTime).Milliseconds()
-		cs.statGameElapsedMs.Store(elapsedMs)
+		cs.statGameElapsedMs.Store(tickTime.Sub(cs.gameStartTime).Milliseconds())
 
 		// 3. Initial Settling: Resolve everything accumulated during game tick
 
@@ -716,7 +741,7 @@ func (cs *ClockScheduler) processTick() {
 	// Update APM based on game time
 	cs.world.Resources.Game.State.UpdateAPM(
 		cs.world.Resources.Status,
-		cs.clock.Now(),
+		tickTime,
 	)
 
 	cs.statTicks.Store(int64(ticks))

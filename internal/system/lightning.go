@@ -30,7 +30,7 @@ func NewLightningSystem(world *engine.World) engine.System {
 }
 
 func (s *LightningSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.enabled = true
 }
 

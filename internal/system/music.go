@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 const (
@@ -42,6 +43,8 @@ type MusicSystem struct {
 	world  *engine.World
 	player *audio.AudioEngine
 
+	rng *vmath.FastRand
+
 	bpmF       float64 // slewed tempo state; drifts toward APM target
 	lastBPM    int
 	tier       audio.Intensity
@@ -63,6 +66,7 @@ func NewMusicSystem(world *engine.World) engine.System {
 
 // Init resets session state
 func (s *MusicSystem) Init() {
+	s.rng = s.world.Rand(s.Name())
 	s.bpmF = float64(parameter.APMToBPM(0))
 	s.lastBPM = 0
 	s.tier = audio.IntensityCalm
@@ -230,7 +234,7 @@ func (s *MusicSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.MusicSeedPayload); ok {
 			seed := p.Seed
 			if seed == 0 {
-				seed = s.world.Resources.Time.RealTimeNano()
+				seed = int64(s.rng.Next())
 			}
 			s.player.SetMusicSeed(seed)
 		}

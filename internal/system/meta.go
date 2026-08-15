@@ -21,7 +21,6 @@ type MetaSystem struct {
 	world *engine.World
 
 	// Context and player telemetry, published for the debug overlay and HUD
-	statPaused  *atomic.Bool
 	statMapW    *atomic.Int64
 	statMapH    *atomic.Int64
 	statCameraX *atomic.Int64
@@ -43,7 +42,6 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 // Init caches the telemetry pointers; runs at construction, before Freeze
 func (s *MetaSystem) Init() {
 	reg := s.world.Resources.Status
-	s.statPaused = reg.Bools.Get("context.paused")
 	s.statMapW = reg.Ints.Get("context.map_w")
 	s.statMapH = reg.Ints.Get("context.map_h")
 	s.statCameraX = reg.Ints.Get("context.camera_x")
@@ -327,15 +325,8 @@ func (s *MetaSystem) handleAboutRequest() {
 // handlePauseRequest applies pause to game state and clock, then announces
 // the change; each system applies it to its own domain (audio → AudioSystem)
 func (s *MetaSystem) handlePauseRequest(paused bool) {
-	if s.ctx.IsPaused.Load() == paused {
+	if !s.ctx.TimeCtl.SetPaused(paused) {
 		return
-	}
-	s.ctx.IsPaused.Store(paused)
-	s.statPaused.Store(paused)
-	if paused {
-		s.ctx.PausableClock.Pause()
-	} else {
-		s.ctx.PausableClock.Resume()
 	}
 	s.ctx.PushEvent(event.EventGamePauseChanged, &event.GamePausePayload{Paused: paused})
 }

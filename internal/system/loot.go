@@ -76,7 +76,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.pity = make(map[component.SpeciesType]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)

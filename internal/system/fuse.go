@@ -49,7 +49,7 @@ func NewFuseSystem(world *engine.World) engine.System {
 
 func (s *FuseSystem) Init() {
 	s.fusions = make([]pendingFusion, 0, 16)
-	s.rng = vmath.NewFastRand(uint64(s.world.Resources.Time.RealTimeNano()))
+	s.rng = s.world.Rand(s.Name())
 	s.enabled = true
 }
 
