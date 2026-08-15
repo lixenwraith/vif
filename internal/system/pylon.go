@@ -12,17 +12,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// pylonCacheEntry holds cached entity position for soft collision
-type pylonCacheEntry struct {
-	entity core.Entity
-	x, y   int
-}
-
 // PylonSystem manages pylon enemy entity lifecycle
 // Pylon is a stationary ablative composite that acts as damage sponge
 // Pushes other enemies away via soft collision
 type PylonSystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Telemetry
 	statActive *atomic.Bool
@@ -45,6 +41,7 @@ func NewPylonSystem(world *engine.World) engine.System {
 }
 
 func (s *PylonSystem) Init() {
+	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -274,7 +271,6 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	cursorPos, hasCursor := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
 
 	// Tier 1: Random attempts
-	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTimeNano()))
 
 	// Valid center ranges: [radiusX, MapWidth-radiusX-1] and [radiusY, MapHeight-radiusY-1]
 	minCX := radiusX
@@ -293,8 +289,8 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
 
 	for range parameter.PylonSpawnMaxAttempts {
-		cx := minCX + rng.Intn(rangeX)
-		cy := minCY + rng.Intn(rangeY)
+		cx := minCX + s.rng.Intn(rangeX)
+		cy := minCY + s.rng.Intn(rangeY)
 		lastCX, lastCY = cx, cy
 
 		// Cursor exclusion

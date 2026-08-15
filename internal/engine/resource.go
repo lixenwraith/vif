@@ -80,6 +80,7 @@ func (tr *TimeResource) Update(gameTime, realTime time.Time, deltaTime time.Dura
 }
 
 // GameTimeNano returns game time as Unix nanoseconds for integer comparison paths.
+// Not a seed source: tick granularity makes concurrent draws identical.
 func (tr *TimeResource) GameTimeNano() int64 { return tr.GameTime.UnixNano() }
 
 // DeltaTimeNano returns the tick delta in nanoseconds
@@ -193,6 +194,10 @@ func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 func (r *RandResource) Stream(label string) *vmath.FastRand {
 	return vmath.NewSeededRand(r.sessionRoot(), label)
 }
+
+// SessionRoot returns the current session's root seed, for packages that build
+// their own generator instead of a vmath stream.
+func (r *RandResource) SessionRoot() uint64 { return r.sessionRoot() }
 
 // sessionRoot folds the session counter into the root; session 0 is the root itself
 func (r *RandResource) sessionRoot() uint64 {

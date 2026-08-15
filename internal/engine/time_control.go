@@ -117,7 +117,7 @@ func (tc *TimeControl) SetScale(s TimeScale) {
 	if !s.Valid() {
 		return
 	}
-	tc.disarm()
+	tc.disarm(false)
 	tc.applyScale(s)
 }
 
@@ -130,7 +130,7 @@ func (tc *TimeControl) applyScale(s TimeScale) {
 
 // StepTicks grants a paused tick allowance and wakes the scheduler
 func (tc *TimeControl) StepTicks(n int64) {
-	tc.disarm()
+	tc.disarm(true)
 	if n < 1 {
 		n = 1
 	}
@@ -155,7 +155,7 @@ func (tc *TimeControl) TakeStep() bool {
 
 // Arm installs a run-until request and switches to its run rate
 func (tc *TimeControl) Arm(bs *BreakState, run TimeScale) {
-	tc.disarm()
+	tc.disarm(true)
 	tc.brk.Store(bs)
 	tc.statBreak.StoreIfChanged(bs.Label)
 	tc.applyScale(run)
@@ -199,15 +199,18 @@ func (tc *TimeControl) take(bs *BreakState) *BreakState {
 	return bs
 }
 
-// Disarm clears any pending step allowance or run-until request
-func (tc *TimeControl) Disarm() { tc.disarm() }
-
-func (tc *TimeControl) disarm() {
-	tc.budget.Store(0)
-	tc.statStep.Store(0)
-	if tc.brk.Swap(nil) != nil {
-		tc.statBreak.StoreIfChanged("-")
+// disarm clears any armed break and returns it, reinstating the rate it was
+// armed from unless the caller is setting a rate itself.
+func (tc *TimeControl) disarm(restore bool) *BreakState {
+	bs := tc.brk.Swap(nil)
+	if bs == nil {
+		return nil
 	}
+	if restore {
+		tc.applyScale(bs.Restore)
+	}
+	tc.statBreak.StoreIfChanged("-")
+	return bs
 }
 
 // CancelBreak drops a pending step allowance and disarms any run-until request,

@@ -37,11 +37,6 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 		engineCfg.PerturbationStrength = cfg.PerturbationStdDev
 	}
 
-	// Pin the seed so engine and probe streams are jointly reproducible
-	if engineCfg.Seed == 0 {
-		engineCfg.Seed = rand.Uint64()
-	}
-
 	bounds := cfg.Bounds
 	initializer := func(rng *rand.Rand) []float64 {
 		g := make([]float64, cfg.GeneCount)
@@ -56,7 +51,8 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 	return &TrackedSpecies{
 		Config:     cfg,
 		Aggregator: agg,
-		probeRng:   rand.New(rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)),
+		// Probe stream derives from the engine seed so both replay together
+		probeRng: rand.New(rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)),
 		Engine: genetic.NewStreamingEngine[[]float64, float64](
 			initializer,
 			&genetic.TournamentSelector[[]float64, float64]{TournamentSize: cfg.TournamentSize},

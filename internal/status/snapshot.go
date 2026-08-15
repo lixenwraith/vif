@@ -70,7 +70,6 @@ func (r *Registry) Tick(n uint64) {
 	}
 	if late := r.lateCount(); late != 0 {
 		r.statLate.Store(late)
-		r.statLateKey.StoreIfChanged(r.lateKey())
 	}
 
 	if every := r.snapEvery.Load(); every != 0 && n%every == 0 &&

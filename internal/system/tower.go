@@ -19,6 +19,8 @@ import (
 type TowerSystem struct {
 	world *engine.World
 
+	rng *vmath.FastRand
+
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
@@ -39,6 +41,7 @@ func NewTowerSystem(world *engine.World) engine.System {
 }
 
 func (s *TowerSystem) Init() {
+	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -243,8 +246,6 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	width := 2*radiusX + 1
 	height := 2*radiusY + 1
 
-	rng := vmath.NewFastRand(uint64(s.world.Resources.Time.GameTimeNano()))
-
 	minCX := radiusX
 	maxCX := config.MapWidth - radiusX - 1
 	minCY := radiusY
@@ -260,8 +261,8 @@ func (s *TowerSystem) findTowerPosition(radiusX, radiusY int) (int, int, bool) {
 	lastCX, lastCY := config.MapWidth/2, config.MapHeight/2
 
 	for range parameter.TowerSpawnMaxAttempts {
-		cx := minCX + rng.Intn(rangeX)
-		cy := minCY + rng.Intn(rangeY)
+		cx := minCX + s.rng.Intn(rangeX)
+		cy := minCY + s.rng.Intn(rangeY)
 		lastCX, lastCY = cx, cy
 
 		if s.validateTowerPosition(cx, cy, radiusX, radiusY) {

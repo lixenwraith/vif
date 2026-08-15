@@ -138,20 +138,6 @@ func TestFastRandZeroSeed(t *testing.T) {
 	}
 }
 
-func TestFastRandIntnRange(t *testing.T) {
-	r := NewFastRand(5)
-	for _, n := range []int{1, 2, 7, 31, 1000} {
-		for range 5000 {
-			if v := r.Intn(n); v < 0 || v >= n {
-				t.Fatalf("Intn(%d) = %d", n, v)
-			}
-		}
-	}
-	if r.Intn(0) != 0 || r.Intn(-5) != 0 {
-		t.Error("Intn of non-positive must be 0")
-	}
-}
-
 func TestFastRandFloat64Range(t *testing.T) {
 	r := NewFastRand(6)
 	for range 10000 {

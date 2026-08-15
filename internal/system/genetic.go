@@ -15,6 +15,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // --- Tracked Entity ---
@@ -179,6 +180,9 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 	}
 
 	cfg := parameter.GAStreamingConfig()
+	// Per-species seed: one root, independent streams, stable across runs
+	cfg.Seed = vmath.DeriveSeed(s.world.Resources.Rand.SessionRoot(),
+		"genetic:"+strconv.Itoa(int(payload.Species)))
 	config := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(payload.Species),
 		Name:               fmt.Sprintf("species_%d", payload.Species),

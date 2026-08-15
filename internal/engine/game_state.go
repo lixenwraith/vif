@@ -7,7 +7,6 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
 // GameState centralizes game state with clear ownership boundaries
@@ -104,8 +103,9 @@ func (gs *GameState) SetMode(m core.GameMode) {
 	gs.Mode.Store(int32(m))
 }
 
-// UpdateAPM rolls action history window and recalculates APM, called ~1/sec by scheduler, publishes results to status registry
-func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time) {
+// UpdateAPM rolls action history window and recalculates APM, called ~1/sec by scheduler.
+// Results stay in the atomics; the scheduler owns the metric cells and publishes them.
+func (gs *GameState) UpdateAPM(currentTime time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
 
@@ -155,10 +155,4 @@ func (gs *GameState) UpdateAPM(registry *status.Registry, currentTime time.Time)
 	// Normalize 5s window to 1-minute rate
 	musicAPM := burstTotal * (60 / burstWindow) / parameter.APMUnit
 	gs.MusicAPM.Store(musicAPM)
-
-	// Publish to registry
-	if registry != nil {
-		registry.Ints.Get("engine.apm").Store(int64(currentAPM))
-		registry.Ints.Get("engine.music_apm").Store(int64(musicAPM))
-	}
 }

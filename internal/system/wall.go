@@ -1,6 +1,7 @@
 package system
 
 import (
+	"math/rand/v2"
 	"sync/atomic"
 
 	"github.com/lixenwraith/color"
@@ -24,6 +25,9 @@ type WallSystem struct {
 
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
+
+	// Maze generator source, reused across spawns so two mazes in one session differ
+	mazeRng *rand.Rand
 
 	// Metrics
 	statEnabled    *atomic.Bool
@@ -50,6 +54,8 @@ func NewWallSystem(world *engine.World) engine.System {
 func (s *WallSystem) Init() {
 	s.pendingPushChecks = make([]vmath.Point, 0, 64)
 	s.pushCheckEveryTick = false
+	s.mazeRng = rand.New(rand.NewPCG(
+		vmath.DeriveSeed(s.world.Resources.Rand.SessionRoot(), s.Name()+":maze"), 0))
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -810,7 +816,9 @@ func (s *WallSystem) handleMazeSpawn(payload *event.MazeSpawnRequestPayload) {
 		Rooms:             rooms,
 		DefaultRoomWidth:  payload.DefaultRoomWidth / payload.CellWidth,
 		DefaultRoomHeight: payload.DefaultRoomHeight / payload.CellHeight,
+		Rng:               s.mazeRng,
 	}
+
 	result := maze.Generate(cfg)
 
 	// Derive actual dimensions post-ensureOdd adjustment in the generator

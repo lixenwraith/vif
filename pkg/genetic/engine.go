@@ -8,6 +8,8 @@ import (
 	"sync"
 )
 
+const defaultSeed = 0x9E3779B97F4A7C15
+
 // ErrNoCandidates is returned when the pool has not been initialized
 var ErrNoCandidates = errors.New("genetic: pool is empty")
 
@@ -43,11 +45,6 @@ func NewEngine[S Solution, F Numeric](
 ) *Engine[S, F] {
 	cfg := config.Normalize()
 
-	seed := cfg.Seed
-	if seed == 0 {
-		seed = rand.Uint64()
-	}
-
 	return &Engine[S, F]{
 		evaluator:   evaluator,
 		initializer: initializer,
@@ -55,7 +52,7 @@ func NewEngine[S Solution, F Numeric](
 		combiner:    combiner,
 		perturbator: perturbator,
 		cfg:         cfg,
-		rng:         rand.New(rand.NewPCG(seed, seed^0x9E3779B97F4A7C15)),
+		rng:         rand.New(rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)),
 		parents:     make([]Candidate[S, F], 2),
 		buf:         make([]S, 2),
 		next:        make([]Candidate[S, F], 0, cfg.PoolSize),

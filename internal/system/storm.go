@@ -49,6 +49,7 @@ type StormSystem struct {
 	statGreenActiveFrame *atomic.Int64
 	statRedActiveFrame   *atomic.Int64
 	statBlueActiveFrame  *atomic.Int64
+	statNudges           *atomic.Int64
 
 	enabled bool
 }
@@ -69,6 +70,7 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.statGreenActiveFrame = world.Resources.Status.Ints.Get("storm.green_active_frames")
 	s.statRedActiveFrame = world.Resources.Status.Ints.Get("storm.red_active_frames")
 	s.statBlueActiveFrame = world.Resources.Status.Ints.Get("storm.blue_active_frames")
+	s.statNudges = world.Resources.Status.Ints.Get("storm.nudge_count")
 
 	s.Init()
 	return s
@@ -1011,8 +1013,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 					circleComp.Vel3D.Z -= parameter.StormInvulnerabilityNudge
 					circleComp.InvulnerableSince = nowNano // Reset timer
 
-					// Telemetry (optional)
-					s.world.Resources.Status.Ints.Get("storm.nudge_count").Add(1)
+					s.statNudges.Add(1)
 				}
 			}
 

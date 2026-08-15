@@ -64,11 +64,6 @@ func NewStreamingEngine[S Solution, F Numeric](
 ) *StreamingEngine[S, F] {
 	cfg := config.Normalize()
 
-	seed := cfg.Seed
-	if seed == 0 {
-		seed = rand.Uint64()
-	}
-
 	e := &StreamingEngine[S, F]{
 		initializer: initializer,
 		selector:    selector,
@@ -76,7 +71,7 @@ func NewStreamingEngine[S Solution, F Numeric](
 		perturbator: perturbator,
 		cloner:      cloner,
 		cfg:         cfg,
-		rng:         rand.New(rand.NewPCG(seed, seed^0x9E3779B97F4A7C15)),
+		rng:         rand.New(rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)),
 		archive:     make([]Candidate[S, F], 0, cfg.PoolSize),
 		parents:     make([]Candidate[S, F], 2),
 		offspring:   make([]S, 2),

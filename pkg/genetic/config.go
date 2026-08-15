@@ -32,7 +32,7 @@ type EngineConfig struct {
 	PerturbationStrength float64
 	MaxIterations        int
 	Parallelism          int
-	// Seed of 0 selects a random seed
+	// Seed fixes the PCG stream; the caller owns reproducibility and 0 is a valid seed
 	Seed uint64
 }
 

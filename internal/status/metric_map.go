@@ -14,10 +14,9 @@ type MetricMap[T any] struct {
 	keys   []string // sorted view, rebuilt lazily after registration
 	sorted bool
 
-	gen     atomic.Uint64 // bumped per new key; invalidates cached views
-	frozen  atomic.Bool
-	late    atomic.Int64
-	lateKey atomic.Pointer[string]
+	gen    atomic.Uint64 // bumped per new key; invalidates cached views
+	frozen atomic.Bool
+	late   atomic.Int64
 }
 
 // NewMetricMap creates an initialized MetricMap
@@ -40,7 +39,7 @@ func (m *MetricMap[T]) Get(key string) *T {
 
 	// Frozen: detached cell, counted; the caller still gets a usable pointer
 	if m.frozen.Load() {
-		return m.markLate(key)
+		return m.markLate()
 	}
 
 	// Slow path: Lock and create
@@ -52,7 +51,7 @@ func (m *MetricMap[T]) Get(key string) *T {
 	}
 	// Re-check under the write lock: Freeze may have run since the fast path
 	if m.frozen.Load() {
-		return m.markLate(key)
+		return m.markLate()
 	}
 
 	ptr := new(T)
@@ -131,18 +130,9 @@ func (m *MetricMap[T]) Freeze() {
 // Late returns the number of registrations rejected since Freeze
 func (m *MetricMap[T]) Late() int64 { return m.late.Load() }
 
-// markLate counts a rejected registration and keeps the first key seen
-func (m *MetricMap[T]) markLate(key string) *T {
-	if m.late.Add(1) == 1 {
-		m.lateKey.Store(&key)
-	}
+// markLate counts a rejected registration and returns a detached cell.
+// The key is not retained: stat.late is the alarm, rg is the diagnosis.
+func (m *MetricMap[T]) markLate() *T {
+	m.late.Add(1)
 	return new(T)
-}
-
-// LateKey returns the first key rejected since Freeze, empty when none
-func (m *MetricMap[T]) LateKey() string {
-	if p := m.lateKey.Load(); p != nil {
-		return *p
-	}
-	return ""
 }

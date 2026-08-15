@@ -11,17 +11,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// // UpdateMutex wraps sync.Mutex for game tick serialization
-// type UpdateMutex struct {
-// 	mu sync.Mutex
-// }
-//
-// func (m *UpdateMutex) Lock()         { m.mu.Lock() }
-// func (m *UpdateMutex) Unlock()       { m.mu.Unlock() }
-// func (m *UpdateMutex) TryLock() bool { return m.mu.TryLock() }
-
-// ===
-
 // LockHoldWarn [wall] is the update-mutex hold time above which a hold is reported
 const LockHoldWarn = 20 * time.Millisecond
 

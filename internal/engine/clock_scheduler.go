@@ -52,6 +52,8 @@ type ClockScheduler struct {
 
 	// Cached metric pointers
 	statTicks           *atomic.Int64
+	statAPM             *atomic.Int64
+	statMusicAPM        *atomic.Int64
 	statEvBackoffs      *atomic.Int64
 	statEvDispatches    *atomic.Int64
 	statEvDead          *atomic.Int64
@@ -120,6 +122,8 @@ func NewClockScheduler(
 		eventLoopBackoffMax: parameter.EventLoopBackoffMax,
 
 		statTicks:           statusReg.Ints.Get("engine.ticks"),
+		statAPM:             statusReg.Ints.Get("engine.apm"),
+		statMusicAPM:        statusReg.Ints.Get("engine.music_apm"),
 		statEvBackoffs:      statusReg.Ints.Get("event.backoffs"),
 		statEvDispatches:    statusReg.Ints.Get("event.dispatches"),
 		statEvDead:          statusReg.Ints.Get("event.dead"),
@@ -733,18 +737,18 @@ func (cs *ClockScheduler) processTick() {
 	})
 
 	// Lock-free / internally synchronized paths only below this line
-	ticks := cs.world.Resources.Game.State.IncrementGameTicks()
+	gs := cs.world.Resources.Game.State
+	ticks := gs.IncrementGameTicks()
 	if bs := cs.ctl.Expire(ticks); bs != nil {
 		cs.breakHit(bs, "expired")
 	}
 
-	// Update APM based on game time
-	cs.world.Resources.Game.State.UpdateAPM(
-		cs.world.Resources.Status,
-		tickTime,
-	)
+	// APM rolls on game time; publish alongside the other tick counters
+	gs.UpdateAPM(tickTime)
 
 	cs.statTicks.Store(int64(ticks))
+	cs.statAPM.Store(int64(gs.GetAPM()))
+	cs.statMusicAPM.Store(int64(gs.GetMusicAPM()))
 	cs.statEntityCount.Store(int64(entityCount))
 	cs.statEntityCreated.Store(cs.world.CreatedCount())
 	cs.statEntityDestroyed.Store(cs.world.DestroyedCount())

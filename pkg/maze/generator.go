@@ -2,9 +2,11 @@ package maze
 
 import (
 	"math"
-	"math/rand"
-	"time"
+	"math/rand/v2"
 )
+
+// mazeDefaultSeed keeps a caller-less Generate reproducible rather than clock-seeded
+const mazeDefaultSeed = 0x9E3779B97F4A7C15
 
 // Cell types
 const (
@@ -49,7 +51,9 @@ type Config struct {
 
 	StartPos *Point // Optional (nil = Automatic)
 	EndPos   *Point // Optional (nil = Automatic)
-	Seed     int64  // Optional (0 = Random)
+
+	// Rng is the caller's generator; nil uses a fixed deterministic stream
+	Rng *rand.Rand
 
 	// Room generation
 	// RoomCount specifies total rooms to generate (0 = no rooms)
@@ -81,11 +85,10 @@ func Generate(cfg Config) Result {
 		}
 	}
 
-	seed := cfg.Seed
-	if seed == 0 {
-		seed = time.Now().UnixNano()
+	rng := cfg.Rng
+	if rng == nil {
+		rng = rand.New(rand.NewPCG(mazeDefaultSeed, 0))
 	}
-	rng := rand.New(rand.NewSource(seed))
 
 	// Resolve and reserve rooms before maze generation
 	resolved := resolveRooms(cfg, cols, rows, rng)
@@ -278,8 +281,8 @@ func resolveRandomRoom(width, height, cols, rows int, existing []resolvedRoom, r
 	const maxAttempts = 100
 	for range maxAttempts {
 		// Pick odd coordinates to align with maze nodes
-		x := minX + rng.Intn((maxX-minX)/2+1)*2
-		y := minY + rng.Intn((maxY-minY)/2+1)*2
+		x := minX + rng.IntN((maxX-minX)/2+1)*2
+		y := minY + rng.IntN((maxY-minY)/2+1)*2
 
 		room := resolvedRoom{x: x, y: y, w: w, h: h}
 		if !roomOverlaps(room, existing) {
@@ -432,7 +435,7 @@ func connectRooms(grid [][]bool, rooms []resolvedRoom, rng *rand.Rand) []RoomRes
 
 			// Determine entry count: 1-4, biased toward fewer
 			maxEntries := min(len(candidates), 4)
-			entryCount := 1 + rng.Intn(maxEntries)
+			entryCount := 1 + rng.IntN(maxEntries)
 
 			for i := 0; i < entryCount && i < len(candidates); i++ {
 				c := candidates[i]
@@ -532,7 +535,7 @@ func recursiveBacktracker(grid [][]bool, start Point, rng *rand.Rand) {
 		}
 
 		if len(candidates) > 0 {
-			d := candidates[rng.Intn(len(candidates))]
+			d := candidates[rng.IntN(len(candidates))]
 			wallX, wallY := curr.X+d.X/2, curr.Y+d.Y/2
 			nextX, nextY := curr.X+d.X, curr.Y+d.Y
 
@@ -581,7 +584,7 @@ func applySmartBraiding(grid [][]bool, probability float64, rng *rand.Rand) {
 				}
 
 				if len(candidates) > 0 {
-					c := candidates[rng.Intn(len(candidates))]
+					c := candidates[rng.IntN(len(candidates))]
 					grid[c.Y][c.X] = Passage
 				}
 			}

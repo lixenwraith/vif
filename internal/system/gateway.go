@@ -1,7 +1,6 @@
 package system
 
 import (
-	"math/rand/v2"
 	"sync/atomic"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // GatewaySystem manages gateway entity lifecycle and timed spawn emission
@@ -17,6 +17,8 @@ import (
 // Anchor liveness validated each tick — gateway despawns if anchor is destroyed
 type GatewaySystem struct {
 	world *engine.World
+
+	rng *vmath.FastRand
 
 	// Telemetry
 	statActive *atomic.Bool
@@ -38,6 +40,7 @@ func NewGatewaySystem(world *engine.World) engine.System {
 }
 
 func (s *GatewaySystem) Init() {
+	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -257,7 +260,7 @@ func (s *GatewaySystem) emitSpawnEvent(species component.SpeciesType, subType ui
 		var genes []float64
 		if s.world.Resources.Genetics != nil {
 			// Periodic probe keeps all phenotype bins under evaluation
-			if rand.Float64() < parameter.GAScoutRate {
+			if s.rng.Float64() < parameter.GAScoutRate {
 				genes, evalID = s.world.Resources.Genetics.SampleScout(uint8(species), populationID)
 			} else {
 				genes, evalID = s.world.Resources.Genetics.Sample(uint8(species), populationID)

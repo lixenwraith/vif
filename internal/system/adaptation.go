@@ -3,7 +3,6 @@ package system
 import (
 	"fmt"
 	"math"
-	"math/rand/v2"
 	"slices"
 	"sync/atomic"
 
@@ -35,6 +34,8 @@ type AdaptationSystem struct {
 	outcomes      map[uint32]map[uint8][]routeOutcome // Buffer: graphID -> subType -> outcomes
 	tracking      map[core.Entity]trackedRoute
 	pendingDeaths []event.EnemyKilledPayload
+
+	rng *vmath.FastRand
 
 	// Ticks since last telemetry refresh
 	telemetryTicks int
@@ -76,6 +77,7 @@ func (s *AdaptationSystem) Init() {
 			Entries: make(map[uint32]*engine.AdaptationEntry),
 		}
 	}
+	s.rng = s.world.Rand(s.Name())
 	clear(s.outcomes)
 	clear(s.tracking)
 	s.pendingDeaths = s.pendingDeaths[:0]
@@ -473,12 +475,12 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 	const scoutRate = 0.10
 
 	for i := range n {
-		if total <= 0 || rand.Float64() < scoutRate {
+		if total <= 0 || s.rng.Float64() < scoutRate {
 			// Scout: Uniform random assignment
-			pop.Pool[i] = rand.IntN(k)
+			pop.Pool[i] = s.rng.Intn(k)
 		} else {
 			// Exploit: Proportional execution
-			r := rand.Float64() * total
+			r := s.rng.Float64() * total
 			lo, hi := 0, k-1
 			for lo < hi {
 				mid := (lo + hi) / 2
@@ -494,7 +496,7 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 
 	// Fisher-Yates shuffle
 	for i := n - 1; i > 0; i-- {
-		j := rand.IntN(i + 1)
+		j := s.rng.Intn(i + 1)
 		pop.Pool[i], pop.Pool[j] = pop.Pool[j], pop.Pool[i]
 	}
 
