@@ -1,6 +1,7 @@
 package system
 
 import (
+	"cmp"
 	"fmt"
 	"math"
 	"slices"
@@ -37,16 +38,22 @@ type AdaptationSystem struct {
 
 	rng *vmath.FastRand
 
+	// Iteration and computation scratch, reused across ticks
+	// No need for init, each is written before read
+	graphKeys     []uint32
+	subKeys       []uint8
+	sumFitness    []float64
+	counts        []int
+	cdf           []float64
+	weightScratch []float64
+
 	// Ticks since last telemetry refresh
 	telemetryTicks int
 
 	// Telemetry
 	statGraphs      *atomic.Int64
 	statPopulations *atomic.Int64
-	statG1          *status.AtomicString
-	statG2          *status.AtomicString
-	statG3          *status.AtomicString
-	statG4          *status.AtomicString
+	statG           [4]*status.AtomicString
 
 	enabled bool
 }
@@ -61,11 +68,10 @@ func NewAdaptationSystem(world *engine.World) engine.System {
 
 	s.statGraphs = world.Resources.Status.Ints.Get("adapt.graphs")
 	s.statPopulations = world.Resources.Status.Ints.Get("adapt.populations")
-	// Register short-string format telemetry for up to 4 route groups
-	s.statG1 = world.Resources.Status.Strings.Get("adapt.g1")
-	s.statG2 = world.Resources.Status.Strings.Get("adapt.g2")
-	s.statG3 = world.Resources.Status.Strings.Get("adapt.g3")
-	s.statG4 = world.Resources.Status.Strings.Get("adapt.g4")
+	// Short-string weight summaries for up to 4 route groups
+	for i, k := range []string{"adapt.g1", "adapt.g2", "adapt.g3", "adapt.g4"} {
+		s.statG[i] = world.Resources.Status.Strings.Get(k)
+	}
 
 	s.Init()
 	return s
@@ -85,10 +91,9 @@ func (s *AdaptationSystem) Init() {
 
 	s.statGraphs.Store(0)
 	s.statPopulations.Store(0)
-	s.statG1.Store("-")
-	s.statG2.Store("-")
-	s.statG3.Store("-")
-	s.statG4.Store("-")
+	for _, g := range s.statG {
+		g.StoreIfChanged("-")
+	}
 
 	s.enabled = true
 }
@@ -170,13 +175,17 @@ func (s *AdaptationSystem) Update() {
 	ar := s.world.Resources.Adaptation
 
 	// Process outcomes, update EXP3 weights, and refill pools
-	for graphID, subTypes := range s.outcomes {
+	s.graphKeys = sortedKeys(s.graphKeys, s.outcomes)
+	for _, graphID := range s.graphKeys {
+		subTypes := s.outcomes[graphID]
 		entry, ok := ar.Entries[graphID]
 		if !ok || entry.Draining {
 			continue
 		}
 
-		for subType, outcomes := range subTypes {
+		s.subKeys = sortedKeys(s.subKeys, subTypes)
+		for _, subType := range s.subKeys {
+			outcomes := subTypes[subType]
 			if len(outcomes) == 0 {
 				continue
 			}
@@ -184,7 +193,7 @@ func (s *AdaptationSystem) Update() {
 			pop, exists := entry.Populations[subType]
 			if !exists {
 				// Drop unattributable outcomes instead of buffering forever
-				s.outcomes[graphID][subType] = s.outcomes[graphID][subType][:0]
+				subTypes[subType] = outcomes[:0]
 				continue
 			}
 
@@ -192,16 +201,20 @@ func (s *AdaptationSystem) Update() {
 			s.samplePool(pop)
 
 			// Clear processed outcomes
-			s.outcomes[graphID][subType] = s.outcomes[graphID][subType][:0]
+			subTypes[subType] = outcomes[:0]
 		}
 	}
 
 	// Pre-emptive pool refill for active entries running low
-	for _, entry := range ar.Entries {
+	s.graphKeys = sortedKeys(s.graphKeys, ar.Entries)
+	for _, graphID := range s.graphKeys {
+		entry := ar.Entries[graphID]
 		if entry.Draining {
 			continue
 		}
-		for _, pop := range entry.Populations {
+		s.subKeys = sortedKeys(s.subKeys, entry.Populations)
+		for _, subType := range s.subKeys {
+			pop := entry.Populations[subType]
 			if len(pop.Pool)-pop.Head < (parameter.RoutePoolDefaultSize / 4) {
 				s.samplePool(pop)
 			}
@@ -216,6 +229,18 @@ func (s *AdaptationSystem) Update() {
 		s.telemetryTicks = 0
 		s.updateTelemetry(ar)
 	}
+}
+
+// sortedKeys refills dst with m's keys in ascending order.
+// RNG-consuming loops must not range a map directly: draw order would depend
+// on the run rather than the seed.
+func sortedKeys[K cmp.Ordered, V any](dst []K, m map[K]V) []K {
+	dst = dst[:0]
+	for k := range m {
+		dst = append(dst, k)
+	}
+	slices.Sort(dst)
+	return dst
 }
 
 // handleGraphComputed creates the bandit entry for a computed graph and seeds
@@ -396,8 +421,17 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 		return
 	}
 
-	sumFitness := make([]float64, k)
-	counts := make([]int, k)
+	// Both accumulate, so a reused buffer must be cleared
+	if cap(s.sumFitness) < k {
+		s.sumFitness = make([]float64, k)
+	}
+	if cap(s.counts) < k {
+		s.counts = make([]int, k)
+	}
+	sumFitness := s.sumFitness[:k]
+	counts := s.counts[:k]
+	clear(sumFitness)
+	clear(counts)
 
 	for _, o := range outcomes {
 		if o.RouteIndex >= 0 && o.RouteIndex < k {
@@ -463,7 +497,11 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 		pop.Pool = pop.Pool[:n]
 	}
 
-	cdf := make([]float64, k)
+	// Every index is written below, so no clear is needed
+	if cap(s.cdf) < k {
+		s.cdf = make([]float64, k)
+	}
+	cdf := s.cdf[:k]
 	cdf[0] = pop.Weights[0]
 	for i := 1; i < k; i++ {
 		cdf[i] = cdf[i-1] + pop.Weights[i]
@@ -520,31 +558,35 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 	activeGraphs := int64(0)
 	activePopulations := int64(0)
 
-	// Deterministic sorting to prevent layout shift in G1-G4 slots
-	var graphIDs []uint32
+	// Deterministic order prevents layout shift in G1-G4 slots.
+	// graphKeys and subKeys are free here: both Update loops have finished.
+	s.graphKeys = s.graphKeys[:0]
 	for id, entry := range ar.Entries {
 		if !entry.Draining {
-			graphIDs = append(graphIDs, id)
+			s.graphKeys = append(s.graphKeys, id)
 		}
 	}
-	slices.Sort(graphIDs)
+	slices.Sort(s.graphKeys)
 
-	groupStrs := make([]string, 0, 4)
+	slot := 0
 
-	for _, id := range graphIDs {
+	for _, id := range s.graphKeys {
 		entry := ar.Entries[id]
 		activeGraphs++
 		activePopulations += int64(len(entry.Populations))
 
-		if len(groupStrs) >= 4 {
+		// Counting continues past the last slot; only publication stops
+		if slot >= len(s.statG) {
 			continue
 		}
 
-		// Look for the subType with the sharpest peak to report
+		// Report the subType with the sharpest peak; sorted so ties break identically every run
 		var bestPop *engine.RoutePopulation
 		var highestPeak float64
 
-		for _, pop := range entry.Populations {
+		s.subKeys = sortedKeys(s.subKeys, entry.Populations)
+		for _, subType := range s.subKeys {
+			pop := entry.Populations[subType]
 			peak := 0.0
 			for _, w := range pop.Weights {
 				if w > peak {
@@ -557,52 +599,44 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 			}
 		}
 
-		if bestPop != nil {
-			wCopy := make([]float64, len(bestPop.Weights))
-			copy(wCopy, bestPop.Weights)
-			slices.Sort(wCopy)
-			slices.Reverse(wCopy)
-			rc := len(wCopy)
-
-			str := ""
-			// Including denominator /rc provides context for low percentages directly in UI limits
-			if rc >= 3 {
-				str = fmt.Sprintf("%.0f%% %.0f%% %.0f%% /%d", wCopy[0]*100, wCopy[1]*100, wCopy[2]*100, rc)
-			} else if rc == 2 {
-				str = fmt.Sprintf("%.0f%% %.0f%% /%d", wCopy[0]*100, wCopy[1]*100, rc)
-			} else if rc == 1 {
-				str = fmt.Sprintf("%.0f%% /%d", wCopy[0]*100, rc)
-			} else {
-				str = "0% 0% 0% /0"
-			}
-			groupStrs = append(groupStrs, str)
-		} else {
+		if bestPop == nil {
 			// placeholder keeps G1-G4 slot ↔ gateway alignment
-			groupStrs = append(groupStrs, fmt.Sprintf("? /%d", entry.RouteCount))
+			s.statG[slot].StoreIfChanged(fmt.Sprintf("? /%d", entry.RouteCount))
+			slot++
+			continue
 		}
+
+		if cap(s.weightScratch) < len(bestPop.Weights) {
+			s.weightScratch = make([]float64, len(bestPop.Weights))
+		}
+		wCopy := s.weightScratch[:len(bestPop.Weights)]
+		copy(wCopy, bestPop.Weights)
+		slices.Sort(wCopy)
+		slices.Reverse(wCopy)
+		rc := len(wCopy)
+
+		// Including denominator /rc provides context for low percentages directly in UI limits
+		var str string
+		switch {
+		case rc >= 3:
+			str = fmt.Sprintf("%.0f%% %.0f%% %.0f%% /%d", wCopy[0]*100, wCopy[1]*100, wCopy[2]*100, rc)
+		case rc == 2:
+			str = fmt.Sprintf("%.0f%% %.0f%% /%d", wCopy[0]*100, wCopy[1]*100, rc)
+		case rc == 1:
+			str = fmt.Sprintf("%.0f%% /%d", wCopy[0]*100, rc)
+		default:
+			str = "0% 0% 0% /0"
+		}
+
+		s.statG[slot].StoreIfChanged(str)
+		slot++
 	}
 
 	s.statGraphs.Store(activeGraphs)
 	s.statPopulations.Store(activePopulations)
 
-	if len(groupStrs) > 0 {
-		s.statG1.Store(groupStrs[0])
-	} else {
-		s.statG1.Store("-")
-	}
-	if len(groupStrs) > 1 {
-		s.statG2.Store(groupStrs[1])
-	} else {
-		s.statG2.Store("-")
-	}
-	if len(groupStrs) > 2 {
-		s.statG3.Store(groupStrs[2])
-	} else {
-		s.statG3.Store("-")
-	}
-	if len(groupStrs) > 3 {
-		s.statG4.Store(groupStrs[3])
-	} else {
-		s.statG4.Store("-")
+	// Slots with no graph read as empty
+	for ; slot < len(s.statG); slot++ {
+		s.statG[slot].StoreIfChanged("-")
 	}
 }

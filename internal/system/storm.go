@@ -184,7 +184,7 @@ func (s *StormSystem) Update() {
 
 	// Process each alive circle
 	s.updateCirclePhysics(&stormComp, dtSec)
-	s.updateCircleDamageImmunity(&stormComp)
+	s.updateCircleDamageImmunity(&stormComp, dt)
 	s.updateCircleAttacks(&stormComp, dt)
 	s.processCircleMemberCombat(&stormComp)
 	s.handleCircleInteractions(&stormComp)
@@ -500,6 +500,11 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 		})
 	}
 	return members
+}
+
+// concave reports whether a circle sits behind the vulnerability boundary
+func concave(c *component.StormCircleComponent) bool {
+	return c.Pos3D.Z >= parameter.StormZMid
 }
 
 // collectAndDestroyWallsInEllipse finds walls in ellipse footprint, emits despawn requests, returns true if any found
@@ -985,62 +990,45 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 }
 
 // updateCircleDamageImmunity sets immunity for concave circles and handles anti-deadlock nudge
-func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent) {
-	nowNano := s.world.Resources.Time.GameTimeNano()
-
+func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormComponent, dt time.Duration) {
 	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
 		}
 
 		circleEntity := stormComp.Circles[i]
-		circleComp, ok := s.world.Components.StormCircle.GetComponent(circleEntity)
+		circleComp, ok := s.world.Components.StormCircle.GetPtr(circleEntity)
 		if !ok {
 			continue
 		}
 
-		isInvulnerable := circleComp.Pos3D.Z >= parameter.StormZMid
+		if !concave(circleComp) {
+			circleComp.InvulnerableElapsed = 0
+			continue
+		}
 
-		if isInvulnerable {
-			// Track invulnerability duration
-			if circleComp.InvulnerableSince == 0 {
-				circleComp.InvulnerableSince = nowNano
-			} else {
-				// Check for timeout - apply nudge if stuck too long
-				elapsed := time.Duration(nowNano - circleComp.InvulnerableSince)
-				if elapsed > parameter.StormInvulnerabilityMaxDuration {
-					// Apply downward nudge
-					circleComp.Vel3D.Z -= parameter.StormInvulnerabilityNudge
-					circleComp.InvulnerableSince = nowNano // Reset timer
+		// Nudge out of a stalled concave orbit, then restart the accumulator
+		circleComp.InvulnerableElapsed += dt
+		if circleComp.InvulnerableElapsed > parameter.StormInvulnerabilityMaxDuration {
+			circleComp.Vel3D.Z -= parameter.StormInvulnerabilityNudge
+			circleComp.InvulnerableElapsed = 0
+			s.statNudges.Add(1)
+		}
 
-					s.statNudges.Add(1)
-				}
+		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+		if !ok {
+			continue
+		}
+		for _, member := range headerComp.MemberEntries {
+			if member.Entity == 0 {
+				continue
 			}
-
-			// Set immunity on members
-			// Missing Header membership exits after local timing work and deliberately
-			// skips the StormCircle commit.
-			headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+			memberCombat, ok := s.world.Components.Combat.GetPtr(member.Entity)
 			if !ok {
 				continue
 			}
-
-			for _, member := range headerComp.MemberEntries {
-				if member.Entity == 0 {
-					continue
-				}
-				memberCombat, ok := s.world.Components.Combat.GetPtr(member.Entity)
-				if !ok {
-					continue
-				}
-				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
-			}
-		} else {
-			// Reset invulnerability tracking when vulnerable
-			circleComp.InvulnerableSince = 0
+			memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 		}
-
-		s.world.Components.StormCircle.SetComponent(circleEntity, circleComp)
 	}
 }
 
@@ -1070,7 +1058,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 
 		circleType := component.StormCircleType(circleComp.Index)
 		// Update invulnerable state, isConvex is guaranteed true with physics override
-		circleComp.IsInvulnerable = circleComp.Pos3D.Z > parameter.StormZMid && circleComp.AttackState != component.StormCircleAttackActive
+		circleComp.IsInvulnerable = concave(circleComp) && circleComp.AttackState != component.StormCircleAttackActive
 
 		switch circleComp.AttackState {
 		case component.StormCircleAttackIdle:

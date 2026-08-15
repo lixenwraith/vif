@@ -22,9 +22,6 @@ type ExplosionSystem struct {
 	entityBuf    []core.Entity
 	dustEntryBuf []event.DustSpawnEntry
 
-	// Random source for orbit radius and direction
-	rng *vmath.FastRand
-
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
 	statMerged    *atomic.Int64
@@ -52,8 +49,6 @@ func (s *ExplosionSystem) Init() {
 	// Reset buffers
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
-
-	s.rng = s.world.Rand(s.Name())
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)

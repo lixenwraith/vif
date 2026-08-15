@@ -40,8 +40,8 @@ type StormCircleComponent struct {
 	Index int // 0, 1, or 2 - position in parent storm
 
 	IsInvulnerable bool
-	// Anti-deadlock: tracks continuous invulnerability duration
-	InvulnerableSince int64 // Unix nano timestamp, 0 if vulnerable
+	// Anti-deadlock: continuous invulnerability duration, cleared when vulnerable
+	InvulnerableElapsed time.Duration
 
 	// Attack state machine
 	AttackState       StormCircleAttackState
