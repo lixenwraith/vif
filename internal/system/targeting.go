@@ -95,9 +95,12 @@ func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.E
 // Results grouped by target: one TargetGroup per composite header or single entity
 // ownerEntity-owned entities excluded
 //
-// Iterates Combat store (singles) and Member store (composites) for species-agnostic resolution
+// Iterates Combat store (singles) and Member store (composites) for species-agnostic resolution.
+// Result order is store order, never map order: callers emit one event per group and
+// combat resolution consumes RNG per event.
 func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, ownerEntity core.Entity) []TargetGroup {
-	groups := make(map[core.Entity]*TargetGroup)
+	index := make(map[core.Entity]int)
+	result := make([]TargetGroup, 0, 8)
 
 	// 1. Simple combat entities (no Header, no Member component)
 	for _, e := range w.Components.Combat.Entities() {
@@ -111,7 +114,8 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 		if !ok || !vmath.EllipseContainsPointF(pos.X, pos.Y, cx, cy, invRxSq, invRySq) {
 			continue
 		}
-		groups[e] = &TargetGroup{Target: e, Members: []core.Entity{e}}
+		index[e] = len(result)
+		result = append(result, TargetGroup{Target: e, Members: []core.Entity{e}})
 	}
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
@@ -137,20 +141,17 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 			continue
 		}
 
-		if g, exists := groups[headerEntity]; exists {
-			g.Members = append(g.Members, memberEntity)
-		} else {
-			groups[headerEntity] = &TargetGroup{
-				Target:  headerEntity,
-				Members: []core.Entity{memberEntity},
-			}
+		if i, exists := index[headerEntity]; exists {
+			result[i].Members = append(result[i].Members, memberEntity)
+			continue
 		}
+		index[headerEntity] = len(result)
+		result = append(result, TargetGroup{
+			Target:  headerEntity,
+			Members: []core.Entity{memberEntity},
+		})
 	}
 
-	result := make([]TargetGroup, 0, len(groups))
-	for _, g := range groups {
-		result = append(result, *g)
-	}
 	return result
 }
 
@@ -158,12 +159,16 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 // Composites prioritized over distance-sorted singles.
 // If count exceeds available targets, results cycle through available targets (overflow distribution)
 // ownerEntity-owned entities excluded
+//
+// Composites are accumulated in Member store order, so the stable sort breaks
+// distance ties identically every run.
 func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerEntity core.Entity) []TargetAssignment {
 	if count <= 0 {
 		return nil
 	}
 
-	composites := make(map[core.Entity]*TargetAssignment)
+	compositeIdx := make(map[core.Entity]int)
+	var composites []TargetAssignment
 	var singles []TargetAssignment
 
 	// 1. Simple combat entities
@@ -207,47 +212,37 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 		px, py := vmath.Point{X: pos.X, Y: pos.Y}.CenterF()
 		distSq := vmath.MagnitudeSqF(px-fromX, py-fromY)
 
-		if existing, exists := composites[headerEntity]; exists {
-			if distSq < existing.DistSq {
-				existing.Hit = memberEntity
-				existing.DistSq = distSq
+		if i, exists := compositeIdx[headerEntity]; exists {
+			if distSq < composites[i].DistSq {
+				composites[i].Hit = memberEntity
+				composites[i].DistSq = distSq
 			}
-		} else {
-			composites[headerEntity] = &TargetAssignment{
-				Target: headerEntity,
-				Hit:    memberEntity,
-				DistSq: distSq,
-			}
+			continue
 		}
+		compositeIdx[headerEntity] = len(composites)
+		composites = append(composites, TargetAssignment{
+			Target: headerEntity,
+			Hit:    memberEntity,
+			DistSq: distSq,
+		})
+	}
+
+	byDist := func(a, b TargetAssignment) int {
+		if a.DistSq < b.DistSq {
+			return -1
+		}
+		if a.DistSq > b.DistSq {
+			return 1
+		}
+		return 0
 	}
 
 	// Composites first (priority, distance-sorted), then singles by distance
-	compositesSlice := make([]TargetAssignment, 0, len(composites))
-	for _, a := range composites {
-		compositesSlice = append(compositesSlice, *a)
-	}
-	slices.SortStableFunc(compositesSlice, func(a, b TargetAssignment) int {
-		if a.DistSq < b.DistSq {
-			return -1
-		}
-		if a.DistSq > b.DistSq {
-			return 1
-		}
-		return 0
-	})
+	slices.SortStableFunc(composites, byDist)
+	slices.SortStableFunc(singles, byDist)
 
-	result := make([]TargetAssignment, 0, len(compositesSlice)+len(singles))
-	result = append(result, compositesSlice...)
-
-	slices.SortStableFunc(singles, func(a, b TargetAssignment) int {
-		if a.DistSq < b.DistSq {
-			return -1
-		}
-		if a.DistSq > b.DistSq {
-			return 1
-		}
-		return 0
-	})
+	result := make([]TargetAssignment, 0, len(composites)+len(singles))
+	result = append(result, composites...)
 	result = append(result, singles...)
 
 	if len(result) == 0 {

@@ -20,9 +20,14 @@ type WeaponSystem struct {
 
 	// Telemetry
 	statRod       *atomic.Bool
-	statRodFired  *atomic.Int64
 	statLauncher  *atomic.Bool
 	statDisruptor *atomic.Bool
+
+	statMainFired      *atomic.Int64
+	statRodFired       *atomic.Int64
+	statLauncherFired  *atomic.Int64
+	statDisruptorFired *atomic.Int64
+	statOrbs           *atomic.Int64
 
 	enabled bool
 }
@@ -34,9 +39,14 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	}
 
 	s.statRod = world.Resources.Status.Bools.Get("weapon.rod")
-	s.statRodFired = world.Resources.Status.Ints.Get("weapon.rod_fired")
 	s.statLauncher = world.Resources.Status.Bools.Get("weapon.launcher")
 	s.statDisruptor = world.Resources.Status.Bools.Get("weapon.disruptor")
+
+	s.statMainFired = world.Resources.Status.Ints.Get("weapon.main_fired")
+	s.statRodFired = world.Resources.Status.Ints.Get("weapon.rod_fired")
+	s.statLauncherFired = world.Resources.Status.Ints.Get("weapon.launcher_fired")
+	s.statDisruptorFired = world.Resources.Status.Ints.Get("weapon.disruptor_fired")
+	s.statOrbs = world.Resources.Status.Ints.Get("weapon.orbs")
 
 	s.Init()
 	return s
@@ -45,9 +55,13 @@ func NewWeaponSystem(world *engine.World) engine.System {
 func (s *WeaponSystem) Init() {
 	s.destroyAllOrbs()
 	s.statRod.Store(false)
-	s.statRodFired.Store(0)
 	s.statLauncher.Store(false)
 	s.statDisruptor.Store(false)
+	s.statMainFired.Store(0)
+	s.statRodFired.Store(0)
+	s.statLauncherFired.Store(0)
+	s.statDisruptorFired.Store(0)
+	s.statOrbs.Store(0)
 	s.enabled = true
 }
 
@@ -328,8 +342,10 @@ func (s *WeaponSystem) updateOrbs() {
 	}
 
 	if len(entries) == 0 {
+		s.statOrbs.Store(0)
 		return
 	}
+	s.statOrbs.Store(int64(len(entries)))
 
 	// Sort by weapon type for deterministic index assignment
 	slices.SortFunc(entries, func(a, b orbEntry) int {
@@ -503,6 +519,7 @@ func (s *WeaponSystem) handleFireMain() {
 	// Reset cooldown
 	weaponComp.MainFireCooldown = parameter.WeaponCooldownMain
 	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
+	s.statMainFired.Add(1)
 
 	// Determine color type from energy polarity
 	colorType := component.CleanerColorPositive
@@ -580,6 +597,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 			}
 
 			weaponComp.Cooldown[wt] = parameter.WeaponCooldownRod
+			s.statRodFired.Add(1)
 
 			rodOrbEntity := weaponComp.Orbs[wt]
 			if rodOrbEntity != 0 {
@@ -614,6 +632,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 			}
 
 			weaponComp.Cooldown[wt] = parameter.WeaponCooldownLauncher
+			s.statLauncherFired.Add(1)
 			launcherOrbEntity := weaponComp.Orbs[wt]
 
 			originX, originY := cursorPos.X, cursorPos.Y
@@ -657,6 +676,7 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos c
 
 	// Consume cooldown
 	weaponComp.Cooldown[component.WeaponDisruptor] = parameter.WeaponCooldownDisruptor
+	s.statDisruptorFired.Add(1)
 
 	// Visual orb flash
 	if disruptorOrbEntity := weaponComp.Orbs[component.WeaponDisruptor]; disruptorOrbEntity != 0 {

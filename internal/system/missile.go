@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -15,18 +16,34 @@ import (
 
 // MissileSystem manages missile lifecycle
 type MissileSystem struct {
-	world   *engine.World
+	world *engine.World
+
+	statCount   *atomic.Int64
+	statSpawned *atomic.Int64
+	statImpacts *atomic.Int64
+	statExpired *atomic.Int64
+
 	enabled bool
 }
 
 func NewMissileSystem(world *engine.World) engine.System {
 	s := &MissileSystem{world: world}
+
+	s.statCount = world.Resources.Status.Ints.Get("missile.count")
+	s.statSpawned = world.Resources.Status.Ints.Get("missile.spawned")
+	s.statImpacts = world.Resources.Status.Ints.Get("missile.impacts")
+	s.statExpired = world.Resources.Status.Ints.Get("missile.expired")
+
 	s.Init()
 	return s
 }
 
 func (s *MissileSystem) Init() {
 	s.destroyAll()
+	s.statCount.Store(0)
+	s.statSpawned.Store(0)
+	s.statImpacts.Store(0)
+	s.statExpired.Store(0)
 	s.enabled = true
 }
 
@@ -74,6 +91,7 @@ func (s *MissileSystem) Update() {
 	dtSec := dt.Seconds()
 
 	missiles := s.world.Components.Missile
+	s.statCount.Store(int64(missiles.CountEntities()))
 	if missiles.CountEntities() == 0 {
 		return
 	}
@@ -103,6 +121,7 @@ func (s *MissileSystem) Update() {
 				Type:   event.ExplosionTypeMissile,
 			})
 			toDestroy = append(toDestroy, missileEntity)
+			s.statImpacts.Add(1)
 			continue
 		}
 
@@ -111,6 +130,7 @@ func (s *MissileSystem) Update() {
 		// OOB check only (wall collision handled in traversal)
 		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
 			toDestroy = append(toDestroy, missileEntity)
+			s.statExpired.Add(1)
 			continue
 		}
 
@@ -346,6 +366,7 @@ func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy flo
 
 	cell := vmath.PointAtF(x, y)
 	s.world.Positions.SetPosition(e, component.PositionComponent{X: cell.X, Y: cell.Y})
+	s.statSpawned.Add(1)
 }
 
 // --- Helpers ---

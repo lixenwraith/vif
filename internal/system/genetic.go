@@ -40,6 +40,7 @@ type GeneticSystem struct {
 	registry *registry.Registry
 
 	tracking      map[core.Entity]*trackedEntity
+	trackKeys     []core.Entity
 	pendingDeaths []event.EnemyKilledPayload
 
 	eyeTracked     int64
@@ -261,11 +262,16 @@ func (s *GeneticSystem) processPendingDeaths() {
 }
 
 // processTracking updates closest approach and retires entities that lost
-// NavigationComponent (OOB, resize, level change)
+// NavigationComponent (OOB, resize, level change).
+// Sorted iteration: completeTracking folds a non-commutative EMA and reports
+// fitness in call order.
 func (s *GeneticSystem) processTracking() {
 	eyes := 0
 
-	for entity, tracked := range s.tracking {
+	s.trackKeys = sortedKeys(s.trackKeys, s.tracking)
+	for _, entity := range s.trackKeys {
+		tracked := s.tracking[entity]
+
 		if !s.world.Components.Navigation.HasEntity(entity) {
 			if pos, ok := s.world.Positions.GetPosition(entity); ok {
 				s.completeTracking(tracked, pos.X, pos.Y)

@@ -21,7 +21,12 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
+// headlessColorMode is the fixed mode a headless run publishes; there is no
+// terminal to detect against and no renderer to consume it
+const headlessColorMode = terminal.ColorMode256
+
 // App owns the wired runtime: services, world, renderer, input, and scheduler
+// Headless runs leave termSvc, term and orchestrator nil
 type App struct {
 	cfg Config
 
@@ -44,6 +49,7 @@ type App struct {
 // New wires the runtime, releasing anything already started on failure
 // every step panicked; the map editor and wasm entry need errors
 func New(cfg Config) (*App, error) {
+	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
@@ -56,8 +62,9 @@ func New(cfg Config) (*App, error) {
 	return a, nil
 }
 
+// init wires the runtime in dependency order; a headless run skips presentation
 func (a *App) init() error {
-	vlog.Info("app", "msg", "init begin")
+	vlog.Info("app", "msg", "init begin", "headless", a.cfg.Headless)
 
 	// Root RNG seed; resolved first, since services and systems both derive
 	// from it. A drawn seed is logged so any run replays with -seed.
@@ -75,21 +82,44 @@ func (a *App) init() error {
 		}
 	}
 
+	if err := a.initServices(); err != nil {
+		return err
+	}
+	a.initWorld()
+	if !a.cfg.Headless {
+		a.initPresentation()
+	}
+	if err := a.initInput(); err != nil {
+		return err
+	}
+	if err := a.initScheduler(); err != nil {
+		return err
+	}
+
+	vlog.Info("app", "msg", "init complete",
+		"width", a.ctx.Width,
+		"height", a.ctx.Height,
+		"systems", len(a.world.Systems()))
+	return nil
+}
+
+// initServices registers and initializes the I/O boundary. A headless run
+// registers content only, so no terminal, audio or network goroutine exists.
+func (a *App) initServices() error {
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.InitRegistry()
 
-	// 1. Service registration (Strongly typed, replacing manifest.BuildServices and serviceArgs)
-	colorMode := terminal.DetectColorMode()
-	if a.cfg.ColorModeSet {
-		colorMode = a.cfg.ColorMode
+	if !a.cfg.Headless {
+		colorMode := terminal.DetectColorMode()
+		if a.cfg.ColorModeSet {
+			colorMode = a.cfg.ColorMode
+		}
+		a.termSvc = service.NewTerminalService(colorMode)
+		_ = a.hub.Register(a.termSvc)
+
+		_ = a.hub.Register(service.NewNetworkService(nil)) // disabled by default (RoleNone)
+		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
 	}
-	termSvc := service.NewTerminalService(colorMode)
-	_ = a.hub.Register(termSvc)
-
-	netSvc := service.NewNetworkService(nil) // disabled by default (RoleNone)
-	_ = a.hub.Register(netSvc)
-
-	_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
 
 	contentSrc, err := ResolveContent(a.cfg)
 	if err != nil {
@@ -97,28 +127,39 @@ func (a *App) init() error {
 	}
 	_ = a.hub.Register(service.NewContentService(contentSrc, a.cfg.Seed))
 
-	// 2. World creation
+	// Init in dependency order; rolls back internally on failure
+	return a.hub.InitAll()
+}
+
+// initWorld builds the ECS world, the game context and the system set
+func (a *App) initWorld() {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
 
-	// 3. Service init in dependency order; rolls back internally on failure
-	if err := a.hub.InitAll(); err != nil {
-		return err
-	}
-
-	// 4. Service resources bridged into the ECS
+	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)
 
-	// 5. Terminal; the orchestrator needs the interface directly
-	a.termSvc = termSvc
-	a.term = a.termSvc.Terminal()
-	core.SetCrashTerminal(a.term)
-	width, height := a.term.Size()
+	// The terminal owns dimensions and color interactively; headless takes
+	// dimensions from config and publishes a fixed mode
+	width, height := a.cfg.Width, a.cfg.Height
+	colorMode := headlessColorMode
+	if !a.cfg.Headless {
+		a.term = a.termSvc.Terminal()
+		core.SetCrashTerminal(a.term)
+		width, height = a.term.Size()
+		colorMode = a.term.ColorMode()
+	}
 
-	// 6. GameContext initializes the remaining world resources
-	a.ctx = engine.NewGameContext(a.world, width, height)
-	a.world.Resources.Config.ColorMode = a.term.ColorMode()
+	// GameContext initializes the remaining world resources.
+	// Headless runs the manual clock: game time is a pure function of ticks.
+	if a.cfg.Headless {
+		a.ctx = engine.NewGameContextWithClock(a.world, width, height, engine.NewManualClock())
+	} else {
+		a.ctx = engine.NewGameContext(a.world, width, height)
+	}
+	a.world.Resources.Config.ColorMode = colorMode
+
 	if n := a.cfg.StatTicks; n != 0 {
 		if n < 0 {
 			n = 0 // explicit disable
@@ -140,38 +181,48 @@ func (a *App) init() error {
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
 
-	// TODO: wire event handling in network system
-
-	// Post-Context wiring: Connect network service to the initialized event queue
-	// netSvc.SetEventQueue(a.world.Resources.Event.Queue)
+	// TODO: wire event handling in network system, post-context, against the
+	// event queue GameContext creates
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
 		a.ctx.TimeCtl.SetScale(s)
 	}
 
-	// 7. Systems; AddSystem sorts by Priority(), manifest order breaks ties
+	// Systems; AddSystem sorts by Priority(), manifest order breaks ties
 	for _, sys := range manifest.BuildSystems(a.world) {
 		a.world.AddSystem(sys)
 	}
 	// This game's streams are drawn; advance so the next game differs
 	a.world.Resources.Rand.NextSession()
+}
 
-	// 8. Renderers; Register sorts by priority, manifest order breaks ties
+// initPresentation builds the render pipeline; never reached headless
+func (a *App) initPresentation() {
+	// Register sorts by priority, manifest order breaks ties
 	a.orchestrator = render.NewRenderOrchestrator(a.term, a.ctx.Width, a.ctx.Height)
 	for _, reg := range manifest.BuildRenderers(a.ctx) {
 		a.orchestrator.Register(reg.Renderer, reg.Priority)
 	}
+}
 
-	// 9. Input
+// initInput builds the intent pipeline. Kept headless because intents are the
+// injection path; only the terminal mouse sink is skipped.
+func (a *App) initInput() error {
 	a.inputMachine = input.NewMachine()
 	if err := a.loadKeymap(); err != nil {
 		return err
 	}
 	a.router = mode.NewRouter(a.ctx, a.inputMachine)
-	a.router.SetMouseModeApplier(a.applyMouseMode)
+	if !a.cfg.Headless {
+		a.router.SetMouseModeApplier(a.applyMouseMode)
+	}
+	return nil
+}
 
-	// 10. Clock scheduler and frame synchronization
+// initScheduler wires the clock scheduler, loads the FSM, and registers the
+// systems that handle events
+func (a *App) initScheduler() error {
 	a.frameReady = make(chan struct{}, 1)
 	var resetChan chan<- struct{}
 	a.scheduler, a.gameUpdateDone, resetChan = engine.NewClockScheduler(
@@ -182,25 +233,17 @@ func (a *App) init() error {
 	)
 	a.ctx.ResetChan = resetChan
 
-	// 11. FSM
 	if err := a.loadFSM(); err != nil {
 		return err
 	}
 
-	// 12. Event handlers
 	// MetaSystem is context-scoped, so it joins the set here rather than via the manifest
-	metaSystem := system.NewMetaSystem(a.ctx)
-	a.world.AddSystem(metaSystem)
+	a.world.AddSystem(system.NewMetaSystem(a.ctx))
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
 			a.scheduler.RegisterEventHandler(h)
 		}
 	}
-
-	vlog.Info("app", "msg", "init complete",
-		"width", a.ctx.Width,
-		"height", a.ctx.Height,
-		"systems", len(a.world.Systems()))
 	return nil
 }
 

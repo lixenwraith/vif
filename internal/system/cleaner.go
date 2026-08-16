@@ -1,6 +1,7 @@
 package system
 
 import (
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -607,5 +608,7 @@ func (s *CleanerSystem) scanTargetRows() []int {
 	for row := range targetRows {
 		rows = append(rows, row)
 	}
+	// Spawn order assigns entity IDs, so map order must not reach it
+	slices.Sort(rows)
 	return rows
 }

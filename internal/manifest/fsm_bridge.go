@@ -1,6 +1,7 @@
 package manifest
 
 import (
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/fsm"
@@ -49,13 +50,13 @@ func worldHost() std.Host[*engine.World] {
 
 // registerGameActions installs actions with no generic equivalent
 func registerGameActions(m *fsm.Machine[*engine.World]) {
-	// ResetKillVars zeroes the per-cycle kill counters
-	// Candidate for removal: four ResetStatusInt actions in config express the same
+	// ResetKillVars zeroes every per-cycle kill counter.
+	// MetaSystem registers these keys before Freeze, so Get is a lookup here.
 	m.RegisterAction("ResetKillVars", func(w *engine.World, args any) {
 		ints := w.Resources.Status.Ints
-		ints.Get("kills.drain").Store(0)
-		ints.Get("kills.swarm").Store(0)
-		ints.Get("kills.quasar").Store(0)
-		ints.Get("kills.storm").Store(0)
+		for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
+			ints.Get("kills." + component.SpeciesNames[i]).Store(0)
+		}
+		ints.Get("kills.total").Store(0)
 	})
 }

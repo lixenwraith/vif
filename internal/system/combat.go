@@ -23,6 +23,10 @@ type CombatSystem struct {
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
+	statDirect *atomic.Int64
+	statArea   *atomic.Int64
+	statKnock  *atomic.Int64
+	statStun   *atomic.Int64
 
 	enabled bool
 }
@@ -35,6 +39,10 @@ func NewCombatSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("combat.active")
 	s.statCount = world.Resources.Status.Ints.Get("combat.count")
+	s.statDirect = world.Resources.Status.Ints.Get("combat.hits_direct")
+	s.statArea = world.Resources.Status.Ints.Get("combat.hits_area")
+	s.statKnock = world.Resources.Status.Ints.Get("combat.knockbacks")
+	s.statStun = world.Resources.Status.Ints.Get("combat.stuns")
 
 	s.Init()
 	return s
@@ -104,6 +112,9 @@ func (s *CombatSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 
 	combats := s.world.Components.Combat
+	combatCount := int64(combats.CountEntities())
+	s.statCount.Store(combatCount)
+	s.statActive.Store(combatCount > 0)
 	for _, combatEntity := range combats.Entities() {
 		combatComp, ok := combats.GetPtr(combatEntity)
 		if !ok {

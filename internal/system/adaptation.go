@@ -42,6 +42,7 @@ type AdaptationSystem struct {
 	// No need for init, each is written before read
 	graphKeys     []uint32
 	subKeys       []uint8
+	trackKeys     []core.Entity
 	sumFitness    []float64
 	counts        []int
 	cdf           []float64
@@ -401,14 +402,18 @@ func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius
 	return -1
 }
 
-// cleanupStaleTracking removes entities destroyed by map resets/resizes without death events
+// cleanupStaleTracking removes entities destroyed by map resets/resizes without death events.
+// Sorted iteration: recordOutcome appends, and applyEXP3 sums those appends in order.
 func (s *AdaptationSystem) cleanupStaleTracking() {
-	for entity, t := range s.tracking {
-		if !s.world.Components.Navigation.HasEntity(entity) {
-			// Entity destroyed without a pending death event. Record a flat 0 outcome and abandon.
-			s.recordOutcome(t.GraphID, t.SubType, t.RouteID, 0.0)
-			delete(s.tracking, entity)
+	s.trackKeys = sortedKeys(s.trackKeys, s.tracking)
+	for _, entity := range s.trackKeys {
+		if s.world.Components.Navigation.HasEntity(entity) {
+			continue
 		}
+		t := s.tracking[entity]
+		// Entity destroyed without a pending death event. Record a flat 0 outcome and abandon.
+		s.recordOutcome(t.GraphID, t.SubType, t.RouteID, 0.0)
+		delete(s.tracking, entity)
 	}
 }
 

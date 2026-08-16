@@ -52,8 +52,9 @@ type DrainSystem struct {
 	drainCache []drainCacheEntry
 
 	// Cached metric pointers
-	statCount   *atomic.Int64
-	statPending *atomic.Int64
+	statCount      *atomic.Int64
+	statPending    *atomic.Int64
+	statCollisions *atomic.Int64
 
 	paused bool
 
@@ -68,9 +69,11 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
+	s.statCollisions = s.world.Resources.Status.Ints.Get("drain.collisions")
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
+	s.statPending = s.world.Resources.Status.Ints.Get("drain.collisions")
 
 	s.Init()
 	return s
@@ -85,6 +88,7 @@ func (s *DrainSystem) Init() {
 	s.spawnCooldownUntil = 0
 	s.statCount.Store(0)
 	s.statPending.Store(0)
+	s.statCollisions.Store(0)
 	s.paused = false
 	s.enabled = true
 }
@@ -795,9 +799,10 @@ func (s *DrainSystem) handleDrainInteractions() {
 	s.handleEntityCollisions()
 }
 
-// handleDrainDrainCollisions detects and removes all drains sharing a cell
+// handleDrainDrainCollisions detects and removes all drains sharing a cell.
+// Emission walks the dense store, not the grouping map: death and kill events
+// must reach the queue in the same order every run.
 func (s *DrainSystem) handleDrainDrainCollisions() {
-	// Build position -> drain entities map
 	drainPositions := make(map[uint64][]core.Entity)
 
 	drainEntities := s.world.Components.Drain.Entities()
@@ -810,21 +815,23 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 		drainPositions[pk] = append(drainPositions[pk], drainEntity)
 	}
 
-	// Find and destroy all drains at cells with multiple drains
-	for drainPos, drainEntitiesAtPosition := range drainPositions {
-		if len(drainEntitiesAtPosition) > 1 {
-			for _, colocatedDrainEntity := range drainEntitiesAtPosition {
-				event.EmitDeathOne(s.world.Resources.Event.Queue, colocatedDrainEntity, event.EventFlashSpawnOneRequest)
-
-				x, y := posFromKey(drainPos)
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:  colocatedDrainEntity,
-					Species: component.SpeciesDrain,
-					X:       x,
-					Y:       y,
-				})
-			}
+	for _, drainEntity := range drainEntities {
+		drainPos, ok := s.world.Positions.GetPosition(drainEntity)
+		if !ok {
+			continue
 		}
+		if len(drainPositions[posKey(drainPos.X, drainPos.Y)]) < 2 {
+			continue
+		}
+
+		event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashSpawnOneRequest)
+		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+			Entity:  drainEntity,
+			Species: component.SpeciesDrain,
+			X:       drainPos.X,
+			Y:       drainPos.Y,
+		})
+		s.statCollisions.Add(1)
 	}
 }
 

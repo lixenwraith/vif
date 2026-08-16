@@ -19,7 +19,7 @@ func TestNewSeededRandMatchesDerive(t *testing.T) {
 // TestDeriveSeedSensitivity asserts neighbouring inputs do not collide
 func TestDeriveSeedSensitivity(t *testing.T) {
 	const label = "glyph"
-	for root := range 1024 {
+	for root := range uint64(1024) {
 		if DeriveSeed(root, label) == DeriveSeed(root+1, label) {
 			t.Fatalf("root %d collides with %d", root, root+1)
 		}

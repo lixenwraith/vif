@@ -266,7 +266,7 @@ func (cs *ClockScheduler) publishRegionStats() {
 // Start begins the scheduler loop
 func (cs *ClockScheduler) Start() {
 	if cs.running.CompareAndSwap(false, true) {
-		cs.prepare()
+		cs.Prepare()
 		cs.wg.Add(2) // 2 Goroutines
 		// Use core.Go for safe execution with centralized crash handling
 		core.Go(cs.schedulerLoop)
@@ -274,9 +274,9 @@ func (cs *ClockScheduler) Start() {
 	}
 }
 
-// prepare closes the system and metric sets before the first tick. Both are
-// idempotent, so a harness driving ticks directly may call it repeatedly.
-func (cs *ClockScheduler) prepare() {
+// Prepare closes the system and metric sets from a harness that drives ticks
+// or settles events before the first RunTicks call. Idempotent.
+func (cs *ClockScheduler) Prepare() {
 	cs.world.Seal() // no system registration once the goroutines are live
 	cs.world.Resources.Status.Freeze()
 }
@@ -285,11 +285,23 @@ func (cs *ClockScheduler) prepare() {
 // allows. Requires a manual clock: Step is a no-op on the interactive clock
 // while it is running. The caller owns the loop, so Start must not be running —
 // a concurrent scheduler or event goroutine reintroduces the nondeterminism
-// this exists to avoid.
+// this exists to avoid. A reset requested during a tick is serviced before the
+// next one, matching the scheduler loop.
 func (cs *ClockScheduler) RunTicks(n int) {
-	cs.prepare()
+	cs.Prepare()
 	for range n {
+		cs.drainReset()
 		cs.stepTick()
+	}
+	cs.drainReset()
+}
+
+// drainReset services a pending reset request without blocking
+func (cs *ClockScheduler) drainReset() {
+	select {
+	case <-cs.resetChan:
+		cs.executeReset()
+	default:
 	}
 }
 

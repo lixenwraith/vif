@@ -1,6 +1,7 @@
 package mode
 
 import (
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/input"
@@ -107,15 +108,22 @@ func (m *MacroManager) StartPlayback(label rune, count int, now time.Time) bool 
 	return true
 }
 
-// StartAllPlayback begins infinite playback of all non-empty macros
+// StartAllPlayback begins infinite playback of all non-empty macros.
+// Labels are sorted: startOrder assigns the playback FIFO.
 // Returns count of macros started
 func (m *MacroManager) StartAllPlayback(now time.Time) int {
+	labels := make([]rune, 0, len(m.buffers))
+	for label := range m.buffers {
+		labels = append(labels, label)
+	}
+	slices.Sort(labels)
+
 	started := 0
-	for label, buffer := range m.buffers {
+	for _, label := range labels {
+		buffer := m.buffers[label]
 		if len(buffer) == 0 {
 			continue
 		}
-		// Skip if already playing
 		if _, playing := m.active[label]; playing {
 			continue
 		}

@@ -18,6 +18,19 @@ const (
 	SpeciesCount
 )
 
+// SpeciesNames indexes SpeciesType for telemetry keys and display
+var SpeciesNames = [SpeciesCount]string{
+	SpeciesNone:   "none",
+	SpeciesDrain:  "drain",
+	SpeciesSwarm:  "swarm",
+	SpeciesQuasar: "quasar",
+	SpeciesStorm:  "storm",
+	SpeciesPylon:  "pylon",
+	SpeciesSnake:  "snake",
+	SpeciesEye:    "eye",
+	SpeciesTower:  "tower",
+}
+
 // GenotypeComponent stores evolution data for tracked entities
 type GenotypeComponent struct {
 	Genes     []float64

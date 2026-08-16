@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -17,6 +18,9 @@ const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
 // Run wires, runs, and tears down the game
 func Run(cfg Config) error {
+	if cfg.Headless {
+		return errors.New("headless config requires NewHeadless, not Run")
+	}
 	a, err := New(cfg)
 	if err != nil {
 		return err

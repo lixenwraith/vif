@@ -11,6 +11,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
+// hitComposite groups an explosion's member hits under their header, in the
+// order headers were first encountered
+type hitComposite struct {
+	header  core.Entity
+	members []core.Entity
+}
+
 // ExplosionSystem handles explosion triggering and glyph-to-dust transformation
 type ExplosionSystem struct {
 	world *engine.World
@@ -21,6 +28,7 @@ type ExplosionSystem struct {
 	// Reusable buffers to avoid allocation in hot path
 	entityBuf    []core.Entity
 	dustEntryBuf []event.DustSpawnEntry
+	centerBuf    []vmath.Point
 
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
@@ -49,6 +57,7 @@ func (s *ExplosionSystem) Init() {
 	// Reset buffers
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
+	s.centerBuf = make([]vmath.Point, 0, 64)
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -132,6 +141,10 @@ func (s *ExplosionSystem) Update() {
 	transRes.ExplosionCount = write
 }
 
+// fireFromDust converts every dust particle into an explosion center.
+// Centers are collected in dense store order: addCenter merges against centers
+// already placed and emits combat events, so a map's order would decide which
+// merges happen and which entities take knockback.
 func (s *ExplosionSystem) fireFromDust() {
 	dustEntities := s.world.Components.Dust.Entities()
 	if len(dustEntities) == 0 {
@@ -139,18 +152,26 @@ func (s *ExplosionSystem) fireFromDust() {
 	}
 
 	type pos struct{ x, y int }
-	positions := make(map[pos]bool, len(dustEntities))
+	seen := make(map[pos]bool, len(dustEntities))
+	s.centerBuf = s.centerBuf[:0]
 
 	for _, e := range dustEntities {
-		if p, ok := s.world.Positions.GetPosition(e); ok {
-			positions[pos{p.X, p.Y}] = true
+		p, ok := s.world.Positions.GetPosition(e)
+		if !ok {
+			continue
 		}
+		key := pos{p.X, p.Y}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		s.centerBuf = append(s.centerBuf, vmath.Point{X: p.X, Y: p.Y})
 	}
 
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
 
-	for p := range positions {
-		s.addCenter(p.x, p.y, s.baseRadius, event.ExplosionTypeDust)
+	for _, p := range s.centerBuf {
+		s.addCenter(p.X, p.Y, s.baseRadius, event.ExplosionTypeDust)
 	}
 }
 
@@ -250,7 +271,9 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius floa
 
 	// Combat entity collectors
 	var hitDrains []core.Entity
-	hitComposites := make(map[core.Entity][]core.Entity)
+	// Headers keep first-seen order: each emitted event consumes RNG in knockback
+	compositeIdx := make(map[core.Entity]int)
+	var hitComposites []hitComposite
 
 	// Single-pass area sweep
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
@@ -283,7 +306,15 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius floa
 
 					switch headerComp.Type {
 					case component.CompositeTypeUnit, component.CompositeTypeAblative:
-						hitComposites[headerEntity] = append(hitComposites[headerEntity], entity)
+						if i, ok := compositeIdx[headerEntity]; ok {
+							hitComposites[i].members = append(hitComposites[i].members, entity)
+							break
+						}
+						compositeIdx[headerEntity] = len(hitComposites)
+						hitComposites = append(hitComposites, hitComposite{
+							header:  headerEntity,
+							members: []core.Entity{entity},
+						})
 					}
 					continue
 				}
@@ -323,13 +354,13 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius floa
 	}
 
 	// Emit combat events for composites (batched by header)
-	for headerEntity, hitMembers := range hitComposites {
+	for i := range hitComposites {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attackType,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
-			TargetEntity: headerEntity,
-			HitEntities:  hitMembers,
+			TargetEntity: hitComposites[i].header,
+			HitEntities:  hitComposites[i].members,
 			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,

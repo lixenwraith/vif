@@ -5,6 +5,7 @@ import (
 	"strings"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -27,6 +28,11 @@ type MetaSystem struct {
 	statCameraY *atomic.Int64
 	statPlayerX *atomic.Int64
 	statPlayerY *atomic.Int64
+
+	// Kill counters gate FSM region transitions, so they live in a system with
+	// no enable/disable toggle
+	statKills      [component.SpeciesCount]*atomic.Int64
+	statKillsTotal *atomic.Int64
 }
 
 // NewMetaSystem creates a new meta system
@@ -48,6 +54,10 @@ func (s *MetaSystem) Init() {
 	s.statCameraY = reg.Ints.Get("context.camera_y")
 	s.statPlayerX = reg.Ints.Get("player.x")
 	s.statPlayerY = reg.Ints.Get("player.y")
+	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
+		s.statKills[i] = reg.Ints.Get("kills." + component.SpeciesNames[i])
+	}
+	s.statKillsTotal = reg.Ints.Get("kills.total")
 }
 
 // Name returns system's name
@@ -73,6 +83,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
 		event.EventGameStepRequest,
+		event.EventEnemyKilled, // TODO: move kill telemetry to combat, not a meta concept, all happens in world
 		event.EventGameResetRequest,
 	}
 }
@@ -131,6 +142,11 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGameStepRequest:
 		p, _ := ev.Payload.(*event.GameStepPayload)
 		s.handleStepRequest(p)
+
+	case event.EventEnemyKilled:
+		if p, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+			s.recordKill(p.Species)
+		}
 	}
 }
 
@@ -148,6 +164,23 @@ func (s *MetaSystem) Update() {
 		s.statPlayerX.Store(int64(pos.X))
 		s.statPlayerY.Store(int64(pos.Y))
 	}
+}
+
+// recordKill counts one enemy death per species
+func (s *MetaSystem) recordKill(species component.SpeciesType) {
+	if species <= component.SpeciesNone || species >= component.SpeciesCount {
+		return
+	}
+	s.statKills[species].Add(1)
+	s.statKillsTotal.Add(1)
+}
+
+// resetKills zeroes every species counter for a new game
+func (s *MetaSystem) resetKills() {
+	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
+		s.statKills[i].Store(0)
+	}
+	s.statKillsTotal.Store(0)
 }
 
 // handleGameReset rebuilds world state; purge additionally clears operator session state
@@ -168,6 +201,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 
 	// 3. GameState reset (counters, NextID → 1)
 	s.ctx.State.Reset()
+	s.resetKills()
 
 	// 4. Config reset (map dimensions to viewport)
 	config := s.ctx.World.Resources.Config
