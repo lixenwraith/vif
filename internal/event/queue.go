@@ -19,7 +19,8 @@ type EventQueue struct {
 	head      atomic.Uint64                         // Read index
 	tail      atomic.Uint64                         // Write index
 
-	overwritten atomic.Uint64 // Events evicted unread by producer overrun
+	overwritten atomic.Uint64           // Events evicted unread by producer overrun
+	journal     atomic.Pointer[Journal] // nil = journaling off
 }
 
 func NewEventQueue() *EventQueue {
@@ -38,6 +39,19 @@ func (eq *EventQueue) Push(event GameEvent) {
 
 		if eq.tail.CompareAndSwap(currentTail, nextTail) {
 			idx := currentTail & parameter.EventBufferMask
+
+			// The claimed slot is the sequence, so record order and dispatch
+			// order cannot disagree between concurrent producers
+			event.Seq = currentTail
+
+			// Last point the producer owns the payload: once published a
+			// handler may recycle it. The origin compare keeps the system
+			// hot path to one register test.
+			if event.Origin != OriginSystem {
+				if j := eq.journal.Load(); j != nil {
+					j.record(&event)
+				}
+			}
 
 			eq.events[idx] = event
 			eq.published[idx].Store(true) // MUST be after write
@@ -116,3 +130,9 @@ func (eq *EventQueue) Len() int {
 func (eq *EventQueue) Dropped() uint64 {
 	return eq.overwritten.Load()
 }
+
+// SetJournal installs or clears the replay journal; nil disables capture
+func (eq *EventQueue) SetJournal(j *Journal) { eq.journal.Store(j) }
+
+// Journal returns the installed journal, nil when disabled
+func (eq *EventQueue) Journal() *Journal { return eq.journal.Load() }

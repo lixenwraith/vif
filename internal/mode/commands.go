@@ -31,6 +31,7 @@ var commandNames = []string{
 	"d", "debug", "h", "help", "?", "about", "content", "energy", "heat",
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
+	"r", "region",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -81,6 +82,8 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleDebugCommand(ctx, args)
 	case "h", "help", "?":
 		return handleHelpCommand(ctx)
+	case "r", "region":
+		return handleRegionCommand(ctx, args)
 	case "about":
 		return handleAboutCommand(ctx)
 	case "content":
@@ -679,14 +682,14 @@ func handleDustCommand(ctx *engine.GameContext) CommandResult {
 
 func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
-		ctx.World.PushEvent(event.EventDebugFlowToggle, nil)
+		ctx.PushEvent(event.EventDebugFlowToggle, nil)
 	} else {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		ctx.World.PushEvent(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
+		ctx.PushEvent(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
@@ -695,14 +698,14 @@ func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
-		ctx.World.PushEvent(event.EventDebugGraphToggle, nil)
+		ctx.PushEvent(event.EventDebugGraphToggle, nil)
 	} else {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		ctx.World.PushEvent(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
+		ctx.PushEvent(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
@@ -812,4 +815,45 @@ func parseStepCond(p *event.GameStepPayload, args []string) bool {
 func stepUsage(ctx *engine.GameContext) CommandResult {
 	setCommandError(ctx, "Usage: :step [n] | :step [rate] fsm [region] [pause] | :step [rate] ev <Event> [pause] | :step off")
 	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleRegionCommand controls FSM regions for debugging.
+// Each invocation performs one primitive operation; entering a region that the
+// escalation chain would reach is pause-then-spawn, issued as two commands.
+func handleRegionCommand(ctx *engine.GameContext, args []string) CommandResult {
+	const usage = "Usage: :region list | spawn <name> <state> | pause|resume|terminate <name>"
+
+	res := CommandResult{Continue: true, KeepPaused: false}
+	if len(args) == 0 {
+		setCommandError(ctx, usage)
+		return res
+	}
+
+	p := &event.FSMRegionPayload{Op: strings.ToLower(args[0])}
+	switch p.Op {
+	case event.RegionList:
+		if len(args) != 1 {
+			setCommandError(ctx, usage)
+			return res
+		}
+	case event.RegionSpawn:
+		if len(args) != 3 {
+			setCommandError(ctx, usage)
+			return res
+		}
+		p.Region, p.State = args[1], args[2]
+	case event.RegionPause, event.RegionResume, event.RegionTerminate:
+		if len(args) != 2 {
+			setCommandError(ctx, usage)
+			return res
+		}
+		p.Region = args[1]
+	default:
+		setCommandError(ctx, usage)
+		return res
+	}
+
+	ctx.PushEvent(event.EventFSMRegionRequest, p)
+	ctx.SetLastCommand(":region " + strings.Join(args, " "))
+	return res
 }

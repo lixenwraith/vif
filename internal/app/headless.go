@@ -199,3 +199,12 @@ func FirstDiff(x, y []string) (idx int, lineX, lineY string, ok bool) {
 	}
 	return 0, "", "", false
 }
+
+// Region applies an FSM region operation and settles what it emits.
+// State is required by event.RegionSpawn and ignored otherwise.
+func (a *App) Region(op, region, state string) {
+	a.ctx.PushEvent(event.EventFSMRegionRequest, &event.FSMRegionPayload{
+		Op: op, Region: region, State: state,
+	})
+	a.scheduler.Settle()
+}

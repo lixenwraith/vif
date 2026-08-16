@@ -306,8 +306,8 @@ func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius floa
 
 					switch headerComp.Type {
 					case component.CompositeTypeUnit, component.CompositeTypeAblative:
-						if i, ok := compositeIdx[headerEntity]; ok {
-							hitComposites[i].members = append(hitComposites[i].members, entity)
+						if ci, ok := compositeIdx[headerEntity]; ok {
+							hitComposites[ci].members = append(hitComposites[ci].members, entity)
 							break
 						}
 						compositeIdx[headerEntity] = len(hitComposites)

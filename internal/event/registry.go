@@ -71,3 +71,9 @@ func NewPayloadStruct(et EventType) any {
 	}
 	return reflect.New(t).Interface()
 }
+
+// HasPayload reports whether a TOML-decodable payload prototype is registered
+func HasPayload(et EventType) bool {
+	_, ok := typeToPayload[et]
+	return ok
+}

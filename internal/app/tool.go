@@ -47,12 +47,45 @@ func checkFSM(cfg Config, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintln(w, "config ok: embedded default")
-		return nil
+		return checkSystems(m, w)
 	}
 	if err := fsm.LoadConfigFromPath(m, path); err != nil {
 		return err
 	}
 	fmt.Fprintln(w, "config ok:", path)
+	return checkSystems(m, w)
+}
+
+// checkSystems validates every system name the config references
+func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
+	valid := make(map[string]bool)
+	for _, n := range manifest.ActiveSystems() {
+		valid[n] = true
+	}
+
+	var unknown []string
+	check := func(where string, names []string) {
+		for _, n := range names {
+			if !valid[n] {
+				unknown = append(unknown, where+": "+n)
+			}
+		}
+	}
+	if sc := m.GetSystemsConfig(); sc != nil {
+		check("[systems]", sc.DisabledSystems)
+	}
+	for _, r := range m.DeclaredRegions() {
+		cfg := m.GetRegionConfig(r)
+		if cfg == nil {
+			continue
+		}
+		check("region "+r, cfg.EnabledSystems)
+		check("region "+r, cfg.DisabledSystems)
+	}
+	if len(unknown) > 0 {
+		return fmt.Errorf("unknown system names:\n  %s", strings.Join(unknown, "\n  "))
+	}
+	fmt.Fprintln(w, "systems ok")
 	return nil
 }
 

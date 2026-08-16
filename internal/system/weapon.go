@@ -79,7 +79,6 @@ func (s *WeaponSystem) EventTypes() []event.EventType {
 		event.EventWeaponAddRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
-		event.EventWeaponFireRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}

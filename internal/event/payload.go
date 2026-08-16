@@ -189,6 +189,24 @@ type GameStepPayload struct {
 	Off    bool   `toml:"off"`   // disarm any pending request
 }
 
+// --- FSM ---
+
+// Region operations carried by FSMRegionPayload
+const (
+	RegionList      = "list"
+	RegionSpawn     = "spawn"
+	RegionPause     = "pause"
+	RegionResume    = "resume"
+	RegionTerminate = "terminate"
+)
+
+// FSMRegionPayload requests an FSM region operation; State applies to spawn only
+type FSMRegionPayload struct {
+	Op     string `toml:"op"`
+	Region string `toml:"region"`
+	State  string `toml:"state,omitempty"`
+}
+
 // --- Nugget ---
 
 // NuggetCollectedPayload signals successful nugget collection

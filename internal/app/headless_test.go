@@ -1,6 +1,7 @@
 package app
 
 import (
+	"io"
 	"strconv"
 	"strings"
 	"testing"
@@ -261,6 +262,41 @@ func TestDeterminismInterleavedScripted(t *testing.T) {
 	}
 }
 
+// TestDeterminismSequentialTower is the tower-arm payoff test: route graphs,
+// the EXP3 bandit and the GA are on the tick path only in this arm.
+func TestDeterminismSequentialTower(t *testing.T) {
+	const ticks = 600
+
+	first := newTestApp(t, testConfig(0x5EED))
+	runTowerScript(t, first, ticks)
+
+	second := newTestApp(t, testConfig(0x5EED))
+	runTowerScript(t, second, ticks)
+
+	assertSnapshotsEqual(t, first.Snapshot(), second.Snapshot())
+}
+
+// TestDeterminismInterleavedTower runs the tower arm in lockstep, so a
+// divergence names its tick and its entity rather than a final-state diff
+func TestDeterminismInterleavedTower(t *testing.T) {
+	const ticks = 500
+
+	a := newTestApp(t, testConfig(0xA11CE))
+	b := newTestApp(t, testConfig(0xA11CE))
+
+	sa, sb := newTowerScript(a), newTowerScript(b)
+	for n := 1; n <= ticks; n++ {
+		sa.step(t, n)
+		sb.step(t, n)
+
+		if idx, la, lb, ok := FirstDiff(a.Snapshot(), b.Snapshot()); ok {
+			dumpDivergence(t, a, b, 12)
+			t.Fatalf("divergence at tick %d, snapshot line %d:\n  A: %s\n  B: %s",
+				n, idx, la, lb)
+		}
+	}
+}
+
 // TestDeterminismDistinctSeeds guards the negative case: identical snapshots
 // across seeds would mean the comparison is blind to simulation state.
 func TestDeterminismDistinctSeeds(t *testing.T) {
@@ -340,6 +376,17 @@ func statInt(t *testing.T, a *App, key string) int64 {
 		t.Fatalf("status int %q is not registered", key)
 	}
 	return reg.Ints.Get(key).Load()
+}
+
+// regionState reads a region's published FSM state; "-" when inactive
+func regionState(t *testing.T, a *App, region string) string {
+	t.Helper()
+	key := "fsm." + region + ".state"
+	reg := a.world.Resources.Status
+	if !reg.Strings.Has(key) {
+		t.Fatalf("status string %q is not registered", key)
+	}
+	return reg.Strings.Get(key).Load()
 }
 
 // diffSnapshots returns every differing line pair, capped for readability.
@@ -455,4 +502,12 @@ func dumpDivergence(t *testing.T, a, b *App, limit int) {
 func fmtKin(px, py, vx, vy float64) string {
 	f := func(v float64) string { return strconv.FormatFloat(v, 'g', -1, 64) }
 	return "p(" + f(px) + "," + f(py) + ") v(" + f(vx) + "," + f(vy) + ")"
+}
+
+// TestEmbeddedConfigValidates asserts the embedded FSM and corpus pass the
+// same validation as an external config; every determinism arm runs on them.
+func TestEmbeddedConfigValidates(t *testing.T) {
+	if err := Check(testConfig(1), io.Discard); err != nil {
+		t.Fatalf("embedded config: %v", err)
+	}
 }

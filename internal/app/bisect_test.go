@@ -7,12 +7,15 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 )
 
-const bisectTicks = 400
+const (
+	bisectTicks      = 400
+	bisectTowerTicks = 500 // tower entry is at tick 100; leaves 400 in-region
+)
 
-// interleavedDivergence runs two scripted instances of one seed in lockstep
-// with the named systems disabled, returning the first divergent tick (-1 for
-// none) and the differing snapshot lines.
-func interleavedDivergence(t *testing.T, seed uint64, ticks int, disabled []string) (int, []string) {
+// interleavedDivergence runs two instances of one seed in lockstep under the
+// given arm, with the named systems disabled. Returns the first divergent tick
+// (-1 for none) and the differing snapshot lines.
+func interleavedDivergence(t *testing.T, mkScript func(*App) *script, seed uint64, ticks int, disabled []string) (int, []string) {
 	t.Helper()
 
 	a, err := NewHeadless(testConfig(seed))
@@ -32,7 +35,7 @@ func interleavedDivergence(t *testing.T, seed uint64, ticks int, disabled []stri
 		setSystemEnabled(b, name, false)
 	}
 
-	sa, sb := newScript(a), newScript(b)
+	sa, sb := mkScript(a), mkScript(b)
 	for n := 1; n <= ticks; n++ {
 		sa.step(t, n)
 		sb.step(t, n)
@@ -44,24 +47,35 @@ func interleavedDivergence(t *testing.T, seed uint64, ticks int, disabled []stri
 	return -1, nil
 }
 
-// TestBisectDivergingSystem disables one system at a time and reports which
-// removals make the scripted run converge. Skips when the baseline is clean.
+// TestBisectDivergingSystem bisects the combat arm
+func TestBisectDivergingSystem(t *testing.T) {
+	bisectArm(t, "combat", newScript, 0xA11CE, bisectTicks)
+}
+
+// TestBisectDivergingSystemTower bisects the tower arm, the only one covering
+// route graphs, the bandit and the GA
+func TestBisectDivergingSystemTower(t *testing.T) {
+	bisectArm(t, "tower", newTowerScript, 0xA11CE, bisectTowerTicks)
+}
+
+// bisectArm disables one system at a time and reports which removals make the
+// arm converge. Skips when the baseline is clean.
 //
 // A region's enabled_systems re-enables its declarations on spawn or resume,
 // so a system named in the FSM config may not stay disabled for the whole run;
 // a candidate that still diverges is inconclusive, not exonerated.
-func TestBisectDivergingSystem(t *testing.T) {
-	const seed = 0xA11CE
+func bisectArm(t *testing.T, arm string, mkScript func(*App) *script, seed uint64, ticks int) {
+	t.Helper()
 
-	base, diffs := interleavedDivergence(t, seed, bisectTicks, nil)
+	base, diffs := interleavedDivergence(t, mkScript, seed, ticks, nil)
 	if base < 0 {
-		t.Skip("scripted run is deterministic; nothing to bisect")
+		t.Skipf("%s arm is deterministic; nothing to bisect", arm)
 	}
-	t.Logf("baseline diverges at tick %d:\n%s", base, strings.Join(diffs, "\n"))
+	t.Logf("%s baseline diverges at tick %d:\n%s", arm, base, strings.Join(diffs, "\n"))
 
 	var converged, delayed []string
 	for _, name := range manifest.ActiveSystems() {
-		tick, _ := interleavedDivergence(t, seed, bisectTicks, []string{name})
+		tick, _ := interleavedDivergence(t, mkScript, seed, ticks, []string{name})
 		switch {
 		case tick < 0:
 			converged = append(converged, name)

@@ -42,9 +42,10 @@ var (
 	flagLog   logFlag
 	flagLevel levelFlag
 	flagScope scopeFlag
-	flagStat  statFlag
-	flagRec   recFlag
-	flagDev   devFlag
+	// TODO: collapse flagStat and flagRec into one flag
+	flagStat statFlag
+	flagRec  recFlag
+	flagDev  devFlag
 )
 
 func init() {

@@ -458,6 +458,14 @@ func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 	ctx.World.PushEvent(eventType, payload)
 }
 
+// PushEventOrigin emits with an explicit producer tag; see World.PushEventOrigin
+func (ctx *GameContext) PushEventOrigin(eventType event.EventType, payload any, origin event.Origin) {
+	ctx.World.PushEventOrigin(eventType, payload, origin)
+}
+
+// WithOrigin scopes the ambient producer tag; see World.WithOrigin
+func (ctx *GameContext) WithOrigin(o event.Origin, fn func()) { ctx.World.WithOrigin(o, fn) }
+
 // === MODE ACCESSORS ===
 
 // GetMode returns the current game mode

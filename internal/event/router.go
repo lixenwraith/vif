@@ -1,6 +1,9 @@
 package event
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // Handler processes specific event types
 // Systems implement this interface to receive routed events
@@ -42,6 +45,9 @@ func (r *Router) Register(handler Handler) {
 	for _, t := range handler.EventTypes() {
 		if !validType(t) {
 			panic(fmt.Sprintf("event: handler %T declared out-of-range type %d", handler, t))
+		}
+		if slices.Contains(r.handlers[t], handler) {
+			panic(fmt.Sprintf("event: handler %T declared type %s twice", handler, GetEventName(t)))
 		}
 		r.handlers[t] = append(r.handlers[t], handler)
 	}

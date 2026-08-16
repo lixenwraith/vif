@@ -4,6 +4,8 @@ package event
 type GameEvent struct {
 	Payload any
 	Type    EventType
+	Seq     uint64 // Monotonic queue slot, stamped at push; orders events within a tick
+	Origin  Origin // Producer, for journaling and replay; never affects dispatch
 }
 
 // EventType represents the type of game event
@@ -132,6 +134,8 @@ const (
 	EventCycleDamageMultiplierIncrease
 	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
 	EventCycleDamageMultiplierReset
+	// EventFSMRegionRequest (FSMRegionPayload) signals FSM to change the active region
+	EventFSMRegionRequest
 
 	// --- Nugget ---
 

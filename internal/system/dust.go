@@ -44,12 +44,6 @@ func posKey(x, y int) uint64 {
 	return uint64(x)<<32 | uint64(uint32(y))
 }
 
-func posFromKey(pk uint64) (x, y int) {
-	x = int(pk >> 32)
-	y = int(pk & 0xFFFFFFFF)
-	return
-}
-
 // DustSystem manages orbital dust particles created from glyph transformation
 // Dust orbits cursor with chase behavior on large cursor movements
 type DustSystem struct {
@@ -250,7 +244,6 @@ func (s *DustSystem) Update() {
 	s.world.Positions.Lock()
 	defer s.world.Positions.Unlock()
 
-	var destroyedCount int64
 	deathCandidates := make([]core.Entity, 0, 32)
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -435,6 +428,7 @@ func (s *DustSystem) Update() {
 		timerComp, ok := s.world.Components.Timer.GetComponent(dustEntity)
 		if !ok {
 			deathCandidates = append(deathCandidates, dustEntity)
+			continue
 		}
 
 		if sigilComp.Color == visual.RgbDustBright && timerComp.Remaining < parameter.DustTimerNormal {
@@ -455,7 +449,7 @@ func (s *DustSystem) Update() {
 	}
 
 	s.statActive.Store(int64(dusts.CountEntities()))
-	s.statDestroyed.Add(destroyedCount)
+	s.statDestroyed.Add(int64(len(deathCandidates)))
 }
 
 // buildCollisionContext pre-computes collision data for current tick
@@ -546,7 +540,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	glyphEntities := s.world.Components.Glyph.Entities()
 	toTransform := make([]glyphData, 0, len(glyphEntities))
-	toFlashKill := make([]core.Entity, len(glyphEntities))
+	toFlashKill := make([]core.Entity, 0, len(glyphEntities))
 
 	for _, glyphEntity := range glyphEntities {
 		// Skip composite members

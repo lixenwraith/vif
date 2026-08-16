@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io/fs"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -61,6 +62,7 @@ type ClockScheduler struct {
 	statEntityCreated   *atomic.Int64
 	statEntityDestroyed *atomic.Int64
 	statQueueLen        *atomic.Int64
+	statQueueMax        *atomic.Int64
 	statGameElapsedMs   *atomic.Int64
 	statEvDropped       *atomic.Int64
 	statTickSlips       *atomic.Int64
@@ -131,6 +133,7 @@ func NewClockScheduler(
 		statEntityCreated:   statusReg.Ints.Get("entity.created_total"),
 		statEntityDestroyed: statusReg.Ints.Get("entity.destroyed_total"),
 		statQueueLen:        statusReg.Ints.Get("event.queue_len"),
+		statQueueMax:        statusReg.Ints.Get("event.queue_max"),
 		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
 		statEvDropped:       statusReg.Ints.Get("event.dropped"),
 		statTickSlips:       statusReg.Ints.Get("engine.tick_slips"),
@@ -142,7 +145,115 @@ func NewClockScheduler(
 		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
 	}
 
+	// The FSM is scheduler-owned, so region control arrives as an event rather
+	// than as an API pair reaching through App
+	cs.eventRouter.Register(cs)
+
 	return cs, updateDone, resetChan
+}
+
+// EventTypes returns the event types the scheduler handles directly
+func (cs *ClockScheduler) EventTypes() []event.EventType {
+	return []event.EventType{event.EventFSMRegionRequest}
+}
+
+// HandleEvent applies a region operation to the scheduler-owned FSM.
+// Runs inside dispatchOnePass with the world lock held; anything the operation
+// emits settles on a later pass.
+func (cs *ClockScheduler) HandleEvent(ev event.GameEvent) {
+	p, ok := ev.Payload.(*event.FSMRegionPayload)
+	if !ok {
+		cs.report("region: missing payload")
+		return
+	}
+	if err := cs.applyRegionOp(p); err != nil {
+		vlog.Error("fsm", "msg", "region request failed",
+			"op", p.Op, "region", p.Region, "state", p.State, "error", err.Error())
+		cs.report("region: " + err.Error())
+		return
+	}
+	vlog.Info("fsm", "msg", "region request", "op", p.Op, "region", p.Region, "state", p.State)
+}
+
+// applyRegionOp dispatches one primitive region operation
+func (cs *ClockScheduler) applyRegionOp(p *event.FSMRegionPayload) error {
+	if p.Op == event.RegionList {
+		return cs.reportRegions()
+	}
+	if p.Region == "" {
+		return fmt.Errorf("%s requires a region name", p.Op)
+	}
+	if cs.fsm.GetRegionConfig(p.Region) == nil {
+		return fmt.Errorf("undeclared region %q", p.Region)
+	}
+
+	switch p.Op {
+	case event.RegionSpawn:
+		id, ok := cs.fsm.GetStateID(p.State)
+		if !ok {
+			return fmt.Errorf("unknown state %q", p.State)
+		}
+		if err := cs.fsm.SpawnRegion(cs.world, p.Region, id); err != nil {
+			return err
+		}
+	case event.RegionPause:
+		if !cs.fsm.HasRegion(p.Region) {
+			return fmt.Errorf("region %q is not active", p.Region)
+		}
+		cs.fsm.PauseRegion(p.Region)
+	case event.RegionResume:
+		if !cs.fsm.HasRegion(p.Region) {
+			return fmt.Errorf("region %q is not active", p.Region)
+		}
+		cs.fsm.ResumeRegion(p.Region)
+	case event.RegionTerminate:
+		if err := cs.fsm.TerminateRegion(cs.world, p.Region); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown op %q", p.Op)
+	}
+
+	// Every op changes the active set, so every op reconciles
+	if !cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil) {
+		return fmt.Errorf("fsm: action ApplyRegionSystemConfigs is not registered")
+	}
+	return nil
+}
+
+// report surfaces a scheduler-side message in the status bar
+func (cs *ClockScheduler) report(msg string) {
+	cs.world.PushEvent(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+		Message:          msg,
+		DurationOverride: true,
+	})
+}
+
+// reportRegions publishes declared regions for :region list.
+// An inactive region shows its declared initial state, which is what spawn expects;
+// an active one shows its current state, suffixed '~' while paused.
+func (cs *ClockScheduler) reportRegions() error {
+	var b strings.Builder
+	for i, r := range cs.fsm.DeclaredRegions() {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		b.WriteString(r)
+
+		t := cs.fsm.RegionTelemetry(r)
+		if !t.Active {
+			if cfg := cs.fsm.GetRegionConfig(r); cfg != nil && cfg.Initial != "" {
+				b.WriteString("[" + cfg.Initial + "]")
+			}
+			continue
+		}
+		b.WriteString("(" + t.State + ")")
+		if t.Paused {
+			b.WriteByte('~')
+		}
+	}
+	cs.report("regions: " + b.String())
+	return nil
 }
 
 // RegisterEventHandler adds an event handler to router, must be called before Start()
@@ -178,8 +289,18 @@ func (cs *ClockScheduler) initLoadedFSM() error {
 	if err := cs.fsm.Init(cs.world); err != nil {
 		return fmt.Errorf("failed to init FSM: %w", err)
 	}
-	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
-	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
+	return cs.applySystemConfig()
+}
+
+// applySystemConfig reconciles global then per-region toggles, so a region
+// declaration wins over the root list. A missing action is a wiring
+// regression, not a runtime condition.
+func (cs *ClockScheduler) applySystemConfig() error {
+	for _, name := range [...]string{"ApplyGlobalSystemConfig", "ApplyRegionSystemConfigs"} {
+		if !cs.fsm.ExecuteAction(cs.world, name, nil) {
+			return fmt.Errorf("fsm: action %s is not registered", name)
+		}
+	}
 	return nil
 }
 
@@ -664,8 +785,9 @@ func (cs *ClockScheduler) executeReset() {
 	}
 
 	// 5. Re-apply global system configuration (mirrors LoadFSM behavior)
-	cs.fsm.ExecuteAction(cs.world, "ApplyGlobalSystemConfig", nil)
-	cs.fsm.ExecuteAction(cs.world, "ApplyRegionSystemConfigs", nil)
+	if err := cs.applySystemConfig(); err != nil {
+		vlog.Error("fsm", "msg", "system config", "error", err.Error())
+	}
 
 	// 6. Unpause via the single owner so clock, context, and audio move
 	//    together; settled below while the world lock is still held.
@@ -764,7 +886,11 @@ func (cs *ClockScheduler) processTick() {
 	cs.statEntityCount.Store(int64(entityCount))
 	cs.statEntityCreated.Store(cs.world.CreatedCount())
 	cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
-	cs.statQueueLen.Store(int64(cs.world.Resources.Event.Queue.Len()))
+	qlen := int64(cs.world.Resources.Event.Queue.Len())
+	cs.statQueueLen.Store(qlen)
+	if qlen > cs.statQueueMax.Load() {
+		cs.statQueueMax.Store(qlen) // high-water mark; sizing input for EventQueueSize
+	}
 
 	// Queue overflow is silent state loss; report every increase.
 	// The counter is monotonic across sessions — the queue outlives reset

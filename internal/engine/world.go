@@ -42,6 +42,11 @@ type World struct {
 
 	createdCount   atomic.Int64
 	destroyedCount atomic.Int64
+
+	// origin tags events pushed while a non-simulation producer drives the world.
+	// Written only under updateMutex via WithOrigin; atomic because lock-free
+	// pushers read it. CI guard: WithOrigin must not appear outside a locked path.
+	origin atomic.Int32
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
@@ -202,19 +207,38 @@ func (w *World) Rand(label string) *vmath.FastRand {
 	return w.Resources.Rand.Stream(label)
 }
 
-// PushEvent emits a game event using direct cached pointers. HOT-PATH for all systems communication
+// WithOrigin runs fn with PushEvent tagging its events as origin, restoring the
+// previous tag. Caller MUST hold updateMutex: no system may run inside fn.
+func (w *World) WithOrigin(o event.Origin, fn func()) {
+	prev := w.origin.Swap(int32(o))
+	defer w.origin.Store(prev)
+	fn()
+}
+
+// PushEvent emits a game event carrying the ambient producer tag. HOT-PATH for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
+	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()))
+}
+
+// PushEventOrigin emits with an explicit tag, for producers outside any WithOrigin scope
+func (w *World) PushEventOrigin(eventType event.EventType, payload any, origin event.Origin) {
+	w.pushEvent(eventType, payload, origin)
+}
+
+// pushEvent is the shared emit body; trace depth is measured from here
+func (w *World) pushEvent(eventType event.EventType, payload any, origin event.Origin) {
 	if w.Resources.Event.Queue == nil {
 		return // Not yet initialized
 	}
 
 	if vlog.On("push", vlog.LevelTrace) {
-		vlog.Trace("push", vlog.LevelTrace, 3, "msg", "push", "ev", event.GetEventName(eventType)) // 3 levels deep in trace to start trace from the producing system
+		vlog.Trace("push", vlog.LevelTrace, 4, "msg", "push", "ev", event.GetEventName(eventType))
 	}
 
 	w.Resources.Event.Queue.Push(event.GameEvent{
 		Type:    eventType,
 		Payload: payload,
+		Origin:  origin,
 	})
 }
 

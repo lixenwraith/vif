@@ -225,6 +225,21 @@ func registerSystemActions[T any](m *fsm.Machine[T], h Host[T]) {
 		h.SetSystem(ctx, sysArgs.SystemName, false)
 	})
 
+	// ApplyGlobalSystemConfig applies the root [systems] toggles. Invoked by
+	// name after Init and after Reset, before the per-region pass.
+	m.RegisterAction("ApplyGlobalSystemConfig", func(ctx T, args any) {
+		if h.SetSystem == nil {
+			return
+		}
+		cfg := m.GetSystemsConfig()
+		if cfg == nil {
+			return
+		}
+		for _, name := range cfg.DisabledSystems {
+			h.SetSystem(ctx, name, false)
+		}
+	})
+
 	// ApplyRegionSystemConfigs reconciles declared toggles for every
 	// active region. Invoked by name after Init and after Reset, where regions
 	// come up without passing through SpawnRegion.

@@ -15,6 +15,8 @@ import (
 // lintDirs are the packages whose iteration order can reach simulation state
 var lintDirs = []string{
 	".", "../engine", "../mode", "../fsm", "../fsm/std", "../status", "../event",
+	"../../pkg/genetic", "../../pkg/genetic/registry", "../../pkg/navigation",
+	"../../content",
 }
 
 // allowedMapRanges lists iterations whose order provably cannot affect
@@ -34,6 +36,7 @@ var allowedMapRanges = map[string]string{
 	"MetricMap.Keys:items":                     "collects keys, sorted before caching",
 	"Registry.buildIndex:byGroup":              "collects group names, sorted before index build",
 	"CleanerSystem.scanTargetRows:targetRows":  "collects rows, sorted before spawn",
+	"MacroManager.StartAllPlayback:buffers":    "collects labels, sorted before playback start",
 
 	// --- Writes target a map or distinct keys; order cannot change the result ---
 	"Machine.CompilePaths:nodes":                   "writes each node's own Path",

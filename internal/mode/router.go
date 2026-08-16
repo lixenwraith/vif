@@ -1,7 +1,6 @@
 package mode
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -150,17 +149,15 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 
 	if vlog.On("input", vlog.LevelDebug) {
-		// Format char nicely if it's printable, otherwise leave as int (mouse coordinates use this field)
-		charDisplay := fmt.Sprintf("%d", intent.Char)
-		if intent.Char >= 32 && intent.Char <= 126 {
-			charDisplay = fmt.Sprintf("'%c' (%d)", intent.Char, intent.Char)
-		}
-
 		vlog.Debug("input", "msg", "intent",
 			"type", intent.Type.String(),
 			"motion", intent.Motion.String(),
+			"operator", intent.Operator.String(),
+			"special", intent.Special.String(),
+			"mode_target", intent.ModeTarget.String(),
+			"scroll", intent.ScrollDir.String(),
 			"count", intent.Count,
-			"char", charDisplay,
+			"char", int32(intent.Char),
 			"cmd", intent.Command,
 			"macro", intent.MacroPlayback)
 	}

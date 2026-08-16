@@ -745,8 +745,8 @@ func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY float
 		return 0, 0
 	}
 
-	resX := sumX * totalWeight
-	resY := sumY * totalWeight
+	resX := sumX / totalWeight
+	resY := sumY / totalWeight
 
 	if resX != 0 || resY != 0 {
 		return vmath.Normalize2DF(resX, resY)

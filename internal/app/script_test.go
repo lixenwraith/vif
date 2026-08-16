@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 )
 
@@ -16,6 +17,10 @@ const (
 	// scriptHeatEvery restores heat drained by ember decay. Drain spawn count
 	// correlates with heat, and heat gates region progression.
 	scriptHeatEvery = 200
+
+	// scriptTowerTick is when the tower arm enters the region: late enough that
+	// main has spawned gold and drains, early enough for a full pylon chain.
+	scriptTowerTick = 100
 )
 
 // script drives one App through a fixed gameplay sequence: god mode with
@@ -23,15 +28,22 @@ const (
 // every action is keyed to a tick index, never to elapsed wall time.
 type script struct {
 	app     *App
+	tower   bool
 	started bool
 }
 
-func newScript(a *App) *script { return &script{app: a} }
+func newScript(a *App) *script      { return &script{app: a} }
+func newTowerScript(a *App) *script { return &script{app: a, tower: true} }
 
-// runScript drives n ticks of the script and fails on an early quit
-func runScript(t *testing.T, a *App, n int) {
+// runScript drives n ticks of the combat arm and fails on an early quit
+func runScript(t *testing.T, a *App, n int) { runArm(t, newScript(a), n) }
+
+// runTowerScript drives n ticks of the tower arm and fails on an early quit
+func runTowerScript(t *testing.T, a *App, n int) { runArm(t, newTowerScript(a), n) }
+
+// runArm advances a script to completion
+func runArm(t *testing.T, s *script, n int) {
 	t.Helper()
-	s := newScript(a)
 	for i := 1; i <= n; i++ {
 		s.step(t, i)
 	}
@@ -46,6 +58,19 @@ func (s *script) step(t *testing.T, tick int) {
 		s.started = true
 	} else if tick%scriptHeatEvery == 0 {
 		s.command(t, "heat 100")
+	}
+
+	if s.tower {
+		switch tick {
+		case scriptTowerTick:
+			s.app.Region(event.RegionPause, "main", "")
+			s.app.Region(event.RegionSpawn, "tower", "TowerSetup")
+		case scriptTowerTick + 1:
+			// publishRegionStats ran during the previous tick
+			if got := regionState(t, s.app, "tower"); got == "-" {
+				t.Fatalf("tower region did not spawn")
+			}
+		}
 	}
 
 	if tick%scriptInputEvery == 0 {
@@ -119,4 +144,37 @@ func TestScriptReachesCombat(t *testing.T) {
 	t.Logf("entities created=%d destroyed=%d | heat=%d | fsm=%s",
 		statInt(t, a, "entity.created_total"), statInt(t, a, "entity.destroyed_total"),
 		statInt(t, a, "heat.current"), a.world.Resources.Status.Strings.Get("fsm.state").Load())
+}
+
+// TestScriptReachesTower asserts the tower arm puts eyes, gateways, route
+// graphs and the GA on the tick path
+func TestScriptReachesTower(t *testing.T) {
+	const ticks = 600
+
+	a := newTestApp(t, testConfig(0xC0FFEE))
+	s := newTowerScript(a)
+
+	var maxEyes, maxGraphs, maxRecomputes int64
+	for i := 1; i <= ticks; i++ {
+		s.step(t, i)
+		maxEyes = max(maxEyes, statInt(t, a, "eye.count"))
+		maxGraphs = max(maxGraphs, statInt(t, a, "adapt.graphs"))
+		maxRecomputes = max(maxRecomputes, statInt(t, a, "nav.recomputes"))
+	}
+
+	if maxEyes == 0 {
+		t.Error("eye.count never rose: gateways spawned nothing")
+	}
+	if maxGraphs == 0 {
+		t.Error("adapt.graphs never rose: no route graph reached the bandit")
+	}
+	if maxRecomputes == 0 {
+		t.Error("nav.recomputes never rose: composite flow fields are idle")
+	}
+	if got := statInt(t, a, "eye.ga.outcomes"); got == 0 {
+		t.Error("eye.ga.outcomes = 0: no fitness was reported")
+	}
+	if got := statInt(t, a, "event.dropped"); got != 0 {
+		t.Errorf("event.dropped = %d: queue overflow invalidates the run", got)
+	}
 }

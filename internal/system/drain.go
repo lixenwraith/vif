@@ -69,11 +69,10 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
-	s.statCollisions = s.world.Resources.Status.Ints.Get("drain.collisions")
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
-	s.statPending = s.world.Resources.Status.Ints.Get("drain.collisions")
+	s.statCollisions = s.world.Resources.Status.Ints.Get("drain.collisions")
 
 	s.Init()
 	return s
@@ -331,11 +330,6 @@ func (s *DrainSystem) removeCompletedSpawn(x, y int) {
 			return
 		}
 	}
-}
-
-// hasPendingSpawns returns true if materialize spawn queue is non-empty
-func (s *DrainSystem) hasPendingSpawns() bool {
-	return len(s.pendingSpawns) > 0
 }
 
 // processPendingSpawns starts materialization for spawns whose scheduled tick has arrived, and purges stale spawns that failed to complete within timeout
@@ -889,12 +883,9 @@ func (s *DrainSystem) updateDrainMovement() {
 		if !ok {
 			continue
 		}
-		// Stun check: skip movement if stunned
+		// Forced movement check: skip movement if stunned, skip kinetic displacement if immune
 		if combatComp.RemainingKineticImmunity > 0 || combatComp.StunnedRemaining > 0 {
-			// Still need position sync but skip homing/physics
-			if combatComp.StunnedRemaining > 0 {
-				continue
-			}
+			continue
 		}
 
 		kineticComp, ok := s.world.Components.Kinetic.GetPtr(drainEntity)
