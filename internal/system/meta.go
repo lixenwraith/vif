@@ -76,6 +76,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventDebugFlowToggle,
 		event.EventDebugGraphToggle,
 		event.EventMetaStatusMessageRequest,
+		event.EventModeChanged,
 		event.EventLevelSetup,
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
@@ -99,6 +100,14 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
 			s.handleMessageRequest(payload)
 		}
+
+	case event.EventModeChanged:
+		p, ok := ev.Payload.(*event.ModeChangedPayload)
+		if !ok || int(p.Mode) >= len(core.ModeNames) {
+			return // absent or out-of-range mode from an external stream
+		}
+		s.ctx.SetMode(p.Mode)
+		s.ctx.World.UpdateBoundsRadius()
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {

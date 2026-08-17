@@ -86,7 +86,9 @@ func (a *App) init() error {
 		return err
 	}
 	a.initWorld()
-	a.initJournal()
+	if err := a.initJournal(); err != nil {
+		return err
+	}
 	if !a.cfg.Headless {
 		a.initPresentation()
 	}
