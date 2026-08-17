@@ -1,6 +1,7 @@
 package event
 
 import (
+	"reflect"
 	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
@@ -26,20 +27,32 @@ type JournalRecord struct {
 type JournalAnchor struct {
 	Speed        string // time scale ladder token; exact, unlike a float
 	ConfigID     string
-	Schema       uint32
+	ContentID    string
+	Schema       uint64 // uint64, not uint32: the log formatter stringifies narrow uints
 	Seed         uint64
 	Session      uint64 // RNG session counter; streams derive from it, so replay must match
 	JSeq         uint64
 	TickInterval int64 // nanoseconds
+	Width        int   // terminal-equivalent dimensions the run started with
+	Height       int
 }
 
-// JournalSink consumes journal output. Called on the producing goroutine
-// between the queue slot claim and its publish: it must not block, must not
-// retain the record, and must not push events.
+// JournalSink consumes journal output. Record is called on the producing
+// goroutine between the queue slot claim and its publish: it must not block,
+// must not retain the record, and must not push events. Anchor is called on the
+// tick goroutine, so the two can overlap and an implementation must be safe for
+// concurrent use.
 type JournalSink interface {
 	Record(JournalRecord)
 	Anchor(JournalAnchor)
 }
+
+// AnchorIntervalTicks is the tick period between anchor records, so a rotated
+// file carries one within this many ticks of its first record
+const AnchorIntervalTicks = 600
+
+// AnchorDue reports whether a tick falls on the anchor cadence
+func AnchorDue(tick uint64) bool { return tick%AnchorIntervalTicks == 0 }
 
 // Journal captures non-system events for replay. One per queue, so concurrent
 // harness runs in a single process cannot share a counter.
@@ -47,6 +60,7 @@ type Journal struct {
 	sink    JournalSink // immutable after NewJournal
 	seq     atomic.Uint64
 	encFail atomic.Uint64
+	anchor  atomic.Pointer[JournalAnchor] // run-invariant template
 }
 
 // NewJournal binds a sink; a nil sink yields a nil Journal, which disables capture
@@ -65,12 +79,28 @@ func (j *Journal) Stats() (emitted, encodeFailed uint64) {
 	return j.seq.Load(), j.encFail.Load()
 }
 
-// Anchor emits a header record; the caller owns the cadence
-func (j *Journal) Anchor(a JournalAnchor) {
+// SetAnchor installs the run-invariant anchor fields and emits one immediately
+func (j *Journal) SetAnchor(a JournalAnchor) {
 	if j == nil {
 		return
 	}
 	a.Schema = JournalSchema
+	j.anchor.Store(&a)
+	j.Anchor(a.Session, a.Speed)
+}
+
+// Anchor re-emits the template with the fields only the engine can supply
+func (j *Journal) Anchor(session uint64, speed string) {
+	if j == nil {
+		return
+	}
+	p := j.anchor.Load()
+	if p == nil {
+		return
+	}
+	a := *p
+	a.Session = session
+	a.Speed = speed
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)
 }
@@ -92,14 +122,22 @@ func (j *Journal) record(ev *GameEvent) {
 	})
 }
 
-// encodePayload marshals a payload to TOML text. Only registry-shaped payloads
-// round-trip, so pooled and scalar ones are reported rather than guessed at.
+// encodePayload marshals a payload to TOML text. Only the registry prototype's
+// own type round-trips, so a mismatch is reported rather than silently encoded.
 func encodePayload(et EventType, p any) (text, encErr string) {
 	if p == nil {
 		return "", ""
 	}
-	if !HasPayload(et) {
+	proto, ok := typeToPayload[et]
+	if !ok {
 		return "", "no registry prototype"
+	}
+	t := reflect.TypeOf(p)
+	if t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t != proto {
+		return "", "payload type " + t.String() + " is not the registered prototype"
 	}
 	b, err := toml.Marshal(p)
 	if err != nil {

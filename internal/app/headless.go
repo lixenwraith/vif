@@ -89,12 +89,12 @@ func (a *App) InputTick() bool {
 // SetupLevel resizes the map independently of the viewport; cropOnResize=false
 // decouples them, so a headless run emulates either mode.
 func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) {
-	a.ctx.PushEvent(event.EventLevelSetup, &event.LevelSetupPayload{
+	a.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
 		Width:         width,
 		Height:        height,
 		ClearEntities: clearEntities,
 		CropOnResize:  cropOnResize,
-	})
+	}, event.OriginDebug)
 	a.scheduler.Settle()
 }
 
@@ -102,7 +102,7 @@ func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) {
 // MetaSystem's synchronous cleanup lands here, the FSM reset at the next Tick,
 // matching the interactive ordering.
 func (a *App) Reset(purge bool) {
-	a.ctx.PushEvent(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge}, event.OriginDebug)
 	a.scheduler.Settle()
 }
 
@@ -114,6 +114,12 @@ func (a *App) World() *engine.World { return a.world }
 
 // Seed returns the root seed the run resolved, including a drawn one
 func (a *App) Seed() uint64 { return a.cfg.Seed }
+
+// JournalStats returns the emitted record count and encode failure count;
+// zero when journaling is off
+func (a *App) JournalStats() (emitted, encodeFailed uint64) {
+	return a.world.Resources.Event.Queue.Journal().Stats()
+}
 
 // === Snapshot ===
 
@@ -203,8 +209,8 @@ func FirstDiff(x, y []string) (idx int, lineX, lineY string, ok bool) {
 // Region applies an FSM region operation and settles what it emits.
 // State is required by event.RegionSpawn and ignored otherwise.
 func (a *App) Region(op, region, state string) {
-	a.ctx.PushEvent(event.EventFSMRegionRequest, &event.FSMRegionPayload{
+	a.ctx.PushEventOrigin(event.EventFSMRegionRequest, &event.FSMRegionPayload{
 		Op: op, Region: region, State: state,
-	})
+	}, event.OriginDebug)
 	a.scheduler.Settle()
 }

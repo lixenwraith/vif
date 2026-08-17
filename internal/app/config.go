@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -70,6 +71,13 @@ type Config struct {
 	// Headless runs with no terminal, audio or renderer, on a manual clock
 	// advanced only by ClockScheduler.RunTicks
 	Headless bool
+
+	// Journal enables the replay journal, written to its own file
+	Journal bool
+
+	// JournalSink overrides the journal destination; nil opens the vlog journal
+	// file. Harnesses set it to capture records in memory.
+	JournalSink event.JournalSink
 
 	// Width and Height are the terminal-equivalent dimensions a headless run
 	// assumes; margins apply as usual, so the viewport is smaller than these.

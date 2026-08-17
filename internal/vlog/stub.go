@@ -75,6 +75,12 @@ func Shutdown(time.Duration)           {}
 func Trace(string, int64, int, ...any) {}
 func NextRun() uint64                  { return 0 }
 func Detail(string, ...any)            {}
+func StartJournal() (string, error)    { return "", ErrDisabled }
+func StopJournal() error               { return nil }
+func JournalEnabled() bool             { return false }
+func JournalPath() string              { return "" }
+func Journal(string, ...any)           {}
+func LastJournalPath() string          { return "" }
 
 func ScopeOf(string) Scope                            { return ScopeTap }
 func Scopes() Scope                                   { return ScopeNone }

@@ -86,6 +86,7 @@ func (a *App) init() error {
 		return err
 	}
 	a.initWorld()
+	a.initJournal()
 	if !a.cfg.Headless {
 		a.initPresentation()
 	}
@@ -247,6 +248,44 @@ func (a *App) initScheduler() error {
 	return nil
 }
 
+// initJournal opens the replay journal and installs it on the event queue.
+// Opt-in: it records every non-system event for the life of the run.
+func (a *App) initJournal() error {
+	if !a.cfg.Journal {
+		return nil
+	}
+
+	sink := a.cfg.JournalSink
+	if sink == nil {
+		path, err := vlog.StartJournal()
+		if err != nil {
+			return fmt.Errorf("journal: %w", err)
+		}
+		vlog.Info("app", "msg", "journal open", "path", path)
+		sink = event.VlogSink()
+	}
+
+	j := event.NewJournal(sink)
+	a.world.Resources.Event.Queue.SetJournal(j)
+
+	// Config identity: the resolved FSM entry, or the embedded default
+	cfgID, err := ResolveGameConfig(a.cfg)
+	if err != nil || cfgID == "" {
+		cfgID = "embedded"
+	}
+	j.SetAnchor(event.JournalAnchor{
+		Speed:        a.ctx.TimeCtl.Scale().String(),
+		ConfigID:     cfgID,
+		ContentID:    service.MustGet[*service.ContentService](a.hub, "content").Label(),
+		Seed:         a.world.Resources.Rand.Root(),
+		Session:      a.world.Resources.Rand.Session(),
+		TickInterval: int64(parameter.GameUpdateInterval),
+		Width:        a.ctx.Width,
+		Height:       a.ctx.Height,
+	})
+	return nil
+}
+
 // Close stops the scheduler before the services it depends on
 // Safe on a partially constructed App
 func (a *App) Close() {
@@ -255,6 +294,20 @@ func (a *App) Close() {
 		a.scheduler.Stop()
 	}
 	a.hub.StopAll()
+
+	if a.cfg.Journal && a.world != nil && a.world.Resources.Event != nil {
+		q := a.world.Resources.Event.Queue
+		emitted, encFail := q.Journal().Stats()
+		q.SetJournal(nil)
+		vlog.Info("app", "msg", "journal close",
+			"path", vlog.JournalPath(), "records", emitted, "encode_failed", encFail)
+	}
+	if vlog.JournalEnabled() {
+		if err := vlog.StopJournal(); err != nil {
+			vlog.Error("app", "msg", "journal close", "error", err.Error())
+		}
+	}
+
 	vlog.Info("app", "msg", "shutdown complete")
 }
 

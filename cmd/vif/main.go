@@ -43,9 +43,10 @@ var (
 	flagLevel levelFlag
 	flagScope scopeFlag
 	// TODO: collapse flagStat and flagRec into one flag
-	flagStat statFlag
-	flagRec  recFlag
-	flagDev  devFlag
+	flagStat    statFlag
+	flagRec     recFlag
+	flagJournal bool
+	flagDev     devFlag
 )
 
 func init() {
@@ -58,6 +59,8 @@ func init() {
 	flag.Var(&flagScope, "log-scope", "Alias of -ls")
 	flag.Var(&flagStat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
 	flag.Var(&flagRec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
+	flag.BoolVar(&flagJournal, "j", false, "Record a replay journal to its own file")
+	flag.BoolVar(&flagJournal, "journal", false, "Alias of -j")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
 }
 
@@ -147,6 +150,9 @@ func shutdownDiagnostics() {
 
 	vlog.Shutdown(logShutdownTimeout)
 
+	if path := vlog.LastJournalPath(); path != "" {
+		fmt.Fprintf(os.Stderr, "replay journal: %s\n", path)
+	}
 	if path := core.CloseCapture(); path != "" {
 		fmt.Fprintf(os.Stderr, "runtime output captured: %s (%d report(s))\n",
 			path, core.CaptureCount())
@@ -181,6 +187,7 @@ func buildConfig() app.Config {
 		RecTicks:      flagRec.value,
 		TimeScaleSpec: *flagSpeed,
 		Seed:          *flagSeed,
+		Journal:       flagJournal,
 	}
 
 	if *flagAudioUnmute {

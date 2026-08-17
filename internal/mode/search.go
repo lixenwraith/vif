@@ -91,6 +91,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 					X: x,
 					Y: y,
 				})
+				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
 				return true
 			}
 		}

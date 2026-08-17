@@ -14,6 +14,7 @@ import (
 // breaks ties between systems sharing a priority constant
 func BuildSystems(w *engine.World) []engine.System {
 	return []engine.System{
+		system.NewCursorSystem(w),
 		system.NewPingSystem(w),
 		system.NewTransientSystem(w),
 		system.NewCameraSystem(w),
@@ -120,6 +121,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 // Consumed by config validation of region enabled_systems/disabled_systems
 func ActiveSystems() []string {
 	return []string{
+		"cursor",
 		"ping",
 		"transient",
 		"camera",

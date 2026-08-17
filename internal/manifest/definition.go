@@ -95,6 +95,7 @@ var Components = []ComponentDef{
 // Generator produces: RegisterSystems(), ActiveSystems()
 var Systems = []SystemDef{
 	// --- Core / Frame Setup ---
+	{"cursor", "NewCursorSystem"},
 	{"ping", "NewPingSystem"},
 	{"transient", "NewTransientSystem"},
 	{"camera", "NewCameraSystem"},

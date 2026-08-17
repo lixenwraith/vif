@@ -37,6 +37,16 @@ const (
 	fileExtension  = "jsonl"
 )
 
+// journalPrefix names the replay journal file
+const journalPrefix = "vif-jrn-"
+
+// journalDrainTimeout bounds the synchronous drain when the journal closes
+const journalDrainTimeout = 3 * time.Second
+
+// journalLevel is the threshold the journal instance is built with; records
+// emit at LevelInfo, so the level field never collides with trace tooling
+const journalLevel = "info"
+
 // Rotation and buffering; tuned after live measurement
 const (
 	bufferSize      = 8192
@@ -70,6 +80,13 @@ var (
 	sink  atomic.Pointer[log.Logger]
 	path  atomic.Pointer[string]
 	level atomic.Int64
+
+	// Journal session: a second logger instance with its own file, deliberately
+	// outside the session's level and scope so a replay capture cannot be
+	// silenced by a debug command
+	jsink atomic.Pointer[log.Logger]
+	jpath atomic.Pointer[string]
+	jlast atomic.Pointer[string]
 
 	run   atomic.Uint64
 	tick  atomic.Uint64
@@ -257,8 +274,17 @@ func Shutdown(timeout time.Duration) {
 	mu.Lock()
 	l := sink.Swap(nil)
 	path.Store(nil)
+	j := jsink.Swap(nil)
+	if p := jpath.Swap(nil); p != nil {
+		jlast.Store(p)
+	}
 	mu.Unlock()
 
+	if j != nil {
+		if err := j.Shutdown(timeout); err != nil {
+			fmt.Fprintf(os.Stderr, "journal shutdown: %v\n", err)
+		}
+	}
 	if l != nil {
 		if err := l.Shutdown(timeout); err != nil {
 			fmt.Fprintf(os.Stderr, "log shutdown: %v\n", err)
@@ -348,6 +374,9 @@ func CrashHook(r any, stack []byte) {
 	if p := crashFlush.Load(); p != nil {
 		(*p)()
 	}
+	if j := jsink.Load(); j != nil {
+		_ = j.Flush(crashFlushTimeout)
+	}
 	l := sink.Load()
 	if l == nil {
 		return
@@ -375,3 +404,87 @@ func NextRun() uint64 { return run.Add(1) }
 // Detail emits at the trace level without a stack trace, for per-item taps
 // gated by scope rather than by call site. Trace is for call chains.
 func Detail(sub string, args ...any) { emit(sub, LevelTrace, args) }
+
+// === Journal ===
+
+// StartJournal opens a dedicated journal file and begins processing.
+// Performs disk I/O; startup or operator command only.
+func StartJournal() (string, error) {
+	mu.Lock()
+	defer mu.Unlock()
+
+	if jsink.Load() != nil {
+		return currentJournalPath(), fmt.Errorf("vlog: journal already running")
+	}
+	if cfg.Dir == "" {
+		return "", fmt.Errorf("vlog: no directory configured")
+	}
+
+	name := journalPrefix + time.Now().Format(fileTimeFormat)
+	l, p, err := buildLogger(cfg.Dir, name, journalLevel)
+	if err != nil {
+		return "", err
+	}
+
+	l.SetErrorHandler(recordInternalError)
+	if cfg.Spawn != nil {
+		l.SetSpawn(cfg.Spawn)
+	}
+	if err := l.Start(); err != nil {
+		_ = l.Shutdown(time.Second)
+		return "", err
+	}
+
+	jpath.Store(&p)
+	jsink.Store(l)
+	return p, nil
+}
+
+// StopJournal drains and closes the journal file
+func StopJournal() error {
+	mu.Lock()
+	l := jsink.Swap(nil)
+	if p := jpath.Swap(nil); p != nil {
+		jlast.Store(p)
+	}
+	mu.Unlock()
+
+	if l == nil {
+		return nil
+	}
+	return l.Shutdown(journalDrainTimeout)
+}
+
+// JournalEnabled reports whether a journal session is running
+func JournalEnabled() bool { return jsink.Load() != nil }
+
+// JournalPath returns the active journal file, empty when stopped
+func JournalPath() string { return currentJournalPath() }
+
+func currentJournalPath() string {
+	if p := jpath.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// Journal writes one record stamped with the live run, tick and frame.
+// No level or scope gate: a replay capture is not debug output.
+func Journal(sub string, args ...any) {
+	l := jsink.Load()
+	if l == nil {
+		return
+	}
+	l.LogContext(context(sub), l.Flags()|log.FlagKV, LevelInfo, 0, args...)
+}
+
+// LastJournalPath returns the journal file, live or most recently closed
+func LastJournalPath() string {
+	if p := jpath.Load(); p != nil {
+		return *p
+	}
+	if p := jlast.Load(); p != nil {
+		return *p
+	}
+	return ""
+}

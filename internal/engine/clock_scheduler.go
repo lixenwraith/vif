@@ -798,7 +798,9 @@ func (cs *ClockScheduler) executeReset() {
 
 	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
 	//    next game's streams differ while staying a function of the root seed
-	vlog.Info("app", "msg", "rng session", "session", cs.world.Resources.Rand.NextSession())
+	session := cs.world.Resources.Rand.NextSession()
+	vlog.Info("app", "msg", "rng session", "session", session)
+	cs.world.Resources.Event.Queue.Journal().Anchor(session, cs.ctl.Scale().String())
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
@@ -907,4 +909,10 @@ func (cs *ClockScheduler) processTick() {
 	// Status snapshot: world lock released and every stat above committed,
 	// so the reading belongs to exactly this tick. Lock-free by construction.
 	cs.world.Resources.Status.Tick(ticks)
+
+	// Anchor cadence: a rotated journal file must be interpretable on its own
+	if event.AnchorDue(ticks) {
+		cs.world.Resources.Event.Queue.Journal().
+			Anchor(cs.world.Resources.Rand.Session(), cs.ctl.Scale().String())
+	}
 }

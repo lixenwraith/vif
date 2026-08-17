@@ -833,7 +833,10 @@ func (r *Router) handleTextConfirm() bool {
 		// KeepPaused commands re-pause from their own handlers.
 		r.ctx.SetPaused(false)
 
-		result := ExecuteCommand(r.ctx, commandText)
+		var result CommandResult
+		r.ctx.WithOrigin(event.OriginCommand, func() {
+			result = ExecuteCommand(r.ctx, commandText)
+		})
 
 		r.ctx.SetCommandText("")
 		r.ctx.SetCommandCursorPos(0)
@@ -1163,27 +1166,32 @@ func (r *Router) ProcessInputTick() bool {
 	mouse := !r.ctx.MouseDisabled.Load()
 
 	emitted := false
-	if r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld) {
-		r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
+	if o, due := r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld); due {
+		r.ctx.PushEventOrigin(event.EventWeaponFireRequest, nil, o)
 		emitted = true
 	}
-	if r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld) {
-		r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+	if o, due := r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld); due {
+		r.ctx.PushEventOrigin(event.EventFireSpecialRequest, nil, o)
 		emitted = true
 	}
 	return emitted
 }
 
-// fireDue reports whether a repeat request is due for a weapon slot and advances its anchor
-// Auto-fire and held-button repeat carry independent intervals, first elapse wins, don't fire in same slot in one cooldown
-func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) bool {
+// fireDue reports whether a repeat request is due for a weapon slot and advances
+// its anchor. Auto-fire and held-button repeat carry independent intervals; when
+// both are due the held button wins, since a held button is input and auto-fire
+// replays as a macro.
+func (r *Router) fireDue(now time.Time, last *time.Time, auto, held bool) (event.Origin, bool) {
 	elapsed := now.Sub(*last)
-	if !((auto && elapsed >= parameter.AutoFireInterval) ||
-		(held && elapsed >= parameter.MouseRepeatInterval)) {
-		return false
+	switch {
+	case held && elapsed >= parameter.MouseRepeatInterval:
+		*last = now
+		return event.OriginInput, true
+	case auto && elapsed >= parameter.AutoFireInterval:
+		*last = now
+		return event.OriginMacro, true
 	}
-	*last = now
-	return true
+	return event.OriginSystem, false
 }
 
 // moveMouseCursor handles coordinate conversion, bounds check, and cursor movement

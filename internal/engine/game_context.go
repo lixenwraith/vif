@@ -450,20 +450,20 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 
 // === EVENT QUEUE METHODS ===
 
-// Rand returns the labelled RNG stream; the world owns the root seed
-func (ctx *GameContext) Rand(label string) *vmath.FastRand { return ctx.World.Rand(label) }
-
-// PushEvent adds an event to the event queue using the World's optimized dispatcher, ensuring consistent frame-stamping across game space and input sources
+// PushEvent adds an event to the queue carrying the ambient producer tag,
+// so a call site inside a WithOrigin scope needs no change
 func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 	ctx.World.PushEvent(eventType, payload)
 }
 
-// PushEventOrigin emits with an explicit producer tag; see World.PushEventOrigin
+// PushEventOrigin emits with an explicit producer tag, for producers that run
+// outside the world lock and therefore outside any WithOrigin scope
 func (ctx *GameContext) PushEventOrigin(eventType event.EventType, payload any, origin event.Origin) {
 	ctx.World.PushEventOrigin(eventType, payload, origin)
 }
 
-// WithOrigin scopes the ambient producer tag; see World.WithOrigin
+// WithOrigin scopes the ambient producer tag; caller MUST hold updateMutex.
+// CI guard: rg 'WithOrigin' internal/ must show only locked call sites.
 func (ctx *GameContext) WithOrigin(o event.Origin, fn func()) { ctx.World.WithOrigin(o, fn) }
 
 // === MODE ACCESSORS ===
@@ -677,3 +677,10 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 func (ctx *GameContext) SetPaused(paused bool) {
 	ctx.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
+
+// === Rand ===
+
+// TODO: unused, review usage potential or deprecate
+
+// Rand returns the labelled RNG stream; the world owns the root seed
+func (ctx *GameContext) Rand(label string) *vmath.FastRand { return ctx.World.Rand(label) }

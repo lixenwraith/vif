@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/render"
@@ -91,14 +92,20 @@ func (a *App) Loop() error {
 	}
 }
 
-// handleIntent runs one intent under the world lock.
+// handleIntent runs one intent under the world lock, tagged with its producer.
 // The entire router path (motions, operators, mouse cursor writes, undo
 // capture, mode transitions) is serialized against tick/event/render by
 // construction — mode/ must never acquire the world lock itself.
 func (a *App) handleIntent(intent *input.Intent) bool {
+	origin := event.OriginInput
+	if intent.MacroPlayback {
+		origin = event.OriginMacro
+	}
 	cont := true
 	a.world.RunSafe(func() {
-		cont = a.router.Handle(intent)
+		a.world.WithOrigin(origin, func() {
+			cont = a.router.Handle(intent)
+		})
 	})
 	return cont
 }
