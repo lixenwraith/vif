@@ -12,10 +12,10 @@ import (
 // fixtureSeed pins the perturbation test so CI is reproducible
 const fixtureSeed = 0x5eed1e55
 
-// scriptConfig builds a headless config; zero dimensions take the defaults,
-// which validateHeadless accepts by construction
+// scriptConfig builds a hermetic headless config: ForceDefault pins the embedded
+// FSM and corpus, so a run does not depend on cwd or $XDG_CONFIG_HOME
 func scriptConfig(seed uint64) Config {
-	return Config{Headless: true, Seed: seed}
+	return Config{Headless: true, ForceDefault: true, Seed: seed}
 }
 
 func intentMotion(op input.MotionOp, count int) *input.Intent {

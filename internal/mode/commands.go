@@ -511,7 +511,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 		}
 	}
 
-	ctx.SetMode(core.ModeOverlay)
+	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushEvent(event.EventMetaDebugRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
@@ -538,7 +538,7 @@ func handleDebugSaveCommand(ctx *engine.GameContext) CommandResult {
 
 // handleHelpCommand triggers help overlay event
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
-	ctx.SetMode(core.ModeOverlay)
+	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushEvent(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
@@ -546,7 +546,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 
 // handleAboutCommand triggers about overlay event
 func handleAboutCommand(ctx *engine.GameContext) CommandResult {
-	ctx.SetMode(core.ModeOverlay)
+	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
 	ctx.PushEvent(event.EventMetaAboutRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}

@@ -702,16 +702,10 @@ func (r *Router) handleAppend() bool {
 
 // transitionMode handles all mode changes with consistent side-effects
 func (r *Router) transitionMode(newMode core.GameMode) {
-	// 1. Update game mode
-	r.ctx.SetMode(newMode)
+	// Update game mode, ping bounds, emit event
+	r.ctx.RequestMode(newMode)
 
-	// 2. Update ping bounds (recomputes based on new mode)
-	r.ctx.World.UpdateBoundsRadius()
-
-	// 3. Emit mode change event
-	r.ctx.PushEvent(event.EventModeChanged, &event.ModeChangedPayload{Mode: newMode})
-
-	// 4. Sync input machine
+	// Sync input machine
 	var inputMode input.InputMode
 	switch newMode {
 	case core.ModeNormal:
@@ -817,8 +811,7 @@ func (r *Router) handleTextConfirm() bool {
 			}
 		}
 		r.ctx.SetSearchText("")
-		r.ctx.SetMode(core.ModeNormal)
-		r.machine.SetMode(input.ModeNormal)
+		r.transitionMode(core.ModeNormal)
 
 	case core.ModeCommand:
 		commandText := r.ctx.GetCommandText()
@@ -842,8 +835,7 @@ func (r *Router) handleTextConfirm() bool {
 		r.ctx.SetCommandCursorPos(0)
 
 		if r.ctx.GetMode() != core.ModeOverlay {
-			r.ctx.SetMode(core.ModeNormal)
-			r.machine.SetMode(input.ModeNormal)
+			r.transitionMode(core.ModeNormal)
 		} else {
 			r.machine.SetMode(input.ModeOverlay)
 		}

@@ -199,21 +199,14 @@ func (a *App) injectGroup(group []ReplayRecord) (int, error) {
 	return pushed, nil
 }
 
-// replayDrops reports whether a record drives the clock rather than the world.
-// The replay owns the clock: EventGameStepRequest arms allowances and run-until
-// breakpoints whose consequences (breakHit pushes a pause and a status message,
-// Expire fires on a tick deadline) are events the recorded run never had;
-// EventGamePauseRequest is a property of how the run was observed, and on a
-// manual clock it freezes nothing while claiming the world is frozen;
-// EventGameSpeedRequest rewrites the speed telemetry to a rate ManualClock
-// records but never applies. OriginDebug records are kept: they are real state
-// changes from the harness.
+// replayDrops reports whether a record drives the debug stepper rather than the world.
+// Pause and speed are kept: stepTick opens the pause gate and ManualClock records a
+// rate without applying it, so both reproduce their telemetry and neither stalls a
+// replay. A step allowance is drained only by schedulerLoop, which a replay never
+// runs, so engine.step would stay armed after the source cleared it.
+// OriginDebug records are kept: they are real state changes from the harness.
 func replayDrops(t event.EventType) bool {
-	switch t {
-	case event.EventGamePauseRequest, event.EventGameSpeedRequest, event.EventGameStepRequest:
-		return true
-	}
-	return false
+	return t == event.EventGameStepRequest
 }
 
 // checkRecord rejects a record this build cannot inject faithfully

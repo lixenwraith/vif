@@ -473,12 +473,22 @@ func (ctx *GameContext) GetMode() core.GameMode {
 	return ctx.World.Resources.Game.State.GetMode()
 }
 
-// SetMode sets the current game mode
+// SetMode applies the mode and publishes context.mode; the applier path, no event
 func (ctx *GameContext) SetMode(m core.GameMode) {
 	ctx.World.Resources.Game.State.SetMode(m)
 	if int(m) < len(core.ModeNames) {
 		ctx.statMode.StoreIfChanged(core.ModeNames[m])
 	}
+}
+
+// RequestMode applies a mode change and announces it, so the transition is a
+// function of the event stream. Decision sites call this; MetaSystem's handler
+// calls SetMode, which is why the emit is not folded into it.
+// Caller MUST hold updateMutex: UpdateBoundsRadius reads component stores.
+func (ctx *GameContext) RequestMode(m core.GameMode) {
+	ctx.SetMode(m)
+	ctx.World.UpdateBoundsRadius()
+	ctx.PushEvent(event.EventModeChanged, &event.ModeChangedPayload{Mode: m})
 }
 
 // IsInsertMode returns true if in insert mode
