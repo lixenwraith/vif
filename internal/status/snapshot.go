@@ -88,17 +88,35 @@ func (r *Registry) Tick(n uint64) {
 // Snapshot emits one record per group, ordered by group then metric name.
 // emit matches vlog.Info so an alternate sink can be substituted.
 func (r *Registry) Snapshot(emit func(sub string, args ...any)) {
-	r.emitGroups(func(args ...any) { emit(SubStat, args...) })
+	r.SnapshotFiltered(nil, emit)
 }
 
-// emitGroups writes the grouped records through a stamp-bound emitter
+// SnapshotFiltered emits one record per group, omitting metrics keep rejects and
+// skipping a group left with none. A nil keep admits every metric.
+func (r *Registry) SnapshotFiltered(keep func(key string) bool, emit func(sub string, args ...any)) {
+	r.emitGroupsFiltered(keep, func(args ...any) { emit(SubStat, args...) })
+}
+
+// emitGroups writes every grouped record through a stamp-bound emitter
 func (r *Registry) emitGroups(emit func(args ...any)) {
+	r.emitGroupsFiltered(nil, emit)
+}
+
+// emitGroupsFiltered writes grouped records, omitting metrics keep rejects
+func (r *Registry) emitGroupsFiltered(keep func(key string) bool, emit func(args ...any)) {
 	for _, g := range r.groups() {
 		// Fresh slice per record: vlog formats asynchronously
 		args := make([]any, 0, 2+2*len(g.members))
 		args = append(args, "msg", g.name)
 		for i := range g.members {
-			args = append(args, g.members[i].name, g.members[i].value())
+			m := &g.members[i]
+			if keep != nil && !keep(m.key) {
+				continue
+			}
+			args = append(args, m.name, m.value())
+		}
+		if len(args) == 2 {
+			continue // every member filtered out
 		}
 		emit(args...)
 	}

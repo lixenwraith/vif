@@ -250,6 +250,19 @@ func (a *App) initScheduler() error {
 	return nil
 }
 
+// embeddedLabel is the identity recorded for a built-in asset
+const embeddedLabel = "embedded"
+
+// resolveConfigID names the FSM entry a run loaded, or the embedded default.
+// Shared by the anchor writer and VerifyAnchor so the two cannot disagree.
+func resolveConfigID(cfg Config) string {
+	path, err := ResolveGameConfig(cfg)
+	if err != nil || path == "" {
+		return embeddedLabel
+	}
+	return path
+}
+
 // initJournal opens the replay journal and installs it on the event queue.
 // Opt-in: it records every non-system event for the life of the run.
 func (a *App) initJournal() error {
@@ -270,20 +283,22 @@ func (a *App) initJournal() error {
 	j := event.NewJournal(sink)
 	a.world.Resources.Event.Queue.SetJournal(j)
 
-	// Config identity: the resolved FSM entry, or the embedded default
-	cfgID, err := ResolveGameConfig(a.cfg)
-	if err != nil || cfgID == "" {
-		cfgID = "embedded"
-	}
+	// The corpus fingerprint reads the telemetry ContentService published during
+	// initWorld, so the anchor and a replay's verification compare one source
+	reg := a.world.Resources.Status
 	j.SetAnchor(event.JournalAnchor{
-		Speed:        a.ctx.TimeCtl.Scale().String(),
-		ConfigID:     cfgID,
-		ContentID:    service.MustGet[*service.ContentService](a.hub, "content").Label(),
-		Seed:         a.world.Resources.Rand.Root(),
-		Session:      a.world.Resources.Rand.Session(),
-		TickInterval: int64(parameter.GameUpdateInterval),
-		Width:        a.ctx.Width,
-		Height:       a.ctx.Height,
+		Speed:         a.ctx.TimeCtl.Scale().String(),
+		ConfigID:      resolveConfigID(a.cfg),
+		ContentID:     reg.Strings.Get("content.source").Load(),
+		ContentPin:    service.MustGet[*service.ContentService](a.hub, "content").Pin(),
+		ContentFiles:  uint64(reg.Ints.Get("content.files").Load()),
+		ContentBlocks: uint64(reg.Ints.Get("content.blocks").Load()),
+		ContentLines:  uint64(reg.Ints.Get("content.lines").Load()),
+		Seed:          a.world.Resources.Rand.Root(),
+		Session:       a.world.Resources.Rand.Session(),
+		TickInterval:  int64(parameter.GameUpdateInterval),
+		Width:         a.ctx.Width,
+		Height:        a.ctx.Height,
 	})
 	return nil
 }

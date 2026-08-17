@@ -4,15 +4,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
-// SnapshotContext emits the state an on-demand dump needs that the registry
-// does not carry: geometry, camera, pause and cursor placement.
+// SnapshotContext emits the state an on-demand dump needs that the registry does
+// not carry: geometry, camera, cursor placement, and the operator session.
+// Four records: context, player and world are simulation state; session is
+// operator-owned, per the contract above ResetSessionState. A consumer comparing
+// two runs drops the session record — see App.SnapshotSimulation.
 // Caller MUST hold updateMutex — reads Config, Positions and Systems.
 func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 	cfg := ctx.World.Resources.Config
 
 	emit(status.SubStat, "msg", "context",
-		"frame", ctx.GetFrameNumber(),
-		"paused", ctx.TimeCtl.IsPaused(),
 		"mode", int(ctx.GetMode()),
 		"screen_w", ctx.Width, "screen_h", ctx.Height,
 		"game_x", ctx.GameXOffset, "game_y", ctx.GameYOffset,
@@ -36,7 +37,14 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 	emit(status.SubStat, "msg", "world",
 		"created", ctx.World.CreatedCount(),
 		"destroyed", ctx.World.DestroyedCount(),
-		"systems", len(ctx.World.Systems()),
+		"systems", len(ctx.World.Systems()))
+
+	// Session: how the run is being observed and driven, not the run itself.
+	// None of it is event-driven, so none of it replays; none of it is read by a
+	// system either, so nothing in the simulation depends on it.
+	emit(status.SubStat, "msg", "session",
+		"frame", ctx.GetFrameNumber(),
+		"paused", ctx.TimeCtl.IsPaused(),
 		"macro_recording", ctx.MacroRecording.Load(),
 		"macro_playing", ctx.MacroPlaying.Load(),
 		"mouse_free", ctx.MouseFreeMode.Load(),

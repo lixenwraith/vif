@@ -8,7 +8,7 @@ import (
 )
 
 // JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 1
+const JournalSchema = 2
 
 // JournalRecord is one replayable event, produced synchronously at push time.
 // Payload is TOML text that decodes into the registry prototype for Type.
@@ -25,13 +25,22 @@ type JournalRecord struct {
 // JournalAnchor is a self-describing header re-emitted periodically so a
 // rotated log file can be replayed without its predecessors.
 type JournalAnchor struct {
-	Speed        string // time scale ladder token; exact, unlike a float
-	ConfigID     string
-	ContentID    string
-	Schema       uint64 // uint64, not uint32: the log formatter stringifies narrow uints
-	Seed         uint64
-	Session      uint64 // RNG session counter; streams derive from it, so replay must match
-	JSeq         uint64
+	Speed      string // time scale ladder token; exact, unlike a float
+	ConfigID   string
+	ContentID  string
+	ContentPin string // file the corpus is restricted to, empty when unpinned
+
+	Schema  uint64 // uint64, not uint32: the log formatter stringifies narrow uints
+	Seed    uint64
+	Session uint64 // RNG session counter; streams derive from it, so replay must match
+	JSeq    uint64
+
+	// Corpus fingerprint: a replay compares these against its own telemetry, since
+	// a resolved path proves which corpus was asked for, not which one loaded
+	ContentFiles  uint64
+	ContentBlocks uint64
+	ContentLines  uint64
+
 	TickInterval int64 // nanoseconds
 	Width        int   // terminal-equivalent dimensions the run started with
 	Height       int

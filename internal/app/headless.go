@@ -7,11 +7,6 @@
 package app
 
 import (
-	"fmt"
-	"slices"
-	"strconv"
-	"strings"
-
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
@@ -119,91 +114,6 @@ func (a *App) Seed() uint64 { return a.cfg.Seed }
 // zero when journaling is off
 func (a *App) JournalStats() (emitted, encodeFailed uint64) {
 	return a.world.Resources.Event.Queue.Journal().Stats()
-}
-
-// === Snapshot ===
-
-// Snapshot returns the sorted context and registry state as comparable lines.
-// Two runs of one seed must produce identical slices.
-func (a *App) Snapshot() []string {
-	lines := make([]string, 0, 64)
-
-	// One critical section: SnapshotContext reads world state, and the registry
-	// reading belongs to the same instant
-	a.world.RunSafe(func() {
-		wd := a.worldDigestLocked()
-		lines = append(lines, "ctx|digest"+
-			"|positions="+wd.Positions.String()+
-			"|kinetics="+wd.Kinetics.String()+
-			"|combat="+wd.Combat.String()+
-			"|entities="+wd.Entities.String())
-
-		a.ctx.SnapshotContext(func(sub string, args ...any) {
-			lines = append(lines, snapshotLine("ctx", sub, args))
-		})
-		a.world.Resources.Status.Snapshot(func(sub string, args ...any) {
-			lines = append(lines, snapshotLine("reg", sub, args))
-		})
-	})
-
-	slices.Sort(lines)
-	return lines
-}
-
-// snapshotLine renders one emitted record as "source|sub|key=value|...".
-// The source tag separates the two emitters, which share group names.
-func snapshotLine(source, sub string, args []any) string {
-	var b strings.Builder
-	b.WriteString(source)
-	b.WriteByte('|')
-	b.WriteString(sub)
-	for i := 0; i+1 < len(args); i += 2 {
-		key, _ := args[i].(string)
-		b.WriteByte('|')
-		b.WriteString(key)
-		b.WriteByte('=')
-		b.WriteString(formatSnapshotValue(args[i+1]))
-	}
-	return b.String()
-}
-
-// formatSnapshotValue renders a metric for comparison. Floats use the shortest
-// round-tripping form, which is exact for same-process equality.
-func formatSnapshotValue(v any) string {
-	switch t := v.(type) {
-	case string:
-		return t
-	case bool:
-		return strconv.FormatBool(t)
-	case int:
-		return strconv.Itoa(t)
-	case int64:
-		return strconv.FormatInt(t, 10)
-	case uint64:
-		return strconv.FormatUint(t, 10)
-	case float64:
-		return strconv.FormatFloat(t, 'g', -1, 64)
-	default:
-		return fmt.Sprint(t)
-	}
-}
-
-// FirstDiff returns the index and both values of the first differing snapshot
-// line; ok is false when the snapshots are identical.
-func FirstDiff(x, y []string) (idx int, lineX, lineY string, ok bool) {
-	n := min(len(x), len(y))
-	for i := range n {
-		if x[i] != y[i] {
-			return i, x[i], y[i], true
-		}
-	}
-	switch {
-	case len(x) > n:
-		return n, x[n], "", true
-	case len(y) > n:
-		return n, "", y[n], true
-	}
-	return 0, "", "", false
 }
 
 // Region applies an FSM region operation and settles what it emits.

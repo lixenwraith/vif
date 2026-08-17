@@ -126,6 +126,10 @@ func (s *ContentService) Corpus() *content.Corpus { return s.corpus }
 // Label returns the resolved corpus location, or "embedded"
 func (s *ContentService) Label() string { return s.label }
 
+// Pin returns the single file the corpus is restricted to, empty when unpinned.
+// Part of the journal's corpus identity: Label reports only the directory.
+func (s *ContentService) Pin() string { return s.src.Pin }
+
 // open returns the corpus filesystem and a telemetry label
 func (s *ContentService) open() (fs.FS, string) {
 	if s.src.Dir == "" {

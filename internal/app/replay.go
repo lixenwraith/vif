@@ -6,25 +6,33 @@
 // record stamped T was produced after tick T completed and before tick T+1: the
 // driver runs tick T, then injects and settles every record stamped T.
 //
-// Bit-exact reproduction is claimed for headless source runs only. A live run
-// races two scheduler goroutines against the main loop for the update mutex, so
-// its journal reconstructs what the player did, not a comparable world.
+// Nothing is filtered. Every non-system-origin record is injected, including pause,
+// rate and step control — the replay does not honour those, but it does reproduce
+// their events, and what must not be compared is declared once in denySim rather
+// than judged per event at the injection site.
+//
+// Settle granularity inside a tick boundary is not observable: the queue returns Seq
+// order however a batch was split, and no handler on the dispatch path accumulates
+// across passes. TestReplaySplitSettle is the tripwire for the first one that does.
+//
+// Bit-exact reproduction is claimed for headless source runs only. A live run races
+// two scheduler goroutines against the main loop for the update mutex, so its journal
+// reconstructs what the player did, not a comparable world.
 package app
 
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"sync"
 
 	"github.com/lixenwraith/toml"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/service"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
-
-// embeddedLabel is the identity initJournal records for a built-in asset
-const embeddedLabel = "embedded"
 
 // ReplayRecord is one journal record paired with the tick it was produced on
 type ReplayRecord struct {
@@ -94,7 +102,8 @@ func (c *Capture) CheckDense() error {
 
 // ConfigFromAnchor rebuilds the configuration a journal was recorded under.
 // Speed is dropped: a replay runs the manual clock, which a headless config
-// rejects a rate for.
+// rejects a rate for. The result asks for a corpus and a config; VerifyAnchor
+// proves the ones that resolved are the recorded ones.
 func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.Schema != event.JournalSchema {
 		return Config{}, fmt.Errorf("journal schema %d, this build reads %d", a.Schema, event.JournalSchema)
@@ -109,34 +118,68 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 
 	cfg := Config{Headless: true, Seed: a.Seed, Width: a.Width, Height: a.Height}
 
-	// Identity is the resolved label. Embedded on both sides is the only pairing
-	// Config can state exactly; otherwise an embedded side re-runs discovery.
+	// Embedded on both sides is the only pairing Config states exactly; a mixed
+	// anchor leaves the embedded side to discovery, which VerifyAnchor then rejects
 	if a.ConfigID == embeddedLabel && a.ContentID == embeddedLabel {
 		cfg.ForceDefault = true
-	} else {
-		if a.ConfigID != embeddedLabel {
-			cfg.GameScript = a.ConfigID
-		}
-		if a.ContentID != embeddedLabel {
-			cfg.ContentPath = a.ContentID
+		return cfg, cfg.Validate()
+	}
+	if a.ConfigID != embeddedLabel {
+		cfg.GameScript = a.ConfigID
+	}
+	if a.ContentID != embeddedLabel {
+		cfg.ContentPath = a.ContentID
+		if a.ContentPin != "" {
+			cfg.ContentPath = filepath.Join(a.ContentID, a.ContentPin) // ResolveContent re-splits
 		}
 	}
 	return cfg, cfg.Validate()
+}
+
+// VerifyAnchor reports whether this App reproduces what the anchor recorded.
+// A resolved path proves which corpus was asked for, not which one loaded, so the
+// fingerprint is compared after construction: a discovered file or a changed corpus
+// becomes a startup error instead of an unexplained snapshot diff many ticks later.
+// Call after NewHeadless, before Replay.
+func (a *App) VerifyAnchor(an event.JournalAnchor) error {
+	reg := a.world.Resources.Status
+	svc := service.MustGet[*service.ContentService](a.hub, "content")
+
+	for _, f := range []struct {
+		name      string
+		want, got any
+	}{
+		{"schema", an.Schema, uint64(event.JournalSchema)},
+		{"seed", an.Seed, a.world.Resources.Rand.Root()},
+		{"session", an.Session, a.world.Resources.Rand.Session()},
+		{"config_id", an.ConfigID, resolveConfigID(a.cfg)},
+		{"content_id", an.ContentID, reg.Strings.Get("content.source").Load()},
+		{"content_pin", an.ContentPin, svc.Pin()},
+		{"content_files", an.ContentFiles, uint64(reg.Ints.Get("content.files").Load())},
+		{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
+		{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
+		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
+		{"width", an.Width, a.ctx.Width},
+		{"height", an.Height, a.ctx.Height},
+	} {
+		if f.want != f.got {
+			return fmt.Errorf("anchor mismatch: %s recorded %v, this run has %v", f.name, f.want, f.got)
+		}
+	}
+	return nil
 }
 
 // ReplayStats reports what a replay consumed
 type ReplayStats struct {
 	Records  int    // records offered
 	Injected int    // records pushed into the queue
-	Filtered int    // clock-control records dropped
 	Ticks    uint64 // ticks executed, i.e. the tick of the last record
 }
 
 // Replay injects records at their recorded tick, advancing the clock between
 // groups. Records must arrive in emission order; each tick group is sorted in
-// place by queue slot, which is dispatch order. Settling happens once per tick
-// boundary, matching Inject: a producer that settled twice between two ticks is
-// not reproducible. The caller runs any trailing ticks the last record misses.
+// place by queue slot, which is dispatch order. The caller runs any trailing ticks
+// the last record misses.
 func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 	st := ReplayStats{Records: len(records)}
 	if !a.cfg.Headless {
@@ -166,7 +209,6 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 
 		injected, err := a.injectGroup(group)
 		st.Injected += injected
-		st.Filtered += len(group) - injected
 		if err != nil {
 			return st, err
 		}
@@ -180,9 +222,6 @@ func (a *App) injectGroup(group []ReplayRecord) (int, error) {
 	pushed := 0
 	for i := range group {
 		rec := &group[i].Rec
-		if replayDrops(rec.Type) {
-			continue
-		}
 		if err := checkRecord(rec); err != nil {
 			return pushed, fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
 		}
@@ -197,16 +236,6 @@ func (a *App) injectGroup(group []ReplayRecord) (int, error) {
 		a.Settle()
 	}
 	return pushed, nil
-}
-
-// replayDrops reports whether a record drives the debug stepper rather than the world.
-// Pause and speed are kept: stepTick opens the pause gate and ManualClock records a
-// rate without applying it, so both reproduce their telemetry and neither stalls a
-// replay. A step allowance is drained only by schedulerLoop, which a replay never
-// runs, so engine.step would stay armed after the source cleared it.
-// OriginDebug records are kept: they are real state changes from the harness.
-func replayDrops(t event.EventType) bool {
-	return t == event.EventGameStepRequest
 }
 
 // checkRecord rejects a record this build cannot inject faithfully
