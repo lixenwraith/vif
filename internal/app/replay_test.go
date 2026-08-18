@@ -1,6 +1,8 @@
 package app
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -150,8 +152,8 @@ func runOverlayScript(t *testing.T, a *App) int {
 }
 
 // journalRun drives a script under a capture sink, returning the capture, the
-// simulation snapshot, the drawn seed and the tick count
-func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []string, uint64, int) {
+// simulation snapshot, the drawn seed and the end position
+func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []string, uint64, event.Stamp) {
 	t.Helper()
 
 	cap := NewCapture()
@@ -162,8 +164,8 @@ func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []st
 	if err != nil {
 		t.Fatalf("source run: %v", err)
 	}
-	ticks := script(t, a)
-	snap, seed := a.SnapshotSimulation(), a.Seed()
+	script(t, a)
+	snap, seed, end := a.SnapshotSimulation(), a.Seed(), a.Position()
 	a.Close()
 
 	if seed == 0 {
@@ -175,7 +177,63 @@ func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []st
 	if len(cap.Records()) == 0 {
 		t.Fatal("no records captured: the script produced no journaled events")
 	}
-	return cap, snap, seed, ticks
+	return cap, snap, seed, end
+}
+
+// replayInto rebuilds from the anchor, verifies it, replays and compares. Returns the
+// divergence rather than failing, so a negative control can require one.
+func replayInto(anchors []event.JournalAnchor, recs []event.JournalRecord,
+	want []string, end event.Stamp) error {
+
+	if len(anchors) == 0 {
+		return errors.New("no anchor captured")
+	}
+	rcfg, err := ConfigFromAnchor(anchors[0])
+	if err != nil {
+		return fmt.Errorf("config from anchor: %w", err)
+	}
+	rep, err := NewHeadless(rcfg)
+	if err != nil {
+		return fmt.Errorf("replay run: %w", err)
+	}
+	defer rep.Close()
+
+	if err := rep.VerifyAnchor(anchors[0]); err != nil {
+		return fmt.Errorf("verify anchor: %w", err)
+	}
+
+	st, err := rep.Replay(recs)
+	if err != nil {
+		return fmt.Errorf("replay: %w (%+v)", err, st)
+	}
+	if st.End.Run != end.Run {
+		return fmt.Errorf("replay ended in run %d, source ended in run %d", st.End.Run, end.Run)
+	}
+	switch rest := int(end.Tick) - int(st.End.Tick); {
+	case rest > 0:
+		rep.Tick(rest)
+	case rest < 0:
+		return fmt.Errorf("replay ran %d ticks in run %d, source ran %d",
+			st.End.Tick, st.End.Run, end.Tick)
+	}
+
+	got := rep.SnapshotSimulation()
+	if i, _, _, ok := FirstDiff(want, got); ok {
+		return fmt.Errorf("diverged at line %d (%+v):\n%s",
+			i, st, strings.Join(Diff(want, got, 8), "\n"))
+	}
+	return nil
+}
+
+func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
+	t.Helper()
+	cap, want, seed, end := journalRun(t, script)
+	if a := cap.Anchors(); len(a) > 0 && a[0].Seed != seed {
+		t.Fatalf("anchor seed %d, run seed %d", a[0].Seed, seed)
+	}
+	if err := replayInto(cap.Anchors(), cap.Records(), want, end); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // replayCapture rebuilds from the anchor, verifies it, replays and compares
@@ -204,25 +262,18 @@ func replayCapture(t *testing.T, cap *Capture, want []string, ticks int) {
 	if err != nil {
 		t.Fatalf("replay: %v (%+v)", err, st)
 	}
-	switch rest := ticks - int(st.Ticks); {
+	switch rest := ticks - int(st.End.Tick); {
 	case rest > 0:
 		rep.Tick(rest)
 	case rest < 0:
-		t.Fatalf("replay ran %d ticks, source ran %d", st.Ticks, ticks)
+		t.Fatalf("replay ran %d ticks, source ran %d", st.End.Tick, ticks)
 	}
 
-	if i, x, y, ok := FirstDiff(want, rep.SnapshotSimulation()); ok {
-		t.Fatalf("replay diverged at line %d (%+v):\n  source %s\n  replay %s", i, st, x, y)
+	got := rep.SnapshotSimulation()
+	if i, _, _, ok := FirstDiff(want, got); ok {
+		t.Fatalf("replay diverged at line %d (%+v):\n%s",
+			i, st, strings.Join(Diff(want, got, 8), "\n"))
 	}
-}
-
-func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
-	t.Helper()
-	cap, want, seed, ticks := journalRun(t, script)
-	if a := cap.Anchors(); len(a) > 0 && a[0].Seed != seed {
-		t.Fatalf("anchor seed %d, run seed %d", a[0].Seed, seed)
-	}
-	replayCapture(t, cap, want, ticks)
 }
 
 // TestJournalDoesNotPerturb drives one fixed-seed sequence twice, journaled and
@@ -474,9 +525,9 @@ func runLongScript(t *testing.T, a *App) int {
 
 // TestReplayAcrossAPMFold asserts APM is produced and reproduced
 func TestReplayAcrossAPMFold(t *testing.T) {
-	cap, want, _, ticks := journalRun(t, runLongScript)
-	if ticks <= int(time.Second/parameter.GameUpdateInterval) {
-		t.Fatalf("script ran %d ticks, too short to cross an APM fold", ticks)
+	cap, want, _, end := journalRun(t, runLongScript)
+	if end.Tick <= uint64(time.Second/parameter.GameUpdateInterval) {
+		t.Fatalf("script ran %d ticks, too short to cross an APM fold", end.Tick)
 	}
 
 	folded := false
@@ -489,7 +540,9 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	if !folded {
 		t.Fatal("script folded no APM: admission is not seeing input-origin events")
 	}
-	replayCapture(t, cap, want, ticks)
+	if err := replayInto(cap.Anchors(), cap.Records(), want, end); err != nil {
+		t.Fatal(err)
+	}
 }
 
 // TestScreenSizeInvertsViewport pins the inverse against the forward derivation, so
@@ -596,3 +649,31 @@ func runResetScript(t *testing.T, a *App) int {
 // TestReplayAcrossReset asserts a journal spanning game resets replays; the tick
 // counter restarts in each run, so a run-blind driver rejects the stream outright
 func TestReplayAcrossReset(t *testing.T) { replayAndCompare(t, runResetScript) }
+
+// TestCursorMovedAppliesWithoutRouter covers the applier directly: a replay has no
+// router, so the position must land from the event alone
+func TestCursorMovedAppliesWithoutRouter(t *testing.T) {
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	a.Tick(1)
+	player := a.World().Resources.Player.Entity
+	from, ok := a.World().Positions.GetPosition(player)
+	if !ok {
+		t.Fatal("no cursor position")
+	}
+	wantX, wantY := from.X+3, from.Y+2
+
+	a.Context().PushEventOrigin(event.EventCursorMoved,
+		&event.CursorMovedPayload{X: wantX, Y: wantY}, event.OriginDebug)
+	a.Settle()
+
+	got, _ := a.World().Positions.GetPosition(player)
+	if got.X != wantX || got.Y != wantY {
+		t.Fatalf("cursor at %d,%d after EventCursorMoved(%d,%d): the write is router-side, not handler-side",
+			got.X, got.Y, wantX, wantY)
+	}
+}

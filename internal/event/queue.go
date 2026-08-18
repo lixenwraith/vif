@@ -71,6 +71,11 @@ func (eq *EventQueue) Push(event GameEvent) {
 	}
 }
 
+// Pushed returns the total events pushed since construction. A producer compares it
+// across a call to learn whether anything needs settling; a settle that dispatches
+// only pending system events leaves no journal record and cannot be replayed.
+func (eq *EventQueue) Pushed() uint64 { return eq.tail.Load() }
+
 // Consume returns all pending events in FIFO order and advances head
 // Single-consumer design (game loop). Checks published flags for safety
 func (eq *EventQueue) Consume() []GameEvent {

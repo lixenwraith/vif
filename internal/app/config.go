@@ -57,9 +57,9 @@ func (m Mode) OwnsGeometry() bool { return m == ModePlay }
 // drives playback controls instead, so the mode router never sees it.
 func (m Mode) OwnsInput() bool { return m == ModePlay }
 
-// Audio reports whether an audio service is registered. Replay stays silent until
-// AudioSystem is confirmed to push nothing the simulation reads.
-func (m Mode) Audio() bool { return m == ModePlay }
+// Audio reports whether an audio service is registered. The replay drives the
+// simulation only through ReplayDriver, so AudioSystem must push no event a system reads.
+func (m Mode) Audio() bool { return m == ModePlay || m == ModeReplay }
 
 // Config is the resolved startup configuration
 // Built from CLI flags by cmd/vi-fighter, or programmatically by embedders

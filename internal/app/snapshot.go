@@ -147,3 +147,22 @@ func FirstDiff(x, y []string) (idx int, lineX, lineY string, ok bool) {
 	}
 	return 0, "", "", false
 }
+
+// Diff returns up to max rendered differences between two snapshots, for a failure
+// message. FirstDiff answers whether they differ; this answers where.
+func Diff(x, y []string, max int) []string {
+	out := make([]string, 0, max)
+	n := min(len(x), len(y))
+	for i := 0; i < n && len(out) < max; i++ {
+		if x[i] != y[i] {
+			out = append(out, fmt.Sprintf("  [%d] want %s\n       got  %s", i, x[i], y[i]))
+		}
+	}
+	for i := n; i < len(x) && len(out) < max; i++ {
+		out = append(out, fmt.Sprintf("  [%d] want %s\n       got  <absent>", i, x[i]))
+	}
+	for i := n; i < len(y) && len(out) < max; i++ {
+		out = append(out, fmt.Sprintf("  [%d] want <absent>\n       got  %s", i, y[i]))
+	}
+	return out
+}

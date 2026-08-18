@@ -38,6 +38,7 @@ var (
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
 	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
+	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
 
 	flagLog   logFlag
 	flagLevel levelFlag
@@ -75,6 +76,8 @@ func main() {
 		err = app.Schema(os.Stdout)
 	case *flagCheck:
 		err = app.Check(buildConfig(), os.Stdout)
+	case *flagReplay != "":
+		err = app.PlayJournal(*flagReplay)
 	default:
 		err = app.Run(buildConfig())
 	}

@@ -192,11 +192,10 @@ func (k groupKey) before(o groupKey) bool {
 
 // ReplayStats reports what a replay consumed
 type ReplayStats struct {
-	Records  int    // records offered
-	Injected int    // records pushed into the queue
-	Groups   int    // settle groups executed
-	Run      uint64 // reset generation reached
-	Ticks    uint64 // ticks executed within that run
+	Records  int         // records offered
+	Injected int         // records pushed into the queue
+	Groups   int         // settle groups executed
+	End      event.Stamp // position the App reached, which a trailing reset advances past the last record's own stamp
 }
 
 // ReplayDriver injects a record stream into a caller-driven App, advancing the clock
@@ -225,8 +224,12 @@ func NewReplayDriver(a *App, records []event.JournalRecord) (*ReplayDriver, erro
 // Done reports whether every record has been injected
 func (d *ReplayDriver) Done() bool { return d.next >= len(d.records) }
 
-// Stats reports what has been consumed so far
-func (d *ReplayDriver) Stats() ReplayStats { return d.stats }
+// Stats reports what has been consumed so far, with the App's live position
+func (d *ReplayDriver) Stats() ReplayStats {
+	st := d.stats
+	st.End = d.a.Position()
+	return st
+}
 
 // End returns the position of the last record, for a progress readout
 func (d *ReplayDriver) End() event.Stamp {
@@ -258,13 +261,11 @@ func (d *ReplayDriver) Step() (bool, error) {
 				d.records[d.next].JSeq, k.run, got)
 		}
 		d.cur = groupKey{run: k.run}
-		d.stats.Run, d.stats.Ticks = k.run, 0
 	}
 
 	if k.tick > d.cur.tick {
 		d.a.Tick(1)
 		d.cur.tick++
-		d.stats.Ticks = d.cur.tick
 		if k.tick > d.cur.tick {
 			return true, nil // still ticking toward the record
 		}

@@ -68,11 +68,15 @@ func (a *App) Loop() error {
 		case ev := <-eventChan:
 			// Dumb pipe: key event → machine → intent → router
 			if intent := a.inputMachine.Process(ev); intent != nil {
+				before := a.pushed()
 				if !a.handleIntent(intent) {
 					return nil // player quit
 				}
-				// Input events bypass the game tick wait, acquires lock
-				a.scheduler.DispatchEventsImmediately()
+				// Input events bypass the game tick wait; an intent that emitted
+				// nothing has nothing of its own to settle
+				if a.pushed() != before {
+					a.scheduler.DispatchEventsImmediately()
+				}
 			}
 
 			if ev.Type == terminal.EventResize {
@@ -192,6 +196,7 @@ func (a *App) applyMouseMode(enabled, motion bool) {
 // input cadence is independent of the render loop.
 // Returns false when the player quit.
 func (a *App) inputTick() bool {
+	before := a.pushed()
 	emitted := a.router.ProcessInputTick()
 
 	macroIntents := a.router.ProcessMacroTick()
@@ -201,7 +206,7 @@ func (a *App) inputTick() bool {
 		}
 	}
 
-	if emitted || len(macroIntents) > 0 {
+	if emitted || a.pushed() != before {
 		a.scheduler.DispatchEventsImmediately()
 	}
 	return true

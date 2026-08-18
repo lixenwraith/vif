@@ -66,13 +66,17 @@ func (a *App) Settle() {
 // where a motion count applies, since no input.Machine normalizes them.
 func (a *App) Inject(intents ...*input.Intent) bool {
 	cont := true
+	before := a.pushed()
 	for _, intent := range intents {
 		if !a.handleIntent(intent) {
 			cont = false
 			break
 		}
 	}
-	a.scheduler.Settle()
+	// Elide the settle when nothing was emitted: an unrecorded group cannot replay
+	if a.pushed() != before {
+		a.scheduler.Settle()
+	}
 	return cont
 }
 
@@ -80,6 +84,7 @@ func (a *App) Inject(intents ...*input.Intent) bool {
 // playback. Their intervals are game time, so a caller that never Ticks emits at
 // most one round. Returns false when a macro intent quits the game.
 func (a *App) InputTick() bool {
+	before := a.pushed()
 	emitted := a.router.ProcessInputTick()
 
 	macroIntents := a.router.ProcessMacroTick()
@@ -89,7 +94,7 @@ func (a *App) InputTick() bool {
 		}
 	}
 
-	if emitted || len(macroIntents) > 0 {
+	if emitted || a.pushed() != before {
 		a.scheduler.Settle()
 	}
 	return true
@@ -136,6 +141,9 @@ func (a *App) Seed() uint64 { return a.cfg.Seed }
 // Position returns the journal stamp the run is at: reset generation, ticks within
 // it, and settle groups within the tick
 func (a *App) Position() event.Stamp { return a.world.Resources.Event.Queue.Stamp() }
+
+// pushed returns the queue's total push count, for settle elision
+func (a *App) pushed() uint64 { return a.world.Resources.Event.Queue.Pushed() }
 
 // JournalStats returns the emitted record count and encode failure count;
 // zero when journaling is off
