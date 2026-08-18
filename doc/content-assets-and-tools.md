@@ -142,8 +142,11 @@ it forever. The loader still scans the containing directory, but delivery is
 restricted to the named accepted source. Pinning fails if the file was rejected
 or produced no usable blocks.
 
-Random selection uses `vmath.FastRand` seeded from current time; content order
-across sources is not a deterministic replay contract.
+Random selection uses a named `vmath` stream derived from the App's root seed.
+For the same accepted corpus, seed, config, and request order, source hopping is
+therefore reproducible and part of the driven-App/replay contract. A journal
+anchor records the resolved source/pin plus accepted file, block, and line
+counts so replay rejects a corpus that changed behind the same path.
 
 ## 7. Embedded assets
 
@@ -245,8 +248,9 @@ experimental dependencies.
 - Inspect `content.rejected`/`:content` rather than assuming every directory
   file was accepted.
 - Treat third-party source as redistributed content and verify its license.
-- Do not depend on directory recursion, hidden files, live reload, or stable
-  cross-file random order.
+- Do not depend on directory recursion, hidden files, or live reload. Cross-file
+  order is reproducible only for the same accepted corpus, seed, and request
+  sequence; changing the corpus changes that input.
 
 ## 12. Source map
 

@@ -281,6 +281,46 @@ exceptions are `transient_effects` (manifest `transient`) and `timekeeper`
 `EventMetaSystemCommandRequest`; construction alone does not guarantee runtime
 toggle support.
 
+### Operator region primitives
+
+`:region` exposes the scheduler-owned region lifecycle without reaching
+through `App` to the machine:
+
+| Command | Primitive |
+|---|---|
+| `:region list` | Report every declared region and whether it is active, paused, and in which state. |
+| `:region spawn <name> <state>` | Spawn one declared inactive region at a named state. |
+| `:region pause <name>` | Pause one active region without changing its state/time. |
+| `:region resume <name>` | Resume one active region. |
+| `:region terminate <name>` | Exit and remove one active region and its delayed work. |
+
+Each command publishes exactly one `EventFSMRegionRequest` primitive. Compound
+policy remains explicit: for example, entering a region that an escalation
+chain would normally reach is issued as `pause` and then `spawn`, not hidden in
+one command. Every successful mutating operation reapplies region system policy.
+
+### Telemetry and transition taps
+
+Before registry freeze, the scheduler registers five metrics for every
+declared region:
+
+`fsm.<region>.state`, `.index`, `.elapsed`, `.max_duration`, and `.paused`.
+
+Inactive regions publish `-`, `-1`, zero durations, and `false`. The older
+foreground summary (`fsm.state`, `fsm.elapsed`, and related fields) remains,
+but the per-region sets preserve simultaneous background activity.
+
+`Machine.OnTransition` observes every transition. External transitions emit
+an info record with region, from/to state, trigger, state index, and maximum
+duration; internal transitions emit a debug `msg="internal"` record instead.
+`Machine.OnRegion` emits info records for spawn/pause/resume/terminate lifecycle
+operations. These are observation taps, not policy callbacks.
+
+`:log rec fsm on` asks the flight recorder to flush on each external
+transition with reason `fsm:<region>`; it is off by default because a busy FSM
+would otherwise write continuously. `:step ... fsm` uses the same transition
+tap to trip a run-until breakpoint after the transition record is emitted.
+
 ## 11. Authoring pattern
 
 A maintainable scenario usually separates concerns into regions:
@@ -357,6 +397,7 @@ event counter plus an outer tick transition.
 | Concern | Primary source |
 |---|---|
 | Runtime semantics | `internal/fsm/machine.go`, `types.go` |
+| Region commands and scheduler adapter | `internal/mode/commands.go`, `internal/engine/clock_scheduler.go` |
 | TOML schema/compiler | `internal/fsm/config.go`, `loader.go`, `builder.go` |
 | External files | `internal/fsm/file_loader.go` |
 | Standard actions/guards | `internal/fsm/std/*.go` |

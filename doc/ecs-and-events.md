@@ -206,8 +206,14 @@ Systems do not call peer systems. They publish `event.GameEvent` values:
 type GameEvent struct {
     Payload any
     Type    EventType
+    Seq     uint64
+    Origin  Origin
 }
 ```
+
+`Seq` is the queue slot assigned at push and orders concurrent producers.
+`Origin` names the producer (`system`, `input`, `macro`, `command`, `network`,
+or `debug`); it never changes dispatch behavior.
 
 `EventNone` is zero and is also used as the scheduler's tick sentinel; it does
 not represent a dispatched gameplay effect.
@@ -221,6 +227,8 @@ The queue is a bounded, lock-free multi-producer/single-consumer ring:
 - consumption and handler execution happen while the world lock is held;
 - if producers outrun the consumer, the oldest pending item is overwritten and
   the dropped-event metric increments;
+- before a non-system event is published, an installed replay journal copies
+  its typed payload and queue/stamp metadata while the producer still owns it;
 - the default queue capacity is 2,048 events.
 
 Each event is offered to the HFSM before registered system handlers. This makes
@@ -231,6 +239,22 @@ recursion. These paths run before a tick, after the FSM phase, and after
 input/reset work—not after the systems phase itself. The independent 4 ms event
 loop settles system-emitted and other asynchronous requests between 50 ms game
 ticks.
+
+### Replay capture
+
+The queue also owns the replay position `(run, tick, boundary)`. Run advances
+when reset rebases tick, tick opens at the top of a simulation body, and
+boundary advances after each non-empty explicit settle group. These counters
+advance even without a journal, so one attached mid-run stamps its first event
+honestly. `OriginSystem` events are derived simulation work and are omitted;
+every other origin is captured and later reinjected in queue-slot order.
+
+`JournalRecord` stores TOML payload text against the generated registry
+prototype plus dense journal sequence and sparse queue sequence. Periodic
+`JournalAnchor` records carry seed/session, config and corpus identity,
+fingerprint counts, tick interval, and simulation geometry. The dedicated file
+and replay constraints are documented in
+[Logging and diagnostics](logging-and-diagnostics.md) §9.
 
 ## 9. Event catalog and payload contracts
 
@@ -283,5 +307,6 @@ the fields it owns into a component, resource, or new value.
 | Resources | `internal/engine/resource.go`, `internal/engine/resource_transient.go` |
 | Components | `internal/component/*.go`, `internal/manifest/definition.go` |
 | Composites | `internal/component/header.go`, `member.go`, `internal/system/composite.go` |
-| Events | `internal/event/type.go`, `payload.go`, `queue.go`, `router.go` |
+| Events and producer origins | `internal/event/type.go`, `payload.go`, `origin.go`, `queue.go`, `router.go` |
+| Replay record and anchor schema | `internal/event/journal.go`, `journal_sink.go` |
 | Destruction | `internal/system/death.go` |

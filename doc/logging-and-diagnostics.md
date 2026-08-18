@@ -1,11 +1,11 @@
 # Logging, Telemetry, and Diagnostics
 
-Vi-Fighter's diagnostic surface has four cooperating layers: a structured
-JSON Lines session log, a status metric registry with periodic snapshots, an
-in-memory flight recorder that flushes only on a trigger, and a runtime stderr
-capture that folds Go runtime output back into the log. All four share one
-correlation stamp so records from different layers join on `run`, `tick`, and
-`frame`.
+Vi-Fighter's diagnostic surface has five cooperating layers: a structured JSON
+Lines session log, a status metric registry with periodic snapshots, an
+in-memory flight recorder that flushes only on a trigger, a dedicated replay
+journal, and a runtime stderr capture that folds Go runtime output back into
+the log. Ordinary diagnostics join on `run`, `tick`, and `frame`; the journal
+uses its own replay position `(run, tick, boundary)`.
 
 This document is the authoritative reference for what is emitted, how to
 control it, and what each record means. For the process lifecycle that
@@ -25,6 +25,8 @@ flowchart TD
     Vlog --> Sink["lixenwraith/log sink"]
     Sink --> File["vif-log-*.jsonl"]
     Recorder -.no session log.-> Side["vif-rec-*.jsonl"]
+    Journal["non-system-origin events"] --> JSink["dedicated journal sink"]
+    JSink --> JFile["vif-jrn-*.jsonl"]
 ```
 
 | Layer | Package | Cost when idle | Written when |
@@ -32,7 +34,8 @@ flowchart TD
 | Session log | `internal/vlog` | one atomic load per guarded call site | continuously, level and scope permitting |
 | Status registry | `internal/status` | one atomic store per metric update | never; values are read by snapshot and recorder |
 | Periodic snapshot | `internal/status` | one modulo per tick | every `StatSnapshotTicks` ticks |
-| Flight recorder | `internal/status` | ~145 atomic loads + stores per tick | on a trigger only |
+| Flight recorder | `internal/status` | one atomic load/store per frozen metric per tick | on a trigger only |
+| Replay journal | `internal/event`, `internal/vlog` | payload encode on each external event | every non-system-origin event, independent of diagnostic filters |
 | Runtime capture | `internal/core` | one `Stat` per drain interval | when the Go runtime writes to fd 2 |
 
 ## 2. Record shape
@@ -51,7 +54,7 @@ payload is an open key-value map.
 | `time` | RFC3339 nanosecond wall clock, assigned at emission |
 | `level` | `TRACE`, `DEBUG`, `INFO`, `WARN`, `ERROR`, or `PROC` for logger heartbeats |
 | `sub` | Subsystem tag; resolves to a scope (§4) |
-| `run` | Session counter; incremented by FSM reset, so `:new` starts run 1 |
+| `run` | Reset generation; incremented by game reset, so `:new` starts run 1 |
 | `tick` | Simulation tick at emission |
 | `frame` | Render frame at emission |
 | `fields` | Record payload; `msg` is the discriminator by convention |
@@ -70,7 +73,7 @@ owners:
 
 | Stamp | Owner | Advances |
 |---|---|---|
-| `run` | `ClockScheduler.executeReset` via `vlog.NextRun` | once per FSM reset |
+| `run` | `MetaSystem.handleGameReset` via `vlog.SetRun` | once per game reset, with the replay tick rebased to zero |
 | `tick` | `ClockScheduler.processTick` via `vlog.SetTick` | once per simulation tick, before the tick body |
 | `frame` | `GameContext.IncrementFrameNumber` via `vlog.SetFrame` | once per render frame |
 
@@ -362,8 +365,9 @@ through `FormatInt`. The log stores the raw integer.
 
 ### Freeze
 
-`Registry.Freeze` is called once from `ClockScheduler.Start`, immediately after
-`World.Seal` and before the first tick. Every system and renderer has
+`Registry.Freeze` is called once from `ClockScheduler.Prepare`, reached by
+`Start` in play mode and by the first tick/settle in a driven App. It follows
+`World.Seal` and precedes the first tick; every system and renderer has
 registered by then. Freezing:
 
 - closes all four maps to new keys;
@@ -417,14 +421,18 @@ second logger instance, independent of the session logger's state, level, and
 scopes. Command mode holds the world lock and the pause, so the values are a
 single coherent tick.
 
-The file contains the full registry snapshot plus three records that have no
+The file contains the full registry snapshot plus four records that have no
 registry mirror, emitted by `GameContext.SnapshotContext`:
 
 | `msg` | Contents |
 |---|---|
-| `context` | frame, pause, mode, screen/game/map/viewport/camera geometry, crop flag, color mode |
+| `context` | mode, screen/game/map/viewport/camera geometry, crop flag, color mode |
 | `player` | cursor entity, position, ping bounds |
-| `world` | entity created/destroyed counts, system count, macro/mouse/auto-fire flags |
+| `world` | entity created/destroyed counts and system count |
+| `session` | frame, pause, macro recording/playback, mouse preferences, and auto-fire |
+
+`session` is operator-owned and omitted by `App.SnapshotSimulation`; the full
+snapshot keeps it for `:d save` and perturbation diagnostics.
 
 The call is blocking: it opens, fills, drains, and closes before returning.
 This is an operator cost, acceptable at a command prompt and nowhere else.
@@ -440,14 +448,15 @@ when something goes wrong.
 Slot-major: one tick's values are contiguous across four kind-partitioned
 planes — `[]int64`, `[]float64`, a `[]uint64` bitset for bools, `[]string` for
 strings — plus a parallel tick-stamp array. The per-tick write is a linear
-walk of ~145 atomic loads and stores with no allocation and no lock.
+walk of the frozen metric set with no allocation and no lock.
 `AtomicString.Load` returns an existing header, so storing a string retains
 rather than copies.
 
 A `head` counter is stored **after** the slot's writes, so a reader never
 observes a torn slot.
 
-Depth 200 with the current metric set is roughly 250 KB.
+Memory grows linearly with depth and with the declared metric set; per-region
+FSM telemetry is included because it is registered before `Freeze`.
 
 ### Sampling
 
@@ -474,6 +483,7 @@ appears on the next tick.
 | `race` | a `sub="race"` runtime report was drained |
 | `crash` | the panic path, via `vlog.SetCrashFlush` |
 | `manual` | `:log rec flush`, and the fallback when no reason was set |
+| `break` | a run-until breakpoint matched or expired |
 | `fsm:<region>` | an FSM transition, **disabled by default** |
 
 Only the newest reason survives: repeated triggers before the tick goroutine
@@ -539,14 +549,94 @@ record buffer.
 
 ### Destination
 
-The flush targets the session log when one is running. With logging disabled it
-opens a standalone `vif-rec-<timestamp>.jsonl`, drains, and closes — the
-recorder is useful precisely when logging is off.
+The flush targets the session log when one is running. With no session sink and
+a configured log directory, it opens a standalone
+`vif-rec-<timestamp>.jsonl`, drains, and closes. A CLI `-lr` initially implies
+`-l`; after `:log off`, the recorder remains active and later triggers use this
+sidecar path. An embedder can also enable `Config.RecTicks` without starting a
+session logger.
 
 Both files carry the same envelope and open together in one viewer instance,
 correlated by `run` and `tick`.
 
-## 9. Runtime output capture
+## 9. Replay journal
+
+`-j` / `-journal` installs an `event.Journal` on the event queue and opens a
+dedicated `vif-jrn-*.jsonl` logger. It records every event whose origin is not
+`OriginSystem`; application producers assign one of the valid origins below.
+The journal logger is separate from the session logger and has no level or
+scope gate: `:log off`, `-lv error`, or
+`-ls none` cannot silence a capture.
+
+`event.Origin` identifies the producer, not the consumer:
+
+| Origin | Producer path |
+|---|---|
+| `system` | Simulation-internal event; never journaled. |
+| `input` | Physical key/mouse input through the mode router, including resize. |
+| `macro` | Macro playback and auto-fire. |
+| `command` | Ex command line, including a typed `:region`. |
+| `network` | Remote producer. |
+| `debug` | Harness or out-of-band APIs such as `App.Region`. |
+
+The dispatcher does not branch on origin. The value exists for APM admission
+and replay capture; replay injects the same event with the recorded origin.
+
+### Position lattice
+
+Each record is stamped synchronously at queue push with
+`(run, tick, boundary)`:
+
+| Counter | Advances when |
+|---|---|
+| `run` | `EventGameResetRequest` rebuilds the world and rebases tick to zero. |
+| `tick` | The next tick body opens, before its pre-settle/FSM/system phases. |
+| `boundary` | A non-empty explicit settle group completes; it resets to zero at each tick/run. |
+
+A record `(R,T,b)` was produced after tick `T` of run `R` completed, in the
+`b`th settle group since. Separate boundaries matter: merging two injected
+groups can change their order relative to system events. The reset event that
+opens run `R+1` is itself recorded in run `R`, so replay follows that boundary
+rather than fabricating it.
+
+### Record and anchor shapes
+
+Journal record fields are:
+
+| Field | Meaning |
+|---|---|
+| `jseq` | Dense journal sequence; a gap means exactly one lost record. |
+| `seq` | Original queue slot/order; legitimately sparse because system events share the queue. |
+| `jrun`, `jtick`, `boundary` | Replay lattice position. |
+| `origin`, `ev` | Producer class and registered event name. |
+| `payload` | TOML text encoded from the registered payload prototype. |
+| `encode_err` | Why a payload could not be captured; replay refuses that record. |
+
+An anchor is emitted when capture opens, after reset, and every 600 ticks so a
+rotated file soon receives a self-description. It carries:
+
+- journal schema, dense sequence position, root seed, RNG session, and exact
+  speed ladder token;
+- current `run`/`tick` plus `start_run`/`start_tick`, which remember where the
+  journal originally opened;
+- resolved config ID, content source and optional pinned file;
+- the loaded corpus fingerprint (`content_files`, `content_blocks`,
+  `content_lines`), because a path alone does not prove what content loaded;
+- fixed tick interval and terminal-equivalent `width`/`height` used by the
+  simulation.
+
+The reader accepts multiple files, sorts records by `jseq`, removes overlap,
+and reports the first gap. `ConfigFromAnchor` verifies schema/tick interval,
+seed, config, corpus fingerprint, and geometry before replay. It refuses an
+anchor with non-zero `start_run` or `start_tick` (`StartRun`/`StartTick` in
+Go): a capture beginning mid-run needs a world snapshot that this journal
+format does not contain.
+
+`app.PlayJournal` presents the replay with fixed viewer controls rather than
+the keymap. See [Runtime and concurrency](runtime.md) for playback keys,
+manual-clock semantics, audio, and the current clipping/pan limit.
+
+## 10. Runtime output capture
 
 Go runtime diagnostics — race reports, `fatal error:`, unrecovered panics from
 goroutines outside `core.Go` — write directly to file descriptor 2. Inside the
@@ -573,7 +663,7 @@ At shutdown the drain runs once more, fd 2 is restored, and an empty capture is
 removed. `-dev` defaults **on** for race builds and is disabled with
 `-dev=false`.
 
-## 10. Control surface
+## 11. Control surface
 
 ### Startup flags
 
@@ -585,14 +675,21 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 | `-ls <spec>` | Scope spec (§4); implies `-l` |
 | `-lt <ticks>` | Status snapshot period, `0` disables; implies `-l` |
 | `-lr <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
+| `-j`, `-journal` | Capture replay input in a dedicated journal; does not imply a session log |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 
 Log setup failure is non-fatal: the game runs unlogged and the process exits
 with `73` (`EX_CANTCREAT`) so a script can detect it.
 
-The recorder resolves its directory from the log configuration but does not
-require a running session — `-lr 200` alone gives a recorder that writes
-sidecar files on a trigger.
+At the `app.Config` boundary, zero means "use the parameter default" while a
+negative `StatTicks`/`RecTicks` means disabled. The CLI therefore maps an
+explicit `-lt=0` or `-lr=0` to `-1`; embedders must preserve the same
+convention.
+
+`-ls` is validated through `vlog.ParseScopes` during flag parsing, before the
+terminal enters its alternate screen. The recorder resolves its directory
+from log configuration but does not require the session to remain running;
+after `:log off`, a trigger writes a sidecar instead.
 
 ### Runtime commands
 
@@ -606,7 +703,7 @@ sidecar files on a trigger.
 | `:log stat <ticks>` | Set the snapshot period, `0` disables |
 | `:log rec` | Report state |
 | `:log rec <ticks>` | Set the recorder depth; discards history |
-| `:log rec flush` | Flush the window now |
+| `:log rec flush` | Request a window flush on the next tick |
 | `:log rec fsm [on\|off]` | Toggle the FSM transition trigger |
 | `:d save` | Write a standalone snapshot (§7) |
 | `:content` | Corpus telemetry in the status bar |
@@ -617,7 +714,7 @@ Starting a session opens a file under the world lock — a deliberate operator
 cost. Stopping detaches the sink immediately and drains on another goroutine,
 so a command handler never waits on disk while holding the lock.
 
-## 11. Sink policy
+## 12. Sink policy
 
 | Policy | Value |
 |---|---|
@@ -639,11 +736,11 @@ on the next successful write. A dropped record is lost; there is no retry.
 The 50 ms flush interval matches the simulation tick, so a crash loses at most
 one tick of buffered records.
 
-Each logger instance is independent: the session log, an on-demand snapshot,
-and a recorder sidecar can be open simultaneously without contending for one
-buffer.
+Each logger instance is independent: the session log, replay journal, an
+on-demand snapshot, and a recorder sidecar can be open simultaneously without
+contending for one buffer.
 
-## 12. Call-site rules
+## 13. Call-site rules
 
 **Argument lifetime.** Records are formatted asynchronously on the logger
 goroutine, up to `BufferSize` records after the call. Pass primitives and value
@@ -682,17 +779,18 @@ it.
 **Status over logging for state.** A value that has a current reading belongs
 in the registry. A value that describes a *transition* belongs in the log.
 
-## 13. Build variants
+## 14. Build variants
 
-`internal/vlog` is build-tagged. On `wasm` or with the `novlog` tag, every
-entry point is a no-op, `lixenwraith/log` is not linked, and the scope
-constants exist only so CLI parsing behaves identically. `status` still
-functions: metrics are registered and updated, snapshots and recorder flushes
-resolve to no-ops.
+`internal/vlog` is build-tagged. On `wasm` or with the `novlog` tag, emission
+entry points are no-ops, session/journal start reports `vlog.ErrDisabled`, and
+`lixenwraith/log` is not linked. Scope constants remain so CLI parsing behaves
+identically. `status` still functions: metrics are registered and updated,
+while snapshot/recorder writes resolve to no-ops. A `-j` recording therefore
+requires a logging-enabled native build.
 
 `make nolog` produces a release build with the tag.
 
-## 14. Diagnostic playbooks
+## 15. Diagnostic playbooks
 
 **"The FSM is in the wrong state."** `-ls afs`. Filter `sub=fsm`. The
 `transition` records give the complete ordered path including intra-tick
@@ -716,11 +814,16 @@ what the producers were doing in the 200 ticks before.
 immediately precedes it. On a race build, `sub=race` records point into the
 stderr capture file.
 
+**"Reproduce this input sequence."** Start with `-j` and preserve every
+`vif-jrn-*` rotation that spans the run. A journal is independent of diagnostic
+level/scope; inspect anchor fingerprints and `jseq` density before blaming a
+replay difference on the simulator.
+
 **"A metric is missing from snapshots."** Check `stat.late` in any snapshot. A
 non-zero value means a metric was registered after `Freeze` and is invisible to
 both the snapshot and the recorder.
 
-## 15. Source map
+## 16. Source map
 
 | Concern | Primary source |
 |---|---|
@@ -733,6 +836,9 @@ both the snapshot and the recorder.
 | Key convention, integer units | `internal/status/key.go`, `format.go` |
 | Atomic float and string cells | `internal/status/atomic_float.go`, `atomic_string.go` |
 | Flight recorder | `internal/status/recorder.go` |
+| Journal record/anchor schema and sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
+| Journal file reader | `internal/journal/read.go` |
+| Replay/config verification | `internal/app/replay.go`, `play.go`, `snapshot.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/clock_scheduler.go` |
 | Lock hold sampling | `internal/engine/sync_std.go` |
 | Frame stamping | `internal/engine/game_context.go` |

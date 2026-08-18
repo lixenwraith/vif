@@ -51,8 +51,8 @@ then stops the initialized superset. Normal `StopAll` visits every initialized
 service in reverse order and logs individual errors without preventing later
 cleanup.
 
-All four current services declare no dependency, so their effective order is
-alphabetical. The dependency mechanism exists for future capabilities that
+All current services declare no dependency, so the registered subset initializes
+alphabetically. The dependency mechanism exists for future capabilities that
 actually require another service; do not invent dependencies merely to choose
 an arbitrary order.
 
@@ -64,6 +64,19 @@ an arbitrary order.
 | `content` | Resolve, load, sanitize, and freeze corpus/cursor. | No-op. | `ContentResource.Provider`. |
 | `audio` | Build engine/config and load optional documents. | Freeze/register sounds, probe backend, start mixer/supervisor. | `AudioResource.Engine` when available. |
 | `network` | If enabled, build transport/handlers. | Listen or connect. | `NetworkResource.Port`; absent in default disabled role. |
+
+Assembly is mode-dependent:
+
+| App mode | Registered services |
+|---|---|
+| `ModePlay` | terminal, content, audio, and network in disabled `RoleNone` |
+| `ModeHeadless` | content only |
+| `ModeReplay` | terminal, content, and audio |
+
+The predicates in `internal/app/config.go` are authoritative: presenting modes
+own a terminal, audio modes register audio, and only play constructs the
+network adapter. Replay input controls playback rather than the mode router,
+and its terminal resize affects presentation rather than recorded geometry.
 
 Content and audio details are covered in
 [Content, assets, and tools](content-assets-and-tools.md) and
@@ -106,9 +119,10 @@ a `NetworkPort` that drains notifications and sends opaque framed messages.
 
 ## 6. Network status: not a playable feature
 
-The default application calls `NewNetworkService(nil)`, which produces
-`RoleNone`. There is no CLI/network configuration path. Disabled service Init
-and Start are no-ops and it contributes no network resource.
+Play mode calls `NewNetworkService(nil)`, which produces `RoleNone`; headless
+and replay do not register the adapter. There is no CLI/network configuration
+path. Disabled service Init and Start are no-ops and it contributes no network
+resource.
 
 Although `NetworkSystem` can translate inbound notifications to game events,
 it is absent from `internal/manifest/definition.go`, so normal application
@@ -262,6 +276,7 @@ Until then, keep RoleNone as the only normal application path.
 | Concern | Primary source |
 |---|---|
 | Service contract/hub | `internal/service/interface.go`, `hub.go` |
+| Mode-to-service policy | `internal/app/config.go`, `app.go` |
 | Terminal adapter | `internal/service/adapter_terminal.go` |
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |

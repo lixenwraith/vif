@@ -12,6 +12,7 @@ flowchart TD
     App --> Services["internal/service"]
     App --> Runtime["engine, input, mode, FSM"]
     App --> Assembly["manifest, systems, renderers"]
+    App --> Replay["journal reader and replay driver"]
     Services --> External["terminal and I/O capabilities"]
 ```
 
@@ -54,17 +55,18 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | CLI flags, logging/runtime-capture setup, schema/check modes, process exit policy. |
+| `cmd/vif` | CLI flags, logging/journal/runtime-capture setup, replay/check/schema selection, process exit policy. |
 | `content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. |
-| `internal/app` | Resolve paths, validate config, compose and run the application, handle signals, frame/input loops, check/schema tools. |
+| `internal/app` | Resolve paths, validate runtime mode, compose play/headless/replay Apps, drive frame/input/playback loops, verify/replay journals, and expose check/schema tools. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID, modes, code blocks, kinetic state, crash and stderr-capture support. |
-| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable clock, scheduler, locking. |
-| `internal/event` | Event type catalog, payloads, generated name/payload registry, MPSC queue, handler router, pooled/batched payload support. |
+| `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking. |
+| `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, default key table, keymap decoding/merging. It does not import the ECS. |
+| `internal/journal` | Leaf JSONL reader that reassembles rotated replay files by dense journal sequence. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Experimental TCP/TLS transport, framed protocol, peers, sequence/ack fields, inbound notifications. |
@@ -73,10 +75,10 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
-| `internal/service` | Dependency-ordered lifecycle hub and adapters for terminal, content, audio, and experimental network transport. |
+| `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and experimental network transport. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
-| `internal/vlog` | Build-tagged facade over the external logger: levels, scopes, correlation stamps, correlated emission sets, standalone files, crash flush; no-op on WASM/`novlog`. |
+| `internal/vlog` | Build-tagged logger facade: levels, scopes, correlation stamps, correlated sets, standalone files, crash flush, and the ungated journal sink; no-op on WASM/`novlog`. |
 
 ## 5. Reusable `pkg` libraries
 
@@ -84,7 +86,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 flowchart TD
     Game["internal systems and tools"] --> Audio["pkg/audio"]
     Game --> Nav["pkg/navigation and maze"]
-    Game --> Physics["pkg/physics and vmath"]
+    Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Genetic["pkg/genetic and subpackages"]
     Game --> Image["pkg/ascimage"]
 ```
@@ -100,7 +102,7 @@ flowchart TD
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Uses shared point/value types and is surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, composite passability, multi-route graphs. | Uses shared points and tuning constants; wall access is callback-based. |
-| `pkg/physics` | Integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Operates on `core.Kinetic` and `pkg/vmath` values. |
+| `pkg/vmath/physics` | Integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Operates on `core.Kinetic` and `pkg/vmath` values. |
 | `pkg/vmath` | Q32.32 and float vectors, LUT math, shapes, arcs, grid traversal, random generator. | Foundational algorithm package; contains both integer-represented and float operations. |
 
 Although these packages are under `pkg`, not all of them are guaranteed to be

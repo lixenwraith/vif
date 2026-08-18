@@ -2,7 +2,7 @@
 
 This directory describes the architecture and design of the current Vi-Fighter
 codebase. It was audited against commit
-`f725c940abe5bcca921ed9f721bc33924ad91a4c` on 2026-08-03. The implementation,
+`04b21fd5afd831a0bf5d0d2ab3d55215cf79a8e6` on 2026-08-18. The implementation,
 generated manifest, and shipped configuration were treated as authoritative
 where older prose disagreed with the code.
 
@@ -19,6 +19,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Package map](package-map.md) | Medium | Which Go packages own each responsibility and how may they depend on one another? |
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
+| [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, enemies, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
@@ -52,6 +53,8 @@ changing a subsystem, update the source that actually owns its shape.
 |---|---|---|
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `internal/engine/component_store_gen.go` |
 | Event names and payload association | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
+| Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go` | `App`, `ClockScheduler`, services |
+| Replay journal format and producer origins | `internal/event/journal.go`, `origin.go` | `internal/journal`, `internal/app/replay.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
 | Alternate scenarios | `config/blank`, `config/main`, `config/td` | selected with `-g` |
@@ -71,9 +74,10 @@ This documentation distinguishes three states:
 - **Experimental/incomplete** means code exists but the normal application does
   not expose a complete end-to-end feature. Networking is the principal example.
 
-Performance statements are intentionally scoped. Several hot paths reuse
-buffers and avoid routine allocation, but the application is not globally
-allocation-free. Gameplay kinetics rely heavily on Q32.32 fixed-point values,
-but `vmath` also uses hardware floating-point operations and supplies native
-float vector paths; the whole simulation should therefore not be described as
-bit-for-bit deterministic across all platforms.
+Performance and determinism statements are intentionally scoped. Several hot
+paths reuse buffers and avoid routine allocation, but the application is not
+globally allocation-free. A caller-driven App is a pure function of its seed,
+config, and injected events for one implementation build. `vmath` also uses
+hardware floating-point operations and native float vector paths, so that is
+not a cross-platform lockstep guarantee; live play adds concurrent scheduling
+and is not the source class for which bit-exact replay is claimed.

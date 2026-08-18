@@ -28,6 +28,13 @@ flowchart TD
 `pkg/audio` carries no ECS or APM concept. The app injects effect volumes and
 shapes, and `MusicSystem` interprets the game's five-second APM signal.
 
+Runtime mode selects whether this layer exists. `ModePlay` and `ModeReplay`
+register the audio service; `ModeHeadless` does not. Replay rebuilds simulation
+from recorded events, including sound requests, and starts playback unmuted
+because the journal anchor has no original mute-state field. Terminal playback
+controls pacing only; it does not route viewer keys through `AudioSystem` or
+the gameplay keymap.
+
 ## 2. Stream contract
 
 | Property | Value |
@@ -268,5 +275,6 @@ events and keep the sequencer unaware of gameplay concepts.
 | Sequencer/patterns | `pkg/audio/sequencer.go`, `pattern*.go`, `track.go`, `voice.go` |
 | Game service | `internal/service/adapter_audio.go` |
 | Game event adapters | `internal/system/audio.go`, `music.go` |
+| Mode selection and replay default | `internal/app/config.go`, `app.go`, `play.go` |
 | Game policy | `internal/parameter/audio.go`, `music.go`, `sfx.go` |
 | Authoring tool | `cmd/soundlab`, `cmd/soundlab/README.md` |

@@ -10,14 +10,14 @@ parameter evolution.
 ```mermaid
 flowchart TD
     Systems["species and navigation systems"] --> Navigation["pkg/navigation"]
-    Systems --> Physics["pkg/physics"]
+    Systems --> Physics["pkg/vmath/physics"]
     Systems --> Genetic["pkg/genetic registry"]
     Navigation --> VMath["pkg/vmath"]
     Physics --> VMath
     Adapt["AdaptationSystem"] --> Navigation
 ```
 
-`pkg/navigation` and `pkg/physics` accept data/callbacks instead of reaching
+`pkg/navigation` and `pkg/vmath/physics` accept data/callbacks instead of reaching
 directly into the ECS where practical. `NavigationSystem` adapts wall/target
 resources to those APIs. `GeneticSystem` adapts entity lifetime events to the
 generic evolutionary registry. `AdaptationSystem` is separate from genetics:
@@ -219,7 +219,7 @@ generic persistence package is available but not wired into the application.
 
 ## 9. Physics primitives
 
-`pkg/physics` operates primarily on `core.Kinetic`:
+`pkg/vmath/physics` operates primarily on `core.Kinetic`:
 
 | Area | Facilities |
 |---|---|
@@ -252,13 +252,17 @@ and velocity in this representation.
 The representation must not be described as a blanket integer-deterministic
 engine. Performance-critical operations such as fixed `Div`, `MulDiv`, `Sqrt`,
 normalization, and exact magnitude convert through hardware floating point, and
-parallel float-native vector/geometry APIs are used heavily. Some random sources
-also use process/time seeds, and real-time scheduling changes event timing.
+parallel float-native vector/geometry APIs are used heavily. Interactive play
+also races scheduler/event/input paths for the world lock, so live event timing
+is not a bit-exact source contract.
 
-The correct guarantee is local: a seeded algorithm may be reproducible given
-the same input/order and no wall-clock budget, but the whole game is not a
-cross-platform lockstep simulation. Any future multiplayer/replay design must
-define its own authoritative state and determinism boundary.
+The runtime now defines a narrower guarantee: `ModeHeadless` and `ModeReplay`
+use a `ManualClock` advanced only by `App.Tick`, and all simulation/content RNG
+streams derive from the root seed and session. For one implementation build, a
+driven run is a pure function of seed, resolved config, and injected event
+groups; bit-exact journal replay is claimed for headless source runs. Floating
+point still prevents treating that as a cross-platform lockstep guarantee, and
+a live journal reconstructs input rather than promising an identical world.
 
 ## 11. Maze generation
 

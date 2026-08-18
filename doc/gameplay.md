@@ -243,7 +243,7 @@ The component `SpeciesType` catalog includes drain, swarm, quasar, storm,
 pylon, snake, eye, and tower. Gateway and bullet are mechanics/entities but are
 not genetic species. Species systems own formation-specific movement and
 spawning; common damage is delegated to `CombatSystem`, common movement math to
-`pkg/physics`, and path selection to `pkg/navigation`.
+`pkg/vmath/physics`, and path selection to `pkg/navigation`.
 
 ## 9. Walls, maps, and navigation
 

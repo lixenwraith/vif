@@ -61,6 +61,14 @@ flowchart LR
 `VisibleMapBounds` centralize conversion. New renderers should use these helpers
 instead of duplicating camera arithmetic.
 
+Replay separates simulation geometry from presentation geometry. The journal
+anchor fixes the former; terminal resize only resizes the orchestrator, and
+`h/j/k/l` shifts presentation offsets without mutating the recorded camera or
+viewport. The current render buffer is still terminal-sized, so a recording
+wider than the viewer terminal is clipped before pan and the pan control can
+reach only cells that entered that buffer. A future windowed composite is
+needed to pan over the whole recorded surface.
+
 ## 3. Compositor data model
 
 The buffer allocates parallel arrays sized to `width * height`:
@@ -248,6 +256,7 @@ retains only game-specific asset interpretation and layering.
 |---|---|
 | Orchestration | `internal/render/orchestrator.go`, `interface.go` |
 | Context/transforms | `internal/render/context.go` |
+| Replay presentation and pan | `internal/app/play.go` |
 | Buffer/finalization | `internal/render/buffer.go` |
 | Blending | `internal/render/blender.go`, `color.go` |
 | Layer priorities | `internal/render/priority.go` |

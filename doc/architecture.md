@@ -56,7 +56,18 @@ See [Package map](package-map.md) for the medium-level dependency view.
 
 ## 3. Architectural control flow
 
-The normal process has four cooperating execution paths:
+`app.Mode` selects one of three application shapes before composition:
+
+| Shape | I/O and presentation | Clock/owner |
+|---|---|---|
+| `ModePlay` | terminal, content, audio, disabled-role network; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
+| `ModeHeadless` | content only; caller supplies geometry and events | manual clock advanced only by `App.Tick` |
+| `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `ReplayDriver` |
+
+The `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio` predicates
+are the composition policy. A driven App spawns no scheduler/event goroutines,
+so for one build its run is a pure function of seed, config, and injected event
+groups. Interactive play instead has four cooperating execution paths:
 
 1. The main goroutine selects terminal events, an input ticker, and a render
    ticker. It routes input and performs terminal output.
@@ -87,6 +98,13 @@ inter-tick loop before the next frame; the next tick's initial settling is the
 fallback. An iteration cap prevents an accidental event cycle from
 monopolizing a thread.
 
+An optional replay journal copies every non-system-origin event synchronously
+at queue push. It uses a dedicated JSONL sink outside diagnostic level/scope
+and stamps events in a `(run, tick, settle-boundary)` lattice. A headless
+recording can therefore be reinjected at the same boundaries into a fresh
+manual-clock App; a live recording reconstructs player input but is not the
+source class for which bit-exact world comparison is claimed.
+
 The exact lifecycle and synchronization rules are in
 [Runtime and concurrency](runtime.md).
 
@@ -115,6 +133,12 @@ extend a critical section. See [Logging and diagnostics](logging-and-diagnostics
 Terminal output and other potentially blocking I/O happen outside the world
 lock. Code reachable from `mode.Router.Handle` must not acquire that lock again,
 because it is already held by the application and is non-reentrant.
+
+Reset also has an explicit ownership split. Simulation entities/resources/FSM
+state are rebuilt. Operator-owned free-mouse/auto-fire preferences, time scale,
+and debug HUD/pins survive plain `:new`; `:new!` purges them. Replay comparison
+drops that session record plus the exact observer-only keys in
+`internal/app/snapshot.go` rather than treating whole metric groups as noise.
 
 ## 5. Data-oriented ECS
 
@@ -199,8 +223,12 @@ events.
 Audio output is zero-CGO but not device-native on most platforms: the engine
 streams 44.1 kHz, 16-bit stereo PCM to an installed process such as `pacat`,
 `pw-cat`, `aplay`, SoX `play`, or `ffplay`, or to FreeBSD OSS. Explicit `null`
-and `wav:path` sinks support headless and offline use. Missing backends degrade
-to silence rather than aborting gameplay.
+and `wav:path` sinks support automation and offline capture. Missing backends
+degrade to silence rather than aborting gameplay.
+
+Audio service assembly is mode-dependent: play and replay register it;
+headless does not. Journal anchors do not carry the original mute state, so
+terminal playback intentionally starts audio unmuted.
 
 See [Audio](audio.md).
 
@@ -250,7 +278,9 @@ enabled.
 
 ## 12. Deployment shapes and current limitations
 
-The primary build targets Linux and FreeBSD terminals. A WASM build runs inside
+The primary build targets Linux and FreeBSD terminals. On those builds the same
+composition root supports interactive play, no-I/O deterministic harnesses,
+and terminal journal playback. A WASM build runs inside
 the bundled xterm.js page, uses embedded configuration/content, and compiles out
 logging; sound is disabled in the current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.

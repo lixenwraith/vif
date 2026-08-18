@@ -176,7 +176,8 @@ work is ordered by playback start time. Recorded intents originating from
 playback are marked, preventing recursive re-recording and excluding synthetic
 activity from APM.
 
-Macro state resets on game reset and is not saved across process runs.
+Macro state resets on both `:new` and `:new!` and is not saved across process
+runs. Other operator preferences have a different reset contract below.
 
 ## 7. Mouse and automatic fire
 
@@ -220,14 +221,22 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:new`, `:n` | Request a full game reset. |
+| `:new`, `:n` | Reset simulation state; keep operator preferences. |
+| `:new!` | Reset and purge free-mouse, auto-fire, speed, debug HUD, and pins. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:auto [on\|off]` | Toggle free mouse and auto-fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
-| `:log ...` | Start/stop logging; set level/scope; schedule status snapshots. |
+| `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |
+| `:step [n]`, `:st` | Pause and advance complete ticks. |
+| `:step [rate] fsm [region] [pause]` | Run until an FSM transition, optionally pausing there. |
+| `:step [rate] ev <Event> [pause]` | Run until the named event is dispatched. |
+| `:step off` | Disarm run-until and restore 1x. |
+| `:region list\|spawn\|pause\|resume\|terminate ...` | Issue one scheduler-owned region primitive. |
+| `:log ...` | Start/stop logging; set level/scope and snapshot period. |
+| `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
 | `:debug [save]` | Open debug overlay or write a point-in-time status snapshot. |
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
@@ -237,6 +246,16 @@ The command dispatcher recognizes aliases shown in the first column.
 The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Commands below the first six rows are
 primarily developer/authoring controls and can substantially alter a live run.
+
+Free-mouse and auto-fire preferences, time scale, debug HUD visibility, and
+pinned overlay cards are operator-owned and survive plain `:new`. Both reset
+forms clear macros and transient command/overlay state. `:new!` additionally
+turns the two preferences off, restores 1x, and clears HUD/pins. Logging state
+is process diagnostic configuration and survives both forms.
+
+Replay terminal keys are not entries in this command table or the keymap. A
+`ModeReplay` App reserves `SPACE . + - h j k l 0 q` for viewer pause, step,
+speed, pan/reset, and quit; those keys never become simulation intents.
 
 System control uses `System.Name()`, not the manifest key. In the current
 assembly, `transient_effects` and `timekeeper` are the runtime names for the

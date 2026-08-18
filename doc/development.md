@@ -96,6 +96,10 @@ useful CI addition even though the current workflow does not perform one.
 | `-k <path>` | Keymap override TOML. |
 | `-check` | Resolve and validate FSM/content, print result, exit. |
 | `-schema` | Print FSM/event schema JSON, exit. |
+| `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, or `8`. |
+| `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
+| `-j`, `-journal` | Record non-system-origin events to a dedicated replay journal. |
+| `-replay <file>` | Present a recorded journal instead of starting interactive play. |
 | `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
 | `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |
@@ -105,6 +109,17 @@ useful CI addition even though the current workflow does not perform one.
 
 When both color flags are passed, truecolor wins because config translation
 checks `-ct` first. When both audio start flags are passed, unmute wins.
+`-lv`, `-ls`, `-lt`, and `-lr` each imply `-l`; `-ls` is parsed before
+terminal startup. A bare `-l` remains boolean, so a directory requires
+`-l=DIR`, not `-l DIR`.
+
+`app.PlayJournal(paths ...string)` and `journal.Load` can reassemble several
+rotated files by `jseq`. The current CLI flag stores one string and passes one
+path, so positional paths after `-replay` are not a supported multi-file form.
+The replay path rebuilds seed, config/content, timing, and geometry from its
+anchor rather than `buildConfig`; normal gameplay flags do not override those
+values. Session logging and `-dev` are still applied before playback starts;
+`-j` is an App config flag and does not journal a replay.
 
 ## 5. Validation and tests
 
@@ -117,15 +132,15 @@ make verify
 It covers race-enabled tests, package compilation, `novlog`, `js/wasm`, and
 vet. It does not cross-build Windows or exercise a real terminal/audio backend.
 
-At the audited revision, the eight Go test files are concentrated in
-`pkg/audio`, `pkg/genetic` and its registry/tracking/fitness packages,
-`cmd/soundlab`, and the internal sound-table parameters. There are no Go test
-files for the app/runtime, ECS, FSM, input/mode, rendering, navigation,
-physics, content loader, gameplay systems, or networking. Those are material
-coverage gaps despite the repository-wide `go test ./...` command. Standalone
-programs under `benchmark` are performance experiments (apart from the one
-`BenchmarkStreaming_ProposeComplete` test in `pkg/genetic`), and `sandbox`
-programs are exploratory rather than production-supported.
+At the audited revision, 37 Go test files cover `cmd/vif`, `cmd/soundlab`, the
+headless/replay application harness, clocks/scheduler/time control, event
+journaling, input/help/mode commands, one gameplay-system surface, parameters,
+profiling, audio, genetics, Q32.32/vector math, and physics. The app suite
+includes seeded soak, mutation, bisect, reset, journal-density, replay, and
+operator-state comparisons. Coverage is still selective: many concrete
+gameplay systems, renderers, content parsing paths, services, and network
+failure modes have no focused test file. Standalone programs under `benchmark`
+and `sandbox` remain experiments rather than production-supported tests.
 
 Configuration work should also run:
 
@@ -138,20 +153,18 @@ For audio documents, use `soundlab validate`; for visual behavior, exercise the
 blend tester and both color modes. Runtime terminal interactions still need a
 manual smoke test because unit tests do not reproduce every emulator.
 
-## 6. Current CI workflow and known gap
+## 6. Current CI workflow
 
-`.github/workflows/test.yml` runs broad tests with and without the race detector
-and a second stress-pattern race job on pushes/PRs.
+`.github/workflows/test.yml` runs on pushes to selected development branches
+and pull requests to `main`, `master`, or `develop`. Its single Go 1.26 job
+downloads modules, runs `go vet ./...`, builds `./...`, and runs
+`go test -race -v ./...` with race output redirected to `race.*`; those files
+are uploaded for seven days on failure.
 
-One step is currently stale: “Run critical system tests” invokes packages
-`./systems` and `./engine`, but the repository uses `internal/system` and
-`internal/engine`; those root packages do not exist. That step will fail even
-after the earlier `go test ./...` passes. It should be replaced by valid package
-paths/test names or removed in favor of `make verify`.
-
-The workflow also installs ALSA development headers even though the current
-audio path streams to command-line backends and has no CGO ALSA binding. The
-install is unnecessary unless another dependency reintroduces that need.
+CI does not run generation followed by a clean-tree check, the `novlog` build,
+the WASM build, Windows cross-compilation, or terminal/audio smoke tests.
+`make verify` covers generation, race tests, default/`novlog`/WASM builds, and
+vet locally; Windows and host-I/O behavior remain separate validation work.
 
 The Makefile's `windows` help text says sound/logging are disabled, but the
 recipe does not pass `novlog` or another disabling tag. Treat the recipe—not the
@@ -207,6 +220,12 @@ filtering, while level still applies.
 record shapes, scopes, the status registry, the flight recorder, and the
 diagnostic playbooks. This section covers only the build-facing policy.
 
+Replay capture is a separate `vif-jrn-*` JSONL sink. `-j` records every
+non-system-origin event regardless of session log level/scope, and its anchor
+carries the seed, RNG session, config/corpus identity and fingerprint, fixed
+tick interval, and simulation geometry. `-replay` runs those records through a
+manual-clock App; this is reproduction input, not another diagnostic scope.
+
 Logging is disabled at compile time for `wasm` or `novlog`. In enabled builds,
 log arguments are formatted asynchronously: call sites must pass primitive
 values/copies, never component pointers, pooled event payloads, or reusable
@@ -223,9 +242,9 @@ float, and string metrics. Systems cache returned pointers during initialization
 and update them without map lookups in hot paths.
 
 Snapshot indexing groups keys by prefix and sorts groups/members.
-`Registry.Freeze`, called from `ClockScheduler.Start`, closes the metric set and
-caches that index permanently; a registration afterwards yields a detached cell
-and increments `stat.late`. Periodic snapshots run after a completed tick and
+`Registry.Freeze`, called by `ClockScheduler.Prepare` from either `Start` or a
+driven tick/settle path, closes the metric set and caches that index permanently;
+a registration afterwards yields a detached cell and increments `stat.late`. Periodic snapshots run after a completed tick and
 after releasing the world lock, so all tick-owned writes are settled and async
 logging cannot extend lock time.
 
@@ -242,9 +261,8 @@ Application goroutines should start through `core.Go`, which recovers panics,
 invokes the logging crash hook, restores/finalizes the terminal, prints the
 stack, and exits according to platform behavior. The crash hook first runs a
 registered flush callback, so the flight-recorder window reaches disk ahead of
-the panic record.
-an additional emergency reset because its blocking loop is especially capable
-of stranding raw mode.
+the panic record. The terminal poll goroutine has an additional emergency reset
+because its blocking loop is especially capable of stranding raw mode.
 
 Go runtime diagnostics such as race reports write directly to file descriptor
 2 and would corrupt/disappear behind an alternate screen. `-dev` redirects
@@ -286,4 +304,5 @@ boundaries.
 | Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
+| Journal and replay | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go` |
 | Crash/runtime capture | `internal/core/crash_handler*.go`, `dev.go`, `redirect_*.go` |

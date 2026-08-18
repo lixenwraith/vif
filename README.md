@@ -16,6 +16,8 @@ configuration, audio policy, and reusable simulation libraries.
   recorded macros.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
   spatial grid, composite actors, and a single explicit world-lock boundary.
+- Three runtime shapes: interactive play, deterministic caller-driven headless
+  runs, and terminal playback of recorded runs.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
   encounters, payload capture/injection, guards, delayed actions, and system
   control.
@@ -30,10 +32,16 @@ configuration, audio policy, and reusable simulation libraries.
 - Plain-text and authored TOML typing corpora, embedded fallback scenarios and
   tutorial content, image-to-terminal wall assets, and dedicated audio/image/
   visual authoring tools.
+- A replay journal, manual-clock harness, exact rational time controls,
+  per-region FSM telemetry, structured logs, status snapshots, and a triggered
+  flight recorder for reproduction and diagnosis.
 
-The simulation is not advertised as globally bit-for-bit deterministic: several
-Q32.32 operations intentionally use hardware floating point, and real-time
-scheduling/random seeds are part of normal play.
+Interactive play is not advertised as globally bit-for-bit deterministic:
+several Q32.32 operations intentionally use hardware floating point and live
+goroutine scheduling affects event timing. Headless and replay Apps instead use
+a manual clock and are deterministic for one build from their seed, config, and
+injected event sequence; bit-exact replay is claimed for headless recordings,
+not arbitrary live sessions or across platforms.
 
 ## Build and run
 
@@ -60,6 +68,12 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 - `-k <keymap.toml>` applies sparse key overrides.
 - `-check` validates resolved FSM/content without opening the game.
 - `-schema` exports the current event/action/guard schema as JSON.
+- `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
+  startup rate from `1/8` through `8`.
+- `-j` records replay input to a dedicated journal; `-replay <file>` presents a
+  journal on the terminal with fixed playback controls.
+- `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
+  and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
 
