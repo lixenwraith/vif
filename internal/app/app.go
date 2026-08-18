@@ -21,9 +21,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// headlessColorMode is the fixed mode a headless run publishes; there is no
-// terminal to detect against and no renderer to consume it
-const headlessColorMode = terminal.ColorMode256
+// fallbackColorMode is published when no terminal exists to detect against
+const fallbackColorMode = terminal.ColorMode256
 
 // App owns the wired runtime: services, world, renderer, input, and scheduler
 // Headless runs leave termSvc, term and orchestrator nil
@@ -64,7 +63,7 @@ func New(cfg Config) (*App, error) {
 
 // init wires the runtime in dependency order; a headless run skips presentation
 func (a *App) init() error {
-	vlog.Info("app", "msg", "init begin", "headless", a.cfg.Headless)
+	vlog.Info("app", "msg", "init begin", "mode", a.cfg.Mode.String())
 
 	// Root RNG seed; resolved first, since services and systems both derive
 	// from it. A drawn seed is logged so any run replays with -seed.
@@ -89,7 +88,7 @@ func (a *App) init() error {
 	if err := a.initJournal(); err != nil {
 		return err
 	}
-	if !a.cfg.Headless {
+	if a.cfg.Mode.Presents() {
 		a.initPresentation()
 	}
 	if err := a.initInput(); err != nil {
@@ -106,21 +105,24 @@ func (a *App) init() error {
 	return nil
 }
 
-// initServices registers and initializes the I/O boundary. A headless run
-// registers content only, so no terminal, audio or network goroutine exists.
+// initServices registers and initializes the I/O boundary. A driven run registers
+// only what its mode presents, so no goroutine exists that the caller does not own.
 func (a *App) initServices() error {
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
 	event.EnsureRegistry()
 
-	if !a.cfg.Headless {
+	if a.cfg.Mode.Presents() {
 		colorMode := terminal.DetectColorMode()
 		if a.cfg.ColorModeSet {
 			colorMode = a.cfg.ColorMode
 		}
 		a.termSvc = service.NewTerminalService(colorMode)
 		_ = a.hub.Register(a.termSvc)
-
+	}
+	if a.cfg.Mode == ModePlay {
 		_ = a.hub.Register(service.NewNetworkService(nil)) // disabled by default (RoleNone)
+	}
+	if a.cfg.Mode.Audio() {
 		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
 	}
 
@@ -143,20 +145,22 @@ func (a *App) initWorld() {
 	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)
 
-	// The terminal owns dimensions and color interactively; headless takes
-	// dimensions from config and publishes a fixed mode
+	// The terminal supplies color whenever one exists, but dimensions only when the
+	// mode says so; a replay's come from the journal, via config
 	width, height := a.cfg.Width, a.cfg.Height
-	colorMode := headlessColorMode
-	if !a.cfg.Headless {
+	colorMode := fallbackColorMode
+	if a.cfg.Mode.Presents() {
 		a.term = a.termSvc.Terminal()
 		core.SetCrashTerminal(a.term)
-		width, height = a.term.Size()
 		colorMode = a.term.ColorMode()
+	}
+	if a.cfg.Mode.OwnsGeometry() {
+		width, height = a.term.Size()
 	}
 
 	// GameContext initializes the remaining world resources.
-	// Headless runs the manual clock: game time is a pure function of ticks.
-	if a.cfg.Headless {
+	// A driven run uses the manual clock: game time is a pure function of ticks.
+	if a.cfg.Mode.Driven() {
 		a.ctx = engine.NewGameContextWithClock(a.world, width, height, engine.NewManualClock())
 	} else {
 		a.ctx = engine.NewGameContext(a.world, width, height)
@@ -200,10 +204,12 @@ func (a *App) initWorld() {
 	a.world.Resources.Rand.NextSession()
 }
 
-// initPresentation builds the render pipeline; never reached headless
+// initPresentation builds the render pipeline. The buffer is terminal-sized while
+// renderers draw in simulation coordinates, so a replay on a smaller terminal clips;
+// the windowed composite replaces that.
 func (a *App) initPresentation() {
-	// Register sorts by priority, manifest order breaks ties
-	a.orchestrator = render.NewRenderOrchestrator(a.term, a.ctx.Width, a.ctx.Height)
+	w, h := a.term.Size()
+	a.orchestrator = render.NewRenderOrchestrator(a.term, w, h)
 	for _, reg := range manifest.BuildRenderers(a.ctx) {
 		a.orchestrator.Register(reg.Renderer, reg.Priority)
 	}
@@ -217,7 +223,7 @@ func (a *App) initInput() error {
 		return err
 	}
 	a.router = mode.NewRouter(a.ctx, a.inputMachine)
-	if !a.cfg.Headless {
+	if a.cfg.Mode.OwnsInput() {
 		a.router.SetMouseModeApplier(a.applyMouseMode)
 	}
 	return nil

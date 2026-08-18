@@ -100,7 +100,7 @@ func (c *Capture) CheckDense() error {
 	return nil
 }
 
-// ConfigFromAnchor rebuilds the configuration a journal was recorded under.
+// ConfigFromAnchor rebuilds the configuration a journal was recorded under, as a headless config; NewReplay retargets it for presentation.
 // Speed is dropped: a replay runs the manual clock, which a headless config
 // rejects a rate for. The result asks for a corpus and a config; VerifyAnchor
 // proves the ones that resolved are the recorded ones.
@@ -120,7 +120,7 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 		return Config{}, errors.New("anchor carries no seed")
 	}
 
-	cfg := Config{Headless: true, Seed: a.Seed, Width: a.Width, Height: a.Height}
+	cfg := Config{Mode: ModeHeadless, Seed: a.Seed, Width: a.Width, Height: a.Height}
 
 	// Embedded on both sides is the only pairing Config states exactly; a mixed
 	// anchor leaves the embedded side to discovery, which VerifyAnchor then rejects
@@ -195,87 +195,149 @@ type ReplayStats struct {
 	Records  int    // records offered
 	Injected int    // records pushed into the queue
 	Groups   int    // settle groups executed
-	Run      uint64 // reset generation the replay ended in
+	Run      uint64 // reset generation reached
 	Ticks    uint64 // ticks executed within that run
 }
 
-// Replay injects records at their recorded run, tick and settle boundary, advancing
-// the clock between ticks. Records must arrive in emission order; each group is sorted
-// in place by queue slot, which is dispatch order. The caller runs any trailing ticks
-// the last record misses.
-func (a *App) Replay(records []event.JournalRecord) (ReplayStats, error) {
-	st := ReplayStats{Records: len(records)}
-	if !a.cfg.Headless {
-		return st, errors.New("replay: requires a headless App")
-	}
-	if a.cfg.Journal {
-		return st, errors.New("replay: journaling a replay records a run that never happened")
-	}
-
-	var cur groupKey
-	for i := 0; i < len(records); {
-		k := keyOf(records[i])
-		if k.before(cur) {
-			return st, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
-				records[i].JSeq, k.run, k.tick, k.boundary)
-		}
-
-		// A run change is opened by the reset the previous run's records requested,
-		// so the driver follows the queue's generation rather than driving it
-		if k.run != cur.run {
-			if got := a.runIndex(); got != k.run {
-				return st, fmt.Errorf("replay: jseq %d opens run %d, the replay is in run %d",
-					records[i].JSeq, k.run, got)
-			}
-			cur = groupKey{run: k.run}
-		}
-		if k.tick > cur.tick {
-			a.Tick(int(k.tick - cur.tick))
-			cur.tick = k.tick
-		}
-
-		j := i
-		for j < len(records) && keyOf(records[j]) == k {
-			j++
-		}
-		group := records[i:j]
-		sort.SliceStable(group, func(x, y int) bool { return group[x].Seq < group[y].Seq })
-
-		injected, err := a.injectGroup(group)
-		st.Injected += injected
-		st.Groups++
-		if err != nil {
-			return st, err
-		}
-		cur, i = k, j
-	}
-	st.Run, st.Ticks = cur.run, cur.tick
-	return st, nil
+// ReplayDriver injects a record stream into a caller-driven App, advancing the clock
+// as it goes. Resumable: Step consumes one tick, so a presenting loop paces playback
+// and a harness runs the stream out. The record slice is the driver's for its lifetime;
+// each group is sorted in place by queue slot, which is dispatch order.
+type ReplayDriver struct {
+	a       *App
+	records []event.JournalRecord
+	next    int      // index of the next record to inject
+	cur     groupKey // position reached
+	stats   ReplayStats
 }
 
-// runIndex returns the reset generation the replay's event queue is stamping
-func (a *App) runIndex() uint64 { return a.world.Resources.Event.Queue.Stamp().Run }
+// NewReplayDriver binds a record stream to an App
+func NewReplayDriver(a *App, records []event.JournalRecord) (*ReplayDriver, error) {
+	if !a.cfg.Mode.Driven() {
+		return nil, errors.New("replay: requires a caller-driven App")
+	}
+	if a.cfg.Journal {
+		return nil, errors.New("replay: journaling a replay records a run that never happened")
+	}
+	return &ReplayDriver{a: a, records: records, stats: ReplayStats{Records: len(records)}}, nil
+}
 
-// injectGroup pushes one group's records and settles them together
-func (a *App) injectGroup(group []event.JournalRecord) (int, error) {
+// Done reports whether every record has been injected
+func (d *ReplayDriver) Done() bool { return d.next >= len(d.records) }
+
+// Stats reports what has been consumed so far
+func (d *ReplayDriver) Stats() ReplayStats { return d.stats }
+
+// End returns the position of the last record, for a progress readout
+func (d *ReplayDriver) End() event.Stamp {
+	if len(d.records) == 0 {
+		return event.Stamp{}
+	}
+	r := d.records[len(d.records)-1]
+	return event.Stamp{Run: r.Run, Tick: r.Tick, Boundary: r.Boundary}
+}
+
+// Step advances one tick and applies every settle group the journal stamped on it.
+// Ticking toward a distant record counts as a step, so a presenting loop calls this
+// once per displayed tick. Returns false once the stream is exhausted.
+func (d *ReplayDriver) Step() (bool, error) {
+	if d.Done() {
+		return false, nil
+	}
+	k := keyOf(d.records[d.next])
+	if k.before(d.cur) {
+		return false, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
+			d.records[d.next].JSeq, k.run, k.tick, k.boundary)
+	}
+
+	// A run boundary is opened by the reset the previous run's records requested, so
+	// the driver follows the queue's generation rather than driving it
+	if k.run != d.cur.run {
+		if got := d.a.runIndex(); got != k.run {
+			return false, fmt.Errorf("replay: jseq %d opens run %d, the replay is in run %d",
+				d.records[d.next].JSeq, k.run, got)
+		}
+		d.cur = groupKey{run: k.run}
+		d.stats.Run, d.stats.Ticks = k.run, 0
+	}
+
+	if k.tick > d.cur.tick {
+		d.a.Tick(1)
+		d.cur.tick++
+		d.stats.Ticks = d.cur.tick
+		if k.tick > d.cur.tick {
+			return true, nil // still ticking toward the record
+		}
+	}
+
+	// Every group stamped on this tick settles before the next one runs
+	for !d.Done() {
+		k = keyOf(d.records[d.next])
+		if k.run != d.cur.run || k.tick != d.cur.tick {
+			break
+		}
+		if err := d.injectGroup(k); err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+// RunAll consumes the whole stream
+func (d *ReplayDriver) RunAll() error {
+	for {
+		more, err := d.Step()
+		if err != nil || !more {
+			return err
+		}
+	}
+}
+
+// injectGroup pushes one settle group's records in queue-slot order and settles them
+func (d *ReplayDriver) injectGroup(k groupKey) error {
+	j := d.next
+	for j < len(d.records) && keyOf(d.records[j]) == k {
+		j++
+	}
+	group := d.records[d.next:j]
+	sort.SliceStable(group, func(x, y int) bool { return group[x].Seq < group[y].Seq })
+
 	pushed := 0
 	for i := range group {
 		rec := &group[i]
 		if err := checkRecord(rec); err != nil {
-			return pushed, fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
+			return fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
 		}
 		payload, err := decodeRecordPayload(rec)
 		if err != nil {
-			return pushed, fmt.Errorf("replay: jseq %d %s: %w", rec.JSeq, event.GetEventName(rec.Type), err)
+			return fmt.Errorf("replay: jseq %d %s: %w", rec.JSeq, event.GetEventName(rec.Type), err)
 		}
-		a.ctx.PushEventOrigin(rec.Type, payload, rec.Origin)
+		d.a.ctx.PushEventOrigin(rec.Type, payload, rec.Origin)
 		pushed++
 	}
 	if pushed > 0 {
-		a.Settle()
+		d.a.Settle()
 	}
-	return pushed, nil
+
+	d.stats.Injected += pushed
+	d.stats.Groups++
+	d.cur, d.next = k, j
+	return nil
 }
+
+// Replay consumes an entire record stream. The caller runs any trailing ticks the
+// last record misses.
+func (a *App) Replay(records []event.JournalRecord) (ReplayStats, error) {
+	d, err := NewReplayDriver(a, records)
+	if err != nil {
+		return ReplayStats{Records: len(records)}, err
+	}
+	err = d.RunAll()
+	return d.Stats(), err
+}
+
+// runIndex returns the reset generation the replay's event queue is stamping
+func (a *App) runIndex() uint64 { return a.world.Resources.Event.Queue.Stamp().Run }
 
 // checkRecord rejects a record this build cannot inject faithfully
 func checkRecord(rec *event.JournalRecord) error {

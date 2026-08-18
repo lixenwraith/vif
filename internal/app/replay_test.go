@@ -18,7 +18,7 @@ const fixtureSeed = 0x5eed1e55
 // scriptConfig builds a hermetic headless config: ForceDefault pins the embedded
 // FSM and corpus, so a run does not depend on cwd or $XDG_CONFIG_HOME
 func scriptConfig(seed uint64) Config {
-	return Config{Headless: true, ForceDefault: true, Seed: seed}
+	return Config{Mode: ModeHeadless, ForceDefault: true, Seed: seed}
 }
 
 func intentMotion(op input.MotionOp, count int) *input.Intent {
@@ -495,8 +495,7 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 // TestScreenSizeInvertsViewport pins the inverse against the forward derivation, so
 // a margin change cannot desync the anchor from the geometry it describes
 func TestScreenSizeInvertsViewport(t *testing.T) {
-	a, err := NewHeadless(Config{Headless: true, ForceDefault: true,
-		Seed: fixtureSeed, Width: 100, Height: 40})
+	a, err := NewHeadless(Config{ForceDefault: true, Seed: fixtureSeed, Width: 100, Height: 40})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}

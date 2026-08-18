@@ -1,7 +1,7 @@
 package app
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -19,8 +19,8 @@ const defaultMouseMode = terminal.MouseModeClick | terminal.MouseModeDrag
 
 // Run wires, runs, and tears down the game
 func Run(cfg Config) error {
-	if cfg.Headless {
-		return errors.New("headless config requires NewHeadless, not Run")
+	if cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
 	a, err := New(cfg)
 	if err != nil {
@@ -37,6 +37,9 @@ func Run(cfg Config) error {
 
 // Loop starts the services and runs the frame loop until the player quits
 func (a *App) Loop() error {
+	if a.cfg.Mode != ModePlay {
+		return fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
+	}
 	if err := a.hub.StartAll(); err != nil {
 		return err
 	}

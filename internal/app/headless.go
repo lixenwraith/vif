@@ -1,9 +1,9 @@
-// Package app: headless harness.
+// Package app: caller-driven harness.
 //
-// A headless App has no terminal, audio service or renderer, and runs on a
-// ManualClock advanced only by Tick. Nothing runs on another goroutine, so a
-// run is a pure function of its seed, its config, and the injected intent
-// sequence. Close is the caller's responsibility.
+// A driven App runs on a ManualClock advanced only by Tick, with no scheduler or
+// event goroutine, so a run is a pure function of its seed, its config, and the
+// injected event sequence. Headless adds no I/O; replay adds a terminal and renderer
+// but takes its geometry from the journal. Close is the caller's responsibility.
 //
 // Concurrent Apps in one process still share four process-wide values, none of
 // which reaches a simulation snapshot: the status recorder trigger hook, the
@@ -17,11 +17,23 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/input"
 )
 
-// NewHeadless builds and starts a headless runtime without spawning the
-// scheduler or event goroutines. Tick drives the simulation instead.
+// NewHeadless builds and starts a headless runtime: no I/O at all, and no scheduler
+// or event goroutine. Tick drives the simulation instead.
 func NewHeadless(cfg Config) (*App, error) {
-	cfg.Headless = true
+	cfg.Mode = ModeHeadless
+	return newDriven(cfg)
+}
 
+// NewReplay builds and starts a presenting runtime for a recorded run: terminal and
+// renderer, but a manual clock the caller ticks and geometry taken from the journal.
+func NewReplay(cfg Config) (*App, error) {
+	cfg.Mode = ModeReplay
+	return newDriven(cfg)
+}
+
+// newDriven wires a caller-driven runtime, sealing the system set and freezing the
+// metric set before anything dispatches so a Settle before the first Tick registers nothing
+func newDriven(cfg Config) (*App, error) {
 	a, err := New(cfg)
 	if err != nil {
 		return nil, err
@@ -30,9 +42,6 @@ func NewHeadless(cfg Config) (*App, error) {
 		a.Close()
 		return nil, err
 	}
-
-	// Seal the system set and freeze the metric set before anything dispatches,
-	// so a Settle preceding the first Tick cannot register a late metric.
 	a.scheduler.Prepare()
 	return a, nil
 }
@@ -123,6 +132,10 @@ func (a *App) World() *engine.World { return a.world }
 
 // Seed returns the root seed the run resolved, including a drawn one
 func (a *App) Seed() uint64 { return a.cfg.Seed }
+
+// Position returns the journal stamp the run is at: reset generation, ticks within
+// it, and settle groups within the tick
+func (a *App) Position() event.Stamp { return a.world.Resources.Event.Queue.Stamp() }
 
 // JournalStats returns the emitted record count and encode failure count;
 // zero when journaling is off
