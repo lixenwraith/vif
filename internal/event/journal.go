@@ -8,7 +8,7 @@ import (
 )
 
 // JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 2
+const JournalSchema = 3
 
 // JournalRecord is one replayable event, produced synchronously at push time.
 // Payload is TOML text that decodes into the registry prototype for Type.
@@ -18,6 +18,7 @@ type JournalRecord struct {
 	EncodeErr string // non-empty when Payload could not be produced
 	JSeq      uint64 // dense record counter; a gap is exactly one lost record
 	Seq       uint64 // queue slot, legitimately sparse in the journal
+	Boundary  uint64 // completed between-tick settles this tick
 	Type      EventType
 	Origin    Origin
 }
@@ -66,10 +67,11 @@ func AnchorDue(tick uint64) bool { return tick%AnchorIntervalTicks == 0 }
 // Journal captures non-system events for replay. One per queue, so concurrent
 // harness runs in a single process cannot share a counter.
 type Journal struct {
-	sink    JournalSink // immutable after NewJournal
-	seq     atomic.Uint64
-	encFail atomic.Uint64
-	anchor  atomic.Pointer[JournalAnchor] // run-invariant template
+	sink     JournalSink // immutable after NewJournal
+	seq      atomic.Uint64
+	encFail  atomic.Uint64
+	boundary atomic.Uint64
+	anchor   atomic.Pointer[JournalAnchor] // run-invariant template
 }
 
 // NewJournal binds a sink; a nil sink yields a nil Journal, which disables capture
@@ -95,11 +97,13 @@ func (j *Journal) SetAnchor(a JournalAnchor) {
 	}
 	a.Schema = JournalSchema
 	j.anchor.Store(&a)
-	j.Anchor(a.Session, a.Speed)
+	j.Anchor(a.Session, a.Speed, a.Width, a.Height)
 }
 
-// Anchor re-emits the template with the fields only the engine can supply
-func (j *Journal) Anchor(session uint64, speed string) {
+// Anchor re-emits the template with the fields only the engine can supply.
+// Dimensions are live rather than run-invariant: a file rotated after a resize must
+// describe the geometry its records were produced under.
+func (j *Journal) Anchor(session uint64, speed string, width, height int) {
 	if j == nil {
 		return
 	}
@@ -110,6 +114,8 @@ func (j *Journal) Anchor(session uint64, speed string) {
 	a := *p
 	a.Session = session
 	a.Speed = speed
+	a.Width = width
+	a.Height = height
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)
 }
@@ -126,9 +132,11 @@ func (j *Journal) record(ev *GameEvent) {
 		EncodeErr: encErr,
 		JSeq:      j.seq.Add(1),
 		Seq:       ev.Seq,
+		Boundary:  j.boundary.Load(),
 		Type:      ev.Type,
 		Origin:    ev.Origin,
 	})
+
 }
 
 // encodePayload marshals a payload to TOML text. Only the registry prototype's
@@ -153,4 +161,19 @@ func encodePayload(et EventType, p any) (text, encErr string) {
 		return "", err.Error()
 	}
 	return string(b), ""
+}
+
+// ResetBoundary restarts the settle counter at the top of a tick
+func (j *Journal) ResetBoundary() {
+	if j != nil {
+		j.boundary.Store(0)
+	}
+}
+
+// NextBoundary closes the current settle group. A replay must settle the same
+// groups: a pass can queue an event that a later pass applies over a replayed one.
+func (j *Journal) NextBoundary() {
+	if j != nil {
+		j.boundary.Add(1)
+	}
 }

@@ -1,10 +1,12 @@
 package app
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -13,13 +15,6 @@ import (
 
 // fixtureSeed pins the perturbation test so CI is reproducible
 const fixtureSeed = 0x5eed1e55
-
-// apmFoldTicks is the tick period between APM folds. GameState.UpdateAPM commits a
-// bucket once a second of game time has passed, and the zero lastAPMTime forces the
-// first fold on tick 1 with an empty accumulator; a script that ends inside the next
-// window therefore never folds intent-derived weight, which a replay cannot produce.
-// The cap goes away once APM admits from the event stream.
-var apmFoldTicks = int(time.Second / parameter.GameUpdateInterval)
 
 // scriptConfig builds a hermetic headless config: ForceDefault pins the embedded
 // FSM and corpus, so a run does not depend on cwd or $XDG_CONFIG_HOME
@@ -85,15 +80,9 @@ func (r *scriptRunner) step(ticks int, intents ...*input.Intent) {
 	r.ticks += ticks
 }
 
-// done reports the tick total, failing if the script outran the APM window
-func (r *scriptRunner) done() int {
-	r.t.Helper()
-	if r.ticks > apmFoldTicks {
-		r.t.Fatalf("script ran %d ticks, APM folds at %d: shorten it or land the event-origin APM change",
-			r.ticks, apmFoldTicks)
-	}
-	return r.ticks
-}
+// done reports the tick total. No APM cap any more: admission moved to the event
+// stream, so a fold reproduces like anything else.
+func (r *scriptRunner) done() int { return r.ticks }
 
 // runScript drives the gameplay sequence: motion, insert typing, delete, auto-fire,
 // a command round trip, and Visual with an active shield — the only state that gives
@@ -177,12 +166,6 @@ func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []st
 	}
 	ticks := script(t, a)
 	snap, seed := a.SnapshotSimulation(), a.Seed()
-
-	// APM is admitted from intents, not from the event stream: a fold inside the
-	// script diverges on replay for a reason unrelated to the simulation
-	if apm := a.World().Resources.Status.Ints.Get("engine.apm").Load(); apm != 0 {
-		t.Fatalf("script outran the APM window (engine.apm=%d)", apm)
-	}
 	a.Close()
 
 	if seed == 0 {
@@ -197,21 +180,14 @@ func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []st
 	return cap, snap, seed, ticks
 }
 
-// replayAndCompare journals a script, rebuilds the config from its anchor, verifies
-// the corpus fingerprint, replays the records and compares simulation snapshots
-func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
+// replayCapture rebuilds from the anchor, verifies it, replays and compares
+func replayCapture(t *testing.T, cap *Capture, want []string, ticks int) {
 	t.Helper()
-
-	cap, want, seed, ticks := journalRun(t, script)
 
 	anchors := cap.Anchors()
 	if len(anchors) == 0 {
 		t.Fatal("no anchor captured")
 	}
-	if anchors[0].Seed != seed {
-		t.Fatalf("anchor seed %d, run seed %d", anchors[0].Seed, seed)
-	}
-
 	rcfg, err := ConfigFromAnchor(anchors[0])
 	if err != nil {
 		t.Fatalf("config from anchor: %v", err)
@@ -232,7 +208,7 @@ func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
 	}
 	switch rest := ticks - int(st.Ticks); {
 	case rest > 0:
-		rep.Tick(rest) // the last record does not reach the end of the run
+		rep.Tick(rest)
 	case rest < 0:
 		t.Fatalf("replay ran %d ticks, source ran %d", st.Ticks, ticks)
 	}
@@ -240,6 +216,15 @@ func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
 	if i, x, y, ok := FirstDiff(want, rep.SnapshotSimulation()); ok {
 		t.Fatalf("replay diverged at line %d (%+v):\n  source %s\n  replay %s", i, st, x, y)
 	}
+}
+
+func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
+	t.Helper()
+	cap, want, seed, ticks := journalRun(t, script)
+	if a := cap.Anchors(); len(a) > 0 && a[0].Seed != seed {
+		t.Fatalf("anchor seed %d, run seed %d", a[0].Seed, seed)
+	}
+	replayCapture(t, cap, want, ticks)
 }
 
 // TestJournalDoesNotPerturb drives one fixed-seed sequence twice, journaled and
@@ -311,15 +296,22 @@ func TestModeChangedAppliesWithoutRouter(t *testing.T) {
 	}
 }
 
-// runSplitSettleScript settles twice between two ticks, which the driver collapses
-// into one: two Injects in a boundary, then an Inject sharing a boundary with an
-// InputTick. It passes, which is what retires the boundary counter from the record
-// layout; it fails the day a handler starts accumulating across dispatch passes.
+// runSplitSettleScript settles several times between two ticks, and does it in the
+// shape that actually bites: a producer whose handler queues an event of the same
+// type a replayed record carries, so a merged settle applies them in the wrong order.
 func runSplitSettleScript(t *testing.T, a *App) int {
 	t.Helper()
 	r := newScriptRunner(t, a)
 
-	// Two settles, one boundary: each Inject dispatches on its own pass
+	// SetupLevel clamps the cursor and queues CursorMoved; the motion below records
+	// an absolute position that a later pass would otherwise overwrite
+	a.SetupLevel(60, 30, true, true)
+	if !a.Inject(intentMotion(input.MotionRight, 8)) {
+		t.Fatal("quit")
+	}
+	r.step(1)
+
+	// Two settles, one boundary
 	if !a.Inject(intentMotion(input.MotionRight, 4)) {
 		t.Fatal("quit")
 	}
@@ -328,7 +320,7 @@ func runSplitSettleScript(t *testing.T, a *App) int {
 	}
 	r.step(1)
 
-	// Inject then InputTick, still one boundary: InputTick settles what it emits
+	// Inject then InputTick, still one boundary
 	if !a.Inject(intentMotion(input.MotionDown, 2)) {
 		t.Fatal("quit")
 	}
@@ -343,9 +335,8 @@ func runSplitSettleScript(t *testing.T, a *App) int {
 	return r.done()
 }
 
-// TestReplaySplitSettle probes whether settle granularity is observable. Passing
-// means JournalRecord needs no boundary counter and the one-Inject-per-boundary
-// constraint on scripts can be dropped; failing means P2 records the boundary.
+// TestReplaySplitSettle asserts the recorded settle boundary reproduces multi-settle
+// tick boundaries, which App.Loop produces for every live input event
 func TestReplaySplitSettle(t *testing.T) { replayAndCompare(t, runSplitSettleScript) }
 
 // TestDenySimKeysExist keeps the deny list honest: a renamed or dropped metric must
@@ -434,6 +425,114 @@ func TestVerifyAnchorRejectsMismatch(t *testing.T) {
 		mutate(&bad)
 		if err := a.VerifyAnchor(bad); err == nil {
 			t.Errorf("%s mismatch accepted", name)
+		}
+	}
+}
+
+// runLongScript crosses an APM fold, which intent-side accounting could not replay.
+// One second of game time is 20 ticks; the fold lands inside the run.
+func runLongScript(t *testing.T, a *App) int {
+	t.Helper()
+	r := newScriptRunner(t, a)
+
+	for i := range 6 {
+		r.step(2, intentMotion(input.MotionRight, 1+i%3))
+		r.step(2, intentMotion(input.MotionDown, 1))
+	}
+	r.step(1, intentModeSwitch(input.ModeTargetInsert))
+	r.step(1, intentTextChar('x'))
+	r.step(2, intentEscape())
+	return r.done()
+}
+
+// TestReplayAcrossAPMFold asserts APM is produced and reproduced
+func TestReplayAcrossAPMFold(t *testing.T) {
+	cap, want, _, ticks := journalRun(t, runLongScript)
+	if ticks <= int(time.Second/parameter.GameUpdateInterval) {
+		t.Fatalf("script ran %d ticks, too short to cross an APM fold", ticks)
+	}
+
+	folded := false
+	for _, line := range want {
+		if strings.HasPrefix(line, "reg|stat|") &&
+			strings.Contains(line, "|apm=") && !strings.Contains(line, "|apm=0|") {
+			folded = true
+		}
+	}
+	if !folded {
+		t.Fatal("script folded no APM: admission is not seeing input-origin events")
+	}
+	replayCapture(t, cap, want, ticks)
+}
+
+// TestScreenSizeInvertsViewport pins the inverse against the forward derivation, so
+// a margin change cannot desync the anchor from the geometry it describes
+func TestScreenSizeInvertsViewport(t *testing.T) {
+	a, err := NewHeadless(Config{Headless: true, ForceDefault: true,
+		Seed: fixtureSeed, Width: 100, Height: 40})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	for _, d := range [][2]int{{100, 40}, {73, 39}, {50, 22}, {120, 48}} {
+		a.Resize(d[0], d[1])
+		a.Tick(1)
+		if w, h := engine.ScreenSize(a.World().Resources.Config); w != d[0] || h != d[1] {
+			t.Fatalf("ScreenSize = %dx%d after resize to %dx%d", w, h, d[0], d[1])
+		}
+		if a.Context().Width != d[0] || a.Context().Height != d[1] {
+			t.Fatalf("context %dx%d after resize to %dx%d",
+				a.Context().Width, a.Context().Height, d[0], d[1])
+		}
+	}
+}
+
+// TestReplayResize replays a mid-run screen change in both crop modes. Crop
+// destroys out-of-bounds entities and resets the camera; no-crop preserves the map
+// and clamps the camera, so the two exercise different halves of HandleResizeLocked.
+func TestReplayResize(t *testing.T) {
+	for name, crop := range map[string]bool{"crop": true, "nocrop": false} {
+		t.Run(name, func(t *testing.T) {
+			replayAndCompare(t, func(t *testing.T, a *App) int {
+				r := newScriptRunner(t, a)
+				a.SetupLevel(60, 30, true, crop)
+				r.step(2, intentMotion(input.MotionRight, 8))
+				r.step(2, intentMotion(input.MotionDown, 6))
+
+				a.Resize(50, 22) // shrink
+				r.step(2)
+				if a.Context().Width != 50 || a.Context().Height != 22 {
+					t.Fatalf("resize not applied: %dx%d",
+						a.Context().Width, a.Context().Height)
+				}
+
+				a.Resize(90, 40) // grow
+				r.step(2, intentMotion(input.MotionRight, 4))
+				return r.done()
+			})
+		})
+	}
+}
+
+// TestResizeRejectsDegenerate asserts a collapsed report is dropped rather than
+// clamped, which is what keeps ScreenSize an exact inverse
+func TestResizeRejectsDegenerate(t *testing.T) {
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	a.Tick(1)
+	w, h := a.Context().Width, a.Context().Height
+	for _, d := range [][2]int{{0, 0}, {-4, 10},
+		{parameter.LeftMargin, 40},
+		{80, parameter.TopMargin + parameter.BottomMargin}} {
+		a.Resize(d[0], d[1])
+		if a.Context().Width != w || a.Context().Height != h {
+			t.Fatalf("degenerate resize %dx%d applied: now %dx%d",
+				d[0], d[1], a.Context().Width, a.Context().Height)
 		}
 	}
 }

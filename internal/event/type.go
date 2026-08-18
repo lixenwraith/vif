@@ -57,6 +57,8 @@ const (
 
 	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
 	EventLevelSetup
+	// EventScreenResize (ScreenResizePayload) signals terminal dimension change
+	EventScreenResize
 
 	// --- Audio ---
 

@@ -20,6 +20,7 @@ func (vlogSink) Record(r JournalRecord) {
 	vlog.Journal(SubJournalRecord,
 		"jseq", r.JSeq,
 		"seq", r.Seq,
+		"boundary", r.Boundary,
 		"origin", r.Origin.String(),
 		"ev", GetEventName(r.Type),
 		"payload", r.Payload,

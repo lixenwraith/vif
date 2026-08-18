@@ -78,6 +78,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventMetaStatusMessageRequest,
 		event.EventModeChanged,
 		event.EventLevelSetup,
+		event.EventScreenResize,
 		event.EventMetaDebugRequest,
 		event.EventMetaHelpRequest,
 		event.EventMetaAboutRequest,
@@ -112,6 +113,11 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
 			s.handleLevelSetup(payload)
+		}
+
+	case event.EventScreenResize:
+		if p, ok := ev.Payload.(*event.ScreenResizePayload); ok {
+			s.handleScreenResize(p)
 		}
 
 	case event.EventDebugFlowToggle:
@@ -270,6 +276,25 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	}
 
 	s.world.SetupLevel(width, height, payload.ClearEntities, cropOnResize)
+}
+
+// handleScreenResize applies terminal dimensions and reflows the geometry. Sole
+// writer of ctx.Width/Height, live and headless alike, so the main loop and this
+// handler cannot race over them.
+// A report that would leave the game area below one cell is dropped rather than
+// clamped: the clamp in updateGameArea is exactly where screen and viewport stop
+// being mutually derivable, which would desync ScreenSize and the journal anchor.
+func (s *MetaSystem) handleScreenResize(p *event.ScreenResizePayload) {
+	if p.Width <= parameter.LeftMargin ||
+		p.Height <= parameter.TopMargin+parameter.BottomMargin {
+		return
+	}
+	if p.Width == s.ctx.Width && p.Height == s.ctx.Height {
+		return
+	}
+	s.ctx.Width = p.Width
+	s.ctx.Height = p.Height
+	s.ctx.HandleResizeLocked()
 }
 
 // handleDebugRequest shows the debug overlay, pinned groups first

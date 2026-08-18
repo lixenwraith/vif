@@ -22,6 +22,14 @@ type LevelSetupPayload struct {
 	CropOnResize  bool `toml:"crop_on_resize"` // Explicit crop behavior (false = level mode)
 }
 
+// ScreenResizePayload carries new terminal dimensions. Terminal cells, not viewport
+// cells: the viewport is derived from these by subtracting the fixed margins, and
+// recording the derived value would hide a margin change behind an identical replay.
+type ScreenResizePayload struct {
+	Width  int `toml:"width"`  // Terminal columns
+	Height int `toml:"height"` // Terminal rows
+}
+
 // --- Audio ---
 
 // SoundRequestPayload contains the sound type to play

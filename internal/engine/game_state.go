@@ -78,11 +78,6 @@ func (gs *GameState) RecordActionWeight(w uint64) {
 	gs.PendingActions.Add(w)
 }
 
-// RecordAction admits one full-weight action (non-Router callers, if any)
-func (gs *GameState) RecordAction() {
-	gs.PendingActions.Add(parameter.APMWeightFull)
-}
-
 // GetAPM returns the current calculated APM
 func (gs *GameState) GetAPM() uint64 {
 	return gs.CurrentAPM.Load()
@@ -108,6 +103,13 @@ func (gs *GameState) SetMode(m core.GameMode) {
 func (gs *GameState) UpdateAPM(currentTime time.Time) {
 	gs.mu.Lock()
 	defer gs.mu.Unlock()
+
+	// First call anchors the window. Folding here would commit a bucket covering the
+	// interval since the zero time and leave every session one tick out of phase.
+	if gs.lastAPMTime.IsZero() {
+		gs.lastAPMTime = currentTime
+		return
+	}
 
 	// Only update if >= 1 second has passed
 	// This ensures buckets represent 1s of data, making the multiplier (12) correct

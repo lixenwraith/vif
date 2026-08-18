@@ -93,6 +93,15 @@ func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) {
 	a.scheduler.Settle()
 }
 
+// Resize records a terminal dimension change and settles the reflow. Headless has no
+// terminal, so this is its only resize path; a live run records the same event from
+// App.Loop, which is what makes a resize replayable.
+func (a *App) Resize(width, height int) {
+	a.ctx.PushEventOrigin(event.EventScreenResize,
+		&event.ScreenResizePayload{Width: width, Height: height}, event.OriginDebug)
+	a.scheduler.Settle()
+}
+
 // Reset requests a new game; purge additionally clears operator session state.
 // MetaSystem's synchronous cleanup lands here, the FSM reset at the next Tick,
 // matching the interactive ordering.

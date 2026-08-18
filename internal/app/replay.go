@@ -11,9 +11,10 @@
 // their events, and what must not be compared is declared once in denySim rather
 // than judged per event at the injection site.
 //
-// Settle granularity inside a tick boundary is not observable: the queue returns Seq
-// order however a batch was split, and no handler on the dispatch path accumulates
-// across passes. TestReplaySplitSettle is the tripwire for the first one that does.
+// Settle granularity is recorded, not assumed: a record carries the number of
+// completed between-tick settles, and the driver settles the same groups. A pass
+// can queue a system event that a later pass applies over a replayed one, so
+// merging two settles into one changes the result.
 //
 // Bit-exact reproduction is claimed for headless source runs only. A live run races
 // two scheduler goroutines against the main loop for the update mutex, so its journal
@@ -169,17 +170,23 @@ func (a *App) VerifyAnchor(an event.JournalAnchor) error {
 	return nil
 }
 
+// groupKey identifies one settle group: a tick and the settles completed within it
+type groupKey struct{ tick, boundary uint64 }
+
+func keyOf(r ReplayRecord) groupKey { return groupKey{r.Tick, r.Rec.Boundary} }
+
 // ReplayStats reports what a replay consumed
 type ReplayStats struct {
 	Records  int    // records offered
 	Injected int    // records pushed into the queue
+	Groups   int    // settle groups executed
 	Ticks    uint64 // ticks executed, i.e. the tick of the last record
 }
 
-// Replay injects records at their recorded tick, advancing the clock between
-// groups. Records must arrive in emission order; each tick group is sorted in
-// place by queue slot, which is dispatch order. The caller runs any trailing ticks
-// the last record misses.
+// Replay injects records at their recorded tick and settle boundary, advancing the
+// clock between ticks. Records must arrive in emission order; each group is sorted
+// in place by queue slot, which is dispatch order. The caller runs any trailing
+// ticks the last record misses.
 func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 	st := ReplayStats{Records: len(records)}
 	if !a.cfg.Headless {
@@ -189,19 +196,20 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 		return st, errors.New("replay: journaling a replay records a run that never happened")
 	}
 
+	var last groupKey
 	for i := 0; i < len(records); {
-		tick := records[i].Tick
-		if tick < st.Ticks {
-			return st, fmt.Errorf("replay: jseq %d stamped tick %d, already at tick %d",
-				records[i].Rec.JSeq, tick, st.Ticks)
+		k := keyOf(records[i])
+		if k.tick < st.Ticks || (k.tick == last.tick && k.boundary < last.boundary) {
+			return st, fmt.Errorf("replay: jseq %d stamped tick %d boundary %d, out of order",
+				records[i].Rec.JSeq, k.tick, k.boundary)
 		}
-		if tick > st.Ticks {
-			a.Tick(int(tick - st.Ticks))
-			st.Ticks = tick
+		if k.tick > st.Ticks {
+			a.Tick(int(k.tick - st.Ticks))
+			st.Ticks = k.tick
 		}
 
 		j := i
-		for j < len(records) && records[j].Tick == tick {
+		for j < len(records) && keyOf(records[j]) == k {
 			j++
 		}
 		group := records[i:j]
@@ -209,10 +217,11 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 
 		injected, err := a.injectGroup(group)
 		st.Injected += injected
+		st.Groups++
 		if err != nil {
 			return st, err
 		}
-		i = j
+		last, i = k, j
 	}
 	return st, nil
 }

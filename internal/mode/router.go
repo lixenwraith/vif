@@ -68,21 +68,9 @@ type Router struct {
 	applyMouseMode MouseModeApplier
 	mouseMode      mouseModeState
 
-	apm apmGate
-
 	// Look-up tables: OpCode → Function
 	motionLUT map[input.MotionOp]MotionFunc
 	charLUT   map[input.MotionOp]CharMotionFunc
-}
-
-// apmGate admits weighted actions into the music-APM signal
-// Future mouse/game-event weighting extends admit() — GameState stays unchanged
-type apmGate struct {
-	lastSig   uint64
-	lastAdmit time.Time
-	lastMouse time.Time
-	secAnchor int64
-	secBudget uint64
 }
 
 // NewRouter creates a router with LUTs initialized
@@ -184,7 +172,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	if r.ctx.GetStatusMessage() != "" {
 		r.ctx.SetStatusMessage("", 0, false)
 	}
-	r.recordAPM(intent)
 
 	// === Macro Context Interception ===
 
@@ -216,9 +203,15 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	case input.IntentToggleAudioCycle:
 		return r.handleToggleAudioCycle()
 	case input.IntentResize:
-		// Caller already holds the world lock
-		r.ctx.HandleResizeLocked()
+		// App.Loop owns resize: it holds the dimensions from the terminal event and
+		// records EventScreenResize. This path reached HandleResizeLocked with
+		// ctx.Width still stale, reflowing against the old size.
+		// TODO: drop IntentResize from internal/input once confirmed unemitted
 		return true
+	// case input.IntentResize:
+	// 	// Caller already holds the world lock
+	// 	r.ctx.HandleResizeLocked()
+	// 	return true
 
 	// Normal mode navigation
 	case input.IntentMotion:
@@ -322,53 +315,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 	}
 
 	return true
-}
-
-// intentSig collapses an intent to a repeat-detection signature
-func intentSig(in *input.Intent) uint64 {
-	return uint64(in.Type)<<48 ^ uint64(in.Motion)<<32 ^ uint64(in.Special)<<24 ^ uint64(uint32(in.Char))
-}
-
-// recordAPM is the admission point for APM, which exists to drive adaptive music.
-// Gates are wall-clock: they measure human effort. GameState buckets the result in
-// game time, so a slowed simulation reports proportionally higher APM.
-// Input while paused is discarded: the world is not advancing, so it is not gameplay.
-func (r *Router) recordAPM(intent *input.Intent) {
-	if intent.MacroPlayback || r.ctx.TimeCtl.IsPaused() {
-		return
-	}
-	now := r.ctx.TimeCtl.RealTime()
-
-	switch intent.Type {
-	case input.IntentMouseMove, input.IntentMouseDrag, input.IntentMouseWheelMove:
-		if now.Sub(r.apm.lastMouse) < parameter.MouseAPMSampleInterval {
-			return
-		}
-		r.apm.lastMouse = now
-	}
-
-	sig := intentSig(intent)
-	w := uint64(parameter.APMWeightFull)
-	if sig == r.apm.lastSig {
-		if now.Sub(r.apm.lastAdmit) < parameter.APMRepeatWindow {
-			return // 4.b: auto-repeat / spam
-		}
-		w = parameter.APMWeightRepeat
-	}
-
-	sec := now.Unix()
-	if sec != r.apm.secAnchor {
-		r.apm.secAnchor, r.apm.secBudget = sec, 0
-	}
-	if r.apm.secBudget+w > parameter.APMMaxPerSecond {
-		w = parameter.APMMaxPerSecond - r.apm.secBudget
-	}
-	r.apm.lastSig, r.apm.lastAdmit = sig, now
-	if w == 0 {
-		return
-	}
-	r.apm.secBudget += w
-	r.ctx.State.RecordActionWeight(w)
 }
 
 // --- System Handlers ---
@@ -761,10 +707,7 @@ func (r *Router) handleSearchChar(char rune) {
 
 func (r *Router) handleCommandChar(char rune) {
 	text := []rune(r.ctx.GetCommandText())
-	pos := r.ctx.GetCommandCursorPos()
-	if pos > len(text) {
-		pos = len(text)
-	}
+	pos := min(r.ctx.GetCommandCursorPos(), len(text))
 
 	newText := make([]rune, 0, len(text)+1)
 	newText = append(newText, text[:pos]...)

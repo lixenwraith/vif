@@ -73,10 +73,7 @@ func (a *App) Loop() error {
 			}
 
 			if ev.Type == terminal.EventResize {
-				a.ctx.Width = ev.Width
-				a.ctx.Height = ev.Height
-				a.ctx.HandleResize()
-				a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
+				a.handleResize(ev.Width, ev.Height)
 			}
 
 		case <-inputTicker.C:
@@ -108,6 +105,17 @@ func (a *App) handleIntent(intent *input.Intent) bool {
 		})
 	})
 	return cont
+}
+
+// handleResize records the terminal change and lets the handler apply it. The
+// dispatch is synchronous so the orchestrator resizes against dimensions the
+// handler has already written; the render pipeline is main-loop state, so it stays
+// here rather than in the handler.
+func (a *App) handleResize(width, height int) {
+	a.ctx.PushEventOrigin(event.EventScreenResize,
+		&event.ScreenResizePayload{Width: width, Height: height}, event.OriginInput)
+	a.scheduler.DispatchEventsImmediately()
+	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
 }
 
 // frame advances one render frame; false means the player quit

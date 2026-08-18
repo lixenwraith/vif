@@ -43,7 +43,9 @@ type GameContext struct {
 
 	// === Main-Loop Exclusive ===
 
-	// Accessed only from main goroutine (input, resize, render), no sync required
+	// Terminal geometry, written only by MetaSystem's EventScreenResize handler
+	// under the world lock. Every reader holds the same lock: HandleResizeLocked,
+	// SnapshotContext, and the RenderContext build in App.frame.
 
 	Width, Height            int // Terminal dimensions
 	GameXOffset, GameYOffset int // Game area offset from terminal origin
@@ -198,14 +200,18 @@ func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	return gameWidth, gameHeight
 }
 
-// HandleResize handles terminal resize events (acquires world lock)
-// Direct-call path: main loop terminal.EventResize
-func (ctx *GameContext) HandleResize() {
-	ctx.World.RunSafe(ctx.HandleResizeLocked)
+// ScreenSize inverts updateGameArea: terminal dimensions recovered from the viewport
+// the world already carries, for world-scoped consumers holding no GameContext — the
+// journal anchor. Exact for every size the resize path admits, which rejects the
+// degenerate ones updateGameArea would clamp to 1.
+func ScreenSize(cfg *ConfigResource) (width, height int) {
+	return cfg.ViewportWidth + parameter.LeftMargin,
+		cfg.ViewportHeight + parameter.TopMargin + parameter.BottomMargin
 }
 
-// HandleResizeLocked is the resize body; caller MUST hold updateMutex
-// Router path: Handle runs under the lock, so IntentResize calls this
+// HandleResizeLocked applies terminal dimensions already written to the context and
+// reflows viewport, map, grid, camera and cursor. Caller MUST hold updateMutex;
+// MetaSystem's EventScreenResize handler is the only entry point.
 func (ctx *GameContext) HandleResizeLocked() {
 	// New Height and Width already set in context by main
 	viewportWidth, viewportHeight := ctx.updateGameArea()

@@ -433,6 +433,7 @@ func (cs *ClockScheduler) Settle() {
 	cs.world.RunSafe(func() {
 		cs.dispatchAndProcessEvents("settle")
 	})
+	cs.world.Resources.Event.Queue.Journal().NextBoundary()
 }
 
 // Stop halts the scheduler loop
@@ -697,6 +698,10 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 		brkEv = bs.Event
 	}
 
+	// APM admission; input while paused is not gameplay
+	apmOpen := !cs.ctl.IsPaused()
+	var apmWeight uint64
+
 	var nFSM, nSys, nDead int
 	for _, ev := range eventsList {
 		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
@@ -727,12 +732,20 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 			h.HandleEvent(ev)
 		}
 
+		if apmOpen && ev.Origin == event.OriginInput && apmAdmits(ev.Type) {
+			apmWeight += parameter.APMWeightFull
+		}
+
 		if brkEv != 0 && ev.Type == brkEv {
 			if bs := cs.ctl.Trip(StepEvent, "", ev.Type); bs != nil {
 				cs.breakHit(bs, event.GetEventName(ev.Type))
 			}
 			brkEv = 0
 		}
+	}
+
+	if apmWeight > 0 {
+		cs.world.Resources.Game.State.RecordActionWeight(apmWeight)
 	}
 
 	if summary {
@@ -747,6 +760,12 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 	cs.statEvDispatches.Add(int64(len(eventsList)))
 	cs.statEvDead.Add(int64(nDead))
 	return len(eventsList)
+}
+
+// apmAdmits reports whether an input-origin event counts as player effort.
+// A screen resize carries OriginInput so a replay reflows, not because the player acted.
+func apmAdmits(t event.EventType) bool {
+	return t != event.EventScreenResize
 }
 
 // dispatchAndProcessEvents settles pending events with iteration cap
@@ -800,7 +819,8 @@ func (cs *ClockScheduler) executeReset() {
 	//    next game's streams differ while staying a function of the root seed
 	session := cs.world.Resources.Rand.NextSession()
 	vlog.Info("app", "msg", "rng session", "session", session)
-	cs.world.Resources.Event.Queue.Journal().Anchor(session, cs.ctl.Scale().String())
+	w, h := ScreenSize(cs.world.Resources.Config)
+	cs.world.Resources.Event.Queue.Journal().Anchor(session, cs.ctl.Scale().String(), w, h)
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
@@ -808,6 +828,7 @@ func (cs *ClockScheduler) DispatchEventsImmediately() {
 	cs.world.RunSafe(func() {
 		cs.dispatchAndProcessEvents("input")
 	})
+	cs.world.Resources.Event.Queue.Journal().NextBoundary()
 }
 
 // processTick executes one clock cycle
@@ -819,13 +840,15 @@ func (cs *ClockScheduler) processTick() {
 	// Stamp the tick being executed; the counter is committed at the end of
 	// this function, so records inside would otherwise carry the previous one
 	vlog.SetTick(cs.world.Resources.Game.State.GetGameTicks() + 1)
+	cs.world.Resources.Event.Queue.Journal().ResetBoundary()
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
 	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
 
 	var (
-		entityCount int
-		tickTime    time.Time // this tick's game instant, read once under the lock
+		entityCount      int
+		tickTime         time.Time // this tick's game instant, read once under the lock
+		screenW, screenH int       // terminal dims for the anchor, derived under the lock
 	)
 
 	cs.world.RunSafe(func() {
@@ -870,6 +893,7 @@ func (cs *ClockScheduler) processTick() {
 		// Position has no internal locking; CountEntities outside this
 		// closure races removeAt on the event-loop/main goroutines
 		entityCount = cs.world.Positions.CountEntities()
+		screenW, screenH = ScreenSize(cs.world.Resources.Config)
 	})
 
 	// Lock-free / internally synchronized paths only below this line
@@ -913,6 +937,6 @@ func (cs *ClockScheduler) processTick() {
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
 		cs.world.Resources.Event.Queue.Journal().
-			Anchor(cs.world.Resources.Rand.Session(), cs.ctl.Scale().String())
+			Anchor(cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(), screenW, screenH)
 	}
 }
