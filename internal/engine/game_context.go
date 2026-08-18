@@ -209,6 +209,12 @@ func ScreenSize(cfg *ConfigResource) (width, height int) {
 		cfg.ViewportHeight + parameter.TopMargin + parameter.BottomMargin
 }
 
+// ViewportFits reports whether terminal dimensions leave a game area of at least one
+// cell, which is exactly the range over which ScreenSize inverts updateGameArea
+func ViewportFits(width, height int) bool {
+	return width > parameter.LeftMargin && height > parameter.TopMargin+parameter.BottomMargin
+}
+
 // HandleResizeLocked applies terminal dimensions already written to the context and
 // reflows viewport, map, grid, camera and cursor. Caller MUST hold updateMutex;
 // MetaSystem's EventScreenResize handler is the only entry point.

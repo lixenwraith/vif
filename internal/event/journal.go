@@ -8,16 +8,25 @@ import (
 )
 
 // JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 3
+const JournalSchema = 4
+
+// Stamp locates a record in the run/tick/settle lattice. Run advances on game
+// reset, tick on each simulation step, boundary on each completed settle group.
+type Stamp struct {
+	Run      uint64
+	Tick     uint64
+	Boundary uint64
+}
 
 // JournalRecord is one replayable event, produced synchronously at push time.
 // Payload is TOML text that decodes into the registry prototype for Type.
-// Run and tick are absent: the sink stamps them from its own correlation source.
 type JournalRecord struct {
 	Payload   string
 	EncodeErr string // non-empty when Payload could not be produced
 	JSeq      uint64 // dense record counter; a gap is exactly one lost record
 	Seq       uint64 // queue slot, legitimately sparse in the journal
+	Run       uint64 // reset generation; the tick counter restarts in each
+	Tick      uint64 // completed ticks in this run
 	Boundary  uint64 // completed between-tick settles this tick
 	Type      EventType
 	Origin    Origin
@@ -35,6 +44,13 @@ type JournalAnchor struct {
 	Seed    uint64
 	Session uint64 // RNG session counter; streams derive from it, so replay must match
 	JSeq    uint64
+
+	// Position at emission, and the position the journal opened at. A non-zero
+	// start marks a mid-run capture, which needs a world snapshot to replay.
+	Run       uint64
+	Tick      uint64
+	StartRun  uint64
+	StartTick uint64
 
 	// Corpus fingerprint: a replay compares these against its own telemetry, since
 	// a resolved path proves which corpus was asked for, not which one loaded
@@ -67,11 +83,10 @@ func AnchorDue(tick uint64) bool { return tick%AnchorIntervalTicks == 0 }
 // Journal captures non-system events for replay. One per queue, so concurrent
 // harness runs in a single process cannot share a counter.
 type Journal struct {
-	sink     JournalSink // immutable after NewJournal
-	seq      atomic.Uint64
-	encFail  atomic.Uint64
-	boundary atomic.Uint64
-	anchor   atomic.Pointer[JournalAnchor] // run-invariant template
+	sink    JournalSink // immutable after NewJournal
+	seq     atomic.Uint64
+	encFail atomic.Uint64
+	anchor  atomic.Pointer[JournalAnchor] // run-invariant template
 }
 
 // NewJournal binds a sink; a nil sink yields a nil Journal, which disables capture
@@ -90,20 +105,22 @@ func (j *Journal) Stats() (emitted, encodeFailed uint64) {
 	return j.seq.Load(), j.encFail.Load()
 }
 
-// SetAnchor installs the run-invariant anchor fields and emits one immediately
-func (j *Journal) SetAnchor(a JournalAnchor) {
+// SetAnchor installs the run-invariant anchor fields and emits one immediately.
+// start is the stamp the journal opened at; a non-zero one marks a mid-run capture.
+func (j *Journal) SetAnchor(a JournalAnchor, start Stamp) {
 	if j == nil {
 		return
 	}
 	a.Schema = JournalSchema
+	a.StartRun, a.StartTick = start.Run, start.Tick
 	j.anchor.Store(&a)
-	j.Anchor(a.Session, a.Speed, a.Width, a.Height)
+	j.Anchor(start, a.Session, a.Speed, a.Width, a.Height)
 }
 
 // Anchor re-emits the template with the fields only the engine can supply.
-// Dimensions are live rather than run-invariant: a file rotated after a resize must
-// describe the geometry its records were produced under.
-func (j *Journal) Anchor(session uint64, speed string, width, height int) {
+// Position and dimensions are live: a file rotated after a resize or a reset must
+// describe the geometry and generation its records were produced under.
+func (j *Journal) Anchor(st Stamp, session uint64, speed string, width, height int) {
 	if j == nil {
 		return
 	}
@@ -112,6 +129,7 @@ func (j *Journal) Anchor(session uint64, speed string, width, height int) {
 		return
 	}
 	a := *p
+	a.Run, a.Tick = st.Run, st.Tick
 	a.Session = session
 	a.Speed = speed
 	a.Width = width
@@ -122,7 +140,7 @@ func (j *Journal) Anchor(session uint64, speed string, width, height int) {
 
 // record emits one event against the producer's own copy, before the queue slot
 // is published; after that a handler may recycle a pooled payload.
-func (j *Journal) record(ev *GameEvent) {
+func (j *Journal) record(ev *GameEvent, st Stamp) {
 	payload, encErr := encodePayload(ev.Type, ev.Payload)
 	if encErr != "" {
 		j.encFail.Add(1)
@@ -132,11 +150,12 @@ func (j *Journal) record(ev *GameEvent) {
 		EncodeErr: encErr,
 		JSeq:      j.seq.Add(1),
 		Seq:       ev.Seq,
-		Boundary:  j.boundary.Load(),
+		Run:       st.Run,
+		Tick:      st.Tick,
+		Boundary:  st.Boundary,
 		Type:      ev.Type,
 		Origin:    ev.Origin,
 	})
-
 }
 
 // encodePayload marshals a payload to TOML text. Only the registry prototype's
@@ -161,19 +180,4 @@ func encodePayload(et EventType, p any) (text, encErr string) {
 		return "", err.Error()
 	}
 	return string(b), ""
-}
-
-// ResetBoundary restarts the settle counter at the top of a tick
-func (j *Journal) ResetBoundary() {
-	if j != nil {
-		j.boundary.Store(0)
-	}
-}
-
-// NextBoundary closes the current settle group. A replay must settle the same
-// groups: a pass can queue an event that a later pass applies over a replayed one.
-func (j *Journal) NextBoundary() {
-	if j != nil {
-		j.boundary.Add(1)
-	}
 }

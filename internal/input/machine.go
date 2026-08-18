@@ -69,7 +69,7 @@ func (m *Machine) Reset() {
 func (m *Machine) Process(ev terminal.Event) *Intent {
 	switch ev.Type {
 	case terminal.EventResize:
-		return &Intent{Type: IntentResize}
+		return nil // App.Loop records EventScreenResize; the router has no resize path // TODO: refactor/remove from input
 	case terminal.EventKey:
 		return m.processKey(ev)
 	case terminal.EventMouse:

@@ -4,6 +4,11 @@
 // ManualClock advanced only by Tick. Nothing runs on another goroutine, so a
 // run is a pure function of its seed, its config, and the injected intent
 // sequence. Close is the caller's responsibility.
+//
+// Concurrent Apps in one process still share four process-wide values, none of
+// which reaches a simulation snapshot: the status recorder trigger hook, the
+// navigation debug pointers in internal/system, help's key table, and vlog's
+// correlation stamp. Run harness Apps sequentially until those are scoped.
 package app
 
 import (

@@ -202,16 +202,6 @@ func (r *Router) Handle(intent *input.Intent) bool {
 		return r.handleEscape()
 	case input.IntentToggleAudioCycle:
 		return r.handleToggleAudioCycle()
-	case input.IntentResize:
-		// App.Loop owns resize: it holds the dimensions from the terminal event and
-		// records EventScreenResize. This path reached HandleResizeLocked with
-		// ctx.Width still stale, reflowing against the old size.
-		// TODO: drop IntentResize from internal/input once confirmed unemitted
-		return true
-	// case input.IntentResize:
-	// 	// Caller already holds the world lock
-	// 	r.ctx.HandleResizeLocked()
-	// 	return true
 
 	// Normal mode navigation
 	case input.IntentMotion:

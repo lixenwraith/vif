@@ -10,7 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 // fixtureSeed pins the perturbation test so CI is reproducible
@@ -65,9 +64,6 @@ func newScriptRunner(t *testing.T, a *App) *scriptRunner {
 	t.Helper()
 	r := &scriptRunner{t: t, a: a}
 	r.step(1) // warmup: the tick-1 APM fold commits an empty bucket
-	if _, tick, _ := vlog.Stamp(); tick == 0 {
-		t.Skip("build carries no vlog correlation stamp; records cannot be tick-aligned")
-	}
 	return r
 }
 
@@ -77,7 +73,9 @@ func (r *scriptRunner) step(ticks int, intents ...*input.Intent) {
 		r.t.Fatal("script intent quit the game")
 	}
 	r.a.Tick(ticks)
-	r.ticks += ticks
+	// Read the counter rather than accumulate: a reset re-bases it, and the
+	// journal stamps ticks per run
+	r.ticks = int(r.a.World().Resources.Game.State.GetGameTicks())
 }
 
 // done reports the tick total. No APM cap any more: admission moved to the event
@@ -429,6 +427,35 @@ func TestVerifyAnchorRejectsMismatch(t *testing.T) {
 	}
 }
 
+// TestJournalStampRebasesOnReset pins the invariant the replay driver depends on:
+// the run advances exactly when the tick counter is re-based
+func TestJournalStampRebasesOnReset(t *testing.T) {
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	q := a.World().Resources.Event.Queue
+	a.Tick(3)
+	if s := q.Stamp(); s.Run != 0 || s.Tick != 3 {
+		t.Fatalf("stamp %+v before reset, want run 0 tick 3", s)
+	}
+
+	a.Reset(false)
+	if s := q.Stamp(); s.Run != 1 || s.Tick != 0 {
+		t.Fatalf("stamp %+v after reset settle, want run 1 tick 0", s)
+	}
+	if n := a.World().Resources.Game.State.GetGameTicks(); n != 0 {
+		t.Fatalf("game ticks %d after reset, want 0", n)
+	}
+
+	a.Tick(2)
+	if s := q.Stamp(); s.Run != 1 || s.Tick != 2 {
+		t.Fatalf("stamp %+v after two ticks in run 1", s)
+	}
+}
+
 // runLongScript crosses an APM fold, which intent-side accounting could not replay.
 // One second of game time is 20 ticks; the fold lands inside the run.
 func runLongScript(t *testing.T, a *App) int {
@@ -536,3 +563,37 @@ func TestResizeRejectsDegenerate(t *testing.T) {
 		}
 	}
 }
+
+// runResetScript crosses a game reset, which restarts the tick counter: the run
+// marker is the only thing that keeps the record stream ordered across it.
+func runResetScript(t *testing.T, a *App) int {
+	t.Helper()
+	r := newScriptRunner(t, a)
+
+	r.step(1, intentMotion(input.MotionRight, 6))
+	r.step(1, intentModeSwitch(input.ModeTargetInsert))
+	r.step(1, intentTextChar('a'))
+	r.step(1, intentEscape())
+
+	// ':new' is OriginCommand, so the reset request is itself journaled
+	r.step(1, intentModeSwitch(input.ModeTargetCommand))
+	r.step(2, intentCommandBody("new")...)
+	if got := a.World().Resources.Event.Queue.Stamp().Run; got != 1 {
+		t.Fatalf("run %d after :new, want 1", got)
+	}
+
+	r.step(2, intentMotion(input.MotionDown, 2))
+	r.step(1, intentMotion(input.MotionRight, 3))
+
+	// A second reset, from the debug path, so the script covers two generations
+	a.Reset(false)
+	r.step(2, intentMotion(input.MotionRight, 4))
+	if got := a.World().Resources.Event.Queue.Stamp().Run; got != 2 {
+		t.Fatalf("run %d after Reset, want 2", got)
+	}
+	return r.done()
+}
+
+// TestReplayAcrossReset asserts a journal spanning game resets replays; the tick
+// counter restarts in each run, so a run-blind driver rejects the stream outright
+func TestReplayAcrossReset(t *testing.T) { replayAndCompare(t, runResetScript) }

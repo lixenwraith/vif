@@ -25,7 +25,7 @@ func Check(cfg Config, w io.Writer) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
-	event.InitRegistry()
+	event.EnsureRegistry()
 
 	if err := checkFSM(cfg, w); err != nil {
 		return err
@@ -117,7 +117,7 @@ func checkContent(cfg Config, w io.Writer) error {
 // Schema writes the machine schema as JSON for the map editor
 // Requires no terminal, services, or World instance
 func Schema(w io.Writer) error {
-	event.InitRegistry()
+	event.EnsureRegistry()
 
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)

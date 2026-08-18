@@ -398,6 +398,9 @@ func (cs *ClockScheduler) Start() {
 // Prepare closes the system and metric sets from a harness that drives ticks
 // or settles events before the first RunTicks call. Idempotent.
 func (cs *ClockScheduler) Prepare() {
+	if cs.world.Resources.Status.Frozen() {
+		return
+	}
 	cs.world.Seal() // no system registration once the goroutines are live
 	cs.world.Resources.Status.Freeze()
 }
@@ -430,10 +433,15 @@ func (cs *ClockScheduler) drainReset() {
 // input so its effects land before the next tick. Must not be called from a
 // path already holding the world lock.
 func (cs *ClockScheduler) Settle() {
-	cs.world.RunSafe(func() {
-		cs.dispatchAndProcessEvents("settle")
-	})
-	cs.world.Resources.Event.Queue.Journal().NextBoundary()
+	cs.world.RunSafe(func() { cs.settleLocked("settle") })
+}
+
+// settleLocked dispatches pending events and closes the settle group when it
+// consumed any. Caller MUST hold the world lock.
+func (cs *ClockScheduler) settleLocked(src string) {
+	if cs.dispatchAndProcessEvents(src) > 0 {
+		cs.world.Resources.Event.Queue.NextBoundary()
+	}
 }
 
 // Stop halts the scheduler loop
@@ -652,7 +660,9 @@ func (cs *ClockScheduler) eventLoop() {
 
 			// Attempt non-blocking lock
 			if cs.world.TryLock() {
-				cs.dispatchOnePass("loop")
+				if cs.dispatchOnePass("loop") > 0 {
+					cs.world.Resources.Event.Queue.NextBoundary()
+				}
 				cs.world.Unlock()
 				backoffCount = 0
 				continue
@@ -669,7 +679,9 @@ func (cs *ClockScheduler) eventLoop() {
 					return
 				}
 				cs.world.Lock()
-				cs.dispatchOnePass("loop")
+				if cs.dispatchOnePass("loop") > 0 {
+					cs.world.Resources.Event.Queue.NextBoundary()
+				}
 				cs.world.Unlock()
 				backoffCount = 0
 			}
@@ -768,20 +780,22 @@ func apmAdmits(t event.EventType) bool {
 	return t != event.EventScreenResize
 }
 
-// dispatchAndProcessEvents settles pending events with iteration cap
-// Used by reset path where immediate settling is required
-func (cs *ClockScheduler) dispatchAndProcessEvents(src string) {
+// dispatchAndProcessEvents settles pending events with an iteration cap and
+// returns how many were dispatched
+func (cs *ClockScheduler) dispatchAndProcessEvents(src string) int {
+	total := 0
 	for range parameter.EventLoopIterations {
-		if cs.dispatchOnePass(src) == 0 {
-			return
+		n := cs.dispatchOnePass(src)
+		total += n
+		if n == 0 {
+			break
 		}
 	}
+	return total
 }
 
 // executeReset performs FSM reset while scheduler mutex is held
 func (cs *ClockScheduler) executeReset() {
-	// New session: correlation stamp for every record below
-	vlog.NextRun()
 	vlog.Info("fsm", "msg", "session reset")
 
 	// 1. Synchronize with world lock
@@ -812,7 +826,8 @@ func (cs *ClockScheduler) executeReset() {
 	//    together; settled below while the world lock is still held.
 	cs.world.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: false})
 
-	// 7. Settle FSM-reset and unpause events before releasing the lock
+	// 7. Settle FSM-reset and unpause events before releasing the lock. No boundary
+	//    bump: this is a phase of the reset, reached identically by a run and its replay.
 	cs.dispatchAndProcessEvents("reset")
 
 	// 8. Systems re-Init on the reset dispatch that preceded this call, so the
@@ -820,15 +835,12 @@ func (cs *ClockScheduler) executeReset() {
 	session := cs.world.Resources.Rand.NextSession()
 	vlog.Info("app", "msg", "rng session", "session", session)
 	w, h := ScreenSize(cs.world.Resources.Config)
-	cs.world.Resources.Event.Queue.Journal().Anchor(session, cs.ctl.Scale().String(), w, h)
+	cs.world.Resources.Event.Queue.AnchorJournal(session, cs.ctl.Scale().String(), w, h)
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
 func (cs *ClockScheduler) DispatchEventsImmediately() {
-	cs.world.RunSafe(func() {
-		cs.dispatchAndProcessEvents("input")
-	})
-	cs.world.Resources.Event.Queue.Journal().NextBoundary()
+	cs.world.RunSafe(func() { cs.settleLocked("input") })
 }
 
 // processTick executes one clock cycle
@@ -836,11 +848,6 @@ func (cs *ClockScheduler) processTick() {
 	if cs.ctl.IsPaused() && !cs.stepping {
 		return
 	}
-
-	// Stamp the tick being executed; the counter is committed at the end of
-	// this function, so records inside would otherwise carry the previous one
-	vlog.SetTick(cs.world.Resources.Game.State.GetGameTicks() + 1)
-	cs.world.Resources.Event.Queue.Journal().ResetBoundary()
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
 	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
@@ -853,6 +860,12 @@ func (cs *ClockScheduler) processTick() {
 
 	cs.world.RunSafe(func() {
 		tickTime = cs.ctl.Now()
+
+		// Stamp under the lock: a producer must not observe the new tick before
+		// the tick body it belongs to has started
+		tick := cs.world.Resources.Game.State.GetGameTicks() + 1
+		vlog.SetTick(tick)
+		cs.world.Resources.Event.Queue.BeginTick(tick)
 
 		// 1. Sync Time
 		cs.world.Resources.Time.Update(
@@ -936,7 +949,7 @@ func (cs *ClockScheduler) processTick() {
 
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
-		cs.world.Resources.Event.Queue.Journal().
-			Anchor(cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(), screenW, screenH)
+		cs.world.Resources.Event.Queue.AnchorJournal(
+			cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(), screenW, screenH)
 	}
 }

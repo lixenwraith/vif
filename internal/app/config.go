@@ -7,7 +7,6 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -15,13 +14,6 @@ import (
 const (
 	HeadlessDefaultWidth  = 80
 	HeadlessDefaultHeight = 24
-)
-
-// Smallest game area a headless run accepts; below it spawn placement and
-// cursor exclusion degenerate to a single cell
-const (
-	HeadlessMinViewportWidth  = 20
-	HeadlessMinViewportHeight = 5
 )
 
 // Config is the resolved startup configuration
@@ -132,11 +124,9 @@ func (c Config) validateHeadless() error {
 		return errors.New("headless: the manual clock is driven by Tick, not by a rate")
 	}
 
-	vw := c.Width - parameter.LeftMargin
-	vh := c.Height - parameter.TopMargin - parameter.BottomMargin
-	if vw < HeadlessMinViewportWidth || vh < HeadlessMinViewportHeight {
-		return fmt.Errorf("headless: %dx%d yields a %dx%d viewport, below the %dx%d minimum",
-			c.Width, c.Height, vw, vh, HeadlessMinViewportWidth, HeadlessMinViewportHeight)
+	// Matches what MetaSystem admits, so a live journal always rebuilds a valid config
+	if !engine.ViewportFits(c.Width, c.Height) {
+		return fmt.Errorf("headless: %dx%d leaves no game area", c.Width, c.Height)
 	}
 	return nil
 }

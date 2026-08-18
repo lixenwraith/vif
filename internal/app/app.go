@@ -110,7 +110,7 @@ func (a *App) init() error {
 // registers content only, so no terminal, audio or network goroutine exists.
 func (a *App) initServices() error {
 	// Event registry backs FSM trigger resolution and :emit; precedes FSM load
-	event.InitRegistry()
+	event.EnsureRegistry()
 
 	if !a.cfg.Headless {
 		colorMode := terminal.DetectColorMode()
@@ -280,13 +280,18 @@ func (a *App) initJournal() error {
 		sink = event.VlogSink()
 	}
 
+	q := a.world.Resources.Event.Queue
 	j := event.NewJournal(sink)
-	a.world.Resources.Event.Queue.SetJournal(j)
+	q.SetJournal(j)
+	j.SetAnchor(a.buildAnchor(), q.Stamp())
+	return nil
+}
 
-	// The corpus fingerprint reads the telemetry ContentService published during
-	// initWorld, so the anchor and a replay's verification compare one source
+// buildAnchor describes what a replay must reproduce. Reads the telemetry
+// ContentService published during initWorld, so anchor and verification share a source.
+func (a *App) buildAnchor() event.JournalAnchor {
 	reg := a.world.Resources.Status
-	j.SetAnchor(event.JournalAnchor{
+	return event.JournalAnchor{
 		Speed:         a.ctx.TimeCtl.Scale().String(),
 		ConfigID:      resolveConfigID(a.cfg),
 		ContentID:     reg.Strings.Get("content.source").Load(),
@@ -299,8 +304,7 @@ func (a *App) initJournal() error {
 		TickInterval:  int64(parameter.GameUpdateInterval),
 		Width:         a.ctx.Width,
 		Height:        a.ctx.Height,
-	})
-	return nil
+	}
 }
 
 // Close stops the scheduler before the services it depends on

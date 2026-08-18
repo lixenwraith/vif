@@ -21,12 +21,12 @@ type EventQueue struct {
 
 	overwritten atomic.Uint64           // Events evicted unread by producer overrun
 	journal     atomic.Pointer[Journal] // nil = journaling off
+	stamp       atomic.Pointer[Stamp]   // record position; advanced under the world lock
 }
 
 func NewEventQueue() *EventQueue {
 	eq := &EventQueue{}
-	eq.head.Store(0)
-	eq.tail.Store(0)
+	eq.stamp.Store(&Stamp{})
 	return eq
 }
 
@@ -49,7 +49,7 @@ func (eq *EventQueue) Push(event GameEvent) {
 			// hot path to one register test.
 			if event.Origin != OriginSystem {
 				if j := eq.journal.Load(); j != nil {
-					j.record(&event)
+					j.record(&event, *eq.stamp.Load())
 				}
 			}
 
@@ -136,3 +136,34 @@ func (eq *EventQueue) SetJournal(j *Journal) { eq.journal.Store(j) }
 
 // Journal returns the installed journal, nil when disabled
 func (eq *EventQueue) Journal() *Journal { return eq.journal.Load() }
+
+// Stamp returns the current record position. The counters advance whether or not
+// a journal is installed, so one attached mid-run stamps correctly from its first record.
+func (eq *EventQueue) Stamp() Stamp { return *eq.stamp.Load() }
+
+// NextRun opens the next run at tick 0. Called where the tick counter is re-based,
+// so the two can never disagree. Caller MUST hold the world lock.
+func (eq *EventQueue) NextRun() uint64 {
+	run := eq.stamp.Load().Run + 1
+	eq.stamp.Store(&Stamp{Run: run})
+	return run
+}
+
+// BeginTick opens tick t at settle group 0. Caller MUST hold the world lock.
+func (eq *EventQueue) BeginTick(tick uint64) {
+	eq.stamp.Store(&Stamp{Run: eq.stamp.Load().Run, Tick: tick})
+}
+
+// NextBoundary closes the current settle group; a replay settles the same groups.
+// Caller MUST hold the world lock.
+func (eq *EventQueue) NextBoundary() {
+	s := eq.stamp.Load()
+	eq.stamp.Store(&Stamp{Run: s.Run, Tick: s.Tick, Boundary: s.Boundary + 1})
+}
+
+// AnchorJournal re-emits the anchor at the current stamp; a no-op when journaling is off
+func (eq *EventQueue) AnchorJournal(session uint64, speed string, width, height int) {
+	if j := eq.journal.Load(); j != nil {
+		j.Anchor(*eq.stamp.Load(), session, speed, width, height)
+	}
+}

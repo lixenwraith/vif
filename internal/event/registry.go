@@ -3,6 +3,7 @@ package event
 import (
 	"reflect"
 	"strings"
+	"sync"
 )
 
 var (
@@ -77,3 +78,9 @@ func HasPayload(et EventType) bool {
 	_, ok := typeToPayload[et]
 	return ok
 }
+
+// EnsureRegistry initialises the event registry exactly once, safe against
+// concurrent App construction. InitRegistry is generated and carries no guard.
+func EnsureRegistry() { registryOnce.Do(InitRegistry) }
+
+var registryOnce sync.Once

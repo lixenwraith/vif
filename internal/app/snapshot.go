@@ -26,7 +26,7 @@ import (
 // contention in the live event loop; rec and stat are telemetry about telemetry,
 // paced by trigger timing and registration order.
 // Keys, not prefixes: the engine group mixes these with simulation counters
-// (ticks, apm, music_apm, tick_slips, game_elapsed_ms).
+// (ticks, apm, music_apm, tick_slips, time.game_elapsed_ms).
 var denySim = map[string]bool{
 	"engine.paused":     true,
 	"engine.speed":      true,

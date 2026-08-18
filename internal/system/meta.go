@@ -218,7 +218,12 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	s.ctx.State.Reset()
 	s.resetKills()
 
-	// 4. Config reset (map dimensions to viewport)
+	// 4. Journal run advances with the tick counter it re-bases; both are world-lock state,
+	// so no producer can observe one without the other
+	run := s.world.Resources.Event.Queue.NextRun()
+	vlog.SetRun(run)
+
+	// 5. Config reset (map dimensions to viewport)
 	config := s.ctx.World.Resources.Config
 	config.MapWidth = config.ViewportWidth
 	config.MapHeight = config.ViewportHeight
@@ -226,20 +231,20 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	config.CameraY = 0
 	config.CropOnResize = true
 
-	// 5. Cursor recreation
+	// 6. Cursor recreation
 	s.ctx.World.CreateCursorEntity()
 
-	// 6. Reset mode and status
+	// 7. Reset mode and status
 	s.ctx.SetMode(core.ModeNormal)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
 	s.ctx.SetStatusMessage("", 0, false)
 	s.ctx.SetOverlayContent(nil)
 
-	// 7. Cancel pending step requests; the rate itself is operator-owned and survives
+	// 8. Cancel pending step requests; the rate itself is operator-owned and survives
 	s.ctx.TimeCtl.CancelBreak()
 
-	// 8. Signal FSM reset - Non-blocking
+	// 9. Signal FSM reset - Non-blocking
 
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
@@ -247,7 +252,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	default:
 	}
 
-	// 9. Purge operator session state; last, so it wins over anything reset restored
+	// 10. Purge operator session state; last, so it wins over anything reset restored
 	if purge {
 		s.ctx.ResetSessionState()
 		vlog.Info("app", "msg", "session purge")
@@ -285,8 +290,7 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 // clamped: the clamp in updateGameArea is exactly where screen and viewport stop
 // being mutually derivable, which would desync ScreenSize and the journal anchor.
 func (s *MetaSystem) handleScreenResize(p *event.ScreenResizePayload) {
-	if p.Width <= parameter.LeftMargin ||
-		p.Height <= parameter.TopMargin+parameter.BottomMargin {
+	if !engine.ViewportFits(p.Width, p.Height) {
 		return
 	}
 	if p.Width == s.ctx.Width && p.Height == s.ctx.Height {

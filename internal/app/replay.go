@@ -1,20 +1,20 @@
 // Package app: journal replay.
 //
-// The driver re-pushes journal records into a fresh headless App at the tick they
-// were recorded on. A record carries the vlog correlation tick, which
-// ClockScheduler.processTick sets to GetGameTicks()+1 before the tick body, so a
-// record stamped T was produced after tick T completed and before tick T+1: the
-// driver runs tick T, then injects and settles every record stamped T.
+// The driver re-pushes journal records into a fresh headless App at the position they
+// were recorded at. Position is (run, tick, boundary), stamped on the event queue under
+// the world lock: run advances where a game reset re-bases the tick counter, tick at the
+// top of each tick body, boundary on each completed settle group. A record stamped
+// (R, T, b) was produced after tick T of run R completed, in the b'th settle since.
 //
 // Nothing is filtered. Every non-system-origin record is injected, including pause,
 // rate and step control — the replay does not honour those, but it does reproduce
 // their events, and what must not be compared is declared once in denySim rather
 // than judged per event at the injection site.
 //
-// Settle granularity is recorded, not assumed: a record carries the number of
-// completed between-tick settles, and the driver settles the same groups. A pass
-// can queue a system event that a later pass applies over a replayed one, so
-// merging two settles into one changes the result.
+// Settle granularity is recorded, not assumed: a pass can queue a system event that a
+// later pass applies over a replayed one, so merging two settles into one changes the
+// result. A run boundary is followed, not driven: the reset that opens run R+1 is a
+// record in run R, and servicing it is the replay's own reset path.
 //
 // Bit-exact reproduction is claimed for headless source runs only. A live run races
 // two scheduler goroutines against the main loop for the update mutex, so its journal
@@ -22,9 +22,11 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"sort"
 	"sync"
 
@@ -32,7 +34,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/service"
-	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 // ReplayRecord is one journal record paired with the tick it was produced on
@@ -46,20 +47,18 @@ type ReplayRecord struct {
 // payload the producer still owns.
 type Capture struct {
 	mu      sync.Mutex
-	records []ReplayRecord
+	records []event.JournalRecord
 	anchors []event.JournalAnchor
 }
 
 // NewCapture creates an empty capture sink
 func NewCapture() *Capture { return &Capture{} }
 
-// Record appends one record, stamping the tick from the same correlation source
-// the file sink uses, so an in-process capture and a rotated file agree.
-// A build without vlog (novlog, wasm) reports no tick and cannot be aligned.
+// Record appends one record; the queue stamped it at push time, so the sink needs
+// no correlation source of its own
 func (c *Capture) Record(r event.JournalRecord) {
-	_, tick, _ := vlog.Stamp()
 	c.mu.Lock()
-	c.records = append(c.records, ReplayRecord{Rec: r, Tick: tick})
+	c.records = append(c.records, r)
 	c.mu.Unlock()
 }
 
@@ -71,10 +70,10 @@ func (c *Capture) Anchor(a event.JournalAnchor) {
 }
 
 // Records returns a copy of the captured records in emission order
-func (c *Capture) Records() []ReplayRecord {
+func (c *Capture) Records() []event.JournalRecord {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	out := make([]ReplayRecord, len(c.records))
+	out := make([]event.JournalRecord, len(c.records))
 	copy(out, c.records)
 	return out
 }
@@ -88,14 +87,14 @@ func (c *Capture) Anchors() []event.JournalAnchor {
 	return out
 }
 
-// CheckDense reports the first jseq gap; a gap is exactly one lost record
+// CheckDense reports the first jseq gap; a gap is exactly one lost record.
+// Sorted, so a concurrent producer's append order cannot read as a gap.
 func (c *Capture) CheckDense() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	for i := range c.records {
-		if want := uint64(i + 1); c.records[i].Rec.JSeq != want {
-			return fmt.Errorf("journal gap at index %d: jseq %d, want %d",
-				i, c.records[i].Rec.JSeq, want)
+	recs := c.Records()
+	slices.SortFunc(recs, func(x, y event.JournalRecord) int { return cmp.Compare(x.JSeq, y.JSeq) })
+	for i := range recs {
+		if want := uint64(i + 1); recs[i].JSeq != want {
+			return fmt.Errorf("journal gap at index %d: jseq %d, want %d", i, recs[i].JSeq, want)
 		}
 	}
 	return nil
@@ -112,6 +111,10 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	if a.TickInterval != int64(parameter.GameUpdateInterval) {
 		return Config{}, fmt.Errorf("journal tick interval %dns, this build ticks at %dns",
 			a.TickInterval, int64(parameter.GameUpdateInterval))
+	}
+	if a.StartRun != 0 || a.StartTick != 0 {
+		return Config{}, fmt.Errorf("journal opened mid-run at run %d tick %d; replaying one needs a world snapshot",
+			a.StartRun, a.StartTick)
 	}
 	if a.Seed == 0 {
 		return Config{}, errors.New("anchor carries no seed")
@@ -170,24 +173,37 @@ func (a *App) VerifyAnchor(an event.JournalAnchor) error {
 	return nil
 }
 
-// groupKey identifies one settle group: a tick and the settles completed within it
-type groupKey struct{ tick, boundary uint64 }
+// groupKey identifies one settle group: a run, a tick within it, and the settles
+// completed within that tick
+type groupKey struct{ run, tick, boundary uint64 }
 
-func keyOf(r ReplayRecord) groupKey { return groupKey{r.Tick, r.Rec.Boundary} }
+func keyOf(r event.JournalRecord) groupKey { return groupKey{r.Run, r.Tick, r.Boundary} }
+
+// before reports whether k precedes o in emission order
+func (k groupKey) before(o groupKey) bool {
+	if k.run != o.run {
+		return k.run < o.run
+	}
+	if k.tick != o.tick {
+		return k.tick < o.tick
+	}
+	return k.boundary < o.boundary
+}
 
 // ReplayStats reports what a replay consumed
 type ReplayStats struct {
 	Records  int    // records offered
 	Injected int    // records pushed into the queue
 	Groups   int    // settle groups executed
-	Ticks    uint64 // ticks executed, i.e. the tick of the last record
+	Run      uint64 // reset generation the replay ended in
+	Ticks    uint64 // ticks executed within that run
 }
 
-// Replay injects records at their recorded tick and settle boundary, advancing the
-// clock between ticks. Records must arrive in emission order; each group is sorted
-// in place by queue slot, which is dispatch order. The caller runs any trailing
-// ticks the last record misses.
-func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
+// Replay injects records at their recorded run, tick and settle boundary, advancing
+// the clock between ticks. Records must arrive in emission order; each group is sorted
+// in place by queue slot, which is dispatch order. The caller runs any trailing ticks
+// the last record misses.
+func (a *App) Replay(records []event.JournalRecord) (ReplayStats, error) {
 	st := ReplayStats{Records: len(records)}
 	if !a.cfg.Headless {
 		return st, errors.New("replay: requires a headless App")
@@ -196,16 +212,26 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 		return st, errors.New("replay: journaling a replay records a run that never happened")
 	}
 
-	var last groupKey
+	var cur groupKey
 	for i := 0; i < len(records); {
 		k := keyOf(records[i])
-		if k.tick < st.Ticks || (k.tick == last.tick && k.boundary < last.boundary) {
-			return st, fmt.Errorf("replay: jseq %d stamped tick %d boundary %d, out of order",
-				records[i].Rec.JSeq, k.tick, k.boundary)
+		if k.before(cur) {
+			return st, fmt.Errorf("replay: jseq %d stamped run %d tick %d boundary %d, out of order",
+				records[i].JSeq, k.run, k.tick, k.boundary)
 		}
-		if k.tick > st.Ticks {
-			a.Tick(int(k.tick - st.Ticks))
-			st.Ticks = k.tick
+
+		// A run change is opened by the reset the previous run's records requested,
+		// so the driver follows the queue's generation rather than driving it
+		if k.run != cur.run {
+			if got := a.runIndex(); got != k.run {
+				return st, fmt.Errorf("replay: jseq %d opens run %d, the replay is in run %d",
+					records[i].JSeq, k.run, got)
+			}
+			cur = groupKey{run: k.run}
+		}
+		if k.tick > cur.tick {
+			a.Tick(int(k.tick - cur.tick))
+			cur.tick = k.tick
 		}
 
 		j := i
@@ -213,7 +239,7 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 			j++
 		}
 		group := records[i:j]
-		sort.SliceStable(group, func(x, y int) bool { return group[x].Rec.Seq < group[y].Rec.Seq })
+		sort.SliceStable(group, func(x, y int) bool { return group[x].Seq < group[y].Seq })
 
 		injected, err := a.injectGroup(group)
 		st.Injected += injected
@@ -221,16 +247,20 @@ func (a *App) Replay(records []ReplayRecord) (ReplayStats, error) {
 		if err != nil {
 			return st, err
 		}
-		last, i = k, j
+		cur, i = k, j
 	}
+	st.Run, st.Ticks = cur.run, cur.tick
 	return st, nil
 }
 
-// injectGroup pushes one tick's records and settles them together
-func (a *App) injectGroup(group []ReplayRecord) (int, error) {
+// runIndex returns the reset generation the replay's event queue is stamping
+func (a *App) runIndex() uint64 { return a.world.Resources.Event.Queue.Stamp().Run }
+
+// injectGroup pushes one group's records and settles them together
+func (a *App) injectGroup(group []event.JournalRecord) (int, error) {
 	pushed := 0
 	for i := range group {
-		rec := &group[i].Rec
+		rec := &group[i]
 		if err := checkRecord(rec); err != nil {
 			return pushed, fmt.Errorf("replay: jseq %d: %w", rec.JSeq, err)
 		}

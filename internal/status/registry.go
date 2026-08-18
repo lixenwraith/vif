@@ -98,8 +98,10 @@ func (r *Registry) lateCount() int64 {
 // it. Call before Freeze so the ring is laid out with the final metric set.
 func (r *Registry) EnableRecorder(depth int) {
 	if depth <= 0 {
-		r.rec.Store(nil)
-		active.Store(nil)
+		// Release the process-wide hook only if this registry still owns it
+		if old := r.rec.Swap(nil); old != nil {
+			active.CompareAndSwap(old, nil)
+		}
 		r.Ints.Get("rec.depth").Store(0)
 		return
 	}
