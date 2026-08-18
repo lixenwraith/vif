@@ -40,26 +40,13 @@ var (
 	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
 
-	flagLog   logFlag
-	flagLevel levelFlag
-	flagScope scopeFlag
-	// TODO: collapse flagStat and flagRec into one flag
-	flagStat    statFlag
-	flagRec     recFlag
+	flagLogs    = newLogFlags()
 	flagJournal bool
-	flagDev     devFlag
+	flagDev     = newSetFlag(true, parseBoolFlag)
 )
 
 func init() {
-	// works: `-l`, `-lv info`, `-l=./tmp -lv trace -ls=afs -lt 1`
-	usage := "Enable logging; -l=DIR overrides " + parameter.LogDir
-	flag.Var(&flagLog, "l", usage)
-	flag.Var(&flagLog, "log", "Alias of -l")
-	flag.Var(&flagLevel, "lv", "Log level: trace, debug, info, warn, error; implies -l")
-	flag.Var(&flagScope, "ls", "Log scope: app+fsm+stat | afs | all | none | +dispatch | -event; implies -l")
-	flag.Var(&flagScope, "log-scope", "Alias of -ls")
-	flag.Var(&flagStat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
-	flag.Var(&flagRec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
+	flagLogs.register(flag.CommandLine)
 	flag.BoolVar(&flagJournal, "j", false, "Record a replay journal to its own file")
 	flag.BoolVar(&flagJournal, "journal", false, "Alias of -j")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
@@ -99,14 +86,14 @@ func setupDiagnostics() int {
 	core.SetCrashHook(vlog.CrashHook)
 	vlog.SetCrashFlush(status.CrashFlush) // drains while the sink is still live
 
-	dir := flagLog.dir
+	dir := flagLogs.dir.value
 	if dir == "" {
 		dir = parameter.LogDir
 	}
 	vlog.Configure(vlog.Config{
 		Dir:   dir,
-		Level: flagLevel.value,
-		Scope: flagScope.value,
+		Level: flagLogs.level.value,
+		Scope: flagLogs.scope.value,
 		Spawn: core.Go, // processor panics reach HandleCrash, terminal restored
 	})
 
@@ -116,7 +103,7 @@ func setupDiagnostics() int {
 	}
 
 	diagStatus := 0
-	if flagLog.set || flagLevel.set || flagScope.set || flagStat.set || flagRec.set {
+	if flagLogs.enabled() {
 		path, err := vlog.Start()
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "logging disabled: %v\n", err)
@@ -127,7 +114,7 @@ func setupDiagnostics() int {
 		}
 	}
 
-	if flagDev.enabled() {
+	if flagDev.valueOr(core.RaceEnabled) {
 		path, err := core.CaptureStderr(dir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
@@ -185,9 +172,9 @@ func buildConfig() app.Config {
 		GameScript:    *flagGameScript,
 		ForceDefault:  *flagDefault,
 		KeymapPath:    *flagKeymapPath,
-		LogScope:      flagScope.value,
-		StatTicks:     flagStat.value,
-		RecTicks:      flagRec.value,
+		LogScope:      flagLogs.scope.value,
+		StatTicks:     flagLogs.stat.value,
+		RecTicks:      flagLogs.rec.value,
 		TimeScaleSpec: *flagSpeed,
 		Seed:          *flagSeed,
 		Journal:       flagJournal,
@@ -212,116 +199,111 @@ func buildConfig() app.Config {
 
 // --- Flag types ---
 
-// logFlag is a boolean flag that also accepts an optional directory.
-// The space form (-l DIR) is not supported by the flag package; use -l=DIR.
-type logFlag struct {
-	dir string
-	set bool
+type flagParser[T any] func(string, T) (value T, set bool, err error)
+
+// setFlag records whether a parsed value was explicitly supplied.
+type setFlag[T any] struct {
+	value   T
+	set     bool
+	boolean bool
+	parse   flagParser[T]
 }
 
-func (f *logFlag) String() string   { return f.dir }
-func (f *logFlag) IsBoolFlag() bool { return true }
-
-func (f *logFlag) Set(v string) error {
-	switch v {
-	case "false":
-		f.set, f.dir = false, ""
-	case "", "true":
-		f.set = true
-	default:
-		f.set, f.dir = true, v
-	}
-	return nil
+func newSetFlag[T any](boolean bool, parse flagParser[T]) setFlag[T] {
+	return setFlag[T]{boolean: boolean, parse: parse}
 }
 
-// levelFlag records that a level was given, so -lv alone enables logging
-type levelFlag struct {
-	value string
-	set   bool
-}
+func (f *setFlag[T]) String() string   { return fmt.Sprint(f.value) }
+func (f *setFlag[T]) IsBoolFlag() bool { return f.boolean }
 
-func (f *levelFlag) String() string { return f.value }
-func (f *levelFlag) Set(v string) error {
-	f.set, f.value = true, v
-	return nil
-}
-
-// scopeFlag records a scope spec, so -ls alone enables logging
-type scopeFlag struct {
-	value string
-	set   bool
-}
-
-func (f *scopeFlag) String() string { return f.value }
-func (f *scopeFlag) Set(v string) error {
-	if _, err := vlog.ParseScopes(v, vlog.ScopeAll); err != nil {
-		return err
-	}
-	f.set, f.value = true, v
-	return nil
-}
-
-// statFlag records a snapshot period, so -lt alone enables logging.
-// 0 maps to -1 so an explicit disable survives the zero-value default.
-type statFlag struct {
-	value int
-	set   bool
-}
-
-func (f *statFlag) String() string { return strconv.Itoa(f.value) }
-func (f *statFlag) Set(v string) error {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return fmt.Errorf("must be a non-negative tick count")
-	}
-	if n == 0 {
-		n = -1
-	}
-	f.set, f.value = true, n
-	return nil
-}
-
-// recFlag records a recorder depth, so -lr alone enables logging.
-// 0 maps to -1 so an explicit disable survives the zero-value default.
-type recFlag struct {
-	value int
-	set   bool
-}
-
-func (f *recFlag) String() string { return strconv.Itoa(f.value) }
-func (f *recFlag) Set(v string) error {
-	n, err := strconv.Atoi(v)
-	if err != nil || n < 0 {
-		return fmt.Errorf("must be a non-negative tick count")
-	}
-	if n == 0 {
-		n = -1
-	}
-	f.set, f.value = true, n
-	return nil
-}
-
-// devFlag is tri-state: unset defers to the build, -dev forces on, -dev=false off
-type devFlag struct {
-	value bool
-	set   bool
-}
-
-func (f *devFlag) String() string   { return strconv.FormatBool(f.value) }
-func (f *devFlag) IsBoolFlag() bool { return true }
-func (f *devFlag) Set(v string) error {
-	b, err := strconv.ParseBool(v)
+func (f *setFlag[T]) Set(s string) error {
+	value, set, err := f.parse(s, f.value)
 	if err != nil {
 		return err
 	}
-	f.set, f.value = true, b
+	f.value, f.set = value, set
 	return nil
 }
 
-// enabled resolves capture: an explicit flag wins, otherwise race builds capture
-func (f *devFlag) enabled() bool {
+// valueOr returns an explicit value or the supplied default.
+func (f *setFlag[T]) valueOr(fallback T) T {
 	if f.set {
 		return f.value
 	}
-	return core.RaceEnabled
+	return fallback
+}
+
+type logFlags struct {
+	dir   setFlag[string]
+	level setFlag[string]
+	scope setFlag[string]
+	stat  setFlag[int]
+	rec   setFlag[int]
+}
+
+func newLogFlags() *logFlags {
+	return &logFlags{
+		dir:   newSetFlag(true, parseLogDirFlag),
+		level: newSetFlag(false, parseStringFlag),
+		scope: newSetFlag(false, parseScopeFlag),
+		stat:  newSetFlag(false, parseTicksFlag),
+		rec:   newSetFlag(false, parseTicksFlag),
+	}
+}
+
+// register installs the logging flags and their aliases.
+func (f *logFlags) register(fs *flag.FlagSet) {
+	usage := "Enable logging; -l=DIR overrides " + parameter.LogDir
+	fs.Var(&f.dir, "l", usage)
+	fs.Var(&f.dir, "log", "Alias of -l")
+	fs.Var(&f.level, "lv", "Log level: trace, debug, info, warn, error; implies -l")
+	fs.Var(&f.scope, "ls", "Log scope: app+fsm+stat | afs | all | none | +dispatch | -event; implies -l")
+	fs.Var(&f.scope, "log-scope", "Alias of -ls")
+	fs.Var(&f.stat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
+	fs.Var(&f.rec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
+}
+
+// enabled reports whether any logging flag was supplied.
+func (f *logFlags) enabled() bool {
+	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set
+}
+
+// parseLogDirFlag keeps -l boolean while accepting -l=DIR.
+func parseLogDirFlag(s, current string) (string, bool, error) {
+	switch s {
+	case "false":
+		return "", false, nil
+	case "", "true":
+		return current, true, nil
+	default:
+		return s, true, nil
+	}
+}
+
+func parseStringFlag(s, _ string) (string, bool, error) {
+	return s, true, nil
+}
+
+func parseScopeFlag(s, _ string) (string, bool, error) {
+	if _, err := vlog.ParseScopes(s, vlog.ScopeAll); err != nil {
+		return "", false, err
+	}
+	return s, true, nil
+}
+
+// parseTicksFlag maps an explicit zero to the runtime disable sentinel.
+func parseTicksFlag(s string, _ int) (int, bool, error) {
+	n, err := strconv.Atoi(s)
+	if err != nil || n < 0 {
+		return 0, false, fmt.Errorf("must be a non-negative tick count")
+	}
+	if n == 0 {
+		n = -1
+	}
+	return n, true, nil
+}
+
+func parseBoolFlag(s string, _ bool) (bool, bool, error) {
+	b, err := strconv.ParseBool(s)
+	return b, err == nil, err
 }
