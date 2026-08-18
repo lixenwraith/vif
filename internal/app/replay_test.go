@@ -677,3 +677,28 @@ func TestCursorMovedAppliesWithoutRouter(t *testing.T) {
 			got.X, got.Y, wantX, wantY)
 	}
 }
+
+// TestReplayResetThenCursor pins the window the soak diverges in: a level whose map
+// differs from the viewport, a reset, then cursor and mode intents applied before any
+// tick of the new run, while the FSM reset is still pending
+func TestReplayResetThenCursor(t *testing.T) {
+	replayAndCompare(t, func(t *testing.T, a *App) int {
+		r := newScriptRunner(t, a)
+		a.SetupLevel(40, 16, true, false) // map decoupled from the viewport
+		r.step(2, intentMotion(input.MotionRight, 6))
+
+		a.Reset(false)
+		// No tick between the reset and these three, matching the soak's stamp
+		if !a.Inject(intentMotion(input.MotionRight, 9)) {
+			t.Fatal("quit")
+		}
+		if !a.Inject(intentModeSwitch(input.ModeTargetInsert)) {
+			t.Fatal("quit")
+		}
+		if !a.Inject(intentModeSwitch(input.ModeTargetInsert)) {
+			t.Fatal("quit")
+		}
+		r.step(2)
+		return r.done()
+	})
+}

@@ -7,12 +7,21 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// LockHoldWarn [wall] is the update-mutex hold time above which a hold is reported
-const LockHoldWarn = 20 * time.Millisecond
+// LockHoldWarn [wall] is the update-mutex hold time above which a hold is reported.
+// Race builds instrument every access, so the threshold scales with them.
+var LockHoldWarn = lockHoldWarn()
+
+func lockHoldWarn() time.Duration {
+	if core.RaceEnabled {
+		return 200 * time.Millisecond
+	}
+	return 20 * time.Millisecond
+}
 
 // sampleLocks gates hold-time stamping. Refreshed once per tick rather than
 // probed on every acquire: this is the hottest lock in the process.

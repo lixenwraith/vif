@@ -156,7 +156,7 @@ func shutdownDiagnostics() {
 	if path := vlog.LastJournalPath(); path != "" {
 		fmt.Fprintf(os.Stderr, "replay journal: %s\n", path)
 	}
-	if path := core.CloseCapture(); path != "" {
+	if path := core.CloseCapture(); path != "" && core.CaptureCount() > 0 {
 		fmt.Fprintf(os.Stderr, "runtime output captured: %s (%d report(s))\n",
 			path, core.CaptureCount())
 	}

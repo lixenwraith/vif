@@ -19,6 +19,13 @@
 // Bit-exact reproduction is claimed for headless source runs only. A live run races
 // two scheduler goroutines against the main loop for the update mutex, so its journal
 // reconstructs what the player did, not a comparable world.
+//
+// Tick reconciliation. A run ends only at a journaled record: NextRun is reached
+// solely through EventGameResetRequest, which never carries OriginSystem, so the last
+// record of run R is stamped at R's final tick and the driver ticks to it. Only the
+// final run can end with unrecorded trailing ticks, which the caller runs itself.
+// Anything else that re-bases the tick counter breaks this and silently under-ticks
+// every run but the last.
 package app
 
 import (

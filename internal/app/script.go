@@ -23,17 +23,21 @@ type ScriptOptions struct {
 	Steps   int  // action count, excluding warmup and trailing settle
 	Resets  bool // allow game reset, which re-bases the journal tick counter
 	Regions bool // allow FSM region operations
+
+	// RegionSet names the regions actRegion may target; the FSM is scheduler-owned
+	// and exposes no region list to a harness, so it is declared here
+	RegionSet []ScriptRegion
 }
 
 // DefaultScript returns the soak profile: every action class enabled
 func DefaultScript(seed uint64, steps int) ScriptOptions {
-	return ScriptOptions{Seed: seed, Steps: steps, Resets: true, Regions: true}
+	return ScriptOptions{Seed: seed, Steps: steps, Resets: true, Regions: true, RegionSet: EmbeddedRegions}
 }
 
 // RunScript drives an App through the option's action sequence, returning the
 // position it ended at
 func RunScript(a *App, opt ScriptOptions) (event.Stamp, error) {
-	d := &scriptDriver{a: a, rng: vmath.NewSeededRand(opt.Seed, "script")}
+	d := &scriptDriver{a: a, rng: vmath.NewSeededRand(opt.Seed, "script"), regions: opt.RegionSet}
 	table := actionTable(opt)
 
 	total := 0
@@ -56,8 +60,9 @@ func RunScript(a *App, opt ScriptOptions) (event.Stamp, error) {
 
 // scriptDriver holds the generator stream and the App it drives
 type scriptDriver struct {
-	a   *App
-	rng *vmath.FastRand
+	a       *App
+	rng     *vmath.FastRand
+	regions []ScriptRegion
 }
 
 // scriptAction is one weighted entry in the action table
@@ -84,7 +89,7 @@ func actionTable(opt ScriptOptions) []scriptAction {
 		{2, (*scriptDriver).actSearch},
 		{2, (*scriptDriver).actOverlay},
 	}
-	if opt.Regions {
+	if opt.Regions && len(opt.RegionSet) > 0 {
 		t = append(t, scriptAction{2, (*scriptDriver).actRegion})
 	}
 	if opt.Resets {
@@ -157,9 +162,11 @@ var scriptCommands = [...]string{
 
 var scriptOverlays = [...]string{"d", "h", "about"}
 
-// scriptRegions pairs the embedded config's declared regions with their entry state.
-// Hardcoded: the FSM is scheduler-owned and exposes no region list to a harness.
-var scriptRegions = [...]struct{ name, state string }{
+// ScriptRegion pairs a declared region with the state a spawn enters it at
+type ScriptRegion struct{ Name, State string }
+
+// EmbeddedRegions are the embedded config's declared regions and entry states
+var EmbeddedRegions = []ScriptRegion{
 	{"main", "MainSpawnGold"},
 	{"quasar", "QuasarFuse"},
 	{"storm", "StormSetup"},
@@ -290,8 +297,8 @@ func (d *scriptDriver) actLevel() bool {
 // actRegion applies one FSM region operation; an invalid one is reported and dropped,
 // which is itself worth reproducing
 func (d *scriptDriver) actRegion() bool {
-	r := scriptRegions[d.rng.Intn(len(scriptRegions))]
-	d.a.Region(scriptRegionOps[d.rng.Intn(len(scriptRegionOps))], r.name, r.state)
+	r := d.regions[d.rng.Intn(len(d.regions))]
+	d.a.Region(scriptRegionOps[d.rng.Intn(len(scriptRegionOps))], r.Name, r.State)
 	return true
 }
 

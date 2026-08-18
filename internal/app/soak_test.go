@@ -2,10 +2,13 @@ package app
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strconv"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -26,20 +29,75 @@ type soakRun struct {
 	seed uint64
 }
 
-// runSoakScript drives one seeded script under a capture sink, asserting the run
-// itself was clean before any replay is attempted
-func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
+// soakConfigDir is the external map set the tower soak drives; the tower region is
+// the only path that engages gateway, eye and route-graph navigation
+const soakConfigDir = "../../config/main"
+const soakContentDir = "../../data"
+
+// towerRegions mirrors config/main's declared regions and their entry states
+var towerRegions = []ScriptRegion{
+	{"main", "MainSpawnGold"},
+	{"quasar", "QuasarFuse"},
+	{"storm", "StormSetup"},
+	{"monitor", "MonitorWarmup"},
+	{"tower", "TowerSetup"},
+}
+
+// towerConfig pins the external map set and a viewport the tower layout fits in
+func towerConfig(t *testing.T, seed uint64) Config {
+	t.Helper()
+	if _, err := os.Stat(filepath.Join(soakConfigDir, parameter.GameConfigFile)); err != nil {
+		t.Skipf("external map set %s not present", soakConfigDir)
+	}
+	cfg := Config{Mode: ModeHeadless, Seed: seed, GameScript: soakConfigDir, Width: 160, Height: 50}
+	if _, err := os.Stat(soakContentDir); err == nil {
+		cfg.ContentPath = soakContentDir
+	}
+	return cfg
+}
+
+// TestReplaySoakTower spawns the tower region outright rather than waiting for the
+// escalation chain, which no 200-step run reaches, then soaks the same way
+func TestReplaySoakTower(t *testing.T) {
+	n := soakIterations / 4
+	if testing.Short() {
+		n = soakShortIters
+	}
+	for i := range n {
+		seed := uint64(soakSeedBase) + 0x2000 + uint64(i)
+		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
+			opt := DefaultScript(seed, soakSteps)
+			opt.RegionSet = towerRegions
+			run := runSoakScriptCfg(t, towerConfig(t, seed), opt, func(a *App) {
+				a.Region(event.RegionSpawn, "tower", "TowerSetup")
+				a.Tick(4)
+			})
+			if err := replaySoak(run, run.cap.Records()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+// runSoakScriptCfg is runSoakScript with the config and options injected and
+// a prelude called before RunScript. The prelude's Region call is OriginDebug,
+// so it journals and replays like any other record.
+func runSoakScriptCfg(t *testing.T, cfg Config, opt ScriptOptions, prelude func(*App)) soakRun {
 	t.Helper()
 
 	cap := NewCapture()
-	cfg := scriptConfig(seed)
 	cfg.Journal, cfg.JournalSink = true, cap
 
 	a, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatalf("source run: %v", err)
 	}
-	if _, err := RunScript(a, DefaultScript(seed, steps)); err != nil {
+
+	if prelude != nil {
+		prelude(a)
+	}
+
+	if _, err := RunScript(a, opt); err != nil {
 		a.Close()
 		t.Fatalf("script: %v", err)
 	}
@@ -55,7 +113,12 @@ func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
 		t.Errorf("%d payload encode failures", encFail)
 	}
 
-	run := soakRun{cap: cap, want: a.SnapshotSimulation(), end: a.Position(), seed: seed}
+	run := soakRun{
+		cap:  cap,
+		want: a.SnapshotSimulation(),
+		end:  a.Position(),
+		seed: opt.Seed,
+	}
 	a.Close()
 
 	if err := cap.CheckDense(); err != nil {
@@ -65,6 +128,13 @@ func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
 		t.Fatal("no records captured")
 	}
 	return run
+}
+
+// runSoakScript drives one seeded script under a capture sink, asserting the run
+// itself was clean before any replay is attempted
+func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
+	t.Helper()
+	return runSoakScriptCfg(t, scriptConfig(seed), DefaultScript(seed, steps), nil)
 }
 
 // replaySoak reproduces a source run from its capture

@@ -135,9 +135,11 @@ func TestReplayLockstep(t *testing.T) {
 		if !ok {
 			continue // the source took no snapshot on this tick
 		}
-		if i, x, y, ok := FirstDiff(w, rep.SnapshotSimulation()); ok {
-			t.Fatalf("diverged in run %d tick %d at line %d:\n  source %s\n  replay %s\nrecords on this tick:\n%s",
-				p.Run, p.Tick, i, x, y, strings.Join(recordsAt(cap.Records(), p.Run, p.Tick), "\n"))
+		got := rep.SnapshotSimulation()
+		if i, _, _, ok := FirstDiff(w, got); ok {
+			t.Fatalf("diverged in run %d tick %d at line %d:\n%s\nrecords on this tick:\n%s",
+				p.Run, p.Tick, i, strings.Join(Diff(w, got, 12), "\n"),
+				strings.Join(recordsAt(cap.Records(), p.Run, p.Tick), "\n"))
 		}
 	}
 }

@@ -231,6 +231,9 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	config.CameraY = 0
 	config.CropOnResize = true
 
+	// Grid tracks map dimensions; a level-sized grid would outlive the level
+	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
+
 	// 6. Cursor recreation
 	s.ctx.World.CreateCursorEntity()
 
