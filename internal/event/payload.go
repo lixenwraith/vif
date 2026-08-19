@@ -274,6 +274,7 @@ type SplashTimerCancelPayload struct {
 
 // EnergyAddPayload contains energy delta
 type EnergyAddPayload struct {
+	Entity     core.Entity               `toml:"entity"`
 	Delta      int                       `toml:"delta"`      // Positive or negative, sign ignored if flags except percentage is set
 	Percentage bool                      `toml:"percentage"` // True: percentage of current energy
 	Type       component.EnergyDeltaType `toml:"type"`
@@ -281,56 +282,105 @@ type EnergyAddPayload struct {
 
 // EnergySetPayload contains energy value
 type EnergySetPayload struct {
-	Value int `toml:"value"`
+	Entity core.Entity `toml:"entity"`
+	Value  int         `toml:"value"`
+}
+
+// EnergyCrossedZeroPayload names the cursor whose energy changed sign
+type EnergyCrossedZeroPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // EnergyGlyphConsumedPayload contains glyph data for centralized energy calculation
 type EnergyGlyphConsumedPayload struct {
-	Type  component.GlyphType  `toml:"type"`
-	Level component.GlyphLevel `toml:"level"`
+	Entity core.Entity          `toml:"entity"`
+	Type   component.GlyphType  `toml:"type"`
+	Level  component.GlyphLevel `toml:"level"`
 }
 
 // EnergyBlinkPayload triggers visual blink state
 type EnergyBlinkPayload struct {
-	Type  int `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
-	Level int `toml:"level"` // 0=dark, 1=normal, 2=bright
+	Entity core.Entity `toml:"entity"`
+	Type   int         `toml:"type"`  // 0=error, 1=blue, 2=green, 3=red, 4=gold
+	Level  int         `toml:"level"` // 0=dark, 1=normal, 2=bright
+}
+
+// EnergyBlinkStopPayload names the cursor whose blink clears
+type EnergyBlinkStopPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Shield ----
 
+// ShieldActivatePayload names the cursor whose shield comes up
+type ShieldActivatePayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
+// ShieldDeactivatePayload names the cursor whose shield drops
+type ShieldDeactivatePayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // ShieldDrainRequestPayload contains energy drain amount from external sources
 type ShieldDrainRequestPayload struct {
-	Value int `toml:"value"`
+	Entity core.Entity `toml:"entity"`
+	Value  int         `toml:"value"`
 }
 
 // --- Weapon ---
 
 // WeaponAddRequestPayload adds a weapon to cursor
 type WeaponAddRequestPayload struct {
+	Entity core.Entity          `toml:"entity"`
 	Weapon component.WeaponType `toml:"weapon"` // 0=rod, 1=launcher, 2=spray
+}
+
+// WeaponFireRequestPayload adds a weapon to cursor
+type WeaponFireRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
+// FireSpecialRequestPayload names the cursor firing its special
+type FireSpecialRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Heat ---
 
 // HeatAddRequestPayload contains heat delta
 type HeatAddRequestPayload struct {
-	Delta int `toml:"delta"`
+	Entity core.Entity `toml:"entity"`
+	Delta  int         `toml:"delta"`
 }
 
 // HeatSetRequestPayload contains absolute heat value
 type HeatSetRequestPayload struct {
-	Value int `toml:"value"`
+	Entity core.Entity `toml:"entity"`
+	Value  int         `toml:"value"`
+}
+
+// HeatBurstPayload names the cursor that overheated
+type HeatBurstPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Boost ---
 
 // BoostActivatePayload contains boost activation parameters
 type BoostActivatePayload struct {
+	Entity   core.Entity   `toml:"entity"`
 	Duration time.Duration `toml:"duration"`
+}
+
+// BoostDeactivatePayload names the cursor whose boost ends
+type BoostDeactivatePayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // BoostExtendPayload contains boost extension parameters
 type BoostExtendPayload struct {
+	Entity   core.Entity   `toml:"entity"`
 	Duration time.Duration `toml:"duration"`
 }
 
@@ -338,9 +388,10 @@ type BoostExtendPayload struct {
 
 // CharacterTypedPayload captures keypress and cursor state when character is typed
 type CharacterTypedPayload struct {
-	Char rune `toml:"char"`
-	X    int  `toml:"x"`
-	Y    int  `toml:"y"`
+	Entity core.Entity `toml:"entity"`
+	Char   rune        `toml:"char"`
+	X      int         `toml:"x"`
+	Y      int         `toml:"y"`
 }
 
 // CharacterTypedPayloadPool reduces GC pressure during high-frequency typing
@@ -369,6 +420,7 @@ type DeleteRequestPayload struct {
 
 // PingGridRequestPayload carries configuration for the ping grid activation
 type PingGridRequestPayload struct {
+	Entity   core.Entity   `toml:"entity"`
 	Duration time.Duration `toml:"duration"`
 }
 
@@ -545,6 +597,11 @@ type CursorMovedPayload struct {
 	Entity core.Entity `toml:"entity"`
 	X      int         `toml:"x"`
 	Y      int         `toml:"y"`
+}
+
+// CursorSetLocalPayload names the roster slot input and the camera follow
+type CursorSetLocalPayload struct {
+	Slot uint8 `toml:"slot"`
 }
 
 // --- Fuse ---

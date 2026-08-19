@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 179
+const EventTypeCount = 181
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -65,21 +65,21 @@ func InitRegistry() {
 	RegisterType("EventSplashTimerCancel", EventSplashTimerCancel, &SplashTimerCancelPayload{})
 	RegisterType("EventEnergyAddRequest", EventEnergyAddRequest, &EnergyAddPayload{})
 	RegisterType("EventEnergySetRequest", EventEnergySetRequest, &EnergySetPayload{})
-	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, nil)
+	RegisterType("EventEnergyCrossedZero", EventEnergyCrossedZero, &EnergyCrossedZeroPayload{})
 	RegisterType("EventEnergyGlyphConsumed", EventEnergyGlyphConsumed, &EnergyGlyphConsumedPayload{})
 	RegisterType("EventEnergyBlinkStart", EventEnergyBlinkStart, &EnergyBlinkPayload{})
-	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, nil)
-	RegisterType("EventShieldActivate", EventShieldActivate, nil)
-	RegisterType("EventShieldDeactivate", EventShieldDeactivate, nil)
+	RegisterType("EventEnergyBlinkStop", EventEnergyBlinkStop, &EnergyBlinkStopPayload{})
+	RegisterType("EventShieldActivate", EventShieldActivate, &ShieldActivatePayload{})
+	RegisterType("EventShieldDeactivate", EventShieldDeactivate, &ShieldDeactivatePayload{})
 	RegisterType("EventShieldDrainRequest", EventShieldDrainRequest, &ShieldDrainRequestPayload{})
 	RegisterType("EventWeaponAddRequest", EventWeaponAddRequest, &WeaponAddRequestPayload{})
-	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, nil)
-	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, nil)
+	RegisterType("EventWeaponFireRequest", EventWeaponFireRequest, &WeaponFireRequestPayload{})
+	RegisterType("EventFireSpecialRequest", EventFireSpecialRequest, &FireSpecialRequestPayload{})
 	RegisterType("EventHeatAddRequest", EventHeatAddRequest, &HeatAddRequestPayload{})
 	RegisterType("EventHeatSetRequest", EventHeatSetRequest, &HeatSetRequestPayload{})
-	RegisterType("EventHeatBurst", EventHeatBurst, nil)
+	RegisterType("EventHeatBurst", EventHeatBurst, &HeatBurstPayload{})
 	RegisterType("EventBoostActivate", EventBoostActivate, &BoostActivatePayload{})
-	RegisterType("EventBoostDeactivate", EventBoostDeactivate, nil)
+	RegisterType("EventBoostDeactivate", EventBoostDeactivate, &BoostDeactivatePayload{})
 	RegisterType("EventBoostExtend", EventBoostExtend, &BoostExtendPayload{})
 	RegisterType("EventCharacterTyped", EventCharacterTyped, &CharacterTypedPayload{})
 	RegisterType("EventDeleteRequest", EventDeleteRequest, &DeleteRequestPayload{})
@@ -112,6 +112,8 @@ func InitRegistry() {
 	RegisterType("EventCursorDespawned", EventCursorDespawned, &CursorDespawnedPayload{})
 	RegisterType("EventCursorMoveRequest", EventCursorMoveRequest, &CursorMoveRequestPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
+	RegisterType("EventCursorSetLocalRequest", EventCursorSetLocalRequest, &CursorSetLocalPayload{})
+	RegisterType("EventCursorLocalChanged", EventCursorLocalChanged, &CursorSetLocalPayload{})
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, nil)
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
 	RegisterType("EventDrainPause", EventDrainPause, nil)

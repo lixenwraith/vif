@@ -10,80 +10,83 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// WeaponSystem manages the cursor gained effects and abilities, it resets on energy getting to or crossing zero
+// WeaponSystem manages per-cursor weapon loadouts, orbs and firing.
+// A loadout resets when its own cursor's energy crosses zero.
 type WeaponSystem struct {
 	world *engine.World
 
-	// Telemetry
-	statRod       *atomic.Bool
-	statLauncher  *atomic.Bool
-	statDisruptor *atomic.Bool
+	// Per-cursor loadout
+	statRod       *status.PlayerBool
+	statLauncher  *status.PlayerBool
+	statDisruptor *status.PlayerBool
+	statOrbs      *status.PlayerInt
 
+	// Roster-wide fire counters
 	statMainFired      *atomic.Int64
 	statRodFired       *atomic.Int64
 	statLauncherFired  *atomic.Int64
 	statDisruptorFired *atomic.Int64
-	statOrbs           *atomic.Int64
 
 	enabled bool
 }
 
-// NewWeaponSystem creates a new quasar system
+// NewWeaponSystem creates a new weapon system
 func NewWeaponSystem(world *engine.World) engine.System {
-	s := &WeaponSystem{
-		world: world,
-	}
+	s := &WeaponSystem{world: world}
 
-	s.statRod = world.Resources.Status.Bools.Get("weapon.rod")
-	s.statLauncher = world.Resources.Status.Bools.Get("weapon.launcher")
-	s.statDisruptor = world.Resources.Status.Bools.Get("weapon.disruptor")
+	reg := world.Resources.Status
+	s.statRod = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.rod", "weapon.rod")
+	s.statLauncher = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.launcher", "weapon.launcher")
+	s.statDisruptor = status.NewPlayerBool(reg, parameter.MaxPlayers, "weapon.disruptor", "weapon.disruptor")
+	s.statOrbs = status.NewPlayerInt(reg, parameter.MaxPlayers, "weapon.orbs", "weapon.orbs")
 
-	s.statMainFired = world.Resources.Status.Ints.Get("weapon.main_fired")
-	s.statRodFired = world.Resources.Status.Ints.Get("weapon.rod_fired")
-	s.statLauncherFired = world.Resources.Status.Ints.Get("weapon.launcher_fired")
-	s.statDisruptorFired = world.Resources.Status.Ints.Get("weapon.disruptor_fired")
-	s.statOrbs = world.Resources.Status.Ints.Get("weapon.orbs")
+	s.statMainFired = reg.Ints.Get("weapon.main_fired")
+	s.statRodFired = reg.Ints.Get("weapon.rod_fired")
+	s.statLauncherFired = reg.Ints.Get("weapon.launcher_fired")
+	s.statDisruptorFired = reg.Ints.Get("weapon.disruptor_fired")
 
 	s.Init()
 	return s
 }
 
+// Init resets session state for a new game, dropping every orb in the world
 func (s *WeaponSystem) Init() {
 	s.destroyAllOrbs()
-	s.statRod.Store(false)
-	s.statLauncher.Store(false)
-	s.statDisruptor.Store(false)
+	s.statRod.Reset()
+	s.statLauncher.Reset()
+	s.statDisruptor.Reset()
+	s.statOrbs.Reset()
 	s.statMainFired.Store(0)
 	s.statRodFired.Store(0)
 	s.statLauncherFired.Store(0)
 	s.statDisruptorFired.Store(0)
-	s.statOrbs.Store(0)
 	s.enabled = true
 }
 
 // Name returns system's name
-func (s *WeaponSystem) Name() string {
-	return "weapon"
-}
+func (s *WeaponSystem) Name() string { return "weapon" }
 
-func (s *WeaponSystem) Priority() int {
-	return parameter.PriorityWeapon
-}
+// Priority returns the system's priority
+func (s *WeaponSystem) Priority() int { return parameter.PriorityWeapon }
 
+// EventTypes returns the event types WeaponSystem handles
 func (s *WeaponSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventWeaponAddRequest,
 		event.EventEnergyCrossedZero,
 		event.EventWeaponFireRequest,
+		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
 }
 
+// HandleEvent processes weapon commands, each naming the cursor it acts on
 func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		s.Init()
@@ -103,69 +106,85 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventWeaponAddRequest:
-		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
-			s.addWeapon(payload.Weapon)
+	case event.EventCursorDespawned:
+		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok {
+			s.clearSlot(p.Slot)
 		}
+		return
 
 	case event.EventEnergyCrossedZero:
-		s.removeAllWeapons()
+		// Notification: it already names the cursor whose energy changed sign
+		if p, ok := ev.Payload.(*event.EnergyCrossedZeroPayload); ok {
+			if cursor := s.world.ResolveCursor(p.Entity); cursor != 0 {
+				s.removeAllWeapons(cursor)
+			}
+		}
+		return
+	}
+
+	cursor := s.world.TargetCursor(ev.Payload)
+	if cursor == 0 {
+		return
+	}
+
+	switch ev.Type {
+	case event.EventWeaponAddRequest:
+		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
+			s.addWeapon(cursor, payload.Weapon)
+		}
 
 	case event.EventWeaponFireRequest:
-		s.handleFireMain()
+		s.handleFireMain(cursor)
 	}
 }
 
+// Update advances cooldowns, pulse and orbit for every cursor
 func (s *WeaponSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursorEntity)
-	if !ok {
-		return
-	}
-
 	dt := s.world.Resources.Time.DeltaTime
 
-	// Update main fire cooldown
-	if weaponComp.MainFireCooldown > 0 {
-		weaponComp.MainFireCooldown -= dt
-		if weaponComp.MainFireCooldown < 0 {
-			weaponComp.MainFireCooldown = 0
+	s.world.Components.Cursor.Each(func(cursor core.Entity, _ *component.CursorComponent) bool {
+		weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
+		if !ok {
+			return true
 		}
-	}
 
-	// Update weapon cooldowns
-	for wt := range weaponComp.Charges {
-		if weaponComp.Charges[wt] <= 0 {
-			continue
+		// Update main fire cooldown
+		if weaponComp.MainFireCooldown > 0 {
+			weaponComp.MainFireCooldown = max(weaponComp.MainFireCooldown-dt, 0)
 		}
-		weaponComp.Cooldown[wt] -= dt
-		if weaponComp.Cooldown[wt] < 0 {
-			weaponComp.Cooldown[wt] = 0
+
+		// Update weapon cooldowns
+		for wt := range weaponComp.Charges {
+			if weaponComp.Charges[wt] <= 0 {
+				continue
+			}
+			weaponComp.Cooldown[wt] = max(weaponComp.Cooldown[wt]-dt, 0)
 		}
-	}
 
-	// Update pulse effect timer
-	if pulseComp, ok := s.world.Components.Pulse.GetPtr(cursorEntity); ok {
-		pulseComp.Remaining -= dt
-		if pulseComp.Remaining <= 0 {
-			s.world.Components.Pulse.RemoveEntity(cursorEntity, false)
+		// Update pulse effect timer
+		if pulseComp, ok := s.world.Components.Pulse.GetPtr(cursor); ok {
+			pulseComp.Remaining -= dt
+			if pulseComp.Remaining <= 0 {
+				s.world.Components.Pulse.RemoveEntity(cursor, false)
+			}
 		}
-	}
 
-	// Ensure orbs exist for active weapons (self-healing after resize/destruction)
-	s.ensureOrbs(cursorEntity)
+		// Ensure orbs exist for active weapons (self-healing after resize/destruction)
+		s.ensureOrbs(cursor, weaponComp)
 
-	// Update orb motion
-	s.updateOrbs()
+		// Update orb motion around this owner
+		s.updateOrbs(cursor, weaponComp)
+		return true
+	})
 }
 
-func (s *WeaponSystem) addWeapon(weapon component.WeaponType) {
-	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+// addWeapon grants or recharges one weapon on one cursor
+func (s *WeaponSystem) addWeapon(cursor core.Entity, weapon component.WeaponType) {
+	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -177,36 +196,26 @@ func (s *WeaponSystem) addWeapon(weapon component.WeaponType) {
 
 	if firstAcquire {
 		weaponComp.Cooldown[weapon] = 0 // Ready to fire immediately on first pickup
-		switch weapon {
-		case component.WeaponRod:
-			s.statRod.Store(true)
-		case component.WeaponLauncher:
-			s.statLauncher.Store(true)
-		case component.WeaponDisruptor:
-			s.statDisruptor.Store(true)
-		}
+		s.publishLoadout(cursor, weaponComp)
 	}
-
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
 
-func (s *WeaponSystem) removeAllWeapons() {
-	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+// removeAllWeapons strips one cursor's loadout and destroys only its own orbs
+func (s *WeaponSystem) removeAllWeapons(cursor core.Entity) {
+	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 	if !ok {
 		return
 	}
 
+	s.destroyCursorOrbs(weaponComp)
+
 	weaponComp.Charges = [component.WeaponCount]int{}
 	weaponComp.Cooldown = [component.WeaponCount]time.Duration{}
-	weaponComp.Orbs = [component.WeaponCount]core.Entity{}
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 
-	s.destroyAllOrbs()
-
-	s.statRod.Store(false)
-	s.statLauncher.Store(false)
-	s.statDisruptor.Store(false)
+	s.publishLoadout(cursor, weaponComp)
+	if slot, ok := s.world.CursorSlot(cursor); ok {
+		s.statOrbs.Store(slot, 0)
+	}
 }
 
 // triggerOrbFlash activates flash effect on specified orb
@@ -219,13 +228,8 @@ func (s *WeaponSystem) triggerOrbFlash(orbEntity core.Entity) {
 	orbComp.FlashRemaining = parameter.OrbFlashDuration
 }
 
-// ensureOrbs creates missing orbs for active weapons and triggers redistribution if needed
-func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
+// ensureOrbs creates missing orbs for one cursor's active weapons and triggers redistribution
+func (s *WeaponSystem) ensureOrbs(cursor core.Entity, weaponComp *component.WeaponComponent) {
 	changed := false
 	for wt := range weaponComp.Charges {
 		if weaponComp.Charges[wt] <= 0 {
@@ -234,15 +238,13 @@ func (s *WeaponSystem) ensureOrbs(cursorEntity core.Entity) {
 
 		orbEntity := weaponComp.Orbs[wt]
 		if orbEntity == 0 || !s.world.Components.Orb.HasEntity(orbEntity) {
-			newOrb := s.spawnOrbEntity(cursorEntity, component.WeaponType(wt))
-			weaponComp.Orbs[wt] = newOrb
+			weaponComp.Orbs[wt] = s.spawnOrbEntity(cursor, component.WeaponType(wt))
 			changed = true
 		}
 	}
 
 	if changed {
-		s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
-		s.redistributeOrbs(cursorEntity)
+		s.redistributeOrbs(weaponComp)
 	}
 }
 
@@ -288,42 +290,29 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 	return orbEntity
 }
 
-// redistributeOrbs triggers angle redistribution for all orbs
-// Called when orb added/removed - actual redistribution happens in updateOrbs()
-func (s *WeaponSystem) redistributeOrbs(cursorEntity core.Entity) {
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	// Mark all orbs for redistribution by invalidating their target angles
-	// The next updateOrbs() call will calculate proper distribution
+// redistributeOrbs invalidates one cursor's orb target angles; updateOrbs recalculates
+func (s *WeaponSystem) redistributeOrbs(weaponComp *component.WeaponComponent) {
 	for _, orbEntity := range weaponComp.Orbs {
 		if orbEntity == 0 {
 			continue
 		}
-		if orb, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
+		if orb, ok := s.world.Components.Orb.GetPtr(orbEntity); ok {
 			orb.TargetAngle = -1 // Invalid angle forces recalculation
-			s.world.Components.Orb.SetComponent(orbEntity, orb)
 		}
 	}
 }
 
-// updateOrbs handles orbital motion with arc-aware collision avoidance
-func (s *WeaponSystem) updateOrbs() {
+// updateOrbs handles one cursor's orbital motion with arc-aware collision avoidance
+func (s *WeaponSystem) updateOrbs(cursor core.Entity, weaponComp *component.WeaponComponent) {
 	dt := s.world.Resources.Time.DeltaTime
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursor)
 	if !ok {
 		return
 	}
 
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
+	slot, hasSlot := s.world.CursorSlot(cursor)
 
 	// Collect active orbs in STABLE order (sort by weapon type)
 	type orbEntry struct {
@@ -341,17 +330,21 @@ func (s *WeaponSystem) updateOrbs() {
 	}
 
 	if len(entries) == 0 {
-		s.statOrbs.Store(0)
+		if hasSlot {
+			s.statOrbs.Store(slot, 0)
+		}
 		return
 	}
-	s.statOrbs.Store(int64(len(entries)))
+	if hasSlot {
+		s.statOrbs.Store(slot, int64(len(entries)))
+	}
 
 	// Sort by weapon type for deterministic index assignment
 	slices.SortFunc(entries, func(a, b orbEntry) int {
 		return int(a.weapon) - int(b.weapon)
 	})
 
-	// Use first orb's radius (all orbs share the same orbit).
+	// Use first orb's radius (all of one owner's orbs share the same orbit).
 	firstOrb, ok := s.world.Components.Orb.GetPtr(entries[0].entity)
 	if !ok {
 		return
@@ -473,23 +466,17 @@ func (s *WeaponSystem) updateOrbs() {
 
 		// Handle flash decay (flash triggered only by firing, not movement)
 		if orb.FlashRemaining > 0 {
-			orb.FlashRemaining -= dt
-			if orb.FlashRemaining <= 0 {
-				orb.FlashRemaining = 0
-			}
+			orb.FlashRemaining = max(orb.FlashRemaining-dt, 0)
 		}
-
 	}
 }
 
-// destroyOrb removes an orb entity and clears its reference from owner's WeaponComponent
+// destroyOrb removes an orb entity and clears its reference from its owner's loadout
 func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
-	orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity)
-	if ok {
-		if weaponComp, ok := s.world.Components.Weapon.GetComponent(orbComp.OwnerEntity); ok {
+	if orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
+		if weaponComp, ok := s.world.Components.Weapon.GetPtr(orbComp.OwnerEntity); ok {
 			if weaponComp.Orbs[orbComp.WeaponType] == orbEntity {
 				weaponComp.Orbs[orbComp.WeaponType] = 0
-				s.world.Components.Weapon.SetComponent(orbComp.OwnerEntity, weaponComp)
 			}
 		}
 	}
@@ -497,39 +484,45 @@ func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
 	event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
 }
 
+// destroyCursorOrbs drops one cursor's orbs, clearing the references in place
+func (s *WeaponSystem) destroyCursorOrbs(weaponComp *component.WeaponComponent) {
+	for wt, orbEntity := range weaponComp.Orbs {
+		if orbEntity == 0 {
+			continue
+		}
+		weaponComp.Orbs[wt] = 0
+		event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
+	}
+}
+
+// destroyAllOrbs drops every orb in the world; the reset path
 func (s *WeaponSystem) destroyAllOrbs() {
-	orbEntities := s.world.Components.Orb.Entities()
-	for _, orbEntity := range orbEntities {
+	for _, orbEntity := range s.world.Components.Orb.Entities() {
 		s.destroyOrb(orbEntity)
 	}
 }
 
-func (s *WeaponSystem) handleFireMain() {
-	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
-	if !ok {
-		return
-	}
-
-	if weaponComp.MainFireCooldown > 0 {
+// handleFireMain fires one cursor's main weapon and its ready loadout
+func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
+	weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
+	if !ok || weaponComp.MainFireCooldown > 0 {
 		return
 	}
 
 	// Reset cooldown
 	weaponComp.MainFireCooldown = parameter.WeaponCooldownMain
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 	s.statMainFired.Add(1)
 
-	// Determine color type from energy polarity
+	// Determine color type from this cursor's energy polarity
 	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
+	if energyComp, ok := s.world.Components.Energy.GetComponent(cursor); ok {
 		if energyComp.Current < 0 {
 			colorType = component.CleanerColorNegative
 		}
 	}
 
 	// Fire Main Weapon (Cleaner)
-	if pos, ok := s.world.Positions.GetPosition(cursorEntity); ok {
+	if pos, ok := s.world.Positions.GetPosition(cursor); ok {
 		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 			OriginX:   pos.X,
 			OriginY:   pos.Y,
@@ -537,18 +530,12 @@ func (s *WeaponSystem) handleFireMain() {
 		})
 	}
 
-	// Fire weapons
-	s.fireAllWeapons()
+	s.fireAllWeapons(cursor, weaponComp)
 }
 
-func (s *WeaponSystem) fireAllWeapons() {
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
-	weaponComp, ok := s.world.Components.Weapon.GetComponent(cursorEntity)
+// fireAllWeapons discharges every ready weapon in one cursor's loadout
+func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.WeaponComponent) {
+	cursorPos, ok := s.world.Positions.GetPosition(cursor)
 	if !ok {
 		return
 	}
@@ -573,7 +560,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 		if launcherReady && launcherCharges > maxNeeded {
 			maxNeeded = launcherCharges
 		}
-		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, cursorEntity)
+		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, cursor)
 	}
 
 	for wt := range weaponComp.Charges {
@@ -582,9 +569,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 			continue
 		}
 
-		weapon := component.WeaponType(wt)
-
-		switch weapon {
+		switch component.WeaponType(wt) {
 		case component.WeaponRod:
 			// Slice shared result instead of independent fetch
 			assignments := sharedAssignments
@@ -603,8 +588,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 				s.triggerOrbFlash(rodOrbEntity)
 			}
 
-			// Rod fires at unique targets only - no cycling
-			// Count unique targets (assignments may have duplicates from overflow distribution)
+			// Rod fires at unique targets only - assignments may repeat under overflow
 			seen := make(map[core.Entity]bool, len(assignments))
 			for _, a := range assignments {
 				if seen[a.Target] {
@@ -614,7 +598,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 
 				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
-					OwnerEntity:  cursorEntity,
+					OwnerEntity:  cursor,
 					OriginEntity: rodOrbEntity,
 					TargetEntity: a.Target,
 					HitEntity:    a.Hit,
@@ -650,7 +634,7 @@ func (s *WeaponSystem) fireAllWeapons() {
 			}
 
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
-				OwnerEntity:  cursorEntity,
+				OwnerEntity:  cursor,
 				OriginEntity: launcherOrbEntity,
 				OriginX:      originX,
 				OriginY:      originY,
@@ -660,15 +644,14 @@ func (s *WeaponSystem) fireAllWeapons() {
 			})
 
 		case component.WeaponDisruptor:
-			s.fireDisruptorWeapon(cursorEntity, cursorPos, &weaponComp)
+			s.fireDisruptorWeapon(cursor, cursorPos, weaponComp)
 		}
 	}
-
-	s.world.Components.Weapon.SetComponent(cursorEntity, weaponComp)
 }
 
-func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {
-	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, cursorEntity)
+// fireDisruptorWeapon discharges one cursor's area pulse
+func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {
+	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, cursor)
 	if len(targets) == 0 {
 		return
 	}
@@ -686,8 +669,8 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos c
 	for _, target := range targets {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackPulse,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
 			TargetEntity: target.Target,
 			HitEntities:  target.Members,
 			OriginX:      cursorPos.X,
@@ -695,11 +678,30 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursorEntity core.Entity, cursorPos c
 		})
 	}
 
-	// Set pulse effect on cursor for visual feedback
-	s.world.Components.Pulse.SetComponent(cursorEntity, component.PulseComponent{
+	// Set pulse effect on the firing cursor for visual feedback
+	s.world.Components.Pulse.SetComponent(cursor, component.PulseComponent{
 		OriginX:   cursorPos.X,
 		OriginY:   cursorPos.Y,
 		Duration:  parameter.PulseEffectDuration,
 		Remaining: parameter.PulseEffectDuration,
 	})
+}
+
+// publishLoadout mirrors one cursor's owned weapons into its roster slot
+func (s *WeaponSystem) publishLoadout(cursor core.Entity, weaponComp *component.WeaponComponent) {
+	slot, ok := s.world.CursorSlot(cursor)
+	if !ok {
+		return
+	}
+	s.statRod.Store(slot, weaponComp.Charges[component.WeaponRod] > 0)
+	s.statLauncher.Store(slot, weaponComp.Charges[component.WeaponLauncher] > 0)
+	s.statDisruptor.Store(slot, weaponComp.Charges[component.WeaponDisruptor] > 0)
+}
+
+// clearSlot zeroes a retired slot's cells
+func (s *WeaponSystem) clearSlot(slot uint8) {
+	s.statRod.Store(slot, false)
+	s.statLauncher.Store(slot, false)
+	s.statDisruptor.Store(slot, false)
+	s.statOrbs.Store(slot, 0)
 }

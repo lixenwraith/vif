@@ -276,9 +276,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 		return
 	}
 
-	// Resolve attacker type
+	// Resolve attacker type; any cursor on the roster attacks as a cursor
 	var attackerType component.CombatEntityType
-	if payload.OriginEntity == s.world.Resources.Player.Entity {
+	if s.world.Components.Cursor.HasEntity(payload.OriginEntity) {
 		attackerType = component.CombatEntityCursor
 	} else if attackerComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
 		attackerType = attackerComp.CombatEntityType
@@ -411,8 +411,9 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 	}
 	currentEnergy := energyComp.Current
 
-	// Energy reward
+	// Energy reward to the draining cursor
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+		Entity:     ownerEntity,
 		Delta:      parameter.VampireDrainEnergyValue,
 		Percentage: false,
 		Type:       component.EnergyDeltaReward,

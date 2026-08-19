@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -16,19 +17,33 @@ import (
 type CursorSystem struct {
 	world *engine.World
 
-	statCount *atomic.Int64
+	statCount       *atomic.Int64
+	statLocal       *atomic.Int64
+	statSlotEntity  [parameter.MaxPlayers]*atomic.Int64
+	statSlotControl [parameter.MaxPlayers]*atomic.Int64
 }
 
 // NewCursorSystem creates the cursor system
 func NewCursorSystem(world *engine.World) engine.System {
 	s := &CursorSystem{world: world}
-	s.statCount = world.Resources.Status.Ints.Get("player.count")
+
+	reg := world.Resources.Status
+	s.statCount = reg.Ints.Get("player.count")
+	s.statLocal = reg.Ints.Get("player.local")
+	for i := range parameter.MaxPlayers {
+		s.statSlotEntity[i] = reg.Ints.Get(status.PlayerKey(i, "entity"))
+		s.statSlotControl[i] = reg.Ints.Get(status.PlayerKey(i, "control"))
+	}
+
 	s.Init()
 	return s
 }
 
 // Init resets per-session state; the roster is cleared with the world it indexes
-func (s *CursorSystem) Init() { s.statCount.Store(0) }
+func (s *CursorSystem) Init() {
+	s.statCount.Store(0)
+	s.publishRoster()
+}
 
 // Name returns system's name
 func (s *CursorSystem) Name() string { return "cursor" }
@@ -47,6 +62,7 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
 		event.EventCursorMoveRequest,
+		event.EventCursorSetLocalRequest,
 	}
 }
 
@@ -64,6 +80,11 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCursorMoveRequest:
 		if p, ok := ev.Payload.(*event.CursorMoveRequestPayload); ok {
 			s.move(p)
+		}
+
+	case event.EventCursorSetLocalRequest:
+		if p, ok := ev.Payload.(*event.CursorSetLocalPayload); ok {
+			s.setLocal(p.Slot)
 		}
 	}
 }
@@ -126,9 +147,9 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 	e := s.build(slot, x, y, component.ControlKind(p.Control), p.PeerID)
 	roster.Bind(slot, e)
 	s.world.UpdateBoundsRadius()
-	s.statCount.Store(int64(roster.Count()))
+	s.publishRoster()
 
-	vlog.Info("app", "msg", "cursor spawn", "entity", uint64(e), "slot", slot, "x", x, "y", y)
+	vlog.Info("app", "msg", "cursor spawn", "entity", uint64(e), "slot", int(slot), "x", x, "y", y)
 	s.world.PushEvent(event.EventCursorSpawned, &event.CursorSpawnedPayload{Entity: e, X: x, Y: y, Slot: slot})
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 }
@@ -147,7 +168,7 @@ func (s *CursorSystem) despawn(p *event.CursorDespawnRequestPayload) {
 	default:
 		s.destroy(p.Slot)
 	}
-	s.statCount.Store(int64(s.world.Resources.Player.Count()))
+	s.publishRoster()
 }
 
 // destroy removes one rostered cursor. The entity carries ProtectAll, so its owning
@@ -161,7 +182,7 @@ func (s *CursorSystem) destroy(slot uint8) {
 	roster.Unbind(slot)
 	s.world.DestroyEntity(e)
 
-	vlog.Info("app", "msg", "cursor despawn", "entity", uint64(e), "slot", slot)
+	vlog.Info("app", "msg", "cursor despawn", "entity", uint64(e), "slot", int(slot))
 	s.world.PushEvent(event.EventCursorDespawned, &event.CursorDespawnedPayload{Entity: e, Slot: slot})
 }
 
@@ -206,4 +227,38 @@ func (s *CursorSystem) resolve(e core.Entity) core.Entity {
 func (s *CursorSystem) fail(reason string) {
 	vlog.Warn("app", "msg", "cursor spawn failed", "reason", reason)
 	s.world.PushEvent(event.EventCursorSpawnFailed, nil)
+}
+
+// setLocal rebinds the followed slot and re-announces its position so the camera re-anchors
+func (s *CursorSystem) setLocal(slot uint8) {
+	roster := s.world.Resources.Player
+	if int(slot) >= parameter.MaxPlayers || roster.LocalSlot() == slot {
+		return
+	}
+	roster.SetLocal(slot)
+	s.world.UpdateBoundsRadius()
+	s.publishRoster()
+
+	vlog.Info("app", "msg", "cursor local", "slot", int(slot), "entity", uint64(roster.Entity))
+	s.world.PushEvent(event.EventCursorLocalChanged, &event.CursorSetLocalPayload{Slot: slot})
+	if pos, ok := s.world.Positions.GetPosition(roster.Entity); ok {
+		s.world.PushEvent(event.EventCursorMoved,
+			&event.CursorMovedPayload{Entity: roster.Entity, X: pos.X, Y: pos.Y})
+	}
+}
+
+// publishRoster mirrors slot occupancy; called on every lifecycle change
+func (s *CursorSystem) publishRoster() {
+	roster := s.world.Resources.Player
+	for i := range parameter.MaxPlayers {
+		e := roster.Slot(uint8(i))
+		s.statSlotEntity[i].Store(int64(e))
+		var control int64 = -1
+		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
+			control = int64(c.Control)
+		}
+		s.statSlotControl[i].Store(control)
+	}
+	s.statCount.Store(int64(roster.Count()))
+	s.statLocal.Store(int64(roster.LocalSlot()))
 }

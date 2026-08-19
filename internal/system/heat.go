@@ -1,111 +1,106 @@
 package system
 
 import (
-	"sync/atomic"
-
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
-// HeatSystem owns HeatComponent mutations
+// HeatSystem owns HeatComponent mutations; every cursor carries its own heat
 type HeatSystem struct {
 	world *engine.World
 
-	statCurrent  *atomic.Int64
-	statOverheat *atomic.Int64
-	statAtMax    *atomic.Bool
-	statEmber    *atomic.Bool
+	statCurrent  *status.PlayerInt
+	statOverheat *status.PlayerInt
+	statAtMax    *status.PlayerBool
+	statEmber    *status.PlayerBool
 
 	enabled bool
 }
 
+// NewHeatSystem creates a new heat system
 func NewHeatSystem(world *engine.World) engine.System {
-	s := &HeatSystem{
-		world: world,
-	}
+	s := &HeatSystem{world: world}
 
-	s.statCurrent = s.world.Resources.Status.Ints.Get("heat.current")
-	s.statOverheat = s.world.Resources.Status.Ints.Get("heat.overheat")
-	s.statAtMax = s.world.Resources.Status.Bools.Get("heat.at_max")
-	s.statEmber = s.world.Resources.Status.Bools.Get("heat.ember")
+	reg := world.Resources.Status
+	s.statCurrent = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.current", "heat.current")
+	s.statOverheat = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.overheat", "heat.overheat")
+	s.statAtMax = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.at_max", "heat.at_max")
+	s.statEmber = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.ember", "heat.ember")
 
 	s.Init()
 	return s
 }
 
-// Init resets session state for new game
+// Init resets session state for a new game
 func (s *HeatSystem) Init() {
-	s.statCurrent.Store(0)
-	s.statOverheat.Store(0)
-	s.statAtMax.Store(false)
-	s.statEmber.Store(false)
+	s.statCurrent.Reset()
+	s.statOverheat.Reset()
+	s.statAtMax.Reset()
+	s.statEmber.Reset()
 	s.enabled = true
 }
 
 // Name returns system's name
-func (s *HeatSystem) Name() string {
-	return "heat"
-}
+func (s *HeatSystem) Name() string { return "heat" }
 
-func (s *HeatSystem) Priority() int {
-	return parameter.PriorityHeat
-}
+// Priority returns the system's priority
+func (s *HeatSystem) Priority() int { return parameter.PriorityHeat }
 
+// Update advances burst flash and ember decay for every cursor
 func (s *HeatSystem) Update() {
 	if !s.enabled {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Player.Entity
-	heatComp, ok := s.world.Components.Heat.GetPtr(cursorEntity)
-	if !ok {
-		return
-	}
+	dt := s.world.Resources.Time.DeltaTime
+	now := s.world.Resources.Time.GameTime
 
-	// Handle burst flash timeout
-	if heatComp.BurstFlashRemaining > 0 {
-		dt := s.world.Resources.Time.DeltaTime
-		heatComp.BurstFlashRemaining -= dt
-		if heatComp.BurstFlashRemaining <= 0 {
-			heatComp.BurstFlashRemaining = 0
+	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		heatComp, ok := s.world.Components.Heat.GetPtr(e)
+		if !ok {
+			return true
 		}
-	}
 
-	// Handle ember decay
-	if heatComp.EmberActive {
-		now := s.world.Resources.Time.GameTime
-		if now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
+		// Handle burst flash timeout
+		if heatComp.BurstFlashRemaining > 0 {
+			heatComp.BurstFlashRemaining = max(heatComp.BurstFlashRemaining-dt, 0)
+		}
+
+		// Handle ember decay
+		if heatComp.EmberActive && now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
 			heatComp.Current -= parameter.EmberDecayAmount
 			heatComp.EmberDecayTime = now
 
 			if heatComp.Current <= 0 {
 				heatComp.Current = 0
 				heatComp.EmberActive = false
-				s.statEmber.Store(false)
 			}
-
 			// Enforce invariant: heat < max → no overheat
 			if heatComp.Current < parameter.HeatMax {
 				heatComp.Overheat = 0
 			}
-
-			s.statCurrent.Store(int64(heatComp.Current))
-			s.statOverheat.Store(int64(heatComp.Overheat))
-			s.statAtMax.Store(heatComp.Current >= parameter.HeatMax)
+			s.publish(e, heatComp)
 		}
-	}
+		return true
+	})
 }
 
+// EventTypes returns the event types HeatSystem handles
 func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
+		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
 }
 
+// HandleEvent processes heat commands, each naming the cursor it acts on
 func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		s.Init()
@@ -124,23 +119,33 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	if ev.Type == event.EventCursorDespawned {
+		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok {
+			s.clearSlot(p.Slot)
+		}
+		return
+	}
+
+	cursor := s.world.TargetCursor(ev.Payload)
+	if cursor == 0 {
+		return
+	}
+
 	switch ev.Type {
 	case event.EventHeatAddRequest:
 		if payload, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
-			s.addHeat(payload.Delta)
+			s.addHeat(cursor, payload.Delta)
 		}
 	case event.EventHeatSetRequest:
 		if payload, ok := ev.Payload.(*event.HeatSetRequestPayload); ok {
-			s.setHeat(payload.Value)
+			s.setHeat(cursor, payload.Value)
 		}
 	}
 }
 
-// addHeat applies delta with clamping and writes back to store
-func (s *HeatSystem) addHeat(delta int) {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+// addHeat applies a delta to one cursor with clamping and overheat rollover
+func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
+	heatComp, ok := s.world.Components.Heat.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -148,20 +153,14 @@ func (s *HeatSystem) addHeat(delta int) {
 	// Reset overheat if heat penalty
 	if delta < 0 {
 		heatComp.Overheat = 0
-
-		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
-			ID: parameter.Sfx.MetalHit,
-		})
-
+		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.MetalHit})
 	}
 
-	// Update heat, clamp to bounds, update overheat
-	current := heatComp.Current
-	newVal := max(0, current+delta)
+	// Update heat, clamp to bounds, accumulate overheat
+	newVal := max(0, heatComp.Current+delta)
 	if newVal > parameter.HeatMax {
-		overheat := newVal - parameter.HeatMax
+		heatComp.Overheat += newVal - parameter.HeatMax
 		newVal = parameter.HeatMax
-		heatComp.Overheat += overheat
 	}
 	heatComp.Current = newVal
 
@@ -171,27 +170,20 @@ func (s *HeatSystem) addHeat(delta int) {
 		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
-		s.world.PushEvent(event.EventHeatBurst, nil)
-		s.statEmber.Store(true)
+		s.world.PushEvent(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
 	}
 
-	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
-
-	s.statCurrent.Store(int64(heatComp.Current))
-	s.statOverheat.Store(int64(heatComp.Overheat))
-	s.statAtMax.Store(newVal >= parameter.HeatMax)
+	s.publish(cursor, heatComp)
 }
 
-// setHeat stores absolute value with clamping and writes back to store
-func (s *HeatSystem) setHeat(value int) {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+// setHeat writes an absolute value to one cursor with clamping
+func (s *HeatSystem) setHeat(cursor core.Entity, value int) {
+	heatComp, ok := s.world.Components.Heat.GetPtr(cursor)
 	if !ok {
 		return
 	}
 
-	// Clamp
+	// Clamp, spilling the excess into overheat
 	if value < 0 {
 		value = 0
 	}
@@ -201,12 +193,27 @@ func (s *HeatSystem) setHeat(value int) {
 	} else {
 		heatComp.Overheat = 0
 	}
-
 	heatComp.Current = value
 
-	s.statCurrent.Store(int64(value))
-	s.statOverheat.Store(int64(heatComp.Overheat))
-	s.statAtMax.Store(value >= parameter.HeatMax)
+	s.publish(cursor, heatComp)
+}
 
-	s.world.Components.Heat.SetComponent(cursorEntity, heatComp)
+// publish mirrors one cursor's heat into its roster slot
+func (s *HeatSystem) publish(cursor core.Entity, heatComp *component.HeatComponent) {
+	slot, ok := s.world.CursorSlot(cursor)
+	if !ok {
+		return
+	}
+	s.statCurrent.Store(slot, int64(heatComp.Current))
+	s.statOverheat.Store(slot, int64(heatComp.Overheat))
+	s.statAtMax.Store(slot, heatComp.Current >= parameter.HeatMax)
+	s.statEmber.Store(slot, heatComp.EmberActive)
+}
+
+// clearSlot zeroes a retired slot's cells
+func (s *HeatSystem) clearSlot(slot uint8) {
+	s.statCurrent.Store(slot, 0)
+	s.statOverheat.Store(slot, 0)
+	s.statAtMax.Store(slot, false)
+	s.statEmber.Store(slot, false)
 }

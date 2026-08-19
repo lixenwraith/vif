@@ -579,12 +579,16 @@ func (r *Router) handleGoldJump() bool {
 }
 
 func (r *Router) handleFireMain() bool {
-	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
+	r.ctx.PushEvent(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	return true
 }
 
 func (r *Router) handleFireSpecial() bool {
-	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+	r.ctx.PushEvent(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	return true
 }
 
@@ -684,6 +688,7 @@ func (r *Router) handleInsertChar(char rune) {
 	}
 
 	payload := event.CharacterTypedPayloadPool.Get().(*event.CharacterTypedPayload)
+	payload.Entity = r.ctx.World.Resources.Player.Entity
 	payload.Char = char
 	payload.X = posX
 	payload.Y = posY
@@ -1002,7 +1007,9 @@ func (r *Router) handleOverlayClose() bool {
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	r.moveMouseCursor(intent)
-	r.ctx.PushEvent(event.EventWeaponFireRequest, nil)
+	r.ctx.PushEvent(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	r.mouseLeftHeld = true
 	r.lastFireMain = r.ctx.TimeCtl.Now()
 	return true
@@ -1084,14 +1091,17 @@ func (r *Router) ProcessInputTick() bool {
 	now := r.ctx.TimeCtl.Now()
 	auto := r.ctx.AutoFire.Load()
 	mouse := !r.ctx.MouseDisabled.Load()
+	player := r.ctx.World.Resources.Player.Entity
 
 	emitted := false
 	if o, due := r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld); due {
-		r.ctx.PushEventOrigin(event.EventWeaponFireRequest, nil, o)
+		r.ctx.PushEventOrigin(event.EventWeaponFireRequest,
+			&event.WeaponFireRequestPayload{Entity: player}, o)
 		emitted = true
 	}
 	if o, due := r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld); due {
-		r.ctx.PushEventOrigin(event.EventFireSpecialRequest, nil, o)
+		r.ctx.PushEventOrigin(event.EventFireSpecialRequest,
+			&event.FireSpecialRequestPayload{Entity: player}, o)
 		emitted = true
 	}
 	return emitted

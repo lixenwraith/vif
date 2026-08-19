@@ -3,6 +3,7 @@ package system
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -43,6 +44,7 @@ func (s *PingSystem) Priority() int {
 func (s *PingSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventPingGridRequest,
+		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -67,9 +69,15 @@ func (s *PingSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	if ev.Type == event.EventPingGridRequest {
-		if payload, ok := ev.Payload.(*event.PingGridRequestPayload); ok {
-			s.handleGridRequest(payload.Duration)
+	switch ev.Type {
+
+	case event.EventPingGridRequest:
+		p, ok := ev.Payload.(*event.PingGridRequestPayload)
+		if !ok {
+			return
+		}
+		if target := s.world.TargetCursor(ev.Payload); target != 0 {
+			s.handleGridRequest(target, p.Duration)
 		}
 	}
 }
@@ -100,17 +108,12 @@ func (s *PingSystem) Update() {
 	}
 }
 
-// handleGridRequest activates the grid on the cursor entity
-func (s *PingSystem) handleGridRequest(duration time.Duration) {
-	// In single player, apply to the main cursor
-	entity := s.world.Resources.Player.Entity
-
-	ping, ok := s.world.Components.Ping.GetComponent(entity)
+// handleGridRequest activates the grid on one cursor
+func (s *PingSystem) handleGridRequest(entity core.Entity, duration time.Duration) {
+	ping, ok := s.world.Components.Ping.GetPtr(entity)
 	if !ok {
 		return
 	}
-
 	ping.GridActive = true
 	ping.GridRemaining = duration
-	s.world.Components.Ping.SetComponent(entity, ping)
 }

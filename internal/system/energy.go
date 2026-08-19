@@ -4,20 +4,24 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 )
 
-// EnergySystem handles character typing and energy calculation
+// EnergySystem owns EnergyComponent mutations; every cursor carries its own energy
 type EnergySystem struct {
 	world *engine.World
 
-	// Cycle difficulty scaling
+	// Cycle difficulty scaling: a world property, not a player one
 	damageMultiplier int64
 
-	// Telemetry
-	statCurrent          *atomic.Int64
+	// Per-cursor state
+	statCurrent *status.PlayerInt
+
+	// Roster-wide occurrence counters
 	statDamageMultiplier *atomic.Int64
 	statPenaltyCount     *atomic.Int64
 	statRewardCount      *atomic.Int64
@@ -29,26 +33,25 @@ type EnergySystem struct {
 
 // NewEnergySystem creates a new energy system
 func NewEnergySystem(world *engine.World) engine.System {
-	s := &EnergySystem{
-		world: world,
-	}
+	s := &EnergySystem{world: world}
 
-	s.statCurrent = s.world.Resources.Status.Ints.Get("energy.current")
-	s.statDamageMultiplier = s.world.Resources.Status.Ints.Get("energy.damage_multiplier")
-	s.statPenaltyCount = s.world.Resources.Status.Ints.Get("energy.penalty_count")
-	s.statRewardCount = s.world.Resources.Status.Ints.Get("energy.reward_count")
-	s.statSpendCount = s.world.Resources.Status.Ints.Get("energy.spend_count")
-	s.statCrossedZeroCount = s.world.Resources.Status.Ints.Get("energy.crossed_zero_count")
+	reg := world.Resources.Status
+	s.statCurrent = status.NewPlayerInt(reg, parameter.MaxPlayers, "energy.current", "energy.current")
+	s.statDamageMultiplier = reg.Ints.Get("energy.damage_multiplier")
+	s.statPenaltyCount = reg.Ints.Get("energy.penalty_count")
+	s.statRewardCount = reg.Ints.Get("energy.reward_count")
+	s.statSpendCount = reg.Ints.Get("energy.spend_count")
+	s.statCrossedZeroCount = reg.Ints.Get("energy.crossed_zero_count")
 
 	s.Init()
 	return s
 }
 
-// Init resets session state for new game
+// Init resets session state for a new game
 func (s *EnergySystem) Init() {
 	s.damageMultiplier = 1
 
-	s.statCurrent.Store(0)
+	s.statCurrent.Reset()
 	s.statDamageMultiplier.Store(1)
 	s.statPenaltyCount.Store(0)
 	s.statRewardCount.Store(0)
@@ -59,14 +62,10 @@ func (s *EnergySystem) Init() {
 }
 
 // Name returns system's name
-func (s *EnergySystem) Name() string {
-	return "energy"
-}
+func (s *EnergySystem) Name() string { return "energy" }
 
 // Priority returns the system's priority
-func (s *EnergySystem) Priority() int {
-	return parameter.PriorityEnergy
-}
+func (s *EnergySystem) Priority() int { return parameter.PriorityEnergy }
 
 // EventTypes returns the event types EnergySystem handles
 func (s *EnergySystem) EventTypes() []event.EventType {
@@ -78,12 +77,13 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 		event.EventEnergyBlinkStop,
 		event.EventCycleDamageMultiplierIncrease,
 		event.EventCycleDamageMultiplierReset,
+		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
 }
 
-// HandleEvent processes input-related events from the router
+// HandleEvent processes energy events; each command names the cursor it acts on
 func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		s.Init()
@@ -102,89 +102,98 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
+	// World-scoped events resolve no cursor of their own
 	switch ev.Type {
-	case event.EventEnergyAddRequest:
-		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
-			s.addEnergy(int64(payload.Delta), payload.Percentage, payload.Type)
+	case event.EventCursorDespawned:
+		if p, ok := ev.Payload.(*event.CursorDespawnedPayload); ok {
+			s.statCurrent.Store(p.Slot, 0)
 		}
-
-	case event.EventEnergySetRequest:
-		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
-			s.setEnergy(int64(payload.Value))
-		}
-
-	case event.EventEnergyGlyphConsumed:
-		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
-			s.handleGlyphConsumed(payload.Type, payload.Level)
-		}
-
-	case event.EventEnergyBlinkStart:
-		if payload, ok := ev.Payload.(*event.EnergyBlinkPayload); ok {
-			s.startBlink(payload.Type, payload.Level)
-		}
-
-	case event.EventEnergyBlinkStop:
-		s.stopBlink()
+		return
 
 	case event.EventCycleDamageMultiplierIncrease:
 		s.damageMultiplier *= 2
 		s.statDamageMultiplier.Store(s.damageMultiplier)
+		return
 
 	case event.EventCycleDamageMultiplierReset:
 		s.damageMultiplier = 1
 		s.statDamageMultiplier.Store(1)
+		return
+	}
+
+	cursor := s.world.TargetCursor(ev.Payload)
+	if cursor == 0 {
+		return
+	}
+
+	switch ev.Type {
+	case event.EventEnergyAddRequest:
+		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
+			s.addEnergy(cursor, int64(payload.Delta), payload.Percentage, payload.Type)
+		}
+
+	case event.EventEnergySetRequest:
+		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
+			s.setEnergy(cursor, int64(payload.Value))
+		}
+
+	case event.EventEnergyGlyphConsumed:
+		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
+			s.handleGlyphConsumed(cursor, payload.Type, payload.Level)
+		}
+
+	case event.EventEnergyBlinkStart:
+		if payload, ok := ev.Payload.(*event.EnergyBlinkPayload); ok {
+			s.startBlink(cursor, payload.Type, payload.Level)
+		}
+
+	case event.EventEnergyBlinkStop:
+		s.stopBlink(cursor)
 	}
 }
 
-// Update manages blink timeout and shield activation state
+// Update ages blink and error flash and reconciles shield state, per cursor
 func (s *EnergySystem) Update() {
 	if !s.enabled {
 		return
 	}
 
 	dt := s.world.Resources.Time.DeltaTime
-	cursorEntity := s.world.Resources.Player.Entity
 
-	// Clear error flash after timeout
-	cursorComp, ok := s.world.Components.Cursor.GetPtr(cursorEntity)
-	if ok && cursorComp.ErrorFlashRemaining > 0 {
-		cursorComp.ErrorFlashRemaining -= dt
-		if cursorComp.ErrorFlashRemaining <= 0 {
-			cursorComp.ErrorFlashRemaining = 0
+	s.world.Components.Cursor.Each(func(e core.Entity, cursorComp *component.CursorComponent) bool {
+		// Clear error flash after timeout
+		if cursorComp.ErrorFlashRemaining > 0 {
+			cursorComp.ErrorFlashRemaining = max(cursorComp.ErrorFlashRemaining-dt, 0)
 		}
-	}
 
-	// Clear energy blink after timeout
-	energyComp, hasEnergy := s.world.Components.Energy.GetPtr(cursorEntity)
-	if hasEnergy && energyComp.BlinkActive {
-		remaining := energyComp.BlinkRemaining - dt
-		if remaining <= 0 {
-			remaining = 0
-			energyComp.BlinkActive = false
+		// Clear energy blink after timeout
+		var energy int64
+		if energyComp, ok := s.world.Components.Energy.GetPtr(e); ok {
+			if energyComp.BlinkActive {
+				energyComp.BlinkRemaining -= dt
+				if energyComp.BlinkRemaining <= 0 {
+					energyComp.BlinkRemaining = 0
+					energyComp.BlinkActive = false
+				}
+			}
+			energy = energyComp.Current
 		}
-		energyComp.BlinkRemaining = remaining
-	}
 
-	// Evaluate shield activation state
-	var energy int64
-	if hasEnergy {
-		energy = energyComp.Current
-	}
-	shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity)
-	if ok {
-		shieldActive := shieldComp.Active
-		if energy != 0 && !shieldActive {
-			s.world.PushEvent(event.EventShieldActivate, nil)
-		} else if energy == 0 && shieldActive {
-			s.world.PushEvent(event.EventShieldDeactivate, nil)
+		// Evaluate shield activation state for this cursor alone
+		if shieldComp, ok := s.world.Components.Shield.GetComponent(e); ok {
+			if energy != 0 && !shieldComp.Active {
+				s.world.PushEvent(event.EventShieldActivate, &event.ShieldActivatePayload{Entity: e})
+			} else if energy == 0 && shieldComp.Active {
+				s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: e})
+			}
 		}
-	}
+		return true
+	})
 }
 
-// addEnergy modifies energy on cursor entity
-func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType component.EnergyDeltaType) {
-	cursorEntity := s.world.Resources.Player.Entity
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+// addEnergy applies a delta to one cursor's energy
+func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage bool, deltaType component.EnergyDeltaType) {
+	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
 	if !ok {
 		return
 	}
@@ -202,25 +211,20 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType compone
 		return
 	}
 
-	// Calculate defensive absolute magnitude
-	absDelta := delta
-	if absDelta < 0 {
-		absDelta = -absDelta
-	}
+	// Defensive absolute magnitude; the delta type carries the direction
+	absDelta := absI64(delta)
 
 	// Apply cycle damage multiplier to penalties
 	if deltaType == component.EnergyDeltaPenalty {
 		absDelta *= s.damageMultiplier
 	}
 
-	negativeEnergy := currentEnergy < 0
-
 	var newEnergy int64
 	var crossedZero bool
 	switch deltaType {
 	case component.EnergyDeltaReward:
 		// Absolute value increase, can't cross zero
-		if negativeEnergy {
+		if currentEnergy < 0 {
 			newEnergy = currentEnergy - absDelta
 		} else {
 			newEnergy = currentEnergy + absDelta
@@ -228,113 +232,96 @@ func (s *EnergySystem) addEnergy(delta int64, percentage bool, deltaType compone
 
 	case component.EnergyDeltaPenalty:
 		// Boost protects from penalties
-		if boostComp, ok := s.world.Components.Boost.GetComponent(cursorEntity); ok && boostComp.Active {
+		if boostComp, ok := s.world.Components.Boost.GetComponent(cursor); ok && boostComp.Active {
 			return
 		}
 		// Ember protects from penalties
-		if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok && heatComp.EmberActive {
+		if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive {
 			return
 		}
-		// Convergent to zero and clamps to zero
-		if negativeEnergy {
-			newEnergy = currentEnergy + absDelta
-			if newEnergy > 0 {
-				crossedZero = true
-				newEnergy = 0
-			}
-		} else {
-			newEnergy = currentEnergy - absDelta
-			if newEnergy < 0 {
-				crossedZero = true
-				newEnergy = 0
-			}
-		}
+		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
 
 	case component.EnergyDeltaPassive:
 		// Bypasses ember/boost, convergent clamp to zero
-		if negativeEnergy {
-			newEnergy = currentEnergy + absDelta
-			if newEnergy > 0 {
-				crossedZero = true
-				newEnergy = 0
-			}
-		} else {
-			newEnergy = currentEnergy - absDelta
-			if newEnergy < 0 {
-				crossedZero = true
-				newEnergy = 0
-			}
-		}
+		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
 
 	case component.EnergyDeltaSpend:
 		s.statSpendCount.Add(1)
 		// Convergent to zero, can cross zero
-		if negativeEnergy {
-			newEnergy = currentEnergy + absDelta
-			if newEnergy > 0 {
-				crossedZero = true
-			}
-		} else {
-			newEnergy = currentEnergy - absDelta
-			if newEnergy < 0 {
-				crossedZero = true
-			}
-		}
+		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, false)
 	}
 
 	energyComp.Current = newEnergy
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
-	s.statCurrent.Store(newEnergy)
+	s.world.Components.Energy.SetComponent(cursor, energyComp)
+	s.publish(cursor, newEnergy)
 
 	// Preventing one frame flickering of shield at zero energy
 	if newEnergy == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 		return
 	}
 
 	// Signal to remove buffs
 	if crossedZero {
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 	}
 }
 
-// setEnergy sets energy value
-func (s *EnergySystem) setEnergy(value int64) {
-	cursorEntity := s.world.Resources.Player.Entity
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+// convergeToZero moves value toward zero by mag; clamp stops it at zero
+func convergeToZero(value, mag int64, clamp bool) (result int64, crossed bool) {
+	if value < 0 {
+		result = value + mag
+		if result > 0 {
+			crossed = true
+			if clamp {
+				result = 0
+			}
+		}
+		return result, crossed
+	}
+	result = value - mag
+	if result < 0 {
+		crossed = true
+		if clamp {
+			result = 0
+		}
+	}
+	return result, crossed
+}
+
+// setEnergy writes an absolute value to one cursor
+func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
+	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
 	if !ok {
 		return
 	}
 
 	currentEnergy := energyComp.Current
 	if (currentEnergy < 0 && value > 0) || (currentEnergy >= 0 && value < 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 	}
 	if value == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
-		s.statCurrent.Store(value)
+		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 	}
 
 	energyComp.Current = value
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
-	s.statCurrent.Store(value)
+	s.world.Components.Energy.SetComponent(cursor, energyComp)
+	s.publish(cursor, value)
 }
 
-// handleGlyphConsumed calculates and applies energy from glyph destruction
-func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ component.GlyphLevel) {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity)
+// handleGlyphConsumed applies energy from a glyph destroyed by one cursor
+func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType component.GlyphType, _ component.GlyphLevel) {
+	heatComp, ok := s.world.Components.Heat.GetComponent(cursor)
 	if !ok {
 		return
 	}
 
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
 	if !ok {
 		return
 	}
@@ -356,23 +343,23 @@ func (s *EnergySystem) handleGlyphConsumed(glyphType component.GlyphType, _ comp
 	newEnergy := currentEnergy + int64(delta)
 
 	energyComp.Current = newEnergy
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+	s.world.Components.Energy.SetComponent(cursor, energyComp)
+	s.publish(cursor, newEnergy)
 
 	if newEnergy == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, nil)
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		return
 	}
 
 	if (newEnergy > 0 && currentEnergy < 0) || (newEnergy < 0 && currentEnergy > 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZero, nil)
+		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 	}
 }
 
-// startBlink activates blink state
-func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
-	cursorEntity := s.world.Resources.Player.Entity
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+// startBlink activates blink state on one cursor
+func (s *EnergySystem) startBlink(cursor core.Entity, blinkType, blinkLevel int) {
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -380,17 +367,29 @@ func (s *EnergySystem) startBlink(blinkType, blinkLevel int) {
 	energyComp.BlinkType = blinkType
 	energyComp.BlinkLevel = blinkLevel
 	energyComp.BlinkRemaining = parameter.EnergyBlinkTimeout
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
 }
 
-// stopBlink clears blink state
-func (s *EnergySystem) stopBlink() {
-	cursorEntity := s.world.Resources.Player.Entity
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+// stopBlink clears blink state on one cursor
+func (s *EnergySystem) stopBlink(cursor core.Entity) {
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
 		return
 	}
 	energyComp.BlinkActive = false
 	energyComp.BlinkRemaining = 0
-	s.world.Components.Energy.SetComponent(cursorEntity, energyComp)
+}
+
+// publish mirrors one cursor's energy into its roster slot
+func (s *EnergySystem) publish(cursor core.Entity, value int64) {
+	if slot, ok := s.world.CursorSlot(cursor); ok {
+		s.statCurrent.Store(slot, value)
+	}
+}
+
+// absI64 returns the magnitude of v
+func absI64(v int64) int64 {
+	if v < 0 {
+		return -v
+	}
+	return v
 }

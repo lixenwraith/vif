@@ -26,8 +26,10 @@ type MetaSystem struct {
 	statMapH    *atomic.Int64
 	statCameraX *atomic.Int64
 	statCameraY *atomic.Int64
-	statPlayerX *atomic.Int64
-	statPlayerY *atomic.Int64
+	// statPlayerX *atomic.Int64
+	// statPlayerY *atomic.Int64
+	statPlayerX *status.PlayerInt
+	statPlayerY *status.PlayerInt
 
 	// Kill counters gate FSM region transitions, so they live in a system with
 	// no enable/disable toggle
@@ -52,8 +54,10 @@ func (s *MetaSystem) Init() {
 	s.statMapH = reg.Ints.Get("context.map_h")
 	s.statCameraX = reg.Ints.Get("context.camera_x")
 	s.statCameraY = reg.Ints.Get("context.camera_y")
-	s.statPlayerX = reg.Ints.Get("player.x")
-	s.statPlayerY = reg.Ints.Get("player.y")
+	s.statPlayerX = status.NewPlayerInt(reg, parameter.MaxPlayers, "x", "player.x")
+	s.statPlayerY = status.NewPlayerInt(reg, parameter.MaxPlayers, "y", "player.y")
+	// s.statPlayerX = reg.Ints.Get("player.x")
+	// s.statPlayerY = reg.Ints.Get("player.y")
 	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
 		s.statKills[i] = reg.Ints.Get("kills." + component.SpeciesNames[i])
 	}
@@ -174,13 +178,16 @@ func (s *MetaSystem) Update() {
 	s.statCameraX.Store(int64(cfg.CameraX))
 	s.statCameraY.Store(int64(cfg.CameraY))
 
-	player := s.world.Resources.Player.Entity
-	if pos, ok := s.world.Positions.GetPosition(player); ok {
-		s.statPlayerX.Store(int64(pos.X))
-		s.statPlayerY.Store(int64(pos.Y))
-	} else {
-		s.statPlayerX.Store(-1)
-		s.statPlayerY.Store(-1)
+	// Per-slot placement; -1 marks an empty slot
+	roster := s.world.Resources.Player
+	for i := range parameter.MaxPlayers {
+		slot := uint8(i)
+		x, y := int64(-1), int64(-1)
+		if pos, ok := s.world.Positions.GetPosition(roster.Slot(slot)); ok {
+			x, y = int64(pos.X), int64(pos.Y)
+		}
+		s.statPlayerX.Store(slot, x)
+		s.statPlayerY.Store(slot, y)
 	}
 }
 

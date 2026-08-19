@@ -1,6 +1,9 @@
 package status
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // GroupMisc receives metrics registered without a "group.name" key
 const GroupMisc = "misc"
@@ -12,4 +15,10 @@ func SplitKey(key string) (group, name string) {
 		return key[:i], key[i+1:]
 	}
 	return GroupMisc, key
+}
+
+// PlayerKey builds a per-slot metric key: PlayerKey(2, "energy.current") = "player.2.energy.current"
+// Called at construction only; the resulting cell pointer is cached by the caller.
+func PlayerKey(slot int, suffix string) string {
+	return "player." + strconv.Itoa(slot) + "." + suffix
 }

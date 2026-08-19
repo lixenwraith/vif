@@ -275,7 +275,7 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 { action = "...", guard = "GuardName", guard_args = { ... } }
 ```
 
-### Cursor Lifecycle
+## Cursor Lifecycle
 
 The world spawns with no cursor. A configuration must spawn one explicitly:
 
@@ -286,9 +286,49 @@ The world spawns with no cursor. A configuration must spawn one explicitly:
 ```
 
 `center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index.
-`EventCursorSpawned` carries `entity`, `slot`, `x`, `y` and is capturable via
-`capture_vars`; `EventCursorSpawnFailed` signals a full roster or a blocked map.
-A cursor-less configuration is legal — cut-scenes and intros use it.
+`EventCursorSpawned` carries `entity`, `slot`, `x`, `y`; `EventCursorSpawnFailed`
+signals a full roster or a blocked map. A cursor-less configuration is legal.
+
+Capture the entity to address that cursor in later actions:
+
+```toml
+{ trigger = "EventCursorSpawned", target = "Arm", capture_vars = { entity = "player_entity" } }
+# In Arm on_enter:
+{ action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } }
+```
+
+Every player-scoped command payload accepts an `entity` field. Omitting it
+addresses the local cursor — a migration convenience, not the target design.
+
+---
+
+## Player Metrics
+
+Per-cursor state is published under `player.<slot>.<metric>`:
+
+| Key                              | Description                |
+|----------------------------------|----------------------------|
+| `player.<n>.entity`              | Entity id, 0 when empty    |
+| `player.<n>.control`             | 0=human, 1=bot, 2=remote   |
+| `player.<n>.x`, `player.<n>.y`   | Position, -1 when empty    |
+| `player.<n>.energy.current`      | Energy                     |
+| `player.<n>.heat.current`        | Heat                       |
+| `player.<n>.heat.overheat`       | Overheat accumulator       |
+| `player.<n>.heat.at_max`         | Heat at cap                |
+| `player.<n>.heat.ember`          | Ember decay active         |
+| `player.<n>.shield.active`       | Shield up                  |
+| `player.<n>.typing.max_streak`   | Longest correct run        |
+
+`player.count` and `player.local` describe the roster.
+
+The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
+`heat.ember`, `shield.active`, `typing.max_streak`, `player.x`, `player.y`
+mirror **slot 0**. They are a migration shim for configs written against a
+single cursor and will be removed once every map is slot-aware.
+
+Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
+`shield.shield_hit`, `energy.spend_count`, `energy.crossed_zero_count`,
+`energy.damage_multiplier`.
 
 ---
 

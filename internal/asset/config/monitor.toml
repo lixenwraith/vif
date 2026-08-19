@@ -7,7 +7,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } },
 ]
 transitions = [
-    { trigger = "EventCursorSpawned", target = "MonitorStart" },
+    { trigger = "EventCursorSpawned", target = "MonitorArm", capture_vars = { entity = "player_entity" } },
     { trigger = "EventCursorSpawnFailed", target = "MonitorBootRetry" },
 ]
 
@@ -17,14 +17,16 @@ transitions = [
     { trigger = "Tick", target = "MonitorBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
 ]
 
-# Gameplay opens only once a cursor exists
-[states.MonitorStart]
+# Arm the spawned cursor and open gameplay; the reset gate needs a non-zero start
+[states.MonitorArm]
 parent = "Root"
 on_enter = [
+    { action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } },
+    { action = "EmitEvent", event = "EventEnergySetRequest", payload = { entity = 0, value = 100 }, payload_vars = { entity = "player_entity" } },
     { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
 ]
 transitions = [
-    { trigger = "Tick", target = "MonitorWarmup" },
+    { trigger = "Tick", target = "MonitorActive" },
 ]
 
 [states.MonitorCycle]
@@ -33,15 +35,7 @@ transitions = [
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "VarEquals", guard_args = { var = "level_failed", value = 1 } },
 ]
 
-[states.MonitorWarmup]
-parent = "MonitorCycle"
-transitions = [
-    { trigger = "Tick", target = "MonitorActive", guard = "Or", guard_args = { guards = [
-        { name = "StatusIntCompare", args = { key = "heat.current", op = "gt", value = 0 } },
-        { name = "StatusIntCompare", args = { key = "energy.current", op = "neq", value = 0 } },
-    ] } },
-]
-
+# heat.current and energy.current mirror slot 0 until the map is multi-cursor
 [states.MonitorActive]
 parent = "MonitorCycle"
 transitions = [

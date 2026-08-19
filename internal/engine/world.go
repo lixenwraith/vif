@@ -343,6 +343,38 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	return newX, newY, true
 }
 
+// ResolveCursor maps an entity to a live cursor; zero selects the local one
+// Caller MUST hold updateMutex
+func (w *World) ResolveCursor(e core.Entity) core.Entity {
+	if e == 0 {
+		e = w.Resources.Player.Entity
+	}
+	if e == 0 || !w.Components.Cursor.HasEntity(e) {
+		return 0
+	}
+	return e
+}
+
+// TargetCursor resolves the cursor a command payload addresses. An unaddressed
+// payload falls back to the local cursor; that fallback is interim glue for
+// producers not yet stamping an entity.
+func (w *World) TargetCursor(payload any) core.Entity {
+	var e core.Entity
+	if a, ok := payload.(event.Addressed); ok {
+		e = a.Target()
+	}
+	return w.ResolveCursor(e)
+}
+
+// CursorSlot returns the roster slot a cursor entity occupies
+func (w *World) CursorSlot(e core.Entity) (uint8, bool) {
+	c, ok := w.Components.Cursor.GetComponent(e)
+	if !ok || int(c.Slot) >= parameter.MaxPlayers {
+		return 0, false
+	}
+	return c.Slot, true
+}
+
 // === Level ===
 
 // SetupLevel reconfigures map dimensions and optionally clears entities

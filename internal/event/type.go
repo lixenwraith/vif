@@ -189,20 +189,20 @@ const (
 	EventEnergyAddRequest
 	// EventEnergySetRequest (EnergySetPayload) signals setting energy to specific value
 	EventEnergySetRequest
-	// EventEnergyCrossedZero signals energy crossing zero
+	// EventEnergyCrossedZero (EnergyCrossedZeroPayload) signals energy crossing zero
 	EventEnergyCrossedZero
 	// EventEnergyGlyphConsumed (EnergyGlyphConsumedPayload) signals glyph destruction for energy calculation
 	EventEnergyGlyphConsumed
 	// EventEnergyBlinkStart (EnergyBlinkPayload) signals visual blink trigger
 	EventEnergyBlinkStart
-	// EventEnergyBlinkStop signals blink clear
+	// EventEnergyBlinkStop (EnergyBlinkStopPayload) signals blink clear
 	EventEnergyBlinkStop
 
 	// --- Shield ---
 
-	// EventShieldActivate signals shield should become active
+	// EventShieldActivate (ShieldActivatePayload) signals shield should become active
 	EventShieldActivate
-	// EventShieldDeactivate signals shield should become inactive
+	// EventShieldDeactivate (ShieldDeactivatePayload) signals shield should become inactive
 	EventShieldDeactivate
 	// EventShieldDrainRequest (ShieldDrainRequestPayload) signals energy drain from external source
 	EventShieldDrainRequest
@@ -211,9 +211,9 @@ const (
 
 	// EventWeaponAddRequest (WeaponAddRequestPayload) signals activating buff for cursor
 	EventWeaponAddRequest
-	// EventWeaponFireRequest signals weapon fire request
+	// EventWeaponFireRequest (WeaponFireRequestPayload) signals weapon fire request
 	EventWeaponFireRequest
-	// EventFireSpecialRequest signals player intent to fire special ability
+	// EventFireSpecialRequest (FireSpecialRequestPayload) signals player intent to fire special ability
 	EventFireSpecialRequest
 
 	// --- Heat ---
@@ -222,14 +222,14 @@ const (
 	EventHeatAddRequest
 	// EventHeatSetRequest (HeatSetRequestPayload) signals absolute heat value
 	EventHeatSetRequest
-	// EventHeatBurst signals heat burst notification
+	// EventHeatBurst (HeatBurstPayload) signals heat burst notification
 	EventHeatBurst
 
 	// --- Boost ---
 
 	// EventBoostActivate (BoostActivatePayload) signals boost activation request
 	EventBoostActivate
-	// EventBoostDeactivate signals boost deactivation
+	// EventBoostDeactivate (BoostDeactivatePayload) signals boost deactivation
 	EventBoostDeactivate
 	// EventBoostExtend (BoostExtendPayload) signals boost duration extension
 	EventBoostExtend
@@ -331,6 +331,10 @@ const (
 	EventCursorMoveRequest
 	// EventCursorMoved (CursorMovedPayload) announces an applied cursor position
 	EventCursorMoved
+	// EventCursorSetLocalRequest (CursorSetLocalPayload) rebinds which cursor input and camera follow
+	EventCursorSetLocalRequest
+	// EventCursorLocalChanged (CursorSetLocalPayload) announces the bound slot
+	EventCursorLocalChanged
 
 	// --- Fuse ---
 
