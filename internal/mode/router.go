@@ -916,12 +916,7 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 		x, y = r.undoRing[r.undoHead].x, r.undoRing[r.undoHead].y
 	}
 
-	r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
-		X: x,
-		Y: y,
-	})
-
-	r.ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+	OpJump(r.ctx, x, y)
 
 	if intent.Command != "" {
 		r.ctx.SetLastCommand(intent.Command)
@@ -1156,13 +1151,7 @@ func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 		return false
 	}
 
-	// Move cursor
-	r.ctx.World.Positions.SetPosition(r.ctx.World.Resources.Player.Entity, component.PositionComponent{
-		X: gameX,
-		Y: gameY,
-	})
-	r.ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: gameX, Y: gameY})
-
+	OpJump(r.ctx, gameX, gameY)
 	return true
 }
 

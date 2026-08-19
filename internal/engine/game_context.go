@@ -160,8 +160,8 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 	// 8. Transient Resource
 	world.Resources.Transient = NewTransientResource()
 
-	// 9. Cursor Entity
-	ctx.World.CreateCursorEntity()
+	// 9. Cursor roster; the FSM spawns cursors, so the world starts with none
+	world.Resources.Player = &PlayerResource{}
 
 	// 10. Target Resource
 	world.Resources.Target = &TargetResource{}
@@ -243,26 +243,20 @@ func (ctx *GameContext) HandleResizeLocked() {
 	// Grid tracks map dimensions (grow-only, no reallocation on shrink)
 	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
-	// Clamp cursor to Map bounds
-	cursorEntity := ctx.World.Resources.Player.Entity
-	if pos, ok := ctx.World.Positions.GetPosition(cursorEntity); ok {
-		newX := max(0, min(pos.X, config.MapWidth-1))
-		newY := max(0, min(pos.Y, config.MapHeight-1))
-
-		if newX != pos.X || newY != pos.Y {
-			pos.X = newX
-			pos.Y = newY
-			ctx.World.Positions.SetPosition(cursorEntity, pos)
+	// Clamp every cursor into the new map bounds and free it if the reflow blocked it;
+	// CursorSystem applies the move, which is what re-anchors the camera
+	ctx.World.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		pos, ok := ctx.World.Positions.GetPosition(e)
+		if !ok {
+			return true
 		}
-
-		// Always emit cursor moved after resize to trigger camera adjustment
-		ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: pos.X, Y: pos.Y})
-	}
-
-	// Free cursor if blocked
-	if newX, newY, moved := ctx.World.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
-		ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
-	}
+		x, y, _ := ctx.World.ResolveFreeCell(
+			max(0, min(pos.X, config.MapWidth-1)),
+			max(0, min(pos.Y, config.MapHeight-1)),
+			component.WallBlockCursor)
+		ctx.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+		return true
+	})
 }
 
 // === Overlay ===
@@ -422,8 +416,9 @@ func (ctx *GameContext) cleanupOutOfBoundsEntities(width, height int) {
 	// Unified cleanup: single Positions iteration handles all entity types
 	allEntities := ctx.World.Positions.AllEntities()
 	for _, e := range allEntities {
-		// Skip cursor entity (special case)
-		if e == ctx.World.Resources.Player.Entity {
+		// Protected entities survive the crop; the cursor is one of them
+		if prot, ok := ctx.World.Components.Protection.GetComponent(e); ok &&
+			prot.Mask&component.ProtectFromDeath != 0 {
 			continue
 		}
 

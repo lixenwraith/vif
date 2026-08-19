@@ -134,6 +134,7 @@ func (a *App) frame() bool {
 	var (
 		snapTime         engine.TimeResource
 		cursorX, cursorY int
+		cursorValid      bool
 		renderCtx        render.RenderContext
 	)
 
@@ -144,12 +145,12 @@ func (a *App) frame() bool {
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
-			cursorX, cursorY = pos.X, pos.Y
+			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
 		// Config (Map/Viewport/Camera/crop) is mutated under updateMutex by
 		// LevelSetup/reset handlers on the event-loop and tick goroutines;
 		// RenderContext must be built inside the same critical section
-		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY)
+		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
 	})
 
 	paused := a.ctx.TimeCtl.IsPaused()
@@ -192,22 +193,23 @@ func (a *App) applyMouseMode(enabled, motion bool) {
 }
 
 // inputTick advances input-driven work: mouse reporting reconciliation,
-// auto-fire and button repeat, macro playback. Runs on its own ticker so
-// input cadence is independent of the render loop.
+// auto-fire and button repeat, macro playback. Each macro intent settles
+// before the next, so a chained motion observes the applied position.
 // Returns false when the player quit.
 func (a *App) inputTick() bool {
 	before := a.pushed()
-	emitted := a.router.ProcessInputTick()
+	if a.router.ProcessInputTick() || a.pushed() != before {
+		a.scheduler.DispatchEventsImmediately()
+	}
 
-	macroIntents := a.router.ProcessMacroTick()
-	for _, intent := range macroIntents {
+	for _, intent := range a.router.ProcessMacroTick() {
+		before = a.pushed()
 		if !a.handleIntent(intent) {
 			return false
 		}
-	}
-
-	if emitted || a.pushed() != before {
-		a.scheduler.DispatchEventsImmediately()
+		if a.pushed() != before {
+			a.scheduler.DispatchEventsImmediately()
+		}
 	}
 	return true
 }

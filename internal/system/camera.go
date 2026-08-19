@@ -54,9 +54,12 @@ func (s *CameraSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventCursorMoved:
-		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
-			s.updateCamera(payload.X, payload.Y)
+		payload, ok := ev.Payload.(*event.CursorMovedPayload)
+		// The camera follows one cursor; a remote or bot move is not a viewport change
+		if !ok || !s.world.Resources.Player.IsLocal(payload.Entity) {
+			return
 		}
+		s.updateCamera(payload.X, payload.Y)
 	}
 }
 

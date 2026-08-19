@@ -228,13 +228,15 @@ func (s *TypingSystem) emitTypingError() {
 	s.currentStreak = 0
 }
 
+// moveCursorRight requests the post-typing advance; CursorSystem applies and announces it
 func (s *TypingSystem) moveCursorRight() {
 	cursorEntity := s.world.Resources.Player.Entity
 	config := s.world.Resources.Config
 
 	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok && cursorPos.X < config.MapWidth-1 {
-		cursorPos.X++
-		s.world.Positions.SetPosition(cursorEntity, cursorPos)
+		s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+			Entity: cursorEntity, X: cursorPos.X + 1, Y: cursorPos.Y,
+		})
 	}
 }
 

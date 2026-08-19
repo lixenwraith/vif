@@ -25,13 +25,17 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 
 	// Cursor placement and ping bounds have no registry mirror
 	player := ctx.World.Resources.Player
-	args := []any{"msg", "player", "entity", uint64(player.Entity)}
+	args := []any{"msg", "player",
+		"entity", uint64(player.Entity),
+		"slot", player.LocalSlot(),
+		"count", player.Count()}
 	if pos, ok := ctx.World.Positions.GetPosition(player.Entity); ok {
 		args = append(args, "x", pos.X, "y", pos.Y)
 	}
-	bounds := player.GetBounds()
-	args = append(args, "bounds_active", bounds.Active,
-		"bounds_rx", bounds.RadiusX, "bounds_ry", bounds.RadiusY)
+	if ping, ok := ctx.World.Components.Ping.GetComponent(player.Entity); ok {
+		args = append(args, "bounds_active", ping.BoundsActive,
+			"bounds_rx", ping.BoundsRadiusX, "bounds_ry", ping.BoundsRadiusY)
+	}
 	emit(status.SubStat, args...)
 
 	emit(status.SubStat, "msg", "world",

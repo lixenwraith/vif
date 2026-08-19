@@ -112,11 +112,12 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 
 // Clear removes all entities and components from the world
 // Caller MUST hold updateMutex: nextEntityID is update-mutex state
-// Session counters reset with the entities they describe
+// Session counters and the cursor roster reset with the entities they describe
 func (w *World) Clear() {
 	w.nextEntityID = 1
 	w.createdCount.Store(0)
 	w.destroyedCount.Store(0)
+	w.Resources.Player.Clear()
 	w.wipeAll()
 }
 
@@ -255,143 +256,87 @@ func (w *World) DestroyedCount() int64 {
 
 // === Base Entities ===
 
-// CreateCursorEntity handles cursor entity and resource creation, and components attachment to cursor entity
-func (w *World) CreateCursorEntity() {
-	// 1. Create cursor entity at the center of the screen
-	cursorEntity := w.CreateEntity()
-	w.Positions.SetPosition(cursorEntity, component.PositionComponent{
-		X: w.Resources.Config.MapWidth / 2,
-		Y: w.Resources.Config.MapHeight / 2,
-	})
-
-	// 2. Setup cursor resource
-	w.Resources.Player = &PlayerResource{
-		Entity: cursorEntity,
-	}
-
-	// 3. Set cursor component
-	w.Components.Cursor.SetComponent(cursorEntity, component.CursorComponent{})
-
-	// 4. Set protection component, make cursor indestructible
-	w.Components.Protection.SetComponent(cursorEntity, component.ProtectionComponent{
-		Mask: component.ProtectAll,
-	})
-
-	// 5. Set position component
-	w.Components.Ping.SetComponent(cursorEntity, component.PingComponent{
-		ShowCrosshair: true,
-		GridActive:    false,
-		GridRemaining: 0,
-	})
-
-	// 6. Set heat component
-	w.Components.Heat.SetComponent(cursorEntity, component.HeatComponent{})
-
-	// 7. Set energy component
-	w.Components.Energy.SetComponent(cursorEntity, component.EnergyComponent{})
-
-	// 8. Set shield component
-	w.Components.Shield.SetComponent(cursorEntity, component.ShieldComponent{
-		RadiusX:       parameter.PlayerShieldRadiusX,
-		RadiusY:       parameter.PlayerShieldRadiusY,
-		LastDrainTime: w.Resources.Time.GameTime,
-	})
-
-	// 9. Set boost component
-	w.Components.Boost.SetComponent(cursorEntity, component.BoostComponent{})
-
-	// 10. Set weapon component
-	w.Components.Weapon.SetComponent(cursorEntity, component.WeaponComponent{})
-
-	// 11. Set combat component
-	w.Components.Combat.SetComponent(cursorEntity, component.CombatComponent{
-		OwnerEntity:      cursorEntity,
-		CombatEntityType: component.CombatEntityCursor,
-		HitPoints:        100,
-	})
-}
-
-// UpdateBoundsRadius recomputes and stores cursor bounds from current state
+// UpdateBoundsRadius recomputes ping bounds for every cursor from mode and shield state
+// Caller MUST hold updateMutex
 func (w *World) UpdateBoundsRadius() {
-	player := w.Resources.Player
-	mode := w.Resources.Game.State.GetMode()
+	visual := w.Resources.Game.State.GetMode() == core.ModeVisual
 
-	if mode != core.ModeVisual {
-		player.SetBounds(PingBounds{Active: false})
-		return
-	}
-
-	shield, ok := w.Components.Shield.GetComponent(player.Entity)
-	if !ok || !shield.Active {
-		player.SetBounds(PingBounds{Active: false})
-		return
-	}
-
-	player.SetBounds(PingBounds{
-		RadiusX: int(shield.RadiusX) / parameter.PingBoundFactor,
-		RadiusY: int(shield.RadiusY) / parameter.PingBoundFactor,
-		Active:  true,
+	w.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		ping, ok := w.Components.Ping.GetPtr(e)
+		if !ok {
+			return true
+		}
+		shield, hasShield := w.Components.Shield.GetComponent(e)
+		if !visual || !hasShield || !shield.Active {
+			ping.BoundsActive = false
+			return true
+		}
+		ping.BoundsRadiusX = int(shield.RadiusX) / parameter.PingBoundFactor
+		ping.BoundsRadiusY = int(shield.RadiusY) / parameter.PingBoundFactor
+		ping.BoundsActive = true
+		return true
 	})
 }
 
-// GetPingAbsoluteBounds returns absolute coordinates computed from cursor position and stored radius
+// GetPingAbsoluteBounds returns the local cursor's absolute bounds; zero when no cursor exists
 func (w *World) GetPingAbsoluteBounds() PingAbsoluteBounds {
-	bounds := w.Resources.Player.GetBounds()
+	return w.PingAbsoluteBoundsOf(w.Resources.Player.Entity)
+}
 
-	cursorPos, ok := w.Positions.GetPosition(w.Resources.Player.Entity)
+// PingAbsoluteBoundsOf derives absolute bounds for one cursor from its position and stored radius
+func (w *World) PingAbsoluteBoundsOf(e core.Entity) PingAbsoluteBounds {
+	pos, ok := w.Positions.GetPosition(e)
 	if !ok {
 		return PingAbsoluteBounds{}
 	}
 
-	if !bounds.Active {
-		return PingAbsoluteBounds{
-			MinX: cursorPos.X, MaxX: cursorPos.X,
-			MinY: cursorPos.Y, MaxY: cursorPos.Y,
-			Active: false,
-		}
+	ping, ok := w.Components.Ping.GetComponent(e)
+	if !ok || !ping.BoundsActive {
+		return PingAbsoluteBounds{MinX: pos.X, MaxX: pos.X, MinY: pos.Y, MaxY: pos.Y}
 	}
 
 	config := w.Resources.Config
-
 	return PingAbsoluteBounds{
-		MinX:   max(0, cursorPos.X-bounds.RadiusX),
-		MaxX:   min(config.MapWidth-1, cursorPos.X+bounds.RadiusX),
-		MinY:   max(0, cursorPos.Y-bounds.RadiusY),
-		MaxY:   min(config.MapHeight-1, cursorPos.Y+bounds.RadiusY),
+		MinX:   max(0, pos.X-ping.BoundsRadiusX),
+		MaxX:   min(config.MapWidth-1, pos.X+ping.BoundsRadiusX),
+		MinY:   max(0, pos.Y-ping.BoundsRadiusY),
+		MaxY:   min(config.MapHeight-1, pos.Y+ping.BoundsRadiusY),
 		Active: true,
 	}
 }
 
 // === Validation ===
 
-// PushEntityFromBlocked relocates entity to nearest valid position if blocked
-// Returns (newX, newY, moved) where moved=true if position changed
-// For cursor: mask=WallBlockCursor; for kinetic entities: mask=WallBlockKinetic
-func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlockMask) (int, int, bool) {
-	pos, ok := w.Positions.GetPosition(entity)
-	if !ok {
-		return 0, 0, false
-	}
-
-	if !w.Positions.IsBlocked(pos.X, pos.Y, mask) {
-		return pos.X, pos.Y, false // Not blocked
+// ResolveFreeCell returns the nearest cell to (x, y) that the mask does not block
+// Reports false when no escape route exists within half the map
+func (w *World) ResolveFreeCell(x, y int, mask component.WallBlockMask) (int, int, bool) {
+	if !w.Positions.IsBlocked(x, y, mask) {
+		return x, y, true
 	}
 
 	config := w.Resources.Config
 	maxRadius := max(config.MapWidth, config.MapHeight) / 2
 
 	newX, newY, found := w.Positions.FindFreeFromPattern(
-		pos.X, pos.Y,
-		1, 1, // Single cell entity
-		PatternCardinalFirst,
-		1, maxRadius,
-		true, // Aspect correct
-		mask,
-		nil, // No additional check
+		x, y, 1, 1, PatternCardinalFirst, 1, maxRadius, true, mask, nil,
 	)
-
 	if !found {
-		return pos.X, pos.Y, false // No escape route
+		return x, y, false
+	}
+	return newX, newY, true
+}
+
+// PushEntityFromBlocked relocates a non-cursor entity to the nearest valid position
+// Cursor placement is CursorSystem-owned: resolve the cell, then emit a move request
+func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlockMask) (int, int, bool) {
+	pos, ok := w.Positions.GetPosition(entity)
+	if !ok {
+		return 0, 0, false
+	}
+
+	newX, newY, found := w.ResolveFreeCell(pos.X, pos.Y, mask)
+	if !found || (newX == pos.X && newY == pos.Y) {
+		return pos.X, pos.Y, false
 	}
 
 	w.Positions.SetPosition(entity, component.PositionComponent{X: newX, Y: newY})
@@ -424,18 +369,17 @@ func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize b
 		w.clearNonProtectedEntities()
 	}
 
-	// Reposition cursor if OOB
-	cursorEntity := w.Resources.Player.Entity
-	if pos, ok := w.Positions.GetPosition(cursorEntity); ok {
-		newX := max(0, min(pos.X, width-1))
-		newY := max(0, min(pos.Y, height-1))
-		if newX != pos.X || newY != pos.Y {
-			w.Positions.SetPosition(cursorEntity, component.PositionComponent{X: newX, Y: newY})
+	// Clamp every cursor into the new bounds; CursorSystem applies and announces
+	w.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		pos, ok := w.Positions.GetPosition(e)
+		if !ok {
+			return true
 		}
-
-		// Emit cursor moved to trigger camera adjustment for new level
-		w.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: newX, Y: newY})
-	}
+		x, y, _ := w.ResolveFreeCell(
+			max(0, min(pos.X, width-1)), max(0, min(pos.Y, height-1)), component.WallBlockCursor)
+		w.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+		return true
+	})
 }
 
 // TODO: process through death, new mask for combat entity persistence

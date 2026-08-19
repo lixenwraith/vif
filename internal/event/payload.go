@@ -498,10 +498,53 @@ type CompositeDestroyRequestPayload struct {
 
 // --- Cursor ---
 
-// CursorMovedPayload signals cursor position change for magnifier updates
+// CursorSpawnRequestPayload asks for a cursor entity
+// Center overrides X/Y; Auto overrides Slot with the lowest free index
+type CursorSpawnRequestPayload struct {
+	X       int    `toml:"x"`
+	Y       int    `toml:"y"`
+	Slot    uint8  `toml:"slot"`
+	Control uint8  `toml:"control"` // component.ControlKind
+	PeerID  uint32 `toml:"peer_id"` // Remote owner when Control is ControlRemote
+	Auto    bool   `toml:"auto"`
+	Center  bool   `toml:"center"`
+}
+
+// CursorSpawnedPayload announces a created cursor
+type CursorSpawnedPayload struct {
+	Entity core.Entity `toml:"entity"`
+	X      int         `toml:"x"`
+	Y      int         `toml:"y"`
+	Slot   uint8       `toml:"slot"`
+}
+
+// CursorDespawnRequestPayload selects cursors to destroy
+// All wins over Entity, which wins over Slot
+type CursorDespawnRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+	Slot   uint8       `toml:"slot"`
+	All    bool        `toml:"all"`
+}
+
+// CursorDespawnedPayload announces a destroyed cursor
+type CursorDespawnedPayload struct {
+	Entity core.Entity `toml:"entity"`
+	Slot   uint8       `toml:"slot"`
+}
+
+// CursorMoveRequestPayload asks for an absolute placement; the producer has already validated it
+// A zero Entity addresses the local cursor, so single-player producers need no lookup
+type CursorMoveRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+	X      int         `toml:"x"`
+	Y      int         `toml:"y"`
+}
+
+// CursorMovedPayload announces the position CursorSystem applied
 type CursorMovedPayload struct {
-	X int `toml:"x"`
-	Y int `toml:"y"`
+	Entity core.Entity `toml:"entity"`
+	X      int         `toml:"x"`
+	Y      int         `toml:"y"`
 }
 
 // --- Fuse ---

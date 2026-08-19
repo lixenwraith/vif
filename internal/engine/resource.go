@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
@@ -132,17 +133,15 @@ type GameStateResource struct {
 
 // --- Player Resource ---
 
-// PlayerResource holds the player cursor entity and derived state
+// PlayerResource indexes the cursor roster. Components.Cursor is the truth;
+// this is the hot-path lookup and is written only by CursorSystem.
 type PlayerResource struct {
+	// Entity is the local cursor, 0 when none exists. Every read is under updateMutex.
 	Entity core.Entity
-	bounds atomic.Pointer[PingBounds]
-}
 
-// PingBounds holds the boundaries for ping crosshair and operations
-type PingBounds struct {
-	RadiusX int  // Half-width from cursor (0 = single column)
-	RadiusY int  // Half-height from cursor (0 = single row)
-	Active  bool // True when visual mode + shield active
+	slots [parameter.MaxPlayers]core.Entity
+	local uint8
+	count int
 }
 
 // PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
@@ -152,17 +151,76 @@ type PingAbsoluteBounds struct {
 	Active     bool
 }
 
-// GetBounds returns current bounds snapshot (lock-free read)
-func (pr *PlayerResource) GetBounds() PingBounds {
-	if b := pr.bounds.Load(); b != nil {
-		return *b
-	}
-	return PingBounds{}
+// Valid reports whether a local cursor exists
+func (pr *PlayerResource) Valid() bool { return pr.Entity != 0 }
+
+// IsLocal reports whether e addresses the local cursor; the zero entity means "unspecified"
+func (pr *PlayerResource) IsLocal(e core.Entity) bool {
+	return pr.Entity != 0 && (e == 0 || e == pr.Entity)
 }
 
-// SetBounds atomically updates bounds
-func (pr *PlayerResource) SetBounds(b PingBounds) {
-	pr.bounds.Store(&b)
+// LocalSlot returns the roster slot the local cursor occupies
+func (pr *PlayerResource) LocalSlot() uint8 { return pr.local }
+
+// SetLocal rebinds which slot input and camera follow
+func (pr *PlayerResource) SetLocal(slot uint8) {
+	if int(slot) >= parameter.MaxPlayers {
+		return
+	}
+	pr.local = slot
+	pr.Entity = pr.slots[slot]
+}
+
+// Slot returns the entity in a roster slot, 0 when empty
+func (pr *PlayerResource) Slot(i uint8) core.Entity {
+	if int(i) >= parameter.MaxPlayers {
+		return 0
+	}
+	return pr.slots[i]
+}
+
+// Count returns the number of occupied slots
+func (pr *PlayerResource) Count() int { return pr.count }
+
+// FreeSlot returns the lowest unoccupied slot
+func (pr *PlayerResource) FreeSlot() (uint8, bool) {
+	for i := range parameter.MaxPlayers {
+		if pr.slots[i] == 0 {
+			return uint8(i), true
+		}
+	}
+	return 0, false
+}
+
+// Bind installs a cursor in a slot; CursorSystem only
+func (pr *PlayerResource) Bind(slot uint8, e core.Entity) {
+	if int(slot) >= parameter.MaxPlayers || pr.slots[slot] != 0 {
+		return
+	}
+	pr.slots[slot] = e
+	pr.count++
+	if slot == pr.local {
+		pr.Entity = e
+	}
+}
+
+// Unbind releases a slot; CursorSystem only
+func (pr *PlayerResource) Unbind(slot uint8) {
+	if int(slot) >= parameter.MaxPlayers || pr.slots[slot] == 0 {
+		return
+	}
+	pr.slots[slot] = 0
+	pr.count--
+	if slot == pr.local {
+		pr.Entity = 0
+	}
+}
+
+// Clear empties the roster; paired with World.Clear
+func (pr *PlayerResource) Clear() {
+	pr.slots = [parameter.MaxPlayers]core.Entity{}
+	pr.Entity = 0
+	pr.count = 0
 }
 
 // --- Random Resource ---

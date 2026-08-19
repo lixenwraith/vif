@@ -190,15 +190,16 @@ func (p *player) frame() {
 	var (
 		snapTime         engine.TimeResource
 		cursorX, cursorY int
+		cursorValid      bool
 		renderCtx        render.RenderContext
 	)
 	a.world.RunSafe(func() {
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
-			cursorX, cursorY = pos.X, pos.Y
+			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
-		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY)
+		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
 	})
 
 	renderCtx.GameXOffset -= p.panX

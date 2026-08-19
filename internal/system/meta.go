@@ -178,6 +178,9 @@ func (s *MetaSystem) Update() {
 	if pos, ok := s.world.Positions.GetPosition(player); ok {
 		s.statPlayerX.Store(int64(pos.X))
 		s.statPlayerY.Store(int64(pos.Y))
+	} else {
+		s.statPlayerX.Store(-1)
+		s.statPlayerY.Store(-1)
 	}
 }
 
@@ -234,20 +237,17 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// Grid tracks map dimensions; a level-sized grid would outlive the level
 	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
-	// 6. Cursor recreation
-	s.ctx.World.CreateCursorEntity()
-
-	// 7. Reset mode and status
+	// 6. Reset mode and status; the FSM reset below spawns the cursor
 	s.ctx.SetMode(core.ModeNormal)
 	s.ctx.SetCommandText("")
 	s.ctx.SetSearchText("")
 	s.ctx.SetStatusMessage("", 0, false)
 	s.ctx.SetOverlayContent(nil)
 
-	// 8. Cancel pending step requests; the rate itself is operator-owned and survives
+	// 7. Cancel pending step requests; the rate itself is operator-owned and survives
 	s.ctx.TimeCtl.CancelBreak()
 
-	// 9. Signal FSM reset - Non-blocking
+	// 8. Signal FSM reset - Non-blocking
 
 	// On return from this function main releases the world lock and scheduler acquires it for reset
 	select {
@@ -255,7 +255,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	default:
 	}
 
-	// 10. Purge operator session state; last, so it wins over anything reset restored
+	// 9. Purge operator session state; last, so it wins over anything reset restored
 	if purge {
 		s.ctx.ResetSessionState()
 		vlog.Info("app", "msg", "session purge")

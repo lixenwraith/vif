@@ -275,6 +275,21 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 { action = "...", guard = "GuardName", guard_args = { ... } }
 ```
 
+### Cursor Lifecycle
+
+The world spawns with no cursor. A configuration must spawn one explicitly:
+
+```toml
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } }
+{ action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { x = 10, y = 5, slot = 1 } }
+{ action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } }
+```
+
+`center` overrides `x`/`y`; `auto` overrides `slot` with the lowest free index.
+`EventCursorSpawned` carries `entity`, `slot`, `x`, `y` and is capturable via
+`capture_vars`; `EventCursorSpawnFailed` signals a full roster or a blocked map.
+A cursor-less configuration is legal — cut-scenes and intros use it.
+
 ---
 
 ## Guards

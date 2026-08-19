@@ -6,6 +6,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
+const MaxPlayers = 16
+
 // Shield
 const (
 	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active

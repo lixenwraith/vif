@@ -1,9 +1,7 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -86,12 +84,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 
 		for x := xStart; x <= ctx.World.Resources.Config.MapWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern) {
-				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-					X: x,
-					Y: y,
-				})
-				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+				OpJump(ctx, x, y)
 				return true
 			}
 		}
@@ -101,12 +94,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 	for y := range startY {
 		for x := 0; x <= ctx.World.Resources.Config.MapWidth-len(pattern); x++ {
 			if matchesPattern(grid, x, y, pattern) {
-				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-					X: x,
-					Y: y,
-				})
-				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+				OpJump(ctx, x, y)
 				return true
 			}
 		}
@@ -115,12 +103,7 @@ func searchForward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern [
 	// Search remaining part of start line
 	for x := range startX {
 		if matchesPattern(grid, x, startY, pattern) {
-			// Write cursor position to ECS
-			ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-				X: x,
-				Y: startY,
-			})
-			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: startY})
+			OpJump(ctx, x, startY)
 			return true
 		}
 	}
@@ -139,12 +122,7 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 
 		for x := xEnd; x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern) {
-				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-					X: x,
-					Y: y,
-				})
-				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+				OpJump(ctx, x, y)
 				return true
 			}
 		}
@@ -154,12 +132,7 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 	for y := ctx.World.Resources.Config.MapHeight - 1; y > startY; y-- {
 		for x := ctx.World.Resources.Config.MapWidth - len(pattern); x >= 0; x-- {
 			if matchesPattern(grid, x, y, pattern) {
-				// Write cursor position to ECS
-				ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-					X: x,
-					Y: y,
-				})
-				ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: y})
+				OpJump(ctx, x, y)
 				return true
 			}
 		}
@@ -168,12 +141,7 @@ func searchBackward(ctx *engine.GameContext, grid map[vmath.Point]rune, pattern 
 	// Search remaining part of start line
 	for x := ctx.World.Resources.Config.MapWidth - len(pattern); x > startX; x-- {
 		if matchesPattern(grid, x, startY, pattern) {
-			// Write cursor position to ECS
-			ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-				X: x,
-				Y: startY,
-			})
-			ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{X: x, Y: startY})
+			OpJump(ctx, x, startY)
 			return true
 		}
 	}

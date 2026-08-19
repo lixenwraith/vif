@@ -13,9 +13,10 @@ type RenderContext struct {
 	DeltaTime float64
 	IsPaused  bool
 
-	// Cursor position (map coordinates)
-	CursorX int
-	CursorY int
+	// Cursor position (map coordinates); CursorValid is false when no local cursor exists
+	CursorX     int
+	CursorY     int
+	CursorValid bool
 
 	// Screen margins (game area offset from terminal origin)
 	GameXOffset int
@@ -46,7 +47,7 @@ type RenderContext struct {
 }
 
 // NewRenderContextFromGame creates a RenderContext from engine.GameContext and TimeResource
-func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResource, cursorX, cursorY int) RenderContext {
+func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResource, cursorX, cursorY int, cursorValid bool) RenderContext {
 	config := ctx.World.Resources.Config
 
 	// Compute map centering offset when map < viewport
@@ -64,8 +65,9 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResour
 		DeltaTime: timeRes.DeltaTime.Seconds(),
 		IsPaused:  ctx.TimeCtl.IsPaused(),
 
-		CursorX: cursorX,
-		CursorY: cursorY,
+		CursorX:     cursorX,
+		CursorY:     cursorY,
+		CursorValid: cursorValid,
 
 		GameXOffset: ctx.GameXOffset,
 		GameYOffset: ctx.GameYOffset,

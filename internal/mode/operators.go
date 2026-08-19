@@ -1,25 +1,24 @@
 package mode
 
 import (
-	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 )
 
-// OpMove updates cursor position based on motion result
+// OpMove requests cursor placement from a motion result; CursorSystem applies it
 func OpMove(ctx *engine.GameContext, result MotionResult) {
 	if !result.Valid {
 		return
 	}
+	OpJump(ctx, result.EndX, result.EndY)
+}
 
-	ctx.World.Positions.SetPosition(ctx.World.Resources.Player.Entity, component.PositionComponent{
-		X: result.EndX,
-		Y: result.EndY,
-	})
-
-	ctx.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
-		X: result.EndX,
-		Y: result.EndY,
+// OpJump requests an absolute placement for producers that resolve a target directly
+func OpJump(ctx *engine.GameContext, x, y int) {
+	ctx.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+		Entity: ctx.World.Resources.Player.Entity,
+		X:      x,
+		Y:      y,
 	})
 }
 

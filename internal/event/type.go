@@ -317,7 +317,19 @@ const (
 
 	// --- Cursor ---
 
-	// EventCursorMoved (CursorMovedPayload) signals cursor position change
+	// EventCursorSpawnRequest (CursorSpawnRequestPayload) asks CursorSystem to create a cursor
+	EventCursorSpawnRequest
+	// EventCursorSpawned (CursorSpawnedPayload) announces a created cursor
+	EventCursorSpawned
+	// EventCursorSpawnFailed signals no roster slot or no free cell was available
+	EventCursorSpawnFailed
+	// EventCursorDespawnRequest (CursorDespawnRequestPayload) asks CursorSystem to destroy cursors
+	EventCursorDespawnRequest
+	// EventCursorDespawned (CursorDespawnedPayload) announces a destroyed cursor
+	EventCursorDespawned
+	// EventCursorMoveRequest (CursorMoveRequestPayload) asks CursorSystem to place a cursor
+	EventCursorMoveRequest
+	// EventCursorMoved (CursorMovedPayload) announces an applied cursor position
 	EventCursorMoved
 
 	// --- Fuse ---

@@ -60,24 +60,22 @@ func (a *App) Settle() {
 	a.scheduler.Settle()
 }
 
-// Inject applies intents at a tick boundary and settles what they emit.
-// Returns false once an intent quits the game; remaining intents are dropped.
+// Inject applies intents at a tick boundary, settling after each so the next one
+// observes the world it produced. Returns false once an intent quits the game.
 // Intents are the sole injection path: hand-built ones must carry Count >= 1
 // where a motion count applies, since no input.Machine normalizes them.
 func (a *App) Inject(intents ...*input.Intent) bool {
-	cont := true
-	before := a.pushed()
 	for _, intent := range intents {
+		before := a.pushed()
 		if !a.handleIntent(intent) {
-			cont = false
-			break
+			return false
+		}
+		// Elide the settle when nothing was emitted: an unrecorded group cannot replay
+		if a.pushed() != before {
+			a.scheduler.Settle()
 		}
 	}
-	// Elide the settle when nothing was emitted: an unrecorded group cannot replay
-	if a.pushed() != before {
-		a.scheduler.Settle()
-	}
-	return cont
+	return true
 }
 
 // InputTick advances input-driven work: auto-fire, held-button repeat and macro
@@ -85,17 +83,19 @@ func (a *App) Inject(intents ...*input.Intent) bool {
 // most one round. Returns false when a macro intent quits the game.
 func (a *App) InputTick() bool {
 	before := a.pushed()
-	emitted := a.router.ProcessInputTick()
+	if a.router.ProcessInputTick() || a.pushed() != before {
+		a.scheduler.Settle()
+	}
 
-	macroIntents := a.router.ProcessMacroTick()
-	for _, intent := range macroIntents {
+	// Per intent: a macro motion is applied by CursorSystem, so the next one must see it
+	for _, intent := range a.router.ProcessMacroTick() {
+		before = a.pushed()
 		if !a.handleIntent(intent) {
 			return false
 		}
-	}
-
-	if emitted || a.pushed() != before {
-		a.scheduler.Settle()
+		if a.pushed() != before {
+			a.scheduler.Settle()
+		}
 	}
 	return true
 }

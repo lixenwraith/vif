@@ -8,7 +8,7 @@ import (
 )
 
 // JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 4
+const JournalSchema = 5
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

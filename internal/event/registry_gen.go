@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 173
+const EventTypeCount = 179
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -105,6 +105,12 @@ func InitRegistry() {
 	RegisterType("EventCompositeMemberDestroyed", EventCompositeMemberDestroyed, &CompositeMemberDestroyedPayload{})
 	RegisterType("EventCompositeIntegrityBreach", EventCompositeIntegrityBreach, &CompositeIntegrityBreachPayload{})
 	RegisterType("EventCompositeDestroyRequest", EventCompositeDestroyRequest, &CompositeDestroyRequestPayload{})
+	RegisterType("EventCursorSpawnRequest", EventCursorSpawnRequest, &CursorSpawnRequestPayload{})
+	RegisterType("EventCursorSpawned", EventCursorSpawned, &CursorSpawnedPayload{})
+	RegisterType("EventCursorSpawnFailed", EventCursorSpawnFailed, nil)
+	RegisterType("EventCursorDespawnRequest", EventCursorDespawnRequest, &CursorDespawnRequestPayload{})
+	RegisterType("EventCursorDespawned", EventCursorDespawned, &CursorDespawnedPayload{})
+	RegisterType("EventCursorMoveRequest", EventCursorMoveRequest, &CursorMoveRequestPayload{})
 	RegisterType("EventCursorMoved", EventCursorMoved, &CursorMovedPayload{})
 	RegisterType("EventFuseQuasarRequest", EventFuseQuasarRequest, nil)
 	RegisterType("EventFuseSwarmRequest", EventFuseSwarmRequest, &FuseSwarmRequestPayload{})
