@@ -233,7 +233,7 @@ func (s *DrainSystem) Update() {
 	}
 
 	// Clock-based updates for active drains
-	if s.world.Components.Drain.CountEntities() > 0 {
+	if len(s.drainCache) > 0 {
 		s.updateDrainMovement()
 		s.handleDrainInteractions()
 	}
@@ -755,7 +755,8 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	// If no valid position, materialize spawn dropped (map saturated with drains)
 }
 
-// handleDrainInteractions processes all drain interactions per tick
+// handleDrainInteractions processes all drain interactions per tick.
+// Caller MUST have populated drainCache via cacheDrainData this tick.
 func (s *DrainSystem) handleDrainInteractions() {
 	now := s.world.Resources.Time.GameTime
 
@@ -903,7 +904,8 @@ func (s *DrainSystem) handleEntityCollisions() {
 	}
 }
 
-// updateDrainMovement handles continuous kinetic drain movement toward cursor
+// updateDrainMovement handles continuous kinetic drain movement toward cursor.
+// Caller MUST have populated drainCache via cacheDrainData this tick.
 func (s *DrainSystem) updateDrainMovement() {
 	config := s.world.Resources.Config
 

@@ -85,6 +85,7 @@ func assertDrainKnockbackIntegrated(
 		t.Fatal("drain has no position")
 	}
 
+	beginDrainTick(t, drains)
 	drains.updateDrainMovement()
 
 	after, _ := w.Components.Kinetic.GetComponent(drain)
@@ -105,6 +106,7 @@ func TestDrainIntegratesShieldKnockbackDuringKineticImmunity(t *testing.T) {
 		Type:    event.EventShieldActivate,
 		Payload: &event.ShieldActivatePayload{Entity: cursor},
 	})
+	beginDrainTick(t, drains)
 	drains.handleDrainInteractions()
 	applyQueuedCombatArea(t, w, combat)
 
@@ -140,10 +142,23 @@ func TestDrainStunStillStopsKineticIntegration(t *testing.T) {
 	combat.RemainingKineticImmunity = parameter.CombatKineticImmunityDuration
 	beforeX, beforeY := kinetic.PreciseX, kinetic.PreciseY
 
+	beginDrainTick(t, drains)
 	drains.updateDrainMovement()
 
 	if kinetic.PreciseX != beforeX || kinetic.PreciseY != beforeY {
 		t.Fatalf("stunned drain moved from (%v, %v) to (%v, %v)",
 			beforeX, beforeY, kinetic.PreciseX, kinetic.PreciseY)
+	}
+}
+
+// beginDrainTick rebuilds the per-tick cache the movement and interaction passes
+// iterate; Update does this at the top of every tick. The emptiness check keeps a
+// missing cache from turning a negative assertion into a vacuous pass.
+func beginDrainTick(t *testing.T, drains *DrainSystem) {
+	t.Helper()
+
+	drains.cacheDrainData()
+	if len(drains.drainCache) == 0 {
+		t.Fatal("drain cache is empty; movement and interaction passes would no-op")
 	}
 }

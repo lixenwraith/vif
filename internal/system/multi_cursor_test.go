@@ -440,3 +440,32 @@ func TestBoostRewardSurvivesStaleTypingDecision(t *testing.T) {
 		t.Fatalf("boost after typing reward = %v, want %v", got.Remaining, want)
 	}
 }
+
+func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+
+	target := w.CreateEntity()
+	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatInitialHPDrain,
+	})
+
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: target, HitEntity: target,
+		AttackType: component.CombatAttackProjectile,
+	})
+
+	got, _ := w.Components.Combat.GetComponent(target)
+	want := parameter.CombatInitialHPDrain - parameter.CombatDamageCleaner
+	if got.HitPoints != want {
+		t.Fatalf("hit points = %d, want %d (one application of %d)",
+			got.HitPoints, want, parameter.CombatDamageCleaner)
+	}
+	if n := combat.statDamage.Load(); n != int64(parameter.CombatDamageCleaner) {
+		t.Fatalf("combat.damage_dealt = %d, want %d", n, parameter.CombatDamageCleaner)
+	}
+}
