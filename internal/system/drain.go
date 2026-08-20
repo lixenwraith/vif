@@ -890,8 +890,9 @@ func (s *DrainSystem) updateDrainMovement() {
 		if !ok {
 			continue
 		}
-		// Forced movement check: skip movement if stunned, skip kinetic displacement if immune
-		if combatComp.RemainingKineticImmunity > 0 || combatComp.StunnedRemaining > 0 {
+		// A stun freezes the drain completely. Kinetic immunity only suppresses
+		// homing and drag below: collision velocity must still displace the drain.
+		if combatComp.StunnedRemaining > 0 {
 			continue
 		}
 
@@ -900,13 +901,13 @@ func (s *DrainSystem) updateDrainMovement() {
 			continue
 		}
 
-		// 1. Navigation & Targeting
-		// ResolveMovementTarget handles group-based target resolution + nav routing
-		// (direct path vs flow field vs stuck fallback)
-		targetX, targetY, _ := ResolveMovementTarget(s.world, drainEntity, kineticComp)
-
-		// 2. Physics with GA-optimized cornering
+		// 1. Steering is disabled during kinetic immunity so the collision
+		// impulse remains authoritative, matching the composite movers.
 		if combatComp.RemainingKineticImmunity == 0 {
+			// ResolveMovementTarget handles group-based target resolution + nav routing
+			// (direct path vs flow field vs stuck fallback)
+			targetX, targetY, _ := ResolveMovementTarget(s.world, drainEntity, kineticComp)
+
 			// Cornering drag scales the base drag by turn severity
 			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
 				parameter.NavCorneringThreshold, 1.0)
@@ -920,7 +921,8 @@ func (s *DrainSystem) updateDrainMovement() {
 			}
 		}
 
-		// 3. Integration & Collision
+		// 2. Integration and collision always run for an unstunned drain,
+		// including while a shield or explosion knockback is immune to re-hit.
 		oldPreciseX, oldPreciseY := kineticComp.PreciseX, kineticComp.PreciseY
 		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtSec)
 
