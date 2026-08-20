@@ -398,6 +398,10 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 	if !ok {
 		return
 	}
+	var killerEntity core.Entity
+	if combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity); ok {
+		killerEntity = combatComp.LastDamagedBy
+	}
 
 	s.world.PushEvent(event.EventTowerDestroyed, &event.TowerDestroyedPayload{
 		HeaderEntity: headerEntity,
@@ -409,6 +413,20 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 		HeaderEntity: headerEntity,
 		Effect:       0,
 	})
+
+	// Towers are player-owned rather than enemies, so ordinary lifecycle deaths
+	// do not affect enemy telemetry or boost. A cursor-attributed PvP destruction
+	// is still a SpeciesTower kill and receives the normal player reward.
+	if killerEntity != 0 {
+		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+			Entity:       headerEntity,
+			KillerEntity: killerEntity,
+			Species:      component.SpeciesTower,
+			SubType:      uint8(towerComp.Type),
+			X:            towerComp.SpawnX,
+			Y:            towerComp.SpawnY,
+		})
+	}
 }
 
 func (s *TowerSystem) terminateTower(headerEntity core.Entity) {

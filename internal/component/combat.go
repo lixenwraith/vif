@@ -61,6 +61,10 @@ type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
 	OwnerEntity core.Entity
 
+	// LastDamagedBy identifies the cursor that most recently dealt HP damage.
+	// Zero means the last damaging attack was not owned by a live cursor.
+	LastDamagedBy core.Entity
+
 	// CombatEntityType
 	CombatEntityType CombatEntityType
 

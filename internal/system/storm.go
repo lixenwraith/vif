@@ -880,6 +880,10 @@ func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormCompon
 // destroyCircle handles individual circle death
 func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index int) {
 	circleEntity := stormComp.Circles[index]
+	var killerEntity core.Entity
+	if combatComp, ok := s.world.Components.Combat.GetComponent(circleEntity); ok {
+		killerEntity = combatComp.LastDamagedBy
+	}
 
 	// Get position for event
 	var posX, posY int
@@ -911,9 +915,11 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 
 		// Emit enemy killed
 		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-			Species: component.SpeciesStorm,
-			X:       posX,
-			Y:       posY,
+			Entity:       s.rootEntity,
+			KillerEntity: killerEntity,
+			Species:      component.SpeciesStorm,
+			X:            posX,
+			Y:            posY,
 		})
 	}
 }

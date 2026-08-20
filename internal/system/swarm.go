@@ -156,9 +156,11 @@ func (s *SwarmSystem) Update() {
 			// Get position for loot before destruction
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Species: component.SpeciesSwarm,
-					X:       headerPos.X,
-					Y:       headerPos.Y,
+					Entity:       headerEntity,
+					KillerEntity: combatComp.LastDamagedBy,
+					Species:      component.SpeciesSwarm,
+					X:            headerPos.X,
+					Y:            headerPos.Y,
 				})
 			}
 

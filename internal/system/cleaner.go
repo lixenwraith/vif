@@ -9,7 +9,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
@@ -174,6 +173,8 @@ func (s *CleanerSystem) Update() {
 			for y := fromY + step; (step > 0 && y <= toY) || (step < 0 && y >= toY); y += step {
 				// Skip OOB cells (cleaner flies off-screen, lifecycle handles destruction)
 				if y < 0 || y >= gameHeight {
+					appendCleanerTrail(cleanerComp, x, y)
+					lastValidY = y
 					continue
 				}
 
@@ -188,9 +189,11 @@ func (s *CleanerSystem) Update() {
 				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
+					appendCleanerTrail(cleanerComp, x, y)
 					break
 				}
 
+				appendCleanerTrail(cleanerComp, x, y)
 				lastValidY = y
 			}
 		} else if kineticComp.VelX != 0 {
@@ -205,6 +208,8 @@ func (s *CleanerSystem) Update() {
 			lastValidX := fromX
 			for x := fromX + step; (step > 0 && x <= toX) || (step < 0 && x >= toX); x += step {
 				if x < 0 || x >= gameWidth {
+					appendCleanerTrail(cleanerComp, x, y)
+					lastValidX = x
 					continue
 				}
 
@@ -217,9 +222,11 @@ func (s *CleanerSystem) Update() {
 				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
+					appendCleanerTrail(cleanerComp, x, y)
 					break
 				}
 
+				appendCleanerTrail(cleanerComp, x, y)
 				lastValidX = x
 			}
 		}
@@ -249,15 +256,6 @@ func (s *CleanerSystem) Update() {
 			kineticComp.PreciseX = blockPreciseX
 			kineticComp.PreciseY = blockPreciseY
 
-			// Trail update to block position
-			if blockGridX != oldPos.X || blockGridY != oldPos.Y {
-				cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
-				cleanerComp.TrailRing[cleanerComp.TrailHead] = vmath.Point{X: blockGridX, Y: blockGridY}
-				if cleanerComp.TrailLen < parameter.CleanerTrailLength {
-					cleanerComp.TrailLen++
-				}
-			}
-
 			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: blockGridX, Y: blockGridY})
 			continue
 		}
@@ -266,11 +264,6 @@ func (s *CleanerSystem) Update() {
 		newGridX, newGridY := newCell.X, newCell.Y
 
 		if newGridX != oldPos.X || newGridY != oldPos.Y {
-			cleanerComp.TrailHead = (cleanerComp.TrailHead + 1) % parameter.CleanerTrailLength
-			cleanerComp.TrailRing[cleanerComp.TrailHead] = vmath.Point{X: newGridX, Y: newGridY}
-			if cleanerComp.TrailLen < parameter.CleanerTrailLength {
-				cleanerComp.TrailLen++
-			}
 			s.world.Positions.SetPosition(cleanerEntity, component.PositionComponent{X: newGridX, Y: newGridY})
 		}
 
@@ -294,6 +287,31 @@ func (s *CleanerSystem) Update() {
 	if s.world.Components.Cleaner.CountEntities() == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 	}
+}
+
+// appendCleanerTrail records every crossed cell, rather than only the final
+// cell of a tick. This keeps fast cleaners visually continuous and mirrors the
+// swept collision path without allocating.
+func appendCleanerTrail(cleaner *component.CleanerComponent, x, y int) {
+	if cleaner.TrailLen > 0 {
+		last := cleaner.TrailRing[cleaner.TrailHead]
+		if last.X == x && last.Y == y {
+			return
+		}
+	}
+
+	cleaner.TrailHead = (cleaner.TrailHead + 1) % parameter.CleanerTrailLength
+	cleaner.TrailRing[cleaner.TrailHead] = vmath.Point{X: x, Y: y}
+	if cleaner.TrailLen < parameter.CleanerTrailLength {
+		cleaner.TrailLen++
+	}
+}
+
+// cleanerFlightBounds returns cell-centered off-map targets far enough for a
+// full trail to clear the map, with no extra off-map lifetime.
+func cleanerFlightBounds(size int) (negative, positive float64) {
+	margin := float64(parameter.CleanerTrailLength)
+	return -margin + 0.5, float64(size) + margin - 0.5
 }
 
 // spawnSweepingCleaners generates cleaner entities for one cursor.
@@ -322,8 +340,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 		}
 	}
 
-	gameWidthCells := float64(config.MapWidth)
-	trailLen := parameter.CleanerTrailLength
+	minFlightX, maxFlightX := cleanerFlightBounds(config.MapWidth)
 	baseSpeed := parameter.CleanerBaseHorizontalSpeed
 
 	// Spawn one cleaner per row with Red entities, alternating L→R and R→L direction
@@ -334,13 +351,13 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 
 		if row%2 != 0 {
 			// Left to right
-			startX = -trailLen
-			targetX = gameWidthCells + trailLen*2
+			startX = minFlightX
+			targetX = maxFlightX
 			velX = baseSpeed
 		} else {
 			// Right to left
-			startX = gameWidthCells + trailLen
-			targetX = -trailLen * 2
+			startX = maxFlightX
+			targetX = minFlightX
 			velX = -baseSpeed
 		}
 
@@ -358,7 +375,6 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 			TrailRing:   trailRing,
 			TrailHead:   0,
 			TrailLen:    1,
-			Rune:        visual.CleanerChar,
 			ColorType:   colorType,
 		}
 		kinetic := physics.Kinetic{
@@ -514,9 +530,8 @@ func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, ori
 		ID: parameter.Sfx.Bullet,
 	})
 
-	gameWidthCells := float64(config.MapWidth)
-	gameHeightCells := float64(config.MapHeight)
-	trailLen := parameter.CleanerTrailLength
+	minFlightX, maxFlightX := cleanerFlightBounds(config.MapWidth)
+	minFlightY, maxFlightY := cleanerFlightBounds(config.MapHeight)
 
 	horizontalSpeed := parameter.CleanerBaseHorizontalSpeed
 	verticalSpeed := parameter.CleanerBaseVerticalSpeed
@@ -531,10 +546,10 @@ func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, ori
 	}
 
 	directions := []dirDef{
-		{horizontalSpeed, 0, ox, oy, gameWidthCells + 2*trailLen, oy},
-		{-horizontalSpeed, 0, ox, oy, -trailLen * 2, oy},
-		{0, verticalSpeed, ox, oy, ox, gameHeightCells + trailLen*2},
-		{0, -verticalSpeed, ox, oy, ox, -trailLen * 2},
+		{horizontalSpeed, 0, ox, oy, maxFlightX, oy},
+		{-horizontalSpeed, 0, ox, oy, minFlightX, oy},
+		{0, verticalSpeed, ox, oy, ox, maxFlightY},
+		{0, -verticalSpeed, ox, oy, ox, minFlightY},
 	}
 
 	// Spawn 4 cleaners from origin, each traveling in a cardinal direction
@@ -553,7 +568,6 @@ func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, ori
 			TrailRing:   trailRing,
 			TrailHead:   0,
 			TrailLen:    1,
-			Rune:        visual.CleanerChar,
 			ColorType:   colorType,
 		}
 		kinetic := physics.Kinetic{

@@ -455,6 +455,10 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 	if !ok {
 		return
 	}
+	var killerEntity core.Entity
+	if combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity); ok {
+		killerEntity = combatComp.LastDamagedBy
+	}
 
 	// Request composite destruction (header + remaining members)
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
@@ -471,10 +475,11 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 
 	// Emit enemy killed for loot/scoring
 	s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-		Entity:  headerEntity,
-		Species: component.SpeciesPylon,
-		X:       pylonComp.SpawnX,
-		Y:       pylonComp.SpawnY,
+		Entity:       headerEntity,
+		KillerEntity: killerEntity,
+		Species:      component.SpeciesPylon,
+		X:            pylonComp.SpawnX,
+		Y:            pylonComp.SpawnY,
 	})
 }
 

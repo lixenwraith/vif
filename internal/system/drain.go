@@ -270,10 +270,11 @@ func (s *DrainSystem) processDrainStates() {
 			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
 
 			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-				Entity:  entry.entity,
-				Species: component.SpeciesDrain,
-				X:       entry.pos.X,
-				Y:       entry.pos.Y,
+				Entity:       entry.entity,
+				KillerEntity: entry.combatComp.LastDamagedBy,
+				Species:      component.SpeciesDrain,
+				X:            entry.pos.X,
+				Y:            entry.pos.Y,
 			})
 
 			continue

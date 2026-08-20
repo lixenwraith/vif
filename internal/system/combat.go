@@ -198,6 +198,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	if attack == nil || attack.DamageType != component.CombatDamageDirect {
 		return
 	}
+	damageCursor := s.world.ResolveCursor(payload.OwnerEntity)
 
 	// Damage routing based on CompositeType
 	var damageTargetDead bool
@@ -213,6 +214,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 				}
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				memberCombat.LastDamagedBy = damageCursor
+				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = memberCombat.HitPoints == 0
 			}
 			s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
@@ -226,6 +229,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			}
 			targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 			targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+			targetCombatComp.LastDamagedBy = damageCursor
 			damageTargetDead = targetCombatComp.HitPoints == 0
 		}
 	}
@@ -312,9 +316,11 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if attack == nil || attack.DamageType != component.CombatDamageArea {
 		return
 	}
+	damageCursor := s.world.ResolveCursor(payload.OwnerEntity)
 
 	// Damage routing
 	var targetDead bool
+	damageApplied := false
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
 		if attack.DamageValue != 0 {
@@ -336,7 +342,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				memberCombat.LastDamagedBy = damageCursor
 				s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
+				damageApplied = true
 			}
 		}
 	} else {
@@ -361,11 +369,18 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				}
 				targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 				targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+				targetCombatComp.LastDamagedBy = damageCursor
+				damageApplied = true
 				if targetCombatComp.HitPoints == 0 {
 					targetDead = true
 				}
 			}
 		}
+	}
+	if damageApplied {
+		// Ablative species read the header when deciding which cursor receives
+		// whole-species kill credit; keep it synchronized with the last member hit.
+		targetCombatComp.LastDamagedBy = damageCursor
 	}
 
 	// Apply kinetic effect

@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
@@ -224,5 +225,187 @@ func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
 	secondWeapon, _ := w.Components.Weapon.GetComponent(second)
 	if firstWeapon.Charges[component.WeaponRod] != 0 || secondWeapon.Charges[component.WeaponRod] != 1 {
 		t.Fatalf("rod charges = (%d, %d), want (0, 1)", firstWeapon.Charges[component.WeaponRod], secondWeapon.Charges[component.WeaponRod])
+	}
+}
+
+func TestEnemyKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	boost := NewBoostSystem(w).(*BoostSystem)
+
+	boost.HandleEvent(event.GameEvent{
+		Type: event.EventEnemyKilled,
+		Payload: &event.EnemyKilledPayload{
+			KillerEntity: second,
+			Species:      component.SpeciesDrain,
+		},
+	})
+
+	firstBoost, _ := w.Components.Boost.GetComponent(first)
+	secondBoost, _ := w.Components.Boost.GetComponent(second)
+	if firstBoost.Active || !secondBoost.Active || secondBoost.Remaining != parameter.BoostBaseDuration {
+		t.Fatalf("boost after first kill = (%#v, %#v), want only credited cursor activated", firstBoost, secondBoost)
+	}
+
+	boost.HandleEvent(event.GameEvent{
+		Type: event.EventEnemyKilled,
+		Payload: &event.EnemyKilledPayload{
+			KillerEntity: second,
+			Species:      component.SpeciesSwarm,
+		},
+	})
+	boost.HandleEvent(event.GameEvent{
+		Type:    event.EventEnemyKilled,
+		Payload: &event.EnemyKilledPayload{Species: component.SpeciesEye},
+	})
+
+	secondBoost, _ = w.Components.Boost.GetComponent(second)
+	wantRemaining := parameter.BoostBaseDuration + parameter.BoostExtensionDuration
+	if secondBoost.Remaining != wantRemaining || secondBoost.TotalDuration != wantRemaining {
+		t.Fatalf("boost after second kill = %#v, want remaining and total %v", secondBoost, wantRemaining)
+	}
+}
+
+func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+
+	unit := w.CreateEntity()
+	w.Positions.SetPosition(unit, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Combat.SetComponent(unit, component.CombatComponent{
+		OwnerEntity:      unit,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatDamageCleaner,
+	})
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: unit, HitEntity: unit,
+		AttackType: component.CombatAttackProjectile,
+	})
+	unitCombat, _ := w.Components.Combat.GetComponent(unit)
+	if unitCombat.HitPoints != 0 || unitCombat.LastDamagedBy != cursor {
+		t.Fatalf("unit combat = %#v, want fatal credit for cursor %d", unitCombat, cursor)
+	}
+
+	header := w.CreateEntity()
+	member := w.CreateEntity()
+	w.Positions.SetPosition(header, component.PositionComponent{X: 10, Y: 5})
+	w.Positions.SetPosition(member, component.PositionComponent{X: 10, Y: 5})
+	w.Components.Header.SetComponent(header, component.HeaderComponent{
+		Type:          component.CompositeTypeAblative,
+		MemberEntries: []component.MemberEntry{{Entity: member}},
+	})
+	w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{
+		OwnerEntity:      header,
+		CombatEntityType: component.CombatEntityPylon,
+	})
+	w.Components.Combat.SetComponent(member, component.CombatComponent{
+		OwnerEntity:      header,
+		CombatEntityType: component.CombatEntityPylon,
+		HitPoints:        parameter.CombatDamageCleaner,
+	})
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: header, HitEntity: member,
+		AttackType: component.CombatAttackProjectile,
+	})
+
+	headerCombat, _ := w.Components.Combat.GetComponent(header)
+	memberCombat, _ := w.Components.Combat.GetComponent(member)
+	if memberCombat.HitPoints != 0 || memberCombat.LastDamagedBy != cursor || headerCombat.LastDamagedBy != cursor {
+		t.Fatalf("ablative combat = header %#v member %#v, want fatal credit for cursor %d", headerCombat, memberCombat, cursor)
+	}
+
+	areaTarget := w.CreateEntity()
+	w.Positions.SetPosition(areaTarget, component.PositionComponent{X: 12, Y: 5})
+	w.Components.Combat.SetComponent(areaTarget, component.CombatComponent{
+		OwnerEntity:      areaTarget,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatDamageExplosion,
+	})
+	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: areaTarget, HitEntities: []core.Entity{areaTarget},
+		AttackType: component.CombatAttackExplosion,
+	})
+	areaCombat, _ := w.Components.Combat.GetComponent(areaTarget)
+	if areaCombat.HitPoints != 0 || areaCombat.LastDamagedBy != cursor {
+		t.Fatalf("area combat = %#v, want fatal credit for cursor %d", areaCombat, cursor)
+	}
+}
+
+func TestCombatClearsStaleCursorCreditWhenEnemyDealsFatalDamage(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+
+	target := w.CreateEntity()
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatDamageCleaner + parameter.CombatDamageEyeSelfDestruct,
+	})
+	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: target, HitEntity: target,
+		AttackType: component.CombatAttackProjectile,
+	})
+
+	targetCombat, _ := w.Components.Combat.GetComponent(target)
+	targetCombat.RemainingDamageImmunity = 0
+	w.Components.Combat.SetComponent(target, targetCombat)
+
+	eye := w.CreateEntity()
+	w.Components.Combat.SetComponent(eye, component.CombatComponent{
+		OwnerEntity:      eye,
+		CombatEntityType: component.CombatEntityEye,
+	})
+	combat.applyHitArea(&event.CombatAttackAreaRequestPayload{
+		OwnerEntity: eye, OriginEntity: eye,
+		TargetEntity: target, HitEntities: []core.Entity{target},
+		AttackType: component.CombatAttackSelfDestruct,
+	})
+
+	targetCombat, _ = w.Components.Combat.GetComponent(target)
+	if targetCombat.HitPoints != 0 || targetCombat.LastDamagedBy != 0 {
+		t.Fatalf("target combat = %#v, want fatal non-cursor damage with no player credit", targetCombat)
+	}
+}
+
+func TestTowerDeathEmitsKillOnlyForCursorCredit(t *testing.T) {
+	w, _, killer := testCursorWorld(t)
+	towers := NewTowerSystem(w).(*TowerSystem)
+
+	header := w.CreateEntity()
+	w.Components.Tower.SetComponent(header, component.TowerComponent{
+		SpawnX: 7,
+		SpawnY: 9,
+		Type:   component.TowerCyan,
+	})
+	w.Components.Combat.SetComponent(header, component.CombatComponent{LastDamagedBy: killer})
+	towers.handleTowerDeath(header)
+
+	kills := 0
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type != event.EventEnemyKilled {
+			continue
+		}
+		payload, ok := ev.Payload.(*event.EnemyKilledPayload)
+		if !ok || payload.Entity != header || payload.KillerEntity != killer || payload.Species != component.SpeciesTower {
+			t.Fatalf("tower kill payload = %#v", ev.Payload)
+		}
+		kills++
+	}
+	if kills != 1 {
+		t.Fatalf("tower kill events = %d, want 1", kills)
+	}
+
+	uncredited := w.CreateEntity()
+	w.Components.Tower.SetComponent(uncredited, component.TowerComponent{SpawnX: 3, SpawnY: 4})
+	w.Components.Combat.SetComponent(uncredited, component.CombatComponent{})
+	towers.handleTowerDeath(uncredited)
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type == event.EventEnemyKilled {
+			t.Fatalf("uncredited tower death emitted enemy kill: %#v", ev.Payload)
+		}
 	}
 }

@@ -52,6 +52,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostActivate,
 		event.EventBoostDeactivate,
 		event.EventBoostExtend,
+		event.EventEnemyKilled,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -108,7 +109,27 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			}
 			s.extend(cursor, payload.Duration)
 		}
+	case event.EventEnemyKilled:
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.KillerEntity); cursor != 0 {
+				s.rewardKill(cursor)
+			}
+		}
 	}
+}
+
+// rewardKill applies the same activation/extension contract as correct typing
+// to the cursor credited with the fatal combat hit.
+func (s *BoostSystem) rewardKill(cursor core.Entity) {
+	boostComp, ok := s.world.Components.Boost.GetPtr(cursor)
+	if !ok {
+		return
+	}
+	if boostComp.Active {
+		s.extend(cursor, parameter.BoostExtensionDuration)
+		return
+	}
+	s.activate(cursor, parameter.BoostBaseDuration)
 }
 
 // Update decrements each cursor's boost by delta time

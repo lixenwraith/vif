@@ -136,10 +136,12 @@ func (s *EyeSystem) Update() {
 		if combatComp.HitPoints <= 0 {
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:  headerEntity,
-					Species: component.SpeciesEye,
-					X:       headerPos.X,
-					Y:       headerPos.Y,
+					Entity:       headerEntity,
+					KillerEntity: combatComp.LastDamagedBy,
+					Species:      component.SpeciesEye,
+					SubType:      uint8(eyeComp.Type),
+					X:            headerPos.X,
+					Y:            headerPos.Y,
 				})
 			}
 			s.despawnEye(headerEntity)
@@ -167,6 +169,7 @@ func (s *EyeSystem) Update() {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
 					Entity:  headerEntity,
 					Species: component.SpeciesEye,
+					SubType: uint8(eyeComp.Type),
 					X:       headerPos.X,
 					Y:       headerPos.Y,
 				})

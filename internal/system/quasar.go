@@ -147,10 +147,11 @@ func (s *QuasarSystem) Update() {
 		if combatComp.HitPoints <= 0 {
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:  headerEntity,
-					Species: component.SpeciesQuasar,
-					X:       headerPos.X,
-					Y:       headerPos.Y,
+					Entity:       headerEntity,
+					KillerEntity: combatComp.LastDamagedBy,
+					Species:      component.SpeciesQuasar,
+					X:            headerPos.X,
+					Y:            headerPos.Y,
 				})
 			}
 			s.terminateQuasar(headerEntity)

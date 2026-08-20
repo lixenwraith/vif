@@ -142,7 +142,7 @@ func (s *SnakeSystem) Update() {
 
 		// Check head death (unshielded and HP <= 0)
 		if !snakeComp.IsShielded && headCombat.HitPoints <= 0 {
-			s.handleSnakeDeath(rootEntity, snakeComp)
+			s.handleSnakeDeath(rootEntity, snakeComp, headCombat.LastDamagedBy)
 			continue
 		}
 
@@ -916,7 +916,7 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 	}
 }
 
-func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *component.SnakeComponent) {
+func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *component.SnakeComponent, killerEntity core.Entity) {
 	headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity)
 	var posX, posY int
 	if ok {
@@ -924,10 +924,11 @@ func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *compon
 	}
 
 	s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-		Entity:  rootEntity,
-		Species: component.SpeciesSnake,
-		X:       posX,
-		Y:       posY,
+		Entity:       rootEntity,
+		KillerEntity: killerEntity,
+		Species:      component.SpeciesSnake,
+		X:            posX,
+		Y:            posY,
 	})
 
 	s.terminateSnake(rootEntity)

@@ -1,7 +1,10 @@
 package renderer
 
 import (
+	"math"
+
 	"github.com/lixenwraith/color"
+	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -10,7 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
-// CleanerRenderer draws cleaner entities with gradient trails
+// CleanerRenderer draws cleaner entities as background-only moving trails.
 type CleanerRenderer struct {
 	gameCtx *engine.GameContext
 
@@ -37,13 +40,18 @@ func (r *CleanerRenderer) buildGradients() {
 	r.gradientNugget = make([]color.RGB, length)
 
 	for i := range length {
-		opacity := 1.0 - (float64(i) / float64(length))
-		if opacity < 0 {
-			opacity = 0
+		t := 0.0
+		if length > 1 {
+			t = float64(i) / float64(length-1)
 		}
-		r.gradientPositive[i] = color.Scale(visual.RgbCleanerBasePositive, opacity)
-		r.gradientNegative[i] = color.Scale(visual.RgbCleanerBaseNegative, opacity)
-		r.gradientNugget[i] = color.Scale(visual.RgbCleanerBaseNugget, opacity)
+		// Reversed smoothstep: a bright moving head with a soft, short tail.
+		fade := 1.0 - t
+		fade = fade * fade * (3.0 - 2.0*fade)
+		intensity := parameter.CleanerTrailTailIntensity +
+			(parameter.CleanerTrailHeadIntensity-parameter.CleanerTrailTailIntensity)*fade
+		r.gradientPositive[i] = color.Scale(visual.RgbCleanerBasePositive, intensity)
+		r.gradientNegative[i] = color.Scale(visual.RgbCleanerBaseNegative, intensity)
+		r.gradientNugget[i] = color.Scale(visual.RgbCleanerBaseNugget, intensity)
 	}
 }
 
@@ -73,19 +81,10 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 			return true
 		}
 
-		// Determine visible trail length
-		visibleLen := cleaner.TrailLen
-		if cleaner.Blocked && cleaner.DrainTotal > 0 {
-			// Shrink trail proportionally to drain progress
-			ratio := cleaner.DrainRemaining / cleaner.DrainTotal
-			if ratio < 0 {
-				ratio = 0
-			}
-			visibleLen = max(int(float64(cleaner.TrailLen)*ratio), visibleLen)
-		}
+		visibleLen := cleanerVisibleTrailLen(cleaner)
 
 		// Iterate trail ring buffer: index 0 is head (brightest), last is tail (faintest)
-		for i := range cleaner.TrailLen {
+		for i := range visibleLen {
 			// Walk backwards from head in the ring buffer
 			idx := (cleaner.TrailHead - i + parameter.CleanerTrailLength) % parameter.CleanerTrailLength
 			point := cleaner.TrailRing[idx]
@@ -98,9 +97,28 @@ func (r *CleanerRenderer) Render(ctx render.RenderContext, buf *render.RenderBuf
 
 			gradientIndex := min(i, maxGradientIdx)
 
-			// Cleaners are opaque (solid background)
-			buf.SetWithBg(screenX, screenY, cleaner.Rune, gradient[gradientIndex], visual.RgbBackground)
+			// Max background blending keeps overlapping auto-fire bounded and steady,
+			// while rune/foreground channels remain untouched and readable.
+			buf.Set(screenX, screenY, 0, visual.RgbBlack, gradient[gradientIndex],
+				render.BlendMaxBg, 1.0, terminal.AttrNone)
 		}
 		return true
 	})
+}
+
+func cleanerVisibleTrailLen(cleaner *component.CleanerComponent) int {
+	visibleLen := cleaner.TrailLen
+	if !cleaner.Blocked || cleaner.DrainTotal <= 0 {
+		return visibleLen
+	}
+
+	ratio := cleaner.DrainRemaining / cleaner.DrainTotal
+	if ratio <= 0 {
+		return 0
+	}
+	if ratio > 1 {
+		ratio = 1
+	}
+	visibleLen = int(math.Ceil(float64(cleaner.TrailLen) * ratio))
+	return min(visibleLen, cleaner.TrailLen)
 }

@@ -769,13 +769,16 @@ type CombatAttackAreaRequestPayload struct {
 	OriginY   int  `toml:"origin_y"`
 }
 
-// EnemyKilledPayload carries entity type and death position for loot resolution
+// EnemyKilledPayload carries enemy identity, death position, and player credit.
+// KillerEntity is the cursor that dealt the fatal damage, or zero for lifecycle
+// deaths and attacks not owned by a cursor.
 type EnemyKilledPayload struct {
-	Entity  core.Entity           `toml:"entity"`
-	X       int                   `toml:"x"`
-	Y       int                   `toml:"y"`
-	Species component.SpeciesType `toml:"species"`
-	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
+	Entity       core.Entity           `toml:"entity"`
+	KillerEntity core.Entity           `toml:"killer_entity"`
+	X            int                   `toml:"x"`
+	Y            int                   `toml:"y"`
+	Species      component.SpeciesType `toml:"species"`
+	SubType      uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 }
 
 // EnemyCreatedPayload signals enemy entity spawn for GA tracking

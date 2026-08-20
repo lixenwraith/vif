@@ -27,9 +27,6 @@ type CleanerComponent struct {
 	TrailHead int // Most recent point index
 	TrailLen  int // Valid point count
 
-	// Character used to render the cleaner block
-	Rune rune
-
 	// Color type for renderer gradient selection
 	ColorType CleanerColorType
 
