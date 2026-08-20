@@ -85,11 +85,15 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventCleanerSweepingRequest:
-		s.spawnSweepingCleaners()
+		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
+			s.spawnSweepingCleaners(cursor)
+		}
 
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
-			s.spawnDirectionalCleaners(payload.OriginX, payload.OriginY, payload.ColorType)
+			if cursor := s.world.TargetCursor(payload); cursor != 0 {
+				s.spawnDirectionalCleaners(cursor, payload.OriginX, payload.OriginY, payload.ColorType)
+			}
 		}
 	}
 }
@@ -179,7 +183,7 @@ func (s *CleanerSystem) Update() {
 				}
 
 				// Combat + glyph; enemy blocks head at this cell
-				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.ColorType) {
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
 					break
@@ -208,7 +212,7 @@ func (s *CleanerSystem) Update() {
 					break
 				}
 
-				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.ColorType) {
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
 					break
@@ -290,11 +294,11 @@ func (s *CleanerSystem) Update() {
 	}
 }
 
-// spawnSweepingCleaners generates cleaner entities
-func (s *CleanerSystem) spawnSweepingCleaners() {
+// spawnSweepingCleaners generates cleaner entities for one cursor.
+func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 	config := s.world.Resources.Config
 
-	rows := s.scanTargetRows()
+	rows := s.scanTargetRows(owner)
 
 	spawnCount := len(rows)
 	// No rows to clean
@@ -310,7 +314,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 	// Determine color type from energy polarity
 	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetComponent(s.world.Resources.Player.Entity); ok {
+	if energyComp, ok := s.world.Components.Energy.GetComponent(owner); ok {
 		if energyComp.Current < 0 {
 			colorType = component.CleanerColorNegative
 		}
@@ -346,13 +350,14 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 		trailRing[0] = vmath.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
-			TargetX:   targetX,
-			TargetY:   rowCenterY,
-			TrailRing: trailRing,
-			TrailHead: 0,
-			TrailLen:  1,
-			Rune:      visual.CleanerChar,
-			ColorType: colorType,
+			OwnerEntity: owner,
+			TargetX:     targetX,
+			TargetY:     rowCenterY,
+			TrailRing:   trailRing,
+			TrailHead:   0,
+			TrailLen:    1,
+			Rune:        visual.CleanerChar,
+			ColorType:   colorType,
 		}
 		kinetic := physics.Kinetic{
 			PreciseX: startX,
@@ -375,8 +380,7 @@ func (s *CleanerSystem) spawnSweepingCleaners() {
 
 // checkCollisions handles combat and glyph interactions at a single cell
 // Returns true if a combat entity was hit (blocks cleaner head)
-func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorType component.CleanerColorType) bool {
-	cursorEntity := s.world.Resources.Player.Entity
+func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, colorType component.CleanerColorType) bool {
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 	n := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
 	if n == 0 {
@@ -401,14 +405,14 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity core.Entity, colorT
 			continue
 		}
 
-		// Skip player-owned entities (tower members)
-		if isOwnedBy(s.world, target, cursorEntity) {
+		// Skip cursors, their orbs, and the firing cursor's owned entities.
+		if isCursorOrOwnedOrb(s.world, target) || isOwnedBy(s.world, target, owner) {
 			continue
 		}
 
 		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			AttackType:   component.CombatAttackProjectile,
-			OwnerEntity:  cursorEntity,
+			OwnerEntity:  owner,
 			OriginEntity: selfEntity,
 			TargetEntity: target,
 			HitEntity:    hit,
@@ -500,8 +504,8 @@ func (s *CleanerSystem) processNuggetEnergy(targetEntities []core.Entity, selfEn
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy)
 }
 
-// spawnDirectionalCleaners generates 4 cleaner entities from origin position
-func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType component.CleanerColorType) {
+// spawnDirectionalCleaners generates four cleaner entities owned by one cursor.
+func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, originY int, colorType component.CleanerColorType) {
 	config := s.world.Resources.Config
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
@@ -541,13 +545,14 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 		trailRing[0] = vmath.Point{X: startGridX, Y: startGridY}
 
 		cleanerComp := component.CleanerComponent{
-			TargetX:   dir.targetX,
-			TargetY:   dir.targetY,
-			TrailRing: trailRing,
-			TrailHead: 0,
-			TrailLen:  1,
-			Rune:      visual.CleanerChar,
-			ColorType: colorType,
+			OwnerEntity: owner,
+			TargetX:     dir.targetX,
+			TargetY:     dir.targetY,
+			TrailRing:   trailRing,
+			TrailHead:   0,
+			TrailLen:    1,
+			Rune:        visual.CleanerChar,
+			ColorType:   colorType,
 		}
 		kinetic := physics.Kinetic{
 			PreciseX: dir.startX,
@@ -571,14 +576,13 @@ func (s *CleanerSystem) spawnDirectionalCleaners(originX, originY int, colorType
 
 // scanTargetRows finds rows containing target character type based on energy polarity
 // Returns rows with TypeRed (energy >= 0) or TypeBlue (energy < 0)
-func (s *CleanerSystem) scanTargetRows() []int {
+func (s *CleanerSystem) scanTargetRows(owner core.Entity) []int {
 	config := s.world.Resources.Config
 	gameHeight := config.MapHeight
 
 	// Determine target type based on energy polarity
 	targetType := component.GlyphRed
-	cursorEntity := s.world.Resources.Player.Entity
-	if energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity); ok {
+	if energyComp, ok := s.world.Components.Energy.GetComponent(owner); ok {
 		if energyComp.Current < 0 {
 			targetType = component.GlyphBlue
 		}

@@ -227,13 +227,24 @@ type NuggetDestroyedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
+// NuggetJumpRequestPayload names the cursor jumping to the active nugget.
+type NuggetJumpRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // --- Cleaner ---
 
 // DirectionalCleanerPayload contains origin for 4-way cleaner spawn
 type DirectionalCleanerPayload struct {
+	Entity    core.Entity                `toml:"entity"`
 	OriginX   int                        `toml:"origin_x"`
 	OriginY   int                        `toml:"origin_y"`
 	ColorType component.CleanerColorType `toml:"color_type"`
+}
+
+// CleanerSweepingRequestPayload names the cursor whose polarity drives the sweep.
+type CleanerSweepingRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Gold ---
@@ -248,6 +259,11 @@ type GoldSpawnedPayload struct {
 // GoldCompletionPayload identifies which gold sequence is completed
 type GoldCompletionPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
+}
+
+// GoldJumpRequestPayload names the cursor jumping to the active gold sequence.
+type GoldJumpRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
 }
 
 // --- Splash ---
@@ -471,6 +487,7 @@ const (
 
 // ExplosionRequestPayload contains parameters for explosion effect
 type ExplosionRequestPayload struct {
+	Entity core.Entity   `toml:"entity"`
 	X      int           `toml:"x"`
 	Y      int           `toml:"y"`
 	Radius float64       `toml:"radius"` // 0 = use default
@@ -1079,6 +1096,7 @@ type EyeDestroyedPayload struct {
 
 // TowerSpawnRequestPayload contains parameters for tower creation
 type TowerSpawnRequestPayload struct {
+	Entity        core.Entity         `toml:"entity"`
 	X             int                 `toml:"x"`
 	Y             int                 `toml:"y"`
 	RadiusX       int                 `toml:"radius_x"`

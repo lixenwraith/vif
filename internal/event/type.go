@@ -145,14 +145,14 @@ const (
 	EventNuggetCollected
 	// EventNuggetDestroyed (NuggetDestroyedPayload) signals nugget was destroyed externally
 	EventNuggetDestroyed
-	// EventNuggetJumpRequest signals player intent to jump to active nugget
+	// EventNuggetJumpRequest (NuggetJumpRequestPayload) signals player intent to jump to active nugget
 	EventNuggetJumpRequest
 
 	// --- Cleaner ---
 
 	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) spawns 4-way cleaners from origin
 	EventCleanerDirectionalRequest
-	// EventCleanerSweepingRequest spawns cleaners on rows with positive/negative energy glyphs
+	// EventCleanerSweepingRequest (CleanerSweepingRequestPayload) spawns cleaners on rows with positive/negative energy glyphs
 	EventCleanerSweepingRequest
 	// EventCleanerSweepingFinished marks cleaner animation completion
 	EventCleanerSweepingFinished
@@ -173,7 +173,7 @@ const (
 	EventGoldDestroyed
 	// EventGoldCancel signals mandatory cleanup of any active gold sequence
 	EventGoldCancel
-	// EventGoldJumpRequest signals player intent to jump to active gold sequence
+	// EventGoldJumpRequest (GoldJumpRequestPayload) signals player intent to jump to active gold sequence
 	EventGoldJumpRequest
 
 	// --- Splash ---

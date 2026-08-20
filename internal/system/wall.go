@@ -683,14 +683,22 @@ func (s *WallSystem) runFullPushCheck() {
 // pushEntitiesAtPosition displaces all non-wall entities at given position
 func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 	var pushCount int64
-	cursorEntity := s.world.Resources.Player.Entity
 
-	// Check cursor
-	if cursorPos, ok := s.world.Positions.GetPosition(cursorEntity); ok {
-		if cursorPos.X == x && cursorPos.Y == y {
-			if _, _, moved := s.world.PushEntityFromBlocked(cursorEntity, component.WallBlockCursor); moved {
-				pushCount++
-			}
+	// Check cursors.
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if !ok || cursorPos.X != x || cursorPos.Y != y {
+			continue
+		}
+		newX, newY, found := s.world.ResolveFreeCell(x, y, component.WallBlockCursor)
+		if found && (newX != x || newY != y) {
+			s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+				Entity: cursor,
+				X:      newX,
+				Y:      newY,
+			})
+			pushCount++
 		}
 	}
 
@@ -699,7 +707,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 	for i := range count {
 		entity := entities[i]
-		if entity == cursorEntity {
+		if s.world.Components.Cursor.HasEntity(entity) {
 			continue
 		}
 		if s.world.Components.Wall.HasEntity(entity) {
@@ -718,7 +726,7 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 		// Push failed - entity is stuck
 		// Destroy non-cursor-owned combat entities that cannot escape
 		if combat, ok := s.world.Components.Combat.GetComponent(entity); ok {
-			if combat.OwnerEntity != cursorEntity {
+			if !s.world.Components.Cursor.HasEntity(combat.OwnerEntity) {
 				event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
 			}
 		}

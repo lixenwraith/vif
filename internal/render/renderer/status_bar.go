@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
@@ -142,7 +143,10 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 
 	// Priority 2: Energy
-	playerEntity := r.gameCtx.World.Resources.Player.Entity
+	var playerEntity core.Entity
+	if r.gameCtx.World.Resources.Player.Valid() {
+		playerEntity = r.gameCtx.World.Resources.Player.Entity
+	}
 	energyComp, hasEnergy := r.gameCtx.World.Components.Energy.GetPtr(playerEntity)
 	var energyVal int64
 	if hasEnergy {

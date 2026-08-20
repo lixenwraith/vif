@@ -99,7 +99,9 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventNuggetJumpRequest:
-		s.handleJumpRequest()
+		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
+			s.handleJumpRequest(cursor)
+		}
 
 	case event.EventNuggetCollected:
 		if payload, ok := ev.Payload.(*event.NuggetCollectedPayload); ok {
@@ -135,8 +137,10 @@ func (s *NuggetSystem) Update() {
 	// Check for auto-collection (ember/shield area or exact co-location)
 	if s.activeNuggetEntity != 0 {
 		nuggetPos, ok := s.world.Positions.GetPosition(s.activeNuggetEntity)
-		if ok && s.isNuggetInCollectionRange(nuggetPos.X, nuggetPos.Y) {
-			s.collectNugget()
+		if ok {
+			if cursor := s.collectionCursor(nuggetPos.X, nuggetPos.Y); cursor != 0 {
+				s.collectNugget(cursor)
+			}
 		}
 	}
 
@@ -169,10 +173,8 @@ func (s *NuggetSystem) Update() {
 	s.statActive.Store(s.activeNuggetEntity != 0)
 }
 
-// handleJumpRequest attempts to jump cursor to the active nugget
-func (s *NuggetSystem) handleJumpRequest() {
-	cursorEntity := s.world.Resources.Player.Entity
-
+// handleJumpRequest attempts to jump one cursor to the active nugget.
+func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	// 1. Check Active Nugget
 	nuggetEntity := s.activeNuggetEntity
 
@@ -191,25 +193,22 @@ func (s *NuggetSystem) handleJumpRequest() {
 	}
 
 	// 3. Move Cursor
-	s.world.Positions.SetPosition(cursorEntity, component.PositionComponent{
-		X: nuggetPos.X,
-		Y: nuggetPos.Y,
-	})
-
-	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
-		X: nuggetPos.X,
-		Y: nuggetPos.Y,
+	s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+		Entity: cursorEntity,
+		X:      nuggetPos.X,
+		Y:      nuggetPos.Y,
 	})
 
 	// 4. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+		Entity:     cursorEntity,
 		Delta:      parameter.NuggetJumpCostPercent,
 		Percentage: true,
 		Type:       component.EnergyDeltaSpend,
 	})
 
 	// 5. Collect nugget that overlaps with cursor
-	s.collectNugget()
+	s.collectNugget(cursorEntity)
 
 	// 5. Update stats
 	s.statJumps.Add(1)
@@ -269,8 +268,7 @@ func (s *NuggetSystem) spawnNugget() {
 // findValidPosition finds a valid random position for a nugget
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
-	if !ok {
+	if s.world.Resources.Player.Count() == 0 {
 		return -1, -1
 	}
 
@@ -278,16 +276,21 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		x := s.rng.Intn(config.MapWidth)
 		y := s.rng.Intn(config.MapHeight)
 
-		dx := x - cursorPos.X
-		if dx < 0 {
-			dx = -dx
-		}
-		dy := y - cursorPos.Y
-		if dy < 0 {
-			dy = -dy
-		}
-
-		if dx <= parameter.CursorExclusionX || dy <= parameter.CursorExclusionY {
+		nearCursor := false
+		s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+			cursorPos, ok := s.world.Positions.GetPosition(e)
+			if !ok {
+				return true
+			}
+			dx := max(x-cursorPos.X, cursorPos.X-x)
+			dy := max(y-cursorPos.Y, cursorPos.Y-y)
+			if dx <= parameter.CursorExclusionX || dy <= parameter.CursorExclusionY {
+				nearCursor = true
+				return false
+			}
+			return true
+		})
+		if nearCursor {
 			continue
 		}
 
@@ -302,48 +305,43 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 	return -1, -1
 }
 
-// collectNugget handles auto-collection when cursor overlaps nugget
-func (s *NuggetSystem) collectNugget() {
+// collectNugget rewards the cursor that collected the active nugget.
+func (s *NuggetSystem) collectNugget(cursor core.Entity) {
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Whoosh,
 	})
 
 	s.world.DestroyEntity(s.activeNuggetEntity)
 
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{Delta: parameter.NuggetHeatIncrease})
+	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+		Entity: cursor,
+		Delta:  parameter.NuggetHeatIncrease,
+	})
 
 	s.activeNuggetEntity = 0
 	s.statCollected.Add(1)
 }
 
-// isNuggetInCollectionRange checks if nugget position is within collection range
-// Priority: ember ellipse > shield ellipse > exact cursor co-location
-func (s *NuggetSystem) isNuggetInCollectionRange(nuggetX, nuggetY int) bool {
-	cursorEntity := s.world.Resources.Player.Entity
+// collectionCursor returns the first rostered cursor whose collection area contains the nugget.
+func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if !ok {
+			continue
+		}
 
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return false
+		if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive &&
+			vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, visual.EmberInvRxSq, visual.EmberInvRySq) {
+			return cursor
+		}
+		if shieldComp, ok := s.world.Components.Shield.GetComponent(cursor); ok && shieldComp.Active &&
+			vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+			return cursor
+		}
+		if cursorPos.X == nuggetX && cursorPos.Y == nuggetY {
+			return cursor
+		}
 	}
-
-	// Ember takes precedence (larger radius)
-	if heatComp, ok := s.world.Components.Heat.GetComponent(cursorEntity); ok && heatComp.EmberActive {
-		return vmath.EllipseContainsPointF(
-			nuggetX, nuggetY,
-			cursorPos.X, cursorPos.Y,
-			visual.EmberInvRxSq, visual.EmberInvRySq,
-		)
-	}
-
-	// Shield ellipse when active
-	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursorEntity); ok && shieldComp.Active {
-		return vmath.EllipseContainsPointF(
-			nuggetX, nuggetY,
-			cursorPos.X, cursorPos.Y,
-			shieldComp.InvRxSq, shieldComp.InvRySq,
-		)
-	}
-
-	// Fallback: exact co-location
-	return cursorPos.X == nuggetX && cursorPos.Y == nuggetY
+	return 0
 }

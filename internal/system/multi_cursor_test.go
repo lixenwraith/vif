@@ -1,0 +1,206 @@
+package system
+
+import (
+	"testing"
+	"time"
+
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
+)
+
+func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
+	t.Helper()
+
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{
+		Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{
+			X: 5, Y: 5, Slot: 0, Control: uint8(component.ControlHuman),
+		},
+	})
+	cursors.HandleEvent(event.GameEvent{
+		Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{
+			X: 15, Y: 5, Slot: 1, Control: uint8(component.ControlBot),
+		},
+	})
+
+	first := w.Resources.Player.Slot(0)
+	second := w.Resources.Player.Slot(1)
+	if first == 0 || second == 0 || first == second {
+		t.Fatalf("cursor roster = (%d, %d), want two distinct entities", first, second)
+	}
+	w.Resources.Event.Queue.Consume()
+	return w, first, second
+}
+
+func TestClosestCursorUsesRoster(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+
+	got, _, _, ok := ClosestCursor(w, 14, 5)
+	if !ok || got != second {
+		t.Fatalf("closest cursor = (%d, %t), want (%d, true)", got, ok, second)
+	}
+
+	got, _, _, ok = ClosestCursor(w, 10, 5)
+	if !ok || got != first {
+		t.Fatalf("tie cursor = (%d, %t), want slot-zero entity %d", got, ok, first)
+	}
+}
+
+func TestCursorOverlapIncludesEveryTouchingPlayer(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{
+		Type: event.EventCursorMoveRequest,
+		Payload: &event.CursorMoveRequestPayload{
+			Entity: second,
+			X:      5,
+			Y:      5,
+		},
+	})
+	w.Resources.Event.Queue.Consume()
+
+	entity := w.CreateEntity()
+	w.Positions.SetPosition(entity, component.PositionComponent{X: 5, Y: 5})
+
+	overlaps := CheckCursorOverlaps(w, entity)
+	if overlaps.Count != 2 {
+		t.Fatalf("overlap count = %d, want 2", overlaps.Count)
+	}
+	if overlaps.Entries[0].Cursor != first || overlaps.Entries[1].Cursor != second {
+		t.Fatalf("overlap cursors = (%d, %d), want (%d, %d)", overlaps.Entries[0].Cursor, overlaps.Entries[1].Cursor, first, second)
+	}
+	if !overlaps.Entries[0].OnCursor || !overlaps.Entries[1].OnCursor {
+		t.Fatalf("overlap flags = (%t, %t), want both true", overlaps.Entries[0].OnCursor, overlaps.Entries[1].OnCursor)
+	}
+}
+
+func TestNavigationGroupZeroPublishesRoster(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	navigation := NewNavigationSystem(w).(*NavigationSystem)
+	navigation.resolveGroupTargets()
+
+	state := w.Resources.Target.GetGroup(0)
+	if !state.Valid || state.Count != 2 {
+		t.Fatalf("group zero = %#v, want two valid targets", state)
+	}
+	if state.Targets[0].Entity != first || state.Targets[1].Entity != second {
+		t.Fatalf("group-zero entities = (%d, %d), want (%d, %d)", state.Targets[0].Entity, state.Targets[1].Entity, first, second)
+	}
+
+	empty := engine.NewWorld()
+	engine.NewGameContextWithClock(empty, 40, 24, engine.NewManualClock())
+	emptyNavigation := NewNavigationSystem(empty).(*NavigationSystem)
+	emptyNavigation.resolveGroupTargets()
+	if state := empty.Resources.Target.GetGroup(0); state.Valid || state.Count != 0 {
+		t.Fatalf("empty group zero = %#v, want invalid", state)
+	}
+}
+
+func TestBulletCollisionAddressesHitCursor(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	bullets := NewBulletSystem(w).(*BulletSystem)
+	damage := component.BulletDamage{EnergyDrain: -7, HeatDelta: -11}
+
+	if !bullets.collideCursor(&component.BulletComponent{Damage: damage}, 15, 5) {
+		t.Fatal("direct hit did not collide with slot-one cursor")
+	}
+	events := w.Resources.Event.Queue.Consume()
+	if len(events) != 1 || events[0].Type != event.EventHeatAddRequest {
+		t.Fatalf("direct-hit events = %#v, want one heat command", events)
+	}
+	heat, ok := events[0].Payload.(*event.HeatAddRequestPayload)
+	if !ok || heat.Entity != second || heat.Delta != damage.HeatDelta {
+		t.Fatalf("heat payload = %#v, want entity %d delta %d", events[0].Payload, second, damage.HeatDelta)
+	}
+
+	shield, ok := w.Components.Shield.GetComponent(first)
+	if !ok {
+		t.Fatal("slot-zero cursor has no shield component")
+	}
+	shield.Active = true
+	shield.InvRxSq = 1
+	shield.InvRySq = 1
+	w.Components.Shield.SetComponent(first, shield)
+
+	if !bullets.collideCursor(&component.BulletComponent{Damage: damage}, 5, 5) {
+		t.Fatal("shield hit did not collide with slot-zero cursor")
+	}
+	events = w.Resources.Event.Queue.Consume()
+	if len(events) != 1 || events[0].Type != event.EventShieldDrainRequest {
+		t.Fatalf("shield-hit events = %#v, want one shield command", events)
+	}
+	drain, ok := events[0].Payload.(*event.ShieldDrainRequestPayload)
+	if !ok || drain.Entity != first || drain.Value != damage.EnergyDrain {
+		t.Fatalf("shield payload = %#v, want entity %d value %d", events[0].Payload, first, damage.EnergyDrain)
+	}
+}
+
+func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	if HasCombatTargetAt(w, 15, 5, 0, first) {
+		t.Fatalf("slot-one cursor %d was treated as a combat target", second)
+	}
+
+	enemy := w.CreateEntity()
+	w.Positions.SetPosition(enemy, component.PositionComponent{X: 16, Y: 5})
+	w.Components.Combat.SetComponent(enemy, component.CombatComponent{
+		OwnerEntity:      enemy,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        1,
+	})
+	targets := FindNearestTargets(w, 15, 5, 1, first)
+	if len(targets) != 1 || targets[0].Target != enemy {
+		t.Fatalf("nearest targets = %#v, want only enemy %d", targets, enemy)
+	}
+}
+
+func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
+	w, first, second := testCursorWorld(t)
+	energy := NewEnergySystem(w).(*EnergySystem)
+	heat := NewHeatSystem(w).(*HeatSystem)
+	shield := NewShieldSystem(w).(*ShieldSystem)
+	boost := NewBoostSystem(w).(*BoostSystem)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+
+	energy.HandleEvent(event.GameEvent{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Entity: second, Value: 42}})
+	heat.HandleEvent(event.GameEvent{Type: event.EventHeatSetRequest, Payload: &event.HeatSetRequestPayload{Entity: second, Value: 37}})
+	shield.HandleEvent(event.GameEvent{Type: event.EventShieldActivate, Payload: &event.ShieldActivatePayload{Entity: second}})
+	boost.HandleEvent(event.GameEvent{Type: event.EventBoostActivate, Payload: &event.BoostActivatePayload{Entity: second, Duration: time.Second}})
+	weapon.HandleEvent(event.GameEvent{Type: event.EventWeaponAddRequest, Payload: &event.WeaponAddRequestPayload{Entity: second, Weapon: component.WeaponRod}})
+
+	firstEnergy, _ := w.Components.Energy.GetComponent(first)
+	secondEnergy, _ := w.Components.Energy.GetComponent(second)
+	if firstEnergy.Current != 0 || secondEnergy.Current != 42 {
+		t.Fatalf("energy = (%d, %d), want (0, 42)", firstEnergy.Current, secondEnergy.Current)
+	}
+
+	firstHeat, _ := w.Components.Heat.GetComponent(first)
+	secondHeat, _ := w.Components.Heat.GetComponent(second)
+	if firstHeat.Current != 0 || secondHeat.Current != 37 {
+		t.Fatalf("heat = (%d, %d), want (0, 37)", firstHeat.Current, secondHeat.Current)
+	}
+
+	firstShield, _ := w.Components.Shield.GetComponent(first)
+	secondShield, _ := w.Components.Shield.GetComponent(second)
+	if firstShield.Active || !secondShield.Active {
+		t.Fatalf("shield active = (%t, %t), want (false, true)", firstShield.Active, secondShield.Active)
+	}
+
+	firstBoost, _ := w.Components.Boost.GetComponent(first)
+	secondBoost, _ := w.Components.Boost.GetComponent(second)
+	if firstBoost.Active || !secondBoost.Active || secondBoost.Remaining != time.Second {
+		t.Fatalf("boost = (%#v, %#v), want only slot one active", firstBoost, secondBoost)
+	}
+
+	firstWeapon, _ := w.Components.Weapon.GetComponent(first)
+	secondWeapon, _ := w.Components.Weapon.GetComponent(second)
+	if firstWeapon.Charges[component.WeaponRod] != 0 || secondWeapon.Charges[component.WeaponRod] != 1 {
+		t.Fatalf("rod charges = (%d, %d), want (0, 1)", firstWeapon.Charges[component.WeaponRod], secondWeapon.Charges[component.WeaponRod])
+	}
+}

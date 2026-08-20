@@ -36,6 +36,9 @@ func NewPulseRenderer(gameCtx *engine.GameContext) *PulseRenderer {
 }
 
 func (r *PulseRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	if !r.gameCtx.World.Resources.Player.Valid() {
+		return
+	}
 	cursorEntity := r.gameCtx.World.Resources.Player.Entity
 
 	pulseComp, ok := r.gameCtx.World.Components.Pulse.GetPtr(cursorEntity)

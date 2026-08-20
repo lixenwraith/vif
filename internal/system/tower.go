@@ -86,7 +86,9 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventTowerSpawnRequest:
 		if payload, ok := ev.Payload.(*event.TowerSpawnRequestPayload); ok {
-			s.spawnTower(payload)
+			if cursor := s.world.TargetCursor(payload); cursor != 0 {
+				s.spawnTower(cursor, payload)
+			}
 		}
 
 	case event.EventTowerCancelRequest:
@@ -133,7 +135,7 @@ func (s *TowerSystem) Update() {
 
 // === Spawn ===
 
-func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
+func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerSpawnRequestPayload) {
 	radiusX := payload.RadiusX
 	radiusY := payload.RadiusY
 	if radiusX <= 0 {
@@ -176,8 +178,6 @@ func (s *TowerSystem) spawnTower(payload *event.TowerSpawnRequestPayload) {
 	if towerType >= component.TowerTypeCount {
 		towerType = component.TowerCyan
 	}
-
-	cursorEntity := s.world.Resources.Player.Entity
 
 	// Create header entity
 	headerEntity := s.world.CreateEntity()

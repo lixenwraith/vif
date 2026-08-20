@@ -17,7 +17,7 @@ transitions = [
 [states.MonitorActive]
 parent = "MonitorCycle"
 transitions = [
-    { trigger = "EventHeatBurst", target = "MonitorHeatBurst" },
+    { trigger = "EventHeatBurst", target = "MonitorHeatBurst", capture_vars = { entity = "burst_entity" } },
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
         { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
         { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } },
@@ -27,7 +27,7 @@ transitions = [
 [states.MonitorHeatBurst]
 parent = "MonitorCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventCleanerSweepingRequest" },
+    { action = "EmitEvent", event = "EventCleanerSweepingRequest", payload = { entity = 0 }, payload_vars = { entity = "burst_entity" } },
 ]
 transitions = [
     { trigger = "Tick", target = "MonitorActive" },

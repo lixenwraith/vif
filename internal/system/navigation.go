@@ -67,10 +67,6 @@ type NavigationSystem struct {
 	// Ticks since last gateway route graph recompute (rebuild budget)
 	routeRebuildTicks int
 
-	// Cached cursor position
-	cursorX, cursorY int
-	cursorValid      bool
-
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
 	statROICells   *atomic.Int64
@@ -116,14 +112,6 @@ func (s *NavigationSystem) Init() {
 		}
 	}
 
-	if s.world.Resources.Player != nil {
-		if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
-			s.cursorX = pos.X
-			s.cursorY = pos.Y
-			s.cursorValid = true
-		}
-	}
-
 	if s.world.Resources.Target == nil {
 		s.world.Resources.Target = &engine.TargetResource{}
 	}
@@ -153,6 +141,7 @@ func (s *NavigationSystem) EventTypes() []event.EventType {
 		event.EventGameResetRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventCursorMoved,
+		event.EventCursorDespawned,
 		event.EventLevelSetup,
 		event.EventTargetGroupUpdate,
 		event.EventTargetGroupRemove,
@@ -179,12 +168,10 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventCursorMoved:
-		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
-			s.cursorX = payload.X
-			s.cursorY = payload.Y
-			s.cursorValid = true
-		}
+	case event.EventCursorMoved, event.EventCursorDespawned:
+		g := s.getOrCreateGroup(0)
+		g.pointFlowCache.MarkDirty()
+		g.compositeFlowCache.MarkDirty()
 
 	case event.EventLevelSetup:
 		if payload, ok := ev.Payload.(*event.LevelSetupPayload); ok {
@@ -346,6 +333,9 @@ func (s *NavigationSystem) Update() {
 
 		groupState := s.world.Resources.Target.GetGroup(groupID)
 		if !groupState.Valid || groupState.Count == 0 {
+			navComp.HasDirectPath = false
+			navComp.FlowX = 0
+			navComp.FlowY = 0
 			continue
 		}
 
@@ -425,7 +415,14 @@ func (s *NavigationSystem) Update() {
 		groupID := s.getEntityGroup(entity)
 		group, ok := s.groups[groupID]
 		if !ok {
+			groupID = 0
 			group = s.groups[0]
+		}
+		groupState := s.world.Resources.Target.GetGroup(groupID)
+		if !groupState.Valid || groupState.Count == 0 {
+			navComp.FlowX = 0
+			navComp.FlowY = 0
+			continue
 		}
 
 		var preciseX, preciseY float64
@@ -536,15 +533,23 @@ func (s *NavigationSystem) getEntityGroup(entity core.Entity) uint8 {
 func (s *NavigationSystem) resolveGroupTargets() {
 	tr := s.world.Resources.Target
 
-	// Cursor always group 0
-	if s.cursorValid {
-		tr.SetGroup(0, engine.TargetGroupState{
-			Type:  component.TargetCursor,
-			Count: 1,
-			Valid: true,
-		})
-		tr.SetGroupTarget(0, 0, engine.TargetData{PosX: s.cursorX, PosY: s.cursorY})
+	// Group 0 contains every live cursor up to the navigation target cap.
+	var cursorState engine.TargetGroupState
+	cursorState.Type = component.TargetCursor
+	for i := range parameter.MaxPlayers {
+		if cursorState.Count >= engine.MaxTargetsPerGroup {
+			break
+		}
+		e := s.world.Resources.Player.Slot(uint8(i))
+		pos, ok := s.world.Positions.GetPosition(e)
+		if !ok {
+			continue
+		}
+		cursorState.Targets[cursorState.Count] = engine.TargetData{Entity: e, PosX: pos.X, PosY: pos.Y}
+		cursorState.Count++
 	}
+	cursorState.Valid = cursorState.Count > 0
+	tr.SetGroup(0, cursorState)
 
 	// Accumulate anchors per group, publish once: per-anchor SetGroup zeroed earlier slots
 	var anchorStates [component.MaxTargetGroups]engine.TargetGroupState
@@ -598,9 +603,7 @@ func (s *NavigationSystem) resolveGroupTargets() {
 			tr.SetGroup(groupID, state)
 
 		case component.TargetCursor:
-			state.Targets[0].PosX = s.cursorX
-			state.Targets[0].PosY = s.cursorY
-			tr.SetGroup(groupID, state)
+			tr.SetGroup(groupID, cursorState)
 		}
 	}
 }

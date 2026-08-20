@@ -250,7 +250,6 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.SwarmHeaderOffsetX
 	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
-	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -262,7 +261,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 			for i := range count {
 				e := entities[i]
-				if e == 0 || e == cursorEntity {
+				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
 					continue
 				}
 				// Skip walls
@@ -806,28 +805,30 @@ func (s *SwarmSystem) checkDrainAbsorption(
 func (s *SwarmSystem) handleCursorInteractions(
 	headerEntity core.Entity,
 ) {
-	cursorEntity := s.world.Resources.Player.Entity
+	overlaps := CheckCursorOverlaps(s.world, headerEntity)
+	for i := range overlaps.Count {
+		overlap := &overlaps.Entries[i]
+		// Combat applies shield knockback and enrage immunity.
+		if len(overlap.ShieldMembers) > 0 {
+			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  overlap.Cursor,
+				OriginEntity: overlap.Cursor,
+				TargetEntity: headerEntity,
+				HitEntities:  overlap.ShieldMembers,
+			})
 
-	overlap := CheckCursorOverlap(s.world, headerEntity)
-
-	// Shield interaction (knockback via combat system; enrage immunity handled there)
-	if len(overlap.ShieldMembers) > 0 {
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackShield,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
-			TargetEntity: headerEntity,
-			HitEntities:  overlap.ShieldMembers,
-		})
-
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.QuasarShieldDrain,
-		})
-	} else if overlap.OnCursor && !overlap.ShieldActive {
-		// Direct cursor collision without shield
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Delta: -parameter.DrainHeatReductionAmount,
-		})
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Entity: overlap.Cursor,
+				Value:  parameter.QuasarShieldDrain,
+			})
+		} else if overlap.OnCursor && !overlap.ShieldActive {
+			// Direct cursor collision without a shield reduces heat.
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Entity: overlap.Cursor,
+				Delta:  -parameter.DrainHeatReductionAmount,
+			})
+		}
 	}
 }
 

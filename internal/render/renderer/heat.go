@@ -37,6 +37,10 @@ func NewHeatRenderer(ctx *engine.GameContext) *HeatRenderer {
 
 // Render implements SystemRenderer
 func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	if !r.gameCtx.World.Resources.Player.Valid() {
+		return
+	}
+
 	// Calculate Fill Limit from HeatComponent
 	heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(r.gameCtx.World.Resources.Player.Entity)
 	if !ok {

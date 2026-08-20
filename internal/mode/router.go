@@ -325,6 +325,7 @@ func (r *Router) handleEscape() bool {
 	case core.ModeNormal:
 		// ESC in Normal mode triggers ping grid, no mode change
 		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
+			Entity:   r.ctx.World.Resources.Player.Entity,
 			Duration: parameter.PingGridDuration,
 		})
 		return true
@@ -568,13 +569,17 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 
 func (r *Router) handleNuggetJump() bool {
 	r.captureForUndo()
-	r.ctx.PushEvent(event.EventNuggetJumpRequest, nil)
+	r.ctx.PushEvent(event.EventNuggetJumpRequest, &event.NuggetJumpRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	return true
 }
 
 func (r *Router) handleGoldJump() bool {
 	r.captureForUndo()
-	r.ctx.PushEvent(event.EventGoldJumpRequest, nil)
+	r.ctx.PushEvent(event.EventGoldJumpRequest, &event.GoldJumpRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	return true
 }
 
@@ -1022,7 +1027,9 @@ func (r *Router) handleMouseLeftUp() bool {
 
 func (r *Router) handleMouseRightDown() bool {
 	// Fire special at current cursor position, no movement
-	r.ctx.PushEvent(event.EventFireSpecialRequest, nil)
+	r.ctx.PushEvent(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
+		Entity: r.ctx.World.Resources.Player.Entity,
+	})
 	r.mouseRightHeld = true
 	r.lastFireSpec = r.ctx.TimeCtl.Now()
 	return true

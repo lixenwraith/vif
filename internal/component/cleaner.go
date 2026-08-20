@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -15,6 +16,8 @@ const (
 )
 
 type CleanerComponent struct {
+	OwnerEntity core.Entity
+
 	// Destruction target (tail must clear screen)
 	TargetX float64
 	TargetY float64

@@ -136,16 +136,8 @@ func (s *LootSystem) Update() {
 		return
 	}
 
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
 	config := s.world.Resources.Config
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
-
-	cursorCenterX, cursorCenterY := vmath.Point{X: cursorPos.X, Y: cursorPos.Y}.CenterF()
 
 	var activeCount int64
 	for _, lootEntity := range lootEntities {
@@ -160,19 +152,21 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
+		cursor, cursorX, cursorY, hasCursor := ClosestCursor(s.world, curX, curY)
 
 		// Collection check
-		if vmath.IntAbs(curX-cursorPos.X) <= parameter.LootCollectRadius &&
-			vmath.IntAbs(curY-cursorPos.Y) <= parameter.LootCollectRadius {
-			s.collectLoot(lootEntity, lootComp.Type)
+		if hasCursor && vmath.IntAbs(curX-cursorX) <= parameter.LootCollectRadius &&
+			vmath.IntAbs(curY-cursorY) <= parameter.LootCollectRadius {
+			s.collectLoot(cursor, lootEntity, lootComp.Type)
 			continue
 		}
 
 		// Movement logic - always process, navigation handles LOS internally
 		navComp, hasNav := s.world.Components.Navigation.GetComponent(lootEntity)
 
-		if hasNav && navComp.HasDirectPath {
+		if hasCursor && hasNav && navComp.HasDirectPath {
 			// Direct LOS: standard homing
+			cursorCenterX, cursorCenterY := vmath.Point{X: cursorX, Y: cursorY}.CenterF()
 			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &profile.LootHoming, dtSec)
 		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
 			// No LOS but have flow field: follow flow with lookahead
@@ -375,15 +369,10 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 	}
 
 	activeLoot := s.getActiveLootTypes()
-	cursorEntity := s.world.Resources.Player.Entity
-	weaponComp, hasWeapons := s.world.Components.Weapon.GetComponent(cursorEntity)
 
 	isOwned := func(lt component.LootType) bool {
 		if activeLoot[lt] {
 			return true
-		}
-		if !hasWeapons {
-			return false
 		}
 		profile := component.LootProfiles[lt]
 		if profile.Reward == nil || profile.Reward.Type != component.RewardWeapon {
@@ -392,7 +381,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 
 		// Max-charge check, repeats drops until capped
 		wt := profile.Reward.WeaponType
-		return weaponComp.Charges[wt] >= parameter.WeaponMaxCharges[wt]
+		return s.allPlayersCapped(wt)
 	}
 
 	var results []DropResult
@@ -498,6 +487,23 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 	return results
 }
 
+// allPlayersCapped reports whether every live cursor has maximum charges for a weapon.
+func (s *LootSystem) allPlayersCapped(weaponType component.WeaponType) bool {
+	players := 0
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		if cursor == 0 {
+			continue
+		}
+		players++
+		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
+		if !ok || weapons.Charges[weaponType] < parameter.WeaponMaxCharges[weaponType] {
+			return false
+		}
+	}
+	return players > 0
+}
+
 // candidate holds entry with pity-adjusted rate
 type candidate struct {
 	entry *component.DropEntry
@@ -520,7 +526,7 @@ func (s *LootSystem) getActiveLootTypes() map[component.LootType]bool {
 
 // --- Collection ---
 
-func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType) {
+func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.LootType) {
 	if int(lootType) >= len(component.LootProfiles) {
 		s.world.DestroyEntity(entity)
 		return
@@ -533,18 +539,21 @@ func (s *LootSystem) collectLoot(entity core.Entity, lootType component.LootType
 		switch profile.Reward.Type {
 		case component.RewardWeapon:
 			s.world.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
+				Entity: cursor,
 				Weapon: profile.Reward.WeaponType,
 			})
 
 		case component.RewardEnergy:
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
-				Delta: profile.Reward.Delta,
-				Type:  component.EnergyDeltaReward,
+				Entity: cursor,
+				Delta:  profile.Reward.Delta,
+				Type:   component.EnergyDeltaReward,
 			})
 
 		case component.RewardHeat:
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: profile.Reward.Delta,
+				Entity: cursor,
+				Delta:  profile.Reward.Delta,
 			})
 		}
 	}

@@ -239,6 +239,16 @@ func swapInGroup(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Journ
 	if len(sites) == 0 {
 		sites = groupPairs(recs, false)
 	}
+	var coupled []int
+	for _, i := range sites {
+		if recs[i].Type == event.EventWeaponFireRequest && recs[i+1].Type == event.EventFireSpecialRequest {
+			coupled = append(coupled, i)
+		}
+	}
+	if len(coupled) > 0 {
+		// Prefer the last coupled fire pair, after prior actions can make ordering observable.
+		sites = coupled[len(coupled)-1:]
+	}
 	i := pick(rng, sites)
 	if i < 0 {
 		return recs, "", false
@@ -281,12 +291,12 @@ func dropRecord(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Journa
 	return append(recs[:i:i], recs[i+1:]...), what, true
 }
 
-// mutatePayload rewrites one recorded cursor position
+// mutatePayload rewrites one recorded cursor move command.
 func mutatePayload(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
-	const forced = "x = 1\ny = 1\n"
+	const forced = "entity = 1\nx = 1\ny = 1\n"
 	var sites []int
 	for i := range recs {
-		if recs[i].Type == event.EventCursorMoved && recs[i].Payload != forced {
+		if recs[i].Type == event.EventCursorMoveRequest && recs[i].Payload != forced {
 			sites = append(sites, i)
 		}
 	}
@@ -298,10 +308,8 @@ func mutatePayload(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Jou
 	return recs, fmt.Sprintf("rewrote jseq %d cursor position", recs[i].JSeq), true
 }
 
-// TestReplaySoakNegative asserts a perturbed record stream is caught. A control that
-// does not diverge is reported, not failed: commuting handlers, records the simulation
-// overwrites before the snapshot, and settles with no cross-dependency are all
-// legitimately invisible. Each control must bite on at least one seed.
+// TestReplaySoakNegative asserts a perturbed record stream is caught. Individual
+// mutations can commute, but each control must bite on at least one seed.
 func TestReplaySoakNegative(t *testing.T) {
 	controls := []struct {
 		name string

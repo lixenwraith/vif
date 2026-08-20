@@ -248,7 +248,6 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.EyeHeaderOffsetX
 	topLeftY := headerY - parameter.EyeHeaderOffsetY
 
-	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -260,7 +259,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 			for i := range count {
 				e := entities[i]
-				if e == 0 || e == cursorEntity {
+				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
 					continue
 				}
 				if s.world.Components.Wall.HasEntity(e) {
@@ -591,24 +590,27 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 // === Interactions ===
 
 func (s *EyeSystem) handleCursorInteraction(headerEntity core.Entity) {
-	cursorEntity := s.world.Resources.Player.Entity
-	overlap := CheckCursorOverlap(s.world, headerEntity)
-
-	if len(overlap.ShieldMembers) > 0 {
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackShield,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
-			TargetEntity: headerEntity,
-			HitEntities:  overlap.ShieldMembers,
-		})
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.EyeShieldDrain,
-		})
-	} else if overlap.OnCursor && !overlap.ShieldActive {
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Delta: -parameter.EyeDamageHeat,
-		})
+	overlaps := CheckCursorOverlaps(s.world, headerEntity)
+	for i := range overlaps.Count {
+		overlap := &overlaps.Entries[i]
+		if len(overlap.ShieldMembers) > 0 {
+			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  overlap.Cursor,
+				OriginEntity: overlap.Cursor,
+				TargetEntity: headerEntity,
+				HitEntities:  overlap.ShieldMembers,
+			})
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Entity: overlap.Cursor,
+				Value:  parameter.EyeShieldDrain,
+			})
+		} else if overlap.OnCursor && !overlap.ShieldActive {
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Entity: overlap.Cursor,
+				Delta:  -parameter.EyeDamageHeat,
+			})
+		}
 	}
 }
 

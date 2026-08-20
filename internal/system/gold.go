@@ -110,7 +110,9 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		s.cancelGold()
 
 	case event.EventGoldJumpRequest:
-		s.handleJumpRequest()
+		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
+			s.handleJumpRequest(cursor)
+		}
 
 	case event.EventGoldSpawnRequest:
 		if !s.spawnEnabled || s.active {
@@ -165,13 +167,11 @@ func (s *GoldSystem) Update() {
 	}
 }
 
-// handleJumpRequest jumps cursor to the first living member of the gold sequence
-func (s *GoldSystem) handleJumpRequest() {
+// handleJumpRequest jumps one cursor to the first living member of the gold sequence.
+func (s *GoldSystem) handleJumpRequest(cursorEntity core.Entity) {
 	if !s.active || s.headerEntity == 0 {
 		return
 	}
-
-	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Find target position (First living member)
 	header, ok := s.world.Components.Header.GetComponent(s.headerEntity)
@@ -198,18 +198,15 @@ func (s *GoldSystem) handleJumpRequest() {
 	}
 
 	// 2. Move Cursor
-	s.world.Positions.SetPosition(cursorEntity, component.PositionComponent{
-		X: targetPos.X,
-		Y: targetPos.Y,
-	})
-
-	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
-		X: targetPos.X,
-		Y: targetPos.Y,
+	s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+		Entity: cursorEntity,
+		X:      targetPos.X,
+		Y:      targetPos.Y,
 	})
 
 	// 3. Pay Energy Cost (spend, non-convergent)
 	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+		Entity:     cursorEntity,
 		Delta:      parameter.GoldJumpCostPercent,
 		Percentage: true,
 		Type:       component.EnergyDeltaSpend,
@@ -218,11 +215,6 @@ func (s *GoldSystem) handleJumpRequest() {
 	// // 4. Play Sound
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Coin,
-	})
-
-	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{
-		X: targetPos.X,
-		Y: targetPos.Y,
 	})
 }
 
@@ -448,8 +440,7 @@ func (s *GoldSystem) clearState() {
 // Caller must NOT hold s.mu lock
 func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 	config := s.world.Resources.Config
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
-	if !ok {
+	if s.world.Resources.Player.Count() == 0 {
 		return -1, -1
 	}
 
@@ -457,9 +448,18 @@ func (s *GoldSystem) findValidPosition(seqLength int) (int, int) {
 		x := s.rng.Intn(config.MapWidth)
 		y := s.rng.Intn(config.MapHeight)
 
-		// Check if far enough from cursor
-		if math.Abs(float64(x-cursorPos.X)) <= parameter.CursorExclusionX ||
-			math.Abs(float64(y-cursorPos.Y)) <= parameter.CursorExclusionY {
+		// Check if far enough from every cursor.
+		nearCursor := false
+		s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+			cursorPos, ok := s.world.Positions.GetPosition(e)
+			if ok && (math.Abs(float64(x-cursorPos.X)) <= parameter.CursorExclusionX ||
+				math.Abs(float64(y-cursorPos.Y)) <= parameter.CursorExclusionY) {
+				nearCursor = true
+				return false
+			}
+			return true
+		})
+		if nearCursor {
 			continue
 		}
 

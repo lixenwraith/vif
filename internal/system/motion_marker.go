@@ -52,6 +52,7 @@ func (s *MotionMarkerSystem) Priority() int {
 func (s *MotionMarkerSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCursorMoved,
+		event.EventCursorDespawned,
 		event.EventModeChanged,
 		event.EventMotionMarkerShowColored,
 		event.EventMotionMarkerClearColored,
@@ -74,18 +75,31 @@ func (s *MotionMarkerSystem) HandleEvent(ev event.GameEvent) {
 		}
 	}
 
+	if ev.Type == event.EventCursorDespawned {
+		if payload, ok := ev.Payload.(*event.CursorDespawnedPayload); ok &&
+			payload.Slot == s.world.Resources.Player.LocalSlot() {
+			s.clearAllMarkers()
+		}
+		return
+	}
+
 	if !s.enabled {
 		return
 	}
 
 	switch ev.Type {
 	case event.EventCursorMoved:
-		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
+		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok &&
+			s.world.Resources.Player.IsLocal(payload.Entity) {
 			s.regenerateBaseMarkers(payload.X, payload.Y)
 		}
 
 	case event.EventModeChanged:
 		// Payload is ignored, just regenerate
+		if !s.world.Resources.Player.Valid() {
+			s.clearAllMarkers()
+			return
+		}
 		cursorEntity := s.world.Resources.Player.Entity
 		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 		if !ok {

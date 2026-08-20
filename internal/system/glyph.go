@@ -298,8 +298,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 	}
 	lineLength := len(lineRunes)
 
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
-	if !ok {
+	if s.world.Resources.Player.Count() == 0 {
 		return false
 	}
 
@@ -308,9 +307,18 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 		startCol := s.rng.Intn(config.MapWidth - lineLength + 1)
 
 		// Cursor exclusion: interval overlap on X, distance on Y
-		if vmath.IntAbs(row-cursorPos.Y) <= parameter.CursorExclusionY &&
-			startCol <= cursorPos.X+parameter.CursorExclusionX &&
-			startCol+lineLength > cursorPos.X-parameter.CursorExclusionX {
+		excluded := false
+		for i := range parameter.MaxPlayers {
+			cursor := s.world.Resources.Player.Slot(uint8(i))
+			cursorPos, ok := s.world.Positions.GetPosition(cursor)
+			if ok && vmath.IntAbs(row-cursorPos.Y) <= parameter.CursorExclusionY &&
+				startCol <= cursorPos.X+parameter.CursorExclusionX &&
+				startCol+lineLength > cursorPos.X-parameter.CursorExclusionX {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
 			continue
 		}
 

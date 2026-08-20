@@ -103,15 +103,24 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventFireSpecialRequest:
-		s.fireFromDust()
+		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
+			s.fireFromDust(cursor)
+		}
 
 	case event.EventExplosionRequest:
 		if p, ok := ev.Payload.(*event.ExplosionRequestPayload); ok {
+			var cursor core.Entity
+			if p.Type != event.ExplosionTypeEye {
+				cursor = s.world.TargetCursor(p)
+				if cursor == 0 {
+					return
+				}
+			}
 			radius := p.Radius
 			if radius == 0 {
 				radius = s.baseRadius
 			}
-			s.addCenter(p.X, p.Y, radius, p.Type)
+			s.addCenter(cursor, p.X, p.Y, radius, p.Type)
 		}
 	}
 }
@@ -145,7 +154,7 @@ func (s *ExplosionSystem) Update() {
 // Centers are collected in dense store order: addCenter merges against centers
 // already placed and emits combat events, so a map's order would decide which
 // merges happen and which entities take knockback.
-func (s *ExplosionSystem) fireFromDust() {
+func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
 	dustEntities := s.world.Components.Dust.Entities()
 	if len(dustEntities) == 0 {
 		return
@@ -171,11 +180,11 @@ func (s *ExplosionSystem) fireFromDust() {
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
 
 	for _, p := range s.centerBuf {
-		s.addCenter(p.X, p.Y, s.baseRadius, event.ExplosionTypeDust)
+		s.addCenter(cursor, p.X, p.Y, s.baseRadius, event.ExplosionTypeDust)
 	}
 }
 
-func (s *ExplosionSystem) addCenter(x, y int, radius float64, explosionType event.ExplosionType) {
+func (s *ExplosionSystem) addCenter(cursor core.Entity, x, y int, radius float64, explosionType event.ExplosionType) {
 	transRes := s.world.Resources.Transient
 
 	// Merge check - only merge same type
@@ -227,16 +236,15 @@ func (s *ExplosionSystem) addCenter(x, y int, radius float64, explosionType even
 	}
 
 	// Process area effects (combat + optional glyph conversion)
-	s.processExplosionArea(x, y, radius, explosionType)
+	s.processExplosionArea(cursor, x, y, radius, explosionType)
 
 	s.statTriggered.Add(1)
 }
 
 // processExplosionArea handles entity collection and event emission for explosion effects
 // Single-pass sweep: collects combat entities (always), converts glyphs (dust only)
-func (s *ExplosionSystem) processExplosionArea(centerX, centerY int, radius float64, explosionType event.ExplosionType) {
+func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX, centerY int, radius float64, explosionType event.ExplosionType) {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
 
 	// Determine behavior based on explosion type
 	var attackType component.CombatAttackType

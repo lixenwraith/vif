@@ -581,7 +581,8 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 	}
 
 	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{
-		Value: value,
+		Entity: ctx.World.Resources.Player.Entity,
+		Value:  value,
 	})
 
 	ctx.SetLastCommand(fmt.Sprintf(":energy %d", value))
@@ -608,7 +609,10 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 		value = parameter.HeatMax
 	}
 
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: value})
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
+		Entity: ctx.World.Resources.Player.Entity,
+		Value:  value,
+	})
 	ctx.SetLastCommand(fmt.Sprintf(":heat %d", value))
 
 	return CommandResult{Continue: true, KeepPaused: false}
@@ -617,10 +621,12 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
-		Value: parameter.HeatMax,
+		Entity: ctx.World.Resources.Player.Entity,
+		Value:  parameter.HeatMax,
 	})
 
 	ctx.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
+		Entity:   ctx.World.Resources.Player.Entity,
 		Duration: parameter.BoostBaseDuration,
 	})
 
@@ -630,22 +636,24 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: parameter.GodEnergyAmount})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponRod})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponLauncher})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponDisruptor})
+	player := ctx.World.Resources.Player.Entity
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDemonCommand sets heat to max and energy to high value
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Value: parameter.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Value: -parameter.GodEnergyAmount})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponRod})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponLauncher})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Weapon: component.WeaponDisruptor})
+	player := ctx.World.Resources.Player.Entity
+	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
+	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -666,7 +674,9 @@ func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 
 // handleCleanerCommand triggers sweeping cleaners
 func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventCleanerSweepingRequest, nil)
+	ctx.PushEvent(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
+		Entity: ctx.World.Resources.Player.Entity,
+	})
 	ctx.SetLastCommand(":cleaner")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

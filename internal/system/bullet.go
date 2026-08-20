@@ -5,6 +5,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
@@ -80,13 +81,6 @@ func (s *BulletSystem) Update() {
 		return
 	}
 
-	// Cache cursor and shield state for the frame
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, hasCursor := s.world.Positions.GetPosition(cursorEntity)
-
-	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := shieldOK && shieldComp.Active
-
 	var toDestroy []core.Entity
 
 	// Collision events are queued, and destruction is deferred until the live
@@ -110,10 +104,7 @@ func (s *BulletSystem) Update() {
 		prevX, prevY := kinetic.PreciseX, kinetic.PreciseY
 		gridX, gridY := physics.IntegratePosition(&kinetic.Kinetic, dtSec)
 
-		destroyed := s.traverseAndCollide(
-			bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY,
-			hasCursor, shieldActive, cursorPos, shieldComp,
-		)
+		destroyed := s.traverseAndCollide(bullet, prevX, prevY, kinetic.PreciseX, kinetic.PreciseY)
 		if destroyed {
 			toDestroy = append(toDestroy, e)
 			continue
@@ -134,9 +125,6 @@ func (s *BulletSystem) Update() {
 func (s *BulletSystem) traverseAndCollide(
 	bullet *component.BulletComponent,
 	fromX, fromY, toX, toY float64,
-	hasCursor, shieldActive bool,
-	cursorPos component.PositionComponent,
-	shieldComp component.ShieldComponent,
 ) bool {
 	start := vmath.PointAtF(fromX, fromY)
 
@@ -157,28 +145,48 @@ func (s *BulletSystem) traverseAndCollide(
 			return true
 		}
 
-		if !hasCursor {
+		if s.collideCursor(bullet, cx, cy) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// collideCursor checks shields before direct hits in deterministic roster order.
+func (s *BulletSystem) collideCursor(bullet *component.BulletComponent, x, y int) bool {
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if !ok {
 			continue
 		}
-
-		// Shield containment (checked before direct hit; shield area encloses cursor)
-		if shieldActive && vmath.EllipseContainsPointF(
-			cx, cy, cursorPos.X, cursorPos.Y,
-			shieldComp.InvRxSq, shieldComp.InvRySq,
-		) {
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Value: bullet.Damage.EnergyDrain,
-			})
-			return true
+		shield, ok := s.world.Components.Shield.GetComponent(cursor)
+		if !ok || !shield.Active || !vmath.EllipseContainsPointF(x, y, cursorPos.X, cursorPos.Y, shield.InvRxSq, shield.InvRySq) {
+			continue
 		}
+		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			Entity: cursor,
+			Value:  bullet.Damage.EnergyDrain,
+		})
+		return true
+	}
 
-		// Direct cursor hit without shield
-		if !shieldActive && cx == cursorPos.X && cy == cursorPos.Y {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: bullet.Damage.HeatDelta,
-			})
-			return true
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if !ok || cursorPos.X != x || cursorPos.Y != y {
+			continue
 		}
+		shield, ok := s.world.Components.Shield.GetComponent(cursor)
+		if ok && shield.Active {
+			continue
+		}
+		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			Entity: cursor,
+			Delta:  bullet.Damage.HeatDelta,
+		})
+		return true
 	}
 
 	return false

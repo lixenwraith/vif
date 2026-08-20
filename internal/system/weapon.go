@@ -524,6 +524,7 @@ func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
 	// Fire Main Weapon (Cleaner)
 	if pos, ok := s.world.Positions.GetPosition(cursor); ok {
 		s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+			Entity:    cursor,
 			OriginX:   pos.X,
 			OriginY:   pos.Y,
 			ColorType: colorType,

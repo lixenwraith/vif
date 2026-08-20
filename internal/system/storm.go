@@ -375,7 +375,6 @@ func (s *StormSystem) isCirclePositionValid(centerX, centerY int) bool {
 
 // clearCircleSpawnArea destroys entities within circle's elliptical footprint
 func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
-	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -383,7 +382,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 		count := s.world.Positions.GetAllEntitiesAtInto(centerX+off.X, centerY+off.Y, entities[:])
 		for i := range count {
 			e := entities[i]
-			if e == 0 || e == cursorEntity {
+			if e == 0 || s.world.Components.Cursor.HasEntity(e) {
 				continue
 			}
 			// Skip walls - they block, not get cleared
@@ -779,8 +778,6 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 
 // processCircleCollisions destroys non-protected entities at circle's elliptical footprint
 func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX, newGridY int) {
-	cursorEntity := s.world.Resources.Player.Entity
-
 	// Build member exclusion set
 	headerComp, hasHeader := s.world.Components.Header.GetComponent(circleEntity)
 	clear(s.memberExcludeSet)
@@ -801,7 +798,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 		for i := range count {
 			e := entities[i]
 			_, excluded := s.memberExcludeSet[e]
-			if e == 0 || e == cursorEntity || excluded {
+			if e == 0 || s.world.Components.Cursor.HasEntity(e) || excluded {
 				continue
 			}
 
@@ -956,8 +953,6 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 
 // handleCircleInteractions processes player collision and shield drain
 func (s *StormSystem) handleCircleInteractions(stormComp *component.StormComponent) {
-	cursorEntity := s.world.Resources.Player.Entity
-
 	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
@@ -965,26 +960,30 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 
 		circleEntity := stormComp.Circles[i]
 
-		overlap := CheckCursorOverlap(s.world, circleEntity)
+		overlaps := CheckCursorOverlaps(s.world, circleEntity)
+		for j := range overlaps.Count {
+			overlap := &overlaps.Entries[j]
+			// Apply shield interaction before exact cursor contact.
+			if len(overlap.ShieldMembers) > 0 {
+				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+					Entity: overlap.Cursor,
+					Value:  parameter.QuasarShieldDrain,
+				})
 
-		// Shield interaction
-		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Value: parameter.QuasarShieldDrain,
-			})
-
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  cursorEntity,
-				OriginEntity: cursorEntity,
-				TargetEntity: circleEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-		} else if overlap.OnCursor && !overlap.ShieldActive {
-			// Direct cursor collision without shield - reset heat
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: -parameter.HeatMax,
-			})
+				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+					AttackType:   component.CombatAttackShield,
+					OwnerEntity:  overlap.Cursor,
+					OriginEntity: overlap.Cursor,
+					TargetEntity: circleEntity,
+					HitEntities:  overlap.ShieldMembers,
+				})
+			} else if overlap.OnCursor && !overlap.ShieldActive {
+				// Direct cursor collision without a shield resets heat.
+				s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+					Entity: overlap.Cursor,
+					Delta:  -parameter.HeatMax,
+				})
+			}
 		}
 	}
 }
@@ -1034,12 +1033,6 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 
 // updateCircleAttacks manages attack state machine for each circle
 func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, dt time.Duration) {
-	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
-	if !ok {
-		return
-	}
-
 	for i := range component.StormCircleCount {
 		if !stormComp.CirclesAlive[i] {
 			continue
@@ -1055,6 +1048,11 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 		if !ok {
 			continue
 		}
+		_, cursorX, cursorY, hasCursor := ClosestCursor(s.world, circlePos.X, circlePos.Y)
+		if !hasCursor {
+			continue
+		}
+		cursorPos := component.PositionComponent{X: cursorX, Y: cursorY}
 
 		circleType := component.StormCircleType(circleComp.Index)
 		// Update invulnerable state, isConvex is guaranteed true with physics override
@@ -1091,7 +1089,7 @@ func (s *StormSystem) updateCircleAttacks(stormComp *component.StormComponent, d
 
 		case component.StormCircleAttackActive:
 			// ACTIVE: Run the attack, lock physics in convex
-			s.processCircleAttack(circleComp, circlePos.X, circlePos.Y, cursorEntity, cursorPos)
+			s.processCircleAttack(circleComp, circlePos.X, circlePos.Y, cursorPos)
 
 			circleComp.AttackRemaining -= dt
 			if circleComp.AttackRemaining <= 0 {
@@ -1151,14 +1149,13 @@ func (s *StormSystem) getRepeatCooldown(circleType component.StormCircleType) ti
 func (s *StormSystem) processCircleAttack(
 	circleComp *component.StormCircleComponent,
 	circleX, circleY int,
-	cursorEntity core.Entity,
 	cursorPos component.PositionComponent,
 ) {
 	circleType := component.StormCircleType(circleComp.Index)
 
 	switch circleType {
 	case component.StormCircleGreen:
-		s.processGreenAttack(circleComp, circleX, circleY, cursorEntity, cursorPos)
+		s.processGreenAttack(circleComp, circleX, circleY)
 	case component.StormCircleRed:
 		s.processRedAttack(circleComp, circleX, circleY, cursorPos)
 	case component.StormCircleBlue:
@@ -1170,8 +1167,6 @@ func (s *StormSystem) processCircleAttack(
 func (s *StormSystem) processGreenAttack(
 	circleComp *component.StormCircleComponent,
 	circleX, circleY int,
-	cursorEntity core.Entity,
-	cursorPos component.PositionComponent,
 ) {
 	// Update visual progress unconditionally
 	attackDuration := parameter.StormGreenRepeatInterval.Seconds()
@@ -1181,23 +1176,26 @@ func (s *StormSystem) processGreenAttack(
 	// Telemetry
 	s.statGreenActiveFrame.Add(1)
 
-	// Check cursor in attack area
-	if !vmath.EllipseContainsPointF(cursorPos.X, cursorPos.Y, circleX, circleY,
-		parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq) {
-		return
-	}
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if !ok || !vmath.EllipseContainsPointF(cursorPos.X, cursorPos.Y, circleX, circleY,
+			parameter.StormGreenInvRxSq, parameter.StormGreenInvRySq) {
+			continue
+		}
 
-	shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursorEntity)
-	shieldActive := shieldOK && shieldComp.Active
-
-	if shieldActive {
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.StormGreenDamageEnergy,
-		})
-	} else {
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Delta: -parameter.StormGreenDamageHeat,
-		})
+		shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursor)
+		if shieldOK && shieldComp.Active {
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Entity: cursor,
+				Value:  parameter.StormGreenDamageEnergy,
+			})
+		} else {
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Entity: cursor,
+				Delta:  -parameter.StormGreenDamageHeat,
+			})
+		}
 	}
 }
 

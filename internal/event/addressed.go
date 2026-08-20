@@ -14,7 +14,15 @@ type Addressed interface {
 // --- Cursor addressing ---
 // Target reports the cursor a command addresses; zero selects the local cursor
 
-func (p *CursorMoveRequestPayload) Target() core.Entity   { return p.Entity }
+func (p *CursorMoveRequestPayload) Target() core.Entity  { return p.Entity }
+func (p *NuggetJumpRequestPayload) Target() core.Entity  { return p.Entity }
+func (p *GoldJumpRequestPayload) Target() core.Entity    { return p.Entity }
+func (p *DirectionalCleanerPayload) Target() core.Entity { return p.Entity }
+func (p *CleanerSweepingRequestPayload) Target() core.Entity {
+	return p.Entity
+}
+func (p *ExplosionRequestPayload) Target() core.Entity    { return p.Entity }
+func (p *TowerSpawnRequestPayload) Target() core.Entity   { return p.Entity }
 func (p *EnergyAddPayload) Target() core.Entity           { return p.Entity }
 func (p *EnergySetPayload) Target() core.Entity           { return p.Entity }
 func (p *EnergyGlyphConsumedPayload) Target() core.Entity { return p.Entity }

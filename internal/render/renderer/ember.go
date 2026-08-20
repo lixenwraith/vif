@@ -80,7 +80,10 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 
 	buf.SetWriteMask(visual.MaskField)
 
-	cursorEntity := r.gameCtx.World.Resources.Player.Entity
+	var cursorEntity core.Entity
+	if r.gameCtx.World.Resources.Player.Valid() {
+		cursorEntity = r.gameCtx.World.Resources.Player.Entity
+	}
 
 	shields.Each(func(entity core.Entity, _ *component.ShieldComponent) bool {
 		heatComp, ok := r.gameCtx.World.Components.Heat.GetPtr(entity)

@@ -91,7 +91,7 @@ func runScript(t *testing.T, a *App) int {
 	t.Helper()
 	r := newScriptRunner(t, a)
 
-	r.step(1, intentMotion(input.MotionRight, 5))       // EventCursorMoved
+	r.step(1, intentMotion(input.MotionRight, 5))       // EventCursorMoveRequest
 	r.step(1, intentModeSwitch(input.ModeTargetInsert)) // EventModeChanged
 	r.step(1, intentTextChar('i'), intentTextChar('f')) // pooled CharacterTypedPayload
 	r.step(1, intentEscape())                           // EventModeChanged, back to Normal
@@ -115,7 +115,9 @@ func runScript(t *testing.T, a *App) int {
 	r.step(2, intentCommandBody("energy 500")...)
 
 	r.step(1, intentModeSwitch(input.ModeTargetVisual))
-	if b := a.World().Resources.Player.GetBounds(); !b.Active {
+	player := a.World().ResolveCursor(0)
+	ping, ok := a.World().Components.Ping.GetComponent(player)
+	if !ok || !ping.BoundsActive {
 		t.Fatal("visual step did not activate ping bounds: the script no longer covers bounds replay")
 	}
 	// MotionMarkerSystem is the simulation-side consumer of ping bounds
@@ -650,10 +652,13 @@ func runResetScript(t *testing.T, a *App) int {
 // counter restarts in each run, so a run-blind driver rejects the stream outright
 func TestReplayAcrossReset(t *testing.T) { replayAndCompare(t, runResetScript) }
 
-// TestCursorMovedAppliesWithoutRouter covers the applier directly: a replay has no
-// router, so the position must land from the event alone
-func TestCursorMovedAppliesWithoutRouter(t *testing.T) {
-	a, err := NewHeadless(scriptConfig(fixtureSeed))
+// TestCursorMoveRequestAppliesWithoutRouter covers the cursor-owned placement path.
+func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
+	cap := NewCapture()
+	cfg := scriptConfig(fixtureSeed)
+	cfg.Journal = true
+	cfg.JournalSink = cap
+	a, err := NewHeadless(cfg)
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}
@@ -661,20 +666,34 @@ func TestCursorMovedAppliesWithoutRouter(t *testing.T) {
 
 	a.Tick(1)
 	player := a.World().Resources.Player.Entity
+	if player != 1 || a.World().Resources.Player.Slot(0) != player {
+		t.Fatalf("initial cursor = entity %d slot-zero %d, want entity 1 in slot zero",
+			player, a.World().Resources.Player.Slot(0))
+	}
 	from, ok := a.World().Positions.GetPosition(player)
 	if !ok {
 		t.Fatal("no cursor position")
 	}
 	wantX, wantY := from.X+3, from.Y+2
 
-	a.Context().PushEventOrigin(event.EventCursorMoved,
-		&event.CursorMovedPayload{X: wantX, Y: wantY}, event.OriginDebug)
+	a.Context().PushEventOrigin(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: player, X: wantX, Y: wantY}, event.OriginDebug)
 	a.Settle()
 
 	got, _ := a.World().Positions.GetPosition(player)
 	if got.X != wantX || got.Y != wantY {
-		t.Fatalf("cursor at %d,%d after EventCursorMoved(%d,%d): the write is router-side, not handler-side",
+		t.Fatalf("cursor at %d,%d after EventCursorMoveRequest(%d,%d)",
 			got.X, got.Y, wantX, wantY)
+	}
+
+	records := cap.Records()
+	if len(records) == 0 {
+		t.Fatal("cursor move command was not journaled")
+	}
+	last := records[len(records)-1]
+	if last.Type != event.EventCursorMoveRequest || !strings.Contains(last.Payload, "entity = 1") {
+		t.Fatalf("last journal record = %s %q, want addressed cursor move",
+			event.GetEventName(last.Type), last.Payload)
 	}
 }
 

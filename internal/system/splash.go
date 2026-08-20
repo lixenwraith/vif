@@ -54,6 +54,7 @@ func (s *SplashSystem) EventTypes() []event.EventType {
 		event.EventSplashTimerRequest,
 		event.EventSplashTimerCancel,
 		event.EventCursorMoved,
+		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -74,6 +75,14 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 		}
 	}
 
+	if ev.Type == event.EventCursorDespawned {
+		if payload, ok := ev.Payload.(*event.CursorDespawnedPayload); ok &&
+			payload.Slot == s.world.Resources.Player.LocalSlot() {
+			s.cleanupSplashesBySlot(component.SlotMagnifier)
+		}
+		return
+	}
+
 	if !s.enabled {
 		return
 	}
@@ -90,7 +99,8 @@ func (s *SplashSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventCursorMoved:
-		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok {
+		if payload, ok := ev.Payload.(*event.CursorMovedPayload); ok &&
+			s.world.Resources.Player.IsLocal(payload.Entity) {
 			s.handleCursorMoved(payload)
 		}
 	}

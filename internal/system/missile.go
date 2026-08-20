@@ -115,6 +115,7 @@ func (s *MissileSystem) Update() {
 		if s.updateMissile(missileComp, kineticComp, dtSec) {
 			x, y := physics.GridPos(&kineticComp.Kinetic)
 			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+				Entity: missileComp.Owner,
 				X:      x,
 				Y:      y,
 				Radius: parameter.MissileExplosionRadius,
@@ -183,7 +184,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 	}
 
 	// General Enemy Collision: missile detonates on any combatant contact
-	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY)
+	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, m.Owner)
 	if hitType != impactNone {
 		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.CenterF()
 		return true
@@ -201,7 +202,7 @@ const (
 )
 
 // traverseForImpact walks path checking for wall/enemy collisions
-func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64) (x, y int, hit impactType) {
+func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner core.Entity) (x, y int, hit impactType) {
 	from := vmath.PointAtF(fromX, fromY)
 	to := vmath.PointAtF(toX, toY)
 
@@ -210,7 +211,6 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64) (x, y 
 		return 0, 0, impactNone
 	}
 
-	cursorEntity := s.world.Resources.Player.Entity
 	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
 	lastSafeX, lastSafeY := from.X, from.Y
 
@@ -228,7 +228,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64) (x, y 
 		}
 
 		// Enemy collision
-		if HasCombatTargetAt(s.world, currX, currY, 0, cursorEntity) {
+		if HasCombatTargetAt(s.world, currX, currY, 0, owner) {
 			return currX, currY, impactEnemy
 		}
 
@@ -268,8 +268,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 	}
 
 	// 3. Retarget: nearest enemy
-	cursorEntity := s.world.Resources.Player.Entity
-	targets := FindNearestTargets(s.world, missileX, missileY, 1, cursorEntity)
+	targets := FindNearestTargets(s.world, missileX, missileY, 1, m.Owner)
 	if len(targets) == 0 {
 		return 0, 0, false
 	}

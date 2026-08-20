@@ -72,8 +72,8 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 	return 0, 0, false
 }
 
-// HasCombatTargetAt returns true if any enemy combat entity exists at (x, y).
-// Excludes selfEntity from resolution and ownerEntity-owned entities from results.
+// HasCombatTargetAt reports whether an enemy combat entity occupies a cell.
+// It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
 func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.Entity) bool {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	count := w.Positions.GetAllEntitiesAtInto(x, y, entities[:])
@@ -81,6 +81,9 @@ func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.E
 		e := entities[i]
 		target, _, valid := ResolveTargetFromEntity(w, e, selfEntity)
 		if !valid {
+			continue
+		}
+		if isCursorOrOwnedOrb(w, target) {
 			continue
 		}
 		if isOwnedBy(w, target, ownerEntity) {
@@ -107,6 +110,9 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
+		if isCursorOrOwnedOrb(w, e) {
+			continue
+		}
 		if isOwnedBy(w, e, ownerEntity) {
 			continue
 		}
@@ -131,6 +137,9 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 			continue
 		}
 		if !w.Components.Combat.HasEntity(headerEntity) {
+			continue
+		}
+		if isCursorOrOwnedOrb(w, headerEntity) {
 			continue
 		}
 		if isOwnedBy(w, headerEntity, ownerEntity) {
@@ -176,6 +185,9 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
+		if isCursorOrOwnedOrb(w, e) {
+			continue
+		}
 		if isOwnedBy(w, e, ownerEntity) {
 			continue
 		}
@@ -200,6 +212,9 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 			continue
 		}
 		if !w.Components.Combat.HasEntity(headerEntity) {
+			continue
+		}
+		if isCursorOrOwnedOrb(w, headerEntity) {
 			continue
 		}
 		if isOwnedBy(w, headerEntity, ownerEntity) {
@@ -273,6 +288,15 @@ func isOwnedBy(w *engine.World, entity, ownerEntity core.Entity) bool {
 	return combat.OwnerEntity == ownerEntity
 }
 
+// isCursorOrOwnedOrb excludes every player and every weapon orb owned by one.
+func isCursorOrOwnedOrb(w *engine.World, entity core.Entity) bool {
+	if w.Components.Cursor.HasEntity(entity) {
+		return true
+	}
+	orb, ok := w.Components.Orb.GetComponent(entity)
+	return ok && w.Components.Cursor.HasEntity(orb.OwnerEntity)
+}
+
 // ResolveClosestMember finds the nearest living member of a composite header
 func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, fromY float64) (core.Entity, float64, float64, bool) {
 	headerComp, ok := w.Components.Header.GetComponent(headerEntity)
@@ -317,11 +341,11 @@ func resolveBaseTarget(w *engine.World, entity core.Entity) (x, y int, valid boo
 
 	state := w.Resources.Target.GetGroup(groupID)
 	if !state.Valid || state.Count == 0 {
-		// Fallback: cursor
-		if pos, ok := w.Positions.GetPosition(w.Resources.Player.Entity); ok {
-			return pos.X, pos.Y, true
+		// Uninitialized groups fall back to the roster-backed cursor group.
+		state = w.Resources.Target.GetGroup(0)
+		if !state.Valid || state.Count == 0 {
+			return 0, 0, false
 		}
-		return 0, 0, false
 	}
 
 	if state.Count == 1 {

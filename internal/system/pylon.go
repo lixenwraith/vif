@@ -137,26 +137,28 @@ func (s *PylonSystem) Update() {
 
 // handleInteractions processes shield drain and cursor collision
 func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
-	cursorEntity := s.world.Resources.Player.Entity
+	overlaps := CheckCursorOverlaps(s.world, headerEntity)
+	for i := range overlaps.Count {
+		overlap := &overlaps.Entries[i]
+		if len(overlap.ShieldMembers) > 0 {
+			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				Entity: overlap.Cursor,
+				Value:  parameter.PylonShieldDrain,
+			})
 
-	overlap := CheckCursorOverlap(s.world, headerEntity)
-
-	if len(overlap.ShieldMembers) > 0 {
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.PylonShieldDrain,
-		})
-
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackShield,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
-			TargetEntity: headerEntity,
-			HitEntities:  overlap.ShieldMembers,
-		})
-	} else if overlap.OnCursor && !overlap.ShieldActive {
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-			Delta: -parameter.PylonDamageHeat,
-		})
+			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				AttackType:   component.CombatAttackShield,
+				OwnerEntity:  overlap.Cursor,
+				OriginEntity: overlap.Cursor,
+				TargetEntity: headerEntity,
+				HitEntities:  overlap.ShieldMembers,
+			})
+		} else if overlap.OnCursor && !overlap.ShieldActive {
+			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				Entity: overlap.Cursor,
+				Delta:  -parameter.PylonDamageHeat,
+			})
+		}
 	}
 }
 
@@ -268,8 +270,6 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 	width := 2*radiusX + 1
 	height := 2*radiusY + 1
 
-	cursorPos, hasCursor := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
-
 	// Tier 1: Random attempts
 
 	// Valid center ranges: [radiusX, MapWidth-radiusX-1] and [radiusY, MapHeight-radiusY-1]
@@ -294,18 +294,21 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 		lastCX, lastCY = cx, cy
 
 		// Cursor exclusion
-		if hasCursor {
-			dx := cx - cursorPos.X
-			dy := cy - cursorPos.Y
-			if dx < 0 {
-				dx = -dx
-			}
-			if dy < 0 {
-				dy = -dy
-			}
-			if dx <= parameter.CursorExclusionX && dy <= parameter.CursorExclusionY {
+		excluded := false
+		for i := range parameter.MaxPlayers {
+			cursor := s.world.Resources.Player.Slot(uint8(i))
+			cursorPos, ok := s.world.Positions.GetPosition(cursor)
+			if !ok {
 				continue
 			}
+			if vmath.IntAbs(cx-cursorPos.X) <= parameter.CursorExclusionX &&
+				vmath.IntAbs(cy-cursorPos.Y) <= parameter.CursorExclusionY {
+				excluded = true
+				break
+			}
+		}
+		if excluded {
+			continue
 		}
 
 		if s.validatePylonPosition(cx, cy, radiusX, radiusY) {
@@ -326,9 +329,13 @@ func (s *PylonSystem) findRandomPylonPosition(radiusX, radiusY int) (int, int, b
 		return topLeftX + radiusX, topLeftY + radiusY, true
 	}
 
-	// Tier 3: Last resort — try cursor position
-	if hasCursor && s.validatePylonPosition(cursorPos.X, cursorPos.Y, radiusX, radiusY) {
-		return cursorPos.X, cursorPos.Y, true
+	// Tier 3: Last resort — try cursor positions.
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		cursorPos, ok := s.world.Positions.GetPosition(cursor)
+		if ok && s.validatePylonPosition(cursorPos.X, cursorPos.Y, radiusX, radiusY) {
+			return cursorPos.X, cursorPos.Y, true
+		}
 	}
 
 	return 0, 0, false

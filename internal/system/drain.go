@@ -628,7 +628,6 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 // materializeDrainAt creates a drain entity at the specified position
 func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	config := s.world.Resources.Config
-	cursorEntity := s.world.Resources.Player.Entity
 	now := s.world.Resources.Time.GameTime
 
 	// TODO: refactor to Position bound check
@@ -684,7 +683,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	count := s.world.Positions.GetAllEntitiesAtInto(spawnX, spawnY, entitiesAtSpawn[:])
 	for i := range count {
 		e := entitiesAtSpawn[i]
-		if e != cursorEntity {
+		if !s.world.Components.Cursor.HasEntity(e) {
 			s.handleCollisionAtPosition(e)
 		}
 	}
@@ -743,7 +742,6 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 // handleDrainInteractions processes all drain interactions per tick
 func (s *DrainSystem) handleDrainInteractions() {
 	now := s.world.Resources.Time.GameTime
-	cursorEntity := s.world.Resources.Player.Entity
 
 	// 1. Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions()
@@ -757,34 +755,45 @@ func (s *DrainSystem) handleDrainInteractions() {
 			continue
 		}
 
-		overlap := CheckCursorOverlap(s.world, drainEntity)
+		overlaps := CheckCursorOverlaps(s.world, drainEntity)
+		drainReady := now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval
+		drainedShield := false
+		destroyDrain := false
 
-		// Shield zone interaction
-		if len(overlap.ShieldMembers) > 0 {
-			// Energy drain (timer-based)
-			if now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval {
-				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-					Value: parameter.DrainShieldEnergyDrainAmount,
+		for i := range overlaps.Count {
+			overlap := &overlaps.Entries[i]
+			// Apply shield-zone interactions before exact cursor contact.
+			if len(overlap.ShieldMembers) > 0 {
+				if drainReady {
+					drainedShield = true
+					s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+						Entity: overlap.Cursor,
+						Value:  parameter.DrainShieldEnergyDrainAmount,
+					})
+				}
+
+				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+					AttackType:   component.CombatAttackShield,
+					OwnerEntity:  overlap.Cursor,
+					OriginEntity: overlap.Cursor,
+					TargetEntity: drainEntity,
+					HitEntities:  overlap.ShieldMembers,
 				})
-				drain.LastDrainTime = now
+				continue
 			}
 
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-				AttackType:   component.CombatAttackShield,
-				OwnerEntity:  cursorEntity,
-				OriginEntity: cursorEntity,
-				TargetEntity: drainEntity,
-				HitEntities:  overlap.ShieldMembers,
-			})
-
-			continue
+			if overlap.OnCursor {
+				s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+					Entity: overlap.Cursor,
+					Delta:  -parameter.DrainHeatReductionAmount,
+				})
+				destroyDrain = true
+			}
 		}
-
-		// Cursor collision (shield not active or drain outside shield)
-		if overlap.OnCursor {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: -parameter.DrainHeatReductionAmount,
-			})
+		if drainedShield {
+			drain.LastDrainTime = now
+		}
+		if destroyDrain {
 			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashSpawnOneRequest)
 		}
 	}
@@ -831,8 +840,6 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 // handleEntityCollisions processes collisions with non-drain entities
 func (s *DrainSystem) handleEntityCollisions() {
-	cursorEntity := s.world.Resources.Player.Entity
-
 	entities := s.world.Components.Drain.Entities()
 	var targets [parameter.MaxEntitiesPerCell]core.Entity
 	for _, entity := range entities {
@@ -845,7 +852,7 @@ func (s *DrainSystem) handleEntityCollisions() {
 
 		for i := range count {
 			target := targets[i]
-			if target != 0 && target != entity && target != cursorEntity {
+			if target != 0 && target != entity && !s.world.Components.Cursor.HasEntity(target) {
 				// Skip other drains (handled separately)
 				if _, ok := s.world.Components.Drain.GetComponent(target); ok {
 					continue
@@ -925,9 +932,6 @@ func (s *DrainSystem) updateDrainMovement() {
 		lastSafeX, lastSafeY := drainComp.LastIntX, drainComp.LastIntY
 		hitWall := false
 
-		// Cursor exclusion for entity-entity collision (not targeting)
-		cursorEntity := s.world.Resources.Player.Entity
-
 		traverser := vmath.NewGridTraverserF(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY)
 		for traverser.Next() {
 			x, y := traverser.Pos()
@@ -951,7 +955,7 @@ func (s *DrainSystem) updateDrainMovement() {
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
 			for i := range count {
 				target := collisionBuf[i]
-				if target == 0 || target == drainEntity || target == cursorEntity {
+				if target == 0 || target == drainEntity || s.world.Components.Cursor.HasEntity(target) {
 					continue
 				}
 				if s.world.Components.Drain.HasEntity(target) {
@@ -988,8 +992,6 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 
 // handleCollisionAtPosition processes collision with a specific entity at a given position
 func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
-	cursorEntity := s.world.Resources.Player.Entity
-
 	// Check protection before any collision handling
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
 		if protComp.Mask&component.ProtectFromSpecies != 0 {
@@ -997,8 +999,8 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 		}
 	}
 
-	// Skip cursor entity
-	if entity == cursorEntity {
+	// Skip cursor entities.
+	if s.world.Components.Cursor.HasEntity(entity) {
 		return
 	}
 

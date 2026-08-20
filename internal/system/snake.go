@@ -829,40 +829,47 @@ func (s *SnakeSystem) updateShieldState(snakeComp *component.SnakeComponent, bod
 }
 
 func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
-	cursorEntity := s.world.Resources.Player.Entity
-
-	// Head interaction
-	headOverlap := CheckCursorOverlap(s.world, snakeComp.HeadEntity)
-
-	if headOverlap.OnCursor {
+	// Apply the head interaction to every overlapping cursor.
+	headOverlaps := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
+	for i := range headOverlaps.Count {
+		headOverlap := &headOverlaps.Entries[i]
+		if !headOverlap.OnCursor {
+			continue
+		}
 		if headOverlap.ShieldActive {
 			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-				Value: parameter.SnakeShieldDrainPerTick,
+				Entity: headOverlap.Cursor,
+				Value:  parameter.SnakeShieldDrainPerTick,
 			})
 		} else if !snakeComp.IsShielded {
-			// Head damages cursor only when unshielded
+			// The head damages a cursor only when the snake is unshielded.
 			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
-				Delta: -parameter.SnakeDamageHeat,
+				Entity: headOverlap.Cursor,
+				Delta:  -parameter.SnakeDamageHeat,
 			})
 		}
 	}
 
-	// Body interaction with player shield
+	// Apply the body interaction to every overlapping player shield.
 	if snakeComp.BodyEntity == 0 {
 		return
 	}
 
-	bodyOverlap := CheckCursorOverlap(s.world, snakeComp.BodyEntity)
-
-	if len(bodyOverlap.ShieldMembers) > 0 {
+	bodyOverlaps := CheckCursorOverlaps(s.world, snakeComp.BodyEntity)
+	for i := range bodyOverlaps.Count {
+		bodyOverlap := &bodyOverlaps.Entries[i]
+		if len(bodyOverlap.ShieldMembers) == 0 {
+			continue
+		}
 		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
-			Value: parameter.SnakeShieldDrainPerTick,
+			Entity: bodyOverlap.Cursor,
+			Value:  parameter.SnakeShieldDrainPerTick,
 		})
 
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackShield,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
+			OwnerEntity:  bodyOverlap.Cursor,
+			OriginEntity: bodyOverlap.Cursor,
 			TargetEntity: snakeComp.BodyEntity,
 			HitEntities:  bodyOverlap.ShieldMembers,
 		})
@@ -988,7 +995,6 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 	topLeftX := centerX - offsetX
 	topLeftY := centerY - offsetY
 
-	cursorEntity := s.world.Resources.Player.Entity
 	var toDestroy []core.Entity
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 
@@ -1000,7 +1006,7 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 			for i := range count {
 				e := entities[i]
-				if e == 0 || e == cursorEntity {
+				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
 					continue
 				}
 				if s.world.Components.Wall.HasEntity(e) {
