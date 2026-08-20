@@ -71,7 +71,7 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 		return CursorOverlap{}
 	}
 
-	shieldComp, shieldOK := w.Components.Shield.GetComponent(cursorEntity)
+	shieldComp, shieldOK := w.Components.Shield.GetPtr(cursorEntity)
 	shieldActive := shieldOK && shieldComp.Active
 
 	result := CursorOverlap{ShieldActive: shieldActive}

@@ -207,6 +207,10 @@ func (s *LootSystem) Update() {
 
 // onEnemyKilled processes multi-drop loot spawning
 func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
+	// A negative coordinate marks a death with no position; nothing to drop onto
+	if payload.X < 0 || payload.Y < 0 {
+		return
+	}
 	results := s.rollDropTable(payload.Species)
 	if len(results) == 0 {
 		return

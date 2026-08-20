@@ -233,6 +233,8 @@ const (
 	EventBoostDeactivate
 	// EventBoostExtend (BoostExtendPayload) signals boost duration extension
 	EventBoostExtend
+	// EventBoostReward (BoostRewardPayload) signals an earned boost; BoostSystem chooses activation or extension
+	EventBoostReward
 
 	// --- Typing ---
 

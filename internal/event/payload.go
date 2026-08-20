@@ -400,6 +400,11 @@ type BoostExtendPayload struct {
 	Duration time.Duration `toml:"duration"`
 }
 
+// BoostRewardPayload names the cursor earning a boost
+type BoostRewardPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // --- Typing ---
 
 // CharacterTypedPayload captures keypress and cursor state when character is typed
@@ -755,7 +760,9 @@ type CombatAttackDirectRequestPayload struct {
 	AttackType   component.CombatAttackType `toml:"attack_type"`
 }
 
-// CombatAttackAreaRequestPayload contains area attack information
+// CombatAttackAreaRequestPayload contains area attack information.
+// An empty HitEntities is the implicit single-hit form: the hit set is exactly
+// {TargetEntity}. Single-cell targets use it to emit no per-event slice.
 type CombatAttackAreaRequestPayload struct {
 	HitEntities  []core.Entity              `toml:"hit_entities"`
 	AttackType   component.CombatAttackType `toml:"attack_type"`

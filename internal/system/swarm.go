@@ -727,7 +727,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 
 // syncMemberPositions updates all member positions relative to header
 func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, headerY int) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -749,7 +749,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 	headerEntity core.Entity,
 	combatComp *component.CombatComponent,
 ) {
-	headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+	headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -774,11 +774,9 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			}
 
 			// Check if it's a drain
-			drainComp, ok := s.world.Components.Drain.GetComponent(entity)
-			if !ok {
+			if !s.world.Components.Drain.HasEntity(entity) {
 				continue
 			}
-			_ = drainComp // Used for type check
 
 			// Get drain HP before destruction
 			drainCombatComp, ok := s.world.Components.Combat.GetComponent(entity)

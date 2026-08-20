@@ -195,7 +195,7 @@ func (s *EnergySystem) Update() {
 		}
 
 		// Evaluate shield activation state for this cursor alone
-		if shieldComp, ok := s.world.Components.Shield.GetComponent(e); ok {
+		if shieldComp, ok := s.world.Components.Shield.GetPtr(e); ok {
 			if energy != 0 && !shieldComp.Active {
 				s.world.PushEvent(event.EventShieldActivate, &event.ShieldActivatePayload{Entity: e})
 			} else if energy == 0 && shieldComp.Active {
@@ -208,7 +208,7 @@ func (s *EnergySystem) Update() {
 
 // addEnergy applies a delta to one cursor's energy
 func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage bool, deltaType component.EnergyDeltaType) {
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -247,11 +247,11 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 
 	case component.EnergyDeltaPenalty:
 		// Boost protects from penalties
-		if boostComp, ok := s.world.Components.Boost.GetComponent(cursor); ok && boostComp.Active {
+		if boostComp, ok := s.world.Components.Boost.GetPtr(cursor); ok && boostComp.Active {
 			return
 		}
 		// Ember protects from penalties
-		if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive {
+		if heatComp, ok := s.world.Components.Heat.GetPtr(cursor); ok && heatComp.EmberActive {
 			return
 		}
 		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
@@ -267,7 +267,6 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	}
 
 	energyComp.Current = newEnergy
-	s.world.Components.Energy.SetComponent(cursor, energyComp)
 	s.publish(cursor, newEnergy)
 
 	// Preventing one frame flickering of shield at zero energy
@@ -309,7 +308,7 @@ func convergeToZero(value, mag int64, clamp bool) (result int64, crossed bool) {
 
 // setEnergy writes an absolute value to one cursor
 func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -325,18 +324,17 @@ func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
 	}
 
 	energyComp.Current = value
-	s.world.Components.Energy.SetComponent(cursor, energyComp)
 	s.publish(cursor, value)
 }
 
 // handleGlyphConsumed applies energy from a glyph destroyed by one cursor
 func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType component.GlyphType, _ component.GlyphLevel) {
-	heatComp, ok := s.world.Components.Heat.GetComponent(cursor)
+	heatComp, ok := s.world.Components.Heat.GetPtr(cursor)
 	if !ok {
 		return
 	}
 
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursor)
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
 		return
 	}
@@ -358,7 +356,6 @@ func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType compone
 	newEnergy := currentEnergy + int64(delta)
 
 	energyComp.Current = newEnergy
-	s.world.Components.Energy.SetComponent(cursor, energyComp)
 	s.publish(cursor, newEnergy)
 
 	if newEnergy == 0 {

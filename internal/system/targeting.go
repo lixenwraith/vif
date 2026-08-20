@@ -37,7 +37,7 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 	}
 
 	// Header entity — route by CompositeType
-	if headerComp, ok := w.Components.Header.GetComponent(entity); ok {
+	if headerComp, ok := w.Components.Header.GetPtr(entity); ok {
 		switch headerComp.Type {
 		case component.CompositeTypeUnit:
 			return entity, entity, true
@@ -47,9 +47,9 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 	}
 
 	// Member entity — resolve upward to header
-	if memberComp, ok := w.Components.Member.GetComponent(entity); ok {
+	if memberComp, ok := w.Components.Member.GetPtr(entity); ok {
 		headerEntity := memberComp.HeaderEntity
-		headerComp, ok := w.Components.Header.GetComponent(headerEntity)
+		headerComp, ok := w.Components.Header.GetPtr(headerEntity)
 		if !ok {
 			return 0, 0, false
 		}
@@ -121,18 +121,18 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 			continue
 		}
 		index[e] = len(result)
-		result = append(result, TargetGroup{Target: e, Members: []core.Entity{e}})
+		result = append(result, TargetGroup{Target: e})
 	}
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
 	// Container children are filtered by header type check.
 	for _, memberEntity := range w.Components.Member.Entities() {
-		memberComp, ok := w.Components.Member.GetComponent(memberEntity)
+		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
 		if !ok {
 			continue
 		}
 		headerEntity := memberComp.HeaderEntity
-		headerComp, ok := w.Components.Header.GetComponent(headerEntity)
+		headerComp, ok := w.Components.Header.GetPtr(headerEntity)
 		if !ok || headerComp.Type == component.CompositeTypeContainer {
 			continue
 		}
@@ -202,12 +202,12 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 
 	// 2. Composite members — closest member per header
 	for _, memberEntity := range w.Components.Member.Entities() {
-		memberComp, ok := w.Components.Member.GetComponent(memberEntity)
+		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
 		if !ok {
 			continue
 		}
 		headerEntity := memberComp.HeaderEntity
-		headerComp, ok := w.Components.Header.GetComponent(headerEntity)
+		headerComp, ok := w.Components.Header.GetPtr(headerEntity)
 		if !ok || headerComp.Type == component.CompositeTypeContainer {
 			continue
 		}
@@ -281,7 +281,7 @@ func isOwnedBy(w *engine.World, entity, ownerEntity core.Entity) bool {
 	if entity == ownerEntity {
 		return true
 	}
-	combat, ok := w.Components.Combat.GetComponent(entity)
+	combat, ok := w.Components.Combat.GetPtr(entity)
 	if !ok {
 		return false
 	}
@@ -293,13 +293,13 @@ func isCursorOrOwnedOrb(w *engine.World, entity core.Entity) bool {
 	if w.Components.Cursor.HasEntity(entity) {
 		return true
 	}
-	orb, ok := w.Components.Orb.GetComponent(entity)
+	orb, ok := w.Components.Orb.GetPtr(entity)
 	return ok && w.Components.Cursor.HasEntity(orb.OwnerEntity)
 }
 
 // ResolveClosestMember finds the nearest living member of a composite header
 func ResolveClosestMember(w *engine.World, headerEntity core.Entity, fromX, fromY float64) (core.Entity, float64, float64, bool) {
-	headerComp, ok := w.Components.Header.GetComponent(headerEntity)
+	headerComp, ok := w.Components.Header.GetPtr(headerEntity)
 	if !ok {
 		return 0, 0, 0, false
 	}

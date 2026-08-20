@@ -33,8 +33,9 @@ type MetaSystem struct {
 
 	// Kill counters gate FSM region transitions, so they live in a system with
 	// no enable/disable toggle
-	statKills      [component.SpeciesCount]*atomic.Int64
-	statKillsTotal *atomic.Int64
+	statKills           [component.SpeciesCount]*atomic.Int64
+	statKillsTotal      *atomic.Int64
+	statKillsUncredited *atomic.Int64
 }
 
 // NewMetaSystem creates a new meta system
@@ -62,6 +63,7 @@ func (s *MetaSystem) Init() {
 		s.statKills[i] = reg.Ints.Get("kills." + component.SpeciesNames[i])
 	}
 	s.statKillsTotal = reg.Ints.Get("kills.total")
+	s.statKillsUncredited = reg.Ints.Get("kills.uncredited")
 }
 
 // Name returns system's name
@@ -164,7 +166,7 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnemyKilled:
 		if p, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
-			s.recordKill(p.Species)
+			s.recordKill(p)
 		}
 	}
 }
@@ -191,13 +193,16 @@ func (s *MetaSystem) Update() {
 	}
 }
 
-// recordKill counts one enemy death per species
-func (s *MetaSystem) recordKill(species component.SpeciesType) {
-	if species <= component.SpeciesNone || species >= component.SpeciesCount {
+// recordKill counts one enemy death per species, tracking deaths no cursor is credited with
+func (s *MetaSystem) recordKill(p *event.EnemyKilledPayload) {
+	if p.Species <= component.SpeciesNone || p.Species >= component.SpeciesCount {
 		return
 	}
-	s.statKills[species].Add(1)
+	s.statKills[p.Species].Add(1)
 	s.statKillsTotal.Add(1)
+	if s.world.ResolveCursor(p.KillerEntity) == 0 {
+		s.statKillsUncredited.Add(1)
+	}
 }
 
 // resetKills zeroes every species counter for a new game
@@ -206,6 +211,7 @@ func (s *MetaSystem) resetKills() {
 		s.statKills[i].Store(0)
 	}
 	s.statKillsTotal.Store(0)
+	s.statKillsUncredited.Store(0)
 }
 
 // handleGameReset rebuilds world state; purge additionally clears operator session state

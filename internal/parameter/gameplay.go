@@ -39,10 +39,10 @@ const (
 // Boost Mechanics
 const (
 	// BoostBaseDuration is the initial duration when boost is activated
-	BoostBaseDuration = 500 * time.Millisecond
+	BoostBaseDuration = 9000 * time.Millisecond
 
 	// BoostExtensionDuration is how long each matching color character extends the boost
-	BoostExtensionDuration = 500 * time.Millisecond
+	BoostExtensionDuration = 10000 * time.Millisecond
 )
 
 // God Mode

@@ -20,7 +20,6 @@ import (
 const (
 	cellFlagDrain           uint8 = 1
 	cellFlagCombatComposite uint8 = 2
-	// Non-combat collision types removed
 )
 
 // collisionContext holds pre-computed collision data for single tick
@@ -29,7 +28,7 @@ type collisionContext struct {
 	cellFlags map[uint64]uint8
 
 	// Impulse accumulators keyed by target entity
-	impulses map[core.Entity]*impulseAcc
+	impulses map[core.Entity]impulseAcc
 
 	// Combat composite headers for member->header routing
 	combatHeaders map[core.Entity]bool
@@ -42,6 +41,13 @@ type impulseAcc struct {
 
 func posKey(x, y int) uint64 {
 	return uint64(x)<<32 | uint64(uint32(y))
+}
+
+// glyphTransform caches a glyph's render state before its entity is destroyed
+type glyphTransform struct {
+	x, y  int
+	char  rune
+	level component.GlyphLevel
 }
 
 // DustSystem manages orbital dust particles created from glyph transformation
@@ -58,6 +64,15 @@ type DustSystem struct {
 
 	// Stagger tick for distributing chase boost activation (cycles 0-2)
 	staggerTick uint8
+
+	// Per-tick collision scratch; refilled in place, never reallocated
+	collisionCtx collisionContext
+	deathBuf     []core.Entity
+
+	// Glyph→dust scratch; storm collisions can request this many times a second
+	transformBuf []glyphTransform
+	destroyBuf   []core.Entity
+	flashBuf     []core.Entity
 
 	// Telemetry
 	statCreated   *atomic.Int64
@@ -85,6 +100,15 @@ func (s *DustSystem) Init() {
 	s.lastCursorY = 0
 	s.rng = s.world.Rand(s.Name())
 	s.staggerTick = 0
+	s.collisionCtx = collisionContext{
+		cellFlags:     make(map[uint64]uint8, 256),
+		impulses:      make(map[core.Entity]impulseAcc, 16),
+		combatHeaders: make(map[core.Entity]bool, 8),
+	}
+	s.deathBuf = make([]core.Entity, 0, 32)
+	s.transformBuf = make([]glyphTransform, 0, 256)
+	s.destroyBuf = make([]core.Entity, 0, 256)
+	s.flashBuf = make([]core.Entity, 0, 64)
 	s.statCreated.Store(0)
 	s.statActive.Store(0)
 	s.statDestroyed.Store(0)
@@ -244,18 +268,16 @@ func (s *DustSystem) Update() {
 	s.world.Positions.Lock()
 	defer s.world.Positions.Unlock()
 
-	deathCandidates := make([]core.Entity, 0, 32)
+	s.deathBuf = s.deathBuf[:0]
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	// 4. MAIN LOOP
-	// A missing Sigil exits after position work but intentionally skips Dust and
-	// Kinetic write-back, so those cross-store values must remain detached.
 	for _, dustEntity := range dusts.Entities() {
-		dustComp, ok := dusts.GetComponent(dustEntity)
+		dustComp, ok := dusts.GetPtr(dustEntity)
 		if !ok {
 			continue
 		}
-		kineticComp, ok := s.world.Components.Kinetic.GetComponent(dustEntity)
+		kineticComp, ok := s.world.Components.Kinetic.GetPtr(dustEntity)
 		if !ok {
 			continue
 		}
@@ -402,9 +424,7 @@ func (s *DustSystem) Update() {
 						}
 						continue
 					}
-
 				}
-
 			}
 
 			// Apply wall reflection
@@ -425,9 +445,9 @@ func (s *DustSystem) Update() {
 		if !ok {
 			continue
 		}
-		timerComp, ok := s.world.Components.Timer.GetComponent(dustEntity)
+		timerComp, ok := s.world.Components.Timer.GetPtr(dustEntity)
 		if !ok {
-			deathCandidates = append(deathCandidates, dustEntity)
+			s.deathBuf = append(s.deathBuf, dustEntity)
 			continue
 		}
 
@@ -436,29 +456,25 @@ func (s *DustSystem) Update() {
 		} else if sigilComp.Color == visual.RgbDustNormal && timerComp.Remaining < parameter.DustTimerDark {
 			sigilComp.Color = visual.RgbDustDark
 		}
-
-		dusts.SetComponent(dustEntity, dustComp)
-		s.world.Components.Kinetic.SetComponent(dustEntity, kineticComp)
 	}
 
 	// Apply batched collision impulses
 	s.applyAccumulatedImpulses(collisionCtx)
 
-	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
+	if len(s.deathBuf) > 0 {
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.deathBuf)
 	}
 
 	s.statActive.Store(int64(dusts.CountEntities()))
-	s.statDestroyed.Add(int64(len(deathCandidates)))
+	s.statDestroyed.Add(int64(len(s.deathBuf)))
 }
 
-// buildCollisionContext pre-computes collision data for current tick
+// buildCollisionContext refills the tick's collision lookup in place
 func (s *DustSystem) buildCollisionContext() *collisionContext {
-	ctx := &collisionContext{
-		cellFlags:     make(map[uint64]uint8, 256),
-		impulses:      make(map[core.Entity]*impulseAcc, 16),
-		combatHeaders: make(map[core.Entity]bool, 8),
-	}
+	ctx := &s.collisionCtx
+	clear(ctx.cellFlags)
+	clear(ctx.impulses)
+	clear(ctx.combatHeaders)
 
 	// Drains
 	for _, e := range s.world.Components.Drain.Entities() {
@@ -494,13 +510,11 @@ func (s *DustSystem) buildCollisionContext() *collisionContext {
 
 // accumulateImpulse adds velocity delta to target's accumulator
 func (ctx *collisionContext) accumulateImpulse(target core.Entity, vx, vy float64) {
-	if acc, exists := ctx.impulses[target]; exists {
-		acc.vx += vx
-		acc.vy += vy
-		acc.hits++
-	} else {
-		ctx.impulses[target] = &impulseAcc{vx: vx, vy: vy, hits: 1}
-	}
+	acc := ctx.impulses[target]
+	acc.vx += vx
+	acc.vy += vy
+	acc.hits++
+	ctx.impulses[target] = acc
 }
 
 // applyAccumulatedImpulses applies batched impulses to kinetic components
@@ -522,83 +536,69 @@ func (s *DustSystem) applyAccumulatedImpulses(ctx *collisionContext) {
 	}
 }
 
-// transformGlyphsToDust converts all non-composite glyphs to dust entities
+// transformGlyphsToDust converts all non-composite glyphs to dust entities.
+// Exits before touching any buffer when no glyph is present: repeat requests
+// within one burst find an already-converted field.
 func (s *DustSystem) transformGlyphsToDust() {
+	glyphEntities := s.world.Components.Glyph.Entities()
+	if len(glyphEntities) == 0 {
+		return
+	}
+
 	cursorEntity := s.world.Resources.Player.Entity
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
 		return
 	}
 
-	// Cache glyph data before destruction
-	type glyphData struct {
-		entity core.Entity
-		x, y   int
-		char   rune
-		level  component.GlyphLevel
-	}
-
-	glyphEntities := s.world.Components.Glyph.Entities()
-	toTransform := make([]glyphData, 0, len(glyphEntities))
-	toFlashKill := make([]core.Entity, 0, len(glyphEntities))
+	s.transformBuf = s.transformBuf[:0]
+	s.flashBuf = s.flashBuf[:0]
+	s.destroyBuf = s.destroyBuf[:0]
 
 	for _, glyphEntity := range glyphEntities {
 		// Skip composite members
 		if s.world.Components.Member.HasEntity(glyphEntity) {
 			continue
 		}
-
-		glyphComp, ok := s.world.Components.Glyph.GetComponent(glyphEntity)
+		glyphComp, ok := s.world.Components.Glyph.GetPtr(glyphEntity)
 		if !ok {
 			continue
 		}
 		if glyphComp.Level == component.GlyphDark {
-			toFlashKill = append(toFlashKill, glyphEntity)
+			s.flashBuf = append(s.flashBuf, glyphEntity)
 			continue
 		}
-
 		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
 		if !ok {
 			continue
 		}
-
-		toTransform = append(toTransform, glyphData{
-			entity: glyphEntity,
-			x:      glyphPos.X,
-			y:      glyphPos.Y,
-			char:   glyphComp.Rune,
-			level:  glyphComp.Level,
+		s.destroyBuf = append(s.destroyBuf, glyphEntity)
+		s.transformBuf = append(s.transformBuf, glyphTransform{
+			x: glyphPos.X, y: glyphPos.Y, char: glyphComp.Rune, level: glyphComp.Level,
 		})
 	}
 
-	// Emit batch death with flash effect (no transform)
-	if len(toFlashKill) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toFlashKill)
+	if len(s.flashBuf) > 0 {
+		// Emit batch death with flash effect (no transform)
+		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf)
 	}
-
-	if len(toTransform) == 0 {
+	if len(s.transformBuf) == 0 {
 		return
 	}
 
 	// Emit batch death with no effect (transform)
-	deathEntities := make([]core.Entity, len(toTransform))
-	for i, gd := range toTransform {
-		deathEntities[i] = gd.entity
-	}
-	s.world.DestroyEntitiesBatch(deathEntities)
+	s.world.DestroyEntitiesBatch(s.destroyBuf)
 
 	// Use batch creation for transformation dust
 	posBatch := s.world.Positions.BeginBatch()
-
-	for _, gd := range toTransform {
+	for _, gt := range s.transformBuf {
 		entity := s.world.CreateEntity()
-		s.setDustComponents(entity, gd.x, gd.y, gd.char, gd.level, cursorPos.X, cursorPos.Y)
-
-		posBatch.Add(entity, component.PositionComponent{X: gd.x, Y: gd.y})
+		s.setDustComponents(entity, gt.x, gt.y, gt.char, gt.level, cursorPos.X, cursorPos.Y)
+		posBatch.Add(entity, component.PositionComponent{X: gt.x, Y: gt.y})
 	}
-
 	posBatch.CommitForce()
-	s.statCreated.Add(int64(len(toTransform)))
+
+	s.statCreated.Add(int64(len(s.transformBuf)))
 }
 
 // setDustComponents calculates physics and component state for a new dust particle

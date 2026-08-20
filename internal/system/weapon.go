@@ -476,7 +476,7 @@ func (s *WeaponSystem) updateOrbs(cursor core.Entity, weaponComp *component.Weap
 
 // destroyOrb removes an orb entity and clears its reference from its owner's loadout
 func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
-	if orbComp, ok := s.world.Components.Orb.GetComponent(orbEntity); ok {
+	if orbComp, ok := s.world.Components.Orb.GetPtr(orbEntity); ok {
 		if weaponComp, ok := s.world.Components.Weapon.GetPtr(orbComp.OwnerEntity); ok {
 			if weaponComp.Orbs[orbComp.WeaponType] == orbEntity {
 				weaponComp.Orbs[orbComp.WeaponType] = 0
@@ -518,7 +518,7 @@ func (s *WeaponSystem) handleFireMain(cursor core.Entity) {
 
 	// Determine color type from this cursor's energy polarity
 	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetComponent(cursor); ok {
+	if energyComp, ok := s.world.Components.Energy.GetPtr(cursor); ok {
 		if energyComp.Current < 0 {
 			colorType = component.CleanerColorNegative
 		}

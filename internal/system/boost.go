@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -17,6 +18,7 @@ type BoostSystem struct {
 
 	statActive    *status.PlayerBool
 	statRemaining *status.PlayerInt
+	statTruncated *atomic.Int64
 
 	enabled bool
 }
@@ -28,6 +30,7 @@ func NewBoostSystem(world *engine.World) engine.System {
 	reg := world.Resources.Status
 	s.statActive = status.NewPlayerBool(reg, parameter.MaxPlayers, "boost.active", "boost.active")
 	s.statRemaining = status.NewPlayerInt(reg, parameter.MaxPlayers, "boost.remaining", "boost.remaining")
+	s.statTruncated = reg.Ints.Get("boost.truncated")
 
 	s.Init()
 	return s
@@ -37,6 +40,7 @@ func NewBoostSystem(world *engine.World) engine.System {
 func (s *BoostSystem) Init() {
 	s.statActive.Reset()
 	s.statRemaining.Reset()
+	s.statTruncated.Store(0)
 	s.enabled = true
 }
 
@@ -52,6 +56,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostActivate,
 		event.EventBoostDeactivate,
 		event.EventBoostExtend,
+		event.EventBoostReward,
 		event.EventEnemyKilled,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
@@ -109,13 +114,41 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			}
 			s.extend(cursor, payload.Duration)
 		}
+
+	case event.EventBoostReward:
+		if payload, ok := ev.Payload.(*event.BoostRewardPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.reward(cursor)
+			}
+		}
+
 	case event.EventEnemyKilled:
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.KillerEntity); cursor != 0 {
-				s.rewardKill(cursor)
+				s.reward(cursor)
 			}
 		}
 	}
+}
+
+// reward applies the activation/extension contract at handling time, so no producer
+// decides between them from a read that a later dispatch invalidates.
+func (s *BoostSystem) reward(cursor core.Entity) {
+	boostComp, ok := s.world.Components.Boost.GetPtr(cursor)
+	if !ok {
+		return
+	}
+	if boostComp.Active {
+		boostComp.Remaining += parameter.BoostExtensionDuration
+		if boostComp.Remaining > boostComp.TotalDuration {
+			boostComp.TotalDuration = boostComp.Remaining
+		}
+	} else {
+		boostComp.Active = true
+		boostComp.Remaining = parameter.BoostBaseDuration
+		boostComp.TotalDuration = parameter.BoostBaseDuration
+	}
+	s.publish(cursor, boostComp)
 }
 
 // rewardKill applies the same activation/extension contract as correct typing
@@ -156,11 +189,16 @@ func (s *BoostSystem) Update() {
 	})
 }
 
-// activate starts a fresh boost on one cursor; extend adds, activate overwrites
+// activate starts a fresh boost on one cursor; it is a hard set, rewards go through reward
 func (s *BoostSystem) activate(cursor core.Entity, duration time.Duration) {
 	boostComp, ok := s.world.Components.Boost.GetPtr(cursor)
 	if !ok {
 		return // CursorSystem attaches BoostComponent, so a miss is not a cursor
+	}
+
+	// An explicit activate shortening a live boost is a producer bug, not a reward
+	if boostComp.Active && boostComp.Remaining > duration {
+		s.statTruncated.Add(1)
 	}
 
 	boostComp.Active = true

@@ -21,12 +21,15 @@ type CombatSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
-	statDirect *atomic.Int64
-	statArea   *atomic.Int64
-	statKnock  *atomic.Int64
-	statStun   *atomic.Int64
+	statActive     *atomic.Bool
+	statCount      *atomic.Int64
+	statDirect     *atomic.Int64
+	statArea       *atomic.Int64
+	statKnock      *atomic.Int64
+	statStun       *atomic.Int64
+	statDamage     *atomic.Int64
+	statImmune     *atomic.Int64
+	statUnprofiled *atomic.Int64
 
 	enabled bool
 }
@@ -43,6 +46,9 @@ func NewCombatSystem(world *engine.World) engine.System {
 	s.statArea = world.Resources.Status.Ints.Get("combat.hits_area")
 	s.statKnock = world.Resources.Status.Ints.Get("combat.knockbacks")
 	s.statStun = world.Resources.Status.Ints.Get("combat.stuns")
+	s.statDamage = world.Resources.Status.Ints.Get("combat.damage_dealt")
+	s.statImmune = world.Resources.Status.Ints.Get("combat.immune_rejects")
+	s.statUnprofiled = world.Resources.Status.Ints.Get("combat.unprofiled")
 
 	s.Init()
 	return s
@@ -52,6 +58,13 @@ func (s *CombatSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.statDirect.Store(0)
+	s.statArea.Store(0)
+	s.statKnock.Store(0)
+	s.statStun.Store(0)
+	s.statDamage.Store(0)
+	s.statImmune.Store(0)
+	s.statUnprofiled.Store(0)
 	s.enabled = true
 }
 
@@ -156,15 +169,14 @@ func (s *CombatSystem) Update() {
 	}
 }
 
-// applyHitDirect applies combat hit to a target
+// applyHitDirect applies combat hit to a target.
+// Combat pointers stay valid: no path below inserts into or removes from the store.
 func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPayload) {
-	// TODO: telemetry
-
 	// Resolve attacker type: prefer OriginEntity, fallback to OwnerEntity
 	var attackerType component.CombatEntityType
-	if attackerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
+	if attackerCombatComp, ok := s.world.Components.Combat.GetPtr(payload.OriginEntity); ok {
 		attackerType = attackerCombatComp.CombatEntityType
-	} else if ownerCombatComp, ok := s.world.Components.Combat.GetComponent(payload.OwnerEntity); ok {
+	} else if ownerCombatComp, ok := s.world.Components.Combat.GetPtr(payload.OwnerEntity); ok {
 		attackerType = ownerCombatComp.CombatEntityType
 	} else {
 		return
@@ -173,13 +185,13 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	targetEntity := payload.TargetEntity
 	hitEntity := payload.HitEntity
 
-	targetCombatComp, ok := s.world.Components.Combat.GetComponent(targetEntity)
+	targetCombatComp, ok := s.world.Components.Combat.GetPtr(targetEntity)
 	if !ok {
 		return
 	}
 
 	// Composite type check for damage routing
-	headerComp, isComposite := s.world.Components.Header.GetComponent(targetEntity)
+	headerComp, isComposite := s.world.Components.Header.GetPtr(targetEntity)
 
 	// Reject containers
 	if isComposite && headerComp.Type == component.CompositeTypeContainer {
@@ -188,7 +200,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	// Validate hit-to-target relationship for composites
 	if isComposite && hitEntity != targetEntity {
-		memberComp, isMember := s.world.Components.Member.GetComponent(hitEntity)
+		memberComp, isMember := s.world.Components.Member.GetPtr(hitEntity)
 		if !isMember || memberComp.HeaderEntity != targetEntity {
 			return
 		}
@@ -196,8 +208,10 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	attack := profile.Attack(payload.AttackType, attackerType, targetCombatComp.CombatEntityType)
 	if attack == nil || attack.DamageType != component.CombatDamageDirect {
+		s.statUnprofiled.Add(1)
 		return
 	}
+	s.statDirect.Add(1)
 	damageCursor := s.world.ResolveCursor(payload.OwnerEntity)
 
 	// Damage routing based on CompositeType
@@ -205,28 +219,31 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
 		// Ablative: damage the HitEntity (member)
-		memberCombat, ok := s.world.Components.Combat.GetComponent(hitEntity)
-		if ok && hitEntity != targetEntity {
-			if memberCombat.RemainingDamageImmunity == 0 && attack.DamageValue != 0 {
-				memberCombat.HitPoints -= attack.DamageValue
-				if memberCombat.HitPoints < 0 {
-					memberCombat.HitPoints = 0
-				}
+		if memberCombat, ok := s.world.Components.Combat.GetPtr(hitEntity); ok && hitEntity != targetEntity {
+			if memberCombat.RemainingDamageImmunity != 0 || attack.DamageValue == 0 {
+				s.statImmune.Add(1)
+			} else {
+				dealt := min(memberCombat.HitPoints, attack.DamageValue)
+				memberCombat.HitPoints -= dealt
+				s.statDamage.Add(int64(dealt))
+
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 				memberCombat.LastDamagedBy = damageCursor
 				targetCombatComp.LastDamagedBy = damageCursor
 				damageTargetDead = memberCombat.HitPoints == 0
 			}
-			s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
 		}
 	} else {
 		// Unit or Simple: damage the TargetEntity
-		if targetCombatComp.RemainingDamageImmunity == 0 && attack.DamageValue != 0 {
-			targetCombatComp.HitPoints -= attack.DamageValue
-			if targetCombatComp.HitPoints < 0 {
-				targetCombatComp.HitPoints = 0
-			}
+		if targetCombatComp.RemainingDamageImmunity != 0 || attack.DamageValue == 0 {
+			s.statImmune.Add(1)
+		} else {
+			dealt := min(targetCombatComp.HitPoints, attack.DamageValue)
+			targetCombatComp.HitPoints -= dealt
+			s.statDamage.Add(int64(dealt))
+
+			targetCombatComp.HitPoints = max(targetCombatComp.HitPoints-attack.DamageValue, 0)
 			targetCombatComp.RemainingHitFlash = parameter.CombatHitFlashDuration
 			targetCombatComp.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 			targetCombatComp.LastDamagedBy = damageCursor
@@ -255,28 +272,33 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, attack.Collision)
 			targetCombatComp.RemainingKineticImmunity = attack.KineticImmunity
 
-			// Propagate kinetic immunity to hit member for displacement detection (e.g. snake body spring physics uses member RemainingKineticImmunity)
+			// Propagate to the hit member for displacement detection (snake body spring physics)
 			if payload.HitEntity != payload.TargetEntity {
-				if hitCombat, ok := s.world.Components.Combat.GetComponent(payload.HitEntity); ok {
+				if hitCombat, ok := s.world.Components.Combat.GetPtr(payload.HitEntity); ok {
 					hitCombat.RemainingKineticImmunity = attack.KineticImmunity
-					s.world.Components.Combat.SetComponent(payload.HitEntity, hitCombat)
 				}
 			}
 		}
 	}
-
-	// Save header (kinetic immunity; non-ablative damage already applied to targetCombatComp)
-	s.world.Components.Combat.SetComponent(payload.TargetEntity, targetCombatComp)
 }
 
+// applyHitArea resolves an area attack against one target.
+// An empty payload.HitEntities is the implicit single-hit form; see the payload doc.
 func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayload) {
-	targetEntity := payload.TargetEntity
-	targetCombatComp, ok := s.world.Components.Combat.GetComponent(payload.TargetEntity)
-	if !ok {
-		return
+	// Normalize before anything reads the hit set
+	var hitBuf [1]core.Entity
+	hits := payload.HitEntities
+	if len(hits) == 0 {
+		if payload.TargetEntity == 0 {
+			return
+		}
+		hitBuf[0] = payload.TargetEntity
+		hits = hitBuf[:]
 	}
 
-	if len(payload.HitEntities) == 0 {
+	targetEntity := payload.TargetEntity
+	targetCombatComp, ok := s.world.Components.Combat.GetPtr(targetEntity)
+	if !ok {
 		return
 	}
 
@@ -284,22 +306,22 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	var attackerType component.CombatEntityType
 	if s.world.Components.Cursor.HasEntity(payload.OriginEntity) {
 		attackerType = component.CombatEntityCursor
-	} else if attackerComp, ok := s.world.Components.Combat.GetComponent(payload.OriginEntity); ok {
+	} else if attackerComp, ok := s.world.Components.Combat.GetPtr(payload.OriginEntity); ok {
 		attackerType = attackerComp.CombatEntityType
 	} else {
 		return
 	}
 
 	// Resolve header if target is a member
-	headerComp, isComposite := s.world.Components.Header.GetComponent(targetEntity)
+	headerComp, isComposite := s.world.Components.Header.GetPtr(targetEntity)
 	if !isComposite {
-		if memberComp, isMember := s.world.Components.Member.GetComponent(targetEntity); isMember {
+		if memberComp, isMember := s.world.Components.Member.GetPtr(targetEntity); isMember {
 			headerEntity := memberComp.HeaderEntity
-			if hc, ok := s.world.Components.Header.GetComponent(headerEntity); ok {
+			if hc, ok := s.world.Components.Header.GetPtr(headerEntity); ok {
 				headerComp = hc
 				isComposite = true
 				targetEntity = headerEntity
-				targetCombatComp, ok = s.world.Components.Combat.GetComponent(headerEntity)
+				targetCombatComp, ok = s.world.Components.Combat.GetPtr(headerEntity)
 				if !ok {
 					return
 				}
@@ -324,39 +346,31 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 
 	if isComposite && headerComp.Type == component.CompositeTypeAblative {
 		if attack.DamageValue != 0 {
-			for _, hitEntity := range payload.HitEntities {
+			for _, hitEntity := range hits {
 				if hitEntity == targetEntity {
 					continue
 				}
-				memberComp, isMember := s.world.Components.Member.GetComponent(hitEntity)
-				if !isMember || memberComp.HeaderEntity != targetEntity {
-					continue
-				}
-				memberCombat, ok := s.world.Components.Combat.GetComponent(hitEntity)
+				memberCombat, ok := s.world.Components.Combat.GetPtr(hitEntity)
 				if !ok || memberCombat.RemainingDamageImmunity > 0 {
 					continue
 				}
-				memberCombat.HitPoints -= attack.DamageValue
-				if memberCombat.HitPoints < 0 {
-					memberCombat.HitPoints = 0
-				}
+				memberCombat.HitPoints = max(memberCombat.HitPoints-attack.DamageValue, 0)
 				memberCombat.RemainingHitFlash = parameter.CombatHitFlashDuration
 				memberCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
 				memberCombat.LastDamagedBy = damageCursor
-				s.world.Components.Combat.SetComponent(hitEntity, memberCombat)
 				damageApplied = true
 			}
 		}
 	} else {
 		if targetCombatComp.RemainingDamageImmunity == 0 && attack.DamageValue != 0 {
 			validHitCount := 0
-			for _, hitEntity := range payload.HitEntities {
+			for _, hitEntity := range hits {
 				if hitEntity == targetEntity {
 					validHitCount++
 					continue
 				}
 				if isComposite {
-					if member, ok := s.world.Components.Member.GetComponent(hitEntity); ok && member.HeaderEntity == targetEntity {
+					if member, ok := s.world.Components.Member.GetPtr(hitEntity); ok && member.HeaderEntity == targetEntity {
 						validHitCount++
 					}
 				}
@@ -386,7 +400,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	// Apply kinetic effect
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
 		if !targetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
-			s.applyAreaKnockback(payload, targetEntity, attack.Collision)
+			s.applyAreaKnockback(payload, targetEntity, hits, attack.Collision)
 			targetCombatComp.RemainingKineticImmunity = attack.KineticImmunity
 		}
 	}
@@ -394,13 +408,13 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	// Apply stun effect
 	if attack.EffectMask&component.CombatEffectStun != 0 {
 		if !targetDead {
-			s.applyStunEffect(targetEntity, &targetCombatComp)
+			s.applyStunEffect(targetEntity, targetCombatComp)
 		}
 	}
 
 	// Chain attack for area attacks - emit per hit entity as direct attacks
 	if chainAttack := attack.Chain; chainAttack != nil {
-		for _, hitEntity := range payload.HitEntities {
+		for _, hitEntity := range hits {
 			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   chainAttack.AttackType,
 				OwnerEntity:  payload.OwnerEntity,
@@ -410,9 +424,6 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 			})
 		}
 	}
-
-	// targetEntity may have been re-resolved from member to header above
-	s.world.Components.Combat.SetComponent(targetEntity, targetCombatComp)
 }
 
 // applyVampireDrain handles energy steal and lightning VFX directly
@@ -464,7 +475,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 }
 
 func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) {
-	originKineticComp, ok := s.world.Components.Kinetic.GetComponent(originEntity)
+	originKineticComp, ok := s.world.Components.Kinetic.GetPtr(originEntity)
 	if !ok {
 		return
 	}
@@ -473,15 +484,15 @@ func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core
 
 	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
 	if hitEntity != targetEntity {
-		if hitKinetic, ok := s.world.Components.Kinetic.GetComponent(hitEntity); ok {
+		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
 			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
-			s.world.Components.Kinetic.SetComponent(hitEntity, hitKinetic)
+			s.statKnock.Add(1)
 			return
 		}
 	}
 
 	// Fallback: targetEntity kinetic (header or simple entity)
-	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
+	targetKineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity)
 	if !ok {
 		return
 	}
@@ -511,18 +522,16 @@ func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core
 			s.rng,
 		)
 	}
-	s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 }
 
-// applyAreaKnockback calculates radial knockback for area attacks
-// Uses explicit OriginX/OriginY if set, otherwise falls back to OriginEntity position
-// targetEntity is the resolved header, which may differ from payload.TargetEntity
-func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, collisionProfile *physics.CollisionProfile) {
+// applyAreaKnockback calculates radial knockback for area attacks.
+// hits is the normalized hit set; targetEntity is the resolved header.
+func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequestPayload, targetEntity core.Entity, hits []core.Entity, collisionProfile *physics.CollisionProfile) {
 	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
 	if !ok {
 		return
 	}
-	targetKineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity)
+	targetKineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity)
 	if !ok {
 		return
 	}
@@ -552,24 +561,23 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	}
 
 	// Single entity - direct radial knockback
-	if len(payload.HitEntities) == 1 && targetEntity == payload.HitEntities[0] {
+	if len(hits) == 1 && targetEntity == hits[0] {
 		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 		return
 	}
 
 	// Composite - calculate centroid offset for angled knockback
-	headerComp, ok := s.world.Components.Header.GetComponent(targetEntity)
+	headerComp, ok := s.world.Components.Header.GetPtr(targetEntity)
 	if !ok {
 		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
-		s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 		return
 	}
 
 	// Build offset centroid from hit members
 	sumX, sumY := 0, 0
 	hitCount := 0
-	for _, hitEntity := range payload.HitEntities {
+	for _, hitEntity := range hits {
+		// for _, hitEntity := range payload.HitEntities {
 		for _, member := range headerComp.MemberEntries {
 			if hitEntity == member.Entity {
 				sumX += member.OffsetX
@@ -587,8 +595,6 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 		centroidY := sumY / hitCount
 		physics.ApplyOffsetCollision(&targetKineticComp.Kinetic, radialX, radialY, centroidX, centroidY, collisionProfile, s.rng)
 	}
-
-	s.world.Components.Kinetic.SetComponent(targetEntity, targetKineticComp)
 }
 
 // applyStunEffect applies stun to target entity
@@ -630,10 +636,9 @@ func (s *CombatSystem) applyStunEffect(targetEntity core.Entity, targetCombatCom
 	targetCombatComp.IsEnraged = false
 
 	// Zero velocity
-	if kineticComp, ok := s.world.Components.Kinetic.GetComponent(targetEntity); ok {
+	if kineticComp, ok := s.world.Components.Kinetic.GetPtr(targetEntity); ok {
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
-		s.world.Components.Kinetic.SetComponent(targetEntity, kineticComp)
 	}
 
 	return true

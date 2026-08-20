@@ -17,6 +17,8 @@ import (
 type CleanerSystem struct {
 	world *engine.World
 
+	entityBuf []core.Entity
+
 	statActive  *atomic.Int64
 	statSpawned *atomic.Int64
 
@@ -26,7 +28,8 @@ type CleanerSystem struct {
 // NewCleanerSystem creates a new cleaner system
 func NewCleanerSystem(world *engine.World) engine.System {
 	s := &CleanerSystem{
-		world: world,
+		world:     world,
+		entityBuf: make([]core.Entity, 0),
 	}
 
 	s.statActive = s.world.Resources.Status.Ints.Get("cleaner.active")
@@ -109,11 +112,11 @@ func (s *CleanerSystem) Update() {
 
 	// Cleaners are destroyed immediately to free their spatial cells for later
 	// cleaners in this tick, so the entity order must remain detached.
-	cleanerEntities := s.world.Components.Cleaner.GetAllEntities()
-	s.statActive.Store(int64(len(cleanerEntities)))
+	s.entityBuf = append(s.entityBuf[:0], s.world.Components.Cleaner.Entities()...)
+	s.statActive.Store(int64(len(s.entityBuf)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
-	if len(cleanerEntities) == 0 {
+	if len(s.entityBuf) == 0 {
 		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
@@ -122,7 +125,7 @@ func (s *CleanerSystem) Update() {
 	gameWidth := config.MapWidth
 	gameHeight := config.MapHeight
 
-	for _, cleanerEntity := range cleanerEntities {
+	for _, cleanerEntity := range s.entityBuf {
 		cleanerComp, ok := s.world.Components.Cleaner.GetPtr(cleanerEntity)
 		if !ok {
 			continue
@@ -334,7 +337,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 
 	// Determine color type from energy polarity
 	colorType := component.CleanerColorPositive
-	if energyComp, ok := s.world.Components.Energy.GetComponent(owner); ok {
+	if energyComp, ok := s.world.Components.Energy.GetPtr(owner); ok {
 		if energyComp.Current < 0 {
 			colorType = component.CleanerColorNegative
 		}
@@ -460,7 +463,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
-		if glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity); ok {
+		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
 			if glyphComp.Type == component.GlyphRed {
 				toDestroy = append(toDestroy, targetEntity)
 			}
@@ -508,7 +511,7 @@ func (s *CleanerSystem) processNuggetEnergy(targetEntities []core.Entity, selfEn
 		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
-		if glyphComp, ok := s.world.Components.Glyph.GetComponent(targetEntity); ok {
+		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
 			if glyphComp.Type == component.GlyphGreen {
 				toDestroy = append(toDestroy, targetEntity)
 			}
@@ -598,7 +601,7 @@ func (s *CleanerSystem) scanTargetRows(owner core.Entity) []int {
 
 	// Determine target type based on energy polarity
 	targetType := component.GlyphRed
-	if energyComp, ok := s.world.Components.Energy.GetComponent(owner); ok {
+	if energyComp, ok := s.world.Components.Energy.GetPtr(owner); ok {
 		if energyComp.Current < 0 {
 			targetType = component.GlyphBlue
 		}
@@ -609,7 +612,7 @@ func (s *CleanerSystem) scanTargetRows(owner core.Entity) []int {
 	entities := s.world.Components.Glyph.Entities()
 
 	for _, entity := range entities {
-		glyph, ok := s.world.Components.Glyph.GetComponent(entity)
+		glyph, ok := s.world.Components.Glyph.GetPtr(entity)
 		if !ok || glyph.Type != targetType {
 			continue
 		}

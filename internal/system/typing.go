@@ -158,27 +158,12 @@ func (s *TypingSystem) handleTyping(cursor core.Entity, cursorX, cursorY int, ty
 
 // applyUniversalRewards grants boost and heat to the cursor that typed correctly
 func (s *TypingSystem) applyUniversalRewards(cursor core.Entity) {
-	// Check current boost state BEFORE pushing events
-	boost, hasBoost := s.world.Components.Boost.GetComponent(cursor)
-	isBoostActive := hasBoost && boost.Active
-
-	// Boost: activate or extend
-	if isBoostActive {
-		s.world.PushEvent(event.EventBoostExtend, &event.BoostExtendPayload{
-			Entity:   cursor,
-			Duration: parameter.BoostExtensionDuration,
-		})
-	} else {
-		s.world.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
-			Entity:   cursor,
-			Duration: parameter.BoostBaseDuration,
-		})
-	}
+	// BoostSystem resolves activation against live state; a decision made here would be stale by dispatch
+	s.world.PushEvent(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
 
 	// Heat: +2 with active boost, +1 without
-	// TODO: const
 	heatGain := 1
-	if isBoostActive {
+	if boost, ok := s.world.Components.Boost.GetPtr(cursor); ok && boost.Active {
 		heatGain = 2
 	}
 	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{

@@ -30,6 +30,11 @@ type ExplosionSystem struct {
 	dustEntryBuf []event.DustSpawnEntry
 	centerBuf    []vmath.Point
 
+	drainBuf     []core.Entity
+	compositeBuf []hitComposite
+	compositeIdx map[core.Entity]int
+	seenCells    map[uint64]bool
+
 	statTriggered *atomic.Int64
 	statConverted *atomic.Int64
 	statMerged    *atomic.Int64
@@ -58,6 +63,11 @@ func (s *ExplosionSystem) Init() {
 	s.entityBuf = make([]core.Entity, 0, 256)
 	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
 	s.centerBuf = make([]vmath.Point, 0, 64)
+
+	s.drainBuf = make([]core.Entity, 0, 64)
+	s.compositeBuf = make([]hitComposite, 0, 16)
+	s.compositeIdx = make(map[core.Entity]int, 16)
+	s.seenCells = make(map[uint64]bool, 256)
 
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
@@ -162,8 +172,7 @@ func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
 		return
 	}
 
-	type pos struct{ x, y int }
-	seen := make(map[pos]bool, len(dustEntities))
+	clear(s.seenCells)
 	s.centerBuf = s.centerBuf[:0]
 
 	for _, e := range dustEntities {
@@ -171,11 +180,11 @@ func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
 		if !ok {
 			continue
 		}
-		key := pos{p.X, p.Y}
-		if seen[key] {
+		key := posKey(p.X, p.Y)
+		if s.seenCells[key] {
 			continue
 		}
-		seen[key] = true
+		s.seenCells[key] = true
 		s.centerBuf = append(s.centerBuf, vmath.Point{X: p.X, Y: p.Y})
 	}
 
@@ -280,10 +289,9 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 	s.dustEntryBuf = s.dustEntryBuf[:0]
 
 	// Combat entity collectors
-	var hitDrains []core.Entity
-	// Headers keep first-seen order: each emitted event consumes RNG in knockback
-	compositeIdx := make(map[core.Entity]int)
-	var hitComposites []hitComposite
+	s.drainBuf = s.drainBuf[:0]
+	s.compositeBuf = s.compositeBuf[:0]
+	clear(s.compositeIdx)
 
 	// Single-pass area sweep
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
@@ -302,26 +310,27 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 				entity := entityBuf[i]
 				// Drain - collect for combat
 				if s.world.Components.Drain.HasEntity(entity) {
-					hitDrains = append(hitDrains, entity)
+					s.drainBuf = append(s.drainBuf, entity)
 					continue
 				}
 
 				// Composite member - collect by header
-				if memberComp, ok := s.world.Components.Member.GetComponent(entity); ok {
+				if memberComp, ok := s.world.Components.Member.GetPtr(entity); ok {
 					headerEntity := memberComp.HeaderEntity
-					headerComp, ok := s.world.Components.Header.GetComponent(headerEntity)
+					headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
 					if !ok {
 						continue
 					}
 
 					switch headerComp.Type {
 					case component.CompositeTypeUnit, component.CompositeTypeAblative:
-						if ci, ok := compositeIdx[headerEntity]; ok {
-							hitComposites[ci].members = append(hitComposites[ci].members, entity)
+						if ci, ok := s.compositeIdx[headerEntity]; ok {
+							s.compositeBuf[ci].members = append(s.compositeBuf[ci].members, entity)
 							break
 						}
-						compositeIdx[headerEntity] = len(hitComposites)
-						hitComposites = append(hitComposites, hitComposite{
+						s.compositeIdx[headerEntity] = len(s.compositeBuf)
+						// members backs a queued payload, so it must stay a fresh allocation
+						s.compositeBuf = append(s.compositeBuf, hitComposite{
 							header:  headerEntity,
 							members: []core.Entity{entity},
 						})
@@ -331,7 +340,7 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 
 				// Glyph - convert to dust (dust explosion only)
 				if convertGlyphs {
-					glyphComp, ok := s.world.Components.Glyph.GetComponent(entity)
+					glyphComp, ok := s.world.Components.Glyph.GetPtr(entity)
 					if !ok || s.world.Components.Death.HasEntity(entity) {
 						continue
 					}
@@ -349,14 +358,13 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 		}
 	}
 
-	// Emit combat events for drains
-	for _, drainEntity := range hitDrains {
+	// Emit combat events for drains; the implicit single-hit form avoids a slice per drain
+	for _, drainEntity := range s.drainBuf {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attackType,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
 			TargetEntity: drainEntity,
-			HitEntities:  []core.Entity{drainEntity},
 			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,
@@ -364,13 +372,13 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 	}
 
 	// Emit combat events for composites (batched by header)
-	for i := range hitComposites {
+	for i := range s.compositeBuf {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   attackType,
 			OwnerEntity:  cursorEntity,
 			OriginEntity: cursorEntity,
-			TargetEntity: hitComposites[i].header,
-			HitEntities:  hitComposites[i].members,
+			TargetEntity: s.compositeBuf[i].header,
+			HitEntities:  s.compositeBuf[i].members,
 			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,

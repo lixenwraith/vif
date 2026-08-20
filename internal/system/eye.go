@@ -578,7 +578,6 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 					OwnerEntity:  headerEntity,
 					OriginEntity: headerEntity,
 					TargetEntity: targetEntity,
-					HitEntities:  []core.Entity{targetEntity},
 					OriginX:      eyePos.X,
 					OriginY:      eyePos.Y,
 				})

@@ -134,7 +134,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 
 	// Fadeout handles its own data extraction from WallComponent
 	if effectEvent == event.EventFadeoutSpawnOne {
-		if wallComp, ok := s.world.Components.Wall.GetComponent(entity); ok {
+		if wallComp, ok := s.world.Components.Wall.GetPtr(entity); ok {
 			s.world.PushEvent(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
 				X:       entityPos.X,
 				Y:       entityPos.Y,
@@ -149,10 +149,10 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	// Extract char: glyph first, sigil fallback
 	var char rune
 	var level component.GlyphLevel
-	if glyphComp, ok := s.world.Components.Glyph.GetComponent(entity); ok {
+	if glyphComp, ok := s.world.Components.Glyph.GetPtr(entity); ok {
 		char = glyphComp.Rune
 		level = glyphComp.Level
-	} else if sigilComp, ok := s.world.Components.Sigil.GetComponent(entity); ok {
+	} else if sigilComp, ok := s.world.Components.Sigil.GetPtr(entity); ok {
 		char = sigilComp.Rune
 	} else {
 		return
@@ -247,20 +247,14 @@ func (s *DeathSystem) processBatchSilent(entities []core.Entity) {
 	}
 
 	// Filter protected entities
-	toDestroy := make([]core.Entity, 0, len(entities))
+	s.destroyBuf = s.destroyBuf[:0]
 	for _, e := range entities {
 		if e == 0 || s.isProtected(e) {
 			continue
 		}
-		toDestroy = append(toDestroy, e)
+		s.destroyBuf = append(s.destroyBuf, e)
 	}
-
-	if len(toDestroy) == 0 {
-		return
-	}
-
-	s.world.DestroyEntitiesBatch(toDestroy)
-	s.statKilled.Add(int64(len(toDestroy)))
+	s.destroyCollected()
 }
 
 // processBatchWith is the generic two-pass batch processor
@@ -341,7 +335,7 @@ func (s *DeathSystem) extractFadeout(entity core.Entity) (event.FadeoutSpawnEntr
 	if !ok {
 		return event.FadeoutSpawnEntry{}, false
 	}
-	wallComp, ok := s.world.Components.Wall.GetComponent(entity)
+	wallComp, ok := s.world.Components.Wall.GetPtr(entity)
 	if !ok {
 		return event.FadeoutSpawnEntry{}, false
 	}
@@ -357,7 +351,7 @@ func (s *DeathSystem) extractFadeout(entity core.Entity) (event.FadeoutSpawnEntr
 
 // isProtected checks death protection and removes DeathComponent tag if protected
 func (s *DeathSystem) isProtected(entity core.Entity) bool {
-	protComp, ok := s.world.Components.Protection.GetComponent(entity)
+	protComp, ok := s.world.Components.Protection.GetPtr(entity)
 	if !ok {
 		return false
 	}
@@ -372,10 +366,10 @@ func (s *DeathSystem) isProtected(entity core.Entity) bool {
 // extractCharData reads character rune and glyph level from entity
 // Glyph first, sigil fallback
 func (s *DeathSystem) extractCharData(entity core.Entity) (char rune, level component.GlyphLevel, ok bool) {
-	if glyphComp, has := s.world.Components.Glyph.GetComponent(entity); has {
+	if glyphComp, has := s.world.Components.Glyph.GetPtr(entity); has {
 		return glyphComp.Rune, glyphComp.Level, true
 	}
-	if sigilComp, has := s.world.Components.Sigil.GetComponent(entity); has {
+	if sigilComp, has := s.world.Components.Sigil.GetPtr(entity); has {
 		return sigilComp.Rune, 0, true
 	}
 	return 0, 0, false

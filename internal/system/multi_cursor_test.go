@@ -409,3 +409,34 @@ func TestTowerDeathEmitsKillOnlyForCursorCredit(t *testing.T) {
 		}
 	}
 }
+
+func TestBoostRewardSurvivesStaleTypingDecision(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	boost := NewBoostSystem(w).(*BoostSystem)
+	typing := NewTypingSystem(w).(*TypingSystem)
+
+	// Pass one: the keystroke is dispatched ahead of the kills it shares a batch with.
+	typing.applyUniversalRewards(cursor)
+	for range 3 {
+		boost.HandleEvent(event.GameEvent{
+			Type:    event.EventEnemyKilled,
+			Payload: &event.EnemyKilledPayload{KillerEntity: cursor, Species: component.SpeciesDrain},
+		})
+	}
+
+	want := parameter.BoostBaseDuration + 2*parameter.BoostExtensionDuration
+	got, _ := w.Components.Boost.GetComponent(cursor)
+	if got.Remaining != want {
+		t.Fatalf("boost after three kills = %v, want %v", got.Remaining, want)
+	}
+
+	// Pass two: the typing reward must extend the live boost, never truncate it.
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		boost.HandleEvent(ev)
+	}
+	want += parameter.BoostExtensionDuration
+	got, _ = w.Components.Boost.GetComponent(cursor)
+	if got.Remaining != want {
+		t.Fatalf("boost after typing reward = %v, want %v", got.Remaining, want)
+	}
+}

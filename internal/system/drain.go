@@ -29,6 +29,8 @@ type drainCacheEntry struct {
 	combatComp component.CombatComponent
 	pos        component.PositionComponent
 	hasPos     bool
+	// dying marks a death already emitted this tick; every later pass skips it
+	dying bool
 }
 
 // DrainSystem manages the drain entity lifecycle
@@ -52,9 +54,14 @@ type DrainSystem struct {
 	drainCache []drainCacheEntry
 
 	// Cached metric pointers
-	statCount      *atomic.Int64
-	statPending    *atomic.Int64
-	statCollisions *atomic.Int64
+	statCount        *atomic.Int64
+	statPending      *atomic.Int64
+	statCollisions   *atomic.Int64
+	statSuicides     *atomic.Int64
+	statSpawned      *atomic.Int64
+	statFusions      *atomic.Int64
+	statDespawned    *atomic.Int64
+	statSpawnFailure *atomic.Int64
 
 	paused bool
 
@@ -73,6 +80,11 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
 	s.statCollisions = s.world.Resources.Status.Ints.Get("drain.collisions")
+	s.statSuicides = s.world.Resources.Status.Ints.Get("drain.suicides")
+	s.statSpawned = s.world.Resources.Status.Ints.Get("drain.spawned")
+	s.statFusions = s.world.Resources.Status.Ints.Get("drain.fusions")
+	s.statDespawned = s.world.Resources.Status.Ints.Get("drain.despawned")
+	s.statSpawnFailure = s.world.Resources.Status.Ints.Get("drain.spawn_failures")
 
 	s.Init()
 	return s
@@ -88,6 +100,7 @@ func (s *DrainSystem) Init() {
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.statCollisions.Store(0)
+	s.statSuicides.Store(0)
 	s.paused = false
 	s.enabled = true
 }
@@ -185,7 +198,7 @@ func (s *DrainSystem) Update() {
 	s.processPendingSpawns()
 
 	// Multi-drain lifecycle based on heat
-	currentCount := s.world.Components.Drain.CountEntities()
+	currentCount := s.liveDrainCount()
 	pendingCount := len(s.pendingSpawns)
 
 	targetCount := s.calcTargetDrainCount()
@@ -202,6 +215,7 @@ func (s *DrainSystem) Update() {
 				// Exponential backoff: 8 ticks base, doubles on consecutive failures
 				backoff := uint64(8)
 				if s.spawnCooldownUntil > 0 {
+					s.statSpawnFailure.Add(int64(needed - queued))
 					// Already had a recent failure, increase backoff
 					prevBackoff := s.spawnCooldownUntil - (currentTick - 1)
 					if prevBackoff > 0 && prevBackoff < 60 {
@@ -267,24 +281,31 @@ func (s *DrainSystem) processDrainStates() {
 
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
+			entry.dying = true
 			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
 
+			// A positionless drain yields no death coordinate; -1 marks it absent
+			killX, killY := entry.killPos()
+			if entry.hasPos {
+				killX, killY = entry.pos.X, entry.pos.Y
+			}
 			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
 				Entity:       entry.entity,
 				KillerEntity: entry.combatComp.LastDamagedBy,
 				Species:      component.SpeciesDrain,
-				X:            entry.pos.X,
-				Y:            entry.pos.Y,
+				X:            killX,
+				Y:            killY,
 			})
-
 			continue
 		}
 
-		// Enrage state transition
+		// Enrage state transition, written through the store
 		shouldEnrage := entry.combatComp.HitPoints < parameter.DrainEnrageThreshold
 		if shouldEnrage != entry.combatComp.IsEnraged {
 			entry.combatComp.IsEnraged = shouldEnrage
-			s.world.Components.Combat.SetComponent(entry.entity, entry.combatComp)
+			if cc, ok := s.world.Components.Combat.GetPtr(entry.entity); ok {
+				cc.IsEnraged = shouldEnrage
+			}
 		}
 	}
 }
@@ -299,8 +320,8 @@ func (s *DrainSystem) detectSwarmFusions() {
 	var enragedDrains []core.Entity
 	for i := range s.drainCache {
 		entry := &s.drainCache[i]
-		// Skip already dead drains
-		if entry.combatComp.HitPoints <= 0 {
+		// Skip already dead or dying drains
+		if entry.combatComp.HitPoints <= 0 || entry.dying {
 			continue
 		}
 		if entry.combatComp.IsEnraged {
@@ -319,6 +340,7 @@ func (s *DrainSystem) detectSwarmFusions() {
 			DrainB: drainB,
 			Effect: event.FuseEffectSpirit,
 		})
+		s.statFusions.Add(1)
 	}
 }
 
@@ -434,6 +456,9 @@ func (s *DrainSystem) getActiveDrainsBySpawnOrder() []core.Entity {
 
 	ordered := make([]drainWithOrder, 0, len(entities))
 	for _, e := range entities {
+		if s.isDying(e) {
+			continue
+		}
 		if drain, ok := s.world.Components.Drain.GetComponent(e); ok {
 			ordered = append(ordered, drainWithOrder{entity: e, order: drain.SpawnOrder})
 		}
@@ -623,6 +648,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 
 	for i := range toRemove {
 		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashSpawnOneRequest)
+		s.statDespawned.Add(1)
 	}
 }
 
@@ -631,22 +657,10 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	config := s.world.Resources.Config
 	now := s.world.Resources.Time.GameTime
 
-	// TODO: refactor to Position bound check
 	// Clamp to bounds
-	if spawnX < 0 {
-		spawnX = 0
-	}
-	if spawnX >= config.MapWidth {
-		spawnX = config.MapWidth - 1
-	}
-	if spawnY < 0 {
-		spawnY = 0
-	}
-	if spawnY >= config.MapHeight {
-		spawnY = config.MapHeight - 1
-	}
+	spawnX = max(min(spawnX, config.MapWidth-1), 0)
+	spawnY = max(min(spawnY, config.MapHeight-1), 0)
 
-	// TODO: early defensive implementation due to flash flood, test if still needed
 	// Check for existing drain
 	if s.hasDrainAt(spawnX, spawnY) {
 		// Collision with moved drain - re-queue at alternate position
@@ -718,6 +732,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		Entity:  entity,
 		Species: component.SpeciesDrain,
 	})
+	s.statSpawned.Add(1)
 }
 
 // requeueSpawnWithOffset attempts to find alternate position and re-queue materialize spawn when target position has become occupied since initial acquisition (e.g. another drain moved into it)
@@ -744,25 +759,30 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 func (s *DrainSystem) handleDrainInteractions() {
 	now := s.world.Resources.Time.GameTime
 
+	// Integration moved drains after cacheDrainData, so the snapshot is stale here
+	s.refreshCachePositions()
+
 	// 1. Detect drain-drain collisions (same cell)
 	s.handleDrainDrainCollisions()
 
 	// 2. Handle shield zone and cursor interactions
-	drains := s.world.Components.Drain
-	drainEntities := drains.Entities()
-	for _, drainEntity := range drainEntities {
-		drain, ok := drains.GetPtr(drainEntity)
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+		if entry.dying {
+			continue
+		}
+		drain, ok := s.world.Components.Drain.GetPtr(entry.entity)
 		if !ok {
 			continue
 		}
 
-		overlaps := CheckCursorOverlaps(s.world, drainEntity)
+		overlaps := CheckCursorOverlaps(s.world, entry.entity)
 		drainReady := now.Sub(drain.LastDrainTime) >= parameter.DrainEnergyDrainInterval
 		drainedShield := false
 		destroyDrain := false
 
-		for i := range overlaps.Count {
-			overlap := &overlaps.Entries[i]
+		for j := range overlaps.Count {
+			overlap := &overlaps.Entries[j]
 			// Apply shield-zone interactions before exact cursor contact.
 			if len(overlap.ShieldMembers) > 0 {
 				if drainReady {
@@ -777,7 +797,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 					AttackType:   component.CombatAttackShield,
 					OwnerEntity:  overlap.Cursor,
 					OriginEntity: overlap.Cursor,
-					TargetEntity: drainEntity,
+					TargetEntity: entry.entity,
 					HitEntities:  overlap.ShieldMembers,
 				})
 				continue
@@ -795,7 +815,19 @@ func (s *DrainSystem) handleDrainInteractions() {
 			drain.LastDrainTime = now
 		}
 		if destroyDrain {
-			event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashSpawnOneRequest)
+			entry.dying = true
+			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
+
+			// Counted as a kill, credited to no cursor: the drain spent itself on the
+			// player, so it grants no boost. Loot still drops as compensation.
+			killX, killY := entry.killPos()
+			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+				Entity:  entry.entity,
+				Species: component.SpeciesDrain,
+				X:       killX,
+				Y:       killY,
+			})
+			s.statSuicides.Add(1)
 		}
 	}
 
@@ -803,37 +835,41 @@ func (s *DrainSystem) handleDrainInteractions() {
 	s.handleEntityCollisions()
 }
 
-// handleDrainDrainCollisions detects and removes all drains sharing a cell.
-// Emission walks the dense store, not the grouping map: death and kill events
-// must reach the queue in the same order every run.
+// handleDrainDrainCollisions destroys every drain sharing a cell with another.
+// Cache order is dense store order, so death and kill events reach the queue in
+// the same order every run. Credit follows the last damaging cursor: the
+// knockback that stacked them is player-caused.
 func (s *DrainSystem) handleDrainDrainCollisions() {
-	drainPositions := make(map[uint64][]core.Entity)
-
-	drainEntities := s.world.Components.Drain.Entities()
-	for _, drainEntity := range drainEntities {
-		drainPos, ok := s.world.Positions.GetPosition(drainEntity)
-		if !ok {
-			continue
-		}
-		pk := posKey(drainPos.X, drainPos.Y)
-		drainPositions[pk] = append(drainPositions[pk], drainEntity)
-	}
-
-	for _, drainEntity := range drainEntities {
-		drainPos, ok := s.world.Positions.GetPosition(drainEntity)
-		if !ok {
-			continue
-		}
-		if len(drainPositions[posKey(drainPos.X, drainPos.Y)]) < 2 {
+	for i := range s.drainCache {
+		a := &s.drainCache[i]
+		if a.dying || !a.hasPos {
 			continue
 		}
 
-		event.EmitDeathOne(s.world.Resources.Event.Queue, drainEntity, event.EventFlashSpawnOneRequest)
+		shared := false
+		for j := range s.drainCache {
+			b := &s.drainCache[j]
+			// A drain already dying still occupies its cell this tick
+			if i == j || !b.hasPos {
+				continue
+			}
+			if b.pos.X == a.pos.X && b.pos.Y == a.pos.Y {
+				shared = true
+				break
+			}
+		}
+		if !shared {
+			continue
+		}
+
+		a.dying = true
+		event.EmitDeathOne(s.world.Resources.Event.Queue, a.entity, event.EventFlashSpawnOneRequest)
 		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-			Entity:  drainEntity,
-			Species: component.SpeciesDrain,
-			X:       drainPos.X,
-			Y:       drainPos.Y,
+			Entity:       a.entity,
+			KillerEntity: a.combatComp.LastDamagedBy,
+			Species:      component.SpeciesDrain,
+			X:            a.pos.X,
+			Y:            a.pos.Y,
 		})
 		s.statCollisions.Add(1)
 	}
@@ -841,29 +877,28 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 // handleEntityCollisions processes collisions with non-drain entities
 func (s *DrainSystem) handleEntityCollisions() {
-	entities := s.world.Components.Drain.Entities()
 	var targets [parameter.MaxEntitiesPerCell]core.Entity
-	for _, entity := range entities {
-		drainPos, ok := s.world.Positions.GetPosition(entity)
-		if !ok {
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+		if entry.dying || !entry.hasPos {
 			continue
 		}
 
-		count := s.world.Positions.GetAllEntitiesAtInto(drainPos.X, drainPos.Y, targets[:])
-
-		for i := range count {
-			target := targets[i]
-			if target != 0 && target != entity && !s.world.Components.Cursor.HasEntity(target) {
-				// Skip other drains (handled separately)
-				if _, ok := s.world.Components.Drain.GetComponent(target); ok {
-					continue
-				}
-				// Skip walls - handled by physics, not collision
-				if s.world.Components.Wall.HasEntity(target) {
-					continue
-				}
-				s.handleCollisionAtPosition(target)
+		count := s.world.Positions.GetAllEntitiesAtInto(entry.pos.X, entry.pos.Y, targets[:])
+		for j := range count {
+			target := targets[j]
+			if target == 0 || target == entry.entity || s.world.Components.Cursor.HasEntity(target) {
+				continue
 			}
+			// Drains resolve against each other in their own pass
+			if s.world.Components.Drain.HasEntity(target) {
+				continue
+			}
+			// Walls are handled by physics, not collision
+			if s.world.Components.Wall.HasEntity(target) {
+				continue
+			}
+			s.handleCollisionAtPosition(target)
 		}
 	}
 }
@@ -881,8 +916,11 @@ func (s *DrainSystem) updateDrainMovement() {
 	var collisionBuf [parameter.MaxEntitiesPerCell]core.Entity
 
 	drains := s.world.Components.Drain
-	drainEntities := drains.Entities()
-	for _, drainEntity := range drainEntities {
+	for i := range s.drainCache {
+		if s.drainCache[i].dying {
+			continue
+		}
+		drainEntity := s.drainCache[i].entity
 		drainComp, ok := drains.GetPtr(drainEntity)
 		if !ok {
 			continue
@@ -956,8 +994,8 @@ func (s *DrainSystem) updateDrainMovement() {
 
 			// Entity-Entity Collision
 			count := s.world.Positions.GetAllEntitiesAtInto(x, y, collisionBuf[:])
-			for i := range count {
-				target := collisionBuf[i]
+			for j := range count {
+				target := collisionBuf[j]
 				if target == 0 || target == drainEntity || s.world.Components.Cursor.HasEntity(target) {
 					continue
 				}
@@ -996,7 +1034,7 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 // handleCollisionAtPosition processes collision with a specific entity at a given position
 func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	// Check protection before any collision handling
-	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+	if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
 		if protComp.Mask&component.ProtectFromSpecies != 0 {
 			return
 		}
@@ -1022,4 +1060,41 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Destroy the entity
 	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+}
+
+// refreshCachePositions re-reads positions after integration; the tick-start snapshot predates movement
+func (s *DrainSystem) refreshCachePositions() {
+	for i := range s.drainCache {
+		entry := &s.drainCache[i]
+		entry.pos, entry.hasPos = s.world.Positions.GetPosition(entry.entity)
+	}
+}
+
+// liveDrainCount counts drains whose death has not already been emitted this tick
+func (s *DrainSystem) liveDrainCount() int {
+	n := 0
+	for i := range s.drainCache {
+		if !s.drainCache[i].dying {
+			n++
+		}
+	}
+	return n
+}
+
+// isDying reports whether a drain's death was already emitted this tick
+func (s *DrainSystem) isDying(e core.Entity) bool {
+	for i := range s.drainCache {
+		if s.drainCache[i].entity == e {
+			return s.drainCache[i].dying
+		}
+	}
+	return false
+}
+
+// killPos returns the entry's death coordinate; -1 marks an absent position
+func (e *drainCacheEntry) killPos() (int, int) {
+	if !e.hasPos {
+		return -1, -1
+	}
+	return e.pos.X, e.pos.Y
 }
