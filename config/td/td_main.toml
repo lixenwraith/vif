@@ -75,7 +75,7 @@ transitions = [
 [states.TdSpawnT1]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 250, y = 95, target_group_id = 1 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 250, y = 95, target_group_id = 1 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdSpawnT2", capture_vars = { header_entity = "t1_anchor" } },
@@ -86,7 +86,7 @@ transitions = [
 [states.TdSpawnT2]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 250, y = 155, target_group_id = 2 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 250, y = 155, target_group_id = 2 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdSpawnQ1", capture_vars = { header_entity = "t2_anchor" } },
@@ -101,7 +101,7 @@ transitions = [
 [states.TdSpawnQ1]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 125, y = 62, target_group_id = 3 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 125, y = 62, target_group_id = 3 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdSpawnQ2", capture_vars = { header_entity = "q1_anchor" } },
@@ -116,7 +116,7 @@ transitions = [
 [states.TdSpawnQ2]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 375, y = 62, target_group_id = 4 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 375, y = 62, target_group_id = 4 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdSpawnQ3", capture_vars = { header_entity = "q2_anchor" } },
@@ -131,7 +131,7 @@ transitions = [
 [states.TdSpawnQ3]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 125, y = 188, target_group_id = 5 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 125, y = 188, target_group_id = 5 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdSpawnQ4", capture_vars = { header_entity = "q3_anchor" } },
@@ -146,7 +146,7 @@ transitions = [
 [states.TdSpawnQ4]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 375, y = 188, target_group_id = 6 } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 375, y = 188, target_group_id = 6 }, payload_vars = { entity = "player_entity" } },
 ]
 transitions = [
     { trigger = "EventTowerSpawned", target = "TdP1TL", capture_vars = { header_entity = "q4_anchor" } },
@@ -330,4 +330,3 @@ on_enter = [
 transitions = [
     { trigger = "Tick", target = "TdCalm" },
 ]
-

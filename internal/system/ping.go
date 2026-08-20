@@ -76,7 +76,7 @@ func (s *PingSystem) HandleEvent(ev event.GameEvent) {
 		if !ok {
 			return
 		}
-		if target := s.world.TargetCursor(ev.Payload); target != 0 {
+		if target := s.world.ResolveCursor(p.Entity); target != 0 {
 			s.handleGridRequest(target, p.Duration)
 		}
 	}

@@ -25,3 +25,7 @@ initial = "MonWatch"
 file = "td_monitor.toml"
 background = true
 
+[regions.td_player]
+initial = "PlayerBoot"
+file = "td_player.toml"
+background = true

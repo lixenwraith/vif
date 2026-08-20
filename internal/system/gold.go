@@ -110,8 +110,10 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		s.cancelGold()
 
 	case event.EventGoldJumpRequest:
-		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
-			s.handleJumpRequest(cursor)
+		if payload, ok := ev.Payload.(*event.GoldJumpRequestPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.handleJumpRequest(cursor)
+			}
 		}
 
 	case event.EventGoldSpawnRequest:

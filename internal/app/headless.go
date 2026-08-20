@@ -83,7 +83,7 @@ func (a *App) Inject(intents ...*input.Intent) bool {
 // most one round. Returns false when a macro intent quits the game.
 func (a *App) InputTick() bool {
 	before := a.pushed()
-	if a.router.ProcessInputTick() || a.pushed() != before {
+	if a.processInputTick() || a.pushed() != before {
 		a.scheduler.Settle()
 	}
 

@@ -122,19 +122,22 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursor := s.world.TargetCursor(ev.Payload)
-	if cursor == 0 {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventWeaponAddRequest:
 		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.addWeapon(cursor, payload.Weapon)
 		}
 
 	case event.EventWeaponFireRequest:
-		s.handleFireMain(cursor)
+		if payload, ok := ev.Payload.(*event.WeaponFireRequestPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.handleFireMain(cursor)
+			}
+		}
 	}
 }
 

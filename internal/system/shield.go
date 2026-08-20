@@ -85,20 +85,27 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursor := s.world.TargetCursor(ev.Payload)
-	if cursor == 0 {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventShieldActivate:
-		s.setActive(cursor, true)
+		if payload, ok := ev.Payload.(*event.ShieldActivatePayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.setActive(cursor, true)
+			}
+		}
 
 	case event.EventShieldDeactivate:
-		s.setActive(cursor, false)
+		if payload, ok := ev.Payload.(*event.ShieldDeactivatePayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.setActive(cursor, false)
+			}
+		}
 
 	case event.EventShieldDrainRequest:
 		if payload, ok := ev.Payload.(*event.ShieldDrainRequestPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Entity:     cursor,
 				Delta:      payload.Value,

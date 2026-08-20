@@ -198,7 +198,7 @@ func (a *App) applyMouseMode(enabled, motion bool) {
 // Returns false when the player quit.
 func (a *App) inputTick() bool {
 	before := a.pushed()
-	if a.router.ProcessInputTick() || a.pushed() != before {
+	if a.processInputTick() || a.pushed() != before {
 		a.scheduler.DispatchEventsImmediately()
 	}
 
@@ -212,4 +212,16 @@ func (a *App) inputTick() bool {
 		}
 	}
 	return true
+}
+
+// processInputTick serializes timer-driven router reads with cursor lifecycle.
+// Unlike Handle intents, ProcessInputTick enters through no input event, so the
+// App boundary must acquire the world lock explicitly before it snapshots the
+// local cursor for auto-fire and held-button repeat.
+func (a *App) processInputTick() bool {
+	emitted := false
+	a.world.RunSafe(func() {
+		emitted = a.router.ProcessInputTick()
+	})
+	return emitted
 }

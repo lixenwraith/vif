@@ -85,13 +85,15 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventCleanerSweepingRequest:
-		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
-			s.spawnSweepingCleaners(cursor)
+		if payload, ok := ev.Payload.(*event.CleanerSweepingRequestPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.spawnSweepingCleaners(cursor)
+			}
 		}
 
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
-			if cursor := s.world.TargetCursor(payload); cursor != 0 {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.spawnDirectionalCleaners(cursor, payload.OriginX, payload.OriginY, payload.ColorType)
 			}
 		}

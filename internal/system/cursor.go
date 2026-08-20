@@ -92,7 +92,7 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 // move applies a placement and announces it. The producer owns validation; the clamp
 // here only stops a stale request from stranding a cursor off-grid.
 func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
-	e := s.resolve(p.Entity)
+	e := s.world.ResolveCursor(p.Entity)
 	if e == 0 {
 		return
 	}
@@ -209,17 +209,6 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 		CombatEntityType: component.CombatEntityCursor,
 		HitPoints:        100,
 	})
-	return e
-}
-
-// resolve maps a payload entity to a live cursor; the zero entity means the local one
-func (s *CursorSystem) resolve(e core.Entity) core.Entity {
-	if e == 0 {
-		e = s.world.Resources.Player.Entity
-	}
-	if e == 0 || !s.world.Components.Cursor.HasEntity(e) {
-		return 0
-	}
 	return e
 }
 

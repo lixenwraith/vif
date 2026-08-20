@@ -99,8 +99,10 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventNuggetJumpRequest:
-		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
-			s.handleJumpRequest(cursor)
+		if payload, ok := ev.Payload.(*event.NuggetJumpRequestPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.handleJumpRequest(cursor)
+			}
 		}
 
 	case event.EventNuggetCollected:
@@ -161,6 +163,7 @@ func (s *NuggetSystem) Update() {
 			nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
 			if posOk {
 				s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+					Entity:    s.world.Resources.Player.Entity,
 					OriginX:   nuggetPos.X,
 					OriginY:   nuggetPos.Y,
 					ColorType: component.CleanerColorNugget,
@@ -259,6 +262,7 @@ func (s *NuggetSystem) spawnNugget() {
 
 	// Emit directional cleaners on spawn
 	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+		Entity:    s.world.Resources.Player.Entity,
 		OriginX:   x,
 		OriginY:   y,
 		ColorType: component.CleanerColorNugget,

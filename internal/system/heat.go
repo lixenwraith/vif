@@ -126,18 +126,21 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursor := s.world.TargetCursor(ev.Payload)
-	if cursor == 0 {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventHeatAddRequest:
 		if payload, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.addHeat(cursor, payload.Delta)
 		}
 	case event.EventHeatSetRequest:
 		if payload, ok := ev.Payload.(*event.HeatSetRequestPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.setHeat(cursor, payload.Value)
 		}
 	}

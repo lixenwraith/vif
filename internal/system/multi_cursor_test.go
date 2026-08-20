@@ -80,6 +80,21 @@ func TestCursorOverlapIncludesEveryTouchingPlayer(t *testing.T) {
 	}
 }
 
+func TestCursorMoveRejectsZeroEntity(t *testing.T) {
+	w, first, _ := testCursorWorld(t)
+	cursors := NewCursorSystem(w).(*CursorSystem)
+
+	cursors.HandleEvent(event.GameEvent{
+		Type:    event.EventCursorMoveRequest,
+		Payload: &event.CursorMoveRequestPayload{X: 9, Y: 8},
+	})
+
+	pos, ok := w.Positions.GetPosition(first)
+	if !ok || pos.X != 5 || pos.Y != 5 {
+		t.Fatalf("local cursor moved to %#v from a zero-entity command", pos)
+	}
+}
+
 func TestNavigationGroupZeroPublishesRoster(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 	navigation := NewNavigationSystem(w).(*NavigationSystem)
@@ -167,6 +182,13 @@ func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
 	shield := NewShieldSystem(w).(*ShieldSystem)
 	boost := NewBoostSystem(w).(*BoostSystem)
 	weapon := NewWeaponSystem(w).(*WeaponSystem)
+
+	// Zero is invalid rather than an alias for the local cursor.
+	energy.HandleEvent(event.GameEvent{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Value: 99}})
+	heat.HandleEvent(event.GameEvent{Type: event.EventHeatSetRequest, Payload: &event.HeatSetRequestPayload{Value: 88}})
+	shield.HandleEvent(event.GameEvent{Type: event.EventShieldActivate, Payload: &event.ShieldActivatePayload{}})
+	boost.HandleEvent(event.GameEvent{Type: event.EventBoostActivate, Payload: &event.BoostActivatePayload{Duration: 2 * time.Second}})
+	weapon.HandleEvent(event.GameEvent{Type: event.EventWeaponAddRequest, Payload: &event.WeaponAddRequestPayload{Weapon: component.WeaponRod}})
 
 	energy.HandleEvent(event.GameEvent{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Entity: second, Value: 42}})
 	heat.HandleEvent(event.GameEvent{Type: event.EventHeatSetRequest, Payload: &event.HeatSetRequestPayload{Entity: second, Value: 37}})

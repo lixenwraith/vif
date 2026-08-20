@@ -601,8 +601,8 @@ type CursorDespawnedPayload struct {
 	Slot   uint8       `toml:"slot"`
 }
 
-// CursorMoveRequestPayload asks for an absolute placement; the producer has already validated it
-// A zero Entity addresses the local cursor, so single-player producers need no lookup
+// CursorMoveRequestPayload asks for an absolute placement of an explicitly named cursor;
+// the producer has already validated the destination.
 type CursorMoveRequestPayload struct {
 	Entity core.Entity `toml:"entity"`
 	X      int         `toml:"x"`

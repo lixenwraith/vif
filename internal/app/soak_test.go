@@ -56,6 +56,68 @@ func towerConfig(t *testing.T, seed uint64) Config {
 	return cfg
 }
 
+// TestTowerDefenseConfigCursorOwnership covers the external producer side of
+// cursor addressing. The TD machine must spawn and capture a cursor before its
+// tower requests inject player_entity into their payloads.
+func TestTowerDefenseConfigCursorOwnership(t *testing.T) {
+	const tdConfigDir = "../../config/td"
+	if _, err := os.Stat(filepath.Join(tdConfigDir, parameter.GameConfigFile)); err != nil {
+		t.Skipf("external map set %s not present", tdConfigDir)
+	}
+
+	cfg := Config{Mode: ModeHeadless, Seed: fixtureSeed, GameScript: tdConfigDir, Width: 160, Height: 50}
+	if _, err := os.Stat(soakContentDir); err == nil {
+		cfg.ContentPath = soakContentDir
+	}
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	a.Tick(12)
+	player := a.World().Resources.Player.Entity
+	if player == 0 {
+		t.Fatal("TD config did not spawn a cursor")
+	}
+
+	towers := a.World().Components.Tower.Entities()
+	if len(towers) == 0 {
+		t.Fatal("TD config did not spawn an explicitly owned tower")
+	}
+	for _, tower := range towers {
+		combat, ok := a.World().Components.Combat.GetComponent(tower)
+		if !ok || combat.OwnerEntity != player {
+			t.Fatalf("tower %d owner = %d, want cursor %d", tower, combat.OwnerEntity, player)
+		}
+	}
+}
+
+func TestMainTowerConfigCursorOwnership(t *testing.T) {
+	a, err := NewHeadless(towerConfig(t, fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	a.Tick(1)
+	player := a.World().Resources.Player.Entity
+	if player == 0 {
+		t.Fatal("main config did not spawn a cursor")
+	}
+	a.Region(event.RegionSpawn, "tower", "TowerSetup")
+	a.Tick(2)
+
+	towers := a.World().Components.Tower.Entities()
+	if len(towers) == 0 {
+		t.Fatal("main config did not spawn an explicitly owned tower")
+	}
+	combat, ok := a.World().Components.Combat.GetComponent(towers[0])
+	if !ok || combat.OwnerEntity != player {
+		t.Fatalf("tower %d owner = %d, want cursor %d", towers[0], combat.OwnerEntity, player)
+	}
+}
+
 // TestReplaySoakTower spawns the tower region outright rather than waiting for the
 // escalation chain, which no 200-step run reaches, then soaks the same way
 func TestReplaySoakTower(t *testing.T) {
@@ -69,8 +131,9 @@ func TestReplaySoakTower(t *testing.T) {
 			opt := DefaultScript(seed, soakSteps)
 			opt.RegionSet = towerRegions
 			run := runSoakScriptCfg(t, towerConfig(t, seed), opt, func(a *App) {
+				a.Tick(1) // boot and capture player_entity before TowerSetup reads it
 				a.Region(event.RegionSpawn, "tower", "TowerSetup")
-				a.Tick(4)
+				a.Tick(3)
 			})
 			if err := replaySoak(run, run.cap.Records()); err != nil {
 				t.Fatal(err)

@@ -154,9 +154,9 @@ type PingAbsoluteBounds struct {
 // Valid reports whether a local cursor exists
 func (pr *PlayerResource) Valid() bool { return pr.Entity != 0 }
 
-// IsLocal reports whether e addresses the local cursor; the zero entity means "unspecified"
+// IsLocal reports whether e explicitly names the local cursor.
 func (pr *PlayerResource) IsLocal(e core.Entity) bool {
-	return pr.Entity != 0 && (e == 0 || e == pr.Entity)
+	return pr.Entity != 0 && e == pr.Entity
 }
 
 // LocalSlot returns the roster slot the local cursor occupies

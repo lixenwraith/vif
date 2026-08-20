@@ -105,7 +105,7 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 			return
 		}
 		// Resolve before release: the pool reclaims the payload below
-		if cursor := s.world.TargetCursor(payload); cursor != 0 {
+		if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 			s.handleTyping(cursor, payload.X, payload.Y, payload.Char)
 		}
 		event.CharacterTypedPayloadPool.Put(payload)

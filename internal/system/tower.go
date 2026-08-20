@@ -86,7 +86,7 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventTowerSpawnRequest:
 		if payload, ok := ev.Payload.(*event.TowerSpawnRequestPayload); ok {
-			if cursor := s.world.TargetCursor(payload); cursor != 0 {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.spawnTower(cursor, payload)
 			}
 		}

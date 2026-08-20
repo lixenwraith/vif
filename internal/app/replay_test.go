@@ -115,7 +115,7 @@ func runScript(t *testing.T, a *App) int {
 	r.step(2, intentCommandBody("energy 500")...)
 
 	r.step(1, intentModeSwitch(input.ModeTargetVisual))
-	player := a.World().ResolveCursor(0)
+	player := a.World().Resources.Player.Entity
 	ping, ok := a.World().Components.Ping.GetComponent(player)
 	if !ok || !ping.BoundsActive {
 		t.Fatal("visual step did not activate ping bounds: the script no longer covers bounds replay")
@@ -694,6 +694,49 @@ func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
 	if last.Type != event.EventCursorMoveRequest || !strings.Contains(last.Payload, "entity = 1") {
 		t.Fatalf("last journal record = %s %q, want addressed cursor move",
 			event.GetEventName(last.Type), last.Payload)
+	}
+}
+
+// TestInputTickSerializesCursorLifecycle covers the live-loop race boundary:
+// timer-driven auto-fire reads the local cursor while CursorSystem may unbind it
+// during reset. The direct roster cycle keeps the test focused on that access;
+// -race verifies the read and writes share World.updateMutex.
+func TestInputTickSerializesCursorLifecycle(t *testing.T) {
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+
+	a.Tick(1)
+	roster := a.World().Resources.Player
+	player := roster.Slot(0)
+	if player == 0 {
+		t.Fatal("no local cursor")
+	}
+
+	const rounds = 256
+	start := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		for range start {
+			a.InputTick()
+			done <- struct{}{}
+		}
+	}()
+
+	for range rounds {
+		start <- struct{}{}
+		a.world.RunSafe(func() {
+			roster.Unbind(0)
+			roster.Bind(0, player)
+		})
+		<-done
+	}
+	close(start)
+
+	if got := roster.Slot(0); got != player || roster.Entity != player {
+		t.Fatalf("restored roster = slot %d local %d, want %d", got, roster.Entity, player)
 	}
 }
 

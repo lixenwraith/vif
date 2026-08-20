@@ -85,20 +85,27 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursor := s.world.TargetCursor(ev.Payload)
-	if cursor == 0 {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventBoostActivate:
 		if payload, ok := ev.Payload.(*event.BoostActivatePayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.activate(cursor, payload.Duration)
 		}
 	case event.EventBoostDeactivate:
-		s.deactivate(cursor)
+		if payload, ok := ev.Payload.(*event.BoostDeactivatePayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.deactivate(cursor)
+			}
+		}
 	case event.EventBoostExtend:
 		if payload, ok := ev.Payload.(*event.BoostExtendPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.extend(cursor, payload.Duration)
 		}
 	}

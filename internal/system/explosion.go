@@ -103,15 +103,17 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventFireSpecialRequest:
-		if cursor := s.world.TargetCursor(ev.Payload); cursor != 0 {
-			s.fireFromDust(cursor)
+		if payload, ok := ev.Payload.(*event.FireSpecialRequestPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.fireFromDust(cursor)
+			}
 		}
 
 	case event.EventExplosionRequest:
 		if p, ok := ev.Payload.(*event.ExplosionRequestPayload); ok {
 			var cursor core.Entity
 			if p.Type != event.ExplosionTypeEye {
-				cursor = s.world.TargetCursor(p)
+				cursor = s.world.ResolveCursor(p.Entity)
 				if cursor == 0 {
 					return
 				}

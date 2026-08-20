@@ -57,7 +57,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventGeneticRegisterSpecies", payload = { species = 7, gene_count = 1, bounds = [{ min = 0.0, max = 1.0 }], perturbation_std_dev = 0.1, is_composite = true, probe_bins = 7 } },
 
     # Spawn tower at center
-    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { x = 0, y = 0, target_group_id = 1 }, payload_vars = { X = "cx", Y = "cy" } },
+    { action = "EmitEvent", event = "EventTowerSpawnRequest", payload = { entity = 0, x = 0, y = 0, target_group_id = 1 }, payload_vars = { entity = "player_entity", X = "cx", Y = "cy" } },
 
     # Push cursor out of walls
     { action = "EmitEvent", event = "EventWallPushCheckRequest" },

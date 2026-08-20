@@ -1,4 +1,34 @@
-# Parallel region for global state and reset
+# Parallel region for player lifecycle, global state and reset
+
+# Boot: the world starts with no cursor, so spawning one is a deliberate step
+[states.MonitorBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "MonitorArm", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "MonitorBootRetry" },
+]
+
+[states.MonitorBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "MonitorBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+# Arm the spawned cursor and open gameplay; the reset gate needs a non-zero start
+[states.MonitorArm]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } },
+    { action = "EmitEvent", event = "EventEnergySetRequest", payload = { entity = 0, value = 100 }, payload_vars = { entity = "player_entity" } },
+    { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
+]
+transitions = [
+    { trigger = "Tick", target = "MonitorActive" },
+]
+
 [states.MonitorCycle]
 parent = "Root"
 transitions = [
@@ -36,6 +66,8 @@ transitions = [
 [states.MonitorGlobalReset]
 parent = "Root"
 on_enter = [
+    # Retire the players first: level setup then sees no cursor to reflow
+    { action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } },
     # Cancel active sequences
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
@@ -59,14 +91,5 @@ on_enter = [
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = true } },
 ]
 transitions = [
-    { trigger = "Tick", target = "MonitorRespawn" },
-]
-
-[states.MonitorRespawn]
-parent = "Root"
-on_enter = [
-    { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
-]
-transitions = [
-    { trigger = "Tick", target = "MonitorWarmup" },
+    { trigger = "Tick", target = "MonitorBoot" },
 ]

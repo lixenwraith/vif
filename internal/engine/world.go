@@ -343,27 +343,14 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 	return newX, newY, true
 }
 
-// ResolveCursor maps an entity to a live cursor; zero selects the local one
+// ResolveCursor validates that e names a live cursor. Commands must carry an
+// explicit entity; zero is never rewritten to the local cursor.
 // Caller MUST hold updateMutex
 func (w *World) ResolveCursor(e core.Entity) core.Entity {
-	if e == 0 {
-		e = w.Resources.Player.Entity
-	}
 	if e == 0 || !w.Components.Cursor.HasEntity(e) {
 		return 0
 	}
 	return e
-}
-
-// TargetCursor resolves the cursor a command payload addresses. An unaddressed
-// payload falls back to the local cursor; that fallback is interim glue for
-// producers not yet stamping an entity.
-func (w *World) TargetCursor(payload any) core.Entity {
-	var e core.Entity
-	if a, ok := payload.(event.Addressed); ok {
-		e = a.Target()
-	}
-	return w.ResolveCursor(e)
 }
 
 // CursorSlot returns the roster slot a cursor entity occupies

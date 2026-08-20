@@ -121,34 +121,49 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 
-	cursor := s.world.TargetCursor(ev.Payload)
-	if cursor == 0 {
-		return
-	}
-
 	switch ev.Type {
 	case event.EventEnergyAddRequest:
 		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.addEnergy(cursor, int64(payload.Delta), payload.Percentage, payload.Type)
 		}
 
 	case event.EventEnergySetRequest:
 		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.setEnergy(cursor, int64(payload.Value))
 		}
 
 	case event.EventEnergyGlyphConsumed:
 		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.handleGlyphConsumed(cursor, payload.Type, payload.Level)
 		}
 
 	case event.EventEnergyBlinkStart:
 		if payload, ok := ev.Payload.(*event.EnergyBlinkPayload); ok {
+			cursor := s.world.ResolveCursor(payload.Entity)
+			if cursor == 0 {
+				return
+			}
 			s.startBlink(cursor, payload.Type, payload.Level)
 		}
 
 	case event.EventEnergyBlinkStop:
-		s.stopBlink(cursor)
+		if payload, ok := ev.Payload.(*event.EnergyBlinkStopPayload); ok {
+			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+				s.stopBlink(cursor)
+			}
+		}
 	}
 }
 

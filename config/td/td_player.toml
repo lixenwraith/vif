@@ -1,0 +1,20 @@
+# Cursor lifecycle for the standalone tower-defense map.
+
+[states.PlayerBoot]
+parent = "Root"
+on_enter = [
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } },
+]
+transitions = [
+    { trigger = "EventCursorSpawned", target = "PlayerActive", capture_vars = { entity = "player_entity" } },
+    { trigger = "EventCursorSpawnFailed", target = "PlayerBootRetry" },
+]
+
+[states.PlayerBootRetry]
+parent = "Root"
+transitions = [
+    { trigger = "Tick", target = "PlayerBoot", guard = "StateTimeExceeds", guard_args = { ms = 100 } },
+]
+
+[states.PlayerActive]
+parent = "Root"
