@@ -216,10 +216,9 @@ func (s *MetaSystem) resetKills() {
 
 // handleGameReset rebuilds world state; purge additionally clears operator session state
 // Execution sequence (race-free):
-//  1. Entity cleanup (drains, world entities)
+//  1. Entity and cursor-roster cleanup
 //  2. GameState reset (counters, timers)
-//  3. Cursor recreation
-//  4. FSM reset (emits spawn request, dispatched immediately)
+//  3. Scheduler-owned FSM reset (emits and settles the cursor spawn request)
 //
 // Other systems handle EventGameResetRequest after this completes
 func (s *MetaSystem) handleGameReset(purge bool) {

@@ -340,11 +340,15 @@ the field name:
 ```
 engine.ticks   → msg="engine"  ticks=<v>
 fsm.td_main.state → msg="fsm"  td_main.state=<v>
+player.0.energy.current → msg="player"  0.energy.current=<v>
 ```
 
 A multi-segment key therefore drills down inside one record rather than
 creating a new group. This is how per-region FSM telemetry stays in the single
-`fsm` record regardless of how many regions a config declares.
+`fsm` record regardless of how many regions a config declares, and how the
+bounded cursor roster exposes slot-scoped energy, heat, shield, boost, weapon,
+position, entity, and control metrics. Bare single-player keys such as
+`energy.current` mirror slot 0 temporarily for configuration compatibility.
 
 ### Integer units
 
@@ -427,7 +431,7 @@ registry mirror, emitted by `GameContext.SnapshotContext`:
 | `msg` | Contents |
 |---|---|
 | `context` | mode, screen/game/map/viewport/camera geometry, crop flag, color mode |
-| `player` | cursor entity, position, ping bounds |
+| `player` | local cursor entity/slot, roster count, local position, and ping bounds |
 | `world` | entity created/destroyed counts and system count |
 | `session` | frame, pause, macro recording/playback, mouse preferences, and auto-fire |
 

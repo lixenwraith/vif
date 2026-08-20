@@ -334,6 +334,9 @@ flowchart TD
 ```
 
 - Put perpetual failure or resource monitoring in a background region.
+- Spawn the required cursor roster from an initial/background region and wait
+  for `EventCursorSpawned` (or retry `EventCursorSpawnFailed`) before emitting
+  player-state events. A new world intentionally contains no cursor.
 - Put one encounter family in one external state file.
 - Spawn boss/side regions dynamically and pause the loop they supersede.
 - Treat system status metrics as observations and events as domain facts.
@@ -343,8 +346,10 @@ flowchart TD
   typed event.
 
 The embedded config demonstrates this structure with `main`, `quasar`, `storm`,
-`monitor`, and `placeholder`. The full current flow is summarized in
-[Gameplay design](gameplay.md).
+`monitor`, and `placeholder`; its monitor also owns the cursor boot/retry
+sequence. The full current flow is summarized in [Gameplay design](gameplay.md),
+and [the authoring reference](../config/README.md) shows cursor spawn payloads
+and capture.
 
 ## 12. Validation rules and diagnostics
 

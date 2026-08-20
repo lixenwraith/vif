@@ -67,9 +67,9 @@ when:
 - the existing field is invalid.
 
 Target groups allow multiple actors/structures to define one navigation goal.
-Group 0 is the cursor; other groups can contain up to eight targets. A field
-seeded from a group naturally selects the nearest reachable target at each
-cell.
+Group 0 contains the live cursor roster up to the eight-target navigation cap;
+other groups can also contain up to eight targets. A field seeded from a group
+naturally selects the nearest reachable target at each cell.
 
 `NavigationComponent` records whether an actor follows a normal group flow
 field or a route graph, along with graph/route IDs and movement state. The
@@ -219,7 +219,8 @@ generic persistence package is available but not wired into the application.
 
 ## 9. Physics primitives
 
-`pkg/vmath/physics` operates primarily on `core.Kinetic`:
+`pkg/vmath/physics` owns a `float64` `Kinetic` value that
+`component.KineticComponent` embeds:
 
 | Area | Facilities |
 |---|---|
@@ -229,7 +230,7 @@ generic persistence package is available but not wired into the application.
 | Collision | profile-based impulses, additive/override modes, mass ratio, variance, immunity |
 | Shapes | point/ellipse/circle and entity-profile collision tests |
 | Orbital | orbit constraints/forces and actor-specific field motion |
-| 3D | fixed and float vector integration/constraint helpers projected into the terminal plane |
+| 3D | `float64` vector integration/constraint helpers projected into the terminal plane |
 
 `IntegrateWithBounce` limits a substep to roughly 0.45 cells to reduce wall
 tunneling, moves one axis at a time, restores the prior axis position on a wall,
@@ -244,17 +245,24 @@ effects.
 
 ## 10. Numeric model and determinism
 
-`pkg/vmath` defines Q32.32 representation (`int64`, 32 fractional bits), grid
-center conversions, lookup-table trig/decay, vectors, ellipses/arcs, grid
-traversal, and a fast seeded RNG. Many kinetic components store precise position
-and velocity in this representation.
+`pkg/vmath` is a `float64` numeric and geometry package. It provides scalar and
+vector operations, lookup-table trig/decay, ellipses/arcs, float grid
+traversal, and a fast seeded RNG. `pkg/vmath/physics.Kinetic` stores precise
+position in cells, velocity in cells per second, and acceleration in cells per
+second squared, all as `float64`.
 
-The representation must not be described as a blanket integer-deterministic
-engine. Performance-critical operations such as fixed `Div`, `MulDiv`, `Sqrt`,
-normalization, and exact magnitude convert through hardware floating point, and
-parallel float-native vector/geometry APIs are used heavily. Interactive play
-also races scheduler/event/input paths for the world lock, so live event timing
-is not a bit-exact source contract.
+Integer `Point` and `Area` values describe discrete grid cells; they are not a
+fixed-point representation. `Point.CenterF` is the sanctioned grid-to-precise
+conversion and adds the half-cell offset, while `PointAtF` uses floor so
+negative precise coordinates map to the correct cell. Terminal aspect
+correction remains explicit in Y radii, weighted distances, and projection
+rather than being encoded in the numeric type.
+
+The retired fixed-point API and its companion files are no longer part of the
+package. There is one numeric path for motion and physics: `float64` math,
+plus integer values where the domain is inherently cell-indexed. Interactive
+play also races scheduler/event/input paths for the world lock, so live event
+timing is not a bit-exact source contract.
 
 The runtime now defines a narrower guarantee: `ModeHeadless` and `ModeReplay`
 use a `ManualClock` advanced only by `App.Tick`, and all simulation/content RNG
@@ -289,8 +297,9 @@ the resulting boolean grid and solution metadata into ECS walls/level state.
   parameters; do not mix their fitness meanings.
 - Cache entity metadata needed after death because component stores are wiped
   before deferred learning updates may run.
-- Treat Q32.32 overflow, float conversion, zero denominators, and cell rounding
-  as explicit boundary cases.
+- Treat non-finite values, zero denominators, precision near cell boundaries,
+  negative-coordinate flooring, and half-cell conversion as explicit boundary
+  cases.
 - Add debug/status observability for a new learner before trying to tune it.
 - If persistence is enabled, version the gene schema and do not rely on
   process-local IDs.

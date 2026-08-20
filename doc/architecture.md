@@ -9,8 +9,10 @@ adaptive navigation, and evolving enemy parameters.
 This document is the high-level entry point. It replaces the older assumptions
 that the repository is standard-library-only and that all simulation math is
 strictly deterministic. The current repository imports the separately
-maintained `terminal`, `toml`, `color`, and `log` modules, and its math packages
-contain both fixed-point and floating-point paths.
+maintained `terminal`, `toml`, `color`, and `log` modules. Simulation math is
+`float64`, with integer values reserved for discrete grid-cell topology; the
+driven runtime's reproducibility is deliberately narrower than a
+cross-platform lockstep guarantee.
 
 ## 1. System context
 
@@ -50,7 +52,7 @@ The main architectural planes are:
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
 | I/O boundaries | `internal/service`, `content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and network transport scaffolding. |
-| Reusable algorithms | `pkg/*` | Audio, fixed/float math, physics, navigation, maze generation, evolution, and terminal-image conversion. |
+| Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, and terminal-image conversion. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
 
@@ -154,10 +156,15 @@ line-of-sight, patterns, and nearby free-space searches. Large actors use a
 header/member composite model: an invisible or controlling header owns motion
 and lifecycle, while member entities provide visible and collidable cells.
 
-Singleton resources hold time, map/camera configuration, player identity,
-targets, event queue, route graphs, adaptive route populations, the genetic
-registry, transient effects, telemetry, and capabilities contributed by
-services.
+Singleton resources hold time, map/camera configuration, the bounded cursor
+roster and local-player selection, targets, event queue, route graphs, adaptive
+route populations, the genetic registry, transient effects, telemetry, and
+capabilities contributed by services. The cursors themselves are ordinary ECS
+entities created and removed by `CursorSystem`; each owns its energy, heat,
+shield, boost, weapon, ping, and combat components. A roster slot also records
+whether a human, in-simulation bot, or remote peer controls that cursor. The
+mode router and camera follow the selected local slot, while gameplay systems
+can iterate or address every cursor through the same event-driven path.
 
 See [ECS and events](ecs-and-events.md).
 
@@ -190,19 +197,20 @@ close/error events. `internal/input.Machine` converts them into pure-data
 dependency.
 
 `internal/mode.Router` is the authoritative owner of game mode. Under the world
-lock, it interprets intents against the current map and components, moves the
-cursor, executes operators/search, publishes combat and mode events, manages
-undo/command history, and schedules macro or mouse-repeat input.
+lock, it interprets intents against the current map and components, requests
+movement for the local cursor, executes operators/search, publishes combat and
+mode events, manages undo/command history, and schedules macro or mouse-repeat
+input.
 
 See [Input and modes](input-and-modes.md).
 
 ## 8. Rendering boundary
 
 Renderers read ECS state but never write directly to the terminal. The
-application first snapshots time, dimensions, camera, and cursor into a value
-`RenderContext`. The orchestrator then clears a `RenderBuffer`, locks the world,
-runs renderers in stable priority order, unlocks, finalizes compositing, and
-flushes cells through the external terminal module.
+application first snapshots time, dimensions, camera, and the local cursor into
+a value `RenderContext`. The orchestrator then clears a `RenderBuffer`, locks
+the world, runs renderers in stable priority order, unlocks, finalizes
+compositing, and flushes cells through the external terminal module.
 
 The buffer supports foreground/background-specific blending, write masks,
 dirty/touched tracking, deferred background overlays, TrueColor and palette
@@ -232,7 +240,7 @@ terminal playback intentionally starts audio unmuted.
 
 See [Audio](audio.md).
 
-## 10. Navigation, adaptation, and evolution
+## 10. Navigation, physics, adaptation, and evolution
 
 Navigation uses aspect-weighted, eight-direction Dijkstra flow fields with
 corner-cut prevention. Target groups share cached fields, while multi-cell
@@ -252,10 +260,15 @@ tracking closest approach and successful self-destruct damage as fitness. The
 adapter uses an in-memory registry: archives survive an in-process `:new`, but
 no persistence store is attached for cross-process saves.
 
-Gameplay motion heavily uses Q32.32 values, lookup tables, and integer grid
-coordinates. Some division, normalization, square-root, collision, and native
-float vector paths use `float64`; fixed-point representation should not be
-confused with a blanket bitwise-determinism guarantee.
+Gameplay motion uses cell-centered `float64` positions, velocities, and
+accelerations. Integer `Point`/`Area` values represent discrete cells, while
+floor-based conversion maps precise positions—including negative
+coordinates—back to the grid. `pkg/vmath` also provides float lookup-table
+trigonometry/decay, vectors, shapes, arcs, traversal, and seeded randomness;
+`pkg/vmath/physics` owns the float kinetic container and 2D/3D mechanics. No
+parallel fixed-point API remains. Floating-point state and live play's
+concurrent scheduling prevent treating the engine as a cross-platform
+bitwise-deterministic simulation.
 
 See [AI, navigation, physics, and evolution](ai-physics-and-evolution.md).
 

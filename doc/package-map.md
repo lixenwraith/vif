@@ -60,7 +60,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/app` | Resolve paths, validate runtime mode, compose play/headless/replay Apps, drive frame/input/playback loops, verify/replay journals, and expose check/schema tools. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
-| `internal/core` | Small shared value types, entity ID, modes, code blocks, kinetic state, crash and stderr-capture support. |
+| `internal/core` | Small shared value types, entity ID, modes, code blocks, crash and stderr-capture support. |
 | `internal/engine` | World, typed stores, positions/spatial grid, resources, game context/state, pausable/manual clocks, time control, scheduler, locking. |
 | `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
@@ -102,13 +102,16 @@ flowchart TD
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Uses shared point/value types and is surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, composite passability, multi-route graphs. | Uses shared points and tuning constants; wall access is callback-based. |
-| `pkg/vmath/physics` | Integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Operates on `core.Kinetic` and `pkg/vmath` values. |
-| `pkg/vmath` | Q32.32 and float vectors, LUT math, shapes, arcs, grid traversal, random generator. | Foundational algorithm package; contains both integer-represented and float operations. |
+| `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
+| `pkg/vmath` | `float64` scalar/vector math, LUTs, shapes, arcs, grid traversal, cell topology, and seeded randomness. | Standard-library-only foundation; integer `Point`/`Area` values are grid indices, not fixed-point numbers. |
 
 Although these packages are under `pkg`, not all of them are guaranteed to be
-drop-in libraries outside this module: several import `internal/core` or
-`internal/parameter`. `pkg/audio` and the core `pkg/genetic` package have the
-clearest game-independent boundaries.
+drop-in libraries outside this module: for example, `pkg/ascimage` imports the
+in-repository renderer and `pkg/navigation` imports game tuning. The numeric
+stack is cleanly one-way: `pkg/vmath` imports only the standard library,
+`pkg/vmath/physics` imports `pkg/vmath`, and neither exposes the removed
+fixed-point types or conversion API. `pkg/audio`, the core `pkg/genetic`
+package, and the numeric stack have the clearest game-independent boundaries.
 
 ## 6. Generated assembly
 

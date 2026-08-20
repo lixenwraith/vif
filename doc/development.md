@@ -44,6 +44,7 @@ The Makefile targets are:
 | `run` | Build the dev binary and execute it. |
 | `test` | Generate and run `go test -race ./...`. |
 | `verify` | Generate, test, default/`novlog`/WASM build, then `go vet ./...`. |
+| `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `clean` | Remove `bin/`. |
@@ -132,12 +133,14 @@ make verify
 It covers race-enabled tests, package compilation, `novlog`, `js/wasm`, and
 vet. It does not cross-build Windows or exercise a real terminal/audio backend.
 
-At the audited revision, 37 Go test files cover `cmd/vif`, `cmd/soundlab`, the
+At the audited revision, 41 Go test files cover `cmd/vif`, `cmd/soundlab`, the
 headless/replay application harness, clocks/scheduler/time control, event
-journaling, input/help/mode commands, one gameplay-system surface, parameters,
-profiling, audio, genetics, Q32.32/vector math, and physics. The app suite
-includes seeded soak, mutation, bisect, reset, journal-density, replay, and
-operator-state comparisons. Coverage is still selective: many concrete
+journaling, input/help/mode commands, selected gameplay-system surfaces,
+parameters, profiling, audio, genetics, `float64` vectors/geometry, cell
+mapping, and physics. Focused system/renderer tests now also cover multi-cursor
+ownership, delayed drain interactions, and cleaner trail behavior. The app
+suite includes seeded soak, mutation, bisect, reset, journal-density, replay,
+and operator-state comparisons. Coverage is still selective: many concrete
 gameplay systems, renderers, content parsing paths, services, and network
 failure modes have no focused test file. Standalone programs under `benchmark`
 and `sandbox` remain experiments rather than production-supported tests.

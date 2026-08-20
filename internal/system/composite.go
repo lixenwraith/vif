@@ -10,7 +10,7 @@ import (
 
 // CompositeSystem manages composite entity groups
 // Responsibilities:
-// - Fixed-point movement integration
+// - Float64 sub-cell movement integration
 // - Member position propagation from phantom head
 // - Liveness validation and tombstone marking
 // - Lazy compaction of dead members

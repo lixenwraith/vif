@@ -18,10 +18,10 @@ flowchart TD
     Escalate --> Navigate
 ```
 
-The cursor is both the player's text-editing position and the player combat
-entity. Movement is discrete on the character grid. Enemies, projectiles, and
-effects may keep higher-precision kinetic state but are projected back into the
-same grid for collision and rendering.
+The local cursor is both the player's text-editing position and the player
+combat entity. Movement is discrete on the character grid. Enemies,
+projectiles, and effects may keep higher-precision `float64` kinetic state but
+are projected back into the same grid for collision and rendering.
 
 The embedded/default campaign is endless rather than a fixed sequence of
 levels. Typing drives the resource economy, drains supply the first hostile
@@ -30,23 +30,32 @@ author may replace that progression entirely with external TOML configuration.
 
 ## 2. Cursor and player state
 
-At level creation, the world creates a protected cursor at the map center with
-cursor, ping, energy, heat, shield, boost, weapon, and combat components.
+The world starts with an empty, 16-slot cursor roster. The playable shipped FSM
+configurations request a protected cursor at the map center; `CursorSystem`
+then creates the entity and attaches cursor, ping, energy, heat, shield, boost,
+weapon, and combat components. Each cursor owns an independent copy of that
+state. A roster slot identifies its human, bot, or remote control source, while
+one selected local slot receives terminal input and anchors the camera/UI.
+
+The shipped games currently spawn one human-controlled local cursor. The
+ordinary-entity roster is the simulation foundation for bots and multiplayer,
+not a claim that the normal CLI exposes a multiplayer mode.
 
 | State | Meaning |
 |---|---|
 | Position | Text cursor, player collision point, weapon origin, and camera subject. |
 | Energy | Signed resource whose nonzero polarity activates the shield and colors attacks. |
 | Heat | Bounded typing momentum; excess becomes overheat and can trigger a burst. |
-| Boost | Short typing-streak window that protects ordinary energy penalties and accelerates heat gain. |
+| Boost | Timed reward from correct typing or credited kills that protects ordinary energy penalties and accelerates heat gain. |
 | Shield | Elliptical defensive/collection area active whenever energy is nonzero. |
 | Weapon | Charge counts, orbiting indicators, and independent cooldowns for three weapon types. |
 | Ping | Crosshair, selection/grid feedback, and cursor movement visuals. |
 | Combat | Player ownership/type and hit-point metadata used by the combat matrix. |
 
-The cursor cannot be destroyed through ordinary gameplay because its protection
-mask is `ProtectAll`. A level reset recreates the player entity and its attached
-components.
+Cursor entities cannot be destroyed through ordinary gameplay because their
+protection mask is `ProtectAll`. `CursorSystem` owns explicit despawn, and a
+level reset clears the roster before the reset FSM requests replacement
+cursors.
 
 ## 3. Typing rules
 
@@ -65,7 +74,8 @@ flowchart TD
 
 A correct character:
 
-- activates boost for 500 ms, or extends an already active boost by 500 ms;
+- activates boost for 9 seconds, or extends an already active boost by 10
+  seconds;
 - adds one heat, or two if boost was already active before the key;
 - changes energy according to the glyph color and current heat;
 - increments correct-input and streak metrics;
@@ -137,10 +147,16 @@ component itself.
 
 ### Boost
 
-Boost represents a live typing streak. Matching characters extend its timer,
-and a typing error deactivates it. While active it doubles the per-character heat
-gain and prevents ordinary energy penalties. Passive drain and explicit spends
-remain effective.
+Boost is a per-cursor timed reward. A correct character or an enemy kill
+credited to that cursor activates it for 9 seconds when inactive or extends it
+by 10 seconds when already active. Combat systems retain the last damaging
+cursor on the target, and enemy fatal-damage lifecycle paths publish
+`EventEnemyKilled` carrying that credit; lifecycle deaths or unowned attacks
+carry no cursor and grant no boost. A typing error deactivates the typing
+cursor's boost.
+
+While active, boost doubles the per-character heat gain and prevents ordinary
+energy penalties. Passive drain and explicit spends remain effective.
 
 ### Shield
 
@@ -208,7 +224,7 @@ weapon system.
 
 | Weapon | Model |
 |---|---|
-| Main cleaner | Directional player attack/effect originating at the cursor. |
+| Main cleaner | Directional player attack/effect originating at the owning cursor. |
 | Rod | Direct lightning against unique nearest targets, up to the number of charges. |
 | Launcher | Homing/area missiles assigned from the nearest-target set. |
 | Disruptor | Pulse/disruption behavior centered through its charged orb path. |
@@ -223,6 +239,11 @@ The special-fire input path is separate from main fire; Backspace or Space uses
 it under the default mapping. See source and keymap documentation when changing
 this behavior because fire requests, auto-fire, macros, and mouse repeat all
 share timing constraints.
+
+Cleaner visuals are background-only moving trails. They preserve any glyph
+foreground in a traversed cell, use max-background blending so overlapping
+auto-fire does not accumulate into a flash, and shrink the visible tail while
+a blocked cleaner drains to its stop point.
 
 ## 8. Hostile and structural actors
 
@@ -304,7 +325,7 @@ The manifest registers these tick systems by domain:
 
 | Domain | Systems |
 |---|---|
-| Frame/player | `ping`, `transient_effects`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
+| Frame/player | `cursor`, `ping`, `transient_effects`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `decay`, `blossom`, `gold` |
 | Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/combat | `navigation`, `soft_collision`, `combat` |

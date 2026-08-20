@@ -249,8 +249,9 @@ At minimum, a supported feature needs:
 5. heartbeat/deadline/ack behavior or removal of misleading fields;
 6. bounded memory and rate limits for decoded payloads and event translation;
 7. manifest registration plus outbound system events;
-8. deterministic-enough server state or snapshot/delta design—current Q32.32
-   storage does not make the whole game lockstep deterministic;
+8. an authoritative server state or snapshot/delta design—the manual-clock
+   harness and seeded streams do not make float64 world state a cross-platform
+   lockstep protocol;
 9. integration, adversarial, disconnect, slow-peer, and saturation tests;
 10. telemetry for peers, bytes, queue drops, protocol rejects, latency, and
     reconnect state.

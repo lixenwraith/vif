@@ -37,7 +37,7 @@ renderers:
 | Group | Fields |
 |---|---|
 | Timing | pause-aware game time, frame delta, paused flag |
-| Player | cursor map coordinates |
+| Player | local-cursor map coordinates and validity |
 | Layout | game-area screen offsets |
 | View | viewport width/height and camera top-left |
 | Map | logical map width/height and centering offsets |
@@ -194,6 +194,12 @@ heat phase, and status/overlay renderers read resources/adapters. Conversely,
 a game component needs no renderer if another renderer deliberately projects
 it (nuggets use their visual/sigil representation rather than a registered
 `nugget` renderer).
+
+The cleaner renderer is intentionally background-only: every sampled trail
+cell writes no rune/foreground, so typeable text remains readable as a cleaner
+crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
+instead of accumulating color, and the visible ring-buffer prefix contracts as
+a blocked cleaner drains to its stop point.
 
 ## 8. Renderer responsibilities
 

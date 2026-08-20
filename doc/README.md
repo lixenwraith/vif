@@ -2,7 +2,7 @@
 
 This directory describes the architecture and design of the current Vi-Fighter
 codebase. It was audited against commit
-`04b21fd5afd831a0bf5d0d2ab3d55215cf79a8e6` on 2026-08-18. The implementation,
+`d3526f21372734cd397ceb6df52c6e33cfbd5699` on 2026-08-20. The implementation,
 generated manifest, and shipped configuration were treated as authoritative
 where older prose disagreed with the code.
 
@@ -25,7 +25,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |
 | [Audio](audio.md) | Domain detail | How are effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
-| [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, fixed-point math, and collision/steering work together? |
+| [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and what networking code is implemented versus actually wired? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
@@ -55,6 +55,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Event names and payload association | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go` | `App`, `ClockScheduler`, services |
 | Replay journal format and producer origins | `internal/event/journal.go`, `origin.go` | `internal/journal`, `internal/app/replay.go` |
+| Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
 | Alternate scenarios | `config/blank`, `config/main`, `config/td` | selected with `-g` |
@@ -77,7 +78,7 @@ This documentation distinguishes three states:
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not
 globally allocation-free. A caller-driven App is a pure function of its seed,
-config, and injected events for one implementation build. `vmath` also uses
-hardware floating-point operations and native float vector paths, so that is
-not a cross-platform lockstep guarantee; live play adds concurrent scheduling
-and is not the source class for which bit-exact replay is claimed.
+config, and injected events for one implementation build. Simulation motion,
+geometry, and physics use `float64`, so that is not a cross-platform lockstep
+guarantee; live play adds concurrent scheduling and is not the source class for
+which bit-exact replay is claimed.

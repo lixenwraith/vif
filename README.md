@@ -15,7 +15,8 @@ configuration, audio policy, and reusable simulation libraries.
   counts, motions, delete operators, find/search repeat, undo, and concurrent
   recorded macros.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
-  spatial grid, composite actors, and a single explicit world-lock boundary.
+  spatial grid, composite actors, FSM-owned player cursors, and a single
+  explicit world-lock boundary.
 - Three runtime shapes: interactive play, deterministic caller-driven headless
   runs, and terminal playback of recorded runs.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
@@ -27,8 +28,8 @@ configuration, audio policy, and reusable simulation libraries.
   arrangement respond to player APM; PCM is streamed to common host audio
   tools, FreeBSD OSS, a null sink, or WAV capture.
 - Aspect-aware flow fields, footprint-aware route graphs, online route
-  adaptation, streaming genetic optimization, Q32.32 storage, and both fixed
-  and floating-point physics/math paths.
+  adaptation, streaming genetic optimization, and cell-centered `float64`
+  motion, geometry, and physics.
 - Plain-text and authored TOML typing corpora, embedded fallback scenarios and
   tutorial content, image-to-terminal wall assets, and dedicated audio/image/
   visual authoring tools.
@@ -37,11 +38,11 @@ configuration, audio policy, and reusable simulation libraries.
   flight recorder for reproduction and diagnosis.
 
 Interactive play is not advertised as globally bit-for-bit deterministic:
-several Q32.32 operations intentionally use hardware floating point and live
-goroutine scheduling affects event timing. Headless and replay Apps instead use
-a manual clock and are deterministic for one build from their seed, config, and
-injected event sequence; bit-exact replay is claimed for headless recordings,
-not arbitrary live sessions or across platforms.
+simulation math uses `float64`, which is not a cross-platform lockstep
+contract, and live goroutine scheduling affects event timing. Headless and
+replay Apps instead use a manual clock and are deterministic for one build from
+their seed, config, and injected event sequence; bit-exact replay is claimed
+for headless recordings, not arbitrary live sessions or across platforms.
 
 ## Build and run
 

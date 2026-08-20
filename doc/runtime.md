@@ -48,7 +48,7 @@ sequenceDiagram
     App->>World: NewWorld()
     App->>Hub: InitAll()
     App->>Hub: BindResources(world.Resources)
-    App->>World: NewGameContext and cursor
+    App->>World: NewGameContext and empty cursor roster
     App->>Runtime: Build systems, renderers, input, scheduler
     App->>Runtime: Load and initialize HFSM
     App->>Runtime: Register event handlers
@@ -67,7 +67,7 @@ The detailed construction order is significant:
 5. Let initialized services contribute typed resources to the world.
 6. Resolve geometry from the terminal or config and create `GameContext`, which
    initializes the status registry, map/camera config, selected clock, event
-   queue, game state, transient state, player cursor, and target resource.
+   queue, game state, transient state, empty player roster, and target resource.
 7. Publish corpus telemetry now that the status registry exists.
 8. Construct systems from the generated manifest. `World.AddSystem` sorts them
    by priority and preserves manifest order for equal priorities.
@@ -76,8 +76,9 @@ The detailed construction order is significant:
     mode; merge the live keymap and bind terminal mouse control only when the
     terminal owns simulation input.
 11. Create frame synchronization channels and the clock scheduler.
-12. Resolve and load the external or embedded FSM, initialize its regions, and
-    apply global/region system toggles.
+12. Resolve and load the external or embedded FSM, initialize its regions,
+    enqueue their entry actions (including the shipped cursor spawn request),
+    and apply global/region system toggles.
 13. Register the event-only `MetaSystem`, then every constructed system that
     implements `event.Handler`.
 
@@ -148,8 +149,8 @@ the same locked `handleIntent` path as physical input.
 For a render frame, the application:
 
 1. increments and publishes the frame counter;
-2. under the world lock, copies `TimeResource`, cursor position, map, viewport,
-   and camera data into a value `RenderContext`;
+2. under the world lock, copies `TimeResource`, local-cursor position, map,
+   viewport, and camera data into a value `RenderContext`;
 3. while paused, updates real time so pause visuals continue animating;
 4. invokes the orchestrator, which separately locks the world while concrete
    renderers read components;
@@ -376,9 +377,10 @@ reinjects their events, but its manual clock advances only under
 
 A `:new` command emits `EventGameResetRequest` and requests scheduler reset
 without reconstructing the process. `MetaSystem` first pauses audio/time,
-clears entities and `GameState`, advances the journal run while rebasing its
-tick to zero, restores viewport-sized map/camera/cursor/mode state, and cancels
-pending step controls. The scheduler then serializes these phases with the
+clears entities, the cursor roster, and `GameState`, advances the journal run
+while rebasing its tick to zero, restores viewport-sized map/camera/mode state,
+and cancels pending step controls. The reset FSM entry actions subsequently
+request replacement cursors. The scheduler serializes these phases with the
 world lock:
 
 1. drain and discard stale queued events;

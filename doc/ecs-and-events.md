@@ -120,9 +120,9 @@ services shared by many systems.
 | `Time` | Current game time, tick delta, and pause-aware clock data. |
 | `Config` | Validated dimensions, runtime options, and enabled-system state. |
 | `Game` | Mode, paused state, and session-level game state. |
-| `Player` | Cursor entity plus visual-selection bounds. |
+| `Player` | Bounded cursor roster, occupied slots, and the slot selected for local input/camera. |
 | `Event` | Event queue and related runtime wiring. |
-| `Target` | Cursor target groups and target cycling state. |
+| `Target` | Navigation target groups and target cycling state. |
 | `RouteGraph` | Navigation graph instances and route distributions. |
 | `Adaptation` | Per-graph route-selection learner state. |
 | `Genetics` | Population registry and evolutionary session data. |
@@ -132,8 +132,17 @@ services shared by many systems.
 | `Audio` | Sound/music capability and state exposed to game systems. |
 | `Network` | Optional transport capability; not wired into the default game. |
 
-Target group `0` is reserved for the cursor. A group can retain up to eight
-targets, which is relevant to multi-target navigation and eye/tower scenarios.
+Target group `0` is reserved for live cursors and contains up to the navigation
+target cap of eight, even though the player roster itself has 16 slots. A field
+seeded from that group routes an actor toward the nearest reachable cursor.
+Other groups can likewise retain up to eight entity or position targets, which
+is relevant to eye/tower scenarios.
+
+`CursorSystem` is the sole owner of cursor lifecycle and placement. FSM,
+terminal input, replay, bots, and eventual network input all request spawn,
+despawn, local-slot selection, or movement through typed events. The system
+updates the ordinary cursor component/entity and then announces the applied
+result, keeping one path for every producer.
 
 ## 6. Composite entities
 
@@ -189,10 +198,11 @@ sequenceDiagram
 ```
 
 `ProtectionComponent` masks operations such as deletion or blanket destruction;
-the cursor is created with full protection. Direct `World.DestroyEntity` and
-batch destruction assume the caller has already established that removal is
-safe, so gameplay code should prefer the appropriate death request unless it
-owns that invariant.
+each cursor is created with full protection. `CursorSystem` deliberately owns
+the direct destruction path for an explicit cursor despawn. Other direct
+`World.DestroyEntity` and batch-destruction callers assume they have already
+established that removal is safe, so gameplay code should prefer the
+appropriate death request unless it owns that invariant.
 
 The optimized one-entity death event packs the effect ID into the high 16 bits
 and the entity ID into the low 48 bits. Batch payloads can come from pools. Code
@@ -270,7 +280,7 @@ The catalog covers these domains:
 | Session and level | init, reset, level creation, pause, content and environment changes |
 | Audio and music | effects, mute state, pause/fade, tempo/intensity and sequencing requests |
 | FSM and meta | region control, variables, delayed actions, system toggles, telemetry |
-| Player and typing | character input, deletion, energy, heat, boost, shield, cursor, weapons |
+| Player and typing | cursor lifecycle/placement, character input, deletion, per-cursor energy, heat, boost, shield, and weapons |
 | World structure | walls, maze, composites, gateways, towers, navigation graphs |
 | Species and combat | creation, attacks, damage, death, fusion, projectiles, adaptation, genetics |
 | Visual effects | flash, fade, splash, dust, cleaner, markers and explosions |

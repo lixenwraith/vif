@@ -19,7 +19,9 @@ The terminal service polls in its own goroutine and writes to a bounded event
 channel. The application input loop passes events to `input.Machine`, which
 maintains only parsing context. The router owns engine-aware state such as
 selection anchors, search results, history, undo, macros, mouse holds, and
-auto-fire.
+auto-fire. It drives only the roster's selected local cursor; `CursorSystem`
+applies and announces placement so live input, replay, bots, and remote
+producers share the same entity-owned path.
 
 `Intent` is a data structure, not a callback. It includes intent type, motion,
 operator, special action, target mode, count, optional character, captured
