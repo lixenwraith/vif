@@ -95,11 +95,9 @@ type player struct {
 	done       bool
 }
 
-// run drives the presentation loop until the viewer quits
+// run drives the presentation loop until the viewer quits. NewReplay has already
+// started the replay's services through newDriven.
 func (p *player) run() error {
-	if err := p.a.hub.StartAll(); err != nil {
-		return err
-	}
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
 
