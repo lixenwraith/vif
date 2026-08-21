@@ -507,7 +507,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		return
 	}
 
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy)
+	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy...)
 }
 
 // processNegativeEnergy handles Blue mutation to Green with Decay spawn
@@ -555,7 +555,7 @@ func (s *CleanerSystem) processNuggetEnergy(targetEntities []core.Entity, selfEn
 		return
 	}
 
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy)
+	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy...)
 }
 
 // spawnDirectionalCleaners generates four cleaner entities owned by one cursor.

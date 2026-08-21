@@ -216,17 +216,20 @@ func TestTelemetryHeadlessSessionReportsActivity(t *testing.T) {
 	if got, want := reg.Ints.Get("event.queue_len").Load(), int64(a.World().Resources.Event.Queue.Len()); got != want {
 		t.Errorf("event.queue_len = %d, live queue length = %d", got, want)
 	}
-	packed := reg.Ints.Get("death.one_packed").Load()
-	batches := reg.Ints.Get("death.batch_count").Load()
-	batchEntities := reg.Ints.Get("death.batch_entities_total").Load()
-	packedPerBatch := float64(0)
-	if batches != 0 {
-		packedPerBatch = float64(packed) / float64(batches)
+	requests := reg.Ints.Get("death.batch_count").Load()
+	entities := reg.Ints.Get("death.batch_entities_total").Load()
+	entitiesPerRequest := float64(0)
+	if requests != 0 {
+		entitiesPerRequest = float64(entities) / float64(requests)
 	}
 	t.Logf("headless telemetry: ticks=%d dispatches=%d entities=%d created=%d typing=%d/%d",
 		reg.Ints.Get("engine.ticks").Load(), reg.Ints.Get("event.dispatches").Load(),
 		reg.Ints.Get("entity.count").Load(), reg.Ints.Get("entity.created_total").Load(),
 		reg.Ints.Get("typing.correct").Load(), reg.Ints.Get("typing.errors").Load())
-	t.Logf("death paths: packed=%d fallback=%d batches=%d batch_entities=%d packed_per_batch=%.2f",
-		packed, reg.Ints.Get("death.one_fallback").Load(), batches, batchEntities, packedPerBatch)
+	t.Logf("death requests: count=%d entities=%d entities_per_request=%.2f silent=%d flash=%d blossom=%d decay=%d fadeout=%d dust=%d other=%d",
+		requests, entities, entitiesPerRequest,
+		reg.Ints.Get("death.batch_silent").Load(), reg.Ints.Get("death.batch_flash").Load(),
+		reg.Ints.Get("death.batch_blossom").Load(), reg.Ints.Get("death.batch_decay").Load(),
+		reg.Ints.Get("death.batch_fadeout").Load(), reg.Ints.Get("death.batch_dust").Load(),
+		reg.Ints.Get("death.batch_other").Load())
 }

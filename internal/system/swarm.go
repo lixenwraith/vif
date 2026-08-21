@@ -308,7 +308,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
 	}
 }
 
@@ -817,7 +817,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			combatComp.HitPoints += hpAbsorbed
 
 			// Destroy drain silently
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 
 			// Emit absorption event
 			s.world.PushEvent(event.EventSwarmAbsorbedDrain, &event.SwarmAbsorbedDrainPayload{

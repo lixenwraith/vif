@@ -479,7 +479,7 @@ func (s *DustSystem) Update() {
 	s.applyAccumulatedImpulses(collisionCtx)
 
 	if len(s.deathBuf) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.deathBuf)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.deathBuf...)
 	}
 
 	s.statActive.Store(int64(dusts.CountEntities()))
@@ -603,7 +603,7 @@ func (s *DustSystem) transformGlyphsToDust() {
 
 	if len(s.flashBuf) > 0 {
 		// Emit batch death with flash effect (no transform)
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf...)
 	}
 	if len(s.transformBuf) == 0 {
 		return

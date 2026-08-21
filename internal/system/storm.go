@@ -865,7 +865,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
 	}
 }
 

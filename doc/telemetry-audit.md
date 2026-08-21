@@ -83,7 +83,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Misleading gauge | `drain.count` | Used `Drain.CountEntities()`, including entities with death already queued; pause forced a false zero | Publishes only live, non-dying drains and preserves the live gauge while paused |
 | Misleading counters | `dust.created`, `swarm.player_kills`, `combat.hits_*`, audio totals | Dust counted dark entries it skipped; swarm counted every HP death as a player kill; combat counted pre-resolution; audio exposed backend-lifetime totals | Counts now follow actual creation, resolved cursor credit, state-changing attacks, and session deltas |
 | Consumerless by key | Most diagnostic counters, including all newly added coverage | No exact-key lookup outside the producer | Deliberately retained: the debug overlay, pinned cards, snapshots, recorder, and `vif-log` enumerate the registry generically |
-| Removed/renamed keys | None | Baseline registry had 488 keys | Final registry has 752 keys: 264 additions and zero removals or renames |
+| Removed/renamed keys | `death.one_packed`, `death.one_fallback` | Baseline registry had 488 keys; the Phase 1 result had 752 | Death API unification retired the two obsolete one-entity path counters; the current registry has 750 keys, a net 262 additions |
 
 ## Deliberately unchanged or excluded
 
@@ -97,7 +97,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 
 ## Added key catalogue
 
-All 264 additions are listed below. No existing key was renamed, removed, or repurposed.
+All 262 surviving additions are listed below. No key was renamed or repurposed; death API unification removed the two obsolete `death.one_*` path counters documented above.
 
 | Key | Description |
 |---|---|
@@ -184,22 +184,20 @@ All 264 additions are listed below. No existing key was renamed, removed, or rep
 | `combat.relation_rejects` (int) | Direct-hit requests rejected because the hit entity was not a member of the target composite. |
 | `combat.stun_immune_rejects` (int) | Stun effects rejected by species/state immunity. |
 | `combat.target_rejects` (int) | Attack requests rejected because the target or required target member lacked combat state. |
-| `death.batch_blossom` (int) | Death batches routed through the blossom-effect processor. |
-| `death.batch_count` (int) | Resolved `EventDeathBatch` payloads, including empty batches. |
-| `death.batch_decay` (int) | Death batches routed through the decay-effect processor. |
-| `death.batch_dust` (int) | Death batches routed through the dust-effect processor. |
-| `death.batch_entities_total` (int) | Total entity entries presented across resolved death batches. |
-| `death.batch_fadeout` (int) | Death batches routed through the fadeout-effect processor. |
-| `death.batch_flash` (int) | Death batches routed through the flash-effect processor. |
-| `death.batch_other` (int) | Death batches using an effect outside the optimized processors. |
-| `death.batch_silent` (int) | Death batches processed without an effect. |
-| `death.batch_size_max` (int) | Largest entity count observed in one death batch. |
+| `death.batch_blossom` (int) | Death requests routed through the blossom-effect processor. |
+| `death.batch_count` (int) | Resolved unified `EventDeathBatch` payloads. |
+| `death.batch_decay` (int) | Death requests routed through the decay-effect processor. |
+| `death.batch_dust` (int) | Death requests routed through the dust-effect processor. |
+| `death.batch_entities_total` (int) | Total entity entries presented across resolved death requests. |
+| `death.batch_fadeout` (int) | Death requests routed through the fadeout-effect processor. |
+| `death.batch_flash` (int) | Death requests routed through the flash-effect processor. |
+| `death.batch_other` (int) | Death requests using an effect outside the optimized processors. |
+| `death.batch_silent` (int) | Death requests processed without an effect. |
+| `death.batch_size_max` (int) | Largest entity count observed in one death request. |
 | `death.buf_destroy_hwm` (int) | High-water live length of the reusable destroy buffer/state collection. |
-| `death.disabled_rejects` (int) | Single or batch death events dropped while the death system was disabled. |
+| `death.disabled_rejects` (int) | Death requests dropped while the death system was disabled. |
 | `death.missing_effect_data` (int) | Deaths whose requested effect lacked the required position/glyph/wall data. |
 | `death.missing_entities` (int) | Death entries that no longer existed when resolved. |
-| `death.one_fallback` (int) | Single-death events using the direct `core.Entity` compatibility payload. |
-| `death.one_packed` (int) | Single-death events using the bit-packed fast-path payload. |
 | `death.payload_rejects` (int) | Death events rejected because their payload type was invalid. |
 | `death.protected_rejects` (int) | Death entries rejected by `ProtectFromDeath`. |
 | `death.tagged` (int) | Entities processed from the `DeathComponent` tick path. |

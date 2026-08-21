@@ -313,7 +313,7 @@ func (s *DrainSystem) processDrainStates() {
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
 			entry.dying = true
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
+			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entry.entity)
 
 			// A positionless drain yields no death coordinate; -1 marks it absent
 			killX, killY := entry.killPos()
@@ -681,7 +681,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	toRemove := min(count, len(ordered))
 
 	for i := range toRemove {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, ordered[i], event.EventFlashSpawnOneRequest)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, ordered[i])
 		s.statDespawned.Add(1)
 	}
 }
@@ -854,7 +854,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 		}
 		if destroyDrain {
 			entry.dying = true
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entry.entity, event.EventFlashSpawnOneRequest)
+			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entry.entity)
 
 			// Counted as a kill, credited to no cursor: the drain spent itself on the
 			// player, so it grants no boost. Loot still drops as compensation.
@@ -901,7 +901,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 		}
 
 		a.dying = true
-		event.EmitDeathOne(s.world.Resources.Event.Queue, a.entity, event.EventFlashSpawnOneRequest)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, a.entity)
 		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
 			Entity:       a.entity,
 			KillerEntity: a.combatComp.LastDamagedBy,
@@ -1090,7 +1090,7 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Convert glyphs to dust
 	if s.world.Components.Glyph.HasEntity(entity) {
-		event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventDustSpawnOneRequest)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventDustSpawnOneRequest, entity)
 		return
 	}
 
@@ -1102,7 +1102,7 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	}
 
 	// Destroy the entity
-	event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 }
 
 // refreshCachePositions re-reads positions after integration; the tick-start snapshot predates movement

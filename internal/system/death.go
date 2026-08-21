@@ -20,8 +20,6 @@ type DeathSystem struct {
 	buffers    bufferTelemetry
 
 	statKilled            *atomic.Int64
-	statOnePacked         *atomic.Int64
-	statOneFallback       *atomic.Int64
 	statTagged            *atomic.Int64
 	statBatchCount        *atomic.Int64
 	statBatchEntities     *atomic.Int64
@@ -53,8 +51,6 @@ func NewDeathSystem(world *engine.World) engine.System {
 
 	reg := s.world.Resources.Status
 	s.statKilled = reg.Ints.Get("death.killed")
-	s.statOnePacked = reg.Ints.Get("death.one_packed")
-	s.statOneFallback = reg.Ints.Get("death.one_fallback")
 	s.statTagged = reg.Ints.Get("death.tagged")
 	s.statBatchCount = reg.Ints.Get("death.batch_count")
 	s.statBatchEntities = reg.Ints.Get("death.batch_entities_total")
@@ -83,8 +79,6 @@ func (s *DeathSystem) Init() {
 	s.destroyBuf = s.destroyBuf[:0]
 	for _, stat := range []*atomic.Int64{
 		s.statKilled,
-		s.statOnePacked,
-		s.statOneFallback,
 		s.statTagged,
 		s.statBatchCount,
 		s.statBatchEntities,
@@ -120,7 +114,6 @@ func (s *DeathSystem) Priority() int {
 
 func (s *DeathSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventDeathOne,
 		event.EventDeathBatch,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -142,67 +135,22 @@ func (s *DeathSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventDeathOne || ev.Type == event.EventDeathBatch {
+		if ev.Type == event.EventDeathBatch {
 			s.statDisabledRejects.Add(1)
+			if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
+				event.ReleaseDeathRequest(p)
+			}
 		}
 		return
 	}
 
 	switch ev.Type {
-	case event.EventDeathOne:
-		// HOT PATH: Priority check for bit-packed uint64
-		if packed, ok := ev.Payload.(uint64); ok {
-			// Bit-pack decode, skipping heap allocation, use event.EmitDeathOne
-			entity := core.Entity(packed & 0xFFFFFFFFFFFF)
-			effect := event.EventType(packed >> 48)
-			s.statOnePacked.Add(1)
-			s.markForDeath(entity, effect)
-			return
-		}
-
-		// DEV/SAFETY PATH: Fallback for direct core.Entity calls
-		if entity, ok := ev.Payload.(core.Entity); ok {
-			s.statOneFallback.Add(1)
-			s.markForDeath(entity, 0)
-			return
-		}
-		s.statPayloadRejects.Add(1)
-
 	case event.EventDeathBatch:
 		if p, ok := ev.Payload.(*event.DeathRequestPayload); ok {
 			s.processBatch(p)
 		} else {
 			s.statPayloadRejects.Add(1)
 		}
-	}
-}
-
-// markForDeath performs protection checks, triggers effects, and DESTROYS the entity immediately. Used for singular or unoptimized batch effect processing
-func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
-	if entity == 0 {
-		s.statZeroRejects.Add(1)
-		return
-	}
-	_, existed := s.world.GetComponentMask(entity)
-	if !existed {
-		s.statMissingEntities.Add(1)
-	}
-
-	// 1. Protection Check
-	if s.isProtected(entity) {
-		return
-	}
-
-	// 2. Emit effect event
-	if effect != 0 {
-		s.emitEffect(entity, effect)
-	}
-
-	// 3. Immediate destruction: removes entity and its components from all stores
-	s.world.DestroyEntity(entity)
-
-	if existed {
-		s.statKilled.Add(1)
 	}
 }
 
@@ -287,13 +235,11 @@ func (s *DeathSystem) Update() {
 		return
 	}
 
-	// markForDeath removes from this store, so preserve the tick-start order.
+	// Protection checks may remove from this store, so preserve tick-start order.
 	s.destroyBuf = append(s.destroyBuf[:0], deaths.Entities()...)
 	s.buffers.Observe(0, len(s.destroyBuf))
 	s.statTagged.Add(int64(len(s.destroyBuf)))
-	for _, e := range s.destroyBuf {
-		s.markForDeath(e, 0)
-	}
+	s.processBatchSilent(s.destroyBuf)
 	s.destroyBuf = s.destroyBuf[:0]
 }
 
@@ -333,6 +279,29 @@ func (s *DeathSystem) processBatch(p *event.DeathRequestPayload) {
 		for _, entity := range p.Entities {
 			s.markForDeath(entity, p.EffectEvent)
 		}
+	}
+}
+
+// markForDeath is the batch processor's fallback for effects without a
+// specialized extractor. Known effects use the two-pass batch path above.
+func (s *DeathSystem) markForDeath(entity core.Entity, effect event.EventType) {
+	if entity == 0 {
+		s.statZeroRejects.Add(1)
+		return
+	}
+	_, existed := s.world.GetComponentMask(entity)
+	if !existed {
+		s.statMissingEntities.Add(1)
+	}
+	if s.isProtected(entity) {
+		return
+	}
+	if effect != 0 {
+		s.emitEffect(entity, effect)
+	}
+	s.world.DestroyEntity(entity)
+	if existed {
+		s.statKilled.Add(1)
 	}
 }
 

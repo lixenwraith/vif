@@ -338,7 +338,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
 	}
 }
 
@@ -733,7 +733,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
 	}
 }
 

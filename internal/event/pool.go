@@ -7,7 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
-// --- Death pool ---
+// --- Death request pool ---
 
 // Can't use generic batch pool without duplicating shared data or wrapper, both inefficient
 

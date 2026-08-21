@@ -531,7 +531,7 @@ type DecaySpawnPayload struct {
 
 // --- Death ---
 
-// DeathRequestPayload contains batch death request
+// DeathRequestPayload contains a death request for one or more entities.
 // EffectEvent: 0 = silent death, EventFlashSpawnOneRequest = flash, future: explosion, chain death
 type DeathRequestPayload struct {
 	Entities    []core.Entity `toml:"entities"`

@@ -495,7 +495,7 @@ func (s *WeaponSystem) destroyOrb(orbEntity core.Entity) {
 		}
 	}
 
-	event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
 }
 
 // destroyCursorOrbs drops one cursor's orbs, clearing the references in place
@@ -505,7 +505,7 @@ func (s *WeaponSystem) destroyCursorOrbs(weaponComp *component.WeaponComponent) 
 			continue
 		}
 		weaponComp.Orbs[wt] = 0
-		event.EmitDeathOne(s.world.Resources.Event.Queue, orbEntity, 0)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
 	}
 }
 

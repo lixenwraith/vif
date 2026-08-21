@@ -274,14 +274,14 @@ func (s *DecaySystem) updateDecayEntities() {
 
 				// Mutual destruction: decay + blossom annihilate
 				if s.world.Components.Blossom.HasEntity(target) {
-					event.EmitDeathOne(s.world.Resources.Event.Queue, target, 0)
-					event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+					event.EmitDeath(s.world.Resources.Event.Queue, 0, target)
+					event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 					break
 				}
 
 				if s.world.Components.Nugget.HasEntity(target) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-					event.EmitDeathOne(s.world.Resources.Event.Queue, target, event.EventFlashSpawnOneRequest)
+					event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, target)
 				} else if s.shouldDieByDecay(target) {
 					deathCandidates = append(deathCandidates, target)
 				} else {
@@ -295,7 +295,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		if destroyEntity {
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, 0)
+			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
 			continue
 		}
 
@@ -319,7 +319,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 	// Emit single batch event instead of scalar events per hit
 	if len(deathCandidates) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates...)
 	}
 	s.buffers.Observe(0, len(s.decayedThisFrame))
 	s.buffers.Observe(1, len(s.processedGridCells))
@@ -366,7 +366,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 		default:
 			// Fallback: Red or other: destroy
-			event.EmitDeathOne(s.world.Resources.Event.Queue, entity, event.EventFlashSpawnOneRequest)
+			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entity)
 		}
 	}
 

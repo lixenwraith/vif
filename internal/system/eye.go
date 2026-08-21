@@ -304,7 +304,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
 	}
 }
 

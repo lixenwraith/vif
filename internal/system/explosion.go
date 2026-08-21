@@ -205,7 +205,7 @@ func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
 	s.buffers.Observe(2, len(s.centerBuf))
 	s.buffers.Observe(6, len(s.seenCells))
 
-	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, dustEntities...)
 
 	for _, p := range s.centerBuf {
 		s.addCenter(cursor, p.X, p.Y, s.baseRadius, event.ExplosionTypeDust)
@@ -409,7 +409,7 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 
 	// Glyph death and dust spawn (dust only)
 	if convertGlyphs && len(s.entityBuf) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.entityBuf)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.entityBuf...)
 
 		event.EmitBatch(s.world.Resources.Event.Queue, event.DustBatchPool, event.EventDustSpawnBatchRequest, s.dustEntryBuf)
 

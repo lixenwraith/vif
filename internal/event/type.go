@@ -36,7 +36,7 @@ type EventType int
 // '.' in the annotation:
 //
 //	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) ...   pooled
-//	// EventDeathOne (core.Entity) ...                                   bit-packed scalar
+//	// EventDeathBatch (DeathRequestPayload) ...                         pooled
 //
 // Payload structs must carry `toml:"..."` tags on every field intended to be
 // set from a config or from ":emit"; untagged fields resolve only by Go name
@@ -298,9 +298,7 @@ const (
 
 	// --- Death ---
 
-	// EventDeathOne (core.Entity) signals intent to destroy a single game entity (scalar/silent)
-	EventDeathOne
-	// EventDeathBatch (DeathRequestPayload) signals intent to destroy a batch of entities with an optional effect
+	// EventDeathBatch (DeathRequestPayload) signals intent to destroy one or more entities with an optional effect
 	EventDeathBatch
 
 	// --- Timer ---

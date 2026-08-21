@@ -1050,7 +1050,7 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 	}
 
 	if len(toDestroy) > 0 {
-		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, toDestroy)
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
 	}
 }
 
