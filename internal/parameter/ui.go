@@ -85,6 +85,9 @@ const (
 	// OverlayCardFrameRows is the card rows consumed by its top and bottom border
 	OverlayCardFrameRows = 2
 
+	// OverlayCardMaxEntries bounds telemetry cards to a navigable viewport height
+	OverlayCardMaxEntries = 15
+
 	// OverlayCardGapX/OverlayCardGapY is the masonry spacing between cards
 	OverlayCardGapX = 2
 	OverlayCardGapY = 1
@@ -160,7 +163,7 @@ var (
 
 // Pinned Stats HUD
 const (
-	// HudMarginX/HudMarginY is the gap from the viewport's top-right corner
+	// HudMarginX/HudMarginY is the gap from the viewport's top-left corner
 	HudMarginX = 1
 	HudMarginY = 0
 
@@ -170,6 +173,12 @@ const (
 
 	// HudColumnGap is the columns between a metric name and its value
 	HudColumnGap = 1
+
+	// HudWrapGap is the horizontal space between height-wrapped HUD columns
+	HudWrapGap = 2
+
+	// HudWidthShrinkFrames delays contraction while allowing immediate expansion
+	HudWidthShrinkFrames = 90
 
 	// HudBgAlpha is the panel background opacity over the game area
 	HudBgAlpha = 0.8

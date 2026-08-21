@@ -3,6 +3,7 @@ package status
 import (
 	"sort"
 	"strconv"
+	"strings"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -51,7 +52,11 @@ func (m *metricRef) value() any {
 type statGroup struct {
 	name    string
 	members []metricRef
+	visible *atomic.Int64 // Player entity cell; nil for always-visible groups
 }
+
+// isVisible suppresses empty roster slots without unregistering their schema.
+func (g *statGroup) isVisible() bool { return g.visible == nil || g.visible.Load() != 0 }
 
 // SetSnapshotInterval sets the game-tick period between snapshots; 0 disables
 func (r *Registry) SetSnapshotInterval(ticks uint64) { r.snapEvery.Store(ticks) }
@@ -105,6 +110,9 @@ func (r *Registry) emitGroups(emit func(args ...any)) {
 // emitGroupsFiltered writes grouped records, omitting metrics keep rejects
 func (r *Registry) emitGroupsFiltered(keep func(key string) bool, emit func(args ...any)) {
 	for _, g := range r.groups() {
+		if !g.isVisible() {
+			continue
+		}
 		// Fresh slice per record: vlog formats asynchronously
 		args := make([]any, 0, 2+2*len(g.members))
 		args = append(args, "msg", g.name)
@@ -149,14 +157,26 @@ func (r *Registry) gen() uint64 {
 // buildIndex flattens all four maps into group-ordered metric references
 func (r *Registry) buildIndex() []statGroup {
 	byGroup := make(map[string][]metricRef, 48)
+	groupSlots := make(map[string]string, 32)
+	playerEntities := make(map[string]*atomic.Int64, 16)
 	add := func(key string, ref metricRef) {
-		g, name := SplitKey(key)
+		g, name, slot := splitKey(key)
 		ref.key, ref.name = key, name
 		byGroup[g] = append(byGroup[g], ref)
+		if slot != "" {
+			groupSlots[g] = slot
+		}
 	}
 
 	r.Bools.Range(func(k string, p *atomic.Bool) { add(k, metricRef{kind: kindBool, b: p}) })
-	r.Ints.Range(func(k string, p *atomic.Int64) { add(k, metricRef{kind: kindInt, i: p}) })
+	r.Ints.Range(func(k string, p *atomic.Int64) {
+		add(k, metricRef{kind: kindInt, i: p})
+		if domain, name, ok := strings.Cut(k, "."); ok && domain == "player" {
+			if slot, metric, ok := splitPlayerMetric(name); ok && metric == "entity" {
+				playerEntities[slot] = p
+			}
+		}
+	})
 	r.Floats.Range(func(k string, p *AtomicFloat) { add(k, metricRef{kind: kindFloat, f: p}) })
 	r.Strings.Range(func(k string, p *AtomicString) { add(k, metricRef{kind: kindString, s: p}) })
 
@@ -171,7 +191,11 @@ func (r *Registry) buildIndex() []statGroup {
 	for _, g := range names {
 		members := byGroup[g]
 		sort.Slice(members, func(i, j int) bool { return members[i].name < members[j].name })
-		groups = append(groups, statGroup{name: g, members: members})
+		groups = append(groups, statGroup{
+			name:    g,
+			members: members,
+			visible: playerEntities[groupSlots[g]],
+		})
 	}
 	return groups
 }

@@ -69,8 +69,9 @@ type recCol struct {
 
 // recGroup mirrors a statGroup in the recorder's flat layout
 type recGroup struct {
-	name string
-	cols []recCol
+	name    string
+	cols    []recCol
+	visible int // Entity column for a roster slot; -1 for always-visible groups
 }
 
 // Recorder is a fixed-depth ring of full registry snapshots, sampled every
@@ -140,7 +141,7 @@ func (rc *Recorder) bind(groups []statGroup) {
 
 	for gi := range groups {
 		g := &groups[gi]
-		rg := recGroup{name: g.name, cols: make([]recCol, 0, len(g.members))}
+		rg := recGroup{name: g.name, cols: make([]recCol, 0, len(g.members)), visible: -1}
 		for i := range g.members {
 			m := &g.members[i]
 			c := recCol{name: m.name, kind: m.kind}
@@ -161,6 +162,17 @@ func (rc *Recorder) bind(groups []statGroup) {
 			rg.cols = append(rg.cols, c)
 		}
 		rc.groups = append(rc.groups, rg)
+	}
+	for gi := range groups {
+		if groups[gi].visible == nil {
+			continue
+		}
+		for i, source := range rc.srcI {
+			if source == groups[gi].visible {
+				rc.groups[gi].visible = i
+				break
+			}
+		}
 	}
 
 	rc.bw = (len(rc.srcB) + 63) / 64
@@ -306,6 +318,12 @@ func (rc *Recorder) Flush(reason string) {
 		rc.slots = append(rc.slots, int((oldest+uint64(k))%uint64(rc.depth)))
 	}
 	t0, t1 := rc.tick[rc.slots[0]], rc.tick[rc.slots[n-1]]
+	visibleGroups := 0
+	for i := range rc.groups {
+		if rc.groupVisible(&rc.groups[i], n) {
+			visibleGroups++
+		}
+	}
 
 	start := time.Now()
 	records := 0
@@ -313,10 +331,13 @@ func (rc *Recorder) Flush(reason string) {
 
 	path, err := vlog.EmitSet(SubRec, run, tick, frame, func(emit func(args ...any)) {
 		emit("msg", "window", "reason", reason,
-			"t0", t0, "t1", t1, "n", n, "groups", len(rc.groups))
+			"t0", t0, "t1", t1, "n", n, "groups", visibleGroups)
 		records++
 		for gi := range rc.groups {
 			g := &rc.groups[gi]
+			if !rc.groupVisible(g, n) {
+				continue
+			}
 			args := make([]any, 0, 6+2*len(g.cols))
 			args = append(args, "msg", g.name, "t0", t0, "n", n)
 			for ci := range g.cols {
@@ -344,6 +365,21 @@ func (rc *Recorder) Flush(reason string) {
 			"reason", reason, "t0", t0, "ticks", n,
 			"records", records, "us", time.Since(start).Microseconds())
 	}
+}
+
+// groupVisible keeps a player group when its slot existed anywhere in the
+// emitted recorder window; schema storage remains fixed for allocation-free sampling.
+func (rc *Recorder) groupVisible(g *recGroup, n int) bool {
+	if g.visible < 0 {
+		return true
+	}
+	stride := len(rc.srcI)
+	for k := range n {
+		if rc.bufI[rc.slots[k]*stride+g.visible] != 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // series returns a column's window: a native scalar when constant, otherwise

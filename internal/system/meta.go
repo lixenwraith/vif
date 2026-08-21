@@ -325,7 +325,7 @@ func (s *MetaSystem) handleScreenResize(p *event.ScreenResizePayload) {
 // handleDebugRequest shows the debug overlay, pinned groups first
 func (s *MetaSystem) handleDebugRequest() {
 	reg := s.world.Resources.Status
-	views := reg.Views()
+	views := reg.VisibleViews()
 	pins := s.ctx.OverlayPins()
 
 	content := &core.OverlayContent{
@@ -335,7 +335,7 @@ func (s *MetaSystem) handleDebugRequest() {
 
 	// Pinned groups lead in pin order; the rest keep the registry's sorted order
 	for _, key := range pins {
-		if v, ok := reg.GroupView(key); ok {
+		if v, ok := reg.GroupView(key); ok && v.Visible() {
 			content.Items = append(content.Items, debugCard(v, true))
 		}
 	}
@@ -357,7 +357,7 @@ func debugCard(v status.GroupView, pinned bool) core.OverlayCard {
 	}
 	return core.OverlayCard{
 		Key:     v.Name(),
-		Title:   strings.ToUpper(v.Name()),
+		Title:   strings.ToUpper(strings.ReplaceAll(v.Name(), ".", " ")),
 		Entries: entries,
 		Pinned:  pinned,
 	}

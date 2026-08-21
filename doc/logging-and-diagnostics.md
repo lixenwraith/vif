@@ -333,22 +333,30 @@ store with no map lookup.
 
 ### Key convention
 
-`SplitKey` splits `group.name` on the first dot. Keys without a dot land in the
-`misc` group. The group becomes the record's `msg`, and the remainder becomes
-the field name:
+`SplitKey` maps each stable dotted key to a bounded semantic group. Keys without
+a dot land in `misc`. The group becomes the record's `msg`, and the projected
+short name becomes the field:
 
 ```
 engine.ticks   → msg="engine"  ticks=<v>
-fsm.td_main.state → msg="fsm"  td_main.state=<v>
-player.0.energy.current → msg="player"  0.energy.current=<v>
+fsm.td_main.state → msg="fsm.td_main"  state=<v>
+player.0.energy.current → msg="player.0"  energy.current=<v>
+player.0.weapon.rod → msg="player.0.weapon"  rod=<v>
+combat.damage_attacker_cursor → msg="combat.damage.attacker"  cursor=<v>
+adapt.buf_cdf_hwm → msg="adapt.buffers"  cdf_hwm=<v>
 ```
 
-A multi-segment key therefore drills down inside one record rather than
-creating a new group. This is how per-region FSM telemetry stays in the single
-`fsm` record regardless of how many regions a config declares, and how the
-bounded cursor roster exposes slot-scoped energy, heat, shield, boost, weapon,
-position, entity, and control metrics. Bare single-player keys such as
-`energy.current` mirror slot 0 temporarily for configuration compatibility.
+The projection separates per-region FSM state, allocation high-water marks,
+combat attribution/effects/rejections, death batches, event settle passes, and
+per-player weapon state. Every resulting group is capped at 15 metrics so the
+same index remains navigable as overlay cards and readable as log records. The
+metric registry keys themselves do not change.
+
+The bounded roster still registers every slot before `Freeze`, but inactive
+slots do not produce periodic snapshot records or debug cards. The flight
+recorder emits a player's groups when that slot was active anywhere in the
+flushed history window. Bare single-player keys such as `energy.current` mirror
+slot 0 temporarily for configuration compatibility.
 
 ### Integer units
 
@@ -366,6 +374,12 @@ owners of the convention:
 
 Display consumers — the debug overlay, the status bar, log viewers — resolve
 through `FormatInt`. The log stores the raw integer.
+
+The debug overlay scrolls through the full height of a clipped selected card
+before `j`/`k` moves to its neighbour. Its pinned-card HUD is anchored at the
+top-left, wraps whole cards into additional columns, and reports any groups it
+cannot fit in a one-line `hidden` notice. HUD width expands immediately but
+contracts only after a stable narrow interval, preventing value-width jitter.
 
 ### Freeze
 

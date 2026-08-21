@@ -244,7 +244,9 @@ command goroutine.
 float, and string metrics. Systems cache returned pointers during initialization
 and update them without map lookups in hot paths.
 
-Snapshot indexing groups keys by prefix and sorts groups/members.
+Snapshot indexing projects stable keys into bounded semantic groups and sorts
+groups/members. Allocation buffers, combat attribution, FSM regions, and active
+player slots therefore remain separate readable records without renaming keys.
 `Registry.Freeze`, called by `ClockScheduler.Prepare` from either `Start` or a
 driven tick/settle path, closes the metric set and caches that index permanently;
 a registration afterwards yields a detached cell and increments `stat.late`. Periodic snapshots run after a completed tick and

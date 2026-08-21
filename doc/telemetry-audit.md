@@ -2,7 +2,7 @@
 
 This audit covers every system constructed by `manifest.BuildSystems`, the inactive `NetworkSystem`, `MetaSystem`, and telemetry owned by `internal/engine` and `internal/event`. The table describes the final wiring; the defect table preserves the Phase 1 findings from the pre-fix tree.
 
-Every metric is consumed generically by the status snapshot, debug overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror.
+Every metric is consumed generically by the status snapshot, debug overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror; inactive slots keep their frozen schema but are omitted from live views and output until active. Stable keys project into semantic groups of at most 15 fields for overlay and log presentation.
 
 ## Phase 1 system audit
 

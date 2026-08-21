@@ -1,18 +1,35 @@
 package status
 
+import "sync/atomic"
+
 // GroupView is a bound view of one metric group. The binding is valid only
 // after Freeze: before it, the index is rebuilt on every registration.
 type GroupView struct {
 	name    string
 	members []metricRef
+	visible *atomic.Int64
 }
 
-// Views binds every registered group in index order
+// Views binds every registered group in index order.
 func (r *Registry) Views() []GroupView {
 	groups := r.groups()
 	views := make([]GroupView, len(groups))
 	for i := range groups {
-		views[i] = GroupView{name: groups[i].name, members: groups[i].members}
+		views[i] = GroupView{
+			name: groups[i].name, members: groups[i].members, visible: groups[i].visible,
+		}
+	}
+	return views
+}
+
+// VisibleViews omits empty roster slots while preserving sorted group order.
+func (r *Registry) VisibleViews() []GroupView {
+	all := r.Views()
+	views := make([]GroupView, 0, len(all))
+	for i := range all {
+		if all[i].Visible() {
+			views = append(views, all[i])
+		}
 	}
 	return views
 }
@@ -21,7 +38,7 @@ func (r *Registry) Views() []GroupView {
 func (r *Registry) GroupView(name string) (GroupView, bool) {
 	for _, g := range r.groups() {
 		if g.name == name {
-			return GroupView{name: g.name, members: g.members}, true
+			return GroupView{name: g.name, members: g.members, visible: g.visible}, true
 		}
 	}
 	return GroupView{}, false
@@ -32,6 +49,9 @@ func (v GroupView) Name() string { return v.name }
 
 // Len returns the metric count in the group
 func (v GroupView) Len() int { return len(v.members) }
+
+// Visible reports whether a dynamic roster group currently belongs in a view.
+func (v GroupView) Visible() bool { return v.visible == nil || v.visible.Load() != 0 }
 
 // MetricName returns the short name of member i
 func (v GroupView) MetricName(i int) string { return v.members[i].name }

@@ -255,6 +255,13 @@ forms clear macros and transient command/overlay state. `:new!` additionally
 turns the two preferences off, restores 1x, and clears HUD/pins. Logging state
 is process diagnostic configuration and survives both forms.
 
+Debug cards contain at most 15 metrics. Empty player slots are omitted until
+they become active. A clipped selected card consumes `j`/`k` scroll steps before
+selection moves beyond it; page motions still move by viewport rows. The live
+HUD starts at the viewport's top-left and wraps pinned cards into columns. If
+the viewport cannot fit every whole card, a `hidden` line names the omitted
+groups; the HUD intentionally has no focus or navigation mode of its own.
+
 Replay terminal keys are not entries in this command table or the keymap. A
 `ModeReplay` App reserves `SPACE . + - h j k l 0 q` for viewer pause, step,
 speed, pan/reset, and quit; those keys never become simulation intents.

@@ -11,6 +11,13 @@ import (
 // otherwise scrolls the document by rows
 func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 	if r.ctx.IsOverlaySelectable() {
+		if delta := selectedCardScrollDelta(
+			r.ctx.OverlayCards(), r.ctx.GetOverlaySelection(), r.ctx.GetOverlayScroll(),
+			r.ctx.OverlayGeometry().ContentH, intent.Motion,
+		); delta != 0 {
+			r.scrollOverlay(delta)
+			return true
+		}
 		return r.moveOverlaySelection(intent.Motion)
 	}
 
@@ -23,6 +30,28 @@ func (r *Router) handleOverlayScroll(intent *input.Intent) bool {
 		r.scrollOverlay(int(intent.ScrollDir))
 	}
 	return true
+}
+
+// selectedCardScrollDelta keeps row navigation inside a clipped selected card
+// before moving to its neighbour.
+func selectedCardScrollDelta(cards []engine.OverlayCardRef, selected string, offset, viewportH int, motion input.MotionOp) int {
+	if viewportH < 1 || (motion != input.MotionUp && motion != input.MotionDown) {
+		return 0
+	}
+	for i := range cards {
+		card := &cards[i]
+		if card.Key != selected {
+			continue
+		}
+		if motion == input.MotionUp && card.Y < offset {
+			return -1
+		}
+		if motion == input.MotionDown && card.Y+card.H > offset+viewportH {
+			return 1
+		}
+		return 0
+	}
+	return 0
 }
 
 // handleOverlayPageScroll pages the view without disturbing the selection

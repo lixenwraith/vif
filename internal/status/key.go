@@ -8,13 +8,109 @@ import (
 // GroupMisc receives metrics registered without a "group.name" key
 const GroupMisc = "misc"
 
-// SplitKey splits "group.name" into its parts; keys without a separator
-// fall into GroupMisc. Sole owner of the grouping convention.
+// SplitKey maps a stable metric key to its bounded display/log group and field.
+// Keys without a separator fall into GroupMisc.
 func SplitKey(key string) (group, name string) {
-	if i := strings.IndexByte(key, '.'); i >= 0 {
-		return key[:i], key[i+1:]
+	group, name, _ = splitKey(key)
+	return group, name
+}
+
+// splitKey also returns the roster slot that controls group visibility.
+func splitKey(key string) (group, name, playerSlot string) {
+	domain, name, ok := strings.Cut(key, ".")
+	if !ok {
+		return GroupMisc, key, ""
 	}
-	return GroupMisc, key
+
+	// Player cards are slot-scoped, with the weapon inventory split out so
+	// every active-slot card stays within the UI cardinality bound.
+	if domain == "player" {
+		if slot, metric, ok := splitPlayerMetric(name); ok {
+			if weapon, ok := strings.CutPrefix(metric, "weapon."); ok {
+				return "player." + slot + ".weapon", weapon, slot
+			}
+			return "player." + slot, metric, slot
+		}
+	}
+
+	// Allocation-shaped telemetry is easier to scan and tune as one card per
+	// owner, instead of being interleaved with behavioral counters.
+	if metric, ok := strings.CutPrefix(name, "buf_"); ok {
+		return domain + ".buffers", metric, ""
+	}
+
+	switch domain {
+	case "combat":
+		for _, partition := range combatMetricPartitions {
+			if metric, ok := strings.CutPrefix(name, partition.prefix); ok {
+				return partition.group, metric, ""
+			}
+		}
+		if metric, ok := strings.CutPrefix(name, "chain_"); ok {
+			return "combat.chain", metric, ""
+		}
+		if metric, ok := strings.CutPrefix(name, "effect_"); ok {
+			return "combat.effects", metric, ""
+		}
+		if metric, ok := strings.CutSuffix(name, "_rejects"); ok {
+			return "combat.rejects", metric, ""
+		}
+		if name == "unprofiled" {
+			return "combat.rejects", name, ""
+		}
+
+	case "death":
+		if metric, ok := strings.CutPrefix(name, "batch_"); ok {
+			return "death.batch", metric, ""
+		}
+		if metric, ok := strings.CutSuffix(name, "_rejects"); ok {
+			return "death.rejects", metric, ""
+		}
+		if strings.HasPrefix(name, "missing_") {
+			return "death.rejects", name, ""
+		}
+
+	case "event":
+		if metric, ok := strings.CutPrefix(name, "settle_"); ok {
+			return "event.settle", metric, ""
+		}
+
+	case "eye":
+		if metric, ok := strings.CutPrefix(name, "ga."); ok {
+			return "eye.ga", metric, ""
+		}
+
+	case "fsm":
+		if region, metric, ok := strings.Cut(name, "."); ok {
+			return "fsm." + region, metric, ""
+		}
+	}
+
+	return domain, name, ""
+}
+
+// splitPlayerMetric recognizes player.<slot>.<metric> without depending on
+// the configured roster bound.
+func splitPlayerMetric(name string) (slot, metric string, ok bool) {
+	slot, metric, ok = strings.Cut(name, ".")
+	if !ok || metric == "" {
+		return "", "", false
+	}
+	n, err := strconv.Atoi(slot)
+	if err != nil || n < 0 {
+		return "", "", false
+	}
+	return slot, metric, true
+}
+
+var combatMetricPartitions = [...]struct {
+	prefix string
+	group  string
+}{
+	{"absorbed_attacker_", "combat.absorbed.attacker"},
+	{"absorbed_defender_", "combat.absorbed.defender"},
+	{"damage_attacker_", "combat.damage.attacker"},
+	{"damage_defender_", "combat.damage.defender"},
 }
 
 // PlayerKey builds a per-slot metric key: PlayerKey(2, "energy.current") = "player.2.energy.current"
