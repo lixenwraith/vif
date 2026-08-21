@@ -25,6 +25,16 @@ const bounceStepLimit = 0.45
 // bounceMaxSteps caps sub-stepping cost at extreme velocities
 const bounceMaxSteps = 20
 
+// BounceStats describes the work and resolved contacts from one integration.
+type BounceStats struct {
+	Steps               int
+	WallCollisions      int
+	BoundaryReflections int
+}
+
+// Hit reports whether any wall or boundary contact was resolved.
+func (s BounceStats) Hit() bool { return s.WallCollisions != 0 || s.BoundaryReflections != 0 }
+
 // IntegrateWithBounce performs physics integration with sub-stepping and restitution.
 //
 // Parameters:
@@ -45,6 +55,24 @@ func IntegrateWithBounce(
 	wallRestitution float64,
 	checkWall WallQueryFunc,
 ) (int, int, bool) {
+	x, y, stats := IntegrateWithBounceStats(
+		k, dt, headerOffsetX, headerOffsetY,
+		boundMinX, boundMaxX, boundMinY, boundMaxY,
+		wallRestitution, checkWall,
+	)
+	return x, y, stats.Hit()
+}
+
+// IntegrateWithBounceStats performs the same integration and exposes contact telemetry.
+func IntegrateWithBounceStats(
+	k *Kinetic,
+	dt float64,
+	headerOffsetX, headerOffsetY int,
+	boundMinX, boundMaxX int,
+	boundMinY, boundMaxY int,
+	wallRestitution float64,
+	checkWall WallQueryFunc,
+) (int, int, BounceStats) {
 	// 1. Calculate step count to prevent tunneling
 	maxDist := math.Max(math.Abs(k.VelX*dt), math.Abs(k.VelY*dt))
 
@@ -57,7 +85,7 @@ func IntegrateWithBounce(
 	}
 
 	dtStep := dt / float64(steps)
-	hitAny := false
+	stats := BounceStats{Steps: steps}
 
 	// 2. Sub-step integration
 	for range steps {
@@ -66,13 +94,13 @@ func IntegrateWithBounce(
 		k.PreciseX += k.VelX * dtStep
 
 		if ReflectBoundsX(k, boundMinX, boundMaxX) {
-			hitAny = true
+			stats.BoundaryReflections++
 			// ReflectBoundsX only flips the sign; scale by restitution magnitude
 			k.VelX *= wallRestitution
 		} else {
 			p := vmath.PointAtF(k.PreciseX, k.PreciseY)
 			if checkWall(p.X-headerOffsetX, p.Y-headerOffsetY) {
-				hitAny = true
+				stats.WallCollisions++
 				k.PreciseX = startPreciseX
 				k.VelX = -k.VelX * wallRestitution
 			}
@@ -83,12 +111,12 @@ func IntegrateWithBounce(
 		k.PreciseY += k.VelY * dtStep
 
 		if ReflectBoundsY(k, boundMinY, boundMaxY) {
-			hitAny = true
+			stats.BoundaryReflections++
 			k.VelY *= wallRestitution
 		} else {
 			p := vmath.PointAtF(k.PreciseX, k.PreciseY)
 			if checkWall(p.X-headerOffsetX, p.Y-headerOffsetY) {
-				hitAny = true
+				stats.WallCollisions++
 				k.PreciseY = startPreciseY
 				k.VelY = -k.VelY * wallRestitution
 			}
@@ -96,5 +124,5 @@ func IntegrateWithBounce(
 	}
 
 	p := vmath.PointAtF(k.PreciseX, k.PreciseY)
-	return p.X, p.Y, hitAny
+	return p.X, p.Y, stats
 }

@@ -70,6 +70,7 @@ type NavigationSystem struct {
 	statEntities   *atomic.Int64
 	statRecomputes *atomic.Int64
 	statROICells   *atomic.Int64
+	buffers        bufferTelemetry
 
 	enabled bool
 }
@@ -83,12 +84,17 @@ func NewNavigationSystem(world *engine.World) engine.System {
 	s.statEntities = world.Resources.Status.Ints.Get("nav.entities")
 	s.statRecomputes = world.Resources.Status.Ints.Get("nav.recomputes")
 	s.statROICells = world.Resources.Status.Ints.Get("nav.roi_cells")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "nav", "groups")
 
 	s.Init()
 	return s
 }
 
 func (s *NavigationSystem) Init() {
+	s.statEntities.Store(0)
+	s.statRecomputes.Store(0)
+	s.statROICells.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 	s.groups = make(map[uint8]*targetGroupNav)
 	s.targets = [component.MaxTargetGroups]engine.TargetGroupState{}
@@ -264,6 +270,13 @@ func (s *NavigationSystem) recomputeCompositePassabilityROI(wallX, wallY, wallW,
 	minY := wallY - footH + 1 + offY
 	maxX := wallX + wallW - 1 + offX
 	maxY := wallY + wallH - 1 + offY
+	clampedMinX := max(0, minX)
+	clampedMinY := max(0, minY)
+	clampedMaxX := min(s.compositePassability.Width-1, maxX)
+	clampedMaxY := min(s.compositePassability.Height-1, maxY)
+	if clampedMinX <= clampedMaxX && clampedMinY <= clampedMaxY {
+		s.statROICells.Add(int64((clampedMaxX - clampedMinX + 1) * (clampedMaxY - clampedMinY + 1)))
+	}
 
 	isWall := func(x, y int) bool {
 		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
@@ -518,6 +531,7 @@ func (s *NavigationSystem) getOrCreateGroup(groupID uint8) *targetGroupNav {
 		),
 	}
 	s.groups[groupID] = g
+	s.buffers.Observe(0, len(s.groups))
 	return g
 }
 

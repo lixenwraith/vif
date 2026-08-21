@@ -17,6 +17,7 @@ type HeatSystem struct {
 	statOverheat *status.PlayerInt
 	statAtMax    *status.PlayerBool
 	statEmber    *status.PlayerBool
+	rejects      rejectionTelemetry
 
 	enabled bool
 }
@@ -30,6 +31,7 @@ func NewHeatSystem(world *engine.World) engine.System {
 	s.statOverheat = status.NewPlayerInt(reg, parameter.MaxPlayers, "heat.overheat", "heat.overheat")
 	s.statAtMax = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.at_max", "heat.at_max")
 	s.statEmber = status.NewPlayerBool(reg, parameter.MaxPlayers, "heat.ember", "heat.ember")
+	s.rejects = newRejectionTelemetry(reg, "heat")
 
 	s.Init()
 	return s
@@ -41,6 +43,7 @@ func (s *HeatSystem) Init() {
 	s.statOverheat.Reset()
 	s.statAtMax.Reset()
 	s.statEmber.Reset()
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -116,6 +119,9 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -131,6 +137,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.addHeat(cursor, payload.Delta)
@@ -139,6 +146,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.HeatSetRequestPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.setHeat(cursor, payload.Value)

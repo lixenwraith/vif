@@ -50,6 +50,10 @@ type StormSystem struct {
 	statRedActiveFrame   *atomic.Int64
 	statBlueActiveFrame  *atomic.Int64
 	statNudges           *atomic.Int64
+	statProtected        *atomic.Int64
+	lifecycle            lifecycleTelemetry
+	buffers              bufferTelemetry
+	motion               bounceTelemetry
 
 	enabled bool
 }
@@ -61,6 +65,7 @@ func NewStormSystem(world *engine.World) engine.System {
 
 	s.memberExcludeSet = make(map[core.Entity]struct{}, 256)
 	s.pendingBlueSpawns = make([]pendingBlueSpawn, 0, 4)
+	s.buffers = newBufferTelemetry(world.Resources.Status, "storm", "ellipse_offsets", "member_excludes", "pending_blue_spawns")
 
 	// Precompute ellipse cell offsets for wall collision checks
 	s.buildEllipseOffsets()
@@ -71,6 +76,9 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.statRedActiveFrame = world.Resources.Status.Ints.Get("storm.red_active_frames")
 	s.statBlueActiveFrame = world.Resources.Status.Ints.Get("storm.blue_active_frames")
 	s.statNudges = world.Resources.Status.Ints.Get("storm.nudge_count")
+	s.statProtected = world.Resources.Status.Ints.Get("storm.protected_rejects")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "storm")
+	s.motion = newBounceTelemetry(world.Resources.Status, "storm")
 
 	s.Init()
 	return s
@@ -86,6 +94,12 @@ func (s *StormSystem) Init() {
 	s.statGreenActiveFrame.Store(0)
 	s.statRedActiveFrame.Store(0)
 	s.statBlueActiveFrame.Store(0)
+	s.statNudges.Store(0)
+	s.statProtected.Store(0)
+	s.lifecycle.Reset()
+	s.buffers.Reset()
+	s.motion.Reset()
+	s.buffers.Observe(0, len(s.ellipseOffsets))
 	s.enabled = true
 }
 
@@ -102,6 +116,7 @@ func (s *StormSystem) EventTypes() []event.EventType {
 		event.EventStormSpawnRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -123,8 +138,17 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesStorm {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventStormSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -132,10 +156,13 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventStormSpawnRequest:
 		if s.rootEntity == 0 {
 			s.spawnStorm()
+		} else {
+			s.lifecycle.spawnFailures.Add(1)
 		}
 
 	case event.EventStormCancelRequest:
 		if s.rootEntity != 0 {
+			s.lifecycle.despawned.Add(1)
 			s.terminateStorm()
 		}
 
@@ -257,6 +284,7 @@ func (s *StormSystem) spawnStorm() {
 		// Find valid position via spiral search
 		foundX, foundY, found := s.findCirclePosition(targetX, targetY)
 		if !found {
+			s.lifecycle.spawnFailures.Add(1)
 			return // Abort entire spawn - one circle failed
 		}
 
@@ -325,6 +353,7 @@ func (s *StormSystem) spawnStorm() {
 		Entity:  rootEntity,
 		Species: component.SpeciesStorm,
 	})
+	s.lifecycle.spawned.Add(1)
 }
 
 // findCirclePosition searches for valid position for circle's elliptical footprint
@@ -391,6 +420,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 			}
 			if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 				if prot.Mask&component.ProtectFromSpecies != 0 {
+					s.statProtected.Add(1)
 					continue
 				}
 			}
@@ -580,6 +610,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 		if circles[i].stunned {
 			continue
 		}
+		motion := physics.BounceStats{Steps: 1}
 
 		// 2. Fold combat/dust knockback from the 2D Kinetic into Vel3D
 		s.absorbExternalImpulse(circles[i].entity, circles[i].circle)
@@ -627,11 +658,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 		// Boundary check X
 		if circles[i].circle.Pos3D.X < boundMinX {
+			motion.BoundaryReflections++
 			circles[i].circle.Pos3D.X = boundMinX
 			if circles[i].circle.Vel3D.X < 0 {
 				circles[i].circle.Vel3D.X = -circles[i].circle.Vel3D.X * parameter.StormRestitution
 			}
 		} else if circles[i].circle.Pos3D.X > boundMaxX {
+			motion.BoundaryReflections++
 			circles[i].circle.Pos3D.X = boundMaxX
 			if circles[i].circle.Vel3D.X > 0 {
 				circles[i].circle.Vel3D.X = -circles[i].circle.Vel3D.X * parameter.StormRestitution
@@ -640,6 +673,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			// Wall check X (only if within bounds)
 			cell := vmath.PointAtF(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
 			if s.collectAndDestroyWallsInEllipse(cell.X, cell.Y) {
+				motion.WallCollisions++
 				circles[i].circle.Pos3D.X = oldPosX
 				circles[i].circle.Vel3D.X = -circles[i].circle.Vel3D.X * parameter.StormRestitution
 			}
@@ -651,11 +685,13 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 		// Boundary check Y
 		if circles[i].circle.Pos3D.Y < boundMinY {
+			motion.BoundaryReflections++
 			circles[i].circle.Pos3D.Y = boundMinY
 			if circles[i].circle.Vel3D.Y < 0 {
 				circles[i].circle.Vel3D.Y = -circles[i].circle.Vel3D.Y * parameter.StormRestitution
 			}
 		} else if circles[i].circle.Pos3D.Y > boundMaxY {
+			motion.BoundaryReflections++
 			circles[i].circle.Pos3D.Y = boundMaxY
 			if circles[i].circle.Vel3D.Y > 0 {
 				circles[i].circle.Vel3D.Y = -circles[i].circle.Vel3D.Y * parameter.StormRestitution
@@ -664,6 +700,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 			// Wall check Y (uses potentially updated X position)
 			cell := vmath.PointAtF(circles[i].circle.Pos3D.X, circles[i].circle.Pos3D.Y)
 			if s.collectAndDestroyWallsInEllipse(cell.X, cell.Y) {
+				motion.WallCollisions++
 				circles[i].circle.Pos3D.Y = oldPosY
 				circles[i].circle.Vel3D.Y = -circles[i].circle.Vel3D.Y * parameter.StormRestitution
 			}
@@ -671,8 +708,10 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 
 		// --- Z Axis (depth bounds only, no walls) ---
 		circles[i].circle.Pos3D.Z += circles[i].circle.Vel3D.Z * dtSec
-		physics.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
-			parameter.StormZMin, parameter.StormZMax, parameter.StormRestitution)
+		if physics.ReflectAxis3D(&circles[i].circle.Pos3D.Z, &circles[i].circle.Vel3D.Z,
+			parameter.StormZMin, parameter.StormZMax, parameter.StormRestitution) {
+			motion.BoundaryReflections++
+		}
 
 		// --- ATTACK PHYSICS OVERRIDE ---
 		// If attacking, physically trap the circle in the convex
@@ -689,6 +728,7 @@ func (s *StormSystem) updateCirclePhysics(stormComp *component.StormComponent, d
 				}
 			}
 		}
+		s.motion.Record(motion)
 	}
 
 	// Inter-circle collision (skip stunned circles)
@@ -789,6 +829,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 			}
 		}
 	}
+	s.buffers.Observe(1, len(s.memberExcludeSet))
 
 	var toDestroy []core.Entity
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
@@ -808,6 +849,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 
 			if prot, ok := s.world.Components.Protection.GetPtr(e); ok {
 				if prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll {
+					s.statProtected.Add(1)
 					continue
 				}
 			}
@@ -947,6 +989,7 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 			})
 
 			if s.AliveCount(stormComp) == 0 {
+				s.lifecycle.killedLifecycle.Add(1)
 				s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
 					RootEntity: s.rootEntity,
 				})
@@ -1378,6 +1421,7 @@ func (s *StormSystem) processBlueAttack(
 			TargetY: circleComp.LockedTargetY,
 			Timer:   parameter.MaterializeAnimationDuration,
 		})
+		s.buffers.Observe(2, len(s.pendingBlueSpawns))
 	}
 }
 

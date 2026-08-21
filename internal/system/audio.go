@@ -28,6 +28,9 @@ type AudioSystem struct {
 	statSfxMute *atomic.Bool  // derived from mask; debug-overlay readability
 	statMusMute *atomic.Bool
 	statReject  [audio.RejectCount]*atomic.Int64
+	basePlayed  uint64
+	baseDropped uint64
+	baseReject  [audio.RejectCount]uint64
 }
 
 // NewAudioSystem creates an audio system with the given player
@@ -58,10 +61,21 @@ func NewAudioSystem(world *engine.World) engine.System {
 // preserves the player's mute choice.
 func (s *AudioSystem) Init() {
 	s.enabled = true
+	s.statBackend.Store("-")
+	s.statSilent.Store(true)
+	s.statPlayed.Store(0)
+	s.statDropped.Store(0)
+	for _, stat := range s.statReject {
+		stat.Store(0)
+	}
 	if s.player == nil {
 		s.statMask.Store(-1) // audio unavailable; renderers skip the indicator
+		s.statSfxMute.Store(false)
+		s.statMusMute.Store(false)
 		return
 	}
+	s.basePlayed, s.baseDropped = s.player.Stats()
+	s.baseReject = s.player.Rejections()
 	s.mask = parameter.AudioChanNone
 	if !s.player.IsEffectMuted() {
 		s.mask |= parameter.AudioChanEffects
@@ -178,12 +192,20 @@ func (s *AudioSystem) Update() {
 		return
 	}
 	p, d := s.player.Stats()
-	s.statPlayed.Store(int64(p))
-	s.statDropped.Store(int64(d))
+	s.statPlayed.Store(int64(counterDelta(p, s.basePlayed)))
+	s.statDropped.Store(int64(counterDelta(d, s.baseDropped)))
 	r := s.player.Rejections()
 	for i := range r {
-		s.statReject[i].Store(int64(r[i]))
+		s.statReject[i].Store(int64(counterDelta(r[i], s.baseReject[i])))
 	}
 	s.statBackend.Store(s.player.BackendName())
 	s.statSilent.Store(s.player.IsSilent())
+}
+
+// counterDelta reports a session delta and tolerates a backend counter reset.
+func counterDelta(current, baseline uint64) uint64 {
+	if current < baseline {
+		return current
+	}
+	return current - baseline
 }

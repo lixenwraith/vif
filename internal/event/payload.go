@@ -758,6 +758,7 @@ type CombatAttackDirectRequestPayload struct {
 	TargetEntity core.Entity                `toml:"target_entity"`
 	HitEntity    core.Entity                `toml:"hit_entity"`
 	AttackType   component.CombatAttackType `toml:"attack_type"`
+	ChainDepth   uint8                      `toml:"chain_depth"`
 }
 
 // CombatAttackAreaRequestPayload contains area attack information.
@@ -771,9 +772,10 @@ type CombatAttackAreaRequestPayload struct {
 	TargetEntity core.Entity                `toml:"target_entity"`
 	// HasOrigin marks origin position for knockback direction (e.g., explosion center)
 	// Without it OriginEntity position is used
-	HasOrigin bool `toml:"has_origin"`
-	OriginX   int  `toml:"origin_x"`
-	OriginY   int  `toml:"origin_y"`
+	HasOrigin  bool  `toml:"has_origin"`
+	OriginX    int   `toml:"origin_x"`
+	OriginY    int   `toml:"origin_y"`
+	ChainDepth uint8 `toml:"chain_depth"`
 }
 
 // EnemyKilledPayload carries enemy identity, death position, and player credit.

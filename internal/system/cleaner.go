@@ -19,8 +19,14 @@ type CleanerSystem struct {
 
 	entityBuf []core.Entity
 
-	statActive  *atomic.Int64
-	statSpawned *atomic.Int64
+	statActive         *atomic.Int64
+	statSpawned        *atomic.Int64
+	statWallCollisions *atomic.Int64
+	statBoundarySteps  *atomic.Int64
+	statGridSteps      *atomic.Int64
+	statCursorRejects  *atomic.Int64
+	statDisabled       *atomic.Int64
+	buffers            bufferTelemetry
 
 	enabled bool
 }
@@ -34,6 +40,12 @@ func NewCleanerSystem(world *engine.World) engine.System {
 
 	s.statActive = s.world.Resources.Status.Ints.Get("cleaner.active")
 	s.statSpawned = s.world.Resources.Status.Ints.Get("cleaner.spawned")
+	s.statWallCollisions = s.world.Resources.Status.Ints.Get("cleaner.wall_collisions")
+	s.statBoundarySteps = s.world.Resources.Status.Ints.Get("cleaner.boundary_steps")
+	s.statGridSteps = s.world.Resources.Status.Ints.Get("cleaner.grid_steps")
+	s.statCursorRejects = s.world.Resources.Status.Ints.Get("cleaner.cursor_rejects")
+	s.statDisabled = s.world.Resources.Status.Ints.Get("cleaner.disabled_rejects")
+	s.buffers = newBufferTelemetry(s.world.Resources.Status, "cleaner", "entities")
 
 	s.Init()
 	return s
@@ -43,6 +55,12 @@ func NewCleanerSystem(world *engine.World) engine.System {
 func (s *CleanerSystem) Init() {
 	s.statActive.Store(0)
 	s.statSpawned.Store(0)
+	s.statWallCollisions.Store(0)
+	s.statBoundarySteps.Store(0)
+	s.statGridSteps.Store(0)
+	s.statCursorRejects.Store(0)
+	s.statDisabled.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -82,6 +100,9 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type == event.EventCleanerSweepingRequest || ev.Type == event.EventCleanerDirectionalRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -90,6 +111,8 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.CleanerSweepingRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.spawnSweepingCleaners(cursor)
+			} else {
+				s.statCursorRejects.Add(1)
 			}
 		}
 
@@ -97,6 +120,8 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.spawnDirectionalCleaners(cursor, payload.OriginX, payload.OriginY, payload.ColorType)
+			} else {
+				s.statCursorRejects.Add(1)
 			}
 		}
 	}
@@ -113,6 +138,7 @@ func (s *CleanerSystem) Update() {
 	// Cleaners are destroyed immediately to free their spatial cells for later
 	// cleaners in this tick, so the entity order must remain detached.
 	s.entityBuf = append(s.entityBuf[:0], s.world.Components.Cleaner.Entities()...)
+	s.buffers.Observe(0, len(s.entityBuf))
 	s.statActive.Store(int64(len(s.entityBuf)))
 
 	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
@@ -174,8 +200,10 @@ func (s *CleanerSystem) Update() {
 
 			lastValidY := fromY
 			for y := fromY + step; (step > 0 && y <= toY) || (step < 0 && y >= toY); y += step {
+				s.statGridSteps.Add(1)
 				// Skip OOB cells (cleaner flies off-screen, lifecycle handles destruction)
 				if y < 0 || y >= gameHeight {
+					s.statBoundarySteps.Add(1)
 					appendCleanerTrail(cleanerComp, x, y)
 					lastValidY = y
 					continue
@@ -183,6 +211,7 @@ func (s *CleanerSystem) Update() {
 
 				// Wall blocks head at previous cell
 				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					s.statWallCollisions.Add(1)
 					blocked = true
 					blockGridX, blockGridY = x, lastValidY
 					break
@@ -210,13 +239,16 @@ func (s *CleanerSystem) Update() {
 
 			lastValidX := fromX
 			for x := fromX + step; (step > 0 && x <= toX) || (step < 0 && x >= toX); x += step {
+				s.statGridSteps.Add(1)
 				if x < 0 || x >= gameWidth {
+					s.statBoundarySteps.Add(1)
 					appendCleanerTrail(cleanerComp, x, y)
 					lastValidX = x
 					continue
 				}
 
 				if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+					s.statWallCollisions.Add(1)
 					blocked = true
 					blockGridX, blockGridY = lastValidX, y
 					break

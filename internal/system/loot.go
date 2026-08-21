@@ -47,6 +47,8 @@ type LootSystem struct {
 	statDrops    *atomic.Int64
 	statActive   *atomic.Int64
 	statCollects *atomic.Int64
+	buffers      bufferTelemetry
+	motion       bounceTelemetry
 
 	enabled bool
 }
@@ -59,6 +61,8 @@ func NewLootSystem(world *engine.World) engine.System {
 	s.statDrops = world.Resources.Status.Ints.Get("loot.drops")
 	s.statActive = world.Resources.Status.Ints.Get("loot.active")
 	s.statCollects = world.Resources.Status.Ints.Get("loot.collects")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity")
+	s.motion = newBounceTelemetry(world.Resources.Status, "loot")
 
 	s.Init()
 	return s
@@ -70,6 +74,8 @@ func (s *LootSystem) Init() {
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
+	s.buffers.Reset()
+	s.motion.Reset()
 
 	s.enabled = true
 }
@@ -182,7 +188,7 @@ func (s *LootSystem) Update() {
 			}
 		}
 
-		newGridX, newGridY, _ := physics.IntegrateWithBounce(
+		newGridX, newGridY, motion := physics.IntegrateWithBounceStats(
 			&kineticComp.Kinetic,
 			dtSec,
 			0, 0,
@@ -193,6 +199,7 @@ func (s *LootSystem) Update() {
 				return s.world.Positions.IsBlocked(tx, ty, component.WallBlockKinetic)
 			},
 		)
+		s.motion.Record(motion)
 
 		if newGridX != curX || newGridY != curY {
 			s.world.Positions.SetPosition(lootEntity, component.PositionComponent{X: newGridX, Y: newGridY})
@@ -370,6 +377,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType) []DropResu
 	if state == nil {
 		state = &pityState{}
 		s.pity[speciesType] = state
+		s.buffers.Observe(0, len(s.pity))
 	}
 
 	activeLoot := s.getActiveLootTypes()

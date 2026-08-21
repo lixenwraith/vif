@@ -19,7 +19,9 @@ type EventQueue struct {
 	head      atomic.Uint64                         // Read index
 	tail      atomic.Uint64                         // Write index
 
-	overwritten atomic.Uint64           // Events evicted unread by producer overrun
+	overwritten atomic.Uint64 // Events evicted unread by producer overrun
+	dispatched  [EventTypeCount]atomic.Int64
+	deadLetter  [EventTypeCount]atomic.Int64
 	journal     atomic.Pointer[Journal] // nil = journaling off
 	stamp       atomic.Pointer[Stamp]   // record position; advanced under the world lock
 }
@@ -134,6 +136,36 @@ func (eq *EventQueue) Len() int {
 // Non-zero means producers outran the consumer and game state was lost.
 func (eq *EventQueue) Dropped() uint64 {
 	return eq.overwritten.Load()
+}
+
+// RecordDispatch accounts one routed event and whether no consumer accepted it.
+// ClockScheduler calls this under the world lock after the routing verdict is known.
+func (eq *EventQueue) RecordDispatch(t EventType, dead bool) {
+	if !validType(t) {
+		return
+	}
+	eq.dispatched[t].Add(1)
+	if dead {
+		eq.deadLetter[t].Add(1)
+	}
+}
+
+// SnapshotTelemetry copies per-type counters for cadence-bound publication.
+func (eq *EventQueue) SnapshotTelemetry(dispatch, dead *[EventTypeCount]int64) {
+	for i := 1; i < EventTypeCount; i++ {
+		dispatch[i] = eq.dispatched[i].Load()
+		dead[i] = eq.deadLetter[i].Load()
+	}
+}
+
+// ResetTelemetry starts queue diagnostics for a new game session.
+// Caller MUST hold the world lock and have drained stale queued events.
+func (eq *EventQueue) ResetTelemetry() {
+	eq.overwritten.Store(0)
+	for i := 1; i < EventTypeCount; i++ {
+		eq.dispatched[i].Store(0)
+		eq.deadLetter[i].Store(0)
+	}
 }
 
 // SetJournal installs or clears the replay journal; nil disables capture

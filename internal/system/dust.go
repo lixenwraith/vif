@@ -75,9 +75,13 @@ type DustSystem struct {
 	flashBuf     []core.Entity
 
 	// Telemetry
-	statCreated   *atomic.Int64
-	statActive    *atomic.Int64
-	statDestroyed *atomic.Int64
+	statCreated             *atomic.Int64
+	statActive              *atomic.Int64
+	statDestroyed           *atomic.Int64
+	statWallCollisions      *atomic.Int64
+	statBoundaryReflections *atomic.Int64
+	statGridSteps           *atomic.Int64
+	buffers                 bufferTelemetry
 
 	enabled bool
 }
@@ -90,6 +94,10 @@ func NewDustSystem(world *engine.World) engine.System {
 	s.statCreated = world.Resources.Status.Ints.Get("dust.created")
 	s.statActive = world.Resources.Status.Ints.Get("dust.active")
 	s.statDestroyed = world.Resources.Status.Ints.Get("dust.destroyed")
+	s.statWallCollisions = world.Resources.Status.Ints.Get("dust.wall_collisions")
+	s.statBoundaryReflections = world.Resources.Status.Ints.Get("dust.boundary_reflections")
+	s.statGridSteps = world.Resources.Status.Ints.Get("dust.grid_steps")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "dust", "death", "transform", "destroy", "flash", "collision_cells", "collision_impulses", "combat_headers")
 
 	s.Init()
 	return s
@@ -112,6 +120,10 @@ func (s *DustSystem) Init() {
 	s.statCreated.Store(0)
 	s.statActive.Store(0)
 	s.statDestroyed.Store(0)
+	s.statWallCollisions.Store(0)
+	s.statBoundaryReflections.Store(0)
+	s.statGridSteps.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -186,6 +198,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			// OPTIMIZATION: Use PositionBatch to lock the spatial grid once for all new entities
 			posBatch := s.world.Positions.BeginBatch()
 
+			created := 0
 			for i := range count {
 				entry := p.Entries[i]
 				if entry.Level == component.GlyphDark {
@@ -196,12 +209,13 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 
 				// Set components to batch entry entity
 				posBatch.Add(entity, component.PositionComponent{X: entry.X, Y: entry.Y})
+				created++
 			}
 
 			// Force commit because dust often spawns on top of dying glyphs (DeathSystem runs later)
 			posBatch.CommitForce()
 
-			s.statCreated.Add(int64(count))
+			s.statCreated.Add(int64(created))
 			event.DustBatchPool.Release(p)
 		}
 
@@ -340,6 +354,7 @@ func (s *DustSystem) Update() {
 		rx := physics.ReflectBoundsDampedX(&kineticComp.Kinetic, 0, gameWidth, parameter.DustWallRestitution)
 		ry := physics.ReflectBoundsDampedY(&kineticComp.Kinetic, 0, gameHeight, parameter.DustWallRestitution)
 		if rx || ry {
+			s.statBoundaryReflections.Add(1)
 			newX, newY = physics.GridPos(&kineticComp.Kinetic)
 		}
 
@@ -351,6 +366,7 @@ func (s *DustSystem) Update() {
 			traverser := vmath.NewGridTraverserF(prevX, prevY, kineticComp.PreciseX, kineticComp.PreciseY)
 
 			for traverser.Next() {
+				s.statGridSteps.Add(1)
 				currX, currY := traverser.Pos()
 
 				// Skip cell from previous frame
@@ -365,6 +381,7 @@ func (s *DustSystem) Update() {
 
 				// Wall collision - reflect and stop (BEFORE entity checks)
 				if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockParticle) {
+					s.statWallCollisions.Add(1)
 					if currX != lastSafeX {
 						physics.ReflectVelocityX(&kineticComp.Kinetic, parameter.DustWallRestitution)
 					}
@@ -458,6 +475,7 @@ func (s *DustSystem) Update() {
 	}
 
 	// Apply batched collision impulses
+	s.buffers.Observe(5, len(collisionCtx.impulses))
 	s.applyAccumulatedImpulses(collisionCtx)
 
 	if len(s.deathBuf) > 0 {
@@ -466,6 +484,7 @@ func (s *DustSystem) Update() {
 
 	s.statActive.Store(int64(dusts.CountEntities()))
 	s.statDestroyed.Add(int64(len(s.deathBuf)))
+	s.buffers.Observe(0, len(s.deathBuf))
 }
 
 // buildCollisionContext refills the tick's collision lookup in place
@@ -503,6 +522,8 @@ func (s *DustSystem) buildCollisionContext() *collisionContext {
 			}
 		}
 	}
+	s.buffers.Observe(4, len(ctx.cellFlags))
+	s.buffers.Observe(6, len(ctx.combatHeaders))
 
 	return ctx
 }
@@ -576,6 +597,9 @@ func (s *DustSystem) transformGlyphsToDust() {
 			x: glyphPos.X, y: glyphPos.Y, char: glyphComp.Rune, level: glyphComp.Level,
 		})
 	}
+	s.buffers.Observe(1, len(s.transformBuf))
+	s.buffers.Observe(2, len(s.destroyBuf))
+	s.buffers.Observe(3, len(s.flashBuf))
 
 	if len(s.flashBuf) > 0 {
 		// Emit batch death with flash effect (no transform)

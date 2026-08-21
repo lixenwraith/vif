@@ -56,6 +56,7 @@ type GeneticSystem struct {
 	typeFitEMA  [parameter.EyeTypeCount]float64
 	statTypeFit *status.AtomicString
 	typeFitBuf  []byte
+	buffers     bufferTelemetry
 
 	enabled bool
 }
@@ -80,6 +81,7 @@ func NewGeneticSystem(world *engine.World) engine.System {
 	s.statOutcomes = world.Resources.Status.Ints.Get("eye.ga.outcomes")
 	s.statTracked = world.Resources.Status.Ints.Get("eye.ga.tracked")
 	s.statTypeFit = world.Resources.Status.Strings.Get("eye.ga.typefit")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "eye", "ga_track_keys", "ga_pending_deaths", "ga_typefit", "ga_tracking")
 
 	s.Init()
 	return s
@@ -92,6 +94,14 @@ func (s *GeneticSystem) Init() {
 	s.eyeTracked = 0
 	s.telemetryTicks = 0
 	s.enabled = true
+	s.statGeneration.Store(0)
+	s.statBest.Store(0)
+	s.statAvg.Store(0)
+	s.statPending.Store(0)
+	s.statOutcomes.Store(0)
+	s.statTracked.Store(0)
+	s.statTypeFit.Store("-")
+	s.buffers.Reset()
 
 	s.registry.Reset() // Drop evaluations belonging to the previous run
 	_ = s.registry.Start()
@@ -158,6 +168,7 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			s.mu.Lock()
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
+			s.buffers.Observe(1, len(s.pendingDeaths))
 			s.mu.Unlock()
 		}
 
@@ -226,6 +237,7 @@ func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType compo
 		targetGroupID: groupID,
 		minDistSq:     math.MaxFloat64,
 	}
+	s.buffers.Observe(3, len(s.tracking))
 
 	s.world.Components.Genotype.SetComponent(entity, component.GenotypeComponent{
 		Genes:     genes,
@@ -269,6 +281,7 @@ func (s *GeneticSystem) processTracking() {
 	eyes := 0
 
 	s.trackKeys = sortedKeys(s.trackKeys, s.tracking)
+	s.buffers.Observe(0, len(s.trackKeys))
 	for _, entity := range s.trackKeys {
 		tracked := s.tracking[entity]
 
@@ -383,5 +396,6 @@ func (s *GeneticSystem) updateTelemetry() {
 		buf = strconv.AppendInt(buf, int64(v*100), 10)
 	}
 	s.typeFitBuf = buf
+	s.buffers.Observe(2, len(s.typeFitBuf))
 	s.statTypeFit.Store(string(buf))
 }

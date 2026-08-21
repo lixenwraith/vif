@@ -21,6 +21,7 @@ type MotionMarkerSystem struct {
 
 	// Colored markers (shown after g+direction)
 	coloredMarkers []core.Entity
+	buffers        bufferTelemetry
 
 	enabled bool
 }
@@ -32,12 +33,14 @@ func NewMotionMarkerSystem(world *engine.World) engine.System {
 		basePositions:  make([]vmath.Point, 0, 4),
 		coloredMarkers: make([]core.Entity, 0, 12),
 	}
+	s.buffers = newBufferTelemetry(world.Resources.Status, "motion_marker", "base_markers", "base_positions", "colored_markers")
 	s.Init()
 	return s
 }
 
 func (s *MotionMarkerSystem) Init() {
 	s.clearAllMarkers()
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -196,6 +199,8 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 			s.basePositions = append(s.basePositions, vmath.Point{X: x, Y: y})
 		}
 	}
+	s.buffers.Observe(0, len(s.baseMarkers))
+	s.buffers.Observe(1, len(s.basePositions))
 }
 
 // showColoredMarkers displays markers for g-motions using the same logic
@@ -224,6 +229,7 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 			s.spawnMarker(x, y, &s.coloredMarkers)
 		}
 	}
+	s.buffers.Observe(2, len(s.coloredMarkers))
 }
 
 // validateBaseMarkers checks if glyphs still exist at marker positions, regenerates if changed

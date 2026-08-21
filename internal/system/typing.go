@@ -27,6 +27,8 @@ type TypingSystem struct {
 	// Per-cursor records
 	statMaxStreak *status.PlayerInt
 	currentStreak [parameter.MaxPlayers]int64
+	buffers       bufferTelemetry
+	rejects       rejectionTelemetry
 
 	enabled bool
 }
@@ -39,6 +41,8 @@ func NewTypingSystem(world *engine.World) engine.System {
 	s.statCorrect = reg.Ints.Get("typing.correct")
 	s.statErrors = reg.Ints.Get("typing.errors")
 	s.statMaxStreak = status.NewPlayerInt(reg, parameter.MaxPlayers, "typing.max_streak", "typing.max_streak")
+	s.buffers = newBufferTelemetry(reg, "typing", "delete")
+	s.rejects = newRejectionTelemetry(reg, "typing")
 
 	s.Init()
 	return s
@@ -51,6 +55,8 @@ func (s *TypingSystem) Init() {
 	s.statCorrect.Store(0)
 	s.statErrors.Store(0)
 	s.statMaxStreak.Reset()
+	s.buffers.Reset()
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -90,6 +96,9 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -107,6 +116,8 @@ func (s *TypingSystem) HandleEvent(ev event.GameEvent) {
 		// Resolve before release: the pool reclaims the payload below
 		if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 			s.handleTyping(cursor, payload.X, payload.Y, payload.Char)
+		} else {
+			s.rejects.cursor.Add(1)
 		}
 		event.CharacterTypedPayloadPool.Put(payload)
 
@@ -417,6 +428,7 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 		s.deleteBuf = append(s.deleteBuf, e)
 		return true
 	})
+	s.buffers.Observe(0, len(s.deleteBuf))
 
 	if len(s.deleteBuf) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, s.deleteBuf)

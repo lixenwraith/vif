@@ -31,6 +31,8 @@ type GoldSystem struct {
 	statActive        *atomic.Bool
 	stateHeaderEntity *atomic.Int64
 	statTimer         *atomic.Int64
+	statSpawnFailures *atomic.Int64
+	rejects           rejectionTelemetry
 
 	enabled bool
 }
@@ -44,6 +46,8 @@ func NewGoldSystem(world *engine.World) engine.System {
 	s.statActive = s.world.Resources.Status.Bools.Get("gold.active")
 	s.stateHeaderEntity = s.world.Resources.Status.Ints.Get("gold.header_entity")
 	s.statTimer = s.world.Resources.Status.Ints.Get("gold.timer")
+	s.statSpawnFailures = s.world.Resources.Status.Ints.Get("gold.spawn_failures")
+	s.rejects = newRejectionTelemetry(s.world.Resources.Status, "gold")
 
 	s.Init()
 	return s
@@ -60,6 +64,8 @@ func (s *GoldSystem) Init() {
 	s.statActive.Store(false)
 	s.stateHeaderEntity.Store(0)
 	s.statTimer.Store(0)
+	s.statSpawnFailures.Store(0)
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -102,6 +108,9 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -113,15 +122,19 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.GoldJumpRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.handleJumpRequest(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 
 	case event.EventGoldSpawnRequest:
 		if !s.spawnEnabled || s.active {
+			s.statSpawnFailures.Add(1)
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 			return
 		}
 		if !s.spawnGold() {
+			s.statSpawnFailures.Add(1)
 			s.world.PushEvent(event.EventGoldSpawnFailed, nil)
 		}
 

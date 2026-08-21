@@ -23,8 +23,13 @@ type DecaySystem struct {
 	decayedThisFrame   map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 
-	statCount   *atomic.Int64
-	statApplied *atomic.Int64
+	statCount            *atomic.Int64
+	statApplied          *atomic.Int64
+	statWallCollisions   *atomic.Int64
+	statBoundaryHits     *atomic.Int64
+	statGridSteps        *atomic.Int64
+	statProtectedRejects *atomic.Int64
+	buffers              bufferTelemetry
 
 	enabled bool
 }
@@ -40,6 +45,11 @@ func NewDecaySystem(world *engine.World) engine.System {
 
 	s.statCount = s.world.Resources.Status.Ints.Get("decay.count")
 	s.statApplied = s.world.Resources.Status.Ints.Get("decay.applied")
+	s.statWallCollisions = s.world.Resources.Status.Ints.Get("decay.wall_collisions")
+	s.statBoundaryHits = s.world.Resources.Status.Ints.Get("decay.boundary_hits")
+	s.statGridSteps = s.world.Resources.Status.Ints.Get("decay.grid_steps")
+	s.statProtectedRejects = s.world.Resources.Status.Ints.Get("decay.protected_rejects")
+	s.buffers = newBufferTelemetry(s.world.Resources.Status, "decay", "hit_entities", "processed_cells")
 
 	s.Init()
 	return s
@@ -52,6 +62,11 @@ func (s *DecaySystem) Init() {
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
 	s.statApplied.Store(0)
+	s.statWallCollisions.Store(0)
+	s.statBoundaryHits.Store(0)
+	s.statGridSteps.Store(0)
+	s.statProtectedRejects.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -220,10 +235,17 @@ func (s *DecaySystem) updateDecayEntities() {
 		// Swept Traversal via Supercover DDA
 		traverser := vmath.NewGridTraverserF(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY)
 		for traverser.Next() {
+			s.statGridSteps.Add(1)
 			x, y := traverser.Pos()
 
 			// Wall or OOB - destroy particle
-			if s.world.Positions.IsBlocked(x, y, component.WallBlockSpawn) {
+			if s.world.Positions.IsOutOfBounds(x, y) {
+				s.statBoundaryHits.Add(1)
+				destroyEntity = true
+				break
+			}
+			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockSpawn) {
+				s.statWallCollisions.Add(1)
 				destroyEntity = true
 				break
 			}
@@ -299,6 +321,8 @@ func (s *DecaySystem) updateDecayEntities() {
 	if len(deathCandidates) > 0 {
 		event.EmitDeathBatch(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates)
 	}
+	s.buffers.Observe(0, len(s.decayedThisFrame))
+	s.buffers.Observe(1, len(s.processedGridCells))
 }
 
 // shouldDieByDecay checks if a character has reached the end of the decay chain
@@ -320,6 +344,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 	// Check protection
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
 		if protComp.Mask&component.ProtectFromDecay != 0 {
+			s.statProtectedRejects.Add(1)
 			return
 		}
 	}

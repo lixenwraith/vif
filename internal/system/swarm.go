@@ -31,6 +31,9 @@ type SwarmSystem struct {
 	statActive      *atomic.Bool
 	statCount       *atomic.Int64
 	statPlayerKills *atomic.Int64
+	statProtected   *atomic.Int64
+	lifecycle       lifecycleTelemetry
+	motion          bounceTelemetry
 
 	enabled bool
 }
@@ -44,6 +47,9 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.statActive = world.Resources.Status.Bools.Get("swarm.active")
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
 	s.statPlayerKills = world.Resources.Status.Ints.Get("swarm.player_kills")
+	s.statProtected = world.Resources.Status.Ints.Get("swarm.protected_rejects")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "swarm")
+	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
 	s.Init()
 	return s
@@ -55,6 +61,9 @@ func (s *SwarmSystem) Init() {
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)
+	s.statProtected.Store(0)
+	s.lifecycle.Reset()
+	s.motion.Reset()
 	s.enabled = true
 }
 
@@ -72,6 +81,7 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 		event.EventSwarmSpawnRequest,
 		event.EventSwarmCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -90,8 +100,20 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesSwarm {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+			if s.world.ResolveCursor(payload.KillerEntity) != 0 {
+				s.statPlayerKills.Add(1)
+			}
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventSwarmSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -103,6 +125,7 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventSwarmCancelRequest:
 		headerEntities := s.world.Components.Swarm.Entities()
+		s.lifecycle.despawned.Add(int64(len(headerEntities)))
 		for _, headerEntity := range headerEntities {
 			s.despawnSwarm(headerEntity)
 		}
@@ -113,6 +136,9 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 		// OOB or other mechanics that have destroyed swarm member entities
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
 			if payload.Behavior == component.BehaviorSwarm {
+				if s.world.Components.Swarm.HasEntity(payload.HeaderEntity) {
+					s.lifecycle.despawned.Add(1)
+				}
 				s.despawnSwarm(payload.HeaderEntity)
 			}
 		}
@@ -164,15 +190,13 @@ func (s *SwarmSystem) Update() {
 				})
 			}
 
-			// Track player damage kills
-			s.statPlayerKills.Add(1)
-
 			s.despawnSwarm(headerEntity)
 			continue
 		}
 
 		// Charges check → despawn
 		if swarmComp.ChargesCompleted >= parameter.SwarmMaxCharges {
+			s.lifecycle.killedLifecycle.Add(1)
 			s.despawnSwarm(headerEntity)
 			continue
 		}
@@ -229,6 +253,7 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 			0,
 		)
 		if !found {
+			s.lifecycle.spawnFailures.Add(1)
 			return
 		}
 		headerX = topLeftX + parameter.SwarmHeaderOffsetX
@@ -240,6 +265,7 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 
 	// Create entity
 	headerEntity := s.createSwarmComposite(headerX, headerY)
+	s.lifecycle.spawned.Add(1)
 
 	// Notify world
 	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
@@ -272,6 +298,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 					if prot.Mask&component.ProtectFromSpecies != 0 {
+						s.statProtected.Add(1)
 						continue
 					}
 				}
@@ -706,7 +733,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 	maxHeaderY := config.MapHeight - (parameter.SwarmHeight - parameter.SwarmHeaderOffsetY)
 
 	// Integrate with Bounce
-	newX, newY, hitWall := physics.IntegrateWithBounce(
+	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,
 		dtSec,
 		parameter.SwarmHeaderOffsetX, parameter.SwarmHeaderOffsetY,
@@ -715,6 +742,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 		parameter.SwarmRestitution,
 		wallCheck,
 	)
+	s.motion.Record(motion)
 
 	// Update positions
 	if newX != headerPos.X || newY != headerPos.Y {
@@ -722,7 +750,7 @@ func (s *SwarmSystem) integrateAndSync(headerEntity core.Entity, dtSec float64) 
 		s.syncMemberPositions(headerEntity, newX, newY)
 	}
 
-	return hitWall
+	return motion.Hit()
 }
 
 // syncMemberPositions updates all member positions relative to header

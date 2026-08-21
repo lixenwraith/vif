@@ -176,6 +176,23 @@ func TestIntegrateWithBounceStaysInBounds(t *testing.T) {
 	}
 }
 
+func TestIntegrateWithBounceStatsPreservesIntegration(t *testing.T) {
+	wall := func(x, _ int) bool { return x == 7 }
+	wrapper := newKin(2.5, 5.5, 50, -3)
+	instrumented := wrapper
+
+	wx, wy, hit := IntegrateWithBounce(&wrapper, 0.2, 0, 0, 0, 40, 0, 20, 0.7, wall)
+	sx, sy, stats := IntegrateWithBounceStats(&instrumented, 0.2, 0, 0, 0, 40, 0, 20, 0.7, wall)
+
+	if wrapper != instrumented || wx != sx || wy != sy || hit != stats.Hit() {
+		t.Fatalf("instrumented integration diverged:\nwrapper=(%+v, %d, %d, %v)\nstats=(%+v, %d, %d, %+v)",
+			wrapper, wx, wy, hit, instrumented, sx, sy, stats)
+	}
+	if stats.Steps <= 1 || stats.WallCollisions == 0 {
+		t.Fatalf("stats did not expose swept work and contact: %+v", stats)
+	}
+}
+
 // --- orbital ---
 
 func TestOrbitalVelocity(t *testing.T) {

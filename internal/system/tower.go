@@ -24,6 +24,7 @@ type TowerSystem struct {
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
+	lifecycle  lifecycleTelemetry
 
 	enabled bool
 }
@@ -35,6 +36,7 @@ func NewTowerSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("tower.active")
 	s.statCount = world.Resources.Status.Ints.Get("tower.count")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "tower")
 
 	s.Init()
 	return s
@@ -44,6 +46,7 @@ func (s *TowerSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.lifecycle.Reset()
 	s.enabled = true
 }
 
@@ -60,6 +63,7 @@ func (s *TowerSystem) EventTypes() []event.EventType {
 		event.EventTowerSpawnRequest,
 		event.EventTowerCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -78,8 +82,17 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesTower {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventTowerSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -88,10 +101,13 @@ func (s *TowerSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.TowerSpawnRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.spawnTower(cursor, payload)
+			} else {
+				s.lifecycle.spawnFailures.Add(1)
 			}
 		}
 
 	case event.EventTowerCancelRequest:
+		s.lifecycle.despawned.Add(int64(s.world.Components.Tower.CountEntities()))
 		s.terminateAll()
 
 	case event.EventCompositeIntegrityBreach:
@@ -163,12 +179,14 @@ func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerS
 		var ok bool
 		centerX, centerY, ok = s.findTowerPosition(radiusX, radiusY)
 		if !ok {
+			s.lifecycle.spawnFailures.Add(1)
 			s.world.PushEvent(event.EventTowerSpawnFailed, nil)
 			return
 		}
 	} else {
 		centerX, centerY = payload.X, payload.Y
 		if !s.validateTowerPosition(centerX, centerY, radiusX, radiusY) {
+			s.lifecycle.spawnFailures.Add(1)
 			s.world.PushEvent(event.EventTowerSpawnFailed, nil)
 			return
 		}
@@ -230,6 +248,7 @@ func (s *TowerSystem) spawnTower(cursorEntity core.Entity, payload *event.TowerS
 		X:            centerX,
 		Y:            centerY,
 	})
+	s.lifecycle.spawned.Add(1)
 }
 
 func (s *TowerSystem) validateTowerPosition(centerX, centerY, radiusX, radiusY int) bool {
@@ -426,6 +445,8 @@ func (s *TowerSystem) handleTowerDeath(headerEntity core.Entity) {
 			X:            towerComp.SpawnX,
 			Y:            towerComp.SpawnY,
 		})
+	} else {
+		s.lifecycle.killedLifecycle.Add(1)
 	}
 }
 

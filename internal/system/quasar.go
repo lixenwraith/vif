@@ -24,8 +24,11 @@ type QuasarSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
+	statActive    *atomic.Bool
+	statCount     *atomic.Int64
+	statProtected *atomic.Int64
+	lifecycle     lifecycleTelemetry
+	motion        bounceTelemetry
 
 	enabled bool
 }
@@ -38,6 +41,9 @@ func NewQuasarSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("quasar.active")
 	s.statCount = world.Resources.Status.Ints.Get("quasar.count")
+	s.statProtected = world.Resources.Status.Ints.Get("quasar.protected_rejects")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "quasar")
+	s.motion = newBounceTelemetry(world.Resources.Status, "quasar")
 
 	s.Init()
 	return s
@@ -47,6 +53,9 @@ func (s *QuasarSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.statProtected.Store(0)
+	s.lifecycle.Reset()
+	s.motion.Reset()
 	s.enabled = true
 }
 
@@ -64,6 +73,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 		event.EventQuasarSpawnRequest,
 		event.EventQuasarCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -82,8 +92,17 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesQuasar {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventQuasarSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -95,13 +114,16 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventQuasarCancelRequest:
 		// Cancel all quasars
-		for _, entity := range s.world.Components.Quasar.Entities() {
+		entities := s.world.Components.Quasar.Entities()
+		s.lifecycle.despawned.Add(int64(len(entities)))
+		for _, entity := range entities {
 			s.terminateQuasar(entity)
 		}
 
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
 			if s.world.Components.Quasar.HasEntity(payload.HeaderEntity) {
+				s.lifecycle.despawned.Add(1)
 				s.terminateQuasar(payload.HeaderEntity)
 			}
 		}
@@ -129,6 +151,7 @@ func (s *QuasarSystem) Update() {
 		// component detached so death/stun exits preserve their prior semantics.
 		quasarComp, ok := quasars.GetComponent(headerEntity)
 		if !ok {
+			s.lifecycle.despawned.Add(1)
 			s.terminateQuasar(headerEntity)
 			continue
 		}
@@ -261,6 +284,7 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 			0,
 		)
 		if !found {
+			s.lifecycle.spawnFailures.Add(1)
 			return
 		}
 		headerX = topLeftX + parameter.QuasarHeaderOffsetX
@@ -270,6 +294,7 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)
 	headerEntity := s.createQuasarComposite(headerX, headerY)
+	s.lifecycle.spawned.Add(1)
 
 	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
 		HeaderEntity: headerEntity,
@@ -303,6 +328,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 				// Check protection
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 					if prot.Mask&component.ProtectFromSpecies != 0 {
+						s.statProtected.Add(1)
 						continue
 					}
 				}
@@ -524,7 +550,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 	maxHeaderY := config.MapHeight - (parameter.QuasarHeight - parameter.QuasarHeaderOffsetY)
 
 	// Integrate with Bounce
-	newX, newY, _ := physics.IntegrateWithBounce(
+	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,
 		dtSec,
 		parameter.QuasarHeaderOffsetX, parameter.QuasarHeaderOffsetY,
@@ -533,6 +559,7 @@ func (s *QuasarSystem) updateKineticMovement(headerEntity core.Entity, quasarCom
 		parameter.QuasarRestitution,
 		wallCheck,
 	)
+	s.motion.Record(motion)
 
 	// Update header position if cell changed
 	if newX != headerPos.X || newY != headerPos.Y {
@@ -688,6 +715,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 				// Check protection
 				if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
 					if protComp.Mask&component.ProtectFromSpecies != 0 {
+						s.statProtected.Add(1)
 						continue
 					}
 				}

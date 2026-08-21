@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -11,7 +12,9 @@ import (
 
 // PingSystem manages the state of ping highlights and grids
 type PingSystem struct {
-	world *engine.World
+	world             *engine.World
+	statCursorRejects *atomic.Int64
+	statDisabled      *atomic.Int64
 
 	enabled bool
 }
@@ -21,12 +24,16 @@ func NewPingSystem(world *engine.World) engine.System {
 	s := &PingSystem{
 		world: world,
 	}
+	s.statCursorRejects = world.Resources.Status.Ints.Get("ping.cursor_rejects")
+	s.statDisabled = world.Resources.Status.Ints.Get("ping.disabled_rejects")
 	s.Init()
 	return s
 }
 
 // Init resets session state for new game
 func (s *PingSystem) Init() {
+	s.statCursorRejects.Store(0)
+	s.statDisabled.Store(0)
 	s.enabled = true
 }
 
@@ -66,6 +73,9 @@ func (s *PingSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -78,6 +88,8 @@ func (s *PingSystem) HandleEvent(ev event.GameEvent) {
 		}
 		if target := s.world.ResolveCursor(p.Entity); target != 0 {
 			s.handleGridRequest(target, p.Duration)
+		} else {
+			s.statCursorRejects.Add(1)
 		}
 	}
 }

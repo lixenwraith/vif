@@ -27,6 +27,10 @@ type EnergySystem struct {
 	statRewardCount      *atomic.Int64
 	statSpendCount       *atomic.Int64
 	statCrossedZeroCount *atomic.Int64
+	statPenaltyRejects   *atomic.Int64
+	statCursorRejects    *atomic.Int64
+	statMissingEnergy    *atomic.Int64
+	statDisabled         *atomic.Int64
 
 	enabled bool
 }
@@ -42,6 +46,10 @@ func NewEnergySystem(world *engine.World) engine.System {
 	s.statRewardCount = reg.Ints.Get("energy.reward_count")
 	s.statSpendCount = reg.Ints.Get("energy.spend_count")
 	s.statCrossedZeroCount = reg.Ints.Get("energy.crossed_zero_count")
+	s.statPenaltyRejects = reg.Ints.Get("energy.penalty_rejects")
+	s.statCursorRejects = reg.Ints.Get("energy.cursor_rejects")
+	s.statMissingEnergy = reg.Ints.Get("energy.missing_energy_rejects")
+	s.statDisabled = reg.Ints.Get("energy.disabled_rejects")
 
 	s.Init()
 	return s
@@ -57,6 +65,10 @@ func (s *EnergySystem) Init() {
 	s.statRewardCount.Store(0)
 	s.statSpendCount.Store(0)
 	s.statCrossedZeroCount.Store(0)
+	s.statPenaltyRejects.Store(0)
+	s.statCursorRejects.Store(0)
+	s.statMissingEnergy.Store(0)
+	s.statDisabled.Store(0)
 
 	s.enabled = true
 }
@@ -99,6 +111,11 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		switch ev.Type {
+		case event.EventEnergyAddRequest, event.EventEnergySetRequest, event.EventEnergyGlyphConsumed,
+			event.EventEnergyBlinkStart, event.EventEnergyBlinkStop:
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -126,6 +143,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.statCursorRejects.Add(1)
 				return
 			}
 			s.addEnergy(cursor, int64(payload.Delta), payload.Percentage, payload.Type)
@@ -135,6 +153,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.statCursorRejects.Add(1)
 				return
 			}
 			s.setEnergy(cursor, int64(payload.Value))
@@ -144,6 +163,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.statCursorRejects.Add(1)
 				return
 			}
 			s.handleGlyphConsumed(cursor, payload.Type, payload.Level)
@@ -153,6 +173,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnergyBlinkPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.statCursorRejects.Add(1)
 				return
 			}
 			s.startBlink(cursor, payload.Type, payload.Level)
@@ -162,6 +183,8 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnergyBlinkStopPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.stopBlink(cursor)
+			} else {
+				s.statCursorRejects.Add(1)
 			}
 		}
 	}
@@ -210,6 +233,7 @@ func (s *EnergySystem) Update() {
 func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage bool, deltaType component.EnergyDeltaType) {
 	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
 	if !ok {
+		s.statMissingEnergy.Add(1)
 		return
 	}
 
@@ -238,6 +262,7 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	var crossedZero bool
 	switch deltaType {
 	case component.EnergyDeltaReward:
+		s.statRewardCount.Add(1)
 		// Absolute value increase, can't cross zero
 		if currentEnergy < 0 {
 			newEnergy = currentEnergy - absDelta
@@ -248,12 +273,15 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 	case component.EnergyDeltaPenalty:
 		// Boost protects from penalties
 		if boostComp, ok := s.world.Components.Boost.GetPtr(cursor); ok && boostComp.Active {
+			s.statPenaltyRejects.Add(1)
 			return
 		}
 		// Ember protects from penalties
 		if heatComp, ok := s.world.Components.Heat.GetPtr(cursor); ok && heatComp.EmberActive {
+			s.statPenaltyRejects.Add(1)
 			return
 		}
+		s.statPenaltyCount.Add(1)
 		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
 
 	case component.EnergyDeltaPassive:

@@ -31,6 +31,7 @@ type WeaponSystem struct {
 	statRodFired       *atomic.Int64
 	statLauncherFired  *atomic.Int64
 	statDisruptorFired *atomic.Int64
+	rejects            rejectionTelemetry
 
 	enabled bool
 }
@@ -49,6 +50,7 @@ func NewWeaponSystem(world *engine.World) engine.System {
 	s.statRodFired = reg.Ints.Get("weapon.rod_fired")
 	s.statLauncherFired = reg.Ints.Get("weapon.launcher_fired")
 	s.statDisruptorFired = reg.Ints.Get("weapon.disruptor_fired")
+	s.rejects = newRejectionTelemetry(reg, "weapon")
 
 	s.Init()
 	return s
@@ -65,6 +67,7 @@ func (s *WeaponSystem) Init() {
 	s.statRodFired.Store(0)
 	s.statLauncherFired.Store(0)
 	s.statDisruptorFired.Store(0)
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -102,6 +105,9 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -117,6 +123,8 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.EnergyCrossedZeroPayload); ok {
 			if cursor := s.world.ResolveCursor(p.Entity); cursor != 0 {
 				s.removeAllWeapons(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 		return
@@ -127,6 +135,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.addWeapon(cursor, payload.Weapon)
@@ -136,6 +145,8 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.WeaponFireRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.handleFireMain(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 	}

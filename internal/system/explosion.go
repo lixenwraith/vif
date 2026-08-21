@@ -35,9 +35,12 @@ type ExplosionSystem struct {
 	compositeIdx map[core.Entity]int
 	seenCells    map[uint64]bool
 
-	statTriggered *atomic.Int64
-	statConverted *atomic.Int64
-	statMerged    *atomic.Int64
+	statTriggered     *atomic.Int64
+	statConverted     *atomic.Int64
+	statMerged        *atomic.Int64
+	statCursorRejects *atomic.Int64
+	statDisabled      *atomic.Int64
+	buffers           bufferTelemetry
 
 	enabled bool
 }
@@ -50,6 +53,9 @@ func NewExplosionSystem(world *engine.World) engine.System {
 	s.statTriggered = world.Resources.Status.Ints.Get("explosion.triggered")
 	s.statConverted = world.Resources.Status.Ints.Get("explosion.converted")
 	s.statMerged = world.Resources.Status.Ints.Get("explosion.merged")
+	s.statCursorRejects = world.Resources.Status.Ints.Get("explosion.cursor_rejects")
+	s.statDisabled = world.Resources.Status.Ints.Get("explosion.disabled_rejects")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "explosion", "entities", "dust_entries", "centers", "drains", "composites", "composite_index", "seen_cells")
 
 	s.Init()
 	return s
@@ -72,6 +78,9 @@ func (s *ExplosionSystem) Init() {
 	s.statTriggered.Store(0)
 	s.statConverted.Store(0)
 	s.statMerged.Store(0)
+	s.statCursorRejects.Store(0)
+	s.statDisabled.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -108,6 +117,9 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type == event.EventFireSpecialRequest || ev.Type == event.EventExplosionRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -116,6 +128,8 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.FireSpecialRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.fireFromDust(cursor)
+			} else {
+				s.statCursorRejects.Add(1)
 			}
 		}
 
@@ -125,6 +139,7 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 			if p.Type != event.ExplosionTypeEye {
 				cursor = s.world.ResolveCursor(p.Entity)
 				if cursor == 0 {
+					s.statCursorRejects.Add(1)
 					return
 				}
 			}
@@ -187,6 +202,8 @@ func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
 		s.seenCells[key] = true
 		s.centerBuf = append(s.centerBuf, vmath.Point{X: p.X, Y: p.Y})
 	}
+	s.buffers.Observe(2, len(s.centerBuf))
+	s.buffers.Observe(6, len(s.seenCells))
 
 	event.EmitDeathBatch(s.world.Resources.Event.Queue, 0, dustEntities)
 
@@ -357,6 +374,11 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 			}
 		}
 	}
+	s.buffers.Observe(0, len(s.entityBuf))
+	s.buffers.Observe(1, len(s.dustEntryBuf))
+	s.buffers.Observe(3, len(s.drainBuf))
+	s.buffers.Observe(4, len(s.compositeBuf))
+	s.buffers.Observe(5, len(s.compositeIdx))
 
 	// Emit combat events for drains; the implicit single-hit form avoids a slice per drain
 	for _, drainEntity := range s.drainBuf {

@@ -1,6 +1,7 @@
 package system
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -34,8 +35,11 @@ type FuseSystem struct {
 
 	rng *vmath.FastRand
 
-	fusions []pendingFusion
-	enabled bool
+	fusions           []pendingFusion
+	statSpawnFailures *atomic.Int64
+	statDisabled      *atomic.Int64
+	buffers           bufferTelemetry
+	enabled           bool
 }
 
 // NewFuseSystem creates a new fuse system
@@ -43,12 +47,18 @@ func NewFuseSystem(world *engine.World) engine.System {
 	s := &FuseSystem{
 		world: world,
 	}
+	s.statSpawnFailures = world.Resources.Status.Ints.Get("fuse.spawn_failures")
+	s.statDisabled = world.Resources.Status.Ints.Get("fuse.disabled_rejects")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "fuse", "pending")
 	s.Init()
 	return s
 }
 
 func (s *FuseSystem) Init() {
 	s.fusions = make([]pendingFusion, 0, 16)
+	s.statSpawnFailures.Store(0)
+	s.statDisabled.Store(0)
+	s.buffers.Reset()
 	s.rng = s.world.Rand(s.Name())
 	s.enabled = true
 }
@@ -89,6 +99,9 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type == event.EventFuseQuasarRequest || ev.Type == event.EventFuseSwarmRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -176,6 +189,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	posA, okA := s.world.Positions.GetPosition(drainA)
 	posB, okB := s.world.Positions.GetPosition(drainB)
 	if !okA || !okB {
+		s.statSpawnFailures.Add(1)
 		return
 	}
 
@@ -191,6 +205,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 		0,
 	)
 	if !found {
+		s.statSpawnFailures.Add(1)
 		return // No valid position - cancel fusion
 	}
 
@@ -222,6 +237,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 		TargetY: midY,
 		Timer:   parameter.SwarmFuseAnimationDuration,
 	})
+	s.buffers.Observe(0, len(s.fusions))
 }
 
 func (s *FuseSystem) handleQuasarFuse() {
@@ -260,6 +276,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 		0,
 	)
 	if !found {
+		s.statSpawnFailures.Add(1)
 		return // No valid position - cancel fusion
 	}
 
@@ -292,6 +309,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 		TargetY: cY,
 		Timer:   parameter.SpiritAnimationDuration + parameter.SpiritSafetyBuffer,
 	})
+	s.buffers.Observe(0, len(s.fusions))
 }
 
 // completeFusion triggers the creation event in the destination system

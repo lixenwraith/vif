@@ -44,12 +44,6 @@ func NewMetaSystem(ctx *engine.GameContext) engine.System {
 		ctx:   ctx,
 		world: ctx.World,
 	}
-	s.Init()
-	return s
-}
-
-// Init caches the telemetry pointers; runs at construction, before Freeze
-func (s *MetaSystem) Init() {
 	reg := s.world.Resources.Status
 	s.statMapW = reg.Ints.Get("context.map_w")
 	s.statMapH = reg.Ints.Get("context.map_h")
@@ -57,13 +51,24 @@ func (s *MetaSystem) Init() {
 	s.statCameraY = reg.Ints.Get("context.camera_y")
 	s.statPlayerX = status.NewPlayerInt(reg, parameter.MaxPlayers, "x", "player.x")
 	s.statPlayerY = status.NewPlayerInt(reg, parameter.MaxPlayers, "y", "player.y")
-	// s.statPlayerX = reg.Ints.Get("player.x")
-	// s.statPlayerY = reg.Ints.Get("player.y")
 	for i := component.SpeciesType(1); i < component.SpeciesCount; i++ {
 		s.statKills[i] = reg.Ints.Get("kills." + component.SpeciesNames[i])
 	}
 	s.statKillsTotal = reg.Ints.Get("kills.total")
 	s.statKillsUncredited = reg.Ints.Get("kills.uncredited")
+	s.Init()
+	return s
+}
+
+// Init resets session telemetry without changing the frozen registry.
+func (s *MetaSystem) Init() {
+	s.statMapW.Store(0)
+	s.statMapH.Store(0)
+	s.statCameraX.Store(0)
+	s.statCameraY.Store(0)
+	s.statPlayerX.Reset()
+	s.statPlayerY.Reset()
+	s.resetKills()
 }
 
 // Name returns system's name
@@ -102,6 +107,7 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventGameResetRequest:
 		p, _ := ev.Payload.(*event.GameResetPayload)
 		s.handleGameReset(p != nil && p.Purge)
+		s.Init()
 
 	case event.EventMetaStatusMessageRequest:
 		if payload, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {

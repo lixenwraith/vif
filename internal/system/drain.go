@@ -54,14 +54,20 @@ type DrainSystem struct {
 	drainCache []drainCacheEntry
 
 	// Cached metric pointers
-	statCount        *atomic.Int64
-	statPending      *atomic.Int64
-	statCollisions   *atomic.Int64
-	statSuicides     *atomic.Int64
-	statSpawned      *atomic.Int64
-	statFusions      *atomic.Int64
-	statDespawned    *atomic.Int64
-	statSpawnFailure *atomic.Int64
+	statCount               *atomic.Int64
+	statPending             *atomic.Int64
+	statCollisions          *atomic.Int64
+	statSuicides            *atomic.Int64
+	statSpawned             *atomic.Int64
+	statFusions             *atomic.Int64
+	statDespawned           *atomic.Int64
+	statSpawnFailure        *atomic.Int64
+	lifecycle               lifecycleTelemetry
+	statWallCollisions      *atomic.Int64
+	statBoundaryReflections *atomic.Int64
+	statGridSteps           *atomic.Int64
+	statProtectedRejects    *atomic.Int64
+	buffers                 bufferTelemetry
 
 	paused bool
 
@@ -81,10 +87,16 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
 	s.statCollisions = s.world.Resources.Status.Ints.Get("drain.collisions")
 	s.statSuicides = s.world.Resources.Status.Ints.Get("drain.suicides")
-	s.statSpawned = s.world.Resources.Status.Ints.Get("drain.spawned")
 	s.statFusions = s.world.Resources.Status.Ints.Get("drain.fusions")
-	s.statDespawned = s.world.Resources.Status.Ints.Get("drain.despawned")
-	s.statSpawnFailure = s.world.Resources.Status.Ints.Get("drain.spawn_failures")
+	s.lifecycle = newLifecycleTelemetry(s.world.Resources.Status, "drain")
+	s.statSpawned = s.lifecycle.spawned
+	s.statDespawned = s.lifecycle.despawned
+	s.statSpawnFailure = s.lifecycle.spawnFailures
+	s.statWallCollisions = s.world.Resources.Status.Ints.Get("drain.wall_collisions")
+	s.statBoundaryReflections = s.world.Resources.Status.Ints.Get("drain.boundary_reflections")
+	s.statGridSteps = s.world.Resources.Status.Ints.Get("drain.grid_steps")
+	s.statProtectedRejects = s.world.Resources.Status.Ints.Get("drain.protected_rejects")
+	s.buffers = newBufferTelemetry(s.world.Resources.Status, "drain", "pending_spawns", "drain_cache")
 
 	s.Init()
 	return s
@@ -101,6 +113,13 @@ func (s *DrainSystem) Init() {
 	s.statPending.Store(0)
 	s.statCollisions.Store(0)
 	s.statSuicides.Store(0)
+	s.statFusions.Store(0)
+	s.lifecycle.Reset()
+	s.statWallCollisions.Store(0)
+	s.statBoundaryReflections.Store(0)
+	s.statGridSteps.Store(0)
+	s.statProtectedRejects.Store(0)
+	s.buffers.Reset()
 	s.paused = false
 	s.enabled = true
 }
@@ -121,6 +140,7 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 		event.EventMaterializeComplete,
 		event.EventDrainPause,
 		event.EventDrainResume,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -140,8 +160,17 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesDrain {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventMaterializeComplete {
+			s.statSpawnFailure.Add(1)
+		}
 		return
 	}
 
@@ -158,6 +187,7 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventMaterializeComplete:
 		// Prevent race condition where drain materializes after fuse sequence started
 		if s.paused {
+			s.statSpawnFailure.Add(1)
 			return
 		}
 		if payload, ok := ev.Payload.(*event.MaterializeCompletedPayload); ok {
@@ -186,7 +216,7 @@ func (s *DrainSystem) Update() {
 
 	// Skip spawn logic when paused
 	if s.paused {
-		s.statCount.Store(0)
+		s.statCount.Store(int64(s.liveDrainCount()))
 		s.statPending.Store(0)
 		return
 	}
@@ -212,10 +242,10 @@ func (s *DrainSystem) Update() {
 
 			// Apply backoff if we couldn't queue all needed spawns
 			if queued < needed {
+				s.statSpawnFailure.Add(int64(needed - queued))
 				// Exponential backoff: 8 ticks base, doubles on consecutive failures
 				backoff := uint64(8)
 				if s.spawnCooldownUntil > 0 {
-					s.statSpawnFailure.Add(int64(needed - queued))
 					// Already had a recent failure, increase backoff
 					prevBackoff := s.spawnCooldownUntil - (currentTick - 1)
 					if prevBackoff > 0 && prevBackoff < 60 {
@@ -238,7 +268,7 @@ func (s *DrainSystem) Update() {
 		s.handleDrainInteractions()
 	}
 
-	s.statCount.Store(int64(s.world.Components.Drain.CountEntities()))
+	s.statCount.Store(int64(s.liveDrainCount()))
 	s.statPending.Store(int64(len(s.pendingSpawns)))
 }
 
@@ -272,6 +302,7 @@ func (s *DrainSystem) cacheDrainData() {
 
 		s.drainCache = append(s.drainCache, entry)
 	}
+	s.buffers.Observe(1, len(s.drainCache))
 }
 
 // processDrainStates handles HP checks, enrage transitions, and termination
@@ -372,6 +403,7 @@ func (s *DrainSystem) processPendingSpawns() {
 		// ~5 seconds at 20 ticks/sec = 100 ticks (materialize animation is ~0.5s)
 		const staleThreshold = 100
 		if spawn.materializeStarted && currentTick > spawn.scheduledTick+staleThreshold {
+			s.statSpawnFailure.Add(1)
 			// Remove stale spawn
 			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
 			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
@@ -380,6 +412,7 @@ func (s *DrainSystem) processPendingSpawns() {
 
 		// Validate coordinates still in bounds (handles resize after queue)
 		if spawn.targetX >= config.MapWidth || spawn.targetY >= config.MapHeight {
+			s.statSpawnFailure.Add(1)
 			// Remove invalid spawn
 			s.pendingSpawns[i] = s.pendingSpawns[len(s.pendingSpawns)-1]
 			s.pendingSpawns = s.pendingSpawns[:len(s.pendingSpawns)-1]
@@ -423,6 +456,7 @@ func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 		targetY:       targetY,
 		scheduledTick: scheduledTick,
 	})
+	s.buffers.Observe(0, len(s.pendingSpawns))
 }
 
 // calcTargetDrainCount returns the desired number of drains based on current heat
@@ -741,6 +775,7 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 
 	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
 	if !ok {
+		s.statSpawnFailure.Add(1)
 		return
 	}
 
@@ -751,6 +786,8 @@ func (s *DrainSystem) requeueSpawnWithOffset(blockedX, blockedY int) {
 	newX, newY, valid := s.randomSpawnOffset(cursorPos.X, cursorPos.Y, queuedPositions)
 	if valid {
 		s.queueDrainSpawn(newX, newY, 0) // Immediate re-spawn materialize
+	} else {
+		s.statSpawnFailure.Add(1)
 	}
 	// If no valid position, materialize spawn dropped (map saturated with drains)
 }
@@ -968,6 +1005,7 @@ func (s *DrainSystem) updateDrainMovement() {
 		newX, newY := physics.Integrate(&kineticComp.Kinetic, dtSec)
 
 		if physics.ReflectBounds(&kineticComp.Kinetic, gameWidth, gameHeight) {
+			s.statBoundaryReflections.Add(1)
 			newX, newY = physics.GridPos(&kineticComp.Kinetic)
 		}
 
@@ -977,6 +1015,7 @@ func (s *DrainSystem) updateDrainMovement() {
 
 		traverser := vmath.NewGridTraverserF(oldPreciseX, oldPreciseY, kineticComp.PreciseX, kineticComp.PreciseY)
 		for traverser.Next() {
+			s.statGridSteps.Add(1)
 			x, y := traverser.Pos()
 
 			if x < 0 || x >= gameWidth || y < 0 || y >= gameHeight {
@@ -987,6 +1026,7 @@ func (s *DrainSystem) updateDrainMovement() {
 			}
 
 			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic) {
+				s.statWallCollisions.Add(1)
 				s.reflectOffWall(&kineticComp.Kinetic, lastSafeX, lastSafeY, x, y)
 				hitWall = true
 				break
@@ -1038,6 +1078,7 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 	// Check protection before any collision handling
 	if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
 		if protComp.Mask&component.ProtectFromSpecies != 0 {
+			s.statProtectedRejects.Add(1)
 			return
 		}
 	}

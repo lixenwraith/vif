@@ -23,8 +23,11 @@ type SnakeSystem struct {
 	rng   *vmath.FastRand
 
 	// Telemetry
-	statActive *atomic.Bool
-	statCount  *atomic.Int64
+	statActive    *atomic.Bool
+	statCount     *atomic.Int64
+	statProtected *atomic.Int64
+	lifecycle     lifecycleTelemetry
+	motion        bounceTelemetry
 
 	enabled bool
 }
@@ -36,6 +39,9 @@ func NewSnakeSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("snake.active")
 	s.statCount = world.Resources.Status.Ints.Get("snake.count")
+	s.statProtected = world.Resources.Status.Ints.Get("snake.protected_rejects")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "snake")
+	s.motion = newBounceTelemetry(world.Resources.Status, "snake")
 
 	s.Init()
 	return s
@@ -45,6 +51,9 @@ func (s *SnakeSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.statProtected.Store(0)
+	s.lifecycle.Reset()
+	s.motion.Reset()
 	s.enabled = true
 }
 
@@ -61,6 +70,7 @@ func (s *SnakeSystem) EventTypes() []event.EventType {
 		event.EventSnakeSpawnRequest,
 		event.EventSnakeCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -79,8 +89,17 @@ func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesSnake {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventSnakeSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -91,6 +110,7 @@ func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventSnakeCancelRequest:
+		s.lifecycle.despawned.Add(int64(s.world.Components.Snake.CountEntities()))
 		s.terminateAll()
 
 	case event.EventCompositeIntegrityBreach:
@@ -122,12 +142,14 @@ func (s *SnakeSystem) Update() {
 
 		// Validate head exists
 		if !s.world.Components.Header.HasEntity(snakeComp.HeadEntity) {
+			s.lifecycle.despawned.Add(1)
 			s.terminateSnake(rootEntity)
 			continue
 		}
 
 		headComp, ok := s.world.Components.SnakeHead.GetPtr(snakeComp.HeadEntity)
 		if !ok {
+			s.lifecycle.despawned.Add(1)
 			s.terminateSnake(rootEntity)
 			continue
 		}
@@ -254,6 +276,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 			0,
 		)
 		if !found {
+			s.lifecycle.spawnFailures.Add(1)
 			return
 		}
 		headX = topLeftX + parameter.SnakeHeadHeaderOffsetX
@@ -301,6 +324,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 		Entity:  rootEntity,
 		Species: component.SpeciesSnake,
 	})
+	s.lifecycle.spawned.Add(1)
 
 	s.world.PushEvent(event.EventSnakeSpawned, &event.SnakeSpawnedPayload{
 		RootEntity: rootEntity,
@@ -605,7 +629,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 	minHeaderY := parameter.SnakeHeadHeaderOffsetY
 	maxHeaderY := config.MapHeight - (parameter.SnakeHeadHeight - parameter.SnakeHeadHeaderOffsetY)
 
-	newX, newY, _ := physics.IntegrateWithBounce(
+	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,
 		dtSec,
 		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY,
@@ -614,6 +638,7 @@ func (s *SnakeSystem) updateHeadMovement(headEntity core.Entity, headComp *compo
 		parameter.SnakeRestitution,
 		wallCheck,
 	)
+	s.motion.Record(motion)
 
 	if newX != headPos.X || newY != headPos.Y {
 		s.world.Positions.SetPosition(headEntity, component.PositionComponent{X: newX, Y: newY})
@@ -1015,6 +1040,7 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 					if prot.Mask&component.ProtectFromSpecies != 0 {
+						s.statProtected.Add(1)
 						continue
 					}
 				}

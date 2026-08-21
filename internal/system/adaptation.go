@@ -55,6 +55,7 @@ type AdaptationSystem struct {
 	statGraphs      *atomic.Int64
 	statPopulations *atomic.Int64
 	statG           [4]*status.AtomicString
+	buffers         bufferTelemetry
 
 	enabled bool
 }
@@ -73,6 +74,7 @@ func NewAdaptationSystem(world *engine.World) engine.System {
 	for i, k := range []string{"adapt.g1", "adapt.g2", "adapt.g3", "adapt.g4"} {
 		s.statG[i] = world.Resources.Status.Strings.Get(k)
 	}
+	s.buffers = newBufferTelemetry(world.Resources.Status, "adapt", "pending_deaths", "graph_keys", "sub_keys", "track_keys", "sum_fitness", "counts", "cdf", "weight_scratch", "outcome_graphs", "tracking", "outcome_samples")
 
 	s.Init()
 	return s
@@ -95,6 +97,7 @@ func (s *AdaptationSystem) Init() {
 	for _, g := range s.statG {
 		g.StoreIfChanged("-")
 	}
+	s.buffers.Reset()
 
 	s.enabled = true
 }
@@ -156,6 +159,7 @@ func (s *AdaptationSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnemyKilled:
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
+			s.buffers.Observe(0, len(s.pendingDeaths))
 		}
 	}
 }
@@ -177,6 +181,7 @@ func (s *AdaptationSystem) Update() {
 
 	// Process outcomes, update EXP3 weights, and refill pools
 	s.graphKeys = sortedKeys(s.graphKeys, s.outcomes)
+	s.buffers.Observe(1, len(s.graphKeys))
 	for _, graphID := range s.graphKeys {
 		subTypes := s.outcomes[graphID]
 		entry, ok := ar.Entries[graphID]
@@ -185,6 +190,7 @@ func (s *AdaptationSystem) Update() {
 		}
 
 		s.subKeys = sortedKeys(s.subKeys, subTypes)
+		s.buffers.Observe(2, len(s.subKeys))
 		for _, subType := range s.subKeys {
 			outcomes := subTypes[subType]
 			if len(outcomes) == 0 {
@@ -208,12 +214,14 @@ func (s *AdaptationSystem) Update() {
 
 	// Pre-emptive pool refill for active entries running low
 	s.graphKeys = sortedKeys(s.graphKeys, ar.Entries)
+	s.buffers.Observe(1, len(s.graphKeys))
 	for _, graphID := range s.graphKeys {
 		entry := ar.Entries[graphID]
 		if entry.Draining {
 			continue
 		}
 		s.subKeys = sortedKeys(s.subKeys, entry.Populations)
+		s.buffers.Observe(2, len(s.subKeys))
 		for _, subType := range s.subKeys {
 			pop := entry.Populations[subType]
 			if len(pop.Pool)-pop.Head < (parameter.RoutePoolDefaultSize / 4) {
@@ -302,6 +310,7 @@ func (s *AdaptationSystem) handleEnemyCreated(payload *event.EnemyCreatedPayload
 		RouteID: nav.RouteID,
 		SubType: payload.SubType,
 	}
+	s.buffers.Observe(9, len(s.tracking))
 }
 
 // recordOutcome buffers a fitness sample for the next Update pass
@@ -309,10 +318,13 @@ func (s *AdaptationSystem) recordOutcome(graphID uint32, subType uint8, routeID 
 	if s.outcomes[graphID] == nil {
 		s.outcomes[graphID] = make(map[uint8][]routeOutcome)
 	}
-	s.outcomes[graphID][subType] = append(s.outcomes[graphID][subType], routeOutcome{
+	outcomes := append(s.outcomes[graphID][subType], routeOutcome{
 		RouteIndex: routeID,
 		Fitness:    fitness,
 	})
+	s.outcomes[graphID][subType] = outcomes
+	s.buffers.Observe(8, len(s.outcomes))
+	s.buffers.Observe(10, len(outcomes))
 }
 
 // processPendingDeaths converts tracked deaths into route outcomes:
@@ -406,6 +418,7 @@ func findCorridorDistance(field *navigation.FlowField, startX, startY, maxRadius
 // Sorted iteration: recordOutcome appends, and applyEXP3 sums those appends in order.
 func (s *AdaptationSystem) cleanupStaleTracking() {
 	s.trackKeys = sortedKeys(s.trackKeys, s.tracking)
+	s.buffers.Observe(3, len(s.trackKeys))
 	for _, entity := range s.trackKeys {
 		if s.world.Components.Navigation.HasEntity(entity) {
 			continue
@@ -435,6 +448,8 @@ func (s *AdaptationSystem) applyEXP3(pop *engine.RoutePopulation, outcomes []rou
 	}
 	sumFitness := s.sumFitness[:k]
 	counts := s.counts[:k]
+	s.buffers.Observe(4, len(sumFitness))
+	s.buffers.Observe(5, len(counts))
 	clear(sumFitness)
 	clear(counts)
 
@@ -507,6 +522,7 @@ func (s *AdaptationSystem) samplePool(pop *engine.RoutePopulation) {
 		s.cdf = make([]float64, k)
 	}
 	cdf := s.cdf[:k]
+	s.buffers.Observe(6, len(cdf))
 	cdf[0] = pop.Weights[0]
 	for i := 1; i < k; i++ {
 		cdf[i] = cdf[i-1] + pop.Weights[i]
@@ -572,6 +588,7 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 		}
 	}
 	slices.Sort(s.graphKeys)
+	s.buffers.Observe(1, len(s.graphKeys))
 
 	slot := 0
 
@@ -590,6 +607,7 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 		var highestPeak float64
 
 		s.subKeys = sortedKeys(s.subKeys, entry.Populations)
+		s.buffers.Observe(2, len(s.subKeys))
 		for _, subType := range s.subKeys {
 			pop := entry.Populations[subType]
 			peak := 0.0
@@ -615,6 +633,7 @@ func (s *AdaptationSystem) updateTelemetry(ar *engine.AdaptationResource) {
 			s.weightScratch = make([]float64, len(bestPop.Weights))
 		}
 		wCopy := s.weightScratch[:len(bestPop.Weights)]
+		s.buffers.Observe(7, len(wCopy))
 		copy(wCopy, bestPop.Weights)
 		slices.Sort(wCopy)
 		slices.Reverse(wCopy)

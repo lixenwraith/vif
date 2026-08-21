@@ -1,6 +1,8 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -16,16 +18,30 @@ import (
 type BulletSystem struct {
 	world   *engine.World
 	enabled bool
+
+	statWallCollisions *atomic.Int64
+	statBoundaryHits   *atomic.Int64
+	statGridSteps      *atomic.Int64
+	statDisabled       *atomic.Int64
 }
 
 func NewBulletSystem(world *engine.World) engine.System {
 	s := &BulletSystem{world: world}
+	reg := world.Resources.Status
+	s.statWallCollisions = reg.Ints.Get("bullet.wall_collisions")
+	s.statBoundaryHits = reg.Ints.Get("bullet.boundary_hits")
+	s.statGridSteps = reg.Ints.Get("bullet.grid_steps")
+	s.statDisabled = reg.Ints.Get("bullet.disabled_rejects")
 
 	s.Init()
 	return s
 }
 
 func (s *BulletSystem) Init() {
+	s.statWallCollisions.Store(0)
+	s.statBoundaryHits.Store(0)
+	s.statGridSteps.Store(0)
+	s.statDisabled.Store(0)
 	s.enabled = true
 }
 
@@ -58,6 +74,9 @@ func (s *BulletSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type == event.EventBulletSpawnRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 
@@ -130,6 +149,7 @@ func (s *BulletSystem) traverseAndCollide(
 
 	traverser := vmath.NewGridTraverserF(fromX, fromY, toX, toY)
 	for traverser.Next() {
+		s.statGridSteps.Add(1)
 		cx, cy := traverser.Pos()
 
 		// Skip origin cell
@@ -138,10 +158,12 @@ func (s *BulletSystem) traverseAndCollide(
 		}
 
 		if s.world.Positions.IsOutOfBounds(cx, cy) {
+			s.statBoundaryHits.Add(1)
 			return true
 		}
 
 		if s.world.Positions.HasBlockingWallAt(cx, cy, component.WallBlockKinetic) {
+			s.statWallCollisions.Add(1)
 			return true
 		}
 

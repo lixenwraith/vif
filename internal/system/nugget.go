@@ -22,10 +22,12 @@ type NuggetSystem struct {
 	lastSpawnAttempt   time.Time
 	activeNuggetEntity core.Entity
 
-	statActive    *atomic.Bool
-	statSpawned   *atomic.Int64
-	statCollected *atomic.Int64
-	statJumps     *atomic.Int64
+	statActive        *atomic.Bool
+	statSpawned       *atomic.Int64
+	statCollected     *atomic.Int64
+	statJumps         *atomic.Int64
+	statSpawnFailures *atomic.Int64
+	rejects           rejectionTelemetry
 
 	enabled bool
 }
@@ -40,6 +42,8 @@ func NewNuggetSystem(world *engine.World) engine.System {
 	s.statSpawned = world.Resources.Status.Ints.Get("nugget.spawned")
 	s.statCollected = world.Resources.Status.Ints.Get("nugget.collected")
 	s.statJumps = world.Resources.Status.Ints.Get("nugget.jumps")
+	s.statSpawnFailures = world.Resources.Status.Ints.Get("nugget.spawn_failures")
+	s.rejects = newRejectionTelemetry(world.Resources.Status, "nugget")
 
 	s.Init()
 	return s
@@ -54,6 +58,8 @@ func (s *NuggetSystem) Init() {
 	s.statSpawned.Store(0)
 	s.statCollected.Store(0)
 	s.statJumps.Store(0)
+	s.statSpawnFailures.Store(0)
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -94,6 +100,9 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -102,6 +111,8 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.NuggetJumpRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.handleJumpRequest(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 
@@ -222,6 +233,7 @@ func (s *NuggetSystem) spawnNugget() {
 	now := s.world.Resources.Time.GameTime
 	x, y := s.findValidPosition()
 	if x < 0 || y < 0 {
+		s.statSpawnFailures.Add(1)
 		return
 	}
 
@@ -245,6 +257,7 @@ func (s *NuggetSystem) spawnNugget() {
 	if err := batch.Commit(); err != nil {
 		// Positions was taken while we were creating the nugget
 		s.world.DestroyEntity(entity)
+		s.statSpawnFailures.Add(1)
 		return
 	}
 

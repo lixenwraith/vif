@@ -334,6 +334,45 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 	}
 }
 
+func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
+	w, cursor, _ := testCursorWorld(t)
+	combat := NewCombatSystem(w).(*CombatSystem)
+	target := w.CreateEntity()
+	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
+		CombatEntityType: component.CombatEntityDrain,
+		HitPoints:        parameter.CombatDamageCleaner * 3,
+	})
+	payload := &event.CombatAttackDirectRequestPayload{
+		OwnerEntity: cursor, OriginEntity: cursor,
+		TargetEntity: target, HitEntity: target,
+		AttackType: component.CombatAttackProjectile,
+	}
+	combat.applyHitDirect(payload)
+
+	targetCombat, _ := w.Components.Combat.GetPtr(target)
+	targetCombat.RemainingDamageImmunity = parameter.CombatDamageImmunityDuration
+	combat.applyHitDirect(payload)
+
+	reg := w.Resources.Status
+	for key, want := range map[string]int64{
+		"combat.damage_dealt":             parameter.CombatDamageCleaner,
+		"combat.damage_attacker_cursor":   parameter.CombatDamageCleaner,
+		"combat.damage_defender_drain":    parameter.CombatDamageCleaner,
+		"combat.absorbed_attacker_cursor": parameter.CombatDamageCleaner,
+		"combat.absorbed_defender_drain":  parameter.CombatDamageCleaner,
+		"combat.chain_followups":          2,
+		"combat.chain_depth_total":        2,
+		"combat.chain_depth_max":          1,
+		"combat.hits_direct":              2,
+	} {
+		if got := reg.Ints.Get(key).Load(); got != want {
+			t.Errorf("%s = %d, want %d", key, got, want)
+		}
+	}
+}
+
 func TestCombatClearsStaleCursorCreditWhenEnemyDealsFatalDamage(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)

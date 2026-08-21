@@ -17,10 +17,12 @@ import (
 type CursorSystem struct {
 	world *engine.World
 
-	statCount       *atomic.Int64
-	statLocal       *atomic.Int64
-	statSlotEntity  [parameter.MaxPlayers]*atomic.Int64
-	statSlotControl [parameter.MaxPlayers]*atomic.Int64
+	statCount         *atomic.Int64
+	statLocal         *atomic.Int64
+	statCursorRejects *atomic.Int64
+	statSpawnFailures *atomic.Int64
+	statSlotEntity    [parameter.MaxPlayers]*atomic.Int64
+	statSlotControl   [parameter.MaxPlayers]*atomic.Int64
 }
 
 // NewCursorSystem creates the cursor system
@@ -30,6 +32,8 @@ func NewCursorSystem(world *engine.World) engine.System {
 	reg := world.Resources.Status
 	s.statCount = reg.Ints.Get("player.count")
 	s.statLocal = reg.Ints.Get("player.local")
+	s.statCursorRejects = reg.Ints.Get("player.cursor_rejects")
+	s.statSpawnFailures = reg.Ints.Get("player.spawn_failures")
 	for i := range parameter.MaxPlayers {
 		s.statSlotEntity[i] = reg.Ints.Get(status.PlayerKey(i, "entity"))
 		s.statSlotControl[i] = reg.Ints.Get(status.PlayerKey(i, "control"))
@@ -42,6 +46,8 @@ func NewCursorSystem(world *engine.World) engine.System {
 // Init resets per-session state; the roster is cleared with the world it indexes
 func (s *CursorSystem) Init() {
 	s.statCount.Store(0)
+	s.statCursorRejects.Store(0)
+	s.statSpawnFailures.Store(0)
 	s.publishRoster()
 }
 
@@ -59,6 +65,7 @@ func (s *CursorSystem) Update() {}
 // would strand every cursor, so it carries no toggle.
 func (s *CursorSystem) EventTypes() []event.EventType {
 	return []event.EventType{
+		event.EventGameResetRequest,
 		event.EventCursorSpawnRequest,
 		event.EventCursorDespawnRequest,
 		event.EventCursorMoveRequest,
@@ -68,6 +75,10 @@ func (s *CursorSystem) EventTypes() []event.EventType {
 
 // HandleEvent routes cursor lifecycle and placement requests
 func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
+	if ev.Type == event.EventGameResetRequest {
+		s.Init()
+		return
+	}
 	switch ev.Type {
 	case event.EventCursorSpawnRequest:
 		if p, ok := ev.Payload.(*event.CursorSpawnRequestPayload); ok {
@@ -94,6 +105,7 @@ func (s *CursorSystem) HandleEvent(ev event.GameEvent) {
 func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
 	e := s.world.ResolveCursor(p.Entity)
 	if e == 0 {
+		s.statCursorRejects.Add(1)
 		return
 	}
 	pos, ok := s.world.Positions.GetPosition(e)
@@ -214,6 +226,7 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 
 // fail reports a spawn refusal so the FSM can retry
 func (s *CursorSystem) fail(reason string) {
+	s.statSpawnFailures.Add(1)
 	vlog.Warn("app", "msg", "cursor spawn failed", "reason", reason)
 	s.world.PushEvent(event.EventCursorSpawnFailed, nil)
 }

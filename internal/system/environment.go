@@ -88,5 +88,5 @@ func (s *EnvironmentSystem) Update() {
 	if !s.enabled {
 		return
 	}
-
+	s.statWindActive.Store(s.WindActive)
 }

@@ -23,8 +23,13 @@ type BlossomSystem struct {
 	blossomedThisFrame map[core.Entity]bool
 	processedGridCells map[int]bool // Key is flat index: (y * gameWidth) + x
 
-	statCount   *atomic.Int64
-	statApplied *atomic.Int64
+	statCount            *atomic.Int64
+	statApplied          *atomic.Int64
+	statWallCollisions   *atomic.Int64
+	statBoundaryHits     *atomic.Int64
+	statGridSteps        *atomic.Int64
+	statProtectedRejects *atomic.Int64
+	buffers              bufferTelemetry
 
 	enabled bool
 }
@@ -40,6 +45,11 @@ func NewBlossomSystem(world *engine.World) engine.System {
 
 	s.statCount = s.world.Resources.Status.Ints.Get("blossom.count")
 	s.statApplied = s.world.Resources.Status.Ints.Get("blossom.applied")
+	s.statWallCollisions = s.world.Resources.Status.Ints.Get("blossom.wall_collisions")
+	s.statBoundaryHits = s.world.Resources.Status.Ints.Get("blossom.boundary_hits")
+	s.statGridSteps = s.world.Resources.Status.Ints.Get("blossom.grid_steps")
+	s.statProtectedRejects = s.world.Resources.Status.Ints.Get("blossom.protected_rejects")
+	s.buffers = newBufferTelemetry(s.world.Resources.Status, "blossom", "hit_entities", "processed_cells")
 
 	s.Init()
 	return s
@@ -52,6 +62,11 @@ func (s *BlossomSystem) Init() {
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
 	s.statApplied.Store(0)
+	s.statWallCollisions.Store(0)
+	s.statBoundaryHits.Store(0)
+	s.statGridSteps.Store(0)
+	s.statProtectedRejects.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -218,10 +233,17 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		// Swept Traversal: Check every grid cell intersected by the movement vector
 		traverser := vmath.NewGridTraverserF(oldX, oldY, kineticComp.PreciseX, kineticComp.PreciseY)
 		for traverser.Next() {
+			s.statGridSteps.Add(1)
 			x, y := traverser.Pos()
 
 			// Wall or OOB - destroy particle
-			if s.world.Positions.IsBlocked(x, y, component.WallBlockParticle) {
+			if s.world.Positions.IsOutOfBounds(x, y) {
+				s.statBoundaryHits.Add(1)
+				destroyBlossom = true
+				break
+			}
+			if s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockParticle) {
+				s.statWallCollisions.Add(1)
 				destroyBlossom = true
 				break
 			}
@@ -307,6 +329,8 @@ func (s *BlossomSystem) updateBlossomEntities() {
 		s.world.Components.Blossom.SetComponent(entity, blossomComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
 	}
+	s.buffers.Observe(0, len(s.blossomedThisFrame))
+	s.buffers.Observe(1, len(s.processedGridCells))
 }
 
 // TODO: check if this can be refactored
@@ -320,6 +344,7 @@ func (s *BlossomSystem) applyBlossomToCharacter(entity core.Entity) bool {
 	// Check protection
 	if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
 		if protComp.Mask&component.ProtectFromDecay != 0 {
+			s.statProtectedRejects.Add(1)
 			return false
 		}
 	}

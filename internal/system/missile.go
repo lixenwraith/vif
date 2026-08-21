@@ -18,10 +18,14 @@ import (
 type MissileSystem struct {
 	world *engine.World
 
-	statCount   *atomic.Int64
-	statSpawned *atomic.Int64
-	statImpacts *atomic.Int64
-	statExpired *atomic.Int64
+	statCount          *atomic.Int64
+	statSpawned        *atomic.Int64
+	statImpacts        *atomic.Int64
+	statExpired        *atomic.Int64
+	statWallCollisions *atomic.Int64
+	statBoundaryHits   *atomic.Int64
+	statGridSteps      *atomic.Int64
+	statDisabled       *atomic.Int64
 
 	enabled bool
 }
@@ -33,6 +37,10 @@ func NewMissileSystem(world *engine.World) engine.System {
 	s.statSpawned = world.Resources.Status.Ints.Get("missile.spawned")
 	s.statImpacts = world.Resources.Status.Ints.Get("missile.impacts")
 	s.statExpired = world.Resources.Status.Ints.Get("missile.expired")
+	s.statWallCollisions = world.Resources.Status.Ints.Get("missile.wall_collisions")
+	s.statBoundaryHits = world.Resources.Status.Ints.Get("missile.boundary_hits")
+	s.statGridSteps = world.Resources.Status.Ints.Get("missile.grid_steps")
+	s.statDisabled = world.Resources.Status.Ints.Get("missile.disabled_rejects")
 
 	s.Init()
 	return s
@@ -44,6 +52,10 @@ func (s *MissileSystem) Init() {
 	s.statSpawned.Store(0)
 	s.statImpacts.Store(0)
 	s.statExpired.Store(0)
+	s.statWallCollisions.Store(0)
+	s.statBoundaryHits.Store(0)
+	s.statGridSteps.Store(0)
+	s.statDisabled.Store(0)
 	s.enabled = true
 }
 
@@ -73,6 +85,9 @@ func (s *MissileSystem) HandleEvent(ev event.GameEvent) {
 		return
 	}
 	if !s.enabled {
+		if ev.Type == event.EventMissileSpawnRequest {
+			s.statDisabled.Add(1)
+		}
 		return
 	}
 	if ev.Type == event.EventMissileSpawnRequest {
@@ -130,6 +145,7 @@ func (s *MissileSystem) Update() {
 
 		// OOB check only (wall collision handled in traversal)
 		if s.world.Positions.IsOutOfBounds(gridX, gridY) {
+			s.statBoundaryHits.Add(1)
 			toDestroy = append(toDestroy, missileEntity)
 			s.statExpired.Add(1)
 			continue
@@ -215,6 +231,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner 
 	lastSafeX, lastSafeY := from.X, from.Y
 
 	for traverser.Next() {
+		s.statGridSteps.Add(1)
 		currX, currY := traverser.Pos()
 
 		// Skip starting cell
@@ -224,6 +241,7 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner 
 
 		// Wall collision
 		if s.world.Positions.HasBlockingWallAt(currX, currY, component.WallBlockKinetic) {
+			s.statWallCollisions.Add(1)
 			return lastSafeX, lastSafeY, impactWall
 		}
 

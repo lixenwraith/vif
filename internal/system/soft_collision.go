@@ -1,6 +1,8 @@
 package system
 
 import (
+	"sync/atomic"
+
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -54,8 +56,11 @@ type SoftCollisionSystem struct {
 	pylons  []collisionEntry
 
 	// Collision and flocking matrices
-	matrix      SoftCollisionMatrix
-	flockMatrix FlockingMatrix
+	matrix            SoftCollisionMatrix
+	flockMatrix       FlockingMatrix
+	statCollisions    *atomic.Int64
+	statImmuneRejects *atomic.Int64
+	buffers           bufferTelemetry
 
 	enabled bool
 }
@@ -70,6 +75,9 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 		storms:  make([]collisionEntry, 0, 12), // 3 circles * potential multiple storms
 		pylons:  make([]collisionEntry, 0, 4),
 	}
+	s.statCollisions = world.Resources.Status.Ints.Get("soft_collision.collisions")
+	s.statImmuneRejects = world.Resources.Status.Ints.Get("soft_collision.immune_rejects")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "soft_collision", "drains", "swarms", "quasars", "storms", "pylons")
 
 	s.initMatrix()
 	s.initFlockingMatrix()
@@ -186,6 +194,9 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 func (s *SoftCollisionSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.clearCaches()
+	s.statCollisions.Store(0)
+	s.statImmuneRejects.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -290,6 +301,11 @@ func (s *SoftCollisionSystem) rebuildCaches() {
 		}
 		s.pylons = append(s.pylons, collisionEntry{entity: entity, x: pylonComp.SpawnX, y: pylonComp.SpawnY})
 	}
+	s.buffers.Observe(0, len(s.drains))
+	s.buffers.Observe(1, len(s.swarms))
+	s.buffers.Observe(2, len(s.quasars))
+	s.buffers.Observe(3, len(s.storms))
+	s.buffers.Observe(4, len(s.pylons))
 }
 
 // getCache returns the cache slice for a given species type
@@ -371,6 +387,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 
 	// Skip if immune or enraged
 	if combatComp.RemainingKineticImmunity > 0 || combatComp.IsEnraged {
+		s.statImmuneRejects.Add(1)
 		return
 	}
 
@@ -393,6 +410,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile, s.rng)
 
 	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
+	s.statCollisions.Add(1)
 
 	// Set immunity
 	combatComp.RemainingKineticImmunity = parameter.SoftCollisionImmunityDuration

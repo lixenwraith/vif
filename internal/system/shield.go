@@ -18,6 +18,7 @@ type ShieldSystem struct {
 
 	statActive    *status.PlayerBool
 	statShieldHit *atomic.Int64
+	rejects       rejectionTelemetry
 
 	enabled bool
 }
@@ -29,6 +30,7 @@ func NewShieldSystem(world *engine.World) engine.System {
 	reg := world.Resources.Status
 	s.statActive = status.NewPlayerBool(reg, parameter.MaxPlayers, "shield.active", "shield.active")
 	s.statShieldHit = reg.Ints.Get("shield.shield_hit")
+	s.rejects = newRejectionTelemetry(reg, "shield")
 
 	s.Init()
 	return s
@@ -38,6 +40,7 @@ func NewShieldSystem(world *engine.World) engine.System {
 func (s *ShieldSystem) Init() {
 	s.statActive.Reset()
 	s.statShieldHit.Store(0)
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -75,6 +78,9 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -90,6 +96,8 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.ShieldActivatePayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.setActive(cursor, true)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 
@@ -97,6 +105,8 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.ShieldDeactivatePayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.setActive(cursor, false)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 
@@ -104,6 +114,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.ShieldDrainRequestPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{

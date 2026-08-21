@@ -19,6 +19,7 @@ type BoostSystem struct {
 	statActive    *status.PlayerBool
 	statRemaining *status.PlayerInt
 	statTruncated *atomic.Int64
+	rejects       rejectionTelemetry
 
 	enabled bool
 }
@@ -31,6 +32,7 @@ func NewBoostSystem(world *engine.World) engine.System {
 	s.statActive = status.NewPlayerBool(reg, parameter.MaxPlayers, "boost.active", "boost.active")
 	s.statRemaining = status.NewPlayerInt(reg, parameter.MaxPlayers, "boost.remaining", "boost.remaining")
 	s.statTruncated = reg.Ints.Get("boost.truncated")
+	s.rejects = newRejectionTelemetry(reg, "boost")
 
 	s.Init()
 	return s
@@ -41,6 +43,7 @@ func (s *BoostSystem) Init() {
 	s.statActive.Reset()
 	s.statRemaining.Reset()
 	s.statTruncated.Store(0)
+	s.rejects.Reset()
 	s.enabled = true
 }
 
@@ -80,6 +83,9 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
+		if ev.Type != event.EventMetaSystemCommandRequest {
+			s.rejects.disabled.Add(1)
+		}
 		return
 	}
 
@@ -96,6 +102,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BoostActivatePayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.activate(cursor, payload.Duration)
@@ -104,12 +111,15 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BoostDeactivatePayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.deactivate(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 	case event.EventBoostExtend:
 		if payload, ok := ev.Payload.(*event.BoostExtendPayload); ok {
 			cursor := s.world.ResolveCursor(payload.Entity)
 			if cursor == 0 {
+				s.rejects.cursor.Add(1)
 				return
 			}
 			s.extend(cursor, payload.Duration)
@@ -119,6 +129,8 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.BoostRewardPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
 				s.reward(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 
@@ -126,6 +138,8 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.KillerEntity); cursor != 0 {
 				s.reward(cursor)
+			} else {
+				s.rejects.cursor.Add(1)
 			}
 		}
 	}

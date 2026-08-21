@@ -5,8 +5,8 @@ import (
 	"sync/atomic"
 )
 
-// Registry is the central metrics facade
-// Systems cache pointers during init; Update loops write directly to atomics
+// Registry is the central metrics facade.
+// Systems cache pointers during construction; Update loops write directly to atomics.
 // Also owns periodic snapshot emission (snapshot.go) and the flight recorder
 // (recorder.go), which share one group index
 type Registry struct {

@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"io/fs"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -66,6 +67,21 @@ type ClockScheduler struct {
 	statGameElapsedMs   *atomic.Int64
 	statEvDropped       *atomic.Int64
 	statTickSlips       *atomic.Int64
+	statEvInvalid       *atomic.Int64
+	statSettleExhausted *atomic.Int64
+	statEvDispatchTypes *status.AtomicString
+	statEvDeadTypes     *status.AtomicString
+	statSettlePass      [settleSourceCount]*atomic.Int64
+
+	// Scheduler-owned accumulators are mutated and published under the world lock.
+	evBackoffs      int64
+	tickSlips       int64
+	tickSlipPending bool
+
+	eventDispatch [event.EventTypeCount]int64
+	eventDead     [event.EventTypeCount]int64
+	eventTypeBuf  []byte
+	eventDeadBuf  []byte
 
 	// Log state: overflow edge detection
 	lastEvDropped uint64
@@ -90,6 +106,18 @@ type regionStat struct {
 	maxDur  *atomic.Int64
 	paused  *atomic.Bool
 }
+
+const (
+	settleSourcePre = iota
+	settleSourcePost
+	settleSourceLoop
+	settleSourceReset
+	settleSourceInput
+	settleSourceManual
+	settleSourceCount
+)
+
+var settleSourceNames = [settleSourceCount]string{"pre", "post", "loop", "reset", "input", "settle"}
 
 // NewClockScheduler creates a new clock scheduler with specified tick interval
 // Receives frameReady sync (receive) channel and returns game updateDone (send) and resetRequest (send) channels
@@ -137,6 +165,10 @@ func NewClockScheduler(
 		statGameElapsedMs:   statusReg.Ints.Get("time.game_elapsed_ms"),
 		statEvDropped:       statusReg.Ints.Get("event.dropped"),
 		statTickSlips:       statusReg.Ints.Get("engine.tick_slips"),
+		statEvInvalid:       statusReg.Ints.Get("event.invalid"),
+		statSettleExhausted: statusReg.Ints.Get("event.settle_exhausted"),
+		statEvDispatchTypes: statusReg.Strings.Get("event.dispatch_by_type"),
+		statEvDeadTypes:     statusReg.Strings.Get("event.dead_by_type"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -144,6 +176,10 @@ func NewClockScheduler(
 		statFSMIndex:   statusReg.Ints.Get("fsm.state_index"),
 		statFSMTotal:   statusReg.Ints.Get("fsm.state_count"),
 	}
+	for i, name := range settleSourceNames {
+		cs.statSettlePass[i] = statusReg.Ints.Get("event.settle_" + name)
+	}
+	cs.resetTelemetry()
 
 	// The FSM is scheduler-owned, so region control arrives as an event rather
 	// than as an API pair reaching through App
@@ -517,7 +553,7 @@ func (cs *ClockScheduler) schedulerLoop() {
 				if gameNow.Sub(cs.nextTickDeadline) > cs.tickInterval*2 {
 					// Systems cannot sustain this rate; drop the debt and count it
 					cs.nextTickDeadline = gameNow.Add(cs.tickInterval)
-					cs.statTickSlips.Add(1)
+					cs.tickSlipPending = true
 				}
 				deadline = cs.nextTickDeadline
 
@@ -645,6 +681,8 @@ func (cs *ClockScheduler) eventLoop() {
 	defer ticker.Stop()
 
 	backoffCount := 0
+	var pendingBackoffs int64
+	var pendingRun uint64
 
 	for {
 		select {
@@ -660,6 +698,10 @@ func (cs *ClockScheduler) eventLoop() {
 
 			// Attempt non-blocking lock
 			if cs.world.TryLock() {
+				if pendingBackoffs != 0 && pendingRun == cs.world.Resources.Event.Queue.Stamp().Run {
+					cs.evBackoffs += pendingBackoffs
+				}
+				pendingBackoffs = 0
 				if cs.dispatchOnePass("loop") > 0 {
 					cs.world.Resources.Event.Queue.NextBoundary()
 				}
@@ -670,7 +712,13 @@ func (cs *ClockScheduler) eventLoop() {
 
 			// Backoff tracking
 			backoffCount++
-			cs.statEvBackoffs.Add(1)
+			run := cs.world.Resources.Event.Queue.Stamp().Run
+			if pendingBackoffs == 0 || pendingRun == run {
+				pendingBackoffs++
+			} else {
+				pendingBackoffs = 1
+			}
+			pendingRun = run
 
 			// Force progress after threshold
 			if backoffCount >= cs.eventLoopBackoffMax {
@@ -679,6 +727,10 @@ func (cs *ClockScheduler) eventLoop() {
 					return
 				}
 				cs.world.Lock()
+				if pendingRun == cs.world.Resources.Event.Queue.Stamp().Run {
+					cs.evBackoffs += pendingBackoffs
+				}
+				pendingBackoffs = 0
 				if cs.dispatchOnePass("loop") > 0 {
 					cs.world.Resources.Event.Queue.NextBoundary()
 				}
@@ -727,8 +779,14 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 		if len(handlers) > 0 {
 			nSys++
 		}
-		if !took && len(handlers) == 0 {
+		dead := !took && len(handlers) == 0
+		if dead {
 			nDead++
+		}
+		if ev.Type <= event.EventNone || int(ev.Type) >= event.EventTypeCount {
+			cs.statEvInvalid.Add(1)
+		} else {
+			cs.world.Resources.Event.Queue.RecordDispatch(ev.Type, dead)
 		}
 
 		// Emitted after HandleEvent so the fsm verdict is known; any transition
@@ -771,6 +829,7 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 
 	cs.statEvDispatches.Add(int64(len(eventsList)))
 	cs.statEvDead.Add(int64(nDead))
+	cs.recordSettlePass(src)
 	return len(eventsList)
 }
 
@@ -784,14 +843,121 @@ func apmAdmits(t event.EventType) bool {
 // returns how many were dispatched
 func (cs *ClockScheduler) dispatchAndProcessEvents(src string) int {
 	total := 0
+	last := 0
 	for range parameter.EventLoopIterations {
-		n := cs.dispatchOnePass(src)
-		total += n
-		if n == 0 {
+		last = cs.dispatchOnePass(src)
+		total += last
+		if last == 0 {
 			break
 		}
 	}
+	if last != 0 && cs.world.Resources.Event.Queue.Len() != 0 {
+		cs.statSettleExhausted.Add(1)
+	}
 	return total
+}
+
+// recordSettlePass increments the fixed source bucket for one non-empty pass.
+func (cs *ClockScheduler) recordSettlePass(src string) {
+	var index int
+	switch src {
+	case "pre":
+		index = settleSourcePre
+	case "post":
+		index = settleSourcePost
+	case "loop":
+		index = settleSourceLoop
+	case "reset":
+		index = settleSourceReset
+	case "input":
+		index = settleSourceInput
+	case "settle":
+		index = settleSourceManual
+	default:
+		return
+	}
+	cs.statSettlePass[index].Add(1)
+}
+
+// resetTelemetry clears scheduler and queue-facing session diagnostics.
+// Construction and executeReset are the only callers.
+func (cs *ClockScheduler) resetTelemetry() {
+	cs.evBackoffs = 0
+	cs.tickSlips = 0
+	cs.tickSlipPending = false
+	cs.lastEvDropped = 0
+
+	for _, stat := range []*atomic.Int64{
+		cs.statTicks,
+		cs.statAPM,
+		cs.statMusicAPM,
+		cs.statEvBackoffs,
+		cs.statEvDispatches,
+		cs.statEvDead,
+		cs.statEntityCount,
+		cs.statEntityCreated,
+		cs.statEntityDestroyed,
+		cs.statQueueLen,
+		cs.statQueueMax,
+		cs.statGameElapsedMs,
+		cs.statEvDropped,
+		cs.statTickSlips,
+		cs.statEvInvalid,
+		cs.statSettleExhausted,
+	} {
+		stat.Store(0)
+	}
+	for _, stat := range cs.statSettlePass {
+		stat.Store(0)
+	}
+	cs.statEvDispatchTypes.StoreIfChanged("-")
+	cs.statEvDeadTypes.StoreIfChanged("-")
+	cs.statFSMName.StoreIfChanged("-")
+	cs.statFSMElapsed.Store(0)
+	cs.statFSMMaxDur.Store(0)
+	cs.statFSMIndex.Store(0)
+	cs.statFSMTotal.Store(0)
+	for i := range cs.regionStats {
+		rs := &cs.regionStats[i]
+		rs.state.StoreIfChanged("-")
+		rs.index.Store(0)
+		rs.elapsed.Store(0)
+		rs.maxDur.Store(0)
+		rs.paused.Store(false)
+	}
+}
+
+// publishEventTelemetry formats the sparse per-type arrays on snapshot cadence.
+func (cs *ClockScheduler) publishEventTelemetry() {
+	cs.world.Resources.Event.Queue.SnapshotTelemetry(&cs.eventDispatch, &cs.eventDead)
+	cs.eventTypeBuf = appendEventTypeCounts(cs.eventTypeBuf[:0], &cs.eventDispatch)
+	cs.eventDeadBuf = appendEventTypeCounts(cs.eventDeadBuf[:0], &cs.eventDead)
+	cs.statEvDispatchTypes.Store(string(cs.eventTypeBuf))
+	cs.statEvDeadTypes.Store(string(cs.eventDeadBuf))
+}
+
+func appendEventTypeCounts(dst []byte, counts *[event.EventTypeCount]int64) []byte {
+	for i := 1; i < event.EventTypeCount; i++ {
+		if counts[i] == 0 {
+			continue
+		}
+		if len(dst) != 0 {
+			dst = append(dst, ' ')
+		}
+		name := event.GetEventName(event.EventType(i))
+		if name == "" {
+			dst = append(dst, '#')
+			dst = strconv.AppendInt(dst, int64(i), 10)
+		} else {
+			dst = append(dst, name...)
+		}
+		dst = append(dst, '=')
+		dst = strconv.AppendInt(dst, counts[i], 10)
+	}
+	if len(dst) == 0 {
+		return append(dst, '-')
+	}
+	return dst
 }
 
 // executeReset performs FSM reset while scheduler mutex is held
@@ -806,6 +972,8 @@ func (cs *ClockScheduler) executeReset() {
 
 	// 2. Drain and discard stale events from the previous game session
 	_ = cs.world.Resources.Event.Queue.Consume()
+	cs.world.Resources.Event.Queue.ResetTelemetry()
+	cs.resetTelemetry()
 
 	// 3. Reset Scheduler internal timing
 	now := cs.ctl.Now()
@@ -853,12 +1021,18 @@ func (cs *ClockScheduler) processTick() {
 	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
 
 	var (
-		entityCount      int
 		tickTime         time.Time // this tick's game instant, read once under the lock
 		screenW, screenH int       // terminal dims for the anchor, derived under the lock
+		ticks            uint64
+		dropped          uint64
+		droppedDelta     uint64
 	)
 
 	cs.world.RunSafe(func() {
+		if cs.tickSlipPending {
+			cs.tickSlips++
+			cs.tickSlipPending = false
+		}
 		tickTime = cs.ctl.Now()
 
 		// Stamp under the lock: a producer must not observe the new tick before
@@ -902,44 +1076,49 @@ func (cs *ClockScheduler) processTick() {
 		// 7. System Execution: Systems run on the final, settled state for this tick
 		cs.world.UpdateLocked()
 
-		// 8. Snapshot store-derived stats while the lock is held
-		// Position has no internal locking; CountEntities outside this
-		// closure races removeAt on the event-loop/main goroutines
-		entityCount = cs.world.Positions.CountEntities()
+		// 8. Commit the tick and every registry write while the world is stable.
+		gs := cs.world.Resources.Game.State
+		ticks = gs.IncrementGameTicks()
+		gs.UpdateAPM(tickTime)
+
+		cs.statTicks.Store(int64(ticks))
+		cs.statAPM.Store(int64(gs.GetAPM()))
+		cs.statMusicAPM.Store(int64(gs.GetMusicAPM()))
+		cs.statEntityCount.Store(int64(cs.world.Positions.CountEntities()))
+		cs.statEntityCreated.Store(cs.world.CreatedCount())
+		cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
+		cs.statEvBackoffs.Store(cs.evBackoffs)
+		cs.statTickSlips.Store(cs.tickSlips)
+
+		qlen := int64(cs.world.Resources.Event.Queue.Len())
+		cs.statQueueLen.Store(qlen)
+		if qlen > cs.statQueueMax.Load() {
+			cs.statQueueMax.Store(qlen)
+		}
+
+		dropped = cs.world.Resources.Event.Queue.Dropped()
+		cs.statEvDropped.Store(int64(dropped))
+		if dropped > cs.lastEvDropped {
+			droppedDelta = dropped - cs.lastEvDropped
+			cs.lastEvDropped = dropped
+		}
+
+		if parameter.StatSnapshotTicks != 0 && ticks%parameter.StatSnapshotTicks == 0 {
+			cs.world.Positions.PublishTelemetry()
+			cs.publishEventTelemetry()
+		}
 		screenW, screenH = ScreenSize(cs.world.Resources.Config)
 	})
 
-	// Lock-free / internally synchronized paths only below this line
-	gs := cs.world.Resources.Game.State
-	ticks := gs.IncrementGameTicks()
 	if bs := cs.ctl.Expire(ticks); bs != nil {
 		cs.breakHit(bs, "expired")
 	}
 
-	// APM rolls on game time; publish alongside the other tick counters
-	gs.UpdateAPM(tickTime)
-
-	cs.statTicks.Store(int64(ticks))
-	cs.statAPM.Store(int64(gs.GetAPM()))
-	cs.statMusicAPM.Store(int64(gs.GetMusicAPM()))
-	cs.statEntityCount.Store(int64(entityCount))
-	cs.statEntityCreated.Store(cs.world.CreatedCount())
-	cs.statEntityDestroyed.Store(cs.world.DestroyedCount())
-	qlen := int64(cs.world.Resources.Event.Queue.Len())
-	cs.statQueueLen.Store(qlen)
-	if qlen > cs.statQueueMax.Load() {
-		cs.statQueueMax.Store(qlen) // high-water mark; sizing input for EventQueueSize
-	}
-
 	// Queue overflow is silent state loss; report every increase.
-	// The counter is monotonic across sessions — the queue outlives reset
-	dropped := cs.world.Resources.Event.Queue.Dropped()
-	cs.statEvDropped.Store(int64(dropped))
-	if dropped > cs.lastEvDropped {
+	if droppedDelta != 0 {
 		vlog.Warn("event", "msg", "queue overflow",
 			"dropped", dropped,
-			"delta", dropped-cs.lastEvDropped)
-		cs.lastEvDropped = dropped
+			"delta", droppedDelta)
 		status.Trigger(status.TrigDrop)
 	}
 

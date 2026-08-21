@@ -118,6 +118,7 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 	// 1. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
 	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
+	world.Positions.BindTelemetry(world.Resources.Status)
 
 	// 2. Context metrics; registered before Freeze, written by their owners
 	reg := world.Resources.Status

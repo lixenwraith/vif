@@ -3,10 +3,12 @@ package engine
 import (
 	"fmt"
 	"math"
+	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -18,6 +20,15 @@ type Position struct {
 	dense    []component.PositionComponent
 	entities []core.Entity // Dense array for cache-friendly iteration
 	bit      uint64        // Component bit mask
+
+	statCellSaturations *atomic.Int64
+	statCellOverflows   *atomic.Int64
+	statOccupiedCells   *atomic.Int64
+	statIndexedEntities *atomic.Int64
+	statMaxOccupancy    *atomic.Int64
+	statOccupancyHWM    *atomic.Int64
+	statPositionsHWM    *atomic.Int64
+	statBatchSizeHWM    *atomic.Int64
 }
 
 // NewPosition creates a new position store with spatial indexing
@@ -34,10 +45,54 @@ func NewPosition(w *World, bit uint64) *Position {
 	}
 }
 
+// BindTelemetry registers spatial diagnostics after GameContext creates the registry.
+func (p *Position) BindTelemetry(reg *status.Registry) {
+	p.statCellSaturations = reg.Ints.Get("spatial.cell_saturations")
+	p.statCellOverflows = reg.Ints.Get("spatial.cell_overflows")
+	p.statOccupiedCells = reg.Ints.Get("spatial.occupied_cells")
+	p.statIndexedEntities = reg.Ints.Get("spatial.indexed_entities")
+	p.statMaxOccupancy = reg.Ints.Get("spatial.max_cell_occupancy")
+	p.statOccupancyHWM = reg.Ints.Get("spatial.cell_occupancy_hwm")
+	p.statPositionsHWM = reg.Ints.Get("spatial.positions_hwm")
+	p.statBatchSizeHWM = reg.Ints.Get("spatial.position_batch_hwm")
+	p.ResetTelemetry()
+}
+
+// ResetTelemetry clears session counters and derived gauges.
+func (p *Position) ResetTelemetry() {
+	for _, stat := range []*atomic.Int64{
+		p.statCellSaturations,
+		p.statCellOverflows,
+		p.statOccupiedCells,
+		p.statIndexedEntities,
+		p.statMaxOccupancy,
+		p.statOccupancyHWM,
+		p.statPositionsHWM,
+		p.statBatchSizeHWM,
+	} {
+		if stat != nil {
+			stat.Store(0)
+		}
+	}
+}
+
+// PublishTelemetry computes grid gauges on the status snapshot cadence.
+func (p *Position) PublishTelemetry() {
+	if p.statOccupiedCells == nil {
+		return
+	}
+	stats := p.grid.ComputeStats()
+	p.statOccupiedCells.Store(int64(stats.CellsOccupied))
+	p.statIndexedEntities.Store(int64(stats.EntitiesTotal))
+	p.statMaxOccupancy.Store(int64(stats.MaxOccupancy))
+}
+
 // SetPosition inserts or updates an entity's position, multiple entities at one position are allowed, overflow silently ignored
 func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
+	countSaturation := true
 	if i, ok := p.index[e]; ok {
 		old := p.dense[i]
+		countSaturation = old.X != pos.X || old.Y != pos.Y
 		p.grid.RemoveEntityAt(e, old.X, old.Y)
 		p.dense[i] = pos
 	} else {
@@ -45,9 +100,42 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 		p.dense = append(p.dense, pos)
 		p.entities = append(p.entities, e)
 		p.world.AddComponentMask(e, p.bit)
+		storeAtomicMax(p.statPositionsHWM, int64(len(p.entities)))
 	}
-	// Explicit ignore for OOB and Cell full
-	_ = p.grid.Set(e, pos.X, pos.Y)
+	p.setGrid(e, pos.X, pos.Y, countSaturation)
+}
+
+// setGrid preserves soft clipping while exposing saturation and data loss.
+func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
+	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
+		_ = p.grid.Set(e, x, y)
+		return
+	}
+	cell := &p.grid.Cells[y*p.grid.Width+x]
+	before := cell.Count
+	if !p.grid.Set(e, x, y) {
+		if p.statCellOverflows != nil {
+			p.statCellOverflows.Add(1)
+		}
+		return
+	}
+	if p.statOccupancyHWM != nil {
+		storeAtomicMax(p.statOccupancyHWM, int64(before+1))
+	}
+	if countSaturation && before+1 == parameter.MaxEntitiesPerCell && p.statCellSaturations != nil {
+		p.statCellSaturations.Add(1)
+	}
+}
+
+func storeAtomicMax(dst *atomic.Int64, value int64) {
+	if dst == nil {
+		return
+	}
+	for old := dst.Load(); value > old; old = dst.Load() {
+		if dst.CompareAndSwap(old, value) {
+			return
+		}
+	}
 }
 
 // GetPosition retrieves a position component
@@ -136,7 +224,7 @@ func (p *Position) ResizeGrid(width, height int) {
 	// Re-populate grid from dense component data
 	for i, e := range p.entities {
 		// Explicit ignore for OOB and Cell full
-		_ = p.grid.Set(e, p.dense[i].X, p.dense[i].Y)
+		p.setGrid(e, p.dense[i].X, p.dense[i].Y, true)
 	}
 }
 
@@ -425,7 +513,7 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	p.grid.RemoveEntityAt(e, old.X, old.Y)
 	p.dense[i] = newPos
 	// Explicit ignore for OOB and Cell full
-	_ = p.grid.Set(e, newPos.X, newPos.Y)
+	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
 }
 
 // GetAllEntitiesAtInto copies entities at (x,y) into a caller-provided buffer and returns number copied, Zero-alloc if buf is on stack
@@ -498,6 +586,7 @@ func (pb *PositionBatch) Commit() error {
 		return fmt.Errorf("batch already committed")
 	}
 	pb.committed = true
+	storeAtomicMax(pb.store.statBatchSizeHWM, int64(len(pb.additions)))
 
 	// 1. Validation phase (Gameplay logic: don't spawn on top of things)
 	// Check both the current grid AND the pending batch for conflicts
@@ -536,6 +625,7 @@ func (pb *PositionBatch) CommitForce() {
 		return
 	}
 	pb.committed = true
+	storeAtomicMax(pb.store.statBatchSizeHWM, int64(len(pb.additions)))
 
 	for _, add := range pb.additions {
 		pb.store.SetPosition(add.entity, add.pos)

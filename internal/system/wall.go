@@ -33,6 +33,7 @@ type WallSystem struct {
 	statEnabled    *atomic.Bool
 	statWallCount  *atomic.Int64
 	statPushEvents *atomic.Int64
+	buffers        bufferTelemetry
 
 	enabled bool
 }
@@ -46,6 +47,7 @@ func NewWallSystem(world *engine.World) engine.System {
 	s.statEnabled = world.Resources.Status.Bools.Get("wall.enabled")
 	s.statWallCount = world.Resources.Status.Ints.Get("wall.count")
 	s.statPushEvents = world.Resources.Status.Ints.Get("wall.push_events")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "wall", "pending_push_checks")
 
 	s.Init()
 	return s
@@ -59,6 +61,7 @@ func (s *WallSystem) Init() {
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -231,6 +234,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 
 	if payload.BlockMask != component.WallBlockNone {
 		s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: payload.X, Y: payload.Y})
+		s.buffers.Observe(0, len(s.pendingPushChecks))
 	}
 
 	s.world.PushEvent(event.EventWallSpawned, &event.WallSpawnedPayload{
@@ -392,6 +396,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 		if payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: rc.x, Y: rc.y})
+			s.buffers.Observe(0, len(s.pendingPushChecks))
 		}
 
 		result.count++
@@ -638,6 +643,7 @@ func (s *WallSystem) handleMaskChange(payload *event.WallMaskChangeRequestPayloa
 
 		if !wasBlocking && payload.BlockMask != component.WallBlockNone {
 			s.pendingPushChecks = append(s.pendingPushChecks, vmath.Point{X: pos.X, Y: pos.Y})
+			s.buffers.Observe(0, len(s.pendingPushChecks))
 		}
 	}
 }

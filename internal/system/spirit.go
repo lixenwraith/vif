@@ -17,6 +17,7 @@ type SpiritSystem struct {
 
 	// Deferred destruction for final frame visibility
 	destroyNextTick []core.Entity
+	buffers         bufferTelemetry
 
 	enabled bool
 }
@@ -25,12 +26,14 @@ func NewSpiritSystem(world *engine.World) engine.System {
 	s := &SpiritSystem{
 		world: world,
 	}
+	s.buffers = newBufferTelemetry(world.Resources.Status, "spirit", "destroy_next_tick")
 	s.Init()
 	return s
 }
 
 func (s *SpiritSystem) Init() {
 	s.destroyNextTick = s.destroyNextTick[:0]
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -110,6 +113,7 @@ func (s *SpiritSystem) Update() {
 			s.destroyNextTick = append(s.destroyNextTick, entity)
 		}
 	}
+	s.buffers.Observe(0, len(s.destroyNextTick))
 }
 
 // spawnSpirit creates spirit entities and their components, without position store registration (vfx only, no world interaction)

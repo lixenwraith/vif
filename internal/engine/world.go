@@ -117,6 +117,7 @@ func (w *World) Clear() {
 	w.nextEntityID = 1
 	w.createdCount.Store(0)
 	w.destroyedCount.Store(0)
+	w.Positions.ResetTelemetry()
 	w.Resources.Player.Clear()
 	w.wipeAll()
 }

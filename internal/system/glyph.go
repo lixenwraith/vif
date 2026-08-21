@@ -78,6 +78,7 @@ type GlyphSystem struct {
 	statRateMult    *status.AtomicFloat
 	statNextSpawnMS *atomic.Int64
 	statOrphanGlyph *atomic.Int64
+	buffers         bufferTelemetry
 
 	enabled bool
 }
@@ -94,6 +95,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 	s.statRateMult = world.Resources.Status.Floats.Get("glyph.rate_mult")
 	s.statNextSpawnMS = world.Resources.Status.Ints.Get("glyph.next_spawn_ms")
 	s.statOrphanGlyph = world.Resources.Status.Ints.Get("glyph.orphan_glyph")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "glyph", "placement")
 
 	s.Init()
 	return s
@@ -112,6 +114,7 @@ func (s *GlyphSystem) Init() {
 	s.statRateMult.Set(0)
 	s.statNextSpawnMS.Store(0)
 	s.statOrphanGlyph.Store(0)
+	s.buffers.Reset()
 	s.enabled = true
 }
 
@@ -345,6 +348,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 				char:   lineRunes[i],
 			})
 		}
+		s.buffers.Observe(0, len(s.placement))
 
 		// 2. Batch position validation and commit
 		batch := s.world.Positions.BeginBatch()

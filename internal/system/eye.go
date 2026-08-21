@@ -19,7 +19,10 @@ type EyeSystem struct {
 	world *engine.World
 
 	// Telemetry
-	statCount *atomic.Int64
+	statCount     *atomic.Int64
+	statProtected *atomic.Int64
+	lifecycle     lifecycleTelemetry
+	motion        bounceTelemetry
 
 	enabled bool
 }
@@ -30,6 +33,9 @@ func NewEyeSystem(world *engine.World) engine.System {
 	}
 
 	s.statCount = world.Resources.Status.Ints.Get("eye.count")
+	s.statProtected = world.Resources.Status.Ints.Get("eye.protected_rejects")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "eye")
+	s.motion = newBounceTelemetry(world.Resources.Status, "eye")
 
 	s.Init()
 	return s
@@ -37,6 +43,9 @@ func NewEyeSystem(world *engine.World) engine.System {
 
 func (s *EyeSystem) Init() {
 	s.statCount.Store(0)
+	s.statProtected.Store(0)
+	s.lifecycle.Reset()
+	s.motion.Reset()
 	s.enabled = true
 }
 
@@ -53,6 +62,7 @@ func (s *EyeSystem) EventTypes() []event.EventType {
 		event.EventEyeSpawnRequest,
 		event.EventEyeCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -72,10 +82,17 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 		}
 		return
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesEye {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
 		// Release GA evaluations for spawn requests dropped while disabled
 		if ev.Type == event.EventEyeSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
 			if payload, ok := ev.Payload.(*event.EyeSpawnRequestPayload); ok {
 				s.abandonEval(payload)
 			}
@@ -92,6 +109,7 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEyeCancelRequest:
 		// despawnEye removes from Eye immediately.
 		headerEntities := s.world.Components.Eye.GetAllEntities()
+		s.lifecycle.despawned.Add(int64(len(headerEntities)))
 		for _, headerEntity := range headerEntities {
 			s.despawnEye(headerEntity)
 		}
@@ -99,6 +117,9 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCompositeIntegrityBreach:
 		if payload, ok := ev.Payload.(*event.CompositeIntegrityBreachPayload); ok {
 			if payload.Behavior == component.BehaviorEye {
+				if s.world.Components.Eye.HasEntity(payload.HeaderEntity) {
+					s.lifecycle.despawned.Add(1)
+				}
 				s.despawnEye(payload.HeaderEntity)
 			}
 		}
@@ -199,6 +220,7 @@ func (s *EyeSystem) Update() {
 
 func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	if int(payload.Type) >= parameter.EyeTypeCount {
+		s.lifecycle.spawnFailures.Add(1)
 		s.abandonEval(payload)
 		return
 	}
@@ -221,6 +243,7 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 			0,
 		)
 		if !found {
+			s.lifecycle.spawnFailures.Add(1)
 			s.abandonEval(payload)
 			return
 		}
@@ -230,6 +253,7 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 
 	s.clearSpawnArea(headerX, headerY)
 	headerEntity := s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
+	s.lifecycle.spawned.Add(1)
 
 	s.world.PushEvent(event.EventEyeSpawned, &event.EyeSpawnedPayload{
 		HeaderEntity: headerEntity,
@@ -270,6 +294,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 				}
 				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
 					if prot.Mask&component.ProtectFromSpecies != 0 {
+						s.statProtected.Add(1)
 						continue
 					}
 				}
@@ -444,7 +469,7 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 	minHeaderY := parameter.EyeHeaderOffsetY
 	maxHeaderY := config.MapHeight - (parameter.EyeHeight - parameter.EyeHeaderOffsetY)
 
-	newX, newY, _ := physics.IntegrateWithBounce(
+	newX, newY, motion := physics.IntegrateWithBounceStats(
 		&kineticComp.Kinetic,
 		dtSec,
 		parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
@@ -453,6 +478,7 @@ func (s *EyeSystem) integrateAndSync(headerEntity core.Entity, kineticComp *comp
 		parameter.EyeRestitution,
 		wallCheck,
 	)
+	s.motion.Record(motion)
 
 	if newX != headerPos.X || newY != headerPos.Y {
 		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: newX, Y: newY})

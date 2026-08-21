@@ -23,6 +23,7 @@ type PylonSystem struct {
 	// Telemetry
 	statActive *atomic.Bool
 	statCount  *atomic.Int64
+	lifecycle  lifecycleTelemetry
 
 	enabled bool
 }
@@ -35,6 +36,7 @@ func NewPylonSystem(world *engine.World) engine.System {
 
 	s.statActive = world.Resources.Status.Bools.Get("pylon.active")
 	s.statCount = world.Resources.Status.Ints.Get("pylon.count")
+	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "pylon")
 
 	s.Init()
 	return s
@@ -44,6 +46,7 @@ func (s *PylonSystem) Init() {
 	s.rng = s.world.Rand(s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
+	s.lifecycle.Reset()
 	s.enabled = true
 }
 
@@ -60,6 +63,7 @@ func (s *PylonSystem) EventTypes() []event.EventType {
 		event.EventPylonSpawnRequest,
 		event.EventPylonCancelRequest,
 		event.EventCompositeIntegrityBreach,
+		event.EventEnemyKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -78,8 +82,17 @@ func (s *PylonSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+	if ev.Type == event.EventEnemyKilled {
+		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesPylon {
+			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
+		}
+		return
+	}
 
 	if !s.enabled {
+		if ev.Type == event.EventPylonSpawnRequest {
+			s.lifecycle.spawnFailures.Add(1)
+		}
 		return
 	}
 
@@ -90,6 +103,7 @@ func (s *PylonSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventPylonCancelRequest:
+		s.lifecycle.despawned.Add(int64(s.world.Components.Pylon.CountEntities()))
 		s.terminateAll()
 
 	case event.EventCompositeIntegrityBreach:
@@ -191,6 +205,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		var ok bool
 		centerX, centerY, ok = s.findRandomPylonPosition(radiusX, radiusY)
 		if !ok {
+			s.lifecycle.spawnFailures.Add(1)
 			s.world.PushEvent(event.EventPylonSpawnFailed, nil)
 			return
 		}
@@ -198,6 +213,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		// Explicit placement — validate
 		centerX, centerY = payload.X, payload.Y
 		if !s.validatePylonPosition(centerX, centerY, radiusX, radiusY) {
+			s.lifecycle.spawnFailures.Add(1)
 			s.world.PushEvent(event.EventPylonSpawnFailed, nil)
 			return
 		}
@@ -252,6 +268,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		X:            centerX,
 		Y:            centerY,
 	})
+	s.lifecycle.spawned.Add(1)
 }
 
 // validatePylonPosition checks if pylon bounding rect fits in bounds and is wall-free
