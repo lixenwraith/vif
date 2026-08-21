@@ -456,6 +456,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 
 // processPositiveEnergy handles Red destruction with Blossom spawn
 func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
+	// TODO: move toDestroy to system level buffer
 	var toDestroy []core.Entity
 
 	// Iterate candidates with self-exclusion pattern

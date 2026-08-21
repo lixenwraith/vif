@@ -122,7 +122,7 @@ func (s *EyeSystem) Update() {
 			continue
 		}
 
-		combatComp, ok := s.world.Components.Combat.GetComponent(headerEntity)
+		combatComp, ok := s.world.Components.Combat.GetPtr(headerEntity)
 		if !ok {
 			continue
 		}
@@ -158,7 +158,7 @@ func (s *EyeSystem) Update() {
 		s.updateAnimationFrame(eyeComp)
 
 		// Homing movement
-		s.updateHomingMovement(headerEntity, eyeComp, &combatComp, kineticComp, dtSec)
+		s.updateHomingMovement(headerEntity, eyeComp, combatComp, kineticComp, dtSec)
 
 		// Physics integration and member position sync
 		s.integrateAndSync(headerEntity, kineticComp, dtSec)
@@ -497,7 +497,7 @@ func (s *EyeSystem) updateAnimationFrame(eyeComp *component.EyeComponent) {
 func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 	// Resolve target group
 	groupID := uint8(0)
-	if tc, ok := s.world.Components.Target.GetComponent(headerEntity); ok {
+	if tc, ok := s.world.Components.Target.GetPtr(headerEntity); ok {
 		groupID = tc.GroupID
 	}
 
@@ -523,7 +523,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 		// Gate radius = target half-extent + self-destruct radius, so it never
 		// rejects a member that would actually be in range
 		gateSq := parameter.EyeContactCheckDistSq
-		if tower, ok := s.world.Components.Tower.GetComponent(targetEntity); ok {
+		if tower, ok := s.world.Components.Tower.GetPtr(targetEntity); ok {
 			r := max(tower.RadiusX, tower.RadiusY) + parameter.EyeSelfDestructRadius
 			gateSq = r * r
 		}
@@ -534,7 +534,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 		}
 
 		// Composite target: check any member within explosion radius
-		if targetHeader, ok := s.world.Components.Header.GetComponent(targetEntity); ok {
+		if targetHeader, ok := s.world.Components.Header.GetPtr(targetEntity); ok {
 			var hitMembers []core.Entity
 			for _, member := range targetHeader.MemberEntries {
 				if member.Entity == 0 {

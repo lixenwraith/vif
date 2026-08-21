@@ -633,7 +633,7 @@ func (s *QuasarSystem) applyZapDamage(cursorEntity core.Entity) {
 	if cursorEntity == 0 {
 		return
 	}
-	shield, ok := s.world.Components.Shield.GetComponent(cursorEntity)
+	shield, ok := s.world.Components.Shield.GetPtr(cursorEntity)
 	shieldActive := ok && shield.Active
 
 	if shieldActive {
@@ -652,7 +652,7 @@ func (s *QuasarSystem) applyZapDamage(cursorEntity core.Entity) {
 
 // processCollisionsAtNewPositions destroys entities at quasar's destination
 func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity, headerX, headerY int) {
-	header, ok := s.world.Components.Header.GetComponent(headerEntity)
+	header, ok := s.world.Components.Header.GetPtr(headerEntity)
 	if !ok {
 		return
 	}
@@ -686,7 +686,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 				}
 
 				// Check protection
-				if protComp, ok := s.world.Components.Protection.GetComponent(entity); ok {
+				if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
 					if protComp.Mask&component.ProtectFromSpecies != 0 {
 						continue
 					}

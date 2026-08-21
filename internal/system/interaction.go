@@ -77,7 +77,7 @@ func checkCursorOverlap(w *engine.World, cursorEntity, entity core.Entity) Curso
 	result := CursorOverlap{ShieldActive: shieldActive}
 
 	// Composite: iterate members
-	if headerComp, ok := w.Components.Header.GetComponent(entity); ok {
+	if headerComp, ok := w.Components.Header.GetPtr(entity); ok {
 		for _, member := range headerComp.MemberEntries {
 			if member.Entity == 0 {
 				continue

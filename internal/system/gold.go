@@ -176,7 +176,7 @@ func (s *GoldSystem) handleJumpRequest(cursorEntity core.Entity) {
 	}
 
 	// 1. Find target position (First living member)
-	header, ok := s.world.Components.Header.GetComponent(s.headerEntity)
+	header, ok := s.world.Components.Header.GetPtr(s.headerEntity)
 	if !ok {
 		return
 	}

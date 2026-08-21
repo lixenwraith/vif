@@ -779,7 +779,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 // processCircleCollisions destroys non-protected entities at circle's elliptical footprint
 func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX, newGridY int) {
 	// Build member exclusion set
-	headerComp, hasHeader := s.world.Components.Header.GetComponent(circleEntity)
+	headerComp, hasHeader := s.world.Components.Header.GetPtr(circleEntity)
 	clear(s.memberExcludeSet)
 	s.memberExcludeSet[circleEntity] = struct{}{}
 	if hasHeader {
@@ -806,7 +806,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 				continue
 			}
 
-			if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
+			if prot, ok := s.world.Components.Protection.GetPtr(e); ok {
 				if prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll {
 					continue
 				}
@@ -835,7 +835,7 @@ func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormCompon
 		}
 
 		circleEntity := stormComp.Circles[i]
-		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+		headerComp, ok := s.world.Components.Header.GetPtr(circleEntity)
 		if !ok {
 			continue
 		}
@@ -849,7 +849,7 @@ func (s *StormSystem) processCircleMemberCombat(stormComp *component.StormCompon
 				continue
 			}
 
-			combatComp, ok := s.world.Components.Combat.GetComponent(member.Entity)
+			combatComp, ok := s.world.Components.Combat.GetPtr(member.Entity)
 			if !ok {
 				// Storm members always have CombatComponent; absence = dead
 				continue
@@ -1020,7 +1020,7 @@ func (s *StormSystem) updateCircleDamageImmunity(stormComp *component.StormCompo
 			s.statNudges.Add(1)
 		}
 
-		headerComp, ok := s.world.Components.Header.GetComponent(circleEntity)
+		headerComp, ok := s.world.Components.Header.GetPtr(circleEntity)
 		if !ok {
 			continue
 		}

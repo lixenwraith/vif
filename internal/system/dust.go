@@ -230,7 +230,7 @@ func (s *DustSystem) Update() {
 
 	// Fetch energy for attraction
 	var cursorEnergy int64
-	energyComp, ok := s.world.Components.Energy.GetComponent(cursorEntity)
+	energyComp, ok := s.world.Components.Energy.GetPtr(cursorEntity)
 	if ok {
 		cursorEnergy = energyComp.Current
 	}
@@ -412,9 +412,8 @@ func (s *DustSystem) Update() {
 
 					// --- Combat Composite ---
 					if flags&cellFlagCombatComposite != 0 {
-						if member, ok := s.world.Components.Member.GetComponent(target); ok {
+						if member, ok := s.world.Components.Member.GetPtr(target); ok {
 							if collisionCtx.combatHeaders[member.HeaderEntity] {
-
 								impulseX, impulseY := physics.ImpulseFromProfile(
 									kineticComp.VelX, kineticComp.VelY,
 									&profile.DustToComposite, s.rng,

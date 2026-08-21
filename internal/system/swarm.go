@@ -779,7 +779,7 @@ func (s *SwarmSystem) checkDrainAbsorption(
 			}
 
 			// Get drain HP before destruction
-			drainCombatComp, ok := s.world.Components.Combat.GetComponent(entity)
+			drainCombatComp, ok := s.world.Components.Combat.GetPtr(entity)
 			hpAbsorbed := 0
 			if ok {
 				hpAbsorbed = drainCombatComp.HitPoints
