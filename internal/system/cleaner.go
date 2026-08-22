@@ -141,9 +141,8 @@ func (s *CleanerSystem) Update() {
 	s.buffers.Observe(0, len(s.entityBuf))
 	s.statActive.Store(int64(len(s.entityBuf)))
 
-	// Push EventCleanerSweepingFinished when all cleaners have completed their animation
+	// Early return if idle
 	if len(s.entityBuf) == 0 {
-		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 
