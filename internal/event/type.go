@@ -154,8 +154,6 @@ const (
 	EventCleanerDirectionalRequest
 	// EventCleanerSweepingRequest (CleanerSweepingRequestPayload) spawns cleaners on rows with positive/negative energy glyphs
 	EventCleanerSweepingRequest
-	// EventCleanerSweepingFinished marks cleaner animation completion
-	EventCleanerSweepingFinished
 
 	// --- Gold ---
 
@@ -391,18 +389,18 @@ const (
 
 	// --- Spirit ---
 
-	// EventSpiritSpawn (SpiritSpawnRequestPayload) signals intent to spawn a spirit entity
-	EventSpiritSpawn
-	// EventSpiritDespawn signals force-clear of all spirit entities
-	EventSpiritDespawn
+	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) signals intent to spawn a spirit entity
+	EventSpiritSpawnRequest
+	// EventSpiritDespawnRequest signals force-clear of all spirit entities
+	EventSpiritDespawnRequest
 
 	// --- Lightning ---
 
 	// EventLightningSpawnRequest (LightningSpawnRequestPayload) signals intent to spawn a lightning visual effect
 	EventLightningSpawnRequest
-	// EventLightningUpdate (LightningUpdatePayload) signals target position update for tracked lightning
-	EventLightningUpdate
-	// EventLightningDespawnRequest (LightningDespawnPayload) signals force-removal of lightning entity(ies)
+	// EventLightningUpdateRequest (LightningUpdateRequestPayload) signals target position update for tracked lightning
+	EventLightningUpdateRequest
+	// EventLightningDespawnRequest (LightningDespawnRequestPayload) signals force-removal of lightning entity(ies)
 	EventLightningDespawnRequest
 
 	// --- Combat ---

@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 167
+const EventTypeCount = 166
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -52,7 +52,6 @@ func InitRegistry() {
 	RegisterType("EventNuggetJumpRequest", EventNuggetJumpRequest, &NuggetJumpRequestPayload{})
 	RegisterType("EventCleanerDirectionalRequest", EventCleanerDirectionalRequest, &DirectionalCleanerPayload{})
 	RegisterType("EventCleanerSweepingRequest", EventCleanerSweepingRequest, &CleanerSweepingRequestPayload{})
-	RegisterType("EventCleanerSweepingFinished", EventCleanerSweepingFinished, nil)
 	RegisterType("EventGoldSpawnRequest", EventGoldSpawnRequest, nil)
 	RegisterType("EventGoldSpawnFailed", EventGoldSpawnFailed, nil)
 	RegisterType("EventGoldSpawned", EventGoldSpawned, &GoldSpawnedPayload{})
@@ -130,11 +129,11 @@ func InitRegistry() {
 	RegisterType("EventGrayoutStart", EventGrayoutStart, nil)
 	RegisterType("EventGrayoutEnd", EventGrayoutEnd, nil)
 	RegisterType("EventStrobeRequest", EventStrobeRequest, &StrobeRequestPayload{})
-	RegisterType("EventSpiritSpawn", EventSpiritSpawn, &SpiritSpawnRequestPayload{})
-	RegisterType("EventSpiritDespawn", EventSpiritDespawn, nil)
+	RegisterType("EventSpiritSpawnRequest", EventSpiritSpawnRequest, &SpiritSpawnRequestPayload{})
+	RegisterType("EventSpiritDespawnRequest", EventSpiritDespawnRequest, nil)
 	RegisterType("EventLightningSpawnRequest", EventLightningSpawnRequest, &LightningSpawnRequestPayload{})
-	RegisterType("EventLightningUpdate", EventLightningUpdate, &LightningUpdatePayload{})
-	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest, &LightningDespawnPayload{})
+	RegisterType("EventLightningUpdateRequest", EventLightningUpdateRequest, &LightningUpdateRequestPayload{})
+	RegisterType("EventLightningDespawnRequest", EventLightningDespawnRequest, &LightningDespawnRequestPayload{})
 	RegisterType("EventCombatAttackDirectRequest", EventCombatAttackDirectRequest, &CombatAttackDirectRequestPayload{})
 	RegisterType("EventCombatAttackAreaRequest", EventCombatAttackAreaRequest, &CombatAttackAreaRequestPayload{})
 	RegisterType("EventLootSpawnRequest", EventLootSpawnRequest, &LootSpawnRequestPayload{})

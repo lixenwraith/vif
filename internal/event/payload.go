@@ -707,15 +707,15 @@ type LightningSpawnRequestPayload struct {
 	Tracked      bool                         `toml:"tracked"` // If true, entity persists and target can be updated
 }
 
-// LightningUpdatePayload updates target position for tracked lightning
-type LightningUpdatePayload struct {
+// LightningUpdateRequestPayload updates target position for tracked lightning
+type LightningUpdateRequestPayload struct {
 	Owner   core.Entity `toml:"owner"`
 	TargetX int         `toml:"target_x"`
 	TargetY int         `toml:"target_y"`
 }
 
-// LightningDespawnPayload specifies lightning removal criteria
-type LightningDespawnPayload struct {
+// LightningDespawnRequestPayload specifies lightning removal criteria
+type LightningDespawnRequestPayload struct {
 	Owner        core.Entity `toml:"owner"`         // Required
 	TargetEntity core.Entity `toml:"target_entity"` // 0 = removes all from owner
 }
@@ -766,9 +766,9 @@ type SpeciesKilledPayload struct {
 type SpeciesCreatedPayload struct {
 	Entity      core.Entity           `toml:"entity"`
 	Species     component.SpeciesType `toml:"species"`
-	SubType     uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
-	X           int                   `toml:"x"` // -1 when the species has no single position
-	Y           int                   `toml:"y"` // -1 when the species has no single position
+	SubType     uint8                 `toml:"sub_type"`     // Species variant (e.g. EyeType)
+	X           int                   `toml:"x"`            // -1 when the species has no single position
+	Y           int                   `toml:"y"`            // -1 when the species has no single position
 	MemberCount int                   `toml:"member_count"` // Composite members; zero for non-composites
 	Genes       []float64             `toml:"genes"`
 	EvalID      uint64                `toml:"eval_id"`

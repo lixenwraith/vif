@@ -626,7 +626,7 @@ func (s *QuasarSystem) startZapping(headerEntity core.Entity, quasarComp *compon
 
 // stopZapping despawns lightning
 func (s *QuasarSystem) stopZapping(headerEntity core.Entity, quasarComp *component.QuasarComponent) {
-	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{Owner: headerEntity})
+	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnRequestPayload{Owner: headerEntity})
 
 	quasarComp.IsZapping = false
 	quasarComp.IsShielded = false
@@ -648,7 +648,7 @@ func (s *QuasarSystem) updateZapTarget(headerEntity core.Entity) core.Entity {
 		return 0
 	}
 
-	s.world.PushEvent(event.EventLightningUpdate, &event.LightningUpdatePayload{
+	s.world.PushEvent(event.EventLightningUpdateRequest, &event.LightningUpdateRequestPayload{
 		Owner:   headerEntity,
 		TargetX: cursorX,
 		TargetY: cursorY,
@@ -776,7 +776,7 @@ func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
 	}
 
 	// Stop zapping or tracked lightning lingers after quasar death
-	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnPayload{
+	s.world.PushEvent(event.EventLightningDespawnRequest, &event.LightningDespawnRequestPayload{
 		Owner:        headerEntity,
 		TargetEntity: 0, // 0 = all lightning from this owner
 	})

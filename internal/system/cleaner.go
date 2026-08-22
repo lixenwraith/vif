@@ -317,10 +317,6 @@ func (s *CleanerSystem) Update() {
 			s.world.DestroyEntity(cleanerEntity)
 		}
 	}
-
-	if s.world.Components.Cleaner.CountEntities() == 0 {
-		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
-	}
 }
 
 // appendCleanerTrail records every crossed cell, rather than only the final
@@ -357,7 +353,6 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 	spawnCount := len(rows)
 	// No rows to clean
 	if spawnCount == 0 {
-		s.world.PushEvent(event.EventCleanerSweepingFinished, nil)
 		return
 	}
 	s.statSpawned.Add(int64(spawnCount))

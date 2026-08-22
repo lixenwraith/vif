@@ -84,7 +84,7 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		if s.hasQuasarFusion() {
-			s.world.PushEvent(event.EventSpiritDespawn, nil)
+			s.world.PushEvent(event.EventSpiritDespawnRequest, nil)
 		}
 		s.Init()
 		return
@@ -164,7 +164,7 @@ func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c 
 	for i, src := range sources {
 		dest := area.DistributePoint(i, s.rng)
 
-		s.world.PushEvent(event.EventSpiritSpawn, &event.SpiritSpawnRequestPayload{
+		s.world.PushEvent(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
 			StartX:    src.X,
 			StartY:    src.Y,
 			TargetX:   dest.X,
@@ -320,7 +320,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 func (s *FuseSystem) completeFusion(f pendingFusion) {
 	switch f.Type {
 	case FuseQuasar:
-		s.world.PushEvent(event.EventSpiritDespawn, nil) // Clean up spirits
+		s.world.PushEvent(event.EventSpiritDespawnRequest, nil) // Clean up spirits
 		// Request spawn, delegation of creation to QuasarSystem
 		s.world.PushEvent(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
 			X: f.TargetX,

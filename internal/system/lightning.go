@@ -82,7 +82,7 @@ func (s *LightningSystem) Update() {
 func (s *LightningSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventLightningSpawnRequest,
-		event.EventLightningUpdate,
+		event.EventLightningUpdateRequest,
 		event.EventLightningDespawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -114,13 +114,13 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 			s.spawnLightning(p)
 		}
 
-	case event.EventLightningUpdate:
-		if p, ok := ev.Payload.(*event.LightningUpdatePayload); ok {
+	case event.EventLightningUpdateRequest:
+		if p, ok := ev.Payload.(*event.LightningUpdateRequestPayload); ok {
 			s.updateTarget(p)
 		}
 
 	case event.EventLightningDespawnRequest:
-		if p, ok := ev.Payload.(*event.LightningDespawnPayload); ok {
+		if p, ok := ev.Payload.(*event.LightningDespawnRequestPayload); ok {
 			s.despawnLightning(p.Owner, p.TargetEntity)
 		}
 	}
@@ -159,7 +159,7 @@ func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) 
 	s.world.Components.Lightning.SetComponent(e, lc)
 }
 
-func (s *LightningSystem) updateTarget(p *event.LightningUpdatePayload) {
+func (s *LightningSystem) updateTarget(p *event.LightningUpdateRequestPayload) {
 	// Find lightning by owner
 	lightnings := s.world.Components.Lightning
 	for _, e := range lightnings.Entities() {

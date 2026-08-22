@@ -48,8 +48,8 @@ func (s *SpiritSystem) Priority() int {
 
 func (s *SpiritSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventSpiritSpawn,
-		event.EventSpiritDespawn,
+		event.EventSpiritSpawnRequest,
+		event.EventSpiritDespawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -75,12 +75,12 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventSpiritSpawn:
+	case event.EventSpiritSpawnRequest:
 		if payload, ok := ev.Payload.(*event.SpiritSpawnRequestPayload); ok {
 			s.spawnSpirit(payload)
 		}
 
-	case event.EventSpiritDespawn:
+	case event.EventSpiritDespawnRequest:
 		s.destroyAllSpirits()
 	}
 }
