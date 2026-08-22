@@ -21,10 +21,14 @@ func TestSpeciesLifecycleEventsAreCanonical(t *testing.T) {
 	if _, ok := NewPayloadStruct(EventSpeciesKilled).(*SpeciesKilledPayload); !ok {
 		t.Fatalf("EventSpeciesKilled payload = %T, want *SpeciesKilledPayload", NewPayloadStruct(EventSpeciesKilled))
 	}
+	if _, ok := NewPayloadStruct(EventCombatHealRequest).(*CombatHealRequestPayload); !ok {
+		t.Fatalf("EventCombatHealRequest payload = %T, want *CombatHealRequestPayload", NewPayloadStruct(EventCombatHealRequest))
+	}
 
 	for _, legacy := range []string{
 		"EventEnemyCreated",
 		"EventEnemyKilled",
+		"EventSwarmAbsorbedDrain",
 		"EventQuasarSpawned",
 		"EventQuasarDestroyed",
 		"EventSwarmSpawned",

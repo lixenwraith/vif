@@ -726,16 +726,18 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		// VelX, VelY, AccelX, AccelY zero-initialized
 	}
 	kineticComp := component.KineticComponent{Kinetic: kinetic}
+	spawnEntry := drainCacheEntry{
+		entity: entity,
+		combatComp: component.CombatComponent{
+			OwnerEntity:      entity,
+			CombatEntityType: component.CombatEntityDrain,
+			HitPoints:        parameter.CombatInitialHPDrain,
+		},
+	}
 
 	// Handle collisions at materialize spawn position
 	var entitiesAtSpawn [parameter.MaxEntitiesPerCell]core.Entity
 	count := s.world.Positions.GetAllEntitiesAtInto(spawnX, spawnY, entitiesAtSpawn[:])
-	for i := range count {
-		e := entitiesAtSpawn[i]
-		if !s.world.Components.Cursor.HasEntity(e) {
-			s.handleCollisionAtPosition(e)
-		}
-	}
 
 	s.world.Positions.SetPosition(entity, pos)
 	s.world.Components.Drain.SetComponent(entity, drainComp)
@@ -748,12 +750,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 	s.world.Components.Navigation.SetComponent(entity, navComp)
 
 	// Combat component for interactions
-	s.world.Components.Combat.SetComponent(entity,
-		component.CombatComponent{
-			OwnerEntity:      entity,
-			CombatEntityType: component.CombatEntityDrain,
-			HitPoints:        parameter.CombatInitialHPDrain,
-		})
+	s.world.Components.Combat.SetComponent(entity, spawnEntry.combatComp)
 
 	// Sigil component for death system flash extraction, drain renderer renders on top
 	s.world.Components.Sigil.SetComponent(entity, component.SigilComponent{
@@ -768,6 +765,19 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		X:       spawnX,
 		Y:       spawnY,
 	})
+
+	// Resolve the occupants captured before the drain entered the position grid.
+	// Publishing creation first preserves lifecycle ordering when the new drain
+	// is immediately consumed by a shared species.
+	for i := range count {
+		e := entitiesAtSpawn[i]
+		if !s.world.Components.Cursor.HasEntity(e) {
+			s.handleCollisionAtPosition(&spawnEntry, e)
+			if spawnEntry.dying {
+				break
+			}
+		}
+	}
 	s.statSpawned.Add(1)
 }
 
@@ -938,7 +948,10 @@ func (s *DrainSystem) handleEntityCollisions() {
 			if s.world.Components.Wall.HasEntity(target) {
 				continue
 			}
-			s.handleCollisionAtPosition(target)
+			s.handleCollisionAtPosition(entry, target)
+			if entry.dying {
+				break
+			}
 		}
 	}
 }
@@ -961,7 +974,8 @@ func (s *DrainSystem) updateDrainMovement() {
 		if s.drainCache[i].dying {
 			continue
 		}
-		drainEntity := s.drainCache[i].entity
+		entry := &s.drainCache[i]
+		drainEntity := entry.entity
 		drainComp, ok := drains.GetPtr(drainEntity)
 		if !ok {
 			continue
@@ -1046,8 +1060,18 @@ func (s *DrainSystem) updateDrainMovement() {
 				if s.world.Components.Drain.HasEntity(target) {
 					continue
 				}
-				s.handleCollisionAtPosition(target)
+				s.handleCollisionAtPosition(entry, target)
+				if entry.dying {
+					break
+				}
 			}
+			if entry.dying {
+				break
+			}
+		}
+
+		if entry.dying {
+			continue
 		}
 
 		if hitWall {
@@ -1075,8 +1099,15 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 	k.PreciseX, k.PreciseY = vmath.Point{X: fromX, Y: fromY}.CenterF()
 }
 
-// handleCollisionAtPosition processes collision with a specific entity at a given position
-func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
+// handleCollisionAtPosition processes collision with a specific entity at a
+// given position. Shared species are handled before protection: their members
+// carry ProtectFromSpecies, but a drain collision is now a one-way event
+// boundary rather than shared-side collision physics.
+func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity core.Entity) {
+	if s.consumeIntoSharedSpecies(drain, entity) {
+		return
+	}
+
 	// Check protection before any collision handling
 	if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
 		if protComp.Mask&component.ProtectFromSpecies != 0 {
@@ -1105,6 +1136,30 @@ func (s *DrainSystem) handleCollisionAtPosition(entity core.Entity) {
 
 	// Destroy the entity
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+}
+
+// consumeIntoSharedSpecies converts a drain collision with a swarm or quasar
+// into a value-only combat event. The consumer receives no drain entity and
+// therefore never needs to read player-local state. The drain is silently
+// consumed and will be replenished by the normal heat-based spawn accounting.
+func (s *DrainSystem) consumeIntoSharedSpecies(drain *drainCacheEntry, entity core.Entity) bool {
+	target, _, ok := ResolveTargetFromEntity(s.world, entity, drain.entity)
+	if !ok || (!s.world.Components.Swarm.HasEntity(target) && !s.world.Components.Quasar.HasEntity(target)) {
+		return false
+	}
+
+	targetCombat, ok := s.world.Components.Combat.GetPtr(target)
+	if !ok || targetCombat.HitPoints <= 0 || drain.combatComp.HitPoints <= 0 {
+		return false
+	}
+
+	s.world.PushEvent(event.EventCombatHealRequest, &event.CombatHealRequestPayload{
+		TargetEntity: target,
+		Amount:       drain.combatComp.HitPoints,
+	})
+	event.EmitDeath(s.world.Resources.Event.Queue, 0, drain.entity)
+	drain.dying = true
+	return true
 }
 
 // refreshCachePositions re-reads positions after integration; the tick-start snapshot predates movement

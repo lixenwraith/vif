@@ -654,13 +654,6 @@ type QuasarSpawnRequestPayload struct {
 
 // --- Swarm ---
 
-// SwarmAbsorbedDrainPayload contains absorption data
-type SwarmAbsorbedDrainPayload struct {
-	SwarmEntity core.Entity `toml:"swarm_entity"`
-	DrainEntity core.Entity `toml:"drain_entity"`
-	HPAbsorbed  int         `toml:"hp_absorbed"`
-}
-
 // SwarmSpawnRequestPayload contains coordinates for creation
 type SwarmSpawnRequestPayload struct {
 	X int `toml:"x"`
@@ -747,6 +740,12 @@ type CombatAttackAreaRequestPayload struct {
 	OriginX    int   `toml:"origin_x"`
 	OriginY    int   `toml:"origin_y"`
 	ChainDepth uint8 `toml:"chain_depth"`
+}
+
+// CombatHealRequestPayload adds uncapped hit points to a live target.
+type CombatHealRequestPayload struct {
+	TargetEntity core.Entity `toml:"target_entity"`
+	Amount       int         `toml:"amount"`
 }
 
 // SpeciesKilledPayload carries species identity, death position, and player credit.

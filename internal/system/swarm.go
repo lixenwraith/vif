@@ -17,7 +17,7 @@ import (
 // SwarmSystem manages the elite swarm species lifecycle
 // Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage, teleports to target location if charge LOS blocked
 // Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
-// Does not pause drain spawn, absorbs drains to increase its health (fused and absorbed drains are respawned by drain system)
+// Does not pause drain spawn; drain collisions heal it through the combat event boundary
 type SwarmSystem struct {
 	world *engine.World
 
@@ -221,9 +221,6 @@ func (s *SwarmSystem) Update() {
 
 		// Interactions with cursor and shield
 		s.handleCursorInteractions(headerEntity)
-
-		// Drain absorption check
-		s.checkDrainAbsorption(headerEntity, combatComp)
 
 		activeCount++
 	}
@@ -769,63 +766,6 @@ func (s *SwarmSystem) syncMemberPositions(headerEntity core.Entity, headerX, hea
 		memberY := headerY + member.OffsetY
 
 		s.world.Positions.SetPosition(member.Entity, component.PositionComponent{X: memberX, Y: memberY})
-	}
-}
-
-// checkDrainAbsorption detects and absorbs colliding drains
-func (s *SwarmSystem) checkDrainAbsorption(
-	headerEntity core.Entity,
-	combatComp *component.CombatComponent,
-) {
-	headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
-	if !ok {
-		return
-	}
-
-	// Check each active member position for drain collision
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	for _, member := range headerComp.MemberEntries {
-		if member.Entity == 0 {
-			continue
-		}
-
-		memberPos, ok := s.world.Positions.GetPosition(member.Entity)
-		if !ok {
-			continue
-		}
-
-		count := s.world.Positions.GetAllEntitiesAtInto(memberPos.X, memberPos.Y, entities[:])
-		for i := range count {
-			entity := entities[i]
-			if entity == 0 || entity == member.Entity || entity == headerEntity {
-				continue
-			}
-
-			// Check if it's a drain
-			if !s.world.Components.Drain.HasEntity(entity) {
-				continue
-			}
-
-			// Get drain HP before destruction
-			drainCombatComp, ok := s.world.Components.Combat.GetPtr(entity)
-			hpAbsorbed := 0
-			if ok {
-				hpAbsorbed = drainCombatComp.HitPoints
-			}
-
-			// Absorb: add HP to swarm (no cap - overheal allowed)
-			combatComp.HitPoints += hpAbsorbed
-
-			// Destroy drain silently
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
-
-			// Emit absorption event
-			s.world.PushEvent(event.EventSwarmAbsorbedDrain, &event.SwarmAbsorbedDrainPayload{
-				SwarmEntity: headerEntity,
-				DrainEntity: entity,
-				HPAbsorbed:  hpAbsorbed,
-			})
-		}
 	}
 }
 

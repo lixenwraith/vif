@@ -366,8 +366,6 @@ const (
 
 	// EventSwarmSpawnRequest (SwarmSpawnRequestPayload) signals SwarmSystem to create the entity at location
 	EventSwarmSpawnRequest
-	// EventSwarmAbsorbedDrain (SwarmAbsorbedDrainPayload) signals drain absorbed by swarm
-	EventSwarmAbsorbedDrain
 	// EventSwarmCancelRequest signals destruction of all swarm composites
 	EventSwarmCancelRequest
 
@@ -409,6 +407,8 @@ const (
 	EventCombatAttackDirectRequest
 	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) signals applying knockback
 	EventCombatAttackAreaRequest
+	// EventCombatHealRequest (CombatHealRequestPayload) requests adding hit points to a live combat entity
+	EventCombatHealRequest
 
 	// --- Loot ---
 

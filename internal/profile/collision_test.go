@@ -49,11 +49,11 @@ func allProfiles() map[string]*physics.CollisionProfile {
 		"ExplosionToSnakeHead": &ExplosionToSnakeHead, "ExplosionToSnakeBody": &ExplosionToSnakeBody,
 		"ExplosionToEye": &ExplosionToEye,
 		"DustToDrain":    &DustToDrain, "DustToComposite": &DustToComposite,
-		"SoftDrainToQuasar": &SoftDrainToQuasar, "SoftSwarmToSwarm": &SoftSwarmToSwarm,
+		"SoftSwarmToSwarm":  &SoftSwarmToSwarm,
 		"SoftSwarmToQuasar": &SoftSwarmToQuasar, "SoftQuasarToSwarm": &SoftQuasarToSwarm,
-		"SoftQuasarToDrain": &SoftQuasarToDrain, "SoftQuasarToQuasar": &SoftQuasarToQuasar,
-		"SoftStormToSwarm": &SoftStormToSwarm, "SoftStormToQuasar": &SoftStormToQuasar,
-		"SoftPylonToDrain": &SoftPylonToDrain, "SoftPylonToSwarm": &SoftPylonToSwarm,
+		"SoftQuasarToQuasar": &SoftQuasarToQuasar,
+		"SoftStormToSwarm":   &SoftStormToSwarm, "SoftStormToQuasar": &SoftStormToQuasar,
+		"SoftPylonToSwarm":  &SoftPylonToSwarm,
 		"SoftPylonToQuasar": &SoftPylonToQuasar,
 	}
 }

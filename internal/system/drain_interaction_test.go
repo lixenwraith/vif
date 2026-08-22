@@ -151,6 +151,102 @@ func TestDrainStunStillStopsKineticIntegration(t *testing.T) {
 	}
 }
 
+func TestDrainCollisionHealsSharedSpeciesThroughCombatEvent(t *testing.T) {
+	tests := []struct {
+		name       string
+		combatType component.CombatEntityType
+		setSpecies func(*engine.World, core.Entity)
+	}{
+		{
+			name:       "swarm",
+			combatType: component.CombatEntitySwarm,
+			setSpecies: func(w *engine.World, entity core.Entity) {
+				w.Components.Swarm.SetComponent(entity, component.SwarmComponent{})
+			},
+		},
+		{
+			name:       "quasar",
+			combatType: component.CombatEntityQuasar,
+			setSpecies: func(w *engine.World, entity core.Entity) {
+				w.Components.Quasar.SetComponent(entity, component.QuasarComponent{})
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w, _, drain, drains, combat := testDrainInteractionWorld(t, 2, 2, 10, 10)
+			drainCombat, _ := w.Components.Combat.GetPtr(drain)
+			drainCombat.HitPoints = 7
+
+			header := w.CreateEntity()
+			member := w.CreateEntity()
+			tc.setSpecies(w, header)
+			w.Components.Header.SetComponent(header, component.HeaderComponent{
+				Type: component.CompositeTypeUnit,
+				MemberEntries: []component.MemberEntry{
+					{Entity: member},
+				},
+			})
+			w.Components.Member.SetComponent(member, component.MemberComponent{HeaderEntity: header})
+			w.Components.Protection.SetComponent(member, component.ProtectionComponent{
+				Mask: component.ProtectFromSpecies,
+			})
+			w.Components.Combat.SetComponent(header, component.CombatComponent{
+				OwnerEntity:      header,
+				CombatEntityType: tc.combatType,
+				HitPoints:        11,
+			})
+			w.Positions.SetPosition(header, component.PositionComponent{X: 12, Y: 10})
+			w.Positions.SetPosition(member, component.PositionComponent{X: 10, Y: 10})
+
+			beginDrainTick(t, drains)
+			drains.handleEntityCollisions()
+
+			healCount := 0
+			deathCount := 0
+			for _, ev := range w.Resources.Event.Queue.Consume() {
+				switch ev.Type {
+				case event.EventCombatHealRequest:
+					payload, ok := ev.Payload.(*event.CombatHealRequestPayload)
+					if !ok {
+						t.Fatalf("heal payload = %T, want *event.CombatHealRequestPayload", ev.Payload)
+					}
+					if payload.TargetEntity != header || payload.Amount != 7 {
+						t.Fatalf("heal payload = %+v, want target %d amount 7", payload, header)
+					}
+					combat.HandleEvent(ev)
+					healCount++
+
+				case event.EventDeathBatch:
+					payload, ok := ev.Payload.(*event.DeathRequestPayload)
+					if !ok {
+						t.Fatalf("death payload = %T, want *event.DeathRequestPayload", ev.Payload)
+					}
+					if len(payload.Entities) != 1 || payload.Entities[0] != drain || payload.EffectEvent != event.EventNone {
+						t.Fatalf("death payload = %+v, want silent death of drain %d", payload, drain)
+					}
+					event.ReleaseDeathRequest(payload)
+					deathCount++
+
+				case event.EventSpeciesKilled:
+					t.Fatal("consumed drain must not emit a species kill event")
+				}
+			}
+
+			if healCount != 1 || deathCount != 1 {
+				t.Fatalf("events: heal=%d death=%d, want 1 each", healCount, deathCount)
+			}
+			if got, _ := w.Components.Combat.GetComponent(header); got.HitPoints != 18 {
+				t.Fatalf("%s HP = %d, want 18", tc.name, got.HitPoints)
+			}
+			if !drains.drainCache[0].dying {
+				t.Fatal("consumed drain was not marked dying")
+			}
+		})
+	}
+}
+
 // beginDrainTick rebuilds the per-tick cache the movement and interaction passes
 // iterate; Update does this at the top of every tick. The emptiness check keeps a
 // missing cache from turning a negative assertion into a vacuous pass.

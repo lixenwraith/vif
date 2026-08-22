@@ -158,6 +158,7 @@ func (s *CombatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCombatAttackDirectRequest,
 		event.EventCombatAttackAreaRequest,
+		event.EventCombatHealRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -178,7 +179,9 @@ func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	if !s.enabled {
-		if ev.Type == event.EventCombatAttackDirectRequest || ev.Type == event.EventCombatAttackAreaRequest {
+		if ev.Type == event.EventCombatAttackDirectRequest ||
+			ev.Type == event.EventCombatAttackAreaRequest ||
+			ev.Type == event.EventCombatHealRequest {
 			s.statDisabled.Add(1)
 		}
 		return
@@ -194,7 +197,27 @@ func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
 		if payload, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok {
 			s.applyHitArea(payload)
 		}
+
+	case event.EventCombatHealRequest:
+		if payload, ok := ev.Payload.(*event.CombatHealRequestPayload); ok {
+			s.applyHeal(payload)
+		}
 	}
+}
+
+// applyHeal adds uncapped HP only while the target is still alive. This keeps
+// lifecycle ownership with the species system and prevents a late bus event
+// from resurrecting an entity already committed to death.
+func (s *CombatSystem) applyHeal(payload *event.CombatHealRequestPayload) {
+	if payload.Amount <= 0 {
+		return
+	}
+
+	combatComp, ok := s.world.Components.Combat.GetPtr(payload.TargetEntity)
+	if !ok || combatComp.HitPoints <= 0 {
+		return
+	}
+	combatComp.HitPoints += payload.Amount
 }
 
 func (s *CombatSystem) Update() {

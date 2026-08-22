@@ -87,13 +87,6 @@ func NewSoftCollisionSystem(world *engine.World) engine.System {
 
 // initMatrix populates the collision rule matrix
 func (s *SoftCollisionSystem) initMatrix() {
-	// Quasar pushes Drain
-	s.matrix[component.SpeciesQuasar][component.SpeciesDrain] = &SoftCollisionRule{
-		Profile:     &profile.SoftQuasarToDrain,
-		SourceInvRx: parameter.QuasarCollisionInvRxSq,
-		SourceInvRy: parameter.QuasarCollisionInvRySq,
-	}
-
 	// Swarm pushes Swarm (bidirectional via separate entries)
 	s.matrix[component.SpeciesSwarm][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftSwarmToSwarm,
@@ -136,13 +129,6 @@ func (s *SoftCollisionSystem) initMatrix() {
 		SourceInvRy: parameter.StormCircleCollisionInvRySq,
 	}
 
-	// Pylon pushes Drain
-	s.matrix[component.SpeciesPylon][component.SpeciesDrain] = &SoftCollisionRule{
-		Profile:     &profile.SoftPylonToDrain,
-		SourceInvRx: parameter.PylonCollisionInvRxSq,
-		SourceInvRy: parameter.PylonCollisionInvRySq,
-	}
-
 	// Pylon pushes Swarm
 	s.matrix[component.SpeciesPylon][component.SpeciesSwarm] = &SoftCollisionRule{
 		Profile:     &profile.SoftPylonToSwarm,
@@ -160,10 +146,11 @@ func (s *SoftCollisionSystem) initMatrix() {
 
 // initFlockingMatrix populates the flocking separation rules
 func (s *SoftCollisionSystem) initFlockingMatrix() {
-	// Whitelist of entities participating in continuous flocking separation.
-	// Pylons (stationary) and Storms (complex orbital physics) are intentionally excluded.
-	flockingSpecies := []component.SpeciesType{
-		component.SpeciesDrain,
+	// Shared species flock together. Drains are a separate, local flock: they
+	// react to shared species, but never contribute acceleration back into the
+	// shared flock. Pylons (stationary) and Storms (complex orbital physics) are
+	// intentionally excluded from continuous flocking.
+	sharedSpecies := []component.SpeciesType{
 		component.SpeciesSwarm,
 		component.SpeciesQuasar,
 	}
@@ -176,8 +163,8 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 		WeightMult: 1.0,
 	}
 
-	for _, src := range flockingSpecies {
-		for _, tgt := range flockingSpecies {
+	for _, src := range sharedSpecies {
+		for _, tgt := range sharedSpecies {
 			// Allocate individual rule configs
 			rule := defaultRule
 
@@ -188,6 +175,16 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 
 			s.flockMatrix[src][tgt] = &rule
 		}
+	}
+
+	// Local drain flock: drains separate from each other and observe the shared
+	// flock. The reverse entries deliberately remain nil so shared motion never
+	// reads or depends on drain positions.
+	drainRule := defaultRule
+	s.flockMatrix[component.SpeciesDrain][component.SpeciesDrain] = &drainRule
+	for _, src := range sharedSpecies {
+		rule := defaultRule
+		s.flockMatrix[src][component.SpeciesDrain] = &rule
 	}
 }
 

@@ -86,15 +86,12 @@ var (
 
 // --- Soft collision (inter-species scatter) ---
 var (
-	SoftDrainToQuasar  = soft(MassDrain, MassQuasar)
 	SoftSwarmToSwarm   = soft(MassSwarm, MassSwarm)
 	SoftSwarmToQuasar  = soft(MassSwarm, MassQuasar)
 	SoftQuasarToSwarm  = soft(MassQuasar, MassSwarm)
-	SoftQuasarToDrain  = soft(MassQuasar, MassDrain)
 	SoftQuasarToQuasar = soft(MassQuasar, MassQuasar)
 	SoftStormToSwarm   = soft(MassStorm, MassSwarm)
 	SoftStormToQuasar  = soft(MassStorm, MassQuasar)
-	SoftPylonToDrain   = soft(MassPylon, MassDrain)
 	SoftPylonToSwarm   = soft(MassPylon, MassSwarm)
 	SoftPylonToQuasar  = soft(MassPylon, MassQuasar)
 )
