@@ -14,10 +14,10 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	cleaners.spawnDirectionalCleaners(cursor, 5, 5, component.CleanerColorPositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
-	enemy := w.CreateEntity()
-	w.Positions.SetPosition(enemy, component.PositionComponent{X: 10, Y: 5})
-	w.Components.Combat.SetComponent(enemy, component.CombatComponent{
-		OwnerEntity:      enemy,
+	target := w.CreateEntity()
+	w.Positions.SetPosition(target, component.PositionComponent{X: 10, Y: 5})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
 		CombatEntityType: component.CombatEntityDrain,
 		HitPoints:        1,
 	})
@@ -31,8 +31,8 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 			continue
 		}
 		payload, ok := ev.Payload.(*event.CombatAttackDirectRequestPayload)
-		if !ok || payload.OwnerEntity != cursor || payload.TargetEntity != enemy {
-			t.Fatalf("combat payload = %#v, want cursor %d targeting enemy %d", ev.Payload, cursor, enemy)
+		if !ok || payload.OwnerEntity != cursor || payload.TargetEntity != target {
+			t.Fatalf("combat payload = %#v, want cursor %d targeting combatant %d", ev.Payload, cursor, target)
 		}
 		combatRequests++
 	}
@@ -54,7 +54,7 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 		break
 	}
 	if impacted == nil {
-		t.Fatal("right-moving cleaner did not stop on the crossed enemy cell")
+		t.Fatal("right-moving cleaner did not stop on the crossed combatant cell")
 	}
 	if impacted.TrailLen != 6 {
 		t.Fatalf("trail length = %d, want origin plus five crossed cells", impacted.TrailLen)

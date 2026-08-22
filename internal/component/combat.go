@@ -56,7 +56,7 @@ const (
 	CombatEffectStun // Future
 )
 
-// CombatComponent tags an entity to be identified as enemy for interactions
+// CombatComponent tags an entity as combat-relevant for interactions.
 type CombatComponent struct {
 	// OwnerEntity indicates owner/parent of the entity with combat component (e.g. cursor is the parent of cleaner)
 	OwnerEntity core.Entity

@@ -30,7 +30,7 @@ var spawnOffsets = [][]struct{ dx, dy int }{
 	{{-1, 0}, {1, 0}, {0, -1}, {0, 1}, {0, 0}}, // 5: cross + center
 }
 
-// pityState tracks consecutive misses per loot type for an enemy type
+// pityState tracks consecutive misses per loot type for a species type
 type pityState struct {
 	misses [component.LootCount]int
 }
@@ -40,7 +40,7 @@ type LootSystem struct {
 
 	rng *vmath.FastRand
 
-	// Pity tracking per enemy type
+	// Pity tracking per species type
 	pity map[component.SpeciesType]*pityState
 
 	// Telemetry
@@ -90,7 +90,7 @@ func (s *LootSystem) Priority() int {
 
 func (s *LootSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventLootSpawnRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -117,9 +117,9 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
-	case event.EventEnemyKilled:
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
-			s.onEnemyKilled(payload)
+	case event.EventSpeciesKilled:
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
+			s.onSpeciesKilled(payload)
 		}
 
 	case event.EventLootSpawnRequest:
@@ -212,8 +212,8 @@ func (s *LootSystem) Update() {
 
 // --- Drop Resolution ---
 
-// onEnemyKilled processes multi-drop loot spawning
-func (s *LootSystem) onEnemyKilled(payload *event.EnemyKilledPayload) {
+// onSpeciesKilled processes multi-drop loot spawning
+func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 	// A negative coordinate marks a death with no position; nothing to drop onto
 	if payload.X < 0 || payload.Y < 0 {
 		return
@@ -348,7 +348,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		Mask: component.ProtectFromSpecies | component.ProtectFromDecay,
 	})
 
-	// Navigation for wall-aware pathfinding (no GA tracking - loot doesn't emit EnemyCreated)
+	// Navigation for wall-aware pathfinding (loot is not a species and emits no SpeciesCreated event)
 	s.world.Components.Navigation.SetComponent(entity, component.NavigationComponent{
 		Width:         1,
 		Height:        1,

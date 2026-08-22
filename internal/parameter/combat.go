@@ -61,7 +61,7 @@ const (
 	CollisionKineticImpulseMax = 40.0
 )
 
-// Soft collision parameters (inter-enemy repulsion)
+// Soft collision parameters (inter-species repulsion)
 const (
 	// SoftCollisionImmunityDuration is immunity window after soft repulsion
 	SoftCollisionImmunityDuration = 100 * time.Millisecond

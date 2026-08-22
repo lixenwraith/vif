@@ -12,14 +12,14 @@ while campaign sequencing is authored through the state machine described in
 flowchart TD
     Navigate["navigate like Vim"] --> Type["type or delete glyphs"]
     Type --> Resources["change heat, energy, and boost"]
-    Resources --> Defend["shield and weapons affect enemies"]
+    Resources --> Defend["shield and weapons affect hostile species"]
     Defend --> Rewards["collect nuggets, gold, and loot"]
     Rewards --> Escalate["FSM advances encounters"]
     Escalate --> Navigate
 ```
 
 The local cursor is both the player's text-editing position and the player
-combat entity. Movement is discrete on the character grid. Enemies,
+combat entity. Movement is discrete on the character grid. Hostile species,
 projectiles, and effects may keep higher-precision `float64` kinetic state but
 are projected back into the same grid for collision and rendering.
 
@@ -147,11 +147,11 @@ component itself.
 
 ### Boost
 
-Boost is a per-cursor timed reward. A correct character or an enemy kill
+Boost is a per-cursor timed reward. A correct character or a species kill
 credited to that cursor activates it for 9 seconds when inactive or extends it
 by 10 seconds when already active. Combat systems retain the last damaging
-cursor on the target, and enemy fatal-damage lifecycle paths publish
-`EventEnemyKilled` carrying that credit; lifecycle deaths or unowned attacks
+cursor on the target, and fatal species lifecycle paths publish
+`EventSpeciesKilled` carrying that credit; lifecycle deaths or unowned attacks
 carry no cursor and grant no boost. A typing error deactivates the typing
 cursor's boost.
 
@@ -163,7 +163,7 @@ energy penalties. Passive drain and explicit spends remain effective.
 The shield activates whenever energy is nonzero and deactivates at zero. It is
 an ellipse around the cursor, not a rectangular grid range. It:
 
-- absorbs or converts several enemy contacts into energy penalties;
+- absorbs or converts several hostile-species contacts into energy penalties;
 - collects nuggets and nearby homing loot;
 - supplies the bounds shown in Visual mode;
 - consumes a percentage of current energy over time as passive drain.
@@ -195,7 +195,7 @@ different events. The Gold system cleans up the composite, but the active FSM
 decides what completion earns. In the embedded campaign, completion adds heat
 and energy.
 
-### Enemy loot
+### Species loot
 
 Kills are evaluated against ordered, species-specific drop tiers. Unique tiers
 skip weapon loot that is already owned or active; skipped entries can add a
@@ -249,12 +249,12 @@ a blocked cleaner drains to its stop point.
 
 | Actor | Current design role |
 |---|---|
-| Drain | Baseline enemy population tied to heat. Materializes, approaches the cursor, periodically drains energy inside the shield, and removes heat on an unshielded cursor collision. |
+| Drain | Baseline hostile species population tied to heat. Materializes, approaches the cursor, periodically drains energy inside the shield, and removes heat on an unshielded cursor collision. |
 | Quasar | Large composite, 5 cells wide by 3 high. Tracks the cursor and emits lightning when the cursor leaves its effective range. It is created by fusing drains in the default progression. |
 | Swarm | Fast composite, 4 cells wide by 2 high, created from enraged drains. It tracks/charges, may teleport around blocked line of sight, absorbs drains, and has bounded charges/lifetime. |
 | Storm | Multi-part boss with independently moving circles and 3D orbital dynamics. Circle types provide distinct attacks, including bullets and swarm pressure. |
-| Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby enemies. |
-| Snake | Segmented composite enemy with separately modeled head and body members and formation lifecycle. |
+| Pylon | Stationary ablative hostile structure/damage sponge that pushes nearby species. |
+| Snake | Segmented composite species with separately modeled head and body members and formation lifecycle. |
 | Eye | Five-by-three composite navigation attacker. It belongs to a target group, homes along routes, and self-destructs on contact; its parameters are evolution-managed. |
 | Tower | Player-owned stationary ablative structure. It blocks cursor placement and acts as a target in tower-defense scenarios. |
 | Gateway | Timed anchored spawner. It emits eye or snake spawn requests with route/adaptation metadata and disappears when its anchor is gone. |

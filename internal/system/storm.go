@@ -116,7 +116,7 @@ func (s *StormSystem) EventTypes() []event.EventType {
 		event.EventStormSpawnRequest,
 		event.EventStormCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -138,8 +138,8 @@ func (s *StormSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesStorm {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesStorm {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -348,10 +348,13 @@ func (s *StormSystem) spawnStorm() {
 	s.statActive.Store(true)
 	s.statCircleCount.Store(component.StormCircleCount)
 
-	// Emit storm creation
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		Entity:  rootEntity,
-		Species: component.SpeciesStorm,
+	// Announce the fully initialized species instance.
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		Entity:      rootEntity,
+		Species:     component.SpeciesStorm,
+		X:           -1,
+		Y:           -1,
+		MemberCount: len(rootMembers),
 	})
 	s.lifecycle.spawned.Add(1)
 }
@@ -927,21 +930,14 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 		killerEntity = combatComp.LastDamagedBy
 	}
 
-	// Get position for event
-	var posX, posY int
+	// Get position for event; the final circle may already be positionless.
+	posX, posY := -1, -1
 	if pos, ok := s.world.Positions.GetPosition(circleEntity); ok {
 		posX, posY = pos.X, pos.Y
 	}
 
 	// Mark as dead
 	stormComp.CirclesAlive[index] = false
-
-	// Emit circle death event
-	s.world.PushEvent(event.EventStormCircleDestroyed, &event.StormCircleDestroyedPayload{
-		CircleEntity: circleEntity,
-		RootEntity:   s.rootEntity,
-		Index:        index,
-	})
 
 	// Destroy circle header via composite system
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
@@ -951,12 +947,8 @@ func (s *StormSystem) destroyCircle(stormComp *component.StormComponent, index i
 
 	// Check if all dead
 	if s.AliveCount(stormComp) == 0 {
-		s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
-			RootEntity: s.rootEntity,
-		})
-
-		// Emit enemy killed
-		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+		// The root is the species identity; circles are implementation details.
+		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 			Entity:       s.rootEntity,
 			KillerEntity: killerEntity,
 			Species:      component.SpeciesStorm,
@@ -982,16 +974,14 @@ func (s *StormSystem) handleCircleBreach(headerEntity core.Entity) {
 		if stormComp.Circles[i] == headerEntity && stormComp.CirclesAlive[i] {
 			stormComp.CirclesAlive[i] = false
 
-			s.world.PushEvent(event.EventStormCircleDestroyed, &event.StormCircleDestroyedPayload{
-				CircleEntity: headerEntity,
-				RootEntity:   s.rootEntity,
-				Index:        i,
-			})
-
 			if s.AliveCount(stormComp) == 0 {
-				s.lifecycle.killedLifecycle.Add(1)
-				s.world.PushEvent(event.EventStormDestroyed, &event.StormDestroyedPayload{
-					RootEntity: s.rootEntity,
+				// The last circle disappeared through lifecycle cleanup rather than
+				// credited combat. Negative coordinates suppress loot placement.
+				s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+					Entity:  s.rootEntity,
+					Species: component.SpeciesStorm,
+					X:       -1,
+					Y:       -1,
 				})
 			}
 

@@ -73,7 +73,7 @@ func (s *QuasarSystem) EventTypes() []event.EventType {
 		event.EventQuasarSpawnRequest,
 		event.EventQuasarCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -92,8 +92,8 @@ func (s *QuasarSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesQuasar {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesQuasar {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -168,15 +168,17 @@ func (s *QuasarSystem) Update() {
 
 		// Hitpoint check
 		if combatComp.HitPoints <= 0 {
+			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:       headerEntity,
-					KillerEntity: combatComp.LastDamagedBy,
-					Species:      component.SpeciesQuasar,
-					X:            headerPos.X,
-					Y:            headerPos.Y,
-				})
+				killX, killY = headerPos.X, headerPos.Y
 			}
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+				Entity:       headerEntity,
+				KillerEntity: combatComp.LastDamagedBy,
+				Species:      component.SpeciesQuasar,
+				X:            killX,
+				Y:            killY,
+			})
 			s.terminateQuasar(headerEntity)
 			continue
 		}
@@ -293,12 +295,8 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 
 	// Clear area and create composite
 	s.clearQuasarSpawnArea(headerX, headerY)
-	headerEntity := s.createQuasarComposite(headerX, headerY)
+	s.createQuasarComposite(headerX, headerY)
 	s.lifecycle.spawned.Add(1)
-
-	s.world.PushEvent(event.EventQuasarSpawned, &event.QuasarSpawnedPayload{
-		HeaderEntity: headerEntity,
-	})
 }
 
 // clearQuasarSpawnArea destroys all entities within the quasar footprint
@@ -435,10 +433,13 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 		MemberEntries: members,
 	})
 
-	// Emit quasar creation
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		Entity:  headerEntity,
-		Species: component.SpeciesQuasar,
+	// Announce the fully initialized species instance.
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		Entity:      headerEntity,
+		Species:     component.SpeciesQuasar,
+		X:           headerX,
+		Y:           headerY,
+		MemberCount: len(members),
 	})
 
 	return headerEntity
@@ -785,6 +786,4 @@ func (s *QuasarSystem) terminateQuasar(headerEntity core.Entity) {
 		HeaderEntity: headerEntity,
 		Effect:       0,
 	})
-
-	s.world.PushEvent(event.EventQuasarDestroyed, nil)
 }

@@ -310,7 +310,7 @@ const (
 
 	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) signals a composite member was successfully typed
 	EventCompositeMemberDestroyed
-	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) signals unexpected member loss (OOB, enemy hit, etc.)
+	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) signals unexpected member loss (OOB, species hit, etc.)
 	EventCompositeIntegrityBreach
 	// EventCompositeDestroyRequest (CompositeDestroyRequestPayload) signals owner system requests full composite destruction
 	EventCompositeDestroyRequest
@@ -336,6 +336,13 @@ const (
 	// EventCursorLocalChanged (CursorSetLocalPayload) announces the bound slot
 	EventCursorLocalChanged
 
+	// --- Species ---
+
+	// EventSpeciesCreated (SpeciesCreatedPayload) announces a created species instance
+	EventSpeciesCreated
+	// EventSpeciesKilled (SpeciesKilledPayload) announces a terminated species instance
+	EventSpeciesKilled
+
 	// --- Fuse ---
 
 	// EventFuseQuasarRequest signals drains should fuse into quasar
@@ -354,10 +361,6 @@ const (
 
 	// EventQuasarSpawnRequest (QuasarSpawnRequestPayload) signals QuasarSystem to create the entity at location
 	EventQuasarSpawnRequest
-	// EventQuasarSpawned (QuasarSpawnedPayload) signals quasar composite creation
-	EventQuasarSpawned
-	// EventQuasarDestroyed signals quasar termination
-	EventQuasarDestroyed
 	// EventQuasarCancelRequest signals manual termination of the quasar phase
 	EventQuasarCancelRequest
 
@@ -365,10 +368,6 @@ const (
 
 	// EventSwarmSpawnRequest (SwarmSpawnRequestPayload) signals SwarmSystem to create the entity at location
 	EventSwarmSpawnRequest
-	// EventSwarmSpawned (SwarmSpawnedPayload) signals swarm composite creation
-	EventSwarmSpawned
-	// EventSwarmDestroyed (SwarmDestroyedPayload) signals swarm termination
-	EventSwarmDestroyed
 	// EventSwarmAbsorbedDrain (SwarmAbsorbedDrainPayload) signals drain absorbed by swarm
 	EventSwarmAbsorbedDrain
 	// EventSwarmCancelRequest signals destruction of all swarm composites
@@ -380,10 +379,6 @@ const (
 	EventStormSpawnRequest
 	// EventStormCancelRequest signals destruction of all storm entities
 	EventStormCancelRequest
-	// EventStormCircleDestroyed (StormCircleDestroyedPayload) signals individual circle destruction
-	EventStormCircleDestroyed
-	// EventStormDestroyed (StormDestroyedPayload) signals all storm circles destroyed
-	EventStormDestroyed
 
 	// --- Post-Process ---
 
@@ -416,10 +411,6 @@ const (
 	EventCombatAttackDirectRequest
 	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) signals applying knockback
 	EventCombatAttackAreaRequest
-	// EventEnemyCreated (EnemyCreatedPayload) signals enemy entity creation via its system
-	EventEnemyCreated
-	// EventEnemyKilled (EnemyKilledPayload) signals an enemy entity was destroyed via combat
-	EventEnemyKilled
 
 	// --- Loot ---
 
@@ -491,10 +482,6 @@ const (
 	EventPylonSpawnRequest
 	// EventPylonSpawnFailed signals pylon spawn could not find valid position
 	EventPylonSpawnFailed
-	// EventPylonSpawned (PylonSpawnedPayload) signals pylon composite creation
-	EventPylonSpawned
-	// EventPylonDestroyed (PylonDestroyedPayload) signals pylon termination (all members dead)
-	EventPylonDestroyed
 	// EventPylonCancelRequest signals forced destruction of all pylons
 	EventPylonCancelRequest
 
@@ -502,10 +489,6 @@ const (
 
 	// EventSnakeSpawnRequest (SnakeSpawnRequestPayload) signals SnakeSystem to create the entity at location
 	EventSnakeSpawnRequest
-	// EventSnakeSpawned (SnakeSpawnedPayload) signals snake composite creation complete
-	EventSnakeSpawned
-	// EventSnakeDestroyed (SnakeDestroyedPayload) signals snake termination
-	EventSnakeDestroyed
 	// EventSnakeCancelRequest signals manual termination of all snakes
 	EventSnakeCancelRequest
 
@@ -526,10 +509,6 @@ const (
 
 	// EventEyeSpawnRequest (EyeSpawnRequestPayload) signals EyeSystem to create entity at location
 	EventEyeSpawnRequest
-	// EventEyeSpawned (EyeSpawnedPayload) signals eye composite creation
-	EventEyeSpawned
-	// EventEyeDestroyed (EyeDestroyedPayload) signals eye termination
-	EventEyeDestroyed
 	// EventEyeCancelRequest signals destruction of all eye composites
 	EventEyeCancelRequest
 
@@ -539,10 +518,6 @@ const (
 	EventTowerSpawnRequest
 	// EventTowerSpawnFailed signals tower spawn could not find valid position
 	EventTowerSpawnFailed
-	// EventTowerSpawned (TowerSpawnedPayload) signals tower composite creation
-	EventTowerSpawned
-	// EventTowerDestroyed (TowerDestroyedPayload) signals tower termination (all members dead)
-	EventTowerDestroyed
 	// EventTowerCancelRequest signals forced destruction of all towers
 	EventTowerCancelRequest
 

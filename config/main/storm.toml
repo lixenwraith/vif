@@ -13,8 +13,8 @@ transitions = [
 [states.StormActive]
 parent = "Root"
 transitions = [
-    { trigger = "EventStormDestroyed", target = "StormDecision" },
-    # Defensive: storm died OOB without emitting destroy event
+    { trigger = "EventSpeciesKilled", target = "StormDecision", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    # Defensive: storm died OOB without emitting a species kill event
     { trigger = "Tick", target = "StormVictory", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "storm.active", value = false } },

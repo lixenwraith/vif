@@ -169,7 +169,8 @@ region does not prevent another region from observing it.
 { trigger = "EventGoldCompleted", target = "Reward" }
 { trigger = "Tick", target = "Timeout",
   guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
-{ trigger = "EventEnemyCreated", internal = true,
+{ trigger = "EventSpeciesCreated", internal = true,
+  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 1 },
   actions = [{ action = "IncrementVar", payload = { name = "seen" } }] }
 ```
 
@@ -192,8 +193,9 @@ transitions declared on ancestors remain active for every descendant.
 `capture_vars` maps an event payload field to an FSM variable:
 
 ```toml
-{ trigger = "EventPylonSpawned", target = "Attach",
-  capture_vars = { pylon_entity = "anchor_id" } }
+{ trigger = "EventSpeciesCreated", target = "Attach",
+  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  capture_vars = { entity = "anchor_id" } }
 ```
 
 Fields resolve by TOML tag and then Go field name. Signed/unsigned integers,
@@ -381,7 +383,8 @@ on_enter = [
     { action = "EmitEvent", event = "EventDrainResume" },
 ]
 transitions = [
-    { trigger = "EventEnemyKilled", internal = true,
+    { trigger = "EventSpeciesKilled", internal = true,
+      guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 1 },
       actions = [{ action = "IncrementVar", payload = { name = "kills" } }] },
     { trigger = "Tick", target = "WaveDone", guard = "VarCompare",
       guard_args = { var = "kills", op = "gte", value = 10 } },

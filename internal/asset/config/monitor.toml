@@ -64,7 +64,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
     { action = "EmitEvent", event = "EventDrainResume" },
-    # Cancel enemy entities
+    # Cancel species entities
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
     { action = "EmitEvent", event = "EventStormCancelRequest" },
     { action = "EmitEvent", event = "EventSwarmCancelRequest" },

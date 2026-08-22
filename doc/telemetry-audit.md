@@ -59,7 +59,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked,typefit}`, `eye.buf_ga_*_hwm` | `NewGeneticSystem` | GA processing; formatted type fitness on snapshot cadence | `Init` | Generic only |
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
 | Music | None | — | — | — | — |
-| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}` | `NewMetaSystem` | Debug/map publication and resolved enemy-kill handler | `Init` | `kills.{drain,quasar,swarm,storm}` are FSM guards; remainder generic |
+| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}` | `NewMetaSystem` | Debug/map publication and resolved species-kill handler | `Init` | `kills.{drain,quasar,swarm,storm}` are FSM guards; remainder generic |
 | Network (inactive) | None | — | — | — | — |
 
 ## Engine and event audit

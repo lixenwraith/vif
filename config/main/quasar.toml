@@ -9,7 +9,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
 ]
 transitions = [
-    { trigger = "EventQuasarSpawned", target = "QuasarGoldSpawn" },
+    { trigger = "EventSpeciesCreated", target = "QuasarGoldSpawn", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
     # Defensive: spawn never arrived
     { trigger = "Tick", target = "QuasarExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } },
 ]
@@ -22,10 +22,15 @@ on_exit = [
     { action = "EmitEvent", event = "EventGoldCancel" },
 ]
 transitions = [
-    { trigger = "EventQuasarDestroyed", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
-    { trigger = "EventQuasarDestroyed", target = "QuasarExit" },
+    # FSM dispatch precedes kill telemetry for the same event, so two prior
+    # quasar kills plus this payload reaches the three-kill escalation gate.
+    { trigger = "EventSpeciesKilled", target = "QuasarEscalate", guard = "And", guard_args = { guards = [
+        { name = "PayloadIntCompare", args = { field = "species", op = "eq", value = 3 } },
+        { name = "StatusIntCompare", args = { key = "kills.quasar", op = "gte", value = 2 } },
+    ] } },
+    { trigger = "EventSpeciesKilled", target = "QuasarExit", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
     { trigger = "Tick", target = "QuasarEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.quasar", op = "gte", value = 3 } },
-    # Defensive: quasar died OOB without emitting destroy event
+    # Defensive: quasar died OOB without emitting a species kill event
     { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
@@ -42,7 +47,7 @@ on_enter = [
 transitions = [
     { trigger = "EventGoldSpawned", target = "QuasarGoldActive" },
     { trigger = "EventGoldSpawnFailed", target = "QuasarGoldSpawnRetry" },
-    # Defensive: quasar died OOB without emitting destroy event
+    # Defensive: quasar died OOB without emitting a species kill event
     { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },
@@ -63,7 +68,7 @@ transitions = [
     { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted" },
     { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" },
-    # Defensive: quasar died OOB without emitting destroy event
+    # Defensive: quasar died OOB without emitting a species kill event
     { trigger = "Tick", target = "QuasarExit", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "quasar.active", value = false } },

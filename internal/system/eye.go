@@ -62,7 +62,7 @@ func (s *EyeSystem) EventTypes() []event.EventType {
 		event.EventEyeSpawnRequest,
 		event.EventEyeCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -82,8 +82,8 @@ func (s *EyeSystem) HandleEvent(ev event.GameEvent) {
 		}
 		return
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesEye {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesEye {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -155,16 +155,18 @@ func (s *EyeSystem) Update() {
 
 		// HP check → death
 		if combatComp.HitPoints <= 0 {
+			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:       headerEntity,
-					KillerEntity: combatComp.LastDamagedBy,
-					Species:      component.SpeciesEye,
-					SubType:      uint8(eyeComp.Type),
-					X:            headerPos.X,
-					Y:            headerPos.Y,
-				})
+				killX, killY = headerPos.X, headerPos.Y
 			}
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+				Entity:       headerEntity,
+				KillerEntity: combatComp.LastDamagedBy,
+				Species:      component.SpeciesEye,
+				SubType:      uint8(eyeComp.Type),
+				X:            killX,
+				Y:            killY,
+			})
 			s.despawnEye(headerEntity)
 			continue
 		}
@@ -186,14 +188,9 @@ func (s *EyeSystem) Update() {
 
 		// Target contact → self-destruct + combat damage
 		if s.checkTargetContact(headerEntity) {
+			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:  headerEntity,
-					Species: component.SpeciesEye,
-					SubType: uint8(eyeComp.Type),
-					X:       headerPos.X,
-					Y:       headerPos.Y,
-				})
+				killX, killY = headerPos.X, headerPos.Y
 				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 					X:      headerPos.X,
 					Y:      headerPos.Y,
@@ -201,6 +198,13 @@ func (s *EyeSystem) Update() {
 					Type:   event.ExplosionTypeEye,
 				})
 			}
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+				Entity:  headerEntity,
+				Species: component.SpeciesEye,
+				SubType: uint8(eyeComp.Type),
+				X:       killX,
+				Y:       killY,
+			})
 			combatComp.HitPoints = 0
 			s.despawnEye(headerEntity)
 			activeCount++
@@ -252,12 +256,8 @@ func (s *EyeSystem) spawnEye(payload *event.EyeSpawnRequestPayload) {
 	}
 
 	s.clearSpawnArea(headerX, headerY)
-	headerEntity := s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
+	s.createEyeComposite(headerX, headerY, payload.Type, payload.TargetGroupID, payload.RouteGraphID, payload.RouteID, payload.EvalID, payload.Genes)
 	s.lifecycle.spawned.Add(1)
-
-	s.world.PushEvent(event.EventEyeSpawned, &event.EyeSpawnedPayload{
-		HeaderEntity: headerEntity,
-	})
 }
 
 // abandonEval releases a GA evaluation whose eye never spawned
@@ -402,12 +402,15 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 		SkipPositionSync: true,
 	})
 
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		EvalID:  evalID,
-		Genes:   genes,
-		Entity:  headerEntity,
-		Species: component.SpeciesEye,
-		SubType: uint8(eyeType),
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		EvalID:      evalID,
+		Genes:       genes,
+		Entity:      headerEntity,
+		Species:     component.SpeciesEye,
+		SubType:     uint8(eyeType),
+		X:           headerX,
+		Y:           headerY,
+		MemberCount: len(members),
 	})
 
 	return headerEntity
@@ -650,12 +653,8 @@ func (s *EyeSystem) despawnEye(headerEntity core.Entity) {
 	}
 
 	// Latch: destruction is deferred to the event loop; drop the tag so a
-	// re-entrant Update cannot emit EnemyKilled twice
+	// re-entrant Update cannot emit SpeciesKilled twice.
 	s.world.Components.Eye.RemoveEntity(headerEntity)
-
-	s.world.PushEvent(event.EventEyeDestroyed, &event.EyeDestroyedPayload{
-		HeaderEntity: headerEntity,
-	})
 
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,

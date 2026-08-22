@@ -39,8 +39,8 @@ transitions = [
 [states.StLive]
 parent = "Root"
 transitions = [
-    { trigger = "EventStormDestroyed", target = "StCleared" },
-    # Defensive: storm died OOB without destroy event
+    { trigger = "EventSpeciesKilled", target = "StCleared", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
+    # Defensive: storm died OOB without a species kill event
     { trigger = "Tick", target = "StCleared", guard = "And", guard_args = { guards = [
         { name = "StateTimeExceeds", args = { ms = 2000 } },
         { name = "StatusBoolEquals", args = { key = "storm.active", value = false } },
@@ -65,4 +65,3 @@ on_enter = [
     { action = "SetVar", payload = { name = "game_won", value = 1 } },
 ]
 # Idle; monitor handles end sequence
-

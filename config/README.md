@@ -78,8 +78,13 @@ transitions = [...]                 # Transition rules
 Extract event payload fields into FSM variables when a transition matches:
 
 ```toml
-{ trigger = "EventPylonSpawned", target = "NextState", capture_vars = { header_entity = "pylon_entity" } }
+{ trigger = "EventSpeciesCreated", target = "NextState",
+  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  capture_vars = { entity = "pylon_entity" } }
 ```
+
+`species` uses the `component.SpeciesType` values: drain `1`, swarm `2`,
+quasar `3`, storm `4`, pylon `5`, snake `6`, eye `7`, and tower `8`.
 
 `capture_vars` maps payload field names to FSM variable names. Fields resolve by `toml` struct tag first, then Go field name. Captured values are set **before** the target state's `on_enter` executes.
 
@@ -89,8 +94,10 @@ Supported field kinds: all signed and unsigned integer widths (including
 Combine with guards and payload injection:
 
 ```toml
-# Capture entity from spawn response, then inject into follow-up request
-{ trigger = "EventPylonSpawned", target = "AttachGateway", capture_vars = { header_entity = "anchor_id" } }
+# Capture a pylon from the shared species response, then inject it into a follow-up request
+{ trigger = "EventSpeciesCreated", target = "AttachGateway",
+  guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 },
+  capture_vars = { entity = "anchor_id" } }
 # In AttachGateway on_enter:
 { action = "EmitEvent", event = "EventGatewaySpawnRequest", payload = { anchor_entity = 0 }, payload_vars = { anchor_entity = "anchor_id" } }
 ```
@@ -121,7 +128,8 @@ events without leaving the current state:
 ```toml
 [states.TowerCycle]
 transitions = [
-    { trigger = "EventPylonDestroyed", internal = true, actions = [
+    { trigger = "EventSpeciesKilled", internal = true,
+      guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, actions = [
         { action = "IncrementVar", payload = { name = "pylons_dead" } },
     ] },
 ]
@@ -407,7 +415,7 @@ struct tag first, then Go field name — identical to `capture_vars` and
 ### PayloadIntCompare
 
 ```toml
-{ trigger = "EventEnemyKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
+{ trigger = "EventSpeciesKilled", target = "BossKilled", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 } }
 ```
 
 ### PayloadBoolEquals

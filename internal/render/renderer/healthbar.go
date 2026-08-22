@@ -13,7 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
-// HealthBarRenderer draws health indicators above enemy entities
+// HealthBarRenderer draws health indicators above combat entities
 type HealthBarRenderer struct {
 	gameCtx  *engine.GameContext
 	position visual.HealthBarPosition
@@ -57,7 +57,7 @@ func getOppositePosition(pos visual.HealthBarPosition) visual.HealthBarPosition 
 	}
 }
 
-// Render draws health bars for all enemy combat entities
+// Render draws health bars for all applicable combat entities
 func (r *HealthBarRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
 	if !visual.HealthBarEnabled {
 		return

@@ -14,7 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-// SwarmSystem manages the elite enemy entity lifecycle
+// SwarmSystem manages the elite swarm species lifecycle
 // Swarm is a 4x2 animated composite, spawned by fusing 2 enraged drains, that tracks cursor at 4x drain speed, charges the cursor and doesn't get deflected by shield when charging due to enrage, teleports to target location if charge LOS blocked
 // Removes one heat on direct cursor collision without shield, despawns after hitpoints reach zero, uses 5 charges, or 30 second timer runs out
 // Does not pause drain spawn, absorbs drains to increase its health (fused and absorbed drains are respawned by drain system)
@@ -81,7 +81,7 @@ func (s *SwarmSystem) EventTypes() []event.EventType {
 		event.EventSwarmSpawnRequest,
 		event.EventSwarmCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -100,8 +100,8 @@ func (s *SwarmSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesSwarm {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesSwarm {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 			if s.world.ResolveCursor(payload.KillerEntity) != 0 {
 				s.statPlayerKills.Add(1)
@@ -179,16 +179,17 @@ func (s *SwarmSystem) Update() {
 
 		// HP check → player kill, despawn
 		if combatComp.HitPoints <= 0 {
-			// Get position for loot before destruction
+			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
-				s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-					Entity:       headerEntity,
-					KillerEntity: combatComp.LastDamagedBy,
-					Species:      component.SpeciesSwarm,
-					X:            headerPos.X,
-					Y:            headerPos.Y,
-				})
+				killX, killY = headerPos.X, headerPos.Y
 			}
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+				Entity:       headerEntity,
+				KillerEntity: combatComp.LastDamagedBy,
+				Species:      component.SpeciesSwarm,
+				X:            killX,
+				Y:            killY,
+			})
 
 			s.despawnSwarm(headerEntity)
 			continue
@@ -263,14 +264,10 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 	// Clear area (retained as defensive measure)
 	s.clearSwarmSpawnArea(headerX, headerY)
 
-	// Create entity
-	headerEntity := s.createSwarmComposite(headerX, headerY)
+	// createSwarmComposite publishes EventSpeciesCreated only after every
+	// component and member is installed.
+	s.createSwarmComposite(headerX, headerY)
 	s.lifecycle.spawned.Add(1)
-
-	// Notify world
-	s.world.PushEvent(event.EventSwarmSpawned, &event.SwarmSpawnedPayload{
-		HeaderEntity: headerEntity,
-	})
 }
 
 // clearSwarmSpawnArea destroys entities within swarm footprint
@@ -398,10 +395,13 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 		MemberEntries: members,
 	})
 
-	// Emit swarm creation
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		Entity:  headerEntity,
-		Species: component.SpeciesSwarm,
+	// Announce the fully initialized species instance.
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		Entity:      headerEntity,
+		Species:     component.SpeciesSwarm,
+		X:           headerX,
+		Y:           headerY,
+		MemberCount: len(members),
 	})
 
 	return headerEntity
@@ -860,12 +860,8 @@ func (s *SwarmSystem) handleCursorInteractions(
 	}
 }
 
-// despawnSwarm emits events and delegates destruction to CompositeSystem
+// despawnSwarm delegates destruction to CompositeSystem.
 func (s *SwarmSystem) despawnSwarm(headerEntity core.Entity) {
-	s.world.PushEvent(event.EventSwarmDestroyed, &event.SwarmDestroyedPayload{
-		HeaderEntity: headerEntity,
-	})
-
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: headerEntity,
 		Effect:       0,

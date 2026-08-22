@@ -35,7 +35,7 @@ const (
 	PriorityGateway // After Tower, before Eye — spawns eyes for the tick
 	PriorityEye     // After Gateway
 	PriorityCombat
-	PriorityLoot // After enemy entities and combat
+	PriorityLoot // After species entities and combat
 	PriorityDecay
 	PriorityBlossom
 	PriorityLightning // After Quasar

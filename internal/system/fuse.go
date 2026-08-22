@@ -215,14 +215,16 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 
 	// Emit death drain events
 	for _, drainEntity := range []core.Entity{drainA, drainB} {
+		killX, killY := -1, -1
 		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-				Entity:  drainEntity,
-				Species: component.SpeciesDrain,
-				X:       pos.X,
-				Y:       pos.Y,
-			})
+			killX, killY = pos.X, pos.Y
 		}
+		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+			Entity:  drainEntity,
+			Species: component.SpeciesDrain,
+			X:       killX,
+			Y:       killY,
+		})
 	}
 
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, drainA, drainB)
@@ -287,16 +289,18 @@ func (s *FuseSystem) handleQuasarFuse() {
 	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
 	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
 
-	// Emit EventEnemyKilled for each drain (enables loot drops)
+	// Emit EventSpeciesKilled for each drain (enables loot drops)
 	for _, drainEntity := range drainEntities {
+		killX, killY := -1, -1
 		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
-				Entity:  drainEntity,
-				Species: component.SpeciesDrain,
-				X:       pos.X,
-				Y:       pos.Y,
-			})
+			killX, killY = pos.X, pos.Y
 		}
+		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+			Entity:  drainEntity,
+			Species: component.SpeciesDrain,
+			X:       killX,
+			Y:       killY,
+		})
 	}
 
 	if len(drainEntities) > 0 {

@@ -199,7 +199,7 @@ func (s *MissileSystem) updateMissile(m *component.MissileComponent, k *componen
 		physics.IntegratePosition(&k.Kinetic, dt)
 	}
 
-	// General Enemy Collision: missile detonates on any combatant contact
+	// General combat collision: the missile detonates on any target contact.
 	impactX, impactY, hitType := s.traverseForImpact(prevX, prevY, k.PreciseX, k.PreciseY, m.Owner)
 	if hitType != impactNone {
 		k.PreciseX, k.PreciseY = vmath.Point{X: impactX, Y: impactY}.CenterF()
@@ -214,10 +214,10 @@ type impactType uint8
 const (
 	impactNone impactType = iota
 	impactWall
-	impactEnemy
+	impactCombatant
 )
 
-// traverseForImpact walks path checking for wall/enemy collisions
+// traverseForImpact walks the path checking for wall and combatant collisions.
 func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner core.Entity) (x, y int, hit impactType) {
 	from := vmath.PointAtF(fromX, fromY)
 	to := vmath.PointAtF(toX, toY)
@@ -245,9 +245,9 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner 
 			return lastSafeX, lastSafeY, impactWall
 		}
 
-		// Enemy collision
+		// Combatant collision
 		if HasCombatTargetAt(s.world, currX, currY, 0, owner) {
-			return currX, currY, impactEnemy
+			return currX, currY, impactCombatant
 		}
 
 		lastSafeX, lastSafeY = currX, currY
@@ -285,7 +285,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 		}
 	}
 
-	// 3. Retarget: nearest enemy
+	// 3. Retarget: nearest combatant
 	targets := FindNearestTargets(s.world, missileX, missileY, 1, m.Owner)
 	if len(targets) == 0 {
 		return 0, 0, false

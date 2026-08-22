@@ -96,7 +96,7 @@ func (s *MetaSystem) EventTypes() []event.EventType {
 		event.EventGamePauseRequest,
 		event.EventGameSpeedRequest,
 		event.EventGameStepRequest,
-		event.EventEnemyKilled, // TODO: move kill telemetry to combat, not a meta concept, all happens in world
+		event.EventSpeciesKilled, // TODO: move kill telemetry to combat, not a meta concept, all happens in world
 		event.EventGameResetRequest,
 	}
 }
@@ -170,8 +170,8 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		p, _ := ev.Payload.(*event.GameStepPayload)
 		s.handleStepRequest(p)
 
-	case event.EventEnemyKilled:
-		if p, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+	case event.EventSpeciesKilled:
+		if p, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			s.recordKill(p)
 		}
 	}
@@ -199,14 +199,20 @@ func (s *MetaSystem) Update() {
 	}
 }
 
-// recordKill counts one enemy death per species, tracking deaths no cursor is credited with
-func (s *MetaSystem) recordKill(p *event.EnemyKilledPayload) {
+// recordKill counts one hostile-species death, tracking deaths no cursor is
+// credited with. A tower lifecycle death with no claimed killer remains a
+// player-side loss rather than progress toward species-kill gates.
+func (s *MetaSystem) recordKill(p *event.SpeciesKilledPayload) {
 	if p.Species <= component.SpeciesNone || p.Species >= component.SpeciesCount {
 		return
 	}
+	if p.Species == component.SpeciesTower && p.KillerEntity == 0 {
+		return
+	}
+	killer := s.world.ResolveCursor(p.KillerEntity)
 	s.statKills[p.Species].Add(1)
 	s.statKillsTotal.Add(1)
-	if s.world.ResolveCursor(p.KillerEntity) == 0 {
+	if killer == 0 {
 		s.statKillsUncredited.Add(1)
 	}
 }

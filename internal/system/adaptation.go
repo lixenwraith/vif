@@ -21,7 +21,7 @@ type routeOutcome struct {
 	Fitness    float64
 }
 
-// trackedRoute caches navigation state because components are wiped before EventEnemyKilled is processed
+// trackedRoute caches navigation state because components are wiped before EventSpeciesKilled is processed
 type trackedRoute struct {
 	RouteID int
 	GraphID uint32
@@ -34,7 +34,7 @@ type AdaptationSystem struct {
 	world         *engine.World
 	outcomes      map[uint32]map[uint8][]routeOutcome // Buffer: graphID -> subType -> outcomes
 	tracking      map[core.Entity]trackedRoute
-	pendingDeaths []event.EnemyKilledPayload
+	pendingDeaths []event.SpeciesKilledPayload
 
 	rng *vmath.FastRand
 
@@ -65,7 +65,7 @@ func NewAdaptationSystem(world *engine.World) engine.System {
 		world:         world,
 		outcomes:      make(map[uint32]map[uint8][]routeOutcome),
 		tracking:      make(map[core.Entity]trackedRoute),
-		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
+		pendingDeaths: make([]event.SpeciesKilledPayload, 0, 16),
 	}
 
 	s.statGraphs = world.Resources.Status.Ints.Get("adapt.graphs")
@@ -116,8 +116,8 @@ func (s *AdaptationSystem) EventTypes() []event.EventType {
 		event.EventMetaSystemCommandRequest,
 		event.EventRouteGraphComputed,
 		event.EventGatewayDespawned,
-		event.EventEnemyCreated,
-		event.EventEnemyKilled,
+		event.EventSpeciesCreated,
+		event.EventSpeciesKilled,
 	}
 }
 
@@ -151,13 +151,13 @@ func (s *AdaptationSystem) HandleEvent(ev event.GameEvent) {
 			s.world.Resources.Adaptation.MarkDraining(uint32(payload.GatewayEntity), s.world.Resources.Time.GameTime)
 		}
 
-	case event.EventEnemyCreated:
-		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
-			s.handleEnemyCreated(payload)
+	case event.EventSpeciesCreated:
+		if payload, ok := ev.Payload.(*event.SpeciesCreatedPayload); ok {
+			s.handleSpeciesCreated(payload)
 		}
 
-	case event.EventEnemyKilled:
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+	case event.EventSpeciesKilled:
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
 			s.buffers.Observe(0, len(s.pendingDeaths))
 		}
@@ -299,8 +299,8 @@ func (s *AdaptationSystem) handleGraphComputed(graphID uint32, routeCount int) {
 	s.samplePool(pop)
 }
 
-// handleEnemyCreated caches routing data before entity destruction
-func (s *AdaptationSystem) handleEnemyCreated(payload *event.EnemyCreatedPayload) {
+// handleSpeciesCreated caches routing data before entity destruction
+func (s *AdaptationSystem) handleSpeciesCreated(payload *event.SpeciesCreatedPayload) {
 	nav, ok := s.world.Components.Navigation.GetComponent(payload.Entity)
 	if !ok || !nav.UseRouteGraph || nav.RouteGraphID == 0 || nav.RouteID < 0 {
 		return

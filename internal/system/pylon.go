@@ -12,9 +12,9 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// PylonSystem manages pylon enemy entity lifecycle
+// PylonSystem manages pylon species lifecycle
 // Pylon is a stationary ablative composite that acts as damage sponge
-// Pushes other enemies away via soft collision
+// Pushes other species away via soft collision
 type PylonSystem struct {
 	world *engine.World
 
@@ -63,7 +63,7 @@ func (s *PylonSystem) EventTypes() []event.EventType {
 		event.EventPylonSpawnRequest,
 		event.EventPylonCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -82,8 +82,8 @@ func (s *PylonSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesPylon {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesPylon {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -256,17 +256,13 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 		SkipPositionSync: true,
 	})
 
-	// Emit creation events
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		Entity:  headerEntity,
-		Species: component.SpeciesPylon,
-	})
-
-	s.world.PushEvent(event.EventPylonSpawned, &event.PylonSpawnedPayload{
-		HeaderEntity: headerEntity,
-		MemberCount:  len(members),
-		X:            centerX,
-		Y:            centerY,
+	// Announce the fully initialized species instance.
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		Entity:      headerEntity,
+		Species:     component.SpeciesPylon,
+		X:           centerX,
+		Y:           centerY,
+		MemberCount: len(members),
 	})
 	s.lifecycle.spawned.Add(1)
 }
@@ -483,15 +479,8 @@ func (s *PylonSystem) handlePylonDeath(headerEntity core.Entity) {
 		Effect:       0,
 	})
 
-	// Emit destroyed event
-	s.world.PushEvent(event.EventPylonDestroyed, &event.PylonDestroyedPayload{
-		HeaderEntity: headerEntity,
-		X:            pylonComp.SpawnX,
-		Y:            pylonComp.SpawnY,
-	})
-
-	// Emit enemy killed for loot/scoring
-	s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+	// Publish one canonical species death for FSMs, loot, scoring, and rewards.
+	s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 		Entity:       headerEntity,
 		KillerEntity: killerEntity,
 		Species:      component.SpeciesPylon,

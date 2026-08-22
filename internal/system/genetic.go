@@ -41,7 +41,7 @@ type GeneticSystem struct {
 
 	tracking      map[core.Entity]*trackedEntity
 	trackKeys     []core.Entity
-	pendingDeaths []event.EnemyKilledPayload
+	pendingDeaths []event.SpeciesKilledPayload
 
 	eyeTracked     int64
 	telemetryTicks int
@@ -70,7 +70,7 @@ func NewGeneticSystem(world *engine.World) engine.System {
 		world:         world,
 		registry:      reg,
 		tracking:      make(map[core.Entity]*trackedEntity, 64),
-		pendingDeaths: make([]event.EnemyKilledPayload, 0, 16),
+		pendingDeaths: make([]event.SpeciesKilledPayload, 0, 16),
 		typeFitBuf:    make([]byte, 0, 64),
 	}
 
@@ -117,8 +117,8 @@ func (s *GeneticSystem) EventTypes() []event.EventType {
 		event.EventMetaSystemCommandRequest,
 		event.EventGeneticRegisterSpecies,
 		event.EventGeneticAbandonEval,
-		event.EventEnemyCreated,
-		event.EventEnemyKilled,
+		event.EventSpeciesCreated,
+		event.EventSpeciesKilled,
 		event.EventCombatAttackAreaRequest,
 	}
 }
@@ -157,15 +157,15 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 			s.mu.Unlock()
 		}
 
-	case event.EventEnemyCreated:
-		if payload, ok := ev.Payload.(*event.EnemyCreatedPayload); ok {
+	case event.EventSpeciesCreated:
+		if payload, ok := ev.Payload.(*event.SpeciesCreatedPayload); ok {
 			s.mu.Lock()
-			s.handleEnemyCreated(payload.Entity, payload.Species, payload.SubType, payload.EvalID, payload.Genes)
+			s.handleSpeciesCreated(payload.Entity, payload.Species, payload.SubType, payload.EvalID, payload.Genes)
 			s.mu.Unlock()
 		}
 
-	case event.EventEnemyKilled:
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+	case event.EventSpeciesKilled:
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
 			s.mu.Lock()
 			s.pendingDeaths = append(s.pendingDeaths, *payload)
 			s.buffers.Observe(1, len(s.pendingDeaths))
@@ -214,7 +214,7 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 	_ = s.registry.Start()
 }
 
-func (s *GeneticSystem) handleEnemyCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8, evalID uint64, genes []float64) {
+func (s *GeneticSystem) handleSpeciesCreated(entity core.Entity, speciesType component.SpeciesType, subType uint8, evalID uint64, genes []float64) {
 	if evalID == 0 {
 		return // Not GA-managed
 	}

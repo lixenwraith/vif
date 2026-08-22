@@ -121,17 +121,17 @@ dilated corridor. The graph also records the footprint/header offsets used to
 compute it.
 
 Graph IDs live in `RouteGraphResource`. Gateways attach the graph ID and a
-sampled route ID to spawned enemies. `:graph` and `:flow` expose the structures
+sampled route ID to spawned species. `:graph` and `:flow` expose the structures
 through the debug renderer.
 
 ## 6. Online route adaptation
 
 `AdaptationSystem` maintains an independent route population for each
-`(routeGraphID, enemy subtype)`. A newly computed graph seeds subtype 0 from
+`(routeGraphID, species subtype)`. A newly computed graph seeds subtype 0 from
 inverse-distance route weights; subtype-specific populations clone that
 baseline lazily.
 
-For each graph-routed enemy it caches route metadata before destruction. On
+For each graph-routed species it caches route metadata before destruction. On
 death, fitness is:
 
 ```text

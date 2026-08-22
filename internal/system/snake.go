@@ -70,7 +70,7 @@ func (s *SnakeSystem) EventTypes() []event.EventType {
 		event.EventSnakeSpawnRequest,
 		event.EventSnakeCancelRequest,
 		event.EventCompositeIntegrityBreach,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -89,8 +89,8 @@ func (s *SnakeSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesSnake {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesSnake {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -320,17 +320,14 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 		},
 	})
 
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
-		Entity:  rootEntity,
-		Species: component.SpeciesSnake,
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+		Entity:      rootEntity,
+		Species:     component.SpeciesSnake,
+		X:           headX,
+		Y:           headY,
+		MemberCount: 2,
 	})
 	s.lifecycle.spawned.Add(1)
-
-	s.world.PushEvent(event.EventSnakeSpawned, &event.SnakeSpawnedPayload{
-		RootEntity: rootEntity,
-		HeadEntity: headEntity,
-		BodyEntity: bodyEntity,
-	})
 }
 
 func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.Entity {
@@ -943,12 +940,12 @@ func (s *SnakeSystem) processGrowth(snakeComp *component.SnakeComponent, headCom
 
 func (s *SnakeSystem) handleSnakeDeath(rootEntity core.Entity, snakeComp *component.SnakeComponent, killerEntity core.Entity) {
 	headPos, ok := s.world.Positions.GetPosition(snakeComp.HeadEntity)
-	var posX, posY int
+	posX, posY := -1, -1
 	if ok {
 		posX, posY = headPos.X, headPos.Y
 	}
 
-	s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+	s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 		Entity:       rootEntity,
 		KillerEntity: killerEntity,
 		Species:      component.SpeciesSnake,
@@ -1004,10 +1001,6 @@ func (s *SnakeSystem) terminateSnake(rootEntity core.Entity) {
 	s.world.PushEvent(event.EventCompositeDestroyRequest, &event.CompositeDestroyRequestPayload{
 		HeaderEntity: rootEntity,
 		Effect:       0,
-	})
-
-	s.world.PushEvent(event.EventSnakeDestroyed, &event.SnakeDestroyedPayload{
-		RootEntity: rootEntity,
 	})
 }
 

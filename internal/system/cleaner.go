@@ -184,7 +184,7 @@ func (s *CleanerSystem) Update() {
 		prevCell := vmath.PointAtF(prevPreciseX, prevPreciseY)
 		newCell := vmath.PointAtF(kineticComp.PreciseX, kineticComp.PreciseY)
 
-		// Swept collision with wall/enemy blocking
+		// Swept collision with wall/combat-target blocking
 		blocked := false
 		var blockGridX, blockGridY int
 
@@ -216,7 +216,7 @@ func (s *CleanerSystem) Update() {
 					break
 				}
 
-				// Combat + glyph; enemy blocks head at this cell
+				// Combat + glyph; the combat target blocks the head at this cell.
 				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y

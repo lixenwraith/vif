@@ -646,11 +646,6 @@ type FuseSwarmRequestPayload struct {
 
 // --- Quasar ---
 
-// QuasarSpawnedPayload contains quasar spawn data
-type QuasarSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
 // QuasarSpawnRequestPayload contains coordinates for creation
 type QuasarSpawnRequestPayload struct {
 	X int `toml:"x"`
@@ -658,16 +653,6 @@ type QuasarSpawnRequestPayload struct {
 }
 
 // --- Swarm ---
-
-// SwarmSpawnedPayload contains swarm spawn data
-type SwarmSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
-// SwarmDestroyedPayload contains despawn reason
-type SwarmDestroyedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
 
 // SwarmAbsorbedDrainPayload contains absorption data
 type SwarmAbsorbedDrainPayload struct {
@@ -680,20 +665,6 @@ type SwarmAbsorbedDrainPayload struct {
 type SwarmSpawnRequestPayload struct {
 	X int `toml:"x"`
 	Y int `toml:"y"`
-}
-
-// --- Storm ---
-
-// StormCircleDestroyedPayload contains individual circle death data
-type StormCircleDestroyedPayload struct {
-	CircleEntity core.Entity `toml:"circle_entity"`
-	RootEntity   core.Entity `toml:"root_entity"`
-	Index        int         `toml:"index"`
-}
-
-// StormDestroyedPayload contains storm death data
-type StormDestroyedPayload struct {
-	RootEntity core.Entity `toml:"root_entity"`
 }
 
 // --- Post-Process ---
@@ -778,26 +749,29 @@ type CombatAttackAreaRequestPayload struct {
 	ChainDepth uint8 `toml:"chain_depth"`
 }
 
-// EnemyKilledPayload carries enemy identity, death position, and player credit.
+// SpeciesKilledPayload carries species identity, death position, and player credit.
 // KillerEntity is the cursor that dealt the fatal damage, or zero for lifecycle
 // deaths and attacks not owned by a cursor.
-type EnemyKilledPayload struct {
+type SpeciesKilledPayload struct {
 	Entity       core.Entity           `toml:"entity"`
 	KillerEntity core.Entity           `toml:"killer_entity"`
-	X            int                   `toml:"x"`
-	Y            int                   `toml:"y"`
+	X            int                   `toml:"x"` // -1 when no death position is available
+	Y            int                   `toml:"y"` // -1 when no death position is available
 	Species      component.SpeciesType `toml:"species"`
 	SubType      uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
 }
 
-// EnemyCreatedPayload signals enemy entity spawn for GA tracking
-type EnemyCreatedPayload struct {
-	Genes  []float64 `toml:"genes"`
-	EvalID uint64    `toml:"eval_id"`
-
-	Entity  core.Entity           `toml:"entity"`
-	Species component.SpeciesType `toml:"species"`
-	SubType uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
+// SpeciesCreatedPayload announces one fully initialized species instance.
+// Genes and EvalID are populated only for GA-managed instances.
+type SpeciesCreatedPayload struct {
+	Entity      core.Entity           `toml:"entity"`
+	Species     component.SpeciesType `toml:"species"`
+	SubType     uint8                 `toml:"sub_type"` // Species variant (e.g. EyeType)
+	X           int                   `toml:"x"` // -1 when the species has no single position
+	Y           int                   `toml:"y"` // -1 when the species has no single position
+	MemberCount int                   `toml:"member_count"` // Composite members; zero for non-composites
+	Genes       []float64             `toml:"genes"`
+	EvalID      uint64                `toml:"eval_id"`
 }
 
 // --- Loot ---
@@ -1013,21 +987,6 @@ type PylonSpawnRequestPayload struct {
 	MaxHP   int `toml:"max_hp"` // HP at center
 }
 
-// PylonSpawnedPayload contains pylon spawn data
-type PylonSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	MemberCount  int         `toml:"member_count"`
-	X            int         `toml:"x"`
-	Y            int         `toml:"y"`
-}
-
-// PylonDestroyedPayload contains pylon death data
-type PylonDestroyedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	X            int         `toml:"x"`
-	Y            int         `toml:"y"`
-}
-
 // --- Snake ---
 
 // SnakeSpawnRequestPayload contains coordinates for snake creation
@@ -1035,18 +994,6 @@ type SnakeSpawnRequestPayload struct {
 	X            int `toml:"x"`
 	Y            int `toml:"y"`
 	SegmentCount int `toml:"segment_count"` // Body segments to spawn (0 = default)
-}
-
-// SnakeSpawnedPayload emitted after successful spawn
-type SnakeSpawnedPayload struct {
-	RootEntity core.Entity `toml:"root_entity"`
-	HeadEntity core.Entity `toml:"head_entity"`
-	BodyEntity core.Entity `toml:"body_entity"`
-}
-
-// SnakeDestroyedPayload emitted on snake death
-type SnakeDestroyedPayload struct {
-	RootEntity core.Entity `toml:"root_entity"`
 }
 
 // --- Navigation ---
@@ -1094,16 +1041,6 @@ type EyeSpawnRequestPayload struct {
 	TargetGroupID uint8             `toml:"target_group_id"`
 }
 
-// EyeSpawnedPayload notifies eye composite creation
-type EyeSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
-// EyeDestroyedPayload notifies eye termination
-type EyeDestroyedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-}
-
 // --- Tower ---
 
 // TowerSpawnRequestPayload contains parameters for tower creation
@@ -1117,21 +1054,6 @@ type TowerSpawnRequestPayload struct {
 	MaxHP         int                 `toml:"max_hp"`
 	Type          component.TowerType `toml:"type"`
 	TargetGroupID uint8               `toml:"target_group_id"` // Navigation target group
-}
-
-// TowerSpawnedPayload contains tower spawn data
-type TowerSpawnedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	MemberCount  int         `toml:"member_count"`
-	X            int         `toml:"x"`
-	Y            int         `toml:"y"`
-}
-
-// TowerDestroyedPayload contains tower death data
-type TowerDestroyedPayload struct {
-	HeaderEntity core.Entity `toml:"header_entity"`
-	X            int         `toml:"x"`
-	Y            int         `toml:"y"`
 }
 
 // --- Gateway ---

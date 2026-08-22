@@ -26,7 +26,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 60, y = 118 } },
 ]
 transitions = [
-    { trigger = "EventPylonSpawned", target = "EscLGwA", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "EscLGwA", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "EscLSpawnB" },
     { trigger = "Tick", target = "EscLSpawnB", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]
@@ -47,7 +47,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 60, y = 132 } },
 ]
 transitions = [
-    { trigger = "EventPylonSpawned", target = "EscLGwB", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "EscLGwB", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "EscLDone" },
     { trigger = "Tick", target = "EscLDone", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]
@@ -83,7 +83,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 440, y = 118 } },
 ]
 transitions = [
-    { trigger = "EventPylonSpawned", target = "EscRGwA", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "EscRGwA", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "EscRSpawnB" },
     { trigger = "Tick", target = "EscRSpawnB", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]
@@ -104,7 +104,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventPylonSpawnRequest", payload = { x = 440, y = 132 } },
 ]
 transitions = [
-    { trigger = "EventPylonSpawned", target = "EscRGwB", capture_vars = { header_entity = "gw_anchor" } },
+    { trigger = "EventSpeciesCreated", target = "EscRGwB", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 5 }, capture_vars = { entity = "gw_anchor" } },
     { trigger = "EventPylonSpawnFailed", target = "EscRDone" },
     { trigger = "Tick", target = "EscRDone", guard = "StateTimeExceeds", guard_args = { ms = 500 } },
 ]

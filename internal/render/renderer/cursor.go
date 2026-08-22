@@ -67,7 +67,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			break
 		}
 
-		// Priority 2: Sigil (Visual/Enemy)
+		// Priority 2: Sigil (visual/species)
 		// Store candidate but continue searching for glyphs
 		if sigilEntity == 0 && r.gameCtx.World.Components.Sigil.HasEntity(e) {
 			sigilEntity = e

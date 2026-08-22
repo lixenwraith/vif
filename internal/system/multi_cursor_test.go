@@ -163,16 +163,16 @@ func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 		t.Fatalf("slot-one cursor %d was treated as a combat target", second)
 	}
 
-	enemy := w.CreateEntity()
-	w.Positions.SetPosition(enemy, component.PositionComponent{X: 16, Y: 5})
-	w.Components.Combat.SetComponent(enemy, component.CombatComponent{
-		OwnerEntity:      enemy,
+	target := w.CreateEntity()
+	w.Positions.SetPosition(target, component.PositionComponent{X: 16, Y: 5})
+	w.Components.Combat.SetComponent(target, component.CombatComponent{
+		OwnerEntity:      target,
 		CombatEntityType: component.CombatEntityDrain,
 		HitPoints:        1,
 	})
 	targets := FindNearestTargets(w, 15, 5, 1, first)
-	if len(targets) != 1 || targets[0].Target != enemy {
-		t.Fatalf("nearest targets = %#v, want only enemy %d", targets, enemy)
+	if len(targets) != 1 || targets[0].Target != target {
+		t.Fatalf("nearest targets = %#v, want only combat target %d", targets, target)
 	}
 }
 
@@ -228,13 +228,13 @@ func TestPlayerCommandsMutateOnlyAddressedCursor(t *testing.T) {
 	}
 }
 
-func TestEnemyKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
+func TestSpeciesKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 	boost := NewBoostSystem(w).(*BoostSystem)
 
 	boost.HandleEvent(event.GameEvent{
-		Type: event.EventEnemyKilled,
-		Payload: &event.EnemyKilledPayload{
+		Type: event.EventSpeciesKilled,
+		Payload: &event.SpeciesKilledPayload{
 			KillerEntity: second,
 			Species:      component.SpeciesDrain,
 		},
@@ -247,15 +247,15 @@ func TestEnemyKillBoostRewardsOnlyCreditedCursor(t *testing.T) {
 	}
 
 	boost.HandleEvent(event.GameEvent{
-		Type: event.EventEnemyKilled,
-		Payload: &event.EnemyKilledPayload{
+		Type: event.EventSpeciesKilled,
+		Payload: &event.SpeciesKilledPayload{
 			KillerEntity: second,
 			Species:      component.SpeciesSwarm,
 		},
 	})
 	boost.HandleEvent(event.GameEvent{
-		Type:    event.EventEnemyKilled,
-		Payload: &event.EnemyKilledPayload{Species: component.SpeciesEye},
+		Type:    event.EventSpeciesKilled,
+		Payload: &event.SpeciesKilledPayload{Species: component.SpeciesEye},
 	})
 
 	secondBoost, _ = w.Components.Boost.GetComponent(second)
@@ -373,7 +373,7 @@ func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 	}
 }
 
-func TestCombatClearsStaleCursorCreditWhenEnemyDealsFatalDamage(t *testing.T) {
+func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
 
@@ -410,7 +410,7 @@ func TestCombatClearsStaleCursorCreditWhenEnemyDealsFatalDamage(t *testing.T) {
 	}
 }
 
-func TestTowerDeathEmitsKillOnlyForCursorCredit(t *testing.T) {
+func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
 	w, _, killer := testCursorWorld(t)
 	towers := NewTowerSystem(w).(*TowerSystem)
 
@@ -425,10 +425,10 @@ func TestTowerDeathEmitsKillOnlyForCursorCredit(t *testing.T) {
 
 	kills := 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
-		if ev.Type != event.EventEnemyKilled {
+		if ev.Type != event.EventSpeciesKilled {
 			continue
 		}
-		payload, ok := ev.Payload.(*event.EnemyKilledPayload)
+		payload, ok := ev.Payload.(*event.SpeciesKilledPayload)
 		if !ok || payload.Entity != header || payload.KillerEntity != killer || payload.Species != component.SpeciesTower {
 			t.Fatalf("tower kill payload = %#v", ev.Payload)
 		}
@@ -442,10 +442,20 @@ func TestTowerDeathEmitsKillOnlyForCursorCredit(t *testing.T) {
 	w.Components.Tower.SetComponent(uncredited, component.TowerComponent{SpawnX: 3, SpawnY: 4})
 	w.Components.Combat.SetComponent(uncredited, component.CombatComponent{})
 	towers.handleTowerDeath(uncredited)
+	kills = 0
 	for _, ev := range w.Resources.Event.Queue.Consume() {
-		if ev.Type == event.EventEnemyKilled {
-			t.Fatalf("uncredited tower death emitted enemy kill: %#v", ev.Payload)
+		if ev.Type != event.EventSpeciesKilled {
+			continue
 		}
+		payload, ok := ev.Payload.(*event.SpeciesKilledPayload)
+		if !ok || payload.Entity != uncredited || payload.KillerEntity != 0 ||
+			payload.Species != component.SpeciesTower || payload.X != 3 || payload.Y != 4 {
+			t.Fatalf("uncredited tower species kill payload = %#v", ev.Payload)
+		}
+		kills++
+	}
+	if kills != 1 {
+		t.Fatalf("uncredited tower species kill events = %d, want 1", kills)
 	}
 }
 
@@ -458,8 +468,8 @@ func TestBoostRewardSurvivesStaleTypingDecision(t *testing.T) {
 	typing.applyUniversalRewards(cursor)
 	for range 3 {
 		boost.HandleEvent(event.GameEvent{
-			Type:    event.EventEnemyKilled,
-			Payload: &event.EnemyKilledPayload{KillerEntity: cursor, Species: component.SpeciesDrain},
+			Type:    event.EventSpeciesKilled,
+			Payload: &event.SpeciesKilledPayload{KillerEntity: cursor, Species: component.SpeciesDrain},
 		})
 	}
 

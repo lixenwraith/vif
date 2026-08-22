@@ -1,7 +1,7 @@
 # Vi-Fighter
 
 Vi-Fighter is a real-time terminal game that combines Vim-style navigation and
-text operations with typing, shooting, procedural encounters, adaptive enemy
+text operations with typing, shooting, procedural encounters, adaptive species
 movement, and generative audio.
 
 The game is written in Go and has no application CGO requirement. Terminal,

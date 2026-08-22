@@ -133,7 +133,7 @@ Renderers call `SetWriteMask` before drawing. Current mask categories are:
 | `MaskGlyph` | Normal typeable text. |
 | `MaskField` | Shield/ember and related fields. |
 | `MaskTransient` | Projectiles, particles, materialization, lines, sigils. |
-| `MaskComposite` | Enemies, structures, gold, composite members. |
+| `MaskComposite` | Species, structures, gold, composite members. |
 | `MaskUI` | Meters, status, cursor, overlays, debug UI. |
 | `MaskHealthBar` | Dedicated high bit used by health bars. |
 

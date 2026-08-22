@@ -4,7 +4,7 @@ Vi-Fighter is a Go terminal game built around a custom entity-component-system
 (ECS), an event-settled fixed-step scheduler, a TOML-configured hierarchical
 state machine, a layered terminal compositor, and a procedural audio engine.
 The game combines vi-style cursor and text operations with real-time combat,
-adaptive navigation, and evolving enemy parameters.
+adaptive navigation, and evolving species parameters.
 
 This document is the high-level entry point. It replaces the older assumptions
 that the repository is standard-library-only and that all simulation math is

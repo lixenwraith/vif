@@ -7,7 +7,7 @@ generated manifest, and shipped configuration were treated as authoritative
 where older prose disagreed with the code.
 
 Vi-Fighter is a terminal action game that combines vi-style text navigation,
-typing, shooting, data-driven encounters, adaptive enemy navigation, procedural
+typing, shooting, data-driven encounters, adaptive species navigation, procedural
 audio, and a custom ECS. The documentation separates those concerns so that a
 reader can start with the application shape and then descend into a subsystem.
 
@@ -20,7 +20,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
-| [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, enemies, encounters, and system responsibilities? |
+| [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
 | [Rendering](rendering.md) | Domain detail | How are ECS state, compositing, color modes, masks, post-processing, and terminal output connected? |

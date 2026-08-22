@@ -72,7 +72,7 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 	return 0, 0, false
 }
 
-// HasCombatTargetAt reports whether an enemy combat entity occupies a cell.
+// HasCombatTargetAt reports whether a non-player combat target occupies a cell.
 // It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
 func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.Entity) bool {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity

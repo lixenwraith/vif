@@ -140,7 +140,7 @@ func (s *DrainSystem) EventTypes() []event.EventType {
 		event.EventMaterializeComplete,
 		event.EventDrainPause,
 		event.EventDrainResume,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -160,8 +160,8 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
-	if ev.Type == event.EventEnemyKilled {
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok && payload.Species == component.SpeciesDrain {
+	if ev.Type == event.EventSpeciesKilled {
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok && payload.Species == component.SpeciesDrain {
 			s.lifecycle.RecordKill(s.world, payload.KillerEntity)
 		}
 		return
@@ -320,7 +320,7 @@ func (s *DrainSystem) processDrainStates() {
 			if entry.hasPos {
 				killX, killY = entry.pos.X, entry.pos.Y
 			}
-			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       entry.entity,
 				KillerEntity: entry.combatComp.LastDamagedBy,
 				Species:      component.SpeciesDrain,
@@ -761,10 +761,12 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		Color: visual.RgbDrain,
 	})
 
-	// Emit drain creation
-	s.world.PushEvent(event.EventEnemyCreated, &event.EnemyCreatedPayload{
+	// Announce the fully initialized species instance.
+	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity:  entity,
 		Species: component.SpeciesDrain,
+		X:       spawnX,
+		Y:       spawnY,
 	})
 	s.statSpawned.Add(1)
 }
@@ -859,7 +861,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			// Counted as a kill, credited to no cursor: the drain spent itself on the
 			// player, so it grants no boost. Loot still drops as compensation.
 			killX, killY := entry.killPos()
-			s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:  entry.entity,
 				Species: component.SpeciesDrain,
 				X:       killX,
@@ -902,7 +904,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 		a.dying = true
 		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, a.entity)
-		s.world.PushEvent(event.EventEnemyKilled, &event.EnemyKilledPayload{
+		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 			Entity:       a.entity,
 			KillerEntity: a.combatComp.LastDamagedBy,
 			Species:      component.SpeciesDrain,

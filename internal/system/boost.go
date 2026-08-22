@@ -60,7 +60,7 @@ func (s *BoostSystem) EventTypes() []event.EventType {
 		event.EventBoostDeactivate,
 		event.EventBoostExtend,
 		event.EventBoostReward,
-		event.EventEnemyKilled,
+		event.EventSpeciesKilled,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -134,8 +134,13 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 
-	case event.EventEnemyKilled:
-		if payload, ok := ev.Payload.(*event.EnemyKilledPayload); ok {
+	case event.EventSpeciesKilled:
+		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
+			// Player-owned tower lifecycle deaths use the shared species event so
+			// FSMs can observe them, but are not failed reward requests.
+			if payload.Species == component.SpeciesTower && payload.KillerEntity == 0 {
+				return
+			}
 			if cursor := s.world.ResolveCursor(payload.KillerEntity); cursor != 0 {
 				s.reward(cursor)
 			} else {
