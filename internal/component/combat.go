@@ -35,6 +35,9 @@ const (
 // Attack Types
 type CombatAttackType int
 
+// CombatAttackNone selects no attack profile; effects carrying it are visual only
+const CombatAttackNone CombatAttackType = -1
+
 const (
 	CombatAttackProjectile CombatAttackType = iota
 	CombatAttackShield

@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 166
+const EventTypeCount = 167
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -90,6 +90,7 @@ func InitRegistry() {
 	RegisterType("EventFlashSpawnOneRequest", EventFlashSpawnOneRequest, &FlashRequestPayload{})
 	RegisterType("EventFlashSpawnBatchRequest", EventFlashSpawnBatchRequest, nil)
 	RegisterType("EventExplosionRequest", EventExplosionRequest, &ExplosionRequestPayload{})
+	RegisterType("EventExplosionBatchRequest", EventExplosionBatchRequest, &ExplosionBatchRequestPayload{})
 	RegisterType("EventDustSpawnOneRequest", EventDustSpawnOneRequest, &DustSpawnOneRequestPayload{})
 	RegisterType("EventDustSpawnBatchRequest", EventDustSpawnBatchRequest, nil)
 	RegisterType("EventDustAllRequest", EventDustAllRequest, nil)

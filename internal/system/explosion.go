@@ -2,6 +2,7 @@ package system
 
 import (
 	"sync/atomic"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -18,44 +19,39 @@ type hitComposite struct {
 	members []core.Entity
 }
 
-// ExplosionSystem handles explosion triggering and glyph-to-dust transformation
+// ExplosionSystem owns explosion centers: merge, lifetime and shared combat resolution.
+// It resolves geometry only; the producer names the combat family and visual variant.
 type ExplosionSystem struct {
 	world *engine.World
 
 	baseRadius float64 // Default radius in cells
 	radiusCap  float64 // Maximum radius after merges (cells)
 
-	// Reusable buffers to avoid allocation in hot path
-	entityBuf    []core.Entity
-	dustEntryBuf []event.DustSpawnEntry
-	centerBuf    []vmath.Point
+	// Rotating eviction cursor, used only once the center array is full
+	evictNext int
 
-	drainBuf     []core.Entity
+	// Reusable collectors for the area sweep
 	compositeBuf []hitComposite
 	compositeIdx map[core.Entity]int
-	seenCells    map[uint64]bool
 
-	statTriggered     *atomic.Int64
-	statConverted     *atomic.Int64
-	statMerged        *atomic.Int64
-	statCursorRejects *atomic.Int64
-	statDisabled      *atomic.Int64
-	buffers           bufferTelemetry
+	statTriggered *atomic.Int64
+	statMerged    *atomic.Int64
+	statEvicted   *atomic.Int64
+	rejects       rejectionTelemetry
+	buffers       bufferTelemetry
 
 	enabled bool
 }
 
 func NewExplosionSystem(world *engine.World) engine.System {
-	s := &ExplosionSystem{
-		world: world,
-	}
+	s := &ExplosionSystem{world: world}
 
-	s.statTriggered = world.Resources.Status.Ints.Get("explosion.triggered")
-	s.statConverted = world.Resources.Status.Ints.Get("explosion.converted")
-	s.statMerged = world.Resources.Status.Ints.Get("explosion.merged")
-	s.statCursorRejects = world.Resources.Status.Ints.Get("explosion.cursor_rejects")
-	s.statDisabled = world.Resources.Status.Ints.Get("explosion.disabled_rejects")
-	s.buffers = newBufferTelemetry(world.Resources.Status, "explosion", "entities", "dust_entries", "centers", "drains", "composites", "composite_index", "seen_cells")
+	reg := world.Resources.Status
+	s.statTriggered = reg.Ints.Get("explosion.triggered")
+	s.statMerged = reg.Ints.Get("explosion.merged")
+	s.statEvicted = reg.Ints.Get("explosion.evicted")
+	s.rejects = newRejectionTelemetry(reg, "explosion")
+	s.buffers = newBufferTelemetry(reg, "explosion", "composites")
 
 	s.Init()
 	return s
@@ -64,22 +60,18 @@ func NewExplosionSystem(world *engine.World) engine.System {
 func (s *ExplosionSystem) Init() {
 	s.baseRadius = parameter.ExplosionFieldRadius
 	s.radiusCap = parameter.ExplosionRadiusCapFixed
+	s.evictNext = 0
 
-	// Reset buffers
-	s.entityBuf = make([]core.Entity, 0, 256)
-	s.dustEntryBuf = make([]event.DustSpawnEntry, 0, 256)
-	s.centerBuf = make([]vmath.Point, 0, 64)
-
-	s.drainBuf = make([]core.Entity, 0, 64)
 	s.compositeBuf = make([]hitComposite, 0, 16)
 	s.compositeIdx = make(map[core.Entity]int, 16)
-	s.seenCells = make(map[uint64]bool, 256)
+
+	// Centers are this system's state, so this system clears them
+	s.world.Resources.Transient.ClearExplosions()
 
 	s.statTriggered.Store(0)
-	s.statConverted.Store(0)
 	s.statMerged.Store(0)
-	s.statCursorRejects.Store(0)
-	s.statDisabled.Store(0)
+	s.statEvicted.Store(0)
+	s.rejects.Reset()
 	s.buffers.Reset()
 	s.enabled = true
 }
@@ -95,8 +87,8 @@ func (s *ExplosionSystem) Priority() int {
 
 func (s *ExplosionSystem) EventTypes() []event.EventType {
 	return []event.EventType{
-		event.EventFireSpecialRequest,
 		event.EventExplosionRequest,
+		event.EventExplosionBatchRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
 	}
@@ -114,40 +106,29 @@ func (s *ExplosionSystem) HandleEvent(ev event.GameEvent) {
 				s.enabled = payload.Enabled
 			}
 		}
+		return
 	}
 
+	// A pooled payload is released on every path, disabled included
 	if !s.enabled {
-		if ev.Type == event.EventFireSpecialRequest || ev.Type == event.EventExplosionRequest {
-			s.statDisabled.Add(1)
+		s.rejects.disabled.Add(1)
+		if p, ok := ev.Payload.(*event.ExplosionBatchRequestPayload); ok {
+			event.ReleaseExplosionBatchRequest(p)
 		}
 		return
 	}
 
 	switch ev.Type {
-	case event.EventFireSpecialRequest:
-		if payload, ok := ev.Payload.(*event.FireSpecialRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
-				s.fireFromDust(cursor)
-			} else {
-				s.statCursorRejects.Add(1)
-			}
-		}
-
 	case event.EventExplosionRequest:
 		if p, ok := ev.Payload.(*event.ExplosionRequestPayload); ok {
-			var cursor core.Entity
-			if p.Type != event.ExplosionTypeEye {
-				cursor = s.world.ResolveCursor(p.Entity)
-				if cursor == 0 {
-					s.statCursorRejects.Add(1)
-					return
-				}
-			}
-			radius := p.Radius
-			if radius == 0 {
-				radius = s.baseRadius
-			}
-			s.addCenter(cursor, p.X, p.Y, radius, p.Type)
+			one := [1]event.ExplosionCenterEntry{{X: p.X, Y: p.Y}}
+			s.spawn(p.Entity, one[:], p.Radius, p.Duration, p.Type, p.Attack)
+		}
+
+	case event.EventExplosionBatchRequest:
+		if p, ok := ev.Payload.(*event.ExplosionBatchRequestPayload); ok {
+			s.spawn(p.Entity, p.Centers, p.Radius, p.Duration, p.Type, p.Attack)
+			event.ReleaseExplosionBatchRequest(p)
 		}
 	}
 }
@@ -166,10 +147,11 @@ func (s *ExplosionSystem) Update() {
 
 	write := 0
 	for i := range transRes.ExplosionCount {
-		transRes.ExplosionBacking[i].Age += dtNano
-		if transRes.ExplosionBacking[i].Age < transRes.ExplosionDurNano {
+		c := &transRes.ExplosionBacking[i]
+		c.Age += dtNano
+		if c.Age < c.DurNano {
 			if write != i {
-				transRes.ExplosionBacking[write] = transRes.ExplosionBacking[i]
+				transRes.ExplosionBacking[write] = *c
 			}
 			write++
 		}
@@ -177,81 +159,69 @@ func (s *ExplosionSystem) Update() {
 	transRes.ExplosionCount = write
 }
 
-// fireFromDust converts every dust particle into an explosion center.
-// Centers are collected in dense store order: addCenter merges against centers
-// already placed and emits combat events, so a map's order would decide which
-// merges happen and which entities take knockback.
-func (s *ExplosionSystem) fireFromDust(cursor core.Entity) {
-	dustEntities := s.world.Components.Dust.Entities()
-	if len(dustEntities) == 0 {
+// spawn applies request defaults and damage credit, then places one center per position
+func (s *ExplosionSystem) spawn(owner core.Entity, centers []event.ExplosionCenterEntry,
+	radius float64, duration time.Duration, visual event.ExplosionType, attack component.CombatAttackType) {
+
+	if len(centers) == 0 {
 		return
 	}
-
-	clear(s.seenCells)
-	s.centerBuf = s.centerBuf[:0]
-
-	for _, e := range dustEntities {
-		p, ok := s.world.Positions.GetPosition(e)
-		if !ok {
-			continue
-		}
-		key := posKey(p.X, p.Y)
-		if s.seenCells[key] {
-			continue
-		}
-		s.seenCells[key] = true
-		s.centerBuf = append(s.centerBuf, vmath.Point{X: p.X, Y: p.Y})
+	if radius <= 0 {
+		radius = s.baseRadius
 	}
-	s.buffers.Observe(2, len(s.centerBuf))
-	s.buffers.Observe(6, len(s.seenCells))
+	if duration <= 0 {
+		duration = parameter.ExplosionFieldDuration
+	}
 
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, dustEntities...)
+	// Damage needs a live cursor for kill credit; a visual-only blast does not
+	var cursor core.Entity
+	if attack != component.CombatAttackNone {
+		cursor = s.world.ResolveCursor(owner)
+		if cursor == 0 {
+			s.rejects.cursor.Add(1)
+			return
+		}
+	}
 
-	for _, p := range s.centerBuf {
-		s.addCenter(cursor, p.X, p.Y, s.baseRadius, event.ExplosionTypeDust)
+	durNano := duration.Nanoseconds()
+	for i := range centers {
+		s.addCenter(cursor, centers[i].X, centers[i].Y, radius, durNano, visual, attack)
 	}
 }
 
-func (s *ExplosionSystem) addCenter(cursor core.Entity, x, y int, radius float64, explosionType event.ExplosionType) {
+// addCenter merges into a live center of the same visual variant or places a new one.
+// A merged request resolves no combat: the absorbing center already swept its area.
+func (s *ExplosionSystem) addCenter(cursor core.Entity, x, y int, radius float64, durNano int64,
+	visual event.ExplosionType, attack component.CombatAttackType) {
+
 	transRes := s.world.Resources.Transient
 
-	// Merge check - only merge same type
 	for i := range transRes.ExplosionCount {
 		c := &transRes.ExplosionBacking[i]
-		if c.Type != explosionType {
+		if c.Type != visual {
 			continue
 		}
 
 		dx := float64(x - c.X)
 		dy := float64(y - c.Y)
-		distSq := vmath.MagnitudeSqF(dx, dy)
-
-		if distSq <= parameter.ExplosionMergeThresholdSq {
+		if vmath.MagnitudeSqF(dx, dy) <= parameter.ExplosionMergeThresholdSq {
 			c.Age = 0
-
 			c.Intensity = min(c.Intensity+parameter.ExplosionIntensityBoost, parameter.ExplosionIntensityCap)
 			c.Radius = min(max(c.Radius, radius)+parameter.ExplosionRadiusBoost, s.radiusCap)
-
 			s.statMerged.Add(1)
 			return
 		}
 	}
 
-	// No merge - add new center
 	var idx int
 	if transRes.ExplosionCount < parameter.ExplosionCenterCap {
 		idx = transRes.ExplosionCount
 		transRes.ExplosionCount++
 	} else {
-		// Overflow: overwrite oldest
-		idx = 0
-		maxAge := transRes.ExplosionBacking[0].Age
-		for i := 1; i < parameter.ExplosionCenterCap; i++ {
-			if transRes.ExplosionBacking[i].Age > maxAge {
-				maxAge = transRes.ExplosionBacking[i].Age
-				idx = i
-			}
-		}
+		// Full: evict in rotation. Every entry is mid-lifetime, so scanning for the oldest buys nothing.
+		idx = s.evictNext
+		s.evictNext = (s.evictNext + 1) % parameter.ExplosionCenterCap
+		s.statEvicted.Add(1)
 	}
 
 	transRes.ExplosionBacking[idx] = engine.ExplosionCenter{
@@ -260,37 +230,22 @@ func (s *ExplosionSystem) addCenter(cursor core.Entity, x, y int, radius float64
 		Radius:    radius,
 		Intensity: 1.0,
 		Age:       0,
-		Type:      explosionType,
+		DurNano:   durNano,
+		Type:      visual,
 	}
 
-	// Process area effects (combat + optional glyph conversion)
-	s.processExplosionArea(cursor, x, y, radius, explosionType)
-
+	if attack != component.CombatAttackNone {
+		s.resolveArea(cursor, x, y, radius, attack)
+	}
 	s.statTriggered.Add(1)
 }
 
-// processExplosionArea handles entity collection and event emission for explosion effects
-// Single-pass sweep: collects combat entities (always), converts glyphs (dust only)
-func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX, centerY int, radius float64, explosionType event.ExplosionType) {
+// resolveArea emits one area attack per shared composite inside the blast ellipse.
+// Player entities are never selected here; their producer resolves its own domain
+// before the request crosses. Phase 3 replaces the header test with an entity-domain test.
+func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, radius float64, attack component.CombatAttackType) {
 	config := s.world.Resources.Config
 
-	// Determine behavior based on explosion type
-	var attackType component.CombatAttackType
-	convertGlyphs := false
-
-	switch explosionType {
-	case event.ExplosionTypeDust:
-		attackType = component.CombatAttackExplosion
-		convertGlyphs = true
-	case event.ExplosionTypeMissile:
-		attackType = component.CombatAttackMissile
-	case event.ExplosionTypeEye:
-		return // Visual only, combat handled by EyeSystem
-	default:
-		return
-	}
-
-	// Calculate bounds with aspect correction
 	radiusCells := int(radius)
 	radiusCellsY := radiusCells / 2
 
@@ -301,118 +256,61 @@ func (s *ExplosionSystem) processExplosionArea(cursorEntity core.Entity, centerX
 
 	radiusSq := radius * radius
 
-	// Clear reuse buffers
-	s.entityBuf = s.entityBuf[:0]
-	s.dustEntryBuf = s.dustEntryBuf[:0]
-
-	// Combat entity collectors
-	s.drainBuf = s.drainBuf[:0]
 	s.compositeBuf = s.compositeBuf[:0]
 	clear(s.compositeIdx)
 
-	// Single-pass area sweep
-	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
+	var cellBuf [parameter.MaxEntitiesPerCell]core.Entity
 	for y := minY; y <= maxY; y++ {
+		dyCirc := vmath.ScaleToCircularF(float64(y - centerY))
 		for x := minX; x <= maxX; x++ {
 			dx := float64(x - centerX)
-			dyCirc := vmath.ScaleToCircularF(float64(y - centerY))
-			distSq := vmath.CircleDistSqF(dx, dyCirc)
-
-			if distSq > radiusSq {
+			if vmath.CircleDistSqF(dx, dyCirc) > radiusSq {
 				continue
 			}
 
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
+			count := s.world.Positions.GetAllEntitiesAtInto(x, y, cellBuf[:])
 			for i := range count {
-				entity := entityBuf[i]
-				// Drain - collect for combat
-				if s.world.Components.Drain.HasEntity(entity) {
-					s.drainBuf = append(s.drainBuf, entity)
+				entity := cellBuf[i]
+				memberComp, ok := s.world.Components.Member.GetPtr(entity)
+				if !ok {
+					continue
+				}
+				headerEntity := memberComp.HeaderEntity
+				headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
+				if !ok {
+					continue
+				}
+				switch headerComp.Type {
+				case component.CompositeTypeUnit, component.CompositeTypeAblative:
+				default:
 					continue
 				}
 
-				// Composite member - collect by header
-				if memberComp, ok := s.world.Components.Member.GetPtr(entity); ok {
-					headerEntity := memberComp.HeaderEntity
-					headerComp, ok := s.world.Components.Header.GetPtr(headerEntity)
-					if !ok {
-						continue
-					}
-
-					switch headerComp.Type {
-					case component.CompositeTypeUnit, component.CompositeTypeAblative:
-						if ci, ok := s.compositeIdx[headerEntity]; ok {
-							s.compositeBuf[ci].members = append(s.compositeBuf[ci].members, entity)
-							break
-						}
-						s.compositeIdx[headerEntity] = len(s.compositeBuf)
-						// members backs a queued payload, so it must stay a fresh allocation
-						s.compositeBuf = append(s.compositeBuf, hitComposite{
-							header:  headerEntity,
-							members: []core.Entity{entity},
-						})
-					}
+				if ci, ok := s.compositeIdx[headerEntity]; ok {
+					s.compositeBuf[ci].members = append(s.compositeBuf[ci].members, entity)
 					continue
 				}
-
-				// Glyph - convert to dust (dust explosion only)
-				if convertGlyphs {
-					glyphComp, ok := s.world.Components.Glyph.GetPtr(entity)
-					if !ok || s.world.Components.Death.HasEntity(entity) {
-						continue
-					}
-
-					s.world.Components.Death.SetComponent(entity, component.DeathComponent{})
-					s.entityBuf = append(s.entityBuf, entity)
-					s.dustEntryBuf = append(s.dustEntryBuf, event.DustSpawnEntry{
-						X:     x,
-						Y:     y,
-						Char:  glyphComp.Rune,
-						Level: glyphComp.Level,
-					})
-				}
+				s.compositeIdx[headerEntity] = len(s.compositeBuf)
+				// members backs a queued payload, so it must stay a fresh allocation
+				s.compositeBuf = append(s.compositeBuf, hitComposite{
+					header:  headerEntity,
+					members: []core.Entity{entity},
+				})
 			}
 		}
 	}
-	s.buffers.Observe(0, len(s.entityBuf))
-	s.buffers.Observe(1, len(s.dustEntryBuf))
-	s.buffers.Observe(3, len(s.drainBuf))
-	s.buffers.Observe(4, len(s.compositeBuf))
-	s.buffers.Observe(5, len(s.compositeIdx))
+	s.buffers.Observe(0, len(s.compositeBuf))
 
-	// Emit combat events for drains; the implicit single-hit form avoids a slice per drain
-	for _, drainEntity := range s.drainBuf {
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   attackType,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
-			TargetEntity: drainEntity,
-			HasOrigin:    true,
-			OriginX:      centerX,
-			OriginY:      centerY,
-		})
-	}
-
-	// Emit combat events for composites (batched by header)
 	for i := range s.compositeBuf {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   attackType,
-			OwnerEntity:  cursorEntity,
-			OriginEntity: cursorEntity,
+			AttackType:   attack,
+			OwnerEntity:  cursor,
+			OriginEntity: cursor,
 			TargetEntity: s.compositeBuf[i].header,
 			HitEntities:  s.compositeBuf[i].members,
 			HasOrigin:    true,
 			OriginX:      centerX,
 			OriginY:      centerY,
 		})
-	}
-
-	// Glyph death and dust spawn (dust only)
-	if convertGlyphs && len(s.entityBuf) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.entityBuf...)
-
-		event.EmitBatch(s.world.Resources.Event.Queue, event.DustBatchPool, event.EventDustSpawnBatchRequest, s.dustEntryBuf)
-
-		s.statConverted.Add(int64(len(s.entityBuf)))
 	}
 }

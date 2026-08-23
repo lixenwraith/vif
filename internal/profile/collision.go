@@ -80,8 +80,7 @@ var (
 
 // --- Dust ---
 var (
-	DustToDrain     = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
-	DustToComposite = accumulate(MassDust, MassQuasar, parameter.DrainDeflectAngleVar, OffsetNone)
+	DustToDrain = accumulate(MassDust, MassDrain, parameter.DrainDeflectAngleVar, OffsetNone)
 )
 
 // --- Soft collision (inter-species scatter) ---

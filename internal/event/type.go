@@ -266,6 +266,8 @@ const (
 
 	// EventExplosionRequest (ExplosionRequestPayload) triggers explosion effect at location
 	EventExplosionRequest
+	// EventExplosionBatchRequest (ExplosionBatchRequestPayload) triggers one explosion made of several centers
+	EventExplosionBatchRequest
 
 	// --- Dust ---
 

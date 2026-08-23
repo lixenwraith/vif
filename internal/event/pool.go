@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // --- Death request pool ---
@@ -69,4 +70,35 @@ func ReleaseWallBatchRequest(p *WallBatchSpawnRequestPayload) {
 	}
 	p.Cells = p.Cells[:0]
 	wallBatchRequestPool.Put(p)
+}
+
+// --- Explosion batch pool ---
+
+var explosionBatchRequestPool = sync.Pool{
+	New: func() any {
+		return &ExplosionBatchRequestPayload{
+			Centers: make([]ExplosionCenterEntry, 0, parameter.ExplosionCenterCap),
+		}
+	},
+}
+
+// AcquireExplosionBatchRequest returns a pooled payload with a zero-length retained-capacity slice
+func AcquireExplosionBatchRequest() *ExplosionBatchRequestPayload {
+	p := explosionBatchRequestPool.Get().(*ExplosionBatchRequestPayload)
+	p.Centers = p.Centers[:0]
+	p.Entity = 0
+	p.Radius = 0
+	p.Duration = 0
+	p.Attack = component.CombatAttackNone
+	p.Type = 0
+	return p
+}
+
+// ReleaseExplosionBatchRequest returns payload to pool
+func ReleaseExplosionBatchRequest(p *ExplosionBatchRequestPayload) {
+	if p == nil {
+		return
+	}
+	p.Centers = p.Centers[:0]
+	explosionBatchRequestPool.Put(p)
 }

@@ -44,7 +44,10 @@ const (
 	// ExplosionFieldDuration is total fade time
 	ExplosionFieldDuration = 300 * time.Millisecond
 
-	// ExplosionCenterCap is maximum concurrent explosion centers
+	// ExplosionFieldDurationNano is ExplosionFieldDuration in nanoseconds for integer age math
+	ExplosionFieldDurationNano = int64(ExplosionFieldDuration)
+
+	// ExplosionCenterCap is maximum concurrent explosion centers and maximum centers one batch explosion can request
 	ExplosionCenterCap = 256
 
 	// ExplosionMergeThreshold is distance for center merging (cells)

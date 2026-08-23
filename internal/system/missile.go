@@ -135,6 +135,7 @@ func (s *MissileSystem) Update() {
 				Y:      y,
 				Radius: parameter.MissileExplosionRadius,
 				Type:   event.ExplosionTypeMissile,
+				Attack: component.CombatAttackMissile,
 			})
 			toDestroy = append(toDestroy, missileEntity)
 			s.statImpacts.Add(1)

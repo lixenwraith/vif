@@ -89,14 +89,8 @@ func (r *ExplosionRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	r.resetDirtyRects()
 
 	// Accumulation pass: rasterize centers into type-specific buffers
-	durationNano := transRes.ExplosionDurNano
-	if durationNano <= 0 {
-		durationNano = 1
-	}
-
 	for i := range centers {
-		c := &centers[i]
-		r.accumulateCenter(ctx, c, durationNano)
+		r.accumulateCenter(ctx, &centers[i])
 	}
 
 	// Render both types
@@ -127,7 +121,7 @@ func (r *ExplosionRenderer) resetDirtyRects() {
 	r.eyeMaxX, r.eyeMaxY = -1, -1
 }
 
-func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine.ExplosionCenter, durationNano int64) {
+func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine.ExplosionCenter) {
 	// Transform center from map coords to viewport coords
 	centerVX, centerVY, visible := ctx.MapToViewport(c.X, c.Y)
 	if !visible {
@@ -137,6 +131,10 @@ func (r *ExplosionRenderer) accumulateCenter(ctx render.RenderContext, c *engine
 	}
 
 	// Time decay via LUT
+	durationNano := c.DurNano
+	if durationNano <= 0 {
+		durationNano = parameter.ExplosionFieldDurationNano
+	}
 	ageIndex := min(int(c.Age*100/durationNano), 100)
 	timeDecay := vmath.ExpDecayF(ageIndex)
 

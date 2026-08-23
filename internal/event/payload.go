@@ -490,13 +490,29 @@ const (
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
 )
 
-// ExplosionRequestPayload contains parameters for explosion effect
+// ExplosionRequestPayload describes one explosion center: geometry, combat family and
+// visual variant. Attack has no safe zero value; producers must set it explicitly.
 type ExplosionRequestPayload struct {
-	Entity core.Entity   `toml:"entity"`
-	X      int           `toml:"x"`
-	Y      int           `toml:"y"`
-	Radius float64       `toml:"radius"` // 0 = use default
-	Type   ExplosionType `toml:"type"`   // Explosion variant
+	Entity   core.Entity                `toml:"entity"` // Owner cursor, credited for damage
+	X        int                        `toml:"x"`
+	Y        int                        `toml:"y"`
+	Radius   float64                    `toml:"radius"`   // 0 = ExplosionFieldRadius
+	Duration time.Duration              `toml:"duration"` // 0 = ExplosionFieldDuration
+	Attack   component.CombatAttackType `toml:"attack"`   // CombatAttackNone = visual only
+	Type     ExplosionType              `toml:"type"`     // Palette selection
+}
+
+// ExplosionBatchRequestPayload describes one explosion made of several centers sharing
+// geometry, combat family and visual variant. Pooled: the consumer releases it.
+// Producers must truncate Centers at parameter.ExplosionRequestCenterCap so a
+// map-wide detonation cannot flood the event queue or the center array.
+type ExplosionBatchRequestPayload struct {
+	Centers  []ExplosionCenterEntry
+	Entity   core.Entity
+	Radius   float64
+	Duration time.Duration
+	Attack   component.CombatAttackType
+	Type     ExplosionType
 }
 
 // --- Dust ---

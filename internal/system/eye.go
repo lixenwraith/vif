@@ -196,6 +196,7 @@ func (s *EyeSystem) Update() {
 					Y:      headerPos.Y,
 					Radius: parameter.EyeSelfDestructRadius,
 					Type:   event.ExplosionTypeEye,
+					Attack: component.CombatAttackNone,
 				})
 			}
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{

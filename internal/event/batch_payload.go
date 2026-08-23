@@ -44,3 +44,9 @@ type DecaySpawnEntry struct {
 	Char          rune
 	SkipStartCell bool
 }
+
+// ExplosionCenterEntry is one explosion center position
+type ExplosionCenterEntry struct {
+	X int `toml:"x"`
+	Y int `toml:"y"`
+}

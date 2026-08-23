@@ -11,14 +11,13 @@ import (
 // TransientResource holds short-lived visual effect state
 // Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
-	// Screen-space post-process effects
+	// Screen-space post-process effects (local view state)
 	Grayout GrayoutState
 	Strobe  StrobeState
 
-	// Spatial explosion effects (fixed backing, zero alloc)
+	// Spatial explosion effects, shared (fixed backing, zero alloc)
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
-	ExplosionDurNano int64
 }
 
 // GrayoutState controls screen desaturation effect
@@ -42,21 +41,19 @@ type ExplosionCenter struct {
 	Radius    float64             // Cells
 	Intensity float64             // Scale = 1.0 base
 	Age       int64               // Nanoseconds since spawn
+	DurNano   int64               // Lifetime in nanoseconds
 	Type      event.ExplosionType // Explosion variant for palette selection
 }
 
 // NewTransientResource creates initialized resource
 func NewTransientResource() *TransientResource {
-	return &TransientResource{
-		ExplosionDurNano: parameter.ExplosionFieldDuration.Nanoseconds(),
-	}
+	return &TransientResource{}
 }
 
-// Reset clears all transient state for new game
+// Reset clears view-effect state for a new game; centers are cleared by their owning system
 func (r *TransientResource) Reset() {
 	r.Grayout = GrayoutState{}
 	r.Strobe = StrobeState{}
-	r.ExplosionCount = 0
 }
 
 // --- Explosion API (prep for Phase 3) ---
