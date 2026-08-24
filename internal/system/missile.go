@@ -18,6 +18,9 @@ import (
 type MissileSystem struct {
 	world *engine.World
 
+	// Player-domain blast scratch for impact resolution
+	blast blastArea
+
 	statCount          *atomic.Int64
 	statSpawned        *atomic.Int64
 	statImpacts        *atomic.Int64
@@ -129,6 +132,11 @@ func (s *MissileSystem) Update() {
 
 		if s.updateMissile(missileComp, kineticComp, dtSec) {
 			x, y := physics.GridPos(&kineticComp.Kinetic)
+
+			// Missile is player-domain: resolve its own half before the request crosses
+			s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
+			strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)
+
 			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 				Entity: missileComp.Owner,
 				X:      x,

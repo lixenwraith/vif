@@ -57,7 +57,6 @@ var cursorDefenders = [...]component.CombatEntityType{
 
 // eyeTargets lists everything an eye can self-destruct against
 var eyeTargets = [...]component.CombatEntityType{
-	component.CombatEntityDrain,
 	component.CombatEntityQuasar,
 	component.CombatEntitySwarm,
 	component.CombatEntityStorm,

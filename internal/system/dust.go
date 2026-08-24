@@ -17,11 +17,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
 
-const (
-	cellFlagDrain           uint8 = 1
-	cellFlagCombatComposite uint8 = 2
-)
-
 // collisionContext caches the tick's drain cells; dust never enumerates the grid.
 // One drain per cell: co-located drains destroy each other in the same tick.
 type collisionContext struct {
@@ -178,7 +173,12 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 		}
 	}
 
+	// A pooled payload is released on every path, disabled included
 	if !s.enabled {
+		s.rejects.disabled.Add(1)
+		if p, ok := ev.Payload.(*event.BatchPayload[event.DustSpawnEntry]); ok {
+			event.DustBatchPool.Release(p)
+		}
 		return
 	}
 
@@ -593,7 +593,136 @@ func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
 }
 
-// TODO: move to parameter/particle.go and visual/color.go
+// detonateDust converts every dust particle into an explosion center, resolves the
+// player-domain half of the blast, then hands the geometry to ExplosionSystem.
+func (s *DustSystem) detonateDust(cursor core.Entity) {
+	dusts := s.world.Components.Dust.Entities()
+	if len(dusts) == 0 {
+		return
+	}
+
+	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	if !ok {
+		return
+	}
+
+	// One center per occupied cell, collected in dense store order so merge order is stable
+	clear(s.centerCells)
+	s.centerBuf = s.centerBuf[:0]
+	s.destroyBuf = append(s.destroyBuf[:0], dusts...)
+	for _, e := range s.destroyBuf {
+		pos, ok := s.world.Positions.GetPosition(e)
+		if !ok {
+			continue
+		}
+		key := posKey(pos.X, pos.Y)
+		if _, seen := s.centerCells[key]; seen {
+			continue
+		}
+		s.centerCells[key] = struct{}{}
+		if len(s.centerBuf) == parameter.ExplosionCenterCap {
+			s.statCentersDropped.Add(1)
+			continue
+		}
+		s.centerBuf = append(s.centerBuf, event.ExplosionCenterEntry{X: pos.X, Y: pos.Y})
+	}
+	s.buffers.Observe(bufDustCenters, len(s.centerBuf))
+
+	// DustSystem owns dust lifecycle, so destruction needs no death-system round trip
+	destroyed := len(s.destroyBuf)
+	s.world.DestroyEntitiesBatch(s.destroyBuf)
+	s.destroyBuf = s.destroyBuf[:0]
+	s.statDestroyed.Add(int64(destroyed))
+
+	if len(s.centerBuf) == 0 {
+		return
+	}
+	s.blast.reset(s.centerBuf, parameter.ExplosionFieldRadius)
+
+	s.convertGlyphs(cursorPos.X, cursorPos.Y, &s.blast)
+	strikePlayerTargets(s.world, cursor, &s.blast, component.CombatAttackExplosion)
+
+	// The crossing: geometry and combat family only, no player entity reference
+	p := event.AcquireExplosionBatchRequest()
+	p.Entity = cursor
+	p.Radius = parameter.ExplosionFieldRadius
+	p.Duration = parameter.ExplosionFieldDuration
+	p.Type = event.ExplosionTypeDust
+	p.Attack = component.CombatAttackExplosion
+	p.Centers = append(p.Centers, s.centerBuf...)
+	s.world.PushEvent(event.EventExplosionBatchRequest, p)
+}
+
+// convertGlyphs turns loose glyphs into dust and flashes the dark ones.
+// A nil area converts the whole field; composite members are never converted.
+func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
+	glyphEntities := s.world.Components.Glyph.Entities()
+	if len(glyphEntities) == 0 {
+		return
+	}
+
+	s.transformBuf = s.transformBuf[:0]
+	s.flashBuf = s.flashBuf[:0]
+	s.destroyBuf = s.destroyBuf[:0]
+
+	for _, glyphEntity := range glyphEntities {
+		if s.world.Components.Member.HasEntity(glyphEntity) {
+			continue
+		}
+		glyphComp, ok := s.world.Components.Glyph.GetPtr(glyphEntity)
+		if !ok {
+			continue
+		}
+
+		// Dark glyphs carry no dust, so they die through the death API for the flash
+		if glyphComp.Level == component.GlyphDark {
+			if area != nil {
+				pos, ok := s.world.Positions.GetPosition(glyphEntity)
+				if !ok || !area.contains(pos.X, pos.Y) {
+					continue
+				}
+			}
+			s.flashBuf = append(s.flashBuf, glyphEntity)
+			continue
+		}
+
+		glyphPos, ok := s.world.Positions.GetPosition(glyphEntity)
+		if !ok {
+			continue
+		}
+		if area != nil && !area.contains(glyphPos.X, glyphPos.Y) {
+			continue
+		}
+		s.destroyBuf = append(s.destroyBuf, glyphEntity)
+		s.transformBuf = append(s.transformBuf, glyphTransform{
+			x: glyphPos.X, y: glyphPos.Y, char: glyphComp.Rune, level: glyphComp.Level,
+		})
+	}
+	s.buffers.Observe(bufDustTransform, len(s.transformBuf))
+	s.buffers.Observe(bufDustFlash, len(s.flashBuf))
+
+	if len(s.flashBuf) > 0 {
+		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf...)
+	}
+	if len(s.transformBuf) == 0 {
+		return
+	}
+
+	s.world.DestroyEntitiesBatch(s.destroyBuf)
+	s.destroyBuf = s.destroyBuf[:0]
+
+	posBatch := s.world.Positions.BeginBatch()
+	for _, gt := range s.transformBuf {
+		entity := s.world.CreateEntity()
+		s.setDustComponents(entity, gt.x, gt.y, gt.char, gt.level, cursorX, cursorY)
+		posBatch.Add(entity, component.PositionComponent{X: gt.x, Y: gt.y})
+	}
+	posBatch.CommitForce()
+
+	s.statCreated.Add(int64(len(s.transformBuf)))
+}
+
+// TODO: move to parameter/particle.go and visual/color.go?
 func (s *DustSystem) dustProperties(level component.GlyphLevel) (time.Duration, color.RGB) {
 	switch level {
 	case component.GlyphDark:
