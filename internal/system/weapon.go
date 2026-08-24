@@ -599,8 +599,12 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			s.statRodFired.Add(1)
 
 			rodOrbEntity := weaponComp.Orbs[wt]
+			originX, originY := cursorPos.X, cursorPos.Y
 			if rodOrbEntity != 0 {
 				s.triggerOrbFlash(rodOrbEntity)
+				if orbPos, ok := s.world.Positions.GetPosition(rodOrbEntity); ok {
+					originX, originY = orbPos.X, orbPos.Y
+				}
 			}
 
 			// Rod fires at unique targets only - assignments may repeat under overflow
@@ -614,9 +618,12 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursor,
-					OriginEntity: rodOrbEntity,
+					OriginEntity: cursor,
 					TargetEntity: a.Target,
 					HitEntity:    a.Hit,
+					HasOrigin:    true,
+					OriginX:      originX,
+					OriginY:      originY,
 				})
 			}
 

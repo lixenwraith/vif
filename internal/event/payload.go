@@ -731,13 +731,21 @@ type LightningDespawnRequestPayload struct {
 
 // --- Combat ---
 
-// CombatAttackDirectRequestPayload contains direct attack information
+// CombatAttackDirectRequestPayload contains direct attack information.
+// HasOrigin/HasVelocity carry the emitter's geometry explicitly, so a player-domain
+// emitter (orb, cleaner, bullet) describes itself without naming its entity.
 type CombatAttackDirectRequestPayload struct {
 	OwnerEntity  core.Entity                `toml:"owner_entity"`
 	OriginEntity core.Entity                `toml:"origin_entity"`
 	TargetEntity core.Entity                `toml:"target_entity"`
 	HitEntity    core.Entity                `toml:"hit_entity"`
+	OriginVelX   float64                    `toml:"origin_vel_x"`
+	OriginVelY   float64                    `toml:"origin_vel_y"`
+	OriginX      int                        `toml:"origin_x"`
+	OriginY      int                        `toml:"origin_y"`
 	AttackType   component.CombatAttackType `toml:"attack_type"`
+	HasOrigin    bool                       `toml:"has_origin"`
+	HasVelocity  bool                       `toml:"has_velocity"`
 	ChainDepth   uint8                      `toml:"chain_depth"`
 }
 

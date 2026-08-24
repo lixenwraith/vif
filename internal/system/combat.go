@@ -272,6 +272,29 @@ func (s *CombatSystem) Update() {
 	}
 }
 
+// resolveOrigin returns the effect origin in cells: explicit payload geometry first,
+// then the origin entity's position.
+func (s *CombatSystem) resolveOrigin(hasOrigin bool, x, y int, originEntity core.Entity) (int, int, bool) {
+	if hasOrigin {
+		return x, y, true
+	}
+	if pos, ok := s.world.Positions.GetPosition(originEntity); ok {
+		return pos.X, pos.Y, true
+	}
+	return 0, 0, false
+}
+
+// resolveOriginVelocity returns the impactor velocity for a kinetic profile.
+func (s *CombatSystem) resolveOriginVelocity(hasVelocity bool, vx, vy float64, originEntity core.Entity) (float64, float64, bool) {
+	if hasVelocity {
+		return vx, vy, true
+	}
+	if k, ok := s.world.Components.Kinetic.GetPtr(originEntity); ok {
+		return k.VelX, k.VelY, true
+	}
+	return 0, 0, false
+}
+
 // applyHitDirect applies combat hit to a target.
 // Combat pointers stay valid: no path below inserts into or removes from the store.
 func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPayload) {
@@ -318,6 +341,10 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		s.statUnprofiled.Add(1)
 		return
 	}
+
+	// Emitter geometry, resolved once for every effect below
+	originX, originY, hasOriginPos := s.resolveOrigin(
+		payload.HasOrigin, payload.OriginX, payload.OriginY, payload.OriginEntity)
 	resolved := false
 	damageCursor := s.world.ResolveCursor(payload.OwnerEntity)
 	if damageCursor == 0 {
@@ -387,7 +414,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 
 	// Apply effects
 	if attack.EffectMask&component.CombatEffectVampireDrain != 0 {
-		if s.applyVampireDrain(payload.OwnerEntity, payload.OriginEntity, payload.HitEntity) {
+		if s.applyVampireDrain(payload.OwnerEntity, payload.HitEntity, originX, originY, hasOriginPos) {
 			s.statEffectVampire.Add(1)
 			resolved = true
 		}
@@ -395,7 +422,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
 		// Kinetic applies to header (composite moves as unit), check header immunity
 		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
-			if s.applyCollision(payload.OriginEntity, payload.TargetEntity, payload.HitEntity, attack.Collision) {
+			originVelX, originVelY, hasVel := s.resolveOriginVelocity(
+				payload.HasVelocity, payload.OriginVelX, payload.OriginVelY, payload.OriginEntity)
+			if hasVel && s.applyCollision(originVelX, originVelY, payload.TargetEntity, payload.HitEntity, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
 			}
@@ -600,11 +629,10 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	}
 }
 
-// applyVampireDrain handles energy steal and lightning VFX directly
-// ownerEntity: receives energy (cursor)
-// originEntity: lightning origin (orb or cursor)
-// targetEntity: lightning target (hit entity)
-func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity core.Entity) bool {
+// applyVampireDrain grants energy to the owner cursor and draws the zap from the
+// attack's emitter to the hit entity. The zap is player-domain: only the instance
+// owning the attack draws it.
+func (s *CombatSystem) applyVampireDrain(ownerEntity, targetEntity core.Entity, originX, originY int, hasOrigin bool) bool {
 	energyComp, ok := s.world.Components.Energy.GetPtr(ownerEntity)
 	if !ok {
 		return false
@@ -619,9 +647,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 		Type:       component.EnergyDeltaReward,
 	})
 
-	// Lightning VFX
-	originPos, ok := s.world.Positions.GetPosition(originEntity)
-	if !ok {
+	if !hasOrigin || !s.world.Resources.Player.IsLocal(ownerEntity) {
 		return true
 	}
 	targetPos, ok := s.world.Positions.GetPosition(targetEntity)
@@ -636,11 +662,10 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 
 	s.world.PushEvent(event.EventLightningSpawnRequest, &event.LightningSpawnRequestPayload{
 		Owner:        ownerEntity,
-		OriginX:      originPos.X,
-		OriginY:      originPos.Y,
+		OriginX:      originX,
+		OriginY:      originY,
 		TargetX:      targetPos.X,
 		TargetY:      targetPos.Y,
-		OriginEntity: originEntity,
 		TargetEntity: targetEntity,
 		ColorType:    lightningColor,
 		Duration:     parameter.LightningZapDuration,
@@ -649,13 +674,15 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, originEntity, targetEntity
 	return true
 }
 
-func (s *CombatSystem) applyCollision(originEntity, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
-	originKineticComp, ok := s.world.Components.Kinetic.GetPtr(originEntity)
-	if !ok {
-		return false
+func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEntity, hitEntity core.Entity, collisionProfile *physics.CollisionProfile) bool {
+	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
+	if hitEntity != targetEntity {
+		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
+			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
+			s.statKnock.Add(1)
+			return true
+		}
 	}
-	originVelX := originKineticComp.VelX
-	originVelY := originKineticComp.VelY
 
 	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
 	if hitEntity != targetEntity {
