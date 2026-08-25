@@ -103,7 +103,7 @@ func NewGlyphSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *GlyphSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.census = glyphCensus{}
 
 	s.nextSpawnTimer = time.Duration(0)
@@ -343,7 +343,7 @@ func (s *GlyphSystem) placeLine(line string, glyphType component.GlyphType, glyp
 				continue
 			}
 			s.placement = append(s.placement, glyphPlacement{
-				entity: s.world.CreateEntity(),
+				entity: s.world.CreateEntity(core.DomainPlayer),
 				pos:    component.PositionComponent{X: startCol + i, Y: row},
 				char:   lineRunes[i],
 			})

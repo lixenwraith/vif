@@ -104,7 +104,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *DrainSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.pendingSpawns = s.pendingSpawns[:0]
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
@@ -702,7 +702,7 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		return
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 
 	pos := component.PositionComponent{
 		X: spawnX,

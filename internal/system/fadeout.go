@@ -106,7 +106,7 @@ func (s *FadeoutSystem) Update() {
 }
 
 func (s *FadeoutSystem) spawnFadeout(x, y int, char rune, fgColor, bgColor color.RGB) {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Fadeout.SetComponent(entity, component.FadeoutComponent{
 		Char:      char,
 		FgColor:   fgColor,

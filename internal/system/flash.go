@@ -106,7 +106,7 @@ func (s *FlashSystem) Update() {
 
 // spawnDestructionFlash creates a flash effect at the given position
 func (s *FlashSystem) spawnDestructionFlash(x, y int, char rune) {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Flash.SetComponent(entity,
 		component.FlashComponent{
 			Rune:      char,

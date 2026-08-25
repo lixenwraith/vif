@@ -48,7 +48,7 @@ func NewSnakeSystem(world *engine.World) engine.System {
 }
 
 func (s *SnakeSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
@@ -288,7 +288,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 		parameter.SnakeHeadHeaderOffsetX, parameter.SnakeHeadHeaderOffsetY)
 
 	// Create root entity (container) - does not have a position
-	rootEntity := s.world.CreateEntity()
+	rootEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Components.Protection.SetComponent(rootEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
@@ -331,7 +331,7 @@ func (s *SnakeSystem) spawnSnake(payload *event.SnakeSpawnRequestPayload) {
 }
 
 func (s *SnakeSystem) createHead(rootEntity core.Entity, headX, headY int) core.Entity {
-	headEntity := s.world.CreateEntity()
+	headEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(headEntity, component.PositionComponent{X: headX, Y: headY})
 
 	// Protected header
@@ -405,7 +405,7 @@ func (s *SnakeSystem) createHeadMembers(headEntity core.Entity, headX, headY int
 			memberX := headX + offsetX
 			memberY := headY + offsetY
 
-			memberEntity := s.world.CreateEntity()
+			memberEntity := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(memberEntity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{
@@ -428,7 +428,7 @@ func (s *SnakeSystem) createHeadMembers(headEntity core.Entity, headX, headY int
 }
 
 func (s *SnakeSystem) createBodyHeader(rootEntity core.Entity, headX, headY int) core.Entity {
-	bodyEntity := s.world.CreateEntity()
+	bodyEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(bodyEntity, component.PositionComponent{X: headX, Y: headY})
 
 	s.world.Components.Protection.SetComponent(bodyEntity, component.ProtectionComponent{
@@ -533,7 +533,7 @@ func (s *SnakeSystem) createBodySegmentMembers(bodyEntity core.Entity, centerX, 
 			continue
 		}
 
-		memberEntity := s.world.CreateEntity()
+		memberEntity := s.world.CreateEntity(core.DomainShared)
 		s.world.Positions.SetPosition(memberEntity, component.PositionComponent{X: memberX, Y: memberY})
 
 		s.world.Components.Protection.SetComponent(memberEntity, component.ProtectionComponent{

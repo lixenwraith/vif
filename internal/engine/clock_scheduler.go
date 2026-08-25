@@ -1003,7 +1003,8 @@ func (cs *ClockScheduler) executeReset() {
 	session := cs.world.Resources.Rand.NextSession()
 	vlog.Info("app", "msg", "rng session", "session", session)
 	w, h := ScreenSize(cs.world.Resources.Config)
-	cs.world.Resources.Event.Queue.AnchorJournal(session, cs.ctl.Scale().String(), w, h)
+	cs.world.Resources.Event.Queue.AnchorJournal(session, cs.ctl.Scale().String(),
+		cs.world.Resources.Player.LocalSlot(), w, h)
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
@@ -1019,10 +1020,12 @@ func (cs *ClockScheduler) processTick() {
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
 	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
+	SetDomainAudit(vlog.On("domain", vlog.LevelDebug))
 
 	var (
 		tickTime         time.Time // this tick's game instant, read once under the lock
 		screenW, screenH int       // terminal dims for the anchor, derived under the lock
+		slot             uint8     // local roster slot for the anchor, read under the lock
 		ticks            uint64
 		dropped          uint64
 		droppedDelta     uint64
@@ -1108,6 +1111,7 @@ func (cs *ClockScheduler) processTick() {
 			cs.publishEventTelemetry()
 		}
 		screenW, screenH = ScreenSize(cs.world.Resources.Config)
+		slot = cs.world.Resources.Player.LocalSlot()
 	})
 
 	if bs := cs.ctl.Expire(ticks); bs != nil {
@@ -1129,6 +1133,7 @@ func (cs *ClockScheduler) processTick() {
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
 		cs.world.Resources.Event.Queue.AnchorJournal(
-			cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(), screenW, screenH)
+			cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(),
+			slot, screenW, screenH)
 	}
 }

@@ -2,6 +2,7 @@ package system
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -129,7 +130,7 @@ func (s *MarkerSystem) spawnMarker(p *event.MarkerSpawnRequestPayload) {
 		intensity = 1.0
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 
 	s.world.Components.Marker.SetComponent(entity, component.MarkerComponent{
 		X:         p.X,

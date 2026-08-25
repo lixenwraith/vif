@@ -320,7 +320,7 @@ func (d *ReplayDriver) injectGroup(k groupKey) error {
 		if err != nil {
 			return fmt.Errorf("replay: jseq %d %s: %w", rec.JSeq, event.GetEventName(rec.Type), err)
 		}
-		d.a.ctx.PushEventOrigin(rec.Type, payload, rec.Origin)
+		d.a.ctx.PushEventFull(rec.Type, payload, rec.Origin, rec.Domain)
 		pushed++
 	}
 	if pushed > 0 {

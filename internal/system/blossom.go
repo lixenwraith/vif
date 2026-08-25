@@ -57,7 +57,7 @@ func NewBlossomSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *BlossomSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	clear(s.blossomedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
@@ -154,7 +154,7 @@ func (s *BlossomSystem) spawnSingleBlossom(x, y int, char rune, skipStartCell bo
 	velY := -speed
 	accelY := -parameter.ParticleAcceleration
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 
 	// 1. Grid Positions
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})

@@ -66,7 +66,7 @@ func TestCursorOverlapIncludesEveryTouchingPlayer(t *testing.T) {
 	})
 	w.Resources.Event.Queue.Consume()
 
-	entity := w.CreateEntity()
+	entity := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(entity, component.PositionComponent{X: 5, Y: 5})
 
 	overlaps := CheckCursorOverlaps(w, entity)
@@ -163,7 +163,7 @@ func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 		t.Fatalf("slot-one cursor %d was treated as a combat target", second)
 	}
 
-	target := w.CreateEntity()
+	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 16, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
@@ -269,7 +269,7 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
 
-	unit := w.CreateEntity()
+	unit := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(unit, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(unit, component.CombatComponent{
 		OwnerEntity:      unit,
@@ -286,8 +286,8 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 		t.Fatalf("unit combat = %#v, want fatal credit for cursor %d", unitCombat, cursor)
 	}
 
-	header := w.CreateEntity()
-	member := w.CreateEntity()
+	header := w.CreateEntity(core.DomainShared)
+	member := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(header, component.PositionComponent{X: 10, Y: 5})
 	w.Positions.SetPosition(member, component.PositionComponent{X: 10, Y: 5})
 	w.Components.Header.SetComponent(header, component.HeaderComponent{
@@ -316,7 +316,7 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 		t.Fatalf("ablative combat = header %#v member %#v, want fatal credit for cursor %d", headerCombat, memberCombat, cursor)
 	}
 
-	areaTarget := w.CreateEntity()
+	areaTarget := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(areaTarget, component.PositionComponent{X: 12, Y: 5})
 	w.Components.Combat.SetComponent(areaTarget, component.CombatComponent{
 		OwnerEntity:      areaTarget,
@@ -337,7 +337,7 @@ func TestCombatRecordsCursorDamageCreditOnUnitAndAblativeHeader(t *testing.T) {
 func TestCombatTelemetryAttributesDamageAbsorptionAndChains(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
-	target := w.CreateEntity()
+	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
@@ -377,10 +377,10 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
 
-	target := w.CreateEntity()
+	target := w.CreateEntity(core.DomainShared)
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
-		CombatEntityType: component.CombatEntityDrain,
+		CombatEntityType: component.CombatEntitySwarm,
 		HitPoints:        parameter.CombatDamageCleaner + parameter.CombatDamageEyeSelfDestruct,
 	})
 	combat.applyHitDirect(&event.CombatAttackDirectRequestPayload{
@@ -393,7 +393,7 @@ func TestCombatClearsStaleCursorCreditWhenSpeciesDealsFatalDamage(t *testing.T) 
 	targetCombat.RemainingDamageImmunity = 0
 	w.Components.Combat.SetComponent(target, targetCombat)
 
-	eye := w.CreateEntity()
+	eye := w.CreateEntity(core.DomainShared)
 	w.Components.Combat.SetComponent(eye, component.CombatComponent{
 		OwnerEntity:      eye,
 		CombatEntityType: component.CombatEntityEye,
@@ -414,7 +414,7 @@ func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
 	w, _, killer := testCursorWorld(t)
 	towers := NewTowerSystem(w).(*TowerSystem)
 
-	header := w.CreateEntity()
+	header := w.CreateEntity(core.DomainShared)
 	w.Components.Tower.SetComponent(header, component.TowerComponent{
 		SpawnX: 7,
 		SpawnY: 9,
@@ -438,7 +438,7 @@ func TestTowerDeathEmitsSpeciesKillWithOptionalCursorCredit(t *testing.T) {
 		t.Fatalf("tower kill events = %d, want 1", kills)
 	}
 
-	uncredited := w.CreateEntity()
+	uncredited := w.CreateEntity(core.DomainShared)
 	w.Components.Tower.SetComponent(uncredited, component.TowerComponent{SpawnX: 3, SpawnY: 4})
 	w.Components.Combat.SetComponent(uncredited, component.CombatComponent{})
 	towers.handleTowerDeath(uncredited)
@@ -494,7 +494,7 @@ func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	combat := NewCombatSystem(w).(*CombatSystem)
 
-	target := w.CreateEntity()
+	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 8, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,

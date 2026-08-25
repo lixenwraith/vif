@@ -69,7 +69,7 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.pity = make(map[component.SpeciesType]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
@@ -295,7 +295,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 		return
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 
 	// Calculate initial burst velocity

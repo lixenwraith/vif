@@ -201,7 +201,7 @@ func (s *CursorSystem) destroy(slot uint8) {
 // build creates one cursor entity with its full component set
 func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind, peerID uint32) core.Entity {
 	w := s.world
-	e := w.CreateEntity()
+	e := w.CreateEntity(core.DomainShared)
 
 	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: slot, Control: control, PeerID: peerID})

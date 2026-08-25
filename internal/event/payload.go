@@ -1039,7 +1039,7 @@ type TargetGroupRemovePayload struct {
 type RouteGraphRequestPayload struct {
 	SourceX       int    `toml:"source_x"` // Gateway spawn position
 	SourceY       int    `toml:"source_y"`
-	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity)
+	RouteGraphID  uint32 `toml:"route_graph_id"` // Opaque ID, typically uint32(gatewayEntity); valid only while route-graph anchors are shared, the domain tag sits above bit 32
 	TargetGroupID uint8  `toml:"target_group_id"`
 }
 

@@ -30,7 +30,7 @@ func NewLightningSystem(world *engine.World) engine.System {
 }
 
 func (s *LightningSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.enabled = true
 }
 
@@ -127,7 +127,7 @@ func (s *LightningSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *LightningSystem) spawnLightning(p *event.LightningSpawnRequestPayload) {
-	e := s.world.CreateEntity()
+	e := s.world.CreateEntity(core.DomainPlayer)
 
 	// Generate seed if not provided
 	pathSeed := p.PathSeed

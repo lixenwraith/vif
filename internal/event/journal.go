@@ -5,10 +5,11 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/toml"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
 // JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 5
+const JournalSchema = 6
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -30,6 +31,7 @@ type JournalRecord struct {
 	Boundary  uint64 // completed between-tick settles this tick
 	Type      EventType
 	Origin    Origin
+	Domain    core.Domain // producer domain; replication filters on it
 }
 
 // JournalAnchor is a self-describing header re-emitted periodically so a
@@ -61,6 +63,7 @@ type JournalAnchor struct {
 	TickInterval int64 // nanoseconds
 	Width        int   // terminal-equivalent dimensions the run started with
 	Height       int
+	Slot         uint64 // local cursor's roster slot; uint64 so the formatter does not stringify it
 }
 
 // JournalSink consumes journal output. Record is called on the producing
@@ -114,13 +117,13 @@ func (j *Journal) SetAnchor(a JournalAnchor, start Stamp) {
 	a.Schema = JournalSchema
 	a.StartRun, a.StartTick = start.Run, start.Tick
 	j.anchor.Store(&a)
-	j.Anchor(start, a.Session, a.Speed, a.Width, a.Height)
+	j.Anchor(start, a.Session, a.Speed, uint8(a.Slot), a.Width, a.Height)
 }
 
 // Anchor re-emits the template with the fields only the engine can supply.
-// Position and dimensions are live: a file rotated after a resize or a reset must
-// describe the geometry and generation its records were produced under.
-func (j *Journal) Anchor(st Stamp, session uint64, speed string, width, height int) {
+// Position, slot and dimensions are live: a file rotated after a resize, a
+// reset or a local-cursor rebind must describe what its records were produced under.
+func (j *Journal) Anchor(st Stamp, session uint64, speed string, slot uint8, width, height int) {
 	if j == nil {
 		return
 	}
@@ -132,6 +135,7 @@ func (j *Journal) Anchor(st Stamp, session uint64, speed string, width, height i
 	a.Run, a.Tick = st.Run, st.Tick
 	a.Session = session
 	a.Speed = speed
+	a.Slot = uint64(slot)
 	a.Width = width
 	a.Height = height
 	a.JSeq = j.seq.Load()
@@ -155,6 +159,7 @@ func (j *Journal) record(ev *GameEvent, st Stamp) {
 		Boundary:  st.Boundary,
 		Type:      ev.Type,
 		Origin:    ev.Origin,
+		Domain:    ev.Domain,
 	})
 }
 

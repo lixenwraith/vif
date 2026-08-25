@@ -315,7 +315,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 	params := &parameter.EyeTypeTable[eyeType]
 
 	// Phantom head
-	headerEntity := s.world.CreateEntity()
+	headerEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
 
 	s.world.Components.Protection.SetComponent(headerEntity, component.ProtectionComponent{
@@ -376,7 +376,7 @@ func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.E
 			offsetX := col - parameter.EyeHeaderOffsetX
 			offsetY := row - parameter.EyeHeaderOffsetY
 
-			entity := s.world.CreateEntity()
+			entity := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{

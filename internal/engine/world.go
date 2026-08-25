@@ -32,7 +32,9 @@ type World struct {
 	// The tick, event, input and render paths all acquire it.
 	// There is no inner locking.
 
-	nextEntityID  core.Entity
+	// nextEntityID counts per domain; index with core.Domain. Both start at 1
+	// so ID 0 is never issued and stays the "no entity" value.
+	nextEntityID  [core.DomainCount]uint64
 	componentMask map[core.Entity]uint64
 	updateMutex   UpdateMutex
 
@@ -47,15 +49,21 @@ type World struct {
 	// Written only under updateMutex via WithOrigin; atomic because lock-free
 	// pushers read it. CI guard: WithOrigin must not appear outside a locked path.
 	origin atomic.Int32
+
+	// domain tags events pushed by a system serving both domains. Written only
+	// under updateMutex via WithDomain; atomic because lock-free pushers read it.
+	domain atomic.Int32
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
 func NewWorld() *World {
 	w := &World{
-		nextEntityID:  1,
 		componentMask: make(map[core.Entity]uint64, 16384), // reasonable small screen size that doesn't require increase
 		Resources:     &Resource{Rand: NewRandResource(0)}, // app overwrites with the run seed
 		systems:       make([]System, 0),
+	}
+	for d := range w.nextEntityID {
+		w.nextEntityID[d] = 1
 	}
 
 	initComponents(w)
@@ -63,19 +71,41 @@ func NewWorld() *World {
 	return w
 }
 
-// CreateEntity reserves a new entity ID
+// CreateEntity reserves a new entity ID in the given domain
 // Caller holds updateMutex (all creation paths: systems, event handlers)
-func (w *World) CreateEntity() core.Entity {
-	id := w.nextEntityID
-	w.nextEntityID++
+func (w *World) CreateEntity(d core.Domain) core.Entity {
+	id := w.nextEntityID[d]
+	w.nextEntityID[d]++
 	// Mirror the count so telemetry never reads nextEntityID off-lock
 	w.createdCount.Add(1)
-	return id
+	return core.MakeEntity(d, id)
 }
+
+// WithOrigin runs fn with PushEvent tagging its events as origin, restoring the
+// previous tag. Caller MUST hold updateMutex: no system may run inside fn.
+func (w *World) WithOrigin(o event.Origin, fn func()) {
+	prev := w.origin.Swap(int32(o))
+	defer w.origin.Store(prev)
+	fn()
+}
+
+// WithDomain runs fn with PushEvent tagging its events as domain d, restoring the
+// previous tag. Caller MUST hold updateMutex: no system may run inside fn.
+func (w *World) WithDomain(d core.Domain, fn func()) {
+	prev := w.domain.Swap(int32(d))
+	defer w.domain.Store(prev)
+	fn()
+}
+
+// Domain returns the ambient producer domain
+func (w *World) Domain() core.Domain { return core.Domain(w.domain.Load()) }
 
 // AddComponentMask marks a component bit as active for the specified entity
 // Callers MUST hold updateMutex, matching removeEntity/wipeAll.
 func (w *World) AddComponentMask(e core.Entity, bit uint64) {
+	if domainAudit.Load() {
+		auditComponentDomain(e, bit)
+	}
 	w.componentMask[e] |= bit
 }
 
@@ -114,7 +144,9 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 // Caller MUST hold updateMutex: nextEntityID is update-mutex state
 // Session counters and the cursor roster reset with the entities they describe
 func (w *World) Clear() {
-	w.nextEntityID = 1
+	for d := range w.nextEntityID {
+		w.nextEntityID[d] = 1
+	}
 	w.createdCount.Store(0)
 	w.destroyedCount.Store(0)
 	w.Positions.ResetTelemetry()
@@ -203,32 +235,35 @@ func (w *World) UpdateLocked() {
 	}
 }
 
-// Rand returns the labelled RNG stream for the current session.
+// Rand returns the labelled RNG stream for a domain in the current session.
 // Single seeding entry point for systems: never seed from a clock.
-func (w *World) Rand(label string) *vmath.FastRand {
-	return w.Resources.Rand.Stream(label)
+func (w *World) Rand(d core.Domain, label string) *vmath.FastRand {
+	return w.Resources.Rand.Stream(d, label)
 }
 
-// WithOrigin runs fn with PushEvent tagging its events as origin, restoring the
-// previous tag. Caller MUST hold updateMutex: no system may run inside fn.
-func (w *World) WithOrigin(o event.Origin, fn func()) {
-	prev := w.origin.Swap(int32(o))
-	defer w.origin.Store(prev)
-	fn()
-}
-
-// PushEvent emits a game event carrying the ambient producer tag. HOT-PATH for all systems communication
+// PushEvent emits a game event carrying the ambient producer and domain tags. HOT-PATH for all systems communication
 func (w *World) PushEvent(eventType event.EventType, payload any) {
-	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()))
+	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.Domain(w.domain.Load()))
 }
 
-// PushEventOrigin emits with an explicit tag, for producers outside any WithOrigin scope
+// PushEventFull emits with explicit origin and domain tags, for replay and
+// transport, which restore both from a record rather than from the ambient tags
+func (w *World) PushEventFull(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
+	w.pushEvent(eventType, payload, origin, domain)
+}
+
+// PushEventOrigin emits with an explicit origin tag, for producers outside any WithOrigin scope
 func (w *World) PushEventOrigin(eventType event.EventType, payload any, origin event.Origin) {
-	w.pushEvent(eventType, payload, origin)
+	w.pushEvent(eventType, payload, origin, core.Domain(w.domain.Load()))
+}
+
+// PushEventDomain emits with an explicit domain tag, for producers outside any WithDomain scope
+func (w *World) PushEventDomain(eventType event.EventType, payload any, domain core.Domain) {
+	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
 }
 
 // pushEvent is the shared emit body; trace depth is measured from here
-func (w *World) pushEvent(eventType event.EventType, payload any, origin event.Origin) {
+func (w *World) pushEvent(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
 	if w.Resources.Event.Queue == nil {
 		return // Not yet initialized
 	}
@@ -241,6 +276,7 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 		Type:    eventType,
 		Payload: payload,
 		Origin:  origin,
+		Domain:  domain,
 	})
 }
 

@@ -116,17 +116,11 @@ func TestDrainIntegratesShieldKnockbackDuringKineticImmunity(t *testing.T) {
 func TestDrainIntegratesExplosionKnockbackDuringKineticImmunity(t *testing.T) {
 	w, cursor, drain, drains, combat := testDrainInteractionWorld(t, 5, 5, 8, 5)
 
-	explosion := NewExplosionSystem(w).(*ExplosionSystem)
-	explosion.HandleEvent(event.GameEvent{
-		Type: event.EventExplosionRequest,
-		Payload: &event.ExplosionRequestPayload{
-			Entity: cursor,
-			X:      5,
-			Y:      5,
-			Radius: 4,
-			Type:   event.ExplosionTypeDust,
-		},
-	})
+	// Player-domain half of a blast: the producer strikes its own domain before
+	// the shared explosion request crosses, so no shared system sees the drain
+	var area blastArea
+	area.reset([]event.ExplosionCenterEntry{{X: 5, Y: 5}}, 4)
+	strikePlayerTargets(w, cursor, &area, component.CombatAttackExplosion)
 	applyQueuedCombatArea(t, w, combat)
 
 	assertDrainKnockbackIntegrated(t, w, drain, drains)
@@ -179,8 +173,8 @@ func TestDrainCollisionHealsSharedSpeciesThroughCombatEvent(t *testing.T) {
 			drainCombat, _ := w.Components.Combat.GetPtr(drain)
 			drainCombat.HitPoints = 7
 
-			header := w.CreateEntity()
-			member := w.CreateEntity()
+			header := w.CreateEntity(core.DomainShared)
+			member := w.CreateEntity(core.DomainShared)
 			tc.setSpecies(w, header)
 			w.Components.Header.SetComponent(header, component.HeaderComponent{
 				Type: component.CompositeTypeUnit,

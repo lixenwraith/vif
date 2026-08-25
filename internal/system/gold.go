@@ -56,7 +56,7 @@ func NewGoldSystem(world *engine.World) engine.System {
 // Init resets session state for new game
 func (s *GoldSystem) Init() {
 	s.active = false
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
@@ -250,7 +250,7 @@ func (s *GoldSystem) spawnGold() bool {
 	}
 
 	// 1. Create Phantom Head entity (NO position yet)
-	headerEntity := s.world.CreateEntity()
+	headerEntity := s.world.CreateEntity(core.DomainShared)
 
 	// 2. Create member entities
 	type entityData struct {
@@ -264,7 +264,7 @@ func (s *GoldSystem) spawnGold() bool {
 
 	// Set position component to gold entities
 	for i := range parameter.GoldSequenceLength {
-		entity := s.world.CreateEntity()
+		entity := s.world.CreateEntity(core.DomainShared)
 		entities = append(entities, entityData{
 			entity: entity,
 			pos:    component.PositionComponent{X: x + i, Y: y},

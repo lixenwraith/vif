@@ -282,7 +282,7 @@ func (s *CompositeSystem) handleEmptyComposite(headerEntity core.Entity, headerC
 
 // CreateHeader spawns an invisible head entity, returns phantom head entity
 func (s *CompositeSystem) CreateHeader(x, y int, behaviorID component.Behavior) core.Entity {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 
 	// Positions at anchor point
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})

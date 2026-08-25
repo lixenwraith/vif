@@ -1,11 +1,14 @@
 package event
 
+import "github.com/lixenwraith/vi-fighter/internal/core"
+
 // GameEvent represents a single game event with metadata
 type GameEvent struct {
 	Payload any
 	Type    EventType
-	Seq     uint64 // Monotonic queue slot, stamped at push; orders events within a tick
-	Origin  Origin // Producer, for journaling and replay; never affects dispatch
+	Seq     uint64      // Monotonic queue slot, stamped at push; orders events within a tick
+	Origin  Origin      // Producer, for journaling and replay; never affects dispatch
+	Domain  core.Domain // Producer domain, for journaling and replication; never affects dispatch
 }
 
 // EventType represents the type of game event

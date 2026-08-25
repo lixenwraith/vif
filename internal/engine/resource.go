@@ -248,14 +248,16 @@ func (r *RandResource) Session() uint64 { return r.session.Load() }
 // finished initializing, so the next game draws different streams from one root.
 func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 
-// Stream returns the labelled generator for the current session
-func (r *RandResource) Stream(label string) *vmath.FastRand {
-	return vmath.NewSeededRand(r.sessionRoot(), label)
+// Stream returns the labelled generator for a domain in the current session
+func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
+	return vmath.NewSeededRand(r.DomainRoot(d), label)
 }
 
-// SessionRoot returns the current session's root seed, for packages that build
-// their own generator instead of a vmath stream.
-func (r *RandResource) SessionRoot() uint64 { return r.sessionRoot() }
+// DomainRoot returns a domain's root seed, for packages that build their own
+// generator instead of a vmath stream.
+func (r *RandResource) DomainRoot(d core.Domain) uint64 {
+	return vmath.DeriveSeed(r.sessionRoot(), core.DomainNames[d])
+}
 
 // sessionRoot folds the session counter into the root; session 0 is the root itself
 func (r *RandResource) sessionRoot() uint64 {

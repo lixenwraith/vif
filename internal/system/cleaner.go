@@ -415,7 +415,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 		kineticComp := component.KineticComponent{Kinetic: kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := s.world.CreateEntity()
+		entity := s.world.CreateEntity(core.DomainShared)
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
@@ -609,7 +609,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, ori
 		kineticComp := component.KineticComponent{Kinetic: kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent
-		entity := s.world.CreateEntity()
+		entity := s.world.CreateEntity(core.DomainShared)
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)

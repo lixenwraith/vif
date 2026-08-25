@@ -149,7 +149,7 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, 
 		targetY = config.MapHeight - 1
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 
 	// TODO: add protection
 	s.world.Components.Materialize.SetComponent(entity, component.MaterializeComponent{

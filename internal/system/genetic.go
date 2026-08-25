@@ -193,7 +193,7 @@ func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpecies
 
 	cfg := parameter.GAStreamingConfig()
 	// Per-species seed: one root, independent streams, stable across runs
-	cfg.Seed = vmath.DeriveSeed(s.world.Resources.Rand.SessionRoot(),
+	cfg.Seed = vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared),
 		"genetic:"+strconv.Itoa(int(payload.Species)))
 	config := registry.SpeciesConfig{
 		ID:                 registry.SpeciesID(payload.Species),

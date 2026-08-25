@@ -86,7 +86,7 @@ func (s *AdaptationSystem) Init() {
 			Entries: make(map[uint32]*engine.AdaptationEntry),
 		}
 	}
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	clear(s.outcomes)
 	clear(s.tracking)
 	s.pendingDeaths = s.pendingDeaths[:0]

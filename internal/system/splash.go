@@ -285,7 +285,7 @@ func (s *SplashSystem) handleTimerSpawn(payload *event.SplashTimerRequestPayload
 	timerBBoxes := s.getTimerBBoxes(0)
 	s.calculateTimerOffset(&splashComp, timerBBoxes)
 
-	splashEntity := s.world.CreateEntity()
+	splashEntity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
 	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,
@@ -398,7 +398,7 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	}
 	splashComp.Content[0] = glyphComp.Rune
 
-	splashEntity := s.world.CreateEntity()
+	splashEntity := s.world.CreateEntity(core.DomainPlayer)
 	s.world.Components.Splash.SetComponent(splashEntity, splashComp)
 	s.world.Components.Protection.SetComponent(splashEntity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies,

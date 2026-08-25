@@ -118,7 +118,7 @@ func (s *SpiritSystem) Update() {
 
 // spawnSpirit creates spirit entities and their components, without position store registration (vfx only, no world interaction)
 func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 )
 
@@ -14,7 +15,7 @@ func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	cleaners.spawnDirectionalCleaners(cursor, 5, 5, component.CleanerColorPositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
-	target := w.CreateEntity()
+	target := w.CreateEntity(core.DomainShared)
 	w.Positions.SetPosition(target, component.PositionComponent{X: 10, Y: 5})
 	w.Components.Combat.SetComponent(target, component.CombatComponent{
 		OwnerEntity:      target,
@@ -71,7 +72,7 @@ func TestSweepingCleanerUsesFullMapBoundsWhenViewportIsSmaller(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	w.SetupLevel(120, 30, false, false)
 
-	glyph := w.CreateEntity()
+	glyph := w.CreateEntity(core.DomainPlayer)
 	w.Positions.SetPosition(glyph, component.PositionComponent{X: 100, Y: 5})
 	w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'x', Type: component.GlyphRed})
 

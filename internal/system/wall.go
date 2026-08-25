@@ -57,7 +57,7 @@ func (s *WallSystem) Init() {
 	s.pendingPushChecks = make([]vmath.Point, 0, 64)
 	s.pushCheckEveryTick = false
 	s.mazeRng = rand.New(rand.NewPCG(
-		vmath.DeriveSeed(s.world.Resources.Rand.SessionRoot(), s.Name()+":maze"), 0))
+		vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name()+":maze"), 0))
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -202,7 +202,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 		}
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(entity, component.PositionComponent{
 		X: payload.X,
 		Y: payload.Y,
@@ -334,7 +334,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 	// 3. Create header if composite
 	var headerEntity core.Entity
 	if payload.Composite {
-		headerEntity = s.world.CreateEntity()
+		headerEntity = s.world.CreateEntity(core.DomainShared)
 		s.world.Positions.SetPosition(headerEntity, component.PositionComponent{
 			X: payload.X, Y: payload.Y,
 		})
@@ -352,7 +352,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 	for _, rc := range resolved {
 		cell := payload.Cells[rc.idx]
-		entity := s.world.CreateEntity()
+		entity := s.world.CreateEntity(core.DomainShared)
 
 		s.world.Components.Wall.SetComponent(entity, component.WallComponent{
 			BlockMask: payload.BlockMask,

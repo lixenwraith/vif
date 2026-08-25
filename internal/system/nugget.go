@@ -51,7 +51,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)
@@ -237,7 +237,7 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 
 	pos := component.PositionComponent{
 		X: x,

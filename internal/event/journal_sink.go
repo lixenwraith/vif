@@ -24,6 +24,7 @@ func (vlogSink) Record(r JournalRecord) {
 		"jtick", r.Tick,
 		"boundary", r.Boundary,
 		"origin", r.Origin.String(),
+		"domain", r.Domain.String(),
 		"ev", GetEventName(r.Type),
 		"payload", r.Payload,
 		"encode_err", r.EncodeErr)
@@ -49,5 +50,6 @@ func (vlogSink) Anchor(a JournalAnchor) {
 		"tick_ns", a.TickInterval,
 		"width", a.Width,
 		"height", a.Height,
+		"slot", a.Slot,
 		"speed", a.Speed)
 }

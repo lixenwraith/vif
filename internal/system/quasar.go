@@ -50,7 +50,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 }
 
 func (s *QuasarSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
@@ -347,7 +347,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
 	// Create phantom head (controller entity)
-	headerEntity := s.world.CreateEntity()
+	headerEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
 
 	// Phantom head is indestructible through lifecycle
@@ -405,7 +405,7 @@ func (s *QuasarSystem) createQuasarComposite(headerX, headerY int) core.Entity {
 			offsetX := col - parameter.QuasarHeaderOffsetX
 			offsetY := row - parameter.QuasarHeaderOffsetY
 
-			entity := s.world.CreateEntity()
+			entity := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			// MemberEntries are not from death, composite system manages lifecycle

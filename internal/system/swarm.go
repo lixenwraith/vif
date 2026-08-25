@@ -57,7 +57,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 
 func (s *SwarmSystem) Init() {
 	s.active = false
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)
@@ -312,7 +312,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
 	// Create phantom head
-	headerEntity := s.world.CreateEntity()
+	headerEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: headerX, Y: headerY})
 
 	// Phantom head is indestructible
@@ -367,7 +367,7 @@ func (s *SwarmSystem) createSwarmComposite(headerX, headerY int) core.Entity {
 			offsetX := col - parameter.SwarmHeaderOffsetX
 			offsetY := row - parameter.SwarmHeaderOffsetY
 
-			entity := s.world.CreateEntity()
+			entity := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(entity, component.PositionComponent{X: memberX, Y: memberY})
 
 			s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{

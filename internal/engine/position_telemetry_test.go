@@ -16,7 +16,7 @@ func TestPositionTelemetryReportsCellSaturationAndOverflow(t *testing.T) {
 	var first core.Entity
 	w.RunSafe(func() {
 		for i := range parameter.MaxEntitiesPerCell + 1 {
-			e := w.CreateEntity()
+			e := w.CreateEntity(core.DomainShared)
 			if i == 0 {
 				first = e
 			}

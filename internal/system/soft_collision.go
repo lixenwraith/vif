@@ -189,7 +189,7 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 }
 
 func (s *SoftCollisionSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.clearCaches()
 	s.statCollisions.Store(0)
 	s.statImmuneRejects.Store(0)

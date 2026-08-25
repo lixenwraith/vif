@@ -40,7 +40,7 @@ func NewGatewaySystem(world *engine.World) engine.System {
 }
 
 func (s *GatewaySystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.enabled = true
@@ -148,7 +148,7 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 		OffsetY:           payload.OffsetY,
 	}
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainShared)
 	if payload.UseRouteGraph {
 		gwComp.RouteDistID = uint32(entity)
 	}

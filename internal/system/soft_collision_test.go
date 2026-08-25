@@ -45,8 +45,8 @@ func TestDrainFlockingObservesSharedSpeciesOneWay(t *testing.T) {
 			w := engine.NewWorld()
 			engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
 
-			shared := w.CreateEntity()
-			drain := w.CreateEntity()
+			shared := w.CreateEntity(core.DomainShared)
+			drain := w.CreateEntity(core.DomainPlayer)
 			tc.setSpecies(w, shared)
 			w.Components.Drain.SetComponent(drain, component.DrainComponent{})
 			w.Components.Combat.SetComponent(shared, component.CombatComponent{HitPoints: 1})

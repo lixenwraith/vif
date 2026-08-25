@@ -158,7 +158,7 @@ func (s *MotionMarkerSystem) clearColoredMarkers() {
 }
 
 func (s *MotionMarkerSystem) spawnMarker(x, y int, slice *[]core.Entity) {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 
 	s.world.Components.Marker.SetComponent(entity, component.MarkerComponent{
 		X:         x,

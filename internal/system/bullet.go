@@ -215,7 +215,7 @@ func (s *BulletSystem) collideCursor(bullet *component.BulletComponent, x, y int
 }
 
 func (s *BulletSystem) spawnBullet(p *event.BulletSpawnRequestPayload) {
-	e := s.world.CreateEntity()
+	e := s.world.CreateEntity(core.DomainPlayer)
 
 	s.world.Components.Bullet.SetComponent(e, component.BulletComponent{
 		Owner:       p.Owner,

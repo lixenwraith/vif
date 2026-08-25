@@ -11,6 +11,7 @@ import (
 	"os"
 	"slices"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 )
 
@@ -29,6 +30,7 @@ type line struct {
 
 type recordFields struct {
 	Origin    string `json:"origin"`
+	Domain    string `json:"domain"`
 	Ev        string `json:"ev"`
 	Payload   string `json:"payload"`
 	EncodeErr string `json:"encode_err"`
@@ -56,6 +58,7 @@ type anchorFields struct {
 	ContentBlocks uint64 `json:"content_blocks"`
 	ContentLines  uint64 `json:"content_lines"`
 	TickInterval  int64  `json:"tick_ns"`
+	Slot          uint64 `json:"slot"`
 	Width         int    `json:"width"`
 	Height        int    `json:"height"`
 }
@@ -127,11 +130,15 @@ func decodeRecord(raw json.RawMessage) (event.JournalRecord, error) {
 	if !ok {
 		return event.JournalRecord{}, fmt.Errorf("jseq %d: unknown origin %q", f.JSeq, f.Origin)
 	}
+	domain, ok := core.ParseDomain(f.Domain)
+	if !ok {
+		return event.JournalRecord{}, fmt.Errorf("jseq %d: unknown domain %q", f.JSeq, f.Domain)
+	}
 	return event.JournalRecord{
 		Payload: f.Payload, EncodeErr: f.EncodeErr,
 		JSeq: f.JSeq, Seq: f.Seq,
 		Run: f.Run, Tick: f.Tick, Boundary: f.Boundary,
-		Type: et, Origin: origin,
+		Type: et, Origin: origin, Domain: domain,
 	}, nil
 }
 
@@ -147,6 +154,7 @@ func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {
 		Run: f.Run, Tick: f.Tick, StartRun: f.StartRun, StartTick: f.StartTick,
 		ContentFiles: f.ContentFiles, ContentBlocks: f.ContentBlocks, ContentLines: f.ContentLines,
 		TickInterval: f.TickInterval, Width: f.Width, Height: f.Height,
+		Slot: f.Slot,
 	}, nil
 }
 

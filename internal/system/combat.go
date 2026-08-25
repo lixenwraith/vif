@@ -108,7 +108,7 @@ func NewCombatSystem(world *engine.World) engine.System {
 }
 
 func (s *CombatSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statDirect.Store(0)

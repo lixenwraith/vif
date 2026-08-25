@@ -115,7 +115,7 @@ func NewDustSystem(world *engine.World) engine.System {
 func (s *DustSystem) Init() {
 	s.lastCursorX = 0
 	s.lastCursorY = 0
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.staggerTick = 0
 	s.collisionCtx = collisionContext{
 		drains:   make(map[uint64]core.Entity, 16),
@@ -222,7 +222,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				if entry.Level == component.GlyphDark {
 					continue
 				}
-				entity := s.world.CreateEntity()
+				entity := s.world.CreateEntity(core.DomainPlayer)
 				s.setDustComponents(entity, entry.X, entry.Y, entry.Char, entry.Level, cursorPos.X, cursorPos.Y)
 
 				// Set components to batch entry entity
@@ -587,7 +587,7 @@ func (s *DustSystem) setDustComponents(entity core.Entity, x, y int, char rune, 
 
 // spawnDust creates a single dust entity with orbital initialization
 func (s *DustSystem) spawnDust(x, y int, char rune, level component.GlyphLevel, cursorX, cursorY int) {
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 	s.setDustComponents(entity, x, y, char, level, cursorX, cursorY)
 
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})
@@ -713,7 +713,7 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 
 	posBatch := s.world.Positions.BeginBatch()
 	for _, gt := range s.transformBuf {
-		entity := s.world.CreateEntity()
+		entity := s.world.CreateEntity(core.DomainPlayer)
 		s.setDustComponents(entity, gt.x, gt.y, gt.char, gt.level, cursorX, cursorY)
 		posBatch.Add(entity, component.PositionComponent{X: gt.x, Y: gt.y})
 	}

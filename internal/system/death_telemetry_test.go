@@ -15,7 +15,7 @@ func TestDeathTelemetrySeparatesEffectTypes(t *testing.T) {
 	deaths := NewDeathSystem(w).(*DeathSystem)
 
 	spawn := func(x int) core.Entity {
-		e := w.CreateEntity()
+		e := w.CreateEntity(core.DomainShared)
 		w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: 3})
 		w.Components.Sigil.SetComponent(e, component.SigilComponent{Rune: 'x'})
 		return e

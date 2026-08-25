@@ -59,7 +59,7 @@ func (s *FuseSystem) Init() {
 	s.statSpawnFailures.Store(0)
 	s.statDisabled.Store(0)
 	s.buffers.Reset()
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.enabled = true
 }
 

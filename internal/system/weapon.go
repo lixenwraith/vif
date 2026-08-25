@@ -269,7 +269,7 @@ func (s *WeaponSystem) spawnOrbEntity(ownerEntity core.Entity, weaponType compon
 		return 0
 	}
 
-	orbEntity := s.world.CreateEntity()
+	orbEntity := s.world.CreateEntity(core.DomainPlayer)
 
 	orbComp := component.OrbComponent{
 		WeaponType:   weaponType,

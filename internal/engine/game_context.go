@@ -10,7 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
-	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
 // GameContext holds all game state including the ECS world
@@ -464,6 +463,12 @@ func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 	ctx.World.PushEvent(eventType, payload)
 }
 
+// PushEventFull emits with explicit origin and domain tags, for replay and
+// transport, which restore both from a record rather than from the ambient tags
+func (ctx *GameContext) PushEventFull(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
+	ctx.World.PushEventFull(eventType, payload, origin, domain)
+}
+
 // PushEventOrigin emits with an explicit producer tag, for producers that run
 // outside the world lock and therefore outside any WithOrigin scope
 func (ctx *GameContext) PushEventOrigin(eventType event.EventType, payload any, origin event.Origin) {
@@ -695,10 +700,3 @@ func (ctx *GameContext) syncOverlaySelection(content *core.OverlayContent) {
 func (ctx *GameContext) SetPaused(paused bool) {
 	ctx.PushEvent(event.EventGamePauseRequest, &event.GamePausePayload{Paused: paused})
 }
-
-// === Rand ===
-
-// TODO: unused, review usage potential or deprecate
-
-// Rand returns the labelled RNG stream; the world owns the root seed
-func (ctx *GameContext) Rand(label string) *vmath.FastRand { return ctx.World.Rand(label) }

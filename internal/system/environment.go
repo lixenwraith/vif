@@ -3,6 +3,7 @@ package system
 import (
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -40,7 +41,7 @@ func NewEnvironmentSystem(world *engine.World) engine.System {
 }
 
 func (s *EnvironmentSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statWindActive.Store(false)
 	s.enabled = true
 }

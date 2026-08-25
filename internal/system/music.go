@@ -3,6 +3,7 @@ package system
 import (
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -66,7 +67,7 @@ func NewMusicSystem(world *engine.World) engine.System {
 
 // Init resets session state
 func (s *MusicSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.bpmF = float64(parameter.APMToBPM(0))
 	s.lastBPM = 0
 	s.tier = audio.IntensityCalm

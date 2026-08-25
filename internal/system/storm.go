@@ -86,7 +86,7 @@ func NewStormSystem(world *engine.World) engine.System {
 
 func (s *StormSystem) Init() {
 	s.rootEntity = 0
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	clear(s.memberExcludeSet)
 	s.pendingBlueSpawns = s.pendingBlueSpawns[:0]
 	s.statActive.Store(false)
@@ -313,7 +313,7 @@ func (s *StormSystem) spawnStorm() {
 	}
 
 	// 3. Create entities
-	rootEntity := s.world.CreateEntity()
+	rootEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Components.Protection.SetComponent(rootEntity, component.ProtectionComponent{
 		Mask: component.ProtectAll ^ component.ProtectFromDeath,
 	})
@@ -444,7 +444,7 @@ func (s *StormSystem) createCircleHeader(
 ) core.Entity {
 	cell := vmath.PointAtF(pos3D.X, pos3D.Y)
 
-	circleEntity := s.world.CreateEntity()
+	circleEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(circleEntity, component.PositionComponent{X: cell.X, Y: cell.Y})
 
 	// Circle headers are protected
@@ -503,7 +503,7 @@ func (s *StormSystem) createCircleMembers(headerEntity core.Entity, headerX, hea
 	members := make([]component.MemberEntry, 0, len(s.ellipseOffsets))
 
 	for _, off := range s.ellipseOffsets {
-		memberEntity := s.world.CreateEntity()
+		memberEntity := s.world.CreateEntity(core.DomainShared)
 
 		s.world.Positions.SetPosition(memberEntity, component.PositionComponent{
 			X: headerX + off.X,

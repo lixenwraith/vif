@@ -41,7 +41,7 @@ func (s *TransientSystem) Init() {
 }
 
 func (s *TransientSystem) Name() string {
-	return "transient_effects"
+	return "transient"
 }
 
 func (s *TransientSystem) Priority() int {

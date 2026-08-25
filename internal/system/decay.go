@@ -57,7 +57,7 @@ func NewDecaySystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *DecaySystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	clear(s.decayedThisFrame)
 	clear(s.processedGridCells)
 	s.statCount.Store(0)
@@ -154,7 +154,7 @@ func (s *DecaySystem) spawnSingleDecay(x, y int, char rune, skipStartCell bool) 
 	velY := speed
 	accelY := parameter.ParticleAcceleration
 
-	entity := s.world.CreateEntity()
+	entity := s.world.CreateEntity(core.DomainPlayer)
 
 	// 1. Grid Positions
 	s.world.Positions.SetPosition(entity, component.PositionComponent{X: x, Y: y})

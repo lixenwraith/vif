@@ -43,7 +43,7 @@ func NewPylonSystem(world *engine.World) engine.System {
 }
 
 func (s *PylonSystem) Init() {
-	s.rng = s.world.Rand(s.Name())
+	s.rng = s.world.Rand(core.DomainShared, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.lifecycle.Reset()
@@ -220,7 +220,7 @@ func (s *PylonSystem) spawnPylon(payload *event.PylonSpawnRequestPayload) {
 	}
 
 	// Create header entity
-	headerEntity := s.world.CreateEntity()
+	headerEntity := s.world.CreateEntity(core.DomainShared)
 	s.world.Positions.SetPosition(headerEntity, component.PositionComponent{X: centerX, Y: centerY})
 
 	// Header is protected from destruction except explicit death
@@ -393,7 +393,7 @@ func (s *PylonSystem) createDiscMembers(
 			memberX := centerX + dx
 			memberY := centerY + dy
 
-			memberEntity := s.world.CreateEntity()
+			memberEntity := s.world.CreateEntity(core.DomainShared)
 			s.world.Positions.SetPosition(memberEntity, component.PositionComponent{
 				X: memberX,
 				Y: memberY,
