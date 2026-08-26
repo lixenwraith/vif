@@ -36,7 +36,7 @@ func (r *StrobeRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 func strobeRenderNoop(_ *StrobeRenderer, _ render.RenderContext, _ *render.RenderBuffer) {}
 
 func strobeRenderTrueColor(r *StrobeRenderer, ctx render.RenderContext, buf *render.RenderBuffer) {
-	strobe := r.gameCtx.World.Resources.Transient.Strobe
+	strobe := r.gameCtx.World.Resources.View.Strobe
 	if !strobe.Active {
 		return
 	}

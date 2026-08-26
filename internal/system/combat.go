@@ -274,29 +274,6 @@ func (s *CombatSystem) Update() {
 	}
 }
 
-// resolveOrigin returns the effect origin in cells: explicit payload geometry first,
-// then the origin entity's position.
-func (s *CombatSystem) resolveOrigin(hasOrigin bool, x, y int, originEntity core.Entity) (int, int, bool) {
-	if hasOrigin {
-		return x, y, true
-	}
-	if pos, ok := s.world.Positions.GetPosition(originEntity); ok {
-		return pos.X, pos.Y, true
-	}
-	return 0, 0, false
-}
-
-// resolveOriginVelocity returns the impactor velocity for a kinetic profile.
-func (s *CombatSystem) resolveOriginVelocity(hasVelocity bool, vx, vy float64, originEntity core.Entity) (float64, float64, bool) {
-	if hasVelocity {
-		return vx, vy, true
-	}
-	if k, ok := s.world.Components.Kinetic.GetPtr(originEntity); ok {
-		return k.VelX, k.VelY, true
-	}
-	return 0, 0, false
-}
-
 // knockbackStream selects the impulse stream by the recipient's domain, so a
 // knockback on a local drain never advances the shared sequence.
 func (s *CombatSystem) knockbackStream(e core.Entity) *vmath.FastRand {
@@ -353,9 +330,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 		return
 	}
 
-	// Emitter geometry, resolved once for every effect below
-	originX, originY, hasOriginPos := s.resolveOrigin(
-		payload.HasOrigin, payload.OriginX, payload.OriginY, payload.OriginEntity)
+	// Emitter geometry is carried by the payload: a direct request never resolves it
+	// from an entity, so a player emitter never names itself in a crossing payload.
+	originX, originY, hasOriginPos := payload.OriginX, payload.OriginY, payload.HasOrigin
 	resolved := false
 	damageCursor := s.world.ResolveCursor(payload.OwnerEntity)
 	if damageCursor == 0 {
@@ -409,14 +386,17 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	}
 
 	// Emit chain attack if present
-	if chain := attack.Chain; chain != nil {
+	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
 		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
-			AttackType:   chain.AttackType,
+			AttackType:   chainAttack.AttackType,
 			OwnerEntity:  payload.OwnerEntity,
 			OriginEntity: payload.OwnerEntity,
 			TargetEntity: payload.TargetEntity,
 			HitEntity:    payload.HitEntity,
+			HasOrigin:    hasOriginPos,
+			OriginX:      originX,
+			OriginY:      originY,
 			ChainDepth:   depth,
 		})
 		s.recordChain(depth, 1)
@@ -433,9 +413,8 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	if attack.EffectMask&component.CombatEffectKinetic != 0 && attack.Collision != nil {
 		// Kinetic applies to header (composite moves as unit), check header immunity
 		if !damageTargetDead && targetCombatComp.RemainingKineticImmunity == 0 && !targetCombatComp.IsEnraged {
-			originVelX, originVelY, hasVel := s.resolveOriginVelocity(
-				payload.HasVelocity, payload.OriginVelX, payload.OriginVelY, payload.OriginEntity)
-			if hasVel && s.applyCollision(originVelX, originVelY, payload.TargetEntity, payload.HitEntity, attack.Collision) {
+			if payload.HasVelocity &&
+				s.applyCollision(payload.OriginVelX, payload.OriginVelY, payload.TargetEntity, payload.HitEntity, attack.Collision) {
 				s.statEffectKinetic.Add(1)
 				resolved = true
 			}
@@ -629,6 +608,9 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				OriginEntity: payload.OwnerEntity,
 				TargetEntity: targetEntity,
 				HitEntity:    hitEntity,
+				HasOrigin:    payload.HasOrigin,
+				OriginX:      payload.OriginX,
+				OriginY:      payload.OriginY,
 				ChainDepth:   depth,
 			})
 		}
@@ -752,7 +734,8 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 		originX = payload.OriginX
 		originY = payload.OriginY
 	} else {
-		// Fall back to entity position (shield, etc.)
+		// Fall back to entity position; every producer taking this path names a
+		// shared cursor or species header, never a player emitter.
 		originPos, ok := s.world.Positions.GetPosition(payload.OriginEntity)
 		if !ok {
 			return false

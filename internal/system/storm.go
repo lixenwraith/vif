@@ -54,6 +54,7 @@ type StormSystem struct {
 	lifecycle            lifecycleTelemetry
 	buffers              bufferTelemetry
 	motion               bounceTelemetry
+	sweep                cellSweep
 
 	enabled bool
 }
@@ -405,35 +406,15 @@ func (s *StormSystem) isCirclePositionValid(centerX, centerY int) bool {
 	return true
 }
 
-// clearCircleSpawnArea destroys entities within circle's elliptical footprint
+// clearCircleSpawnArea empties a circle footprint in both domains (D-12)
 func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for _, off := range s.ellipseOffsets {
-		count := s.world.Positions.GetAllEntitiesAtInto(centerX+off.X, centerY+off.Y, entities[:])
-		for i := range count {
-			e := entities[i]
-			if e == 0 || s.world.Components.Cursor.HasEntity(e) {
-				continue
-			}
-			// Skip walls - they block, not get cleared
-			if s.world.Components.Wall.HasEntity(e) {
-				continue
-			}
-			if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-				if prot.Mask&component.ProtectFromSpecies != 0 {
-					s.statProtected.Add(1)
-					continue
-				}
-			}
-			toDestroy = append(toDestroy, e)
-		}
+		s.sweep.collect(s.world, centerX+off.X, centerY+off.Y, func(e core.Entity) bool {
+			return speciesClearable(s.world, e, s.statProtected)
+		})
 	}
-
-	if len(toDestroy) > 0 {
-		s.world.DestroyEntitiesBatch(toDestroy)
-	}
+	s.sweep.destroy(s.world)
 }
 
 // createCircleHeader builds a single circle sub-header entity
@@ -819,7 +800,7 @@ func (s *StormSystem) resolveCircleCollision(a, b *component.StormCircleComponen
 	}
 }
 
-// processCircleCollisions destroys non-protected entities at circle's elliptical footprint
+// processCircleCollisions destroys non-protected entities at a circle's footprint
 func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX, newGridY int) {
 	// Build member exclusion set
 	headerComp, hasHeader := s.world.Components.Header.GetPtr(circleEntity)
@@ -834,42 +815,31 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 	}
 	s.buffers.Observe(1, len(s.memberExcludeSet))
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for _, off := range s.ellipseOffsets {
-		count := s.world.Positions.GetAllEntitiesAtInto(newGridX+off.X, newGridY+off.Y, entities[:])
-		for i := range count {
-			e := entities[i]
-			_, excluded := s.memberExcludeSet[e]
-			if e == 0 || s.world.Components.Cursor.HasEntity(e) || excluded {
-				continue
+		s.sweep.collect(s.world, newGridX+off.X, newGridY+off.Y, func(e core.Entity) bool {
+			if _, excluded := s.memberExcludeSet[e]; excluded {
+				return false
 			}
-
-			if s.world.Components.Wall.HasEntity(e) {
-				continue
+			if s.world.Components.Cursor.HasEntity(e) || s.world.Components.Wall.HasEntity(e) {
+				return false
 			}
-
-			if prot, ok := s.world.Components.Protection.GetPtr(e); ok {
-				if prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll {
-					s.statProtected.Add(1)
-					continue
-				}
+			if prot, ok := s.world.Components.Protection.GetPtr(e); ok &&
+				(prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll) {
+				s.statProtected.Add(1)
+				return false
 			}
+			return true
+		})
+	}
 
-			if s.world.Components.Nugget.HasEntity(e) {
-				s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
-					Entity: e,
-				})
-			}
-
-			toDestroy = append(toDestroy, e)
+	// Nuggets are shared; announce each one the sweep claimed
+	for _, e := range s.sweep.shared {
+		if s.world.Components.Nugget.HasEntity(e) {
+			s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
 		}
 	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
-	}
+	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
 }
 
 // processCircleMemberCombat scans members for HP<=0 and routes deaths through CompositeSystem, storm system it the combat-based lifecycle authority

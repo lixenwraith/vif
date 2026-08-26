@@ -12,7 +12,7 @@ import (
 func TestCleanerSamplesEverySweptCellBeforeCombatImpact(t *testing.T) {
 	w, cursor, _ := testCursorWorld(t)
 	cleaners := NewCleanerSystem(w).(*CleanerSystem)
-	cleaners.spawnDirectionalCleaners(cursor, 5, 5, component.CleanerColorPositive)
+	cleaners.spawnDirectionalCleaners(core.DomainShared, cursor, 5, 5, component.CleanerColorPositive)
 	w.Resources.Event.Queue.Consume() // Spawn sound.
 
 	target := w.CreateEntity(core.DomainShared)
@@ -77,7 +77,7 @@ func TestSweepingCleanerUsesFullMapBoundsWhenViewportIsSmaller(t *testing.T) {
 	w.Components.Glyph.SetComponent(glyph, component.GlyphComponent{Rune: 'x', Type: component.GlyphRed})
 
 	cleaners := NewCleanerSystem(w).(*CleanerSystem)
-	cleaners.spawnSweepingCleaners(cursor)
+	cleaners.spawnSweepingCleaners(core.DomainShared, cursor)
 	entities := w.Components.Cleaner.Entities()
 	if len(entities) != 1 {
 		t.Fatalf("sweeping cleaner count = %d, want 1", len(entities))

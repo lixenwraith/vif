@@ -23,6 +23,7 @@ type EyeSystem struct {
 	statProtected *atomic.Int64
 	lifecycle     lifecycleTelemetry
 	motion        bounceTelemetry
+	sweep         cellSweep
 
 	enabled bool
 }
@@ -272,41 +273,20 @@ func (s *EyeSystem) abandonEval(payload *event.EyeSpawnRequestPayload) {
 	})
 }
 
+// clearSpawnArea empties the eye footprint in both domains (D-12)
 func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.EyeHeaderOffsetX
 	topLeftY := headerY - parameter.EyeHeaderOffsetY
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for row := range parameter.EyeHeight {
 		for col := range parameter.EyeWidth {
-			x := topLeftX + col
-			y := topLeftY + row
-
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
-			for i := range count {
-				e := entities[i]
-				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
-					continue
-				}
-				if s.world.Components.Wall.HasEntity(e) {
-					continue
-				}
-				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromSpecies != 0 {
-						s.statProtected.Add(1)
-						continue
-					}
-				}
-				toDestroy = append(toDestroy, e)
-			}
+			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
+				return speciesClearable(s.world, e, s.statProtected)
+			})
 		}
 	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
-	}
+	s.sweep.emit(s.world, 0)
 }
 
 func (s *EyeSystem) createEyeComposite(headerX, headerY int, eyeType component.EyeType, groupID uint8, routeGraphID uint32, routeID int, evalID uint64, genes []float64) core.Entity {
@@ -608,6 +588,7 @@ func (s *EyeSystem) checkTargetContact(headerEntity core.Entity) bool {
 					OwnerEntity:  headerEntity,
 					OriginEntity: headerEntity,
 					TargetEntity: targetEntity,
+					HasOrigin:    true,
 					OriginX:      eyePos.X,
 					OriginY:      eyePos.Y,
 				})

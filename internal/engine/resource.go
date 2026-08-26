@@ -44,6 +44,9 @@ type Resource struct {
 	// Transient visual effects
 	Transient *TransientResource
 
+	// Player-domain view effects
+	View *ViewResource
+
 	// Telemetry
 	Status *status.Registry
 

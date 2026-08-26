@@ -20,7 +20,7 @@ func NewGrayoutRenderer(ctx *engine.GameContext) *GrayoutRenderer {
 
 // Render applies grayscale with intensity from game state
 func (r *GrayoutRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
-	grayout := r.gameCtx.World.Resources.Transient.Grayout
+	grayout := r.gameCtx.World.Resources.View.Grayout
 
 	if !grayout.Active || grayout.Intensity <= 0 {
 		return

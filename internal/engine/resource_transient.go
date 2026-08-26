@@ -8,16 +8,18 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// TransientResource holds short-lived visual effect state
+// TransientResource holds shared spatial explosion state.
 // Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
-	// Screen-space post-process effects (local view state)
-	Grayout GrayoutState
-	Strobe  StrobeState
-
-	// Spatial explosion effects, shared (fixed backing, zero alloc)
+	// Fixed backing, zero alloc
 	ExplosionBacking [parameter.ExplosionCenterCap]ExplosionCenter
 	ExplosionCount   int
+}
+
+// ViewResource holds player-domain screen-space effect state; never replicated.
+type ViewResource struct {
+	Grayout GrayoutState
+	Strobe  StrobeState
 }
 
 // GrayoutState controls screen desaturation effect
@@ -50,8 +52,13 @@ func NewTransientResource() *TransientResource {
 	return &TransientResource{}
 }
 
-// Reset clears view-effect state for a new game; centers are cleared by their owning system
-func (r *TransientResource) Reset() {
+// NewViewResource creates initialized view state
+func NewViewResource() *ViewResource {
+	return &ViewResource{}
+}
+
+// Reset clears view-effect state for a new game
+func (r *ViewResource) Reset() {
 	r.Grayout = GrayoutState{}
 	r.Strobe = StrobeState{}
 }

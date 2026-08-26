@@ -709,10 +709,9 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 	}
 
 	// Check other entities
-	// TODO(phase4.2b): shared displacement only. Player entities embedded by a new wall
-	// must be pushed by a player-domain handler of EventWallSpawned, not from here.
+	// Both domains: a new wall claims its cell and displaces whoever holds it (D-12)
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
+	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
 	for i := range count {
 		entity := entities[i]
 		if s.world.Components.Cursor.HasEntity(entity) {

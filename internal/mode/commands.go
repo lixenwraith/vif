@@ -674,9 +674,9 @@ func handleDecayCommand(ctx *engine.GameContext) CommandResult {
 
 // handleCleanerCommand triggers sweeping cleaners
 func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
+	ctx.PushEventDomain(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
 		Entity: ctx.World.Resources.Player.Entity,
-	})
+	}, core.DomainPlayer)
 	ctx.SetLastCommand(":cleaner")
 	return CommandResult{Continue: true, KeepPaused: false}
 }

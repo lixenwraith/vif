@@ -368,16 +368,15 @@ func (s *MissileSystem) handleSpawnRequest(p *event.MissileSpawnRequestPayload) 
 			hit = p.HitEntities[i%len(p.HitEntities)]
 		}
 
-		s.spawnMissile(p.OwnerEntity, p.OriginEntity, originX, originY, vx, vy, target, hit)
+		s.spawnMissile(p.OwnerEntity, originX, originY, vx, vy, target, hit)
 	}
 }
 
-func (s *MissileSystem) spawnMissile(owner, origin core.Entity, x, y, vx, vy float64, target, hit core.Entity) {
+func (s *MissileSystem) spawnMissile(owner core.Entity, x, y, vx, vy float64, target, hit core.Entity) {
 	e := s.world.CreateEntity(core.DomainPlayer)
 
 	s.world.Components.Missile.SetComponent(e, component.MissileComponent{
 		Owner:        owner,
-		Origin:       origin,
 		TargetEntity: target,
 		HitEntity:    hit,
 	})

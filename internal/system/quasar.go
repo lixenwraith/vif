@@ -29,6 +29,7 @@ type QuasarSystem struct {
 	statProtected *atomic.Int64
 	lifecycle     lifecycleTelemetry
 	motion        bounceTelemetry
+	sweep         cellSweep
 
 	enabled bool
 }
@@ -299,47 +300,20 @@ func (s *QuasarSystem) spawnQuasar(targetX, targetY int) {
 	s.lifecycle.spawned.Add(1)
 }
 
-// clearQuasarSpawnArea destroys all entities within the quasar footprint
+// clearQuasarSpawnArea empties the quasar footprint in both domains (D-12)
 func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
-	// Calculate top-left from header position
 	topLeftX := headerX - parameter.QuasarHeaderOffsetX
 	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for row := range parameter.QuasarHeight {
 		for col := range parameter.QuasarWidth {
-			x := topLeftX + col
-			y := topLeftY + row
-
-			// TODO(phase4.2b): shared footprint only. Player entities under a new
-			// shared species must be evicted by a player-domain consumer.
-			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
-			for i := range count {
-				e := entities[i]
-				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
-					continue
-				}
-				// Skip walls - they block, not get cleared
-				if s.world.Components.Wall.HasEntity(e) {
-					continue
-				}
-				// Check protection
-				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromSpecies != 0 {
-						s.statProtected.Add(1)
-						continue
-					}
-				}
-				toDestroy = append(toDestroy, e)
-			}
+			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
+				return speciesClearable(s.world, e, s.statProtected)
+			})
 		}
 	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
-	}
+	s.sweep.emit(s.world, 0)
 }
 
 // createQuasarComposite builds the 3x5 quasar entity structure
@@ -680,7 +654,8 @@ func (s *QuasarSystem) applyZapDamage(cursorEntity core.Entity) {
 	}
 }
 
-// processCollisionsAtNewPositions destroys entities at quasar's destination
+// processCollisionsAtNewPositions destroys entities at quasar's destination.
+// Walls are not exempt here: a moving quasar plows through them.
 func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity, headerX, headerY int) {
 	header, ok := s.world.Components.Header.GetPtr(headerEntity)
 	if !ok {
@@ -696,49 +671,33 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 		}
 	}
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
-	// Check each cell the quasar will occupy
 	topLeftX := headerX - parameter.QuasarHeaderOffsetX
 	topLeftY := headerY - parameter.QuasarHeaderOffsetY
 
+	s.sweep.reset()
 	for row := range parameter.QuasarHeight {
 		for col := range parameter.QuasarWidth {
-			x := topLeftX + col
-			y := topLeftY + row
-
-			// TODO(phase4.2b): shared occupants only; player eviction is pending
-			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
-			for i := range count {
-				entity := entities[i]
-				if entity == 0 || s.world.Components.Cursor.HasEntity(entity) || memberSet[entity] {
-					continue
+			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
+				if memberSet[e] || s.world.Components.Cursor.HasEntity(e) {
+					return false
 				}
-
-				// Check protection
-				if protComp, ok := s.world.Components.Protection.GetPtr(entity); ok {
-					if protComp.Mask&component.ProtectFromSpecies != 0 {
-						s.statProtected.Add(1)
-						continue
-					}
+				if prot, ok := s.world.Components.Protection.GetPtr(e); ok &&
+					prot.Mask&component.ProtectFromSpecies != 0 {
+					s.statProtected.Add(1)
+					return false
 				}
-
-				// Handle nugget collision
-				if s.world.Components.Nugget.HasEntity(entity) {
-					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
-						Entity: entity,
-					})
-				}
-
-				toDestroy = append(toDestroy, entity)
-			}
+				return true
+			})
 		}
 	}
 
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, toDestroy...)
+	// Nuggets are shared; announce each one the sweep claimed
+	for _, e := range s.sweep.shared {
+		if s.world.Components.Nugget.HasEntity(e) {
+			s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
+		}
 	}
+	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)
 }
 
 // handleInteractions processes shield drain and cursor collision

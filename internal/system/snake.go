@@ -28,6 +28,7 @@ type SnakeSystem struct {
 	statProtected *atomic.Int64
 	lifecycle     lifecycleTelemetry
 	motion        bounceTelemetry
+	sweep         cellSweep
 
 	enabled bool
 }
@@ -1010,41 +1011,20 @@ func (s *SnakeSystem) terminateAll() {
 	}
 }
 
+// clearSpawnArea empties a snake footprint in both domains (D-12)
 func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, offsetY int) {
 	topLeftX := centerX - offsetX
 	topLeftY := centerY - offsetY
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for row := range height {
 		for col := range width {
-			x := topLeftX + col
-			y := topLeftY + row
-
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
-			for i := range count {
-				e := entities[i]
-				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
-					continue
-				}
-				if s.world.Components.Wall.HasEntity(e) {
-					continue
-				}
-				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromSpecies != 0 {
-						s.statProtected.Add(1)
-						continue
-					}
-				}
-				toDestroy = append(toDestroy, e)
-			}
+			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
+				return speciesClearable(s.world, e, s.statProtected)
+			})
 		}
 	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
-	}
+	s.sweep.emit(s.world, 0)
 }
 
 // resolvedSegment holds per-segment member entities resolved from HeaderComponent

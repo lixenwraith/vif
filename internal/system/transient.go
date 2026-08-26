@@ -34,7 +34,7 @@ func NewTransientSystem(world *engine.World) engine.System {
 }
 
 func (s *TransientSystem) Init() {
-	s.world.Resources.Transient.Reset()
+	s.world.Resources.View.Reset()
 	s.statGrayoutActive.Store(false)
 	s.statStrobeActive.Store(false)
 	s.enabled = true
@@ -79,14 +79,14 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventGrayoutStart:
-		s.world.Resources.Transient.Grayout = engine.GrayoutState{
+		s.world.Resources.View.Grayout = engine.GrayoutState{
 			Active:    true,
 			Intensity: 1.0,
 		}
 		s.statGrayoutActive.Store(true)
 
 	case event.EventGrayoutEnd:
-		s.world.Resources.Transient.Grayout.Active = false
+		s.world.Resources.View.Grayout.Active = false
 		s.statGrayoutActive.Store(false)
 
 	case event.EventStrobeRequest:
@@ -101,7 +101,7 @@ func (s *TransientSystem) Update() {
 		return
 	}
 
-	strobe := &s.world.Resources.Transient.Strobe
+	strobe := &s.world.Resources.View.Strobe
 	if !strobe.Active {
 		return
 	}
@@ -116,7 +116,7 @@ func (s *TransientSystem) Update() {
 }
 
 func (s *TransientSystem) handleStrobeRequest(req *event.StrobeRequestPayload) {
-	current := &s.world.Resources.Transient.Strobe
+	current := &s.world.Resources.View.Strobe
 
 	duration := time.Duration(req.DurationMs) * time.Millisecond
 	if duration == 0 {

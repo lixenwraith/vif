@@ -218,7 +218,8 @@ func (s *CleanerSystem) Update() {
 				}
 
 				// Combat + glyph; the combat target blocks the head at this cell.
-				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity,
+					kineticComp.VelX, kineticComp.VelY, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
 					appendCleanerTrail(cleanerComp, x, y)
@@ -254,7 +255,8 @@ func (s *CleanerSystem) Update() {
 					break
 				}
 
-				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity, cleanerComp.ColorType) {
+				if s.checkCollisions(x, y, cleanerEntity, cleanerComp.OwnerEntity,
+					kineticComp.VelX, kineticComp.VelY, cleanerComp.ColorType) {
 					blocked = true
 					blockGridX, blockGridY = x, y
 					appendCleanerTrail(cleanerComp, x, y)
@@ -430,7 +432,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(domain core.Domain, owner core.Ent
 // Returns true if a combat entity was hit (blocks cleaner head)
 // Nugget cleaners are visual-only: a shared cleaner consuming player glyphs is an
 // undeclared crossing under multi-instance, so the mechanic is deprecated, not bridged.
-func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, colorType component.CleanerColorType) bool {
+func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, velX, velY float64, colorType component.CleanerColorType) bool {
 	if colorType == component.CleanerColorNugget {
 		return false
 	}
@@ -467,9 +469,15 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			AttackType:   component.CombatAttackProjectile,
 			OwnerEntity:  owner,
-			OriginEntity: selfEntity,
+			OriginEntity: owner,
 			TargetEntity: target,
 			HitEntity:    hit,
+			HasOrigin:    true,
+			OriginX:      x,
+			OriginY:      y,
+			HasVelocity:  true,
+			OriginVelX:   velX,
+			OriginVelY:   velY,
 		})
 		blocked = true
 	}

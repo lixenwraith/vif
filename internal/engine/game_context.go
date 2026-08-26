@@ -159,6 +159,7 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 
 	// 8. Transient Resource
 	world.Resources.Transient = NewTransientResource()
+	world.Resources.View = NewViewResource()
 
 	// 9. Cursor roster; the FSM spawns cursors, so the world starts with none
 	world.Resources.Player = &PlayerResource{}
@@ -467,6 +468,12 @@ func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 // transport, which restore both from a record rather than from the ambient tags
 func (ctx *GameContext) PushEventFull(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
 	ctx.World.PushEventFull(eventType, payload, origin, domain)
+}
+
+// PushEventDomain emits with an explicit domain tag, for producers that run
+// outside the world lock and therefore outside any WithDomain scope
+func (ctx *GameContext) PushEventDomain(eventType event.EventType, payload any, domain core.Domain) {
+	ctx.World.PushEventDomain(eventType, payload, domain)
 }
 
 // PushEventOrigin emits with an explicit producer tag, for producers that run

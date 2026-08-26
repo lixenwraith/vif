@@ -70,9 +70,10 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 	}
 
 	switch ev.Type {
+
 	case event.EventMaterializeRequest:
 		if payload, ok := ev.Payload.(*event.MaterializeRequestPayload); ok {
-			s.spawnMaterializeEffect(payload.X, payload.Y, 1, 1, 1, payload.Type)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, 1, 1, 1, payload.Type)
 		}
 
 	case event.EventMaterializeAreaRequest:
@@ -85,7 +86,7 @@ func (s *MaterializeSystem) HandleEvent(ev event.GameEvent) {
 			if height < 1 {
 				height = 1
 			}
-			s.spawnMaterializeEffect(payload.X, payload.Y, width, height, 1, payload.Type)
+			s.spawnMaterializeEffect(ev.Domain, payload.X, payload.Y, width, height, 1, payload.Type)
 		}
 	}
 }
@@ -131,8 +132,8 @@ func (s *MaterializeSystem) Update() {
 	s.world.DestroyEntitiesBatch(toDestroy)
 }
 
-// spawnMaterializeEffect creates a single materialize effect entity
-func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType) {
+// spawnMaterializeEffect creates one materialize entity in the request's domain
+func (s *MaterializeSystem) spawnMaterializeEffect(domain core.Domain, targetX, targetY, areaWidth, areaHeight, beamWidth int, spawnType component.SpawnType) {
 	config := s.world.Resources.Config
 
 	// Clamp target coordinates
@@ -149,9 +150,8 @@ func (s *MaterializeSystem) spawnMaterializeEffect(targetX, targetY, areaWidth, 
 		targetY = config.MapHeight - 1
 	}
 
-	entity := s.world.CreateEntity(core.DomainShared)
+	entity := s.world.CreateEntity(domain)
 
-	// TODO: add protection
 	s.world.Components.Materialize.SetComponent(entity, component.MaterializeComponent{
 		TargetX:    targetX,
 		TargetY:    targetY,

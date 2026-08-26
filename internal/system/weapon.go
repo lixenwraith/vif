@@ -656,13 +656,12 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 			}
 
 			s.world.PushEvent(event.EventMissileSpawnRequest, &event.MissileSpawnRequestPayload{
-				OwnerEntity:  cursor,
-				OriginEntity: launcherOrbEntity,
-				OriginX:      originX,
-				OriginY:      originY,
-				Count:        charges,
-				Targets:      targets,
-				HitEntities:  hits,
+				OwnerEntity: cursor,
+				OriginX:     originX,
+				OriginY:     originY,
+				Count:       charges,
+				Targets:     targets,
+				HitEntities: hits,
 			})
 
 		case component.WeaponDisruptor:
@@ -695,6 +694,7 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos compone
 			OriginEntity: cursor,
 			TargetEntity: target.Target,
 			HitEntities:  target.Members,
+			HasOrigin:    true,
 			OriginX:      cursorPos.X,
 			OriginY:      cursorPos.Y,
 		})

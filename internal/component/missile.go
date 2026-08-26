@@ -17,8 +17,7 @@ type MissileTrailPoint struct {
 
 // MissileComponent holds missile entity state (pure data)
 type MissileComponent struct {
-	Owner  core.Entity // Cursor that fired
-	Origin core.Entity // Orb entity (visual origin)
+	Owner core.Entity // Owner player
 
 	// Target assignment
 	TargetEntity core.Entity // Header for composite, entity for single

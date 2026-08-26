@@ -67,8 +67,10 @@ func (p *Position) ResetTelemetry() {
 	for _, stat := range []*atomic.Int64{
 		p.statCellSaturations,
 		p.statCellOverflows,
+		p.statPlayerRejects,
 		p.statOccupiedCells,
 		p.statIndexedEntities,
+		p.statIndexedShared,
 		p.statMaxOccupancy,
 		p.statOccupancyHWM,
 		p.statPositionsHWM,

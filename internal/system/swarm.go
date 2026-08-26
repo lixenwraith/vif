@@ -34,6 +34,7 @@ type SwarmSystem struct {
 	statProtected   *atomic.Int64
 	lifecycle       lifecycleTelemetry
 	motion          bounceTelemetry
+	sweep           cellSweep
 
 	enabled bool
 }
@@ -267,44 +268,20 @@ func (s *SwarmSystem) spawnSwarm(targetX, targetY int) {
 	s.lifecycle.spawned.Add(1)
 }
 
-// clearSwarmSpawnArea destroys entities within swarm footprint
+// clearSwarmSpawnArea empties the swarm footprint in both domains (D-12)
 func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	topLeftX := headerX - parameter.SwarmHeaderOffsetX
 	topLeftY := headerY - parameter.SwarmHeaderOffsetY
 
-	var toDestroy []core.Entity
-	var entities [parameter.MaxEntitiesPerCell]core.Entity
-
+	s.sweep.reset()
 	for row := range parameter.SwarmHeight {
 		for col := range parameter.SwarmWidth {
-			x := topLeftX + col
-			y := topLeftY + row
-
-			// TODO(phase4.2b): shared footprint only; player eviction is pending
-			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
-			for i := range count {
-				e := entities[i]
-				if e == 0 || s.world.Components.Cursor.HasEntity(e) {
-					continue
-				}
-				// Skip walls
-				if s.world.Components.Wall.HasEntity(e) {
-					continue
-				}
-				if prot, ok := s.world.Components.Protection.GetComponent(e); ok {
-					if prot.Mask&component.ProtectFromSpecies != 0 {
-						s.statProtected.Add(1)
-						continue
-					}
-				}
-				toDestroy = append(toDestroy, e)
-			}
+			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
+				return speciesClearable(s.world, e, s.statProtected)
+			})
 		}
 	}
-
-	if len(toDestroy) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, toDestroy...)
-	}
+	s.sweep.emit(s.world, 0)
 }
 
 // createSwarmComposite builds the 4×2 swarm entity structure

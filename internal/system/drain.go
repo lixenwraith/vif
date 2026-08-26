@@ -420,10 +420,13 @@ func (s *DrainSystem) processPendingSpawns() {
 		}
 
 		if !spawn.materializeStarted && currentTick >= spawn.scheduledTick {
-			s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
-				X:    spawn.targetX,
-				Y:    spawn.targetY,
-				Type: component.SpawnTypeDrain,
+			// Drain is player-domain, so its materialize effect is too
+			s.world.WithDomain(core.DomainPlayer, func() {
+				s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+					X:    spawn.targetX,
+					Y:    spawn.targetY,
+					Type: component.SpawnTypeDrain,
+				})
 			})
 			spawn.materializeStarted = true
 		}

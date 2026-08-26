@@ -268,7 +268,9 @@ func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, 
 				continue
 			}
 
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, cellBuf[:])
+			// Shared only: this enumeration decides shared combat, so it must not
+			// observe player entities (D-1)
+			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, cellBuf[:])
 			for i := range count {
 				entity := cellBuf[i]
 				memberComp, ok := s.world.Components.Member.GetPtr(entity)

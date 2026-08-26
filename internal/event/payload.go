@@ -810,13 +810,12 @@ type LootSpawnRequestPayload struct {
 
 // MissileSpawnRequestPayload contains missile spawn parameters
 type MissileSpawnRequestPayload struct {
-	Targets      []core.Entity `toml:"targets"`       // Prioritized target entities
-	HitEntities  []core.Entity `toml:"hit_entities"`  // Corresponding hit points (member or same as target)
-	OwnerEntity  core.Entity   `toml:"owner_entity"`  // Cursor
-	OriginEntity core.Entity   `toml:"origin_entity"` // Launcher orb
-	OriginX      int           `toml:"origin_x"`
-	OriginY      int           `toml:"origin_y"`
-	Count        int           `toml:"count"`
+	Targets     []core.Entity `toml:"targets"`      // Prioritized target entities
+	HitEntities []core.Entity `toml:"hit_entities"` // Corresponding hit points (member or same as target)
+	OwnerEntity core.Entity   `toml:"owner_entity"` // Cursor
+	OriginX     int           `toml:"origin_x"`
+	OriginY     int           `toml:"origin_y"`
+	Count       int           `toml:"count"`
 }
 
 // --- Bullet ---
