@@ -71,7 +71,8 @@ type recCol struct {
 type recGroup struct {
 	name    string
 	cols    []recCol
-	visible int // Entity column for a roster slot; -1 for always-visible groups
+	visible int // Sentinel column for GateSentinel; -1 when absent
+	gate    GroupGate
 }
 
 // Recorder is a fixed-depth ring of full registry snapshots, sampled every
@@ -141,7 +142,7 @@ func (rc *Recorder) bind(groups []statGroup) {
 
 	for gi := range groups {
 		g := &groups[gi]
-		rg := recGroup{name: g.name, cols: make([]recCol, 0, len(g.members)), visible: -1}
+		rg := recGroup{name: g.name, cols: make([]recCol, 0, len(g.members)), visible: -1, gate: g.gate}
 		for i := range g.members {
 			m := &g.members[i]
 			c := recCol{name: m.name, kind: m.kind}
@@ -367,19 +368,30 @@ func (rc *Recorder) Flush(reason string) {
 	}
 }
 
-// groupVisible keeps a player group when its slot existed anywhere in the
-// emitted recorder window; schema storage remains fixed for allocation-free sampling.
+// groupVisible applies the group's gate across the emitted window; schema storage
+// remains fixed for allocation-free sampling.
 func (rc *Recorder) groupVisible(g *recGroup, n int) bool {
-	if g.visible < 0 {
-		return true
-	}
-	stride := len(rc.srcI)
-	for k := range n {
-		if rc.bufI[rc.slots[k]*stride+g.visible] != 0 {
+	switch g.gate {
+	case GateSentinel:
+		if g.visible < 0 {
 			return true
 		}
+		stride := len(rc.srcI)
+		for k := range n {
+			if rc.bufI[rc.slots[k]*stride+g.visible] != 0 {
+				return true
+			}
+		}
+		return false
+	case GateActivity:
+		for ci := range g.cols {
+			if !rc.colZero(&g.cols[ci], n) {
+				return true
+			}
+		}
+		return false
 	}
-	return false
+	return true
 }
 
 // series returns a column's window: a native scalar when constant, otherwise
@@ -488,6 +500,40 @@ func (rc *Recorder) constString(idx, stride, n int, v string) bool {
 	for k := 1; k < n; k++ {
 		if rc.bufS[rc.slots[k]*stride+idx] != v {
 			return false
+		}
+	}
+	return true
+}
+
+// colZero reports whether a column held an empty reading for the whole window
+func (rc *Recorder) colZero(c *recCol, n int) bool {
+	switch c.kind {
+	case kindInt:
+		stride := len(rc.srcI)
+		for k := range n {
+			if rc.bufI[rc.slots[k]*stride+c.idx] != 0 {
+				return false
+			}
+		}
+	case kindFloat:
+		stride := len(rc.srcF)
+		for k := range n {
+			if rc.bufF[rc.slots[k]*stride+c.idx] != 0 {
+				return false
+			}
+		}
+	case kindBool:
+		for k := range n {
+			if rc.boolAt(rc.slots[k], c.idx) {
+				return false
+			}
+		}
+	case kindString:
+		stride := len(rc.srcS)
+		for k := range n {
+			if rc.bufS[rc.slots[k]*stride+c.idx] != "" {
+				return false
+			}
 		}
 	}
 	return true

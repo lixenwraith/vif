@@ -133,3 +133,59 @@ func snapshotGroupNames(reg *Registry) []string {
 	})
 	return names
 }
+
+func TestActivityGatedGroupsAppearOnlyWhenTheyHaveReadings(t *testing.T) {
+	reg := NewRegistry()
+	dealt := reg.Ints.Get("combat.damage_attacker_cursor")
+	reg.Ints.Get("combat.damage_attacker_drain")
+	reg.Ints.Get("combat.hits_direct")
+	reg.Freeze()
+
+	if groups := visibleGroupNames(reg); slices.Contains(groups, "combat.damage.attacker") {
+		t.Fatalf("silent partition visible: %v", groups)
+	}
+	if snapshot := snapshotGroupNames(reg); slices.Contains(snapshot, "combat.damage.attacker") {
+		t.Fatalf("silent partition emitted: %v", snapshot)
+	}
+	if !slices.Contains(visibleGroupNames(reg), "combat") {
+		t.Fatal("ungated combat group was hidden")
+	}
+
+	dealt.Store(7)
+	if !slices.Contains(visibleGroupNames(reg), "combat.damage.attacker") {
+		t.Fatal("partition stayed hidden after damage was recorded")
+	}
+	if !slices.Contains(snapshotGroupNames(reg), "combat.damage.attacker") {
+		t.Fatal("partition stayed out of the snapshot after damage was recorded")
+	}
+}
+
+func TestRecorderDropsSilentActivityGroupFromWindow(t *testing.T) {
+	reg := NewRegistry()
+	reg.Ints.Get("combat.damage_attacker_cursor")
+	reg.Freeze()
+
+	rc := &Recorder{depth: 2}
+	rc.bind(reg.groups())
+	rc.slots = append(rc.slots[:0], 0, 1)
+
+	var damage *recGroup
+	for i := range rc.groups {
+		if rc.groups[i].name == "combat.damage.attacker" {
+			damage = &rc.groups[i]
+			break
+		}
+	}
+	if damage == nil || damage.gate != GateActivity {
+		t.Fatal("combat damage partition is not activity gated")
+	}
+	if rc.groupVisible(damage, 2) {
+		t.Fatal("all-zero window was retained")
+	}
+
+	stride := len(rc.srcI)
+	rc.bufI[rc.slots[1]*stride+damage.cols[0].idx] = 3
+	if !rc.groupVisible(damage, 2) {
+		t.Fatal("group active in the second sample was suppressed")
+	}
+}

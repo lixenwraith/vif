@@ -71,3 +71,15 @@ func TestDrainFlockingObservesSharedSpeciesOneWay(t *testing.T) {
 		})
 	}
 }
+
+func TestSoftCollisionImpulseStreamFollowsTargetDomain(t *testing.T) {
+	w := engine.NewWorld()
+	engine.NewGameContextWithClock(w, 40, 24, engine.NewManualClock())
+	s := NewSoftCollisionSystem(w).(*SoftCollisionSystem)
+
+	shared := s.impulseStream(w.CreateEntity(core.DomainShared))
+	player := s.impulseStream(w.CreateEntity(core.DomainPlayer))
+	if shared == player {
+		t.Fatal("player impulses draw from the shared stream")
+	}
+}

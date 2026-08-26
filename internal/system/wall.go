@@ -186,7 +186,7 @@ func (s *WallSystem) handleSpawnSingle(payload *event.WallSpawnRequestPayload) {
 			var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 			var toDestroy []core.Entity
 			s.world.Positions.Lock()
-			n := s.world.Positions.GetAllEntitiesAtInto(payload.X, payload.Y, entityBuf[:])
+			n := s.world.Positions.GetEntitiesAtInto(payload.X, payload.Y, engine.ScopeShared, entityBuf[:])
 			s.world.Positions.Unlock()
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
@@ -304,7 +304,7 @@ func (s *WallSystem) executeBatchSpawn(payload *event.WallBatchSpawnRequestPaylo
 
 		s.world.Positions.Lock()
 		for _, rc := range resolved {
-			n := s.world.Positions.GetAllEntitiesAtInto(rc.x, rc.y, entityBuf[:])
+			n := s.world.Positions.GetEntitiesAtInto(rc.x, rc.y, engine.ScopeShared, entityBuf[:])
 			for j := range n {
 				if s.world.Components.Wall.HasEntity(entityBuf[j]) {
 					toDestroy = append(toDestroy, entityBuf[j])
@@ -709,8 +709,10 @@ func (s *WallSystem) pushEntitiesAtPosition(x, y int) int64 {
 	}
 
 	// Check other entities
+	// TODO(phase4.2b): shared displacement only. Player entities embedded by a new wall
+	// must be pushed by a player-domain handler of EventWallSpawned, not from here.
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
 	for i := range count {
 		entity := entities[i]
 		if s.world.Components.Cursor.HasEntity(entity) {
@@ -940,7 +942,7 @@ func (s *WallSystem) computeBoxCharsInArea(x, y, width, height int, style compon
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
 	for cy := y; cy < endY; cy++ {
 		for cx := x; cx < endX; cx++ {
-			count := s.world.Positions.GetAllEntitiesAtInto(cx, cy, entities[:])
+			count := s.world.Positions.GetEntitiesAtInto(cx, cy, engine.ScopeShared, entities[:])
 			for i := range count {
 				e := entities[i]
 				wall, ok := s.world.Components.Wall.GetPtr(e)
@@ -1091,7 +1093,7 @@ func (s *WallSystem) hasWallWithStyle(x, y int, style component.BoxDrawStyle) bo
 	}
 
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
 	for i := range count {
 		if wall, ok := s.world.Components.Wall.GetPtr(entities[i]); ok {
 			if wall.BoxStyle == style {
@@ -1125,7 +1127,7 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			continue
 		}
 
-		count := s.world.Positions.GetAllEntitiesAtInto(nx, ny, entities[:])
+		count := s.world.Positions.GetEntitiesAtInto(nx, ny, engine.ScopeShared, entities[:])
 		for i := range count {
 			e := entities[i]
 			wall, ok := s.world.Components.Wall.GetPtr(e)

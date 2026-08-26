@@ -113,6 +113,28 @@ var combatMetricPartitions = [...]struct {
 	{"damage_defender_", "combat.damage.defender"},
 }
 
+// activityGatedGroups names group prefixes whose cards are noise until something
+// happens: wide per-type partitions that stay zero in most sessions. Declare a
+// prefix here rather than teaching a consumer to special-case a group.
+var activityGatedGroups = [...]string{
+	"combat.absorbed.",
+	"combat.damage.",
+}
+
+// groupGate returns the visibility rule a group selects. A non-empty slot marks a
+// roster-scoped group, which gates on its slot's entity cell.
+func groupGate(group, slot string) GroupGate {
+	if slot != "" {
+		return GateSentinel
+	}
+	for _, prefix := range activityGatedGroups {
+		if strings.HasPrefix(group, prefix) {
+			return GateActivity
+		}
+	}
+	return GateAlways
+}
+
 // PlayerKey builds a per-slot metric key: PlayerKey(2, "energy.current") = "player.2.energy.current"
 // Called at construction only; the resulting cell pointer is cached by the caller.
 func PlayerKey(slot int, suffix string) string {

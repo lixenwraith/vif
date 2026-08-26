@@ -22,6 +22,19 @@ const (
 	kindString
 )
 
+// GroupGate selects the rule a group uses to decide whether it belongs in a
+// view, snapshot or recorder window.
+type GroupGate uint8
+
+const (
+	// GateAlways keeps the group unconditionally; the default for a plain domain card.
+	GateAlways GroupGate = iota
+	// GateSentinel keeps the group while a designated int metric is non-zero.
+	GateSentinel
+	// GateActivity keeps the group while any member holds a non-zero reading.
+	GateActivity
+)
+
 // metricRef binds a metric's short name to its live storage
 type metricRef struct {
 	b    *atomic.Bool
@@ -48,15 +61,49 @@ func (m *metricRef) value() any {
 	return nil
 }
 
+// isZero reports whether the metric holds its type's empty reading
+func (m *metricRef) isZero() bool {
+	switch m.kind {
+	case kindBool:
+		return !m.b.Load()
+	case kindInt:
+		return m.i.Load() == 0
+	case kindFloat:
+		return m.f.Get() == 0
+	case kindString:
+		return m.s.Load() == ""
+	}
+	return true
+}
+
 // statGroup is one emitted record: a key prefix and its members
 type statGroup struct {
 	name    string
 	members []metricRef
-	visible *atomic.Int64 // Player entity cell; nil for always-visible groups
+	visible *atomic.Int64 // Sentinel cell for GateSentinel; nil otherwise
+	gate    GroupGate
 }
 
-// isVisible suppresses empty roster slots without unregistering their schema.
-func (g *statGroup) isVisible() bool { return g.visible == nil || g.visible.Load() != 0 }
+// isVisible applies the group's gate to the current readings.
+func (g *statGroup) isVisible() bool { return gateVisible(g.gate, g.visible, g.members) }
+
+// gateVisible resolves one group's visibility; shared by the index and bound views.
+// A GateSentinel group with no sentinel stays visible, so a mis-declared gate
+// cannot silently hide a card.
+func gateVisible(gate GroupGate, sentinel *atomic.Int64, members []metricRef) bool {
+	switch gate {
+	case GateSentinel:
+		return sentinel == nil || sentinel.Load() != 0
+	case GateActivity:
+		for i := range members {
+			if !members[i].isZero() {
+				return true
+			}
+		}
+		return false
+	}
+	return true
+}
 
 // SetSnapshotInterval sets the game-tick period between snapshots; 0 disables
 func (r *Registry) SetSnapshotInterval(ticks uint64) { r.snapEvery.Store(ticks) }
@@ -191,10 +238,12 @@ func (r *Registry) buildIndex() []statGroup {
 	for _, g := range names {
 		members := byGroup[g]
 		sort.Slice(members, func(i, j int) bool { return members[i].name < members[j].name })
+		slot := groupSlots[g]
 		groups = append(groups, statGroup{
 			name:    g,
 			members: members,
-			visible: playerEntities[groupSlots[g]],
+			visible: playerEntities[slot],
+			gate:    groupGate(g, slot),
 		})
 	}
 	return groups

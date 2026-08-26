@@ -57,8 +57,12 @@ const (
 
 // MaxEntitiesPerCell set to 31 to ensure the Cell struct fits exactly into 256 bytes
 // (4 cache lines) when Entity is uint64 (8 bytes)
-// 31 * 8 (Entities) + 1 (Count) + 7 (Padding) = 256 bytes
+// 31 * 8 (Entities) + 1 (Count) + 1 (SharedCount) + 6 (Padding) = 256 bytes
 const MaxEntitiesPerCell = 31
+
+// ReservedPlayerPerCell caps the player half of a cell so a pile of local effects
+// can never consume the slots a shared entity needs.
+const ReservedPlayerPerCell = 12
 
 // Spatial Grid Defaults
 const (

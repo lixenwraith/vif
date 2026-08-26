@@ -8,6 +8,7 @@ type GroupView struct {
 	name    string
 	members []metricRef
 	visible *atomic.Int64
+	gate    GroupGate
 }
 
 // Views binds every registered group in index order.
@@ -16,7 +17,8 @@ func (r *Registry) Views() []GroupView {
 	views := make([]GroupView, len(groups))
 	for i := range groups {
 		views[i] = GroupView{
-			name: groups[i].name, members: groups[i].members, visible: groups[i].visible,
+			name: groups[i].name, members: groups[i].members,
+			visible: groups[i].visible, gate: groups[i].gate,
 		}
 	}
 	return views
@@ -38,7 +40,7 @@ func (r *Registry) VisibleViews() []GroupView {
 func (r *Registry) GroupView(name string) (GroupView, bool) {
 	for _, g := range r.groups() {
 		if g.name == name {
-			return GroupView{name: g.name, members: g.members, visible: g.visible}, true
+			return GroupView{name: g.name, members: g.members, visible: g.visible, gate: g.gate}, true
 		}
 	}
 	return GroupView{}, false
@@ -50,8 +52,8 @@ func (v GroupView) Name() string { return v.name }
 // Len returns the metric count in the group
 func (v GroupView) Len() int { return len(v.members) }
 
-// Visible reports whether a dynamic roster group currently belongs in a view.
-func (v GroupView) Visible() bool { return v.visible == nil || v.visible.Load() != 0 }
+// Visible reports whether a gated group currently belongs in a view.
+func (v GroupView) Visible() bool { return gateVisible(v.gate, v.visible, v.members) }
 
 // MetricName returns the short name of member i
 func (v GroupView) MetricName(i int) string { return v.members[i].name }

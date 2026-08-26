@@ -280,7 +280,8 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 			x := topLeftX + col
 			y := topLeftY + row
 
-			count := s.world.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+			// TODO(phase4.2b): shared footprint only; player eviction is pending
+			count := s.world.Positions.GetEntitiesAtInto(x, y, engine.ScopeShared, entities[:])
 			for i := range count {
 				e := entities[i]
 				if e == 0 || s.world.Components.Cursor.HasEntity(e) {

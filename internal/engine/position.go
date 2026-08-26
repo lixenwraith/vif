@@ -23,8 +23,10 @@ type Position struct {
 
 	statCellSaturations *atomic.Int64
 	statCellOverflows   *atomic.Int64
+	statPlayerRejects   *atomic.Int64
 	statOccupiedCells   *atomic.Int64
 	statIndexedEntities *atomic.Int64
+	statIndexedShared   *atomic.Int64
 	statMaxOccupancy    *atomic.Int64
 	statOccupancyHWM    *atomic.Int64
 	statPositionsHWM    *atomic.Int64
@@ -49,8 +51,10 @@ func NewPosition(w *World, bit uint64) *Position {
 func (p *Position) BindTelemetry(reg *status.Registry) {
 	p.statCellSaturations = reg.Ints.Get("spatial.cell_saturations")
 	p.statCellOverflows = reg.Ints.Get("spatial.cell_overflows")
+	p.statPlayerRejects = reg.Ints.Get("spatial.player_budget_rejects")
 	p.statOccupiedCells = reg.Ints.Get("spatial.occupied_cells")
 	p.statIndexedEntities = reg.Ints.Get("spatial.indexed_entities")
+	p.statIndexedShared = reg.Ints.Get("spatial.indexed_shared")
 	p.statMaxOccupancy = reg.Ints.Get("spatial.max_cell_occupancy")
 	p.statOccupancyHWM = reg.Ints.Get("spatial.cell_occupancy_hwm")
 	p.statPositionsHWM = reg.Ints.Get("spatial.positions_hwm")
@@ -84,6 +88,7 @@ func (p *Position) PublishTelemetry() {
 	stats := p.grid.ComputeStats()
 	p.statOccupiedCells.Store(int64(stats.CellsOccupied))
 	p.statIndexedEntities.Store(int64(stats.EntitiesTotal))
+	p.statIndexedShared.Store(int64(stats.EntitiesShared))
 	p.statMaxOccupancy.Store(int64(stats.MaxOccupancy))
 }
 
@@ -105,7 +110,7 @@ func (p *Position) SetPosition(e core.Entity, pos component.PositionComponent) {
 	p.setGrid(e, pos.X, pos.Y, countSaturation)
 }
 
-// setGrid preserves soft clipping while exposing saturation and data loss.
+// setGrid preserves soft clipping while exposing saturation, budget rejection, and data loss.
 func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
 	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
 		_ = p.grid.Set(e, x, y)
@@ -113,8 +118,14 @@ func (p *Position) setGrid(e core.Entity, x, y int, countSaturation bool) {
 	}
 	cell := &p.grid.Cells[y*p.grid.Width+x]
 	before := cell.Count
+	playerBefore := cell.Count - cell.SharedCount
 	if !p.grid.Set(e, x, y) {
-		if p.statCellOverflows != nil {
+		// A player insert stopped by its own budget is not cell exhaustion
+		if e.Domain() == core.DomainPlayer && playerBefore >= parameter.ReservedPlayerPerCell {
+			if p.statPlayerRejects != nil {
+				p.statPlayerRejects.Add(1)
+			}
+		} else if p.statCellOverflows != nil {
 			p.statCellOverflows.Add(1)
 		}
 		return
@@ -195,12 +206,12 @@ func (p *Position) RemoveBatch(entities []core.Entity, skipMask ...bool) {
 	}
 }
 
-// GetAllEntityAt returns a COPY of entities at the given position, nil if OOB or empty
+// GetEntitiesAt returns a COPY of the in-scope entities at (x, y), nil if OOB or empty
 // Copy is required: callers may SetPosition/remove returned entities while
 // iterating, which swap-mutates the underlying grid cell.
-// Hot paths should prefer GetAllEntitiesAtInto (zero-alloc)
-func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
-	view := p.grid.GetAllEntitiesAt(x, y)
+// Hot paths should prefer GetEntitiesAtInto (zero-alloc)
+func (p *Position) GetEntitiesAt(x, y int, scope DomainScope) []core.Entity {
+	view := p.grid.EntitiesAt(x, y, scope)
 	if len(view) == 0 {
 		return nil
 	}
@@ -211,9 +222,32 @@ func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
 	return result
 }
 
-// HasAnyEntityAt O(1) returns true if any entity exists at the given coordinates
+// GetAllEntityAt returns a COPY of every entity at (x, y) regardless of domain
+func (p *Position) GetAllEntityAt(x, y int) []core.Entity {
+	return p.GetEntitiesAt(x, y, ScopeBoth)
+}
+
+// GetEntitiesAtInto copies in-scope entities at (x,y) into a caller-provided buffer and returns number copied, Zero-alloc if buf is on stack
+func (p *Position) GetEntitiesAtInto(x, y int, scope DomainScope, buf []core.Entity) int {
+	view := p.grid.EntitiesAt(x, y, scope)
+	count := min(len(view), len(buf))
+	copy(buf, view[:count])
+	return count
+}
+
+// GetAllEntitiesAtInto copies every entity at (x,y) regardless of domain
+func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
+	return p.GetEntitiesAtInto(x, y, ScopeBoth, buf)
+}
+
+// HasAnyEntityAt O(1) returns true if any entity of either domain exists at (x, y)
 func (p *Position) HasAnyEntityAt(x, y int) bool {
-	return p.grid.HasAnyEntityAt(x, y)
+	return p.grid.HasAnyEntityAt(x, y, ScopeBoth)
+}
+
+// HasAnySharedEntityAt O(1) returns true if a shared entity occupies (x, y)
+func (p *Position) HasAnySharedEntityAt(x, y int) bool {
+	return p.grid.HasAnyEntityAt(x, y, ScopeShared)
 }
 
 // ResizeGrid resizes the internal spatial grid and re-indexes all entities
@@ -288,8 +322,8 @@ func (p *Position) HasBlockingWallAt(x, y int, mask component.WallBlockMask) boo
 
 	idx := y*p.grid.Width + x
 	cell := &p.grid.Cells[idx]
-	for i := uint8(0); i < cell.Count; i++ {
-		if wall, ok := p.world.Components.Wall.GetComponent(cell.Entities[i]); ok {
+	for _, e := range cell.view(ScopeShared) {
+		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
 			// If mask is 0, allow any wall. Otherwise check mask
 			if mask == 0 || wall.BlockMask&mask != 0 {
 				return true
@@ -311,7 +345,7 @@ func (p *Position) HasBlockingWallInAreaUnsafe(x, y, width, height int, mask com
 		return false
 	}
 
-	return p.grid.HasAnyEntityInArea(x, y, width, height, func(e core.Entity) bool {
+	return p.grid.HasAnyEntityInArea(x, y, width, height, ScopeShared, func(e core.Entity) bool {
 		if wall, ok := p.world.Components.Wall.GetComponent(e); ok {
 			return mask == 0 || wall.BlockMask&mask != 0
 		}
@@ -516,29 +550,6 @@ func (p *Position) MoveUnsafe(e core.Entity, newPos component.PositionComponent)
 	p.setGrid(e, newPos.X, newPos.Y, old.X != newPos.X || old.Y != newPos.Y)
 }
 
-// GetAllEntitiesAtInto copies entities at (x,y) into a caller-provided buffer and returns number copied, Zero-alloc if buf is on stack
-func (p *Position) GetAllEntitiesAtInto(x, y int, buf []core.Entity) int {
-	if x < 0 || x >= p.grid.Width || y < 0 || y >= p.grid.Height {
-		return 0
-	}
-
-	// Direct grid access is safe because we hold the lock
-	idx := y*p.grid.Width + x
-	cell := &p.grid.Cells[idx]
-	count := int(cell.Count)
-
-	if count == 0 {
-		return 0
-	}
-
-	if count > len(buf) {
-		count = len(buf)
-	}
-
-	copy(buf, cell.Entities[:count])
-	return count
-}
-
 // RemoveEntityUnsafe deletes an entity from store and grid without clearing
 // the component mask (original semantic); equivalent to RemoveEntity(e, true)
 func (p *Position) RemoveEntityUnsafe(e core.Entity) {
@@ -579,9 +590,19 @@ func (pb *PositionBatch) Add(e core.Entity, pos component.PositionComponent) {
 	pb.additions = append(pb.additions, positionAddition{entity: e, pos: pos})
 }
 
-// Commit applies all batched additions
-// Checks with HasAnyEntityAt only to prevent unintended spawns on existing entities
+// Commit applies all batched additions, rejecting a cell occupied by any entity
 func (pb *PositionBatch) Commit() error {
+	return pb.commit(pb.store.HasAnyEntityAt)
+}
+
+// CommitShared applies all batched additions, rejecting only shared occupancy so a
+// player glyph or dust pile cannot veto a shared placement.
+func (pb *PositionBatch) CommitShared() error {
+	return pb.commit(pb.store.HasAnySharedEntityAt)
+}
+
+// commit validates every addition against an occupancy gate, then applies the batch
+func (pb *PositionBatch) commit(occupied func(x, y int) bool) error {
 	if pb.committed {
 		return fmt.Errorf("batch already committed")
 	}
@@ -594,7 +615,7 @@ func (pb *PositionBatch) Commit() error {
 
 	for _, add := range pb.additions {
 		// Check against existing entities
-		if pb.store.grid.HasAnyEntityAt(add.pos.X, add.pos.Y) {
+		if occupied(add.pos.X, add.pos.Y) {
 			// Collision found in world
 			return fmt.Errorf("position is occupied")
 		}
@@ -650,10 +671,7 @@ type ScanLineResult struct {
 	X, Y   int
 }
 
-// ScanLine traverses cells from (startX, startY) in direction (dx, dy) until bounds or maxSteps
-// Returns slice of (entity, x, y) for cells with matching filter
-// filter: nil = all entities, or func to test entity (e.g. HasGlyph)
-func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) []ScanLineResult {
+func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, scope DomainScope, filter func(core.Entity) bool) []ScanLineResult {
 	var results []ScanLineResult
 	x, y := startX, startY
 
@@ -662,11 +680,8 @@ func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(co
 			break
 		}
 
-		idx := y*p.grid.Width + x
-		cell := &p.grid.Cells[idx]
-
-		for i := uint8(0); i < cell.Count; i++ {
-			e := cell.Entities[i]
+		cell := &p.grid.Cells[y*p.grid.Width+x]
+		for _, e := range cell.view(scope) {
 			if filter == nil || filter(e) {
 				results = append(results, ScanLineResult{Entity: e, X: x, Y: y})
 			}
@@ -679,9 +694,7 @@ func (p *Position) ScanLine(startX, startY, dx, dy, maxSteps int, filter func(co
 	return results
 }
 
-// ScanLineFirst returns first entity matching filter along line, or (0, -1, -1) if none
-// Single-lock scan optimized for finding first match
-func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter func(core.Entity) bool) (core.Entity, int, int) {
+func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, scope DomainScope, filter func(core.Entity) bool) (core.Entity, int, int) {
 	x, y := startX, startY
 
 	for range maxSteps {
@@ -689,11 +702,8 @@ func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter fu
 			break
 		}
 
-		idx := y*p.grid.Width + x
-		cell := &p.grid.Cells[idx]
-
-		for i := uint8(0); i < cell.Count; i++ {
-			e := cell.Entities[i]
+		cell := &p.grid.Cells[y*p.grid.Width+x]
+		for _, e := range cell.view(scope) {
 			if filter == nil || filter(e) {
 				return e, x, y
 			}
@@ -709,7 +719,7 @@ func (p *Position) ScanLineFirst(startX, startY, dx, dy, maxSteps int, filter fu
 // FindClosestEntityInDirection searches for entities in a cardinal direction (up, down, left, right)
 // within the specified bounds. It enforces "Center-Oriented Consolidation".
 // Returns (entity, x, y, found).
-func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
+func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, bounds PingAbsoluteBounds, scope DomainScope, filter func(core.Entity) bool) (core.Entity, int, int, bool) {
 	// Direction handling
 	if dy != 0 {
 		// VERTICAL SCAN (Up/Down)
@@ -754,16 +764,9 @@ func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 					continue
 				}
 
-				// Check cell
-				idx := y*p.grid.Width + x
-				cell := &p.grid.Cells[idx]
-				if cell.Count == 0 {
-					continue
-				}
-
-				// Check entities in cell
-				for i := uint8(0); i < cell.Count; i++ {
-					e := cell.Entities[i]
+				// Horizontal cell check
+				cell := &p.grid.Cells[y*p.grid.Width+x]
+				for _, e := range cell.view(scope) {
 					if filter == nil || filter(e) {
 						// Found a candidate. Is it closer to center (startX)?
 						dist := vmath.IntAbs(x - startX)
@@ -822,14 +825,9 @@ func (p *Position) FindClosestEntityInDirection(startX, startY, dx, dy int, boun
 					continue
 				}
 
-				idx := y*p.grid.Width + x
-				cell := &p.grid.Cells[idx]
-				if cell.Count == 0 {
-					continue
-				}
-
-				for i := uint8(0); i < cell.Count; i++ {
-					e := cell.Entities[i]
+				// Vertical cell check
+				cell := &p.grid.Cells[y*p.grid.Width+x]
+				for _, e := range cell.view(scope) {
 					if filter == nil || filter(e) {
 						dist := vmath.IntAbs(y - startY)
 						if dist < minDist {

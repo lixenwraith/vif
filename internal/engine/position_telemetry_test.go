@@ -36,3 +36,36 @@ func TestPositionTelemetryReportsCellSaturationAndOverflow(t *testing.T) {
 		t.Fatalf("max occupancy = %d, want %d", got, parameter.MaxEntitiesPerCell)
 	}
 }
+
+// TestPlayerBudgetRejectIsCountedSeparately proves a spent player budget is not cell exhaustion.
+func TestPlayerBudgetRejectIsCountedSeparately(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 40, 24, NewManualClock())
+	reg := w.Resources.Status
+
+	const excess = 4
+	for range parameter.ReservedPlayerPerCell + excess {
+		e := w.CreateEntity(core.DomainPlayer)
+		w.Positions.SetPosition(e, component.PositionComponent{X: 3, Y: 3})
+	}
+	if got := reg.Ints.Get("spatial.player_budget_rejects").Load(); got != excess {
+		t.Fatalf("player budget rejects = %d, want %d", got, excess)
+	}
+	if got := reg.Ints.Get("spatial.cell_overflows").Load(); got != 0 {
+		t.Fatalf("cell overflows = %d, want 0 while the shared half is free", got)
+	}
+
+	// The shared half must still accept its full complement
+	wantShared := int64(parameter.MaxEntitiesPerCell - parameter.ReservedPlayerPerCell)
+	for range wantShared {
+		e := w.CreateEntity(core.DomainShared)
+		w.Positions.SetPosition(e, component.PositionComponent{X: 3, Y: 3})
+	}
+	w.Positions.PublishTelemetry()
+	if got := reg.Ints.Get("spatial.indexed_shared").Load(); got != wantShared {
+		t.Fatalf("indexed shared = %d, want %d", got, wantShared)
+	}
+	if got := reg.Ints.Get("spatial.cell_overflows").Load(); got != 0 {
+		t.Fatalf("cell overflows = %d, want 0 after filling the shared half exactly", got)
+	}
+}

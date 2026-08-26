@@ -816,8 +816,8 @@ func motionScanDirectional(ctx *engine.GameContext, x, y, count, dx, dy int) Mot
 	}
 
 	for range count {
-		// Use shared engine logic for consistency
-		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, filter)
+		// Both domains: glyphs are player, gold members are shared and carry one
+		_, nextX, nextY, found := ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
 		if !found {
 			break
 		}
@@ -870,8 +870,8 @@ func MotionColoredGlyph(ctx *engine.GameContext, x, y, count int, motion input.M
 	for range count {
 		var nextX, nextY int
 		var ok bool
-		// Use the centralized engine logic
-		_, nextX, nextY, ok = ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, filter)
+		// Both domains: the color filter narrows the result, the scope must not
+		_, nextX, nextY, ok = ctx.World.Positions.FindClosestEntityInDirection(endX, endY, dx, dy, bounds, engine.ScopeBoth, filter)
 
 		if !ok {
 			// If not found in sequence, stop at last valid

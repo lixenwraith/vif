@@ -17,8 +17,9 @@ import (
 type CombatSystem struct {
 	world *engine.World
 
-	// Random source for knockback impulse randomization
-	rng *vmath.FastRand
+	// Knockback impulse streams, selected by the impulse recipient's domain
+	rngShared *vmath.FastRand
+	rngPlayer *vmath.FastRand
 
 	// Telemetry
 	statActive        *atomic.Bool
@@ -108,7 +109,8 @@ func NewCombatSystem(world *engine.World) engine.System {
 }
 
 func (s *CombatSystem) Init() {
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
+	s.rngShared = s.world.Rand(core.DomainShared, s.Name())
+	s.rngPlayer = s.world.Rand(core.DomainPlayer, s.Name())
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statDirect.Store(0)
@@ -293,6 +295,15 @@ func (s *CombatSystem) resolveOriginVelocity(hasVelocity bool, vx, vy float64, o
 		return k.VelX, k.VelY, true
 	}
 	return 0, 0, false
+}
+
+// knockbackStream selects the impulse stream by the recipient's domain, so a
+// knockback on a local drain never advances the shared sequence.
+func (s *CombatSystem) knockbackStream(e core.Entity) *vmath.FastRand {
+	if e.Domain() == core.DomainPlayer {
+		return s.rngPlayer
+	}
+	return s.rngShared
 }
 
 // applyHitDirect applies combat hit to a target.
@@ -678,16 +689,7 @@ func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEnti
 	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
 	if hitEntity != targetEntity {
 		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
-			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
-			s.statKnock.Add(1)
-			return true
-		}
-	}
-
-	// Priority: hitEntity kinetic (ablative member with own kinetic, e.g. snake body)
-	if hitEntity != targetEntity {
-		if hitKinetic, ok := s.world.Components.Kinetic.GetPtr(hitEntity); ok {
-			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
+			physics.ApplyCollision(&hitKinetic.Kinetic, originVelX, originVelY, collisionProfile, s.knockbackStream(hitEntity))
 			s.statKnock.Add(1)
 			return true
 		}
@@ -698,10 +700,11 @@ func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEnti
 	if !ok {
 		return false
 	}
+	rng := s.knockbackStream(targetEntity)
 
 	if targetEntity == hitEntity {
 		// Direct hit on simple entity or header itself
-		physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, collisionProfile, s.rng)
+		physics.ApplyCollision(&targetKineticComp.Kinetic, originVelX, originVelY, collisionProfile, rng)
 		s.statKnock.Add(1)
 	} else {
 		// Member hit, kinetic on header — offset collision for angular impulse
@@ -722,7 +725,7 @@ func (s *CombatSystem) applyCollision(originVelX, originVelY float64, targetEnti
 			originVelX, originVelY,
 			offsetX, offsetY,
 			collisionProfile,
-			s.rng,
+			rng,
 		)
 		s.statKnock.Add(1)
 	}
@@ -740,6 +743,7 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	if !ok {
 		return false
 	}
+	rng := s.knockbackStream(targetEntity)
 
 	// Determine origin position for radial direction
 	var originX, originY int
@@ -770,14 +774,14 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 
 	// Single entity - direct radial knockback
 	if len(hits) == 1 && targetEntity == hits[0] {
-		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, rng)
 		return true
 	}
 
 	// Composite - calculate centroid offset for angled knockback
 	headerComp, ok := s.world.Components.Header.GetPtr(targetEntity)
 	if !ok {
-		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, rng)
 		return true
 	}
 
@@ -796,11 +800,11 @@ func (s *CombatSystem) applyAreaKnockback(payload *event.CombatAttackAreaRequest
 	}
 
 	if hitCount == 0 {
-		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, s.rng)
+		physics.ApplyCollision(&targetKineticComp.Kinetic, radialX, radialY, collisionProfile, rng)
 	} else {
 		centroidX := sumX / hitCount
 		centroidY := sumY / hitCount
-		physics.ApplyOffsetCollision(&targetKineticComp.Kinetic, radialX, radialY, centroidX, centroidY, collisionProfile, s.rng)
+		physics.ApplyOffsetCollision(&targetKineticComp.Kinetic, radialX, radialY, centroidX, centroidY, collisionProfile, rng)
 	}
 	return true
 }

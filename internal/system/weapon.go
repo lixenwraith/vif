@@ -575,7 +575,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 		if launcherReady && launcherCharges > maxNeeded {
 			maxNeeded = launcherCharges
 		}
-		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, cursor)
+		sharedAssignments = FindNearestTargets(s.world, fromX, fromY, maxNeeded, engine.ScopeBoth, cursor)
 	}
 
 	for wt := range weaponComp.Charges {
@@ -673,7 +673,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 
 // fireDisruptorWeapon discharges one cursor's area pulse
 func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos component.PositionComponent, weaponComp *component.WeaponComponent) {
-	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, cursor)
+	targets := FindTargetsInEllipse(s.world, cursorPos.X, cursorPos.Y, parameter.PulseRadiusInvRxSq, parameter.PulseRadiusInvRySq, engine.ScopeBoth, cursor)
 	if len(targets) == 0 {
 		return
 	}

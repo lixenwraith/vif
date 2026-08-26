@@ -110,7 +110,7 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCleanerSweepingRequest:
 		if payload, ok := ev.Payload.(*event.CleanerSweepingRequestPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
-				s.spawnSweepingCleaners(cursor)
+				s.spawnSweepingCleaners(ev.Domain, cursor)
 			} else {
 				s.statCursorRejects.Add(1)
 			}
@@ -119,12 +119,13 @@ func (s *CleanerSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventCleanerDirectionalRequest:
 		if payload, ok := ev.Payload.(*event.DirectionalCleanerPayload); ok {
 			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
-				s.spawnDirectionalCleaners(cursor, payload.OriginX, payload.OriginY, payload.ColorType)
+				s.spawnDirectionalCleaners(ev.Domain, cursor, payload.OriginX, payload.OriginY, payload.ColorType)
 			} else {
 				s.statCursorRejects.Add(1)
 			}
 		}
 	}
+
 }
 
 // Update handles spawning, movement, collision, and cleanup synchronously
@@ -344,8 +345,8 @@ func cleanerFlightBounds(size int) (negative, positive float64) {
 	return -margin + 0.5, float64(size) + margin - 0.5
 }
 
-// spawnSweepingCleaners generates cleaner entities for one cursor.
-func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
+// spawnSweepingCleaners generates cleaner entities for one cursor in the request's domain.
+func (s *CleanerSystem) spawnSweepingCleaners(domain core.Domain, owner core.Entity) {
 	config := s.world.Resources.Config
 
 	rows := s.scanTargetRows(owner)
@@ -415,7 +416,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 		kineticComp := component.KineticComponent{Kinetic: kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent (float overlay)
-		entity := s.world.CreateEntity(core.DomainShared)
+		entity := s.world.CreateEntity(domain)
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)
@@ -427,7 +428,13 @@ func (s *CleanerSystem) spawnSweepingCleaners(owner core.Entity) {
 
 // checkCollisions handles combat and glyph interactions at a single cell
 // Returns true if a combat entity was hit (blocks cleaner head)
+// Nugget cleaners are visual-only: a shared cleaner consuming player glyphs is an
+// undeclared crossing under multi-instance, so the mechanic is deprecated, not bridged.
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, colorType component.CleanerColorType) bool {
+	if colorType == component.CleanerColorNugget {
+		return false
+	}
+
 	var entityBuf [parameter.MaxEntitiesPerCell]core.Entity
 	n := s.world.Positions.GetAllEntitiesAtInto(x, y, entityBuf[:])
 	if n == 0 {
@@ -473,8 +480,6 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 		s.processPositiveEnergy(entities, selfEntity)
 	case component.CleanerColorNegative:
 		s.processNegativeEnergy(x, y, entities, selfEntity)
-	case component.CleanerColorNugget:
-		s.processNuggetEnergy(entities, selfEntity)
 	}
 
 	return blocked
@@ -530,30 +535,8 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 	}
 }
 
-// processNuggetEnergy handles Green destruction with Blossom spawn
-func (s *CleanerSystem) processNuggetEnergy(targetEntities []core.Entity, selfEntity core.Entity) {
-	var toDestroy []core.Entity
-
-	for _, targetEntity := range targetEntities {
-		if targetEntity == 0 || targetEntity == selfEntity {
-			continue
-		}
-		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
-			if glyphComp.Type == component.GlyphGreen {
-				toDestroy = append(toDestroy, targetEntity)
-			}
-		}
-	}
-
-	if len(toDestroy) == 0 {
-		return
-	}
-
-	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy...)
-}
-
-// spawnDirectionalCleaners generates four cleaner entities owned by one cursor.
-func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, originY int, colorType component.CleanerColorType) {
+// spawnDirectionalCleaners generates four cleaner entities owned by one cursor in the request's domain.
+func (s *CleanerSystem) spawnDirectionalCleaners(domain core.Domain, owner core.Entity, originX, originY int, colorType component.CleanerColorType) {
 	config := s.world.Resources.Config
 
 	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
@@ -609,7 +592,7 @@ func (s *CleanerSystem) spawnDirectionalCleaners(owner core.Entity, originX, ori
 		kineticComp := component.KineticComponent{Kinetic: kinetic}
 
 		// Spawn Protocol: CreateEntity → PositionComponent (grid registration) → CleanerComponent
-		entity := s.world.CreateEntity(core.DomainShared)
+		entity := s.world.CreateEntity(domain)
 		s.world.Positions.SetPosition(entity, component.PositionComponent{X: startGridX, Y: startGridY})
 		s.world.Components.Cleaner.SetComponent(entity, cleanerComp)
 		s.world.Components.Kinetic.SetComponent(entity, kineticComp)

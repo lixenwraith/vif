@@ -73,10 +73,11 @@ func ResolveTargetFromEntity(w *engine.World, entity, selfEntity core.Entity) (c
 }
 
 // HasCombatTargetAt reports whether a non-player combat target occupies a cell.
+// scope selects the enumerated domains; shared species pass ScopeShared, weapons ScopeBoth.
 // It excludes self, every cursor, cursor-owned orbs, and entities owned by ownerEntity.
-func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.Entity) bool {
+func HasCombatTargetAt(w *engine.World, x, y int, scope engine.DomainScope, selfEntity, ownerEntity core.Entity) bool {
 	var entities [parameter.MaxEntitiesPerCell]core.Entity
-	count := w.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	count := w.Positions.GetEntitiesAtInto(x, y, scope, entities[:])
 	for i := range count {
 		e := entities[i]
 		target, _, valid := ResolveTargetFromEntity(w, e, selfEntity)
@@ -101,12 +102,15 @@ func HasCombatTargetAt(w *engine.World, x, y int, selfEntity, ownerEntity core.E
 // Iterates Combat store (singles) and Member store (composites) for species-agnostic resolution.
 // Result order is store order, never map order: callers emit one event per group and
 // combat resolution consumes RNG per event.
-func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, ownerEntity core.Entity) []TargetGroup {
+func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64, scope engine.DomainScope, ownerEntity core.Entity) []TargetGroup {
 	index := make(map[core.Entity]int)
 	result := make([]TargetGroup, 0, 8)
 
 	// 1. Simple combat entities (no Header, no Member component)
 	for _, e := range w.Components.Combat.Entities() {
+		if !scope.Selects(e) {
+			continue
+		}
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
@@ -126,7 +130,11 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 
 	// 2. Composite members — covers Unit hitbox members and Ablative combat members.
 	// Container children are filtered by header type check.
+	// Members share their header's domain by construction, so filtering here covers both.
 	for _, memberEntity := range w.Components.Member.Entities() {
+		if !scope.Selects(memberEntity) {
+			continue
+		}
 		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
 		if !ok {
 			continue
@@ -171,7 +179,7 @@ func FindTargetsInEllipse(w *engine.World, cx, cy int, invRxSq, invRySq float64,
 //
 // Composites are accumulated in Member store order, so the stable sort breaks
 // distance ties identically every run.
-func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerEntity core.Entity) []TargetAssignment {
+func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, scope engine.DomainScope, ownerEntity core.Entity) []TargetAssignment {
 	if count <= 0 {
 		return nil
 	}
@@ -182,6 +190,9 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 
 	// 1. Simple combat entities
 	for _, e := range w.Components.Combat.Entities() {
+		if !scope.Selects(e) {
+			continue
+		}
 		if w.Components.Header.HasEntity(e) || w.Components.Member.HasEntity(e) {
 			continue
 		}
@@ -202,6 +213,9 @@ func FindNearestTargets(w *engine.World, fromX, fromY float64, count int, ownerE
 
 	// 2. Composite members — closest member per header
 	for _, memberEntity := range w.Components.Member.Entities() {
+		if !scope.Selects(memberEntity) {
+			continue
+		}
 		memberComp, ok := w.Components.Member.GetPtr(memberEntity)
 		if !ok {
 			continue

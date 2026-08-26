@@ -255,7 +255,8 @@ func (s *MissileSystem) traverseForImpact(fromX, fromY, toX, toY float64, owner 
 		}
 
 		// Combatant collision
-		if HasCombatTargetAt(s.world, currX, currY, 0, owner) {
+		// Both domains: the missile is player-domain, so a drain detonates it too
+		if HasCombatTargetAt(s.world, currX, currY, engine.ScopeBoth, 0, owner) {
 			return currX, currY, impactCombatant
 		}
 
@@ -295,7 +296,7 @@ func (s *MissileSystem) resolveTarget(m *component.MissileComponent, missileX, m
 	}
 
 	// 3. Retarget: nearest combatant
-	targets := FindNearestTargets(s.world, missileX, missileY, 1, m.Owner)
+	targets := FindNearestTargets(s.world, missileX, missileY, 1, engine.ScopeBoth, m.Owner)
 	if len(targets) == 0 {
 		return 0, 0, false
 	}

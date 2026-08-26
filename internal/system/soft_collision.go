@@ -43,10 +43,15 @@ type FlockingRule struct {
 // Source repels Target. nil entry = no flocking interaction
 type FlockingMatrix [component.SpeciesCount][component.SpeciesCount]*FlockingRule
 
-// SoftCollisionSystem centralizes inter-species soft collision and flocking separation
+// SoftCollisionSystem centralizes inter-species soft collision and flocking separation.
+// Dual-domain (D-7): it observes both domains and may write kinetic in either, so its
+// impulse stream is selected by the target's domain.
 type SoftCollisionSystem struct {
 	world *engine.World
-	rng   *vmath.FastRand
+
+	// Impulse streams, selected by the target's domain
+	rngShared *vmath.FastRand
+	rngPlayer *vmath.FastRand
 
 	// Internal position caches (rebuilt each tick)
 	drains  []collisionEntry
@@ -189,7 +194,8 @@ func (s *SoftCollisionSystem) initFlockingMatrix() {
 }
 
 func (s *SoftCollisionSystem) Init() {
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
+	s.rngShared = s.world.Rand(core.DomainShared, s.Name())
+	s.rngPlayer = s.world.Rand(core.DomainPlayer, s.Name())
 	s.clearCaches()
 	s.statCollisions.Store(0)
 	s.statImmuneRejects.Store(0)
@@ -364,6 +370,15 @@ func (s *SoftCollisionSystem) processCollisionPair(
 	}
 }
 
+// impulseStream selects the stream by the recipient's domain, so a player impulse
+// never advances the shared sequence.
+func (s *SoftCollisionSystem) impulseStream(e core.Entity) *vmath.FastRand {
+	if e.Domain() == core.DomainPlayer {
+		return s.rngPlayer
+	}
+	return s.rngShared
+}
+
 // tryApplyCollision checks and applies collision from source position to target entity
 func (s *SoftCollisionSystem) tryApplyCollision(
 	sourceX, sourceY int,
@@ -404,7 +419,7 @@ func (s *SoftCollisionSystem) tryApplyCollision(
 		return
 	}
 
-	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile, s.rng)
+	impulseX, impulseY := physics.ImpulseFromProfile(radialX, radialY, rule.Profile, s.impulseStream(targetEntity))
 
 	physics.ApplyImpulse(&kineticComp.Kinetic, impulseX, impulseY)
 	s.statCollisions.Add(1)

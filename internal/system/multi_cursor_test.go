@@ -159,7 +159,7 @@ func TestBulletCollisionAddressesHitCursor(t *testing.T) {
 
 func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 	w, first, second := testCursorWorld(t)
-	if HasCombatTargetAt(w, 15, 5, 0, first) {
+	if HasCombatTargetAt(w, 15, 5, engine.ScopeBoth, 0, first) {
 		t.Fatalf("slot-one cursor %d was treated as a combat target", second)
 	}
 
@@ -170,7 +170,7 @@ func TestCombatQueriesExcludeEveryCursor(t *testing.T) {
 		CombatEntityType: component.CombatEntityDrain,
 		HitPoints:        1,
 	})
-	targets := FindNearestTargets(w, 15, 5, 1, first)
+	targets := FindNearestTargets(w, 15, 5, 1, engine.ScopeBoth, first)
 	if len(targets) != 1 || targets[0].Target != target {
 		t.Fatalf("nearest targets = %#v, want only combat target %d", targets, target)
 	}

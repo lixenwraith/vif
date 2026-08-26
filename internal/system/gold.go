@@ -278,7 +278,7 @@ func (s *GoldSystem) spawnGold() bool {
 		batch.Add(ed.entity, ed.pos)
 	}
 
-	if err := batch.Commit(); err != nil {
+	if err := batch.CommitShared(); err != nil {
 		for _, ed := range entities {
 			s.world.DestroyEntity(ed.entity)
 		}
