@@ -370,6 +370,12 @@ func handleSystemCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
+	if !enabledFlag && !ctx.World.AllowSystemDisable(args[0]) {
+		setCommandError(ctx, fmt.Sprintf("%s is required by %s", args[0],
+			strings.Join(ctx.World.SystemsRequiring(args[0], engine.DepRequired), ", ")))
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
 	ctx.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
 		SystemName: args[0],
 		Enabled:    enabledFlag,

@@ -20,7 +20,12 @@ func worldHost() std.Host[*engine.World] {
 	return std.Host[*engine.World]{
 		Emit: (*engine.World).PushEvent,
 
+		// A declared required dependency outranks the config: refusing here is
+		// the runtime half of the load-time check in app.checkSystems
 		SetSystem: func(w *engine.World, name string, enabled bool) {
+			if !enabled && !w.AllowSystemDisable(name) {
+				return
+			}
 			w.PushEvent(event.EventMetaSystemCommandRequest, &event.MetaSystemCommandPayload{
 				SystemName: name,
 				Enabled:    enabled,

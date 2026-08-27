@@ -2,6 +2,8 @@ package engine
 
 import (
 	"slices"
+	"strings"
+	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -56,6 +58,10 @@ type World struct {
 	// domain tags events pushed by a system serving both domains. Written only
 	// under updateMutex via WithDomain; atomic because lock-free pushers read it.
 	domain atomic.Int32
+
+	// degradedSystems remembers the disabled systems that already reported an
+	// optional dependent, so a region re-applying its config reports once
+	degradedSystems sync.Map
 }
 
 // NewWorld creates a new ECS world with dynamic component store support
@@ -225,6 +231,25 @@ func (w *World) SystemsRequiring(name string, strength DependencyStrength) []str
 	}
 	slices.Sort(dependents)
 	return dependents
+}
+
+// AllowSystemDisable reports whether name may be disabled. A system declaring
+// it required refuses the request; an optional dependent is reported once.
+// Region configs are checked at load time; this covers the runtime commands and
+// FSM actions that validation cannot see.
+func (w *World) AllowSystemDisable(name string) bool {
+	if required := w.SystemsRequiring(name, DepRequired); len(required) > 0 {
+		vlog.Warn("system", "msg", "disable refused", "system", name,
+			"required_by", strings.Join(required, ","))
+		return false
+	}
+	if optional := w.SystemsRequiring(name, DepOptional); len(optional) > 0 {
+		if _, reported := w.degradedSystems.LoadOrStore(name, true); !reported {
+			vlog.Info("system", "msg", "dependents degraded", "system", name,
+				"optional_for", strings.Join(optional, ","))
+		}
+	}
+	return true
 }
 
 // Systems returns a copy of all registered systems

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"maps"
 	"reflect"
 	"sort"
 	"strings"
@@ -56,11 +57,13 @@ func checkFSM(cfg Config, w io.Writer) error {
 	return checkSystems(m, w)
 }
 
-// checkSystems validates every system name the config references
+// checkSystems validates every system name the config references, then every
+// required dependency the resulting system set would leave unsatisfied
 func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
-	valid := make(map[string]bool)
-	for _, n := range manifest.ActiveSystems() {
-		valid[n] = true
+	profiles := manifest.SystemProfiles()
+	valid := make(map[string]bool, len(profiles))
+	for _, p := range profiles {
+		valid[p.Name] = true
 	}
 
 	var unknown []string
@@ -71,8 +74,11 @@ func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
 			}
 		}
 	}
+
+	var globalDisabled []string
 	if sc := m.GetSystemsConfig(); sc != nil {
-		check("[systems]", sc.DisabledSystems)
+		globalDisabled = sc.DisabledSystems
+		check("[systems]", globalDisabled)
 	}
 	for _, r := range m.DeclaredRegions() {
 		cfg := m.GetRegionConfig(r)
@@ -85,7 +91,64 @@ func checkSystems(m *fsm.Machine[*engine.World], w io.Writer) error {
 	if len(unknown) > 0 {
 		return fmt.Errorf("unknown system names:\n  %s", strings.Join(unknown, "\n  "))
 	}
+
+	if err := checkSystemDependencies(m, profiles, globalDisabled); err != nil {
+		return err
+	}
 	fmt.Fprintln(w, "systems ok")
+	return nil
+}
+
+// checkSystemDependencies reports every enabled system whose required
+// dependency the config disables. Each region is evaluated against the global
+// baseline alone, which is the set ApplyRegionSystemConfigs leaves behind when
+// that region spawns or resumes.
+func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.SystemProfile,
+	globalDisabled []string) error {
+
+	base := make(map[string]bool, len(profiles))
+	for _, p := range profiles {
+		base[p.Name] = true
+	}
+	for _, n := range globalDisabled {
+		base[n] = false
+	}
+
+	var broken []string
+	collect := func(where string, enabled map[string]bool) {
+		for _, p := range profiles {
+			if !enabled[p.Name] {
+				continue
+			}
+			for _, dep := range p.Requires {
+				if dep.Strength == engine.DepRequired && !enabled[dep.Name] {
+					broken = append(broken, fmt.Sprintf("%s: %s requires %s", where, p.Name, dep.Name))
+				}
+			}
+		}
+	}
+
+	collect("[systems]", base)
+	for _, r := range m.DeclaredRegions() {
+		cfg := m.GetRegionConfig(r)
+		if cfg == nil {
+			continue
+		}
+		enabled := maps.Clone(base)
+		for _, n := range cfg.DisabledSystems {
+			enabled[n] = false
+		}
+		for _, n := range cfg.EnabledSystems {
+			enabled[n] = true
+		}
+		collect("region "+r, enabled)
+	}
+
+	if len(broken) > 0 {
+		return fmt.Errorf("required systems disabled:\n  %s\n"+
+			"Enable the dependency, or disable the system that requires it.",
+			strings.Join(broken, "\n  "))
+	}
 	return nil
 }
 

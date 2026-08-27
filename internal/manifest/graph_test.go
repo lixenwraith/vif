@@ -102,3 +102,32 @@ func TestNoSystemRequiresItself(t *testing.T) {
 		}
 	}
 }
+
+// TestAllowSystemDisableRefusesRequired asserts the runtime guard refuses a
+// disable a dependent cannot survive, and permits one it can
+func TestAllowSystemDisableRefusesRequired(t *testing.T) {
+	w := buildWorld(t)
+
+	if w.AllowSystemDisable("composite") {
+		t.Error("disabling composite was allowed; wall and every composite species require it")
+	}
+	if !w.AllowSystemDisable("glyph") {
+		t.Error("disabling glyph was refused; every dependent declares it optional")
+	}
+}
+
+// TestEverySystemDependencyIsRegistered asserts no declaration names a system
+// the manifest does not build, which would fail startup rather than validation
+func TestEverySystemDependencyIsRegistered(t *testing.T) {
+	registered := make(map[string]bool, len(ActiveSystems()))
+	for _, n := range ActiveSystems() {
+		registered[n] = true
+	}
+	for _, p := range SystemProfiles() {
+		for _, dep := range p.Requires {
+			if !registered[dep.Name] {
+				t.Errorf("%s declares %s, which the manifest does not build", p.Name, dep.Name)
+			}
+		}
+	}
+}
