@@ -3,6 +3,7 @@ package app
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -248,6 +249,15 @@ func (a *App) initScheduler() error {
 
 	// MetaSystem is context-scoped, so it joins the set here rather than via the manifest
 	a.world.AddSystem(system.NewMetaSystem(a.ctx))
+
+	// The declared dependency graph is resolved once the set is complete; an
+	// unknown name or a cycle is a startup error, not a runtime degradation
+	order, err := a.world.SystemInitOrder()
+	if err != nil {
+		return fmt.Errorf("system dependencies: %w", err)
+	}
+	vlog.Debug("app", "msg", "system init order", "systems", strings.Join(order, ","))
+
 	for _, sys := range a.world.Systems() {
 		if h, ok := sys.(event.Handler); ok {
 			a.scheduler.RegisterEventHandler(h)

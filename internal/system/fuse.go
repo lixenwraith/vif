@@ -72,6 +72,11 @@ func (s *FuseSystem) Name() string {
 // Domain reports player: it draws the player stream and crosses as a spawn request (D-3).
 func (s *FuseSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires the drains it consumes and the spawn path it fuses into.
+func (s *FuseSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("drain", "materialize", "spirit"), engine.Optional("quasar", "swarm")...)
+}
+
 func (s *FuseSystem) Priority() int {
 	return parameter.PriorityFuse
 }

@@ -57,6 +57,9 @@ func (s *CursorSystem) Name() string { return "cursor" }
 // Domain reports shared: it creates the shared cursor entity, whose creation order is replicated (D-11).
 func (s *CursorSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires nothing: the roster is the root of the graph.
+func (s *CursorSystem) Requires() engine.SystemDependencies { return nil }
+
 // Priority returns the system's priority
 func (s *CursorSystem) Priority() int { return parameter.PriorityCursor }
 

@@ -50,6 +50,11 @@ func (s *BulletSystem) Name() string { return "bullet" }
 // Domain reports player: it creates player bullets and owns the player Bullet store.
 func (s *BulletSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Bullets arrive by request; combat resolves what they hit.
+func (s *BulletSystem) Requires() engine.SystemDependencies {
+	return engine.Optional("combat")
+}
+
 // Priority: define parameter.PriorityBullet, schedule after storm and before render
 func (s *BulletSystem) Priority() int { return 0 }
 

@@ -132,6 +132,11 @@ func (s *DrainSystem) Name() string {
 // Domain reports player: it draws the player stream and creates player entities.
 func (s *DrainSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires the materializer gating every spawn; heat sets the population.
+func (s *DrainSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("materialize"), engine.Optional("heat", "navigation", "combat")...)
+}
+
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
 	return parameter.PriorityDrain

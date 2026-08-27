@@ -50,6 +50,11 @@ func (s *ShieldSystem) Name() string { return "shield" }
 // Domain reports player: it writes owner-authored cursor shield state (D-13).
 func (s *ShieldSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires the cursor the shield lives on; energy funds it.
+func (s *ShieldSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("cursor"), engine.Optional("energy")...)
+}
+
 // Priority returns the system's priority
 func (s *ShieldSystem) Priority() int { return parameter.PriorityShield }
 

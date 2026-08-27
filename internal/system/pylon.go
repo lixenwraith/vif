@@ -57,6 +57,11 @@ func (s *PylonSystem) Name() string {
 // Domain reports shared: it draws the shared stream and creates shared entities.
 func (s *PylonSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the composite contract its body is built on.
+func (s *PylonSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("composite"), engine.Optional("navigation", "combat")...)
+}
+
 func (s *PylonSystem) Priority() int {
 	return parameter.PriorityPylon
 }

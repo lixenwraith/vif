@@ -43,6 +43,45 @@ func ParseSystemDomain(s string) (SystemDomain, bool) {
 	return 0, false
 }
 
+// DependencyStrength grades what a missing dependency costs its dependent
+type DependencyStrength uint8
+
+const (
+	// DepRequired marks a dependency the dependent cannot function without.
+	// Disabling it is refused and reported.
+	DepRequired DependencyStrength = iota
+	// DepOptional marks a dependency whose absence only degrades the dependent.
+	// Disabling it is legal and reported once.
+	DepOptional
+)
+
+// SystemDependency names a system another system needs, and how badly.
+// Dependencies order initialization and gate the enable and disable commands.
+// Tick order is Priority()'s business; the two often agree but are not the same
+// relation and neither may be derived from the other.
+type SystemDependency struct {
+	Name     string
+	Strength DependencyStrength
+}
+
+// SystemDependencies is one system's declared dependency set
+type SystemDependencies []SystemDependency
+
+// Require names systems the caller cannot function without
+func Require(names ...string) SystemDependencies { return dependencies(names, DepRequired) }
+
+// Optional names systems whose absence only degrades the caller
+func Optional(names ...string) SystemDependencies { return dependencies(names, DepOptional) }
+
+// dependencies pairs each name with one strength
+func dependencies(names []string, strength DependencyStrength) SystemDependencies {
+	deps := make(SystemDependencies, len(names))
+	for i, n := range names {
+		deps[i] = SystemDependency{Name: n, Strength: strength}
+	}
+	return deps
+}
+
 // System is an interface that all systems must implement
 type System interface {
 	Init()
@@ -50,5 +89,7 @@ type System interface {
 	Name() string
 	// Domain declares which domains the system reads and writes
 	Domain() SystemDomain
+	// Requires declares the systems this one needs, and how badly
+	Requires() SystemDependencies
 	Update()
 }

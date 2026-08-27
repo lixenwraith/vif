@@ -36,6 +36,11 @@ func (s *CameraSystem) Name() string {
 // Domain reports player: the camera is per-instance view, gated on the local cursor.
 func (s *CameraSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires the cursor it follows.
+func (s *CameraSystem) Requires() engine.SystemDependencies {
+	return engine.Require("cursor")
+}
+
 func (s *CameraSystem) Priority() int {
 	return parameter.PriorityCamera // Run early, before rendering-related systems
 }

@@ -42,6 +42,11 @@ func (s *LightningSystem) Name() string {
 // Domain reports player: it draws the player stream and creates player entities (D-8).
 func (s *LightningSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires nothing: strikes arrive by request.
+func (s *LightningSystem) Requires() engine.SystemDependencies {
+	return engine.Optional("combat")
+}
+
 func (s *LightningSystem) Priority() int {
 	// After quasar, before render
 	return parameter.PriorityLightning

@@ -109,6 +109,11 @@ func (s *AdaptationSystem) Name() string {
 // Domain reports shared: it draws the shared stream and writes only shared route state.
 func (s *AdaptationSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the route graphs it scores.
+func (s *AdaptationSystem) Requires() engine.SystemDependencies {
+	return engine.Require("navigation")
+}
+
 func (s *AdaptationSystem) Priority() int {
 	return parameter.PriorityAdaptation
 }

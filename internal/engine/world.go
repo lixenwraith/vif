@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -192,6 +193,38 @@ func (w *World) HasSystem(name string) bool {
 		}
 	}
 	return false
+}
+
+// SystemInitOrder resolves declared dependencies into a deterministic
+// initialization order. This is not the tick order, which AddSystem fixes from
+// Priority(); a system may legitimately initialize before one that ticks first.
+func (w *World) SystemInitOrder() ([]string, error) {
+	deps := make(map[string][]string, len(w.systems))
+	for _, s := range w.systems {
+		required := s.Requires()
+		names := make([]string, 0, len(required))
+		for _, d := range required {
+			names = append(names, d.Name)
+		}
+		deps[s.Name()] = names
+	}
+	return core.TopoSort(deps)
+}
+
+// SystemsRequiring returns the registered systems declaring name at the given
+// strength, sorted. Callers use it to refuse or report a disable request.
+func (w *World) SystemsRequiring(name string, strength DependencyStrength) []string {
+	var dependents []string
+	for _, s := range w.systems {
+		for _, d := range s.Requires() {
+			if d.Name == name && d.Strength == strength {
+				dependents = append(dependents, s.Name())
+				break
+			}
+		}
+	}
+	slices.Sort(dependents)
+	return dependents
 }
 
 // Systems returns a copy of all registered systems

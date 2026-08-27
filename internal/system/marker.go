@@ -32,6 +32,9 @@ func (s *MarkerSystem) Name() string {
 // Domain reports shared: it creates shared marker entities.
 func (s *MarkerSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires nothing: markers arrive by request.
+func (s *MarkerSystem) Requires() engine.SystemDependencies { return nil }
+
 func (s *MarkerSystem) Priority() int {
 	return parameter.PrioritySplash - 10 // Before splash, after game logic
 }

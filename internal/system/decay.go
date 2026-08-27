@@ -78,6 +78,11 @@ func (s *DecaySystem) Name() string {
 // Domain reports player: it draws the player stream and creates player entities.
 func (s *DecaySystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Decay follows glyphs and deaths and idles without them.
+func (s *DecaySystem) Requires() engine.SystemDependencies {
+	return engine.Optional("glyph", "death")
+}
+
 // Priority returns the system's priority
 func (s *DecaySystem) Priority() int {
 	return parameter.PriorityDecay

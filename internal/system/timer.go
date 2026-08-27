@@ -38,6 +38,11 @@ func (s *TimerSystem) Name() string {
 // Domain reports dual: it expires timers on entities of either domain.
 func (s *TimerSystem) Domain() engine.SystemDomain { return engine.SystemDual }
 
+// Requires the death pipeline every expiry routes through.
+func (s *TimerSystem) Requires() engine.SystemDependencies {
+	return engine.Require("death")
+}
+
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimerSystem) Priority() int {
 	return parameter.PriorityTimekeeper

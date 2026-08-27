@@ -90,6 +90,11 @@ func (s *MusicSystem) Name() string {
 // Domain reports player: it draws the player stream and writes no simulation state.
 func (s *MusicSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires nothing: without an audio engine it tracks intensity silently.
+func (s *MusicSystem) Requires() engine.SystemDependencies {
+	return engine.Optional("audio")
+}
+
 // Priority returns system priority
 func (s *MusicSystem) Priority() int {
 	return parameter.PriorityUI + 1

@@ -53,6 +53,11 @@ func (s *BoostSystem) Name() string { return "boost" }
 // Domain reports player: it writes owner-authored cursor boost state (D-13).
 func (s *BoostSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires the cursor the boost lives on; energy funds it.
+func (s *BoostSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("cursor"), engine.Optional("energy")...)
+}
+
 // Priority returns the system's priority
 func (s *BoostSystem) Priority() int { return parameter.PriorityBoost }
 

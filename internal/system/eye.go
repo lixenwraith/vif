@@ -57,6 +57,11 @@ func (s *EyeSystem) Name() string {
 // Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
 func (s *EyeSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the composite contract its body is built on.
+func (s *EyeSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("composite"), engine.Optional("navigation", "combat")...)
+}
+
 func (s *EyeSystem) Priority() int {
 	return parameter.PriorityEye
 }

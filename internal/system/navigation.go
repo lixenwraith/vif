@@ -141,6 +141,9 @@ func (s *NavigationSystem) Name() string {
 // Domain reports shared: flow fields and route graphs are derived from shared species alone.
 func (s *NavigationSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires nothing: fields are derived from the map and shared species.
+func (s *NavigationSystem) Requires() engine.SystemDependencies { return nil }
+
 func (s *NavigationSystem) Priority() int {
 	return parameter.PriorityNavigation
 }

@@ -77,6 +77,11 @@ func (s *GoldSystem) Name() string {
 // Domain reports shared: shared stream and shared entities; the claim is contested, the reward owner-authored.
 func (s *GoldSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the composite contract its chain is built on.
+func (s *GoldSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("composite"), engine.Optional("nugget", "energy", "splash")...)
+}
+
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
 	return parameter.PriorityGold

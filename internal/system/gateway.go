@@ -53,6 +53,11 @@ func (s *GatewaySystem) Name() string {
 // Domain reports shared: it draws the shared stream and creates shared gateway entities.
 func (s *GatewaySystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the route graph it anchors; the species it gates are optional.
+func (s *GatewaySystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("navigation"), engine.Optional("eye", "snake")...)
+}
+
 func (s *GatewaySystem) Priority() int {
 	return parameter.PriorityGateway
 }

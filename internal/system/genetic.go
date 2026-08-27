@@ -112,6 +112,11 @@ func (s *GeneticSystem) Name() string { return "genetic" }
 // Domain reports shared: it writes the Genotype store of shared species.
 func (s *GeneticSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires nothing: it observes lifecycle and route outcomes.
+func (s *GeneticSystem) Requires() engine.SystemDependencies {
+	return engine.Optional("death", "adaptation")
+}
+
 func (s *GeneticSystem) Priority() int { return parameter.PriorityGenetic }
 
 func (s *GeneticSystem) EventTypes() []event.EventType {

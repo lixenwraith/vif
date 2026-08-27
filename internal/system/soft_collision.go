@@ -210,6 +210,9 @@ func (s *SoftCollisionSystem) Name() string {
 // Domain reports dual: it holds one stream per domain and selects by the occupant's domain (D-8).
 func (s *SoftCollisionSystem) Domain() engine.SystemDomain { return engine.SystemDual }
 
+// Requires nothing: it resolves the occupants it finds.
+func (s *SoftCollisionSystem) Requires() engine.SystemDependencies { return nil }
+
 func (s *SoftCollisionSystem) Priority() int {
 	return parameter.PrioritySoftCollision
 }

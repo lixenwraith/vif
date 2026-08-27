@@ -84,6 +84,11 @@ func (s *ExplosionSystem) Name() string {
 // Domain reports shared: explosion centers are the crossing artifact and stay shared (D-3).
 func (s *ExplosionSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires combat, which resolves the area attack each center emits.
+func (s *ExplosionSystem) Requires() engine.SystemDependencies {
+	return engine.Require("combat")
+}
+
 func (s *ExplosionSystem) Priority() int {
 	return parameter.PriorityExplosion
 }

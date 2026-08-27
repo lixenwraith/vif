@@ -77,6 +77,11 @@ func (s *WeaponSystem) Name() string { return "weapon" }
 // Domain reports player: only the owning instance simulates a cursor's weapons (D-2, D-13).
 func (s *WeaponSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
 
+// Requires a cursor and the energy a shot spends.
+func (s *WeaponSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("cursor", "energy"), engine.Optional("combat", "cleaner")...)
+}
+
 // Priority returns the system's priority
 func (s *WeaponSystem) Priority() int { return parameter.PriorityWeapon }
 

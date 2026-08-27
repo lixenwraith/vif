@@ -57,6 +57,11 @@ func (s *TowerSystem) Name() string {
 // Domain reports shared: it draws the shared stream and creates shared entities.
 func (s *TowerSystem) Domain() engine.SystemDomain { return engine.SystemShared }
 
+// Requires the composite contract its body is built on.
+func (s *TowerSystem) Requires() engine.SystemDependencies {
+	return append(engine.Require("composite"), engine.Optional("navigation", "combat")...)
+}
+
 func (s *TowerSystem) Priority() int {
 	return parameter.PriorityTower
 }
