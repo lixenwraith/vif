@@ -51,7 +51,10 @@ func (r *HeatRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer
 
 	heat := heatComp.Current
 	overheat := heatComp.Overheat
-	r.burstBlink = heatComp.BurstFlashRemaining > 0
+	r.burstBlink = false
+	if view, ok := r.gameCtx.World.Components.CursorView.GetPtr(r.gameCtx.World.Resources.Player.Entity); ok {
+		r.burstBlink = view.BurstFlashRemaining > 0
+	}
 
 	maxX := ctx.ScreenWidth - 1
 	heatFillWidth := (maxX * heat) / 100

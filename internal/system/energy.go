@@ -198,22 +198,23 @@ func (s *EnergySystem) Update() {
 
 	dt := s.world.Resources.Time.DeltaTime
 
-	s.world.Components.Cursor.Each(func(e core.Entity, cursorComp *component.CursorComponent) bool {
-		// Clear error flash after timeout
-		if cursorComp.ErrorFlashRemaining > 0 {
-			cursorComp.ErrorFlashRemaining = max(cursorComp.ErrorFlashRemaining-dt, 0)
-		}
-
-		// Clear energy blink after timeout
-		var energy int64
-		if energyComp, ok := s.world.Components.Energy.GetPtr(e); ok {
-			if energyComp.BlinkActive {
-				energyComp.BlinkRemaining -= dt
-				if energyComp.BlinkRemaining <= 0 {
-					energyComp.BlinkRemaining = 0
-					energyComp.BlinkActive = false
+	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// Local view timers; neither reaches shared simulation
+		if view, ok := s.world.Components.CursorView.GetPtr(e); ok {
+			if view.ErrorFlashRemaining > 0 {
+				view.ErrorFlashRemaining = max(view.ErrorFlashRemaining-dt, 0)
+			}
+			if view.BlinkActive {
+				view.BlinkRemaining -= dt
+				if view.BlinkRemaining <= 0 {
+					view.BlinkRemaining = 0
+					view.BlinkActive = false
 				}
 			}
+		}
+
+		var energy int64
+		if energyComp, ok := s.world.Components.Energy.GetPtr(e); ok {
 			energy = energyComp.Current
 		}
 
@@ -397,26 +398,26 @@ func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType compone
 	}
 }
 
-// startBlink activates blink state on one cursor
+// startBlink activates blink state on one cursor's view
 func (s *EnergySystem) startBlink(cursor core.Entity, blinkType, blinkLevel int) {
-	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
+	view, ok := s.world.Components.CursorView.GetPtr(cursor)
 	if !ok {
 		return
 	}
-	energyComp.BlinkActive = true
-	energyComp.BlinkType = blinkType
-	energyComp.BlinkLevel = blinkLevel
-	energyComp.BlinkRemaining = parameter.EnergyBlinkTimeout
+	view.BlinkActive = true
+	view.BlinkType = blinkType
+	view.BlinkLevel = blinkLevel
+	view.BlinkRemaining = parameter.EnergyBlinkTimeout
 }
 
-// stopBlink clears blink state on one cursor
+// stopBlink clears blink state on one cursor's view
 func (s *EnergySystem) stopBlink(cursor core.Entity) {
-	energyComp, ok := s.world.Components.Energy.GetPtr(cursor)
+	view, ok := s.world.Components.CursorView.GetPtr(cursor)
 	if !ok {
 		return
 	}
-	energyComp.BlinkActive = false
-	energyComp.BlinkRemaining = 0
+	view.BlinkActive = false
+	view.BlinkRemaining = 0
 }
 
 // publish mirrors one cursor's energy into its roster slot

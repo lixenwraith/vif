@@ -6,9 +6,8 @@ import (
 
 // HeatComponent tracks the heat state
 type HeatComponent struct {
-	Current             int
-	Overheat            int
-	BurstFlashRemaining time.Duration
+	Current  int
+	Overheat int
 
 	// Ember state
 	EmberActive    bool

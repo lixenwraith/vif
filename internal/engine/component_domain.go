@@ -30,8 +30,9 @@ var componentDomains = map[uint64]componentRule{
 	ShieldBit:       {"shield", core.DomainShared},
 	BoostBit:        {"boost", core.DomainShared},
 	WeaponBit:       {"weapon", core.DomainShared},
-	PingBit:         {"ping", core.DomainShared},  // moves to player in Phase 4.6
-	PulseBit:        {"pulse", core.DomainShared}, // moves to player in Phase 4.6
+	CursorViewBit:   {"cursor_view", core.DomainShared}, // Shared cursor view, written by one instance
+	PingBit:         {"ping", core.DomainShared},
+	PulseBit:        {"pulse", core.DomainShared},
 	SpiritBit:       {"spirit", core.DomainShared},
 	MarkerBit:       {"marker", core.DomainShared},
 	GenotypeBit:     {"genotype", core.DomainShared},

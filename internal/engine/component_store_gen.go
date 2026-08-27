@@ -26,6 +26,7 @@ const (
 	WeaponBit
 	OrbBit
 	PingBit
+	CursorViewBit
 	DecayBit
 	BlossomBit
 	CleanerBit
@@ -83,6 +84,7 @@ type Component struct {
 	Weapon       *Store[component.WeaponComponent]
 	Orb          *Store[component.OrbComponent]
 	Ping         *Store[component.PingComponent]
+	CursorView   *Store[component.CursorViewComponent]
 	Decay        *Store[component.DecayComponent]
 	Blossom      *Store[component.BlossomComponent]
 	Cleaner      *Store[component.CleanerComponent]
@@ -139,6 +141,7 @@ func initComponents(w *World) {
 	w.Components.Weapon = NewStore[component.WeaponComponent](w, WeaponBit)
 	w.Components.Orb = NewStore[component.OrbComponent](w, OrbBit)
 	w.Components.Ping = NewStore[component.PingComponent](w, PingBit)
+	w.Components.CursorView = NewStore[component.CursorViewComponent](w, CursorViewBit)
 	w.Components.Decay = NewStore[component.DecayComponent](w, DecayBit)
 	w.Components.Blossom = NewStore[component.BlossomComponent](w, BlossomBit)
 	w.Components.Cleaner = NewStore[component.CleanerComponent](w, CleanerBit)
@@ -241,6 +244,9 @@ func (w *World) removeEntity(e core.Entity) {
 	}
 	if mask&PingBit != 0 {
 		w.Components.Ping.RemoveEntity(e, true)
+	}
+	if mask&CursorViewBit != 0 {
+		w.Components.CursorView.RemoveEntity(e, true)
 	}
 	if mask&DecayBit != 0 {
 		w.Components.Decay.RemoveEntity(e, true)
@@ -417,6 +423,9 @@ func (w *World) removeEntitiesBatch(entities []core.Entity) {
 	if union&PingBit != 0 {
 		w.Components.Ping.RemoveBatch(entities, true)
 	}
+	if union&CursorViewBit != 0 {
+		w.Components.CursorView.RemoveBatch(entities, true)
+	}
 	if union&DecayBit != 0 {
 		w.Components.Decay.RemoveBatch(entities, true)
 	}
@@ -550,6 +559,7 @@ func (w *World) wipeAll() {
 	w.Components.Weapon.ClearAllComponents()
 	w.Components.Orb.ClearAllComponents()
 	w.Components.Ping.ClearAllComponents()
+	w.Components.CursorView.ClearAllComponents()
 	w.Components.Decay.ClearAllComponents()
 	w.Components.Blossom.ClearAllComponents()
 	w.Components.Cleaner.ClearAllComponents()

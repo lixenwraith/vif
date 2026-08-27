@@ -2,8 +2,6 @@ package component
 
 import (
 	"time"
-
-	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
 // WeaponType - rod (lightning - direct), launcher (missile - area), spray (acid - area dot)
@@ -21,6 +19,5 @@ const (
 type WeaponComponent struct {
 	Charges          [WeaponCount]int
 	Cooldown         [WeaponCount]time.Duration
-	Orbs             [WeaponCount]core.Entity // Orb entity per charged weapon, 0 = none
 	MainFireCooldown time.Duration
 }

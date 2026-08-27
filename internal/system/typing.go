@@ -220,8 +220,8 @@ func (s *TypingSystem) emitTypingFeedback(cursor core.Entity, glyphType componen
 // emitTypingError penalizes the acting cursor and breaks its streak
 func (s *TypingSystem) emitTypingError(cursor core.Entity) {
 	// Set cursor error flash
-	if cursorComp, ok := s.world.Components.Cursor.GetPtr(cursor); ok {
-		cursorComp.ErrorFlashRemaining = parameter.ErrorBlinkTimeout
+	if view, ok := s.world.Components.CursorView.GetPtr(cursor); ok {
+		view.ErrorFlashRemaining = parameter.ErrorBlinkTimeout
 	}
 
 	// Reset boost and apply heat penalty

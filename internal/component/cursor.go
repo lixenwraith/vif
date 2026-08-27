@@ -1,9 +1,5 @@
 package component
 
-import (
-	"time"
-)
-
 // ControlKind identifies the producer authorized to drive a cursor
 type ControlKind uint8
 
@@ -15,9 +11,6 @@ const (
 
 // CursorComponent marks an entity as a player cursor
 type CursorComponent struct {
-	// ErrorFlashRemaining is the duration remaining for the error flash
-	ErrorFlashRemaining time.Duration
-
 	// Slot is the roster index this cursor occupies
 	Slot uint8
 

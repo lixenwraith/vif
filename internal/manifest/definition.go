@@ -43,6 +43,7 @@ var Components = []ComponentDef{
 	{"Weapon", "WeaponComponent"},
 	{"Orb", "OrbComponent"},
 	{"Ping", "PingComponent"},
+	{"CursorView", "CursorViewComponent"},
 
 	// --- Entity Behaviors ---
 	{"Decay", "DecayComponent"},

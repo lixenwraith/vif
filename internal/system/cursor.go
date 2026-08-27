@@ -205,6 +205,7 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 
 	w.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	w.Components.Cursor.SetComponent(e, component.CursorComponent{Slot: slot, Control: control, PeerID: peerID})
+	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
 	w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
 	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: true})
 	w.Components.Heat.SetComponent(e, component.HeatComponent{})

@@ -161,8 +161,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 		energyFg, energyBg = visual.RgbBlack, visual.RgbEnergyBg
 	}
 
-	if hasEnergy && energyComp.BlinkActive && energyComp.BlinkRemaining > 0 {
-		typeCode := energyComp.BlinkType
+	view, hasView := r.gameCtx.World.Components.CursorView.GetPtr(playerEntity)
+	if hasView && view.BlinkActive && view.BlinkRemaining > 0 {
+		typeCode := view.BlinkType
 		if typeCode == 0 {
 			energyFg = visual.RgbCursorError
 		} else {

@@ -63,14 +63,14 @@ func (s *HeatSystem) Update() {
 	now := s.world.Resources.Time.GameTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// Burst flash is local view state and ages even without a heat component
+		if view, ok := s.world.Components.CursorView.GetPtr(e); ok && view.BurstFlashRemaining > 0 {
+			view.BurstFlashRemaining = max(view.BurstFlashRemaining-dt, 0)
+		}
+
 		heatComp, ok := s.world.Components.Heat.GetPtr(e)
 		if !ok {
 			return true
-		}
-
-		// Handle burst flash timeout
-		if heatComp.BurstFlashRemaining > 0 {
-			heatComp.BurstFlashRemaining = max(heatComp.BurstFlashRemaining-dt, 0)
 		}
 
 		// Handle ember decay
@@ -178,7 +178,9 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	// Trigger and reset overheat if at or above max
 	if heatComp.Overheat >= parameter.HeatMaxOverheat {
 		heatComp.Overheat = 0
-		heatComp.BurstFlashRemaining = parameter.HeatBurstFlashDuration
+		if view, ok := s.world.Components.CursorView.GetPtr(cursor); ok {
+			view.BurstFlashRemaining = parameter.HeatBurstFlashDuration
+		}
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushEvent(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
