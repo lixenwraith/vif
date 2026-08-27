@@ -202,7 +202,7 @@ What each profile admits:
 Dual has three shapes, all of them D-7 or D-12 rather than an escape hatch:
 `cleaner`, `materialize` and `spirit` create from the requesting domain;
 `combat` and `soft_collision` hold one stream per domain (D-8); `death` and
-`timekeeper` act on components that attach in either. `wall` stays shared: its
+`timer` act on components that attach in either. `wall` stays shared: its
 push-out enumerates both domains under D-12 but authors nothing player-domain,
 and it is the one system whose exemption covers a *read* of the other domain.
 

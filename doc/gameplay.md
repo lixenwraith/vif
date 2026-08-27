@@ -331,7 +331,7 @@ The manifest registers these tick systems by domain:
 | Motion/combat | `navigation`, `soft_collision`, `combat` |
 | Species | `drain`, `quasar`, `swarm`, `storm`, `pylon`, `snake`, `eye`, `bullet` |
 | Particles | `dust`, `flash`, `fadeout`, `marker`, `explosion`, `motion_marker`, `splash` |
-| Lifecycle/learning | `environment`, `death`, `timekeeper`, `adaptation`, `genetic` |
+| Lifecycle/learning | `environment`, `death`, `timer`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 
 The table uses runtime `Name()` values, which the manifest keys now match;

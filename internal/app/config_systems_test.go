@@ -64,7 +64,7 @@ initial = "Root"
 	if err == nil {
 		t.Fatal("checkSystems accepted a config disabling a required system")
 	}
-	for _, want := range []string{"[systems]", "combat requires death", "timekeeper requires death"} {
+	for _, want := range []string{"[systems]", "combat requires death", "timer requires death"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("message does not report %q:\n%v", want, err)
 		}

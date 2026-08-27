@@ -32,7 +32,7 @@ func (s *TimerSystem) Init() {
 
 // Name returns system's name
 func (s *TimerSystem) Name() string {
-	return "timekeeper"
+	return "timer"
 }
 
 // Domain reports dual: it expires timers on entities of either domain.

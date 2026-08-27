@@ -50,6 +50,6 @@ const (
 	PriorityDeath        // After game logic, before TimeKeeper
 	PriorityTimekeeper   // After game logic
 	PriorityAdaptation   // Before genetic
-	PriorityGenetic      // After death and timekeeper, observes entity lifecycle
+	PriorityGenetic      // After death and timer, observes entity lifecycle
 	PriorityDiagnostics  // After all others, telemetry collection
 )
