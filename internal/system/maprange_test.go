@@ -63,6 +63,7 @@ var allowedMapRanges = map[string]string{
 
 	// --- Detector false positive: parameter is a slice ---
 	"AdaptationSystem.applyEXP3:outcomes": "parameter is []routeOutcome, not the map field",
+	"FuseSystem.killDrains:drains":        "parameter is []core.Entity, not DustSystem's map field",
 }
 
 type finding struct {
