@@ -22,7 +22,7 @@ const (
 	SystemDual
 )
 
-// systemDomainNames indexes SystemDomain for diagnostics and generated tables
+// systemDomainNames indexes SystemDomain for diagnostics
 var systemDomainNames = [...]string{"shared", "player", "dual"}
 
 // String returns the profile name, or "?" when out of range
@@ -31,16 +31,6 @@ func (d SystemDomain) String() string {
 		return "?"
 	}
 	return systemDomainNames[d]
-}
-
-// ParseSystemDomain resolves a profile name; the inverse of SystemDomain.String
-func ParseSystemDomain(s string) (SystemDomain, bool) {
-	for i, n := range systemDomainNames {
-		if n == s {
-			return SystemDomain(i), true
-		}
-	}
-	return 0, false
 }
 
 // DependencyStrength grades what a missing dependency costs its dependent
