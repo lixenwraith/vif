@@ -29,6 +29,9 @@ func (s *MarkerSystem) Name() string {
 	return "marker"
 }
 
+// Domain reports shared: it creates shared marker entities.
+func (s *MarkerSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *MarkerSystem) Priority() int {
 	return parameter.PrioritySplash - 10 // Before splash, after game logic
 }

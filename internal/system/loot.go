@@ -91,6 +91,9 @@ func (s *LootSystem) Name() string {
 	return "loot"
 }
 
+// Domain reports player: the drop is rolled per participant against owner-authored inventory (D-6).
+func (s *LootSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *LootSystem) Priority() int {
 	return parameter.PriorityLoot
 }

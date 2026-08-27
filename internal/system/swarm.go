@@ -73,6 +73,9 @@ func (s *SwarmSystem) Name() string {
 	return "swarm"
 }
 
+// Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
+func (s *SwarmSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *SwarmSystem) Priority() int {
 	return parameter.PrioritySwarm
 }

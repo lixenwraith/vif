@@ -42,6 +42,9 @@ func (s *PingSystem) Name() string {
 	return "ping"
 }
 
+// Domain reports player: PingComponent is pure local view (D-13).
+func (s *PingSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *PingSystem) Priority() int {
 	return parameter.PriorityEffect

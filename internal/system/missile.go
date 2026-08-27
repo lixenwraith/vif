@@ -64,6 +64,9 @@ func (s *MissileSystem) Init() {
 
 func (s *MissileSystem) Name() string { return "missile" }
 
+// Domain reports player: it creates player missiles whose impact crosses as an explosion request (D-3).
+func (s *MissileSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *MissileSystem) Priority() int { return parameter.PriorityMissile }
 
 func (s *MissileSystem) EventTypes() []event.EventType {

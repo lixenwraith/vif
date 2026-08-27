@@ -87,6 +87,9 @@ func (s *MusicSystem) Name() string {
 	return "music"
 }
 
+// Domain reports player: it draws the player stream and writes no simulation state.
+func (s *MusicSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns system priority
 func (s *MusicSystem) Priority() int {
 	return parameter.PriorityUI + 1

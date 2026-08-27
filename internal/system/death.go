@@ -108,6 +108,9 @@ func (s *DeathSystem) Name() string {
 	return "death"
 }
 
+// Domain reports dual: it routes deaths of either domain and emits one batch per domain.
+func (s *DeathSystem) Domain() engine.SystemDomain { return engine.SystemDual }
+
 func (s *DeathSystem) Priority() int {
 	return parameter.PriorityDeath
 }

@@ -106,6 +106,9 @@ func (s *AdaptationSystem) Name() string {
 	return "adaptation"
 }
 
+// Domain reports shared: it draws the shared stream and writes only shared route state.
+func (s *AdaptationSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *AdaptationSystem) Priority() int {
 	return parameter.PriorityAdaptation
 }

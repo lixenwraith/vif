@@ -108,6 +108,9 @@ func (s *StormSystem) Name() string {
 	return "storm"
 }
 
+// Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
+func (s *StormSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *StormSystem) Priority() int {
 	return parameter.PriorityStorm
 }

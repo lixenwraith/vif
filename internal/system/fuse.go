@@ -69,6 +69,9 @@ func (s *FuseSystem) Name() string {
 	return "fuse"
 }
 
+// Domain reports player: it draws the player stream and crosses as a spawn request (D-3).
+func (s *FuseSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *FuseSystem) Priority() int {
 	return parameter.PriorityFuse
 }

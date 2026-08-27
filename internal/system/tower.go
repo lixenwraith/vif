@@ -54,6 +54,9 @@ func (s *TowerSystem) Name() string {
 	return "tower"
 }
 
+// Domain reports shared: it draws the shared stream and creates shared entities.
+func (s *TowerSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *TowerSystem) Priority() int {
 	return parameter.PriorityTower
 }

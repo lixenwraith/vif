@@ -44,6 +44,9 @@ func (s *TransientSystem) Name() string {
 	return "transient"
 }
 
+// Domain reports player: ViewResource grayout and strobe are per-instance view.
+func (s *TransientSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *TransientSystem) Priority() int {
 	return parameter.PriorityEffect
 }

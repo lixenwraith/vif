@@ -1,0 +1,357 @@
+package system
+
+import (
+	"go/ast"
+	"go/parser"
+	"go/token"
+	"os"
+	"slices"
+	"strings"
+	"testing"
+)
+
+// allowedDomainAccess exempts one system's access to a store of the other
+// domain, keyed "system:Store". D-12 claimed geometry is the only legitimate
+// reason: the outcome is a function of the cell set alone, so it is identical
+// on every instance.
+var allowedDomainAccess = map[string]string{
+	"wall:Decay":   "D-12 push-out classifies any occupant; read-only mask lookup",
+	"wall:Blossom": "D-12 push-out classifies any occupant; read-only mask lookup",
+	"drain:Wall":   "GetPtr reads BlockMask for spawn denial; the wall is never written",
+	"death:Wall":   "GetPtr reads BlockMask while resolving a shared wall death",
+}
+
+// ownerAuthoredStores are the shared-entity components exactly one instance
+// writes and every other receives as transported values (D-13). A player-domain
+// system may write them; they are not re-derived simulation state.
+var ownerAuthoredStores = map[string]bool{
+	"Energy": true, "Heat": true, "Shield": true, "Boost": true,
+	"Weapon": true, "CursorView": true, "Ping": true, "Pulse": true,
+}
+
+// storeWriters are the Store methods that can mutate a component. GetPtr hands
+// out a mutable pointer, so it counts as a write unless allowedDomainAccess
+// records that the call site only reads.
+var storeWriters = map[string]bool{
+	"SetComponent": true, "GetPtr": true,
+	"RemoveEntity": true, "RemoveBatch": true, "ClearAllComponents": true,
+}
+
+// systemEvidence is what one system's file shows about the domains it touches
+type systemEvidence struct {
+	name    string
+	domain  string // declared profile: shared, player or dual
+	file    string
+	creates map[string]bool // shared, player, stamped
+	draws   map[string]bool // shared, player
+	writes  map[string]bool // component store field names
+	reads   map[string]bool // component store field names
+	stamps  bool            // calls WithDomain
+}
+
+// TestSystemDomainProfiles checks every declared profile against the RNG
+// streams, entity domains and component stores its file actually touches.
+// Evidence is attributed per file: helpers shared between systems (sweep.go,
+// targeting.go) declare no system and are not attributed to one.
+func TestSystemDomainProfiles(t *testing.T) {
+	storeDomains := parseStoreDomains(t, "../engine/component_domain.go")
+	systems := parseSystemEvidence(t, ".")
+
+	if len(systems) < 50 {
+		t.Fatalf("found %d systems, expected the full set; the parser has drifted", len(systems))
+	}
+
+	for _, e := range systems {
+		switch e.domain {
+		case "shared":
+			// A shared system's every write must be re-derived identically on
+			// every instance, so nothing player-domain may reach it.
+			if e.creates["player"] {
+				t.Errorf("%s: declared shared but creates player-domain entities", e.file)
+			}
+			if e.draws["player"] {
+				t.Errorf("%s: declared shared but draws the player RNG stream", e.file)
+			}
+			for _, store := range sortedStores(e.writes) {
+				if storeDomains[store] == "player" && !exempt(e.name, store) {
+					t.Errorf("%s: declared shared but writes the player-only %s store", e.file, store)
+				}
+			}
+			for _, store := range sortedStores(e.reads) {
+				if storeDomains[store] == "player" && !exempt(e.name, store) {
+					t.Errorf("%s: declared shared but reads the player-only %s store (D-1)", e.file, store)
+				}
+			}
+
+		case "player":
+			// A player system may read shared state and write owner-authored
+			// cursor components, but must not author replicated state.
+			if e.creates["shared"] {
+				t.Errorf("%s: declared player but creates shared-domain entities", e.file)
+			}
+			if e.draws["shared"] {
+				t.Errorf("%s: declared player but draws the shared RNG stream", e.file)
+			}
+			for _, store := range sortedStores(e.writes) {
+				if storeDomains[store] == "shared" && !ownerAuthoredStores[store] && !exempt(e.name, store) {
+					t.Errorf("%s: declared player but writes the shared-only %s store", e.file, store)
+				}
+			}
+
+		case "dual":
+			// Dual resolves both domains: by ambient stamping (D-7), by drawing
+			// a stream per domain (D-8), or by acting on components that attach
+			// in either. A profile whose every trace points at one domain
+			// should narrow to that domain instead.
+			stamped := e.stamps || e.creates["stamped"]
+			shared := e.creates["shared"] || e.draws["shared"] || pinned(e, storeDomains, "shared")
+			player := e.creates["player"] || e.draws["player"] || pinned(e, storeDomains, "player")
+			if !stamped && shared != player {
+				t.Errorf("%s: declared dual but only resolves the %s domain; narrow the profile",
+					e.file, pick(shared, "shared", "player"))
+			}
+
+		default:
+			t.Errorf("%s: unknown domain profile %q", e.file, e.domain)
+		}
+	}
+}
+
+// pinned reports whether the system writes a store belonging to the domain
+func pinned(e systemEvidence, storeDomains map[string]string, domain string) bool {
+	for store := range e.writes {
+		if storeDomains[store] == domain && !ownerAuthoredStores[store] && !exempt(e.name, store) {
+			return true
+		}
+	}
+	return false
+}
+
+// pick returns a when cond holds, b otherwise
+func pick(cond bool, a, b string) string {
+	if cond {
+		return a
+	}
+	return b
+}
+
+// exempt reports whether allowedDomainAccess records a reason for this access
+func exempt(system, store string) bool {
+	_, ok := allowedDomainAccess[system+":"+store]
+	return ok
+}
+
+// TestAllowedDomainAccessIsLive fails on an entry no longer describing real code,
+// so the exemption list cannot outlive the access it excuses.
+func TestAllowedDomainAccessIsLive(t *testing.T) {
+	systems := parseSystemEvidence(t, ".")
+	touched := make(map[string]bool)
+	for _, e := range systems {
+		for store := range e.writes {
+			touched[e.name+":"+store] = true
+		}
+		for store := range e.reads {
+			touched[e.name+":"+store] = true
+		}
+	}
+	for key := range allowedDomainAccess {
+		if !touched[key] {
+			t.Errorf("allowedDomainAccess[%q] excuses an access that no longer exists", key)
+		}
+	}
+}
+
+// parseStoreDomains reads the engine audit table so store classification has one
+// source. An unlisted store attaches in either domain and is reported as "".
+func parseStoreDomains(t *testing.T, path string) map[string]string {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+
+	domains := make(map[string]string)
+	ast.Inspect(f, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || !strings.HasSuffix(key.Name, "Bit") {
+			return true
+		}
+		lit, ok := kv.Value.(*ast.CompositeLit)
+		if !ok || len(lit.Elts) != 2 {
+			return true
+		}
+		if sel, ok := lit.Elts[1].(*ast.SelectorExpr); ok {
+			domains[strings.TrimSuffix(key.Name, "Bit")] = strings.ToLower(
+				strings.TrimPrefix(sel.Sel.Name, "Domain"))
+		}
+		return true
+	})
+
+	if len(domains) < 30 {
+		t.Fatalf("parsed %d store domains from %s; the table or parser has drifted", len(domains), path)
+	}
+	return domains
+}
+
+// parseSystemEvidence walks every non-test file in dir and pairs the system it
+// declares with the domain evidence its code shows
+func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		names = append(names, n)
+	}
+	slices.Sort(names) // deterministic diagnostics
+
+	var systems []systemEvidence
+	fset := token.NewFileSet()
+	for _, n := range names {
+		f, err := parser.ParseFile(fset, dir+"/"+n, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", n, err)
+		}
+		name, domain := declaredProfile(f)
+		if name == "" || domain == "" {
+			continue // a helper file declares no system
+		}
+		e := systemEvidence{
+			name: name, domain: domain, file: n,
+			creates: map[string]bool{}, draws: map[string]bool{},
+			writes: map[string]bool{}, reads: map[string]bool{},
+		}
+		collectEvidence(f, &e)
+		systems = append(systems, e)
+	}
+	return systems
+}
+
+// declaredProfile returns the system name and domain the file declares, taken
+// from the Name and Domain methods
+func declaredProfile(f *ast.File) (name, domain string) {
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Recv == nil || fn.Body == nil {
+			continue
+		}
+		ret, ok := soleReturn(fn.Body)
+		if !ok {
+			continue
+		}
+		switch fn.Name.Name {
+		case "Name":
+			if lit, ok := ret.(*ast.BasicLit); ok {
+				name = strings.Trim(lit.Value, `"`)
+			}
+		case "Domain":
+			if sel, ok := ret.(*ast.SelectorExpr); ok {
+				domain = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "System"))
+			}
+		}
+	}
+	return name, domain
+}
+
+// soleReturn returns the single expression of a one-statement return body
+func soleReturn(body *ast.BlockStmt) (ast.Expr, bool) {
+	if len(body.List) != 1 {
+		return nil, false
+	}
+	ret, ok := body.List[0].(*ast.ReturnStmt)
+	if !ok || len(ret.Results) != 1 {
+		return nil, false
+	}
+	return ret.Results[0], true
+}
+
+// collectEvidence records every entity creation, RNG draw and component store
+// access the file makes
+func collectEvidence(f *ast.File, e *systemEvidence) {
+	ast.Inspect(f, func(n ast.Node) bool {
+		call, ok := n.(*ast.CallExpr)
+		if !ok {
+			return true
+		}
+		sel, ok := call.Fun.(*ast.SelectorExpr)
+		if !ok {
+			return true
+		}
+
+		switch sel.Sel.Name {
+		case "CreateEntity":
+			if len(call.Args) == 1 {
+				e.creates[domainArg(call.Args[0])] = true
+			}
+		case "Rand":
+			if len(call.Args) == 2 {
+				e.draws[domainArg(call.Args[0])] = true
+			}
+		case "WithDomain", "PushEventDomain":
+			e.stamps = true
+		}
+
+		// s.world.Components.<Store>.<Method>(...)
+		if store, ok := componentStore(sel.X); ok {
+			if storeWriters[sel.Sel.Name] {
+				e.writes[store] = true
+			} else {
+				e.reads[store] = true
+			}
+		}
+		return true
+	})
+}
+
+// domainArg names the domain a core.Domain argument selects; a non-constant
+// argument is "stamped", the ambient-domain form of D-7
+func domainArg(arg ast.Expr) string {
+	sel, ok := arg.(*ast.SelectorExpr)
+	if !ok {
+		return "stamped"
+	}
+	switch sel.Sel.Name {
+	case "DomainShared":
+		return "shared"
+	case "DomainPlayer":
+		return "player"
+	}
+	return "stamped"
+}
+
+// componentStore returns the store field of a Components selector chain
+func componentStore(x ast.Expr) (string, bool) {
+	field, ok := x.(*ast.SelectorExpr)
+	if !ok {
+		return "", false
+	}
+	owner, ok := field.X.(*ast.SelectorExpr)
+	if !ok || owner.Sel.Name != "Components" {
+		return "", false
+	}
+	return field.Sel.Name, true
+}
+
+// sortedStores returns store names in a fixed order for stable diagnostics
+func sortedStores(m map[string]bool) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
+}

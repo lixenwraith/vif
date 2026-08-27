@@ -76,6 +76,9 @@ func (s *EnergySystem) Init() {
 // Name returns system's name
 func (s *EnergySystem) Name() string { return "energy" }
 
+// Domain reports player: it writes owner-authored cursor energy (D-13).
+func (s *EnergySystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *EnergySystem) Priority() int { return parameter.PriorityEnergy }
 

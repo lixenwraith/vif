@@ -81,6 +81,9 @@ func (s *ExplosionSystem) Name() string {
 	return "explosion"
 }
 
+// Domain reports shared: explosion centers are the crossing artifact and stay shared (D-3).
+func (s *ExplosionSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *ExplosionSystem) Priority() int {
 	return parameter.PriorityExplosion
 }

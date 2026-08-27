@@ -30,6 +30,9 @@ func (s *NetworkSystem) Init() { s.enabled = true }
 
 func (s *NetworkSystem) Name() string { return "network" }
 
+// Domain reports shared: it translates transport notifications, which carry shared state.
+func (s *NetworkSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 // Priority: inbound translation before gameplay logic consumes events
 // Stub value; finalize with protocol work
 func (s *NetworkSystem) Priority() int { return parameter.PriorityUI }

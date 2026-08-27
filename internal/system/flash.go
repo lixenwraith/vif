@@ -33,6 +33,9 @@ func (s *FlashSystem) Name() string {
 	return "flash"
 }
 
+// Domain reports player: it creates player flash entities (D-6).
+func (s *FlashSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *FlashSystem) Priority() int {
 	return parameter.PriorityFlash
 }

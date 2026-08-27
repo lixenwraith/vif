@@ -69,6 +69,9 @@ func (s *CleanerSystem) Name() string {
 	return "cleaner"
 }
 
+// Domain reports dual: a nugget-spawned cleaner is shared, a weapon-spawned one player (D-7).
+func (s *CleanerSystem) Domain() engine.SystemDomain { return engine.SystemDual }
+
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
 	return parameter.PriorityCleaner

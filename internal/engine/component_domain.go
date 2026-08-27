@@ -17,8 +17,8 @@ type componentRule struct {
 
 // componentDomains is the audit table for AddComponentMask. Glyph, Sigil,
 // Kinetic, Protection, Combat, Navigation, Death, Timer and Position attach in
-// both domains and are deliberately absent; Cleaner and Materialize are stamped
-// and join in Phase 4.
+// both domains and are deliberately absent, as do Cleaner, Materialize, Spirit
+// and Marker, which their systems stamp from the requesting domain.
 var componentDomains = map[uint64]componentRule{
 	CursorBit:       {"cursor", core.DomainShared},
 	NuggetBit:       {"nugget", core.DomainShared},
@@ -32,8 +32,6 @@ var componentDomains = map[uint64]componentRule{
 	CursorViewBit:   {"cursor_view", core.DomainShared}, // Shared cursor view, written by one instance
 	PingBit:         {"ping", core.DomainShared},
 	PulseBit:        {"pulse", core.DomainShared},
-	SpiritBit:       {"spirit", core.DomainShared},
-	MarkerBit:       {"marker", core.DomainShared},
 	GenotypeBit:     {"genotype", core.DomainShared},
 	TargetBit:       {"target", core.DomainShared},
 	TargetAnchorBit: {"target_anchor", core.DomainShared},

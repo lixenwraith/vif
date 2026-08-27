@@ -43,6 +43,9 @@ func (s *SpiritSystem) Name() string {
 	return "spirit"
 }
 
+// Domain reports dual: it creates in the requesting domain, which today is the player-domain fuse (D-7).
+func (s *SpiritSystem) Domain() engine.SystemDomain { return engine.SystemDual }
+
 func (s *SpiritSystem) Priority() int {
 	return parameter.PrioritySpirit
 }

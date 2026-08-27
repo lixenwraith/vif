@@ -54,6 +54,9 @@ func (s *EyeSystem) Name() string {
 	return "eye"
 }
 
+// Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
+func (s *EyeSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *EyeSystem) Priority() int {
 	return parameter.PriorityEye
 }

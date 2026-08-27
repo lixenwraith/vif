@@ -138,6 +138,9 @@ func (s *NavigationSystem) Name() string {
 	return "navigation"
 }
 
+// Domain reports shared: flow fields and route graphs are derived from shared species alone.
+func (s *NavigationSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *NavigationSystem) Priority() int {
 	return parameter.PriorityNavigation
 }

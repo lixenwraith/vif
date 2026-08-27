@@ -47,6 +47,9 @@ func (s *ShieldSystem) Init() {
 // Name returns system's name
 func (s *ShieldSystem) Name() string { return "shield" }
 
+// Domain reports player: it writes owner-authored cursor shield state (D-13).
+func (s *ShieldSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *ShieldSystem) Priority() int { return parameter.PriorityShield }
 

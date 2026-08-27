@@ -38,6 +38,9 @@ func (s *CompositeSystem) Name() string {
 	return "composite"
 }
 
+// Domain reports shared: it creates shared header entities and writes shared composite state.
+func (s *CompositeSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *CompositeSystem) Priority() int {
 	return parameter.PriorityComposite
 }

@@ -129,6 +129,9 @@ func (s *DrainSystem) Name() string {
 	return "drain"
 }
 
+// Domain reports player: it draws the player stream and creates player entities.
+func (s *DrainSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *DrainSystem) Priority() int {
 	return parameter.PriorityDrain

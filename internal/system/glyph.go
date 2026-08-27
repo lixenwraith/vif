@@ -123,6 +123,9 @@ func (s *GlyphSystem) Name() string {
 	return "glyph"
 }
 
+// Domain reports player: it draws the player stream and creates player glyph entities.
+func (s *GlyphSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *GlyphSystem) Priority() int {
 	return parameter.PriorityGlyph

@@ -35,6 +35,9 @@ func (s *MaterializeSystem) Name() string {
 	return "materialize"
 }
 
+// Domain reports dual: it creates in the requesting domain, shared for a spawn gate and player for drain (D-7).
+func (s *MaterializeSystem) Domain() engine.SystemDomain { return engine.SystemDual }
+
 // Priority returns the system's priority
 func (s *MaterializeSystem) Priority() int {
 	return parameter.PriorityMaterialize

@@ -54,6 +54,9 @@ func (s *PylonSystem) Name() string {
 	return "pylon"
 }
 
+// Domain reports shared: it draws the shared stream and creates shared entities.
+func (s *PylonSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *PylonSystem) Priority() int {
 	return parameter.PriorityPylon
 }

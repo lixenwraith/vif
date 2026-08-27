@@ -144,6 +144,9 @@ func (s *DustSystem) Name() string {
 	return "dust"
 }
 
+// Domain reports player: it draws the player stream and creates player entities.
+func (s *DustSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 func (s *DustSystem) Priority() int {
 	return parameter.PriorityDust
 }

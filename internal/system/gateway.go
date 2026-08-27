@@ -50,6 +50,9 @@ func (s *GatewaySystem) Name() string {
 	return "gateway"
 }
 
+// Domain reports shared: it draws the shared stream and creates shared gateway entities.
+func (s *GatewaySystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *GatewaySystem) Priority() int {
 	return parameter.PriorityGateway
 }

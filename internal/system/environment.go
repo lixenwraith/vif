@@ -51,6 +51,9 @@ func (s *EnvironmentSystem) Name() string {
 	return "environment"
 }
 
+// Domain reports shared: it draws the shared stream and writes no player state.
+func (s *EnvironmentSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 func (s *EnvironmentSystem) Priority() int {
 	return parameter.PrioritySwarm
 }

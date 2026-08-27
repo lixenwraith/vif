@@ -54,6 +54,9 @@ func (s *CursorSystem) Init() {
 // Name returns system's name
 func (s *CursorSystem) Name() string { return "cursor" }
 
+// Domain reports shared: it creates the shared cursor entity, whose creation order is replicated (D-11).
+func (s *CursorSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 // Priority returns the system's priority
 func (s *CursorSystem) Priority() int { return parameter.PriorityCursor }
 

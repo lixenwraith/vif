@@ -63,6 +63,9 @@ func (s *TypingSystem) Init() {
 // Name returns system's name
 func (s *TypingSystem) Name() string { return "typing" }
 
+// Domain reports player: it consumes player glyphs and writes owner-authored cursor state (D-13).
+func (s *TypingSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *TypingSystem) Priority() int { return parameter.PriorityTyping }
 

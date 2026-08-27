@@ -35,6 +35,9 @@ func (s *TimerSystem) Name() string {
 	return "timekeeper"
 }
 
+// Domain reports dual: it expires timers on entities of either domain.
+func (s *TimerSystem) Domain() engine.SystemDomain { return engine.SystemDual }
+
 // Priority returns the system's priority (runs just before CullSystem)
 func (s *TimerSystem) Priority() int {
 	return parameter.PriorityTimekeeper

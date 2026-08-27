@@ -74,6 +74,9 @@ func (s *GoldSystem) Name() string {
 	return "gold"
 }
 
+// Domain reports shared: shared stream and shared entities; the claim is contested, the reward owner-authored.
+func (s *GoldSystem) Domain() engine.SystemDomain { return engine.SystemShared }
+
 // Priority returns the system's priority
 func (s *GoldSystem) Priority() int {
 	return parameter.PriorityGold

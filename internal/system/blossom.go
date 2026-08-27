@@ -75,6 +75,9 @@ func (s *BlossomSystem) Name() string {
 	return "blossom"
 }
 
+// Domain reports player: it draws the player stream and creates player entities.
+func (s *BlossomSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
+
 // Priority returns the system's priority
 func (s *BlossomSystem) Priority() int {
 	return parameter.PriorityBlossom
