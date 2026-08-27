@@ -167,7 +167,7 @@ func ActiveSystems() []string {
 		"splash",
 		"environment",
 		"death",
-		"timer",
+		"timekeeper",
 		"adaptation",
 		"genetic",
 		"audio",
