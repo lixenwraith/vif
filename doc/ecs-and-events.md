@@ -36,6 +36,15 @@ world; registering another system after that point panics. Systems run
 sequentially in ascending priority, with registration order breaking equal
 priorities.
 
+Each system also declares two things priority does not express. `Domain()`
+classifies it shared, player or dual and is checked against its code by
+`internal/system/domain_test.go`; see [the domain model](domain-model.md).
+`Requires()` names the systems it needs, graded required or optional.
+`World.SystemInitOrder` resolves those declarations into a deterministic
+initialization order through `core.TopoSort`. That order is not the tick order
+and never reorders `Update()`: a system may legitimately initialize before one
+that ticks first.
+
 ## 2. Entities and typed stores
 
 Most components use `engine.Store[T]`, a sparse-set-style typed store:

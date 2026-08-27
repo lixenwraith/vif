@@ -277,11 +277,15 @@ When a region is spawned or resumed,
 events. Global disabled systems are applied during initialization/reset. This
 allows a scenario to keep mechanics constructed but dormant until needed.
 
-System lists use runtime names. Most equal their manifest key, but the current
-exceptions are `transient_effects` (manifest `transient`) and `timekeeper`
-(manifest `timer`). A system also has to subscribe to and honor
-`EventMetaSystemCommandRequest`; construction alone does not guarantee runtime
-toggle support.
+System lists use runtime names, which now equal their manifest keys. A system
+also has to subscribe to and honor `EventMetaSystemCommandRequest`;
+construction alone does not guarantee runtime toggle support.
+
+A disable is checked against the declared dependency graph. `-check` rejects a
+config that leaves an enabled system without a required dependency, naming the
+region, and `World.AllowSystemDisable` refuses the same request from an
+`EnableSystem`/`DisableSystem` action or the `:system` command. Disabling both
+ends stays legal; an optional dependency is reported once, not per resume.
 
 ### Operator region primitives
 

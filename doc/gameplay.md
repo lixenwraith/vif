@@ -325,7 +325,7 @@ The manifest registers these tick systems by domain:
 
 | Domain | Systems |
 |---|---|
-| Frame/player | `cursor`, `ping`, `transient_effects`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
+| Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `decay`, `blossom`, `gold` |
 | Spawning/effects | `materialize`, `cleaner`, `fuse`, `spirit`, `lightning`, `missile` |
 | Motion/combat | `navigation`, `soft_collision`, `combat` |
@@ -334,10 +334,13 @@ The manifest registers these tick systems by domain:
 | Lifecycle/learning | `environment`, `death`, `timekeeper`, `adaptation`, `genetic` |
 | Sound | `audio`, `music` |
 
-The table uses runtime `Name()` values. Two currently differ from their
-manifest keys: `transient` becomes `transient_effects`, and `timer` becomes
-`timekeeper`. Configuration validation and the `:system` command use runtime
-names. `MetaSystem` is event-only and added directly by the app.
+The table uses runtime `Name()` values, which the manifest keys now match;
+`TestActiveSystemsMatchRuntimeNames` keeps the two together, so configuration
+validation, the `:system` command and the manifest all name a system the same
+way. `MetaSystem` is event-only and added directly by the app.
+
+Each entry also declares a domain profile and its dependencies; see
+[the domain model](domain-model.md).
 
 ## 12. Balance and ownership map
 

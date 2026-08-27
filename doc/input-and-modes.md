@@ -266,9 +266,8 @@ Replay terminal keys are not entries in this command table or the keymap. A
 `ModeReplay` App reserves `SPACE . + - h j k l 0 q` for viewer pause, step,
 speed, pan/reset, and quit; those keys never become simulation intents.
 
-System control uses `System.Name()`, not the manifest key. In the current
-assembly, `transient_effects` and `timekeeper` are the runtime names for the
-manifest entries `transient` and `timer`.
+System control uses `System.Name()`, which the manifest keys match. `:system`
+refuses a disable that a system declares required, naming the dependents.
 
 ## 10. Keymap override files
 
