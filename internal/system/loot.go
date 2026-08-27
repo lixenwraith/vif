@@ -35,15 +35,20 @@ type pityState struct {
 	misses [component.LootCount]int
 }
 
+// pityKey scopes a pity streak to one cursor's slot; local cursors roll independently
+type pityKey struct {
+	species component.SpeciesType
+	slot    uint8
+}
+
 type LootSystem struct {
 	world *engine.World
 
-	// One stream per domain: a player-domain kill must not advance the shared roll
-	rngShared *vmath.FastRand
-	rngPlayer *vmath.FastRand
+	// Loot is player-domain, so it never advances the shared stream
+	rng *vmath.FastRand
 
-	// Pity tracking per species type
-	pity map[component.SpeciesType]*pityState
+	// Pity tracking per species type and roster slot
+	pity map[pityKey]*pityState
 
 	// Telemetry
 	statDrops    *atomic.Int64
@@ -71,9 +76,8 @@ func NewLootSystem(world *engine.World) engine.System {
 }
 
 func (s *LootSystem) Init() {
-	s.rngShared = s.world.Rand(core.DomainShared, s.Name())
-	s.rngPlayer = s.world.Rand(core.DomainPlayer, s.Name())
-	s.pity = make(map[component.SpeciesType]*pityState)
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
+	s.pity = make(map[pityKey]*pityState)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
@@ -122,12 +126,14 @@ func (s *LootSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventSpeciesKilled:
 		if payload, ok := ev.Payload.(*event.SpeciesKilledPayload); ok {
-			s.onSpeciesKilled(payload, ev.Domain)
+			s.onSpeciesKilled(payload)
 		}
 
 	case event.EventLootSpawnRequest:
+		// Direct spawn names no owner; it belongs to the local cursor
 		if payload, ok := ev.Payload.(*event.LootSpawnRequestPayload); ok {
-			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y, ev.Domain)
+			s.spawnLootMulti([]component.LootType{payload.Type}, payload.X, payload.Y,
+				s.world.Resources.Player.Entity)
 		}
 	}
 }
@@ -161,22 +167,23 @@ func (s *LootSystem) Update() {
 		}
 
 		curX, curY := physics.GridPos(&kineticComp.Kinetic)
-		cursor, cursorX, cursorY, hasCursor := ClosestCursor(s.world, curX, curY)
+		owner := lootComp.Owner
+		ownerPos, hasOwner := s.world.Positions.GetPosition(owner)
 
 		// Collection check
-		if hasCursor && vmath.IntAbs(curX-cursorX) <= parameter.LootCollectRadius &&
-			vmath.IntAbs(curY-cursorY) <= parameter.LootCollectRadius {
-			s.collectLoot(cursor, lootEntity, lootComp.Type)
+		if hasOwner && vmath.IntAbs(curX-ownerPos.X) <= parameter.LootCollectRadius &&
+			vmath.IntAbs(curY-ownerPos.Y) <= parameter.LootCollectRadius {
+			s.collectLoot(owner, lootEntity, lootComp.Type)
 			continue
 		}
 
 		// Movement logic - always process, navigation handles LOS internally
 		navComp, hasNav := s.world.Components.Navigation.GetComponent(lootEntity)
 
-		if hasCursor && hasNav && navComp.HasDirectPath {
+		if hasOwner && hasNav && navComp.HasDirectPath {
 			// Direct LOS: standard homing
-			cursorCenterX, cursorCenterY := vmath.Point{X: cursorX, Y: cursorY}.CenterF()
-			physics.ApplyHoming(&kineticComp.Kinetic, cursorCenterX, cursorCenterY, &profile.LootHoming, dtSec)
+			ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.CenterF()
+			physics.ApplyHoming(&kineticComp.Kinetic, ownerCenterX, ownerCenterY, &profile.LootHoming, dtSec)
 		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
 			// No LOS but have flow field: follow flow with lookahead
 			targetX := kineticComp.PreciseX + navComp.FlowX*parameter.LootFlowLookahead
@@ -215,37 +222,50 @@ func (s *LootSystem) Update() {
 
 // --- Drop Resolution ---
 
-// onSpeciesKilled processes multi-drop loot spawning in the killed species' domain
-func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload, domain core.Domain) {
+// onSpeciesKilled rolls the drop table once per locally simulated cursor; a kill
+// produces this instance's drops only, so ownership is never read across instances.
+func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 	// A negative coordinate marks a death with no position; nothing to drop onto
 	if payload.X < 0 || payload.Y < 0 {
 		return
 	}
-	results := s.rollDropTable(payload.Species, domain)
-	if len(results) == 0 {
-		return
-	}
 
-	// Flatten results into spawn list
-	var spawns []component.LootType
-	for _, r := range results {
-		for range r.Count {
-			spawns = append(spawns, r.Loot)
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		if cursor == 0 || !s.simulatesLocally(cursor) {
+			continue
 		}
-	}
 
-	if len(spawns) == 0 {
-		return
-	}
+		results := s.rollDropTable(payload.Species, cursor, uint8(i))
+		if len(results) == 0 {
+			continue
+		}
 
-	// Spawn with offset pattern
-	s.spawnLootMulti(spawns, payload.X, payload.Y, domain)
+		// Flatten results into spawn list
+		var spawns []component.LootType
+		for _, r := range results {
+			for range r.Count {
+				spawns = append(spawns, r.Loot)
+			}
+		}
+		if len(spawns) == 0 {
+			continue
+		}
+
+		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor)
+	}
+}
+
+// simulatesLocally reports whether this instance owns a cursor's loadout, per D-2
+func (s *LootSystem) simulatesLocally(cursor core.Entity) bool {
+	c, ok := s.world.Components.Cursor.GetComponent(cursor)
+	return ok && c.Control != component.ControlRemote
 }
 
 // --- Spawn ---
 
 // spawnLootMulti spawns multiple loot items with scatter pattern and initial burst velocity
-func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, domain core.Domain) {
+func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, owner core.Entity) {
 	count := len(loots)
 	if count == 0 {
 		return
@@ -286,19 +306,19 @@ func (s *LootSystem) spawnLootMulti(loots []component.LootType, cx, cy int, doma
 			}
 		}
 
-		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, domain)
+		s.spawnLootWithBurst(lootType, spawnX, spawnY, burstDirX, burstDirY, owner)
 		s.statDrops.Add(1)
 	}
 }
 
-// spawnLootWithBurst creates a loot entity in the kill's domain with initial velocity in burst direction
-func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, domain core.Domain) {
+// spawnLootWithBurst creates an owned loot entity with initial velocity in burst direction
+func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burstDirX, burstDirY int, owner core.Entity) {
 	vis, ok := visual.LootVisuals[lootType]
 	if !ok {
 		return
 	}
 
-	entity := s.world.CreateEntity(domain)
+	entity := s.world.CreateEntity(core.DomainPlayer)
 	preciseX, preciseY := vmath.Point{X: x, Y: y}.CenterF()
 
 	// Calculate initial burst velocity
@@ -312,6 +332,7 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	// Loot component
 	s.world.Components.Loot.SetComponent(entity, component.LootComponent{
 		Type:     lootType,
+		Owner:    owner,
 		LastIntX: x,
 		LastIntY: y,
 	})
@@ -368,31 +389,23 @@ func (s *LootSystem) isValidSpawnPos(x, y int) bool {
 	return !s.world.Positions.IsBlocked(x, y, component.WallBlockKinetic)
 }
 
-// rng selects the drop stream for a kill's domain, per D-8.
-func (s *LootSystem) rng(d core.Domain) *vmath.FastRand {
-	if d == core.DomainPlayer {
-		return s.rngPlayer
-	}
-	return s.rngShared
-}
-
 // rollDropTable processes tiered drop tables with pity and fallback accumulation
-// Returns slice of drop results (may be empty)
-func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, domain core.Domain) []DropResult {
+// for one cursor. Returns slice of drop results (may be empty)
+func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, cursor core.Entity, slot uint8) []DropResult {
 	table, ok := component.DropTables[speciesType]
 	if !ok || len(table.Tiers) == 0 {
 		return nil
 	}
 
-	// Pity is keyed by species and every species belongs to one domain, so the map is partitioned already
-	state := s.pity[speciesType]
+	key := pityKey{species: speciesType, slot: slot}
+	state := s.pity[key]
 	if state == nil {
 		state = &pityState{}
-		s.pity[speciesType] = state
+		s.pity[key] = state
 		s.buffers.Observe(0, len(s.pity))
 	}
 
-	activeLoot := s.getActiveLootTypes(domain)
+	activeLoot := s.getActiveLootTypes(cursor)
 
 	isOwned := func(lt component.LootType) bool {
 		if activeLoot[lt] {
@@ -403,9 +416,10 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, domain cor
 			return false
 		}
 
-		// Max-charge check, repeats drops until capped
+		// Max-charge check, repeats drops until this cursor is capped
 		wt := profile.Reward.WeaponType
-		return s.allPlayersCapped(wt)
+		weapons, ok := s.world.Components.Weapon.GetComponent(cursor)
+		return ok && weapons.Charges[wt] >= parameter.WeaponMaxCharges[wt]
 	}
 
 	var results []DropResult
@@ -457,8 +471,7 @@ func (s *LootSystem) rollDropTable(speciesType component.SpeciesType, domain cor
 		}
 
 		// Roll
-		// TODO: check using FastRand.Float64
-		roll := s.rng(domain).Float64()
+		roll := s.rng.Float64()
 		var cumulative float64
 		var dropped *component.DropEntry
 
@@ -535,16 +548,12 @@ type candidate struct {
 	rate  float64
 }
 
-// getActiveLootTypes returns the loot types on map in one domain; a shared roll
-// must not observe another instance's player loot.
-func (s *LootSystem) getActiveLootTypes(domain core.Domain) map[component.LootType]bool {
+// getActiveLootTypes returns the loot types this cursor already has on the map
+func (s *LootSystem) getActiveLootTypes(cursor core.Entity) map[component.LootType]bool {
 	active := make(map[component.LootType]bool)
 	for _, entity := range s.world.Components.Loot.Entities() {
-		if entity.Domain() != domain {
-			continue
-		}
 		lootComp, ok := s.world.Components.Loot.GetPtr(entity)
-		if !ok {
+		if !ok || lootComp.Owner != cursor {
 			continue
 		}
 		active[lootComp.Type] = true

@@ -42,8 +42,10 @@ type World struct {
 	// Readable from any goroutine, including the post-tick telemetry tail
 	// that runs after the update mutex is released
 
-	createdCount   atomic.Int64
-	destroyedCount atomic.Int64
+	// Entity counts per domain; index with core.Domain. A cross-instance
+	// comparison reads the shared half, which must match exactly.
+	createdCount   [core.DomainCount]atomic.Int64
+	destroyedCount [core.DomainCount]atomic.Int64
 
 	// origin tags events pushed while a non-simulation producer drives the world.
 	// Written only under updateMutex via WithOrigin; atomic because lock-free
@@ -77,7 +79,7 @@ func (w *World) CreateEntity(d core.Domain) core.Entity {
 	id := w.nextEntityID[d]
 	w.nextEntityID[d]++
 	// Mirror the count so telemetry never reads nextEntityID off-lock
-	w.createdCount.Add(1)
+	w.createdCount[d].Add(1)
 	return core.MakeEntity(d, id)
 }
 
@@ -127,7 +129,7 @@ func (w *World) RemoveComponentMask(e core.Entity, bit uint64) {
 // Caller guarantees entity doesn't have ProtectAll
 func (w *World) DestroyEntity(e core.Entity) {
 	w.removeEntity(e)
-	w.destroyedCount.Add(1)
+	w.destroyedCount[e.Domain()].Add(1)
 }
 
 // DestroyEntitiesBatch removes entities without protection checks
@@ -137,7 +139,9 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 		return
 	}
 	w.removeEntitiesBatch(entities)
-	w.destroyedCount.Add(int64(len(entities)))
+	for _, e := range entities {
+		w.destroyedCount[e.Domain()].Add(1)
+	}
 }
 
 // Clear removes all entities and components from the world
@@ -146,9 +150,9 @@ func (w *World) DestroyEntitiesBatch(entities []core.Entity) {
 func (w *World) Clear() {
 	for d := range w.nextEntityID {
 		w.nextEntityID[d] = 1
+		w.createdCount[d].Store(0)
+		w.destroyedCount[d].Store(0)
 	}
-	w.createdCount.Store(0)
-	w.destroyedCount.Store(0)
 	w.Positions.ResetTelemetry()
 	w.Resources.Player.Clear()
 	w.wipeAll()
@@ -280,16 +284,30 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 	})
 }
 
-// CreatedCount returns total entities created this session
+// CreatedCount returns total entities created this session across both domains
 // Lock-free: safe from any goroutine, including the post-tick telemetry tail
 func (w *World) CreatedCount() int64 {
-	return w.createdCount.Load()
+	var n int64
+	for d := range w.createdCount {
+		n += w.createdCount[d].Load()
+	}
+	return n
 }
 
-// DestroyedCount returns total entities destroyed
+// DestroyedCount returns total entities destroyed across both domains
 func (w *World) DestroyedCount() int64 {
-	return w.destroyedCount.Load()
+	var n int64
+	for d := range w.destroyedCount {
+		n += w.destroyedCount[d].Load()
+	}
+	return n
 }
+
+// CreatedCountDomain returns entities created in one domain
+func (w *World) CreatedCountDomain(d core.Domain) int64 { return w.createdCount[d].Load() }
+
+// DestroyedCountDomain returns entities destroyed in one domain
+func (w *World) DestroyedCountDomain(d core.Domain) int64 { return w.destroyedCount[d].Load() }
 
 // === Base Entities ===
 
@@ -438,7 +456,6 @@ func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize b
 	})
 }
 
-// TODO: process through death, new mask for combat entity persistence
 // clearNonProtectedEntities destroys all entities except those with ProtectAll
 func (w *World) clearNonProtectedEntities() {
 	// Collect entities to destroy (avoid mutation during iteration)
@@ -457,7 +474,9 @@ func (w *World) clearNonProtectedEntities() {
 
 	w.removeEntitiesBatch(toDestroy)
 
-	w.destroyedCount.Add(int64(len(toDestroy)))
+	for _, e := range toDestroy {
+		w.destroyedCount[e.Domain()].Add(1)
+	}
 }
 
 // === Debug ===

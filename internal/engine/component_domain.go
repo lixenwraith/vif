@@ -23,7 +23,6 @@ var componentDomains = map[uint64]componentRule{
 	CursorBit:       {"cursor", core.DomainShared},
 	NuggetBit:       {"nugget", core.DomainShared},
 	WallBit:         {"wall", core.DomainShared},
-	LootBit:         {"loot", core.DomainShared},
 	GatewayBit:      {"gateway", core.DomainShared},
 	EnergyBit:       {"energy", core.DomainShared},
 	HeatBit:         {"heat", core.DomainShared},
@@ -52,6 +51,7 @@ var componentDomains = map[uint64]componentRule{
 	HeaderBit:       {"header", core.DomainShared},
 	MemberBit:       {"member", core.DomainShared},
 
+	LootBit:      {"loot", core.DomainPlayer},
 	DustBit:      {"dust", core.DomainPlayer},
 	DrainBit:     {"drain", core.DomainPlayer},
 	DecayBit:     {"decay", core.DomainPlayer},

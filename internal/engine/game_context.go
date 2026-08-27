@@ -87,11 +87,12 @@ type GameContext struct {
 	OverlayHUD atomic.Bool
 
 	// Cached status pointers
-	statFPS     *atomic.Int64
-	statFrame   *atomic.Int64
-	statScreenW *atomic.Int64
-	statScreenH *atomic.Int64
-	statMode    *status.AtomicString
+	statFPS       *atomic.Int64
+	statFrame     *atomic.Int64
+	statScreenW   *atomic.Int64
+	statScreenH   *atomic.Int64
+	statMapLocked *atomic.Bool
+	statMode      *status.AtomicString
 }
 
 // NewGameContext creates a GameContext on the interactive clock
@@ -125,6 +126,7 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 	ctx.statFrame = reg.Ints.Get("context.frame")
 	ctx.statScreenW = reg.Ints.Get("context.screen_w")
 	ctx.statScreenH = reg.Ints.Get("context.screen_h")
+	ctx.statMapLocked = reg.Bools.Get("context.map_locked")
 	ctx.statMode = reg.Strings.Get("context.mode")
 
 	// 3. Time control; registers its metrics before Freeze
@@ -239,7 +241,9 @@ func (ctx *GameContext) HandleResizeLocked() {
 	config.ViewportWidth = viewportWidth
 	config.ViewportHeight = viewportHeight
 
-	if config.CropOnResize && ctx.mapSizeLocal() {
+	cropped := config.CropOnResize && ctx.mapSizeLocal()
+	ctx.statMapLocked.Store(config.CropOnResize && !cropped)
+	if cropped {
 		// Resize map to match viewport, cleanup OOB entities
 		config.MapWidth = viewportWidth
 		config.MapHeight = viewportHeight
@@ -248,6 +252,11 @@ func (ctx *GameContext) HandleResizeLocked() {
 		config.CameraX = 0
 		config.CameraY = 0
 	} else {
+		if config.CropOnResize {
+			vlog.Info("app", "msg", "map size locked",
+				"map_w", config.MapWidth, "map_h", config.MapHeight,
+				"viewport_w", viewportWidth, "viewport_h", viewportHeight)
+		}
 		// Map persists, clamp camera to valid range
 		ctx.clampCamera(config)
 	}

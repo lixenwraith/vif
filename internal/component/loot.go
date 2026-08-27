@@ -1,6 +1,7 @@
 package component
 
 import (
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -104,6 +105,9 @@ type LootProfile struct {
 // LootComponent represents a collectible loot drop entity
 type LootComponent struct {
 	Type LootType
+
+	// Owner is the cursor this drop belongs to; loot is personal
+	Owner core.Entity
 
 	// Grid tracking
 	LastIntX int
