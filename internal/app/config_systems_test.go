@@ -101,18 +101,21 @@ disabled_systems = ["cursor","camera","energy","heat","ping","shield","boost","w
 	}
 }
 
-// TestCheckSystemsRejectsUnknownName asserts name validation still runs first
+// TestCheckSystemsRejectsUnknownName asserts name validation still runs first,
+// and that the message names the entry it rejected
 func TestCheckSystemsRejectsUnknownName(t *testing.T) {
 	m := loadSystemsConfig(t, `
 [regions.main]
 initial = "Root"
-disabled_systems = ["timer"]
+disabled_systems = ["timekeeper"]
 `)
 	err := checkSystems(m, io.Discard)
 	if err == nil {
 		t.Fatal("checkSystems accepted an unknown system name")
 	}
-	if !strings.Contains(err.Error(), "unknown system names") {
-		t.Errorf("message does not report an unknown name:\n%v", err)
+	for _, want := range []string{"unknown system names", "region main: timekeeper"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("message does not report %q:\n%v", want, err)
+		}
 	}
 }
