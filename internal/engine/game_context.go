@@ -229,6 +229,13 @@ func (ctx *GameContext) mapSizeLocal() bool {
 	return net == nil || net.Port == nil || net.Port.PeerCount() == 0
 }
 
+// PublishMapLock republishes context.map_locked from current state. The flag is
+// a derivation of CropOnResize and mapSizeLocal (D-14), so every writer of
+// either republishes it or the last resize's verdict outlives its inputs.
+func (ctx *GameContext) PublishMapLock() {
+	ctx.statMapLocked.Store(ctx.World.Resources.Config.CropOnResize && !ctx.mapSizeLocal())
+}
+
 // HandleResizeLocked applies terminal dimensions already written to the context and
 // reflows viewport, map, grid, camera and cursor. Caller MUST hold updateMutex;
 // MetaSystem's EventScreenResize handler is the only entry point.
@@ -242,7 +249,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 	config.ViewportHeight = viewportHeight
 
 	cropped := config.CropOnResize && ctx.mapSizeLocal()
-	ctx.statMapLocked.Store(config.CropOnResize && !cropped)
+	ctx.PublishMapLock()
 	if cropped {
 		// Resize map to match viewport, cleanup OOB entities
 		config.MapWidth = viewportWidth

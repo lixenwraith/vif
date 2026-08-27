@@ -264,6 +264,10 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	config.CameraY = 0
 	config.CropOnResize = true
 
+	// Crop and the roster are both rebuilt above, and map_locked derives from
+	// them; without this the last resize's verdict outlives the session
+	s.ctx.PublishMapLock()
+
 	// Grid tracks map dimensions; a level-sized grid would outlive the level
 	s.ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
