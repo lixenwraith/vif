@@ -1,12 +1,13 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"slices"
-	"sort"
 	"sync"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -153,66 +154,24 @@ func (h *Hub) StopAll() {
 	h.initialized, h.started = nil, nil
 }
 
-// topologicalSort computes initialization order using Kahn's algorithm
-// Returns error if circular dependency detected
+// topologicalSort computes initialization order with the shared resolver
+// Returns error if a dependency is unregistered or a cycle exists
 func (h *Hub) topologicalSort() ([]string, error) {
-	// Build adjacency list and in-degree map
-	inDegree := make(map[string]int)
-	dependents := make(map[string][]string) // dep -> services that depend on it
-
-	// 1. Get and sort all names for deterministic processing
-	names := make([]string, 0, len(h.services))
-	for name := range h.services {
-		names = append(names, name)
+	deps := make(map[string][]string, len(h.services))
+	for name, svc := range h.services {
+		deps[name] = svc.Dependencies()
 	}
-	sort.Strings(names)
 
-	// 2. Build graph using sorted names
-	for _, name := range names {
-		svc := h.services[name]
-		inDegree[name] = 0 // Initialize entry
-		for _, dep := range svc.Dependencies() {
-			if _, exists := h.services[dep]; !exists {
-				return nil, fmt.Errorf("service %s depends on unregistered service: %s", name, dep)
-			}
-			inDegree[name]++
-			dependents[dep] = append(dependents[dep], name)
+	order, err := core.TopoSort(deps)
+	if err != nil {
+		var unknown *core.UnknownDependencyError
+		if errors.As(err, &unknown) {
+			return nil, fmt.Errorf("service %s depends on unregistered service: %s",
+				unknown.Name, unknown.Dependency)
 		}
+		return nil, fmt.Errorf("circular dependency detected in services: %w", err)
 	}
-
-	// 3. Seed queue from sorted names to ensure deterministic start
-	var queue []string
-	for _, name := range names {
-		if inDegree[name] == 0 {
-			queue = append(queue, name)
-		}
-	}
-
-	var result []string
-	for len(queue) > 0 {
-		// Pop front (stable order via append)
-		name := queue[0]
-		queue = queue[1:]
-		result = append(result, name)
-
-		// Sorting dependents here is optional but ensures determinism for siblings in the tree
-		deps := dependents[name]
-		sort.Strings(deps)
-
-		// Decrement in-degree of dependents
-		for _, dependent := range deps {
-			inDegree[dependent]--
-			if inDegree[dependent] == 0 {
-				queue = append(queue, dependent)
-			}
-		}
-	}
-
-	if len(result) != len(h.services) {
-		return nil, fmt.Errorf("circular dependency detected in services")
-	}
-
-	return result, nil
+	return order, nil
 }
 
 // Names returns all registered service names (unordered)
