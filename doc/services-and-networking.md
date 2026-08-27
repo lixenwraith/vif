@@ -41,9 +41,12 @@ flowchart TD
     Start --> Stop["Stop initialized services in reverse order"]
 ```
 
-The hub uses Kahn's algorithm. Service names and dependent lists are sorted so
-unrelated siblings have deterministic order. Missing dependencies and cycles
-are startup errors.
+The hub delegates to `core.TopoSort`, the same Kahn implementation the system
+dependency graph resolves with. Names and dependent lists are sorted so
+unrelated siblings have deterministic order; service init order feeds RNG
+seeding, so it must not vary between runs. Missing dependencies and cycles are
+startup errors, and the resolver reports them as typed errors the hub renders
+in service terms.
 
 If `Init` fails, already initialized services are stopped in reverse order. If
 `Start` fails, already started services are rolled back; the app's final close

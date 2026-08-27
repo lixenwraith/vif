@@ -152,6 +152,14 @@ go run ./cmd/vif -check -g path/to/scenario
 go run ./cmd/vif -schema > /tmp/vif-schema.json
 ```
 
+`-check` validates system names against the manifest and then the declared
+dependency graph, rejecting a scenario that leaves an enabled system without a
+system it requires. Two lints run inside `make verify` rather than as separate
+commands: `TestNoOrderDependentMapRange` reports map iteration whose order can
+reach simulation state, and `TestSystemDomainProfiles` checks every declared
+domain profile against the RNG streams, entity domains and component stores its
+system touches. Both carry an allowlist that wants a reason, not a name.
+
 For audio documents, use `soundlab validate`; for visual behavior, exercise the
 blend tester and both color modes. Runtime terminal interactions still need a
 manual smoke test because unit tests do not reproduce every emulator.
@@ -285,6 +293,8 @@ telemetry—archive or remove them according to development needs.
 1. Read the high-level architecture and the relevant domain document.
 2. Keep edits within the package ownership rules in [Package map](package-map.md).
 3. Update manifest/event/input source declarations and regenerate where needed.
+   A new system also declares `Domain()` and `Requires()`; see
+   [the domain model](domain-model.md).
 4. Add focused tests, including error/overflow/pause/reset paths where the
    subsystem is concurrent.
 5. Run formatting, `make verify`, config checks, and the appropriate manual
@@ -295,8 +305,10 @@ telemetry—archive or remove them according to development needs.
 
 Do not “fix” unrelated dirty-tree changes during a focused contribution. Avoid
 blocking I/O inside the world lock, storing game behavior in renderers, calling
-peer systems directly, or exposing host service implementations across domain
-boundaries.
+peer systems directly, or exposing host service implementations across package
+boundaries. Anything iterating a map before a write, an RNG draw or an event
+push has to sort first; determinism across instances is the invariant the
+domain model rests on.
 
 ## 12. Source map
 

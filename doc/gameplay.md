@@ -321,9 +321,11 @@ and audio systems disabled.
 
 ## 11. System inventory
 
-The manifest registers these tick systems by domain:
+The manifest registers these tick systems, grouped here by responsibility. The
+grouping is editorial and is not the replication domain, which each system
+declares for itself:
 
-| Domain | Systems |
+| Group | Systems |
 |---|---|
 | Frame/player | `cursor`, `ping`, `transient`, `camera`, `energy`, `shield`, `heat`, `boost`, `weapon` |
 | Typing/world | `typing`, `composite`, `wall`, `tower`, `gateway`, `loot`, `glyph`, `nugget`, `decay`, `blossom`, `gold` |
@@ -339,8 +341,8 @@ The table uses runtime `Name()` values, which the manifest keys now match;
 validation, the `:system` command and the manifest all name a system the same
 way. `MetaSystem` is event-only and added directly by the app.
 
-Each entry also declares a domain profile and its dependencies; see
-[the domain model](domain-model.md).
+Each entry declares a domain profile and its dependencies through `Domain()`
+and `Requires()`; see [the domain model](domain-model.md).
 
 ## 12. Balance and ownership map
 

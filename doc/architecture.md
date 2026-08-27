@@ -166,7 +166,15 @@ whether a human, in-simulation bot, or remote peer controls that cursor. The
 mode router and camera follow the selected local slot, while gameplay systems
 can iterate or address every cursor through the same event-driven path.
 
-See [ECS and events](ecs-and-events.md).
+Every entity, event and RNG stream carries a replication domain. Shared state
+is identical on every instance and replicated; player state is this instance's
+participant and is never replicated. Systems declare which of the two they read
+and write, and which other systems they need, through `Domain()` and
+`Requires()`; a test checks each declaration against the code, and the declared
+dependencies resolve into a deterministic initialization order that is separate
+from the tick order `Priority()` fixes.
+
+See [ECS and events](ecs-and-events.md) and [the domain model](domain-model.md).
 
 ## 6. Data-driven encounter control
 
@@ -303,6 +311,12 @@ framing, peer manager, service adapter, and inbound translation system exist,
 but `App` constructs the service in disabled `RoleNone` mode, does not bind its
 event path, and does not include `NetworkSystem` in the generated system
 manifest. No normal CLI flag enables multiplayer.
+
+The simulation-side foundation is further along than the transport. The domain
+boundary is landed and enforced: entities, events and RNG streams are tagged,
+systems declare and are checked against their domain, and determinism across
+instances is stated as rules D-1..D-14 in [the domain model](domain-model.md).
+Event classification and the wire protocol remain.
 
 For build, diagnostics, platform, and repository-health details, see
 [Development and operations](development.md) and

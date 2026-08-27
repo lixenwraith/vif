@@ -19,10 +19,14 @@ flowchart TD
     World --> Identity["entity IDs and component masks"]
 ```
 
-The world starts entity IDs at `1`; `0` is the conventional no-entity value.
-`Clear` resets both the ID sequence and session entity counters. Component
+An entity is `[domain:8][id:56]`: a replication domain tag over a domain-local
+identifier. The world keeps one counter per domain, both starting at `1`, so
+`0` is the conventional no-entity value in either. `CreateEntity` names its
+domain at every call site, `Clear` resets both sequences and their session
+counters, and created and destroyed counts are tracked per domain. Component
 masks let generated destruction code remove only the stores present on an
-entity.
+entity. Which domain an entity, event or RNG stream belongs to is the subject
+of [the domain model](domain-model.md).
 
 All component stores, positions, resources that participate in a tick, entity
 IDs, and system execution are protected by the world's update mutex. The game
@@ -103,10 +107,10 @@ occupants. Spawn and movement designs should avoid pathological stacking.
 list. The following grouping is conceptual; every registered component gets a
 generated typed store and mask bit.
 
-| Domain | Components |
+| Group | Components |
 |---|---|
 | Identity and presentation | `Glyph`, `Sigil`, `Nugget`, `Cursor`, `Protection`, `Kinetic`, `Wall`, `Loot`, `Gateway` |
-| Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping` |
+| Player state | `Energy`, `Heat`, `Shield`, `Boost`, `Weapon`, `Orb`, `Ping`, `CursorView` |
 | General behavior | `Decay`, `Blossom`, `Cleaner`, `Dust`, `Navigation`, `Combat`, `Genotype`, `Lightning`, `Missile`, `Pulse`, `Spirit`, `Materialize` |
 | Species and structures | `Target`, `TargetAnchor`, `Drain`, `Quasar`, `Swarm`, `Storm`, `StormCircle`, `Bullet`, `Pylon`, `Snake`, `SnakeHead`, `SnakeBody`, `SnakeMember`, `Eye`, `Tower` |
 | Composite entities | `Header`, `Member` |
@@ -114,8 +118,13 @@ generated typed store and mask bit.
 | Lifecycle | `Death`, `Timer` |
 | Special storage | `Position` |
 
+The grouping above is conceptual and unrelated to the replication domain. That
+is a property of the entity a component attaches to, and
+`engine.componentDomains` is the audit table naming the components legal in one
+domain only.
+
 Components should remain data-oriented. Behavior belongs in systems, and
-cross-domain requests belong in events. Related enum values and static profiles
+cross-system requests belong in events. Related enum values and static profiles
 live alongside a component when they define the meaning of that data, such as
 weapon types, loot profiles, or glyph levels.
 

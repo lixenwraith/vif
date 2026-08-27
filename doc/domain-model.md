@@ -119,6 +119,9 @@ The join race is accepted: a resize already in flight when the second
 participant appears may land, a resize after it will not. The window is one
 event dispatch and the divergence is bounded by the guard immediately after.
 Suppression publishes `context.map_locked` and logs once per resize.
+`GameContext.PublishMapLock` is the flag's only writer, called by the resize
+path and again by reset, which rebuilds both of its inputs; without the second
+call the previous session's verdict outlives it.
 
 Consequence not yet closed: a map script may branch an FSM guard on
 `viewport_width`, `camera_x` or `color_mode`, which are per-instance. Under a
