@@ -29,7 +29,7 @@ type pendingFusion struct {
 }
 
 // FuseSystem orchestrates the visual and timing transition of entity fusions and manages fusion source system
-// Actual entity creation is delegated to target systems (QuasarSystem and SwarmSystem)
+// Player-domain: it consumes drains and their visuals; the crossing is the geometry-only spawn request.
 type FuseSystem struct {
 	world *engine.World
 
@@ -59,7 +59,8 @@ func (s *FuseSystem) Init() {
 	s.statSpawnFailures.Store(0)
 	s.statDisabled.Store(0)
 	s.buffers.Reset()
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
+	// Spirit scatter is a player-domain effect, so the draw must not touch the shared stream
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.enabled = true
 }
 
@@ -84,7 +85,7 @@ func (s *FuseSystem) EventTypes() []event.EventType {
 func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 	if ev.Type == event.EventGameResetRequest {
 		if s.hasQuasarFusion() {
-			s.world.PushEvent(event.EventSpiritDespawnRequest, nil)
+			s.world.PushEventDomain(event.EventSpiritDespawnRequest, nil, core.DomainPlayer)
 		}
 		s.Init()
 		return
@@ -160,28 +161,56 @@ func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []vmath.Point,
 	}
 }
 
+// effectSpiritArea flies one spirit per source into the target area; player-domain visuals
 func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
-	for i, src := range sources {
-		dest := area.DistributePoint(i, s.rng)
+	s.world.WithDomain(core.DomainPlayer, func() {
+		for i, src := range sources {
+			dest := area.DistributePoint(i, s.rng)
 
-		s.world.PushEvent(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
-			StartX:    src.X,
-			StartY:    src.Y,
-			TargetX:   dest.X,
-			TargetY:   dest.Y,
-			Char:      visual.DrainChar,
-			BaseColor: c,
-		})
-	}
+			s.world.PushEvent(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
+				StartX:    src.X,
+				StartY:    src.Y,
+				TargetX:   dest.X,
+				TargetY:   dest.Y,
+				Char:      visual.DrainChar,
+				BaseColor: c,
+			})
+		}
+	})
 }
 
+// effectMaterialize gates the shared spawn, so it crosses as shared even though the producer is player-domain
 func (s *FuseSystem) effectMaterialize(area vmath.Area) {
-	s.world.PushEvent(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+	s.world.PushEventDomain(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
 		X:          area.X,
 		Y:          area.Y,
 		AreaWidth:  area.Width,
 		AreaHeight: area.Height,
 		Type:       component.SpawnTypeSwarm,
+	}, core.DomainShared)
+}
+
+// killDrains reports and retires the consumed drains; the batch is domain-pure, so a
+// shared record never names a player entity.
+func (s *FuseSystem) killDrains(drains []core.Entity) {
+	if len(drains) == 0 {
+		return
+	}
+	// TODO(phase6): EmitDeath bypasses PushEvent, so the tag does not reach the death record yet.
+	s.world.WithDomain(core.DomainPlayer, func() {
+		for _, drainEntity := range drains {
+			killX, killY := -1, -1
+			if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
+				killX, killY = pos.X, pos.Y
+			}
+			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+				Entity:  drainEntity,
+				Species: component.SpeciesDrain,
+				X:       killX,
+				Y:       killY,
+			})
+		}
+		event.EmitDeath(s.world.Resources.Event.Queue, 0, drains...)
 	})
 }
 
@@ -213,19 +242,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	midX = topLeftX + parameter.SwarmHeaderOffsetX
 	midY = topLeftY + parameter.SwarmHeaderOffsetY
 
-	// Emit death drain events
-	for _, drainEntity := range []core.Entity{drainA, drainB} {
-		killX, killY := -1, -1
-		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-			killX, killY = pos.X, pos.Y
-		}
-		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
-			Entity:  drainEntity,
-			Species: component.SpeciesDrain,
-			X:       killX,
-			Y:       killY,
-		})
-	}
+	s.killDrains([]core.Entity{drainA, drainB})
 
 	event.EmitDeath(s.world.Resources.Event.Queue, 0, drainA, drainB)
 
@@ -242,6 +259,7 @@ func (s *FuseSystem) handleSwarmFuse(drainA, drainB core.Entity, effect event.Fu
 	s.buffers.Observe(0, len(s.fusions))
 }
 
+// handleQuasarFuse consumes every drain into one quasar at their centroid
 func (s *FuseSystem) handleQuasarFuse() {
 	drainEntities := s.world.Components.Drain.Entities()
 	sources := make([]vmath.Point, 0, len(drainEntities))
@@ -288,24 +306,7 @@ func (s *FuseSystem) handleQuasarFuse() {
 
 	area := vmath.Area{X: topLeftX, Y: topLeftY, Width: parameter.QuasarWidth, Height: parameter.QuasarHeight}
 	s.applyEffect(event.FuseEffectMaterialize, sources, area, component.SpiritCyan)
-
-	// Emit EventSpeciesKilled for each drain (enables loot drops)
-	for _, drainEntity := range drainEntities {
-		killX, killY := -1, -1
-		if pos, ok := s.world.Positions.GetPosition(drainEntity); ok {
-			killX, killY = pos.X, pos.Y
-		}
-		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
-			Entity:  drainEntity,
-			Species: component.SpeciesDrain,
-			X:       killX,
-			Y:       killY,
-		})
-	}
-
-	if len(drainEntities) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, drainEntities...)
-	}
+	s.killDrains(drainEntities)
 
 	s.fusions = append(s.fusions, pendingFusion{
 		Type:    FuseQuasar,
@@ -316,22 +317,21 @@ func (s *FuseSystem) handleQuasarFuse() {
 	s.buffers.Observe(0, len(s.fusions))
 }
 
-// completeFusion triggers the creation event in the destination system
+// completeFusion triggers the creation event in the destination system.
+// Spirits are player-domain visuals; the species spawn is the shared result.
 func (s *FuseSystem) completeFusion(f pendingFusion) {
 	switch f.Type {
 	case FuseQuasar:
-		s.world.PushEvent(event.EventSpiritDespawnRequest, nil) // Clean up spirits
-		// Request spawn, delegation of creation to QuasarSystem
-		s.world.PushEvent(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
+		s.world.PushEventDomain(event.EventSpiritDespawnRequest, nil, core.DomainPlayer)
+		s.world.PushEventDomain(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
 			X: f.TargetX,
 			Y: f.TargetY,
-		})
+		}, core.DomainShared)
 
 	case FuseSwarm:
-		// Request spawn, delegation of creation to SwarmSystem
-		s.world.PushEvent(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+		s.world.PushEventDomain(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
 			X: f.TargetX,
 			Y: f.TargetY,
-		})
+		}, core.DomainShared)
 	}
 }

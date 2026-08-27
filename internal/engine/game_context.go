@@ -216,6 +216,17 @@ func ViewportFits(width, height int) bool {
 	return width > parameter.LeftMargin && height > parameter.TopMargin+parameter.BottomMargin
 }
 
+// mapSizeLocal reports whether this instance may derive map bounds from its own terminal.
+// Crop rewrites shared simulation state, so it is admissible only while nobody else shares the world.
+// When more than one player is present, crop is disabled and map size is locked.
+func (ctx *GameContext) mapSizeLocal() bool {
+	if ctx.World.Resources.Player.Count() > 1 {
+		return false
+	}
+	net := ctx.World.Resources.Network
+	return net == nil || net.Port == nil || net.Port.PeerCount() == 0
+}
+
 // HandleResizeLocked applies terminal dimensions already written to the context and
 // reflows viewport, map, grid, camera and cursor. Caller MUST hold updateMutex;
 // MetaSystem's EventScreenResize handler is the only entry point.
@@ -228,7 +239,7 @@ func (ctx *GameContext) HandleResizeLocked() {
 	config.ViewportWidth = viewportWidth
 	config.ViewportHeight = viewportHeight
 
-	if config.CropOnResize {
+	if config.CropOnResize && ctx.mapSizeLocal() {
 		// Resize map to match viewport, cleanup OOB entities
 		config.MapWidth = viewportWidth
 		config.MapHeight = viewportHeight

@@ -159,6 +159,7 @@ func (s *NuggetSystem) Update() {
 
 	// Spawn if no active nugget and cooldown elapsed
 	if s.activeNuggetEntity == 0 {
+		s.statActive.Store(false)
 		if now.Sub(s.lastSpawnAttempt) >= parameter.NuggetSpawnInterval {
 			s.lastSpawnAttempt = now
 			s.spawnNugget()
@@ -171,20 +172,14 @@ func (s *NuggetSystem) Update() {
 	if ok {
 		nugget.BeaconRemaining -= dt
 		if nugget.BeaconRemaining <= 0 {
-			nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity)
-			if posOk {
-				s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-					Entity:    s.world.Resources.Player.Entity,
-					OriginX:   nuggetPos.X,
-					OriginY:   nuggetPos.Y,
-					ColorType: component.CleanerColorNugget,
-				})
+			if nuggetPos, posOk := s.world.Positions.GetPosition(s.activeNuggetEntity); posOk {
+				s.emitBeacon(nuggetPos.X, nuggetPos.Y)
 			}
 			nugget.BeaconRemaining = parameter.NuggetBeaconInterval
 		}
 	}
 
-	s.statActive.Store(s.activeNuggetEntity != 0)
+	s.statActive.Store(true)
 }
 
 // handleJumpRequest attempts to jump one cursor to the active nugget.
@@ -226,6 +221,21 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 
 	// 5. Update stats
 	s.statJumps.Add(1)
+}
+
+// emitBeacon fires the nugget's directional cleaner from the nearest rostered cursor,
+// so a shared payload never names the local cursor
+func (s *NuggetSystem) emitBeacon(x, y int) {
+	cursor, _, _, ok := ClosestCursor(s.world, x, y)
+	if !ok {
+		return
+	}
+	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+		Entity:    cursor,
+		OriginX:   x,
+		OriginY:   y,
+		ColorType: component.CleanerColorNugget,
+	})
 }
 
 // spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
@@ -274,12 +284,7 @@ func (s *NuggetSystem) spawnNugget() {
 	s.statSpawned.Add(1)
 
 	// Emit directional cleaners on spawn
-	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
-		Entity:    s.world.Resources.Player.Entity,
-		OriginX:   x,
-		OriginY:   y,
-		ColorType: component.CleanerColorNugget,
-	})
+	s.emitBeacon(x, y)
 }
 
 // findValidPosition finds a valid random position for a nugget

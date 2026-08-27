@@ -12,6 +12,7 @@ import (
 // SpiritSystem manages converging visual effect entities
 // Spirits travel from start to target position over a duration
 // Self-destruct on arrival; EventSpiritDespawn provides safety cleanup
+// Stamped: spirits are created in the requesting event's domain (D-7)
 type SpiritSystem struct {
 	world *engine.World
 
@@ -77,7 +78,7 @@ func (s *SpiritSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventSpiritSpawnRequest:
 		if payload, ok := ev.Payload.(*event.SpiritSpawnRequestPayload); ok {
-			s.spawnSpirit(payload)
+			s.spawnSpirit(payload, ev.Domain)
 		}
 
 	case event.EventSpiritDespawnRequest:
@@ -116,9 +117,9 @@ func (s *SpiritSystem) Update() {
 	s.buffers.Observe(0, len(s.destroyNextTick))
 }
 
-// spawnSpirit creates spirit entities and their components, without position store registration (vfx only, no world interaction)
-func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload) {
-	entity := s.world.CreateEntity(core.DomainShared)
+// spawnSpirit creates spirit entities and their components in the requesting domain, without position store registration (vfx only, no world interaction)
+func (s *SpiritSystem) spawnSpirit(p *event.SpiritSpawnRequestPayload, domain core.Domain) {
+	entity := s.world.CreateEntity(domain)
 
 	// Speed = Progress increment per tick for all spirits to arrive together
 	// Lerp handles distance normalization - progress 0→1 over duration

@@ -6,6 +6,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 )
 
 // FNV-1a 64, inlined so a per-tick digest allocates nothing
@@ -49,12 +50,21 @@ type worldDigest struct {
 	Entities  digest
 }
 
-// worldDigestLocked computes the digest; caller MUST hold the world lock
+// worldDigestLocked computes the digest over both domains; caller MUST hold the world lock
 func (a *App) worldDigestLocked() worldDigest {
+	return a.worldDigestScopedLocked(engine.ScopeBoth)
+}
+
+// worldDigestScopedLocked hashes one domain scope, so two instances compare shared
+// state without their player-domain effects. Caller MUST hold the world lock.
+func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 	var wd worldDigest
 
 	wd.Positions = newDigest()
 	for _, e := range a.world.Positions.Entities() {
+		if !scope.Selects(e) {
+			continue
+		}
 		pos, ok := a.world.Positions.GetPosition(e)
 		if !ok {
 			continue
@@ -65,6 +75,9 @@ func (a *App) worldDigestLocked() worldDigest {
 	// Float divergence surfaces here many ticks before it moves a grid cell
 	wd.Kinetics = newDigest()
 	a.world.Components.Kinetic.Each(func(e core.Entity, k *component.KineticComponent) bool {
+		if !scope.Selects(e) {
+			return true
+		}
 		wd.Kinetics = wd.Kinetics.u64(uint64(e)).
 			f64(k.PreciseX).f64(k.PreciseY).f64(k.VelX).f64(k.VelY)
 		return true
@@ -72,6 +85,9 @@ func (a *App) worldDigestLocked() worldDigest {
 
 	wd.Combat = newDigest()
 	a.world.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
+		if !scope.Selects(e) {
+			return true
+		}
 		wd.Combat = wd.Combat.u64(uint64(e)).
 			i64(int64(c.HitPoints)).b(c.IsEnraged).
 			i64(int64(c.StunnedRemaining)).

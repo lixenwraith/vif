@@ -317,16 +317,13 @@ func (s *DrainSystem) processDrainStates() {
 
 			// A positionless drain yields no death coordinate; -1 marks it absent
 			killX, killY := entry.killPos()
-			if entry.hasPos {
-				killX, killY = entry.pos.X, entry.pos.Y
-			}
-			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+			s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:       entry.entity,
 				KillerEntity: entry.combatComp.LastDamagedBy,
 				Species:      component.SpeciesDrain,
 				X:            killX,
 				Y:            killY,
-			})
+			}, core.DomainPlayer)
 			continue
 		}
 
@@ -874,12 +871,12 @@ func (s *DrainSystem) handleDrainInteractions() {
 			// Counted as a kill, credited to no cursor: the drain spent itself on the
 			// player, so it grants no boost. Loot still drops as compensation.
 			killX, killY := entry.killPos()
-			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+			s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 				Entity:  entry.entity,
 				Species: component.SpeciesDrain,
 				X:       killX,
 				Y:       killY,
-			})
+			}, core.DomainPlayer)
 			s.statSuicides.Add(1)
 		}
 	}
@@ -917,13 +914,13 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 
 		a.dying = true
 		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, a.entity)
-		s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+		s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 			Entity:       a.entity,
 			KillerEntity: a.combatComp.LastDamagedBy,
 			Species:      component.SpeciesDrain,
 			X:            a.pos.X,
 			Y:            a.pos.Y,
-		})
+		}, core.DomainPlayer)
 		s.statCollisions.Add(1)
 	}
 }
