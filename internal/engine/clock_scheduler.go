@@ -45,6 +45,9 @@ type ClockScheduler struct {
 	// Event routing
 	eventRouter *event.Router
 
+	// tap observes every event before dispatch; harness-only, set before Start
+	tap func(event.GameEvent)
+
 	// Finite GameState Machine
 	fsm *fsm.Machine[*World]
 
@@ -296,6 +299,11 @@ func (cs *ClockScheduler) reportRegions() error {
 func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 	cs.eventRouter.Register(handler)
 }
+
+// SetDispatchTap installs an observer called for every event before the FSM and
+// system handlers see it, so a pooled payload is still the producer's. Harness-only:
+// set before Start, or any time on a driven App, never on a running scheduler.
+func (cs *ClockScheduler) SetDispatchTap(fn func(event.GameEvent)) { cs.tap = fn }
 
 // LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
 func (cs *ClockScheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
@@ -766,8 +774,16 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 	apmOpen := !cs.ctl.IsPaused()
 	var apmWeight uint64
 
+	// Harness observer, hoisted with the other gates
+	tap := cs.tap
+
 	var nFSM, nSys, nDead int
 	for _, ev := range eventsList {
+		// Before any handler runs: a pooled payload is still the producer's
+		if tap != nil {
+			tap(ev)
+		}
+
 		handlers, _ := cs.eventRouter.GetHandlers(ev.Type)
 
 		// FSM first, and its result is what makes sys=0 meaningful

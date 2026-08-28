@@ -22,6 +22,13 @@ import (
 // comparison drops them; a same-instance replay still compares them.
 var denySharedPrefix = []string{
 	"player.", // per-slot cursor state, including the weapon inventory cards
+	// This instance's view of the map: mirrors of fields ctx|view already drops
+	"context.screen_", "context.camera_", "context.mode",
+	// Instance-local traffic and index: only Shared ∪ Bus replicates (D-10), and a
+	// resize re-runs ResizeGrid on the instance that received it. spatial.indexed_shared
+	// is the one comparable member here and is dropped with the rest; the shared
+	// position digest already covers it. TODO(phase6): allow-list, not prefix deny.
+	"event.", "spatial.",
 	"drain.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",

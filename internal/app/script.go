@@ -23,31 +23,78 @@ type ScriptOptions struct {
 	Steps   int  // action count, excluding warmup and trailing settle
 	Resets  bool // allow game reset, which re-bases the journal tick counter
 	Regions bool // allow FSM region operations
+	Resizes bool // allow terminal resize, which a parity run must hold fixed
 
 	// RegionSet names the regions actRegion may target; the FSM is scheduler-owned
 	// and exposes no region list to a harness, so it is declared here
 	RegionSet []ScriptRegion
+
+	// MapMotionsOnly drops the viewport-relative motions, which two instances of one
+	// session resolve against different geometry
+	MapMotionsOnly bool
 }
 
 // DefaultScript returns the soak profile: every action class enabled
 func DefaultScript(seed uint64, steps int) ScriptOptions {
-	return ScriptOptions{Seed: seed, Steps: steps, Resets: true, Regions: true, RegionSet: EmbeddedRegions}
+	return ScriptOptions{Seed: seed, Steps: steps, Resets: true, Regions: true,
+		Resizes: true, RegionSet: EmbeddedRegions}
+}
+
+// ScriptDriver applies a drawn action sequence to one App. Two drivers built from
+// one seed produce identical sequences, which is what lets instances step in lockstep.
+type ScriptDriver struct {
+	a       *App
+	rng     *vmath.FastRand
+	regions []ScriptRegion
+	motions []input.MotionOp
+
+	table []scriptAction
+	total int
+}
+
+// scriptAction is one weighted entry in the action table
+type scriptAction struct {
+	run    func(*ScriptDriver) bool
+	weight int
+}
+
+// NewScriptDriver binds an option set to an App for caller-paced stepping
+func NewScriptDriver(a *App, opt ScriptOptions) *ScriptDriver {
+	d := &ScriptDriver{a: a, rng: vmath.NewSeededRand(opt.Seed, "script"), regions: opt.RegionSet}
+	d.motions = scriptMotions[:]
+	if opt.MapMotionsOnly {
+		d.motions = mapMotions()
+	}
+	d.table = actionTable(opt)
+	for _, e := range d.table {
+		d.total += e.weight
+	}
+	return d
+}
+
+// Step applies one drawn action; false means the action quit the game
+func (d *ScriptDriver) Step() bool { return d.pick()(d) }
+
+// pick draws one weighted action
+func (d *ScriptDriver) pick() func(*ScriptDriver) bool {
+	r := d.rng.Intn(d.total)
+	for i := range d.table {
+		if r < d.table[i].weight {
+			return d.table[i].run
+		}
+		r -= d.table[i].weight
+	}
+	return d.table[0].run
 }
 
 // RunScript drives an App through the option's action sequence, returning the
 // position it ended at
 func RunScript(a *App, opt ScriptOptions) (event.Stamp, error) {
-	d := &scriptDriver{a: a, rng: vmath.NewSeededRand(opt.Seed, "script"), regions: opt.RegionSet}
-	table := actionTable(opt)
-
-	total := 0
-	for _, e := range table {
-		total += e.weight
-	}
+	d := NewScriptDriver(a, opt)
 
 	a.Tick(1) // warmup: the tick-1 APM fold commits an empty bucket
 	for range opt.Steps {
-		if !d.pick(table, total)(d) {
+		if !d.Step() {
 			return a.Position(), errors.New("script quit the game")
 		}
 		if opt.Perturb != nil {
@@ -58,56 +105,36 @@ func RunScript(a *App, opt ScriptOptions) (event.Stamp, error) {
 	return a.Position(), nil
 }
 
-// scriptDriver holds the generator stream and the App it drives
-type scriptDriver struct {
-	a       *App
-	rng     *vmath.FastRand
-	regions []ScriptRegion
-}
-
-// scriptAction is one weighted entry in the action table
-type scriptAction struct {
-	weight int
-	run    func(*scriptDriver) bool
-}
-
 // actionTable builds the weighted action set. Tick dominates so the simulation
 // actually runs between injections.
 func actionTable(opt ScriptOptions) []scriptAction {
+	// Weight zero rather than omission: the enabled sequence must not shift
+	resize := 3
+	if !opt.Resizes {
+		resize = 0
+	}
 	t := []scriptAction{
-		{30, (*scriptDriver).actTick},
-		{20, (*scriptDriver).actMotion},
-		{10, (*scriptDriver).actType},
-		{8, (*scriptDriver).actFire},
-		{8, (*scriptDriver).actInputTick},
-		{6, (*scriptDriver).actMode},
-		{6, (*scriptDriver).actSpecial},
-		{4, (*scriptDriver).actCharMotion},
-		{4, (*scriptDriver).actCommand},
-		{3, (*scriptDriver).actResize},
-		{2, (*scriptDriver).actLevel},
-		{2, (*scriptDriver).actSearch},
-		{2, (*scriptDriver).actOverlay},
+		{(*ScriptDriver).actTick, 30},
+		{(*ScriptDriver).actMotion, 20},
+		{(*ScriptDriver).actType, 10},
+		{(*ScriptDriver).actFire, 8},
+		{(*ScriptDriver).actInputTick, 8},
+		{(*ScriptDriver).actMode, 6},
+		{(*ScriptDriver).actSpecial, 6},
+		{(*ScriptDriver).actCharMotion, 4},
+		{(*ScriptDriver).actCommand, 4},
+		{(*ScriptDriver).actResize, resize},
+		{(*ScriptDriver).actLevel, 2},
+		{(*ScriptDriver).actSearch, 2},
+		{(*ScriptDriver).actOverlay, 2},
 	}
 	if opt.Regions && len(opt.RegionSet) > 0 {
-		t = append(t, scriptAction{2, (*scriptDriver).actRegion})
+		t = append(t, scriptAction{(*ScriptDriver).actRegion, 2})
 	}
 	if opt.Resets {
-		t = append(t, scriptAction{1, (*scriptDriver).actReset})
+		t = append(t, scriptAction{(*ScriptDriver).actReset, 1})
 	}
 	return t
-}
-
-// pick draws one weighted action
-func (d *scriptDriver) pick(table []scriptAction, total int) func(*scriptDriver) bool {
-	r := d.rng.Intn(total)
-	for i := range table {
-		if r < table[i].weight {
-			return table[i].run
-		}
-		r -= table[i].weight
-	}
-	return table[0].run
 }
 
 // --- Alphabets ---
@@ -126,6 +153,26 @@ var scriptMotions = [...]input.MotionOp{
 	input.MotionHalfPageLeft, input.MotionHalfPageRight, input.MotionParaBack,
 	input.MotionParaForward, input.MotionMatchBracket, input.MotionOrigin,
 	input.MotionEnd, input.MotionCenter, input.MotionColumnUp, input.MotionColumnDown,
+}
+
+// viewportMotions are the only entries in scriptMotions that read ViewportWidth or
+// ViewportHeight; everything else resolves against the map or the ping bounds.
+var viewportMotions = map[input.MotionOp]bool{
+	input.MotionHalfPageLeft:  true,
+	input.MotionHalfPageRight: true,
+	input.MotionHalfPageUp:    true,
+	input.MotionHalfPageDown:  true,
+}
+
+// mapMotions returns scriptMotions without the viewport-relative entries
+func mapMotions() []input.MotionOp {
+	out := make([]input.MotionOp, 0, len(scriptMotions))
+	for _, m := range scriptMotions {
+		if !viewportMotions[m] {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 var scriptCharMotions = [...]input.MotionOp{
@@ -182,22 +229,22 @@ var scriptRegionOps = [...]string{
 // --- Actions ---
 
 // actTick advances the simulation, which is what makes the other actions land
-func (d *scriptDriver) actTick() bool {
+func (d *ScriptDriver) actTick() bool {
 	d.a.Tick(1 + d.rng.Intn(4))
 	return true
 }
 
 // actMotion injects one cursor motion
-func (d *scriptDriver) actMotion() bool {
+func (d *ScriptDriver) actMotion() bool {
 	return d.a.Inject(&input.Intent{
 		Type:   input.IntentMotion,
-		Motion: scriptMotions[d.rng.Intn(len(scriptMotions))],
+		Motion: d.motions[d.rng.Intn(len(d.motions))],
 		Count:  1 + d.rng.Intn(6),
 	})
 }
 
 // actCharMotion injects an f/F/t/T motion against a drawn target character
-func (d *scriptDriver) actCharMotion() bool {
+func (d *ScriptDriver) actCharMotion() bool {
 	return d.a.Inject(&input.Intent{
 		Type:   input.IntentCharMotion,
 		Motion: scriptCharMotions[d.rng.Intn(len(scriptCharMotions))],
@@ -208,12 +255,12 @@ func (d *scriptDriver) actCharMotion() bool {
 
 // actType injects a keystroke; it reaches the world only in Insert mode, which
 // actMode enters often enough to cover the typing path
-func (d *scriptDriver) actType() bool {
+func (d *ScriptDriver) actType() bool {
 	return d.a.Inject(&input.Intent{Type: input.IntentTextChar, Char: d.char(), Count: 1})
 }
 
 // actMode switches mode, or leaves the current one with Escape
-func (d *scriptDriver) actMode() bool {
+func (d *ScriptDriver) actMode() bool {
 	if d.rng.Intn(4) == 0 {
 		return d.a.Inject(&input.Intent{Type: input.IntentEscape, Count: 1})
 	}
@@ -225,7 +272,7 @@ func (d *scriptDriver) actMode() bool {
 }
 
 // actSpecial injects a delete, search-repeat or find-repeat command
-func (d *scriptDriver) actSpecial() bool {
+func (d *ScriptDriver) actSpecial() bool {
 	if d.rng.Intn(5) == 0 {
 		return d.a.Inject(&input.Intent{
 			Type: input.IntentOperatorLine, Operator: input.OperatorDelete,
@@ -240,7 +287,7 @@ func (d *scriptDriver) actSpecial() bool {
 }
 
 // actFire requests a weapon or special discharge
-func (d *scriptDriver) actFire() bool {
+func (d *ScriptDriver) actFire() bool {
 	t := input.IntentFireMain
 	if d.rng.Intn(3) == 0 {
 		t = input.IntentFireSpecial
@@ -249,16 +296,16 @@ func (d *scriptDriver) actFire() bool {
 }
 
 // actInputTick advances auto-fire and macro playback, which emit on their own cadence
-func (d *scriptDriver) actInputTick() bool { return d.a.InputTick() }
+func (d *ScriptDriver) actInputTick() bool { return d.a.InputTick() }
 
 // actCommand runs one ex command, keystroke by keystroke so each lands in its own
 // settle group, as a live run produces
-func (d *scriptDriver) actCommand() bool {
+func (d *ScriptDriver) actCommand() bool {
 	return d.typeCommand(scriptCommands[d.rng.Intn(len(scriptCommands))])
 }
 
 // actOverlay opens an overlay and closes it, covering the paused overlay mode round trip
-func (d *scriptDriver) actOverlay() bool {
+func (d *ScriptDriver) actOverlay() bool {
 	if !d.typeCommand(scriptOverlays[d.rng.Intn(len(scriptOverlays))]) {
 		return false
 	}
@@ -267,7 +314,7 @@ func (d *scriptDriver) actOverlay() bool {
 }
 
 // actSearch enters search mode, types a short pattern and confirms it
-func (d *scriptDriver) actSearch() bool {
+func (d *ScriptDriver) actSearch() bool {
 	if !d.a.Inject(&input.Intent{Type: input.IntentEscape, Count: 1}) ||
 		!d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetSearch, Count: 1}) {
 		return false
@@ -282,13 +329,13 @@ func (d *scriptDriver) actSearch() bool {
 
 // actResize reports a terminal change; dimensions stay above the margins so
 // ScreenSize keeps inverting updateGameArea exactly
-func (d *scriptDriver) actResize() bool {
+func (d *ScriptDriver) actResize() bool {
 	d.a.Resize(20+d.rng.Intn(140), 8+d.rng.Intn(44))
 	return true
 }
 
 // actLevel resizes the map independently of the viewport, in both crop modes
-func (d *scriptDriver) actLevel() bool {
+func (d *ScriptDriver) actLevel() bool {
 	d.a.SetupLevel(20+d.rng.Intn(100), 10+d.rng.Intn(30),
 		d.rng.Intn(2) == 0, d.rng.Intn(2) == 0)
 	return true
@@ -296,14 +343,14 @@ func (d *scriptDriver) actLevel() bool {
 
 // actRegion applies one FSM region operation; an invalid one is reported and dropped,
 // which is itself worth reproducing
-func (d *scriptDriver) actRegion() bool {
+func (d *ScriptDriver) actRegion() bool {
 	r := d.regions[d.rng.Intn(len(d.regions))]
 	d.a.Region(scriptRegionOps[d.rng.Intn(len(scriptRegionOps))], r.Name, r.State)
 	return true
 }
 
 // actReset restarts the game through either the debug path or the ex command
-func (d *scriptDriver) actReset() bool {
+func (d *ScriptDriver) actReset() bool {
 	purge := d.rng.Intn(4) == 0
 	if d.rng.Intn(2) == 0 {
 		cmd := "new"
@@ -319,11 +366,11 @@ func (d *scriptDriver) actReset() bool {
 // --- Helpers ---
 
 // char draws one printable character
-func (d *scriptDriver) char() rune { return rune(scriptChars[d.rng.Intn(len(scriptChars))]) }
+func (d *ScriptDriver) char() rune { return rune(scriptChars[d.rng.Intn(len(scriptChars))]) }
 
 // typeCommand runs one ex command as a full round trip: the mode switch pauses, the
 // confirm unpauses and executes
-func (d *scriptDriver) typeCommand(cmd string) bool {
+func (d *ScriptDriver) typeCommand(cmd string) bool {
 	if !d.a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1}) {
 		return false
 	}

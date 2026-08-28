@@ -114,11 +114,11 @@ func (w *World) Domain() core.Domain { return core.Domain(w.domain.Load()) }
 func (w *World) AddComponentMask(e core.Entity, bit uint64) {
 	if domainAudit.Load() {
 		auditComponentDomain(e, bit)
+		auditEntityDomain(w, e)
 	}
 	w.componentMask[e] |= bit
 }
 
-// TODO: for DEBUG
 // GetComponentMask returns the entity signature and whether the entity is tracked
 // Caller MUST hold updateMutex
 func (w *World) GetComponentMask(e core.Entity) (uint64, bool) {
@@ -292,8 +292,16 @@ func (w *World) Update() {
 
 // UpdateLocked runs all systems assuming the caller already holds updateMutex
 func (w *World) UpdateLocked() {
+	audit := domainAudit.Load()
 	for _, system := range w.systems {
+		// Attribution is a per-tick decision, matching the audit gate itself
+		if audit {
+			setAuditScope(system.Name(), system.Domain())
+		}
 		system.Update()
+	}
+	if audit {
+		clearAuditScope()
 	}
 }
 

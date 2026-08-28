@@ -29,6 +29,10 @@ var ownerAuthoredStores = map[string]bool{
 	"Weapon": true, "CursorView": true, "Ping": true, "Pulse": true,
 }
 
+// ownerAuthoredCreators may write the D-13 set despite a shared profile: they create
+// the entity, and the initial values are constants the shared creation order carries.
+var ownerAuthoredCreators = map[string]bool{"cursor": true}
+
 // storeWriters are the Store methods that can mutate a component. GetPtr hands
 // out a mutable pointer, so it counts as a write unless allowedDomainAccess
 // records that the call site only reads.
@@ -75,6 +79,17 @@ func TestSystemDomainProfiles(t *testing.T) {
 			for _, store := range sortedStores(e.writes) {
 				if storeDomains[store] == "player" && !exempt(e.name, store) {
 					t.Errorf("%s: declared shared but writes the player-only %s store", e.file, store)
+				}
+			}
+			// D-13: owner-authored values are transported, never re-derived, so a
+			// shared system must not author them. Blind to writes made through a
+			// World helper rather than a Components selector.
+			if !ownerAuthoredCreators[e.name] {
+				for _, store := range sortedStores(e.writes) {
+					if ownerAuthoredStores[store] {
+						t.Errorf("%s: declared shared but writes the owner-authored %s store (D-13)",
+							e.file, store)
+					}
 				}
 			}
 			for _, store := range sortedStores(e.reads) {
@@ -186,9 +201,15 @@ func parseStoreDomains(t *testing.T, path string) map[string]string {
 		if !ok || len(lit.Elts) != 2 {
 			return true
 		}
+
+		// The name string is otherwise unchecked, since the store is derived from
+		// the bit constant; a mismatch there would never be reported.
+		field := strings.TrimSuffix(key.Name, "Bit")
+		if name, ok := lit.Elts[0].(*ast.BasicLit); !ok || strings.Trim(name.Value, `"`) != field {
+			t.Errorf("componentDomains[%s]: name string must be %q", key.Name, field)
+		}
 		if sel, ok := lit.Elts[1].(*ast.SelectorExpr); ok {
-			domains[strings.TrimSuffix(key.Name, "Bit")] = strings.ToLower(
-				strings.TrimPrefix(sel.Sel.Name, "Domain"))
+			domains[field] = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "Domain"))
 		}
 		return true
 	})
@@ -204,24 +225,9 @@ func parseStoreDomains(t *testing.T, path string) map[string]string {
 func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 	t.Helper()
 
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		t.Fatalf("read %s: %v", dir, err)
-	}
-
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		n := e.Name()
-		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
-			continue
-		}
-		names = append(names, n)
-	}
-	slices.Sort(names) // deterministic diagnostics
-
 	var systems []systemEvidence
 	fset := token.NewFileSet()
-	for _, n := range names {
+	for _, n := range packageFiles(t, dir) {
 		f, err := parser.ParseFile(fset, dir+"/"+n, nil, 0)
 		if err != nil {
 			t.Fatalf("parse %s: %v", n, err)
@@ -235,10 +241,61 @@ func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 			creates: map[string]bool{}, draws: map[string]bool{},
 			writes: map[string]bool{}, reads: map[string]bool{},
 		}
-		collectEvidence(f, &e)
+		collectEvidence(f, &e, collectStoreAliases(f))
 		systems = append(systems, e)
 	}
 	return systems
+}
+
+// packageFiles returns the sorted non-test sources of dir
+func packageFiles(t *testing.T, dir string) []string {
+	t.Helper()
+
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatalf("read %s: %v", dir, err)
+	}
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		n := e.Name()
+		if e.IsDir() || !strings.HasSuffix(n, ".go") || strings.HasSuffix(n, "_test.go") {
+			continue
+		}
+		names = append(names, n)
+	}
+	slices.Sort(names) // deterministic diagnostics
+	return names
+}
+
+// helperFiles declare no system, so their domain evidence is attributed to nobody.
+// Pinned rather than tolerated: a new one is a hole in the boundary suite.
+var helperFiles = []string{
+	"blast.go",
+	"interaction.go",
+	"sweep.go",
+	"targeting.go",
+	"telemetry.go",
+}
+
+// TestHelperFilesArePinned fails when the unattributed set changes, in either
+// direction: a new helper is unchecked, a vanished one leaves a stale entry.
+func TestHelperFilesArePinned(t *testing.T) {
+	fset := token.NewFileSet()
+	var got []string
+	for _, n := range packageFiles(t, ".") {
+		f, err := parser.ParseFile(fset, "./"+n, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", n, err)
+		}
+		if name, domain := declaredProfile(f); name == "" || domain == "" {
+			got = append(got, n)
+		}
+	}
+	want := slices.Clone(helperFiles)
+	slices.Sort(want)
+	if !slices.Equal(got, want) {
+		t.Fatalf("unattributed file set changed; update helperFiles to:\n\t%#v", got)
+	}
 }
 
 // declaredProfile returns the system name and domain the file declares, taken
@@ -280,8 +337,16 @@ func soleReturn(body *ast.BlockStmt) (ast.Expr, bool) {
 }
 
 // collectEvidence records every entity creation, RNG draw and component store
-// access the file makes
-func collectEvidence(f *ast.File, e *systemEvidence) {
+// access the file makes, resolving hoisted store variables through aliases.
+func collectEvidence(f *ast.File, e *systemEvidence, aliases map[string]string) {
+	record := func(store, method string) {
+		if storeWriters[method] {
+			e.writes[store] = true
+			return
+		}
+		e.reads[store] = true
+	}
+
 	ast.Inspect(f, func(n ast.Node) bool {
 		call, ok := n.(*ast.CallExpr)
 		if !ok {
@@ -307,14 +372,57 @@ func collectEvidence(f *ast.File, e *systemEvidence) {
 
 		// s.world.Components.<Store>.<Method>(...)
 		if store, ok := componentStore(sel.X); ok {
-			if storeWriters[sel.Sel.Name] {
-				e.writes[store] = true
-			} else {
-				e.reads[store] = true
-			}
+			record(store, sel.Sel.Name)
+			return true
+		}
+
+		// <alias>.<Method>(...) where the alias was bound to a store
+		if store, ok := aliases[aliasName(sel.X)]; ok {
+			record(store, sel.Sel.Name)
 		}
 		return true
 	})
+}
+
+// collectStoreAliases maps local variables and struct fields bound to a component
+// store, so a hoisted store is still attributed to the system that uses it.
+// Single-value bindings only: a two-value form yields a component, not a store.
+func collectStoreAliases(f *ast.File) map[string]string {
+	aliases := make(map[string]string)
+	bind := func(lhs, rhs ast.Expr) {
+		name := aliasName(lhs)
+		store, ok := componentStore(rhs)
+		if name != "" && ok {
+			aliases[name] = store
+		}
+	}
+	ast.Inspect(f, func(n ast.Node) bool {
+		switch t := n.(type) {
+		case *ast.AssignStmt:
+			if len(t.Lhs) == 1 && len(t.Rhs) == 1 {
+				bind(t.Lhs[0], t.Rhs[0])
+			}
+		case *ast.ValueSpec:
+			if len(t.Names) == 1 && len(t.Values) == 1 {
+				bind(t.Names[0], t.Values[0])
+			}
+		case *ast.KeyValueExpr:
+			bind(t.Key, t.Value)
+		}
+		return true
+	})
+	return aliases
+}
+
+// aliasName reduces a binding target to the identifier a later call selects on
+func aliasName(x ast.Expr) string {
+	switch t := x.(type) {
+	case *ast.Ident:
+		return t.Name
+	case *ast.SelectorExpr:
+		return t.Sel.Name
+	}
+	return ""
 }
 
 // domainArg names the domain a core.Domain argument selects; a non-constant

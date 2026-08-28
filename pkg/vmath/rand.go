@@ -29,6 +29,10 @@ func (r *FastRand) Next() uint64 {
 	return r.state
 }
 
+// State returns the generator's position, so a test can assert a code path drew
+// nothing from a stream. Never zero: NewFastRand rejects a zero seed.
+func (r *FastRand) State() uint64 { return r.state }
+
 // Intn returns a value in [0, n) using Lemire multiply-shift.
 // Unbiased; the rejection branch fires with probability ~n/2^64
 func (r *FastRand) Intn(n int) int {

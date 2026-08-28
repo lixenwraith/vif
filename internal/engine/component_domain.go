@@ -2,6 +2,9 @@
 package engine
 
 import (
+	"slices"
+	"strconv"
+	"sync"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -11,7 +14,7 @@ import (
 // componentRule names the entity domain a component bit may attach to.
 // Only single-domain components are listed; an unlisted bit is legal in either.
 type componentRule struct {
-	name   string
+	field  string // Component store field, so a violation names the store the writer touched
 	domain core.Domain
 }
 
@@ -20,53 +23,117 @@ type componentRule struct {
 // both domains and are deliberately absent, as do Cleaner, Materialize, Spirit
 // and Marker, which their systems stamp from the requesting domain.
 var componentDomains = map[uint64]componentRule{
-	CursorBit:       {"cursor", core.DomainShared},
-	NuggetBit:       {"nugget", core.DomainShared},
-	WallBit:         {"wall", core.DomainShared},
-	GatewayBit:      {"gateway", core.DomainShared},
-	EnergyBit:       {"energy", core.DomainShared},
-	HeatBit:         {"heat", core.DomainShared},
-	ShieldBit:       {"shield", core.DomainShared},
-	BoostBit:        {"boost", core.DomainShared},
-	WeaponBit:       {"weapon", core.DomainShared},
-	CursorViewBit:   {"cursor_view", core.DomainShared}, // Shared cursor view, written by one instance
-	PingBit:         {"ping", core.DomainShared},
-	PulseBit:        {"pulse", core.DomainShared},
-	GenotypeBit:     {"genotype", core.DomainShared},
-	TargetBit:       {"target", core.DomainShared},
-	TargetAnchorBit: {"target_anchor", core.DomainShared},
-	QuasarBit:       {"quasar", core.DomainShared},
-	SwarmBit:        {"swarm", core.DomainShared},
-	StormBit:        {"storm", core.DomainShared},
-	StormCircleBit:  {"storm_circle", core.DomainShared},
-	PylonBit:        {"pylon", core.DomainShared},
-	SnakeBit:        {"snake", core.DomainShared},
-	SnakeHeadBit:    {"snake_head", core.DomainShared},
-	SnakeBodyBit:    {"snake_body", core.DomainShared},
-	SnakeMemberBit:  {"snake_member", core.DomainShared},
-	EyeBit:          {"eye", core.DomainShared},
-	TowerBit:        {"tower", core.DomainShared},
-	HeaderBit:       {"header", core.DomainShared},
-	MemberBit:       {"member", core.DomainShared},
+	CursorBit:       {"Cursor", core.DomainShared},
+	NuggetBit:       {"Nugget", core.DomainShared},
+	WallBit:         {"Wall", core.DomainShared},
+	GatewayBit:      {"Gateway", core.DomainShared},
+	EnergyBit:       {"Energy", core.DomainShared},
+	HeatBit:         {"Heat", core.DomainShared},
+	ShieldBit:       {"Shield", core.DomainShared},
+	BoostBit:        {"Boost", core.DomainShared},
+	WeaponBit:       {"Weapon", core.DomainShared},
+	CursorViewBit:   {"CursorView", core.DomainShared}, // Shared cursor view, written by one instance
+	PingBit:         {"Ping", core.DomainShared},
+	PulseBit:        {"Pulse", core.DomainShared},
+	GenotypeBit:     {"Genotype", core.DomainShared},
+	TargetBit:       {"Target", core.DomainShared},
+	TargetAnchorBit: {"TargetAnchor", core.DomainShared},
+	QuasarBit:       {"Quasar", core.DomainShared},
+	SwarmBit:        {"Swarm", core.DomainShared},
+	StormBit:        {"Storm", core.DomainShared},
+	StormCircleBit:  {"StormCircle", core.DomainShared},
+	PylonBit:        {"Pylon", core.DomainShared},
+	SnakeBit:        {"Snake", core.DomainShared},
+	SnakeHeadBit:    {"SnakeHead", core.DomainShared},
+	SnakeBodyBit:    {"SnakeBody", core.DomainShared},
+	SnakeMemberBit:  {"SnakeMember", core.DomainShared},
+	EyeBit:          {"Eye", core.DomainShared},
+	TowerBit:        {"Tower", core.DomainShared},
+	HeaderBit:       {"Header", core.DomainShared},
+	MemberBit:       {"Member", core.DomainShared},
 
-	LootBit:      {"loot", core.DomainPlayer},
-	DustBit:      {"dust", core.DomainPlayer},
-	DrainBit:     {"drain", core.DomainPlayer},
-	DecayBit:     {"decay", core.DomainPlayer},
-	BlossomBit:   {"blossom", core.DomainPlayer},
-	BulletBit:    {"bullet", core.DomainPlayer},
-	OrbBit:       {"orb", core.DomainPlayer},
-	MissileBit:   {"missile", core.DomainPlayer},
-	LightningBit: {"lightning", core.DomainPlayer},
-	FlashBit:     {"flash", core.DomainPlayer},
-	FadeoutBit:   {"fadeout", core.DomainPlayer},
-	SplashBit:    {"splash", core.DomainPlayer},
+	LootBit:      {"Loot", core.DomainPlayer},
+	DustBit:      {"Dust", core.DomainPlayer},
+	DrainBit:     {"Drain", core.DomainPlayer},
+	DecayBit:     {"Decay", core.DomainPlayer},
+	BlossomBit:   {"Blossom", core.DomainPlayer},
+	BulletBit:    {"Bullet", core.DomainPlayer},
+	OrbBit:       {"Orb", core.DomainPlayer},
+	MissileBit:   {"Missile", core.DomainPlayer},
+	LightningBit: {"Lightning", core.DomainPlayer},
+	FlashBit:     {"Flash", core.DomainPlayer},
+	FadeoutBit:   {"Fadeout", core.DomainPlayer},
+	SplashBit:    {"Splash", core.DomainPlayer},
 }
 
-var domainAudit atomic.Bool
+// domainViolationCap bounds the retained descriptions; the counter is the alarm,
+// this is the diagnosis
+const domainViolationCap = 16
 
-// SetDomainAudit enables the per-attachment domain check; a per-tick decision
-func SetDomainAudit(on bool) { domainAudit.Store(on) }
+// domainAudit gates the per-attachment check, refreshed once per tick. The pin
+// survives that refresh and the counter lets a soak assert zero instead of grepping logs.
+var (
+	domainAudit    atomic.Bool
+	domainAuditPin atomic.Bool
+	domainMismatch atomic.Int64
+
+	// Appended under updateMutex, read after the run; the mutex covers a live
+	// reader that holds neither.
+	violationMu sync.Mutex
+	violations  []string
+)
+
+// SetDomainAudit refreshes the per-tick gate; a pinned audit stays on regardless
+func SetDomainAudit(on bool) { domainAudit.Store(on || domainAuditPin.Load()) }
+
+// PinDomainAudit forces the audit on for a harness run and clears the counter.
+// Process-wide: a test holding the pin must not run beside another App.
+func PinDomainAudit(on bool) {
+	domainAuditPin.Store(on)
+	domainAudit.Store(on)
+	if on {
+		domainMismatch.Store(0)
+		violationMu.Lock()
+		violations = violations[:0]
+		violationMu.Unlock()
+	}
+}
+
+// DomainMismatches returns the violations counted while the audit was active
+func DomainMismatches() int64 { return domainMismatch.Load() }
+
+// DomainViolations returns the first retained violation descriptions
+func DomainViolations() []string {
+	violationMu.Lock()
+	defer violationMu.Unlock()
+	return slices.Clone(violations)
+}
+
+// recordViolation counts one violation and retains its description up to the cap
+func recordViolation(what string) {
+	domainMismatch.Add(1)
+	violationMu.Lock()
+	if len(violations) < domainViolationCap {
+		violations = append(violations, what)
+	}
+	violationMu.Unlock()
+}
+
+// auditScope names the system whose Update is running, so a violation names a
+// writer. Written only under updateMutex, by UpdateLocked.
+var auditScope struct {
+	name   string
+	domain SystemDomain
+	active bool
+}
+
+// setAuditScope attributes subsequent component writes to a system
+func setAuditScope(name string, d SystemDomain) {
+	auditScope.name, auditScope.domain, auditScope.active = name, d, true
+}
+
+// clearAuditScope drops the attribution once the system set has run
+func clearAuditScope() { auditScope.active = false }
 
 // auditComponentDomain reports an attachment contradicting the entity's domain
 // tag. Diagnostic only; it never blocks the write.
@@ -75,9 +142,28 @@ func auditComponentDomain(e core.Entity, bit uint64) {
 	if !ok || rule.domain == e.Domain() {
 		return
 	}
+	recordViolation("component " + rule.field + " wants " + rule.domain.String() +
+		", entity is " + e.Domain().String() + " id " + strconv.FormatUint(e.ID(), 10) +
+		" (in " + auditScope.name + ")")
 	vlog.Warn("domain", "msg", "component domain mismatch",
-		"component", rule.name,
+		"component", rule.field,
 		"want", rule.domain.String(),
 		"got", e.Domain().String(),
-		"id", e.ID())
+		"id", e.ID(),
+		"system", auditScope.name)
+}
+
+// auditEntityDomain reports a shared-profile system writing a player entity, which
+// D-1 forbids. A system that stamped itself into the player domain (D-7, D-12) is exempt.
+// Attach-only: SetComponent and SetPosition reach AddComponentMask on first insert,
+// so a GetPtr mutation or a MoveUnsafe is the static checker's business, not this one.
+func auditEntityDomain(w *World, e core.Entity) {
+	if !auditScope.active || auditScope.domain != SystemShared ||
+		e.Domain() != core.DomainPlayer || w.Domain() == core.DomainPlayer {
+		return
+	}
+	recordViolation("shared system " + auditScope.name + " wrote player entity id " +
+		strconv.FormatUint(e.ID(), 10))
+	vlog.Warn("domain", "msg", "shared system wrote player entity",
+		"system", auditScope.name, "id", e.ID())
 }

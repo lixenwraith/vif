@@ -159,3 +159,7 @@ func (a *App) Region(op, region, state string) {
 	}, event.OriginDebug)
 	a.scheduler.Settle()
 }
+
+// SetDispatchTap installs an observer for every dispatched event, for assertions the
+// journal cannot make: system-origin events are never journaled.
+func (a *App) SetDispatchTap(fn func(event.GameEvent)) { a.scheduler.SetDispatchTap(fn) }
