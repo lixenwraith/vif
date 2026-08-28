@@ -234,7 +234,7 @@ func (s *GoldSystem) handleJumpRequest(cursorEntity core.Entity) {
 	})
 
 	// 3. Pay Energy Cost (spend, non-convergent)
-	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Entity:     cursorEntity,
 		Delta:      parameter.GoldJumpCostPercent,
 		Percentage: true,
@@ -242,7 +242,7 @@ func (s *GoldSystem) handleJumpRequest(cursorEntity core.Entity) {
 	})
 
 	// // 4. Play Sound
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Coin,
 	})
 }

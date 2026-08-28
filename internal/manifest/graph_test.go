@@ -13,7 +13,7 @@ func buildWorld(t *testing.T) *engine.World {
 	t.Helper()
 	w := scratchWorld(t)
 	for _, sys := range BuildSystems(w) {
-		w.AddSystem(sys)
+		w.AddSystem(sys, ProfileFor(sys))
 	}
 	return w
 }

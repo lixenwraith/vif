@@ -222,6 +222,7 @@ func parseStoreDomains(t *testing.T, path string) map[string]string {
 func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 	t.Helper()
 
+	domains := parseSystemDomains(t, "../manifest/build_gen.go")
 	var systems []systemEvidence
 	fset := token.NewFileSet()
 	for _, n := range packageFiles(t, dir) {
@@ -229,9 +230,16 @@ func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 		if err != nil {
 			t.Fatalf("parse %s: %v", n, err)
 		}
-		name, domain := declaredProfile(f)
-		if name == "" || domain == "" {
+		name := declaredName(f)
+		if name == "" {
 			continue // a helper file declares no system
+		}
+		domain, ok := domains[name]
+		if !ok {
+			if _, known := unregisteredSystems[name]; !known {
+				t.Errorf("%s declares system %q, which the manifest does not declare", n, name)
+			}
+			continue
 		}
 		e := systemEvidence{
 			name: name, domain: domain, file: n,
@@ -264,6 +272,77 @@ func packageFiles(t *testing.T, dir string) []string {
 	return names
 }
 
+// unregisteredSystems declare a system nothing registers, so the manifest carries
+// no profile and the boundary suite cannot check them.
+var unregisteredSystems = map[string]string{
+	"network": "TODO(phase7): NetworkSystem is written but never added to the world",
+}
+
+// parseSystemDomains reads the generated profile table, so system classification has
+// one source: manifest.Systems.
+func parseSystemDomains(t *testing.T, path string) map[string]string {
+	t.Helper()
+
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+
+	domains := make(map[string]string)
+	ast.Inspect(f, func(n ast.Node) bool {
+		kv, ok := n.(*ast.KeyValueExpr)
+		if !ok {
+			return true
+		}
+		key, ok := kv.Key.(*ast.BasicLit)
+		if !ok {
+			return true
+		}
+		if sel, ok := kv.Value.(*ast.SelectorExpr); ok {
+			domains[strings.Trim(key.Value, `"`)] = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "System"))
+		}
+		return true
+	})
+
+	if len(domains) < 50 {
+		t.Fatalf("parsed %d system domains from %s; the table or parser has drifted", len(domains), path)
+	}
+	return domains
+}
+
+// TestSystemsDeclareNoDomainMethod pins the single-source rule: the manifest declares
+// the domain, so a leftover method is a second declaration free to drift. The method
+// satisfies no interface, so nothing but this test would notice it.
+func TestSystemsDeclareNoDomainMethod(t *testing.T) {
+	fset := token.NewFileSet()
+	for _, n := range packageFiles(t, ".") {
+		f, err := parser.ParseFile(fset, "./"+n, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", n, err)
+		}
+		for _, decl := range f.Decls {
+			fn, ok := decl.(*ast.FuncDecl)
+			if ok && fn.Recv != nil && fn.Name.Name == "Domain" {
+				t.Errorf("%s: %s declares Domain(); the manifest is the declaration site",
+					n, boundaryRecvName(fn))
+			}
+		}
+	}
+}
+
+// boundaryRecvName returns the receiver's bare type name
+func boundaryRecvName(fn *ast.FuncDecl) string {
+	e := fn.Recv.List[0].Type
+	if star, ok := e.(*ast.StarExpr); ok {
+		e = star.X
+	}
+	if id, ok := e.(*ast.Ident); ok {
+		return id.Name
+	}
+	return "?"
+}
+
 // helperFiles declare no system, so their domain evidence is attributed to nobody.
 // Pinned rather than tolerated: a new one is a hole in the boundary suite.
 var helperFiles = []string{
@@ -284,7 +363,7 @@ func TestHelperFilesArePinned(t *testing.T) {
 		if err != nil {
 			t.Fatalf("parse %s: %v", n, err)
 		}
-		if name, domain := declaredProfile(f); name == "" || domain == "" {
+		if declaredName(f) == "" {
 			got = append(got, n)
 		}
 	}
@@ -295,30 +374,22 @@ func TestHelperFilesArePinned(t *testing.T) {
 	}
 }
 
-// declaredProfile returns the system name and domain the file declares, taken
-// from the Name and Domain methods
-func declaredProfile(f *ast.File) (name, domain string) {
+// declaredName returns the system name the file declares, from its Name method
+func declaredName(f *ast.File) string {
 	for _, decl := range f.Decls {
 		fn, ok := decl.(*ast.FuncDecl)
-		if !ok || fn.Recv == nil || fn.Body == nil {
+		if !ok || fn.Recv == nil || fn.Body == nil || fn.Name.Name != "Name" {
 			continue
 		}
 		ret, ok := soleReturn(fn.Body)
 		if !ok {
 			continue
 		}
-		switch fn.Name.Name {
-		case "Name":
-			if lit, ok := ret.(*ast.BasicLit); ok {
-				name = strings.Trim(lit.Value, `"`)
-			}
-		case "Domain":
-			if sel, ok := ret.(*ast.SelectorExpr); ok {
-				domain = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "System"))
-			}
+		if lit, ok := ret.(*ast.BasicLit); ok {
+			return strings.Trim(lit.Value, `"`)
 		}
 	}
-	return name, domain
+	return ""
 }
 
 // soleReturn returns the single expression of a one-statement return body

@@ -650,12 +650,12 @@ func (s *QuasarSystem) applyZapDamage(cursorEntity core.Entity) {
 
 	if shieldActive {
 		// Drain energy through shield
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 			Entity: cursorEntity,
 			Value:  parameter.QuasarShieldDrain,
 		})
 	} else {
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+		s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 			Entity: cursorEntity,
 			Delta:  -parameter.QuasarDamageHeat,
 		})

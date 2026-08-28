@@ -178,14 +178,14 @@ func (s *TypingSystem) handleTyping(cursor core.Entity, cursorX, cursorY int, ty
 // applyUniversalRewards grants boost and heat to the cursor that typed correctly
 func (s *TypingSystem) applyUniversalRewards(cursor core.Entity) {
 	// BoostSystem resolves activation against live state; a decision made here would be stale by dispatch
-	s.world.PushEvent(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
+	s.world.PushLocal(event.EventBoostReward, &event.BoostRewardPayload{Entity: cursor})
 
 	// Heat: +2 with active boost, +1 without
 	heatGain := 1
 	if boost, ok := s.world.Components.Boost.GetPtr(cursor); ok && boost.Active {
 		heatGain = 2
 	}
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+	s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 		Entity: cursor, Delta: heatGain,
 	})
 
@@ -219,7 +219,7 @@ func (s *TypingSystem) emitTypingFeedback(cursor core.Entity, glyphType componen
 		blinkType = 0
 	}
 
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
+	s.world.PushLocal(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
 		Entity: cursor,
 		Type:   blinkType,
 	})
@@ -233,15 +233,15 @@ func (s *TypingSystem) emitTypingError(cursor core.Entity) {
 	}
 
 	// Reset boost and apply heat penalty
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+	s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 		Entity: cursor, Delta: -parameter.HeatTypingErrorPenalty,
 	})
-	s.world.PushEvent(event.EventBoostDeactivate, &event.BoostDeactivatePayload{Entity: cursor})
-	s.world.PushEvent(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
+	s.world.PushLocal(event.EventBoostDeactivate, &event.BoostDeactivatePayload{Entity: cursor})
+	s.world.PushLocal(event.EventEnergyBlinkStart, &event.EnergyBlinkPayload{
 		Entity: cursor, Type: 0, Level: 0,
 	})
 
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Error,
 	})
 
@@ -296,7 +296,7 @@ func (s *TypingSystem) handleCompositeMember(cursor, entity, anchorID core.Entit
 
 	// Color-based energy (only Blue/Green/Red for now)
 	if header.Behavior != component.BehaviorGold {
-		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
+		s.world.PushLocal(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
 			Entity: cursor,
 			Type:   glyph.Type,
 			Level:  glyph.Level,
@@ -337,7 +337,7 @@ func (s *TypingSystem) handleGlyph(cursor, entity core.Entity, glyph component.G
 	// Type-specific handling, placeholder for other type additions
 	switch glyph.Type {
 	case component.GlyphBlue, component.GlyphGreen, component.GlyphRed:
-		s.world.PushEvent(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
+		s.world.PushLocal(event.EventEnergyGlyphConsumed, &event.EnergyGlyphConsumedPayload{
 			Entity: cursor,
 			Type:   glyph.Type,
 			Level:  glyph.Level,
@@ -413,6 +413,10 @@ func (s *TypingSystem) handleDeleteRequest(payload *event.DeleteRequestPayload) 
 	s.deleteBuf = s.deleteBuf[:0]
 
 	s.world.Components.Glyph.Each(func(e core.Entity, _ *component.GlyphComponent) bool {
+		// Deletion is player-domain; gold members are shared and typed, not deleted
+		if e.Domain() != core.DomainPlayer {
+			return true
+		}
 		pos, ok := s.world.Positions.GetPosition(e)
 		if !ok {
 			return true // orphan glyph: no position, not a positional target

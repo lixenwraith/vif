@@ -583,20 +583,20 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 	if profile.Reward != nil {
 		switch profile.Reward.Type {
 		case component.RewardWeapon:
-			s.world.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
+			s.world.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{
 				Entity: cursor,
 				Weapon: profile.Reward.WeaponType,
 			})
 
 		case component.RewardEnergy:
-			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+			s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Entity: cursor,
 				Delta:  profile.Reward.Delta,
 				Type:   component.EnergyDeltaReward,
 			})
 
 		case component.RewardHeat:
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: cursor,
 				Delta:  profile.Reward.Delta,
 			})
@@ -606,7 +606,7 @@ func (s *LootSystem) collectLoot(cursor, entity core.Entity, lootType component.
 	// Visual feedback
 	vis := visual.LootVisuals[lootType]
 	if pos, ok := s.world.Positions.GetPosition(entity); ok {
-		s.world.PushEvent(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
+		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X: pos.X, Y: pos.Y, Char: vis.Rune,
 		})
 	}

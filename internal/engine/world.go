@@ -341,6 +341,13 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
 }
 
+// PushLocal emits an event that must never replicate: an owner-authored grant, or an
+// effect belonging to this instance alone. Phase 6 classifies on the domain tag, so
+// tagging here is what makes the classification mechanical rather than by inspection.
+func (w *World) PushLocal(eventType event.EventType, payload any) {
+	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.DomainPlayer)
+}
+
 // pushEvent is the shared emit body; trace depth is measured from here
 func (w *World) pushEvent(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
 	if w.Resources.Event.Queue == nil {

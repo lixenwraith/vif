@@ -511,6 +511,10 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if targetEntity.Domain() != core.DomainPlayer {
+			continue
+		}
 		if glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity); ok {
 			if glyphComp.Type == component.GlyphRed {
 				toDestroy = append(toDestroy, targetEntity)
@@ -638,6 +642,9 @@ func (s *CleanerSystem) scanTargetRows(owner core.Entity) []int {
 	entities := s.world.Components.Glyph.Entities()
 
 	for _, entity := range entities {
+		if entity.Domain() != core.DomainPlayer {
+			continue
+		}
 		glyph, ok := s.world.Components.Glyph.GetPtr(entity)
 		if !ok || glyph.Type != targetType {
 			continue

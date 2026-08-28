@@ -217,7 +217,7 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	})
 
 	// 4. Pay Energy Cost (spend, non-convergent)
-	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Entity:     cursorEntity,
 		Delta:      parameter.NuggetJumpCostPercent,
 		Percentage: true,
@@ -238,7 +238,9 @@ func (s *NuggetSystem) emitBeacon(x, y int) {
 	if !ok {
 		return
 	}
-	s.world.PushEvent(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
+	// The beacon is shared, its cleaners are not: each instance draws its own from
+	// the same shared trigger, so no visual reaches the wire
+	s.world.PushLocal(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 		Entity:    cursor,
 		OriginX:   x,
 		OriginY:   y,
@@ -337,13 +339,13 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 
 // collectNugget rewards the cursor that collected the active nugget.
 func (s *NuggetSystem) collectNugget(cursor core.Entity) {
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Whoosh,
 	})
 
 	s.world.DestroyEntity(s.activeNuggetEntity)
 
-	s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+	s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 		Entity: cursor,
 		Delta:  parameter.NuggetHeatIncrease,
 	})

@@ -674,6 +674,10 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 	s.destroyBuf = s.destroyBuf[:0]
 
 	for _, glyphEntity := range glyphEntities {
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if glyphEntity.Domain() != core.DomainPlayer {
+			continue
+		}
 		if s.world.Components.Member.HasEntity(glyphEntity) {
 			continue
 		}
