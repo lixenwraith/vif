@@ -227,8 +227,13 @@ func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *compo
 	var glyphEntity core.Entity
 
 	for i := range count {
-		if s.world.Components.Glyph.HasEntity(buf[i]) {
-			glyphEntity = buf[i]
+		candidate := buf[i]
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if candidate.Domain() != core.DomainPlayer {
+			continue
+		}
+		if s.world.Components.Glyph.HasEntity(candidate) {
+			glyphEntity = candidate
 			break
 		}
 	}
@@ -347,8 +352,13 @@ func (s *SplashSystem) handleCursorMoved(payload *event.CursorMovedPayload) {
 	var entity core.Entity
 
 	for i := range count {
-		if s.world.Components.Glyph.HasEntity(buf[i]) {
-			entity = buf[i]
+		candidate := buf[i]
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if candidate.Domain() != core.DomainPlayer {
+			continue
+		}
+		if s.world.Components.Glyph.HasEntity(candidate) {
+			entity = candidate
 			break
 		}
 	}

@@ -528,6 +528,10 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 		if targetEntity == 0 || targetEntity == selfEntity {
 			continue
 		}
+		// Glyph mechanics are player-domain; a shared glyph is a gold member
+		if targetEntity.Domain() != core.DomainPlayer {
+			continue
+		}
 
 		glyphComp, ok := s.world.Components.Glyph.GetPtr(targetEntity)
 		if !ok || glyphComp.Type != component.GlyphBlue {

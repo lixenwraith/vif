@@ -267,6 +267,10 @@ func (s *BlossomSystem) updateBlossomEntities() {
 				if target == 0 || target == entity {
 					continue
 				}
+				// Glyph mechanics are player-domain; a shared glyph is a gold member
+				if target.Domain() != core.DomainPlayer {
+					continue
+				}
 
 				// Entity deduplication: ensure one blossom effect per target per tick
 				alreadyHit := s.blossomedThisFrame[target]
@@ -279,17 +283,6 @@ func (s *BlossomSystem) updateBlossomEntities() {
 					s.world.DestroyEntity(target)
 					destroyBlossom = true
 					continue
-				}
-
-				// TODO: change it so only checks if glyph of red/green/blue and continue on the rest instead of reverse filtering
-				// Logic: Passthrough checks
-				if s.world.Components.Nugget.HasEntity(target) {
-					continue
-				}
-				if member, ok := s.world.Components.Member.GetComponent(target); ok {
-					if header, ok := s.world.Components.Header.GetComponent(member.HeaderEntity); ok && header.Behavior == component.BehaviorGold {
-						continue
-					}
 				}
 
 				// Apply effect

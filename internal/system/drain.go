@@ -1104,6 +1104,11 @@ func (s *DrainSystem) reflectOffWall(k *physics.Kinetic, fromX, fromY, wallX, wa
 // carry ProtectFromSpecies, but a drain collision is now a one-way event
 // boundary rather than shared-side collision physics.
 func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity core.Entity) {
+	// Glyph mechanics are player-domain; a shared glyph is a gold member
+	if entity.Domain() != core.DomainPlayer && s.world.Components.Glyph.HasEntity(entity) {
+		return
+	}
+
 	if s.consumeIntoSharedSpecies(drain, entity) {
 		return
 	}

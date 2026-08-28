@@ -282,10 +282,16 @@ func (s *DecaySystem) updateDecayEntities() {
 				if s.world.Components.Nugget.HasEntity(target) {
 					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
 					event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, target)
-				} else if s.shouldDieByDecay(target) {
-					deathCandidates = append(deathCandidates, target)
 				} else {
-					s.applyDecayToCharacter(target)
+					// Glyph mechanics are player-domain; a shared glyph is a gold member
+					if target.Domain() != core.DomainPlayer {
+						continue
+					}
+					if s.shouldDieByDecay(target) {
+						deathCandidates = append(deathCandidates, target)
+					} else {
+						s.applyDecayToCharacter(target)
+					}
 				}
 
 				s.decayedThisFrame[target] = true
