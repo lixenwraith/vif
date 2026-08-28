@@ -132,8 +132,16 @@ func setAuditScope(name string, d SystemDomain) {
 	auditScope.name, auditScope.domain, auditScope.active = name, d, true
 }
 
-// clearAuditScope drops the attribution once the system set has run
-func clearAuditScope() { auditScope.active = false }
+func clearAuditScope() { auditScope.name, auditScope.active = "", false }
+
+// auditScopeName attributes a write to the running system, or to the settle pass
+// when no system is on the stack
+func auditScopeName() string {
+	if auditScope.active {
+		return auditScope.name
+	}
+	return "event"
+}
 
 // auditComponentDomain reports an attachment contradicting the entity's domain
 // tag. Diagnostic only; it never blocks the write.
@@ -144,13 +152,13 @@ func auditComponentDomain(e core.Entity, bit uint64) {
 	}
 	recordViolation("component " + rule.field + " wants " + rule.domain.String() +
 		", entity is " + e.Domain().String() + " id " + strconv.FormatUint(e.ID(), 10) +
-		" (in " + auditScope.name + ")")
+		" (in " + auditScopeName() + ")")
 	vlog.Warn("domain", "msg", "component domain mismatch",
 		"component", rule.field,
 		"want", rule.domain.String(),
 		"got", e.Domain().String(),
 		"id", e.ID(),
-		"system", auditScope.name)
+		"system", auditScopeName())
 }
 
 // auditEntityDomain reports a shared-profile system writing a player entity, which
