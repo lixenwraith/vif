@@ -316,6 +316,7 @@ func (s *TypingSystem) handleCompositeMember(cursor, entity, anchorID core.Entit
 	s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 		HeaderEntity:   anchorID,
 		MemberEntity:   entity,
+		Entity:         cursor,
 		Char:           typedRune,
 		RemainingCount: remaining,
 	})

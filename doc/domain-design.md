@@ -241,3 +241,9 @@ takes a `DomainScope`, so the shared digest excludes player entities.
   is a presentation problem with no shared-state component.
 - Journal schema is 6.
 
+
+1. **Gold typing is an unclassified crossing.** `EventCompositeMemberDestroyed` names a *shared* member and is produced by `TypingSystem` (player) from a keystroke. It is a D-3 crossing missing from the table. Row to add: *"gold member typed → one composite-member destruction: header, member, typist cursor."* The payload is already minimal and now carries the typist, so it is transport-ready.
+2. **Rewards were unattributed.** `GoldCompletionPayload` carried only `HeaderEntity`, so with two participants nobody could be credited except by accident of who typed last. §3.1 makes the credit a deterministic function of shared events; the reward path itself stays FSM-owned.
+3. **Dust and cleaner can reach gold members.** `EventDustAllRequest` iterates `Components.Glyph.Entities()`, which includes gold members. Gold carries `ProtectFromDelete | ProtectFromDecay` — if the dust conversion checks neither mask, a player-domain system destroys shared entities with no crossing. **Needs `dust.go` and `cleaner.go` to confirm and fix.** The fix is a scope guard, not a protection mask: those loops should skip `e.Domain() != core.DomainPlayer`, which is free and states the invariant.
+
+

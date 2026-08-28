@@ -21,11 +21,13 @@ var allowedDomainAccess = map[string]string{
 	"death:Wall":   "GetPtr reads BlockMask while resolving a shared wall death",
 }
 
-// ownerAuthoredStores are the shared-entity components exactly one instance
-// writes and every other receives as transported values (D-13). A player-domain
-// system may write them; they are not re-derived simulation state.
+// ownerAuthoredStores are the cursor-exclusive components exactly one instance
+// writes and every other receives as transported values (D-13). A player system may
+// write them; a shared system may not. Shield and Combat are absent deliberately:
+// they also carry quasar, loot and species state, which is re-derived, and the store
+// name alone cannot tell the two apart.
 var ownerAuthoredStores = map[string]bool{
-	"Energy": true, "Heat": true, "Shield": true, "Boost": true,
+	"Energy": true, "Heat": true, "Boost": true,
 	"Weapon": true, "CursorView": true, "Ping": true, "Pulse": true,
 }
 
@@ -58,7 +60,7 @@ type systemEvidence struct {
 // Evidence is attributed per file: helpers shared between systems (sweep.go,
 // targeting.go) declare no system and are not attributed to one.
 func TestSystemDomainProfiles(t *testing.T) {
-	storeDomains := parseStoreDomains(t, "../engine/component_domain.go")
+	storeDomains := parseStoreDomains(t, "../engine/component_domain_gen.go")
 	systems := parseSystemEvidence(t, ".")
 
 	if len(systems) < 50 {
@@ -202,12 +204,7 @@ func parseStoreDomains(t *testing.T, path string) map[string]string {
 			return true
 		}
 
-		// The name string is otherwise unchecked, since the store is derived from
-		// the bit constant; a mismatch there would never be reported.
 		field := strings.TrimSuffix(key.Name, "Bit")
-		if name, ok := lit.Elts[0].(*ast.BasicLit); !ok || strings.Trim(name.Value, `"`) != field {
-			t.Errorf("componentDomains[%s]: name string must be %q", key.Name, field)
-		}
 		if sel, ok := lit.Elts[1].(*ast.SelectorExpr); ok {
 			domains[field] = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "Domain"))
 		}

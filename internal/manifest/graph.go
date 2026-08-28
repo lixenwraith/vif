@@ -12,6 +12,16 @@ const (
 	profileHeight = 24
 )
 
+// ProfileFor pairs a system's manifest domain with the dependencies it declares.
+// An unknown name is a wiring regression, not a runtime condition.
+func ProfileFor(s engine.System) engine.SystemProfile {
+	d, ok := systemDomains[s.Name()]
+	if !ok {
+		panic("manifest: system " + s.Name() + " is not declared")
+	}
+	return engine.SystemProfile{Requires: s.Requires(), Domain: d}
+}
+
 // SystemProfile is one active system's declared identity
 type SystemProfile struct {
 	Name     string
@@ -32,7 +42,7 @@ func SystemProfiles() []SystemProfile {
 	for _, s := range built {
 		profiles = append(profiles, SystemProfile{
 			Name:     s.Name(),
-			Domain:   s.Domain(),
+			Domain:   systemDomains[s.Name()],
 			Requires: s.Requires(),
 		})
 	}

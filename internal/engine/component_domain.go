@@ -1,5 +1,7 @@
-// TODO: merge into manifest and codegen
 package engine
+
+// The audit table is generated from manifest.Components into component_domain_gen.go;
+// this file holds the runtime audit that reads it.
 
 import (
 	"slices"
@@ -10,61 +12,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
-
-// componentRule names the entity domain a component bit may attach to.
-// Only single-domain components are listed; an unlisted bit is legal in either.
-type componentRule struct {
-	field  string // Component store field, so a violation names the store the writer touched
-	domain core.Domain
-}
-
-// componentDomains is the audit table for AddComponentMask. Glyph, Sigil,
-// Kinetic, Protection, Combat, Navigation, Death, Timer and Position attach in
-// both domains and are deliberately absent, as do Cleaner, Materialize, Spirit
-// and Marker, which their systems stamp from the requesting domain.
-var componentDomains = map[uint64]componentRule{
-	CursorBit:       {"Cursor", core.DomainShared},
-	NuggetBit:       {"Nugget", core.DomainShared},
-	WallBit:         {"Wall", core.DomainShared},
-	GatewayBit:      {"Gateway", core.DomainShared},
-	EnergyBit:       {"Energy", core.DomainShared},
-	HeatBit:         {"Heat", core.DomainShared},
-	ShieldBit:       {"Shield", core.DomainShared},
-	BoostBit:        {"Boost", core.DomainShared},
-	WeaponBit:       {"Weapon", core.DomainShared},
-	CursorViewBit:   {"CursorView", core.DomainShared}, // Shared cursor view, written by one instance
-	PingBit:         {"Ping", core.DomainShared},
-	PulseBit:        {"Pulse", core.DomainShared},
-	GenotypeBit:     {"Genotype", core.DomainShared},
-	TargetBit:       {"Target", core.DomainShared},
-	TargetAnchorBit: {"TargetAnchor", core.DomainShared},
-	QuasarBit:       {"Quasar", core.DomainShared},
-	SwarmBit:        {"Swarm", core.DomainShared},
-	StormBit:        {"Storm", core.DomainShared},
-	StormCircleBit:  {"StormCircle", core.DomainShared},
-	PylonBit:        {"Pylon", core.DomainShared},
-	SnakeBit:        {"Snake", core.DomainShared},
-	SnakeHeadBit:    {"SnakeHead", core.DomainShared},
-	SnakeBodyBit:    {"SnakeBody", core.DomainShared},
-	SnakeMemberBit:  {"SnakeMember", core.DomainShared},
-	EyeBit:          {"Eye", core.DomainShared},
-	TowerBit:        {"Tower", core.DomainShared},
-	HeaderBit:       {"Header", core.DomainShared},
-	MemberBit:       {"Member", core.DomainShared},
-
-	LootBit:      {"Loot", core.DomainPlayer},
-	DustBit:      {"Dust", core.DomainPlayer},
-	DrainBit:     {"Drain", core.DomainPlayer},
-	DecayBit:     {"Decay", core.DomainPlayer},
-	BlossomBit:   {"Blossom", core.DomainPlayer},
-	BulletBit:    {"Bullet", core.DomainPlayer},
-	OrbBit:       {"Orb", core.DomainPlayer},
-	MissileBit:   {"Missile", core.DomainPlayer},
-	LightningBit: {"Lightning", core.DomainPlayer},
-	FlashBit:     {"Flash", core.DomainPlayer},
-	FadeoutBit:   {"Fadeout", core.DomainPlayer},
-	SplashBit:    {"Splash", core.DomainPlayer},
-}
 
 // domainViolationCap bounds the retained descriptions; the counter is the alarm,
 // this is the diagnosis

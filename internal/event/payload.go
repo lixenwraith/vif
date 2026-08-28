@@ -256,9 +256,11 @@ type GoldSpawnedPayload struct {
 	Duration     time.Duration `toml:"duration"`
 }
 
-// GoldCompletionPayload identifies which gold sequence is completed
+// GoldCompletionPayload identifies which gold sequence ended and who earned it.
+// Entity is the cursor that typed the most members, 0 on timeout or destruction.
 type GoldCompletionPayload struct {
 	HeaderEntity core.Entity `toml:"header_entity"`
+	Entity       core.Entity `toml:"entity"`
 }
 
 // GoldJumpRequestPayload names the cursor jumping to the active gold sequence.
@@ -568,6 +570,7 @@ type TimerStartPayload struct {
 type CompositeMemberDestroyedPayload struct {
 	HeaderEntity   core.Entity `toml:"header_entity"`
 	MemberEntity   core.Entity `toml:"member_entity"`
+	Entity         core.Entity `toml:"entity"` // Cursor that typed it; 0 for non-typed loss
 	Char           rune        `toml:"char"`
 	RemainingCount int         `toml:"remaining_count"` // CountEntities of remaining live members after this one
 }

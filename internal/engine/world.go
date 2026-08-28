@@ -24,10 +24,11 @@ type World struct {
 	Components Component
 	Positions  *Position
 
-	// systems is appended only by AddSystem during single-threaded
+	// systems pairs each registered system with its declared profile. Appended only
+	// by AddSystem during single-threaded
 	// construction, then frozen by Seal. UpdateLocked ranges it every tick
 	// without synchronization, so runtime registration is not permitted
-	systems []System
+	systems []systemEntry
 	sealed  atomic.Bool
 
 	// === Update-mutex guarded ===
@@ -69,7 +70,7 @@ func NewWorld() *World {
 	w := &World{
 		componentMask: make(map[core.Entity]uint64, 16384), // reasonable small screen size that doesn't require increase
 		Resources:     &Resource{Rand: NewRandResource(0)}, // app overwrites with the run seed
-		systems:       make([]System, 0),
+		systems:       make([]systemEntry, 0),
 	}
 	for d := range w.nextEntityID {
 		w.nextEntityID[d] = 1
@@ -165,36 +166,35 @@ func (w *World) Clear() {
 	w.wipeAll()
 }
 
-// AddSystem adds a system to the world and sorts by priority
-// Construction only; panics once Seal has frozen the set
-func (w *World) AddSystem(system System) {
+// systemEntry pairs a registered system with the profile it was registered under
+type systemEntry struct {
+	sys     System
+	profile SystemProfile
+}
+
+// AddSystem registers a system under its declared profile and sorts by priority.
+// Construction only; panics once Seal has frozen the set.
+func (w *World) AddSystem(system System, profile SystemProfile) {
 	if w.sealed.Load() {
 		panic("engine: AddSystem after Seal")
 	}
 
-	w.systems = append(w.systems, system)
+	w.systems = append(w.systems, systemEntry{sys: system, profile: profile})
 
 	// Sort by priority (bubble sort, small N)
 	for i := range len(w.systems) - 1 {
 		for j := range len(w.systems) - i - 1 {
-			if w.systems[j].Priority() > w.systems[j+1].Priority() {
+			if w.systems[j].sys.Priority() > w.systems[j+1].sys.Priority() {
 				w.systems[j], w.systems[j+1] = w.systems[j+1], w.systems[j]
 			}
 		}
 	}
 }
 
-// Seal freezes the system set; called by ClockScheduler.Start before the
-// scheduler and event goroutines begin ranging it
-func (w *World) Seal() {
-	w.sealed.Store(true)
-}
-
 // HasSystem reports whether a system with the given name is registered
-// Validation source for command-mode and config system references
 func (w *World) HasSystem(name string) bool {
-	for _, s := range w.systems {
-		if s.Name() == name {
+	for i := range w.systems {
+		if w.systems[i].sys.Name() == name {
 			return true
 		}
 	}
@@ -206,13 +206,13 @@ func (w *World) HasSystem(name string) bool {
 // Priority(); a system may legitimately initialize before one that ticks first.
 func (w *World) SystemInitOrder() ([]string, error) {
 	deps := make(map[string][]string, len(w.systems))
-	for _, s := range w.systems {
-		required := s.Requires()
+	for i := range w.systems {
+		required := w.systems[i].profile.Requires
 		names := make([]string, 0, len(required))
 		for _, d := range required {
 			names = append(names, d.Name)
 		}
-		deps[s.Name()] = names
+		deps[w.systems[i].sys.Name()] = names
 	}
 	return core.TopoSort(deps)
 }
@@ -221,16 +221,48 @@ func (w *World) SystemInitOrder() ([]string, error) {
 // strength, sorted. Callers use it to refuse or report a disable request.
 func (w *World) SystemsRequiring(name string, strength DependencyStrength) []string {
 	var dependents []string
-	for _, s := range w.systems {
-		for _, d := range s.Requires() {
+	for i := range w.systems {
+		for _, d := range w.systems[i].profile.Requires {
 			if d.Name == name && d.Strength == strength {
-				dependents = append(dependents, s.Name())
+				dependents = append(dependents, w.systems[i].sys.Name())
 				break
 			}
 		}
 	}
 	slices.Sort(dependents)
 	return dependents
+}
+
+// Systems returns a copy of all registered systems
+// Used by ClockScheduler for event handler auto-registration
+func (w *World) Systems() []System {
+	result := make([]System, len(w.systems))
+	for i := range w.systems {
+		result[i] = w.systems[i].sys
+	}
+	return result
+}
+
+// UpdateLocked runs all systems assuming the caller already holds updateMutex
+func (w *World) UpdateLocked() {
+	audit := domainAudit.Load()
+	for i := range w.systems {
+		e := &w.systems[i]
+		// Attribution is a per-tick decision, matching the audit gate itself
+		if audit {
+			setAuditScope(e.sys.Name(), e.profile.Domain)
+		}
+		e.sys.Update()
+	}
+	if audit {
+		clearAuditScope()
+	}
+}
+
+// Seal freezes the system set; called by ClockScheduler.Start before the
+// scheduler and event goroutines begin ranging it
+func (w *World) Seal() {
+	w.sealed.Store(true)
 }
 
 // AllowSystemDisable reports whether name may be disabled. A system declaring
@@ -250,14 +282,6 @@ func (w *World) AllowSystemDisable(name string) bool {
 		}
 	}
 	return true
-}
-
-// Systems returns a copy of all registered systems
-// Used by ClockScheduler for event handler auto-registration
-func (w *World) Systems() []System {
-	result := make([]System, len(w.systems))
-	copy(result, w.systems)
-	return result
 }
 
 // RunSafe executes a function while holding the world's update lock
@@ -288,21 +312,6 @@ func (w *World) Update() {
 	w.RunSafe(func() {
 		w.UpdateLocked()
 	})
-}
-
-// UpdateLocked runs all systems assuming the caller already holds updateMutex
-func (w *World) UpdateLocked() {
-	audit := domainAudit.Load()
-	for _, system := range w.systems {
-		// Attribution is a per-tick decision, matching the audit gate itself
-		if audit {
-			setAuditScope(system.Name(), system.Domain())
-		}
-		system.Update()
-	}
-	if audit {
-		clearAuditScope()
-	}
 }
 
 // Rand returns the labelled RNG stream for a domain in the current session.

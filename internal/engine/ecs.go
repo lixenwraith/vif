@@ -77,9 +77,14 @@ type System interface {
 	Init()
 	Priority() int // Lower values run first
 	Name() string
-	// Domain declares which domains the system reads and writes
-	Domain() SystemDomain
 	// Requires declares the systems this one needs, and how badly
 	Requires() SystemDependencies
 	Update()
+}
+
+// SystemProfile is what a registration declares about a system. Domain comes from
+// the manifest; Requires still comes from the system until it moves there too.
+type SystemProfile struct {
+	Requires SystemDependencies
+	Domain   SystemDomain
 }

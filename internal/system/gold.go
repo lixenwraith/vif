@@ -24,6 +24,7 @@ type GoldSystem struct {
 	headerEntity core.Entity // Phantom Head
 	startTime    time.Time
 	timeoutTime  time.Time
+	contrib      [parameter.MaxPlayers]int // Members typed per roster slot, for completion credit
 	active       bool
 	spawnEnabled bool
 
@@ -60,6 +61,7 @@ func (s *GoldSystem) Init() {
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
+	s.contrib = [parameter.MaxPlayers]int{}
 	s.spawnEnabled = true
 	s.statActive.Store(false)
 	s.stateHeaderEntity.Store(0)
@@ -148,7 +150,11 @@ func (s *GoldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventCompositeMemberDestroyed:
 		if payload, ok := ev.Payload.(*event.CompositeMemberDestroyedPayload); ok {
-			if payload.HeaderEntity == s.headerEntity && payload.RemainingCount == 0 {
+			if payload.HeaderEntity != s.headerEntity {
+				return
+			}
+			s.recordContribution(payload.Entity)
+			if payload.RemainingCount == 0 {
 				s.handleGoldComplete()
 			}
 		}
@@ -370,6 +376,28 @@ func (s *GoldSystem) handleMemberTyped(payload *event.CompositeMemberDestroyedPa
 	}
 }
 
+// recordContribution tallies one typed member against its cursor's roster slot
+func (s *GoldSystem) recordContribution(cursor core.Entity) {
+	if slot, ok := s.world.CursorSlot(cursor); ok && int(slot) < parameter.MaxPlayers {
+		s.contrib[slot]++
+	}
+}
+
+// creditedCursor returns the cursor that typed the most members; ties break to the
+// lowest slot, so every instance credits the same one from the same event stream.
+func (s *GoldSystem) creditedCursor() core.Entity {
+	best, bestSlot := 0, -1
+	for i := range parameter.MaxPlayers {
+		if s.contrib[i] > best {
+			best, bestSlot = s.contrib[i], i
+		}
+	}
+	if bestSlot < 0 {
+		return 0
+	}
+	return s.world.Resources.Player.Slot(uint8(bestSlot))
+}
+
 // handleGoldComplete processes successful gold sequence completion
 func (s *GoldSystem) handleGoldComplete() {
 	if !s.active {
@@ -381,6 +409,7 @@ func (s *GoldSystem) handleGoldComplete() {
 	// Emit completion event, FSM is the reward authority
 	s.world.PushEvent(event.EventGoldCompleted, &event.GoldCompletionPayload{
 		HeaderEntity: headerEntity,
+		Entity:       s.creditedCursor(),
 	})
 
 	// Silent destruction - members already dead from typing
@@ -454,6 +483,7 @@ func (s *GoldSystem) clearState() {
 	s.headerEntity = 0
 	s.startTime = time.Time{}
 	s.timeoutTime = time.Time{}
+	s.contrib = [parameter.MaxPlayers]int{}
 	s.statActive.Store(false)
 	s.statTimer.Store(0)
 	s.stateHeaderEntity.Store(0)
