@@ -49,11 +49,7 @@ func crossingTargets(ev event.GameEvent) bool {
 // TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak. The tap runs on the
 // caller's goroutine — a driven App has no scheduler — so no synchronization is needed.
 func TestBusPayloadsNameOnlySharedEntities(t *testing.T) {
-	const seed = 0x4B15
-	steps := 1500
-	if testing.Short() {
-		steps = 300
-	}
+	const seed, steps = 0x4B15, 1500 // This seed produces no crossing inside the old 300-step short horizon.
 
 	a := mustHeadless(t, seed, 120, 40)
 	defer a.Close()
