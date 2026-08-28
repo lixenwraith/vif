@@ -108,14 +108,6 @@ func (s *StormSystem) Name() string {
 	return "storm"
 }
 
-// Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
-func (s *StormSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires the composite contract its body is built on.
-func (s *StormSystem) Requires() engine.SystemDependencies {
-	return append(engine.Require("composite"), engine.Optional("navigation", "combat", "bullet", "dust", "wall")...)
-}
-
 func (s *StormSystem) Priority() int {
 	return parameter.PriorityStorm
 }

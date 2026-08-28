@@ -65,14 +65,6 @@ func (s *QuasarSystem) Name() string {
 	return "quasar"
 }
 
-// Domain reports shared: shared stream and shared entities, with a D-12 spawn footprint sweep.
-func (s *QuasarSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires the composite contract its body is built on.
-func (s *QuasarSystem) Requires() engine.SystemDependencies {
-	return append(engine.Require("composite"), engine.Optional("navigation", "combat", "lightning")...)
-}
-
 func (s *QuasarSystem) Priority() int {
 	return parameter.PriorityQuasar
 }

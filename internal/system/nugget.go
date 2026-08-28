@@ -68,14 +68,6 @@ func (s *NuggetSystem) Name() string {
 	return "nugget"
 }
 
-// Domain reports shared: shared stream and shared entities; the claim is a shared outcome.
-func (s *NuggetSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires nothing: collection rewards are optional.
-func (s *NuggetSystem) Requires() engine.SystemDependencies {
-	return engine.Optional("cleaner", "energy", "heat")
-}
-
 // Priority returns the system's priority
 func (s *NuggetSystem) Priority() int {
 	return parameter.PriorityNugget

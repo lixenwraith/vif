@@ -69,14 +69,6 @@ func (s *CleanerSystem) Name() string {
 	return "cleaner"
 }
 
-// Domain reports dual: a nugget-spawned cleaner is shared, a weapon-spawned one player (D-7).
-func (s *CleanerSystem) Domain() engine.SystemDomain { return engine.SystemDual }
-
-// Requires nothing: a sweep is requested, and its effects are optional.
-func (s *CleanerSystem) Requires() engine.SystemDependencies {
-	return engine.Optional("combat", "decay")
-}
-
 // Priority returns the system's priority
 func (s *CleanerSystem) Priority() int {
 	return parameter.PriorityCleaner

@@ -123,12 +123,6 @@ func (s *GlyphSystem) Name() string {
 	return "glyph"
 }
 
-// Domain reports player: it draws the player stream and creates player glyph entities.
-func (s *GlyphSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires nothing: the corpus and the map are its only inputs.
-func (s *GlyphSystem) Requires() engine.SystemDependencies { return nil }
-
 // Priority returns the system's priority
 func (s *GlyphSystem) Priority() int {
 	return parameter.PriorityGlyph

@@ -32,12 +32,6 @@ func (s *FadeoutSystem) Name() string {
 	return "fadeout"
 }
 
-// Domain reports player: it creates player fadeout entities (D-6).
-func (s *FadeoutSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires nothing: fadeouts arrive by request.
-func (s *FadeoutSystem) Requires() engine.SystemDependencies { return nil }
-
 func (s *FadeoutSystem) Priority() int {
 	return parameter.PriorityFadeout
 }

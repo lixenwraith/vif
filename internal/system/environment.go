@@ -51,12 +51,6 @@ func (s *EnvironmentSystem) Name() string {
 	return "environment"
 }
 
-// Domain reports shared: it draws the shared stream and writes no player state.
-func (s *EnvironmentSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires nothing: it reads the map and the clock.
-func (s *EnvironmentSystem) Requires() engine.SystemDependencies { return nil }
-
 func (s *EnvironmentSystem) Priority() int {
 	return parameter.PrioritySwarm
 }

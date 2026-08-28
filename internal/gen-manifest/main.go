@@ -40,6 +40,8 @@ type SystemDef struct {
 	Name        string
 	Constructor string
 	Domain      string
+	Requires    []string
+	Optional    []string
 }
 
 // DomainConst renders the engine.SystemDomain constant for a declared profile
@@ -53,6 +55,31 @@ func (s SystemDef) DomainConst() string {
 		return "SystemDual"
 	}
 	return ""
+}
+
+// RequiresExpr renders the dependency set as the engine constructor call the
+// generated table uses; branching lives here rather than in the template.
+func (s SystemDef) RequiresExpr() string {
+	switch {
+	case len(s.Requires) == 0 && len(s.Optional) == 0:
+		return "nil"
+	case len(s.Optional) == 0:
+		return "engine.Require(" + quoteList(s.Requires) + ")"
+	case len(s.Requires) == 0:
+		return "engine.Optional(" + quoteList(s.Optional) + ")"
+	default:
+		return "append(engine.Require(" + quoteList(s.Requires) + "), engine.Optional(" +
+			quoteList(s.Optional) + ")...)"
+	}
+}
+
+// quoteList renders a name list as Go string literal arguments
+func quoteList(names []string) string {
+	parts := make([]string, len(names))
+	for i, n := range names {
+		parts[i] = `"` + n + `"`
+	}
+	return strings.Join(parts, ", ")
 }
 
 type RendererDef struct {
@@ -179,13 +206,12 @@ func parseSystems(comp *ast.CompositeLit) []SystemDef {
 	var result []SystemDef
 	for _, elt := range comp.Elts {
 		lit, ok := elt.(*ast.CompositeLit)
-		if !ok || len(lit.Elts) < 3 {
+		if !ok {
 			continue
 		}
-		def := SystemDef{
-			Name:        extractString(lit.Elts[0]),
-			Constructor: extractString(lit.Elts[1]),
-			Domain:      extractString(lit.Elts[2]),
+		def := parseSystemDef(lit)
+		if def.Name == "" || def.Constructor == "" {
+			panic(fmt.Sprintf("system definition requires name and constructor: %#v", def))
 		}
 		if def.DomainConst() == "" {
 			panic(fmt.Sprintf("system %s: domain %q is not \"shared\", \"player\" or \"dual\"", def.Name, def.Domain))
@@ -193,6 +219,49 @@ func parseSystems(comp *ast.CompositeLit) []SystemDef {
 		result = append(result, def)
 	}
 	return result
+}
+
+// parseSystemDef reads one keyed SystemDef literal
+func parseSystemDef(lit *ast.CompositeLit) SystemDef {
+	var def SystemDef
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		switch key.Name {
+		case "Name":
+			def.Name = extractString(kv.Value)
+		case "Constructor":
+			def.Constructor = extractString(kv.Value)
+		case "Domain":
+			def.Domain = extractString(kv.Value)
+		case "Requires":
+			def.Requires = extractStringList(kv.Value)
+		case "Optional":
+			def.Optional = extractStringList(kv.Value)
+		}
+	}
+	return def
+}
+
+// extractStringList reads a []string composite literal
+func extractStringList(expr ast.Expr) []string {
+	lit, ok := expr.(*ast.CompositeLit)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(lit.Elts))
+	for _, e := range lit.Elts {
+		if s := extractString(e); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func parseRenderers(comp *ast.CompositeLit) []RendererDef {
@@ -680,15 +749,14 @@ func ActiveSystems() []string {
 	}
 }
 
-// systemDomains is the declared domain profile of every system, registered or
-// context-scoped. AddSystem takes it as a registration argument; systems no
-// longer declare it themselves.
-var systemDomains = map[string]engine.SystemDomain{
+// systemProfiles is every system's declared profile: the domain it resolves and the
+// systems it depends on. AddSystem takes it as a registration argument.
+var systemProfiles = map[string]engine.SystemProfile{
 {{- range .Systems }}
-	"{{ .Name }}": engine.{{ .DomainConst }},
+	"{{ .Name }}": {Domain: engine.{{ .DomainConst }}, Requires: {{ .RequiresExpr }}},
 {{- end }}
 {{- range .ContextSystems }}
-	"{{ .Name }}": engine.{{ .DomainConst }},
+	"{{ .Name }}": {Domain: engine.{{ .DomainConst }}, Requires: {{ .RequiresExpr }}},
 {{- end }}
 }
 `))

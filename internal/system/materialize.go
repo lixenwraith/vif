@@ -35,9 +35,6 @@ func (s *MaterializeSystem) Name() string {
 	return "materialize"
 }
 
-// Requires nothing: it is the spawn gate other systems wait on.
-func (s *MaterializeSystem) Requires() engine.SystemDependencies { return nil }
-
 // Priority returns the system's priority
 func (s *MaterializeSystem) Priority() int {
 	return parameter.PriorityMaterialize

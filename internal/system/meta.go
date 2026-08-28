@@ -76,13 +76,6 @@ func (s *MetaSystem) Name() string {
 	return "meta"
 }
 
-// Domain reports shared: its world writes are replicated (reset, level setup, kill
-// counters) or the D-14 map-bounds writer; the context state it writes is not world state.
-func (s *MetaSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires nothing: it publishes context and kill counters.
-func (s *MetaSystem) Requires() engine.SystemDependencies { return nil }
-
 // Priority returns the system's priority
 func (s *MetaSystem) Priority() int {
 	return parameter.PriorityUI

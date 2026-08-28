@@ -1,25 +1,15 @@
 package manifest
 
-import (
-	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/event"
-)
+import "github.com/lixenwraith/vi-fighter/internal/engine"
 
-// profileWidth and profileHeight size the scratch world; the geometry never
-// reaches a declaration, it only has to leave a viewport
-const (
-	profileWidth  = 80
-	profileHeight = 24
-)
-
-// ProfileFor pairs a system's manifest domain with the dependencies it declares.
-// An unknown name is a wiring regression, not a runtime condition.
-func ProfileFor(s engine.System) engine.SystemProfile {
-	d, ok := systemDomains[s.Name()]
+// ProfileFor returns a system's declared profile. An unknown name is a wiring
+// regression, not a runtime condition.
+func ProfileFor(name string) engine.SystemProfile {
+	p, ok := systemProfiles[name]
 	if !ok {
-		panic("manifest: system " + s.Name() + " is not declared")
+		panic("manifest: system " + name + " is not declared")
 	}
-	return engine.SystemProfile{Requires: s.Requires(), Domain: d}
+	return p
 }
 
 // SystemProfile is one active system's declared identity
@@ -29,21 +19,16 @@ type SystemProfile struct {
 	Requires engine.SystemDependencies
 }
 
-// SystemProfiles returns what every active system declares, by constructing the
-// set on a scratch world and reading it back. Config validation needs the
-// declarations before a run exists; the systems are discarded on return.
+// SystemProfiles returns every manifest system's profile in manifest order.
+// Context-scoped systems are excluded from FSM system-name validation.
 func SystemProfiles() []SystemProfile {
-	event.EnsureRegistry()
-	w := engine.NewWorld()
-	engine.NewGameContextWithClock(w, profileWidth, profileHeight, engine.NewManualClock())
-
-	built := BuildSystems(w)
-	profiles := make([]SystemProfile, 0, len(built))
-	for _, s := range built {
+	profiles := make([]SystemProfile, 0, len(Systems))
+	for _, def := range Systems {
+		p := ProfileFor(def.Name)
 		profiles = append(profiles, SystemProfile{
-			Name:     s.Name(),
-			Domain:   systemDomains[s.Name()],
-			Requires: s.Requires(),
+			Name:     def.Name,
+			Domain:   p.Domain,
+			Requires: p.Requires,
 		})
 	}
 	return profiles

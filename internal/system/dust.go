@@ -144,14 +144,6 @@ func (s *DustSystem) Name() string {
 	return "dust"
 }
 
-// Domain reports player: it draws the player stream and creates player entities.
-func (s *DustSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires nothing: detonation crosses to explosion when it is present.
-func (s *DustSystem) Requires() engine.SystemDependencies {
-	return engine.Optional("explosion")
-}
-
 func (s *DustSystem) Priority() int {
 	return parameter.PriorityDust
 }

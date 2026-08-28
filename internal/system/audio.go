@@ -94,12 +94,6 @@ func (s *AudioSystem) Name() string {
 	return "audio"
 }
 
-// Domain reports player: it plays this instance's sounds and writes no simulation state.
-func (s *AudioSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires nothing: it is the sink other systems emit into.
-func (s *AudioSystem) Requires() engine.SystemDependencies { return nil }
-
 // Priority returns the system's priority
 func (s *AudioSystem) Priority() int {
 	return parameter.PriorityUI

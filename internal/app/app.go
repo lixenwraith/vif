@@ -199,7 +199,7 @@ func (a *App) initWorld() {
 
 	// Systems; AddSystem sorts by Priority(), manifest order breaks ties
 	for _, sys := range manifest.BuildSystems(a.world) {
-		a.world.AddSystem(sys, manifest.ProfileFor(sys))
+		a.world.AddSystem(sys, manifest.ProfileFor(sys.Name()))
 	}
 	// This game's streams are drawn; advance so the next game differs
 	a.world.Resources.Rand.NextSession()
@@ -249,7 +249,7 @@ func (a *App) initScheduler() error {
 
 	// MetaSystem is context-scoped, so it joins the set here rather than via the manifest
 	meta := system.NewMetaSystem(a.ctx)
-	a.world.AddSystem(meta, manifest.ProfileFor(meta))
+	a.world.AddSystem(meta, manifest.ProfileFor(meta.Name()))
 
 	// The declared dependency graph is resolved once the set is complete; an
 	// unknown name or a cycle is a startup error, not a runtime degradation

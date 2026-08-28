@@ -72,18 +72,16 @@ func dependencies(names []string, strength DependencyStrength) SystemDependencie
 	return deps
 }
 
-// System is an interface that all systems must implement
+// System is an interface that all systems must implement.
+// Domain and dependencies are declared in internal/manifest, not here.
 type System interface {
 	Init()
 	Priority() int // Lower values run first
 	Name() string
-	// Requires declares the systems this one needs, and how badly
-	Requires() SystemDependencies
 	Update()
 }
 
-// SystemProfile is what a registration declares about a system. Domain comes from
-// the manifest; Requires still comes from the system until it moves there too.
+// SystemProfile is what a registration declares about a system.
 type SystemProfile struct {
 	Requires SystemDependencies
 	Domain   SystemDomain

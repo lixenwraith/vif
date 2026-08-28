@@ -43,14 +43,6 @@ func (s *SplashSystem) Name() string {
 	return "splash"
 }
 
-// Domain reports player: it creates player splash entities, gated on the local cursor (D-6).
-func (s *SplashSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires the cursor whose viewport it overlays.
-func (s *SplashSystem) Requires() engine.SystemDependencies {
-	return engine.Require("cursor")
-}
-
 // Priority returns the system's priority (low, after game logic)
 func (s *SplashSystem) Priority() int {
 	return parameter.PrioritySplash

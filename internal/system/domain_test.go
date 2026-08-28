@@ -222,7 +222,7 @@ func parseStoreDomains(t *testing.T, path string) map[string]string {
 func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 	t.Helper()
 
-	domains := parseSystemDomains(t, "../manifest/build_gen.go")
+	domains := parseSystemDomains(t, "../manifest/definition.go")
 	var systems []systemEvidence
 	fset := token.NewFileSet()
 	for _, n := range packageFiles(t, dir) {
@@ -278,8 +278,7 @@ var unregisteredSystems = map[string]string{
 	"network": "TODO(phase7): NetworkSystem is written but never added to the world",
 }
 
-// parseSystemDomains reads the generated profile table, so system classification has
-// one source: manifest.Systems.
+// parseSystemDomains reads Systems and ContextSystems from the manifest authority.
 func parseSystemDomains(t *testing.T, path string) map[string]string {
 	t.Helper()
 
@@ -290,20 +289,37 @@ func parseSystemDomains(t *testing.T, path string) map[string]string {
 	}
 
 	domains := make(map[string]string)
-	ast.Inspect(f, func(n ast.Node) bool {
-		kv, ok := n.(*ast.KeyValueExpr)
+	for _, decl := range f.Decls {
+		gen, ok := decl.(*ast.GenDecl)
 		if !ok {
-			return true
+			continue
 		}
-		key, ok := kv.Key.(*ast.BasicLit)
-		if !ok {
-			return true
+		for _, spec := range gen.Specs {
+			value, ok := spec.(*ast.ValueSpec)
+			if !ok || len(value.Names) == 0 || len(value.Values) == 0 {
+				continue
+			}
+			listName := value.Names[0].Name
+			if listName != "Systems" && listName != "ContextSystems" {
+				continue
+			}
+			list, ok := value.Values[0].(*ast.CompositeLit)
+			if !ok {
+				continue
+			}
+			for _, elt := range list.Elts {
+				lit, ok := elt.(*ast.CompositeLit)
+				if !ok {
+					continue
+				}
+				name := keyedString(lit, "Name")
+				domain := keyedString(lit, "Domain")
+				if name != "" && domain != "" {
+					domains[name] = domain
+				}
+			}
 		}
-		if sel, ok := kv.Value.(*ast.SelectorExpr); ok {
-			domains[strings.Trim(key.Value, `"`)] = strings.ToLower(strings.TrimPrefix(sel.Sel.Name, "System"))
-		}
-		return true
-	})
+	}
 
 	if len(domains) < 50 {
 		t.Fatalf("parsed %d system domains from %s; the table or parser has drifted", len(domains), path)
@@ -311,9 +327,27 @@ func parseSystemDomains(t *testing.T, path string) map[string]string {
 	return domains
 }
 
-// TestSystemsDeclareNoDomainMethod pins the single-source rule: the manifest declares
-// the domain, so a leftover method is a second declaration free to drift. The method
-// satisfies no interface, so nothing but this test would notice it.
+// keyedString returns one string field from a keyed composite literal.
+func keyedString(lit *ast.CompositeLit, field string) string {
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != field {
+			continue
+		}
+		value, ok := kv.Value.(*ast.BasicLit)
+		if ok {
+			return strings.Trim(value.Value, `"`)
+		}
+	}
+	return ""
+}
+
+// TestSystemsDeclareNoDomainMethod pins the single-source rule for domain and dependencies.
+// These methods satisfy no interface, so nothing but this test would notice a leftover.
 func TestSystemsDeclareNoDomainMethod(t *testing.T) {
 	fset := token.NewFileSet()
 	for _, n := range packageFiles(t, ".") {
@@ -323,9 +357,9 @@ func TestSystemsDeclareNoDomainMethod(t *testing.T) {
 		}
 		for _, decl := range f.Decls {
 			fn, ok := decl.(*ast.FuncDecl)
-			if ok && fn.Recv != nil && fn.Name.Name == "Domain" {
-				t.Errorf("%s: %s declares Domain(); the manifest is the declaration site",
-					n, boundaryRecvName(fn))
+			if ok && fn.Recv != nil && (fn.Name.Name == "Domain" || fn.Name.Name == "Requires") {
+				t.Errorf("%s: %s declares %s(); the manifest is the declaration site",
+					n, boundaryRecvName(fn), fn.Name.Name)
 			}
 		}
 	}

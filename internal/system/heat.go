@@ -50,14 +50,6 @@ func (s *HeatSystem) Init() {
 // Name returns system's name
 func (s *HeatSystem) Name() string { return "heat" }
 
-// Domain reports player: it writes owner-authored cursor heat (D-13).
-func (s *HeatSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires the cursor the heat component lives on.
-func (s *HeatSystem) Requires() engine.SystemDependencies {
-	return engine.Require("cursor")
-}
-
 // Priority returns the system's priority
 func (s *HeatSystem) Priority() int { return parameter.PriorityHeat }
 

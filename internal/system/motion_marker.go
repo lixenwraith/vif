@@ -48,14 +48,6 @@ func (s *MotionMarkerSystem) Name() string {
 	return "motion_marker"
 }
 
-// Domain reports player: it creates player markers, gated on the local cursor (D-6).
-func (s *MotionMarkerSystem) Domain() engine.SystemDomain { return engine.SystemPlayer }
-
-// Requires the cursor whose motion targets it marks.
-func (s *MotionMarkerSystem) Requires() engine.SystemDependencies {
-	return engine.Require("cursor")
-}
-
 func (s *MotionMarkerSystem) Priority() int {
 	return parameter.PriorityMotionMarker
 }

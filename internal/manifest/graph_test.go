@@ -13,7 +13,7 @@ func buildWorld(t *testing.T) *engine.World {
 	t.Helper()
 	w := scratchWorld(t)
 	for _, sys := range BuildSystems(w) {
-		w.AddSystem(sys, ProfileFor(sys))
+		w.AddSystem(sys, ProfileFor(sys.Name()))
 	}
 	return w
 }
@@ -66,11 +66,11 @@ func TestSystemInitOrderPrecedesDependents(t *testing.T) {
 	for i, name := range order {
 		position[name] = i
 	}
-	for _, sys := range w.Systems() {
-		for _, dep := range sys.Requires() {
-			if position[dep.Name] >= position[sys.Name()] {
+	for _, profile := range SystemProfiles() {
+		for _, dep := range profile.Requires {
+			if position[dep.Name] >= position[profile.Name] {
 				t.Errorf("%s initializes at %d, after its dependency %s at %d",
-					sys.Name(), position[sys.Name()], dep.Name, position[dep.Name])
+					profile.Name, position[profile.Name], dep.Name, position[dep.Name])
 			}
 		}
 	}
@@ -94,10 +94,10 @@ func TestSystemsRequiringIsSorted(t *testing.T) {
 // TestNoSystemRequiresItself asserts a self-edge is caught as a declaration
 // error rather than resolved into a cycle report
 func TestNoSystemRequiresItself(t *testing.T) {
-	for _, sys := range buildWorld(t).Systems() {
-		for _, dep := range sys.Requires() {
-			if dep.Name == sys.Name() {
-				t.Errorf("%s declares itself a dependency", sys.Name())
+	for _, profile := range SystemProfiles() {
+		for _, dep := range profile.Requires {
+			if dep.Name == profile.Name {
+				t.Errorf("%s declares itself a dependency", profile.Name)
 			}
 		}
 	}

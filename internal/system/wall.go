@@ -69,14 +69,6 @@ func (s *WallSystem) Name() string {
 	return "wall"
 }
 
-// Domain reports shared: it creates shared walls; push-out enumerates both domains (D-12).
-func (s *WallSystem) Domain() engine.SystemDomain { return engine.SystemShared }
-
-// Requires the composite contract its segments are built on.
-func (s *WallSystem) Requires() engine.SystemDependencies {
-	return append(engine.Require("composite"), engine.Optional("navigation")...)
-}
-
 func (s *WallSystem) Priority() int {
 	return parameter.PriorityWall
 }
