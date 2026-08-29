@@ -490,6 +490,7 @@ const (
 	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
 	ExplosionTypeMissile                      // Visual only, warm palette
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
+	ExplosionTypePulse                        // Combat geometry only; PulseComponent owns the visual
 )
 
 // ExplosionRequestPayload describes one explosion center: geometry, combat family and

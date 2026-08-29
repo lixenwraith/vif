@@ -700,22 +700,18 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos compone
 		s.triggerOrbFlash(disruptorOrbEntity)
 	}
 
-	// Emit area attack per target.
-	// TODO: this reaches shared targets without a geometry crossing. The
-	// area request names resolved entities, so it is Local by D-4; the pulse should
-	// push an explosion request and let every instance resolve its own targets (D-3).
-	for _, target := range targets {
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
-			AttackType:   component.CombatAttackPulse,
-			OwnerEntity:  cursor,
-			OriginEntity: cursor,
-			TargetEntity: target.Target,
-			HitEntities:  target.Members,
-			HasOrigin:    true,
-			OriginX:      cursorPos.X,
-			OriginY:      cursorPos.Y,
-		})
-	}
+	// Resolve player targets here; shared targets are re-derived from the crossing geometry.
+	var pulse blastArea
+	pulse.resetOne(cursorPos.X, cursorPos.Y, parameter.PulseRadiusX)
+	strikePlayerTargets(s.world, cursor, &pulse, component.CombatAttackPulse)
+	s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+		Entity: cursor,
+		X:      cursorPos.X,
+		Y:      cursorPos.Y,
+		Radius: parameter.PulseRadiusX,
+		Attack: component.CombatAttackPulse,
+		Type:   event.ExplosionTypePulse,
+	})
 
 	// Set pulse effect on the firing cursor for visual feedback
 	s.world.Components.Pulse.SetComponent(cursor, component.PulseComponent{

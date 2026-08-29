@@ -37,6 +37,7 @@ var crossingPushes = map[string]string{
 	// duration, attack family and owner cursor.
 	"missile:EventExplosionRequest":   "missile impact; the explosion centers cross",
 	"dust:EventExplosionBatchRequest": "dust detonation; the explosion centers cross",
+	"weapon:EventExplosionRequest":    "disruptor pulse; center, ellipse radius, attack family and owner cross",
 
 	// D-3 table, drain fusion: the spawn request carries the header cell only.
 	"fuse:EventQuasarSpawnRequest": "drain fusion; the quasar header cell crosses",

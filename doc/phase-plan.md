@@ -281,11 +281,9 @@ that resizes, records or navigates will.
 Small and self-contained; none blocks Phase 8. Closed in Phase 7: the `ctx|player`
 record split, the `spatial.indexed_shared` allow-list, `World.UpdateBoundsRadius`,
 and `internal/journal` round-trip coverage, which `read_test.go` now carries.
+Closed in Phase 8: the disruptor pulse now crosses one combat-only explosion
+artifact and resolves player targets before the crossing.
 
-- **The weapon pulse** pushes an area attack at shared targets with no geometry
-  crossing behind it. `EventCombatAttackAreaRequest` is `Shared`, so the pulse's
-  hits are re-derived by a peer that never saw the pulse — the only D-3 row still
-  open.
 - **Operator grant commands** in `internal/mode/commands.go` push the
   owner-authored family with the ambient shared tag under `OriginCommand`.
   Harmless while those types are `Local` class, which the wire never reads.

@@ -183,6 +183,15 @@ func (s *ExplosionSystem) spawn(owner core.Entity, centers []event.ExplosionCent
 		}
 	}
 
+	// A disruptor pulse carries shared combat geometry but owns its visual on the firing cursor.
+	if visual == event.ExplosionTypePulse {
+		for i := range centers {
+			s.resolveArea(cursor, centers[i].X, centers[i].Y, radius, attack)
+		}
+		s.statTriggered.Add(int64(len(centers)))
+		return
+	}
+
 	durNano := duration.Nanoseconds()
 	for i := range centers {
 		s.addCenter(cursor, centers[i].X, centers[i].Y, radius, durNano, visual, attack)

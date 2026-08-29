@@ -39,7 +39,7 @@ smallest artifact that determines the shared outcome crosses as a Bus event:
 | effect | crossing artifact |
 |---|---|
 | direct hit (rod, cleaner, bullet) | one combat event per shared target |
-| area effect (missile impact, dust detonation) | one explosion request: centers, radius, duration, attack family, owner cursor |
+| area effect (missile impact, dust detonation, disruptor pulse) | one explosion request: centers, radius, duration, attack family, owner cursor |
 | drain fusion | one spawn request: header cell only |
 | gold member typed | one composite-member destruction: header, member, typist cursor |
 | decay or drain reaching a shared nugget | one nugget destruction: the nugget identity |
