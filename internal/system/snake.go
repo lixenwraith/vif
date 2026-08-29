@@ -860,13 +860,13 @@ func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 			continue
 		}
 		if headOverlap.ShieldActive {
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: headOverlap.Cursor,
 				Value:  parameter.SnakeShieldDrainPerTick,
 			})
 		} else if !snakeComp.IsShielded {
 			// The head damages a cursor only when the snake is unshielded.
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: headOverlap.Cursor,
 				Delta:  -parameter.SnakeDamageHeat,
 			})
@@ -884,7 +884,7 @@ func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 		if len(bodyOverlap.ShieldMembers) == 0 {
 			continue
 		}
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 			Entity: bodyOverlap.Cursor,
 			Value:  parameter.SnakeShieldDrainPerTick,
 		})

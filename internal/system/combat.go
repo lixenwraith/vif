@@ -633,7 +633,7 @@ func (s *CombatSystem) applyVampireDrain(ownerEntity, targetEntity core.Entity, 
 	currentEnergy := energyComp.Current
 
 	// Energy reward to the draining cursor
-	s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 		Entity:     ownerEntity,
 		Delta:      parameter.VampireDrainEnergyValue,
 		Percentage: false,

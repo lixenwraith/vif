@@ -187,7 +187,7 @@ func (s *BulletSystem) collideCursor(bullet *component.BulletComponent, x, y int
 		if !ok || !shield.Active || !vmath.EllipseContainsPointF(x, y, cursorPos.X, cursorPos.Y, shield.InvRxSq, shield.InvRySq) {
 			continue
 		}
-		s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 			Entity: cursor,
 			Value:  bullet.Damage.EnergyDrain,
 		})
@@ -204,7 +204,7 @@ func (s *BulletSystem) collideCursor(bullet *component.BulletComponent, x, y int
 		if ok && shield.Active {
 			continue
 		}
-		s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+		s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 			Entity: cursor,
 			Delta:  bullet.Damage.HeatDelta,
 		})

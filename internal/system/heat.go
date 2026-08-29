@@ -164,7 +164,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	// Reset overheat if heat penalty
 	if delta < 0 {
 		heatComp.Overheat = 0
-		s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.MetalHit})
+		s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{ID: parameter.Sfx.MetalHit})
 	}
 
 	// Update heat, clamp to bounds, accumulate overheat
@@ -183,7 +183,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 		}
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
-		s.world.PushEvent(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
+		s.world.PushLocal(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
 	}
 
 	s.publish(cursor, heatComp)

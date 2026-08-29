@@ -221,9 +221,9 @@ func (s *EnergySystem) Update() {
 		// Evaluate shield activation state for this cursor alone
 		if shieldComp, ok := s.world.Components.Shield.GetPtr(e); ok {
 			if energy != 0 && !shieldComp.Active {
-				s.world.PushEvent(event.EventShieldActivate, &event.ShieldActivatePayload{Entity: e})
+				s.world.PushLocal(event.EventShieldActivate, &event.ShieldActivatePayload{Entity: e})
 			} else if energy == 0 && shieldComp.Active {
-				s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: e})
+				s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: e})
 			}
 		}
 		return true
@@ -300,15 +300,15 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 
 	// Preventing one frame flickering of shield at zero energy
 	if newEnergy == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 		return
 	}
 
 	// Signal to remove buffs
 	if crossedZero {
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 	}
 }
@@ -344,12 +344,12 @@ func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
 
 	currentEnergy := energyComp.Current
 	if (currentEnergy < 0 && value > 0) || (currentEnergy >= 0 && value < 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		s.statCrossedZeroCount.Add(1)
 	}
 	if value == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 	}
 
 	energyComp.Current = value
@@ -388,13 +388,13 @@ func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType compone
 	s.publish(cursor, newEnergy)
 
 	if newEnergy == 0 {
-		s.world.PushEvent(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 		return
 	}
 
 	if (newEnergy > 0 && currentEnergy < 0) || (newEnergy < 0 && currentEnergy > 0) {
-		s.world.PushEvent(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
+		s.world.PushLocal(event.EventEnergyCrossedZero, &event.EnergyCrossedZeroPayload{Entity: cursor})
 	}
 }
 

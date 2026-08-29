@@ -164,7 +164,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 	// Fadeout handles its own data extraction from WallComponent
 	if effectEvent == event.EventFadeoutSpawnOne {
 		if wallComp, ok := s.world.Components.Wall.GetPtr(entity); ok {
-			s.world.PushEvent(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
+			s.world.PushLocal(event.EventFadeoutSpawnOne, &event.FadeoutSpawnPayload{
 				X:       entityPos.X,
 				Y:       entityPos.Y,
 				Char:    wallComp.Rune,
@@ -192,7 +192,7 @@ func (s *DeathSystem) emitEffect(entity core.Entity, effectEvent event.EventType
 
 	switch effectEvent {
 	case event.EventFlashSpawnOneRequest:
-		s.world.PushEvent(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
+		s.world.PushLocal(event.EventFlashSpawnOneRequest, &event.FlashRequestPayload{
 			X:    entityPos.X,
 			Y:    entityPos.Y,
 			Char: char,
@@ -355,7 +355,7 @@ func processBatchWith[T any](s *DeathSystem, pool *event.BatchPool[T], eventType
 	s.destroyCollected()
 
 	if len(batch.Entries) > 0 {
-		s.world.PushEvent(eventType, batch)
+		s.world.PushLocal(eventType, batch)
 	} else {
 		pool.Release(batch)
 	}

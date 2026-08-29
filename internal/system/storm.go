@@ -974,7 +974,7 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 			overlap := &overlaps.Entries[j]
 			// Apply shield interaction before exact cursor contact.
 			if len(overlap.ShieldMembers) > 0 {
-				s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+				s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 					Entity: overlap.Cursor,
 					Value:  parameter.QuasarShieldDrain,
 				})
@@ -988,7 +988,7 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 				})
 			} else if overlap.OnCursor && !overlap.ShieldActive {
 				// Direct cursor collision without a shield resets heat.
-				s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 					Entity: overlap.Cursor,
 					Delta:  -parameter.HeatMax,
 				})
@@ -1195,12 +1195,12 @@ func (s *StormSystem) processGreenAttack(
 
 		shieldComp, shieldOK := s.world.Components.Shield.GetComponent(cursor)
 		if shieldOK && shieldComp.Active {
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: cursor,
 				Value:  parameter.StormGreenDamageEnergy,
 			})
 		} else {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: cursor,
 				Delta:  -parameter.StormGreenDamageHeat,
 			})

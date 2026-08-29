@@ -155,7 +155,7 @@ func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
 	for i := range overlaps.Count {
 		overlap := &overlaps.Entries[i]
 		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: overlap.Cursor,
 				Value:  parameter.PylonShieldDrain,
 			})
@@ -168,7 +168,7 @@ func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
 				HitEntities:  overlap.ShieldMembers,
 			})
 		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: overlap.Cursor,
 				Delta:  -parameter.PylonDamageHeat,
 			})

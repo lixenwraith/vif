@@ -418,12 +418,10 @@ func (s *DrainSystem) processPendingSpawns() {
 
 		if !spawn.materializeStarted && currentTick >= spawn.scheduledTick {
 			// Drain is player-domain, so its materialize effect is too
-			s.world.WithDomain(core.DomainPlayer, func() {
-				s.world.PushEvent(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
-					X:    spawn.targetX,
-					Y:    spawn.targetY,
-					Type: component.SpawnTypeDrain,
-				})
+			s.world.PushLocal(event.EventMaterializeRequest, &event.MaterializeRequestPayload{
+				X:    spawn.targetX,
+				Y:    spawn.targetY,
+				Type: component.SpawnTypeDrain,
 			})
 			spawn.materializeStarted = true
 		}
@@ -837,7 +835,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			if len(overlap.ShieldMembers) > 0 {
 				if drainReady {
 					drainedShield = true
-					s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+					s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 						Entity: overlap.Cursor,
 						Value:  parameter.DrainShieldEnergyDrainAmount,
 					})
@@ -854,7 +852,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 			}
 
 			if overlap.OnCursor {
-				s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+				s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 					Entity: overlap.Cursor,
 					Delta:  -parameter.DrainHeatReductionAmount,
 				})

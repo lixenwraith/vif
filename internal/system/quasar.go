@@ -191,7 +191,7 @@ func (s *QuasarSystem) Update() {
 				quasarComp.ChargeRemaining = 0
 				quasars.SetComponent(headerEntity, quasarComp)
 
-				s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+				s.world.PushLocal(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
 					AnchorEntity: headerEntity,
 				})
 			}
@@ -215,7 +215,7 @@ func (s *QuasarSystem) Update() {
 				quasarComp.ChargeRemaining = 0
 				quasars.SetComponent(headerEntity, quasarComp)
 
-				s.world.PushEvent(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
+				s.world.PushLocal(event.EventSplashTimerCancel, &event.SplashTimerCancelPayload{
 					AnchorEntity: headerEntity,
 				})
 			}
@@ -427,7 +427,7 @@ func (s *QuasarSystem) startCharging(headerEntity core.Entity, quasarComp *compo
 	quasarComp.ChargeRemaining = parameter.QuasarChargeDuration
 	s.world.Components.Quasar.SetComponent(headerEntity, *quasarComp)
 
-	s.world.PushEvent(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
+	s.world.PushLocal(event.EventSplashTimerRequest, &event.SplashTimerRequestPayload{
 		AnchorEntity: headerEntity,
 		Color:        visual.RgbSplashCyan,
 		MarginRight:  parameter.QuasarHeaderOffsetX + 1, // Accounting for anchor column
@@ -714,12 +714,12 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity) {
 				TargetEntity: headerEntity,
 				HitEntities:  overlap.ShieldMembers,
 			})
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: overlap.Cursor,
 				Value:  parameter.QuasarShieldDrain,
 			})
 		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: overlap.Cursor,
 				Delta:  -parameter.QuasarDamageHeat,
 			})

@@ -360,7 +360,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(domain core.Domain, owner core.Ent
 	}
 	s.statSpawned.Add(int64(spawnCount))
 
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Ring,
 	})
 
@@ -555,7 +555,7 @@ func (s *CleanerSystem) processNegativeEnergy(x, y int, targetEntities []core.En
 func (s *CleanerSystem) spawnDirectionalCleaners(domain core.Domain, owner core.Entity, originX, originY int, colorType component.CleanerColorType) {
 	config := s.world.Resources.Config
 
-	s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+	s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 		ID: parameter.Sfx.Bullet,
 	})
 

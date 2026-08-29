@@ -764,13 +764,13 @@ func (s *SwarmSystem) handleCursorInteractions(
 				HitEntities:  overlap.ShieldMembers,
 			})
 
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: overlap.Cursor,
 				Value:  parameter.QuasarShieldDrain,
 			})
 		} else if overlap.OnCursor && !overlap.ShieldActive {
 			// Direct cursor collision without a shield reduces heat.
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: overlap.Cursor,
 				Delta:  -parameter.DrainHeatReductionAmount,
 			})

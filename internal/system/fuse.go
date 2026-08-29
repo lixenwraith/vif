@@ -163,20 +163,18 @@ func (s *FuseSystem) applyEffect(effect event.FuseEffect, sources []vmath.Point,
 
 // effectSpiritArea flies one spirit per source into the target area; player-domain visuals
 func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c component.SpiritColor) {
-	s.world.WithDomain(core.DomainPlayer, func() {
-		for i, src := range sources {
-			dest := area.DistributePoint(i, s.rng)
+	for i, src := range sources {
+		dest := area.DistributePoint(i, s.rng)
 
-			s.world.PushEvent(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
-				StartX:    src.X,
-				StartY:    src.Y,
-				TargetX:   dest.X,
-				TargetY:   dest.Y,
-				Char:      visual.DrainChar,
-				BaseColor: c,
-			})
-		}
-	})
+		s.world.PushLocal(event.EventSpiritSpawnRequest, &event.SpiritSpawnRequestPayload{
+			StartX:    src.X,
+			StartY:    src.Y,
+			TargetX:   dest.X,
+			TargetY:   dest.Y,
+			Char:      visual.DrainChar,
+			BaseColor: c,
+		})
+	}
 }
 
 // effectMaterialize gates the shared spawn, so it crosses as shared even though the producer is player-domain

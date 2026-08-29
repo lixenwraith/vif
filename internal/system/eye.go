@@ -614,12 +614,12 @@ func (s *EyeSystem) handleCursorInteraction(headerEntity core.Entity) {
 				TargetEntity: headerEntity,
 				HitEntities:  overlap.ShieldMembers,
 			})
-			s.world.PushEvent(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
+			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: overlap.Cursor,
 				Value:  parameter.EyeShieldDrain,
 			})
 		} else if overlap.OnCursor && !overlap.ShieldActive {
-			s.world.PushEvent(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
+			s.world.PushLocal(event.EventHeatAddRequest, &event.HeatAddRequestPayload{
 				Entity: overlap.Cursor,
 				Delta:  -parameter.EyeDamageHeat,
 			})

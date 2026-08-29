@@ -117,14 +117,14 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 				s.rejects.cursor.Add(1)
 				return
 			}
-			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+			s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Entity:     cursor,
 				Delta:      payload.Value,
 				Percentage: false,
 				Type:       component.EnergyDeltaPenalty,
 			})
 
-			s.world.PushEvent(event.EventSoundRequest, &event.SoundRequestPayload{
+			s.world.PushLocal(event.EventSoundRequest, &event.SoundRequestPayload{
 				// SoundType: audio.SoundShield,
 			})
 
@@ -171,7 +171,7 @@ func (s *ShieldSystem) Update() {
 		}
 
 		if now.Sub(shieldComp.LastDrainTime) >= parameter.ShieldPassiveDrainInterval {
-			s.world.PushEvent(event.EventEnergyAddRequest, &event.EnergyAddPayload{
+			s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{
 				Entity:     e,
 				Delta:      parameter.ShieldPassiveEnergyPercentDrain,
 				Percentage: true,
