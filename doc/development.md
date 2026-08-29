@@ -293,8 +293,8 @@ telemetry—archive or remove them according to development needs.
 1. Read the high-level architecture and the relevant domain document.
 2. Keep edits within the package ownership rules in [Package map](package-map.md).
 3. Update manifest/event/input source declarations and regenerate where needed.
-   A new system also declares `Domain()` and `Requires()`; see
-   [the domain model](domain-model.md).
+   A new system is declared in `internal/manifest/definition.go`, profile and
+   dependencies included; see [the domain model](domain-design.md).
 4. Add focused tests, including error/overflow/pause/reset paths where the
    subsystem is concurrent.
 5. Run formatting, `make verify`, config checks, and the appropriate manual

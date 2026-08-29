@@ -20,7 +20,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Runtime and concurrency](runtime.md) | Medium/detail | How does the process start, tick, render, pause, reset, and shut down safely? |
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
-| [Multi-instance domain model](domain-model.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains? |
+| [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
@@ -53,7 +53,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Concern | Authoritative source | Generated or runtime consumer |
 |---|---|---|
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `internal/engine/component_store_gen.go` |
-| System domain profiles and dependencies | `Domain()` and `Requires()` in `internal/system/*.go` | `manifest.SystemProfiles`, `World.SystemInitOrder`, `app.checkSystems` |
+| System domain profiles and dependencies | `Systems` and `ContextSystems` in `internal/manifest/definition.go` | `manifest.ProfileFor`, `World.SystemInitOrder`, `app.checkSystems` |
 | Event names and payload association | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go` | `App`, `ClockScheduler`, services |
 | Replay journal format and producer origins | `internal/event/journal.go`, `origin.go` | `internal/journal`, `internal/app/replay.go` |

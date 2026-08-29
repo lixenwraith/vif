@@ -26,7 +26,7 @@ domain at every call site, `Clear` resets both sequences and their session
 counters, and created and destroyed counts are tracked per domain. Component
 masks let generated destruction code remove only the stores present on an
 entity. Which domain an entity, event or RNG stream belongs to is the subject
-of [the domain model](domain-model.md).
+of [the domain model](domain-design.md).
 
 All component stores, positions, resources that participate in a tick, entity
 IDs, and system execution are protected by the world's update mutex. The game
@@ -40,10 +40,12 @@ world; registering another system after that point panics. Systems run
 sequentially in ascending priority, with registration order breaking equal
 priorities.
 
-Each system also declares two things priority does not express. `Domain()`
-classifies it shared, player or dual and is checked against its code by
-`internal/system/domain_test.go`; see [the domain model](domain-model.md).
-`Requires()` names the systems it needs, graded required or optional.
+`internal/manifest/definition.go` declares two things priority does not
+express. `SystemDef.Domain` classifies a system shared, player or dual and is
+checked against its code by `internal/system/domain_test.go`; see [the domain
+model](domain-design.md). `SystemDef.Requires` and `Optional` name the systems
+it needs, graded required or optional. The system type itself carries neither:
+`World.AddSystem` takes the profile from `manifest.ProfileFor`.
 `World.SystemInitOrder` resolves those declarations into a deterministic
 initialization order through `core.TopoSort`. That order is not the tick order
 and never reorders `Update()`: a system may legitimately initialize before one
@@ -121,7 +123,8 @@ generated typed store and mask bit.
 The grouping above is conceptual and unrelated to the replication domain. That
 is a property of the entity a component attaches to, and
 `engine.componentDomains` is the audit table naming the components legal in one
-domain only.
+domain only, generated into `component_domain_gen.go` from `ComponentDef.Domain`
+in `internal/manifest/definition.go`.
 
 Components should remain data-oriented. Behavior belongs in systems, and
 cross-system requests belong in events. Related enum values and static profiles
