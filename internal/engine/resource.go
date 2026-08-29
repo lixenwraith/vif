@@ -524,7 +524,29 @@ type NetworkPort interface {
 	Drain(dst []network.Inbound) int
 }
 
+// NetworkSessionPort exposes barrier metadata negotiated before simulation starts.
+type NetworkSessionPort interface {
+	ParticipantID() uint32
+	BarrierDelayTicks() uint64
+}
+
 // NetworkResource wraps the network endpoint for ECS access
 type NetworkResource struct {
-	Port NetworkPort
+	Port              NetworkPort
+	ParticipantID     uint32
+	BarrierDelayTicks uint64
+}
+
+// NewNetworkResource binds a poll endpoint and its deterministic barrier identity.
+func NewNetworkResource(port NetworkPort) *NetworkResource {
+	r := &NetworkResource{Port: port, ParticipantID: 1, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks}
+	if session, ok := port.(NetworkSessionPort); ok {
+		if id := session.ParticipantID(); id != 0 {
+			r.ParticipantID = id
+		}
+		if delay := session.BarrierDelayTicks(); delay != 0 {
+			r.BarrierDelayTicks = delay
+		}
+	}
+	return r
 }

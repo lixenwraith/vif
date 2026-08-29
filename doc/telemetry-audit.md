@@ -1,6 +1,6 @@
 # Telemetry audit
 
-This audit covers every system constructed by `manifest.BuildSystems`, the inactive `NetworkSystem`, `MetaSystem`, and telemetry owned by `internal/engine` and `internal/event`. The table describes the final wiring; the defect table preserves the Phase 1 findings from the pre-fix tree.
+This audit covers every system constructed by `manifest.BuildSystems`, `MetaSystem`, and telemetry owned by `internal/engine` and `internal/event`. The table describes the final wiring; the defect table preserves the Phase 1 findings from the pre-fix tree.
 
 Every metric is consumed generically by the status snapshot, debug overlay, pinning UI, and `vif-log` registry traversal. “Generic only” means no code or configuration reads the key by name outside its producer. Player patterns expand across roster slots 0–15 and retain the legacy slot-zero mirror; inactive slots keep their frozen schema but are omitted from live views and output until active. Stable keys project into semantic groups of at most 15 fields for overlay and log presentation.
 
@@ -59,8 +59,8 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Genetic | `eye.ga.{generation,best,avg,pending,outcomes,tracked,typefit}`, `eye.buf_ga_*_hwm` | `NewGeneticSystem` | GA processing; formatted type fitness on snapshot cadence | `Init` | Generic only |
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
 | Music | None | — | — | — | — |
-| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}` | `NewMetaSystem` | Debug/map publication and resolved species-kill handler | `Init` | `kills.{drain,quasar,swarm,storm}` are FSM guards; remainder generic |
-| Network (inactive) | None | — | — | — | — |
+| Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.all_defeated` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.all_defeated` are FSM guards; remainder generic |
+| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied}` | `NewNetworkSystem` | Transport polling, fixed-delay admission and cursor sync | `Init` | Generic only |
 
 ## Engine and event audit
 
@@ -91,7 +91,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 - The position store binds its metrics immediately after `NewGameContextWithClock` creates the registry; `World` necessarily constructs the store before that registry exists. It is frozen before the first tick and never registers during reset.
 - Legacy slot-zero mirrors such as `energy.current`, `heat.current`, and `player.x` remain intact for existing status-bar/config consumers.
 - Registry-owned `content.*`, `rec.*`, and `stat.*` metrics and persistent operator/context settings are excluded from session-zero assertions. Reset tests seed and verify every session-owned int, bool, and string; live gauges are allowed to rebuild to their deterministic reset values.
-- Systems with no existing counters and no reusable allocation-shaped buffers remain metric-free. `NetworkSystem` is not constructed by the active manifest.
+- Systems with no existing counters and no reusable allocation-shaped buffers remain metric-free.
 - `hitComposite.members` in the explosion path remains a fresh queued-payload slice, not a reusable system buffer; reusing it would corrupt queued events.
 - Event-type arrays remain internal fixed atomics and are formatted only at `parameter.StatSnapshotTicks`, avoiding per-event formatting/allocation.
 
@@ -285,6 +285,18 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `nugget.cursor_rejects` (int) | Requests rejected because nugget could not resolve a roster cursor. |
 | `nugget.disabled_rejects` (int) | Action requests dropped while the nugget system was disabled. |
 | `nugget.spawn_failures` (int) | nugget spawn requests that could not produce an entity. |
+| `network.barrier_applied_local` (int) | Deferred local artifacts admitted at their playout boundary. |
+| `network.barrier_applied_peer` (int) | Peer artifacts admitted at their playout boundary. |
+| `network.barrier_deferred` (int) | Local crossing artifacts accepted by the barrier. |
+| `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. |
+| `network.barrier_peer_applied` (bool) | Whether the most recent boundary admitted a peer artifact. |
+| `network.barrier_peer_artifacts` (int) | Peer artifacts admitted at the most recent boundary. |
+| `network.barrier_peer_lag_ticks` (int) | Closed-epoch lag beyond the negotiated playout lead. |
+| `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. |
+| `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
+| `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
+| `network.frames_dropped` (int) | Transport frames rejected by encoding, framing, ordering or identity checks. |
+| `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors. |
 | `ping.cursor_rejects` (int) | Requests rejected because ping could not resolve a roster cursor. |
 | `ping.disabled_rejects` (int) | Action requests dropped while the ping system was disabled. |
 | `player.cursor_rejects` (int) | Requests rejected because player could not resolve a roster cursor. |
@@ -306,6 +318,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `quasar.wall_collisions` (int) | Resolved quasar contacts with blocking wall cells. |
 | `shield.cursor_rejects` (int) | Requests rejected because shield could not resolve a roster cursor. |
 | `shield.disabled_rejects` (int) | Action requests dropped while the shield system was disabled. |
+| `session.all_defeated` (bool) | Every currently rostered cursor has crossed its terminal heat/energy state. |
 | `snake.boundary_reflections` (int) | Resolved snake reflections at simulation bounds. |
 | `snake.despawned` (int) | snake instances removed by cancellation or integrity cleanup. |
 | `snake.killed_by_lifecycle` (int) | snake deaths with no resolved roster-cursor killer. |

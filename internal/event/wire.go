@@ -41,9 +41,8 @@ func OnWire(ev GameEvent) bool {
 	}
 	switch ClassOf(ev.Type) {
 	case ClassBus:
-		// Every Bus type has producers of both kinds: a player mechanic crossing
-		// (World.PushCrossing, stamped player) and a shared system re-deriving its
-		// own copy of the same type. Only the first travels.
+		// A Bus artifact travels only when its producer explicitly stamps it as a
+		// crossing; types with a shared producer leave that re-derived copy local.
 		if ev.Domain != core.DomainPlayer {
 			return false
 		}
@@ -60,18 +59,15 @@ func OnWire(ev GameEvent) bool {
 	return !ok || !d.IsDerived()
 }
 
-// WireSink is the transport's two ends of one tick. Receive runs at the top of the
-// tick, before the settle that opens it, so a peer's artifacts join the tick that
-// drained them rather than the one after. Cross runs at push time on the producing
-// goroutine from the lock-free queue, so it must not block, must not retain the
-// payload, and must not push events — the same contract as JournalSink.Record.
-// Flush runs at the end of the tick, after everything it produced has settled, so a
-// peer receives one tick's artifacts as one tick's worth. Receive and Flush both
-// run on the tick goroutine under the world lock.
+// WireSink defers crossings into a fixed-delay barrier. Cross returns true only
+// when it took ownership of the event; the queue then neither journals nor publishes
+// the original. Receive admits due local and peer artifacts before the next tick,
+// and Flush closes one production epoch. Cross is non-blocking and may run from any
+// producer; Receive and Flush run under the world lock.
 type WireSink interface {
-	Receive()
-	Cross(ev GameEvent)
-	Flush()
+	Receive(nextTick uint64) int
+	Cross(ev GameEvent) bool
+	Flush(completedTick uint64)
 }
 
 // WireFrame is one artifact on the wire. The payload is the same TOML text the
@@ -81,6 +77,20 @@ type WireFrame struct {
 	Domain  string `json:"domain"`
 	Payload string `json:"payload"`
 	Seq     uint64 `json:"seq"`
+}
+
+// ScheduledWireFrame names the simulation tick at whose opening an artifact applies.
+type ScheduledWireFrame struct {
+	Frame     WireFrame `json:"frame"`
+	ApplyTick uint64    `json:"apply_tick"`
+}
+
+// WireBatch closes one participant's production epoch, including an empty one.
+// Source provides the canonical ordering key shared by every receiver.
+type WireBatch struct {
+	Frames       []ScheduledWireFrame `json:"frames,omitempty"`
+	ProducedTick uint64               `json:"produced_tick"`
+	Source       uint32               `json:"source"`
 }
 
 // NewWireFrame encodes one crossing; an unencodable payload reports why rather
@@ -139,6 +149,16 @@ func EncodeFrames(frames []WireFrame) ([]byte, error) { return json.Marshal(fram
 // DecodeFrames unpacks a message payload back into frames
 func DecodeFrames(b []byte) ([]WireFrame, error) {
 	var out []WireFrame
+	err := json.Unmarshal(b, &out)
+	return out, err
+}
+
+// EncodeWireBatch serializes one closed barrier production epoch.
+func EncodeWireBatch(batch WireBatch) ([]byte, error) { return json.Marshal(batch) }
+
+// DecodeWireBatch decodes one barrier production epoch.
+func DecodeWireBatch(b []byte) (WireBatch, error) {
+	var out WireBatch
 	err := json.Unmarshal(b, &out)
 	return out, err
 }

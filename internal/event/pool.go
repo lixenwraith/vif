@@ -102,3 +102,11 @@ func ReleaseExplosionBatchRequest(p *ExplosionBatchRequestPayload) {
 	p.Centers = p.Centers[:0]
 	explosionBatchRequestPool.Put(p)
 }
+
+// ReleaseDeferredPayload returns a pooled payload after the barrier encoded it.
+// Non-pooled payloads need no action.
+func ReleaseDeferredPayload(payload any) {
+	if p, ok := payload.(*ExplosionBatchRequestPayload); ok {
+		ReleaseExplosionBatchRequest(p)
+	}
+}

@@ -259,12 +259,16 @@ Two *live* in-process instances sharing a seed and an event pipe, driven by
 `RunScript`, asserting `SnapshotShared()` equality per tick and reporting the
 first divergent record via `FirstDiff`/`Diff`.
 
-Blocker to resolve first: **the lockstep barrier**. A crossing pushed during a
-settle applies locally in that settle but reaches the peer at the next tick's
-opening. Exact per-tick agreement needs produce, exchange, then apply — each
-instance deferring its own crossings to the same relative point its peer applies
-them at. Phase 7's one-directional test holds to 200 steps without it; two live
-participants will not.
+First blocker, **resolved: the fixed-delay crossing barrier.** A crossing pushed
+during a settle used to apply locally there and remotely at the next tick opening,
+a one-tick/50ms divergence window. `WireSink.Cross` now withholds the local
+artifact, `Flush` exchanges a closed production epoch asynchronously, and
+`Receive` applies both local and peer artifacts at the same future between-tick
+boundary. The default three-tick/150ms playout lead requires no synchronous
+round trip. An apply-generated crossing belongs to the next production epoch and
+receives a full delay of its own. With no peer the sink declines ownership and the
+old queue/settle path is unchanged. The Phase 7 observer test now holds for 1,200
+steps while preserving replay settle groups.
 
 Second blocker, **resolved: nugget is personal and uncontested.** The component,
 system, RNG and event family are player-domain/local. Collection reads only the

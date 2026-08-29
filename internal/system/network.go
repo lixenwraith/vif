@@ -1,6 +1,8 @@
 package system
 
 import (
+	"cmp"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,11 +25,17 @@ import (
 type NetworkSystem struct {
 	world *engine.World
 
-	// crossings accumulates one tick's outbound artifacts. Written from the
-	// lock-free push path on any producer goroutine, drained under the tick.
-	mu        sync.Mutex
-	crossings []event.WireFrame
-	encodeErr int64
+	// Barrier state is written from the lock-free push path and drained under the tick.
+	mu              sync.Mutex
+	crossings       []event.ScheduledWireFrame
+	scheduled       []barrierArtifact
+	lastPeerTick    [parameter.MaxPlayers + 1]uint64
+	productionEpoch uint64
+	crossSeq        uint64
+	localSource     uint32
+	delayTicks      uint64
+	encodeErr       int64
+	barrierActive   atomic.Bool
 
 	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
 
@@ -39,8 +47,24 @@ type NetworkSystem struct {
 	statState *atomic.Int64
 	statDrop  *atomic.Int64
 
-	attached bool // the wire sink is installed
-	enabled  bool
+	statDeferred      *atomic.Int64
+	statAppliedLocal  *atomic.Int64
+	statAppliedPeer   *atomic.Int64
+	statLate          *atomic.Int64
+	statRanWithout    *atomic.Int64
+	statPeerLag       *atomic.Int64
+	statPeerArtifacts *atomic.Int64
+	statPeerApplied   *atomic.Bool
+
+	enabled bool
+}
+
+// barrierArtifact is one encoded local or peer crossing waiting for its apply tick.
+type barrierArtifact struct {
+	frame     event.WireFrame
+	applyTick uint64
+	source    uint32
+	origin    event.Origin
 }
 
 func NewNetworkSystem(world *engine.World) engine.System {
@@ -51,13 +75,20 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statRecv = reg.Ints.Get("network.crossings_received")
 	s.statState = reg.Ints.Get("network.state_applied")
 	s.statDrop = reg.Ints.Get("network.frames_dropped")
+	s.statDeferred = reg.Ints.Get("network.barrier_deferred")
+	s.statAppliedLocal = reg.Ints.Get("network.barrier_applied_local")
+	s.statAppliedPeer = reg.Ints.Get("network.barrier_applied_peer")
+	s.statLate = reg.Ints.Get("network.barrier_late")
+	s.statRanWithout = reg.Ints.Get("network.barrier_ran_without_peer")
+	s.statPeerLag = reg.Ints.Get("network.barrier_peer_lag_ticks")
+	s.statPeerArtifacts = reg.Ints.Get("network.barrier_peer_artifacts")
+	s.statPeerApplied = reg.Bools.Get("network.barrier_peer_applied")
 
 	s.Init()
 	return s
 }
 
-// Init resets per-session state. The outbound sink is installed by Update once a
-// live port appears, so a run with no transport leaves the push path untouched.
+// Init resets the barrier and leaves its sink installed as a no-op without peers.
 func (s *NetworkSystem) Init() {
 	s.enabled = true
 	s.ticks = 0
@@ -68,14 +99,32 @@ func (s *NetworkSystem) Init() {
 	s.statRecv.Store(0)
 	s.statState.Store(0)
 	s.statDrop.Store(0)
+	s.statDeferred.Store(0)
+	s.statAppliedLocal.Store(0)
+	s.statAppliedPeer.Store(0)
+	s.statLate.Store(0)
+	s.statRanWithout.Store(0)
+	s.statPeerLag.Store(0)
+	s.statPeerArtifacts.Store(0)
+	s.statPeerApplied.Store(false)
+	s.barrierActive.Store(false)
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
+	s.scheduled = s.scheduled[:0]
+	s.lastPeerTick = [parameter.MaxPlayers + 1]uint64{}
+	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
+	s.crossSeq = 0
+	s.localSource = 1
+	s.delayTicks = parameter.NetworkBarrierDelayTicks
+	if r := s.world.Resources.Network; r != nil {
+		s.localSource = r.ParticipantID
+		s.delayTicks = r.BarrierDelayTicks
+	}
 	s.encodeErr = 0
 	s.mu.Unlock()
 
-	s.attached = false
-	s.world.Resources.Event.Queue.SetWireSink(nil)
+	s.world.Resources.Event.Queue.SetWireSink(s)
 }
 
 // port returns the live endpoint, nil when no transport is attached. Read per tick
@@ -113,108 +162,134 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 	}
 }
 
-// Cross implements event.WireSink: it encodes a crossing on the producer's
-// goroutine and buffers it. Encoding here, not at flush, is what lets the payload
-// be recycled the moment the queue slot publishes.
-func (s *NetworkSystem) Cross(ev event.GameEvent) {
+// Cross encodes and schedules a crossing when a peer is live. Returning true
+// transfers queue ownership; pooled originals are released after encoding.
+func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
+	if !s.barrierActive.Load() {
+		return false
+	}
 	frame, encErr := event.NewWireFrame(ev)
 	s.mu.Lock()
 	if encErr != "" {
 		s.encodeErr++
-	} else {
-		s.crossings = append(s.crossings, frame)
+		s.mu.Unlock()
+		event.ReleaseDeferredPayload(ev.Payload)
+		return true
 	}
+	s.crossSeq++
+	frame.Seq = s.crossSeq
+	applyTick := s.productionEpoch + s.delayTicks
+	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
+	s.scheduled = append(s.scheduled, barrierArtifact{
+		frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
+	})
 	s.mu.Unlock()
+	event.ReleaseDeferredPayload(ev.Payload)
+	s.statDeferred.Add(1)
+	return true
 }
 
 func (s *NetworkSystem) Update() {
 	p := s.port()
-	if !s.enabled || p == nil || !p.IsRunning() {
-		if s.attached {
-			s.world.Resources.Event.Queue.SetWireSink(nil)
-			s.attached = false
-		}
-		return
+	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
+	s.barrierActive.Store(active)
+	if r := s.world.Resources.Network; r != nil {
+		s.mu.Lock()
+		s.localSource = r.ParticipantID
+		s.delayTicks = r.BarrierDelayTicks
+		s.mu.Unlock()
 	}
-	if !s.attached {
-		s.world.Resources.Event.Queue.SetWireSink(s)
-		s.attached = true
+	if s.enabled && p != nil && p.IsRunning() {
+		s.ticks++
 	}
-
-	s.ticks++
 }
 
-// Receive implements event.WireSink: inbound translation opens the tick.
+// Receive drains transport state and publishes every artifact due before nextTick.
 // Caller holds the world lock.
-func (s *NetworkSystem) Receive() {
+func (s *NetworkSystem) Receive(nextTick uint64) int {
+	queued := 0
 	p := s.port()
-	if !s.enabled || p == nil || !p.IsRunning() {
-		return
+	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
+	s.barrierActive.Store(active)
+	if s.enabled && p != nil {
+		queued += s.drain(p)
 	}
-	s.drain(p)
+	queued += s.applyDue(nextTick)
+	s.publishBarrierTelemetry(nextTick, p)
+	return queued
 }
 
-// Flush implements event.WireSink: outbound work runs at the tick boundary, after
-// the tick has settled, so a crossing produced anywhere in the tick leaves with it.
+// Flush closes completedTick's production epoch, including an empty marker.
 // Caller holds the world lock.
-func (s *NetworkSystem) Flush() {
+func (s *NetworkSystem) Flush(completedTick uint64) {
 	p := s.port()
-	if !s.enabled || p == nil || !p.IsRunning() {
-		return
-	}
-	s.flushCrossings(p)
-	if s.ticks%parameter.NetworkSyncTicks == 0 {
+	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
+	s.barrierActive.Store(active)
+	s.flushCrossings(p, completedTick, active)
+	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
 	}
 }
 
 // drain translates one tick's transport notifications into events
-func (s *NetworkSystem) drain(p engine.NetworkPort) {
+func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 	n := p.Drain(s.buf[:])
+	queued := 0
 	for i := range n {
 		in := &s.buf[i]
 		switch in.Kind {
 		case network.InboundConnect:
 			s.world.PushLocal(event.EventNetworkConnect, &event.NetworkConnectPayload{PeerID: uint32(in.Peer)})
+			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
+			queued++
 		case network.InboundMessage:
-			s.dispatchMessage(in.Peer, in.Msg)
+			queued += s.dispatchMessage(in.Peer, in.Msg)
 		}
 	}
+	return queued
 }
 
-func (s *NetworkSystem) dispatchMessage(id network.PeerID, msg *network.Message) {
+func (s *NetworkSystem) dispatchMessage(id network.PeerID, msg *network.Message) int {
 	if msg == nil {
-		return
+		return 0
 	}
 	switch msg.Type {
 	case network.MsgEvent:
-		s.applyCrossings(msg.Payload)
+		s.scheduleCrossings(msg.Payload)
 	case network.MsgStateSync:
 		s.applyCursorState(msg.Payload)
 	case network.MsgInput:
 		s.world.PushLocal(event.EventRemoteInput, &event.RemoteInputPayload{PeerID: uint32(id), Payload: msg.Payload})
+		return 1
 	}
+	return 0
 }
 
-// flushCrossings sends this tick's artifacts as one message; an empty tick sends
-// nothing, so an idle link is silent
-func (s *NetworkSystem) flushCrossings(p engine.NetworkPort) {
+// flushCrossings advances the epoch under the producer lock, then sends its marker.
+func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint64, active bool) {
 	s.mu.Lock()
 	pending := s.crossings
 	s.crossings = nil
 	dropped := s.encodeErr
 	s.encodeErr = 0
+	s.productionEpoch = completedTick + 1
+	source := s.localSource
 	s.mu.Unlock()
 
 	if dropped != 0 {
 		s.statDrop.Add(dropped)
 	}
-	if len(pending) == 0 {
+	if !active {
+		if len(pending) != 0 {
+			s.statDrop.Add(int64(len(pending)))
+		}
 		return
 	}
-	body, err := event.EncodeFrames(pending)
+	body, err := event.EncodeWireBatch(event.WireBatch{
+		Source: source, ProducedTick: completedTick, Frames: pending,
+	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
 		vlog.Warn("app", "msg", "network encode", "frames", len(pending), "error", err.Error())
@@ -224,24 +299,120 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort) {
 	s.statSent.Add(int64(len(pending)))
 }
 
-// applyCrossings replays a peer's artifacts with the domain their producer
-// resolved (D-7), tagged OriginNetwork so the wire gate does not echo them back
-func (s *NetworkSystem) applyCrossings(body []byte) {
-	frames, err := event.DecodeFrames(body)
+// scheduleCrossings buffers one peer epoch; application waits for its target tick.
+func (s *NetworkSystem) scheduleCrossings(body []byte) {
+	batch, err := event.DecodeWireBatch(body)
 	if err != nil {
 		s.statDrop.Add(1)
 		vlog.Warn("app", "msg", "network decode", "error", err.Error())
 		return
 	}
-	for _, f := range frames {
-		et, payload, domain, err := f.Decode()
+	if batch.Source == 0 || int(batch.Source) >= len(s.lastPeerTick) {
+		s.statDrop.Add(int64(max(1, len(batch.Frames))))
+		return
+	}
+	s.mu.Lock()
+	if batch.ProducedTick <= s.lastPeerTick[batch.Source] {
+		s.mu.Unlock()
+		s.statDrop.Add(int64(len(batch.Frames)))
+		return
+	}
+	s.lastPeerTick[batch.Source] = batch.ProducedTick
+	for _, f := range batch.Frames {
+		s.scheduled = append(s.scheduled, barrierArtifact{
+			frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
+		})
+	}
+	s.mu.Unlock()
+}
+
+// applyDue publishes due artifacts in the same source/sequence order everywhere.
+func (s *NetworkSystem) applyDue(nextTick uint64) int {
+	s.mu.Lock()
+	due := make([]barrierArtifact, 0, len(s.scheduled))
+	keep := s.scheduled[:0]
+	for _, a := range s.scheduled {
+		if a.applyTick <= nextTick {
+			due = append(due, a)
+		} else {
+			keep = append(keep, a)
+		}
+	}
+	s.scheduled = keep
+	localSource := s.localSource
+	s.mu.Unlock()
+
+	slices.SortFunc(due, func(a, b barrierArtifact) int {
+		if n := cmp.Compare(a.applyTick, b.applyTick); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(a.source, b.source); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.frame.Seq, b.frame.Seq)
+	})
+
+	local, peer := 0, 0
+	for _, a := range due {
+		et, payload, domain, err := a.frame.Decode()
 		if err != nil {
 			s.statDrop.Add(1)
-			vlog.Warn("app", "msg", "network frame", "ev", f.Event, "error", err.Error())
 			continue
 		}
-		s.world.PushEventFull(et, payload, event.OriginNetwork, domain)
-		s.statRecv.Add(1)
+		if a.applyTick < nextTick {
+			s.statLate.Add(1)
+		}
+		s.world.Resources.Event.Queue.PushReady(event.GameEvent{
+			Type: et, Payload: payload, Origin: a.origin, Domain: domain,
+		})
+		if a.source == localSource {
+			local++
+		} else {
+			peer++
+		}
+	}
+	s.statAppliedLocal.Add(int64(local))
+	s.statAppliedPeer.Add(int64(peer))
+	s.statPeerArtifacts.Store(int64(peer))
+	s.statPeerApplied.Store(peer != 0)
+	s.statRecv.Add(int64(peer))
+	return len(due)
+}
+
+// publishBarrierTelemetry reports playout lead and epochs that ran before a marker.
+func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.NetworkPort) {
+	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
+		s.statPeerLag.Store(0)
+		return
+	}
+	s.mu.Lock()
+	delay := s.delayTicks
+	local := s.localSource
+	minPeer := uint64(0)
+	seen := 0
+	for source := 1; source < len(s.lastPeerTick); source++ {
+		if uint32(source) == local || s.lastPeerTick[source] == 0 {
+			continue
+		}
+		tick := s.lastPeerTick[source]
+		if seen == 0 || tick < minPeer {
+			minPeer = tick
+		}
+		seen++
+	}
+	s.mu.Unlock()
+
+	required := uint64(0)
+	if nextTick > delay {
+		required = nextTick - delay
+	}
+	lag := uint64(0)
+	if required > minPeer {
+		lag = required - minPeer
+	}
+	s.statPeerLag.Store(int64(lag))
+	if p != nil && p.PeerCount() > 0 && required != 0 && (seen < p.PeerCount() || lag != 0) {
+		s.statRanWithout.Add(1)
 	}
 }
 

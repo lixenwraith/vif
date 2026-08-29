@@ -3,6 +3,8 @@ package network
 import (
 	"crypto/tls"
 	"time"
+
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // Role defines the network topology role
@@ -30,6 +32,10 @@ type Config struct {
 	// Connection limits
 	MaxPeers int
 
+	// Session identity and fixed playout delay are agreed by the join handshake.
+	ParticipantID     PeerID
+	BarrierDelayTicks uint64
+
 	// Timing
 	ConnectTimeout    time.Duration
 	ReadTimeout       time.Duration
@@ -51,6 +57,7 @@ func DefaultConfig() *Config {
 		Address:           ":7777",
 		TLS:               nil, // Must be explicitly configured for production
 		MaxPeers:          16,
+		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 		ConnectTimeout:    5 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      5 * time.Second,

@@ -67,5 +67,5 @@ func (a *App) adoptMapLatch(an event.JournalAnchor) {
 // builds its own endpoint instead of taking the one NetworkService contributes.
 // NetworkSystem reads the port per tick, so this needs no re-registration.
 func (a *App) AttachTransport(port engine.NetworkPort) {
-	a.world.RunSafe(func() { a.world.Resources.Network = &engine.NetworkResource{Port: port} })
+	a.world.RunSafe(func() { a.world.Resources.Network = engine.NewNetworkResource(port) })
 }

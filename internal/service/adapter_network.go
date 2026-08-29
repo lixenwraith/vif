@@ -62,8 +62,20 @@ func (s *NetworkService) Contribute(r *engine.Resource) {
 	if s.disabled.Load() {
 		return
 	}
-	r.Network = &engine.NetworkResource{Port: s}
+	r.Network = engine.NewNetworkResource(s)
 }
+
+func (s *NetworkService) ParticipantID() uint32 {
+	if s.config.ParticipantID != 0 {
+		return uint32(s.config.ParticipantID)
+	}
+	if s.config.Role == network.RoleClient || s.config.Role == network.RolePeer {
+		return 2
+	}
+	return 1
+}
+
+func (s *NetworkService) BarrierDelayTicks() uint64 { return s.config.BarrierDelayTicks }
 
 // push enqueues without blocking transport goroutines; drops on full buffer
 func (s *NetworkService) push(in network.Inbound) {

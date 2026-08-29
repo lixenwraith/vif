@@ -38,7 +38,19 @@ func NewEventQueue() *EventQueue {
 
 // Push adds event using lock-free CAS with published flags pattern
 // Safe for concurrent producers. O(1) amortized
-func (eq *EventQueue) Push(event GameEvent) {
+func (eq *EventQueue) Push(ev GameEvent) {
+	if w := eq.wire.Load(); w != nil && OnWire(ev) && w.sink.Cross(ev) {
+		return
+	}
+	eq.publish(ev)
+}
+
+// PushReady publishes an artifact already admitted by the barrier without
+// offering it to the wire again. The original origin is preserved for replay.
+func (eq *EventQueue) PushReady(ev GameEvent) { eq.publish(ev) }
+
+// publish journals and enqueues one event after any wire deferral decision.
+func (eq *EventQueue) publish(event GameEvent) {
 	for {
 		currentTail := eq.tail.Load()
 		nextTail := currentTail + 1
@@ -57,13 +69,6 @@ func (eq *EventQueue) Push(event GameEvent) {
 				if j := eq.journal.Load(); j != nil {
 					j.record(&event, *eq.stamp.Load())
 				}
-			}
-
-			// Transport gate. Separate from the journal: a crossing pushed by a
-			// system carries OriginSystem and is never journaled, and the wire set
-			// is narrower than the journal's anyway (OnWire).
-			if w := eq.wire.Load(); w != nil && OnWire(event) {
-				w.sink.Cross(event)
 			}
 
 			eq.events[idx] = event
@@ -95,19 +100,18 @@ func (eq *EventQueue) SetWireSink(w WireSink) {
 	eq.wire.Store(&wireHolder{sink: w})
 }
 
-// ReceiveWire admits a peer's artifacts into the tick about to settle; a no-op
-// with no transport. Caller MUST hold the world lock and MUST NOT have settled yet.
-func (eq *EventQueue) ReceiveWire() {
+// ReceiveWire admits artifacts due before nextTick. Caller holds the world lock.
+func (eq *EventQueue) ReceiveWire(nextTick uint64) int {
 	if w := eq.wire.Load(); w != nil {
-		w.sink.Receive()
+		return w.sink.Receive(nextTick)
 	}
+	return 0
 }
 
-// FlushWire sends the tick's accumulated crossings; a no-op with no transport.
-// Caller MUST hold the world lock and MUST have settled the tick.
-func (eq *EventQueue) FlushWire() {
+// FlushWire closes completedTick's production epoch. Caller holds the world lock.
+func (eq *EventQueue) FlushWire(completedTick uint64) {
 	if w := eq.wire.Load(); w != nil {
-		w.sink.Flush()
+		w.sink.Flush(completedTick)
 	}
 }
 

@@ -1,12 +1,14 @@
 package parameter
 
-// Transport cadence. Crossings go out the tick they are pushed; owner-authored
-// state is a periodic value sync, so its interval trades staleness against traffic.
+// Transport cadence. Crossings use a fixed playout delay; owner-authored state is
+// a periodic value sync whose interval trades freshness against traffic.
 const (
+	// NetworkBarrierDelayTicks gives an artifact 150ms to reach every participant.
+	// The session carries this value so a higher-latency deployment can negotiate more.
+	NetworkBarrierDelayTicks = 3
+
 	// NetworkSyncTicks is the period between owner-authored state syncs (D-13).
-	// One cursor's payload is small, so the interval is short enough that a
-	// shared collection resolved through a peer's shield or ember reads a value
-	// no more than this many ticks old.
+	// One cursor's payload is small; this keeps remote presentation responsive.
 	NetworkSyncTicks = 6
 
 	// NetworkDrainWindow bounds one tick's inbound translation, so a flooding

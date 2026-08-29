@@ -391,11 +391,27 @@ and the context state it writes is not world state.
 `network` carries a `dual` profile: it replays a peer's crossings in the domain
 their producer stamped (D-7) and is the sole writer of a remote cursor's
 owner-authored set (D-13). It runs first — `parameter.PriorityNetwork` — but its
-transport work is not in `Update`: inbound opens the tick, before the settle, and
-outbound closes it, after everything the tick produced has settled. Both are
-driven by `ClockScheduler` through the queue's `event.WireSink`, so a peer
-receives one tick's artifacts as one tick's worth. `unregisteredSystems` in
-`internal/system/domain_test.go` is now empty.
+transport work is not in `Update`. `event.WireSink.Cross` ends production by
+encoding and withholding each local artifact. `Flush` closes the tick's epoch and
+sends it asynchronously, including an empty marker. `Receive` opens the next tick
+by applying local and peer artifacts whose fixed playout deadline has arrived,
+then `settleLocked("wire")` completes that dedicated between-tick settle group
+before `BeginTick`. Existing pre/post settle groups are neither merged nor split,
+so replay keeps their exact granularity.
+
+The default delay is three 50ms ticks. It is session metadata rather than a
+round-trip gate: simulation never waits for a peer, and a deployment can negotiate
+a larger lead for a higher-latency path. Artifacts sort by apply tick, participant
+ID and per-source sequence, the shape required beyond two participants. A crossing
+produced by the wire settle belongs to the production epoch about to run and gets
+one complete delay of its own; it never recurses into the apply pass.
+
+With no live peer `Cross` declines ownership, `Receive` returns zero and the
+scheduler creates no wire settle group. The original queue/journal/publication
+path is therefore unchanged. `network.barrier_{deferred,applied_local,
+applied_peer,late,ran_without_peer,peer_lag_ticks,peer_artifacts}` and
+`network.barrier_peer_applied` expose the barrier state. `unregisteredSystems` in
+`internal/system/domain_test.go` is empty.
 
 ## 6. Telemetry and snapshots
 
@@ -464,13 +480,12 @@ whose `CombatComponent` is owner-authored (D-13).
   remove a personal nugget through their D-12 player victim batch, but the
   lifecycle notification remains local. `TestPersonalNuggetUsesPlayerDomainAndLocalCursor`
   and the profile read check in `TestSystemDomainProfiles` enforce the decision.
-- **Per-tick parity between two live participants needs a barrier.** A crossing
-  pushed during a settle applies locally in that settle but reaches the peer in
-  the next tick's opening, so a damage-immunity window can close on one side and
-  not the other. `TestObserverSharedStateTracksTheLiveParticipant` holds to 200
-  steps with one live participant and one observer and diverges beyond that on a
-  species kill. Closing it is the produce-exchange-apply barrier of Phase 8, not
-  a transport defect.
+- **Resolved in Phase 8: the fixed-delay crossing barrier.** Before it, a crossing
+  applied locally in its producing settle and remotely at the next tick opening —
+  a one-tick, 50ms window at the default cadence. The Phase 7 observer held for
+  200 scripted steps before a species interaction exposed it. Both copies now
+  apply at the same future between-tick boundary; the observer soak holds for
+  1,200 steps in `TestObserverSharedStateTracksTheLiveParticipant`.
 - **`EventLevelSetup` and FSM region ops are `Shared` but operator-injectable.**
   Both are replicated only because every instance runs the same map script; one
   injected into a single participant rewrites shared state its peers never see.
