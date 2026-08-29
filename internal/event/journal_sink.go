@@ -50,6 +50,9 @@ func (vlogSink) Anchor(a JournalAnchor) {
 		"tick_ns", a.TickInterval,
 		"width", a.Width,
 		"height", a.Height,
+		"map_w", a.MapWidth,
+		"map_h", a.MapHeight,
+		"crop_on_resize", a.CropOnResize,
 		"slot", a.Slot,
 		"speed", a.Speed)
 }

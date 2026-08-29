@@ -308,6 +308,7 @@ func (a *App) initJournal() error {
 // ContentService published during initWorld, so anchor and verification share a source.
 func (a *App) buildAnchor() event.JournalAnchor {
 	reg := a.world.Resources.Status
+	cfg := a.world.Resources.Config
 	return event.JournalAnchor{
 		Speed:         a.ctx.TimeCtl.Scale().String(),
 		ConfigID:      resolveConfigID(a.cfg),
@@ -321,6 +322,9 @@ func (a *App) buildAnchor() event.JournalAnchor {
 		TickInterval:  int64(parameter.GameUpdateInterval),
 		Width:         a.ctx.Width,
 		Height:        a.ctx.Height,
+		MapWidth:      cfg.MapWidth,
+		MapHeight:     cfg.MapHeight,
+		CropOnResize:  cfg.CropOnResize,
 	}
 }
 

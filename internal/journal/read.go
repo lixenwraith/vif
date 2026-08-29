@@ -61,6 +61,9 @@ type anchorFields struct {
 	Slot          uint64 `json:"slot"`
 	Width         int    `json:"width"`
 	Height        int    `json:"height"`
+	MapWidth      int    `json:"map_w"`
+	MapHeight     int    `json:"map_h"`
+	CropOnResize  bool   `json:"crop_on_resize"`
 }
 
 // Replicated returns the records that must appear identically in every instance's
@@ -167,6 +170,7 @@ func decodeAnchor(raw json.RawMessage) (event.JournalAnchor, error) {
 		Run: f.Run, Tick: f.Tick, StartRun: f.StartRun, StartTick: f.StartTick,
 		ContentFiles: f.ContentFiles, ContentBlocks: f.ContentBlocks, ContentLines: f.ContentLines,
 		TickInterval: f.TickInterval, Width: f.Width, Height: f.Height,
+		MapWidth: f.MapWidth, MapHeight: f.MapHeight, CropOnResize: f.CropOnResize,
 		Slot: f.Slot,
 	}, nil
 }

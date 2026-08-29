@@ -199,8 +199,8 @@ func (eq *EventQueue) NextBoundary() {
 }
 
 // AnchorJournal re-emits the anchor at the current stamp; a no-op when journaling is off
-func (eq *EventQueue) AnchorJournal(session uint64, speed string, slot uint8, width, height int) {
+func (eq *EventQueue) AnchorJournal(live AnchorLive) {
 	if j := eq.journal.Load(); j != nil {
-		j.Anchor(*eq.stamp.Load(), session, speed, slot, width, height)
+		j.Anchor(*eq.stamp.Load(), live)
 	}
 }

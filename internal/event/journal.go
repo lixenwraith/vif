@@ -14,7 +14,11 @@ import (
 // defaults to shared, so pre-7 records read "shared" wherever nothing stamped —
 // death batches, combat hits and operator input among them. Replication filters
 // on it (see Replicated), so a 6 and a 7 journal are not comparable.
-const JournalSchema = 7
+//
+// 8: The anchor gained the D-14 map latch (map_w, map_h, crop_on_resize). Records
+// are unchanged, so a 7 journal replays identically; the bump is what lets a join
+// handshake reject an anchor whose latch fields are absent rather than zero.
+const JournalSchema = 8
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -74,6 +78,33 @@ type JournalAnchor struct {
 	Width        int   // terminal-equivalent dimensions the run started with
 	Height       int
 	Slot         uint64 // local cursor's roster slot; uint64 so the formatter does not stringify it
+
+	// D-14 map latch: the shared simulation bounds, which a joining participant
+	// adopts and which lock as soon as a second one is present. Distinct from
+	// Width and Height, which are this instance's terminal.
+	MapWidth     int
+	MapHeight    int
+	CropOnResize bool
+}
+
+// JoinAnchor is what one participant offers another so both reproduce the same
+// session. It wraps JournalAnchor rather than restating it: replay and join verify
+// the same identity, and a field added for one is available to the other.
+type JoinAnchor struct {
+	Anchor JournalAnchor
+}
+
+// AnchorLive is the part of an anchor only the engine can supply, re-read at every
+// emission: a file rotated after a resize, a reset or a local rebind must describe
+// what its records were produced under.
+type AnchorLive struct {
+	Speed         string
+	Session       uint64
+	Width, Height int
+	MapWidth      int
+	MapHeight     int
+	CropOnResize  bool
+	Slot          uint8
 }
 
 // JournalSink consumes journal output. Record is called on the producing
@@ -127,13 +158,15 @@ func (j *Journal) SetAnchor(a JournalAnchor, start Stamp) {
 	a.Schema = JournalSchema
 	a.StartRun, a.StartTick = start.Run, start.Tick
 	j.anchor.Store(&a)
-	j.Anchor(start, a.Session, a.Speed, uint8(a.Slot), a.Width, a.Height)
+	j.Anchor(start, AnchorLive{
+		Speed: a.Speed, Session: a.Session, Width: a.Width, Height: a.Height,
+		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
+		Slot: uint8(a.Slot),
+	})
 }
 
-// Anchor re-emits the template with the fields only the engine can supply.
-// Position, slot and dimensions are live: a file rotated after a resize, a
-// reset or a local-cursor rebind must describe what its records were produced under.
-func (j *Journal) Anchor(st Stamp, session uint64, speed string, slot uint8, width, height int) {
+// Anchor re-emits the template with the fields only the engine can supply
+func (j *Journal) Anchor(st Stamp, live AnchorLive) {
 	if j == nil {
 		return
 	}
@@ -143,11 +176,12 @@ func (j *Journal) Anchor(st Stamp, session uint64, speed string, slot uint8, wid
 	}
 	a := *p
 	a.Run, a.Tick = st.Run, st.Tick
-	a.Session = session
-	a.Speed = speed
-	a.Slot = uint64(slot)
-	a.Width = width
-	a.Height = height
+	a.Session = live.Session
+	a.Speed = live.Speed
+	a.Slot = uint64(live.Slot)
+	a.Width, a.Height = live.Width, live.Height
+	a.MapWidth, a.MapHeight = live.MapWidth, live.MapHeight
+	a.CropOnResize = live.CropOnResize
 	a.JSeq = j.seq.Load()
 	j.sink.Anchor(a)
 }

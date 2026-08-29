@@ -147,19 +147,22 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	return cfg, cfg.Validate()
 }
 
-// VerifyAnchor reports whether this App reproduces what the anchor recorded.
-// A resolved path proves which corpus was asked for, not which one loaded, so the
-// fingerprint is compared after construction: a discovered file or a changed corpus
-// becomes a startup error instead of an unexplained snapshot diff many ticks later.
-// Call after NewHeadless, before Replay.
-func (a *App) VerifyAnchor(an event.JournalAnchor) error {
+// anchorField is one value the anchor names and this App must reproduce
+type anchorField struct {
+	name      string
+	want, got any
+}
+
+// anchorIdentity is what any two participants in one session must agree on: the
+// record layout and tick rate the stream assumes, the seed and session counter
+// every RNG stream derives from, and the config and corpus the simulation reads.
+// Terminal geometry is deliberately absent — it is per-instance, and only a replay,
+// which reconstructs the recording terminal, compares it.
+// Shared by VerifyAnchor and the join handshake so the two cannot disagree.
+func (a *App) anchorIdentity(an event.JournalAnchor) []anchorField {
 	reg := a.world.Resources.Status
 	svc := service.MustGet[*service.ContentService](a.hub, "content")
-
-	for _, f := range []struct {
-		name      string
-		want, got any
-	}{
+	return []anchorField{
 		{"schema", an.Schema, uint64(event.JournalSchema)},
 		{"seed", an.Seed, a.world.Resources.Rand.Root()},
 		{"session", an.Session, a.world.Resources.Rand.Session()},
@@ -170,14 +173,29 @@ func (a *App) VerifyAnchor(an event.JournalAnchor) error {
 		{"content_blocks", an.ContentBlocks, uint64(reg.Ints.Get("content.blocks").Load())},
 		{"content_lines", an.ContentLines, uint64(reg.Ints.Get("content.lines").Load())},
 		{"tick_ns", an.TickInterval, int64(parameter.GameUpdateInterval)},
-		{"width", an.Width, a.ctx.Width},
-		{"height", an.Height, a.ctx.Height},
-	} {
+	}
+}
+
+// firstAnchorMismatch reports the first field this App does not reproduce
+func firstAnchorMismatch(kind string, fields []anchorField) error {
+	for _, f := range fields {
 		if f.want != f.got {
-			return fmt.Errorf("anchor mismatch: %s recorded %v, this run has %v", f.name, f.want, f.got)
+			return fmt.Errorf("%s mismatch: %s recorded %v, this run has %v", kind, f.name, f.want, f.got)
 		}
 	}
 	return nil
+}
+
+// VerifyAnchor reports whether this App reproduces what the anchor recorded.
+// A resolved path proves which corpus was asked for, not which one loaded, so the
+// fingerprint is compared after construction: a discovered file or a changed corpus
+// becomes a startup error instead of an unexplained snapshot diff many ticks later.
+// Call after NewHeadless, before Replay.
+func (a *App) VerifyAnchor(an event.JournalAnchor) error {
+	fields := append(a.anchorIdentity(an),
+		anchorField{"width", an.Width, a.ctx.Width},
+		anchorField{"height", an.Height, a.ctx.Height})
+	return firstAnchorMismatch("anchor", fields)
 }
 
 // groupKey identifies one settle group: a run, a tick within it, and the settles

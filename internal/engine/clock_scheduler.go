@@ -1018,9 +1018,25 @@ func (cs *ClockScheduler) executeReset() {
 	//    next game's streams differ while staying a function of the root seed
 	session := cs.world.Resources.Rand.NextSession()
 	vlog.Info("app", "msg", "rng session", "session", session)
-	w, h := ScreenSize(cs.world.Resources.Config)
-	cs.world.Resources.Event.Queue.AnchorJournal(session, cs.ctl.Scale().String(),
-		cs.world.Resources.Player.LocalSlot(), w, h)
+	cs.world.Resources.Event.Queue.AnchorJournal(cs.anchorLive(session))
+}
+
+// anchorLive reads the per-emission anchor fields: this instance's terminal, the
+// D-14 map latch, the followed slot and the time scale.
+// Caller MUST hold updateMutex — reads Config and the roster.
+func (cs *ClockScheduler) anchorLive(session uint64) event.AnchorLive {
+	cfg := cs.world.Resources.Config
+	w, h := ScreenSize(cfg)
+	return event.AnchorLive{
+		Speed:        cs.ctl.Scale().String(),
+		Session:      session,
+		Width:        w,
+		Height:       h,
+		MapWidth:     cfg.MapWidth,
+		MapHeight:    cfg.MapHeight,
+		CropOnResize: cfg.CropOnResize,
+		Slot:         cs.world.Resources.Player.LocalSlot(),
+	}
 }
 
 // DispatchEventsImmediately processes all pending events synchronously
@@ -1041,7 +1057,9 @@ func (cs *ClockScheduler) processTick() {
 	var (
 		tickTime         time.Time // this tick's game instant, read once under the lock
 		screenW, screenH int       // terminal dims for the anchor, derived under the lock
-		slot             uint8     // local roster slot for the anchor, read under the lock
+		mapW, mapH       int       // D-14 map latch for the anchor, read under the lock
+		cropOnResize     bool
+		slot             uint8 // local roster slot for the anchor, read under the lock
 		ticks            uint64
 		dropped          uint64
 		droppedDelta     uint64
@@ -1126,7 +1144,9 @@ func (cs *ClockScheduler) processTick() {
 			cs.world.Positions.PublishTelemetry()
 			cs.publishEventTelemetry()
 		}
-		screenW, screenH = ScreenSize(cs.world.Resources.Config)
+		cfg := cs.world.Resources.Config
+		screenW, screenH = ScreenSize(cfg)
+		mapW, mapH, cropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
 		slot = cs.world.Resources.Player.LocalSlot()
 	})
 
@@ -1148,8 +1168,15 @@ func (cs *ClockScheduler) processTick() {
 
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
-		cs.world.Resources.Event.Queue.AnchorJournal(
-			cs.world.Resources.Rand.Session(), cs.ctl.Scale().String(),
-			slot, screenW, screenH)
+		cs.world.Resources.Event.Queue.AnchorJournal(event.AnchorLive{
+			Speed:        cs.ctl.Scale().String(),
+			Session:      cs.world.Resources.Rand.Session(),
+			Width:        screenW,
+			Height:       screenH,
+			MapWidth:     mapW,
+			MapHeight:    mapH,
+			CropOnResize: cropOnResize,
+			Slot:         slot,
+		})
 	}
 }
