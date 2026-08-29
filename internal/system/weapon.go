@@ -701,7 +701,7 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos compone
 	}
 
 	// Emit area attack per target.
-	// TODO(phase7): this reaches shared targets without a geometry crossing. The
+	// TODO: this reaches shared targets without a geometry crossing. The
 	// area request names resolved entities, so it is Local by D-4; the pulse should
 	// push an explosion request and let every instance resolve its own targets (D-3).
 	for _, target := range targets {

@@ -1,6 +1,6 @@
 # Multi-instance domain model — vi-fighter
 
-Status: Phases 4, 5 and 5.5 landed, verification included. Rules D-1..D-15 are
+Status: Phases 4 through 7 landed, verification included. Rules D-1..D-15 are
 implemented unless marked. Supersedes every earlier design note.
 
 ## 1. Domains
@@ -22,6 +22,16 @@ system reads shared only. Exceptions are D-12 and D-13, both explicit.
 **D-2 Simulation ownership.** Only the instance owning a cursor simulates that
 cursor's weapons, projectiles and player species. A remote participant's
 player-domain state does not exist locally and is never reconstructed.
+
+The admission check is `World.SimulatesLocally`, and `World.ResolveOwnedCursor` is
+`ResolveCursor` narrowed through it. Every writer of the D-13 set goes through one
+or the other — the five grant handlers and the five per-tick loops that would
+otherwise age a transported value — so a remote cursor's energy has exactly one
+authority. `LootSystem.simulatesLocally` was the first instance of the guard and
+is now the shared one. Reading `Resources.Player.Entity` is not a violation: every
+site is view, input, or a player-domain effect keyed to the local participant
+(`internal/render`, `internal/mode`, dust, drain population, motion marker,
+splash), which is what D-6 says those are.
 
 **D-3 The crossing.** When a player mechanic affects a shared entity, the
 smallest artifact that determines the shared outcome crosses as a Bus event:
@@ -135,6 +145,28 @@ The class is declared in the `type.go` doc comment beside the payload —
 `internal/event/registry_gen.go`. `event.Replicated(type, domain)` is the
 transported set. The generator refuses an unclassified constant.
 
+*Compared is not sent.* `Replicated` answers "must both instances hold this
+record", which is what the journal filter needs. `event.OnWire` answers "must a
+peer receive it", and it is strictly narrower: a `Shared` event is re-derived
+identically on every instance, so sending it applies it twice.
+
+The wire set is not `Bus` either. **Every Bus type has producers of both kinds**:
+`EventNuggetDestroyed` from a player decay wave and from a shared quasar,
+`EventCompositeMemberDestroyed` from typing and from pylon, tower, storm and
+snake, `EventExplosionRequest` from a missile and from an eye,
+`EventSwarmSpawnRequest` from the fuse and from a storm. A shared producer's copy
+is re-derived everywhere; only the player-domain one crosses. So the tag decides
+here too: `World.PushCrossing` stamps the D-3 artifact `DomainPlayer`, and
+`OnWire` requires it. `TestCrossingPushesAreLive` fails a `crossingPushes` entry
+that does not use it.
+
+For `Stamped` the tag means the *target's* domain instead, so the same rule reads
+inverted: `stampedCrossings` names the one Stamped type a player-domain producer
+aims at a shared target (`EventCombatAttackDirectRequest`), every other
+Stamped-shared event having come from a shared system. A chain follow-up is in the
+transported set but not on the wire — the receiver derives it from the root — and
+opts out through the `event.Derived` payload interface (D-5).
+
 *Resolved: what `Stamped` actually means.* It is not "the ambient domain at
 push". `EventCombatAttackDirectRequest` forces the distinction: the same
 producer, in the same tick, under the same ambient domain, pushes a hit that
@@ -186,6 +218,20 @@ half: `ownerAuthoredStores` in `internal/system/domain_test.go` lists Energy,
 Heat, Boost, Weapon, CursorView, Ping and Pulse. `Shield` and `Combat` are
 excluded deliberately — they also carry quasar, loot and species state, which
 is re-derived, and the store name alone cannot separate the two populations.
+
+The set is closed against the code: a live cursor carries exactly Cursor,
+Protection, Energy, Heat, Shield, Boost, Weapon, Ping, CursorView, Combat and
+Position, plus Pulse while a disruptor pulse runs. Position is shared and crosses
+as `EventCursorMoveRequest`; Protection is a creation constant; the rest is this
+list.
+
+The transport is `CursorStatePayload`, written by `NetworkSystem` and by nothing
+else, and only onto a cursor `SimulatesLocally` rejects. Shield and Combat travel
+as their cursor fields alone. `CursorViewComponent.Orbs` does not travel: it names
+player-domain entities (D-4). Two members are load-bearing rather than
+presentational — `ShieldComponent.Active/InvRxSq/InvRySq` and
+`HeatComponent.EmberActive` — because `NuggetSystem.collectionCursor` resolves a
+shared outcome through them. See §7: that read is this rule's one live violation.
 
 **D-14 Map bounds authority.** `MapWidth`, `MapHeight` and `CropOnResize` are
 shared simulation state with two writers:
@@ -323,9 +369,14 @@ the list must satisfy:
 `shared`: its world writes are replicated or are the D-14 map-bounds writer,
 and the context state it writes is not world state.
 
-`internal/system/network.go` declares no profile because `NetworkSystem` is
-written but registered nowhere; `TODO(phase7)` marks it, and
-`TestSystemDomainProfiles` exempts it by name.
+`network` carries a `dual` profile: it replays a peer's crossings in the domain
+their producer stamped (D-7) and is the sole writer of a remote cursor's
+owner-authored set (D-13). It runs first — `parameter.PriorityNetwork` — but its
+transport work is not in `Update`: inbound opens the tick, before the settle, and
+outbound closes it, after everything the tick produced has settled. Both are
+driven by `ClockScheduler` through the queue's `event.WireSink`, so a peer
+receives one tick's artifacts as one tick's worth. `unregisteredSystems` in
+`internal/system/domain_test.go` is now empty.
 
 ## 6. Telemetry and snapshots
 
@@ -343,52 +394,78 @@ Three snapshot views over one reading:
 | `SnapshotSimulation` | operator surface (`denySim`, session record) | replay vs. source run |
 | `SnapshotShared` | owner-authored state (`denySharedPrefix`, `denySharedField`, view and session records, local digest scope) | cross-instance comparison |
 
-`denySharedPrefix` covers, besides the per-slot `player.` group and the
-per-system effect groups: `context.screen_`, `context.camera_` and
-`context.mode`, which mirror fields the `view` record already drops; and
-`event.` and `spatial.`, which are instance-local traffic and index counts.
+The shared view is four rules, not one list. `denySharedPrefix` drops a group:
+the per-slot `player.` group; `context.screen_`, `context.camera_` and
+`context.mode`, which mirror fields the `view` record already drops; `event.` and
+`spatial.`, instance-local traffic and index counts; `network.`, which is the
+exact complement of a peer's counters; `entity.` and `kills.`, aggregates that sum
+both domains; and every player- or dual-profile system's own group — the effect
+systems, plus `glyph.`, `fuse.`, `shield.`, `cleaner.`, `camera.`, `transient.`,
+`motion_marker.`, `materialize.`, `soft_collision.`, `audio.`, `music.`,
+`death.`, `timer.` and `combat.`. The rule is the profile in `manifest.Systems`,
+not the name. `denySharedKey` drops a single key from an otherwise comparable
+group: `engine.apm` and `engine.music_apm` beside the tick counters,
+`nav.entities`, and `content.served`/`content.rejected` beside the corpus
+fingerprint. A `.buf_*_hwm` suffix drops scratch high-water marks, which
+`newBufferTelemetry` names for every system that publishes one. `allowSharedKey`
+re-admits `spatial.indexed_shared`, which its group prefix would otherwise deny.
 `denySharedField` drops `created_local`/`destroyed_local` from the otherwise
 shared `world` record.
 
-`SnapshotContext` emits five records: `context`, `world` and `player` are
-emitted into the shared view, `view` and `session` are dropped from it.
-`worldDigestScopedLocked` takes a `DomainScope`, so the shared digest excludes
-player entities.
+Most of that list was invisible while both parity instances ran identical
+player-domain simulations. A real second participant drives its own cursor, so
+every mixed-domain counter moves independently; `combat.` is the loss worth
+naming, since it resolves targets in both domains from one set of counters and
+would return to the comparison if those were split per domain.
 
-The `player` record is misplaced. It carries `count`, which is the shared
-roster size, alongside `entity`, `slot`, `x` and `y`, which are this instance's
-binding to its own cursor. Parity holds today only because both instances in
-`TestSharedSnapshotParityAcrossTerminalSizes` bind slot 0. The fix is a split:
-`count` stays in a shared record, the binding moves to `view`.
+`SnapshotContext` emits five records: `context`, `world` and `player` are
+emitted into the shared view, `view` and `session` are dropped from it. The
+`player` record carries `count`, the shared roster size, and nothing else: the
+local binding — `entity`, `slot`, `x`, `y` — moved to `view`, where a remote
+participant binding a different slot to a different entity is expected rather than
+divergent. `worldDigestScopedLocked` takes a `DomainScope`, so the shared digest
+excludes player entities, and its combat digest additionally excludes cursors,
+whose `CombatComponent` is owner-authored (D-13).
 
 ## 7. Known gaps
 
+- **`NuggetSystem.collectionCursor` reads owner-authored state to decide a shared
+  outcome.** Which cursor claims a shared nugget is resolved by each rostered
+  cursor's `HeatComponent.EmberActive` and `ShieldComponent.Active`/`InvRxSq`/
+  `InvRySq`. Those are D-13 values that arrive on a periodic sync, so two
+  participants can disagree on whether a nugget was collected — a shared entity
+  population divergence. §4 already states the rule this breaks: "a mechanic is
+  contested when the outcome is a function of shared state alone". **No sync
+  cadence closes it**, because the transport is a pipeline: the peer is applying
+  a value the owner has already moved past. The two ways out are a shared
+  collection rule (co-location and a shared radius, no owner-authored read) or
+  demoting collection to a personal mechanic resolved per instance. This is a
+  gameplay decision, so it is recorded rather than taken. Meanwhile the
+  two-participant test disables `nugget` and says why.
+- **Per-tick parity between two live participants needs a barrier.** A crossing
+  pushed during a settle applies locally in that settle but reaches the peer in
+  the next tick's opening, so a damage-immunity window can close on one side and
+  not the other. `TestObserverSharedStateTracksTheLiveParticipant` holds to 200
+  steps with one live participant and one observer and diverges beyond that on a
+  species kill. Closing it is the produce-exchange-apply barrier of Phase 8, not
+  a transport defect.
+- **`EventLevelSetup` and FSM region ops are `Shared` but operator-injectable.**
+  Both are replicated only because every instance runs the same map script; one
+  injected into a single participant rewrites shared state its peers never see.
+  `ScriptOptions.MapSetups` holds the first fixed for a parity run, matching what
+  `Resizes` already does; the FSM op is held by `Regions`.
 - `event.EmitDeath` writes the queue directly, bypassing `PushEvent`, so
   `WithDomain` does not reach death records. Batches are already domain-pure,
-  which is what determinism needs. `TODO(phase6)` in `sweep.go` and `fuse.go`.
-- Every system-side producer of the owner-authored grant family
-  (`EventEnergyAddRequest`, `EventHeatAddRequest`, `EventShieldDrainRequest`,
-  `EventWeaponAddRequest`, and the storm and bullet drains) already pushes
-  through `PushLocal`. The remaining producers are the operator commands in
-  `internal/mode/commands.go`, which push with the ambient shared tag under
-  `OriginCommand` and are therefore journaled: retagging them changes recorded
-  record domains, so it belongs in the Phase 6 batch with the journal filter.
-- `spatial.indexed_shared` is genuinely comparable across instances and is
-  dropped with the rest of the `spatial.` prefix. It wants an allow-list, not a
-  prefix deny; the shared position digest covers it meanwhile.
-- The `ctx|player` snapshot record carries the local binding — see §6.
-- `World.UpdateBoundsRadius` writes `PingComponent` for every rostered cursor
-  including remote ones. Harmless under D-13, since ping is pure local view and
-  reaches no digest; restricting it to the local slot forces `setLocal` to
-  clear the departing slot.
+  which is what determinism needs. Landed in Phase 6 as a domain parameter; the
+  `TODO(phase6)` comments in `sweep.go` and `fuse.go` are retired.
+- Operator commands in `internal/mode/commands.go` still push the owner-authored
+  grant family with the ambient shared tag under `OriginCommand`. Harmless while
+  the grants are `Local` class, which the wire never reads; retagging them
+  changes recorded record domains.
 - `uint32(entity)` narrowing at `gateway.go` and `adaptation.go` is safe only
   while route-graph anchors are shared (tag 0).
-- `internal/journal` has zero test coverage. Its one non-test importer is
-  `internal/app/play.go`, so a `DomainNames` or field-name change breaks
-  `vif play` with nothing to catch it.
 - A recording wider than the terminal is clipped by the render buffer. The pan
   offset in `play.go` is the seam a windowed composite replaces. Deferred; it
   is a presentation problem with no shared-state component.
-- Journal schema is 6. Records already carry `Domain`, written by `vlogSink`
-  and parsed by `internal/journal/read.go`, so the Phase 6 filter needs a bump
-  only if it adds a field.
+- Journal schema is 8: 7 made `Domain` meaningful, 8 added the D-14 map latch to
+  the anchor. Records are unchanged between the two.

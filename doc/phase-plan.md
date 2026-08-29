@@ -103,10 +103,10 @@ Component domain and system profile are now data in
 `System` no longer declares `Domain()` or `Requires()`; `World.AddSystem(sys,
 profile)` takes a `manifest.ProfileFor(name)`. The methods were deleted, not
 asserted — one declaration site, no drift.
-`internal/system/network.go` carries a `TODO(phase7)`: it is written but
-registered nowhere, and `domain_test.go` exempts it by name.
+`internal/system/network.go` carried a `TODO(phase7)`: written but registered
+nowhere, exempted by name in `domain_test.go`. Phase 7 registered it.
 
-## Phase 6 — Event classification and journal completeness
+## Phase 6 — Event classification and journal completeness · landed
 
 The prerequisite for any wire format. Largest mechanical phase; 167 event types
 (`EventTypeCount`, including `EventNone`).
@@ -116,10 +116,11 @@ The prerequisite for any wire format. Largest mechanical phase; 167 event types
 class is per-instance, resolved by the *target's* domain: the same producer, in
 the same tick, under the same ambient domain, pushes a hit that crosses when the
 target is shared and does not when the target is player. **No static per-type
-table can carry it.** The predicate exists today only as `crossingTargets()` in
-`internal/app/bus_purity_test.go`. See the D-10 amendment. Item 1 must decide
-this before the table is populated, because the answer changes what the table
-means.
+table can carry it.** Resolved as landed: the combat producers stamp
+`GameEvent.Domain` from the target's own domain at all four push sites, and both
+`event.Replicated` and `event.OnWire` read the tag. `crossingTargets()` in
+`internal/app/bus_purity_test.go` is gone; that test now runs against
+`event.Replicated`.
 
 1. **Registry classes.** Add `Shared|Bus|Local|Stamped`, derived from a
    doc-comment annotation the way payloads already are. The generator is
@@ -164,8 +165,8 @@ means.
    `Shared ∪ Bus`, which the domain tag alone cannot express, because a Bus
    event is player-tagged by definition. So the filter keys on `ClassOf(Type)`,
    with a per-instance predicate for `Stamped` — see the open question below.
-   Schema stays 6 unless the filter adds a record field; `ConfigFromAnchor` and
-   `VerifyAnchor` follow only if it does. No fixtures exist to regenerate.
+   Schema went to 7 as landed: `Domain` became meaningful, so a 6 and a 7 journal
+   are not comparable. Phase 7 took it to 8 for the anchor's map latch.
 
 5. **FSM view-key instrumentation.** The plan named `internal/fsm/config_access.go`
    and `internal/fsm/std/`; neither is where this lives. The accessors are
@@ -178,18 +179,17 @@ means.
    `World.Resources`, so lift it to a `World` method — the accessors take a
    `*World` and cannot see the context. Keys stay (D-14).
 
-**Open question, decide before writing the table.** `Stamped` is per-instance
+**Open question, resolved as landed: producers stamp, the filter reads the tag.** `Stamped` is per-instance
 for at least two types, so no static entry can carry the class:
 `EventCombatAttackDirectRequest` crosses only when
 `ChainDepth == 0 && TargetEntity.Domain() == DomainShared`, and the census
 shows `EventSpeciesKilled` mixed 53 player to 1 shared from a single producer.
 Either the journal filter carries the same predicate the test does — today it
-lives only in `crossingTargets()` in `internal/app/bus_purity_test.go` — or the
-producers stamp `GameEvent.Domain` from the target's domain and the filter keys
-on the tag. The second is cheaper at the filter and D-10 already names
-`Stamped` as the mechanism, but it is a wiring change across every combat
-producer, and it makes the domain tag mean two different things depending on
-class. Resolve it before populating 167 entries, not after.
+lived only in a test predicate — or the producers stamp `GameEvent.Domain` from
+the target's domain and the filter keys on the tag. The second was taken. It does
+make the domain tag mean two different things depending on class, and Phase 7 hit
+that squarely: for `Bus` the tag is the producer's domain, for `Stamped` it is the
+target's, so `event.OnWire` reads it in opposite directions per class.
 
 **Exit criterion.** `TestBusPayloadsNameOnlySharedEntities` runs against the
 declared Bus set rather than its hand-list, and every event type has a class.
@@ -197,78 +197,103 @@ Second, cheap assertion worth adding at the same time: over a soak, every
 `Local`-classed event carries `Domain == DomainPlayer` at push. That turns item
 3 from an inspection into a test.
 
-## Phase 7 — Transport
+## Phase 7 — Transport · landed
 
-1. **Join handshake.** Carries the D-14 map-size latch, the seed, the session
-   counter and the config/content identity. `JournalAnchor` already carries
-   exactly this set for replay — extend that shape rather than inventing a
-   second one.
-2. **`NetworkSystem` wiring.** `NetworkPort.Drain` per tick already exists as a
-   poll model, deliberately keeping network goroutines out of the world event
-   queue. The interface collapses to a concrete type as the package matures,
-   following the audio precedent. Declaring it in `manifest.Systems` retires
-   the `TODO(phase7)` and the `TestSystemDomainProfiles` exemption.
-3. **Remote cursor lifecycle.** `EventCursorSpawnRequest{Control: ControlRemote,
-   PeerID}` already exists and works; the roster, slots and `CursorSystem` need
-   no change. Verify with two local cursors first, one marked remote.
-4. **Owner-authored replication.** Periodic value sync for the D-13 component
-   set, one direction per cursor. This is the only state transfer in the design;
-   everything else re-derives. `Shield` and `Combat` need a field-level split
-   here: both carry re-derived species state alongside the cursor state.
-5. **Bus event transport**, driven by the Phase 6 classification.
-   `event.Replicated(type, domain)` is the send predicate and `crossingPushes`
-   in `internal/system/event_class_test.go` enumerates the eleven producer sites
-   it must cover. Two distinctions Phase 6 deliberately left to this phase:
-   - **Compared is not sent.** The class table answers "must both instances have
-     this record", which is what the journal filter needs. A `Shared` event is
-     re-derived identically on both instances and must be compared but never
-     sent; a `Bus` event must be sent. The wire set is `Bus` plus `Stamped`
-     resolving shared, not the whole transported set.
-   - **D-5 chains.** A chain attack is stamped by its target like any other, so
-     it is in the transported set. It must not be on the wire: the receiver
-     derives it from the root the wire carried, and sending both applies it
-     twice.
-6. **The unclosed crossings.** The weapon pulse pushes an area attack at shared
-   targets with no geometry crossing behind it (see the domain document's gaps),
-   and 19 `Local` types still push unstamped. Both need closing before the wire
-   carries anything.
+1. **Join handshake.** `JournalAnchor` gained the D-14 map latch (`map_w`,
+   `map_h`, `crop_on_resize`); journal schema 8, records unchanged. `VerifyAnchor`
+   split into `anchorIdentity` — schema, tick rate, seed, session counter, config
+   and corpus identity — plus terminal geometry, which only a replay compares.
+   `App.Join` runs the identity table, refuses an anchor whose position it cannot
+   reconstruct (`ErrJoinMidRun`: nothing transports world state), and adopts the
+   latch through `SetupLevel`, the D-14 authority, rather than by writing Config.
+
+2. **`NetworkSystem` wiring.** Declared in `manifest.Systems` with a `dual`
+   profile at `PriorityNetwork`; `unregisteredSystems` is now empty. The port is
+   read per tick, so `App.AttachTransport` needs no re-registration. Transport
+   work is not in `Update`: `event.WireSink` gained `Receive` (tick open, before
+   the settle) and `Flush` (tick close, after it), both driven by
+   `ClockScheduler`, so a peer receives one tick's artifacts as one tick's worth.
+
+3. **Remote cursor lifecycle.** `World.SimulatesLocally` and
+   `World.ResolveOwnedCursor` are the D-2 admission check; the five grant handlers
+   and the five per-tick loops that aged a rostered cursor now go through them.
+   `UpdateBoundsRadius` is local-only and `setLocal` clears the departing slot.
+   Covered by three tests in `multi_cursor_test.go`, built on the existing harness.
+
+4. **Owner-authored replication.** `CursorStatePayload` carries the D-13 set with
+   Shield and Combat split to their cursor fields; `NetworkSystem` is its only
+   writer and writes only what `SimulatesLocally` rejects. `CursorViewComponent.Orbs`
+   is excluded (D-4).
+
+5. **Bus event transport.** `event.OnWire` is the send predicate. **The finding
+   that shaped it: the class alone cannot decide.** Every Bus type has producers of
+   both kinds — a player mechanic crossing and a shared system re-deriving its own
+   copy of the same type — so `World.PushCrossing` stamps the D-3 artifact player
+   and `OnWire` requires the stamp. `TestCrossingPushesAreLive` fails a crossing
+   that does not use it. For `Stamped` the tag is the target's domain, so
+   `stampedCrossings` names the one type a player producer aims at a shared target,
+   and a chain follow-up opts out through `event.Derived` (D-5).
+
+6. **The unclosed crossings.** The nine `crossingPushes` sites plus the two
+   `mode/router.go` jump requests and `mode/operators.go` now stamp. The weapon
+   pulse is not closed and is carried forward.
+
+**Exit criterion, met, one step short of Phase 8's.**
+`TestObserverSharedStateTracksTheLiveParticipant` runs a live participant and an
+observer that simulates no cursor, sharing a seed and a `network.Loopback` pipe,
+and asserts `SnapshotShared()` equality at every tick boundary for 200 steps —
+the observer's shared state arriving over the wire rather than re-derived. Two
+*live* participants need the produce-exchange-apply barrier of Phase 8; see the
+domain document's §7.
+
+What Phase 7 also had to widen, none of it visible while both parity instances ran
+identical player-domain simulations: the shared snapshot's deny rules (every
+player- and dual-profile system's group, the both-domain aggregates, scratch
+high-water marks, this participant's APM and corpus consumption), the `ctx|player`
+record split, and the exclusion of cursor combat from the shared digest.
 
 ## Phase 8 — Multi-instance verification
 
-Two in-process instances sharing a seed and an event pipe, driven by
+Two *live* in-process instances sharing a seed and an event pipe, driven by
 `RunScript`, asserting `SnapshotShared()` equality per tick and reporting the
-first divergent record via `FirstDiff`/`Diff`. This is Phase 4's exit criterion
-applied to a real second participant rather than a second terminal size.
+first divergent record via `FirstDiff`/`Diff`.
 
-Blocker to resolve first: `headless.go` documents four process-wide values that
-no snapshot reaches but that prevent concurrent Apps — the status recorder
-trigger hook, the navigation debug pointers in `internal/system`, help's key
-table, and vlog's correlation stamp. Two live instances in one process needs
-those scoped.
+Blocker to resolve first: **the lockstep barrier**. A crossing pushed during a
+settle applies locally in that settle but reaches the peer at the next tick's
+opening. Exact per-tick agreement needs produce, exchange, then apply — each
+instance deferring its own crossings to the same relative point its peer applies
+them at. Phase 7's one-directional test holds to 200 steps without it; two live
+participants will not.
 
-Second blocker, smaller: the `ctx|player` snapshot record carries this
-instance's cursor binding (`entity`, `slot`, `x`, `y`) in a record the shared
-view keeps. Parity holds today only because both instances bind slot 0. Split
-it before a real second participant: `count` stays shared, the binding moves to
-`view`.
+Second blocker: **`NuggetSystem.collectionCursor`**. A shared outcome resolved by
+owner-authored ember and shield state, which arrives on a periodic sync. No
+cadence closes it — see the domain document's §7. The choice is a shared
+collection rule or a personal one, and it is a gameplay decision.
+
+Third, from `headless.go`: four process-wide values no snapshot reaches but that
+prevent concurrent Apps — the status recorder trigger hook, the navigation debug
+pointers in `internal/system`, help's key table, and vlog's correlation stamp.
+Phase 7's tests run two Apps in one process and do not touch them; a live pair
+that resizes, records or navigates will.
 
 ## Carried-forward gaps
 
-Small and self-contained; none blocks Phase 6.
+Small and self-contained; none blocks Phase 8. Closed in Phase 7: the `ctx|player`
+record split, the `spatial.indexed_shared` allow-list, `World.UpdateBoundsRadius`,
+and `internal/journal` round-trip coverage, which `read_test.go` now carries.
 
-- **`ctx|player` record split** — `internal/engine/snapshot.go`, and the record
-  filter in `internal/app/snapshot.go`.
-- **`spatial.indexed_shared` allow-list** — the key is genuinely comparable
-  across instances and is dropped by the `spatial.` prefix deny. Wants an
-  allow-list; the shared position digest covers it meanwhile.
-- **`internal/journal` round-trip coverage** — zero tests, one non-test
-  importer (`internal/app/play.go`). A `DomainNames` or field-name change
-  breaks `vif play` silently.
-- **`World.UpdateBoundsRadius`** writes `PingComponent` for every rostered
-  cursor including remote ones. Harmless under D-13; restricting it to the
-  local slot forces `setLocal` to clear the departing slot.
+- **The weapon pulse** pushes an area attack at shared targets with no geometry
+  crossing behind it. `EventCombatAttackAreaRequest` is `Shared`, so the pulse's
+  hits are re-derived by a peer that never saw the pulse — the only D-3 row still
+  open.
+- **Operator grant commands** in `internal/mode/commands.go` push the
+  owner-authored family with the ambient shared tag under `OriginCommand`.
+  Harmless while those types are `Local` class, which the wire never reads.
 - **`uint32(entity)` narrowing** at `gateway.go` and `adaptation.go`, safe only
   while route-graph anchors are shared.
+- **`combat.` telemetry is a mixed aggregate** and is dropped whole from the
+  shared snapshot. Splitting the counters per target domain would return the group
+  to the comparison.
 
 ## Deferred, own context
 
