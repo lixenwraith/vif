@@ -128,7 +128,7 @@ func (r *Registry) Tick(n uint64) {
 		vlog.On(SubStat, vlog.LevelInfo) {
 		// One explicit stamp for the whole snapshot: the frame counter belongs
 		// to the render goroutine and can advance mid-emission
-		run, tick, frame := vlog.Stamp()
+		run, tick, frame := r.Correlation().Stamp()
 		_, _ = vlog.EmitSet(SubStat, run, tick, frame, r.emitGroups)
 	}
 

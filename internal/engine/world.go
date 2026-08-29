@@ -307,6 +307,9 @@ func (w *World) Unlock() {
 	w.updateMutex.Unlock()
 }
 
+// SetLockSampling updates hold-time instrumentation for this world.
+func (w *World) SetLockSampling(on bool) { w.updateMutex.SetSampling(on) }
+
 // Update runs all systems sequentially
 func (w *World) Update() {
 	w.RunSafe(func() {

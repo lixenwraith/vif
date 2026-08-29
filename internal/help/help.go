@@ -5,7 +5,6 @@ package help
 import (
 	"strings"
 	"sync"
-	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/input"
 )
@@ -42,26 +41,15 @@ type topicDef struct {
 	Entries []entryDef
 }
 
-var active atomic.Pointer[input.KeyTable]
-
-// defaultTable backs KeyTable until a keymap is installed
+// defaultTable backs callers that do not own a runtime key table.
 var defaultTable = sync.OnceValue(input.DefaultKeyTable)
-
-// SetKeyTable installs the active bindings; call it beside Machine.SetKeyTable
-// so a user keymap documents itself
-func SetKeyTable(kt *input.KeyTable) { active.Store(kt) }
-
-// KeyTable returns the active bindings, falling back to the defaults
-func KeyTable() *input.KeyTable {
-	if kt := active.Load(); kt != nil {
-		return kt
-	}
-	return defaultTable()
-}
 
 // Topics resolves every section against a key table. Entries whose actions are
 // all unbound in this keymap are dropped, as is a section left empty.
 func Topics(kt *input.KeyTable) []Topic {
+	if kt == nil {
+		kt = defaultTable()
+	}
 	out := make([]Topic, 0, len(topics))
 	for i := range topics {
 		t := &topics[i]

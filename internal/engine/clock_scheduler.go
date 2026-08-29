@@ -379,7 +379,7 @@ func (cs *ClockScheduler) bindFSMTelemetry() {
 				"via", event.GetEventName(trigger))
 			return
 		}
-		status.TriggerFSM(region)
+		cs.world.Resources.Status.TriggerFSM(region)
 		if vlog.On("fsm", vlog.LevelInfo) {
 			vlog.Info("fsm", "msg", "transition",
 				"region", region,
@@ -612,7 +612,7 @@ func (cs *ClockScheduler) Reset() { cs.executeReset() }
 // breakHit applies a tripped request: flush the recorder window, report the
 // cause, and pause when asked
 func (cs *ClockScheduler) breakHit(bs *BreakState, cause string) {
-	status.Trigger(status.TrigBreak)
+	cs.world.Resources.Status.Trigger(status.TrigBreak)
 	vlog.Info("app", "msg", "breakpoint",
 		"on", bs.Label, "cause", cause, "scale", bs.Restore.String(), "pause", bs.Pause)
 
@@ -1051,7 +1051,7 @@ func (cs *ClockScheduler) processTick() {
 	}
 
 	// Lock sampling is a per-tick decision, not a per-acquire probe
-	SetLockSampling(vlog.On("lock", vlog.LevelDebug) || status.RecorderActive())
+	cs.world.SetLockSampling(vlog.On("lock", vlog.LevelDebug) || cs.world.Resources.Status.RecorderActive())
 	SetDomainAudit(vlog.On("domain", vlog.LevelDebug))
 
 	var (
@@ -1075,7 +1075,7 @@ func (cs *ClockScheduler) processTick() {
 		// Stamp under the lock: a producer must not observe the new tick before
 		// the tick body it belongs to has started
 		tick := cs.world.Resources.Game.State.GetGameTicks() + 1
-		vlog.SetTick(tick)
+		cs.world.Resources.Status.Correlation().SetTick(tick)
 		cs.world.Resources.Event.Queue.BeginTick(tick)
 
 		// 1. Sync Time
@@ -1166,7 +1166,7 @@ func (cs *ClockScheduler) processTick() {
 		vlog.Warn("event", "msg", "queue overflow",
 			"dropped", dropped,
 			"delta", droppedDelta)
-		status.Trigger(status.TrigDrop)
+		cs.world.Resources.Status.Trigger(status.TrigDrop)
 	}
 
 	// Status snapshot: world lock released and every stat above committed,

@@ -11,7 +11,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
-	"github.com/lixenwraith/vi-fighter/internal/help"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
@@ -375,7 +374,7 @@ func (a *App) loadKeymap() error {
 	}
 	kt := input.MergeKeyTable(input.DefaultKeyTable(), override)
 	a.inputMachine.SetKeyTable(kt)
-	help.SetKeyTable(kt) // Help documents the bindings actually in force
+	a.ctx.KeyTable = kt
 	return nil
 }
 

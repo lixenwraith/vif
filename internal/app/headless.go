@@ -5,10 +5,8 @@
 // injected event sequence. Headless adds no I/O; replay adds a terminal and renderer
 // but takes its geometry from the journal. Close is the caller's responsibility.
 //
-// Concurrent Apps in one process still share four process-wide values, none of
-// which reaches a simulation snapshot: the status recorder trigger hook, the
-// navigation debug pointers in internal/system, help's key table, and vlog's
-// correlation stamp. Run harness Apps sequentially until those are scoped.
+// Driven Apps own recorder triggers, navigation debug state, help bindings and
+// correlation stamps, so several harness runtimes may coexist in one process.
 package app
 
 import (

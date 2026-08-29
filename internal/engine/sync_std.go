@@ -23,20 +23,20 @@ func lockHoldWarn() time.Duration {
 	return 20 * time.Millisecond
 }
 
-// sampleLocks gates hold-time stamping. Refreshed once per tick rather than
-// probed on every acquire: this is the hottest lock in the process.
-var sampleLocks atomic.Bool
-
-// SetLockSampling enables hold-time stamping; called once per tick from
-// processTick so the decision costs one atomic load per acquire
-func SetLockSampling(on bool) { sampleLocks.Store(on) }
-
 // UpdateMutex wraps sync.Mutex for game tick serialization.
 // Hold time is sampled only while debug logging is active.
 type UpdateMutex struct {
 	acquired time.Time // holder-exclusive between Lock and Unlock
 	mu       sync.Mutex
+	sample   atomic.Bool
+	status   atomic.Pointer[status.Registry]
 }
+
+// BindStatus scopes recorder triggers to the world owning this mutex.
+func (m *UpdateMutex) BindStatus(reg *status.Registry) { m.status.Store(reg) }
+
+// SetSampling updates this world's hold-time gate once per tick.
+func (m *UpdateMutex) SetSampling(on bool) { m.sample.Store(on) }
 
 func (m *UpdateMutex) Lock() {
 	m.mu.Lock()
@@ -58,7 +58,7 @@ func (m *UpdateMutex) Unlock() {
 
 // mark stamps the acquisition when sampling is active
 func (m *UpdateMutex) mark() {
-	if sampleLocks.Load() {
+	if m.sample.Load() {
 		m.acquired = time.Now()
 		return
 	}
@@ -77,5 +77,7 @@ func (m *UpdateMutex) report() {
 		return
 	}
 	vlog.Trace("lock", vlog.LevelWarn, 4, "msg", "long hold", "us", held.Microseconds())
-	status.Trigger(status.TrigLock)
+	if reg := m.status.Load(); reg != nil {
+		reg.Trigger(status.TrigLock)
+	}
 }

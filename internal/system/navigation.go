@@ -40,16 +40,6 @@ type targetGroupNav struct {
 	compositeFlowCache *navigation.FlowFieldCache // For composite entities (footprint-aware)
 }
 
-var DebugFlow *navigation.FlowFieldCache
-var DebugShowFlow bool
-
-var DebugCompositeFlow *navigation.FlowFieldCache
-var DebugCompositePassability *navigation.CompositePassability
-var DebugShowCompositeNav bool // New flag for composite debug view
-
-// DebugFlowGroupID selects which target group's flow fields are exposed to debug renderer
-var DebugFlowGroupID uint8
-
 // NavigationSystem resolves target groups, maintains per-group point and composite
 // flow fields, tracks composite passability, and computes gateway route graphs
 type NavigationSystem struct {
@@ -126,12 +116,13 @@ func (s *NavigationSystem) Init() {
 		s.world.Resources.RouteGraph = &engine.RouteGraphResource{}
 	}
 
-	// Debug exposure
-	if g, ok := s.groups[DebugFlowGroupID]; ok {
-		DebugFlow = g.pointFlowCache
-		DebugCompositeFlow = g.compositeFlowCache
+	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
+		if g, ok := s.groups[dbg.GroupID]; ok {
+			dbg.Flow = g.pointFlowCache
+			dbg.CompositeFlow = g.compositeFlowCache
+		}
+		dbg.CompositePassability = s.compositePassability
 	}
-	DebugCompositePassability = s.compositePassability
 }
 
 func (s *NavigationSystem) Name() string {
@@ -187,7 +178,9 @@ func (s *NavigationSystem) HandleEvent(ev event.GameEvent) {
 					parameter.EyeWidth, parameter.EyeHeight,
 					parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
 				)
-				DebugCompositePassability = s.compositePassability
+				if dbg := s.world.Resources.NavigationDebug; dbg != nil {
+					dbg.CompositePassability = s.compositePassability
+				}
 			}
 
 			s.compositePassability.Resize(payload.Width, payload.Height)
@@ -477,13 +470,14 @@ func (s *NavigationSystem) Update() {
 
 	}
 
-	// Update debug pointers for selected group
-	if g, ok := s.groups[DebugFlowGroupID]; ok {
-		DebugFlow = g.pointFlowCache
-		DebugCompositeFlow = g.compositeFlowCache
-	} else {
-		DebugFlow = nil
-		DebugCompositeFlow = nil
+	if dbg := s.world.Resources.NavigationDebug; dbg != nil {
+		if g, ok := s.groups[dbg.GroupID]; ok {
+			dbg.Flow = g.pointFlowCache
+			dbg.CompositeFlow = g.compositeFlowCache
+		} else {
+			dbg.Flow = nil
+			dbg.CompositeFlow = nil
+		}
 	}
 }
 

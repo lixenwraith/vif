@@ -40,6 +40,13 @@ func Trigger(reason string) {
 	}
 }
 
+// Trigger requests a flush from this registry's recorder.
+func (r *Registry) Trigger(reason string) {
+	if rc := r.rec.Load(); rc != nil {
+		rc.Trigger(reason)
+	}
+}
+
 // TriggerFSM requests a flush for an FSM transition; disabled by default,
 // since transitions are frequent enough to flood on their own
 func TriggerFSM(region string) {
@@ -50,8 +57,20 @@ func TriggerFSM(region string) {
 	rc.Trigger("fsm:" + region)
 }
 
+// TriggerFSM requests a transition flush from this registry's recorder.
+func (r *Registry) TriggerFSM(region string) {
+	rc := r.rec.Load()
+	if rc == nil || !rc.trigFSM.Load() {
+		return
+	}
+	rc.Trigger("fsm:" + region)
+}
+
 // RecorderActive reports whether a recorder is sampling
 func RecorderActive() bool { return active.Load() != nil }
+
+// RecorderActive reports whether this registry is sampling.
+func (r *Registry) RecorderActive() bool { return r.rec.Load() != nil }
 
 // CrashFlush drains the window synchronously from the crash path
 func CrashFlush() {
@@ -328,7 +347,7 @@ func (rc *Recorder) Flush(reason string) {
 
 	start := time.Now()
 	records := 0
-	run, tick, frame := vlog.Stamp()
+	run, tick, frame := rc.reg.Correlation().Stamp()
 
 	path, err := vlog.EmitSet(SubRec, run, tick, frame, func(emit func(args ...any)) {
 		emit("msg", "window", "reason", reason,

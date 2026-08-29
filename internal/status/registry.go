@@ -3,6 +3,8 @@ package status
 import (
 	"sync"
 	"sync/atomic"
+
+	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 // Registry is the central metrics facade.
@@ -28,6 +30,7 @@ type Registry struct {
 
 	rec      atomic.Pointer[Recorder]
 	statLate *atomic.Int64
+	corr     *vlog.Correlation
 }
 
 // NewRegistry creates an initialized Registry with snapshots disabled
@@ -37,6 +40,7 @@ func NewRegistry() *Registry {
 		Ints:    NewMetricMap[atomic.Int64](),
 		Floats:  NewMetricMap[AtomicFloat](),
 		Strings: NewMetricMap[AtomicString](),
+		corr:    vlog.DefaultCorrelation(),
 	}
 	r.statLate = r.Ints.Get("stat.late")
 	// Reserve the recorder's counters even when none is installed: EnableRecorder
@@ -47,6 +51,16 @@ func NewRegistry() *Registry {
 	}
 	return r
 }
+
+// SetCorrelation binds snapshots and recorder output to one runtime's stamp.
+func (r *Registry) SetCorrelation(c *vlog.Correlation) {
+	if c != nil {
+		r.corr = c
+	}
+}
+
+// Correlation returns the stamp owner bound before the registry freezes.
+func (r *Registry) Correlation() *vlog.Correlation { return r.corr }
 
 // TotalCount returns total metrics across all types
 func (r *Registry) TotalCount() int {

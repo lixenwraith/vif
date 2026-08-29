@@ -7,10 +7,22 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 )
+
+// NavigationDebugState is one runtime's operator view of navigation internals.
+type NavigationDebugState struct {
+	Flow                 *navigation.FlowFieldCache
+	CompositeFlow        *navigation.FlowFieldCache
+	CompositePassability *navigation.CompositePassability
+	ShowFlow             bool
+	ShowComposite        bool
+	GroupID              uint8
+}
 
 // GameContext holds all game state including the ECS world
 type GameContext struct {
@@ -21,6 +33,10 @@ type GameContext struct {
 	World   *World       // ECS world; has internal lock
 	State   *GameState   // Centralized game state; has internal lock
 	TimeCtl *TimeControl // Sole time surface: reads, rate, pause, step; registry-bound
+
+	KeyTable        *input.KeyTable
+	Correlation     *vlog.Correlation
+	NavigationDebug NavigationDebugState
 
 	// === Channels ===
 
@@ -97,16 +113,21 @@ type GameContext struct {
 
 // NewGameContext creates a GameContext on the interactive clock
 func NewGameContext(world *World, width, height int) *GameContext {
-	return NewGameContextWithClock(world, width, height, NewPausableClock())
+	return newGameContext(world, width, height, NewPausableClock(), vlog.DefaultCorrelation())
 }
 
 // NewGameContextWithClock creates a GameContext on a caller-supplied time source.
 // Headless and replay runs pass a ManualClock.
 func NewGameContextWithClock(world *World, width, height int, clock Clock) *GameContext {
+	return newGameContext(world, width, height, clock, vlog.NewCorrelation())
+}
+
+func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Correlation) *GameContext {
 	ctx := &GameContext{
-		World:  world,
-		Width:  width,
-		Height: height,
+		World:       world,
+		Width:       width,
+		Height:      height,
+		Correlation: corr,
 	}
 
 	// Calculate game area
@@ -117,8 +138,11 @@ func NewGameContextWithClock(world *World, width, height int, clock Clock) *Game
 
 	// 1. Status Registry (before other resources that may use it)
 	world.Resources.Status = status.NewRegistry()
+	world.Resources.Status.SetCorrelation(corr)
 	world.Resources.Status.SetSnapshotInterval(parameter.StatSnapshotTicks)
+	world.updateMutex.BindStatus(world.Resources.Status)
 	world.Positions.BindTelemetry(world.Resources.Status)
+	world.Resources.NavigationDebug = &ctx.NavigationDebug
 
 	// 2. Context metrics; registered before Freeze, written by their owners
 	reg := world.Resources.Status
@@ -473,7 +497,7 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 
 	n := ctx.FrameNumber.Add(1)
 	ctx.statFrame.Store(n)
-	vlog.SetFrame(uint64(n))
+	ctx.Correlation.SetFrame(uint64(n))
 	return n
 }
 

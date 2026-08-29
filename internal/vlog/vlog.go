@@ -88,10 +88,6 @@ var (
 	jpath atomic.Pointer[string]
 	jlast atomic.Pointer[string]
 
-	run   atomic.Uint64
-	tick  atomic.Uint64
-	frame atomic.Uint64
-
 	// lastErr holds the most recent internal diagnostic; the terminal belongs
 	// to the game, so it is reported on shutdown instead
 	lastErr atomic.Pointer[string]
@@ -349,24 +345,25 @@ func Trace(sub string, level int64, depth int, args ...any) {
 }
 
 func context(sub string) log.Context {
+	run, tick, frame := defaultCorrelation.Stamp()
 	return log.Context{
 		Tag:  sub,
-		Vals: [log.ContextSlots]uint64{run.Load(), tick.Load(), frame.Load()},
+		Vals: [log.ContextSlots]uint64{run, tick, frame},
 	}
 }
 
 // SetRun advances the session counter; owned by the FSM reset path
-func SetRun(n uint64) { run.Store(n) }
+func SetRun(n uint64) { defaultCorrelation.SetRun(n) }
 
 // SetTick publishes the game tick stamped on subsequent records
-func SetTick(n uint64) { tick.Store(n) }
+func SetTick(n uint64) { defaultCorrelation.SetTick(n) }
 
 // SetFrame publishes the render frame stamped on subsequent records
-func SetFrame(n uint64) { frame.Store(n) }
+func SetFrame(n uint64) { defaultCorrelation.SetFrame(n) }
 
 // Stamp returns the live correlation values, for callers that emit a set of
 // records describing one instant and need them to share a stamp.
-func Stamp() (uint64, uint64, uint64) { return run.Load(), tick.Load(), frame.Load() }
+func Stamp() (uint64, uint64, uint64) { return defaultCorrelation.Stamp() }
 
 // CrashHook records a panic and flushes before the host restores the terminal.
 // Registered with core.SetCrashHook.
@@ -399,7 +396,7 @@ func SetCrashFlush(fn func()) { crashFlush.Store(&fn) }
 func recordInternalError(msg string) { lastErr.Store(&msg) }
 
 // NextRun advances the session counter stamped on subsequent records
-func NextRun() uint64 { return run.Add(1) }
+func NextRun() uint64 { return defaultCorrelation.NextRun() }
 
 // Detail emits at the trace level without a stack trace, for per-item taps
 // gated by scope rather than by call site. Trace is for call chains.

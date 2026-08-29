@@ -47,6 +47,9 @@ type Resource struct {
 	// Player-domain view effects
 	View *ViewResource
 
+	// Per-runtime operator view of navigation internals
+	NavigationDebug *NavigationDebugState
+
 	// Telemetry
 	Status *status.Registry
 

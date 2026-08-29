@@ -133,19 +133,21 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventDebugFlowToggle:
+		dbg := &s.ctx.NavigationDebug
 		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
-			DebugFlowGroupID = payload.GroupID
-			DebugShowFlow = true
+			dbg.GroupID = payload.GroupID
+			dbg.ShowFlow = true
 		} else {
-			DebugShowFlow = !DebugShowFlow
+			dbg.ShowFlow = !dbg.ShowFlow
 		}
 
 	case event.EventDebugGraphToggle:
+		dbg := &s.ctx.NavigationDebug
 		if payload, ok := ev.Payload.(*event.DebugFlowGroupPayload); ok {
-			DebugFlowGroupID = payload.GroupID
-			DebugShowCompositeNav = true
+			dbg.GroupID = payload.GroupID
+			dbg.ShowComposite = true
 		} else {
-			DebugShowCompositeNav = !DebugShowCompositeNav
+			dbg.ShowComposite = !dbg.ShowComposite
 		}
 
 	case event.EventMetaDebugRequest:
@@ -248,7 +250,7 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	// 4. Journal run advances with the tick counter it re-bases; both are world-lock state,
 	// so no producer can observe one without the other
 	run := s.world.Resources.Event.Queue.NextRun()
-	vlog.SetRun(run)
+	s.ctx.Correlation.SetRun(run)
 
 	// 5. Config reset (map dimensions to viewport)
 	config := s.ctx.World.Resources.Config
@@ -375,7 +377,7 @@ func debugCard(v status.GroupView, pinned bool) core.OverlayCard {
 
 // handleHelpRequest projects the help topics against the active key bindings
 func (s *MetaSystem) handleHelpRequest() {
-	topics := help.Topics(help.KeyTable())
+	topics := help.Topics(s.ctx.KeyTable)
 
 	content := &core.OverlayContent{
 		Title:  "HELP",

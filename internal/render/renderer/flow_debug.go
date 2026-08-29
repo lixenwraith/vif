@@ -6,7 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/render"
-	"github.com/lixenwraith/vi-fighter/internal/system"
 	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 )
 
@@ -25,14 +24,15 @@ func NewFlowFieldDebugRenderer(gameCtx *engine.GameContext) *FlowFieldDebugRende
 }
 
 func (r *FlowFieldDebugRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffer) {
+	dbg := &r.gameCtx.NavigationDebug
 	// Mode 1: Point entity flow field (existing)
-	if system.DebugShowFlow && !system.DebugShowCompositeNav {
-		r.renderFlowField(ctx, buf, system.DebugFlow, false)
+	if dbg.ShowFlow && !dbg.ShowComposite {
+		r.renderFlowField(ctx, buf, dbg.Flow, false)
 		return
 	}
 
 	// Mode 2: Composite navigation debug
-	if system.DebugShowCompositeNav {
+	if dbg.ShowComposite {
 		r.renderCompositeDebug(ctx, buf)
 		return
 	}
@@ -120,7 +120,7 @@ func (r *FlowFieldDebugRenderer) renderCompositeDebug(ctx render.RenderContext, 
 }
 
 func (r *FlowFieldDebugRenderer) renderPassabilityGrid(ctx render.RenderContext, buf *render.RenderBuffer) {
-	pass := system.DebugCompositePassability
+	pass := r.gameCtx.NavigationDebug.CompositePassability
 	if pass == nil {
 		return
 	}
@@ -149,7 +149,7 @@ func (r *FlowFieldDebugRenderer) renderPassabilityGrid(ctx render.RenderContext,
 }
 
 func (r *FlowFieldDebugRenderer) renderCompositeFlowField(ctx render.RenderContext, buf *render.RenderBuffer) {
-	cache := system.DebugCompositeFlow
+	cache := r.gameCtx.NavigationDebug.CompositeFlow
 	if cache == nil || !cache.IsValid() {
 		return
 	}
