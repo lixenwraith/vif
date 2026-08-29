@@ -11,9 +11,13 @@ package app
 import (
 	"errors"
 	"fmt"
+	"slices"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // ErrJoinMidRun is returned when the two participants are not at the same position.
@@ -55,6 +59,89 @@ func (a *App) Join(j event.JoinAnchor) error {
 	return nil
 }
 
+// JoinSession verifies a coordinator offer and adopts its map and roster.
+func (a *App) JoinSession(o network.SessionOffer) error {
+	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
+		return err
+	}
+	if err := a.Join(o.Anchor); err != nil {
+		return err
+	}
+	return a.configureSessionRoster(o, o.Assigned)
+}
+
+// HostSession applies the same map and roster sequence after a guest accepts.
+func (a *App) HostSession(o network.SessionOffer) error {
+	if err := a.validateSessionOffer(o, o.Host); err != nil {
+		return err
+	}
+	a.adoptMapLatch(o.Anchor.Anchor)
+	return a.configureSessionRoster(o, o.Host)
+}
+
+func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID) error {
+	if err := o.Validate(); err != nil {
+		return err
+	}
+	if len(o.Participants) > parameter.MaxPlayers {
+		return fmt.Errorf("join roster has %d participants, maximum is %d", len(o.Participants), parameter.MaxPlayers)
+	}
+	for _, p := range o.Participants {
+		if int(p.Slot) >= parameter.MaxPlayers || int(p.ID) > parameter.MaxPlayers {
+			return fmt.Errorf("join roster assignment id %d slot %d exceeds maximum %d", p.ID, p.Slot, parameter.MaxPlayers)
+		}
+	}
+	if _, ok := o.Participant(local); !ok {
+		return fmt.Errorf("join roster omits local participant %d", local)
+	}
+	return nil
+}
+
+// configureSessionRoster creates slots in coordinator order, then applies local control.
+func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerID) error {
+	participants := slices.Clone(o.Participants)
+	slices.SortFunc(participants, func(x, y network.SessionParticipant) int { return int(x.Slot) - int(y.Slot) })
+
+	for _, p := range participants {
+		var exists bool
+		a.world.RunSafe(func() { exists = a.world.Resources.Player.Slot(p.Slot) != 0 })
+		if exists {
+			continue
+		}
+		a.ctx.PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
+			Slot: p.Slot, Center: true, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID),
+		}, event.OriginDebug)
+		a.scheduler.Settle()
+	}
+
+	localAssignment, _ := o.Participant(local)
+	var count int
+	a.world.RunSafe(func() {
+		roster := a.world.Resources.Player
+		count = roster.Count()
+		for _, p := range participants {
+			e := roster.Slot(p.Slot)
+			if c, ok := a.world.Components.Cursor.GetPtr(e); ok {
+				c.PeerID = uint32(p.ID)
+				c.Control = component.ControlRemote
+				if p.ID == local {
+					c.Control = component.ControlHuman
+				}
+			}
+		}
+	})
+	if count != len(participants) {
+		return fmt.Errorf("join roster created %d cursors, want %d", count, len(participants))
+	}
+	if localAssignment.Slot != 0 {
+		a.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
+			&event.CursorSetLocalPayload{Slot: localAssignment.Slot}, event.OriginDebug)
+		a.scheduler.Settle()
+	}
+	a.world.RunSafe(a.ctx.PublishMapLock)
+	return nil
+}
+
 // adoptMapLatch applies the host's bounds through the D-14 authority — the level
 // setup path — rather than by writing Config, so the grid, the camera and every
 // cursor reflow exactly as they would for a map script. Entities are kept: the
@@ -67,5 +154,8 @@ func (a *App) adoptMapLatch(an event.JournalAnchor) {
 // builds its own endpoint instead of taking the one NetworkService contributes.
 // NetworkSystem reads the port per tick, so this needs no re-registration.
 func (a *App) AttachTransport(port engine.NetworkPort) {
-	a.world.RunSafe(func() { a.world.Resources.Network = engine.NewNetworkResource(port) })
+	a.world.RunSafe(func() {
+		a.world.Resources.Network = engine.NewNetworkResource(port)
+		a.ctx.PublishMapLock()
+	})
 }

@@ -2,6 +2,7 @@ package network
 
 import (
 	"crypto/tls"
+	"net"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -48,6 +49,14 @@ type Config struct {
 	WriteBufferSize int
 	SendQueueSize   int
 	RecvQueueSize   int
+
+	// AcceptSession authenticates and assigns a canonical participant ID before
+	// an accepted stream reaches the poll endpoint.
+	AcceptSession func(net.Conn) (PeerID, error)
+	OnError       func(error)
+
+	preconnected     net.Conn
+	preconnectedPeer PeerID
 }
 
 // DefaultConfig returns production-safe defaults

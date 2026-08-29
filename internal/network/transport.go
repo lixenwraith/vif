@@ -97,26 +97,65 @@ func (t *Transport) acceptLoop() {
 			}
 		}
 
-		t.peers.AddConnection(conn)
+		if t.config.AcceptSession != nil {
+			id, err := t.config.AcceptSession(conn)
+			if err != nil {
+				_ = conn.Close()
+				t.report(err)
+				continue
+			}
+			if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+				t.report(err)
+			}
+			continue
+		}
+		if _, err := t.peers.AddConnection(conn); err != nil {
+			t.report(err)
+		}
 	}
 }
 
 // startClient connects to server
 func (t *Transport) startClient() error {
-	conn, err := dial(t.config.Address, t.config)
-	if err != nil {
-		t.running.Store(false)
-		return err
+	conn := t.config.preconnected
+	id := t.config.preconnectedPeer
+	if conn == nil {
+		var err error
+		conn, err = dial(t.config.Address, t.config)
+		if err != nil {
+			t.running.Store(false)
+			return err
+		}
 	}
 
-	_, err = t.peers.AddConnection(conn)
+	var err error
+	if id != 0 {
+		_, err = t.peers.AddConnectionAs(conn, id)
+	} else {
+		_, err = t.peers.AddConnection(conn)
+	}
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		t.running.Store(false)
 		return err
 	}
 
 	return nil
+}
+
+// Addr returns the bound listener address, nil for a client or before Start.
+func (t *Transport) Addr() net.Addr {
+	if t.listener == nil {
+		return nil
+	}
+	return t.listener.Addr()
+}
+
+// report publishes an asynchronous accept or handshake failure.
+func (t *Transport) report(err error) {
+	if t.config.OnError != nil {
+		t.config.OnError(err)
+	}
 }
 
 // Stop halts the transport

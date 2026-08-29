@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -119,6 +120,22 @@ type Config struct {
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects the defaults.
 	Width, Height int
+}
+
+// ConfigForJoin applies the host-authored simulation identity to local operator options.
+func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
+	fromAnchor, err := ConfigFromAnchor(o.Anchor.Anchor)
+	if err != nil {
+		return Config{}, err
+	}
+	local.Seed = fromAnchor.Seed
+	local.ForceDefault = fromAnchor.ForceDefault
+	local.GameScript = fromAnchor.GameScript
+	local.ContentPath = fromAnchor.ContentPath
+	if !local.Mode.Driven() {
+		local.TimeScaleSpec = o.Anchor.Anchor.Speed
+	}
+	return local, local.Validate()
 }
 
 // Normalize fills unset fields that carry a defined default

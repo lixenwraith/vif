@@ -24,6 +24,10 @@ const (
 	// Coordination
 	MsgPeerList   MessageType = 0x20 // Server sends peer roster
 	MsgRoleAssign MessageType = 0x21 // Coordinator assignment
+	MsgJoinOffer  MessageType = 0x22 // Host offers the session anchor and roster assignment
+	MsgJoinReply  MessageType = 0x23 // Joiner accepts or rejects the offered identity
+	MsgStart      MessageType = 0x24 // Host releases both participants into tick zero
+	MsgReady      MessageType = 0x25 // Joiner confirms it received the start gate
 
 	// Future: auth
 	MsgAuthRequest  MessageType = 0x30
@@ -64,16 +68,31 @@ func (m *Message) Encode(w io.Writer) error {
 	binary.BigEndian.PutUint32(header[6:10], m.Ack)
 	binary.BigEndian.PutUint16(header[10:12], uint16(payloadLen))
 
-	if _, err := w.Write(header); err != nil {
+	if err := writeFull(w, header); err != nil {
 		return err
 	}
 
 	if payloadLen > 0 {
-		if _, err := w.Write(m.Payload); err != nil {
+		if err := writeFull(w, m.Payload); err != nil {
 			return err
 		}
 	}
 
+	return nil
+}
+
+// writeFull turns a short stream write into either a complete frame or an error.
+func writeFull(w io.Writer, p []byte) error {
+	for len(p) != 0 {
+		n, err := w.Write(p)
+		if err != nil {
+			return err
+		}
+		if n == 0 {
+			return io.ErrShortWrite
+		}
+		p = p[n:]
+	}
 	return nil
 }
 

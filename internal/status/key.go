@@ -79,10 +79,24 @@ func splitKey(key string) (group, name, playerSlot string) {
 		if metric, ok := strings.CutPrefix(name, "ga."); ok {
 			return "eye.ga", metric, ""
 		}
+		if strings.HasPrefix(name, "protected_") {
+			return "eye.protection", name, ""
+		}
 
 	case "fsm":
 		if region, metric, ok := strings.Cut(name, "."); ok {
 			return "fsm." + region, metric, ""
+		}
+
+	case "network":
+		switch name {
+		case "state", "peers", "connected", "map_latched":
+			return "network.session", name, ""
+		}
+
+	case "quasar", "snake", "storm", "swarm":
+		if strings.HasPrefix(name, "protected_") {
+			return domain + ".protection", name, ""
 		}
 	}
 

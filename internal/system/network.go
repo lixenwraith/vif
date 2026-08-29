@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -55,6 +56,10 @@ type NetworkSystem struct {
 	statPeerLag       *atomic.Int64
 	statPeerArtifacts *atomic.Int64
 	statPeerApplied   *atomic.Bool
+	statPeers         *atomic.Int64
+	statConnected     *atomic.Bool
+	statConnection    *status.AtomicString
+	statMapLatched    *atomic.Bool
 
 	enabled bool
 }
@@ -83,6 +88,10 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statPeerLag = reg.Ints.Get("network.barrier_peer_lag_ticks")
 	s.statPeerArtifacts = reg.Ints.Get("network.barrier_peer_artifacts")
 	s.statPeerApplied = reg.Bools.Get("network.barrier_peer_applied")
+	s.statPeers = reg.Ints.Get("network.peers")
+	s.statConnected = reg.Bools.Get("network.connected")
+	s.statConnection = reg.Strings.Get("network.state")
+	s.statMapLatched = reg.Bools.Get("network.map_latched")
 
 	s.Init()
 	return s
@@ -107,6 +116,10 @@ func (s *NetworkSystem) Init() {
 	s.statPeerLag.Store(0)
 	s.statPeerArtifacts.Store(0)
 	s.statPeerApplied.Store(false)
+	s.statPeers.Store(0)
+	s.statConnected.Store(false)
+	s.statConnection.Store("off")
+	s.statMapLatched.Store(false)
 	s.barrierActive.Store(false)
 
 	s.mu.Lock()
@@ -193,6 +206,7 @@ func (s *NetworkSystem) Update() {
 	p := s.port()
 	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
 	s.barrierActive.Store(active)
+	s.publishConnectionTelemetry(p)
 	if r := s.world.Resources.Network; r != nil {
 		s.mu.Lock()
 		s.localSource = r.ParticipantID
@@ -211,6 +225,7 @@ func (s *NetworkSystem) Receive(nextTick uint64) int {
 	p := s.port()
 	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
 	s.barrierActive.Store(active)
+	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil {
 		queued += s.drain(p)
 	}
@@ -243,12 +258,58 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
+			s.despawnPeer(uint32(in.Peer))
 			queued++
 		case network.InboundMessage:
 			queued += s.dispatchMessage(in.Peer, in.Msg)
 		}
 	}
 	return queued
+}
+
+// despawnPeer leaves the local simulation alive with only its connected roster.
+func (s *NetworkSystem) despawnPeer(peerID uint32) {
+	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
+		if c.Control == component.ControlRemote && c.PeerID == peerID {
+			s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: c.Slot})
+		}
+		return true
+	})
+}
+
+// publishConnectionTelemetry exposes the poll endpoint and D-14 latch state.
+func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
+	peers := 0
+	state := "off"
+	if p != nil {
+		peers = p.PeerCount()
+		if statePort, ok := p.(interface{ ConnectionState() network.ConnState }); ok {
+			switch statePort.ConnectionState() {
+			case network.StateConnected:
+				state = "connected"
+			case network.StateConnecting:
+				state = "waiting"
+			default:
+				state = "down"
+			}
+		} else {
+			switch {
+			case !p.IsRunning():
+				state = "down"
+			case peers == 0:
+				state = "waiting"
+			default:
+				state = "connected"
+			}
+		}
+	}
+	latched := !s.world.MapSizeLocal()
+	s.statPeers.Store(int64(peers))
+	s.statConnected.Store(peers > 0)
+	s.statConnection.StoreIfChanged(state)
+	s.statMapLatched.Store(latched)
+	s.world.Resources.Status.Bools.Get("context.map_locked").Store(
+		s.world.Resources.Config.CropOnResize && latched)
 }
 
 func (s *NetworkSystem) dispatchMessage(id network.PeerID, msg *network.Message) int {

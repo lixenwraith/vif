@@ -265,6 +265,117 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	localA, _ := mirrorCursors(t, a, b)
 	var localB core.Entity
 	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
+	proveTwoLive(t, a, b, localA, localB, seed, steps, func() {
+		a.Tick(1)
+		b.Tick(1)
+	})
+}
+
+// TestTwoLiveParticipantsStayInLockstepOverTCP proves the same session through
+// stream framing, the anchor handshake and canonical socket participant IDs.
+func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
+	const seed = 0x5EEDBEEF
+	steps := 1200
+	if testing.Short() {
+		steps = 120
+	}
+
+	a := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(a.Close)
+	offer := network.SessionOffer{
+		Anchor: a.JoinAnchor(), Host: 1, Assigned: 2,
+		Participants:      []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
+		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+	}
+	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = network.HostAcceptor(func() (network.SessionOffer, error) { return offer, nil }, time.Second)
+	host := network.NewSocketPort(hostCfg)
+	t.Cleanup(func() { _ = host.Close() })
+	if err := host.Start(); err != nil {
+		t.Fatalf("host transport: %v", err)
+	}
+	a.AttachTransport(host)
+
+	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
+	if err != nil {
+		t.Fatalf("dial session: %v", err)
+	}
+	t.Cleanup(func() { _ = pending.Close() })
+	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, offered)
+	if err != nil {
+		t.Fatalf("join config: %v", err)
+	}
+	b, err := NewHeadless(joinCfg)
+	if err != nil {
+		t.Fatalf("join app: %v", err)
+	}
+	t.Cleanup(b.Close)
+	if err := b.JoinSession(offered); err != nil {
+		_ = pending.Complete(err)
+		t.Fatalf("join session: %v", err)
+	}
+	if err := pending.Complete(nil); err != nil {
+		t.Fatalf("join reply: %v", err)
+	}
+	waitSocket(t, host, func() bool { return host.PeerCount() == 1 }, "host peer")
+	if err := a.HostSession(offer); err != nil {
+		t.Fatalf("host roster: %v", err)
+	}
+	if !host.Send(uint32(offered.Assigned), uint8(network.MsgStart), nil) {
+		t.Fatal("host could not send start gate")
+	}
+	if err := pending.WaitStart(); err != nil {
+		t.Fatalf("start gate: %v", err)
+	}
+	if err := pending.Ready(); err != nil {
+		t.Fatalf("ready gate: %v", err)
+	}
+	waitSocket(t, host, func() bool { return host.ReadyCount() == 1 }, "joiner ready")
+
+	guest := network.NewSocketPort(pending.TransportConfig())
+	t.Cleanup(func() { _ = guest.Close() })
+	if err := guest.Start(); err != nil {
+		t.Fatalf("guest transport: %v", err)
+	}
+	b.AttachTransport(guest)
+	waitSocket(t, guest, func() bool { return guest.PeerCount() == 1 }, "guest peer")
+
+	var localA, localB core.Entity
+	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
+	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
+	proveTwoLive(t, a, b, localA, localB, seed, steps, func() {
+		recvA, recvB := host.Received(), guest.Received()
+		a.Tick(1)
+		b.Tick(1)
+		waitSocket(t, host, func() bool { return host.Received() > recvA }, "host epoch")
+		waitSocket(t, guest, func() bool { return guest.Received() > recvB }, "guest epoch")
+	})
+
+	if err := guest.Close(); err != nil {
+		t.Fatalf("guest disconnect: %v", err)
+	}
+	waitSocket(t, host, func() bool { return host.PeerCount() == 0 }, "host disconnect")
+	a.Tick(1)
+	var roster int
+	var state string
+	var peers int64
+	var latched bool
+	a.World().RunSafe(func() {
+		roster = a.World().Resources.Player.Count()
+		reg := a.World().Resources.Status
+		state = reg.Strings.Get("network.state").Load()
+		peers = reg.Ints.Get("network.peers").Load()
+		latched = reg.Bools.Get("network.map_latched").Load()
+	})
+	if roster != 1 || !host.IsRunning() || state != "down" || peers != 0 || latched {
+		t.Fatalf("host after disconnect = roster %d running %t state %q peers %d latch %t",
+			roster, host.IsRunning(), state, peers, latched)
+	}
+}
+
+func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, seed uint64, steps int, tickPair func()) {
+	t.Helper()
 	assertSharedParity(t, a, b, -1)
 
 	// The harness owns the clock and holds non-transported operator mutations fixed.
@@ -284,15 +395,13 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 		if !db.Step() {
 			t.Fatalf("step %d quit participant b", i)
 		}
-		a.Tick(1)
-		b.Tick(1)
+		tickPair()
 		movedA = movedA || cursorPosition(a, localA) != startA
 		movedB = movedB || cursorPosition(b, localB) != startB
 		assertSharedParity(t, a, b, i)
 	}
 	for i := range parameter.NetworkBarrierDelayTicks + 1 {
-		a.Tick(1)
-		b.Tick(1)
+		tickPair()
 		assertSharedParity(t, a, b, steps+i)
 	}
 
@@ -309,6 +418,21 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	if !movedA || !movedB || sentA == 0 || sentB == 0 || apmA == 0 || apmB == 0 {
 		t.Fatalf("live proof = moved(%t,%t) sent(%d,%d) apm(%d,%d), want both active",
 			movedA, movedB, sentA, sentB, apmA, apmB)
+	}
+}
+
+func waitSocket(t *testing.T, port *network.SocketPort, ready func() bool, what string) {
+	t.Helper()
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	for !ready() {
+		select {
+		case err := <-port.Errors():
+			t.Fatalf("%s: %v", what, err)
+		case <-port.Changes():
+		case <-deadline.C:
+			t.Fatalf("timed out waiting for %s", what)
+		}
 	}
 }
 

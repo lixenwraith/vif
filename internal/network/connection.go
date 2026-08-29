@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -42,6 +43,10 @@ type Peer struct {
 	// Send queue
 	sendCh chan *Message
 
+	readTimeout       time.Duration
+	writeTimeout      time.Duration
+	heartbeatInterval time.Duration
+
 	// Lifecycle
 	closeCh   chan struct{}
 	closeOnce sync.Once
@@ -50,15 +55,21 @@ type Peer struct {
 }
 
 // newPeer creates a peer from an established connection
-func newPeer(id PeerID, conn net.Conn, sendQueueSize int) *Peer {
+func newPeer(id PeerID, conn net.Conn, cfg *Config) *Peer {
 	p := &Peer{
-		ID:      id,
-		Addr:    conn.RemoteAddr().String(),
-		conn:    conn,
-		reader:  bufio.NewReaderSize(conn, 64*1024),
-		writer:  bufio.NewWriterSize(conn, 64*1024),
-		sendCh:  make(chan *Message, sendQueueSize),
-		closeCh: make(chan struct{}),
+		ID:                id,
+		Addr:              conn.RemoteAddr().String(),
+		conn:              conn,
+		reader:            bufio.NewReaderSize(conn, cfg.ReadBufferSize),
+		writer:            bufio.NewWriterSize(conn, cfg.WriteBufferSize),
+		sendCh:            make(chan *Message, cfg.SendQueueSize),
+		closeCh:           make(chan struct{}),
+		readTimeout:       cfg.DisconnectTimeout,
+		writeTimeout:      cfg.WriteTimeout,
+		heartbeatInterval: cfg.HeartbeatInterval,
+	}
+	if p.readTimeout <= 0 {
+		p.readTimeout = cfg.ReadTimeout
 	}
 	p.State.Store(uint32(StateConnected))
 	p.LastSeen.Store(time.Now().UnixNano())
@@ -71,10 +82,6 @@ func (p *Peer) Send(msg *Message) bool {
 	if ConnState(p.State.Load()) != StateConnected {
 		return false
 	}
-
-	// Assign sequence number
-	msg.Seq = p.OutSeq.Add(1)
-	msg.Ack = p.InSeq.Load()
 
 	select {
 	case p.sendCh <- msg:
@@ -89,7 +96,7 @@ func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
 		p.State.Store(uint32(StateDisconnecting))
 		close(p.closeCh)
-		p.conn.Close()
+		_ = p.conn.Close()
 	})
 }
 
@@ -104,6 +111,9 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 		default:
 		}
 
+		if p.readTimeout > 0 {
+			_ = p.conn.SetReadDeadline(time.Now().Add(p.readTimeout))
+		}
 		msg, err := Decode(p.reader)
 		if err != nil {
 			return
@@ -123,18 +133,33 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 // writeLoop sends queued messages
 func (p *Peer) writeLoop() {
 	defer p.Close()
+	var heartbeat <-chan time.Time
+	var ticker *time.Ticker
+	if p.heartbeatInterval > 0 {
+		ticker = time.NewTicker(p.heartbeatInterval)
+		heartbeat = ticker.C
+		defer ticker.Stop()
+	}
 
 	for {
+		var msg *Message
 		select {
 		case <-p.closeCh:
 			return
-		case msg := <-p.sendCh:
-			if err := msg.Encode(p.writer); err != nil {
-				return
-			}
-			if err := p.writer.Flush(); err != nil {
-				return
-			}
+		case msg = <-p.sendCh:
+		case <-heartbeat:
+			msg = NewMessage(MsgHeartbeat, nil)
+		}
+		msg.Seq = p.OutSeq.Add(1)
+		msg.Ack = p.InSeq.Load()
+		if p.writeTimeout > 0 {
+			_ = p.conn.SetWriteDeadline(time.Now().Add(p.writeTimeout))
+		}
+		if err := msg.Encode(p.writer); err != nil {
+			return
+		}
+		if err := p.writer.Flush(); err != nil {
+			return
 		}
 	}
 }
@@ -175,16 +200,33 @@ func (pm *PeerManager) SetHandlers(
 
 // AddConnection registers a new peer from a raw connection
 func (pm *PeerManager) AddConnection(conn net.Conn) (PeerID, error) {
+	for {
+		id := PeerID(pm.nextID.Add(1))
+		if _, exists := pm.GetPeer(id); !exists {
+			return pm.AddConnectionAs(conn, id)
+		}
+	}
+}
+
+// AddConnectionAs registers a stream under its session-assigned participant ID.
+func (pm *PeerManager) AddConnectionAs(conn net.Conn, id PeerID) (PeerID, error) {
 	pm.mu.Lock()
 	defer pm.mu.Unlock()
 
+	if id == 0 {
+		_ = conn.Close()
+		return 0, errors.New("peer id must be non-zero")
+	}
 	if len(pm.peers) >= pm.maxPeers {
-		conn.Close()
+		_ = conn.Close()
 		return 0, errors.New("max peers reached")
 	}
+	if _, exists := pm.peers[id]; exists {
+		_ = conn.Close()
+		return 0, fmt.Errorf("peer %d already connected", id)
+	}
 
-	id := PeerID(pm.nextID.Add(1))
-	peer := newPeer(id, conn, pm.config.SendQueueSize)
+	peer := newPeer(id, conn, pm.config)
 	pm.peers[id] = peer
 
 	// Start I/O loops
@@ -209,6 +251,7 @@ func (pm *PeerManager) handleMessage(id PeerID, msg *Message) {
 // monitorPeer watches for disconnection
 func (pm *PeerManager) monitorPeer(peer *Peer) {
 	<-peer.closeCh
+	peer.State.Store(uint32(StateDisconnected))
 
 	pm.mu.Lock()
 	delete(pm.peers, peer.ID)

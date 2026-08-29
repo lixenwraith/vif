@@ -26,7 +26,7 @@ func TestTelemetryGroupsFitDebugCards(t *testing.T) {
 	for _, want := range []string{
 		"adapt.buffers", "combat.absorbed.attacker", "combat.damage.defender",
 		"combat.rejects", "death.batch", "event.settle", "eye.ga", "fsm.main",
-		"player.0", "player.0.weapon",
+		"network.session", "player.0", "player.0.weapon", "storm.protection",
 	} {
 		if !seen[want] {
 			t.Errorf("semantic telemetry group %q is missing", want)

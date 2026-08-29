@@ -42,6 +42,9 @@ type StatusBarRenderer struct {
 	statSpeed *status.AtomicString
 	statStep  *atomic.Int64
 	statBreak *status.AtomicString
+	statNet   *status.AtomicString
+	statPeers *atomic.Int64
+	statLatch *atomic.Bool
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -76,6 +79,9 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statSpeed: statusReg.Strings.Get("engine.speed"),
 		statStep:  statusReg.Ints.Get("engine.step"),
 		statBreak: statusReg.Strings.Get("engine.breakpoint"),
+		statNet:   statusReg.Strings.Get("network.state"),
+		statPeers: statusReg.Ints.Get("network.peers"),
+		statLatch: statusReg.Bools.Get("network.map_latched"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -115,6 +121,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Priority 0: time control; absent at real time with nothing pending
 	if item, ok := r.timeItem(); ok {
+		rightItems = append(rightItems, item)
+	}
+	if item, ok := r.networkItem(); ok {
 		rightItems = append(rightItems, item)
 	}
 
@@ -422,6 +431,29 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 	}
+}
+
+// networkItem reports connection, peer count and the D-14 map latch.
+func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
+	state := r.statNet.Load()
+	if state == "" || state == "off" {
+		return statusItem{}, false
+	}
+	label := "WAIT"
+	bg := visual.RgbGtBg
+	switch state {
+	case "connected":
+		label = fmt.Sprintf("%dP", r.statPeers.Load())
+		bg = visual.RgbBoostBg
+	case "down":
+		label = "DOWN"
+		bg = visual.RgbCursorError
+	}
+	latch := "OPEN"
+	if r.statLatch.Load() {
+		latch = "LOCK"
+	}
+	return statusItem{text: fmt.Sprintf(" NET:%s/%s ", label, latch), fg: visual.RgbBlack, bg: bg}, true
 }
 
 // timeItem builds the time control indicator, present only when the simulation is

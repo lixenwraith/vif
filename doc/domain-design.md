@@ -1,7 +1,8 @@
 # Multi-instance domain model — vi-fighter
 
-Status: Phases 4 through 7 landed, verification included. Rules D-1..D-15 are
-implemented unless marked. Supersedes every earlier design note.
+Status: Phases 4 through 7 and the Phase 8 transport checkpoint landed,
+verification included. Rules D-1..D-15 are implemented unless marked.
+Supersedes every earlier design note.
 
 ## 1. Domains
 
@@ -130,8 +131,8 @@ domain and carried through to `JournalRecord.Domain`, which the vlog sink
 writes and `internal/journal` parses. Registry classes: `Shared` (emitted and
 consumed shared, replicated), `Bus` (player-originated, affects shared,
 replicated), `Local` (never replicated), `Stamped` (class determined per-event
-from the domain tag). The registry table itself is Phase 6; today the class is
-documented, not declared.
+from the domain tag). The class is declared in `type.go` and generated into the
+registry table; no runtime inference remains.
 
 Two facts constrain how the table can be built:
 
@@ -413,6 +414,33 @@ applied_peer,late,ran_without_peer,peer_lag_ticks,peer_artifacts}` and
 `network.barrier_peer_applied` expose the barrier state. `unregisteredSystems` in
 `internal/system/domain_test.go` is empty.
 
+The real stream endpoint is `network.SocketPort`. Every message has a fixed
+12-byte header whose final field is payload length; `Decode` uses `io.ReadFull`
+for both header and payload, and `Encode` completes short writes. Transport
+goroutines append only `network.Inbound` values to the port buffer. `NetworkSystem`
+drains that buffer under the world lock, preserving the poll boundary.
+Idle peers exchange framed heartbeats; read and write deadlines close a silent
+stream without blocking a tick. The resulting disconnect notification is drained
+through the same path and removes only cursors owned by that participant.
+
+The startup handshake sends the existing `JoinAnchor` inside `SessionOffer`, then
+the host assigns participant IDs and roster slots. `App.JoinSession` still calls
+`App.Join`, so schema, tick interval, seed, session, config, corpus and D-14 latch
+mismatches return the existing join error. A rejected connection never enters the
+peer manager. Canonical participant IDs, not connection-local accept order, key
+the barrier sort and disconnect roster cleanup. The tick-zero start/ready gate is
+startup coordination only; no per-tick round trip was added.
+
+The wire keeps journal TOML payloads inside a JSON epoch envelope. The measured
+complete stream frames, including the 12-byte header, are 44 bytes for an empty
+epoch, 567 bytes for four cursor moves, 1,771 bytes for six resolved three-member
+shield hits, and 703 bytes for one D-13 owner-state sync. At 20 ticks/s with the
+six-tick state cadence, that is about 3.2 KB/s idle, 13.7 KB/s at four crossings
+per tick, or 37.8 KB/s at the deliberately busy shield rate, per direction and
+owned cursor. A denser payload codec does not justify a second registry/schema
+path at these rates. `TestWireEncodingBudget` pins the representative budgets;
+`TestFrameRoundTripSurvivesShortStreamIO` pins framing.
+
 ## 6. Telemetry and snapshots
 
 `status.GroupGate`: `GateAlways`, `GateSentinel` (gated on a roster slot's
@@ -486,6 +514,17 @@ whose `CombatComponent` is owner-authored (D-13).
   200 scripted steps before a species interaction exposed it. Both copies now
   apply at the same future between-tick boundary; the observer soak holds for
   1,200 steps in `TestObserverSharedStateTracksTheLiveParticipant`.
+- **Resolved in Phase 8: the TCP poll endpoint.** The same two-live proof holds
+  for 1,200 steps over `127.0.0.1` in
+  `TestTwoLiveParticipantsStayInLockstepOverTCP`, including the anchor handshake,
+  coordinator roster, stream framing and clean remote-cursor removal on disconnect.
+  The host transport remains running with its local cursor.
+- **Operator startup is not in this checkpoint.** `SocketPort`, `ConfigForJoin`,
+  `HostSession` and `JoinSession` are the application seams, but `cmd/vif` has no
+  `-host`/`-join` flags yet. The current session is startup-only, trusted and
+  plaintext: no mid-run snapshot, reconnect, authentication, lag compensation or
+  TLS configuration surface. The roster and participant vectors are not shaped
+  around two peers, but this proof assigns exactly two.
 - **`EventLevelSetup` and FSM region ops are `Shared` but operator-injectable.**
   Both are replicated only because every instance runs the same map script; one
   injected into a single participant rewrites shared state its peers never see.

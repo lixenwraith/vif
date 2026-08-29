@@ -21,9 +21,11 @@ func TestSplitKeyUsesBoundedSemanticGroups(t *testing.T) {
 		{"eye.ga.generation", "eye.ga", "generation"},
 		{"fsm.main.state", "fsm.main", "state"},
 		{"fsm.state", "fsm", "state"},
+		{"network.map_latched", "network.session", "map_latched"},
 		{"player.0.boost.active", "player.0", "boost.active"},
 		{"player.0.weapon.rod", "player.0.weapon", "rod"},
 		{"player.count", "player", "count"},
+		{"storm.protected_player_rejects", "storm.protection", "protected_player_rejects"},
 		{"undotted", GroupMisc, "undotted"},
 	}
 

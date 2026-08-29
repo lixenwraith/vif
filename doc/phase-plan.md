@@ -290,6 +290,43 @@ navigation debug state, help key table and vlog correlation stamp now belong to
 their App-owned registry or `GameContext`. `TestConcurrentAppsKeepProcessStateScoped`
 drives two Apps through resize and debug mutations without cross-talk.
 
+Fourth, **resolved at the transport seam: TCP.** `network.SocketPort` implements
+the same poll contract as `Loopback` over the existing 12-byte length-bearing
+stream header. `io.ReadFull` admits no partial frame and the encoder completes
+short writes. The join handshake carries `JoinAnchor`, coordinator-assigned
+participant IDs and roster slots, and the negotiated barrier delay. The joiner
+uses `ConfigForJoin` before construction, so it adopts the anchor seed rather
+than drawing one; `App.JoinSession` then invokes the existing identity check and
+D-14 latch. A tick-zero start/ready gate lets both Apps finish roster construction
+before either clock runs. Network goroutines still touch only `SocketPort`'s
+inbound buffer. Framed heartbeats and connection deadlines turn a silent stream
+into the same drained disconnect outcome as an orderly close.
+
+`TestTwoLiveParticipantsStayInLockstepOverTCP` repeats the 1,200-step two-driver
+criterion through `127.0.0.1`, asserting the same shared snapshot after every
+paired boundary. It then disconnects the guest: the host removes only the remote
+cursor, retains its local cursor and keeps the listener running. Handshake
+rejection returns the original join mismatch, and the host remains available.
+The status registry and bar expose connection state, peer count and map latch as
+`network.{state,peers,map_latched}` in the `network.session` card and
+`NET:<state>/<latch>`.
+
+Encoding remains the journal's TOML payload inside a JSON epoch. Complete frames
+measure 44 bytes for an empty epoch, 567 bytes for four cursor moves, 1,771 bytes
+for six resolved three-member shield hits, and 703 bytes for one D-13 sync. At
+20 ticks/s and the six-tick sync cadence this is approximately 3.2 KB/s idle,
+13.7 KB/s at four crossings/tick, and 37.8 KB/s at the busy shield rate, per
+direction and owned cursor. `TestWireEncodingBudget` pins those representative
+budgets. The bandwidth does not justify a second dense codec and its parallel
+schema/registry path.
+
+**Not in this checkpoint:** the `cmd/vif` startup flags and manual two-terminal
+surface. The transport proof is two participants, startup-only, trusted and
+plaintext; there is no mid-run world snapshot, reconnect, authentication, lag
+compensation or TLS operator configuration. `SessionOffer.Participants` and the
+canonical source ordering already carry vectors, so four participants extend the
+coordinator and snapshot lifecycle rather than replace the transport shape.
+
 The extended observer soak also closed four latent shared-outcome leaks:
 
 - personal drain deaths now cross `EventDrainDefeated` before advancing
