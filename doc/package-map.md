@@ -129,7 +129,8 @@ when two systems or renderers share a priority.
 
 Important exceptions:
 
-- `MetaSystem` is event-only and is registered directly by `internal/app`; it
+- `MetaSystem` is event-only, declared in `manifest.ContextSystems` and
+  registered directly by `internal/app` because it takes a `GameContext`; it
   is intentionally absent from the per-tick system manifest.
 - `NetworkSystem` exists but is absent from the manifest and is not active in
   the normal application.

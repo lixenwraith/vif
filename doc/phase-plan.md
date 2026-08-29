@@ -2,7 +2,7 @@
 
 Companion to `domain-design.md`. Rules referenced as D-n.
 
-## Phase 4 — Domain boundary · landed
+## Phase 4 — Domain boundary · complete
 
 | Step | State |
 |---|---|
@@ -70,62 +70,63 @@ into Phase 6.
    `OriginSystem`, so nothing is journaled differently.
 3. **Owner-authored write test.** `ownerAuthoredStores` restricted to
    cursor-exclusive components. `Shield` and `Combat` are excluded because they
-   also carry quasar, loot and species state, which is re-derived rather than
-   transported.
-4. **Contested-vs-personal audit.** Every `ClosestCursor` site is contested:
-   deterministic slot order, positions only. One fix landed —
+   also carry quasar, loot and species state that is re-derived rather than
+   transported (D-13).
+4. **Contested-vs-personal audit done.** All `ClosestCursor` sites are
+   contested — deterministic slot order, positions only. One fix:
    `NuggetSystem.emitBeacon` now uses `PushLocal`, so a shared nugget beacon
    draws each instance's own cleaners instead of one shared cleaner carrying
    pure visuals.
-5. **`MetaSystem` profile confirmed** `shared`, with the rationale corrected:
-   its world writes are replicated or are the D-14 map-bounds writer, and the
-   context state it writes is not world state. It now declares that profile in
-   `manifest.ContextSystems` rather than sitting outside the manifest.
+5. **`MetaSystem` profile confirmed** `shared`, rationale corrected: its world
+   writes are replicated or are the D-14 map-bounds write, and the context
+   state it writes is not world state.
 
-Also landed, out of the original scope: gold contributor attribution.
+Also landed, ahead of its phase: **gold contributor attribution**.
 `CompositeMemberDestroyedPayload.Entity` carries the typist, `GoldSystem`
 tallies per roster slot, and `GoldCompletionPayload.Entity` names the cursor
-that typed the most members (ties to the lowest slot, so every instance credits
-the same one). Timeout and destruction leave it zero.
+that typed the most members — ties to the lowest slot, so every instance
+credits the same one. Timeout and destruction leave it zero. This is the D-3
+gold crossing row.
 
-## Phase 5.5 — Manifest convergence · landed
+**Exit criterion, met.** Every component bit appears in `manifest.Components`,
+and every system's declared profile is asserted in both directions.
 
-Pulled forward from "Deferred, own context" once both tables stopped moving.
+## Phase 5.5 — Manifest convergence · complete
 
-Component domain and system profile are data in
+Was listed under "Deferred, own context" as *component_domain.go / system
+profile convergence*. Both tables were stable after Phase 5, so it was pulled
+forward.
+
+Component domain and system profile are now data in
 `internal/manifest/definition.go`, generated into
 `internal/engine/component_domain_gen.go` and `internal/manifest/build_gen.go`.
 `System` no longer declares `Domain()` or `Requires()`; `World.AddSystem(sys,
-profile)` takes a `manifest.ProfileFor(name)`. The methods were deleted rather
-than asserted — one declaration site, so nothing can drift.
+profile)` takes a `manifest.ProfileFor(name)`. The methods were deleted, not
+asserted — one declaration site, no drift.
 `internal/system/network.go` carries a `TODO(phase7)`: it is written but
-registered nowhere, and `TestSystemDomainProfiles` exempts it by name.
+registered nowhere, and `domain_test.go` exempts it by name.
 
 ## Phase 6 — Event classification and journal completeness
 
-The prerequisite for any wire format. Largest mechanical phase; 167 event
-types across 53 sections of `internal/event/type.go`.
+The prerequisite for any wire format. Largest mechanical phase; 167 event types
+(`EventTypeCount`, including `EventNone`).
 
-**Findings that reshape this phase.** A dispatch-tap census over three seeds
-(`DefaultScript`, 4000 steps each) observed 91 of the 166 real types
-(`EventTypeCount` is 167 including the `EventNone` sentinel). Of those, 70
-carry a `shared` tag, 20 `player`, and one — `EventSpeciesKilled` — both. Two
-consequences:
+**The finding that shapes this phase.** `EventCombatAttackDirectRequest` is
+`Stamped`, and `Stamped` is not "resolved from the ambient domain at push". Its
+class is per-instance, resolved by the *target's* domain: the same producer, in
+the same tick, under the same ambient domain, pushes a hit that crosses when the
+target is shared and does not when the target is player. **No static per-type
+table can carry it.** The predicate exists today only as `crossingTargets()` in
+`internal/app/bus_purity_test.go`. See the D-10 amendment. Item 1 must decide
+this before the table is populated, because the answer changes what the table
+means.
 
-- 75 types never fire in a soak, so no runtime pass can populate the table.
-  The class must be declared and only *checked* where observed.
-- The tag is opt-in (D-7): the ambient domain defaults to shared and is not
-  derived from the system profile, so `shared` on a record means "nobody said
-  otherwise", not "shared". FSM-emitted D-6 effects (`EventGrayoutStart`,
-  `EventStrobeRequest`, `EventDecaySpawnOne`) are tagged shared today.
-
-1. **Registry classes.** Add `Shared|Bus|Local|Stamped` to `RegisterType`,
-   derived from a doc-comment annotation the way payloads already are.
-   `internal/gen-manifest/main.go` owns the grammar: `docPayload` parses the
-   parenthesized payload from the line opening with the constant name, and
-   `collectEvents` enforces the contract. Extend that rather than adding a
-   second mechanism — proposed form, a bracketed token after the optional
-   payload:
+1. **Registry classes.** Add `Shared|Bus|Local|Stamped`, derived from a
+   doc-comment annotation the way payloads already are. The generator is
+   `internal/gen-manifest/main.go` (*not* `internal/manifest/cmd/main.go`,
+   which does not exist); `docPayload` already cuts the constant name and an
+   optional `(Payload)` off the doc line, so a class marker in the remainder
+   parses with a sibling `docClass` and no second mechanism:
 
    ```
    // EventFoo (FooPayload) [bus] short description
@@ -212,7 +213,8 @@ Second, cheap assertion worth adding at the same time: over a soak, every
    no change. Verify with two local cursors first, one marked remote.
 4. **Owner-authored replication.** Periodic value sync for the D-13 component
    set, one direction per cursor. This is the only state transfer in the design;
-   everything else re-derives.
+   everything else re-derives. `Shield` and `Combat` need a field-level split
+   here: both carry re-derived species state alongside the cursor state.
 5. **Bus event transport**, driven by the Phase 6 classification.
 
 ## Phase 8 — Multi-instance verification

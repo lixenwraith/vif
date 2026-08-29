@@ -168,8 +168,8 @@ can iterate or address every cursor through the same event-driven path.
 
 Every entity, event and RNG stream carries a replication domain. Shared state
 is identical on every instance and replicated; player state is this instance's
-participant and is never replicated. Which of the two a system reads and writes,
-and which other systems it needs, are declared as data in
+participant and is never replicated. Systems declare which of the two they read
+and write, and which other systems they need, as `SystemDef` data in
 `internal/manifest/definition.go`; a test checks each declaration against the
 code, and the declared dependencies resolve into a deterministic initialization
 order that is separate from the tick order `Priority()` fixes.

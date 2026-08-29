@@ -37,6 +37,14 @@ Effects on player targets do not cross. The producer resolves its own domain
 *before* pushing the crossing event; the shared consumer resolves only shared
 targets.
 
+The gold row is a keystroke crossing: `TypingSystem` is player-domain and
+`EventCompositeMemberDestroyed` names a shared member. Its payload carries the
+typist (`CompositeMemberDestroyedPayload.Entity`), which is what makes the
+credit a function of shared events rather than of who happened to type last.
+`GoldSystem` tallies per roster slot and `GoldCompletionPayload.Entity` names
+the cursor that typed the most members, ties resolved to the lowest slot so
+every instance credits the same one. Timeout and destruction leave it zero.
+
 **D-4 Payload purity.** A Bus payload names only shared entities. Player
 emitters are reduced to coordinates and velocity (`HasOrigin`, `OriginX/Y`,
 `HasVelocity`, `OriginVelX/Y`). A Local payload may name player entities
@@ -107,6 +115,18 @@ Two facts constrain how the table can be built:
   predicate, or the producers stamp `GameEvent.Domain` from the target's domain
   and the filter keys on the tag.
 
+*Amendment.* `Stamped` is not only "resolved from the ambient domain at push".
+`EventCombatAttackDirectRequest` is the case that forces the distinction: the
+same producer, in the same tick, under the same ambient domain, pushes a hit
+that crosses when the target is shared and does not when the target is player.
+The class is a function of the payload, not of the producer, so **no static
+per-type table can carry it**. The predicate exists today only as
+`crossingTargets()` in `internal/app/bus_purity_test.go`. Phase 6 closes it one
+of two ways: the journal filter carries the same predicate, or combat producers
+stamp `GameEvent.Domain` from the target's domain and the filter keys on the
+tag. The second is cheaper and D-10 already provides `Stamped` as the
+mechanism, but it is a wiring change across every combat producer.
+
 **D-11 Determinism invariants.** Across instances: identical shared event
 order, identical shared entity creation order, identical shared RNG derivation,
 identical shared component values except where D-13 applies. Verified by
@@ -159,9 +179,11 @@ branches are covered: `TestMapSizeLockedWithSecondCursor` and
 `TestMapSizeCropsWithOneCursor` as its negative control.
 
 Consequence not yet closed: a map script may branch an FSM guard on
-`viewport_width`, `camera_x` or `color_mode`, which are per-instance. Under a
-locked map those diverge silently. Keys are retained; instrumentation is a
-Phase 6 item.
+`viewport_width`, `viewport_height`, `camera_x`, `camera_y` or `color_mode`,
+which are per-instance. Under a locked map those diverge silently. Keys are
+retained; instrumentation is a Phase 6 item. The whole script-visible surface
+is `internal/engine/config_access.go` — eight keys, of which `map_width`,
+`map_height` and `crop_on_resize` are replicated and the other five are not.
 
 **D-15 Declared classification.** Every system declares its domain profile
 (shared, player, dual) and its dependencies (required, optional) as data in
@@ -215,6 +237,17 @@ local view (`CursorViewComponent`, `PingComponent`, `PulseComponent`).
 
 `TransientResource` holds explosion centers and stays shared: they *are* the
 crossing artifact. `ViewResource` (grayout, strobe) is player-domain.
+
+**Glyph.** Content glyphs are player-domain: the corpus and the map are the
+only inputs, so every instance derives the same text from its own player
+counter and types against its own copy. Gold sequence members are the only
+shared entities carrying `GlyphComponent`, which is why the bit stays unlisted
+in `ComponentDef` — it attaches in either domain and the audit cannot key on
+it. `TestSharedGlyphsAreGoldMembersOnly` asserts the split. Player-domain
+mechanics that iterate glyphs — dust conversion, cleaner sweep, decay, blossom,
+splash, typing, drain — guard by `e.Domain() != core.DomainPlayer`. One invariant
+stated at the loop, replacing three accidental mechanisms (protection masks,
+component absence, iteration order) that happened to hold.
 
 **Contested objectives.** Nugget and gold are shared entities that any
 participant may claim, and the claim itself is a shared outcome every instance

@@ -62,7 +62,8 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 | Generated file | Derived from | Contains |
 |---|---|---|
 | `internal/engine/component_store_gen.go` | manifest components | typed component fields, mask bits, initialization, per-entity/batch removal/wipe |
-| `internal/manifest/build_gen.go` | systems/renderers | constructors and active-name lists |
+| `internal/engine/component_domain_gen.go` | `ComponentDef.Domain` | `componentDomains`, the replication-domain audit table |
+| `internal/manifest/build_gen.go` | systems/renderers | constructors, active-name lists, and `systemProfiles` |
 | `internal/event/registry_gen.go` | `internal/event/type.go` and payload comments/types | event name/type/payload registry |
 | `internal/input/strings_gen.go` | selected input enum const blocks | enum string/reverse lookup tables |
 
@@ -70,7 +71,8 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 flowchart TD
     Definition["manifest and enum sources"] --> Generator["internal/gen-manifest"]
     Generator --> Stores["typed ECS stores"]
-    Generator --> Builders["system/renderer builders"]
+    Generator --> Domains["component domain audit table"]
+    Generator --> Builders["system/renderer builders and profiles"]
     Generator --> Registry["event registry"]
     Generator --> Strings["input strings"]
 ```
