@@ -58,492 +58,492 @@ const (
 
 	// --- Level ---
 
-	// EventLevelSetup (LevelSetupPayload) signals map dimension change and optional entity clear
+	// EventLevelSetup (LevelSetupPayload) [shared] signals map dimension change and optional entity clear
 	EventLevelSetup
-	// EventScreenResize (ScreenResizePayload) signals terminal dimension change
+	// EventScreenResize (ScreenResizePayload) [local] signals terminal dimension change
 	EventScreenResize
 
 	// --- Audio ---
 
-	// EventSoundRequest (SoundRequestPayload) requests audio playback
+	// EventSoundRequest (SoundRequestPayload) [local] requests audio playback
 	EventSoundRequest
-	// EventSoundMuteToggle (SoundMuteTogglePayload) requests an audio mute-mask change; nil payload cycles
+	// EventSoundMuteToggle (SoundMuteTogglePayload) [local] requests an audio mute-mask change; nil payload cycles
 	EventSoundMuteToggle
-	// EventAudioMuteChanged (AudioMuteChangedPayload) announces the applied audio mute mask
+	// EventAudioMuteChanged (AudioMuteChangedPayload) [local] announces the applied audio mute mask
 	EventAudioMuteChanged
 
 	// --- Music ---
 
-	// EventMusicStart (MusicStartPayload) begins music playback
+	// EventMusicStart (MusicStartPayload) [local] begins music playback
 	EventMusicStart
-	// EventMusicStop halts music playback
+	// EventMusicStop [local] halts music playback
 	EventMusicStop
-	// EventBeatPatternRequest (BeatPatternRequestPayload) requests beat pattern change
+	// EventBeatPatternRequest (BeatPatternRequestPayload) [local] requests beat pattern change
 	EventBeatPatternRequest
-	// EventMelodyNoteRequest (MelodyNoteRequestPayload) triggers single note
+	// EventMelodyNoteRequest (MelodyNoteRequestPayload) [local] triggers single note
 	EventMelodyNoteRequest
-	// EventMelodyPatternRequest (MelodyPatternRequestPayload) requests melody pattern change
+	// EventMelodyPatternRequest (MelodyPatternRequestPayload) [local] requests melody pattern change
 	EventMelodyPatternRequest
-	// EventMusicIntensityChange (MusicIntensityPayload) adjusts music intensity
+	// EventMusicIntensityChange (MusicIntensityPayload) [local] adjusts music intensity
 	EventMusicIntensityChange
-	// EventMusicTempoChange (MusicTempoPayload) adjusts BPM
+	// EventMusicTempoChange (MusicTempoPayload) [local] adjusts BPM
 	EventMusicTempoChange
-	// EventMusicSeedRequest (MusicSeedPayload) re-keys the sequencer rng
+	// EventMusicSeedRequest (MusicSeedPayload) [local] re-keys the sequencer rng
 	EventMusicSeedRequest
-	// EventMusicSwingRequest (MusicSwingPayload) sets sequencer shuffle
+	// EventMusicSwingRequest (MusicSwingPayload) [local] sets sequencer shuffle
 	EventMusicSwingRequest
 
 	// --- Network ---
 
-	// EventNetworkConnect (NetworkConnectPayload) signals a new peer connection
+	// EventNetworkConnect (NetworkConnectPayload) [local] signals a new peer connection
 	EventNetworkConnect
-	// EventNetworkDisconnect (NetworkDisconnectPayload) signals peer disconnection
+	// EventNetworkDisconnect (NetworkDisconnectPayload) [local] signals peer disconnection
 	EventNetworkDisconnect
-	// EventRemoteInput (RemoteInputPayload) signals input from a remote player
+	// EventRemoteInput (RemoteInputPayload) [local] signals input from a remote player
 	EventRemoteInput
-	// EventStateSync (StateSyncPayload) signals state snapshot received
+	// EventStateSync (StateSyncPayload) [local] signals state snapshot received
 	EventStateSync
-	// EventNetworkEvent (NetworkEventPayload) signals a game event from remote peer
+	// EventNetworkEvent (NetworkEventPayload) [local] signals a game event from remote peer
 	EventNetworkEvent
-	// EventNetworkError (NetworkErrorPayload) signals a network error
+	// EventNetworkError (NetworkErrorPayload) [local] signals a network error
 	EventNetworkError
 
 	// --- Meta ---
 
-	// EventGameResetRequest (GameResetPayload) signals a request to reset the game state
+	// EventGameResetRequest (GameResetPayload) [shared] signals a request to reset the game state
 	EventGameResetRequest
-	// EventMetaDebugRequest signals a request to show debug overlay
+	// EventMetaDebugRequest [local] signals a request to show debug overlay
 	EventMetaDebugRequest
-	// EventMetaHelpRequest signals a request to show help overlay
+	// EventMetaHelpRequest [local] signals a request to show help overlay
 	EventMetaHelpRequest
-	// EventMetaAboutRequest signals a request to show about overlay
+	// EventMetaAboutRequest [local] signals a request to show about overlay
 	EventMetaAboutRequest
-	// EventMetaStatusMessageRequest (MetaStatusMessagePayload) signals a request to display a message in status bar
+	// EventMetaStatusMessageRequest (MetaStatusMessagePayload) [local] signals a request to display a message in status bar
 	EventMetaStatusMessageRequest
-	// EventMetaSystemCommandRequest (MetaSystemCommandPayload) signals a request to execute a system command
+	// EventMetaSystemCommandRequest (MetaSystemCommandPayload) [shared] signals a request to execute a system command
 	EventMetaSystemCommandRequest
-	// EventGamePauseRequest (GamePausePayload) asks MetaSystem to change pause state
+	// EventGamePauseRequest (GamePausePayload) [local] asks MetaSystem to change pause state
 	EventGamePauseRequest
-	// EventGamePauseChanged (GamePausePayload) announces applied pause state; systems react in their own domain
+	// EventGamePauseChanged (GamePausePayload) [local] announces applied pause state; systems react in their own domain
 	EventGamePauseChanged
-	// EventGameSpeedRequest (GameSpeedPayload) asks MetaSystem to change the time scale
+	// EventGameSpeedRequest (GameSpeedPayload) [local] asks MetaSystem to change the time scale
 	EventGameSpeedRequest
-	// EventGameSpeedChanged (GameSpeedPayload) announces the applied time scale
+	// EventGameSpeedChanged (GameSpeedPayload) [local] announces the applied time scale
 	EventGameSpeedChanged
-	// EventGameStepRequest (GameStepPayload) asks MetaSystem to step ticks or arm a run-until breakpoint
+	// EventGameStepRequest (GameStepPayload) [local] asks MetaSystem to step ticks or arm a run-until breakpoint
 	EventGameStepRequest
 
 	// --- FSM ---
 
-	// EventCycleDamageMultiplierIncrease signals cycle completion, doubles damage multiplier
+	// EventCycleDamageMultiplierIncrease [shared] signals cycle completion, doubles damage multiplier
 	EventCycleDamageMultiplierIncrease
-	// EventCycleDamageMultiplierReset signals cycle reset, resets damage multiplier to 1
+	// EventCycleDamageMultiplierReset [shared] signals cycle reset, resets damage multiplier to 1
 	EventCycleDamageMultiplierReset
-	// EventFSMRegionRequest (FSMRegionPayload) signals FSM to change the active region
+	// EventFSMRegionRequest (FSMRegionPayload) [shared] signals FSM to change the active region
 	EventFSMRegionRequest
 
 	// --- Nugget ---
 
-	// EventNuggetCollected (NuggetCollectedPayload) signals nugget was collected by player
+	// EventNuggetCollected (NuggetCollectedPayload) [shared] signals nugget was collected by player
 	EventNuggetCollected
-	// EventNuggetDestroyed (NuggetDestroyedPayload) signals nugget was destroyed externally
+	// EventNuggetDestroyed (NuggetDestroyedPayload) [shared] signals nugget was destroyed externally
 	EventNuggetDestroyed
-	// EventNuggetJumpRequest (NuggetJumpRequestPayload) signals player intent to jump to active nugget
+	// EventNuggetJumpRequest (NuggetJumpRequestPayload) [bus] signals player intent to jump to active nugget
 	EventNuggetJumpRequest
 
 	// --- Cleaner ---
 
-	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) spawns 4-way cleaners from origin
+	// EventCleanerDirectionalRequest (DirectionalCleanerPayload) [local] spawns 4-way cleaners from origin
 	EventCleanerDirectionalRequest
-	// EventCleanerSweepingRequest (CleanerSweepingRequestPayload) spawns cleaners on rows with positive/negative energy glyphs
+	// EventCleanerSweepingRequest (CleanerSweepingRequestPayload) [local] spawns cleaners on rows with positive/negative energy glyphs
 	EventCleanerSweepingRequest
 
 	// --- Gold ---
 
-	// EventGoldSpawnRequest signals a specific request to try spawning a gold sequence
+	// EventGoldSpawnRequest [shared] signals a specific request to try spawning a gold sequence
 	EventGoldSpawnRequest
-	// EventGoldSpawnFailed signals that a requested spawn could not be completed (e.g. no space)
+	// EventGoldSpawnFailed [shared] signals that a requested spawn could not be completed (e.g. no space)
 	EventGoldSpawnFailed
-	// EventGoldSpawned (GoldSpawnedPayload) signals gold sequence creation
+	// EventGoldSpawned (GoldSpawnedPayload) [shared] signals gold sequence creation
 	EventGoldSpawned
-	// EventGoldCompleted (GoldCompletionPayload) signals successful gold sequence completion
+	// EventGoldCompleted (GoldCompletionPayload) [shared] signals successful gold sequence completion
 	EventGoldCompleted
-	// EventGoldTimeout (GoldCompletionPayload) signals gold sequence expiration
+	// EventGoldTimeout (GoldCompletionPayload) [shared] signals gold sequence expiration
 	EventGoldTimeout
-	// EventGoldDestroyed (GoldCompletionPayload) signals external gold destruction
+	// EventGoldDestroyed (GoldCompletionPayload) [shared] signals external gold destruction
 	EventGoldDestroyed
-	// EventGoldCancel signals mandatory cleanup of any active gold sequence
+	// EventGoldCancel [shared] signals mandatory cleanup of any active gold sequence
 	EventGoldCancel
-	// EventGoldJumpRequest (GoldJumpRequestPayload) signals player intent to jump to active gold sequence
+	// EventGoldJumpRequest (GoldJumpRequestPayload) [bus] signals player intent to jump to active gold sequence
 	EventGoldJumpRequest
 
 	// --- Splash ---
 
-	// EventSplashTimerRequest (SplashTimerRequestPayload) signals timer visual feedback
+	// EventSplashTimerRequest (SplashTimerRequestPayload) [local] signals timer visual feedback
 	EventSplashTimerRequest
-	// EventSplashTimerCancel (SplashTimerCancelPayload) signals ending timer visual feedback
+	// EventSplashTimerCancel (SplashTimerCancelPayload) [local] signals ending timer visual feedback
 	EventSplashTimerCancel
 
 	// --- Energy ---
 
-	// EventEnergyAddRequest (EnergyAddPayload) signals energy delta on target entity
+	// EventEnergyAddRequest (EnergyAddPayload) [local] signals energy delta on target entity
 	EventEnergyAddRequest
-	// EventEnergySetRequest (EnergySetPayload) signals setting energy to specific value
+	// EventEnergySetRequest (EnergySetPayload) [local] signals setting energy to specific value
 	EventEnergySetRequest
-	// EventEnergyCrossedZero (EnergyCrossedZeroPayload) signals energy crossing zero
+	// EventEnergyCrossedZero (EnergyCrossedZeroPayload) [local] signals energy crossing zero
 	EventEnergyCrossedZero
-	// EventEnergyGlyphConsumed (EnergyGlyphConsumedPayload) signals glyph destruction for energy calculation
+	// EventEnergyGlyphConsumed (EnergyGlyphConsumedPayload) [local] signals glyph destruction for energy calculation
 	EventEnergyGlyphConsumed
-	// EventEnergyBlinkStart (EnergyBlinkPayload) signals visual blink trigger
+	// EventEnergyBlinkStart (EnergyBlinkPayload) [local] signals visual blink trigger
 	EventEnergyBlinkStart
-	// EventEnergyBlinkStop (EnergyBlinkStopPayload) signals blink clear
+	// EventEnergyBlinkStop (EnergyBlinkStopPayload) [local] signals blink clear
 	EventEnergyBlinkStop
 
 	// --- Shield ---
 
-	// EventShieldActivate (ShieldActivatePayload) signals shield should become active
+	// EventShieldActivate (ShieldActivatePayload) [local] signals shield should become active
 	EventShieldActivate
-	// EventShieldDeactivate (ShieldDeactivatePayload) signals shield should become inactive
+	// EventShieldDeactivate (ShieldDeactivatePayload) [local] signals shield should become inactive
 	EventShieldDeactivate
-	// EventShieldDrainRequest (ShieldDrainRequestPayload) signals energy drain from external source
+	// EventShieldDrainRequest (ShieldDrainRequestPayload) [local] signals energy drain from external source
 	EventShieldDrainRequest
 
 	// --- Weapon ---
 
-	// EventWeaponAddRequest (WeaponAddRequestPayload) signals activating buff for cursor
+	// EventWeaponAddRequest (WeaponAddRequestPayload) [local] signals activating buff for cursor
 	EventWeaponAddRequest
-	// EventWeaponFireRequest (WeaponFireRequestPayload) signals weapon fire request
+	// EventWeaponFireRequest (WeaponFireRequestPayload) [local] signals weapon fire request
 	EventWeaponFireRequest
-	// EventFireSpecialRequest (FireSpecialRequestPayload) signals player intent to fire special ability
+	// EventFireSpecialRequest (FireSpecialRequestPayload) [local] signals player intent to fire special ability
 	EventFireSpecialRequest
 
 	// --- Heat ---
 
-	// EventHeatAddRequest (HeatAddRequestPayload) signals heat delta modification
+	// EventHeatAddRequest (HeatAddRequestPayload) [local] signals heat delta modification
 	EventHeatAddRequest
-	// EventHeatSetRequest (HeatSetRequestPayload) signals absolute heat value
+	// EventHeatSetRequest (HeatSetRequestPayload) [local] signals absolute heat value
 	EventHeatSetRequest
-	// EventHeatBurst (HeatBurstPayload) signals heat burst notification
+	// EventHeatBurst (HeatBurstPayload) [local] signals heat burst notification
 	EventHeatBurst
 
 	// --- Boost ---
 
-	// EventBoostActivate (BoostActivatePayload) signals boost activation request
+	// EventBoostActivate (BoostActivatePayload) [local] signals boost activation request
 	EventBoostActivate
-	// EventBoostDeactivate (BoostDeactivatePayload) signals boost deactivation
+	// EventBoostDeactivate (BoostDeactivatePayload) [local] signals boost deactivation
 	EventBoostDeactivate
-	// EventBoostExtend (BoostExtendPayload) signals boost duration extension
+	// EventBoostExtend (BoostExtendPayload) [local] signals boost duration extension
 	EventBoostExtend
-	// EventBoostReward (BoostRewardPayload) signals an earned boost; BoostSystem chooses activation or extension
+	// EventBoostReward (BoostRewardPayload) [local] signals an earned boost; BoostSystem chooses activation or extension
 	EventBoostReward
 
 	// --- Typing ---
 
-	// EventCharacterTyped (CharacterTypedPayload) signals Insert mode keypress
+	// EventCharacterTyped (CharacterTypedPayload) [local] signals Insert mode keypress
 	EventCharacterTyped
-	// EventDeleteRequest (DeleteRequestPayload) signals a deletion operation (x, d, etc.)
+	// EventDeleteRequest (DeleteRequestPayload) [local] signals a deletion operation (x, d, etc.)
 	EventDeleteRequest
 
 	// --- Ping ---
 
-	// EventPingGridRequest (PingGridRequestPayload) signals a request to show the ping grid
+	// EventPingGridRequest (PingGridRequestPayload) [local] signals a request to show the ping grid
 	EventPingGridRequest
 
 	// --- Materialize ---
 
-	// EventMaterializeRequest (MaterializeRequestPayload) signals a request to start a materialization visual effect
+	// EventMaterializeRequest (MaterializeRequestPayload) [stamped] signals a request to start a materialization visual effect
 	EventMaterializeRequest
-	// EventMaterializeComplete (MaterializeCompletedPayload) signals materialization finished at location
+	// EventMaterializeComplete (MaterializeCompletedPayload) [stamped] signals materialization finished at location
 	EventMaterializeComplete
-	// EventMaterializeAreaRequest (MaterializeAreaRequestPayload) requests area-based materialization (swarm, quasar)
+	// EventMaterializeAreaRequest (MaterializeAreaRequestPayload) [stamped] requests area-based materialization (swarm, quasar)
 	EventMaterializeAreaRequest
 
 	// --- Flash ---
 
-	// EventFlashSpawnOneRequest (FlashRequestPayload) signals a request to spawn a destruction flash effect
+	// EventFlashSpawnOneRequest (FlashRequestPayload) [local] signals a request to spawn a destruction flash effect
 	EventFlashSpawnOneRequest
-	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) signals batch spawn of destruction flash effects
+	// EventFlashSpawnBatchRequest (BatchPayload[FlashSpawnEntry]) [local] signals batch spawn of destruction flash effects
 	EventFlashSpawnBatchRequest
 
 	// --- Explosion ---
 
-	// EventExplosionRequest (ExplosionRequestPayload) triggers explosion effect at location
+	// EventExplosionRequest (ExplosionRequestPayload) [bus] triggers explosion effect at location
 	EventExplosionRequest
-	// EventExplosionBatchRequest (ExplosionBatchRequestPayload) triggers one explosion made of several centers
+	// EventExplosionBatchRequest (ExplosionBatchRequestPayload) [bus] triggers one explosion made of several centers
 	EventExplosionBatchRequest
 
 	// --- Dust ---
 
-	// EventDustSpawnOneRequest (DustSpawnOneRequestPayload) signals intent to spawn a single dust entity
+	// EventDustSpawnOneRequest (DustSpawnOneRequestPayload) [local] signals intent to spawn a single dust entity
 	EventDustSpawnOneRequest
-	// EventDustSpawnBatchRequest (BatchPayload[DustSpawnEntry]) signals intent to spawn multiple dust entities
+	// EventDustSpawnBatchRequest (BatchPayload[DustSpawnEntry]) [local] signals intent to spawn multiple dust entities
 	EventDustSpawnBatchRequest
-	// EventDustAllRequest signals intent to convert all glyphs on the map to dust
+	// EventDustAllRequest [local] signals intent to convert all glyphs on the map to dust
 	EventDustAllRequest
 
 	// --- Blossom ---
 
-	// EventBlossomSpawnOne (BlossomSpawnPayload) signals intent to spawn a single blossom entity
+	// EventBlossomSpawnOne (BlossomSpawnPayload) [local] signals intent to spawn a single blossom entity
 	EventBlossomSpawnOne
-	// EventBlossomSpawnBatch (BatchPayload[BlossomSpawnEntry]) signals batch spawn of blossom entities
+	// EventBlossomSpawnBatch (BatchPayload[BlossomSpawnEntry]) [local] signals batch spawn of blossom entities
 	EventBlossomSpawnBatch
-	// EventBlossomWave signals start of a full width rising blossom wave
+	// EventBlossomWave [local] signals start of a full width rising blossom wave
 	EventBlossomWave
 
 	// --- Decay ---
 
-	// EventDecaySpawnOne (DecaySpawnPayload) signals intent to spawn a single decay entity
+	// EventDecaySpawnOne (DecaySpawnPayload) [local] signals intent to spawn a single decay entity
 	EventDecaySpawnOne
-	// EventDecaySpawnBatch (BatchPayload[DecaySpawnEntry]) signals batch spawn of decay entities
+	// EventDecaySpawnBatch (BatchPayload[DecaySpawnEntry]) [local] signals batch spawn of decay entities
 	EventDecaySpawnBatch
-	// EventDecayWave signals start of a full width falling decay wave
+	// EventDecayWave [local] signals start of a full width falling decay wave
 	EventDecayWave
 
 	// --- Death ---
 
-	// EventDeathBatch (DeathRequestPayload) signals intent to destroy one or more entities with an optional effect
+	// EventDeathBatch (DeathRequestPayload) [stamped] signals intent to destroy one or more entities with an optional effect
 	EventDeathBatch
 
 	// --- Timer ---
 
-	// EventTimerStart (TimerStartPayload) signals creation of a lifecycle timer for an entity
+	// EventTimerStart (TimerStartPayload) [stamped] signals creation of a lifecycle timer for an entity
 	EventTimerStart
 
 	// --- Composite ---
 
-	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) signals a composite member was successfully typed
+	// EventCompositeMemberDestroyed (CompositeMemberDestroyedPayload) [bus] signals a composite member was successfully typed
 	EventCompositeMemberDestroyed
-	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) signals unexpected member loss (OOB, species hit, etc.)
+	// EventCompositeIntegrityBreach (CompositeIntegrityBreachPayload) [shared] signals unexpected member loss (OOB, species hit, etc.)
 	EventCompositeIntegrityBreach
-	// EventCompositeDestroyRequest (CompositeDestroyRequestPayload) signals owner system requests full composite destruction
+	// EventCompositeDestroyRequest (CompositeDestroyRequestPayload) [shared] signals owner system requests full composite destruction
 	EventCompositeDestroyRequest
 
 	// --- Cursor ---
 
-	// EventCursorSpawnRequest (CursorSpawnRequestPayload) asks CursorSystem to create a cursor
+	// EventCursorSpawnRequest (CursorSpawnRequestPayload) [shared] asks CursorSystem to create a cursor
 	EventCursorSpawnRequest
-	// EventCursorSpawned (CursorSpawnedPayload) announces a created cursor
+	// EventCursorSpawned (CursorSpawnedPayload) [shared] announces a created cursor
 	EventCursorSpawned
-	// EventCursorSpawnFailed signals no roster slot or no free cell was available
+	// EventCursorSpawnFailed [shared] signals no roster slot or no free cell was available
 	EventCursorSpawnFailed
-	// EventCursorDespawnRequest (CursorDespawnRequestPayload) asks CursorSystem to destroy cursors
+	// EventCursorDespawnRequest (CursorDespawnRequestPayload) [shared] asks CursorSystem to destroy cursors
 	EventCursorDespawnRequest
-	// EventCursorDespawned (CursorDespawnedPayload) announces a destroyed cursor
+	// EventCursorDespawned (CursorDespawnedPayload) [shared] announces a destroyed cursor
 	EventCursorDespawned
-	// EventCursorMoveRequest (CursorMoveRequestPayload) asks CursorSystem to place a cursor
+	// EventCursorMoveRequest (CursorMoveRequestPayload) [bus] asks CursorSystem to place a cursor
 	EventCursorMoveRequest
-	// EventCursorMoved (CursorMovedPayload) announces an applied cursor position
+	// EventCursorMoved (CursorMovedPayload) [shared] announces an applied cursor position
 	EventCursorMoved
-	// EventCursorSetLocalRequest (CursorSetLocalPayload) rebinds which cursor input and camera follow
+	// EventCursorSetLocalRequest (CursorSetLocalPayload) [local] rebinds which cursor input and camera follow
 	EventCursorSetLocalRequest
-	// EventCursorLocalChanged (CursorSetLocalPayload) announces the bound slot
+	// EventCursorLocalChanged (CursorSetLocalPayload) [local] announces the bound slot
 	EventCursorLocalChanged
 
 	// --- Species ---
 
-	// EventSpeciesCreated (SpeciesCreatedPayload) announces a created species instance
+	// EventSpeciesCreated (SpeciesCreatedPayload) [stamped] announces a created species instance
 	EventSpeciesCreated
-	// EventSpeciesKilled (SpeciesKilledPayload) announces a terminated species instance
+	// EventSpeciesKilled (SpeciesKilledPayload) [stamped] announces a terminated species instance
 	EventSpeciesKilled
 
 	// --- Fuse ---
 
-	// EventFuseQuasarRequest signals drains should fuse into quasar
+	// EventFuseQuasarRequest [local] signals drains should fuse into quasar
 	EventFuseQuasarRequest
-	// EventFuseSwarmRequest (FuseSwarmRequestPayload) signals two enraged drains should fuse into swarm
+	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
 	EventFuseSwarmRequest
 
 	// --- Drain ---
 
-	// EventDrainPause signals DrainSystem to stop spawning
+	// EventDrainPause [local] signals DrainSystem to stop spawning
 	EventDrainPause
-	// EventDrainResume signals DrainSystem to resume spawning
+	// EventDrainResume [local] signals DrainSystem to resume spawning
 	EventDrainResume
 
 	// --- Quasar ---
 
-	// EventQuasarSpawnRequest (QuasarSpawnRequestPayload) signals QuasarSystem to create the entity at location
+	// EventQuasarSpawnRequest (QuasarSpawnRequestPayload) [bus] signals QuasarSystem to create the entity at location
 	EventQuasarSpawnRequest
-	// EventQuasarCancelRequest signals manual termination of the quasar phase
+	// EventQuasarCancelRequest [shared] signals manual termination of the quasar phase
 	EventQuasarCancelRequest
 
 	// --- Swarm ---
 
-	// EventSwarmSpawnRequest (SwarmSpawnRequestPayload) signals SwarmSystem to create the entity at location
+	// EventSwarmSpawnRequest (SwarmSpawnRequestPayload) [bus] signals SwarmSystem to create the entity at location
 	EventSwarmSpawnRequest
-	// EventSwarmCancelRequest signals destruction of all swarm composites
+	// EventSwarmCancelRequest [shared] signals destruction of all swarm composites
 	EventSwarmCancelRequest
 
 	// --- Storm ---
 
-	// EventStormSpawnRequest triggers storm spawn
+	// EventStormSpawnRequest [shared] triggers storm spawn
 	EventStormSpawnRequest
-	// EventStormCancelRequest signals destruction of all storm entities
+	// EventStormCancelRequest [shared] signals destruction of all storm entities
 	EventStormCancelRequest
 
 	// --- Post-Process ---
 
-	// EventGrayoutStart signals persistent grayout activation
+	// EventGrayoutStart [local] signals persistent grayout activation
 	EventGrayoutStart
-	// EventGrayoutEnd signals persistent grayout deactivation
+	// EventGrayoutEnd [local] signals persistent grayout deactivation
 	EventGrayoutEnd
-	// EventStrobeRequest (StrobeRequestPayload) triggers screen flash effect
+	// EventStrobeRequest (StrobeRequestPayload) [local] triggers screen flash effect
 	EventStrobeRequest
 
 	// --- Spirit ---
 
-	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) signals intent to spawn a spirit entity
+	// EventSpiritSpawnRequest (SpiritSpawnRequestPayload) [stamped] signals intent to spawn a spirit entity
 	EventSpiritSpawnRequest
-	// EventSpiritDespawnRequest signals force-clear of all spirit entities
+	// EventSpiritDespawnRequest [stamped] signals force-clear of all spirit entities
 	EventSpiritDespawnRequest
 
 	// --- Lightning ---
 
-	// EventLightningSpawnRequest (LightningSpawnRequestPayload) signals intent to spawn a lightning visual effect
+	// EventLightningSpawnRequest (LightningSpawnRequestPayload) [local] signals intent to spawn a lightning visual effect
 	EventLightningSpawnRequest
-	// EventLightningUpdateRequest (LightningUpdateRequestPayload) signals target position update for tracked lightning
+	// EventLightningUpdateRequest (LightningUpdateRequestPayload) [local] signals target position update for tracked lightning
 	EventLightningUpdateRequest
-	// EventLightningDespawnRequest (LightningDespawnRequestPayload) signals force-removal of lightning entity(ies)
+	// EventLightningDespawnRequest (LightningDespawnRequestPayload) [local] signals force-removal of lightning entity(ies)
 	EventLightningDespawnRequest
 
 	// --- Combat ---
 
-	// EventCombatAttackDirectRequest (CombatAttackDirectRequestPayload) signals applying knockback
+	// EventCombatAttackDirectRequest (CombatAttackDirectRequestPayload) [stamped] signals applying knockback
 	EventCombatAttackDirectRequest
-	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) signals applying knockback
+	// EventCombatAttackAreaRequest (CombatAttackAreaRequestPayload) [local] signals applying knockback
 	EventCombatAttackAreaRequest
-	// EventCombatHealRequest (CombatHealRequestPayload) requests adding hit points to a live combat entity
+	// EventCombatHealRequest (CombatHealRequestPayload) [shared] requests adding hit points to a live combat entity
 	EventCombatHealRequest
 
 	// --- Loot ---
 
-	// EventLootSpawnRequest (LootSpawnRequestPayload) requests direct loot spawn at position
+	// EventLootSpawnRequest (LootSpawnRequestPayload) [local] requests direct loot spawn at position
 	EventLootSpawnRequest
 
 	// --- Missile ---
 
-	// EventMissileSpawnRequest (MissileSpawnRequestPayload) signals launcher buff firing a cluster missile
+	// EventMissileSpawnRequest (MissileSpawnRequestPayload) [local] signals launcher buff firing a cluster missile
 	EventMissileSpawnRequest
 
 	// --- Bullet ---
 
-	// EventBulletSpawnRequest (BulletSpawnRequestPayload) signals creation of a linear projectile
+	// EventBulletSpawnRequest (BulletSpawnRequestPayload) [local] signals creation of a linear projectile
 	EventBulletSpawnRequest
 
 	// --- Marker ---
 
-	// EventMarkerSpawnRequest (MarkerSpawnRequestPayload) signals a request to spawn a visual marker
+	// EventMarkerSpawnRequest (MarkerSpawnRequestPayload) [shared] signals a request to spawn a visual marker
 	EventMarkerSpawnRequest
 
 	// --- Motion Marker ---
 
-	// EventMotionMarkerShowColored (MotionMarkerShowPayload) signals a request to show colored glyph motion markers in ping bound
+	// EventMotionMarkerShowColored (MotionMarkerShowPayload) [local] signals a request to show colored glyph motion markers in ping bound
 	EventMotionMarkerShowColored
-	// EventMotionMarkerClearColored signals clearing colored motion markers (jump executed or cancelled)
+	// EventMotionMarkerClearColored [local] signals clearing colored motion markers (jump executed or cancelled)
 	EventMotionMarkerClearColored
 
 	// --- Mode ---
 
-	// EventModeChanged (ModeChangedPayload) signals change of the mode
+	// EventModeChanged (ModeChangedPayload) [local] signals change of the mode
 	EventModeChanged
 
 	// --- Wall ---
 
-	// EventWallSpawnRequest (WallSpawnRequestPayload) requests creation of a single wall cell
+	// EventWallSpawnRequest (WallSpawnRequestPayload) [shared] requests creation of a single wall cell
 	EventWallSpawnRequest
-	// EventWallBatchSpawnRequest (WallBatchSpawnRequestPayload) creates multiple wall cells in a single batch operation (supports collision modes)
+	// EventWallBatchSpawnRequest (WallBatchSpawnRequestPayload) [shared] creates multiple wall cells in a single batch operation (supports collision modes)
 	EventWallBatchSpawnRequest
-	// EventWallCompositeSpawnRequest (WallCompositeSpawnRequestPayload) requests creation of a multi-cell wall structure
+	// EventWallCompositeSpawnRequest (WallCompositeSpawnRequestPayload) [shared] requests creation of a multi-cell wall structure
 	EventWallCompositeSpawnRequest
-	// EventWallPatternSpawnRequest (WallPatternSpawnRequestPayload) requests creation of wall structure from .vifimg pattern file
+	// EventWallPatternSpawnRequest (WallPatternSpawnRequestPayload) [shared] requests creation of wall structure from .vifimg pattern file
 	EventWallPatternSpawnRequest
-	// EventMazeSpawnRequest (MazeSpawnRequestPayload) signals maze generation and wall spawning
+	// EventMazeSpawnRequest (MazeSpawnRequestPayload) [shared] signals maze generation and wall spawning
 	EventMazeSpawnRequest
-	// EventWallDespawnRequest (WallDespawnRequestPayload) requests removal of walls in specified area or globally
+	// EventWallDespawnRequest (WallDespawnRequestPayload) [shared] requests removal of walls in specified area or globally
 	EventWallDespawnRequest
-	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) modifies blocking behavior of existing walls
+	// EventWallMaskChangeRequest (WallMaskChangeRequestPayload) [shared] modifies blocking behavior of existing walls
 	EventWallMaskChangeRequest
-	// EventWallPushCheckRequest triggers full entity displacement check for blocking walls
+	// EventWallPushCheckRequest [shared] triggers full entity displacement check for blocking walls
 	EventWallPushCheckRequest
-	// EventWallSpawned (WallSpawnedPayload) notifies completion of wall creation with bounds and entity count
+	// EventWallSpawned (WallSpawnedPayload) [shared] notifies completion of wall creation with bounds and entity count
 	EventWallSpawned
-	// EventWallDespawned (WallDespawnedPayload) notifies completion of wall destruction with bounds
+	// EventWallDespawned (WallDespawnedPayload) [shared] notifies completion of wall destruction with bounds
 	EventWallDespawned
-	// EventWallDespawnAll signals silent destruction of all wall entities
+	// EventWallDespawnAll [shared] signals silent destruction of all wall entities
 	EventWallDespawnAll
 
 	// --- Fadeout ---
 
-	// EventFadeoutSpawnOne (FadeoutSpawnPayload) signals intent to spawn a single fadeout effect
+	// EventFadeoutSpawnOne (FadeoutSpawnPayload) [local] signals intent to spawn a single fadeout effect
 	EventFadeoutSpawnOne
-	// EventFadeoutSpawnBatch (BatchPayload[FadeoutSpawnEntry]) signals intent to spawn multiple fadeout effects
+	// EventFadeoutSpawnBatch (BatchPayload[FadeoutSpawnEntry]) [local] signals intent to spawn multiple fadeout effects
 	EventFadeoutSpawnBatch
 
 	// --- Pylon ---
 
-	// EventPylonSpawnRequest (PylonSpawnRequestPayload) signals pylon creation at location
+	// EventPylonSpawnRequest (PylonSpawnRequestPayload) [shared] signals pylon creation at location
 	EventPylonSpawnRequest
-	// EventPylonSpawnFailed signals pylon spawn could not find valid position
+	// EventPylonSpawnFailed [shared] signals pylon spawn could not find valid position
 	EventPylonSpawnFailed
-	// EventPylonCancelRequest signals forced destruction of all pylons
+	// EventPylonCancelRequest [shared] signals forced destruction of all pylons
 	EventPylonCancelRequest
 
 	// --- Snake ---
 
-	// EventSnakeSpawnRequest (SnakeSpawnRequestPayload) signals SnakeSystem to create the entity at location
+	// EventSnakeSpawnRequest (SnakeSpawnRequestPayload) [shared] signals SnakeSystem to create the entity at location
 	EventSnakeSpawnRequest
-	// EventSnakeCancelRequest signals manual termination of all snakes
+	// EventSnakeCancelRequest [shared] signals manual termination of all snakes
 	EventSnakeCancelRequest
 
 	// --- Navigation ---
 
-	// EventTargetGroupUpdate (TargetGroupUpdatePayload) configures or updates a navigation target group
+	// EventTargetGroupUpdate (TargetGroupUpdatePayload) [shared] configures or updates a navigation target group
 	EventTargetGroupUpdate
-	// EventTargetGroupRemove (TargetGroupRemovePayload) removes a target group, entities fall back to group 0
+	// EventTargetGroupRemove (TargetGroupRemovePayload) [shared] removes a target group, entities fall back to group 0
 	EventTargetGroupRemove
-	// EventNavigationRegraph signals a request to recalculate navigation graphs
+	// EventNavigationRegraph [shared] signals a request to recalculate navigation graphs
 	EventNavigationRegraph
-	// EventRouteGraphRequest (RouteGraphRequestPayload) requests route graph computation for a gateway-target pair
+	// EventRouteGraphRequest (RouteGraphRequestPayload) [shared] requests route graph computation for a gateway-target pair
 	EventRouteGraphRequest
-	// EventRouteGraphComputed (RouteGraphComputedPayload) signals route graph computation completion
+	// EventRouteGraphComputed (RouteGraphComputedPayload) [shared] signals route graph computation completion
 	EventRouteGraphComputed
 
 	// --- Eye ---
 
-	// EventEyeSpawnRequest (EyeSpawnRequestPayload) signals EyeSystem to create entity at location
+	// EventEyeSpawnRequest (EyeSpawnRequestPayload) [shared] signals EyeSystem to create entity at location
 	EventEyeSpawnRequest
-	// EventEyeCancelRequest signals destruction of all eye composites
+	// EventEyeCancelRequest [shared] signals destruction of all eye composites
 	EventEyeCancelRequest
 
 	// --- Tower ---
 
-	// EventTowerSpawnRequest (TowerSpawnRequestPayload) signals tower creation at location
+	// EventTowerSpawnRequest (TowerSpawnRequestPayload) [shared] signals tower creation at location
 	EventTowerSpawnRequest
-	// EventTowerSpawnFailed signals tower spawn could not find valid position
+	// EventTowerSpawnFailed [shared] signals tower spawn could not find valid position
 	EventTowerSpawnFailed
-	// EventTowerCancelRequest signals forced destruction of all towers
+	// EventTowerCancelRequest [shared] signals forced destruction of all towers
 	EventTowerCancelRequest
 
 	// --- Gateway ---
 
-	// EventGatewaySpawnRequest (GatewaySpawnRequestPayload) signals GatewaySystem to create a gateway entity anchored to a parent
+	// EventGatewaySpawnRequest (GatewaySpawnRequestPayload) [shared] signals GatewaySystem to create a gateway entity anchored to a parent
 	EventGatewaySpawnRequest
-	// EventGatewayDespawnRequest (GatewayDespawnRequestPayload) signals GatewaySystem to remove gateway for a specific anchor
+	// EventGatewayDespawnRequest (GatewayDespawnRequestPayload) [shared] signals GatewaySystem to remove gateway for a specific anchor
 	EventGatewayDespawnRequest
-	// EventGatewayDespawned (GatewayDespawnedPayload) signals that a gateway entity has been cleaned up
+	// EventGatewayDespawned (GatewayDespawnedPayload) [shared] signals that a gateway entity has been cleaned up
 	EventGatewayDespawned
 
 	// --- Genetic ---
 
-	// EventGeneticRegisterSpecies (GeneticRegisterSpeciesPayload) dynamically registers a species for evolution
+	// EventGeneticRegisterSpecies (GeneticRegisterSpeciesPayload) [shared] dynamically registers a species for evolution
 	EventGeneticRegisterSpecies
-	// EventGeneticAbandonEval (GeneticAbandonEvalPayload) abandons evaluation of the species
+	// EventGeneticAbandonEval (GeneticAbandonEvalPayload) [shared] abandons evaluation of the species
 	EventGeneticAbandonEval
 
 	// --- Debug ---
 
-	// EventDebugFlowToggle (DebugFlowGroupPayload) toggles debug flow field visualization
+	// EventDebugFlowToggle (DebugFlowGroupPayload) [local] toggles debug flow field visualization
 	EventDebugFlowToggle
-	// EventDebugGraphToggle (DebugFlowGroupPayload) toggles debug graph visualization
+	// EventDebugGraphToggle (DebugFlowGroupPayload) [local] toggles debug graph visualization
 	EventDebugGraphToggle
 )

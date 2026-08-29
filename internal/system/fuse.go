@@ -194,7 +194,8 @@ func (s *FuseSystem) killDrains(drains []core.Entity) {
 	if len(drains) == 0 {
 		return
 	}
-	// TODO(phase6): EmitDeath bypasses PushEvent, so the tag does not reach the death record yet.
+	// The scope stamps the spirit and effect pushes below; EmitDeath takes its own
+	// domain from the entities it destroys.
 	s.world.WithDomain(core.DomainPlayer, func() {
 		for _, drainEntity := range drains {
 			killX, killY := -1, -1

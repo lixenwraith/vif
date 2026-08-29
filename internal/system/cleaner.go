@@ -466,7 +466,9 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 			continue
 		}
 
-		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+		// Resolved by the target: a cleaner hit on a shared species crosses, one on a
+		// player entity does not (D-3, D-10).
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			AttackType:   component.CombatAttackProjectile,
 			OwnerEntity:  owner,
 			OriginEntity: owner,
@@ -478,7 +480,7 @@ func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity,
 			HasVelocity:  true,
 			OriginVelX:   velX,
 			OriginVelY:   velY,
-		})
+		}, target.Domain())
 		blocked = true
 	}
 

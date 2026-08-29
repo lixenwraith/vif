@@ -324,7 +324,7 @@ func (r *Router) handleEscape() bool {
 		r.ctx.SetPaused(false)
 	case core.ModeNormal:
 		// ESC in Normal mode triggers ping grid, no mode change
-		r.ctx.PushEvent(event.EventPingGridRequest, &event.PingGridRequestPayload{
+		r.ctx.PushLocal(event.EventPingGridRequest, &event.PingGridRequestPayload{
 			Entity:   r.ctx.World.Resources.Player.Entity,
 			Duration: parameter.PingGridDuration,
 		})
@@ -340,7 +340,7 @@ func (r *Router) handleEscape() bool {
 // Replace handleToggleEffectMute and handleToggleMusicMute with:
 func (r *Router) handleToggleAudioCycle() bool {
 	// A nil payload forces AudioSystem to default to parameter.AudioMaskCycle
-	r.ctx.PushEvent(event.EventSoundMuteToggle, nil)
+	r.ctx.PushLocal(event.EventSoundMuteToggle, nil)
 	return true
 }
 
@@ -395,7 +395,7 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
 	// Emit event for MotionMarkerSystem to show colored markers
 	dir := r.motionToDirection(intent.Motion)
-	r.ctx.PushEvent(event.EventMotionMarkerShowColored, &event.MotionMarkerShowPayload{
+	r.ctx.PushLocal(event.EventMotionMarkerShowColored, &event.MotionMarkerShowPayload{
 		DirectionX: dir[0],
 		DirectionY: dir[1],
 	})
@@ -404,7 +404,7 @@ func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
 
 func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 	// Clear colored markers
-	r.ctx.PushEvent(event.EventMotionMarkerClearColored, nil)
+	r.ctx.PushLocal(event.EventMotionMarkerClearColored, nil)
 
 	r.captureForUndo()
 
@@ -569,7 +569,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 
 func (r *Router) handleNuggetJump() bool {
 	r.captureForUndo()
-	r.ctx.PushEvent(event.EventNuggetJumpRequest, &event.NuggetJumpRequestPayload{
+	r.ctx.PushLocal(event.EventNuggetJumpRequest, &event.NuggetJumpRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true
@@ -577,21 +577,21 @@ func (r *Router) handleNuggetJump() bool {
 
 func (r *Router) handleGoldJump() bool {
 	r.captureForUndo()
-	r.ctx.PushEvent(event.EventGoldJumpRequest, &event.GoldJumpRequestPayload{
+	r.ctx.PushLocal(event.EventGoldJumpRequest, &event.GoldJumpRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true
 }
 
 func (r *Router) handleFireMain() bool {
-	r.ctx.PushEvent(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
+	r.ctx.PushLocal(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true
 }
 
 func (r *Router) handleFireSpecial() bool {
-	r.ctx.PushEvent(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
+	r.ctx.PushLocal(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true
@@ -697,7 +697,7 @@ func (r *Router) handleInsertChar(char rune) {
 	payload.Char = char
 	payload.X = posX
 	payload.Y = posY
-	r.ctx.PushEvent(event.EventCharacterTyped, payload)
+	r.ctx.PushLocal(event.EventCharacterTyped, payload)
 }
 
 func (r *Router) handleSearchChar(char rune) {
@@ -1012,7 +1012,7 @@ func (r *Router) handleOverlayClose() bool {
 
 func (r *Router) handleMouseLeftDown(intent *input.Intent) bool {
 	r.moveMouseCursor(intent)
-	r.ctx.PushEvent(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
+	r.ctx.PushLocal(event.EventWeaponFireRequest, &event.WeaponFireRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	r.mouseLeftHeld = true
@@ -1027,7 +1027,7 @@ func (r *Router) handleMouseLeftUp() bool {
 
 func (r *Router) handleMouseRightDown() bool {
 	// Fire special at current cursor position, no movement
-	r.ctx.PushEvent(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
+	r.ctx.PushLocal(event.EventFireSpecialRequest, &event.FireSpecialRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	r.mouseRightHeld = true
@@ -1102,13 +1102,13 @@ func (r *Router) ProcessInputTick() bool {
 
 	emitted := false
 	if o, due := r.fireDue(now, &r.lastFireMain, auto, mouse && r.mouseLeftHeld); due {
-		r.ctx.PushEventOrigin(event.EventWeaponFireRequest,
-			&event.WeaponFireRequestPayload{Entity: player}, o)
+		r.ctx.PushEventFull(event.EventWeaponFireRequest,
+			&event.WeaponFireRequestPayload{Entity: player}, o, core.DomainPlayer)
 		emitted = true
 	}
 	if o, due := r.fireDue(now, &r.lastFireSpec, auto, mouse && r.mouseRightHeld); due {
-		r.ctx.PushEventOrigin(event.EventFireSpecialRequest,
-			&event.FireSpecialRequestPayload{Entity: player}, o)
+		r.ctx.PushEventFull(event.EventFireSpecialRequest,
+			&event.FireSpecialRequestPayload{Entity: player}, o, core.DomainPlayer)
 		emitted = true
 	}
 	return emitted

@@ -118,12 +118,14 @@ func (s *MaterializeSystem) Update() {
 		matComp.Progress += progressDelta
 
 		if matComp.Progress >= 1.0 {
-			s.world.PushEvent(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
+			// The completion carries the domain of the entity it completes, so a
+			// gated shared spawn and a drain materialize stay distinguishable (D-7).
+			s.world.PushEventDomain(event.EventMaterializeComplete, &event.MaterializeCompletedPayload{
 				X:    matComp.TargetX,
 				Y:    matComp.TargetY,
 				Type: matComp.Type,
 				// Note: MaterializeCompletedPayload may need AreaWidth/Height if consumers need it
-			})
+			}, matEntity.Domain())
 			toDestroy = append(toDestroy, matEntity)
 			continue
 		}

@@ -79,7 +79,7 @@ func (r *Router) handleOverlayActivate() bool {
 	}
 	r.ctx.ToggleOverlayPin(key)
 	// The debug overlay is the only card layout; MetaSystem owns the projection
-	r.ctx.PushEvent(event.EventMetaDebugRequest, nil)
+	r.ctx.PushLocal(event.EventMetaDebugRequest, nil)
 	return true
 }
 

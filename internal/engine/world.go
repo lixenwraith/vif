@@ -341,6 +341,17 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), domain)
 }
 
+// MapSizeLocal reports whether this instance may derive map bounds from its own
+// terminal: nobody else shares the world, so a crop rewriting shared state is
+// admissible (D-14). Also gates the divergent-read warning in config_access.
+func (w *World) MapSizeLocal() bool {
+	if w.Resources.Player.Count() > 1 {
+		return false
+	}
+	net := w.Resources.Network
+	return net == nil || net.Port == nil || net.Port.PeerCount() == 0
+}
+
 // PushLocal emits an event that must never replicate: an owner-authored grant, or an
 // effect belonging to this instance alone. Phase 6 classifies on the domain tag, so
 // tagging here is what makes the classification mechanical rather than by inspection.

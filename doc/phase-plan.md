@@ -216,6 +216,22 @@ Second, cheap assertion worth adding at the same time: over a soak, every
    everything else re-derives. `Shield` and `Combat` need a field-level split
    here: both carry re-derived species state alongside the cursor state.
 5. **Bus event transport**, driven by the Phase 6 classification.
+   `event.Replicated(type, domain)` is the send predicate and `crossingPushes`
+   in `internal/system/event_class_test.go` enumerates the eleven producer sites
+   it must cover. Two distinctions Phase 6 deliberately left to this phase:
+   - **Compared is not sent.** The class table answers "must both instances have
+     this record", which is what the journal filter needs. A `Shared` event is
+     re-derived identically on both instances and must be compared but never
+     sent; a `Bus` event must be sent. The wire set is `Bus` plus `Stamped`
+     resolving shared, not the whole transported set.
+   - **D-5 chains.** A chain attack is stamped by its target like any other, so
+     it is in the transported set. It must not be on the wire: the receiver
+     derives it from the root the wire carried, and sending both applies it
+     twice.
+6. **The unclosed crossings.** The weapon pulse pushes an area attack at shared
+   targets with no geometry crossing behind it (see the domain document's gaps),
+   and 19 `Local` types still push unstamped. Both need closing before the wire
+   carries anything.
 
 ## Phase 8 — Multi-instance verification
 

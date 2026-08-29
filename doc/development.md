@@ -64,7 +64,7 @@ input enum declarations. `go generate ./internal/manifest/...` runs
 | `internal/engine/component_store_gen.go` | manifest components | typed component fields, mask bits, initialization, per-entity/batch removal/wipe |
 | `internal/engine/component_domain_gen.go` | `ComponentDef.Domain` | `componentDomains`, the replication-domain audit table |
 | `internal/manifest/build_gen.go` | systems/renderers | constructors, active-name lists, and `systemProfiles` |
-| `internal/event/registry_gen.go` | `internal/event/type.go` and payload comments/types | event name/type/payload registry |
+| `internal/event/registry_gen.go` | `internal/event/type.go` and payload comments/types | event name/type/payload registry and the replication class table |
 | `internal/input/strings_gen.go` | selected input enum const blocks | enum string/reverse lookup tables |
 
 ```mermaid

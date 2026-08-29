@@ -281,7 +281,9 @@ honestly. `OriginSystem` events are derived simulation work and are omitted;
 every other origin is captured and later reinjected in queue-slot order.
 
 `JournalRecord` stores TOML payload text against the generated registry
-prototype plus dense journal sequence and sparse queue sequence. Periodic
+prototype plus dense journal sequence and sparse queue sequence, and carries the
+producer domain: `JournalRecord.Replicated` selects the records every instance of
+one seed must agree on. Periodic
 `JournalAnchor` records carry seed/session, config and corpus identity,
 fingerprint counts, tick interval, and simulation geometry. The dedicated file
 and replay constraints are documented in
@@ -291,8 +293,16 @@ and replay constraints are documented in
 
 `internal/event/type.go` is the authoritative event list. Its declaration
 comments are consumed by generation to produce event names, payload reflection,
-schema output, and command-mode `:emit` support. When adding or changing an
-event, update the declaration and payload together, then regenerate.
+the replication class table, schema output, and command-mode `:emit` support.
+The comment carries an optional payload type and a required replication class:
+
+	// EventFoo (FooPayload) [bus] short description
+	// EventFoo [local] short description
+
+The class is `local`, `shared`, `bus` or `stamped`, and generation fails on a
+constant that carries none; see [the domain model](domain-design.md) D-10. When
+adding or changing an event, update the declaration and payload together, then
+regenerate.
 
 The catalog covers these domains:
 

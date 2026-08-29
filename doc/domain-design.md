@@ -32,6 +32,14 @@ smallest artifact that determines the shared outcome crosses as a Bus event:
 | area effect (missile impact, dust detonation) | one explosion request: centers, radius, duration, attack family, owner cursor |
 | drain fusion | one spawn request: header cell only |
 | gold member typed | one composite-member destruction: header, member, typist cursor |
+| decay or drain reaching a shared nugget | one nugget destruction: the nugget identity |
+| a dying drain donating its hit points | one heal request: target and amount |
+| the post-typing cursor advance | one cursor move request: the shared cursor and its cell |
+
+The table is `crossingPushes` in `internal/system/event_class_test.go`, and the
+test fails on a player-profile system pushing a replicated event that is not in
+it. The last three rows were found that way: they are crossings the design did
+not name, and each needs a wire path in Phase 7 exactly as the first four do.
 
 Effects on player targets do not cross. The producer resolves its own domain
 *before* pushing the crossing event; the shared consumer resolves only shared
@@ -62,13 +70,20 @@ from the player counter and may be created conditionally on local view state
 (`Player.IsLocal`). They never feed shared simulation. This is what lets a
 remote cursor's damage land without its visuals cluttering the screen.
 
-**D-7 Ambient domain.** `World.WithDomain(d, fn)` mirrors `WithOrigin`, and
-`PushEventDomain` stamps explicitly for producers outside any scope. One system
-can serve both domains without splitting: a nugget-spawned cleaner is created
-shared, a weapon-spawned cleaner player, and `CleanerSystem` reads the
-request's domain rather than being duplicated. This is the general answer to
-generic types (death, timer, flash, spirit, materialize, species lifecycle) —
-they are stamped, not statically classified.
+**D-7 Ambient domain.** `World.WithDomain(d, fn)` mirrors `WithOrigin`;
+`PushEventDomain` and `PushLocal` stamp explicitly for producers outside any
+scope. One system can serve both domains without splitting: `MaterializeSystem`
+gates a shared species spawn and a player drain from one code path, reading the
+request's domain rather than being duplicated, and stamps the completion with
+the domain of the entity it completed. This is the general answer to generic
+types (death, timer, spirit, materialize, species lifecycle) — they are
+stamped, not statically classified.
+
+Cleaner was this rule's original example and is no longer one. All three
+producers — nugget beacon, weapon, and the `:cleaner` command — push
+`core.DomainPlayer`, the beacon since Phase 5, so every cleaner is
+player-domain and its request events are `Local`. `CleanerSystem` still resolves
+both and keeps its `dual` profile, which is defensive rather than exercised.
 
 The ambient tag is **not** derived from the declared system profile:
 `UpdateLocked` sets the audit scope from `SystemDef.Domain` but leaves
@@ -115,17 +130,27 @@ Two facts constrain how the table can be built:
   predicate, or the producers stamp `GameEvent.Domain` from the target's domain
   and the filter keys on the tag.
 
-*Amendment.* `Stamped` is not only "resolved from the ambient domain at push".
-`EventCombatAttackDirectRequest` is the case that forces the distinction: the
-same producer, in the same tick, under the same ambient domain, pushes a hit
-that crosses when the target is shared and does not when the target is player.
-The class is a function of the payload, not of the producer, so **no static
-per-type table can carry it**. The predicate exists today only as
-`crossingTargets()` in `internal/app/bus_purity_test.go`. Phase 6 closes it one
-of two ways: the journal filter carries the same predicate, or combat producers
-stamp `GameEvent.Domain` from the target's domain and the filter keys on the
-tag. The second is cheaper and D-10 already provides `Stamped` as the
-mechanism, but it is a wiring change across every combat producer.
+The class is declared in the `type.go` doc comment beside the payload —
+`// EventFoo (FooPayload) [bus] ...` — and generated into `eventClasses` in
+`internal/event/registry_gen.go`. `event.Replicated(type, domain)` is the
+transported set. The generator refuses an unclassified constant.
+
+*Resolved: what `Stamped` actually means.* It is not "the ambient domain at
+push". `EventCombatAttackDirectRequest` forces the distinction: the same
+producer, in the same tick, under the same ambient domain, pushes a hit that
+crosses when the target is shared and does not when the target is player. The
+class is a function of the payload, not of the producer, so no static per-type
+table can carry it. Combat producers now stamp from the target's own domain at
+all four push sites, and the filter reads the tag — the cheaper of the two
+options, and the one D-10 already had a mechanism for.
+
+*The tag is only information where a producer set it.* `core.DomainShared` is
+the zero value and the ambient domain defaults to it, so a bare `PushEvent`
+leaves a record reading "shared" whatever produced it. `Shared`, `Bus` and
+`Local` are therefore declarations, checked statically against the pushing
+system's profile (`TestEventClassMatchesSystemProfile`); only `Stamped` is read
+from the tag, and `TestStampedEventsAreExplicitlyStamped` rejects a `Stamped`
+declaration no producer resolves.
 
 **D-11 Determinism invariants.** Across instances: identical shared event
 order, identical shared entity creation order, identical shared RNG derivation,
@@ -178,12 +203,15 @@ Suppression publishes `context.map_locked` and logs once per resize. Both
 branches are covered: `TestMapSizeLockedWithSecondCursor` and
 `TestMapSizeCropsWithOneCursor` as its negative control.
 
-Consequence not yet closed: a map script may branch an FSM guard on
-`viewport_width`, `viewport_height`, `camera_x`, `camera_y` or `color_mode`,
-which are per-instance. Under a locked map those diverge silently. Keys are
-retained; instrumentation is a Phase 6 item. The whole script-visible surface
-is `internal/engine/config_access.go` — eight keys, of which `map_width`,
+Consequence, instrumented rather than closed: a map script may branch an FSM
+guard on `viewport_width`, `viewport_height`, `camera_x`, `camera_y` or
+`color_mode`, which are per-instance, and under a locked map those take a
+different arm on each instance. The whole script-visible surface is
+`internal/engine/config_access.go` — eight keys, of which `map_width`,
 `map_height` and `crop_on_resize` are replicated and the other five are not.
+Both accessors warn once per key when a non-replicated one is read while
+`World.MapSizeLocal()` is false. The keys are retained: D-14 keeps the surface
+and the warning only marks where a script has made itself instance-dependent.
 
 **D-15 Declared classification.** Every system declares its domain profile
 (shared, player, dual) and its dependencies (required, optional) as data in

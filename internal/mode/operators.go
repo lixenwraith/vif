@@ -15,7 +15,7 @@ func OpMove(ctx *engine.GameContext, result MotionResult) {
 
 // OpJump requests an absolute placement for producers that resolve a target directly
 func OpJump(ctx *engine.GameContext, x, y int) {
-	ctx.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+	ctx.PushLocal(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
 		Entity: ctx.World.Resources.Player.Entity,
 		X:      x,
 		Y:      y,
@@ -72,5 +72,5 @@ func OpDelete(ctx *engine.GameContext, result MotionResult) {
 		payload.EndY = ey
 	}
 
-	ctx.PushEvent(event.EventDeleteRequest, payload)
+	ctx.PushLocal(event.EventDeleteRequest, payload)
 }

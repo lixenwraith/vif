@@ -8,8 +8,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
-// JournalSchema is the record layout version; bump on any field change
-const JournalSchema = 6
+// JournalSchema is the record layout version; bump on any field change.
+//
+// 7: Domain became meaningful. It was populated from the ambient domain, which
+// defaults to shared, so pre-7 records read "shared" wherever nothing stamped —
+// death batches, combat hits and operator input among them. Replication filters
+// on it (see Replicated), so a 6 and a 7 journal are not comparable.
+const JournalSchema = 7
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.
@@ -33,6 +38,11 @@ type JournalRecord struct {
 	Origin    Origin
 	Domain    core.Domain // producer domain; replication filters on it
 }
+
+// Replicated reports whether this record belongs in the transported set, which
+// is Shared union Bus with Stamped resolved through the domain its producer
+// stamped (D-10). Two instances of one seed must produce the same subsequence.
+func (r JournalRecord) Replicated() bool { return Replicated(r.Type, r.Domain) }
 
 // JournalAnchor is a self-describing header re-emitted periodically so a
 // rotated log file can be replayed without its predecessors.

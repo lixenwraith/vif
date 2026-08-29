@@ -50,11 +50,8 @@ func (s *cellSweep) emit(w *engine.World, effect event.EventType) {
 		event.EmitDeath(w.Resources.Event.Queue, effect, s.shared...)
 	}
 	if len(s.player) > 0 {
-		// TODO(phase6): EmitDeath bypasses PushEvent, so the tag does not reach the
-		// record yet; the batch is already domain-pure, which is what determinism needs.
-		w.WithDomain(core.DomainPlayer, func() {
-			event.EmitDeath(w.Resources.Event.Queue, effect, s.player...)
-		})
+		// EmitDeath takes the domain from the entities, so the batch stamps itself.
+		event.EmitDeath(w.Resources.Event.Queue, effect, s.player...)
 	}
 }
 

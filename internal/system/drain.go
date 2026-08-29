@@ -756,8 +756,9 @@ func (s *DrainSystem) materializeDrainAt(spawnX, spawnY int) {
 		Color: visual.RgbDrain,
 	})
 
-	// Announce the fully initialized species instance.
-	s.world.PushEvent(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
+	// Announce the fully initialized species instance. Drains are player-domain, so
+	// the announcement is stamped to match how the kill path already stamps.
+	s.world.PushLocal(event.EventSpeciesCreated, &event.SpeciesCreatedPayload{
 		Entity:  entity,
 		Species: component.SpeciesDrain,
 		X:       spawnX,

@@ -623,7 +623,8 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 				}
 				seen[a.Target] = true
 
-				s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+				// Resolved by the target, not by the firing cursor's domain (D-10).
+				s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 					AttackType:   component.CombatAttackLightning,
 					OwnerEntity:  cursor,
 					OriginEntity: cursor,
@@ -632,7 +633,7 @@ func (s *WeaponSystem) fireAllWeapons(cursor core.Entity, weaponComp *component.
 					HasOrigin:    true,
 					OriginX:      originX,
 					OriginY:      originY,
-				})
+				}, a.Target.Domain())
 			}
 
 		case component.WeaponLauncher:
@@ -694,7 +695,10 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos compone
 		s.triggerOrbFlash(disruptorOrbEntity)
 	}
 
-	// Emit area attack per target
+	// Emit area attack per target.
+	// TODO(phase7): this reaches shared targets without a geometry crossing. The
+	// area request names resolved entities, so it is Local by D-4; the pulse should
+	// push an explosion request and let every instance resolve its own targets (D-3).
 	for _, target := range targets {
 		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackPulse,

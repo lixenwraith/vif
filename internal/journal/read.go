@@ -63,6 +63,19 @@ type anchorFields struct {
 	Height        int    `json:"height"`
 }
 
+// Replicated returns the records that must appear identically in every instance's
+// journal of one seed: the transported set of D-10. Anchors are dropped — they
+// describe the file, not the run's shared state.
+func (s Set) Replicated() []event.JournalRecord {
+	out := make([]event.JournalRecord, 0, len(s.Records))
+	for _, r := range s.Records {
+		if r.Replicated() {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 // Load reads one or more journal files into a single set. The event registry must
 // be initialised first: event names resolve through it.
 func Load(paths ...string) (Set, error) {

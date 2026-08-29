@@ -388,7 +388,9 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 	// Emit chain attack if present
 	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
-		s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+		// The class is per-event: a hit on a shared target is shared simulation, one
+		// on a player target is this instance's alone (D-10).
+		s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 			AttackType:   chainAttack.AttackType,
 			OwnerEntity:  payload.OwnerEntity,
 			OriginEntity: payload.OwnerEntity,
@@ -398,7 +400,7 @@ func (s *CombatSystem) applyHitDirect(payload *event.CombatAttackDirectRequestPa
 			OriginX:      originX,
 			OriginY:      originY,
 			ChainDepth:   depth,
-		})
+		}, payload.TargetEntity.Domain())
 		s.recordChain(depth, 1)
 		resolved = true
 	}
@@ -602,7 +604,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 	if chainAttack := attack.Chain; chainAttack != nil {
 		depth := payload.ChainDepth + 1
 		for _, hitEntity := range hits {
-			s.world.PushEvent(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
+			s.world.PushEventDomain(event.EventCombatAttackDirectRequest, &event.CombatAttackDirectRequestPayload{
 				AttackType:   chainAttack.AttackType,
 				OwnerEntity:  payload.OwnerEntity,
 				OriginEntity: payload.OwnerEntity,
@@ -612,7 +614,7 @@ func (s *CombatSystem) applyHitArea(payload *event.CombatAttackAreaRequestPayloa
 				OriginX:      payload.OriginX,
 				OriginY:      payload.OriginY,
 				ChainDepth:   depth,
-			})
+			}, targetEntity.Domain())
 		}
 		s.recordChain(depth, len(hits))
 		resolved = len(hits) != 0 || resolved

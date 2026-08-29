@@ -519,7 +519,7 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
-	ctx.PushEvent(event.EventMetaDebugRequest, nil)
+	ctx.PushLocal(event.EventMetaDebugRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
@@ -546,7 +546,7 @@ func handleDebugSaveCommand(ctx *engine.GameContext) CommandResult {
 func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
-	ctx.PushEvent(event.EventMetaHelpRequest, nil)
+	ctx.PushLocal(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
@@ -554,7 +554,7 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 func handleAboutCommand(ctx *engine.GameContext) CommandResult {
 	ctx.RequestMode(core.ModeOverlay)
 	ctx.SetPaused(true)
-	ctx.PushEvent(event.EventMetaAboutRequest, nil)
+	ctx.PushLocal(event.EventMetaAboutRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
 }
 
@@ -586,7 +586,7 @@ func handleEnergyCommand(ctx *engine.GameContext, args []string) CommandResult {
 		return CommandResult{Continue: true, KeepPaused: false}
 	}
 
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{
+	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{
 		Entity: ctx.World.Resources.Player.Entity,
 		Value:  value,
 	})
@@ -615,7 +615,7 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 		value = parameter.HeatMax
 	}
 
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
+	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
 		Entity: ctx.World.Resources.Player.Entity,
 		Value:  value,
 	})
@@ -626,12 +626,12 @@ func handleHeatCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 // handleBoostCommand triggers boost request event
 func handleBoostCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
+	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{
 		Entity: ctx.World.Resources.Player.Entity,
 		Value:  parameter.HeatMax,
 	})
 
-	ctx.PushEvent(event.EventBoostActivate, &event.BoostActivatePayload{
+	ctx.PushLocal(event.EventBoostActivate, &event.BoostActivatePayload{
 		Entity:   ctx.World.Resources.Player.Entity,
 		Duration: parameter.BoostBaseDuration,
 	})
@@ -643,11 +643,11 @@ func handleBoostCommand(ctx *engine.GameContext) CommandResult {
 // handleGodCommand sets heat to max and energy to high value
 func handleGodCommand(ctx *engine.GameContext) CommandResult {
 	player := ctx.World.Resources.Player.Entity
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
+	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: parameter.GodEnergyAmount})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":god")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -655,25 +655,25 @@ func handleGodCommand(ctx *engine.GameContext) CommandResult {
 // handleDemonCommand sets heat to max and energy to high value
 func handleDemonCommand(ctx *engine.GameContext) CommandResult {
 	player := ctx.World.Resources.Player.Entity
-	ctx.PushEvent(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
-	ctx.PushEvent(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
-	ctx.PushEvent(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
+	ctx.PushLocal(event.EventHeatSetRequest, &event.HeatSetRequestPayload{Entity: player, Value: parameter.HeatMax})
+	ctx.PushLocal(event.EventEnergySetRequest, &event.EnergySetPayload{Entity: player, Value: -parameter.GodEnergyAmount})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponRod})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponLauncher})
+	ctx.PushLocal(event.EventWeaponAddRequest, &event.WeaponAddRequestPayload{Entity: player, Weapon: component.WeaponDisruptor})
 	ctx.SetLastCommand(":demon")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleBlossomCommand triggers a blossom wave
 func handleBlossomCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventBlossomWave, nil)
+	ctx.PushLocal(event.EventBlossomWave, nil)
 	ctx.SetLastCommand(":blossom")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleDecayCommand triggers a decay wave
 func handleDecayCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventDecayWave, nil)
+	ctx.PushLocal(event.EventDecayWave, nil)
 	ctx.SetLastCommand(":decay")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -689,7 +689,7 @@ func handleCleanerCommand(ctx *engine.GameContext) CommandResult {
 
 // handleDustCommand triggers glyph to dust transform
 func handleDustCommand(ctx *engine.GameContext) CommandResult {
-	ctx.PushEvent(event.EventDustAllRequest, nil)
+	ctx.PushLocal(event.EventDustAllRequest, nil)
 	ctx.SetLastCommand(":dust")
 	return CommandResult{Continue: true, KeepPaused: false}
 }
@@ -698,14 +698,14 @@ func handleDustCommand(ctx *engine.GameContext) CommandResult {
 
 func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
-		ctx.PushEvent(event.EventDebugFlowToggle, nil)
+		ctx.PushLocal(event.EventDebugFlowToggle, nil)
 	} else {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		ctx.PushEvent(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
+		ctx.PushLocal(event.EventDebugFlowToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
@@ -714,14 +714,14 @@ func handleFlowCommand(ctx *engine.GameContext, args []string) CommandResult {
 
 func handleGraphCommand(ctx *engine.GameContext, args []string) CommandResult {
 	if len(args) == 0 {
-		ctx.PushEvent(event.EventDebugGraphToggle, nil)
+		ctx.PushLocal(event.EventDebugGraphToggle, nil)
 	} else {
 		groupID, err := strconv.Atoi(args[0])
 		if err != nil || groupID < 0 || groupID >= component.MaxTargetGroups {
 			setCommandError(ctx, fmt.Sprintf("Invalid group ID: %s (0-%d)", args[0], component.MaxTargetGroups-1))
 			return CommandResult{Continue: true, KeepPaused: false}
 		}
-		ctx.PushEvent(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
+		ctx.PushLocal(event.EventDebugGraphToggle, &event.DebugFlowGroupPayload{
 			GroupID: uint8(groupID),
 		})
 	}
@@ -754,7 +754,7 @@ func handleSpeedCommand(ctx *engine.GameContext, args []string) CommandResult {
 		next = s
 	}
 
-	ctx.PushEvent(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
+	ctx.PushLocal(event.EventGameSpeedRequest, &event.GameSpeedPayload{Num: next.Num, Den: next.Den})
 	ctx.SetStatusMessage("Speed "+next.String()+"x", parameter.StatusMessageDefaultTimeout, true)
 	ctx.SetLastCommand(":speed " + next.String())
 	return CommandResult{Continue: true, KeepPaused: false}
@@ -792,7 +792,7 @@ func handleStepCommand(ctx *engine.GameContext, args []string) CommandResult {
 		}
 	}
 
-	ctx.PushEvent(event.EventGameStepRequest, p)
+	ctx.PushLocal(event.EventGameStepRequest, p)
 	ctx.SetLastCommand(":step " + strings.Join(args, " "))
 	return CommandResult{Continue: true, KeepPaused: false}
 }

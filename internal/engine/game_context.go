@@ -221,13 +221,7 @@ func ViewportFits(width, height int) bool {
 // mapSizeLocal reports whether this instance may derive map bounds from its own terminal.
 // Crop rewrites shared simulation state, so it is admissible only while nobody else shares the world.
 // When more than one player is present, crop is disabled and map size is locked.
-func (ctx *GameContext) mapSizeLocal() bool {
-	if ctx.World.Resources.Player.Count() > 1 {
-		return false
-	}
-	net := ctx.World.Resources.Network
-	return net == nil || net.Port == nil || net.Port.PeerCount() == 0
-}
+func (ctx *GameContext) mapSizeLocal() bool { return ctx.World.MapSizeLocal() }
 
 // PublishMapLock republishes context.map_locked from current state. The flag is
 // a derivation of CropOnResize and mapSizeLocal (D-14), so every writer of
@@ -489,6 +483,12 @@ func (ctx *GameContext) IncrementFrameNumber() int64 {
 // so a call site inside a WithOrigin scope needs no change
 func (ctx *GameContext) PushEvent(eventType event.EventType, payload any) {
 	ctx.World.PushEvent(eventType, payload)
+}
+
+// PushLocal stamps the player domain, for producers whose effect is this
+// instance's alone: operator commands and per-instance input (D-10)
+func (ctx *GameContext) PushLocal(eventType event.EventType, payload any) {
+	ctx.World.PushLocal(eventType, payload)
 }
 
 // PushEventFull emits with explicit origin and domain tags, for replay and
