@@ -1,8 +1,13 @@
 package app
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 )
 
 // parityScript builds the option set two instances step in lockstep. Resizes and
@@ -70,6 +75,75 @@ func assertSharedParity(t *testing.T, a, b *App, step int) {
 	if !ok {
 		return
 	}
-	t.Fatalf("step %d: shared snapshot diverged at line %d\n  a: %s\n  b: %s\n%s",
-		step, idx, lx, ly, strings.Join(Diff(x, y, 8), "\n"))
+	t.Fatalf("step %d: shared snapshot diverged at line %d\n  a: %s\n  b: %s\n%s\n%s",
+		step, idx, lx, ly, strings.Join(Diff(x, y, 8), "\n"), strings.Join(diffSharedWorld(a, b, 8), "\n"))
+}
+
+// diffSharedWorld names the entities behind a world-digest mismatch.
+func diffSharedWorld(a, b *App, maxDiff int) []string {
+	type state struct {
+		position  component.PositionComponent
+		kinetic   component.KineticComponent
+		combat    component.CombatComponent
+		hasPos    bool
+		hasKin    bool
+		hasCombat bool
+	}
+	read := func(x *App) map[core.Entity]state {
+		out := make(map[core.Entity]state)
+		x.World().RunSafe(func() {
+			w := x.World()
+			visit := func(e core.Entity) {
+				if e.Domain() != core.DomainShared {
+					return
+				}
+				s := out[e]
+				s.position, s.hasPos = w.Positions.GetPosition(e)
+				s.kinetic, s.hasKin = w.Components.Kinetic.GetComponent(e)
+				s.combat, s.hasCombat = w.Components.Combat.GetComponent(e)
+				if s.hasPos || s.hasKin || s.hasCombat {
+					out[e] = s
+				}
+			}
+			for _, e := range w.Positions.Entities() {
+				visit(e)
+			}
+			for _, e := range w.Components.Kinetic.Entities() {
+				visit(e)
+			}
+			for _, e := range w.Components.Combat.Entities() {
+				visit(e)
+			}
+		})
+		return out
+	}
+
+	x, y := read(a), read(b)
+	entities := make([]core.Entity, 0, len(x)+len(y))
+	for e := range x {
+		entities = append(entities, e)
+	}
+	for e := range y {
+		if _, ok := x[e]; !ok {
+			entities = append(entities, e)
+		}
+	}
+	slices.Sort(entities)
+
+	out := make([]string, 0, maxDiff)
+	for _, e := range entities {
+		sx, okx := x[e]
+		sy, oky := y[e]
+		if okx == oky && sx == sy {
+			continue
+		}
+		out = append(out, fmt.Sprintf("  entity %d: a=(%+v,%t) b=(%+v,%t)", e, sx, okx, sy, oky))
+		if len(out) == maxDiff {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return []string{"  compared shared world state agrees"}
+	}
+	return out
 }

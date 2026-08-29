@@ -2,9 +2,9 @@ package app
 
 import (
 	"math"
+	"slices"
 	"strconv"
 
-	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 )
@@ -61,10 +61,7 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 	var wd worldDigest
 
 	wd.Positions = newDigest()
-	for _, e := range a.world.Positions.Entities() {
-		if !scope.Selects(e) {
-			continue
-		}
+	for _, e := range digestEntities(a.world.Positions.Entities(), scope) {
 		pos, ok := a.world.Positions.GetPosition(e)
 		if !ok {
 			continue
@@ -74,30 +71,33 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 
 	// Float divergence surfaces here many ticks before it moves a grid cell
 	wd.Kinetics = newDigest()
-	a.world.Components.Kinetic.Each(func(e core.Entity, k *component.KineticComponent) bool {
-		if !scope.Selects(e) {
-			return true
+	for _, e := range digestEntities(a.world.Components.Kinetic.Entities(), scope) {
+		k, ok := a.world.Components.Kinetic.GetPtr(e)
+		if !ok {
+			continue
 		}
 		wd.Kinetics = wd.Kinetics.u64(uint64(e)).
 			f64(k.PreciseX).f64(k.PreciseY).f64(k.VelX).f64(k.VelY)
-		return true
-	})
+	}
 
 	// A cursor's combat is owner-authored and transported (D-13), so it is compared
 	// only within one instance; every other combatant is re-derived and must match.
 	shared := scope != engine.ScopeBoth
 	wd.Combat = newDigest()
-	a.world.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-		if !scope.Selects(e) || (shared && a.world.Components.Cursor.HasEntity(e)) {
-			return true
+	for _, e := range digestEntities(a.world.Components.Combat.Entities(), scope) {
+		if shared && a.world.Components.Cursor.HasEntity(e) {
+			continue
+		}
+		c, ok := a.world.Components.Combat.GetPtr(e)
+		if !ok {
+			continue
 		}
 		wd.Combat = wd.Combat.u64(uint64(e)).
 			i64(int64(c.HitPoints)).b(c.IsEnraged).
 			i64(int64(c.StunnedRemaining)).
 			i64(int64(c.RemainingKineticImmunity)).
 			i64(int64(c.RemainingDamageImmunity))
-		return true
-	})
+	}
 
 	wd.Entities = newDigest().
 		i64(a.world.CreatedCount()).
@@ -105,4 +105,19 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 		i64(int64(a.world.Positions.CountEntities()))
 
 	return wd
+}
+
+// digestEntities canonically projects a mixed dense store for cross-instance comparison.
+func digestEntities(entities []core.Entity, scope engine.DomainScope) []core.Entity {
+	if scope == engine.ScopeBoth {
+		return entities
+	}
+	out := make([]core.Entity, 0, len(entities))
+	for _, e := range entities {
+		if scope.Selects(e) {
+			out = append(out, e)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
