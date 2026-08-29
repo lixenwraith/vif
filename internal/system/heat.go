@@ -80,6 +80,7 @@ func (s *HeatSystem) Update() {
 
 		// Handle ember decay
 		if heatComp.EmberActive && now.Sub(heatComp.EmberDecayTime) >= parameter.EmberDecayInterval {
+			wasDefeated := cursorDefeated(s.world, e)
 			heatComp.Current -= parameter.EmberDecayAmount
 			heatComp.EmberDecayTime = now
 
@@ -92,6 +93,7 @@ func (s *HeatSystem) Update() {
 				heatComp.Overheat = 0
 			}
 			s.publish(e, heatComp)
+			s.pushDefeatTransition(e, wasDefeated)
 		}
 		return true
 	})
@@ -165,6 +167,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	if !ok {
 		return
 	}
+	wasDefeated := cursorDefeated(s.world, cursor)
 
 	// Reset overheat if heat penalty
 	if delta < 0 {
@@ -192,6 +195,7 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 	}
 
 	s.publish(cursor, heatComp)
+	s.pushDefeatTransition(cursor, wasDefeated)
 }
 
 // setHeat writes an absolute value to one cursor with clamping
@@ -200,6 +204,7 @@ func (s *HeatSystem) setHeat(cursor core.Entity, value int) {
 	if !ok {
 		return
 	}
+	wasDefeated := cursorDefeated(s.world, cursor)
 
 	// Clamp, spilling the excess into overheat
 	if value < 0 {
@@ -214,6 +219,7 @@ func (s *HeatSystem) setHeat(cursor core.Entity, value int) {
 	heatComp.Current = value
 
 	s.publish(cursor, heatComp)
+	s.pushDefeatTransition(cursor, wasDefeated)
 }
 
 // publish mirrors one cursor's heat into its roster slot
@@ -234,4 +240,15 @@ func (s *HeatSystem) clearSlot(slot uint8) {
 	s.statOverheat.Store(slot, 0)
 	s.statAtMax.Store(slot, false)
 	s.statEmber.Store(slot, false)
+}
+
+// pushDefeatTransition crosses only changes to the combined lifecycle predicate.
+func (s *HeatSystem) pushDefeatTransition(cursor core.Entity, was bool) {
+	now := cursorDefeated(s.world, cursor)
+	if now == was {
+		return
+	}
+	s.world.PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{
+		Entity: cursor, Defeated: now,
+	})
 }

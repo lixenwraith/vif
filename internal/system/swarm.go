@@ -28,13 +28,14 @@ type SwarmSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statActive      *atomic.Bool
-	statCount       *atomic.Int64
-	statPlayerKills *atomic.Int64
-	statProtected   *atomic.Int64
-	lifecycle       lifecycleTelemetry
-	motion          bounceTelemetry
-	sweep           cellSweep
+	statActive          *atomic.Bool
+	statCount           *atomic.Int64
+	statPlayerKills     *atomic.Int64
+	statProtected       *atomic.Int64
+	statProtectedPlayer *atomic.Int64
+	lifecycle           lifecycleTelemetry
+	motion              bounceTelemetry
+	sweep               cellSweep
 
 	enabled bool
 }
@@ -49,6 +50,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.statCount = world.Resources.Status.Ints.Get("swarm.count")
 	s.statPlayerKills = world.Resources.Status.Ints.Get("swarm.player_kills")
 	s.statProtected = world.Resources.Status.Ints.Get("swarm.protected_rejects")
+	s.statProtectedPlayer = world.Resources.Status.Ints.Get("swarm.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "swarm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
@@ -63,6 +65,7 @@ func (s *SwarmSystem) Init() {
 	s.statCount.Store(0)
 	s.statPlayerKills.Store(0)
 	s.statProtected.Store(0)
+	s.statProtectedPlayer.Store(0)
 	s.lifecycle.Reset()
 	s.motion.Reset()
 	s.enabled = true
@@ -277,7 +280,7 @@ func (s *SwarmSystem) clearSwarmSpawnArea(headerX, headerY int) {
 	for row := range parameter.SwarmHeight {
 		for col := range parameter.SwarmWidth {
 			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
-				return speciesClearable(s.world, e, s.statProtected)
+				return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 			})
 		}
 	}
@@ -754,9 +757,12 @@ func (s *SwarmSystem) handleCursorInteractions(
 	overlaps := CheckCursorOverlaps(s.world, headerEntity)
 	for i := range overlaps.Count {
 		overlap := &overlaps.Entries[i]
+		if !s.world.SimulatesLocally(overlap.Cursor) {
+			continue
+		}
 		// Combat applies shield knockback and enrage immunity.
 		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 				AttackType:   component.CombatAttackShield,
 				OwnerEntity:  overlap.Cursor,
 				OriginEntity: overlap.Cursor,

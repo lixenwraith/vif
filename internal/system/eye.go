@@ -19,11 +19,12 @@ type EyeSystem struct {
 	world *engine.World
 
 	// Telemetry
-	statCount     *atomic.Int64
-	statProtected *atomic.Int64
-	lifecycle     lifecycleTelemetry
-	motion        bounceTelemetry
-	sweep         cellSweep
+	statCount           *atomic.Int64
+	statProtected       *atomic.Int64
+	statProtectedPlayer *atomic.Int64
+	lifecycle           lifecycleTelemetry
+	motion              bounceTelemetry
+	sweep               cellSweep
 
 	enabled bool
 }
@@ -35,6 +36,7 @@ func NewEyeSystem(world *engine.World) engine.System {
 
 	s.statCount = world.Resources.Status.Ints.Get("eye.count")
 	s.statProtected = world.Resources.Status.Ints.Get("eye.protected_rejects")
+	s.statProtectedPlayer = world.Resources.Status.Ints.Get("eye.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "eye")
 	s.motion = newBounceTelemetry(world.Resources.Status, "eye")
 
@@ -45,6 +47,7 @@ func NewEyeSystem(world *engine.World) engine.System {
 func (s *EyeSystem) Init() {
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
+	s.statProtectedPlayer.Store(0)
 	s.lifecycle.Reset()
 	s.motion.Reset()
 	s.enabled = true
@@ -282,7 +285,7 @@ func (s *EyeSystem) clearSpawnArea(headerX, headerY int) {
 	for row := range parameter.EyeHeight {
 		for col := range parameter.EyeWidth {
 			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
-				return speciesClearable(s.world, e, s.statProtected)
+				return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 			})
 		}
 	}
@@ -606,8 +609,11 @@ func (s *EyeSystem) handleCursorInteraction(headerEntity core.Entity) {
 	overlaps := CheckCursorOverlaps(s.world, headerEntity)
 	for i := range overlaps.Count {
 		overlap := &overlaps.Entries[i]
+		if !s.world.SimulatesLocally(overlap.Cursor) {
+			continue
+		}
 		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 				AttackType:   component.CombatAttackShield,
 				OwnerEntity:  overlap.Cursor,
 				OriginEntity: overlap.Cursor,

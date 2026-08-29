@@ -18,7 +18,7 @@ const (
 	// ClassShared is emitted and consumed by shared systems and re-derived
 	// identically on every instance, so every instance journals it.
 	ClassShared
-	// ClassBus is player-originated and affects shared state: the D-3 crossing.
+	// ClassBus is owner-resolved and affects shared state: the D-3 crossing.
 	ClassBus
 	// ClassStamped is decided per event, not per type. The producer resolves the
 	// replication domain and stamps GameEvent.Domain; the filter reads the stamp.

@@ -23,12 +23,13 @@ type SnakeSystem struct {
 	rng   *vmath.FastRand
 
 	// Telemetry
-	statActive    *atomic.Bool
-	statCount     *atomic.Int64
-	statProtected *atomic.Int64
-	lifecycle     lifecycleTelemetry
-	motion        bounceTelemetry
-	sweep         cellSweep
+	statActive          *atomic.Bool
+	statCount           *atomic.Int64
+	statProtected       *atomic.Int64
+	statProtectedPlayer *atomic.Int64
+	lifecycle           lifecycleTelemetry
+	motion              bounceTelemetry
+	sweep               cellSweep
 
 	enabled bool
 }
@@ -41,6 +42,7 @@ func NewSnakeSystem(world *engine.World) engine.System {
 	s.statActive = world.Resources.Status.Bools.Get("snake.active")
 	s.statCount = world.Resources.Status.Ints.Get("snake.count")
 	s.statProtected = world.Resources.Status.Ints.Get("snake.protected_rejects")
+	s.statProtectedPlayer = world.Resources.Status.Ints.Get("snake.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "snake")
 	s.motion = newBounceTelemetry(world.Resources.Status, "snake")
 
@@ -53,6 +55,7 @@ func (s *SnakeSystem) Init() {
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
+	s.statProtectedPlayer.Store(0)
 	s.lifecycle.Reset()
 	s.motion.Reset()
 	s.enabled = true
@@ -856,7 +859,7 @@ func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 	headOverlaps := CheckCursorOverlaps(s.world, snakeComp.HeadEntity)
 	for i := range headOverlaps.Count {
 		headOverlap := &headOverlaps.Entries[i]
-		if !headOverlap.OnCursor {
+		if !headOverlap.OnCursor || !s.world.SimulatesLocally(headOverlap.Cursor) {
 			continue
 		}
 		if headOverlap.ShieldActive {
@@ -881,7 +884,7 @@ func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 	bodyOverlaps := CheckCursorOverlaps(s.world, snakeComp.BodyEntity)
 	for i := range bodyOverlaps.Count {
 		bodyOverlap := &bodyOverlaps.Entries[i]
-		if len(bodyOverlap.ShieldMembers) == 0 {
+		if len(bodyOverlap.ShieldMembers) == 0 || !s.world.SimulatesLocally(bodyOverlap.Cursor) {
 			continue
 		}
 		s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
@@ -889,7 +892,7 @@ func (s *SnakeSystem) handleInteractions(snakeComp *component.SnakeComponent) {
 			Value:  parameter.SnakeShieldDrainPerTick,
 		})
 
-		s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+		s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 			AttackType:   component.CombatAttackShield,
 			OwnerEntity:  bodyOverlap.Cursor,
 			OriginEntity: bodyOverlap.Cursor,
@@ -1020,7 +1023,7 @@ func (s *SnakeSystem) clearSpawnArea(centerX, centerY, width, height, offsetX, o
 	for row := range height {
 		for col := range width {
 			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
-				return speciesClearable(s.world, e, s.statProtected)
+				return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 			})
 		}
 	}

@@ -51,6 +51,7 @@ type StormSystem struct {
 	statBlueActiveFrame  *atomic.Int64
 	statNudges           *atomic.Int64
 	statProtected        *atomic.Int64
+	statProtectedPlayer  *atomic.Int64
 	lifecycle            lifecycleTelemetry
 	buffers              bufferTelemetry
 	motion               bounceTelemetry
@@ -78,6 +79,7 @@ func NewStormSystem(world *engine.World) engine.System {
 	s.statBlueActiveFrame = world.Resources.Status.Ints.Get("storm.blue_active_frames")
 	s.statNudges = world.Resources.Status.Ints.Get("storm.nudge_count")
 	s.statProtected = world.Resources.Status.Ints.Get("storm.protected_rejects")
+	s.statProtectedPlayer = world.Resources.Status.Ints.Get("storm.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "storm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "storm")
 
@@ -97,6 +99,7 @@ func (s *StormSystem) Init() {
 	s.statBlueActiveFrame.Store(0)
 	s.statNudges.Store(0)
 	s.statProtected.Store(0)
+	s.statProtectedPlayer.Store(0)
 	s.lifecycle.Reset()
 	s.buffers.Reset()
 	s.motion.Reset()
@@ -411,7 +414,7 @@ func (s *StormSystem) clearCircleSpawnArea(centerX, centerY int) {
 	s.sweep.reset()
 	for _, off := range s.ellipseOffsets {
 		s.sweep.collect(s.world, centerX+off.X, centerY+off.Y, func(e core.Entity) bool {
-			return speciesClearable(s.world, e, s.statProtected)
+			return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 		})
 	}
 	s.sweep.destroy(s.world)
@@ -826,7 +829,7 @@ func (s *StormSystem) processCircleCollisions(circleEntity core.Entity, newGridX
 			}
 			if prot, ok := s.world.Components.Protection.GetPtr(e); ok &&
 				(prot.Mask&component.ProtectFromSpecies != 0 || prot.Mask == component.ProtectAll) {
-				s.statProtected.Add(1)
+				countSpeciesProtected(e, s.statProtected, s.statProtectedPlayer)
 				return false
 			}
 			return true
@@ -972,6 +975,9 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 		overlaps := CheckCursorOverlaps(s.world, circleEntity)
 		for j := range overlaps.Count {
 			overlap := &overlaps.Entries[j]
+			if !s.world.SimulatesLocally(overlap.Cursor) {
+				continue
+			}
 			// Apply shield interaction before exact cursor contact.
 			if len(overlap.ShieldMembers) > 0 {
 				s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
@@ -979,7 +985,7 @@ func (s *StormSystem) handleCircleInteractions(stormComp *component.StormCompone
 					Value:  parameter.QuasarShieldDrain,
 				})
 
-				s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+				s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 					AttackType:   component.CombatAttackShield,
 					OwnerEntity:  overlap.Cursor,
 					OriginEntity: overlap.Cursor,

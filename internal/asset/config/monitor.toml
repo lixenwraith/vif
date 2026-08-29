@@ -35,15 +35,11 @@ transitions = [
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "VarEquals", guard_args = { var = "level_failed", value = 1 } },
 ]
 
-# heat.current and energy.current mirror slot 0 until the map is multi-cursor
 [states.MonitorActive]
 parent = "MonitorCycle"
 transitions = [
     { trigger = "EventHeatBurst", target = "MonitorHeatBurst", capture_vars = { entity = "burst_entity" } },
-    { trigger = "Tick", target = "MonitorGlobalReset", guard = "And", guard_args = { guards = [
-        { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
-        { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } },
-    ] } },
+    { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusBoolEquals", guard_args = { key = "session.all_defeated", value = true } },
 ]
 
 [states.MonitorHeatBurst]

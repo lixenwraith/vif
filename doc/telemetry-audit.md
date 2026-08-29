@@ -38,12 +38,12 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass and buffer observation | `Init` | Generic only |
 | Combat | `combat.{active,count,hits_direct,hits_area,knockbacks,stuns,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area attacks | `Init` | Generic only |
 | Drain | `drain.{count,pending,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
-| Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Storm | `storm.{active,circle_count,*_active_frames,nudge_count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,buf_*_hwm}` | `NewStormSystem` | Spawn/lifecycle/3-D physics/update paths | `Init` | Generic only |
+| Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
+| Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
+| Storm | `storm.{active,circle_count,*_active_frames,nudge_count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects,buf_*_hwm}` | `NewStormSystem` | Spawn/lifecycle/3-D physics/update paths | `Init` | Generic only |
 | Pylon | `pylon.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewPylonSystem` | Spawn/cancel/death handlers and update | `Init` | Generic only |
-| Snake | `snake.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects}` | `NewSnakeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
-| Eye | `eye.{count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects}` | `NewEyeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
+| Snake | `snake.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSnakeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
+| Eye | `eye.{count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewEyeSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Bullet | `bullet.{wall_collisions,boundary_hits,grid_steps,disabled_rejects}` | `NewBulletSystem` | Spawn rejection and swept update | `Init` | Generic only |
 | Dust | `dust.{created,active,destroyed,wall_collisions,boundary_reflections,grid_steps,buf_*_hwm}` | `NewDustSystem` | Resolved spawn/destruction/collision paths | `Init` | Generic only |
 | Flash | None | — | — | — | — |
@@ -256,6 +256,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `eye.killed_by_lifecycle` (int) | eye deaths with no resolved roster-cursor killer. |
 | `eye.killed_by_player` (int) | eye deaths credited to a resolved roster cursor. |
 | `eye.physics_steps` (int) | Physics integration substeps executed for eye movers. |
+| `eye.protected_player_rejects` (int) | eye interactions rejected on player-domain victims. |
 | `eye.protected_rejects` (int) | eye interactions rejected by the applicable protection mask. |
 | `eye.spawn_failures` (int) | eye spawn requests that could not produce an entity. |
 | `eye.spawned` (int) | Successfully created eye lifecycle instances. |
@@ -298,6 +299,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `quasar.killed_by_lifecycle` (int) | quasar deaths with no resolved roster-cursor killer. |
 | `quasar.killed_by_player` (int) | quasar deaths credited to a resolved roster cursor. |
 | `quasar.physics_steps` (int) | Physics integration substeps executed for quasar movers. |
+| `quasar.protected_player_rejects` (int) | quasar interactions rejected on player-domain victims. |
 | `quasar.protected_rejects` (int) | quasar interactions rejected by the applicable protection mask. |
 | `quasar.spawn_failures` (int) | quasar spawn requests that could not produce an entity. |
 | `quasar.spawned` (int) | Successfully created quasar lifecycle instances. |
@@ -309,6 +311,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `snake.killed_by_lifecycle` (int) | snake deaths with no resolved roster-cursor killer. |
 | `snake.killed_by_player` (int) | snake deaths credited to a resolved roster cursor. |
 | `snake.physics_steps` (int) | Physics integration substeps executed for snake movers. |
+| `snake.protected_player_rejects` (int) | snake interactions rejected on player-domain victims. |
 | `snake.protected_rejects` (int) | snake interactions rejected by the applicable protection mask. |
 | `snake.spawn_failures` (int) | snake spawn requests that could not produce an entity. |
 | `snake.spawned` (int) | Successfully created snake lifecycle instances. |
@@ -337,6 +340,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `storm.killed_by_lifecycle` (int) | storm deaths with no resolved roster-cursor killer. |
 | `storm.killed_by_player` (int) | storm deaths credited to a resolved roster cursor. |
 | `storm.physics_steps` (int) | Physics integration substeps executed for storm movers. |
+| `storm.protected_player_rejects` (int) | storm interactions rejected on player-domain victims. |
 | `storm.protected_rejects` (int) | storm interactions rejected by the applicable protection mask. |
 | `storm.spawn_failures` (int) | storm spawn requests that could not produce an entity. |
 | `storm.spawned` (int) | Successfully created storm lifecycle instances. |
@@ -346,6 +350,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `swarm.killed_by_lifecycle` (int) | swarm deaths with no resolved roster-cursor killer. |
 | `swarm.killed_by_player` (int) | swarm deaths credited to a resolved roster cursor. |
 | `swarm.physics_steps` (int) | Physics integration substeps executed for swarm movers. |
+| `swarm.protected_player_rejects` (int) | swarm interactions rejected on player-domain victims. |
 | `swarm.protected_rejects` (int) | swarm interactions rejected by the applicable protection mask. |
 | `swarm.spawn_failures` (int) | swarm spawn requests that could not produce an entity. |
 | `swarm.spawned` (int) | Successfully created swarm lifecycle instances. |

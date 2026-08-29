@@ -24,12 +24,13 @@ type QuasarSystem struct {
 	rng *vmath.FastRand
 
 	// Telemetry
-	statActive    *atomic.Bool
-	statCount     *atomic.Int64
-	statProtected *atomic.Int64
-	lifecycle     lifecycleTelemetry
-	motion        bounceTelemetry
-	sweep         cellSweep
+	statActive          *atomic.Bool
+	statCount           *atomic.Int64
+	statProtected       *atomic.Int64
+	statProtectedPlayer *atomic.Int64
+	lifecycle           lifecycleTelemetry
+	motion              bounceTelemetry
+	sweep               cellSweep
 
 	enabled bool
 }
@@ -43,6 +44,7 @@ func NewQuasarSystem(world *engine.World) engine.System {
 	s.statActive = world.Resources.Status.Bools.Get("quasar.active")
 	s.statCount = world.Resources.Status.Ints.Get("quasar.count")
 	s.statProtected = world.Resources.Status.Ints.Get("quasar.protected_rejects")
+	s.statProtectedPlayer = world.Resources.Status.Ints.Get("quasar.protected_player_rejects")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "quasar")
 	s.motion = newBounceTelemetry(world.Resources.Status, "quasar")
 
@@ -55,6 +57,7 @@ func (s *QuasarSystem) Init() {
 	s.statActive.Store(false)
 	s.statCount.Store(0)
 	s.statProtected.Store(0)
+	s.statProtectedPlayer.Store(0)
 	s.lifecycle.Reset()
 	s.motion.Reset()
 	s.enabled = true
@@ -309,7 +312,7 @@ func (s *QuasarSystem) clearQuasarSpawnArea(headerX, headerY int) {
 	for row := range parameter.QuasarHeight {
 		for col := range parameter.QuasarWidth {
 			s.sweep.collect(s.world, topLeftX+col, topLeftY+row, func(e core.Entity) bool {
-				return speciesClearable(s.world, e, s.statProtected)
+				return speciesClearable(s.world, e, s.statProtected, s.statProtectedPlayer)
 			})
 		}
 	}
@@ -683,7 +686,7 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 				}
 				if prot, ok := s.world.Components.Protection.GetPtr(e); ok &&
 					prot.Mask&component.ProtectFromSpecies != 0 {
-					s.statProtected.Add(1)
+					countSpeciesProtected(e, s.statProtected, s.statProtectedPlayer)
 					return false
 				}
 				return true
@@ -705,9 +708,12 @@ func (s *QuasarSystem) handleInteractions(headerEntity core.Entity) {
 	overlaps := CheckCursorOverlaps(s.world, headerEntity)
 	for i := range overlaps.Count {
 		overlap := &overlaps.Entries[i]
+		if !s.world.SimulatesLocally(overlap.Cursor) {
+			continue
+		}
 		// Apply shield knockback before exact cursor contact.
 		if len(overlap.ShieldMembers) > 0 {
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 				AttackType:   component.CombatAttackShield,
 				OwnerEntity:  overlap.Cursor,
 				OriginEntity: overlap.Cursor,

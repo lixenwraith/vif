@@ -160,6 +160,7 @@ func (s *CombatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventCombatAttackDirectRequest,
 		event.EventCombatAttackAreaRequest,
+		event.EventCombatAttackAreaCrossingRequest,
 		event.EventCombatHealRequest,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -183,6 +184,7 @@ func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
 	if !s.enabled {
 		if ev.Type == event.EventCombatAttackDirectRequest ||
 			ev.Type == event.EventCombatAttackAreaRequest ||
+			ev.Type == event.EventCombatAttackAreaCrossingRequest ||
 			ev.Type == event.EventCombatHealRequest {
 			s.statDisabled.Add(1)
 		}
@@ -195,7 +197,7 @@ func (s *CombatSystem) HandleEvent(ev event.GameEvent) {
 			s.applyHitDirect(payload)
 		}
 
-	case event.EventCombatAttackAreaRequest:
+	case event.EventCombatAttackAreaRequest, event.EventCombatAttackAreaCrossingRequest:
 		if payload, ok := ev.Payload.(*event.CombatAttackAreaRequestPayload); ok {
 			s.applyHitArea(payload)
 		}

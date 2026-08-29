@@ -276,6 +276,24 @@ navigation debug state, help key table and vlog correlation stamp now belong to
 their App-owned registry or `GameContext`. `TestConcurrentAppsKeepProcessStateScoped`
 drives two Apps through resize and debug mutations without cross-talk.
 
+The extended observer soak also closed four latent shared-outcome leaks:
+
+- personal drain deaths now cross `EventDrainDefeated` before advancing
+  `kills.drain`;
+- `EventCombatHealRequest`, already pushed as a crossing, is correctly classified
+  `Bus` rather than `Shared`;
+- shared species resolve a shield impact only for a locally owned cursor and cross
+  the exact shared area-hit target/member set;
+- the global-reset guard folds crossed per-owner defeat state and fires only when
+  every rostered cursor is defeated, rather than reading slot-zero heat/energy.
+
+`TestSharedCursorOverlapOutcomesStayOwnerResolved`,
+`TestSharedSpeciesCrossesOnlyOwnedShieldImpact`,
+`TestCursorDefeatTransitionCrossesCombinedOwnerState` and
+`TestMetaDefeatGateRequiresEveryRosteredCursor` pin those shapes. The protection
+rejection counters of shared species are split by victim domain so the shared
+snapshot compares their shared half.
+
 ## Carried-forward gaps
 
 Small and self-contained; none blocks Phase 8. Closed in Phase 7: the `ctx|player`

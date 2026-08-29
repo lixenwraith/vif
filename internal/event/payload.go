@@ -159,6 +159,12 @@ type GameResetPayload struct {
 	Purge bool `toml:"purge"`
 }
 
+// CursorDefeatStatePayload carries one owner's combined heat/energy state.
+type CursorDefeatStatePayload struct {
+	Entity   core.Entity `toml:"entity"`
+	Defeated bool        `toml:"defeated"`
+}
+
 // MetaStatusMessagePayload contains message to be displayed in status bar
 type MetaStatusMessagePayload struct {
 	Message          string        `toml:"message"`

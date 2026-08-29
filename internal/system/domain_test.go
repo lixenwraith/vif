@@ -411,6 +411,34 @@ func TestHelperFilesArePinned(t *testing.T) {
 	}
 }
 
+// TestSharedCursorOverlapOutcomesStayOwnerResolved pins every shared species
+// overlap to a local-ownership guard and a shield-impact crossing.
+func TestSharedCursorOverlapOutcomesStayOwnerResolved(t *testing.T) {
+	want := map[string][3]int{
+		"quasar.go": {1, 1, 1},
+		"swarm.go":  {1, 1, 1},
+		"storm.go":  {1, 1, 1},
+		"eye.go":    {1, 1, 1},
+		"pylon.go":  {1, 1, 1},
+		"snake.go":  {2, 2, 1},
+	}
+	for file, counts := range want {
+		body, err := os.ReadFile(file)
+		if err != nil {
+			t.Fatal(err)
+		}
+		source := string(body)
+		got := [3]int{
+			strings.Count(source, "CheckCursorOverlaps("),
+			strings.Count(source, "SimulatesLocally("),
+			strings.Count(source, "PushCrossing(event.EventCombatAttackAreaCrossingRequest"),
+		}
+		if got != counts {
+			t.Errorf("%s overlap/owner/crossing counts = %v, want %v", file, got, counts)
+		}
+	}
+}
+
 // declaredName returns the system name the file declares, from its Name method
 func declaredName(f *ast.File) string {
 	for _, decl := range f.Decls {

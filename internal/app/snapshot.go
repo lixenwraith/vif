@@ -94,6 +94,11 @@ func sharedKey(key string) bool {
 	if strings.Contains(key, ".buf_") && strings.HasSuffix(key, "_hwm") {
 		return false
 	}
+	// Shared sweep systems count rejected player victims separately so their shared
+	// rejection counter remains comparable across participants.
+	if strings.HasSuffix(key, ".protected_player_rejects") {
+		return false
+	}
 	if allowSharedKey[key] {
 		return true
 	}

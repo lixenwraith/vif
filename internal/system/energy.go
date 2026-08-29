@@ -243,6 +243,7 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 		s.statMissingEnergy.Add(1)
 		return
 	}
+	wasDefeated := cursorDefeated(s.world, cursor)
 
 	currentEnergy := energyComp.Current
 
@@ -303,6 +304,7 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 
 	energyComp.Current = newEnergy
 	s.publish(cursor, newEnergy)
+	s.pushDefeatTransition(cursor, wasDefeated)
 
 	// Preventing one frame flickering of shield at zero energy
 	if newEnergy == 0 {
@@ -347,6 +349,7 @@ func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
 	if !ok {
 		return
 	}
+	wasDefeated := cursorDefeated(s.world, cursor)
 
 	currentEnergy := energyComp.Current
 	if (currentEnergy < 0 && value > 0) || (currentEnergy >= 0 && value < 0) {
@@ -360,6 +363,7 @@ func (s *EnergySystem) setEnergy(cursor core.Entity, value int64) {
 
 	energyComp.Current = value
 	s.publish(cursor, value)
+	s.pushDefeatTransition(cursor, wasDefeated)
 }
 
 // handleGlyphConsumed applies energy from a glyph destroyed by one cursor
@@ -373,6 +377,7 @@ func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType compone
 	if !ok {
 		return
 	}
+	wasDefeated := cursorDefeated(s.world, cursor)
 
 	heat := heatComp.Current
 	var delta int
@@ -392,6 +397,7 @@ func (s *EnergySystem) handleGlyphConsumed(cursor core.Entity, glyphType compone
 
 	energyComp.Current = newEnergy
 	s.publish(cursor, newEnergy)
+	s.pushDefeatTransition(cursor, wasDefeated)
 
 	if newEnergy == 0 {
 		s.world.PushLocal(event.EventShieldDeactivate, &event.ShieldDeactivatePayload{Entity: cursor})
@@ -431,6 +437,24 @@ func (s *EnergySystem) publish(cursor core.Entity, value int64) {
 	if slot, ok := s.world.CursorSlot(cursor); ok {
 		s.statCurrent.Store(slot, value)
 	}
+}
+
+// cursorDefeated reports the owner-authored lifecycle predicate.
+func cursorDefeated(w *engine.World, cursor core.Entity) bool {
+	energy, energyOK := w.Components.Energy.GetComponent(cursor)
+	heat, heatOK := w.Components.Heat.GetComponent(cursor)
+	return energyOK && heatOK && energy.Current == 0 && heat.Current == 0
+}
+
+// pushDefeatTransition crosses only changes to the combined lifecycle predicate.
+func (s *EnergySystem) pushDefeatTransition(cursor core.Entity, was bool) {
+	now := cursorDefeated(s.world, cursor)
+	if now == was {
+		return
+	}
+	s.world.PushCrossing(event.EventCursorDefeatState, &event.CursorDefeatStatePayload{
+		Entity: cursor, Defeated: now,
+	})
 }
 
 // absI64 returns the magnitude of v

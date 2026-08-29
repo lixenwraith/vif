@@ -43,13 +43,22 @@ smallest artifact that determines the shared outcome crosses as a Bus event:
 | drain fusion | one spawn request: header cell only |
 | gold member typed | one composite-member destruction: header, member, typist cursor |
 | a dying drain donating its hit points | one heal request: target and amount |
+| a personal drain death | one progression event with no entity payload |
 | the post-typing cursor advance | one cursor move request: the shared cursor and its cell |
 | a personal nugget jump | one cursor move request: the shared cursor and the personal nugget's cell |
+| a locally owned shield striking a shared species | one area hit: target, struck members and owner cursor |
+| a participant entering or leaving terminal heat/energy state | one cursor defeat-state event |
 
 The table is `crossingPushes` in `internal/system/event_class_test.go`, and the
 test fails on a player-profile system pushing a replicated event that is not in
 it. Nugget destruction left the table in Phase 8 when nugget became personal;
 only its jump's shared cursor move crosses.
+
+The shared progression FSM consumes `EventDrainDefeated`, not the local drain's
+`EventSpeciesKilled`; otherwise one participant's personal population advances
+only its own copy of `kills.drain`. The global reset similarly consumes the
+crossed combined defeat predicate and resets only when every rostered cursor is
+defeated. It never reads the owner-authored `heat.current`/`energy.current` cells.
 
 Effects on player targets do not cross. The producer resolves its own domain
 *before* pushing the crossing event; the shared consumer resolves only shared
@@ -150,14 +159,15 @@ record", which is what the journal filter needs. `event.OnWire` answers "must a
 peer receive it", and it is strictly narrower: a `Shared` event is re-derived
 identically on every instance, so sending it applies it twice.
 
-The wire set is not `Bus` either. **Every Bus type has producers of both kinds**:
+The wire set is not `Bus` either. **Many Bus types have producers of both kinds**:
 `EventCompositeMemberDestroyed` from typing and from pylon, tower, storm and
 snake, `EventExplosionRequest` from a missile and from an eye,
 `EventSwarmSpawnRequest` from the fuse and from a storm. A shared producer's copy
 is re-derived everywhere; only the player-domain one crosses. So the tag decides
 here too: `World.PushCrossing` stamps the D-3 artifact `DomainPlayer`, and
-`OnWire` requires it. `TestCrossingPushesAreLive` fails a `crossingPushes` entry
-that does not use it.
+`OnWire` requires it. Crossing-only Bus types such as `EventDrainDefeated` use
+the same explicit stamp; class alone never opts an event onto the wire.
+`TestCrossingPushesAreLive` fails a `crossingPushes` entry that does not use it.
 
 For `Stamped` the tag means the *target's* domain instead, so the same rule reads
 inverted: `stampedCrossings` names the one Stamped type a player-domain producer
@@ -232,6 +242,14 @@ as their cursor fields alone. `CursorViewComponent.Orbs` does not travel: it nam
 player-domain entities (D-4). Shield geometry and ember state reproduce the
 remote cursor's presentation and owner-local interactions; no shared outcome
 reads the periodic snapshot.
+
+Shield/species collision used to contradict that last sentence: quasar, swarm,
+storm, eye, pylon and snake all re-derived shared knockback from whichever shield
+snapshot they held. Each now admits only `SimulatesLocally` cursors and crosses
+`EventCombatAttackAreaCrossingRequest` with the exact shared target/member set.
+`TestSharedCursorOverlapOutcomesStayOwnerResolved` pins every overlap site to the
+ownership guard and crossing; `TestSharedSpeciesCrossesOnlyOwnedShieldImpact`
+proves a remote shield cannot produce a second impact.
 
 **D-14 Map bounds authority.** `MapWidth`, `MapHeight` and `CropOnResize` are
 shared simulation state with two writers:
@@ -408,7 +426,10 @@ not the name. `denySharedKey` drops a single key from an otherwise comparable
 group: `engine.apm` and `engine.music_apm` beside the tick counters,
 `nav.entities`, and `content.served`/`content.rejected` beside the corpus
 fingerprint. A `.buf_*_hwm` suffix drops scratch high-water marks, which
-`newBufferTelemetry` names for every system that publishes one. `allowSharedKey`
+`newBufferTelemetry` names for every system that publishes one. A
+`.protected_player_rejects` suffix drops the player-victim half of otherwise
+shared species protection telemetry; the unsuffixed counter contains only shared
+victims. `allowSharedKey`
 re-admits `spatial.indexed_shared`, which its group prefix would otherwise deny.
 `denySharedField` drops `created_local`/`destroyed_local` from the otherwise
 shared `world` record.
@@ -418,6 +439,13 @@ player-domain simulations. A real second participant drives its own cursor, so
 every mixed-domain counter moves independently; `combat.` is the loss worth
 naming, since it resolves targets in both domains from one set of counters and
 would return to the comparison if those were split per domain.
+
+The Phase 8 observer soak found three code/document disagreements. Personal drain
+deaths incremented `kills.drain` only where their population existed;
+`EventCombatHealRequest` was pushed with `PushCrossing` but declared `Shared`, so
+`OnWire` correctly rejected it; and the monitor reset read slot-zero owner state
+directly. They now cross `EventDrainDefeated`, declare the heal `Bus`, and fold
+per-owner `EventCursorDefeatState` artifacts into `session.all_defeated`.
 
 `SnapshotContext` emits five records: `context`, `world` and `player` are
 emitted into the shared view, `view` and `session` are dropped from it. The

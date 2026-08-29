@@ -27,8 +27,8 @@ var stampingPush = map[string]bool{
 	"PushLocal": true, "PushEventDomain": true, "PushEventFull": true, "PushCrossing": true,
 }
 
-// crossingPushes is the D-3 table as code: every push of a replicated event by a
-// player-profile system, keyed "system:EventName", with the artifact that crosses.
+// crossingPushes is the D-3 table as code: every owner-resolved push of a
+// replicated event, keyed "system:EventName", with the artifact that crosses.
 // Adding a player-domain push of a shared or bus event without an entry here fails
 // TestEventClassMatchesSystemProfile; an entry that stops describing real code
 // fails TestCrossingPushesAreLive.
@@ -51,7 +51,20 @@ var crossingPushes = map[string]string{
 	// shared outcome is determined by the artifact it pushes, so each needs a
 	// wire path in Phase 7 exactly as the rows above do.
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
+	"drain:EventDrainDefeated":      "one personal drain death advances shared progression",
+	"fuse:EventDrainDefeated":       "each fused personal drain advances shared progression",
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",
+	"energy:EventCursorDefeatState": "the owner's combined energy/heat lifecycle state crosses",
+	"heat:EventCursorDefeatState":   "the owner's combined energy/heat lifecycle state crosses",
+
+	// A shared species reads only the locally owned shield and crosses the exact
+	// target/member set; periodic remote shield state never resolves shared combat.
+	"quasar:EventCombatAttackAreaCrossingRequest": "owner-resolved shield impact on a shared quasar",
+	"swarm:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared swarm",
+	"storm:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared storm",
+	"eye:EventCombatAttackAreaCrossingRequest":    "owner-resolved shield impact on a shared eye",
+	"pylon:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared pylon",
+	"snake:EventCombatAttackAreaCrossingRequest":  "owner-resolved shield impact on a shared snake",
 }
 
 // systemPushes records, per event constant one system's file pushes, the World

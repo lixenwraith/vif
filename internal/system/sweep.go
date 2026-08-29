@@ -65,16 +65,27 @@ func (s *cellSweep) destroy(w *engine.World) {
 	}
 }
 
-// speciesClearable admits everything a spawn footprint may destroy: cursors, walls
-// and species-protected entities survive.
-func speciesClearable(w *engine.World, e core.Entity, protected *atomic.Int64) bool {
+// countSpeciesProtected records a rejected victim in its entity domain.
+func countSpeciesProtected(e core.Entity, shared, player *atomic.Int64) {
+	if e.Domain() == core.DomainPlayer {
+		if player != nil {
+			player.Add(1)
+		}
+		return
+	}
+	if shared != nil {
+		shared.Add(1)
+	}
+}
+
+// speciesClearable admits everything a spawn footprint may destroy; cursors,
+// walls, and species-protected entities survive.
+func speciesClearable(w *engine.World, e core.Entity, protectedShared, protectedPlayer *atomic.Int64) bool {
 	if w.Components.Cursor.HasEntity(e) || w.Components.Wall.HasEntity(e) {
 		return false
 	}
 	if prot, ok := w.Components.Protection.GetComponent(e); ok && prot.Mask&component.ProtectFromSpecies != 0 {
-		if protected != nil {
-			protected.Add(1)
-		}
+		countSpeciesProtected(e, protectedShared, protectedPlayer)
 		return false
 	}
 	return true

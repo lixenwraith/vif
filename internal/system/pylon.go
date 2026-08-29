@@ -154,13 +154,16 @@ func (s *PylonSystem) handleInteractions(headerEntity core.Entity) {
 	overlaps := CheckCursorOverlaps(s.world, headerEntity)
 	for i := range overlaps.Count {
 		overlap := &overlaps.Entries[i]
+		if !s.world.SimulatesLocally(overlap.Cursor) {
+			continue
+		}
 		if len(overlap.ShieldMembers) > 0 {
 			s.world.PushLocal(event.EventShieldDrainRequest, &event.ShieldDrainRequestPayload{
 				Entity: overlap.Cursor,
 				Value:  parameter.PylonShieldDrain,
 			})
 
-			s.world.PushEvent(event.EventCombatAttackAreaRequest, &event.CombatAttackAreaRequestPayload{
+			s.world.PushCrossing(event.EventCombatAttackAreaCrossingRequest, &event.CombatAttackAreaRequestPayload{
 				AttackType:   component.CombatAttackShield,
 				OwnerEntity:  overlap.Cursor,
 				OriginEntity: overlap.Cursor,

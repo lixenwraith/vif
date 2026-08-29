@@ -208,6 +208,7 @@ func (s *FuseSystem) killDrains(drains []core.Entity) {
 				X:       killX,
 				Y:       killY,
 			})
+			s.world.PushCrossing(event.EventDrainDefeated, nil)
 		}
 		event.EmitDeath(s.world.Resources.Event.Queue, 0, drains...)
 	})

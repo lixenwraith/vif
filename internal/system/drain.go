@@ -324,6 +324,7 @@ func (s *DrainSystem) processDrainStates() {
 				X:            killX,
 				Y:            killY,
 			}, core.DomainPlayer)
+			s.world.PushCrossing(event.EventDrainDefeated, nil)
 			continue
 		}
 
@@ -876,6 +877,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 				X:       killX,
 				Y:       killY,
 			}, core.DomainPlayer)
+			s.world.PushCrossing(event.EventDrainDefeated, nil)
 			s.statSuicides.Add(1)
 		}
 	}
@@ -920,6 +922,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 			X:            a.pos.X,
 			Y:            a.pos.Y,
 		}, core.DomainPlayer)
+		s.world.PushCrossing(event.EventDrainDefeated, nil)
 		s.statCollisions.Add(1)
 	}
 }
