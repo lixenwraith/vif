@@ -25,6 +25,13 @@ type ScriptOptions struct {
 	Regions bool // allow FSM region operations
 	Resizes bool // allow terminal resize, which a parity run must hold fixed
 
+	// DisableTicks leaves clock advancement to a multi-participant harness.
+	DisableTicks bool
+	// DisableCommands excludes commands that mutate one participant's operator surface.
+	DisableCommands bool
+	// DisableOverlays excludes the paused overlay round trip, which advances one clock.
+	DisableOverlays bool
+
 	// MapSetups allows the operator level setup. It is the D-14 authority and is
 	// replicated only because every instance runs the same map script; one injected
 	// into a single participant is an operator action its peers never see.
@@ -114,6 +121,18 @@ func RunScript(a *App, opt ScriptOptions) (event.Stamp, error) {
 // actually runs between injections.
 func actionTable(opt ScriptOptions) []scriptAction {
 	// Weight zero rather than omission: the enabled sequence must not shift
+	tick := 30
+	if opt.DisableTicks {
+		tick = 0
+	}
+	command := 4
+	if opt.DisableCommands {
+		command = 0
+	}
+	overlay := 2
+	if opt.DisableOverlays {
+		overlay = 0
+	}
 	resize := 3
 	if !opt.Resizes {
 		resize = 0
@@ -123,7 +142,7 @@ func actionTable(opt ScriptOptions) []scriptAction {
 		level = 0
 	}
 	t := []scriptAction{
-		{(*ScriptDriver).actTick, 30},
+		{(*ScriptDriver).actTick, tick},
 		{(*ScriptDriver).actMotion, 20},
 		{(*ScriptDriver).actType, 10},
 		{(*ScriptDriver).actFire, 8},
@@ -131,11 +150,11 @@ func actionTable(opt ScriptOptions) []scriptAction {
 		{(*ScriptDriver).actMode, 6},
 		{(*ScriptDriver).actSpecial, 6},
 		{(*ScriptDriver).actCharMotion, 4},
-		{(*ScriptDriver).actCommand, 4},
+		{(*ScriptDriver).actCommand, command},
 		{(*ScriptDriver).actResize, resize},
 		{(*ScriptDriver).actLevel, level},
 		{(*ScriptDriver).actSearch, 2},
-		{(*ScriptDriver).actOverlay, 2},
+		{(*ScriptDriver).actOverlay, overlay},
 	}
 	if opt.Regions && len(opt.RegionSet) > 0 {
 		t = append(t, scriptAction{(*ScriptDriver).actRegion, 2})

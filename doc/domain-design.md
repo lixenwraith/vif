@@ -491,6 +491,12 @@ whose `CombatComponent` is owner-authored (D-13).
   injected into a single participant rewrites shared state its peers never see.
   `ScriptOptions.MapSetups` holds the first fixed for a parity run, matching what
   `Resizes` already does; the FSM op is held by `Regions`.
+- **Ex commands and overlays are operator-injectable, not participant input.**
+  The two-live criterion disables both: commands include direct scheduler and
+  system mutations that are not sent to a peer, while an overlay advances only
+  its App's paused clock. The same harness disables internal random ticks and
+  advances both clocks once per step. These actions remain valid in replay and
+  single-instance soaks; they are outside the D-10 wire set by design.
 - `event.EmitDeath` writes the queue directly, bypassing `PushEvent`, so
   `WithDomain` does not reach death records. Batches are already domain-pure,
   which is what determinism needs. Landed in Phase 6 as a domain parameter; the

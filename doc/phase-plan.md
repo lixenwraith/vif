@@ -255,9 +255,12 @@ record split, and the exclusion of cursor combat from the shared digest.
 
 ## Phase 8 — Multi-instance verification
 
-Two *live* in-process instances sharing a seed and an event pipe, driven by
-`RunScript`, asserting `SnapshotShared()` equality per tick and reporting the
-first divergent record via `FirstDiff`/`Diff`.
+Two *live* in-process instances sharing a seed and an event pipe, each driven by
+an independent `ScriptDriver`, assert `SnapshotShared()` equality at every paired
+tick boundary and report the first divergent record via `FirstDiff`/`Diff`.
+`TestTwoLiveParticipantsStayInLockstep` holds for 1,200 steps plus the trailing
+barrier drain; both cursors move, both participants send crossings, and both
+produce nonzero APM.
 
 First blocker, **resolved: the fixed-delay crossing barrier.** A crossing pushed
 during a settle used to apply locally there and remotely at the next tick opening,
@@ -274,6 +277,13 @@ Second blocker, **resolved: nugget is personal and uncontested.** The component,
 system, RNG and event family are player-domain/local. Collection reads only the
 local binding, remote cursors cannot claim it, and a jump transports only the
 resulting shared cursor move. The two-live parity test keeps nugget enabled.
+
+The two-live harness owns one tick per participant per step. It disables random
+script ticks and the overlay round trip so neither App can outrun the three-tick
+playout lead. `Resizes`, `MapSetups`, FSM `Regions`, resets and ex commands are
+also held fixed: each is an operator injection applied only to the App receiving
+it, and several intentionally rewrite shared scheduler or simulation state. They
+are not participant gameplay and are not transported under D-10.
 
 Third, from `headless.go`, **resolved:** the status recorder trigger hook,
 navigation debug state, help key table and vlog correlation stamp now belong to

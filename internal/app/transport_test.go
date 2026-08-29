@@ -253,6 +253,71 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	}
 }
 
+// TestTwoLiveParticipantsStayInLockstep is Phase 8's headless exit criterion.
+func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
+	const seed = 0x5EEDBEEF
+	steps := 1200
+	if testing.Short() {
+		steps = 120
+	}
+
+	a, b := pair(t, seed, steps)
+	localA, _ := mirrorCursors(t, a, b)
+	var localB core.Entity
+	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
+	assertSharedParity(t, a, b, -1)
+
+	// The harness owns the clock and holds non-transported operator mutations fixed.
+	optA := parityScript(seed, steps)
+	optA.Regions, optA.MapSetups = false, false
+	optA.DisableTicks, optA.DisableCommands, optA.DisableOverlays = true, true, true
+	optB := optA
+	optB.Seed ^= 0x9E3779B97F4A7C15
+	da, db := NewScriptDriver(a, optA), NewScriptDriver(b, optB)
+
+	startA, startB := cursorPosition(a, localA), cursorPosition(b, localB)
+	movedA, movedB := false, false
+	for i := range steps {
+		if !da.Step() {
+			t.Fatalf("step %d quit participant a", i)
+		}
+		if !db.Step() {
+			t.Fatalf("step %d quit participant b", i)
+		}
+		a.Tick(1)
+		b.Tick(1)
+		movedA = movedA || cursorPosition(a, localA) != startA
+		movedB = movedB || cursorPosition(b, localB) != startB
+		assertSharedParity(t, a, b, i)
+	}
+	for i := range parameter.NetworkBarrierDelayTicks + 1 {
+		a.Tick(1)
+		b.Tick(1)
+		assertSharedParity(t, a, b, steps+i)
+	}
+
+	var sentA, sentB int64
+	var apmA, apmB uint64
+	a.World().RunSafe(func() {
+		sentA = a.World().Resources.Status.Ints.Get("network.crossings_sent").Load()
+		apmA = a.World().Resources.Game.State.GetAPM()
+	})
+	b.World().RunSafe(func() {
+		sentB = b.World().Resources.Status.Ints.Get("network.crossings_sent").Load()
+		apmB = b.World().Resources.Game.State.GetAPM()
+	})
+	if !movedA || !movedB || sentA == 0 || sentB == 0 || apmA == 0 || apmB == 0 {
+		t.Fatalf("live proof = moved(%t,%t) sent(%d,%d) apm(%d,%d), want both active",
+			movedA, movedB, sentA, sentB, apmA, apmB)
+	}
+}
+
+// cursorPosition reads one roster entity under the world lock.
+func cursorPosition(a *App, e core.Entity) (pos component.PositionComponent) {
+	a.World().RunSafe(func() { pos, _ = a.World().Positions.GetPosition(e) })
+	return pos
+}
+
 // observeOnly marks every cursor on an instance remote, so it simulates none and
 // its shared state is whatever the wire delivers
 func observeOnly(t *testing.T, a *App) {
