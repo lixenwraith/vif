@@ -141,7 +141,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventEnergyAddRequest:
 		if payload, ok := ev.Payload.(*event.EnergyAddPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.statCursorRejects.Add(1)
 				return
@@ -151,7 +151,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergySetRequest:
 		if payload, ok := ev.Payload.(*event.EnergySetPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.statCursorRejects.Add(1)
 				return
@@ -161,7 +161,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyGlyphConsumed:
 		if payload, ok := ev.Payload.(*event.EnergyGlyphConsumedPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.statCursorRejects.Add(1)
 				return
@@ -171,7 +171,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyBlinkStart:
 		if payload, ok := ev.Payload.(*event.EnergyBlinkPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.statCursorRejects.Add(1)
 				return
@@ -181,7 +181,7 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventEnergyBlinkStop:
 		if payload, ok := ev.Payload.(*event.EnergyBlinkStopPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.stopBlink(cursor)
 			} else {
 				s.statCursorRejects.Add(1)
@@ -199,6 +199,12 @@ func (s *EnergySystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// D-2: a remote cursor's energy, view timers and shield state all arrive as
+		// transported values, so writing them here would be a second authority
+		if !s.world.SimulatesLocally(e) {
+			return true
+		}
+
 		// Local view timers; neither reaches shared simulation
 		if view, ok := s.world.Components.CursorView.GetPtr(e); ok {
 			if view.ErrorFlashRemaining > 0 {

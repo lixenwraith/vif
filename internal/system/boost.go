@@ -100,7 +100,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventBoostActivate:
 		if payload, ok := ev.Payload.(*event.BoostActivatePayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return
@@ -109,7 +109,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventBoostDeactivate:
 		if payload, ok := ev.Payload.(*event.BoostDeactivatePayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.deactivate(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -117,7 +117,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventBoostExtend:
 		if payload, ok := ev.Payload.(*event.BoostExtendPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return
@@ -127,7 +127,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventBoostReward:
 		if payload, ok := ev.Payload.(*event.BoostRewardPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.reward(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -141,7 +141,7 @@ func (s *BoostSystem) HandleEvent(ev event.GameEvent) {
 			if payload.Species == component.SpeciesTower && payload.KillerEntity == 0 {
 				return
 			}
-			if cursor := s.world.ResolveCursor(payload.KillerEntity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.KillerEntity); cursor != 0 {
 				s.reward(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -193,6 +193,11 @@ func (s *BoostSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// D-2: a remote cursor's boost timer runs on its owner, not here
+		if !s.world.SimulatesLocally(e) {
+			return true
+		}
+
 		boostComp, ok := s.world.Components.Boost.GetPtr(e)
 		if !ok || !boostComp.Active {
 			return true

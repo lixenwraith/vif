@@ -121,7 +121,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventEnergyCrossedZero:
 		// Notification: it already names the cursor whose energy changed sign
 		if p, ok := ev.Payload.(*event.EnergyCrossedZeroPayload); ok {
-			if cursor := s.world.ResolveCursor(p.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(p.Entity); cursor != 0 {
 				s.removeAllWeapons(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -133,7 +133,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventWeaponAddRequest:
 		if payload, ok := ev.Payload.(*event.WeaponAddRequestPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return
@@ -143,7 +143,7 @@ func (s *WeaponSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventWeaponFireRequest:
 		if payload, ok := ev.Payload.(*event.WeaponFireRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.handleFireMain(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -161,6 +161,11 @@ func (s *WeaponSystem) Update() {
 	dt := s.world.Resources.Time.DeltaTime
 
 	s.world.Components.Cursor.Each(func(cursor core.Entity, _ *component.CursorComponent) bool {
+		// D-2: only the owner simulates a cursor's weapons, cooldowns and orbs
+		if !s.world.SimulatesLocally(cursor) {
+			return true
+		}
+
 		weaponComp, ok := s.world.Components.Weapon.GetPtr(cursor)
 		if !ok {
 			return true

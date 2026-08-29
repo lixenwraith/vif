@@ -83,9 +83,12 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 		return true
 	})
 
+	// A cursor's combat is owner-authored and transported (D-13), so it is compared
+	// only within one instance; every other combatant is re-derived and must match.
+	shared := scope != engine.ScopeBoth
 	wd.Combat = newDigest()
 	a.world.Components.Combat.Each(func(e core.Entity, c *component.CombatComponent) bool {
-		if !scope.Selects(e) {
+		if !scope.Selects(e) || (shared && a.world.Components.Cursor.HasEntity(e)) {
 			return true
 		}
 		wd.Combat = wd.Combat.u64(uint64(e)).

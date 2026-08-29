@@ -63,6 +63,11 @@ func (s *HeatSystem) Update() {
 	now := s.world.Resources.Time.GameTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// D-2: a remote cursor's heat and burst flash are transported, not aged here
+		if !s.world.SimulatesLocally(e) {
+			return true
+		}
+
 		// Burst flash is local view state and ages even without a heat component
 		if view, ok := s.world.Components.CursorView.GetPtr(e); ok && view.BurstFlashRemaining > 0 {
 			view.BurstFlashRemaining = max(view.BurstFlashRemaining-dt, 0)
@@ -135,7 +140,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventHeatAddRequest:
 		if payload, ok := ev.Payload.(*event.HeatAddRequestPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return
@@ -144,7 +149,7 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 		}
 	case event.EventHeatSetRequest:
 		if payload, ok := ev.Payload.(*event.HeatSetRequestPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return

@@ -25,14 +25,20 @@ var denySharedPrefix = []string{
 	// This instance's view of the map: mirrors of fields ctx|view already drops
 	"context.screen_", "context.camera_", "context.mode",
 	// Instance-local traffic and index: only Shared ∪ Bus replicates (D-10), and a
-	// resize re-runs ResizeGrid on the instance that received it. spatial.indexed_shared
-	// is the one comparable member here and is dropped with the rest; the shared
-	// position digest already covers it. TODO(phase7): allow-list, not prefix deny.
+	// resize re-runs ResizeGrid on the instance that received it. The one comparable
+	// member is exempted by allowSharedKey rather than by narrowing the prefix.
 	"event.", "spatial.",
 	"drain.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
 	"combat.damage.", "combat.absorbed.",
+}
+
+// allowSharedKey re-admits a key its group prefix denies. spatial.indexed_shared
+// counts the shared half of the partition, which D-11 requires two instances to
+// agree on; the rest of the spatial group is this instance's index.
+var allowSharedKey = map[string]bool{
+	"spatial.indexed_shared": true,
 }
 
 // denySharedField lists context record fields that are local, in records that
@@ -46,6 +52,9 @@ var denySharedField = map[string]bool{
 func sharedKey(key string) bool {
 	if denySim[key] {
 		return false
+	}
+	if allowSharedKey[key] {
+		return true
 	}
 	for _, p := range denySharedPrefix {
 		if strings.HasPrefix(key, p) {

@@ -404,26 +404,35 @@ func (w *World) DestroyedCountDomain(d core.Domain) int64 { return w.destroyedCo
 
 // === Base Entities ===
 
-// UpdateBoundsRadius recomputes ping bounds for every cursor from mode and shield state
+// UpdateBoundsRadius recomputes ping bounds for the local cursor from mode and shield
+// state. Ping is pure local view (D-13) and this instance looks through one cursor, so
+// a rostered remote keeps whatever ClearBoundsRadius left it.
 // Caller MUST hold updateMutex
 func (w *World) UpdateBoundsRadius() {
-	visual := w.Resources.Game.State.GetMode() == core.ModeVisual
+	e := w.Resources.Player.Entity
+	ping, ok := w.Components.Ping.GetPtr(e)
+	if !ok {
+		return
+	}
 
-	w.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
-		ping, ok := w.Components.Ping.GetPtr(e)
-		if !ok {
-			return true
-		}
-		shield, hasShield := w.Components.Shield.GetComponent(e)
-		if !visual || !hasShield || !shield.Active {
-			ping.BoundsActive = false
-			return true
-		}
-		ping.BoundsRadiusX = int(shield.RadiusX) / parameter.PingBoundFactor
-		ping.BoundsRadiusY = int(shield.RadiusY) / parameter.PingBoundFactor
-		ping.BoundsActive = true
-		return true
-	})
+	visual := w.Resources.Game.State.GetMode() == core.ModeVisual
+	shield, hasShield := w.Components.Shield.GetComponent(e)
+	if !visual || !hasShield || !shield.Active {
+		ping.BoundsActive = false
+		return
+	}
+	ping.BoundsRadiusX = int(shield.RadiusX) / parameter.PingBoundFactor
+	ping.BoundsRadiusY = int(shield.RadiusY) / parameter.PingBoundFactor
+	ping.BoundsActive = true
+}
+
+// ClearBoundsRadius drops one cursor's ping bounds. Paired with a local rebind:
+// the departing slot stops being recomputed, so it must not keep stale bounds.
+// Caller MUST hold updateMutex
+func (w *World) ClearBoundsRadius(e core.Entity) {
+	if ping, ok := w.Components.Ping.GetPtr(e); ok {
+		ping.BoundsActive = false
+	}
 }
 
 // GetPingAbsoluteBounds returns the local cursor's absolute bounds; zero when no cursor exists
@@ -496,6 +505,26 @@ func (w *World) PushEntityFromBlocked(entity core.Entity, mask component.WallBlo
 // Caller MUST hold updateMutex
 func (w *World) ResolveCursor(e core.Entity) core.Entity {
 	if e == 0 || !w.Components.Cursor.HasEntity(e) {
+		return 0
+	}
+	return e
+}
+
+// SimulatesLocally reports whether this instance owns a cursor's simulation (D-2).
+// A remote cursor's owner-authored state arrives as transported values, so a local
+// system that also wrote it would be a second authority for one cell.
+// Caller MUST hold updateMutex
+func (w *World) SimulatesLocally(e core.Entity) bool {
+	c, ok := w.Components.Cursor.GetComponent(e)
+	return ok && c.Control != component.ControlRemote
+}
+
+// ResolveOwnedCursor is ResolveCursor narrowed to the cursors this instance
+// simulates. It is the single admission check for the D-13 owner-authored set:
+// a grant naming a remote cursor resolves to zero and its writer does nothing.
+// Caller MUST hold updateMutex
+func (w *World) ResolveOwnedCursor(e core.Entity) core.Entity {
+	if e == 0 || !w.SimulatesLocally(e) {
 		return 0
 	}
 	return e

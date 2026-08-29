@@ -9,7 +9,9 @@ import (
 // not carry: geometry, camera, cursor placement, and the operator session.
 // Five records. context, world and player are shared simulation state and must
 // match across instances; view and session are owner-authored, and a consumer
-// comparing two instances drops both — see App.SnapshotShared.
+// comparing two instances drops both — see App.SnapshotShared. The player record
+// carries the shared roster size only: the local binding lives in view, because a
+// remote participant binds a different slot to a different entity.
 // Caller MUST hold updateMutex — reads Config, Positions and Systems.
 func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 	cfg := ctx.World.Resources.Config
@@ -27,20 +29,21 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 		"camera_x", cfg.CameraX, "camera_y", cfg.CameraY,
 		"color_mode", int(cfg.ColorMode)}
 
+	// Roster size is shared; which slot this instance drives, and where that cursor
+	// stands, is this instance's binding and travels with the view record.
 	player := ctx.World.Resources.Player
-	args := []any{"msg", "player",
+	view = append(view,
 		"entity", uint64(player.Entity),
-		"slot", player.LocalSlot(),
-		"count", player.Count()}
+		"slot", player.LocalSlot())
 	if pos, ok := ctx.World.Positions.GetPosition(player.Entity); ok {
-		args = append(args, "x", pos.X, "y", pos.Y)
+		view = append(view, "x", pos.X, "y", pos.Y)
 	}
 	// Ping bounds are cursor view state, so they travel with the view record
 	if ping, ok := ctx.World.Components.Ping.GetComponent(player.Entity); ok {
 		view = append(view, "bounds_active", ping.BoundsActive,
 			"bounds_rx", ping.BoundsRadiusX, "bounds_ry", ping.BoundsRadiusY)
 	}
-	emit(status.SubStat, args...)
+	emit(status.SubStat, "msg", "player", "count", player.Count())
 	emit(status.SubStat, view...)
 
 	emit(status.SubStat, "msg", "world",

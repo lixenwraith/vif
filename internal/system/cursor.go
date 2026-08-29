@@ -238,7 +238,9 @@ func (s *CursorSystem) setLocal(slot uint8) {
 	if int(slot) >= parameter.MaxPlayers || roster.LocalSlot() == slot {
 		return
 	}
+	prev := roster.Entity
 	roster.SetLocal(slot)
+	s.world.ClearBoundsRadius(prev)
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
 

@@ -94,7 +94,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventShieldActivate:
 		if payload, ok := ev.Payload.(*event.ShieldActivatePayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.setActive(cursor, true)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -103,7 +103,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDeactivate:
 		if payload, ok := ev.Payload.(*event.ShieldDeactivatePayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.setActive(cursor, false)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -112,7 +112,7 @@ func (s *ShieldSystem) HandleEvent(ev event.GameEvent) {
 
 	case event.EventShieldDrainRequest:
 		if payload, ok := ev.Payload.(*event.ShieldDrainRequestPayload); ok {
-			cursor := s.world.ResolveCursor(payload.Entity)
+			cursor := s.world.ResolveOwnedCursor(payload.Entity)
 			if cursor == 0 {
 				s.rejects.cursor.Add(1)
 				return
@@ -165,6 +165,11 @@ func (s *ShieldSystem) Update() {
 	now := s.world.Resources.Time.GameTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
+		// D-2: the owner drains its own shield and transports the result
+		if !s.world.SimulatesLocally(e) {
+			return true
+		}
+
 		shieldComp, ok := s.world.Components.Shield.GetPtr(e)
 		if !ok || !shieldComp.Active {
 			return true

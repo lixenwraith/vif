@@ -232,7 +232,7 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 
 	for i := range parameter.MaxPlayers {
 		cursor := s.world.Resources.Player.Slot(uint8(i))
-		if cursor == 0 || !s.simulatesLocally(cursor) {
+		if cursor == 0 || !s.world.SimulatesLocally(cursor) {
 			continue
 		}
 
@@ -254,12 +254,6 @@ func (s *LootSystem) onSpeciesKilled(payload *event.SpeciesKilledPayload) {
 
 		s.spawnLootMulti(spawns, payload.X, payload.Y, cursor)
 	}
-}
-
-// simulatesLocally reports whether this instance owns a cursor's loadout, per D-2
-func (s *LootSystem) simulatesLocally(cursor core.Entity) bool {
-	c, ok := s.world.Components.Cursor.GetComponent(cursor)
-	return ok && c.Control != component.ControlRemote
 }
 
 // --- Spawn ---

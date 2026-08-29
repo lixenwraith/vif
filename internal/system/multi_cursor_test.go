@@ -39,6 +39,180 @@ func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	return w, first, second
 }
 
+// spawnRemoteCursor adds one peer-owned cursor to an existing roster. Phase 7 item 3
+// verifies the remote lifecycle with two local cursors before any socket exists.
+func spawnRemoteCursor(t *testing.T, w *engine.World, slot uint8, x, y int, peer uint32) core.Entity {
+	t.Helper()
+
+	cursors := NewCursorSystem(w).(*CursorSystem)
+	cursors.HandleEvent(event.GameEvent{
+		Type: event.EventCursorSpawnRequest,
+		Payload: &event.CursorSpawnRequestPayload{
+			X: x, Y: y, Slot: slot, Control: uint8(component.ControlRemote), PeerID: peer,
+		},
+	})
+	w.Resources.Event.Queue.Consume()
+
+	e := w.Resources.Player.Slot(slot)
+	if e == 0 {
+		t.Fatalf("remote cursor did not occupy slot %d", slot)
+	}
+	c, ok := w.Components.Cursor.GetComponent(e)
+	if !ok || c.Control != component.ControlRemote || c.PeerID != peer {
+		t.Fatalf("remote cursor component = %#v, want remote control for peer %d", c, peer)
+	}
+	return e
+}
+
+// TestRemoteCursorJoinsTheRosterWithoutBecomingLocal asserts the roster half of
+// item 3: a remote cursor is a full shared entity that contested mechanics see,
+// and it never becomes this instance's binding.
+func TestRemoteCursorJoinsTheRosterWithoutBecomingLocal(t *testing.T) {
+	w, first, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+
+	roster := w.Resources.Player
+	if roster.Count() != 3 {
+		t.Fatalf("roster count = %d, want 3", roster.Count())
+	}
+	if roster.Entity != first || roster.LocalSlot() != 0 {
+		t.Fatalf("local binding = (entity %d, slot %d), want (%d, 0)", roster.Entity, roster.LocalSlot(), first)
+	}
+	if roster.IsLocal(remote) {
+		t.Fatalf("remote cursor %d reports as local", remote)
+	}
+
+	// Contested mechanics resolve over the whole roster, remote included
+	if got, _, _, ok := ClosestCursor(w, 26, 5); !ok || got != remote {
+		t.Fatalf("closest cursor = (%d, %t), want remote %d", got, ok, remote)
+	}
+
+	// Ping is pure local view: only the binding's bounds are recomputed (D-13)
+	if ping, ok := w.Components.Ping.GetComponent(remote); !ok || ping.BoundsActive {
+		t.Fatalf("remote ping = %#v, want present and inactive", ping)
+	}
+}
+
+// TestRemoteCursorRejectsOwnerAuthoredWrites is the D-2 admission check: every
+// owner-authored writer refuses a cursor this instance does not simulate, so a
+// transported value is the single authority for that cell (D-13).
+func TestRemoteCursorRejectsOwnerAuthoredWrites(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+
+	if !w.SimulatesLocally(local) || w.SimulatesLocally(remote) {
+		t.Fatalf("SimulatesLocally = (%t, %t), want (true, false)", w.SimulatesLocally(local), w.SimulatesLocally(remote))
+	}
+	if got := w.ResolveOwnedCursor(remote); got != 0 {
+		t.Fatalf("ResolveOwnedCursor(remote) = %d, want 0", got)
+	}
+
+	energy := NewEnergySystem(w).(*EnergySystem)
+	heat := NewHeatSystem(w).(*HeatSystem)
+	shield := NewShieldSystem(w).(*ShieldSystem)
+	boost := NewBoostSystem(w).(*BoostSystem)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+
+	for _, ev := range []event.GameEvent{
+		{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Entity: remote, Value: 42}},
+		{Type: event.EventHeatSetRequest, Payload: &event.HeatSetRequestPayload{Entity: remote, Value: 37}},
+		{Type: event.EventShieldActivate, Payload: &event.ShieldActivatePayload{Entity: remote}},
+		{Type: event.EventBoostActivate, Payload: &event.BoostActivatePayload{Entity: remote, Duration: time.Second}},
+		{Type: event.EventWeaponAddRequest, Payload: &event.WeaponAddRequestPayload{Entity: remote, Weapon: component.WeaponRod}},
+	} {
+		energy.HandleEvent(ev)
+		heat.HandleEvent(ev)
+		shield.HandleEvent(ev)
+		boost.HandleEvent(ev)
+		weapon.HandleEvent(ev)
+	}
+
+	remoteEnergy, _ := w.Components.Energy.GetComponent(remote)
+	remoteHeat, _ := w.Components.Heat.GetComponent(remote)
+	remoteShield, _ := w.Components.Shield.GetComponent(remote)
+	remoteBoost, _ := w.Components.Boost.GetComponent(remote)
+	remoteWeapon, _ := w.Components.Weapon.GetComponent(remote)
+	if remoteEnergy.Current != 0 || remoteHeat.Current != 0 || remoteShield.Active ||
+		remoteBoost.Active || remoteWeapon.Charges[component.WeaponRod] != 0 {
+		t.Fatalf("remote cursor was written locally: energy %d heat %d shield %t boost %t rod %d",
+			remoteEnergy.Current, remoteHeat.Current, remoteShield.Active,
+			remoteBoost.Active, remoteWeapon.Charges[component.WeaponRod])
+	}
+
+	// Non-vacuous: the same commands land on a cursor this instance owns
+	for _, ev := range []event.GameEvent{
+		{Type: event.EventEnergySetRequest, Payload: &event.EnergySetPayload{Entity: local, Value: 42}},
+		{Type: event.EventHeatSetRequest, Payload: &event.HeatSetRequestPayload{Entity: local, Value: 37}},
+		{Type: event.EventBoostActivate, Payload: &event.BoostActivatePayload{Entity: local, Duration: time.Second}},
+	} {
+		energy.HandleEvent(ev)
+		heat.HandleEvent(ev)
+		boost.HandleEvent(ev)
+	}
+	localEnergy, _ := w.Components.Energy.GetComponent(local)
+	localHeat, _ := w.Components.Heat.GetComponent(local)
+	localBoost, _ := w.Components.Boost.GetComponent(local)
+	if localEnergy.Current != 42 || localHeat.Current != 37 || !localBoost.Active {
+		t.Fatalf("owned cursor state = (energy %d, heat %d, boost %t), want (42, 37, true)",
+			localEnergy.Current, localHeat.Current, localBoost.Active)
+	}
+}
+
+// TestRemoteCursorStateDoesNotAgeLocally covers the other half of the admission
+// check: the per-tick loops that would otherwise decay a transported value.
+func TestRemoteCursorStateDoesNotAgeLocally(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+
+	boost := NewBoostSystem(w).(*BoostSystem)
+	weapon := NewWeaponSystem(w).(*WeaponSystem)
+	shield := NewShieldSystem(w).(*ShieldSystem)
+
+	// A transported snapshot: both cursors arrive at the same values
+	for _, e := range []core.Entity{local, remote} {
+		b, _ := w.Components.Boost.GetPtr(e)
+		b.Active, b.Remaining, b.TotalDuration = true, time.Second, time.Second
+		wp, _ := w.Components.Weapon.GetPtr(e)
+		wp.MainFireCooldown = time.Second
+		sh, _ := w.Components.Shield.GetPtr(e)
+		sh.Active = true
+		sh.LastDrainTime = w.Resources.Time.GameTime.Add(-time.Hour)
+	}
+
+	w.Resources.Time.DeltaTime = 100 * time.Millisecond
+	boost.Update()
+	weapon.Update()
+	shield.Update()
+
+	remoteBoost, _ := w.Components.Boost.GetComponent(remote)
+	remoteWeapon, _ := w.Components.Weapon.GetComponent(remote)
+	if remoteBoost.Remaining != time.Second || remoteWeapon.MainFireCooldown != time.Second {
+		t.Fatalf("remote cursor aged locally: boost %v cooldown %v",
+			remoteBoost.Remaining, remoteWeapon.MainFireCooldown)
+	}
+
+	localBoost, _ := w.Components.Boost.GetComponent(local)
+	localWeapon, _ := w.Components.Weapon.GetComponent(local)
+	if localBoost.Remaining != 900*time.Millisecond || localWeapon.MainFireCooldown != 900*time.Millisecond {
+		t.Fatalf("owned cursor did not age: boost %v cooldown %v",
+			localBoost.Remaining, localWeapon.MainFireCooldown)
+	}
+
+	// The shield drain is an energy command; exactly one cursor may produce it
+	drains := 0
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if p, ok := ev.Payload.(*event.EnergyAddPayload); ok && ev.Type == event.EventEnergyAddRequest {
+			if p.Entity == remote {
+				t.Fatalf("shield drain produced for remote cursor %d", remote)
+			}
+			drains++
+		}
+	}
+	if drains != 1 {
+		t.Fatalf("shield drain requests = %d, want 1", drains)
+	}
+}
+
 func TestClosestCursorUsesRoster(t *testing.T) {
 	w, first, second := testCursorWorld(t)
 
