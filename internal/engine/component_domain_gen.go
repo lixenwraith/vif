@@ -13,7 +13,7 @@ type componentRule struct {
 // componentDomains is the audit table for AddComponentMask, derived from
 // manifest.Components. A bit absent here attaches in either domain.
 var componentDomains = map[uint64]componentRule{
-	NuggetBit:       {"Nugget", core.DomainShared},
+	NuggetBit:       {"Nugget", core.DomainPlayer},
 	CursorBit:       {"Cursor", core.DomainShared},
 	WallBit:         {"Wall", core.DomainShared},
 	LootBit:         {"Loot", core.DomainPlayer},

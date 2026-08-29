@@ -34,7 +34,7 @@ var Components = []ComponentDef{
 	// Glyph is player except gold sequence members, which are shared composite members
 	{"Glyph", "GlyphComponent", ""},
 	{"Sigil", "SigilComponent", ""},
-	{"Nugget", "NuggetComponent", "shared"},
+	{"Nugget", "NuggetComponent", "player"},
 	{"Cursor", "CursorComponent", "shared"},
 	{"Protection", "ProtectionComponent", ""},
 	{"Kinetic", "KineticComponent", ""},
@@ -134,8 +134,8 @@ var Systems = []SystemDef{
 	{Name: "loot", Constructor: "NewLootSystem", Domain: "player",
 		Optional: []string{"death", "energy", "weapon", "heat"}}, // rolled per participant against owner-authored inventory; reward handlers are optional (D-6)
 	{Name: "glyph", Constructor: "NewGlyphSystem", Domain: "player"}, // player stream and entities; corpus and map are its only inputs
-	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "shared",
-		Optional: []string{"cleaner", "energy", "heat"}}, // contested: the claim is shared; collection rewards are optional
+	{Name: "nugget", Constructor: "NewNuggetSystem", Domain: "player",
+		Optional: []string{"cleaner", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "decay", Constructor: "NewDecaySystem", Domain: "player", Optional: []string{"glyph", "death"}}, // player entities that idle without glyph and death events
 	{Name: "blossom", Constructor: "NewBlossomSystem", Domain: "player", Optional: []string{"death"}},      // player entities requested on death and idle without it
 	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared",
@@ -144,7 +144,7 @@ var Systems = []SystemDef{
 	// --- Spawning / Materialize ---
 	{Name: "materialize", Constructor: "NewMaterializeSystem", Domain: "dual"}, // stamped from the requester; the spawn gate is a dependency root (D-7)
 	{Name: "cleaner", Constructor: "NewCleanerSystem", Domain: "dual",
-		Optional: []string{"combat", "decay"}}, // nugget-spawned shared, weapon-spawned player; sweep effects are optional (D-7)
+		Optional: []string{"combat", "decay"}}, // request-stamped construction; current producers are player-domain (D-7)
 	{Name: "fuse", Constructor: "NewFuseSystem", Domain: "player", Requires: []string{"drain", "materialize", "spirit"},
 		Optional: []string{"quasar", "swarm"}}, // player stream crosses through the spawn request (D-3)
 	{Name: "spirit", Constructor: "NewSpiritSystem", Domain: "dual"}, // creates in the requesting domain, currently from the player-domain fuse (D-7)

@@ -18,7 +18,10 @@ import (
 // 8: The anchor gained the D-14 map latch (map_w, map_h, crop_on_resize). Records
 // are unchanged, so a 7 journal replays identically; the bump is what lets a join
 // handshake reject an anchor whose latch fields are absent rather than zero.
-const JournalSchema = 8
+//
+// 9: Nugget became a player-domain personal mechanic. Its event family moved from
+// the replicated set to Local, and a jump now records the resulting cursor crossing.
+const JournalSchema = 9
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

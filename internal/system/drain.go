@@ -1133,7 +1133,7 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 
 	// Check if it's a nugget, notify destruction
 	if s.world.Components.Nugget.HasEntity(entity) {
-		s.world.PushCrossing(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
+		s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
 			Entity: entity,
 		})
 	}

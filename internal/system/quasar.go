@@ -691,10 +691,10 @@ func (s *QuasarSystem) processCollisionsAtNewPositions(headerEntity core.Entity,
 		}
 	}
 
-	// Nuggets are shared; announce each one the sweep claimed
-	for _, e := range s.sweep.shared {
+	// Personal nuggets receive a local lifecycle notification before the player batch dies.
+	for _, e := range s.sweep.player {
 		if s.world.Components.Nugget.HasEntity(e) {
-			s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
+			s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: e})
 		}
 	}
 	s.sweep.emit(s.world, event.EventFlashSpawnOneRequest)

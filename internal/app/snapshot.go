@@ -42,7 +42,7 @@ var denySharedPrefix = []string{
 	"drain.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
-	"glyph.", "fuse.", "shield.", "cleaner.", "camera.", "transient.",
+	"glyph.", "nugget.", "fuse.", "shield.", "cleaner.", "camera.", "transient.",
 	"motion_marker.", "materialize.", "soft_collision.", "audio.", "music.",
 	"death.", "timer.",
 	// Combat resolves targets in both domains from one set of counters, so the whole

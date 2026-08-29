@@ -13,7 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// NuggetSystem manages nugget spawn and respawn logic
+// NuggetSystem owns one participant's personal nugget lifecycle.
 type NuggetSystem struct {
 	world *engine.World
 
@@ -51,7 +51,7 @@ func NewNuggetSystem(world *engine.World) engine.System {
 
 // Init resets session state for new game
 func (s *NuggetSystem) Init() {
-	s.rng = s.world.Rand(core.DomainShared, s.Name())
+	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.lastSpawnAttempt = time.Time{}
 	s.activeNuggetEntity = 0
 	s.statActive.Store(false)
@@ -109,7 +109,7 @@ func (s *NuggetSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventNuggetJumpRequest:
 		if payload, ok := ev.Payload.(*event.NuggetJumpRequestPayload); ok {
-			if cursor := s.world.ResolveCursor(payload.Entity); cursor != 0 {
+			if cursor := s.world.ResolveOwnedCursor(payload.Entity); cursor != 0 {
 				s.handleJumpRequest(cursor)
 			} else {
 				s.rejects.cursor.Add(1)
@@ -202,7 +202,7 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	}
 
 	// 3. Move Cursor
-	s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+	s.world.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
 		Entity: cursorEntity,
 		X:      nuggetPos.X,
 		Y:      nuggetPos.Y,
@@ -219,19 +219,16 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 	// 5. Collect nugget that overlaps with cursor
 	s.collectNugget(cursorEntity)
 
-	// 5. Update stats
+	// 6. Update stats
 	s.statJumps.Add(1)
 }
 
-// emitBeacon fires the nugget's directional cleaner from the nearest rostered cursor,
-// so a shared payload never names the local cursor
+// emitBeacon fires the personal nugget's cleaner from the local cursor.
 func (s *NuggetSystem) emitBeacon(x, y int) {
-	cursor, _, _, ok := ClosestCursor(s.world, x, y)
-	if !ok {
+	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
+	if cursor == 0 {
 		return
 	}
-	// The beacon is shared, its cleaners are not: each instance draws its own from
-	// the same shared trigger, so no visual reaches the wire
 	s.world.PushLocal(event.EventCleanerDirectionalRequest, &event.DirectionalCleanerPayload{
 		Entity:    cursor,
 		OriginX:   x,
@@ -240,7 +237,7 @@ func (s *NuggetSystem) emitBeacon(x, y int) {
 	})
 }
 
-// spawnNugget creates a new nugget at a random valid position, caller must hold s.mu lock
+// spawnNugget creates a personal nugget at a random valid position.
 func (s *NuggetSystem) spawnNugget() {
 	now := s.world.Resources.Time.GameTime
 	x, y := s.findValidPosition()
@@ -249,7 +246,7 @@ func (s *NuggetSystem) spawnNugget() {
 		return
 	}
 
-	entity := s.world.CreateEntity(core.DomainShared)
+	entity := s.world.CreateEntity(core.DomainPlayer)
 
 	pos := component.PositionComponent{
 		X: x,
@@ -292,7 +289,9 @@ func (s *NuggetSystem) spawnNugget() {
 // findValidPosition finds a valid random position for a nugget
 func (s *NuggetSystem) findValidPosition() (int, int) {
 	config := s.world.Resources.Config
-	if s.world.Resources.Player.Count() == 0 {
+	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	if !ok {
 		return -1, -1
 	}
 
@@ -300,21 +299,9 @@ func (s *NuggetSystem) findValidPosition() (int, int) {
 		x := s.rng.Intn(config.MapWidth)
 		y := s.rng.Intn(config.MapHeight)
 
-		nearCursor := false
-		s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
-			cursorPos, ok := s.world.Positions.GetPosition(e)
-			if !ok {
-				return true
-			}
-			dx := max(x-cursorPos.X, cursorPos.X-x)
-			dy := max(y-cursorPos.Y, cursorPos.Y-y)
-			if dx <= parameter.CursorExclusionX || dy <= parameter.CursorExclusionY {
-				nearCursor = true
-				return false
-			}
-			return true
-		})
-		if nearCursor {
+		dx := max(x-cursorPos.X, cursorPos.X-x)
+		dy := max(y-cursorPos.Y, cursorPos.Y-y)
+		if dx <= parameter.CursorExclusionX || dy <= parameter.CursorExclusionY {
 			continue
 		}
 
@@ -346,26 +333,24 @@ func (s *NuggetSystem) collectNugget(cursor core.Entity) {
 	s.statCollected.Add(1)
 }
 
-// collectionCursor returns the first rostered cursor whose collection area contains the nugget.
+// collectionCursor returns the local cursor when its personal collection area contains the nugget.
 func (s *NuggetSystem) collectionCursor(nuggetX, nuggetY int) core.Entity {
-	for i := range parameter.MaxPlayers {
-		cursor := s.world.Resources.Player.Slot(uint8(i))
-		cursorPos, ok := s.world.Positions.GetPosition(cursor)
-		if !ok {
-			continue
-		}
+	cursor := s.world.ResolveOwnedCursor(s.world.Resources.Player.Entity)
+	cursorPos, ok := s.world.Positions.GetPosition(cursor)
+	if !ok {
+		return 0
+	}
 
-		if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive &&
-			vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, visual.EmberInvRxSq, visual.EmberInvRySq) {
-			return cursor
-		}
-		if shieldComp, ok := s.world.Components.Shield.GetComponent(cursor); ok && shieldComp.Active &&
-			vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
-			return cursor
-		}
-		if cursorPos.X == nuggetX && cursorPos.Y == nuggetY {
-			return cursor
-		}
+	if heatComp, ok := s.world.Components.Heat.GetComponent(cursor); ok && heatComp.EmberActive &&
+		vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, visual.EmberInvRxSq, visual.EmberInvRySq) {
+		return cursor
+	}
+	if shieldComp, ok := s.world.Components.Shield.GetComponent(cursor); ok && shieldComp.Active &&
+		vmath.EllipseContainsPointF(nuggetX, nuggetY, cursorPos.X, cursorPos.Y, shieldComp.InvRxSq, shieldComp.InvRySq) {
+		return cursor
+	}
+	if cursorPos.X == nuggetX && cursorPos.Y == nuggetY {
+		return cursor
 	}
 	return 0
 }

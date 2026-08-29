@@ -146,11 +146,11 @@ const (
 
 	// --- Nugget ---
 
-	// EventNuggetCollected (NuggetCollectedPayload) [shared] signals nugget was collected by player
+	// EventNuggetCollected (NuggetCollectedPayload) [local] signals the personal nugget was collected
 	EventNuggetCollected
-	// EventNuggetDestroyed (NuggetDestroyedPayload) [shared] signals nugget was destroyed externally
+	// EventNuggetDestroyed (NuggetDestroyedPayload) [local] signals the personal nugget was destroyed externally
 	EventNuggetDestroyed
-	// EventNuggetJumpRequest (NuggetJumpRequestPayload) [bus] signals player intent to jump to active nugget
+	// EventNuggetJumpRequest (NuggetJumpRequestPayload) [local] signals player intent to jump to their active nugget
 	EventNuggetJumpRequest
 
 	// --- Cleaner ---

@@ -46,7 +46,7 @@ func itoa(v uint64) string {
 	return string(b[i:])
 }
 
-const anchorLine = `{"sub":"anchor","fields":{"schema":8,"jseq":0,"jrun":0,"jtick":0,` +
+const anchorLine = `{"sub":"anchor","fields":{"schema":9,"jseq":0,"jrun":0,"jtick":0,` +
 	`"start_run":0,"start_tick":0,"seed":42,"session":3,"config_id":"cfg","content_id":"c",` +
 	`"content_pin":"","content_files":1,"content_blocks":2,"content_lines":3,` +
 	`"tick_ns":16000000,"width":120,"height":40,"map_w":100,"map_h":30,` +

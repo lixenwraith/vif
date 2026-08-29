@@ -12,7 +12,7 @@ Companion to `domain-design.md`. Rules referenced as D-n.
 | 4.4 Combat payload reduced to geometry | done |
 | 4.5 Player-domain projectiles; cleaner and materialize stamped | done |
 | 4.6 Cursor view components (`CursorViewComponent`) | done |
-| 4.7 Nugget cursor leak resolved via `ClosestCursor` | done |
+| 4.7 Nugget cursor leak resolved via `ClosestCursor` | superseded in Phase 8 — personal |
 | 4.8 Fuse player-domain, geometry-only crossing, spirit stamped | done |
 | 4.9 Config split | withdrawn — one struct, no benefit |
 | 4.10 Drain flocking | resolved by declaration |
@@ -76,7 +76,8 @@ into Phase 6.
    contested — deterministic slot order, positions only. One fix:
    `NuggetSystem.emitBeacon` now uses `PushLocal`, so a shared nugget beacon
    draws each instance's own cleaners instead of one shared cleaner carrying
-   pure visuals.
+   pure visuals. Phase 8 supersedes this arrangement by making the nugget itself
+   personal; the beacon remains local.
 5. **`MetaSystem` profile confirmed** `shared`, rationale corrected: its world
    writes are replicated or are the D-14 map-bounds write, and the context
    state it writes is not world state.
@@ -265,16 +266,15 @@ instance deferring its own crossings to the same relative point its peer applies
 them at. Phase 7's one-directional test holds to 200 steps without it; two live
 participants will not.
 
-Second blocker: **`NuggetSystem.collectionCursor`**. A shared outcome resolved by
-owner-authored ember and shield state, which arrives on a periodic sync. No
-cadence closes it — see the domain document's §7. The choice is a shared
-collection rule or a personal one, and it is a gameplay decision.
+Second blocker, **resolved: nugget is personal and uncontested.** The component,
+system, RNG and event family are player-domain/local. Collection reads only the
+local binding, remote cursors cannot claim it, and a jump transports only the
+resulting shared cursor move. The two-live parity test keeps nugget enabled.
 
-Third, from `headless.go`: four process-wide values no snapshot reaches but that
-prevent concurrent Apps — the status recorder trigger hook, the navigation debug
-pointers in `internal/system`, help's key table, and vlog's correlation stamp.
-Phase 7's tests run two Apps in one process and do not touch them; a live pair
-that resizes, records or navigates will.
+Third, from `headless.go`, **resolved:** the status recorder trigger hook,
+navigation debug state, help key table and vlog correlation stamp now belong to
+their App-owned registry or `GameContext`. `TestConcurrentAppsKeepProcessStateScoped`
+drives two Apps through resize and debug mutations without cross-talk.
 
 ## Carried-forward gaps
 

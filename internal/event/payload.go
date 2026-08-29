@@ -217,12 +217,12 @@ type FSMRegionPayload struct {
 
 // --- Nugget ---
 
-// NuggetCollectedPayload signals successful nugget collection
+// NuggetCollectedPayload signals successful personal nugget collection.
 type NuggetCollectedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
 
-// NuggetDestroyedPayload signals external nugget destruction
+// NuggetDestroyedPayload signals external destruction of a personal nugget.
 type NuggetDestroyedPayload struct {
 	Entity core.Entity `toml:"entity"`
 }
@@ -598,9 +598,8 @@ type CompositeDestroyRequestPayload struct {
 //
 // Shield and Combat are split to their cursor fields: both stores also carry
 // quasar, loot and species state, which is re-derived and must not travel.
-// ShieldActive, ShieldInvRxSq/RySq and EmberActive are the load-bearing members —
-// NuggetSystem resolves a shared collection through them, so an instance missing
-// them disagrees on a shared outcome. The rest is the peer's HUD.
+// ShieldActive, ShieldInvRxSq/RySq and EmberActive reproduce the remote cursor's
+// presentation and owner-local interactions. No shared outcome reads this snapshot.
 // CursorViewComponent.Orbs is absent: it names player-domain entities (D-4).
 // Durations are nanoseconds so the TOML round trip is exact.
 type CursorStatePayload struct {

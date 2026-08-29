@@ -430,8 +430,7 @@ func (s *CleanerSystem) spawnSweepingCleaners(domain core.Domain, owner core.Ent
 
 // checkCollisions handles combat and glyph interactions at a single cell
 // Returns true if a combat entity was hit (blocks cleaner head)
-// Nugget cleaners are visual-only: a shared cleaner consuming player glyphs is an
-// undeclared crossing under multi-instance, so the mechanic is deprecated, not bridged.
+// Nugget cleaners are visual-only; their personal beacon never mutates glyphs or combat.
 func (s *CleanerSystem) checkCollisions(x, y int, selfEntity, owner core.Entity, velX, velY float64, colorType component.CleanerColorType) bool {
 	if colorType == component.CleanerColorNugget {
 		return false

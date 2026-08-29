@@ -42,14 +42,14 @@ smallest artifact that determines the shared outcome crosses as a Bus event:
 | area effect (missile impact, dust detonation, disruptor pulse) | one explosion request: centers, radius, duration, attack family, owner cursor |
 | drain fusion | one spawn request: header cell only |
 | gold member typed | one composite-member destruction: header, member, typist cursor |
-| decay or drain reaching a shared nugget | one nugget destruction: the nugget identity |
 | a dying drain donating its hit points | one heal request: target and amount |
 | the post-typing cursor advance | one cursor move request: the shared cursor and its cell |
+| a personal nugget jump | one cursor move request: the shared cursor and the personal nugget's cell |
 
 The table is `crossingPushes` in `internal/system/event_class_test.go`, and the
 test fails on a player-profile system pushing a replicated event that is not in
-it. The last three rows were found that way: they are crossings the design did
-not name, and each needs a wire path in Phase 7 exactly as the first four do.
+it. Nugget destruction left the table in Phase 8 when nugget became personal;
+only its jump's shared cursor move crosses.
 
 Effects on player targets do not cross. The producer resolves its own domain
 *before* pushing the crossing event; the shared consumer resolves only shared
@@ -151,7 +151,6 @@ peer receive it", and it is strictly narrower: a `Shared` event is re-derived
 identically on every instance, so sending it applies it twice.
 
 The wire set is not `Bus` either. **Every Bus type has producers of both kinds**:
-`EventNuggetDestroyed` from a player decay wave and from a shared quasar,
 `EventCompositeMemberDestroyed` from typing and from pylon, tower, storm and
 snake, `EventExplosionRequest` from a missile and from an eye,
 `EventSwarmSpawnRequest` from the fuse and from a storm. A shared producer's copy
@@ -215,9 +214,11 @@ it are excluded by `denySharedPrefix` in `internal/app/snapshot.go`.
 
 The static check keys on store name, so it covers only the cursor-exclusive
 half: `ownerAuthoredStores` in `internal/system/domain_test.go` lists Energy,
-Heat, Boost, Weapon, CursorView, Ping and Pulse. `Shield` and `Combat` are
-excluded deliberately — they also carry quasar, loot and species state, which
-is re-derived, and the store name alone cannot separate the two populations.
+Heat, Boost, Weapon, CursorView, Ping and Pulse. A shared-profile system may
+neither write nor read one of those stores; the read check would have caught the
+old shared nugget claim. `Shield` and `Combat` are excluded deliberately — they
+also carry quasar, loot and species state, which is re-derived, and the store
+name alone cannot separate the two populations.
 
 The set is closed against the code: a live cursor carries exactly Cursor,
 Protection, Energy, Heat, Shield, Boost, Weapon, Ping, CursorView, Combat and
@@ -228,10 +229,9 @@ list.
 The transport is `CursorStatePayload`, written by `NetworkSystem` and by nothing
 else, and only onto a cursor `SimulatesLocally` rejects. Shield and Combat travel
 as their cursor fields alone. `CursorViewComponent.Orbs` does not travel: it names
-player-domain entities (D-4). Two members are load-bearing rather than
-presentational — `ShieldComponent.Active/InvRxSq/InvRySq` and
-`HeatComponent.EmberActive` — because `NuggetSystem.collectionCursor` resolves a
-shared outcome through them. See §7: that read is this rule's one live violation.
+player-domain entities (D-4). Shield geometry and ember state reproduce the
+remote cursor's presentation and owner-local interactions; no shared outcome
+reads the periodic snapshot.
 
 **D-14 Map bounds authority.** `MapWidth`, `MapHeight` and `CropOnResize` are
 shared simulation state with two writers:
@@ -301,9 +301,9 @@ Telemetry: `spatial.player_budget_rejects`, `spatial.indexed_shared`.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, nugget, gold, marker, explosion centers, FSM, time |
-| **Player** | glyph, dust, drain, decay, blossom, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, loot |
-| **Stamped** | cleaner (nugget-spawned shared, weapon-spawned player), materialize (shared when it gates a shared spawn, player for drain), spirit (shared unless the requester is player-domain, which today is always the fuse) |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, gold, marker, explosion centers, FSM, time |
+| **Player** | glyph, nugget, dust, drain, decay, blossom, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, loot |
+| **Stamped** | cleaner (request-stamped; current nugget, weapon and command producers are player), materialize (shared when it gates a shared spawn, player for drain), spirit (shared unless the requester is player-domain, which today is always the fuse) |
 
 Cursor components split three ways: shared-and-replicated (position),
 owner-authored (energy, heat, boost, shield, weapon, combat — D-13), and pure
@@ -323,18 +323,19 @@ splash, typing, drain — guard by `e.Domain() != core.DomainPlayer`. One invari
 stated at the loop, replacing three accidental mechanisms (protection masks,
 component absence, iteration order) that happened to hold.
 
-**Contested objectives.** Nugget and gold are shared entities that any
-participant may claim, and the claim itself is a shared outcome every instance
-agrees on: `NuggetSystem.collectionCursor` and `GoldSystem.handleJumpRequest`
-resolve over the whole roster and their sequence state is shared. Only the
-*reward* is owner-authored (D-13). Credit is a deterministic function of the
-shared event stream: `GoldSystem` tallies `EventCompositeMemberDestroyed` per
-roster slot and `GoldCompletionPayload.Entity` names the cursor that typed the
-most members, ties breaking to the lowest slot, zero on timeout or destruction.
-This is the deliberate opposite of loot, which is rolled and owned per
-participant (D-6) precisely because its drop table reads per-cursor inventory.
-A mechanic is contested when the outcome is a function of shared state alone;
-personal when it reads owner-authored state.
+**Contested objectives.** Gold is shared and any participant may claim it. The
+claim is a deterministic function of the shared event stream: `GoldSystem`
+tallies `EventCompositeMemberDestroyed` per roster slot and
+`GoldCompletionPayload.Entity` names the cursor that typed the most members,
+ties breaking to the lowest slot, zero on timeout or destruction. Only the
+reward is owner-authored (D-13).
+
+Nugget is deliberately personal and uncontested. Each instance owns its player-
+domain spawn, collection area, destruction and reward; a remote cursor cannot
+claim it. A nugget jump crosses only the resulting shared cursor move. This puts
+nugget beside loot, which is also rolled and owned per participant because its
+mechanic reads owner-authored state. A mechanic is contested when the outcome is
+a function of shared state alone; personal when it reads owner-authored state.
 
 **Glyph.** Content glyphs are player-domain — every instance derives the same
 corpus from the same seed, so a glyph is re-derived rather than replicated, and
@@ -429,19 +430,12 @@ whose `CombatComponent` is owner-authored (D-13).
 
 ## 7. Known gaps
 
-- **`NuggetSystem.collectionCursor` reads owner-authored state to decide a shared
-  outcome.** Which cursor claims a shared nugget is resolved by each rostered
-  cursor's `HeatComponent.EmberActive` and `ShieldComponent.Active`/`InvRxSq`/
-  `InvRySq`. Those are D-13 values that arrive on a periodic sync, so two
-  participants can disagree on whether a nugget was collected — a shared entity
-  population divergence. §4 already states the rule this breaks: "a mechanic is
-  contested when the outcome is a function of shared state alone". **No sync
-  cadence closes it**, because the transport is a pipeline: the peer is applying
-  a value the owner has already moved past. The two ways out are a shared
-  collection rule (co-location and a shared radius, no owner-authored read) or
-  demoting collection to a personal mechanic resolved per instance. This is a
-  gameplay decision, so it is recorded rather than taken. Meanwhile the
-  two-participant test disables `nugget` and says why.
+- **Resolved in Phase 8: nugget is personal and uncontested.** `NuggetComponent`
+  and `NuggetSystem` are player-domain, the nugget event family is `Local`, and
+  `collectionCursor` reads only the local binding. Quasar and storm may still
+  remove a personal nugget through their D-12 player victim batch, but the
+  lifecycle notification remains local. `TestPersonalNuggetUsesPlayerDomainAndLocalCursor`
+  and the profile read check in `TestSystemDomainProfiles` enforce the decision.
 - **Per-tick parity between two live participants needs a barrier.** A crossing
   pushed during a settle applies locally in that settle but reaches the peer in
   the next tick's opening, so a damage-immunity window can close on one side and
@@ -467,5 +461,6 @@ whose `CombatComponent` is owner-authored (D-13).
 - A recording wider than the terminal is clipped by the render buffer. The pan
   offset in `play.go` is the seam a windowed composite replaces. Deferred; it
   is a presentation problem with no shared-state component.
-- Journal schema is 8: 7 made `Domain` meaningful, 8 added the D-14 map latch to
-  the anchor. Records are unchanged between the two.
+- Journal schema is 9: 7 made `Domain` meaningful, 8 added the D-14 map latch to
+  the anchor, and 9 moved the nugget event family out of the replicated record
+  set after the mechanic became personal.

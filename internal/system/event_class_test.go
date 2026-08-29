@@ -45,12 +45,11 @@ var crossingPushes = map[string]string{
 
 	// D-3 table, gold: the typed member and its typist cross.
 	"typing:EventCompositeMemberDestroyed": "gold member typed; header, member and typist cross",
+	"nugget:EventCursorMoveRequest":        "a personal nugget jump moves the shared cursor",
 
 	// Crossings the D-3 table does not name. Each is a player mechanic whose
 	// shared outcome is determined by the artifact it pushes, so each needs a
 	// wire path in Phase 7 exactly as the rows above do.
-	"decay:EventNuggetDestroyed":    "a decay wave reaching a shared nugget; the nugget identity crosses",
-	"drain:EventNuggetDestroyed":    "a drain consuming a shared nugget; the nugget identity crosses",
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",
 }

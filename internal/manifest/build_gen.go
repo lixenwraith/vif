@@ -197,7 +197,7 @@ var systemProfiles = map[string]engine.SystemProfile{
 	"gateway":        {Domain: engine.SystemShared, Requires: append(engine.Require("navigation"), engine.Optional("eye", "snake")...)},
 	"loot":           {Domain: engine.SystemPlayer, Requires: engine.Optional("death", "energy", "weapon", "heat")},
 	"glyph":          {Domain: engine.SystemPlayer, Requires: nil},
-	"nugget":         {Domain: engine.SystemShared, Requires: engine.Optional("cleaner", "energy", "heat")},
+	"nugget":         {Domain: engine.SystemPlayer, Requires: engine.Optional("cleaner", "energy", "heat")},
 	"decay":          {Domain: engine.SystemPlayer, Requires: engine.Optional("glyph", "death")},
 	"blossom":        {Domain: engine.SystemPlayer, Requires: engine.Optional("death")},
 	"gold":           {Domain: engine.SystemShared, Requires: append(engine.Require("composite"), engine.Optional("nugget", "energy", "splash")...)},

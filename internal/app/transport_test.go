@@ -114,8 +114,8 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 		ownedShield, _ = b.World().Components.Shield.GetComponent(ownedOnB)
 	})
 
-	// Heat and the shield ellipse are the load-bearing members: NuggetSystem
-	// resolves a shared collection through exactly these.
+	// Heat and the shield ellipse are mirrored for the remote cursor's presentation
+	// and owner-local interactions; they no longer determine a shared outcome.
 	if mirrored.Current != owned.Current || mirrored.Current != 55 || !mirrored.EmberActive {
 		t.Fatalf("remote heat on a = %d, owner holds %d; ember %t",
 			mirrored.Current, owned.Current, mirrored.EmberActive)
@@ -125,8 +125,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 		t.Fatalf("remote shield on a = %#v, owner holds %#v", mirrorShield, ownedShield)
 	}
 
-	// The load-bearing consequence: NuggetSystem resolves a shared collection
-	// through exactly these fields, so both instances now read the same ones.
+	// The receiving instance applied at least one owner-authored snapshot.
 	var applied int64
 	a.World().RunSafe(func() {
 		applied = a.World().Resources.Status.Ints.Get("network.state_applied").Load()
@@ -198,15 +197,6 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 
 	live, observer := pair(t, seed, steps)
 	observeOnly(t, observer)
-
-	// NuggetSystem.collectionCursor resolves a *shared* outcome — which cursor
-	// claims the nugget — by reading owner-authored ember and shield state, which
-	// arrives on a periodic sync and is therefore up to NetworkSyncTicks stale. The
-	// domain document says a contested mechanic is a function of shared state
-	// alone; this one is not, and no sync cadence closes it. Disabled here so the
-	// rest of the shared surface is asserted rather than masked by it.
-	disableSystem(t, live, "nugget")
-	disableSystem(t, observer, "nugget")
 
 	assertSharedParity(t, live, observer, -1)
 
