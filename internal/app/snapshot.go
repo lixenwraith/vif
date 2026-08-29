@@ -28,10 +28,45 @@ var denySharedPrefix = []string{
 	// resize re-runs ResizeGrid on the instance that received it. The one comparable
 	// member is exempted by allowSharedKey rather than by narrowing the prefix.
 	"event.", "spatial.",
+	// Transport traffic: what this instance sent and received, which is the exact
+	// complement of its peer's counters rather than a shared quantity
+	"network.",
+	// Aggregate entity counters sum both domains, so a second participant's own
+	// player-domain effects move them. ctx|world carries the shared half, and the
+	// shared position digest covers placement.
+	"entity.",
+	// Per-system counters of a player- or dual-profile system. Two instances of one
+	// terminal ran identical player-domain simulations, so most of these matched by
+	// accident; a real second participant drives its own cursor, so none of them do.
+	// The rule is the profile in manifest.Systems, not the name.
 	"drain.", "dust.", "decay.", "blossom.", "bullet.", "missile.",
 	"lightning.", "flash.", "fadeout.", "splash.", "spirit.", "loot.",
 	"weapon.", "energy.", "heat.", "typing.", "ping.", "boost.",
-	"combat.damage.", "combat.absorbed.",
+	"glyph.", "fuse.", "shield.", "cleaner.", "camera.", "transient.",
+	"motion_marker.", "materialize.", "soft_collision.", "audio.", "music.",
+	"death.", "timer.",
+	// Combat resolves targets in both domains from one set of counters, so the whole
+	// group is a mixed aggregate. The shared combat digest carries the shared half;
+	// splitting these per domain would restore the group to the comparison.
+	"combat.",
+	// Kill tallies mix shared species with the player-domain drain, so the total
+	// and the drain column move with this participant's own population
+	"kills.",
+}
+
+// denySharedKey drops a single per-instance key from a group that is otherwise
+// comparable. Keys, not a prefix: the engine group mixes these with the tick
+// counters two participants must agree on.
+var denySharedKey = map[string]bool{
+	"engine.apm":       true, // actions this participant took, not the session's
+	"engine.music_apm": true,
+	// Whole-store counts, which sum both domains: a participant's own player-domain
+	// population moves them. The shared position digest covers the shared half.
+	"nav.entities": true,
+	// Corpus consumption is a player-domain draw; the fingerprint beside it
+	// (files, blocks, lines, source) is shared and stays comparable.
+	"content.served":   true,
+	"content.rejected": true,
 }
 
 // allowSharedKey re-admits a key its group prefix denies. spatial.indexed_shared
@@ -50,7 +85,13 @@ var denySharedField = map[string]bool{
 
 // sharedKey reports whether a status key belongs in a cross-instance comparison
 func sharedKey(key string) bool {
-	if denySim[key] {
+	if denySim[key] || denySharedKey[key] {
+		return false
+	}
+	// Scratch high-water marks: allocation telemetry sized by this instance's own
+	// player-domain population. Named by newBufferTelemetry, which every system
+	// publishing one goes through, so the suffix is the whole rule.
+	if strings.Contains(key, ".buf_") && strings.HasSuffix(key, "_hwm") {
 		return false
 	}
 	if allowSharedKey[key] {

@@ -25,6 +25,11 @@ type ScriptOptions struct {
 	Regions bool // allow FSM region operations
 	Resizes bool // allow terminal resize, which a parity run must hold fixed
 
+	// MapSetups allows the operator level setup. It is the D-14 authority and is
+	// replicated only because every instance runs the same map script; one injected
+	// into a single participant is an operator action its peers never see.
+	MapSetups bool
+
 	// RegionSet names the regions actRegion may target; the FSM is scheduler-owned
 	// and exposes no region list to a harness, so it is declared here
 	RegionSet []ScriptRegion
@@ -37,7 +42,7 @@ type ScriptOptions struct {
 // DefaultScript returns the soak profile: every action class enabled
 func DefaultScript(seed uint64, steps int) ScriptOptions {
 	return ScriptOptions{Seed: seed, Steps: steps, Resets: true, Regions: true,
-		Resizes: true, RegionSet: EmbeddedRegions}
+		Resizes: true, MapSetups: true, RegionSet: EmbeddedRegions}
 }
 
 // ScriptDriver applies a drawn action sequence to one App. Two drivers built from
@@ -113,6 +118,10 @@ func actionTable(opt ScriptOptions) []scriptAction {
 	if !opt.Resizes {
 		resize = 0
 	}
+	level := 2
+	if !opt.MapSetups {
+		level = 0
+	}
 	t := []scriptAction{
 		{(*ScriptDriver).actTick, 30},
 		{(*ScriptDriver).actMotion, 20},
@@ -124,7 +133,7 @@ func actionTable(opt ScriptOptions) []scriptAction {
 		{(*ScriptDriver).actCharMotion, 4},
 		{(*ScriptDriver).actCommand, 4},
 		{(*ScriptDriver).actResize, resize},
-		{(*ScriptDriver).actLevel, 2},
+		{(*ScriptDriver).actLevel, level},
 		{(*ScriptDriver).actSearch, 2},
 		{(*ScriptDriver).actOverlay, 2},
 	}

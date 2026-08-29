@@ -107,6 +107,8 @@ const (
 	EventNetworkEvent
 	// EventNetworkError (NetworkErrorPayload) [local] signals a network error
 	EventNetworkError
+	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
+	EventCursorStateSync
 
 	// --- Meta ---
 

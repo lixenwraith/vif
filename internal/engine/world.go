@@ -359,6 +359,15 @@ func (w *World) PushLocal(eventType event.EventType, payload any) {
 	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.DomainPlayer)
 }
 
+// PushCrossing emits a D-3 crossing: the smallest artifact by which a player
+// mechanic determines a shared outcome. Stamped player, which is what separates it
+// from the same type pushed by a shared system re-deriving its own copy — every
+// Bus type has producers of both kinds. The journal replicates both; the wire
+// carries only this one (event.OnWire).
+func (w *World) PushCrossing(eventType event.EventType, payload any) {
+	w.pushEvent(eventType, payload, event.Origin(w.origin.Load()), core.DomainPlayer)
+}
+
 // pushEvent is the shared emit body; trace depth is measured from here
 func (w *World) pushEvent(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
 	if w.Resources.Event.Queue == nil {

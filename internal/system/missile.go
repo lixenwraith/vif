@@ -137,7 +137,7 @@ func (s *MissileSystem) Update() {
 			s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
 			strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)
 
-			s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+			s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 				Entity: missileComp.Owner,
 				X:      x,
 				Y:      y,

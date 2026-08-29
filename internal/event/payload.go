@@ -591,6 +591,59 @@ type CompositeDestroyRequestPayload struct {
 
 // --- Cursor ---
 
+// CursorStatePayload is one cursor's owner-authored state (D-13), sent by the
+// instance that simulates it and applied by every other. This is the only value
+// transfer in the design; everything else re-derives.
+//
+// Shield and Combat are split to their cursor fields: both stores also carry
+// quasar, loot and species state, which is re-derived and must not travel.
+// ShieldActive, ShieldInvRxSq/RySq and EmberActive are the load-bearing members —
+// NuggetSystem resolves a shared collection through them, so an instance missing
+// them disagrees on a shared outcome. The rest is the peer's HUD.
+// CursorViewComponent.Orbs is absent: it names player-domain entities (D-4).
+// Durations are nanoseconds so the TOML round trip is exact.
+type CursorStatePayload struct {
+	WeaponCharges  []int   `toml:"weapon_charges"`
+	WeaponCooldown []int64 `toml:"weapon_cooldown"`
+
+	Entity core.Entity `toml:"entity"` // shared, so both instances name the same one
+	Seq    uint64      `toml:"seq"`    // owner's sync counter; a reordered packet is dropped
+
+	Energy   int64 `toml:"energy"`
+	Heat     int   `toml:"heat"`
+	Overheat int   `toml:"overheat"`
+
+	ShieldRadiusX float64 `toml:"shield_radius_x"`
+	ShieldRadiusY float64 `toml:"shield_radius_y"`
+	ShieldInvRxSq float64 `toml:"shield_inv_rx_sq"`
+	ShieldInvRySq float64 `toml:"shield_inv_ry_sq"`
+
+	BoostRemaining   int64 `toml:"boost_remaining"`
+	BoostTotal       int64 `toml:"boost_total"`
+	MainFireCooldown int64 `toml:"main_fire_cooldown"`
+
+	HitPoints      int   `toml:"hit_points"`
+	DamageImmunity int64 `toml:"damage_immunity"`
+
+	ErrorFlash     int64 `toml:"error_flash"`
+	BurstFlash     int64 `toml:"burst_flash"`
+	BlinkRemaining int64 `toml:"blink_remaining"`
+	BlinkType      int   `toml:"blink_type"`
+	BlinkLevel     int   `toml:"blink_level"`
+
+	PulseOriginX   int   `toml:"pulse_origin_x"`
+	PulseOriginY   int   `toml:"pulse_origin_y"`
+	PulseDuration  int64 `toml:"pulse_duration"`
+	PulseRemaining int64 `toml:"pulse_remaining"`
+
+	Slot         uint8 `toml:"slot"`
+	EmberActive  bool  `toml:"ember_active"`
+	ShieldActive bool  `toml:"shield_active"`
+	BoostActive  bool  `toml:"boost_active"`
+	BlinkActive  bool  `toml:"blink_active"`
+	PulseActive  bool  `toml:"pulse_active"`
+}
+
 // CursorSpawnRequestPayload asks for a cursor entity
 // Center overrides X/Y; Auto overrides Slot with the lowest free index
 type CursorSpawnRequestPayload struct {
@@ -751,6 +804,10 @@ type CombatAttackDirectRequestPayload struct {
 	HasVelocity  bool                       `toml:"has_velocity"`
 	ChainDepth   uint8                      `toml:"chain_depth"`
 }
+
+// IsDerived reports a chain follow-up, which the receiver produces from the root
+// hit the wire carried; sending both would apply the chain twice (D-5).
+func (p *CombatAttackDirectRequestPayload) IsDerived() bool { return p.ChainDepth > 0 }
 
 // CombatAttackAreaRequestPayload contains area attack information.
 // An empty HitEntities is the implicit single-hit form: the hit set is exactly

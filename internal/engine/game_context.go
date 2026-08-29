@@ -491,6 +491,12 @@ func (ctx *GameContext) PushLocal(eventType event.EventType, payload any) {
 	ctx.World.PushLocal(eventType, payload)
 }
 
+// PushCrossing emits a D-3 crossing from a producer outside the world lock; see
+// World.PushCrossing
+func (ctx *GameContext) PushCrossing(eventType event.EventType, payload any) {
+	ctx.World.PushCrossing(eventType, payload)
+}
+
 // PushEventFull emits with explicit origin and domain tags, for replay and
 // transport, which restore both from a record rather than from the ambient tags
 func (ctx *GameContext) PushEventFull(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {

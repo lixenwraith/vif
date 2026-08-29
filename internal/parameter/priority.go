@@ -3,7 +3,8 @@ package parameter
 // TODO: review and reorder, use iota? add comment for all
 // System Execution Priorities (lower runs first)
 const (
-	PriorityCursor int = iota
+	PriorityNetwork int = iota // Before every consumer: a peer's crossing must be queued for this tick's settle
+	PriorityCursor
 	PriorityCamera
 	PriorityShield
 	PriorityHeat

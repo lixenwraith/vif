@@ -16,7 +16,7 @@ import (
 // and PushEventDomain name their domain explicitly, so a profile mismatch there is
 // deliberate and the class check still applies to the type they push.
 var pushMethods = map[string]bool{
-	"PushEvent": true, "PushLocal": true,
+	"PushEvent": true, "PushLocal": true, "PushCrossing": true,
 	"PushEventDomain": true, "PushEventFull": true, "PushEventOrigin": true,
 }
 
@@ -24,7 +24,7 @@ var pushMethods = map[string]bool{
 // one. A Stamped type is only meaningful if its producers use one of these, or push
 // inside a WithDomain scope.
 var stampingPush = map[string]bool{
-	"PushLocal": true, "PushEventDomain": true, "PushEventFull": true,
+	"PushLocal": true, "PushEventDomain": true, "PushEventFull": true, "PushCrossing": true,
 }
 
 // crossingPushes is the D-3 table as code: every push of a replicated event by a
@@ -54,12 +54,13 @@ var crossingPushes = map[string]string{
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",
 }
 
-// systemPushes is the set of event constants one system's file pushes by name
+// systemPushes records, per event constant one system's file pushes, the World
+// methods it pushes it with. The method matters: a D-3 crossing must stamp.
 type systemPushes struct {
 	name   string
 	file   string
 	domain string
-	events map[string]bool
+	events map[string]map[string]bool
 }
 
 // TestEventClassMatchesSystemProfile checks every statically resolvable push
@@ -113,18 +114,26 @@ func TestEventClassMatchesSystemProfile(t *testing.T) {
 	t.Logf("checked %d system/event pushes against the class table", checked)
 }
 
-// TestCrossingPushesAreLive fails on an entry no longer describing real code
+// TestCrossingPushesAreLive fails on an entry no longer describing real code, and
+// on a crossing that does not stamp. The stamp is what the wire reads: every Bus
+// type also has shared producers re-deriving their own copy, and a crossing left in
+// the ambient domain is indistinguishable from one of those (event.OnWire).
 func TestCrossingPushesAreLive(t *testing.T) {
 	pushes := parseSystemPushes(t, ".")
-	live := make(map[string]bool)
+	methods := make(map[string]map[string]bool)
 	for _, p := range pushes {
-		for name := range p.events {
-			live[p.name+":"+name] = true
+		for name, m := range p.events {
+			methods[p.name+":"+name] = m
 		}
 	}
 	for key := range crossingPushes {
-		if !live[key] {
+		m, ok := methods[key]
+		if !ok {
 			t.Errorf("crossingPushes[%q] describes a push that no longer exists", key)
+			continue
+		}
+		if !m["PushCrossing"] {
+			t.Errorf("crossingPushes[%q] does not stamp: push it with World.PushCrossing (D-3)", key)
 		}
 	}
 }
@@ -152,7 +161,7 @@ func parseSystemPushes(t *testing.T, dir string) []systemPushes {
 			continue // unregistered; TestSystemDomainProfiles already reports it
 		}
 
-		p := systemPushes{name: name, file: n, domain: domain, events: map[string]bool{}}
+		p := systemPushes{name: name, file: n, domain: domain, events: map[string]map[string]bool{}}
 		ast.Inspect(f, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok || len(call.Args) == 0 {
@@ -163,7 +172,10 @@ func parseSystemPushes(t *testing.T, dir string) []systemPushes {
 				return true
 			}
 			if ev := eventConstName(call.Args[0]); ev != "" {
-				p.events[ev] = true
+				if p.events[ev] == nil {
+					p.events[ev] = map[string]bool{}
+				}
+				p.events[ev][sel.Sel.Name] = true
 			}
 			return true
 		})
@@ -263,7 +275,7 @@ func collectStampingEvidence(t *testing.T, dir string, pushed, stamped map[strin
 	}
 }
 
-func sortedPushed(m map[string]bool) []string {
+func sortedPushed(m map[string]map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
 		out = append(out, k)

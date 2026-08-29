@@ -569,7 +569,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 
 func (r *Router) handleNuggetJump() bool {
 	r.captureForUndo()
-	r.ctx.PushLocal(event.EventNuggetJumpRequest, &event.NuggetJumpRequestPayload{
+	r.ctx.PushCrossing(event.EventNuggetJumpRequest, &event.NuggetJumpRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true
@@ -577,7 +577,7 @@ func (r *Router) handleNuggetJump() bool {
 
 func (r *Router) handleGoldJump() bool {
 	r.captureForUndo()
-	r.ctx.PushLocal(event.EventGoldJumpRequest, &event.GoldJumpRequestPayload{
+	r.ctx.PushCrossing(event.EventGoldJumpRequest, &event.GoldJumpRequestPayload{
 		Entity: r.ctx.World.Resources.Player.Entity,
 	})
 	return true

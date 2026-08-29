@@ -1088,9 +1088,12 @@ func (cs *ClockScheduler) processTick() {
 		// 2. Update game elapsed time status
 		cs.statGameElapsedMs.Store(tickTime.Sub(cs.gameStartTime).Milliseconds())
 
-		// 3. Initial Settling: Resolve everything accumulated during game tick
+		// 3. Initial Settling: Resolve everything accumulated during game tick,
+		//    a peer's artifacts included — inbound transport opens the tick so a
+		//    crossing lands in the tick that drained it, not the one after.
 
 		// Ensures FSM and Systems start with a consistent, settled world
+		cs.world.Resources.Event.Queue.ReceiveWire()
 		cs.dispatchAndProcessEvents("pre")
 
 		// 4. FSM Update: Advance state machine (may emit new events via Actions)
@@ -1144,6 +1147,10 @@ func (cs *ClockScheduler) processTick() {
 			cs.world.Positions.PublishTelemetry()
 			cs.publishEventTelemetry()
 		}
+		// Outbound transport closes the tick: everything this tick produced has
+		// settled, so a peer receives one tick's artifacts as one tick's worth
+		cs.world.Resources.Event.Queue.FlushWire()
+
 		cfg := cs.world.Resources.Config
 		screenW, screenH = ScreenSize(cfg)
 		mapW, mapH, cropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize

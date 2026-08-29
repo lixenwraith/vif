@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 )
 
@@ -60,4 +61,11 @@ func (a *App) Join(j event.JoinAnchor) error {
 // joiner's world is the same seed's world, not a fresh one.
 func (a *App) adoptMapLatch(an event.JournalAnchor) {
 	a.SetupLevel(an.MapWidth, an.MapHeight, false, an.CropOnResize)
+}
+
+// AttachTransport binds a transport to this App, for a harness or an embedder that
+// builds its own endpoint instead of taking the one NetworkService contributes.
+// NetworkSystem reads the port per tick, so this needs no re-registration.
+func (a *App) AttachTransport(port engine.NetworkPort) {
+	a.world.RunSafe(func() { a.world.Resources.Network = &engine.NetworkResource{Port: port} })
 }

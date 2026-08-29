@@ -23,8 +23,12 @@ type EventQueue struct {
 	dispatched  [EventTypeCount]atomic.Int64
 	deadLetter  [EventTypeCount]atomic.Int64
 	journal     atomic.Pointer[Journal] // nil = journaling off
-	stamp       atomic.Pointer[Stamp]   // record position; advanced under the world lock
+	wire        atomic.Pointer[wireHolder]
+	stamp       atomic.Pointer[Stamp] // record position; advanced under the world lock
 }
+
+// wireHolder boxes the interface so the pointer swap stays atomic
+type wireHolder struct{ sink WireSink }
 
 func NewEventQueue() *EventQueue {
 	eq := &EventQueue{}
@@ -55,6 +59,13 @@ func (eq *EventQueue) Push(event GameEvent) {
 				}
 			}
 
+			// Transport gate. Separate from the journal: a crossing pushed by a
+			// system carries OriginSystem and is never journaled, and the wire set
+			// is narrower than the journal's anyway (OnWire).
+			if w := eq.wire.Load(); w != nil && OnWire(event) {
+				w.sink.Cross(event)
+			}
+
 			eq.events[idx] = event
 			eq.published[idx].Store(true) // MUST be after write
 
@@ -70,6 +81,33 @@ func (eq *EventQueue) Push(event GameEvent) {
 			}
 			return
 		}
+	}
+}
+
+// SetWireSink installs or clears the transport sink; nil disconnects.
+// Not synchronized against in-flight pushes: a crossing racing a disconnect may
+// still reach the departing sink, which is why Cross must not retain the event.
+func (eq *EventQueue) SetWireSink(w WireSink) {
+	if w == nil {
+		eq.wire.Store(nil)
+		return
+	}
+	eq.wire.Store(&wireHolder{sink: w})
+}
+
+// ReceiveWire admits a peer's artifacts into the tick about to settle; a no-op
+// with no transport. Caller MUST hold the world lock and MUST NOT have settled yet.
+func (eq *EventQueue) ReceiveWire() {
+	if w := eq.wire.Load(); w != nil {
+		w.sink.Receive()
+	}
+}
+
+// FlushWire sends the tick's accumulated crossings; a no-op with no transport.
+// Caller MUST hold the world lock and MUST have settled the tick.
+func (eq *EventQueue) FlushWire() {
+	if w := eq.wire.Load(); w != nil {
+		w.sink.Flush()
 	}
 }
 

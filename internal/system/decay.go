@@ -280,7 +280,7 @@ func (s *DecaySystem) updateDecayEntities() {
 				}
 
 				if s.world.Components.Nugget.HasEntity(target) {
-					s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
+					s.world.PushCrossing(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
 					event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, target)
 				} else {
 					// Glyph mechanics are player-domain; a shared glyph is a gold member

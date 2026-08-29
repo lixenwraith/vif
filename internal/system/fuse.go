@@ -317,20 +317,22 @@ func (s *FuseSystem) handleQuasarFuse() {
 }
 
 // completeFusion triggers the creation event in the destination system.
-// Spirits are player-domain visuals; the species spawn is the shared result.
+// Spirits are player-domain visuals; the species spawn is the shared result, and
+// the request is the D-3 artifact that carries it — stamped player because the
+// fuse produced it, which is what tells it from the same type a shared storm pushes.
 func (s *FuseSystem) completeFusion(f pendingFusion) {
 	switch f.Type {
 	case FuseQuasar:
 		s.world.PushEventDomain(event.EventSpiritDespawnRequest, nil, core.DomainPlayer)
-		s.world.PushEventDomain(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
+		s.world.PushCrossing(event.EventQuasarSpawnRequest, &event.QuasarSpawnRequestPayload{
 			X: f.TargetX,
 			Y: f.TargetY,
-		}, core.DomainShared)
+		})
 
 	case FuseSwarm:
-		s.world.PushEventDomain(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
+		s.world.PushCrossing(event.EventSwarmSpawnRequest, &event.SwarmSpawnRequestPayload{
 			X: f.TargetX,
 			Y: f.TargetY,
-		}, core.DomainShared)
+		})
 	}
 }

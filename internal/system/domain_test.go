@@ -273,10 +273,9 @@ func packageFiles(t *testing.T, dir string) []string {
 }
 
 // unregisteredSystems declare a system nothing registers, so the manifest carries
-// no profile and the boundary suite cannot check them.
-var unregisteredSystems = map[string]string{
-	"network": "TODO(phase7): NetworkSystem is written but never added to the world",
-}
+// no profile and the boundary suite cannot check them. Empty since Phase 7
+// registered network; an entry here is a system escaping the boundary suite.
+var unregisteredSystems = map[string]string{}
 
 // parseSystemDomains reads Systems and ContextSystems from the manifest authority.
 func parseSystemDomains(t *testing.T, path string) map[string]string {

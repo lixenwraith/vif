@@ -248,7 +248,7 @@ func (s *TypingSystem) moveCursorRight(cursor core.Entity) {
 	config := s.world.Resources.Config
 
 	if pos, ok := s.world.Positions.GetPosition(cursor); ok && pos.X < config.MapWidth-1 {
-		s.world.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
+		s.world.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
 			Entity: cursor, X: pos.X + 1, Y: pos.Y,
 		})
 	}
@@ -305,7 +305,7 @@ func (s *TypingSystem) handleCompositeMember(cursor, entity, anchorID core.Entit
 			remaining++
 		}
 	}
-	s.world.PushEvent(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
+	s.world.PushCrossing(event.EventCompositeMemberDestroyed, &event.CompositeMemberDestroyedPayload{
 		HeaderEntity:   anchorID,
 		MemberEntity:   entity,
 		Entity:         cursor,

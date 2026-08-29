@@ -102,6 +102,10 @@ var Components = []ComponentDef{
 // Systems is the authoritative system list: order, construction, domain profile, and dependencies
 // Generator produces: RegisterSystems(), ActiveSystems(), systemProfiles
 var Systems = []SystemDef{
+	// --- Transport ---
+	{Name: "network", Constructor: "NewNetworkSystem", Domain: "dual",
+		Requires: []string{"cursor"}}, // replays a peer's crossings in the domain their producer stamped (D-7); sole writer of a remote cursor's owner-authored set (D-13)
+
 	// --- Core / Frame Setup ---
 	{Name: "cursor", Constructor: "NewCursorSystem", Domain: "shared"},                               // creates the shared cursor; replicated creation order (D-11); the roster is the dependency root
 	{Name: "ping", Constructor: "NewPingSystem", Domain: "player", Requires: []string{"cursor"}},     // pure local view attached to the cursor (D-13)

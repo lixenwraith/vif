@@ -650,7 +650,7 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 	p.Type = event.ExplosionTypeDust
 	p.Attack = component.CombatAttackExplosion
 	p.Centers = append(p.Centers, s.centerBuf...)
-	s.world.PushEvent(event.EventExplosionBatchRequest, p)
+	s.world.PushCrossing(event.EventExplosionBatchRequest, p)
 }
 
 // convertGlyphs turns loose glyphs into dust and flashes the dark ones.

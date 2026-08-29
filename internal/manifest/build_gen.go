@@ -14,6 +14,7 @@ import (
 // breaks ties between systems sharing a priority constant
 func BuildSystems(w *engine.World) []engine.System {
 	return []engine.System{
+		system.NewNetworkSystem(w),
 		system.NewCursorSystem(w),
 		system.NewPingSystem(w),
 		system.NewTransientSystem(w),
@@ -121,6 +122,7 @@ func BuildRenderers(ctx *engine.GameContext) []render.Registration {
 // Consumed by config validation of region enabled_systems/disabled_systems
 func ActiveSystems() []string {
 	return []string{
+		"network",
 		"cursor",
 		"ping",
 		"transient",
@@ -178,6 +180,7 @@ func ActiveSystems() []string {
 // systemProfiles is every system's declared profile: the domain it resolves and the
 // systems it depends on. AddSystem takes it as a registration argument.
 var systemProfiles = map[string]engine.SystemProfile{
+	"network":        {Domain: engine.SystemDual, Requires: engine.Require("cursor")},
 	"cursor":         {Domain: engine.SystemShared, Requires: nil},
 	"ping":           {Domain: engine.SystemPlayer, Requires: engine.Require("cursor")},
 	"transient":      {Domain: engine.SystemPlayer, Requires: nil},

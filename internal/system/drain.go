@@ -1133,7 +1133,7 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 
 	// Check if it's a nugget, notify destruction
 	if s.world.Components.Nugget.HasEntity(entity) {
-		s.world.PushEvent(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
+		s.world.PushCrossing(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{
 			Entity: entity,
 		})
 	}
@@ -1157,7 +1157,7 @@ func (s *DrainSystem) consumeIntoSharedSpecies(drain *drainCacheEntry, entity co
 		return false
 	}
 
-	s.world.PushEvent(event.EventCombatHealRequest, &event.CombatHealRequestPayload{
+	s.world.PushCrossing(event.EventCombatHealRequest, &event.CombatHealRequestPayload{
 		TargetEntity: target,
 		Amount:       drain.combatComp.HitPoints,
 	})
