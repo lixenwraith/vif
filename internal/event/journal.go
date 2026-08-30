@@ -21,7 +21,10 @@ import (
 //
 // 9: Nugget became a player-domain personal mechanic. Its event family moved from
 // the replicated set to Local, and a jump now records the resulting cursor crossing.
-const JournalSchema = 9
+//
+// 10: Explosion combat and presentation use separate payload families. Cursor
+// creation carries its arming template, and drain fusion carries its causal cursor.
+const JournalSchema = 10
 
 // Stamp locates a record in the run/tick/settle lattice. Run advances on game
 // reset, tick on each simulation step, boundary on each completed settle group.

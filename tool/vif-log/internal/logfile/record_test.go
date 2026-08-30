@@ -45,7 +45,7 @@ func TestRecordNamesTheAnchorByItsSub(t *testing.T) {
 		t.Errorf("ColMsg = %q, want %q", got, SubAnchor)
 	}
 	// The anchor has no discriminator field, so nothing is dropped from fields.
-	if fields := r.FieldsText(); !strings.Contains(fields, "schema=9") {
+	if fields := r.FieldsText(); !strings.Contains(fields, "schema=10") {
 		t.Errorf("anchor fields = %q, want the schema", fields)
 	}
 }

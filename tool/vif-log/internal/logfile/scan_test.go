@@ -12,7 +12,7 @@ import (
 // sink shows up here as a failing test rather than as an empty column.
 const (
 	anchorLine = `{"time":"2026-08-30T01:27:39.654615818Z","level":"INFO","sub":"anchor",` +
-		`"run":0,"tick":0,"frame":0,"fields":{"schema":9,"jseq":0,"jrun":0,"jtick":0,` +
+		`"run":0,"tick":0,"frame":0,"fields":{"schema":10,"jseq":0,"jrun":0,"jtick":0,` +
 		`"start_run":0,"start_tick":0,"seed":1788052523337853842,"session":3,` +
 		`"config_id":"cfg-abc","content_id":"content-xyz","content_pin":"",` +
 		`"content_files":5,"content_blocks":191,"content_lines":847,"tick_ns":50000000,` +
