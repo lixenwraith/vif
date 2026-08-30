@@ -6,6 +6,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -75,6 +76,15 @@ func TestLiveSessionRefusesAnInstanceLocalPause(t *testing.T) {
 		tickAll(apps)
 	}
 	assertMeshParity(t, apps, 0)
+
+	// A synchronous snapshot drains a second log sink while the world lock is
+	// held. That may exceed the playout lead, so it is not a live inspection
+	// operation even though the non-blocking debug overlay remains available.
+	apps[0].Context().ClearStatusMessage()
+	mode.ExecuteCommand(apps[0].Context(), "d save")
+	if got := apps[0].Context().GetStatusMessage(); got != "Snapshot save unavailable in a live session" {
+		t.Fatalf(":d save status=%q", got)
+	}
 }
 
 // TestCoordinatorResetCrossesAndPreservesRoster reproduces :new as an operator
@@ -84,7 +94,15 @@ func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
 	apps := meshSession(t, 0xA3A3, 2, [][2]int{{1, 2}})
 	localCursors(t, apps)
 
-	apps[0].Reset(false)
+	// The same command on a guest is operator-local refusal, not an artifact.
+	mode.ExecuteCommand(apps[1].Context(), "n")
+	apps[1].Settle()
+	if got := apps[1].Position().Run; got != 0 {
+		t.Fatalf("guest :new changed run to %d", got)
+	}
+
+	mode.ExecuteCommand(apps[0].Context(), "n")
+	apps[0].Settle()
 	for range parameter.NetworkBarrierDelayTicks + 8 {
 		tickAll(apps)
 	}
@@ -224,4 +242,22 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 			t.Fatalf("participant %d retained sync notice %q", i+1, got)
 		}
 	}
+}
+
+// TestSharedSnapshotExcludesLocalSchedulerTiming pins the distinction the live
+// digest needs but the manual-clock harness cannot produce naturally: two real
+// schedulers have different wall origins and can miss different deadlines even
+// while they complete the same absolute simulation tick.
+func TestSharedSnapshotExcludesLocalSchedulerTiming(t *testing.T) {
+	a := mustHeadless(t, 0xD165E58, 120, 40)
+	b := mustHeadless(t, 0xD165E58, 120, 40)
+	defer a.Close()
+	defer b.Close()
+	tickUntilCursor(t, a)
+	tickUntilCursor(t, b)
+
+	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
+	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
+	a.World().Resources.Status.Ints.Get("gold.timer").Store(4_200)
+	assertSharedParity(t, a, b, 0)
 }

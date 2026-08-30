@@ -218,6 +218,13 @@ func (a *App) initWorld() {
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
 		a.ctx.TimeCtl.SetScale(s)
 	}
+	// The host can wait in the lobby much longer than a joiner. Freeze both clocks
+	// before the FSM creates any game-time deadline, then release them only after
+	// the common start gate. Otherwise the lobby wait ages the host's gold timer and
+	// every other absolute deadline before tick one.
+	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
+		a.ctx.TimeCtl.SetPaused(true)
+	}
 
 	// Systems; AddSystem sorts by Priority(), manifest order breaks ties
 	for _, sys := range manifest.BuildSystems(a.world) {

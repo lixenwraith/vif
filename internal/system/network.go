@@ -84,10 +84,16 @@ type NetworkSystem struct {
 // stateDigest names one completed shared-world state. Valid distinguishes a real
 // run-zero/tick-zero hash from an empty ring slot.
 type stateDigest struct {
-	Run   uint64 `json:"run"`
-	Tick  uint64 `json:"tick"`
-	Hash  uint64 `json:"hash"`
-	Valid bool   `json:"-"`
+	Run       uint64 `json:"run"`
+	Tick      uint64 `json:"tick"`
+	Hash      uint64 `json:"hash"`
+	Positions uint64 `json:"positions"`
+	Kinetics  uint64 `json:"kinetics"`
+	Combat    uint64 `json:"combat"`
+	Context   uint64 `json:"context"`
+	Status    uint64 `json:"status"`
+	Surface   uint64 `json:"surface"`
+	Valid     bool   `json:"-"`
 }
 
 // epochWindow is one source's replay filter: the newest production epoch admitted
@@ -617,10 +623,11 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 		s.world.Resources.Config.CropOnResize && latched)
 }
 
-// dispatchMessage admits the two message kinds the domain model defines: the D-3
-// artifact epoch and the D-13 owner-authored sync. Raw participant input is not one
-// of them — a peer sends the resolved artifact, never the keystroke that produced
-// it — so an unrecognised type is counted and discarded rather than translated.
+// dispatchMessage admits the three steady-state message kinds the domain model
+// defines: the D-3 artifact epoch, D-13 owner-authored sync and D-11 parity digest.
+// Raw participant input is not one of them — a peer sends the resolved artifact,
+// never the keystroke that produced it — so an unrecognised type is counted and
+// discarded rather than translated.
 func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 	if msg == nil {
 		return 0
@@ -708,11 +715,18 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 	if r == nil || r.SharedDigest == nil {
 		return
 	}
+	digest := r.SharedDigest()
 	sample := stateDigest{
-		Run:   s.world.Resources.Event.Queue.Stamp().Run,
-		Tick:  completedTick,
-		Hash:  r.SharedDigest(),
-		Valid: true,
+		Run:       s.world.Resources.Event.Queue.Stamp().Run,
+		Tick:      completedTick,
+		Hash:      digest.Hash,
+		Positions: digest.Positions,
+		Kinetics:  digest.Kinetics,
+		Combat:    digest.Combat,
+		Context:   digest.Context,
+		Status:    digest.Status,
+		Surface:   digest.Surface,
+		Valid:     true,
 	}
 	s.recordStateDigest(sample)
 	body, err := json.Marshal(sample)
@@ -768,7 +782,8 @@ func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDiges
 		s.syncNoticeUntil = 0
 		if !peerWasDesynced {
 			vlog.Warn("app", "msg", "shared state divergence", "peer", peer,
-				"run", local.Run, "tick", local.Tick, "local", local.Hash, "remote", remote.Hash)
+				"run", local.Run, "tick", local.Tick, "part", digestDifference(local, remote),
+				"local", local.Hash, "remote", remote.Hash)
 		}
 		return
 	}
@@ -776,6 +791,25 @@ func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDiges
 		s.statSyncState.Store("synced")
 		s.syncNoticeUntil = s.ticks + parameter.NetworkResyncNoticeTicks
 		vlog.Info("app", "msg", "shared state resynchronised", "run", local.Run, "tick", local.Tick)
+	}
+}
+
+func digestDifference(local, remote stateDigest) string {
+	switch {
+	case local.Positions != remote.Positions:
+		return "positions"
+	case local.Kinetics != remote.Kinetics:
+		return "kinetics"
+	case local.Combat != remote.Combat:
+		return "combat"
+	case local.Context != remote.Context:
+		return "context"
+	case local.Status != remote.Status:
+		return "status"
+	case local.Surface != remote.Surface:
+		return "snapshot"
+	default:
+		return "combined"
 	}
 }
 

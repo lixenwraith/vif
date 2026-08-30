@@ -118,27 +118,54 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 // sharedDigestLocked hashes exactly SnapshotShared's comparable surface into one
 // transport-sized value. Caller MUST hold the world lock; unlike snapshotShared it
 // must not acquire it again.
-func (a *App) sharedDigestLocked() uint64 {
+func (a *App) sharedDigestLocked() engine.SharedStateDigest {
 	wd := a.worldDigestScopedLocked(engine.ScopeShared)
-	lines := []string{"ctx|digest" +
+	digestLine := "ctx|digest" +
 		"|positions=" + wd.Positions.String() +
 		"|kinetics=" + wd.Kinetics.String() +
-		"|combat=" + wd.Combat.String()}
+		"|combat=" + wd.Combat.String()
+	contextLines := make([]string, 0, 8)
 	a.ctx.SnapshotContext(func(sub string, args ...any) {
 		if isRecord(args, "session") || isRecord(args, "view") {
 			return
 		}
-		lines = append(lines, snapshotLine("ctx", sub, filterFields(args)))
+		contextLines = append(contextLines, snapshotLine("ctx", sub, filterFields(args)))
 	})
+	statusLines := make([]string, 0, 56)
 	a.world.Resources.Status.SnapshotFiltered(sharedKey, func(sub string, args ...any) {
-		lines = append(lines, snapshotLine("reg", sub, args))
+		statusLines = append(statusLines, snapshotLine("reg", sub, args))
 	})
+	slices.Sort(contextLines)
+	slices.Sort(statusLines)
+	contextDigest := newDigest()
+	for _, line := range contextLines {
+		contextDigest = contextDigest.text(line)
+	}
+	statusDigest := newDigest()
+	for _, line := range statusLines {
+		statusDigest = statusDigest.text(line)
+	}
+	lines := append(contextLines, statusLines...)
+	slices.Sort(lines)
+	surface := newDigest()
+	for _, line := range lines {
+		surface = surface.text(line)
+	}
+	lines = append(lines, digestLine)
 	slices.Sort(lines)
 	d := newDigest()
 	for _, line := range lines {
 		d = d.text(line)
 	}
-	return uint64(d)
+	return engine.SharedStateDigest{
+		Hash:      uint64(d),
+		Positions: uint64(wd.Positions),
+		Kinetics:  uint64(wd.Kinetics),
+		Combat:    uint64(wd.Combat),
+		Context:   uint64(contextDigest),
+		Status:    uint64(statusDigest),
+		Surface:   uint64(surface),
+	}
 }
 
 // digestEntities canonically projects a mixed dense store for cross-instance comparison.

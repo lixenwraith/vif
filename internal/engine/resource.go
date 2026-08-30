@@ -585,6 +585,19 @@ type NetworkSessionPort interface {
 	BarrierDelayTicks() uint64
 }
 
+// SharedStateDigest is the runtime D-11 probe. Hash covers the complete
+// SnapshotShared surface; the parts make a mismatch diagnosable without sending
+// the snapshot itself.
+type SharedStateDigest struct {
+	Hash      uint64
+	Positions uint64
+	Kinetics  uint64
+	Combat    uint64
+	Context   uint64
+	Status    uint64
+	Surface   uint64
+}
+
 // NetworkResource wraps the network endpoint for ECS access
 type NetworkResource struct {
 	Port              NetworkPort
@@ -592,7 +605,7 @@ type NetworkResource struct {
 	BarrierDelayTicks uint64
 	// SharedDigest is supplied by App after construction. NetworkSystem calls it
 	// under the world lock when publishing periodic runtime parity probes.
-	SharedDigest func() uint64
+	SharedDigest func() SharedStateDigest
 
 	// OnDeparture is called under the world lock when a participant leaves, so the
 	// session layer can return its identity to the pool. It must not take a lock

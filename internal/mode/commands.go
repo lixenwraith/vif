@@ -545,6 +545,11 @@ func handleDebugCommand(ctx *engine.GameContext, args []string) CommandResult {
 // Command mode still holds the world lock and the pause, so the values are a
 // single coherent tick. Opens a second logger: a deliberate operator cost
 func handleDebugSaveCommand(ctx *engine.GameContext) CommandResult {
+	if ctx.World.LiveSession() {
+		setCommandError(ctx, "Snapshot save unavailable in a live session")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+
 	path, err := vlog.Dump(func(emit func(sub string, args ...any)) {
 		ctx.SnapshotContext(emit)
 		ctx.World.Resources.Status.Snapshot(emit)

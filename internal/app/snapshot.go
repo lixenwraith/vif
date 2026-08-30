@@ -60,6 +60,14 @@ var denySharedPrefix = []string{
 var denySharedKey = map[string]bool{
 	"engine.apm":       true, // actions this participant took, not the session's
 	"engine.music_apm": true,
+	// Interactive schedulers start and slip independently. Tick identity is shared;
+	// wall elapsed time and missed-deadline telemetry are not simulation state.
+	"engine.tick_slips":    true,
+	"time.game_elapsed_ms": true,
+	// Remaining wall-clock duration is a display gauge. The shared FSM state and
+	// resulting timeout event are the deterministic surface; scheduler wake jitter
+	// makes the nanosecond remainder unsuitable for equality.
+	"gold.timer": true,
 	// Whole-store counts, which sum both domains: a participant's own player-domain
 	// population moves them. The shared position digest covers the shared half.
 	"nav.entities": true,
