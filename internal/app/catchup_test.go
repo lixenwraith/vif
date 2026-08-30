@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -83,20 +84,32 @@ func TestCatchUpReproducesALiveSessionsCrossings(t *testing.T) {
 	}
 	assertSharedParity(t, host, late, -1)
 
-	// Parity alone is a weak witness for the barrier half: applying a re-derived
+	// Parity alone is a weak witness for the barrier half. Applying a re-derived
 	// crossing one lead early only moves the compared surface once an FSM deadline
-	// happens to fall inside that lead, which takes a run several times longer than
-	// this one. The reproduction held no link at any point, so a non-zero deferral
-	// count is the direct statement that the barrier followed the run.
-	var deferred, appliedLocal int64
-	late.World().RunSafe(func() {
-		reg := late.World().Resources.Status
-		deferred = reg.Ints.Get("network.barrier_deferred").Load()
-		appliedLocal = reg.Ints.Get("network.barrier_applied_local").Load()
-	})
-	if deferred == 0 || appliedLocal == 0 {
-		t.Fatalf("the reproduction deferred %d and applied %d artifacts through the barrier, want both non-zero",
-			deferred, appliedLocal)
+	// falls inside that lead, which takes a run several times longer than this one —
+	// and how soon the reproduction re-derives its first crossing at all is a
+	// property of the seed. So the barrier is asserted directly instead: this
+	// instance holds no link and never has, and its own crossing must still wait the
+	// session's playout lead rather than applying where it was produced.
+	//
+	// Ordered last: it moves a shared cursor, so it runs after the comparison.
+	var cursor core.Entity
+	late.World().RunSafe(func() { cursor = late.World().Resources.Player.Slot(0) })
+	start := cursorPosition(late, cursor)
+	want := start
+	want.X = start.X + 1
+	late.Context().PushCrossing(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: cursor, X: want.X, Y: want.Y})
+	late.Settle()
+	for i := range parameter.NetworkBarrierDelayTicks {
+		if got := cursorPosition(late, cursor); got != start {
+			t.Fatalf("the reproduction applied its crossing at lead tick %d: %#v", i, got)
+		}
+		late.Tick(1)
+	}
+	late.Tick(1)
+	if got := cursorPosition(late, cursor); got != want {
+		t.Fatalf("the reproduction's crossing position = %#v, want %#v", got, want)
 	}
 }
 
