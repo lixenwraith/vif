@@ -246,9 +246,10 @@ func (a *App) initWorld() {
 // Adopting bounds later would leave that shared cursor on this terminal's centre
 // rather than the session's, which is a shared position no crossing ever corrects.
 //
-// LockMap closes the crop path for the whole run; a reproduction of a session — a
-// join, a catch-up or a replay — additionally carries the bounds it must start on.
-// A hosting run keeps its own terminal's bounds and only stops cropping them.
+// LockMap latches the world as shared, which closes the crop path and engages the
+// playout barrier for the whole run; a reproduction of a session — a join, a
+// catch-up or a replay — additionally carries the bounds it must start on. A
+// hosting run keeps its own terminal's bounds and only stops deriving them.
 func (a *App) applyMapLatch() {
 	if a.cfg.LockMap {
 		a.world.MarkSessionShared()

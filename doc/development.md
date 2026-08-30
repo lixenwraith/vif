@@ -189,8 +189,9 @@ VIF_SOAK=full go test ./... # the wide seed sweep
 
 Every iteration is still reproducible from its seed, so a failure found by the
 wide sweep reruns alone with `-run 'TestReplaySoak/<seed>'`. Under `-race` the
-default profile is about two and a half minutes for the whole tree; the wide one
-is about six and a half.
+default profile runs the whole tree in about two and a half minutes, of which
+`internal/app` is two and a half; before the tiers existed that one package alone
+took nearly six, and the wide sweep still does.
 
 Configuration work should also run:
 

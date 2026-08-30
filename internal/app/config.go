@@ -150,13 +150,14 @@ type Config struct {
 	MapWidth, MapHeight int
 	CropOnResize        bool
 
-	// LockMap clears CropOnResize before the FSM boots, so this run's terminal never
-	// rewrites shared map bounds. A hosting run sets it: its bounds are what every
-	// joiner adopts from the anchor, and a crop between the offer a participant
-	// dialled and the gate that starts it would move bounds that participant has
-	// already built its world on. The flag itself does not travel — the cleared flag
-	// does, in the anchor and in the record stream, which is what makes a replay and
-	// a catch-up reach the same bounds.
+	// LockMap latches the world as shared before the FSM boots, so this run's
+	// terminal never rewrites shared map bounds and its crossings take the session's
+	// playout lead. A hosting run sets it, because its bounds are what every joiner
+	// adopts from the anchor and a crop between the offer a participant dialled and
+	// the gate that starts it would move bounds that participant has already built
+	// its world on. A run reproducing a session sets it from the anchor's
+	// SessionShared, which is how a replay and a catch-up reach the same bounds and
+	// the same apply ticks as the run they reproduce.
 	LockMap bool
 
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the

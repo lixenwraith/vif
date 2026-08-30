@@ -761,8 +761,8 @@ Effort is tiered rather than fixed. `soakScale(short, normal, full)` picks a
 repetition or step count per profile: `-short` for a smoke run, the default for
 what a change is validated against, and `VIF_SOAK=full` for the wide seed sweep.
 The default profile keeps every seed reproducible from its name while bringing a
-`-race` run of the whole tree from about six and a half minutes to two and a
-half. Separate
+`-race` run of the whole tree to about two and a half minutes; `internal/app`
+alone used to take nearly six. Separate
 multi-participant tests exercise the live operator policy: instance-local time,
 system, raw event and FSM controls are refused, while the coordinator's reset is
 transported under D-10.
