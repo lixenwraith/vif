@@ -101,6 +101,8 @@ func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID)
 func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerID) error {
 	participants := slices.Clone(o.Participants)
 	slices.SortFunc(participants, func(x, y network.SessionParticipant) int { return int(x.Slot) - int(y.Slot) })
+	var initialHeat, initialEnergy int
+	a.world.RunSafe(func() { initialHeat, initialEnergy = a.world.Resources.Player.InitialResources() })
 
 	for _, p := range participants {
 		var exists bool
@@ -110,6 +112,7 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 		}
 		a.ctx.PushEventOrigin(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 			Slot: p.Slot, Center: true, Control: uint8(component.ControlRemote), PeerID: uint32(p.ID),
+			Heat: initialHeat, Energy: initialEnergy,
 		}, event.OriginDebug)
 		a.scheduler.Settle()
 	}
@@ -138,6 +141,9 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 			&event.CursorSetLocalPayload{Slot: localAssignment.Slot}, event.OriginDebug)
 		a.scheduler.Settle()
 	}
+	a.ctx.PushLocal(event.EventCursorArmRequest,
+		&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
+	a.scheduler.Settle()
 	a.world.RunSafe(a.ctx.PublishMapLock)
 	return nil
 }
@@ -157,6 +163,7 @@ func (a *App) AttachTransport(port engine.NetworkPort) {
 	a.world.RunSafe(func() {
 		r := engine.NewNetworkResource(port)
 		r.OnDeparture = a.releaseParticipant32
+		r.SharedDigest = a.sharedDigestLocked
 		a.world.Resources.Network = r
 		a.ctx.PublishMapLock()
 	})

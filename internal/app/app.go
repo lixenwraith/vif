@@ -168,6 +168,7 @@ func (a *App) initWorld() {
 	a.hub.BindResources(a.world.Resources)
 	if r := a.world.Resources.Network; r != nil {
 		r.OnDeparture = a.releaseParticipant32
+		r.SharedDigest = a.sharedDigestLocked
 	}
 
 	// The terminal supplies color whenever one exists, but dimensions only when the

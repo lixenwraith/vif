@@ -4,7 +4,7 @@ package event
 
 // EventTypeCount is the number of declared EventType constants, including EventNone
 // Values are contiguous in [0, EventTypeCount)
-const EventTypeCount = 169
+const EventTypeCount = 170
 
 // InitRegistry populates the registry from the EventType const block in type.go
 // Must be called once at startup
@@ -107,6 +107,7 @@ func InitRegistry() {
 	RegisterType("EventCursorSpawnRequest", EventCursorSpawnRequest, &CursorSpawnRequestPayload{})
 	RegisterType("EventCursorSpawned", EventCursorSpawned, &CursorSpawnedPayload{})
 	RegisterType("EventCursorSpawnFailed", EventCursorSpawnFailed, nil)
+	RegisterType("EventCursorArmRequest", EventCursorArmRequest, &CursorArmRequestPayload{})
 	RegisterType("EventCursorDespawnRequest", EventCursorDespawnRequest, &CursorDespawnRequestPayload{})
 	RegisterType("EventCursorDespawned", EventCursorDespawned, &CursorDespawnedPayload{})
 	RegisterType("EventCursorMoveRequest", EventCursorMoveRequest, &CursorMoveRequestPayload{})
@@ -207,7 +208,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventParticipantJoined:               ClassBus,
 	EventParticipantDeparted:             ClassBus,
 	EventCursorStateSync:                 ClassLocal,
-	EventGameResetRequest:                ClassShared,
+	EventGameResetRequest:                ClassBus,
 	EventMetaDebugRequest:                ClassLocal,
 	EventMetaHelpRequest:                 ClassLocal,
 	EventMetaAboutRequest:                ClassLocal,
@@ -282,6 +283,7 @@ var eventClasses = [EventTypeCount]EventClass{
 	EventCursorSpawnRequest:              ClassShared,
 	EventCursorSpawned:                   ClassShared,
 	EventCursorSpawnFailed:               ClassShared,
+	EventCursorArmRequest:                ClassLocal,
 	EventCursorDespawnRequest:            ClassShared,
 	EventCursorDespawned:                 ClassShared,
 	EventCursorMoveRequest:               ClassBus,

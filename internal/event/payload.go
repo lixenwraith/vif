@@ -649,11 +649,21 @@ type CursorStatePayload struct {
 type CursorSpawnRequestPayload struct {
 	X       int    `toml:"x"`
 	Y       int    `toml:"y"`
+	Heat    int    `toml:"heat"`
+	Energy  int    `toml:"energy"`
 	Slot    uint8  `toml:"slot"`
 	Control uint8  `toml:"control"` // component.ControlKind
 	PeerID  uint32 `toml:"peer_id"` // Remote owner when Control is ControlRemote
 	Auto    bool   `toml:"auto"`
 	Center  bool   `toml:"center"`
+}
+
+// CursorArmRequestPayload restores the configured starting resources on the
+// cursor this instance owns. It is local by design: heat and energy are D-13
+// owner-authored state after the shared cursor has been created.
+type CursorArmRequestPayload struct {
+	Heat   int `toml:"heat"`
+	Energy int `toml:"energy"`
 }
 
 // CursorSpawnedPayload announces a created cursor

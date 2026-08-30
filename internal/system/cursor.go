@@ -128,6 +128,30 @@ func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
 // spawn creates one cursor in a roster slot, announcing success or refusal
 func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 	roster := s.world.Resources.Player
+	roster.SetInitialResources(p.Heat, p.Energy)
+
+	// A full reset rebuilds the session roster through the normal scripted boot
+	// request. The request supplies the configuration template; the pending entries
+	// supply only membership and per-instance control assignments.
+	if entries, count, local := roster.TakeRestore(); count > 0 {
+		roster.SetLocal(local)
+		for i := range count {
+			entry := entries[i]
+			q := *p
+			q.Slot = entry.Slot
+			q.Auto = false
+			q.Control = uint8(entry.Control)
+			q.PeerID = entry.PeerID
+			s.spawnOne(&q)
+		}
+		return
+	}
+	s.spawnOne(p)
+}
+
+// spawnOne creates one cursor in a roster slot, announcing success or refusal.
+func (s *CursorSystem) spawnOne(p *event.CursorSpawnRequestPayload) {
+	roster := s.world.Resources.Player
 
 	slot := p.Slot
 	if p.Auto {
@@ -156,7 +180,7 @@ func (s *CursorSystem) spawn(p *event.CursorSpawnRequestPayload) {
 		return
 	}
 
-	e := s.build(slot, x, y, component.ControlKind(p.Control), p.PeerID)
+	e := s.build(slot, x, y, component.ControlKind(p.Control), p.PeerID, p.Heat, p.Energy)
 	roster.Bind(slot, e)
 	s.world.UpdateBoundsRadius()
 	s.publishRoster()
@@ -199,7 +223,7 @@ func (s *CursorSystem) destroy(slot uint8) {
 }
 
 // build creates one cursor entity with its full component set
-func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind, peerID uint32) core.Entity {
+func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind, peerID uint32, heat, energy int) core.Entity {
 	w := s.world
 	e := w.CreateEntity(core.DomainShared)
 
@@ -208,8 +232,8 @@ func (s *CursorSystem) build(slot uint8, x, y int, control component.ControlKind
 	w.Components.CursorView.SetComponent(e, component.CursorViewComponent{})
 	w.Components.Protection.SetComponent(e, component.ProtectionComponent{Mask: component.ProtectAll})
 	w.Components.Ping.SetComponent(e, component.PingComponent{ShowCrosshair: true})
-	w.Components.Heat.SetComponent(e, component.HeatComponent{})
-	w.Components.Energy.SetComponent(e, component.EnergyComponent{})
+	w.Components.Heat.SetComponent(e, component.HeatComponent{Current: heat})
+	w.Components.Energy.SetComponent(e, component.EnergyComponent{Current: int64(energy)})
 	w.Components.Shield.SetComponent(e, component.ShieldComponent{
 		RadiusX:       parameter.PlayerShieldRadiusX,
 		RadiusY:       parameter.PlayerShieldRadiusY,

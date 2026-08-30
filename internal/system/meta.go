@@ -115,7 +115,9 @@ func (s *MetaSystem) HandleEvent(ev event.GameEvent) {
 	switch ev.Type {
 	case event.EventGameResetRequest:
 		p, _ := ev.Payload.(*event.GameResetPayload)
-		s.handleGameReset(p != nil && p.Purge)
+		// Purge is operator-local. A crossed coordinator reset restarts every
+		// participant, but it must not erase each peer's own command history.
+		s.handleGameReset(p != nil && p.Purge && ev.Origin != event.OriginNetwork)
 		s.Init()
 
 	case event.EventMetaStatusMessageRequest:
@@ -297,6 +299,14 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 
 	// 2. Synchronous World Cleanup
 	// Already inside world.RunSafe from main -> DispatchEventsImmediately
+	var roster []engine.CursorRosterEntry
+	for i := range parameter.MaxPlayers {
+		e := s.world.Resources.Player.Slot(uint8(i))
+		if c, ok := s.world.Components.Cursor.GetComponent(e); ok {
+			roster = append(roster, engine.CursorRosterEntry{Slot: c.Slot, Control: c.Control, PeerID: c.PeerID})
+		}
+	}
+	s.world.Resources.Player.PrepareRestore(roster)
 	s.ctx.World.Clear()
 
 	// 3. GameState reset (counters, NextID → 1)
@@ -486,6 +496,10 @@ func (s *MetaSystem) handleAboutRequest() {
 // handlePauseRequest applies pause to game state and clock, then announces
 // the change; each system applies it to its own domain (audio → AudioSystem)
 func (s *MetaSystem) handlePauseRequest(paused bool) {
+	if paused && s.world.LiveSession() {
+		s.ctx.SetStatusMessage("Pause is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		return
+	}
 	if !s.ctx.TimeCtl.SetPaused(paused) {
 		return
 	}
@@ -495,6 +509,10 @@ func (s *MetaSystem) handlePauseRequest(paused bool) {
 // handleSpeedRequest applies the time scale through its single owner, then
 // announces it; a nil or non-positive payload restores real time
 func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
+	if s.world.LiveSession() {
+		s.ctx.SetStatusMessage("Speed control is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		return
+	}
 	scale := engine.ScaleNormal
 	if p != nil && p.Num > 0 && p.Den > 0 {
 		scale = engine.TimeScale{Num: p.Num, Den: p.Den}
@@ -511,6 +529,10 @@ func (s *MetaSystem) handleSpeedRequest(p *event.GameSpeedPayload) {
 // handleStepRequest arms a tick allowance or a run-until breakpoint; pause and
 // rate move through their single owner here
 func (s *MetaSystem) handleStepRequest(p *event.GameStepPayload) {
+	if s.world.LiveSession() {
+		s.ctx.SetStatusMessage("Step control is unavailable in a live session", parameter.StatusMessageDefaultTimeout, true)
+		return
+	}
 	if p == nil || p.Off {
 		s.handleSpeedRequest(nil) // restores 1x and disarms
 		return

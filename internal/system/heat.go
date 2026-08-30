@@ -104,6 +104,7 @@ func (s *HeatSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventHeatAddRequest,
 		event.EventHeatSetRequest,
+		event.EventCursorArmRequest,
 		event.EventCursorDespawned,
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
@@ -157,6 +158,12 @@ func (s *HeatSystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 			s.setHeat(cursor, payload.Value)
+		}
+	case event.EventCursorArmRequest:
+		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {
+			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
+				s.setHeat(cursor, p.Heat)
+			}
 		}
 	}
 }

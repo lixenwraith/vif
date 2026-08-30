@@ -148,6 +148,29 @@ type PlayerResource struct {
 	slots [parameter.MaxPlayers]core.Entity
 	local uint8
 	count int
+
+	// The first scripted spawn declares the configuration's starting resources.
+	// Session admission and late arrivals reuse the declaration instead of
+	// hard-coding one game's values in app or NetworkSystem.
+	initialHeat   int
+	initialEnergy int
+	initialSet    bool
+
+	// A full game reset clears every entity. MetaSystem snapshots the closed
+	// roster here first; CursorSystem consumes it when the reset FSM emits its
+	// ordinary boot spawn, preserving deterministic shared creation order.
+	restore      [parameter.MaxPlayers]CursorRosterEntry
+	restoreCount int
+	restoreLocal uint8
+}
+
+// CursorRosterEntry is the instance-local control assignment for one shared
+// cursor. Every participant stores the same slots and peer IDs, but marks only
+// its own assignment non-remote.
+type CursorRosterEntry struct {
+	Slot    uint8
+	Control component.ControlKind
+	PeerID  uint32
 }
 
 // PingAbsoluteBounds holds absolute coordinates derived from cursor position and radius
@@ -187,6 +210,36 @@ func (pr *PlayerResource) Slot(i uint8) core.Entity {
 
 // Count returns the number of occupied slots
 func (pr *PlayerResource) Count() int { return pr.count }
+
+// SetInitialResources records the gameplay configuration's cursor template.
+func (pr *PlayerResource) SetInitialResources(heat, energy int) {
+	if pr.initialSet {
+		return
+	}
+	pr.initialHeat, pr.initialEnergy, pr.initialSet = heat, energy, true
+}
+
+// InitialResources returns the cursor template declared by the boot script.
+func (pr *PlayerResource) InitialResources() (heat, energy int) {
+	return pr.initialHeat, pr.initialEnergy
+}
+
+// PrepareRestore snapshots a closed roster before World.Clear. The caller walks
+// slots in order, so consuming this fixed array recreates identical shared IDs.
+func (pr *PlayerResource) PrepareRestore(entries []CursorRosterEntry) {
+	pr.restore = [parameter.MaxPlayers]CursorRosterEntry{}
+	pr.restoreCount = min(len(entries), parameter.MaxPlayers)
+	copy(pr.restore[:], entries[:pr.restoreCount])
+	pr.restoreLocal = pr.local
+}
+
+// TakeRestore returns and clears the reset roster pending behind World.Clear.
+func (pr *PlayerResource) TakeRestore() ([parameter.MaxPlayers]CursorRosterEntry, int, uint8) {
+	entries, count, local := pr.restore, pr.restoreCount, pr.restoreLocal
+	pr.restore = [parameter.MaxPlayers]CursorRosterEntry{}
+	pr.restoreCount = 0
+	return entries, count, local
+}
 
 // FreeSlot returns the lowest unoccupied slot
 func (pr *PlayerResource) FreeSlot() (uint8, bool) {
@@ -537,6 +590,9 @@ type NetworkResource struct {
 	Port              NetworkPort
 	ParticipantID     uint32
 	BarrierDelayTicks uint64
+	// SharedDigest is supplied by App after construction. NetworkSystem calls it
+	// under the world lock when publishing periodic runtime parity probes.
+	SharedDigest func() uint64
 
 	// OnDeparture is called under the world lock when a participant leaves, so the
 	// session layer can return its identity to the pool. It must not take a lock

@@ -355,6 +355,18 @@ func (w *World) MapSizeLocal() bool {
 	return net == nil || net.Port == nil || net.Port.PeerCount() == 0
 }
 
+// LiveSession reports whether this world is currently sharing ticks with peers.
+// A local multi-cursor setup has no transport and remains operator-controlled.
+func (w *World) LiveSession() bool {
+	net := w.Resources.Network
+	return net != nil && net.Port != nil && net.Port.IsRunning() && net.Port.PeerCount() > 0
+}
+
+// IsSessionCoordinator reports whether this instance owns the host identity.
+func (w *World) IsSessionCoordinator() bool {
+	return w.Resources.Network != nil && w.Resources.Network.ParticipantID == 1
+}
+
 // PushLocal emits an event that must never replicate: an owner-authored grant, or an
 // effect belonging to this instance alone. Replication classifies on the domain tag,
 // so tagging here is what makes the classification mechanical rather than by inspection.

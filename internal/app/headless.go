@@ -123,7 +123,15 @@ func (a *App) Resize(width, height int) {
 // MetaSystem's synchronous cleanup lands here, the FSM reset at the next Tick,
 // matching the interactive ordering.
 func (a *App) Reset(purge bool) {
-	a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge}, event.OriginDebug)
+	if a.world.LiveSession() {
+		if !a.world.IsSessionCoordinator() {
+			a.ctx.SetStatusMessage("Only the host can reset a live session", 0, false)
+			return
+		}
+		a.ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+	} else {
+		a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge}, event.OriginDebug)
+	}
 	a.scheduler.Settle()
 }
 

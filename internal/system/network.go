@@ -283,8 +283,10 @@ func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
 	if p.Participant == s.participantID() {
 		control = component.ControlHuman
 	}
+	heat, energy := s.world.Resources.Player.InitialResources()
 	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
 		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant,
+		Heat: heat, Energy: energy,
 	})
 	if control == component.ControlHuman {
 		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})

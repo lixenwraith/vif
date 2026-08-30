@@ -4,7 +4,7 @@
 [states.MonitorBoot]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true } },
+    { action = "EmitEvent", event = "EventCursorSpawnRequest", payload = { center = true, heat = 10, energy = 100 } },
 ]
 transitions = [
     { trigger = "EventCursorSpawned", target = "MonitorArm", capture_vars = { entity = "player_entity" } },
@@ -21,8 +21,7 @@ transitions = [
 [states.MonitorArm]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventHeatSetRequest", payload = { entity = 0, value = 10 }, payload_vars = { entity = "player_entity" } },
-    { action = "EmitEvent", event = "EventEnergySetRequest", payload = { entity = 0, value = 100 }, payload_vars = { entity = "player_entity" } },
+    { action = "EmitEvent", event = "EventCursorArmRequest", payload = { heat = 10, energy = 100 } },
     { action = "SpawnRegion", region = "main", initial_state = "MainSpawnGold" },
 ]
 transitions = [
@@ -63,8 +62,7 @@ transitions = [
 [states.MonitorGlobalReset]
 parent = "Root"
 on_enter = [
-    # Retire the players first: level setup then sees no cursor to reflow
-    { action = "EmitEvent", event = "EventCursorDespawnRequest", payload = { all = true } },
+    # Protected roster cursors survive level setup; MonitorArm restores each owner's resources.
     # Cancel active sequences
     { action = "EmitEvent", event = "EventGoldCancel" },
     { action = "EmitEvent", event = "EventGrayoutEnd" },
@@ -88,5 +86,5 @@ on_enter = [
     { action = "EmitEvent", event = "EventLevelSetup", payload = { width = 0, height = 0, clear_entities = true, crop_on_resize = true } },
 ]
 transitions = [
-    { trigger = "Tick", target = "MonitorBoot" },
+    { trigger = "Tick", target = "MonitorArm" },
 ]

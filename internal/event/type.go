@@ -108,7 +108,7 @@ const (
 
 	// --- Meta ---
 
-	// EventGameResetRequest (GameResetPayload) [shared] signals a request to reset the game state
+	// EventGameResetRequest (GameResetPayload) [bus] resets the session; shared producers re-derive it, operator producers cross it
 	EventGameResetRequest
 	// EventMetaDebugRequest [local] signals a request to show debug overlay
 	EventMetaDebugRequest
@@ -324,6 +324,8 @@ const (
 	EventCursorSpawned
 	// EventCursorSpawnFailed [shared] signals no roster slot or no free cell was available
 	EventCursorSpawnFailed
+	// EventCursorArmRequest (CursorArmRequestPayload) [local] restores the locally owned cursor's configured starting resources
+	EventCursorArmRequest
 	// EventCursorDespawnRequest (CursorDespawnRequestPayload) [shared] asks CursorSystem to destroy cursors
 	EventCursorDespawnRequest
 	// EventCursorDespawned (CursorDespawnedPayload) [shared] announces a destroyed cursor

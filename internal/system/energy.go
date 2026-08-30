@@ -84,6 +84,7 @@ func (s *EnergySystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventEnergyAddRequest,
 		event.EventEnergySetRequest,
+		event.EventCursorArmRequest,
 		event.EventEnergyGlyphConsumed,
 		event.EventEnergyBlinkStart,
 		event.EventEnergyBlinkStop,
@@ -157,6 +158,12 @@ func (s *EnergySystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 			s.setEnergy(cursor, int64(payload.Value))
+		}
+	case event.EventCursorArmRequest:
+		if p, ok := ev.Payload.(*event.CursorArmRequestPayload); ok {
+			if cursor := s.world.Resources.Player.Entity; cursor != 0 {
+				s.setEnergy(cursor, int64(p.Energy))
+			}
 		}
 
 	case event.EventEnergyGlyphConsumed:

@@ -107,6 +107,18 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 	return wd
 }
 
+// sharedDigestLocked folds the shared world stores into one transport-sized value.
+// Caller MUST hold the world lock. Runtime parity exchange uses the same inputs as
+// SnapshotShared's world digest, so a live alert and a test diff describe the same
+// disagreement.
+func (a *App) sharedDigestLocked() uint64 {
+	wd := a.worldDigestScopedLocked(engine.ScopeShared)
+	return uint64(newDigest().
+		u64(uint64(wd.Positions)).
+		u64(uint64(wd.Kinetics)).
+		u64(uint64(wd.Combat)))
+}
+
 // digestEntities canonically projects a mixed dense store for cross-instance comparison.
 func digestEntities(entities []core.Entity, scope engine.DomainScope) []core.Entity {
 	if scope == engine.ScopeBoth {
