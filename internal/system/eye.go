@@ -195,12 +195,11 @@ func (s *EyeSystem) Update() {
 			killX, killY := -1, -1
 			if headerPos, ok := s.world.Positions.GetPosition(headerEntity); ok {
 				killX, killY = headerPos.X, headerPos.Y
-				s.world.PushEvent(event.EventExplosionRequest, &event.ExplosionRequestPayload{
+				s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
 					X:      headerPos.X,
 					Y:      headerPos.Y,
 					Radius: parameter.EyeSelfDestructRadius,
 					Type:   event.ExplosionTypeEye,
-					Attack: component.CombatAttackNone,
 				})
 			}
 			s.world.PushEvent(event.EventSpeciesKilled, &event.SpeciesKilledPayload{

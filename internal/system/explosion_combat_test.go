@@ -40,7 +40,7 @@ func TestExplosionCombatDoesNotDependOnVisualMergeState(t *testing.T) {
 		Type: event.EventExplosionRequest,
 		Payload: &event.ExplosionRequestPayload{
 			Entity: cursor, X: 7, Y: 5, Radius: 4,
-			Attack: component.CombatAttackMissile, Type: event.ExplosionTypeMissile,
+			Attack: component.CombatAttackMissile,
 		},
 	})
 

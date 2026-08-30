@@ -109,7 +109,7 @@ var Systems = []SystemDef{
 	// --- Core / Frame Setup ---
 	{Name: "cursor", Constructor: "NewCursorSystem", Domain: "shared"},                               // creates the shared cursor; replicated creation order (D-11); the roster is the dependency root
 	{Name: "ping", Constructor: "NewPingSystem", Domain: "player", Requires: []string{"cursor"}},     // pure local view attached to the cursor (D-13)
-	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns the per-instance grayout and strobe view state
+	{Name: "transient", Constructor: "NewTransientSystem", Domain: "player"},                         // owns per-instance overlays and explosion presentation (D-6)
 	{Name: "camera", Constructor: "NewCameraSystem", Domain: "player", Requires: []string{"cursor"}}, // per-instance view follows the local cursor
 
 	// --- Player State: owner-authored cursor components (D-13) ---
@@ -183,7 +183,7 @@ var Systems = []SystemDef{
 	{Name: "flash", Constructor: "NewFlashSystem", Domain: "player"},                                              // request-created player effect
 	{Name: "fadeout", Constructor: "NewFadeoutSystem", Domain: "player"},                                          // request-created player effect
 	{Name: "marker", Constructor: "NewMarkerSystem", Domain: "shared"},                                            // request-created shared marker
-	{Name: "explosion", Constructor: "NewExplosionSystem", Domain: "shared", Requires: []string{"combat"}},        // the crossing artifact, not an effect; combat resolves its area attack
+	{Name: "explosion", Constructor: "NewExplosionSystem", Domain: "shared", Requires: []string{"combat"}},        // combat-only consumer of crossed geometry; presentation is transient (D-3, D-6)
 	{Name: "motion_marker", Constructor: "NewMotionMarkerSystem", Domain: "player", Requires: []string{"cursor"}}, // local-cursor marker (D-6)
 	{Name: "splash", Constructor: "NewSplashSystem", Domain: "player", Requires: []string{"cursor"}},              // local-cursor viewport overlay (D-6)
 

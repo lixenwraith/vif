@@ -8,7 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
-// TransientResource holds shared spatial explosion state.
+// TransientResource holds player-domain spatial explosion presentation.
 // Systems write, renderers read. All fields are render-frame stable.
 type TransientResource struct {
 	// Fixed backing, zero alloc

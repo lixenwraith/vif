@@ -710,7 +710,6 @@ func (s *WeaponSystem) fireDisruptorWeapon(cursor core.Entity, cursorPos compone
 		Y:      cursorPos.Y,
 		Radius: parameter.PulseRadiusX,
 		Attack: component.CombatAttackPulse,
-		Type:   event.ExplosionTypePulse,
 	})
 
 	// Set pulse effect on the firing cursor for visual feedback

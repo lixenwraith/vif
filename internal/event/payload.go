@@ -490,38 +490,51 @@ type FlashRequestPayload struct {
 
 // --- Explosion ---
 
-// ExplosionType differentiates visual and behavioral explosion variants
+// ExplosionType differentiates local presentation palettes.
 type ExplosionType uint8
 
 const (
 	ExplosionTypeDust    ExplosionType = iota // Converts glyphs to dust, cyan palette
 	ExplosionTypeMissile                      // Visual only, warm palette
 	ExplosionTypeEye                          // Self-destruct explosion with character noise
-	ExplosionTypePulse                        // Combat geometry only; PulseComponent owns the visual
 )
 
-// ExplosionRequestPayload describes one explosion center: geometry, combat family and
-// visual variant. Attack has no safe zero value; producers must set it explicitly.
+// ExplosionRequestPayload is the D-3 combat artifact for one explosion center.
+// Attack has no safe zero value; producers must set it explicitly.
 type ExplosionRequestPayload struct {
-	Entity   core.Entity                `toml:"entity"` // Owner cursor, credited for damage
-	X        int                        `toml:"x"`
-	Y        int                        `toml:"y"`
-	Radius   float64                    `toml:"radius"`   // 0 = ExplosionFieldRadius
-	Duration time.Duration              `toml:"duration"` // 0 = ExplosionFieldDuration
-	Attack   component.CombatAttackType `toml:"attack"`   // CombatAttackNone = visual only
-	Type     ExplosionType              `toml:"type"`     // Palette selection
+	Entity core.Entity                `toml:"entity"` // Owner cursor, credited for damage
+	X      int                        `toml:"x"`
+	Y      int                        `toml:"y"`
+	Radius float64                    `toml:"radius"` // 0 = ExplosionFieldRadius
+	Attack component.CombatAttackType `toml:"attack"`
 }
 
-// ExplosionBatchRequestPayload describes one explosion made of several centers sharing
-// geometry, combat family and visual variant. Pooled: the consumer releases it.
+// ExplosionBatchRequestPayload describes one combat artifact made of several
+// centers sharing geometry and combat family. Pooled: the consumer releases it.
 // Producers must truncate Centers at parameter.ExplosionRequestCenterCap so a
-// map-wide detonation cannot flood the event queue or the center array.
+// map-wide detonation cannot flood the event queue.
 type ExplosionBatchRequestPayload struct {
+	Centers []ExplosionCenterEntry
+	Entity  core.Entity
+	Radius  float64
+	Attack  component.CombatAttackType
+}
+
+// ExplosionVisualRequestPayload is player-domain presentation for one center.
+type ExplosionVisualRequestPayload struct {
+	X        int           `toml:"x"`
+	Y        int           `toml:"y"`
+	Radius   float64       `toml:"radius"`
+	Duration time.Duration `toml:"duration"`
+	Type     ExplosionType `toml:"type"`
+}
+
+// ExplosionVisualBatchRequestPayload is player-domain presentation for a group
+// of centers. It is not pooled: the local queue owns the producer's slice copy.
+type ExplosionVisualBatchRequestPayload struct {
 	Centers  []ExplosionCenterEntry
-	Entity   core.Entity
 	Radius   float64
 	Duration time.Duration
-	Attack   component.CombatAttackType
 	Type     ExplosionType
 }
 

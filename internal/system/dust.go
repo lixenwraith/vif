@@ -641,13 +641,16 @@ func (s *DustSystem) detonateDust(cursor core.Entity) {
 
 	s.convertGlyphs(cursorPos.X, cursorPos.Y, &s.blast)
 	strikePlayerTargets(s.world, cursor, &s.blast, component.CombatAttackExplosion)
+	s.world.PushLocal(event.EventExplosionVisualBatchRequest, &event.ExplosionVisualBatchRequestPayload{
+		Centers: append([]event.ExplosionCenterEntry(nil), s.centerBuf...),
+		Radius:  parameter.ExplosionFieldRadius, Duration: parameter.ExplosionFieldDuration,
+		Type: event.ExplosionTypeDust,
+	})
 
-	// The crossing: geometry and combat family only, no player entity reference
+	// The crossing carries combat geometry. Presentation stays with this producer.
 	p := event.AcquireExplosionBatchRequest()
 	p.Entity = cursor
 	p.Radius = parameter.ExplosionFieldRadius
-	p.Duration = parameter.ExplosionFieldDuration
-	p.Type = event.ExplosionTypeDust
 	p.Attack = component.CombatAttackExplosion
 	p.Centers = append(p.Centers, s.centerBuf...)
 	s.world.PushCrossing(event.EventExplosionBatchRequest, p)

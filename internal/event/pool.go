@@ -88,9 +88,7 @@ func AcquireExplosionBatchRequest() *ExplosionBatchRequestPayload {
 	p.Centers = p.Centers[:0]
 	p.Entity = 0
 	p.Radius = 0
-	p.Duration = 0
 	p.Attack = component.CombatAttackNone
-	p.Type = 0
 	return p
 }
 

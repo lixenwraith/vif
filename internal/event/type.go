@@ -265,10 +265,14 @@ const (
 
 	// --- Explosion ---
 
-	// EventExplosionRequest (ExplosionRequestPayload) [bus] triggers explosion effect at location
+	// EventExplosionRequest (ExplosionRequestPayload) [bus] resolves shared combat geometry at one center
 	EventExplosionRequest
-	// EventExplosionBatchRequest (ExplosionBatchRequestPayload) [bus] triggers one explosion made of several centers
+	// EventExplosionBatchRequest (ExplosionBatchRequestPayload) [bus] resolves shared combat geometry at several centers
 	EventExplosionBatchRequest
+	// EventExplosionVisualRequest (ExplosionVisualRequestPayload) [local] presents one explosion center for its producer
+	EventExplosionVisualRequest
+	// EventExplosionVisualBatchRequest (ExplosionVisualBatchRequestPayload) [local] presents several explosion centers for its producer
+	EventExplosionVisualBatchRequest
 
 	// --- Dust ---
 

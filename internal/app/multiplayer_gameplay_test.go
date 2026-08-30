@@ -133,3 +133,31 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 		}
 	}
 }
+
+// TestExplosionPresentationStaysWithItsProducer is the presentation half of the
+// explosion split. The combat artifact reaches the peer; the smoke center does not.
+func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
+	apps := meshSession(t, 0xA5A5, 2, [][2]int{{1, 2}})
+	local := localCursors(t, apps)
+
+	apps[0].Context().PushLocal(event.EventExplosionVisualRequest,
+		&event.ExplosionVisualRequestPayload{X: 10, Y: 10, Radius: 4, Type: event.ExplosionTypeMissile})
+	apps[0].Context().PushCrossing(event.EventExplosionRequest,
+		&event.ExplosionRequestPayload{Entity: local[0], X: 10, Y: 10, Radius: 4})
+	apps[0].Settle()
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(apps)
+	}
+
+	for i, a := range apps {
+		var centers int
+		a.World().RunSafe(func() { centers = a.World().Resources.Transient.ExplosionCount })
+		want := 0
+		if i == 0 {
+			want = 1
+		}
+		if centers != want {
+			t.Fatalf("participant %d has %d missile visual centers, want %d", i+1, centers, want)
+		}
+	}
+}

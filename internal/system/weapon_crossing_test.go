@@ -57,8 +57,7 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 		t.Fatalf("crossing event = %#v, want player-stamped explosion request", events[1])
 	}
 	if crossing.Entity != cursor || crossing.X != cursorPos.X || crossing.Y != cursorPos.Y ||
-		crossing.Radius != parameter.PulseRadiusX || crossing.Attack != component.CombatAttackPulse ||
-		crossing.Type != event.ExplosionTypePulse {
+		crossing.Radius != parameter.PulseRadiusX || crossing.Attack != component.CombatAttackPulse {
 		t.Fatalf("crossing payload = %#v, want complete pulse geometry", crossing)
 	}
 
@@ -70,8 +69,5 @@ func TestDisruptorCrossesGeometry(t *testing.T) {
 	shared, ok := derived[0].Payload.(*event.CombatAttackAreaRequestPayload)
 	if !ok || shared.TargetEntity != header || len(shared.HitEntities) != 1 || shared.HitEntities[0] != member {
 		t.Fatalf("shared attack = %#v, want header %d member %d", derived[0].Payload, header, member)
-	}
-	if w.Resources.Transient.ExplosionCount != 0 {
-		t.Fatalf("pulse created %d explosion centers; PulseComponent owns its visual", w.Resources.Transient.ExplosionCount)
 	}
 }

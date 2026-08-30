@@ -33,10 +33,9 @@ var stampingPush = map[string]bool{
 // TestEventClassMatchesSystemProfile; an entry that stops describing real code
 // fails TestCrossingPushesAreLive.
 var crossingPushes = map[string]string{
-	// D-3 table, area effect: the explosion request carries centers, radius,
-	// duration, attack family and owner cursor.
-	"missile:EventExplosionRequest":   "missile impact; the explosion centers cross",
-	"dust:EventExplosionBatchRequest": "dust detonation; the explosion centers cross",
+	// D-3 table, area effect: combat geometry crosses; visual centers stay local.
+	"missile:EventExplosionRequest":   "missile impact; center, radius, attack family and owner cross",
+	"dust:EventExplosionBatchRequest": "dust detonation; centers, radius, attack family and owner cross",
 	"weapon:EventExplosionRequest":    "disruptor pulse; center, ellipse radius, attack family and owner cross",
 
 	// D-3 table, drain fusion: the spawn request carries the header cell only.

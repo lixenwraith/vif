@@ -136,13 +136,16 @@ func (s *MissileSystem) Update() {
 			// Missile is player-domain: resolve its own half before the request crosses
 			s.blast.resetOne(x, y, parameter.MissileExplosionRadius)
 			strikePlayerTargets(s.world, missileComp.Owner, &s.blast, component.CombatAttackMissile)
+			s.world.PushLocal(event.EventExplosionVisualRequest, &event.ExplosionVisualRequestPayload{
+				X: x, Y: y, Radius: parameter.MissileExplosionRadius,
+				Type: event.ExplosionTypeMissile,
+			})
 
 			s.world.PushCrossing(event.EventExplosionRequest, &event.ExplosionRequestPayload{
 				Entity: missileComp.Owner,
 				X:      x,
 				Y:      y,
 				Radius: parameter.MissileExplosionRadius,
-				Type:   event.ExplosionTypeMissile,
 				Attack: component.CombatAttackMissile,
 			})
 			toDestroy = append(toDestroy, missileEntity)
