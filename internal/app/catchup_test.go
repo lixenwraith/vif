@@ -69,12 +69,35 @@ func TestCatchUpReproducesALiveSessionsCrossings(t *testing.T) {
 		t.Fatalf("host retained %d records at tick %d", len(records), at.Tick)
 	}
 
-	late := mustJoiner(t, seed, 120, 40, an)
+	// The anchor a mid-run joiner receives is the live one, taken while the session
+	// is running: it names the position to reach and carries the latch that engages
+	// the playout barrier for the reproduction.
+	live := host.JoinAnchor()
+	if !live.Anchor.SessionShared {
+		t.Fatal("the live anchor does not describe a shared session")
+	}
+	late := mustJoiner(t, seed, 120, 40, live)
 	defer late.Close()
-	if err := late.CatchUp(host.JoinAnchor(), records); err != nil {
+	if err := late.CatchUp(live, records); err != nil {
 		t.Fatalf("catch up: %v", err)
 	}
 	assertSharedParity(t, host, late, -1)
+
+	// Parity alone is a weak witness for the barrier half: applying a re-derived
+	// crossing one lead early only moves the compared surface once an FSM deadline
+	// happens to fall inside that lead, which takes a run several times longer than
+	// this one. The reproduction held no link at any point, so a non-zero deferral
+	// count is the direct statement that the barrier followed the run.
+	var deferred, appliedLocal int64
+	late.World().RunSafe(func() {
+		reg := late.World().Resources.Status
+		deferred = reg.Ints.Get("network.barrier_deferred").Load()
+		appliedLocal = reg.Ints.Get("network.barrier_applied_local").Load()
+	})
+	if deferred == 0 || appliedLocal == 0 {
+		t.Fatalf("the reproduction deferred %d and applied %d artifacts through the barrier, want both non-zero",
+			deferred, appliedLocal)
+	}
 }
 
 // runningHost builds one participant, journals it into a retained log, and drives it

@@ -19,16 +19,22 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 	return a
 }
 
-// mustJoiner builds a participant that adopts a session's D-14 bounds before its
-// FSM boots, which is what ConfigForJoin does for a real join. Its terminal is its
-// own: a joiner whose world took its bounds from that terminal instead would spawn
-// cursor slot zero on a different cell than the host and never recover (D-11).
+// mustJoiner builds a participant the way ConfigForJoin does for a real join: it
+// adopts the session's D-14 bounds before its FSM boots, and it latches the world
+// as shared. Its terminal is its own.
+//
+// Both halves matter and for different reasons. A joiner whose world took its
+// bounds from that terminal would spawn cursor slot zero on a different cell than
+// the host and never recover (D-11). And one that did not latch would leave the
+// playout barrier disengaged, so every crossing it re-derives would apply a lead
+// earlier than the session applied it — which is invisible until an FSM deadline
+// falls inside that lead.
 func mustJoiner(t *testing.T, seed uint64, w, h int, an event.JoinAnchor) *App {
 	t.Helper()
 	a, err := NewHeadless(Config{
 		Seed: seed, Width: w, Height: h, ForceDefault: true,
 		MapWidth: an.Anchor.MapWidth, MapHeight: an.Anchor.MapHeight,
-		CropOnResize: an.Anchor.CropOnResize,
+		CropOnResize: an.Anchor.CropOnResize, LockMap: an.Anchor.SessionShared,
 	})
 	if err != nil {
 		t.Fatalf("headless joiner: %v", err)
