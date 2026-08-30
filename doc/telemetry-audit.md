@@ -60,7 +60,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
 | Music | None | — | — | — | — |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.all_defeated` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.all_defeated` are FSM guards; remainder generic |
-| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied}` | `NewNetworkSystem` | Transport polling, fixed-delay admission and cursor sync | `Init` | Generic only |
+| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched}` | `NewNetworkSystem` | Transport polling, fixed-delay admission, cursor sync and connection state | `Init` | Status bar reads peer/state/latch; remainder generic |
 
 ## Engine and event audit
 
@@ -295,7 +295,11 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. |
 | `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
 | `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
+| `network.connected` (bool) | Whether at least one session peer is currently connected. |
 | `network.frames_dropped` (int) | Transport frames rejected by encoding, framing, ordering or identity checks. |
+| `network.map_latched` (bool) | Whether the host-authored D-14 map dimensions are latched. |
+| `network.peers` (int) | Current connected session-peer count. |
+| `network.state` (string) | Operator connection state: off, connecting, connected or disconnected. |
 | `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors. |
 | `ping.cursor_rejects` (int) | Requests rejected because ping could not resolve a roster cursor. |
 | `ping.disabled_rejects` (int) | Action requests dropped while the ping system was disabled. |

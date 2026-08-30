@@ -1,10 +1,9 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was audited against commit
-`d3526f21372734cd397ceb6df52c6e33cfbd5699` on 2026-08-20. The implementation,
-generated manifest, and shipped configuration were treated as authoritative
-where older prose disagreed with the code.
+codebase. It was audited through the Phase 8 two-participant operator surface on
+2026-08-30. The implementation, generated manifest, and shipped configuration
+were treated as authoritative where older prose disagreed with the code.
 
 Vi-Fighter is a terminal action game that combines vi-style text navigation,
 typing, shooting, data-driven encounters, adaptive species navigation, procedural
@@ -28,7 +27,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Audio](audio.md) | Domain detail | How are effects synthesized, music sequenced, APM mapped to arrangements, and backends selected? |
 | [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
-| [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and what networking code is implemented versus actually wired? |
+| [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
 
 Existing focused references remain useful:
@@ -75,7 +74,8 @@ This documentation distinguishes three states:
 - **Active** means constructed and used by the normal `cmd/vif` runtime.
 - **Optional** means supported by an explicit flag, config, build tag, or tool.
 - **Experimental/incomplete** means code exists but the normal application does
-  not expose a complete end-to-end feature. Networking is the principal example.
+  not expose a complete end-to-end feature. Mid-run join/reconnect and authenticated
+  multiplayer are examples; startup two-participant networking is optional and active.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

@@ -103,6 +103,8 @@ useful CI addition even though the current workflow does not perform one.
 | `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
 | `-j`, `-journal` | Record non-system-origin events to a dedicated replay journal. |
 | `-replay <file>` | Present a recorded journal instead of starting interactive play. |
+| `-host <address>` | Bind a startup-only two-participant session, for example `:7777`. |
+| `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
 | `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
 | `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |
@@ -115,6 +117,31 @@ checks `-ct` first. When both audio start flags are passed, unmute wins.
 `-lv`, `-ls`, `-lt`, and `-lr` each imply `-l`; `-ls` is parsed before
 terminal startup. A bare `-l` remains boolean, so a directory requires
 `-l=DIR`, not `-l DIR`.
+
+`-host` and `-join` are mutually exclusive and available only on the interactive
+play path; combining either with `-check`, `-schema`, or `-replay` is an error.
+They are flags rather than ex commands because no world snapshot supports a
+mid-run transition. The host holds tick zero until one joiner passes anchor,
+roster and start/ready checks. The joiner dials before constructing its `App`,
+so the anchor seed is installed before RNG/content initialization.
+
+### Two-terminal verification
+
+```bash
+# host
+./bin/vif -d -host 127.0.0.1:7777
+
+# joiner
+./bin/vif -join 127.0.0.1:7777
+```
+
+Both sides should show `NET:1P/LOCK`, two cursors, and the same shared actors and
+score/progression after either participant moves, types and fires. Quit the
+joiner and continue on the host; its indicator becomes `NET:DOWN/OPEN` and only
+the remote cursor disappears. For a LAN, bind `:7777` and join the host's
+reachable address. Public-internet routing uses the same socket code, but the
+current operator path is plaintext and unauthenticated, so it is for trusted
+peers only.
 
 `app.PlayJournal(paths ...string)` and `journal.Load` can reassemble several
 rotated files by `jseq`. The current CLI flag stores one string and passes one

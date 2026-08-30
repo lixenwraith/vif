@@ -36,6 +36,9 @@ configuration, audio policy, and reusable simulation libraries.
 - A replay journal, manual-clock harness, exact rational time controls,
   per-region FSM telemetry, structured logs, status snapshots, and a triggered
   flight recorder for reproduction and diagnosis.
+- Startup-only two-participant play over framed TCP, with deterministic shared
+  simulation, owner-authored cursor state, a fixed-delay crossing barrier, and
+  clean continuation after a peer disconnects.
 
 Interactive play is not advertised as globally bit-for-bit deterministic:
 simulation math uses `float64`, which is not a cross-platform lockstep
@@ -73,10 +76,17 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   startup rate from `1/8` through `8`.
 - `-j` records replay input to a dedicated journal; `-replay <file>` presents a
   journal on the terminal with fixed playback controls.
+- `-host <bind-address>` hosts a tick-zero two-participant session;
+  `-join <host:port>` joins it and adopts the host's seed/config/content identity.
 - `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
   and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
+
+For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
+in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second.
+This proof is currently plaintext, trusted-peer, startup-only, and limited to
+two participants.
 
 ## Documentation
 

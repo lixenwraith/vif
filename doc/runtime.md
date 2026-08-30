@@ -54,6 +54,12 @@ sequenceDiagram
     App->>Runtime: Register event handlers
 ```
 
+`-join` adds a pre-composition step: `Run` dials, receives the host's
+`JournalAnchor`, validates/adopts its seed and configuration identity, and only
+then calls `New`. `-host` composes first so its acceptor can snapshot the live
+tick-zero anchor. After service start, both roles complete the start/ready gate
+before the first frame token releases the scheduler.
+
 The detailed construction order is significant:
 
 1. Validate the application config and configure any embedder-provided log
@@ -61,7 +67,8 @@ The detailed construction order is significant:
 2. Initialize the generated event registry. FSM trigger resolution and
    `:emit` reflection depend on it.
 3. Register services selected by the mode: content always; terminal for
-   presenting modes; audio for play/replay; disabled-role network for play.
+   presenting modes; audio for play/replay; network for play in `RoleNone`,
+   `RoleHost`, or `RolePeer` according to startup configuration.
 4. Create an empty world and initialize services in deterministic topological
    order.
 5. Let initialized services contribute typed resources to the world.
@@ -290,7 +297,7 @@ state loss and is logged when observed.
 | Status metric values | Per-value atomics; set closed by `Registry.Freeze` | Systems cache pointers during construction; snapshots and the recorder load atomically off the world lock. |
 | Audio sequencer, voices, active effects | Mixer-goroutine confinement | Other goroutines send bounded commands or read atomic mirrors. |
 | Service registry/lifecycle | `service.Hub.mu` | Composition/start/stop paths only. |
-| Network inbound buffer | Bounded channel | Transport callbacks push without blocking; a future active `NetworkSystem` drains on tick. |
+| Network inbound buffer | Bounded channel | Transport callbacks push without blocking; active `NetworkSystem` sessions drain at the tick poll boundary. |
 
 ### Non-reentrant router rule
 

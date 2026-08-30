@@ -320,12 +320,45 @@ direction and owned cursor. `TestWireEncodingBudget` pins those representative
 budgets. The bandwidth does not justify a second dense codec and its parallel
 schema/registry path.
 
-**Not in this checkpoint:** the `cmd/vif` startup flags and manual two-terminal
-surface. The transport proof is two participants, startup-only, trusted and
-plaintext; there is no mid-run world snapshot, reconnect, authentication, lag
-compensation or TLS operator configuration. `SessionOffer.Participants` and the
-canonical source ordering already carry vectors, so four participants extend the
-coordinator and snapshot lifecycle rather than replace the transport shape.
+Fifth, **resolved: startup operator surface.** `-host <bind-address>` and
+`-join <host:port>` are play-mode-only flags; no ex command suggests a mid-run
+mode transition the snapshot layer cannot support. The host starts its listener
+and renders a tick-zero lobby while the scheduler is stopped. The joiner receives
+the anchor before `New`, so seed/config/corpus adoption precedes world and service
+construction. The shared start/ready methods used by the CLI now replace the
+manual gate sequence in `TestTwoLiveParticipantsStayInLockstepOverTCP`.
+`TestActivatedSessionDefersCrossingBeforeFirstTick` additionally proves that
+input arriving before the first system update enters the barrier.
+
+Manual two-terminal proof on one machine:
+
+```bash
+# terminal 1
+./bin/vif -d -host 127.0.0.1:7777
+
+# terminal 2
+./bin/vif -join 127.0.0.1:7777
+```
+
+Both status bars must reach `NET:1P/LOCK`; each terminal must show both cursors,
+and movement, typing, combat and scoring from either side must resolve onto the
+same shared actors. Quit the joiner: the host must change to `NET:DOWN/OPEN`,
+remove only the remote cursor and continue accepting local input. `:d save` is
+not a byte-for-byte field parity diagnostic because it deliberately includes
+local view and owner-authored metrics; a divergence is a different shared actor,
+position, kill/progression result, or nonzero `network.barrier_late`/
+`network.barrier_ran_without_peer` trend under an otherwise healthy link.
+
+The same binary works on a LAN by binding the host to `:7777` or
+`0.0.0.0:7777` and joining its reachable address. Internet use is the same socket
+path but remains a trusted-peer proof: it requires external firewall/NAT routing
+and currently carries plaintext with no authentication.
+
+**Remaining limits:** two participants, startup-only, trusted and plaintext;
+there is no mid-run world snapshot, reconnect, authentication, lag compensation
+or CLI TLS configuration. `SessionOffer.Participants` and canonical source
+ordering already carry vectors, so four participants extend coordinator and
+snapshot lifecycle rather than replace the transport shape.
 
 The extended observer soak also closed four latent shared-outcome leaks:
 

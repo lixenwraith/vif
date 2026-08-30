@@ -51,7 +51,7 @@ The main architectural planes are:
 | Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
-| I/O boundaries | `internal/service`, `content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and network transport scaffolding. |
+| I/O boundaries | `internal/service`, `content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and framed network sessions. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, and terminal-image conversion. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
@@ -62,7 +62,7 @@ See [Package map](package-map.md) for the medium-level dependency view.
 
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
-| `ModePlay` | terminal, content, audio, disabled-role network; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
+| `ModePlay` | terminal, content, audio, and optional startup host/join networking; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
 | `ModeHeadless` | content only; caller supplies geometry and events | manual clock advanced only by `App.Tick` |
 | `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `ReplayDriver` |
 
@@ -77,8 +77,8 @@ groups. Interactive play instead has four cooperating execution paths:
    gated by frame readiness.
 3. The event goroutine settles queued events between simulation ticks and
    remains active while the game is paused.
-4. Service-owned goroutines poll the terminal, mix audio, or, when explicitly
-   enabled by an embedder, perform network I/O.
+4. Service-owned goroutines poll the terminal, mix audio, or, when `-host` or
+   `-join` is selected, perform network I/O.
 
 ```mermaid
 flowchart TD
@@ -306,17 +306,20 @@ the bundled xterm.js page, uses embedded configuration/content, and compiles out
 logging; sound is disabled in the current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.
 
-Networking is infrastructure, not a completed game mode. The TCP/TLS transport,
-framing, peer manager, service adapter, and inbound translation system exist,
-but `App` constructs the service in disabled `RoleNone` mode, does not bind its
-event path, and does not include `NetworkSystem` in the generated system
-manifest. No normal CLI flag enables multiplayer.
+Phase 8 exposes a startup-only two-participant TCP game through `-host` and
+`-join`. The join handshake resolves the host anchor before the joining world is
+constructed, both schedulers remain at tick zero until the ready gate completes,
+and the manifest-registered `NetworkSystem` drains framed input only at the
+simulation's poll boundary. The fixed-delay artifact barrier exchanges crossings
+without a synchronous per-tick round trip. A disconnect despawns the departed
+cursor and leaves the survivor running.
 
-The simulation-side foundation is further along than the transport. The domain
-boundary is landed and enforced: entities, events and RNG streams are tagged,
-systems declare and are checked against their domain, and determinism across
-instances is stated as rules D-1..D-15 in [the domain model](domain-design.md).
-Event classification and the wire protocol remain.
+The proof of concept has no reconnect, mid-run world snapshot, lag compensation,
+authentication, or CLI TLS identity, and currently admits one joining peer. The
+participant/session representation and poll/barrier contracts are not pair-shaped;
+larger lobbies need coordinator slot allocation rather than a transport rewrite.
+The domain boundary, event classification, wire protocol, and their enforcing
+tests are described by rules D-1..D-15 in [the domain model](domain-design.md).
 
 For build, diagnostics, platform, and repository-health details, see
 [Development and operations](development.md) and

@@ -1,10 +1,9 @@
-# Services and Experimental Networking
+# Services and Networking
 
 Services own process/host resources whose lifecycle differs from ECS systems:
 terminal raw mode, audio output, the immutable content corpus, and an optional
-network transport. The network code is scaffolding and is disabled/unassembled
-in the current game; this document explicitly separates implemented transport
-pieces from a supported multiplayer feature.
+network transport. Networking is assembled for a startup-only two-participant
+trusted-peer mode; a normal run still contributes no active network capability.
 
 ## 1. Service lifecycle contract
 
@@ -72,7 +71,7 @@ Assembly is mode-dependent:
 
 | App mode | Registered services |
 |---|---|
-| `ModePlay` | terminal, content, audio, and network in disabled `RoleNone` |
+| `ModePlay` | terminal, content, audio, and network; `RoleNone` normally, `RoleHost`/`RolePeer` with startup flags |
 | `ModeHeadless` | content only |
 | `ModeReplay` | terminal, content, and audio |
 
@@ -120,62 +119,63 @@ This direction prevents the I/O layer from directly mutating component stores.
 Content exposes `NextBlock`; audio exposes the audio engine; networking exposes
 a `NetworkPort` that drains notifications and sends opaque framed messages.
 
-## 6. Network status: not a playable feature
+## 6. Operator session surface
 
-Play mode calls `NewNetworkService(nil)`, which produces `RoleNone`; headless
-and replay do not register the adapter. There is no CLI/network configuration
-path. Disabled service Init and Start are no-ops and it contributes no network
-resource.
+`ModePlay` registers `NetworkService` on every run. With neither startup flag it
+uses `RoleNone`, so Init/Start are no-ops and no `NetworkResource` is contributed.
+Two flags activate the same composition path:
 
-Although `NetworkSystem` can translate inbound notifications to game events,
-it is absent from `internal/manifest/definition.go`, so normal application
-assembly never constructs it. `internal/app/app.go` contains an explicit TODO
-for network event handling. No outbound gameplay protocol, state authority,
-serialization model, reconciliation, authentication, or determinism contract
-has been implemented.
+| Flag | Startup behavior |
+|---|---|
+| `-host <bind-address>` | Build the host App, start a listener, render a lobby, and hold the scheduler at tick zero until one peer is ready. |
+| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, build the mirrored roster, then pass the start/ready gate. |
 
-The code should therefore be described as an experimental TCP/TLS transport
-foundation, not multiplayer support.
+They are flags rather than ex commands because the protocol has no mid-run world
+snapshot. A host can be canceled in the lobby with `Ctrl-C`/`Ctrl-Q`. After a
+connected peer leaves, the remote cursor is removed and the survivor continues;
+the host listener remains active, but a later join is rejected with
+`ErrJoinMidRun` at the current position.
+
+The join anchor owns the seed, RNG session, tick rate, config, corpus fingerprint
+and D-14 map latch. `ConfigForJoin` runs before `New`, so `initWorld` cannot draw a
+different seed. The coordinator assigns canonical participant IDs and roster
+slots; both instances create the roster in slot order and mark only their own
+cursor human-controlled.
+
+The status bar shows `NET:WAIT/OPEN`, `NET:1P/LOCK`, or `NET:DOWN/OPEN`.
+The `network.session` debug card exposes state, peer count, connected state and
+map latch separately.
 
 ## 7. Transport roles and lifecycle
-
-The transport recognizes:
 
 | Role | Current behavior |
 |---|---|
 | `RoleNone` | Disabled/no-op. |
-| `RoleServer` | Listen and accept multiple TCP/TLS peers. |
-| `RoleHost` | Same transport behavior as server; P2P semantics are not implemented above it. |
-| `RoleClient` | Dial one TCP/TLS endpoint. |
-| `RolePeer` | Same transport behavior as client; coordination semantics are not implemented. |
+| `RoleServer` | Generic TCP/TLS listener. |
+| `RoleHost` | Listener with `HostAcceptor`, anchor verification and canonical participant assignment. |
+| `RoleClient` | Generic dialer. |
+| `RolePeer` | Dialed/preconnected stream admitted after the join and start gates. |
 
 ```mermaid
 flowchart TD
-    Transport["Transport"] --> Listener["server or host accept loop"]
-    Transport --> Dial["client or peer dial"]
+    Transport["Transport"] --> Listener["host accept loop"]
+    Transport --> Dial["peer dial or preconnected stream"]
     Listener --> Manager["PeerManager"]
     Dial --> Manager
-    Manager --> Peer["per-peer read, write, monitor goroutines"]
+    Manager --> Peer["read, write and close goroutines"]
 ```
 
-Server/host uses `tls.Listen` when a TLS configuration is present, otherwise
-plain `net.Listen`. Client/peer uses a dialer with the configured connection
-timeout and optional `tls.DialWithDialer`. TLS is `nil` by default and plaintext
-is intended only for local/debug use.
+Host uses `tls.Listen` when a TLS config is supplied programmatically, otherwise
+`net.Listen`; peer uses the corresponding dialer. The CLI deliberately supplies
+no TLS configuration in this trusted-peer proof. Every admitted stream is keyed
+by the coordinator's participant ID rather than accept order. The peer manager
+enforces the configured cap and duplicate-ID rejection.
 
-The peer manager caps connections (default 16), assigns monotonically
-increasing process-local peer IDs, and maintains a mutex-protected map. Each
-accepted peer gets:
+Each peer owns a bounded send queue, exact-frame read loop, encode/flush loop and
+close monitor. `Stop` closes the listener and peers and waits for the accept loop;
+peer close removes it from the manager and emits one poll notification.
 
-- one blocking decode loop;
-- one queued encode/flush loop;
-- one monitor waiting for close and removing it from the manager;
-- a bounded send channel (default 256).
-
-Close is one-shot, closes the connection, and causes both I/O loops to unwind.
-The transport closes the listener/all peers and waits for its accept loop.
-
-## 8. Wire frame
+## 8. Wire frame and session messages
 
 Every message begins with a fixed 12-byte big-endian header:
 
@@ -186,80 +186,83 @@ Every message begins with a fixed 12-byte big-endian header:
 | 2–5 | 4 | sender sequence |
 | 6–9 | 4 | latest received sequence/ack |
 | 10–11 | 2 | payload length |
-| 12 onward | 0–65,535 | opaque payload |
+| 12 onward | 0–65,535 | payload |
 
-```text
-[type:1][flags:1][seq:4][ack:4][length:2][payload:length]
+`Encode` completes short writes and `Decode` uses `io.ReadFull` for header and
+payload, so a partial stream read never reaches the game. Per-peer send assigns
+sequence and ack values at actual write time; broadcast clones a message per peer.
+Ack is observational—there is no retransmission policy.
+
+Control messages carry heartbeat, join offer/reply and start/ready gates.
+Gameplay uses `MsgEvent` for a closed crossing epoch and `MsgStateSync` for one
+owner-authored cursor snapshot. The epoch is JSON containing journal-registry TOML
+payloads; representative complete-frame budgets are pinned by
+`TestWireEncodingBudget`.
+
+## 9. Poll boundary and lockstep barrier
+
+Socket goroutines never touch `World`, the event queue or component stores.
+`SocketPort` appends `Inbound` notifications to its configured bounded receive
+channel (256 by default); a full buffer increments `Dropped` rather than blocking
+the socket. `NetworkService` contributes that port through `NetworkResource`.
+
+`NetworkSystem` is manifest-registered with a `dual` profile. At tick open,
+`WireSink.Receive` drains notifications and applies scheduled local/peer artifacts;
+at tick close, `Flush` sends the closed production epoch. `Cross` withholds the
+local artifact so every participant applies it at the same fixed-delay boundary.
+The default lead is three 50 ms ticks and never waits for a per-tick round trip.
+`ActivateSession` closes the lobby-to-first-tick input window before the main loop
+reads terminal events.
+
+`MsgStateSync` periodically copies only the D-13 owner-authored cursor set.
+Disconnect drains through the same poll boundary, despawns only cursors owned by
+that participant, disables the barrier when no peer remains, and restores local
+map-size authority.
+
+## 10. Timeouts, limits and security
+
+`network.Config` applies connection/read/write deadlines, heartbeat and silent
+disconnect intervals, read/write buffer sizes, bounded send/receive queues, peer
+cap, barrier delay and optional TLS. Heartbeats are framed control messages and a
+silent connection closes through the normal disconnect path.
+
+The current operator feature is deliberately narrower than the transport shape:
+
+- exactly two participants and one startup join;
+- no world snapshot, reconnect or lag compensation;
+- trusted plaintext peers; no authentication or CLI TLS identity;
+- no cross-version compatibility negotiation beyond anchor schema/tick/config/
+  corpus equality;
+- sequence/ack fields detect ordering but do not retransmit.
+
+The participant roster, source ordering and epoch format are vectors rather than
+two-peer pairs. Supporting four startup participants requires a coordinator
+allocator and lobby target count; supporting a mid-run participant additionally
+requires a world snapshot. Neither change replaces the port or barrier shape.
+
+## 11. Verification and manual run
+
+`TestTwoLiveParticipantsStayInLockstep` proves two independent drivers over
+`Loopback`; `TestTwoLiveParticipantsStayInLockstepOverTCP` repeats 1,200 paired
+boundaries over `127.0.0.1`, uses the production startup gates, checks disconnect
+continuation and rejects a later join with `ErrJoinMidRun` while the listener stays
+up. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers input immediately
+after the lobby gate. Framing, timeout, mismatch and encoding budgets have focused
+tests in `internal/network` and `internal/event`.
+
+```bash
+# terminal 1
+./bin/vif -d -host 127.0.0.1:7777
+
+# terminal 2
+./bin/vif -join 127.0.0.1:7777
 ```
 
-Message types reserve ranges for heartbeat/connect/disconnect/ack, input/state
-sync/event, peer list/role assignment, and future authentication. Flags declare
-need-ack and future compression. Encoding enforces the 65,535-byte payload cap;
-decoding uses `io.ReadFull` for exact framing.
-
-Per-peer `Send` assigns its own outbound sequence and copies the current inbound
-sequence into `Ack`. Broadcast clones the message for each peer so sequences do
-not race.
-
-## 9. Transport-to-game handoff
-
-Transport callbacks must not touch the world. `NetworkService` enqueues
-connect, disconnect, or message notifications into a 1,024-entry channel
-without blocking I/O goroutines; overflow increments a drop counter.
-
-If assembled, `NetworkSystem.Update` drains at most 64 notifications per game
-tick and translates:
-
-| Transport item | Game event |
-|---|---|
-| connect | `EventNetworkConnect` |
-| disconnect | `EventNetworkDisconnect` |
-| `MsgInput` | `EventRemoteInput` with opaque payload |
-| `MsgStateSync` | `EventStateSync` with peer, sequence, payload |
-| `MsgEvent` | `EventNetworkEvent` with opaque payload |
-
-Other message types are currently ignored by the system. The port also exposes
-send, broadcast, peer count, and running state, but `NetworkSystem` has no
-outbound request subscriptions yet.
-
-## 10. Incomplete and misleading configuration
-
-`network.Config` declares read/write timeouts, heartbeat/disconnect intervals,
-read/write buffer sizes, and receive queue size. In the current implementation:
-
-- only connection timeout, address, role, TLS, max peers, and send queue size
-  materially affect behavior;
-- per-peer readers/writers use hard-coded 64 KiB buffers;
-- no read/write deadlines are applied;
-- heartbeat and disconnect timeout logic does not run;
-- `RecvQueueSize` is unused; the service owns a separate fixed 1,024 channel;
-- acknowledgment fields/flags are recorded but retransmission or required-ack
-  policy is absent;
-- compression and auth message semantics are reserved only.
-
-Do not present `DefaultConfig` as production-safe merely because its fields have
-values. TLS identity/verification, protocol validation, resource limits, and
-application authority must be designed before enabling untrusted connections.
-
-## 11. Work required for real networking
-
-At minimum, a supported feature needs:
-
-1. an explicit product topology and authoritative simulation owner;
-2. CLI/configuration and secure TLS/auth identity handling;
-3. versioned typed payload schemas with validation and compatibility rules;
-4. input/state/event ownership, ordering, replay, and reconciliation semantics;
-5. heartbeat/deadline/ack behavior or removal of misleading fields;
-6. bounded memory and rate limits for decoded payloads and event translation;
-7. manifest registration plus outbound system events;
-8. an authoritative server state or snapshot/delta design—the manual-clock
-   harness and seeded streams do not make float64 world state a cross-platform
-   lockstep protocol;
-9. integration, adversarial, disconnect, slow-peer, and saturation tests;
-10. telemetry for peers, bytes, queue drops, protocol rejects, latency, and
-    reconnect state.
-
-Until then, keep RoleNone as the only normal application path.
+Both sides should reach `NET:1P/LOCK`, display two cursors and agree on shared
+actors, scoring and progression while both participants move/type/fire. Quit one;
+the other must continue at `NET:DOWN/OPEN`. Bind the host to `:7777` for a LAN.
+Internet routing uses the same TCP path but is not safe for untrusted peers until
+authentication and TLS configuration are exposed.
 
 ## 12. Adding a service
 
@@ -285,5 +288,5 @@ Until then, keep RoleNone as the only normal application path.
 | Content/audio adapters | `internal/service/adapter_content.go`, `adapter_audio.go` |
 | Network adapter | `internal/service/adapter_network.go` |
 | Transport/protocol | `internal/network/*.go` |
-| Optional ECS translator | `internal/system/network.go` |
-| Current assembly status | `internal/app/app.go`, `internal/manifest/definition.go` |
+| Tick-owned ECS wire bridge | `internal/system/network.go` |
+| Startup session assembly | `internal/app/session.go`, `app.go`, `loop.go` |

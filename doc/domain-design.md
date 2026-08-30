@@ -1,7 +1,7 @@
 # Multi-instance domain model — vi-fighter
 
-Status: Phases 4 through 7 and the Phase 8 transport checkpoint landed,
-verification included. Rules D-1..D-15 are implemented unless marked.
+Status: Phases 4 through 8 landed, verification included. Rules D-1..D-15 are
+implemented unless marked.
 Supersedes every earlier design note.
 
 ## 1. Domains
@@ -431,6 +431,16 @@ peer manager. Canonical participant IDs, not connection-local accept order, key
 the barrier sort and disconnect roster cleanup. The tick-zero start/ready gate is
 startup coordination only; no per-tick round trip was added.
 
+`cmd/vif` exposes that gate as startup flags rather than ex commands:
+`-host <bind-address>` and `-join <host:port>`. A host initializes its terminal,
+world and listener, renders a lobby message, and holds the scheduler at tick zero
+until one participant is ready. A joiner dials before constructing its `App`, so
+`ConfigForJoin` installs the host seed, config and corpus identity before
+`initWorld` can draw a seed or load content. Both sides activate the crossing sink
+before terminal input is consumed. The host remains playable and listening after
+a disconnect; a later connection receives the current nonzero position and is
+rejected with `ErrJoinMidRun`, because no world snapshot exists.
+
 The wire keeps journal TOML payloads inside a JSON epoch envelope. The measured
 complete stream frames, including the 12-byte header, are 44 bytes for an empty
 epoch, 567 bytes for four cursor moves, 1,771 bytes for six resolved three-member
@@ -519,12 +529,15 @@ whose `CombatComponent` is owner-authored (D-13).
   `TestTwoLiveParticipantsStayInLockstepOverTCP`, including the anchor handshake,
   coordinator roster, stream framing and clean remote-cursor removal on disconnect.
   The host transport remains running with its local cursor.
-- **Operator startup is not in this checkpoint.** `SocketPort`, `ConfigForJoin`,
-  `HostSession` and `JoinSession` are the application seams, but `cmd/vif` has no
-  `-host`/`-join` flags yet. The current session is startup-only, trusted and
-  plaintext: no mid-run snapshot, reconnect, authentication, lag compensation or
-  TLS configuration surface. The roster and participant vectors are not shaped
-  around two peers, but this proof assigns exactly two.
+- **Resolved in Phase 8: startup operator surface.** `-host <bind-address>` and
+  `-join <host:port>` select the same `ModePlay` composition path with an active
+  `NetworkService`. `TestTwoLiveParticipantsStayInLockstepOverTCP` now drives the
+  same host/join gate methods as the CLI, and
+  `TestActivatedSessionDefersCrossingBeforeFirstTick` proves input immediately
+  after the gate is deferred rather than applied locally. The proof remains
+  startup-only, two-participant, trusted and plaintext: no world snapshot,
+  reconnect, authentication, lag compensation or CLI TLS configuration. The
+  roster and wire ordering remain vector-shaped rather than two-peer-shaped.
 - **`EventLevelSetup` and FSM region ops are `Shared` but operator-injectable.**
   Both are replicated only because every instance runs the same map script; one
   injected into a single participant rewrites shared state its peers never see.

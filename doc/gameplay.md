@@ -37,9 +37,11 @@ weapon, and combat components. Each cursor owns an independent copy of that
 state. A roster slot identifies its human, bot, or remote control source, while
 one selected local slot receives terminal input and anchors the camera/UI.
 
-The shipped games currently spawn one human-controlled local cursor. The
-ordinary-entity roster is the simulation foundation for bots and multiplayer,
-not a claim that the normal CLI exposes a multiplayer mode.
+Ordinary startup spawns one human-controlled local cursor. With `-host` and
+`-join`, the startup gate assigns slots zero and one and both worlds spawn one
+locally controlled and one remotely controlled cursor. The roster remains a
+16-slot structure even though the current operator surface admits exactly two
+participants.
 
 | State | Meaning |
 |---|---|

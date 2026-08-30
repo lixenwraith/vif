@@ -151,7 +151,7 @@ services shared by many systems.
 | `Status` | Atomic, dynamically registered metrics. |
 | `Content` | Loaded immutable content corpus capability. |
 | `Audio` | Sound/music capability and state exposed to game systems. |
-| `Network` | Optional transport capability; not wired into the default game. |
+| `Network` | Poll-model transport capability; `RoleNone` in ordinary play and active for `-host`/`-join`. |
 
 Target group `0` is reserved for live cursors and contains up to the navigation
 target cap of eight, even though the player roster itself has 16 slots. A field
@@ -160,7 +160,7 @@ Other groups can likewise retain up to eight entity or position targets, which
 is relevant to eye/tower scenarios.
 
 `CursorSystem` is the sole owner of cursor lifecycle and placement. FSM,
-terminal input, replay, bots, and eventual network input all request spawn,
+terminal input, replay, bots, and remote participant input all request spawn,
 despawn, local-slot selection, or movement through typed events. The system
 updates the ordinary cursor component/entity and then announces the applied
 result, keeping one path for every producer.
@@ -315,7 +315,7 @@ The catalog covers these domains:
 | World structure | walls, maze, composites, gateways, towers, navigation graphs |
 | Species and combat | creation, attacks, damage, death, fusion, projectiles, adaptation, genetics |
 | Visual effects | flash, fade, splash, dust, cleaner, markers and explosions |
-| Experimental network | connect/disconnect and transport notifications |
+| Multiplayer network | connect/disconnect, remote cursor input, state sync, and transport notifications |
 
 Payload ownership depends on the event. Several high-frequency payloads are
 pooled and returned by the consumer; handlers must treat payloads as borrowed

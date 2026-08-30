@@ -55,9 +55,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | CLI flags, logging/journal/runtime-capture setup, replay/check/schema selection, process exit policy. |
+| `cmd/vif` | CLI flags including startup host/join selection, logging/journal/runtime-capture setup, replay/check/schema selection, process exit policy. |
 | `content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. |
-| `internal/app` | Resolve paths, validate runtime mode, compose play/headless/replay Apps, drive frame/input/playback loops, verify/replay journals, and expose check/schema tools. |
+| `internal/app` | Resolve paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback loops, verify/replay journals, and expose check/schema tools. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -69,13 +69,13 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/journal` | Leaf JSONL reader that reassembles rotated replay files by dense journal sequence. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
-| `internal/network` | Experimental TCP/TLS transport, framed protocol, peers, sequence/ack fields, inbound notifications. |
+| `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, peers, sequence/ack fields, and bounded inbound notifications. |
 | `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, paths, navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
-| `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and experimental network transport. |
+| `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and network transport. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
 | `internal/vlog` | Build-tagged logger facade: levels, scopes, correlation stamps, correlated sets, standalone files, crash flush, and the ungated journal sink; no-op on WASM/`novlog`. |
@@ -132,8 +132,9 @@ Important exceptions:
 - `MetaSystem` is event-only, declared in `manifest.ContextSystems` and
   registered directly by `internal/app` because it takes a `GameContext`; it
   is intentionally absent from the per-tick system manifest.
-- `NetworkSystem` exists but is absent from the manifest and is not active in
-  the normal application.
+- `NetworkSystem` is a manifest-registered dual-domain system. It is inert with
+  the default `RoleNone` resource and becomes the tick-owned wire bridge for a
+  `-host` or `-join` session.
 - runtime system control uses each system's `Name()` value, not necessarily the
   manifest construction key. New systems should keep those names identical.
 
