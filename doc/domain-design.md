@@ -247,18 +247,39 @@ snapshot they held. Each now admits only `SimulatesLocally` cursors and crosses
 `EventCombatAttackAreaCrossingRequest` with the exact shared target/member set.
 
 **D-14 Map bounds authority.** `MapWidth`, `MapHeight` and `CropOnResize` are
-shared simulation state with two writers:
+shared simulation state. Every writer of them must therefore be a function of
+state every participant agrees on — and, because a run is reproduced by replaying
+its record stream, of state a *reproduction* agrees on too. That second half is
+what the rule turns on: a replay and a mid-run catch-up hold no transport and no
+terminal of their own.
+
+Writers:
 
 - `World.SetupLevel`, driven by `EventLevelSetup` from the map script. Shared and
   replicated; this is the authority.
 - `GameContext.HandleResizeLocked`, driven by this instance's terminal, and
-  admissible only while `mapSizeLocal()` holds. *When more than one player is
-  present, crop is disabled and map size is locked.*
+  admissible only while `World.MapSizeLocal()` holds.
+- `MetaSystem`'s full reset and its zero-dimension level setup, which return the
+  map to the viewport — the same terminal derivation, under the same guard.
 
-The join race is accepted: a resize already in flight when the second participant
-appears may land, a resize after it will not. The window is one event dispatch
-and the divergence is bounded by the guard immediately after. Suppression
-publishes `context.map_locked` and logs once per resize.
+`MapSizeLocal()` is `!SessionShared() && roster ≤ 1`. The roster size is shared.
+`SessionShared` is not derivable from anything else and is not shared simulation
+state, so it travels in the journal anchor (schema 11): a run that opened or
+joined a session sets it, and any reproduction of that run adopts it. Reading it
+off the live transport instead — which is what it used to do — made a replay crop
+where the run it reproduced did not, and left the map croppable in two windows
+where it must not be: while a host waits in a lobby, holding out an anchor whose
+bounds a joiner has already adopted, and after every participant leaves, changing
+the bounds a returning one would replay onto.
+
+*The bounds a participant reproduces must be in place before its FSM boots.* The
+boot script spawns cursor slot zero at the centre of the map, and it runs inside
+`New`. A joiner that adopted the session's bounds afterwards therefore held that
+shared cursor on its own terminal's centre while everyone else held it on the
+session's — a shared position, diverging from tick zero, which no crossing
+corrects. `Config.MapWidth`/`MapHeight`/`CropOnResize`/`LockMap` carry it, filled
+by `ConfigForJoin` and `ConfigFromAnchor`, and `App.applyMapLatch` installs it
+before any system is built.
 
 Consequence, instrumented rather than closed: a map script may branch an FSM
 guard on `viewport_width`, `viewport_height`, `camera_x`, `camera_y` or
@@ -267,7 +288,7 @@ different arm on each instance. The whole script-visible surface is
 `internal/engine/config_access.go` — eight keys, of which `map_width`,
 `map_height` and `crop_on_resize` are replicated and the other five are not. Both
 accessors warn once per key when a non-replicated one is read while
-`World.MapSizeLocal()` is false. The keys are retained: D-14 keeps the surface,
+`World.SessionShared()` holds. The keys are retained: D-14 keeps the surface,
 and the warning only marks where a script has made itself instance-dependent.
 
 **D-15 Declared classification.** Every system declares its domain profile
@@ -461,11 +482,22 @@ kinetic, combat, context and status diagnosis; a ring holds local samples so
 sequential polling or different link latency cannot compare unlike ticks. Digest
 messages do not flood: equality on every edge implies equality across a connected
 graph. A mismatch increments `network.digest_mismatches`, logs its first differing
-category on the transition and holds a high-priority red `DESYNC` status-bar item.
+category on the transition and holds a high-priority `DESYNC` status-bar item.
 Once every neighbour agrees again, a green `SYNCED` acknowledgement remains for
 twenty ticks and disappears. This detects divergence; it neither chooses an
 authoritative copy nor repairs one, and it deliberately excludes D-13
 owner-authored values.
+
+Divergence has two degrees, because one disagreeing sample and a permanent one
+call for different statements. An artifact that missed its apply tick lands on one
+side a tick late and the next sample finds the two equal again, so the indicator
+waits for `NetworkDesyncSamples` consecutive disagreements before reporting.
+`NetworkDivergedSamples` of them is past anything the participants could still
+resolve between themselves — nothing re-derives a missing artifact — so the
+session publishes `network.diverged`, logs at error, and the indicator turns from
+amber `DESYNC` to red `DIVERGED`. `network.sync_part` and `network.sync_tick` name
+the first differing category and the tick it was first seen on, so the diagnosis
+survives into `:d` and the journal. Agreement clears both degrees.
 
 **Membership.** A roster change is shared state, so it travels as an artifact
 rather than as a local reaction to a link event. A disconnect is observed only by
@@ -565,11 +597,12 @@ A denser payload codec does not justify a second registry/schema path at these
 rates. `TestWireEncodingBudget` pins the representative budgets;
 `TestFrameRoundTripSurvivesShortStreamIO` pins framing.
 
-Journal schema is 10, and the wire shares its encoder: 7 made `Domain` meaningful,
+Journal schema is 11, and the wire shares its encoder: 7 made `Domain` meaningful,
 8 added the D-14 map latch to the anchor, 9 moved the nugget event family out of
-the replicated record set after the mechanic became personal, and 10 separates
+the replicated record set after the mechanic became personal, 10 separates
 explosion combat from presentation while adding the roster template and causal
-fusion fields.
+fusion fields, and 11 adds `SessionShared`, the D-14 crop admissibility a
+reproduction has to adopt rather than derive from a transport it does not hold.
 
 ## 7. Telemetry and snapshots
 
@@ -654,6 +687,8 @@ fails the build when the code stops matching the declaration.
 | `TestLocalEventsCarryThePlayerDomain` | `internal/app` | D-10: a Local-class record is tagged player, against a shrinking exemption set |
 | `TestDomainAuditSoakClean` | `internal/app` | Zero component-domain violations over a 3,000-step soak |
 | `TestMapSizeLockedWithSecondCursor`, `TestMapSizeCropsWithOneCursor` | `internal/app` | D-14, with the crop path as its own negative control |
+| `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` | `internal/app` | D-14/D-11: a participant on a different terminal holds the boot cursor on the session's cell, not its own |
+| `TestSessionRunNeverCropsItsMap` | `internal/app` | D-14: a run that opened a session keeps its bounds through a resize, so the anchor it offers cannot move |
 | `TestSharedGlyphsAreGoldMembersOnly` | `internal/app` | §4: every shared-domain glyph is a gold composite member |
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |
 | `TestObserverSharedStateTracksTheLiveParticipant` | `internal/app` | 1,200 steps of an observer whose shared state arrives over the wire rather than re-derived |
@@ -668,7 +703,7 @@ fails the build when the code stops matching the declaration.
 | `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
 | `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
-| `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption produces red `DESYNC`, equality produces transient green `SYNCED`, then the notice clears |
+| `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption is not reported on its first sample, becomes amber `DESYNC`, escalates to red `DIVERGED`, and equality clears both through a transient green `SYNCED` |
 | `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores independent wall origins and deadline-slip telemetry while keeping absolute simulation tick/state |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
 | `TestSessionLogSplitsAndRoundTrips`, `TestSessionLogChunksFitOneFrame` | `internal/event` | The catch-up transfer is lossless and every chunk fits one frame |
@@ -692,8 +727,24 @@ to `"event"` for settle-pass attaches; `ClockScheduler.SetDispatchTap` and
 The two-live harness owns one tick per participant per step. It disables random
 script ticks and the overlay round trip (whose driver explicitly ticks one App)
 so neither App can outrun the three-tick playout lead. The long random criterion
-also holds `Resizes`, `MapSetups`, FSM `Regions`, resets and ex commands fixed to
-isolate participant gameplay and avoid deliberately restarting the run. Separate
+holds `MapSetups`, FSM `Regions`, resets and ex commands fixed to isolate
+participant gameplay and avoid deliberately restarting the run.
+
+Two things it deliberately does *not* hold fixed any more, because holding them
+fixed is what let a resize desynchronise a live session with every test passing.
+`pair` joins a second participant on a **different terminal size**, so no
+viewport-derived value can match by accident; and `liveScript` drives **resizes**,
+so each participant's terminal moves under the session. The socket criterion keeps
+viewport-relative motions excluded for an unrelated reason recorded in §9.4: it
+ends in a mid-run catch-up, which replays input records rather than the cells they
+resolved against.
+
+Effort is tiered rather than fixed. `soakScale(short, normal, full)` picks a
+repetition or step count per profile: `-short` for a smoke run, the default for
+what a change is validated against, and `VIF_SOAK=full` for the wide seed sweep.
+The default profile keeps every seed reproducible from its name while bringing a
+`-race` run of the whole tree from about six and a half minutes to two and a
+half. Separate
 multi-participant tests exercise the live operator policy: instance-local time,
 system, raw event and FSM controls are refused, while the coordinator's reset is
 transported under D-10.
@@ -717,8 +768,16 @@ must reset both terminals while preserving two cursors; the joiner's `:new` must
 be refused. The tenth drain defeat must produce one quasar, and missile smoke
 must remain on the firing terminal even though its damage resolves on both.
 
-No healthy run should show the high-priority red `DESYNC` item. Quit the joiner:
-the host must change to `NET:DOWN/OPEN`, remove only the remote cursor and
+Give the two terminals **different sizes**, and resize one of them mid-run — a
+tmux pane change is the ordinary case. The map must not move on either side and
+neither status bar may show `DESYNC`: a resize reflows one instance's view and
+touches no shared state. The latch stays `LOCK` for the life of a session run,
+including before a joiner has arrived and after it leaves, so `NET:WAIT/LOCK` and
+`NET:DOWN/LOCK` are both expected.
+
+No healthy run should show the amber `DESYNC` item, and none should ever reach red
+`DIVERGED`, which says the two are past resolving it between themselves. Quit the
+joiner: the host must change to `NET:DOWN/LOCK`, remove only the remote cursor and
 continue accepting local input. `:d save` is refused while peers are live: its
 synchronous logger drain holds the world lock and can overrun the playout lead.
 On a solo or replayed copy it is still not a byte-for-byte parity diagnostic
@@ -865,6 +924,26 @@ bind to. That is the prerequisite, not rewind.
   socket, but a running host advances while a joiner replays, so the handoff needs
   either the host to hold its advance across it or the joiner to buffer epochs and
   fast-forward onto the session's tick phase. Only the second scales.
+
+  What the handoff needs is now specific. Three pieces, none of them large on its
+  own: the coordinator serving a *delta* log from the tick a joiner reached rather
+  than only a complete one, so the residual gap shrinks geometrically across two or
+  three rounds instead of being whatever the first replay cost; the coordinator
+  re-sending its last `NetworkBarrierDelayTicks` epochs to a peer that has just
+  connected, because those artifacts apply after the log ends and were broadcast
+  before the joiner attached; and the joiner ticking to the session's phase before
+  its scheduler starts, which the barrier already supports since every artifact
+  names an absolute apply tick. Its prerequisite is the fidelity item below.
+
+- **Catch-up of a long networked run is not byte-faithful.** Replaying a host's
+  retained log reproduces its world exactly for the profiles the criteria drive,
+  but a run past roughly 1,200 driven steps that mixes resizes with
+  viewport-relative motions reaches a state one gold cycle behind, off by the
+  three-tick playout lead. The live participants stay in parity throughout; only
+  the reproduction drifts, so the defect is in what the log does not carry, not in
+  the session. This is the reason automatic resynchronisation is not built yet:
+  a participant that resynchronised onto a reproduction the digest still calls
+  diverged would resynchronise forever.
 - Reconnect reuses the same machinery and is not separately wired: an identity is
   released when its participant departs, and a returning participant catches up
   like any other late arrival.
@@ -874,7 +953,10 @@ bind to. That is the prerequisite, not rewind.
   that transition.
 - The runtime digest detects connected-peer divergence after its six-tick sample
   cadence but neither stops play nor repairs it. `SYNCED` means the compared
-  surface became equal again; it does not explain why.
+  surface became equal again; it does not explain why. `DIVERGED` states that it
+  will not: past `NetworkDivergedSamples` nothing re-derives the missing artifact,
+  and the only recovery the model admits is reproducing the session from the
+  coordinator's log — which is the mid-run join above, with its prerequisites.
 - Plaintext and unauthenticated; no CLI TLS surface.
 - No lag compensation. A slow peer produces late artifacts and divergence rather
   than a stall — deliberate, since simulation never waits, but it means the
@@ -933,10 +1015,12 @@ bind to. That is the prerequisite, not rewind.
 
 ### 9.5 Next work
 
-1. **Live mid-run join in `cmd/vif`.** Give the joiner the session's tick phase and
-   let it buffer epochs while it replays, so the handoff does not stall the host.
-   This is what turns the proven mechanism into a feature a player can use, and it
-   carries reconnect and a future suspend/resume form of live pause with it.
+1. **Live mid-run join in `cmd/vif`,** on the three pieces §9.4 now names, and the
+   catch-up fidelity defect ahead of them. This is what turns the proven mechanism
+   into a feature a player can use; it carries reconnect and a future
+   suspend/resume form of live pause with it, and it is the one recovery a
+   `DIVERGED` session can be given — the participant rejoins and reproduces rather
+   than being repaired in place.
 2. **A playout lead derived from the graph.** Negotiate it from the worst-case path
    rather than fixing it at three ticks, and act on `network.barrier_late` instead
    of only reporting it.

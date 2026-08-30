@@ -137,8 +137,10 @@ so the anchor seed is installed before RNG/content initialization.
 ```
 
 Both sides should show `NET:1P/LOCK`, two cursors, and the same shared actors and
-score/progression after either participant moves, types and fires. Quit the
-joiner and continue on the host; its indicator becomes `NET:DOWN/OPEN` and only
+score/progression after either participant moves, types and fires. Use terminals
+of different sizes and resize one mid-run: the shared map must not follow either
+terminal. Quit the joiner and continue on the host; its indicator becomes
+`NET:DOWN/LOCK` — a run that opened a session keeps its map latched — and only
 the remote cursor disappears. For a LAN, bind `:7777` and join the host's
 reachable address. Public-internet routing uses the same socket code, but the
 current operator path is plaintext and unauthenticated, so it is for trusted
@@ -174,6 +176,21 @@ and operator-state comparisons. Coverage is still selective: many concrete
 gameplay systems, renderers, content parsing paths, services, and network
 failure modes have no focused test file. Standalone programs under `benchmark`
 and `sandbox` remain experiments rather than production-supported tests.
+
+The soak profiles are tiered rather than fixed, because the widest one is a
+release-gate cost rather than an edit-cycle one. `soakScale(short, normal, full)`
+in `internal/app` selects a repetition or step count per profile:
+
+```bash
+go test -short ./...        # smoke
+go test ./...               # the default a change is validated against
+VIF_SOAK=full go test ./... # the wide seed sweep
+```
+
+Every iteration is still reproducible from its seed, so a failure found by the
+wide sweep reruns alone with `-run 'TestReplaySoak/<seed>'`. Under `-race` the
+default profile is about two and a half minutes for the whole tree; the wide one
+is about six and a half.
 
 Configuration work should also run:
 
