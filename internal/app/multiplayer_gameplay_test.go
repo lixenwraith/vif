@@ -3,6 +3,8 @@ package app
 import (
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -158,6 +160,68 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 		}
 		if centers != want {
 			t.Fatalf("participant %d has %d missile visual centers, want %d", i+1, centers, want)
+		}
+	}
+}
+
+// TestRuntimeDigestReportsAndClearsSharedDivergence proves the live instrument
+// against a deliberately corrupted shared position. It also pins the transient
+// SYNCED acknowledgement after the exact state is restored.
+func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
+	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+
+	var target core.Entity
+	var original component.PositionComponent
+	for range 8 {
+		apps[0].World().RunSafe(func() {
+			for _, e := range apps[0].World().Components.Header.Entities() {
+				if e.Domain() == core.DomainShared {
+					target = e
+					original, _ = apps[0].World().Positions.GetPosition(e)
+					break
+				}
+			}
+		})
+		if target != 0 {
+			break
+		}
+		tickAll(apps)
+	}
+	if target == 0 {
+		t.Fatal("no shared composite available for divergence probe")
+	}
+
+	apps[0].World().RunSafe(func() {
+		p := original
+		p.X++
+		apps[0].World().Positions.SetPosition(target, p)
+	})
+	for range 2*parameter.NetworkDigestTicks + 2 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "desync" {
+			t.Fatalf("participant %d sync state=%q, want desync", i+1, got)
+		}
+	}
+
+	apps[0].World().RunSafe(func() { apps[0].World().Positions.SetPosition(target, original) })
+	for range 2*parameter.NetworkDigestTicks + 2 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "synced" {
+			t.Fatalf("participant %d sync state=%q after repair, want synced", i+1, got)
+		}
+	}
+
+	for range parameter.NetworkResyncNoticeTicks + 1 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "" {
+			t.Fatalf("participant %d retained sync notice %q", i+1, got)
 		}
 	}
 }

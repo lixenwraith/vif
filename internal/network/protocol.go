@@ -19,8 +19,9 @@ const (
 
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
 	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
-	MsgStateSync MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
-	MsgEvent     MessageType = 0x12 // Live: one closed barrier production epoch
+	MsgStateSync   MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
+	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
+	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
 
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.

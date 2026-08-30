@@ -43,6 +43,7 @@ type StatusBarRenderer struct {
 	statStep  *atomic.Int64
 	statBreak *status.AtomicString
 	statNet   *status.AtomicString
+	statSync  *status.AtomicString
 	statPeers *atomic.Int64
 	statLatch *atomic.Bool
 
@@ -80,6 +81,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statStep:  statusReg.Ints.Get("engine.step"),
 		statBreak: statusReg.Strings.Get("engine.breakpoint"),
 		statNet:   statusReg.Strings.Get("network.state"),
+		statSync:  statusReg.Strings.Get("network.sync_state"),
 		statPeers: statusReg.Ints.Get("network.peers"),
 		statLatch: statusReg.Bools.Get("network.map_latched"),
 
@@ -119,7 +121,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	var rightItems []statusItem
 
-	// Priority 0: time control; absent at real time with nothing pending
+	// Priority 0: parity failure must survive even the narrowest useful status bar.
+	if item, ok := r.syncItem(); ok {
+		rightItems = append(rightItems, item)
+	}
+	// Time control is absent at real time with nothing pending.
 	if item, ok := r.timeItem(); ok {
 		rightItems = append(rightItems, item)
 	}
@@ -430,6 +436,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 				startX++
 			}
 		}
+	}
+}
+
+func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
+	switch r.statSync.Load() {
+	case "desync":
+		return statusItem{text: " DESYNC ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+	case "synced":
+		return statusItem{text: " SYNCED ", fg: visual.RgbBlack, bg: visual.RgbGreen}, true
+	default:
+		return statusItem{}, false
 	}
 }
 

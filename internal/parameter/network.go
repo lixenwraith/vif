@@ -11,6 +11,15 @@ const (
 	// One cursor's payload is small; this keeps remote presentation responsive.
 	NetworkSyncTicks = 6
 
+	// NetworkDigestTicks is the cadence of runtime D-11 parity probes. Adjacent
+	// peers compare the same completed tick; equality on every mesh edge implies
+	// equality across the connected session graph.
+	NetworkDigestTicks = NetworkSyncTicks
+
+	// NetworkResyncNoticeTicks keeps the green SYNCED acknowledgement visible for
+	// one second after the last mismatching peer agrees again.
+	NetworkResyncNoticeTicks = 20
+
 	// NetworkDrainWindow bounds one tick's inbound translation, so a flooding
 	// peer cannot stretch a tick without bound
 	NetworkDrainWindow = 64

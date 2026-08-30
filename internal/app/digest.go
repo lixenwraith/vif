@@ -38,6 +38,14 @@ func (d digest) b(v bool) digest {
 	return d.u64(0)
 }
 
+func (d digest) text(v string) digest {
+	for i := range len(v) {
+		d ^= digest(v[i])
+		d *= digest(fnvPrime)
+	}
+	return d.u64(uint64(len(v)))
+}
+
 func (d digest) String() string { return strconv.FormatUint(uint64(d), 16) }
 
 // worldDigest hashes the state the status registry does not carry: entity
@@ -107,16 +115,30 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 	return wd
 }
 
-// sharedDigestLocked folds the shared world stores into one transport-sized value.
-// Caller MUST hold the world lock. Runtime parity exchange uses the same inputs as
-// SnapshotShared's world digest, so a live alert and a test diff describe the same
-// disagreement.
+// sharedDigestLocked hashes exactly SnapshotShared's comparable surface into one
+// transport-sized value. Caller MUST hold the world lock; unlike snapshotShared it
+// must not acquire it again.
 func (a *App) sharedDigestLocked() uint64 {
 	wd := a.worldDigestScopedLocked(engine.ScopeShared)
-	return uint64(newDigest().
-		u64(uint64(wd.Positions)).
-		u64(uint64(wd.Kinetics)).
-		u64(uint64(wd.Combat)))
+	lines := []string{"ctx|digest" +
+		"|positions=" + wd.Positions.String() +
+		"|kinetics=" + wd.Kinetics.String() +
+		"|combat=" + wd.Combat.String()}
+	a.ctx.SnapshotContext(func(sub string, args ...any) {
+		if isRecord(args, "session") || isRecord(args, "view") {
+			return
+		}
+		lines = append(lines, snapshotLine("ctx", sub, filterFields(args)))
+	})
+	a.world.Resources.Status.SnapshotFiltered(sharedKey, func(sub string, args ...any) {
+		lines = append(lines, snapshotLine("reg", sub, args))
+	})
+	slices.Sort(lines)
+	d := newDigest()
+	for _, line := range lines {
+		d = d.text(line)
+	}
+	return uint64(d)
 }
 
 // digestEntities canonically projects a mixed dense store for cross-instance comparison.

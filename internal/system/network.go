@@ -50,28 +50,44 @@ type NetworkSystem struct {
 	statState *atomic.Int64
 	statDrop  *atomic.Int64
 
-	statDeferred      *atomic.Int64
-	statAppliedLocal  *atomic.Int64
-	statAppliedPeer   *atomic.Int64
-	statLate          *atomic.Int64
-	statRanWithout    *atomic.Int64
-	statPeerLag       *atomic.Int64
-	statPeerArtifacts *atomic.Int64
-	statPeerApplied   *atomic.Bool
-	statPeers         *atomic.Int64
-	statConnected     *atomic.Bool
-	statConnection    *status.AtomicString
-	statMapLatched    *atomic.Bool
-	statLostIn        *atomic.Int64
-	statLostOut       *atomic.Int64
-	statRelayed       *atomic.Int64
-	statDuplicates    *atomic.Int64
+	statDeferred       *atomic.Int64
+	statAppliedLocal   *atomic.Int64
+	statAppliedPeer    *atomic.Int64
+	statLate           *atomic.Int64
+	statRanWithout     *atomic.Int64
+	statPeerLag        *atomic.Int64
+	statPeerArtifacts  *atomic.Int64
+	statPeerApplied    *atomic.Bool
+	statPeers          *atomic.Int64
+	statConnected      *atomic.Bool
+	statConnection     *status.AtomicString
+	statMapLatched     *atomic.Bool
+	statLostIn         *atomic.Int64
+	statLostOut        *atomic.Int64
+	statRelayed        *atomic.Int64
+	statDuplicates     *atomic.Int64
+	statDigestMismatch *atomic.Int64
+	statSyncState      *status.AtomicString
+
+	digestHistory   [parameter.NetworkEpochWindow]stateDigest
+	pendingDigest   [parameter.MaxPlayers + 1]stateDigest
+	peerDesync      [parameter.MaxPlayers + 1]bool
+	syncNoticeUntil uint64
 
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
 	lastLostOut uint64
 
 	enabled bool
+}
+
+// stateDigest names one completed shared-world state. Valid distinguishes a real
+// run-zero/tick-zero hash from an empty ring slot.
+type stateDigest struct {
+	Run   uint64 `json:"run"`
+	Tick  uint64 `json:"tick"`
+	Hash  uint64 `json:"hash"`
+	Valid bool   `json:"-"`
 }
 
 // epochWindow is one source's replay filter: the newest production epoch admitted
@@ -172,6 +188,8 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statLostOut = reg.Ints.Get("network.transport_lost_out")
 	s.statRelayed = reg.Ints.Get("network.relay_forwarded")
 	s.statDuplicates = reg.Ints.Get("network.relay_duplicates")
+	s.statDigestMismatch = reg.Ints.Get("network.digest_mismatches")
+	s.statSyncState = reg.Strings.Get("network.sync_state")
 
 	s.Init()
 	return s
@@ -205,8 +223,14 @@ func (s *NetworkSystem) Init() {
 	s.statLostOut.Store(0)
 	s.statRelayed.Store(0)
 	s.statDuplicates.Store(0)
+	s.statDigestMismatch.Store(0)
+	s.statSyncState.Store("")
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
+	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
+	s.pendingDigest = [parameter.MaxPlayers + 1]stateDigest{}
+	s.peerDesync = [parameter.MaxPlayers + 1]bool{}
+	s.syncNoticeUntil = 0
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
@@ -396,6 +420,9 @@ func (s *NetworkSystem) Update() {
 	if s.enabled && p != nil && p.IsRunning() {
 		s.ticks++
 	}
+	if s.statSyncState.Load() == "synced" && s.ticks >= s.syncNoticeUntil {
+		s.statSyncState.Store("")
+	}
 }
 
 // Receive drains transport state and publishes every artifact due before nextTick.
@@ -437,6 +464,7 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
+			s.forgetDigestPeer(uint32(in.Peer))
 			s.noticeDeparture(uint32(in.Peer))
 			queued++
 		case network.InboundMessage:
@@ -444,6 +472,18 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 		}
 	}
 	return queued
+}
+
+func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
+	if peer == 0 || int(peer) >= len(s.peerDesync) {
+		return
+	}
+	s.peerDesync[peer] = false
+	s.pendingDigest[peer] = stateDigest{}
+	if !s.anyPeerDesynced() {
+		s.statSyncState.Store("")
+		s.syncNoticeUntil = 0
+	}
 }
 
 // noticeDeparture reacts to a lost link. It deliberately does not despawn anything:
@@ -590,6 +630,8 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 		s.scheduleCrossings(from, msg.Payload)
 	case network.MsgStateSync:
 		s.applyCursorState(from, msg.Payload)
+	case network.MsgStateDigest:
+		s.receiveStateDigest(from, msg.Payload)
 	case network.MsgDisconnect:
 		s.receiveDeparture(from, msg.Payload)
 	default:
@@ -654,6 +696,96 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 	}
 	p.Broadcast(uint8(network.MsgEvent), body)
 	s.statSent.Add(int64(len(pending)))
+	if completedTick%parameter.NetworkDigestTicks == 0 {
+		s.sendStateDigest(p, completedTick)
+	}
+}
+
+// sendStateDigest publishes one completed-tick hash to direct neighbours. Digest
+// messages need no mesh flood: if each edge agrees, the connected graph agrees.
+func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint64) {
+	r := s.world.Resources.Network
+	if r == nil || r.SharedDigest == nil {
+		return
+	}
+	sample := stateDigest{
+		Run:   s.world.Resources.Event.Queue.Stamp().Run,
+		Tick:  completedTick,
+		Hash:  r.SharedDigest(),
+		Valid: true,
+	}
+	s.recordStateDigest(sample)
+	body, err := json.Marshal(sample)
+	if err != nil {
+		s.statDrop.Add(1)
+		return
+	}
+	p.Broadcast(uint8(network.MsgStateDigest), body)
+}
+
+// receiveStateDigest compares immediately when this tick is already in local
+// history, or holds the peer sample until the local Flush reaches it.
+func (s *NetworkSystem) receiveStateDigest(from uint32, body []byte) {
+	if from == 0 || int(from) >= len(s.pendingDigest) {
+		s.statDrop.Add(1)
+		return
+	}
+	var remote stateDigest
+	if err := json.Unmarshal(body, &remote); err != nil {
+		s.statDrop.Add(1)
+		return
+	}
+	remote.Valid = true
+	local := s.digestHistory[remote.Tick%uint64(len(s.digestHistory))]
+	if local.Valid && local.Run == remote.Run && local.Tick == remote.Tick {
+		s.compareStateDigest(from, local, remote)
+		return
+	}
+	s.pendingDigest[from] = remote
+}
+
+func (s *NetworkSystem) recordStateDigest(local stateDigest) {
+	s.digestHistory[local.Tick%uint64(len(s.digestHistory))] = local
+	for peer := 1; peer < len(s.pendingDigest); peer++ {
+		remote := s.pendingDigest[peer]
+		if !remote.Valid || remote.Run != local.Run || remote.Tick != local.Tick {
+			continue
+		}
+		s.pendingDigest[peer] = stateDigest{}
+		s.compareStateDigest(uint32(peer), local, remote)
+	}
+}
+
+func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDigest) {
+	wasDesynced := s.anyPeerDesynced()
+	mismatch := local.Hash != remote.Hash
+	peerWasDesynced := s.peerDesync[peer]
+	s.peerDesync[peer] = mismatch
+
+	if mismatch {
+		s.statDigestMismatch.Add(1)
+		s.statSyncState.Store("desync")
+		s.syncNoticeUntil = 0
+		if !peerWasDesynced {
+			vlog.Warn("app", "msg", "shared state divergence", "peer", peer,
+				"run", local.Run, "tick", local.Tick, "local", local.Hash, "remote", remote.Hash)
+		}
+		return
+	}
+	if wasDesynced && !s.anyPeerDesynced() {
+		s.statSyncState.Store("synced")
+		s.syncNoticeUntil = s.ticks + parameter.NetworkResyncNoticeTicks
+		vlog.Info("app", "msg", "shared state resynchronised", "run", local.Run, "tick", local.Tick)
+	}
+}
+
+func (s *NetworkSystem) anyPeerDesynced() bool {
+	for peer := 1; peer < len(s.peerDesync); peer++ {
+		if s.peerDesync[peer] {
+			return true
+		}
+	}
+	return false
 }
 
 // scheduleCrossings buffers one peer epoch and passes it on. Application waits for
