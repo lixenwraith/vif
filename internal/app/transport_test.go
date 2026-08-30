@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -271,6 +272,56 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	})
 }
 
+// TestActivatedSessionDefersCrossingBeforeFirstTick closes the lobby/input gap.
+func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
+	const seed = 0x5EEDBEEF
+	a := mustHeadless(t, seed, 120, 40)
+	b := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(func() { a.Close(); b.Close() })
+
+	offer, err := a.hostOffer()
+	if err != nil {
+		t.Fatalf("host offer: %v", err)
+	}
+	if err := b.JoinSession(offer); err != nil {
+		t.Fatalf("join roster: %v", err)
+	}
+	if err := a.HostSession(offer); err != nil {
+		t.Fatalf("host roster: %v", err)
+	}
+	pa, pb := network.NewLoopbackPair(offer.Host, offer.Assigned)
+	a.AttachTransport(pa)
+	b.AttachTransport(pb)
+	a.activateNetworkSession()
+	b.activateNetworkSession()
+
+	var target core.Entity
+	a.World().RunSafe(func() { target = a.World().Resources.Player.Slot(0) })
+	start := cursorPosition(a, target)
+	a.Context().PushCrossing(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: target, X: start.X + 1, Y: start.Y})
+	a.Settle()
+	if got := cursorPosition(a, target); got != start {
+		t.Fatalf("host applied pre-tick crossing immediately: %#v", got)
+	}
+	if got := cursorPosition(b, target); got != start {
+		t.Fatalf("joiner applied pre-tick crossing immediately: %#v", got)
+	}
+
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		a.Tick(1)
+		b.Tick(1)
+	}
+	want := start
+	want.X++
+	if got := cursorPosition(a, target); got != want {
+		t.Fatalf("host crossing position = %#v, want %#v", got, want)
+	}
+	if got := cursorPosition(b, target); got != want {
+		t.Fatalf("joiner crossing position = %#v, want %#v", got, want)
+	}
+}
+
 // TestTwoLiveParticipantsStayInLockstepOverTCP proves the same session through
 // stream framing, the anchor handshake and canonical socket participant IDs.
 func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
@@ -282,20 +333,21 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 
 	a := mustHeadless(t, seed, 120, 40)
 	t.Cleanup(a.Close)
-	offer := network.SessionOffer{
-		Anchor: a.JoinAnchor(), Host: 1, Assigned: 2,
-		Participants:      []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
-		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+	offer, err := a.hostOffer()
+	if err != nil {
+		t.Fatalf("host offer: %v", err)
 	}
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = network.HostAcceptor(func() (network.SessionOffer, error) { return offer, nil }, time.Second)
+	hostCfg.AcceptSession = network.HostAcceptor(a.hostOffer, time.Second)
 	host := network.NewSocketPort(hostCfg)
 	t.Cleanup(func() { _ = host.Close() })
 	if err := host.Start(); err != nil {
 		t.Fatalf("host transport: %v", err)
 	}
 	a.AttachTransport(host)
+	hostStarted := make(chan error, 1)
+	go func() { hostStarted <- a.startHostSessionOn(host, nil) }()
 
 	pending, offered, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
 	if err != nil {
@@ -311,6 +363,8 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 		t.Fatalf("join app: %v", err)
 	}
 	t.Cleanup(b.Close)
+	b.pendingJoin = pending
+	b.sessionOffer = offered
 	if err := b.JoinSession(offered); err != nil {
 		_ = pending.Complete(err)
 		t.Fatalf("join session: %v", err)
@@ -318,20 +372,9 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	if err := pending.Complete(nil); err != nil {
 		t.Fatalf("join reply: %v", err)
 	}
-	waitSocket(t, host, func() bool { return host.PeerCount() == 1 }, "host peer")
-	if err := a.HostSession(offer); err != nil {
-		t.Fatalf("host roster: %v", err)
+	if err := b.startJoinSession(); err != nil {
+		t.Fatalf("join startup: %v", err)
 	}
-	if !host.Send(uint32(offered.Assigned), uint8(network.MsgStart), nil) {
-		t.Fatal("host could not send start gate")
-	}
-	if err := pending.WaitStart(); err != nil {
-		t.Fatalf("start gate: %v", err)
-	}
-	if err := pending.Ready(); err != nil {
-		t.Fatalf("ready gate: %v", err)
-	}
-	waitSocket(t, host, func() bool { return host.ReadyCount() == 1 }, "joiner ready")
 
 	guest := network.NewSocketPort(pending.TransportConfig())
 	t.Cleanup(func() { _ = guest.Close() })
@@ -340,6 +383,11 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	}
 	b.AttachTransport(guest)
 	waitSocket(t, guest, func() bool { return guest.PeerCount() == 1 }, "guest peer")
+	if err := <-hostStarted; err != nil {
+		t.Fatalf("host startup: %v", err)
+	}
+	a.activateNetworkSession()
+	b.activateNetworkSession()
 
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
@@ -371,6 +419,39 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	if roster != 1 || !host.IsRunning() || state != "down" || peers != 0 || latched {
 		t.Fatalf("host after disconnect = roster %d running %t state %q peers %d latch %t",
 			roster, host.IsRunning(), state, peers, latched)
+	}
+
+	retry, retryOffer, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
+	if err != nil {
+		t.Fatalf("retry dial: %v", err)
+	}
+	defer retry.Close()
+	retryCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, retryOffer)
+	if err != nil {
+		t.Fatalf("retry config: %v", err)
+	}
+	retryApp, err := NewHeadless(retryCfg)
+	if err != nil {
+		t.Fatalf("retry app: %v", err)
+	}
+	defer retryApp.Close()
+	joinErr := retryApp.JoinSession(retryOffer)
+	if !errors.Is(joinErr, ErrJoinMidRun) {
+		t.Fatalf("retry JoinSession() error = %v, want ErrJoinMidRun", joinErr)
+	}
+	if err := retry.Complete(joinErr); !errors.Is(err, ErrJoinMidRun) {
+		t.Fatalf("retry Complete() error = %v, want unchanged ErrJoinMidRun", err)
+	}
+	select {
+	case err := <-host.Errors():
+		if err.Error() != joinErr.Error() {
+			t.Fatalf("host retry error = %v, want %v", err, joinErr)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("host did not report rejected mid-run join")
+	}
+	if !host.IsRunning() || host.PeerCount() != 0 {
+		t.Fatalf("host after rejected retry = running %t peers %d", host.IsRunning(), host.PeerCount())
 	}
 }
 

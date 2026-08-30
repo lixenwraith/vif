@@ -51,6 +51,9 @@ func (s *NetworkService) Stop() error {
 	return nil
 }
 
+// Port returns the poll endpoint after Init, nil for a disabled role.
+func (s *NetworkService) Port() *network.SocketPort { return s.port }
+
 func (s *NetworkService) Contribute(r *engine.Resource) {
 	if s.disabled.Load() {
 		return

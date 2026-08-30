@@ -41,12 +41,14 @@ var (
 	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
 
 	flagLogs    = newLogFlags()
+	flagSession sessionFlags
 	flagJournal bool
 	flagDev     = newSetFlag(true, parseBoolFlag)
 )
 
 func init() {
 	flagLogs.register(flag.CommandLine)
+	flagSession.register(flag.CommandLine)
 	flag.BoolVar(&flagJournal, "j", false, "Record a replay journal to its own file")
 	flag.BoolVar(&flagJournal, "journal", false, "Alias of -j")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
@@ -58,7 +60,10 @@ func main() {
 	logStatus := setupDiagnostics()
 
 	var err error
+	sessionErr := flagSession.validateInvocation(*flagSchema, *flagCheck, *flagReplay)
 	switch {
+	case sessionErr != nil:
+		err = sessionErr
 	case *flagSchema:
 		err = app.Schema(os.Stdout)
 	case *flagCheck:
@@ -178,6 +183,8 @@ func buildConfig() app.Config {
 		TimeScaleSpec: *flagSpeed,
 		Seed:          *flagSeed,
 		Journal:       flagJournal,
+		HostAddress:   flagSession.host,
+		JoinAddress:   flagSession.join,
 	}
 
 	if *flagAudioUnmute {
@@ -195,6 +202,24 @@ func buildConfig() app.Config {
 	// Neither flag: terminal auto-detects
 
 	return cfg
+}
+
+// sessionFlags expose startup-only hosting and joining without a mid-run mode switch.
+type sessionFlags struct {
+	host string
+	join string
+}
+
+func (f *sessionFlags) register(fs *flag.FlagSet) {
+	fs.StringVar(&f.host, "host", "", "Host a two-participant session on bind address, e.g. :7777")
+	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
+}
+
+func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
+	if (f.host != "" || f.join != "") && (schema || check || replay != "") {
+		return fmt.Errorf("-host and -join are available only in interactive play")
+	}
+	return nil
 }
 
 // --- Flag types ---

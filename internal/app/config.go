@@ -116,10 +116,22 @@ type Config struct {
 	// file. Harnesses set it to capture records in memory.
 	JournalSink event.JournalSink
 
+	// HostAddress binds a startup-only two-participant session. The scheduler
+	// remains at tick zero until the joining participant passes the start gate.
+	HostAddress string
+
+	// JoinAddress connects to a startup-only session. The host anchor supplies
+	// simulation identity before the App is constructed.
+	JoinAddress string
+
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects the defaults.
 	Width, Height int
+
+	// networkConfig is prepared by Run after host/join negotiation. Keeping the
+	// transport detail private leaves Config's public session surface role-neutral.
+	networkConfig *network.Config
 }
 
 // ConfigForJoin applies the host-authored simulation identity to local operator options.
@@ -153,6 +165,12 @@ func (c *Config) Normalize() {
 
 // Validate reports configuration conflicts
 func (c Config) Validate() error {
+	if c.HostAddress != "" && c.JoinAddress != "" {
+		return errors.New("-host and -join are mutually exclusive")
+	}
+	if (c.HostAddress != "" || c.JoinAddress != "") && c.Mode != ModePlay {
+		return fmt.Errorf("%s: network sessions require interactive play mode", c.Mode)
+	}
 	if c.ForceDefault && (c.GameScript != "" || c.ContentPath != "") {
 		return errors.New("-d is mutually exclusive with -g and -f")
 	}

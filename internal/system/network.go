@@ -202,6 +202,23 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 	return true
 }
 
+// ActivateSession closes the pre-first-tick input window after startup gates.
+// The regular tick path keeps the same state current after disconnects.
+func (s *NetworkSystem) ActivateSession() {
+	p := s.port()
+	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
+	if active {
+		if r := s.world.Resources.Network; r != nil {
+			s.mu.Lock()
+			s.localSource = r.ParticipantID
+			s.delayTicks = r.BarrierDelayTicks
+			s.mu.Unlock()
+		}
+	}
+	s.barrierActive.Store(active)
+	s.publishConnectionTelemetry(p)
+}
+
 func (s *NetworkSystem) Update() {
 	p := s.port()
 	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0

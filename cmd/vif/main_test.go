@@ -133,6 +133,22 @@ func TestDevFlagTriState(t *testing.T) {
 	}
 }
 
+func TestSessionFlags(t *testing.T) {
+	fs := flag.NewFlagSet("session", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	var session sessionFlags
+	session.register(fs)
+	if err := fs.Parse([]string{"-host", ":7777", "-join", "host.example:7777"}); err != nil {
+		t.Fatalf("Parse() error = %v", err)
+	}
+	if session.host != ":7777" || session.join != "host.example:7777" {
+		t.Fatalf("session flags = host %q join %q", session.host, session.join)
+	}
+	if err := session.validateInvocation(false, true, ""); err == nil {
+		t.Fatal("session flags accepted -check")
+	}
+}
+
 func newDiagnosticFlagSet() (*flag.FlagSet, *logFlags, *setFlag[bool]) {
 	fs := flag.NewFlagSet("diagnostics", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)

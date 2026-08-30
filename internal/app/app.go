@@ -1,9 +1,11 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -14,6 +16,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/service"
@@ -29,9 +32,10 @@ const fallbackColorMode = terminal.ColorMode256
 type App struct {
 	cfg Config
 
-	hub     *service.Hub
-	termSvc *service.TerminalService
-	term    terminal.Terminal
+	hub        *service.Hub
+	termSvc    *service.TerminalService
+	networkSvc *service.NetworkService
+	term       terminal.Terminal
 
 	world *engine.World
 	ctx   *engine.GameContext
@@ -43,6 +47,10 @@ type App struct {
 	scheduler      *engine.ClockScheduler
 	frameReady     chan struct{}
 	gameUpdateDone <-chan struct{}
+
+	pendingJoin  *network.PendingJoin
+	sessionMu    sync.Mutex
+	sessionOffer network.SessionOffer
 }
 
 // New wires the runtime, releasing anything already started on failure
@@ -54,6 +62,12 @@ func New(cfg Config) (*App, error) {
 	}
 
 	a := &App{cfg: cfg, hub: service.NewHub()}
+	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
+		a.cfg.networkConfig = a.hostNetworkConfig()
+	}
+	if a.cfg.JoinAddress != "" && a.cfg.networkConfig == nil {
+		return nil, errors.New("join sessions must be started with app.Run")
+	}
 	if err := a.init(); err != nil {
 		a.Close()
 		return nil, err
@@ -120,7 +134,8 @@ func (a *App) initServices() error {
 		_ = a.hub.Register(a.termSvc)
 	}
 	if a.cfg.Mode == ModePlay {
-		_ = a.hub.Register(service.NewNetworkService(nil)) // disabled by default (RoleNone)
+		a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
+		_ = a.hub.Register(a.networkSvc)
 	}
 	if a.cfg.Mode.Audio() {
 		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
@@ -187,9 +202,6 @@ func (a *App) initWorld() {
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
-
-	// TODO: wire event handling in network system, post-context, against the
-	// event queue GameContext creates
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
@@ -333,6 +345,9 @@ func (a *App) Close() {
 	vlog.Info("app", "msg", "shutdown begin")
 	if a.scheduler != nil {
 		a.scheduler.Stop()
+	}
+	if a.pendingJoin != nil {
+		_ = a.pendingJoin.Close()
 	}
 	a.hub.StopAll()
 

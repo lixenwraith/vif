@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"fmt"
 	"time"
 
@@ -22,7 +23,7 @@ func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
-	a, err := New(cfg)
+	a, err := newInteractiveApp(cfg)
 	if err != nil {
 		return err
 	}
@@ -40,8 +41,27 @@ func (a *App) Loop() error {
 	if a.cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode has no interactive loop", a.cfg.Mode)
 	}
+	sigChan, stopSignals := notifySignals()
+	defer stopSignals()
+
+	if a.pendingJoin != nil {
+		if err := a.startJoinSession(); err != nil {
+			return err
+		}
+	}
 	if err := a.hub.StartAll(); err != nil {
 		return err
+	}
+	if a.cfg.HostAddress != "" {
+		if err := a.startHostSession(sigChan); err != nil {
+			if errors.Is(err, errSessionCanceled) {
+				return nil
+			}
+			return err
+		}
+	}
+	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
+		a.activateNetworkSession()
 	}
 
 	// Prime the first tick, then start the game clock
@@ -55,9 +75,6 @@ func (a *App) Loop() error {
 	defer inputTicker.Stop()
 
 	eventChan := a.termSvc.Events()
-
-	sigChan, stopSignals := notifySignals()
-	defer stopSignals()
 
 	for {
 		select {

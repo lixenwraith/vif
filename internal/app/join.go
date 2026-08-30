@@ -22,7 +22,7 @@ import (
 
 // ErrJoinMidRun is returned when the two participants are not at the same position.
 // Nothing carries world state yet, so a joiner can only reproduce a session from
-// its start; a later join needs the world snapshot Phase 7 does not transport.
+// its start; a later join needs a world snapshot the current transport does not carry.
 var ErrJoinMidRun = errors.New("join: participants are not at the same position")
 
 // JoinAnchor describes this session to a participant that wants to share it: the
