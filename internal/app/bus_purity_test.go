@@ -22,7 +22,7 @@ var entityType = reflect.TypeOf(core.Entity(0))
 
 // TestBusPayloadsNameOnlySharedEntities asserts D-4 over a soak: a record that
 // replicates names only shared entities. The transported set comes from the class
-// table, so this is the Phase 6 exit criterion rather than a hand-list — a Stamped
+// table, so this runs against the declared set rather than a hand-list — a Stamped
 // type resolves through the domain its producer stamped, which for a combat hit is
 // the target's own domain. A record that does not replicate constrains nothing and
 // is skipped whole; its player entities are this instance's business.

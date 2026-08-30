@@ -14,6 +14,7 @@ type SocketPort struct {
 	errors    chan error
 
 	dropped  atomic.Uint64
+	refused  atomic.Uint64
 	received atomic.Uint64
 	ever     atomic.Bool
 	ready    atomic.Int64
@@ -61,9 +62,13 @@ func (p *SocketPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 	return p.transport.Send(PeerID(peerID), NewMessage(MessageType(msgType), payload))
 }
 
-// Broadcast queues one independently sequenced frame per peer.
+// Broadcast queues one independently sequenced frame per peer. A peer whose send
+// queue is full refuses the frame; the count is retained rather than discarded,
+// because a refused crossing is a divergence the session must be able to see.
 func (p *SocketPort) Broadcast(msgType uint8, payload []byte) {
-	p.transport.Broadcast(NewMessage(MessageType(msgType), payload))
+	if refused := p.transport.Broadcast(NewMessage(MessageType(msgType), payload)); refused > 0 {
+		p.refused.Add(uint64(refused))
+	}
 }
 
 // PeerCount reports the currently connected participants.
@@ -115,6 +120,9 @@ func (p *SocketPort) Errors() <-chan error { return p.errors }
 
 // Dropped reports transport notifications lost to a full poll buffer.
 func (p *SocketPort) Dropped() uint64 { return p.dropped.Load() }
+
+// Refused reports outbound frames a peer's send queue could not take.
+func (p *SocketPort) Refused() uint64 { return p.refused.Load() }
 
 // Received reports complete non-control frames admitted by the read loop.
 func (p *SocketPort) Received() uint64 { return p.received.Load() }

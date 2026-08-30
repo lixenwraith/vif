@@ -99,14 +99,6 @@ const (
 	EventNetworkConnect
 	// EventNetworkDisconnect (NetworkDisconnectPayload) [local] signals peer disconnection
 	EventNetworkDisconnect
-	// EventRemoteInput (RemoteInputPayload) [local] signals input from a remote player
-	EventRemoteInput
-	// EventStateSync (StateSyncPayload) [local] signals state snapshot received
-	EventStateSync
-	// EventNetworkEvent (NetworkEventPayload) [local] signals a game event from remote peer
-	EventNetworkEvent
-	// EventNetworkError (NetworkErrorPayload) [local] signals a network error
-	EventNetworkError
 	// EventCursorStateSync (CursorStatePayload) [local] carries one cursor's owner-authored state to the instances that do not simulate it
 	EventCursorStateSync
 

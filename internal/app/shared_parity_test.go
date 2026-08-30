@@ -22,7 +22,7 @@ func parityScript(seed uint64, steps int) ScriptOptions {
 	return opt
 }
 
-// TestSharedSnapshotParityAcrossTerminalSizes is Phase 4's exit criterion: two
+// TestSharedSnapshotParityAcrossTerminalSizes is the D-11 criterion: two
 // instances of one seed on different terminals agree on every shared record.
 //
 // Both are constructed at one size and diverge only after SetupLevel decouples the

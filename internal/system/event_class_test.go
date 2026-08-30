@@ -48,8 +48,8 @@ var crossingPushes = map[string]string{
 	"nugget:EventCursorMoveRequest":        "a personal nugget jump moves the shared cursor",
 
 	// Crossings the D-3 table does not name. Each is a player mechanic whose
-	// shared outcome is determined by the artifact it pushes, so each needs a
-	// wire path in Phase 7 exactly as the rows above do.
+	// shared outcome is determined by the artifact it pushes, so each takes the
+	// same wire path as the rows above.
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
 	"drain:EventDrainDefeated":      "one personal drain death advances shared progression",
 	"fuse:EventDrainDefeated":       "each fused personal drain advances shared progression",

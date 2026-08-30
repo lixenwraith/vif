@@ -63,7 +63,7 @@ func (r *ViewResource) Reset() {
 	r.Strobe = StrobeState{}
 }
 
-// --- Explosion API (prep for Phase 3) ---
+// --- Explosion API ---
 
 // ExplosionCenters returns active slice view (no allocation)
 func (r *TransientResource) ExplosionCenters() []ExplosionCenter {

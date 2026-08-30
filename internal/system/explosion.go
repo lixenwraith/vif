@@ -251,7 +251,8 @@ func (s *ExplosionSystem) addCenter(cursor core.Entity, x, y int, radius float64
 
 // resolveArea emits one area attack per shared composite inside the blast ellipse.
 // Player entities are never selected here; their producer resolves its own domain
-// before the request crosses. Phase 3 replaces the header test with an entity-domain test.
+// before the request crosses. The header test stands in for an entity-domain test and
+// can become one once a player-domain composite exists.
 func (s *ExplosionSystem) resolveArea(cursor core.Entity, centerX, centerY int, radius float64, attack component.CombatAttackType) {
 	config := s.world.Resources.Config
 

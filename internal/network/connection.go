@@ -274,16 +274,22 @@ func (pm *PeerManager) Send(id PeerID, msg *Message) bool {
 	return peer.Send(msg)
 }
 
-// Broadcast sends a message to all connected peers
-func (pm *PeerManager) Broadcast(msg *Message) {
+// Broadcast sends a message to all connected peers and reports how many could
+// not take it. A refused send is a frame the peer never sees; for a crossing that
+// is a permanent lockstep divergence, so the count is returned rather than dropped.
+func (pm *PeerManager) Broadcast(msg *Message) int {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
+	refused := 0
 	for _, peer := range pm.peers {
 		// Clone message for independent sequence numbers
 		clone := *msg
-		peer.Send(&clone)
+		if !peer.Send(&clone) {
+			refused++
+		}
 	}
+	return refused
 }
 
 // GetPeer retrieves a peer by ID

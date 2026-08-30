@@ -70,8 +70,9 @@ func (a *blastArea) contains(x, y int) bool {
 // strikePlayerTargets applies a blast to player-domain combat entities. A local
 // producer calls it before pushing its explosion request, so the shared consumer
 // never observes a player entity.
-// The drain store is today's player-domain combat set; Phase 3 replaces it with a
-// domain filter over Components.Combat and player mods are covered without change.
+// The drain store is today's whole player-domain combat set. A second player-domain
+// combatant replaces this with a domain filter over Components.Combat; nothing else
+// on the path has to change.
 func strikePlayerTargets(w *engine.World, owner core.Entity, area *blastArea, attack component.CombatAttackType) {
 	cursor := w.ResolveCursor(owner)
 	if cursor == 0 {

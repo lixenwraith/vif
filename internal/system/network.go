@@ -60,6 +60,12 @@ type NetworkSystem struct {
 	statConnected     *atomic.Bool
 	statConnection    *status.AtomicString
 	statMapLatched    *atomic.Bool
+	statLostIn        *atomic.Int64
+	statLostOut       *atomic.Int64
+
+	// Last reported transport loss, so a new one is logged once rather than per tick.
+	lastLostIn  uint64
+	lastLostOut uint64
 
 	enabled bool
 }
@@ -92,6 +98,8 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statConnected = reg.Bools.Get("network.connected")
 	s.statConnection = reg.Strings.Get("network.state")
 	s.statMapLatched = reg.Bools.Get("network.map_latched")
+	s.statLostIn = reg.Ints.Get("network.transport_lost_in")
+	s.statLostOut = reg.Ints.Get("network.transport_lost_out")
 
 	s.Init()
 	return s
@@ -120,6 +128,9 @@ func (s *NetworkSystem) Init() {
 	s.statConnected.Store(false)
 	s.statConnection.Store("off")
 	s.statMapLatched.Store(false)
+	s.statLostIn.Store(0)
+	s.statLostOut.Store(0)
+	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 
 	s.mu.Lock()
@@ -202,34 +213,34 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 	return true
 }
 
-// ActivateSession closes the pre-first-tick input window after startup gates.
-// The regular tick path keeps the same state current after disconnects.
-func (s *NetworkSystem) ActivateSession() {
-	p := s.port()
+// refreshLink re-reads the negotiated session identity and reports whether the
+// barrier owns crossings this tick. Every entry point the system has — the startup
+// gate, the update pass, tick open and tick close — needs the same answer, and the
+// endpoint may be attached or lost between any two of them.
+func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
-	if active {
-		if r := s.world.Resources.Network; r != nil {
-			s.mu.Lock()
-			s.localSource = r.ParticipantID
-			s.delayTicks = r.BarrierDelayTicks
-			s.mu.Unlock()
-		}
-	}
-	s.barrierActive.Store(active)
-	s.publishConnectionTelemetry(p)
-}
-
-func (s *NetworkSystem) Update() {
-	p := s.port()
-	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
-	s.barrierActive.Store(active)
-	s.publishConnectionTelemetry(p)
 	if r := s.world.Resources.Network; r != nil {
 		s.mu.Lock()
 		s.localSource = r.ParticipantID
 		s.delayTicks = r.BarrierDelayTicks
 		s.mu.Unlock()
 	}
+	s.barrierActive.Store(active)
+	return active
+}
+
+// ActivateSession closes the pre-first-tick input window after startup gates.
+// The regular tick path keeps the same state current after disconnects.
+func (s *NetworkSystem) ActivateSession() {
+	p := s.port()
+	s.refreshLink(p)
+	s.publishConnectionTelemetry(p)
+}
+
+func (s *NetworkSystem) Update() {
+	p := s.port()
+	s.refreshLink(p)
+	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil && p.IsRunning() {
 		s.ticks++
 	}
@@ -240,8 +251,7 @@ func (s *NetworkSystem) Update() {
 func (s *NetworkSystem) Receive(nextTick uint64) int {
 	queued := 0
 	p := s.port()
-	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
-	s.barrierActive.Store(active)
+	s.refreshLink(p)
 	s.publishConnectionTelemetry(p)
 	if s.enabled && p != nil {
 		queued += s.drain(p)
@@ -255,12 +265,12 @@ func (s *NetworkSystem) Receive(nextTick uint64) int {
 // Caller holds the world lock.
 func (s *NetworkSystem) Flush(completedTick uint64) {
 	p := s.port()
-	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
-	s.barrierActive.Store(active)
+	active := s.refreshLink(p)
 	s.flushCrossings(p, completedTick, active)
 	if s.enabled && p != nil && p.IsRunning() && s.ticks%parameter.NetworkSyncTicks == 0 {
 		s.sendCursorState(p)
 	}
+	s.publishTransportLoss(p)
 }
 
 // drain translates one tick's transport notifications into events
@@ -285,10 +295,16 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 }
 
 // despawnPeer leaves the local simulation alive with only its connected roster.
+// The slot's sync sequence is released with it: sequences are per-sender and restart
+// at one, so a slot refilled by a later participant must not be gated by the numbers
+// its predecessor already used.
 func (s *NetworkSystem) despawnPeer(peerID uint32) {
 	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
 		if c.Control == component.ControlRemote && c.PeerID == peerID {
 			s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: c.Slot})
+			if int(c.Slot) < parameter.MaxPlayers {
+				s.lastSync[c.Slot] = 0
+			}
 		}
 		return true
 	})
@@ -329,7 +345,11 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 		s.world.Resources.Config.CropOnResize && latched)
 }
 
-func (s *NetworkSystem) dispatchMessage(id network.PeerID, msg *network.Message) int {
+// dispatchMessage admits the two message kinds the domain model defines: the D-3
+// artifact epoch and the D-13 owner-authored sync. Raw participant input is not one
+// of them — a peer sends the resolved artifact, never the keystroke that produced
+// it — so an unrecognised type is counted and discarded rather than translated.
+func (s *NetworkSystem) dispatchMessage(_ network.PeerID, msg *network.Message) int {
 	if msg == nil {
 		return 0
 	}
@@ -338,11 +358,36 @@ func (s *NetworkSystem) dispatchMessage(id network.PeerID, msg *network.Message)
 		s.scheduleCrossings(msg.Payload)
 	case network.MsgStateSync:
 		s.applyCursorState(msg.Payload)
-	case network.MsgInput:
-		s.world.PushLocal(event.EventRemoteInput, &event.RemoteInputPayload{PeerID: uint32(id), Payload: msg.Payload})
-		return 1
+	default:
+		s.statDrop.Add(1)
 	}
 	return 0
+}
+
+// publishTransportLoss exposes frames the link lost outside the barrier: inbound
+// notifications a full poll buffer discarded, and outbound frames a peer's send
+// queue refused. Either one silently desynchronises two instances, so a new loss
+// is logged as well as counted.
+func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
+	if p == nil {
+		return
+	}
+	loss, ok := p.(interface {
+		Dropped() uint64
+		Refused() uint64
+	})
+	if !ok {
+		return
+	}
+	in, out := loss.Dropped(), loss.Refused()
+	s.statLostIn.Store(int64(in))
+	s.statLostOut.Store(int64(out))
+	if in == s.lastLostIn && out == s.lastLostOut {
+		return
+	}
+	vlog.Warn("app", "msg", "network transport loss",
+		"inbound_dropped", in, "outbound_refused", out)
+	s.lastLostIn, s.lastLostOut = in, out
 }
 
 // flushCrossings advances the epoch under the producer lock, then sends its marker.
@@ -489,7 +534,8 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 		lag = required - minPeer
 	}
 	s.statPeerLag.Store(int64(lag))
-	if p != nil && p.PeerCount() > 0 && required != 0 && (seen < p.PeerCount() || lag != 0) {
+	// The guard above already established a running port with at least one peer.
+	if required != 0 && (seen < p.PeerCount() || lag != 0) {
 		s.statRanWithout.Add(1)
 	}
 }
@@ -582,10 +628,18 @@ func (s *NetworkSystem) applyCursorState(body []byte) {
 	}
 }
 
-// writeCursorState applies one sync, dropping a stale or misaddressed one
+// writeCursorState applies one sync, dropping a stale or misaddressed one. The
+// payload names both an entity and a slot; they must agree, because the entity
+// selects the cells written and the slot keys the sequence that decides whether to
+// write them at all. A disagreement would age one participant's state under
+// another's sequence, so it is dropped rather than reconciled.
 func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) {
 	cursor := s.world.ResolveCursor(p.Entity)
 	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers {
+		s.statDrop.Add(1)
+		return
+	}
+	if slot, ok := s.world.CursorSlot(cursor); !ok || slot != p.Slot {
 		s.statDrop.Add(1)
 		return
 	}

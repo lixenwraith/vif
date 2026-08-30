@@ -203,7 +203,7 @@ var Systems = []SystemDef{
 
 // ContextSystems are context-scoped systems App registers directly: they take a
 // GameContext rather than a World, so BuildSystems cannot construct them.
-// TODO(phase7): fold into Systems once construction takes a capability set.
+// TODO: fold into Systems once construction takes a capability set.
 var ContextSystems = []SystemDef{
 	{Name: "meta", Constructor: "NewMetaSystem", Domain: "shared"}, // world writes are replicated or the D-14 map writer; publishes context and kill counters
 }

@@ -11,10 +11,10 @@ import (
 )
 
 // unstampedLocal pins the Local-class types some producer still pushes in the
-// ambient domain. Phase 5 stamped the owner-authored grants and D-6 effects and
-// Phase 6 stamped internal/mode, but app, engine, fsm and the shared species
-// systems still push these unstamped. The set must only shrink: an entry that
-// stops appearing fails, and a type not listed here fails on first sight.
+// ambient domain. The owner-authored grants, the D-6 effects and internal/mode all
+// stamp; app, engine, fsm and the shared species systems still push these unstamped.
+// The set must only shrink: an entry that stops appearing fails, and a type not
+// listed here fails on first sight.
 // Not a transport gate — the class keeps a Local type off the wire whatever its
 // tag — but a per-instance effect journaled as shared is a record two instances
 // legitimately differ on while claiming they should not.

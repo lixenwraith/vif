@@ -16,10 +16,10 @@ const (
 	MsgDisconnect MessageType = 0x03
 	MsgAck        MessageType = 0x04
 
-	// Game messages
-	MsgInput     MessageType = 0x10 // Player keystroke
-	MsgStateSync MessageType = 0x11 // Full/delta state snapshot
-	MsgEvent     MessageType = 0x12 // Game event broadcast
+	// Game messages. 0x10 is reserved: raw participant input is deliberately not a
+	// message kind — a peer sends the resolved D-3 artifact, never the keystroke.
+	MsgStateSync MessageType = 0x11 // Owner-authored cursor state (D-13)
+	MsgEvent     MessageType = 0x12 // One closed barrier production epoch
 
 	// Coordination
 	MsgPeerList   MessageType = 0x20 // Server sends peer roster

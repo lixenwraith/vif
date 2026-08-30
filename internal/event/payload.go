@@ -126,31 +126,6 @@ type NetworkDisconnectPayload struct {
 	PeerID uint32 `toml:"peer_id"`
 }
 
-// RemoteInputPayload contains input data from remote player
-type RemoteInputPayload struct {
-	Payload []byte `toml:"payload"` // Encoded keystroke/intent
-	PeerID  uint32 `toml:"peer_id"`
-}
-
-// StateSyncPayload contains state snapshot from peer
-type StateSyncPayload struct {
-	Payload []byte `toml:"payload"` // Encoded snapshot
-	PeerID  uint32 `toml:"peer_id"`
-	Seq     uint32 `toml:"seq"`
-}
-
-// NetworkEventPayload contains a forwarded game event
-type NetworkEventPayload struct {
-	Payload []byte `toml:"payload"` // Encoded GameEvent
-	PeerID  uint32 `toml:"peer_id"`
-}
-
-// NetworkErrorPayload contains error information
-type NetworkErrorPayload struct {
-	Error  string `toml:"error"` // 0 for general errors
-	PeerID uint32 `toml:"peer_id"`
-}
-
 // --- Meta ---
 
 // GameResetPayload requests a game restart; Purge additionally clears operator

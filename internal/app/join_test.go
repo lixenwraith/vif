@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// TestJoinAdmitsAMatchingParticipant is Phase 7 item 1: a second instance of one
+// TestJoinAdmitsAMatchingParticipant covers the join handshake: a second instance of one
 // seed reproduces the session's identity and adopts the host's D-14 map latch,
 // arriving at bounds its own terminal would not have produced.
 func TestJoinAdmitsAMatchingParticipant(t *testing.T) {
@@ -60,7 +60,7 @@ func TestJoinRejectsADifferentSession(t *testing.T) {
 }
 
 // TestJoinRejectsAMidRunHost covers the position check: nothing transports world
-// state in Phase 7, so a joiner can only reproduce a session from its start.
+// state, so a joiner can only reproduce a session from its start.
 func TestJoinRejectsAMidRunHost(t *testing.T) {
 	const seed = 0x5EEDBEEF
 

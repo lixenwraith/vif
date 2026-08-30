@@ -2,10 +2,17 @@ package network
 
 import (
 	"crypto/tls"
+	"errors"
 	"net"
 	"sync"
 	"sync/atomic"
+	"time"
 )
+
+// acceptRetryDelay paces the accept loop after a transient failure such as a
+// descriptor limit, so the goroutine cannot busy-spin on a listener that keeps
+// failing without being closed.
+const acceptRetryDelay = 10 * time.Millisecond
 
 // Transport handles network I/O for a specific role
 type Transport struct {
@@ -93,8 +100,19 @@ func (t *Transport) acceptLoop() {
 			case <-t.stopCh:
 				return
 			default:
-				continue
 			}
+			// A closed listener never recovers; anything else is reported and
+			// paced, so a persistent accept failure cannot spin this goroutine.
+			if errors.Is(err, net.ErrClosed) {
+				return
+			}
+			t.report(err)
+			select {
+			case <-t.stopCh:
+				return
+			case <-time.After(acceptRetryDelay):
+			}
+			continue
 		}
 
 		if t.config.AcceptSession != nil {
@@ -181,9 +199,9 @@ func (t *Transport) Send(id PeerID, msg *Message) bool {
 	return t.peers.Send(id, msg)
 }
 
-// Broadcast sends to all peers
-func (t *Transport) Broadcast(msg *Message) {
-	t.peers.Broadcast(msg)
+// Broadcast sends to all peers and returns the number that refused the frame.
+func (t *Transport) Broadcast(msg *Message) int {
+	return t.peers.Broadcast(msg)
 }
 
 // PeerCount returns connected peer count

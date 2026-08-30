@@ -39,8 +39,8 @@ func testCursorWorld(t *testing.T) (*engine.World, core.Entity, core.Entity) {
 	return w, first, second
 }
 
-// spawnRemoteCursor adds one peer-owned cursor to an existing roster. Phase 7 item 3
-// verifies the remote lifecycle with two local cursors before any socket exists.
+// spawnRemoteCursor adds one peer-owned cursor to an existing roster, so the remote
+// lifecycle is verified against two local cursors without a socket.
 func spawnRemoteCursor(t *testing.T, w *engine.World, slot uint8, x, y int, peer uint32) core.Entity {
 	t.Helper()
 

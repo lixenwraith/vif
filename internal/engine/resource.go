@@ -508,8 +508,6 @@ type AudioResource struct {
 	Engine *audio.AudioEngine
 }
 
-// TODO: refactor wrapper after network stub developement
-
 // NetworkPort is the service-side endpoint driven by NetworkSystem.
 // Outbound: direct calls. Inbound: Drain per game tick (poll model keeps
 // network goroutines out of the world event queue).

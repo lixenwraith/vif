@@ -82,7 +82,7 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 	return localA, remoteA
 }
 
-// TestTransportSyncsOwnerAuthoredCursorState is Phase 7 item 4: the owner writes,
+// TestTransportSyncsOwnerAuthoredCursorState is the D-13 transport: the owner writes,
 // the peer receives, and the peer's own systems never author the same cell.
 func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 	a, b := pair(t, 0x5EEDBEEF, 0)
@@ -136,7 +136,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 	}
 }
 
-// TestTransportCarriesCrossingsWithoutEcho is Phase 7 item 5: a D-3 artifact
+// TestTransportCarriesCrossingsWithoutEcho is the D-3 wire rule: a D-3 artifact
 // reaches the peer, and the peer does not send it back.
 func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
 	a, b := pair(t, 0x5EEDBEEF, 0)
@@ -254,7 +254,7 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	}
 }
 
-// TestTwoLiveParticipantsStayInLockstep is Phase 8's headless exit criterion.
+// TestTwoLiveParticipantsStayInLockstep is the headless two-participant criterion.
 func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	const seed = 0x5EEDBEEF
 	steps := 1200
