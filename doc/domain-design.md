@@ -262,10 +262,11 @@ Writers:
 - `MetaSystem`'s full reset and its zero-dimension level setup, which return the
   map to the viewport — the same terminal derivation, under the same guard.
 
-`MapSizeLocal()` is `!SessionShared() && roster ≤ 1`. The roster size is shared.
-`SessionShared` is not derivable from anything else and is not shared simulation
-state, so it travels in the journal anchor (schema 11): a run that opened or
-joined a session sets it, and any reproduction of that run adopts it. Reading it
+`MapSizeLocal()` is `!SessionShared()`, and `SessionShared` is a second rostered
+cursor, a bound session transport, or the run's own latch. The roster size is shared.
+The latch is not derivable from anything else and is not shared simulation state,
+so it travels in the journal anchor (schema 11): a run that opened or joined a
+session sets it, and any reproduction of that run adopts it. Reading it
 off the live transport instead — which is what it used to do — made a replay crop
 where the run it reproduced did not, and left the map croppable in two windows
 where it must not be: while a host waits in a lobby, holding out an anchor whose

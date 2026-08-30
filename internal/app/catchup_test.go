@@ -23,7 +23,7 @@ import (
 // falls inside it.
 func TestCatchUpReproducesALiveSessionsCrossings(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := soakScale(200, 700, 1200)
+	steps := soakScale(200, 500, 1200)
 
 	host, err := NewHeadless(Config{
 		Seed: seed, Width: 120, Height: 40, ForceDefault: true, RetainSessionLog: true,

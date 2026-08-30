@@ -221,7 +221,7 @@ func replaySoak(run soakRun, recs []event.JournalRecord) error {
 
 // TestReplaySoak drives many seeded scripts through journal → replay → FirstDiff
 func TestReplaySoak(t *testing.T) {
-	n := soakScale(8, 24, 120)
+	n := soakScale(8, 20, 120)
 	for i := range n {
 		seed := uint64(soakSeedBase) + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {

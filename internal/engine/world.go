@@ -357,12 +357,12 @@ func (w *World) PushEventDomain(eventType event.EventType, payload any, domain c
 //
 // Map bounds are shared simulation state, so every writer of them must be a
 // function of state every participant agrees on — and, because a run is reproduced
-// by replaying its record stream, of state a reproduction agrees on too. The shared
-// roster size is one such input. The other is SessionShared, which is why that flag
-// travels in the journal anchor rather than being read off the live transport: a
-// replay and a mid-run catch-up hold no transport, and deriving the verdict from
-// one made the reproduction crop where the run it reproduces did not.
-func (w *World) MapSizeLocal() bool { return !w.SessionShared() && w.Resources.Player.Count() <= 1 }
+// by replaying its record stream, of state a reproduction agrees on too. That is
+// the whole of SessionShared: a second rostered cursor, which is shared state, or
+// the latch a session run carries, which travels in the journal anchor rather than
+// being read off the live transport. Deriving the verdict from a transport made a
+// replay crop where the run it reproduces did not.
+func (w *World) MapSizeLocal() bool { return !w.SessionShared() }
 
 // SessionShared reports whether this world is, or reproduces, one shared with
 // another participant: a second rostered cursor, a bound session transport, or the
