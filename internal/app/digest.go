@@ -4,6 +4,7 @@ import (
 	"math"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -118,7 +119,7 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 // sharedDigestLocked hashes exactly SnapshotShared's comparable surface into one
 // transport-sized value. Caller MUST hold the world lock; unlike snapshotShared it
 // must not acquire it again.
-func (a *App) sharedDigestLocked() engine.SharedStateDigest {
+func (a *App) sharedDigestLocked(detail bool) engine.SharedStateDigest {
 	wd := a.worldDigestScopedLocked(engine.ScopeShared)
 	digestLine := "ctx|digest" +
 		"|positions=" + wd.Positions.String() +
@@ -135,6 +136,19 @@ func (a *App) sharedDigestLocked() engine.SharedStateDigest {
 	a.world.Resources.Status.SnapshotFiltered(sharedKey, func(sub string, args ...any) {
 		statusLines = append(statusLines, snapshotLine("reg", sub, args))
 	})
+	// One hash per record, so a mismatch names the record rather than the category
+	// it belongs to. Built only on request: it is a diagnostic, not a probe.
+	var groups map[string]uint64
+	if detail {
+		groups = make(map[string]uint64, len(contextLines)+len(statusLines))
+		for _, line := range contextLines {
+			groups[recordName(line)] = uint64(newDigest().text(line))
+		}
+		for _, line := range statusLines {
+			groups[recordName(line)] = uint64(newDigest().text(line))
+		}
+		groups["world"] = uint64(newDigest().text(digestLine))
+	}
 	slices.Sort(contextLines)
 	slices.Sort(statusLines)
 	contextDigest := newDigest()
@@ -165,7 +179,28 @@ func (a *App) sharedDigestLocked() engine.SharedStateDigest {
 		Context:   uint64(contextDigest),
 		Status:    uint64(statusDigest),
 		Surface:   uint64(surface),
+		Groups:    groups,
 	}
+}
+
+// recordName is the identity of one snapshot line: its emitter and record name,
+// without the field values that follow. Two instances build the same set of names
+// from the same world, so a differing hash under one name is the record to read.
+func recordName(line string) string {
+	name := line
+	if i := strings.Index(name, "|msg="); i >= 0 {
+		head, tail := name[:i], name[i+len("|msg="):]
+		if j := strings.IndexByte(tail, '|'); j >= 0 {
+			tail = tail[:j]
+		}
+		return head + "|" + tail
+	}
+	if i := strings.IndexByte(name, '|'); i >= 0 {
+		if j := strings.IndexByte(name[i+1:], '|'); j >= 0 {
+			return name[:i+1+j]
+		}
+	}
+	return name
 }
 
 // digestEntities canonically projects a mixed dense store for cross-instance comparison.

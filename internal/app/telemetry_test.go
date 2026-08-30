@@ -7,6 +7,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
@@ -232,4 +233,29 @@ func TestTelemetryHeadlessSessionReportsActivity(t *testing.T) {
 		reg.Ints.Get("death.batch_blossom").Load(), reg.Ints.Get("death.batch_decay").Load(),
 		reg.Ints.Get("death.batch_fadeout").Load(), reg.Ints.Get("death.batch_dust").Load(),
 		reg.Ints.Get("death.batch_other").Load())
+}
+
+// TestSharedDigestCarriesDetailOnlyOnRequest pins the cost side of the diagnosis:
+// the per-record breakdown is what turns a differing category into a differing
+// record, and it is roughly a hundred hashes, so a healthy session must not pay
+// for it. NetworkSystem asks for it only once a sample has already disagreed.
+func TestSharedDigestCarriesDetailOnlyOnRequest(t *testing.T) {
+	a := mustHeadless(t, 0xD1FF, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	var plain, detailed engine.SharedStateDigest
+	a.World().RunSafe(func() {
+		plain = a.sharedDigestLocked(false)
+		detailed = a.sharedDigestLocked(true)
+	})
+	if plain.Groups != nil {
+		t.Fatalf("a plain digest carried %d record hashes, want none", len(plain.Groups))
+	}
+	if len(detailed.Groups) < 8 {
+		t.Fatalf("a detailed digest carried %d record hashes, want the whole surface", len(detailed.Groups))
+	}
+	if plain.Hash != detailed.Hash || plain.Status != detailed.Status {
+		t.Fatal("asking for detail changed the digest it explains")
+	}
 }

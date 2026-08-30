@@ -36,6 +36,7 @@ var allowedMapRanges = map[string]string{
 	"MetricMap.Keys:items":                     "collects keys, sorted before caching",
 	"Registry.buildIndex:byGroup":              "collects group names, sorted before index build",
 	"CleanerSystem.scanTargetRows:targetRows":  "collects rows, sorted before spawn",
+	"digestRecordDifference:Groups":            "collects differing record names, sorted before joining",
 	"MacroManager.StartAllPlayback:buffers":    "collects labels, sorted before playback start",
 
 	// --- Writes target a map or distinct keys; order cannot change the result ---

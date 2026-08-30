@@ -253,7 +253,10 @@ surface. Two consecutive mismatching samples log once, increment
 `network.digest_mismatches`, and raise an amber `DESYNC` status item;
 `NetworkDivergedSamples` of them publish `network.diverged`, log at error and turn
 it red `DIVERGED`. `network.sync_part` and `network.sync_tick` carry the first
-differing category and the tick it appeared on. Agreement after a mismatch shows
+differing category and the tick it appeared on, and `network.sync_records` names
+the individual snapshot records that disagree: once a sample has mismatched the
+digest carries a hash per record, so a category becomes something to read. A
+healthy session sends no breakdown at all. Agreement after a mismatch shows
 green `SYNCED` for twenty ticks. The digest is a detector only: it does not flood,
 select an authority, repair state, or cross a partition.
 

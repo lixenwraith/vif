@@ -1,6 +1,7 @@
 package app
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -254,6 +255,18 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 	for i, a := range apps {
 		if !a.World().Resources.Status.Bools.Get("network.diverged").Load() {
 			t.Fatalf("participant %d never escalated a persistent divergence", i+1)
+		}
+	}
+
+	// A category is not a diagnosis: "the status surface differs" leaves a hundred
+	// records to search, and one host's own log cannot narrow it. Once a mismatch is
+	// outstanding the digest carries a hash per record, so the report names the one
+	// that moved. Here that is the world digest, which is where the corruption is.
+	for i, a := range apps {
+		got := a.World().Resources.Status.Strings.Get("network.sync_records").Load()
+		if !strings.Contains(got, "world") {
+			t.Fatalf("participant %d named %q as the differing records, want the world digest among them",
+				i+1, got)
 		}
 	}
 

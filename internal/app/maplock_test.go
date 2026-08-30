@@ -221,17 +221,20 @@ func TestSessionRunNeverCropsItsMap(t *testing.T) {
 	}
 }
 
-// TestLockedResizeLeavesTheFlowFieldPhaseAlone is the second half of the resize
-// rule, and the one a locked map does not cover on its own.
+// TestLocalViewChangesLeaveTheFlowFieldPhaseAlone covers D-17 at its two producers.
 //
-// A resize used to reconcile every cursor even when the map had not moved, which
-// announced a same-cell EventCursorMoved. That announcement is a shared event, and
 // NavigationSystem's flow-field cache is throttled: MarkDirty only latches, and a
-// field is recomputed when the throttle allows. So a local view change put the two
-// instances on different recompute phases, and from then on they steered shared
-// species along fields of different ages — a divergence that begins in kinetics,
-// long before any cell moves.
-func TestLockedResizeLeavesTheFlowFieldPhaseAlone(t *testing.T) {
+// field is recomputed once the interval allows, so the cache's phase is shared
+// state and every producer of a dirty mark has to be shared. EventCursorMoved is
+// one such producer, and two purely local view changes were announcing it — a
+// resize that reconciled cursors the locked map had not moved, and the rebind that
+// binds this participant's own slot. Either put the two instances on different
+// recompute phases, after which they steer shared species along fields of different
+// ages: a divergence that begins in kinetics, long before any cell moves.
+//
+// The rebind is the one that matters most, because it fires at session start on
+// every participant but slot zero.
+func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
 	a := mustHeadless(t, 0x14AF, 200, 60)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -248,6 +251,25 @@ func TestLockedResizeLeavesTheFlowFieldPhaseAlone(t *testing.T) {
 	a.Tick(2)
 	if moves != 0 {
 		t.Fatalf("a resize under a locked map announced %d cursor moves", moves)
+	}
+
+	// A local rebind is the same rule in a second place, and the one that fires at
+	// session start: every participant but slot zero binds its own cursor, so the
+	// announcement offset the two instances' flow-field phases from tick one.
+	spawnCursor(t, a)
+	a.Tick(1)
+	moves = 0
+	a.Context().PushEventOrigin(event.EventCursorSetLocalRequest,
+		&event.CursorSetLocalPayload{Slot: 1}, event.OriginDebug)
+	a.Settle()
+	a.Tick(1)
+	if moves != 0 {
+		t.Fatalf("a local rebind announced %d cursor moves", moves)
+	}
+	var bound uint8
+	a.World().RunSafe(func() { bound = a.World().Resources.Player.LocalSlot() })
+	if bound != 1 {
+		t.Fatalf("rebind left the local slot at %d, want 1; the guard proves nothing", bound)
 	}
 
 	// The negative control: the same resize with one cursor crops the map, which

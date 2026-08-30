@@ -638,6 +638,13 @@ type SharedStateDigest struct {
 	Context   uint64
 	Status    uint64
 	Surface   uint64
+
+	// Groups is one hash per snapshot record, present only when the caller asked
+	// for detail. A category tells an operator that the status surface disagrees;
+	// it does not say which of a hundred records did, and a host's own log cannot
+	// answer that on its own. Detail is therefore requested only while a mismatch
+	// is already outstanding, so a healthy session carries none of it.
+	Groups map[string]uint64
 }
 
 // NetworkResource wraps the network endpoint for ECS access
@@ -647,7 +654,9 @@ type NetworkResource struct {
 	BarrierDelayTicks uint64
 	// SharedDigest is supplied by App after construction. NetworkSystem calls it
 	// under the world lock when publishing periodic runtime parity probes.
-	SharedDigest func() SharedStateDigest
+	// detail asks for the per-record breakdown, which costs a map on the wire and
+	// is worth it only once something disagrees.
+	SharedDigest func(detail bool) SharedStateDigest
 
 	// OnDeparture is called under the world lock when a participant leaves, so the
 	// session layer can return its identity to the pool. It must not take a lock

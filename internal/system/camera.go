@@ -43,7 +43,7 @@ func (s *CameraSystem) Update() {
 
 // EventTypes returns events this system handles
 func (s *CameraSystem) EventTypes() []event.EventType {
-	return []event.EventType{event.EventCursorMoved}
+	return []event.EventType{event.EventCursorMoved, event.EventCursorLocalChanged}
 }
 
 // HandleEvent processes cursor movement for camera updates
@@ -60,6 +60,14 @@ func (s *CameraSystem) HandleEvent(ev event.GameEvent) {
 			return
 		}
 		s.updateCamera(payload.X, payload.Y)
+
+	case event.EventCursorLocalChanged:
+		// A rebind moves the view, not the world. The camera re-anchors from the new
+		// binding rather than from a cursor move nobody made: EventCursorMoved is a
+		// shared event and dirties a throttled shared derivation (D-17).
+		if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
+			s.updateCamera(pos.X, pos.Y)
+		}
 	}
 }
 

@@ -256,7 +256,13 @@ func (s *CursorSystem) fail(reason string) {
 	s.world.PushEvent(event.EventCursorSpawnFailed, nil)
 }
 
-// setLocal rebinds the followed slot and re-announces its position so the camera re-anchors
+// setLocal rebinds the followed slot. The rebind is this instance's own — which
+// participant a world follows is not shared state — so it announces itself as
+// EventCursorLocalChanged and nothing else. It used to re-announce the cursor's
+// position as EventCursorMoved to make the camera re-anchor, which put a local view
+// change into a shared event stream: NavigationSystem's throttled flow-field cache
+// dirties on that event, so the one instance whose slot is not zero advanced its
+// recompute phase at startup and the two then read fields of different ages (D-17).
 func (s *CursorSystem) setLocal(slot uint8) {
 	roster := s.world.Resources.Player
 	if int(slot) >= parameter.MaxPlayers || roster.LocalSlot() == slot {
@@ -269,11 +275,7 @@ func (s *CursorSystem) setLocal(slot uint8) {
 	s.publishRoster()
 
 	vlog.Info("app", "msg", "cursor local", "slot", int(slot), "entity", uint64(roster.Entity))
-	s.world.PushEvent(event.EventCursorLocalChanged, &event.CursorSetLocalPayload{Slot: slot})
-	if pos, ok := s.world.Positions.GetPosition(roster.Entity); ok {
-		s.world.PushEvent(event.EventCursorMoved,
-			&event.CursorMovedPayload{Entity: roster.Entity, X: pos.X, Y: pos.Y})
-	}
+	s.world.PushLocal(event.EventCursorLocalChanged, &event.CursorSetLocalPayload{Slot: slot})
 }
 
 // publishRoster mirrors slot occupancy; called on every lifecycle change

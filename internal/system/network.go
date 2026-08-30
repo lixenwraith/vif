@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"encoding/json"
 	"slices"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -75,6 +77,7 @@ type NetworkSystem struct {
 	peerMismatches  [parameter.MaxPlayers + 1]int
 	syncNoticeUntil uint64
 	statSyncPart    *status.AtomicString
+	statSyncRecords *status.AtomicString
 	statSyncTick    *atomic.Int64
 	statDiverged    *atomic.Bool
 
@@ -97,7 +100,14 @@ type stateDigest struct {
 	Context   uint64 `json:"context"`
 	Status    uint64 `json:"status"`
 	Surface   uint64 `json:"surface"`
-	Valid     bool   `json:"-"`
+
+	// Groups carries one hash per snapshot record, and only while a mismatch is
+	// already outstanding. A category names the surface that disagrees; this names
+	// the record, which is what a two-host post-mortem actually needs and what a
+	// single host's log cannot otherwise recover.
+	Groups map[string]uint64 `json:"groups,omitempty"`
+
+	Valid bool `json:"-"`
 }
 
 // epochWindow is one source's replay filter: the newest production epoch admitted
@@ -201,6 +211,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statDigestMismatch = reg.Ints.Get("network.digest_mismatches")
 	s.statSyncState = reg.Strings.Get("network.sync_state")
 	s.statSyncPart = reg.Strings.Get("network.sync_part")
+	s.statSyncRecords = reg.Strings.Get("network.sync_records")
 	s.statSyncTick = reg.Ints.Get("network.sync_tick")
 	s.statDiverged = reg.Bools.Get("network.diverged")
 
@@ -239,6 +250,7 @@ func (s *NetworkSystem) Init() {
 	s.statDigestMismatch.Store(0)
 	s.statSyncState.Store("")
 	s.statSyncPart.Store("")
+	s.statSyncRecords.Store("")
 	s.statSyncTick.Store(0)
 	s.statDiverged.Store(false)
 	s.peerMismatches = [parameter.MaxPlayers + 1]int{}
@@ -508,6 +520,7 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 	if !s.anyPeerDesynced() {
 		s.statSyncState.Store("")
 		s.statSyncPart.Store("")
+		s.statSyncRecords.Store("")
 		s.statDiverged.Store(false)
 		s.syncNoticeUntil = 0
 	}
@@ -742,7 +755,10 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 	if r == nil || r.SharedDigest == nil {
 		return
 	}
-	digest := r.SharedDigest()
+	// Detail costs a map on the wire, so it is sent only once this instance has
+	// something to explain: one disagreeing sample is enough to start, which puts
+	// the breakdown on both sides before the second sample reports.
+	digest := r.SharedDigest(s.anyPeerMismatching())
 	sample := stateDigest{
 		Run:       s.world.Resources.Event.Queue.Stamp().Run,
 		Tick:      completedTick,
@@ -753,6 +769,7 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 		Context:   digest.Context,
 		Status:    digest.Status,
 		Surface:   digest.Surface,
+		Groups:    digest.Groups,
 		Valid:     true,
 	}
 	s.recordStateDigest(sample)
@@ -813,6 +830,7 @@ func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDiges
 		if wasDesynced && !s.anyPeerDesynced() {
 			s.statSyncState.Store("synced")
 			s.statSyncPart.Store("")
+			s.statSyncRecords.Store("")
 			s.statDiverged.Store(false)
 			s.syncNoticeUntil = s.ticks + parameter.NetworkResyncNoticeTicks
 			vlog.Info("app", "msg", "shared state resynchronised",
@@ -829,20 +847,54 @@ func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDiges
 	}
 
 	part := digestDifference(local, remote)
+	records := digestRecordDifference(local, remote)
 	if !s.peerDesync[peer] {
 		s.peerDesync[peer] = true
 		s.statSyncState.Store("desync")
 		s.statSyncPart.Store(part)
 		s.statSyncTick.Store(int64(local.Tick))
+		s.statSyncRecords.StoreIfChanged(records)
 		s.syncNoticeUntil = 0
 		vlog.Warn("app", "msg", "shared state divergence", "peer", peer,
-			"run", local.Run, "tick", local.Tick, "part", part,
+			"run", local.Run, "tick", local.Tick, "part", part, "records", records,
 			"samples", n, "local", local.Hash, "remote", remote.Hash)
+	} else if records != "" {
+		s.statSyncRecords.StoreIfChanged(records)
 	}
 	if n >= parameter.NetworkDivergedSamples && !s.statDiverged.Swap(true) {
 		vlog.Error("app", "msg", "shared state diverged", "peer", peer,
-			"run", local.Run, "tick", local.Tick, "part", part, "samples", n)
+			"run", local.Run, "tick", local.Tick, "part", part, "records", records,
+			"samples", n)
 	}
+}
+
+// digestRecordDifference names the snapshot records whose hashes disagree, which is
+// what turns "the status surface differs" into something to read. Empty until both
+// sides carry the breakdown, which starts one sample after the first disagreement;
+// a name present on one side only is reported with the side that has it.
+func digestRecordDifference(local, remote stateDigest) string {
+	if len(local.Groups) == 0 || len(remote.Groups) == 0 {
+		return ""
+	}
+	names := make([]string, 0, 4)
+	for name, hash := range local.Groups {
+		if other, ok := remote.Groups[name]; !ok {
+			names = append(names, name+"(local only)")
+		} else if other != hash {
+			names = append(names, name)
+		}
+	}
+	for name := range remote.Groups {
+		if _, ok := local.Groups[name]; !ok {
+			names = append(names, name+"(peer only)")
+		}
+	}
+	slices.Sort(names)
+	if len(names) > parameter.NetworkDivergedRecordsLogged {
+		names = append(names[:parameter.NetworkDivergedRecordsLogged],
+			"+"+strconv.Itoa(len(names)-parameter.NetworkDivergedRecordsLogged)+" more")
+	}
+	return strings.Join(names, ",")
 }
 
 func digestDifference(local, remote stateDigest) string {
@@ -862,6 +914,17 @@ func digestDifference(local, remote stateDigest) string {
 	default:
 		return "combined"
 	}
+}
+
+// anyPeerMismatching reports whether any peer's last sample disagreed, which is
+// what turns on the per-record breakdown.
+func (s *NetworkSystem) anyPeerMismatching() bool {
+	for peer := 1; peer < len(s.peerMismatches); peer++ {
+		if s.peerMismatches[peer] > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 func (s *NetworkSystem) anyPeerDesynced() bool {

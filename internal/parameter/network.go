@@ -27,6 +27,12 @@ const (
 	// Two samples is a quarter of a second at the digest cadence.
 	NetworkDesyncSamples = 2
 
+	// NetworkDivergedRecordsLogged bounds how many differing snapshot record names
+	// one diagnosis carries. A real divergence names one or two; a reset or a lost
+	// artifact names most of the surface, and the first few plus a count says that
+	// just as well as a hundred would.
+	NetworkDivergedRecordsLogged = 6
+
 	// NetworkDivergedSamples is where a divergence stops being transient. Nothing
 	// re-derives the missing artifact, so past this point the two runs are different
 	// games and the participant needs the session again rather than a warning.
