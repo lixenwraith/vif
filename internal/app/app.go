@@ -169,6 +169,11 @@ func (a *App) initWorld() {
 	if r := a.world.Resources.Network; r != nil {
 		r.OnDeparture = a.releaseParticipant32
 		r.SharedDigest = a.sharedDigestLocked
+		// A session endpoint exists, so this run is shared for its whole life
+		// whether or not a peer is attached at a given tick. Latching it here rather
+		// than reading the port keeps the anchor, the D-14 verdict and the playout
+		// barrier answering one question, which is what a reproduction adopts.
+		a.world.MarkSessionShared()
 	}
 
 	// The terminal supplies color whenever one exists, but dimensions only when the
