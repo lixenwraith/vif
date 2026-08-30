@@ -182,6 +182,21 @@ func parseUint32(b []byte) uint32 {
 	return uint32(v)
 }
 
+// parseUint64 parses a leading decimal run, saturating at the type maximum.
+func parseUint64(b []byte) uint64 {
+	var v uint64
+	for _, c := range b {
+		if c < '0' || c > '9' {
+			break
+		}
+		if v > (^uint64(0)-uint64(c-'0'))/10 {
+			return ^uint64(0)
+		}
+		v = v*10 + uint64(c-'0')
+	}
+	return v
+}
+
 // parseInt64 parses a complete decimal integer token without allocating.
 func parseInt64(b []byte) (int64, bool) {
 	if len(b) == 0 {

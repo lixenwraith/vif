@@ -7,7 +7,8 @@ import (
 	"sync/atomic"
 )
 
-// Meta is one index row: 48 bytes, pointer-free, holds no line bytes.
+// Meta is one index row: 48 bytes, pointer-free, holds no line bytes. Dom fits
+// in the tail padding, so indexing the journal's domain costs no memory.
 type Meta struct {
 	Off   int64
 	TS    int64
@@ -20,6 +21,7 @@ type Meta struct {
 	Sub   uint16 // interned sub
 	Src   uint16 // source file index
 	Lvl   Level
+	Dom   Domain // journal replication scope, DomNone off the journal
 	Flags uint8
 }
 
@@ -29,7 +31,12 @@ const (
 	FlagSnapHead
 	FlagTrace
 	FlagNoTime // TS was inherited from the previous line, for ordering only
+	FlagAnchor // journal header record; a landmark, like a snapshot head
 )
+
+// Landmark reports whether a record is a navigation target for n/N: a stat
+// snapshot head in a diagnostic log, a journal anchor in a capture.
+func (m Meta) Landmark() bool { return m.Flags&(FlagSnapHead|FlagAnchor) != 0 }
 
 // Snapshot groups the stat records sharing one (src, run, tick). Members are
 // not contiguous in the merged view; Count is authoritative, Head locates the
@@ -51,6 +58,8 @@ type Source struct {
 
 	scanned atomic.Int64
 	bad     atomic.Int64
+	dom     atomic.Int64 // records carrying a journal domain
+	gaps    atomic.Int64 // breaks in this source's jseq run
 	done    atomic.Bool
 	failure atomic.Pointer[scanErr]
 }
@@ -204,6 +213,34 @@ func (x *Index) Malformed() int64 {
 	var n int64
 	for _, s := range x.srcs {
 		n += s.bad.Load()
+	}
+	return n
+}
+
+// HasDomains reports whether any indexed record carries a journal domain. The
+// viewer spends a column on the domain only for a set that has one.
+func (x *Index) HasDomains() bool {
+	if x == nil {
+		return false
+	}
+	for _, s := range x.srcs {
+		if s.dom.Load() > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// JournalGaps returns the number of breaks in the journal's jseq run. A gap is
+// exactly one lost record, so a non-zero count means the capture is not
+// replayable as it stands.
+func (x *Index) JournalGaps() int64 {
+	if x == nil {
+		return 0
+	}
+	var n int64
+	for _, s := range x.srcs {
+		n += s.gaps.Load()
 	}
 	return n
 }

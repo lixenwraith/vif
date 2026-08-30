@@ -69,8 +69,94 @@ func LevelByInitial(c byte) (Level, bool) {
 	return LevelBad, false
 }
 
-// SubStat marks stat snapshot records.
-const SubStat = "stat"
+// Sub tags the viewer reasons about. Everything else is an ordinary tag.
+const (
+	// SubStat marks stat snapshot records.
+	SubStat = "stat"
+	// SubJournal marks replay-journal event records, written to vif-jrn files.
+	SubJournal = "journal"
+	// SubAnchor marks the journal's self-describing header records.
+	SubAnchor = "anchor"
+)
+
+// Domain is a journal record's replication scope. DomNone covers every record
+// that carries no domain at all, which is the whole diagnostic log.
+type Domain uint8
+
+const (
+	DomNone Domain = iota
+	DomShared
+	DomPlayer
+	DomCount
+)
+
+// domainName mirrors core.DomainNames; the journal writes these verbatim.
+var domainName = [DomCount]string{"", "shared", "player"}
+var domainInitial = [DomCount]byte{' ', 's', 'p'}
+
+func (d Domain) String() string {
+	if d < DomCount {
+		return domainName[d]
+	}
+	return "?"
+}
+
+// Initial returns the one-character gutter and strip label.
+func (d Domain) Initial() byte {
+	if d < DomCount {
+		return domainInitial[d]
+	}
+	return '?'
+}
+
+// ParseDomain maps a fields.domain token to a Domain; unknown tokens are DomNone.
+func ParseDomain(b []byte) Domain {
+	switch string(b) {
+	case "shared":
+		return DomShared
+	case "player":
+		return DomPlayer
+	}
+	return DomNone
+}
+
+// DomainByName resolves a domain name for filter specs; "both" and "" mean
+// unconstrained.
+func DomainByName(s string) (Domain, bool) {
+	switch s {
+	case "", "both", "all", "any":
+		return DomNone, true
+	case "shared":
+		return DomShared, true
+	case "player":
+		return DomPlayer, true
+	}
+	return DomNone, false
+}
+
+// discriminatorKeys are the fields.* keys that name a record, in precedence
+// order. Diagnostic records use msg, the logger self-report uses type, and
+// journal records use ev — the event name is what distinguishes them.
+var discriminatorKeys = [...]string{"msg", "type", "ev"}
+
+// SyntheticMsg names records whose fields carry no discriminator at all. The
+// journal anchor is the only one: it is a header, so its sub is its identity.
+func SyntheticMsg(sub string) string {
+	if sub == SubAnchor {
+		return SubAnchor
+	}
+	return ""
+}
+
+// syntheticMsgTok is the index pass's form of SyntheticMsg: it returns a slice
+// of sub rather than a fresh string, so a record without a discriminator costs
+// the scan no allocation.
+func syntheticMsgTok(sub []byte) []byte {
+	if string(sub) == SubAnchor {
+		return sub
+	}
+	return nil
+}
 
 // StampText renders a record's wall-clock stamp, or a placeholder when the
 // line carried no usable time and inherited one for ordering.
@@ -81,10 +167,13 @@ func StampText(m Meta) string {
 	return FormatTS(m.TS)
 }
 
-// KnownSubs is the closed subsystem vocabulary; ad-hoc taps are also accepted.
+// KnownSubs is the subsystem vocabulary the game emits, in scope order, with
+// the two journal subs last. Ad-hoc taps are also accepted; this drives the
+// filter hint only.
 var KnownSubs = []string{
-	"app", "service", "fsm", "event", "dispatch", "push",
-	"input", "stat", "rec", "lock", "race", "crash",
+	"app", "service", "crash", "race", "fsm", "event", "dispatch", "push",
+	"input", "stat", "rec", "lock", "domain", "system",
+	SubJournal, SubAnchor,
 }
 
 // DurUnit is the time unit implied by a metric key's suffix.

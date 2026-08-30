@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/lixenwraith/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 )
 
 // Need declares what a filter must touch beyond the index row.

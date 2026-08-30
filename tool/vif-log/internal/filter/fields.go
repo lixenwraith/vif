@@ -1,6 +1,6 @@
 package filter
 
-import "github.com/lixenwraith/vif-log/internal/logfile"
+import "github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 
 func init() {
 	Register(Desc{Kind: "fields", Help: "regexp over the parsed fields, smart-case", New: newFields})

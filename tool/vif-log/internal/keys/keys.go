@@ -47,6 +47,8 @@ const (
 	ActPinOnly
 	ActPinClear
 
+	ActDomain // cycle the journal domain: both / shared / player
+
 	ActOpen
 	ActExport
 
@@ -133,15 +135,17 @@ var Bindings = []Binding{
 	{ModeNormal, []Chord{K(terminal.KeyEscape)}, ActClear, "search", "clear search and filters"},
 	{ModeNormal, []Chord{R('f')}, ActFollowNext, "search", "next record like this one"},
 	{ModeNormal, []Chord{R('F')}, ActFollowPrev, "search", "previous record like this one"},
-	{ModeNormal, []Chord{R('\\')}, ActFilter, "search", "filter: kind:regexp (sub msg tick run level fields)"},
+	{ModeNormal, []Chord{R('\\')}, ActFilter, "search", "filter: kind:arg (sub msg tick run level dom fields)"},
 
 	{ModeNormal, []Chord{K(terminal.KeyEnter)}, ActExpand, "snapshot", "expand/collapse this snapshot"},
-	{ModeNormal, []Chord{R('n')}, ActSnapNext, "snapshot", "jump to next snapshot down"},
-	{ModeNormal, []Chord{R('N')}, ActSnapPrev, "snapshot", "jump to previous snapshot up"},
+	{ModeNormal, []Chord{R('n')}, ActSnapNext, "snapshot", "next landmark down: stat snapshot or journal anchor"},
+	{ModeNormal, []Chord{R('N')}, ActSnapPrev, "snapshot", "previous landmark up"},
 
 	{ModeNormal, []Chord{R(' ')}, ActPinToggle, "pin", "pin/unpin record"},
 	{ModeNormal, []Chord{R('P')}, ActPinOnly, "pin", "show only pinned records"},
 	{ModeNormal, []Chord{R('C')}, ActPinClear, "pin", "clear all pins"},
+
+	{ModeNormal, []Chord{R('D')}, ActDomain, "journal", "cycle domain: both / shared / player"},
 
 	{ModeNormal, []Chord{R('o')}, ActOpen, "file", "open a log file"},
 	{ModeNormal, []Chord{R('x')}, ActExport, "file", "export pins, or the current result"},

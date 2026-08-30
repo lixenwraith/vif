@@ -108,6 +108,13 @@ func (x *Index) scanSource(src uint16, f *os.File, part *scanPart, live bool) {
 		curR     uint32
 		curT     uint32
 		haveSnap bool
+
+		// Journal bookkeeping: jseq is dense by construction, so any step other
+		// than +1 is a record the writer dropped.
+		lastSeq  uint64
+		haveSeq  bool
+		domCount int64
+		gapCount int64
 	)
 
 	// Estimated row count avoids repeated regrowth on multi-MB files.
@@ -130,9 +137,22 @@ func (x *Index) scanSource(src uint16, f *os.File, part *scanPart, live bool) {
 		raw := trimEOL(line)
 
 		if len(raw) > 0 {
-			m := parseMeta(raw, off, src, x.subN, x.msgN)
+			m, jseq := parseMeta(raw, off, src, x.subN, x.msgN)
 			if m.Flags&FlagMalformed != 0 {
 				s.bad.Add(1)
+			}
+			if m.Dom != DomNone {
+				domCount++
+				if domCount == 1 {
+					s.dom.Store(1) // HasDomains only asks whether there is one
+				}
+			}
+			if jseq != 0 {
+				if haveSeq && jseq != lastSeq+1 {
+					gapCount++
+					s.gaps.Store(gapCount)
+				}
+				lastSeq, haveSeq = jseq, true
 			}
 			// Ordering key: a line without a usable stamp inherits the previous
 			// one and is rendered as unstamped.
@@ -240,13 +260,19 @@ func trimEOL(b []byte) []byte {
 }
 
 // parseMeta extracts the indexed fields from one line. Unparseable lines are
-// flagged and kept, never dropped.
-func parseMeta(line []byte, off int64, src uint16, subN, msgN *interner) Meta {
-	m := Meta{Off: off, Len: uint32(len(line)), Src: src, Lvl: LevelBad, Flags: FlagMalformed}
+// flagged and kept, never dropped. jseq is the journal record counter, 0 for
+// every line that is not a journal record.
+func parseMeta(line []byte, off int64, src uint16, subN, msgN *interner) (m Meta, jseq uint64) {
+	m = Meta{Off: off, Len: uint32(len(line)), Src: src, Lvl: LevelBad, Flags: FlagMalformed}
 	i := skipSpace(line, 0)
 	if i >= len(line) || line[i] != '{' {
-		return m
+		return m, 0
 	}
+
+	// sub and fields are resolved after the pass: the discriminator a record
+	// without one falls back to depends on its sub, and key order is the
+	// writer's business, not ours.
+	var sub, fields []byte
 
 	ok := eachField(line, i, func(k, v []byte, kind byte) bool {
 		switch string(k) {
@@ -262,9 +288,7 @@ func parseMeta(line []byte, off int64, src uint16, subN, msgN *interner) Meta {
 			}
 		case "sub":
 			if kind == KStr {
-				if id := subN.intern(strTok(v)); id <= 0xffff {
-					m.Sub = uint16(id)
-				}
+				sub = strTok(v)
 			}
 		case "run":
 			m.Run = parseUint32(v)
@@ -278,37 +302,69 @@ func parseMeta(line []byte, off int64, src uint16, subN, msgN *interner) Meta {
 			}
 		case "fields":
 			if kind == KObj {
-				m.Msg = msgN.intern(discriminator(v))
+				fields = v
 			}
 		}
 		return true
 	})
 
+	if id := subN.intern(sub); id <= 0xffff {
+		m.Sub = uint16(id)
+	}
+	if string(sub) == SubAnchor {
+		m.Flags |= FlagAnchor
+	}
+
+	// Only the journal carries a domain and a jseq, so ordinary records pay for
+	// the discriminator alone and stop at the first field.
+	jrn := string(sub) == SubJournal
+	msg, dom, seq := scanFields(fields, jrn || m.Flags&FlagAnchor != 0)
+	m.Dom = dom
+	if msg == nil {
+		msg = syntheticMsgTok(sub)
+	}
+	m.Msg = msgN.intern(msg)
+	if jrn {
+		jseq = seq
+	}
+
 	if ok {
 		m.Flags &^= FlagMalformed
 	}
-	return m
+	return m, jseq
 }
 
-// discriminator returns fields.msg, falling back to fields.type for records
-// that omit msg. Returns nil when neither is present; that interns to id 0.
-func discriminator(fields []byte) []byte {
-	var msg, typ []byte
+// scanFields makes one pass over the fields object for everything the index row
+// needs. deep also collects the journal's domain and jseq; without it the pass
+// stops at the first discriminator, which the writer always emits first.
+// A nil discriminator means the record has none: the caller falls back on the sub.
+func scanFields(fields []byte, deep bool) (msg []byte, dom Domain, jseq uint64) {
+	if fields == nil {
+		return nil, DomNone, 0
+	}
+	best := len(discriminatorKeys) // rank of the discriminator found so far
 	eachField(fields, 0, func(k, v []byte, kind byte) bool {
-		if kind != KStr {
-			return true
+		if kind == KStr {
+			for rank, name := range discriminatorKeys {
+				if rank >= best {
+					break
+				}
+				if string(k) == name {
+					msg, best = strTok(v), rank
+					break
+				}
+			}
 		}
-		switch string(k) {
-		case "msg":
-			msg = strTok(v)
-			return false // msg wins and is always first; stop scanning
-		case "type":
-			typ = strTok(v)
+		if !deep {
+			return best > 0
+		}
+		switch {
+		case kind == KStr && string(k) == "domain":
+			dom = ParseDomain(strTok(v))
+		case kind == KNum && string(k) == "jseq":
+			jseq = parseUint64(v)
 		}
 		return true
 	})
-	if msg != nil {
-		return msg
-	}
-	return typ
+	return msg, dom, jseq
 }

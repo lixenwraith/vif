@@ -1,4 +1,6 @@
-// vif-log — terminal viewer for vi-fighter JSONL diagnostic logs.
+// vif-log — terminal viewer for vi-fighter JSONL logs: the diagnostic stream
+// (vif-log-*.jsonl) and the replay journal (vif-jrn-*.jsonl), separately or
+// merged into one chronological view.
 package main
 
 import (
@@ -9,8 +11,8 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal"
-	"github.com/lixenwraith/vif-log/internal/app"
-	"github.com/lixenwraith/vif-log/internal/filter"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/app"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
 )
 
 const tickInterval = 50 * time.Millisecond // 20 fps clock
@@ -26,10 +28,11 @@ func (f *filterSpec) Set(v string) error {
 
 func main() {
 	var specs filterSpec
-	flag.Var(&specs, "f", "filter, repeatable: kind:regexp (sub msg tick run level find fields)")
+	flag.Var(&specs, "f", "filter, repeatable: kind:arg (sub msg tick run level dom find fields)")
 
 	flag.Usage = func() {
 		fmt.Fprintln(os.Stderr, "usage: vif-log [-f kind:arg]... [file.jsonl... | directory]")
+		fmt.Fprintln(os.Stderr, "  reads vif-log-*.jsonl diagnostic logs and vif-jrn-*.jsonl replay journals")
 		flag.PrintDefaults()
 		fmt.Fprintln(os.Stderr, "\nfilters:")
 		for _, d := range filter.Kinds() {

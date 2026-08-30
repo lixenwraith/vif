@@ -3,7 +3,7 @@ package filter
 import (
 	"strings"
 
-	"github.com/lixenwraith/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 )
 
 func init() {

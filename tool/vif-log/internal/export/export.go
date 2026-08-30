@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/lixenwraith/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 )
 
 // Exporter serialises a record set. JSONL is the only implementation; a plain

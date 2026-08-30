@@ -20,7 +20,7 @@ help:
 	@echo "  nolog    Release build without logger"
 	@echo "  wasm     Build WebAssembly binary for xterm.js (sound and logging disabled)"
 	@echo "  windows  Cross-compile for Windows (amd64, requires Windows Terminal, sound/log disabled)"
-	@echo "  tools    Build all auxiliary tools and cmds"
+	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"

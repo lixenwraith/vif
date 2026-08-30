@@ -9,10 +9,10 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif-log/internal/filter"
-	"github.com/lixenwraith/vif-log/internal/keys"
-	"github.com/lixenwraith/vif-log/internal/logfile"
-	"github.com/lixenwraith/vif-log/internal/ui"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/keys"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/ui"
 )
 
 const (
@@ -58,6 +58,7 @@ type App struct {
 	lvl     *filter.Level
 	snap    *filter.Collapse
 	find    *filter.Find
+	dom     *filter.Domain
 	pins    *filter.PinSet
 	pinOnly *filter.Pinned
 
@@ -107,10 +108,12 @@ func New(t terminal.Terminal, start []string, specs []string) (*App, error) {
 	// Snapshots collapse by default: stat members are ~half the records in a
 	// typical log and arrive in blocks of ~40. enter expands.
 	a.lvl, a.snap, a.find = filter.NewLevel(), filter.NewCollapse(true), filter.NewFind()
+	a.dom = filter.NewDomain()
 	a.pins = filter.NewPinSet()
 	a.pinOnly = filter.NewPinned(a.pins)
 	a.stack.Add(a.lvl)
 	a.stack.Add(a.snap)
+	a.stack.Add(a.dom)
 	a.stack.Add(a.pinOnly)
 	a.stack.Add(a.find)
 
@@ -139,6 +142,13 @@ func (a *App) applyFilterSpec(spec string) error {
 			return err
 		}
 		a.lvl.Mask = f.(*filter.Level).Mask
+		return nil
+	case "dom":
+		f, err := filter.New(kind, arg)
+		if err != nil {
+			return err
+		}
+		a.dom.Set(f.(*filter.Domain).State)
 		return nil
 	case "find":
 		return a.find.Set(arg, a.col)
@@ -372,6 +382,8 @@ var actions = map[keys.Action]func(*App){
 	keys.ActPinToggle: (*App).togglePin,
 	keys.ActPinOnly:   (*App).togglePinOnly,
 	keys.ActPinClear:  (*App).clearPins,
+
+	keys.ActDomain: (*App).cycleDomain,
 
 	keys.ActOpen:   (*App).openBrowser,
 	keys.ActExport: (*App).openExport,

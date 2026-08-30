@@ -51,13 +51,10 @@ type Record struct {
 	Fields []Field
 	Bad    bool
 
-	msgIdx int    // index into Fields of the discriminator, -1 if none
-	buf    []byte // column rendering scratch, reused across calls
+	msgIdx  int    // index into Fields of the discriminator, -1 if none
+	buf     []byte // column rendering scratch, reused across calls
+	scratch []byte // value rendering scratch, flattened into buf
 }
-
-// msgKeys are the discriminator keys in precedence order. Most records use
-// fields.msg; the logger self-report uses fields.type.
-var msgKeys = [...]string{"msg", "type"}
 
 // Parse fills r from line. Slices alias line and are reused across calls, so
 // copy anything retained past the next Parse.
@@ -94,7 +91,7 @@ func (r *Record) Parse(m Meta, line []byte) {
 
 	// Resolve the discriminator once: input records carry both msg and type,
 	// and only the one actually used may be dropped from the fields text.
-	for _, k := range msgKeys {
+	for _, k := range discriminatorKeys {
 		for i := range r.Fields {
 			if r.Fields[i].Key == k && r.Fields[i].Kind == KStr {
 				r.msgIdx = i
@@ -117,12 +114,21 @@ func (r *Record) Get(key string) (Field, bool) {
 	return Field{}, false
 }
 
-// Msg returns the record's discriminator.
+// Msg returns the record's discriminator, falling back to the one its sub
+// implies for records that carry none — the journal anchor.
 func (r *Record) Msg() string {
 	if r.msgIdx < 0 {
-		return ""
+		return SyntheticMsg(r.Sub)
 	}
 	return unquote(r.Fields[r.msgIdx].Val)
+}
+
+// Domain returns the record's journal replication scope, DomNone off the journal.
+func (r *Record) Domain() Domain {
+	if f, ok := r.Get("domain"); ok && f.Kind == KStr {
+		return ParseDomain(strTok(f.Val))
+	}
+	return DomNone
 }
 
 // FollowValue returns the first string field other than the discriminator: the
@@ -175,9 +181,10 @@ func (r *Record) ColumnBytes(c Column) []byte {
 
 func (r *Record) appendMsg(dst []byte) []byte {
 	if r.msgIdx < 0 {
-		return dst
+		return append(dst, SyntheticMsg(r.Sub)...)
 	}
-	return appendUnquoted(dst, r.Fields[r.msgIdx].Val)
+	r.scratch = appendUnquoted(r.scratch[:0], r.Fields[r.msgIdx].Val)
+	return appendFlat(dst, r.scratch)
 }
 
 func (r *Record) appendFields(dst []byte) []byte {
@@ -191,7 +198,8 @@ func (r *Record) appendFields(dst []byte) []byte {
 		}
 		dst = append(dst, f.Key...)
 		dst = append(dst, '=')
-		dst = r.appendDisplay(dst, f)
+		r.scratch = r.appendDisplay(r.scratch[:0], f)
+		dst = appendFlat(dst, r.scratch)
 		if len(dst)-start > fieldsTextCap {
 			break
 		}
@@ -218,6 +226,19 @@ func (r *Record) appendDisplay(dst []byte, f Field) []byte {
 		return append(dst, trimFloat(f.Val)...)
 	}
 	return append(dst, f.Val...)
+}
+
+// appendFlat copies src with every control character replaced by a space, so a
+// multi-line value — a journal payload, a crash stack — stays on its own row.
+// The detail pane renders the unflattened value and wraps it instead.
+func appendFlat(dst, src []byte) []byte {
+	for _, c := range src {
+		if c < 0x20 || c == 0x7f {
+			c = ' '
+		}
+		dst = append(dst, c)
+	}
+	return dst
 }
 
 func appendUnquoted(dst, tok []byte) []byte {

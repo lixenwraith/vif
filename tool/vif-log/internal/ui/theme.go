@@ -3,7 +3,7 @@ package ui
 import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 )
 
 // Theme extends the tui theme with log-specific colors.
@@ -12,6 +12,7 @@ type Theme struct {
 	Accent  color.RGB
 	Accent2 color.RGB
 	Level   [logfile.LevelCount]color.RGB
+	Domain  [logfile.DomCount]color.RGB
 	KeyFg   color.RGB
 	NumFg   color.RGB
 	StrFg   color.RGB
@@ -40,6 +41,13 @@ var DefaultTheme = Theme{
 		logfile.LevelError: {R: 247, G: 118, B: 142},
 		logfile.LevelProc:  {R: 187, G: 154, B: 247},
 		logfile.LevelBad:   {R: 255, G: 100, B: 100},
+	},
+	// Shared state is replicated, player state is local: the pair reads as one
+	// axis, distinct from the level colors it sits beside.
+	Domain: [logfile.DomCount]color.RGB{
+		logfile.DomNone:   {R: 86, G: 95, B: 137},
+		logfile.DomShared: {R: 125, G: 207, B: 255},
+		logfile.DomPlayer: {R: 247, G: 168, B: 116},
 	},
 	KeyFg:  color.RGB{R: 140, G: 152, B: 200},
 	NumFg:  color.RGB{R: 224, G: 175, B: 104},

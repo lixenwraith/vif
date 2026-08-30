@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif-log/internal/export"
-	"github.com/lixenwraith/vif-log/internal/filter"
-	"github.com/lixenwraith/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/export"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/filter"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
 )
 
 // sortDir is the display order of the sort column.
@@ -356,6 +356,22 @@ func (a *App) togglePinOnly() {
 	a.rebuild()
 }
 
+// cycleDomain advances the three-state journal domain filter. Off a journal
+// the filter has nothing to bite on, so say so rather than emptying the view.
+func (a *App) cycleDomain() {
+	if !a.idx.HasDomains() {
+		a.say(tui.ToastInfo, "no journal records loaded")
+		return
+	}
+	a.dom.Cycle()
+	a.rebuild()
+	if a.dom.Active() {
+		a.say(tui.ToastInfo, "domain: "+a.dom.State.String())
+	} else {
+		a.say(tui.ToastInfo, "domain: both")
+	}
+}
+
 func (a *App) clearPins() {
 	n := a.pins.Len()
 	a.pins.Clear()
@@ -373,46 +389,33 @@ func (a *App) cycleColumn(d int) {
 	}
 }
 
-// nextSnapshot jumps the cursor to the nearest downward snapshot head.
-func (a *App) nextSnapshot() {
+// nextSnapshot jumps the cursor to the nearest landmark below: a stat snapshot
+// head in a diagnostic log, a journal anchor in a capture.
+func (a *App) nextSnapshot() { a.landmarkJump(1) }
+
+// prevSnapshot jumps the cursor to the nearest landmark above.
+func (a *App) prevSnapshot() { a.landmarkJump(-1) }
+
+func (a *App) landmarkJump(dir int) {
 	rows := a.rows()
 	if len(rows) == 0 {
 		return
 	}
-	start := a.cursor + 1
 	metas := a.idx.Metas()
-
-	for i := start; i < len(rows); i++ {
+	for i := a.cursor + dir; i >= 0 && i < len(rows); i += dir {
 		rec := rows[i]
-		if int(rec) < len(metas) && metas[rec].Flags&logfile.FlagSnapHead != 0 {
+		if int(rec) < len(metas) && metas[rec].Landmark() {
 			a.cursor = i
 			a.dscroll = 0
 			a.clamp()
 			return
 		}
 	}
-	a.say(tui.ToastWarning, "no more snapshots below")
-}
-
-// prevSnapshot jumps the cursor to the nearest upward snapshot head.
-func (a *App) prevSnapshot() {
-	rows := a.rows()
-	if len(rows) == 0 {
-		return
+	where := "below"
+	if dir < 0 {
+		where = "above"
 	}
-	start := a.cursor - 1
-	metas := a.idx.Metas()
-
-	for i := start; i >= 0; i-- {
-		rec := rows[i]
-		if int(rec) < len(metas) && metas[rec].Flags&logfile.FlagSnapHead != 0 {
-			a.cursor = i
-			a.dscroll = 0
-			a.clamp()
-			return
-		}
-	}
-	a.say(tui.ToastWarning, "no more snapshots above")
+	a.say(tui.ToastWarning, "no more landmarks "+where)
 }
 
 // --- prompt: search and export ---------------------------------------------
@@ -485,7 +488,7 @@ func (a *App) clearState() {
 	var keep []filter.Entry
 	for _, e := range a.stack.Entries {
 		switch e.F.Kind() {
-		case "level", "snap", "pin", "find":
+		case "level", "snap", "pin", "find", "dom":
 			keep = append(keep, e)
 		default:
 			changed = true

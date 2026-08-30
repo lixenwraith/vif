@@ -10,7 +10,7 @@ import (
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif-log/internal/ui"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/ui"
 )
 
 // fileRow is one entry in the open panel.

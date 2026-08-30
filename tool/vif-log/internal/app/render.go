@@ -8,9 +8,9 @@ import (
 	"github.com/lixenwraith/color"
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/terminal/tui"
-	"github.com/lixenwraith/vif-log/internal/keys"
-	"github.com/lixenwraith/vif-log/internal/logfile"
-	"github.com/lixenwraith/vif-log/internal/ui"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/keys"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/logfile"
+	"github.com/lixenwraith/vi-fighter/tool/vif-log/internal/ui"
 )
 
 // paneOrder fixes render order. The list sizes itself first so the status bar
@@ -135,6 +135,11 @@ func (a *App) renderHeader(r tui.Region) {
 	if rx > x+2*int(logfile.LevelCount) {
 		x = a.drawLevelStrip(r, x)
 	}
+	// The domain strip earns its cells once a journal is loaded — or straight
+	// away when -f dom: preselected one, so the state is never invisible.
+	if (a.idx.HasDomains() || a.dom.Active()) && rx > x+2*int(logfile.DomCount) {
+		x = a.drawDomainStrip(r, x)
+	}
 	if w := rx - x - 2; w > 8 {
 		// title carries "name +N" once several files are merged
 		name := a.title
@@ -154,6 +159,23 @@ func (a *App) drawLevelStrip(r tui.Region, x int) int {
 			fg, bg, attr = a.th.HeaderBg, a.th.Level[l], terminal.AttrBold
 		}
 		r.Cell(x, 0, rune(l.Initial()), fg, bg, attr)
+		x += 2
+	}
+	return x
+}
+
+// drawDomainStrip mirrors the level strip for the journal's replication scope:
+// the selected state is filled, the excluded one outlined. Both are filled when
+// the filter is unconstrained, which is what "both" looks like.
+func (a *App) drawDomainStrip(r tui.Region, x int) int {
+	x++ // one cell of air between the two strips
+	for d := logfile.DomShared; d < logfile.DomCount; d++ {
+		on := !a.dom.Active() || a.dom.State == d
+		fg, bg, attr := a.th.Domain[d], a.th.HeaderBg, terminal.AttrNone
+		if on {
+			fg, bg, attr = a.th.HeaderBg, a.th.Domain[d], terminal.AttrBold
+		}
+		r.Cell(x, 0, rune(d.Initial()), fg, bg, attr)
 		x += 2
 	}
 	return x
@@ -198,6 +220,10 @@ func (a *App) statusPairs() []pair {
 	if n := a.idx.Malformed(); n > 0 {
 		ps = append(ps, pair{"bad", fmt.Sprint(n), a.th.Error})
 	}
+	// A jseq gap is a dropped journal record: the capture no longer replays.
+	if n := a.idx.JournalGaps(); n > 0 {
+		ps = append(ps, pair{"jgaps", fmt.Sprint(n), a.th.Error})
+	}
 	if n := a.pins.Len(); n > 0 {
 		ps = append(ps, pair{"pins", fmt.Sprint(n), a.th.Warning})
 	}
@@ -217,13 +243,15 @@ func pct(n, total int) int {
 // --- record list -----------------------------------------------------------
 
 // colLayout is the physical geometry of the list pane: pin gutter, optional
-// source gutter, then the focusable columns with level wedged after time.
+// source and domain gutters, then the focusable columns with level wedged
+// after time.
 type colLayout struct {
 	w            int
 	pinX         int
 	srcX, srcW   int
 	tsX, tsW     int
 	lvlX         int
+	domX, domW   int
 	tickX, tickW int
 	subX, subW   int
 	markX        int
@@ -231,16 +259,26 @@ type colLayout struct {
 	fldX         int
 }
 
-func listCols(w, nsrc int) colLayout {
+// listCols places the columns. The optional gutters cost a cell only when the
+// loaded set has something to put in them: several files, or a journal.
+func listCols(w, nsrc int, dom bool) colLayout {
 	c := colLayout{w: w, tsW: 12, subW: 8, msgW: 16}
 	if nsrc > 1 {
 		c.srcW = 1
+	}
+	if dom {
+		c.domW = 1
+		// In a journal the msg column holds event names, which run past twenty
+		// characters and share a prefix — truncated at 16 the rows stop telling
+		// each other apart. The fields beside them are short numeric counters,
+		// so the width comes from there.
+		c.msgW = 24
 	}
 	if w >= 96 {
 		c.tickW = 6
 	}
 	if w < 76 {
-		c.msgW = 12
+		c.msgW = min(c.msgW, 12)
 	}
 	if w < 60 {
 		c.subW, c.msgW = 6, 10
@@ -253,6 +291,10 @@ func listCols(w, nsrc int) colLayout {
 	}
 	c.tsX, x = x, x+c.tsW+1
 	c.lvlX, x = x, x+2
+	c.domX = x
+	if c.domW > 0 {
+		x += c.domW + 1
+	}
 	c.tickX = x
 	if c.tickW > 0 {
 		x += c.tickW + 1
@@ -284,7 +326,7 @@ func (c colLayout) span(col logfile.Column) (int, int) {
 func (a *App) renderList(r tui.Region) {
 	r.Fill(a.th.Bg)
 	list := r.Sub(0, 0, r.W-1, r.H)
-	c := listCols(list.W, a.idx.SrcCount())
+	c := listCols(list.W, a.idx.SrcCount(), a.idx.HasDomains())
 	a.renderColHeader(list, c)
 
 	body := list.Sub(0, 1, list.W, list.H-1)
@@ -338,6 +380,9 @@ func (a *App) renderColHeader(r tui.Region, c colLayout) {
 	all := a.col == logfile.ColAll
 	head(c.tsX, c.tsW, "time", all || a.col == logfile.ColTime)
 	head(c.lvlX, 1, "T", all)
+	if c.domW > 0 {
+		head(c.domX, c.domW, "D", all)
+	}
 	if c.tickW > 0 {
 		head(c.tickX, c.tickW, "tick", all || a.col == logfile.ColTick)
 	}
@@ -388,6 +433,12 @@ func (a *App) renderRow(r tui.Region, y int, rec int32, m logfile.Meta, c colLay
 	}
 	r.Cell(c.lvlX, y, rune(m.Lvl.Initial()), lvlFg, bg, terminal.AttrBold)
 
+	// Domain gutter: present only once a journal is indexed. Records without a
+	// domain — every diagnostic record — leave it blank rather than claiming one.
+	if c.domW > 0 && m.Dom != logfile.DomNone {
+		r.Cell(c.domX, y, rune(m.Dom.Initial()), a.th.Domain[m.Dom], bg, terminal.AttrBold)
+	}
+
 	// Tick column appears only on wide terminals; the index carries it always
 	if c.tickW > 0 {
 		r.Text(c.tickX, y, tui.PadLeft(strconv.FormatUint(uint64(m.Tick), 10), c.tickW),
@@ -398,7 +449,11 @@ func (a *App) renderRow(r tui.Region, y int, rec int32, m logfile.Meta, c colLay
 	r.Text(c.subX, y, tui.PadRight(tui.Truncate(sub, c.subW), c.subW), a.th.SubColor(sub), bg, terminal.AttrNone)
 
 	if mark := snapMark(m, collapsed); mark != 0 {
-		r.Cell(c.markX, y, mark, a.th.SnapFg, bg, terminal.AttrNone)
+		fg := a.th.SnapFg
+		if m.Flags&logfile.FlagAnchor != 0 {
+			fg = a.th.Accent2
+		}
+		r.Cell(c.markX, y, mark, fg, bg, terminal.AttrNone)
 	}
 
 	msg, msgAttr := logfile.Dash(a.idx.MsgName(m.Msg)), terminal.AttrNone
@@ -421,9 +476,12 @@ func (a *App) renderRow(r tui.Region, y int, rec int32, m logfile.Meta, c colLay
 	}
 }
 
-// snapMark returns the group indicator: collapsed head, expanded head, member.
+// snapMark returns the row's landmark indicator: collapsed snapshot head,
+// expanded head, snapshot member, or a journal anchor.
 func snapMark(m logfile.Meta, collapsed bool) rune {
 	switch {
+	case m.Flags&logfile.FlagAnchor != 0:
+		return '⚑'
 	case m.Flags&logfile.FlagSnapHead != 0 && collapsed:
 		return '▶'
 	case m.Flags&logfile.FlagSnapHead != 0:
@@ -515,6 +573,11 @@ func (a *App) renderDetail(r tui.Region) {
 		appendWrapped("file", a.idx.SrcName(m.Src), true)
 	}
 	appendWrapped("sub", logfile.Dash(a.idx.SubName(m.Sub)), true)
+	// Domain is a header field for a journal record, not one field among many:
+	// it decides whether the record is replicated.
+	if m.Dom != logfile.DomNone {
+		appendWrapped("domain", m.Dom.String(), true)
+	}
 	appendWrapped("run", fmt.Sprint(m.Run), true)
 	appendWrapped("tick", fmt.Sprint(m.Tick), true)
 	appendWrapped("frame", fmt.Sprint(m.Frame), true)
@@ -581,6 +644,7 @@ var footerActions = []struct {
 	{keys.ActExpand, "snap"},
 	{keys.ActPinToggle, "pin"},
 	{keys.ActPinOnly, "only"},
+	{keys.ActDomain, "dom"},
 	{keys.ActExport, "export"},
 	{keys.ActColNext, "col"},
 	{keys.ActSort, "sort"},
