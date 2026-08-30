@@ -38,10 +38,10 @@ state. A roster slot identifies its human, bot, or remote control source, while
 one selected local slot receives terminal input and anchors the camera/UI.
 
 Ordinary startup spawns one human-controlled local cursor. With `-host` and
-`-join`, the startup gate assigns slots zero and one and both worlds spawn one
-locally controlled and one remotely controlled cursor. The roster remains a
-16-slot structure even though the current operator surface admits exactly two
-participants.
+`-join`, the startup gate assigns up to `parameter.MaxPlayers` slots and every
+world creates the same roster in slot order, with one locally controlled cursor
+and the rest remote. The boot script's initial heat and energy values are a
+template applied to every admitted cursor, not only slot zero.
 
 | State | Meaning |
 |---|---|
@@ -301,19 +301,20 @@ The actual flow is:
 
 1. `main` repeatedly spawns a gold sequence, waits five seconds, starts a decay
    wave, waits five seconds, and repeats.
-2. At ten drain kills it resets that counter, spawns `quasar`, and pauses
-   `main`.
-3. `quasar` starts grayout/strobe, pauses drains, requests fusion, and runs a
-   faster gold/dust loop until the quasar dies.
+2. At ten drain kills it resets that counter, elects the cursor responsible for
+   the threshold defeat, spawns one `quasar`, and pauses `main`.
+3. `quasar` starts local grayout/strobe, pauses drains, asks only that causal
+   participant's drains to fuse, and runs a faster gold/dust loop until the
+   quasar dies.
 4. Before three cumulative quasar kills it resumes `main`; at three it starts
    `storm` instead.
 5. Destroying a storm increases the species energy-damage multiplier. Current
    threshold guards may route to a five-second placeholder region; otherwise
    drains and `main` resume.
-6. The background monitor waits until the player has held heat or nonzero
-   energy. If both later reach zero, it cancels live encounters, resets kill
-   tracking and the damage multiplier, clears/rebuilds the level, and respawns
-   `main`.
+6. The background monitor waits until every rostered cursor reports its combined
+   defeat state. Once all are defeated, it cancels live encounters, resets kill
+   tracking and the damage multiplier, clears/rebuilds the level, and preserves
+   and re-arms the complete roster before restarting `main`.
 
 This is data, not a guaranteed product rule. `config/main` extends the game
 with a tower scenario; `config/td` is a standalone 500-by-250 tower-defense

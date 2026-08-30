@@ -1,7 +1,7 @@
 # Multi-instance domain model — vi-fighter
 
-Rules D-1..D-15 describe how one world is split between state every instance
-holds and state that belongs to one participant. All fifteen are implemented and
+Rules D-1..D-16 describe how one world is split between state every instance
+holds and state that belongs to one participant. All sixteen are implemented and
 verified; §8 maps each to the test that pins it. §9 records what the model does
 *not* yet do, and is the input to the next round of work.
 
@@ -43,11 +43,12 @@ smallest artifact that determines the shared outcome crosses as a Bus event:
 | effect | crossing artifact |
 |---|---|
 | direct hit (rod, cleaner, bullet) | one combat event per shared target |
-| area effect (missile impact, dust detonation, disruptor pulse) | one explosion request: centers, radius, duration, attack family, owner cursor |
-| drain fusion | one spawn request: header cell only |
+| area effect (missile impact, dust detonation, disruptor pulse) | one explosion request: centers, radius, attack family, owner cursor |
+| shared progression selecting a drain fusion | one spawn request from the causal participant: header cell only |
+| a personal collision selecting a drain fusion | one spawn request for that participant's distinct causal occurrence |
 | gold member typed | one composite-member destruction: header, member, typist cursor |
 | a dying drain donating its hit points | one heal request: target and amount |
-| a personal drain death | one progression event with no entity payload |
+| a personal drain death | one progression event naming the owner cursor |
 | the post-typing cursor advance | one cursor move request: the shared cursor and its cell |
 | a personal nugget jump | one cursor move request: the shared cursor and the personal nugget's cell |
 | a locally owned shield striking a shared species | one area hit: target, struck members and owner cursor |
@@ -63,6 +64,11 @@ The shared progression FSM consumes `EventDrainDefeated`, not the local drain's
 only its own copy of `kills.drain`. The global reset similarly consumes the
 crossed combined defeat predicate and resets only when every rostered cursor is
 defeated. It never reads the owner-authored `heat.current`/`energy.current` cells.
+
+The cursor on `EventDrainDefeated` is causal metadata, not the defeated personal
+entity. It elects the one player-domain fuse that may turn a shared escalation
+into a spawn crossing (D-16). The personal swarm fusion does not need an election:
+each drain collision is already a separate participant-owned occurrence.
 
 Effects on player targets do not cross. The producer resolves its own domain
 *before* pushing the crossing event; the shared consumer resolves only shared
@@ -88,10 +94,14 @@ transported. `EventExplosionBatchRequest` crosses; the
 `EventCombatAttackAreaRequest`s it produces do not.
 
 **D-6 Effect entities are player-domain.** Lightning, flash, fadeout, splash,
-motion marker, dust, decay, blossom, orb, bullet, missile and loot are created
-from the player counter and may be created conditionally on local view state
-(`Player.IsLocal`). They never feed shared simulation. This is what lets a remote
-cursor's damage land without its visuals cluttering the screen.
+motion marker, explosion smoke, fuse materialize beams, dust, decay, blossom,
+orb, bullet, missile and loot are created from the player counter and may be
+created conditionally on local view state (`Player.IsLocal`). They never feed
+shared simulation. This is what lets a remote cursor's damage land without its
+visuals cluttering the screen. In particular, explosion geometry crosses and is
+resolved unconditionally by the shared `ExplosionSystem`; the independently
+mergeable and evictable visual center stays in `TransientSystem` and never
+decides combat.
 
 **D-7 Ambient domain.** `World.WithDomain(d, fn)` mirrors `WithOrigin`;
 `PushEventDomain` and `PushLocal` stamp explicitly for producers outside any
@@ -160,11 +170,13 @@ it twice.
 The wire set is not `Bus` either. **Many Bus types have producers of both kinds**:
 `EventCompositeMemberDestroyed` from typing and from pylon, tower, storm and
 snake; `EventExplosionRequest` from a missile and from an eye;
-`EventSwarmSpawnRequest` from the fuse and from a storm. A shared producer's copy
-is re-derived everywhere; only the player-domain one crosses. So the tag decides
-here too: `World.PushCrossing` stamps the D-3 artifact `DomainPlayer`, and
-`OnWire` requires it. Crossing-only Bus types such as `EventDrainDefeated` use
-the same explicit stamp; class alone never opts an event onto the wire.
+`EventSwarmSpawnRequest` from the fuse and from a storm; and
+`EventGameResetRequest` from the shared monitor FSM or the coordinator's operator
+surface. A shared producer's copy is re-derived everywhere; only the
+player-domain one crosses. So the tag decides here too: `World.PushCrossing`
+stamps the D-3 artifact `DomainPlayer`, and `OnWire` requires it. Crossing-only
+Bus types such as `EventDrainDefeated` use the same explicit stamp; class alone
+never opts an event onto the wire.
 `TestCrossingPushesAreLive` fails a `crossingPushes` entry that does not use it.
 
 For `Stamped` the tag means the *target's* domain instead, so the same rule reads
@@ -214,6 +226,13 @@ Protection, Energy, Heat, Shield, Boost, Weapon, Ping, CursorView, Combat and
 Position, plus Pulse while a disruptor pulse runs. Position is shared and crosses
 as `EventCursorMoveRequest`; Protection is a creation constant; the rest is this
 list.
+
+The boot script's heat and energy values are a cursor-creation template, not a
+second runtime authority. Session admission and full reset copy that template to
+every rostered cursor in deterministic slot order, then `EventCursorArmRequest`
+restores only the cursor `ResolveOwnedCursor` selects on each instance. This
+keeps configuration in the FSM without addressing the roster through one
+`player_entity` variable.
 
 The transport is `CursorStatePayload`, written by `NetworkSystem` and by nothing
 else, and only onto a cursor `SimulatesLocally` rejects and whose roster slot
@@ -269,6 +288,22 @@ topologically by the shared resolver in `internal/core`; it is distinct from
 `System.Priority()`, which orders `Update()` within a tick, and the two are
 permitted to correlate without being conflated.
 
+**D-16 Causal fan-out.** A shared trigger may not fan out to every participant's
+player-domain mechanic when that mechanic later crosses one logical shared
+result. The shared event must deterministically select one causal cursor before
+any participant-owned state is read, and only the instance that simulates that
+cursor may produce the crossing. `EventDrainDefeated.Entity` does this for the
+tenth-drain quasar escalation: both FSMs enter `QuasarFuse`, but only the
+participant that produced the triggering defeat fuses drains and emits the
+quasar spawn. Canonical event order selects one cursor if several defeats arrive
+at the threshold together.
+
+This rule does not collapse genuinely personal causes. A drain collision that
+requests a swarm is one occurrence per participant and may produce one crossing
+per occurrence. Nor does D-16 require making drains shared: the election carries
+only a shared cursor identity across the boundary, leaving the mechanic that
+reads owner-authored drain state in the player domain.
+
 ## 3. Spatial partition
 
 `Cell` = `Count uint8 + SharedCount uint8 + [6]byte + [31]Entity` = 256 bytes,
@@ -293,16 +328,20 @@ Telemetry: `spatial.player_budget_rejects`, `spatial.indexed_shared`.
 
 | Domain | Entities |
 |---|---|
-| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, gold, marker, explosion centers, FSM, time |
-| **Player** | glyph, nugget, dust, drain, decay, blossom, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, loot |
-| **Stamped** | cleaner (request-stamped; every current producer is player), materialize (shared when it gates a shared spawn, player for drain), spirit (shared unless the requester is player-domain, which today is always the fuse) |
+| **Shared** | cursor, quasar, swarm, storm, snake, eye, pylon, tower, gateway, wall, gold, marker, FSM, time |
+| **Player** | glyph, nugget, dust, drain, decay, blossom, bullet, missile, orb, lightning, flash, fadeout, splash, motion marker, explosion centers, loot |
+| **Stamped** | cleaner (request-stamped; every current producer is player), materialize (shared when it gates a shared storm spawn, player for drain and fuse presentation), spirit (shared unless the requester is player-domain, which today is always the fuse) |
 
 Cursor components split three ways: shared-and-replicated (position),
 owner-authored (energy, heat, boost, shield, weapon, combat — D-13), and pure
 local view (`CursorViewComponent`, `PingComponent`, `PulseComponent`).
 
-`TransientResource` holds explosion centers and stays shared: they *are* the
-crossing artifact. `ViewResource` (grayout, strobe) is player-domain.
+`TransientResource` holds local explosion presentation and is player-domain.
+Merge distance, visual lifetime and cap eviction may differ freely between
+instances. The crossing artifact is instead the immutable geometry in
+`EventExplosionRequest`/`EventExplosionBatchRequest`; `ExplosionSystem` consumes
+it without consulting `TransientResource`. `ViewResource` (grayout, strobe) is
+also player-domain.
 
 **Glyph.** Content glyphs are player-domain: the corpus and the map are the only
 inputs, so every instance derives the same text from its own player counter and
@@ -325,13 +364,21 @@ Gold is contested: any participant may claim it, and the claim is a deterministi
 function of the shared event stream — `GoldSystem` tallies
 `EventCompositeMemberDestroyed` per roster slot, `GoldCompletionPayload.Entity`
 names the cursor that typed the most members, ties break to the lowest slot, zero
-on timeout or destruction. Only the reward is owner-authored (D-13).
+on timeout or destruction. The FSM carries that entity into the local heat and
+energy grant, so only the winning cursor's owner applies the reward. Only the
+reward is owner-authored (D-13).
 
 Nugget is personal and uncontested: each instance owns its player-domain spawn,
 collection area, destruction and reward, and a remote cursor cannot claim it. A
 nugget jump crosses only the resulting shared cursor move. This puts nugget
 beside loot, which is also rolled and owned per participant because its mechanic
 reads owner-authored state.
+
+Quasar progression is shared but its source drains are personal. D-16 makes the
+threshold defeat's cursor the causal owner of the one fusion, avoiding both an
+N-way shared spawn and a migration of drains into the shared domain. A swarm
+fusion remains personal from trigger through drain selection; only its resulting
+shared spawn crosses.
 
 ## 5. System classification
 
@@ -407,6 +454,19 @@ duplicate and would be discarded without ever being applied.
 meet its apply tick. `network.relay_forwarded` and `network.relay_duplicates`
 expose the flood.
 
+**Runtime parity.** Every six completed ticks, each instance sends its direct
+neighbours a digest of exactly the state surface `SnapshotShared` compares. The
+sample names the run and absolute tick and carries category hashes for position,
+kinetic, combat, context and status diagnosis; a ring holds local samples so
+sequential polling or different link latency cannot compare unlike ticks. Digest
+messages do not flood: equality on every edge implies equality across a connected
+graph. A mismatch increments `network.digest_mismatches`, logs its first differing
+category on the transition and holds a high-priority red `DESYNC` status-bar item.
+Once every neighbour agrees again, a green `SYNCED` acknowledgement remains for
+twenty ticks and disappears. This detects divergence; it neither chooses an
+authoritative copy nor repairs one, and it deliberately excludes D-13
+owner-authored values.
+
 **Membership.** A roster change is shared state, so it travels as an artifact
 rather than as a local reaction to a link event. A disconnect is observed only by
 a direct neighbour, and at a moment of that neighbour's own transport's choosing:
@@ -419,6 +479,17 @@ build has a path to — and a neighbour that is not the coordinator forwards a
 crosses the same way, so every instance creates the new cursor at one agreed tick
 and its shared entity is identical everywhere (D-11). Both carry `OriginSession`,
 which is journaled: nothing else in the record stream implies a roster change.
+
+**Session control.** Time control remains an instance-local operator facility,
+so pause, speed and step requests are refused while a live peer is attached.
+Command and overlay modes remain usable for inspection without stopping the
+simulation. A full game reset is different: it is one logical shared action and
+the coordinator is its single producer. `:new`/`:new!` on the coordinator crosses
+`EventGameResetRequest`; a guest request is refused, while a reset emitted by the
+shared monitor FSM is still re-derived rather than sent. The agreed reset event
+snapshots the closed roster, clears the world and barrier, then rebuilds every
+cursor in slot order from the boot template. Thus reset changes the run without
+silently reducing the session to slot zero.
 
 **Mid-run join.** A participant arriving after tick zero reproduces the session
 rather than receiving it. A run is a pure function of its anchor and its
@@ -441,9 +512,10 @@ Transport goroutines append only `network.Inbound` values to the port buffer;
 boundary. Idle peers exchange framed heartbeats; read and write deadlines close a
 silent stream without blocking a tick. The resulting disconnect notification is
 drained through the same path and removes only cursors owned by that participant.
-Two message kinds are live in a session — one closed barrier epoch and one
-owner-authored cursor sync — plus the four-step startup handshake; anything else
-is counted as a drop rather than translated.
+The steady-state simulation stream has three message kinds — one closed barrier
+epoch, one owner-authored cursor sync and one shared-state digest — plus the
+membership notice and four-step startup handshake; anything else is counted as a
+drop rather than translated.
 
 Loss that happens outside the barrier is counted, because either kind
 desynchronises silently: `network.transport_lost_in` is inbound notifications a
@@ -465,7 +537,10 @@ the offer: a joiner that dialled early saw only the participants ahead of it, an
 building from that partial view would give each instance a different shared
 creation order (D-11). The gate is otherwise startup coordination only — no
 per-tick round trip — and it is what gives every participant the same tick origin
-the barrier's absolute apply ticks presume.
+the barrier's absolute apply ticks presume. The interactive game clock is frozen
+before the FSM creates any deadline and released only after this gate. Without
+that hold, the host's lobby wait aged its ten-second gold timer before tick one
+while a late-created joiner's timer remained fresh.
 
 `cmd/vif` exposes that gate as startup flags rather than ex commands: `-host
 <bind-address>`, `-join <host:port>` and `-players <n>`. A host initializes its
@@ -474,8 +549,9 @@ tick zero until every expected participant is ready. A joiner dials before
 constructing its `App`, so `ConfigForJoin` installs the host seed, config and
 corpus identity before `initWorld` can draw a seed or load content. Both sides
 activate the crossing sink before terminal input is consumed. The host remains
-playable and listening after a disconnect, and a later connection is caught up
-from the retained log rather than refused.
+playable and listening after a disconnect. The App/transport layer can catch a
+later connection up from the retained log rather than refusing it, but `cmd/vif`
+does not yet complete the running-host tick-phase handoff described in §9.4.
 
 **Cost.** The wire keeps journal TOML payloads inside a JSON epoch envelope. The
 measured complete frames, including the 12-byte header, are 44 bytes for an empty
@@ -483,13 +559,17 @@ epoch, 567 bytes for four cursor moves, 1,771 bytes for six resolved three-membe
 shield hits, and 703 bytes for one D-13 owner-state sync. At 20 ticks/s with the
 six-tick state cadence, that is about 3.2 KB/s idle, 13.7 KB/s at four crossings
 per tick, or 37.8 KB/s at the deliberately busy shield rate, per direction and
-owned cursor. A denser payload codec does not justify a second registry/schema
-path at these rates. `TestWireEncodingBudget` pins the representative budgets;
+owned cursor; the small run/tick/hash probe and its category hashes arrive at the
+same six-tick cadence.
+A denser payload codec does not justify a second registry/schema path at these
+rates. `TestWireEncodingBudget` pins the representative budgets;
 `TestFrameRoundTripSurvivesShortStreamIO` pins framing.
 
-Journal schema is 9, and the wire shares its encoder: 7 made `Domain` meaningful,
-8 added the D-14 map latch to the anchor, and 9 moved the nugget event family out
-of the replicated record set after the mechanic became personal.
+Journal schema is 10, and the wire shares its encoder: 7 made `Domain` meaningful,
+8 added the D-14 map latch to the anchor, 9 moved the nugget event family out of
+the replicated record set after the mechanic became personal, and 10 separates
+explosion combat from presentation while adding the roster template and causal
+fusion fields.
 
 ## 7. Telemetry and snapshots
 
@@ -518,8 +598,11 @@ effect systems, plus `glyph.`, `fuse.`, `shield.`, `cleaner.`, `camera.`,
 `music.`, `death.`, `timer.` and `combat.`. The rule is the profile in
 `manifest.Systems`, not the name. `denySharedKey` drops a single key from an
 otherwise comparable group: `engine.apm` and `engine.music_apm` beside the tick
-counters, `nav.entities`, and `content.served`/`content.rejected` beside the
-corpus fingerprint. A `.buf_*_hwm` suffix drops scratch high-water marks, which
+counters, `nav.entities`, `content.served`/`content.rejected` beside the corpus
+fingerprint, and `engine.tick_slips`, `time.game_elapsed_ms` and `gold.timer`,
+which are local scheduler/wall-time gauges rather than shared state. The shared
+tick, FSM state and timeout result remain compared. A `.buf_*_hwm` suffix drops
+scratch high-water marks, which
 `newBufferTelemetry` names for every system that publishes one. A
 `.protected_player_rejects` suffix drops the player-victim half of otherwise
 shared species protection telemetry; the unsuffixed counter contains only shared
@@ -542,6 +625,13 @@ than divergent. `worldDigestScopedLocked` takes a `DomainScope`, so the shared
 digest excludes player entities, and its combat digest additionally excludes
 cursors, whose `CombatComponent` is owner-authored (D-13).
 
+The runtime digest reuses this filter rather than maintaining a second idea of
+parity. It folds the shared snapshot records plus canonical shared position,
+kinetic and non-cursor combat digests into FNV-1a 64. The hash is a detector, not
+a proof or a repair protocol: collision risk is accepted for a frequent warning
+signal, while `SnapshotShared`, `FirstDiff` and `Diff` remain the diagnostic that
+names the first differing record in tests.
+
 ## 8. Verification
 
 The boundary is asserted by construction rather than by review. Each rule below
@@ -555,6 +645,7 @@ fails the build when the code stops matching the declaration.
 | `TestSystemsDeclareNoDomainMethod` | `internal/system` | D-15: the manifest is the only declaration site |
 | `TestCombatKnockbackDrawsFromTheTargetsStream`, `TestSoftCollisionImpulseDrawsFromTheTargetsStream` | `internal/system` | D-8: a player-target impulse never advances the shared stream, the shared case proving it non-vacuous |
 | `TestEventClassMatchesSystemProfile`, `TestCrossingPushesAreLive` | `internal/system` | D-3/D-10: every player-profile push of a replicated event is a named crossing, and every named crossing stamps |
+| `TestOneSharedQuasarTriggerProducesOneSpawn` | `internal/app` | D-16: a shared progression trigger elects one causal player fuse and yields one shared spawn |
 | `TestPersonalNuggetUsesPlayerDomainAndLocalCursor`, `TestPersonalNuggetJumpCrossesOnlyCursorMove` | `internal/system` | §4: nugget is personal; only the cursor move crosses |
 | `TestSharedSpeciesCrossesOnlyOwnedShieldImpact`, `TestCursorDefeatTransitionCrossesCombinedOwnerState`, `TestMetaDefeatGateRequiresEveryRosteredCursor` | `internal/system` | D-13: a remote shield cannot produce a second impact; defeat state crosses instead of being read from slot zero |
 | `TestRemoteCursorRejectsOwnerAuthoredWrites`, `TestRemoteCursorStateDoesNotAgeLocally` | `internal/system` | D-2: neither a grant nor a per-tick loop writes a cursor this instance does not simulate |
@@ -574,6 +665,11 @@ fails the build when the code stops matching the declaration.
 | `TestThreeParticipantLobbyClosesOnOneRoster` | `internal/app` | The socket handshake for a lobby larger than a pair: partial offers, one closed roster |
 | `TestLateJoinerReplaysTheSessionToTheHostPosition` | `internal/app` | Mid-run join: replaying the log onto a different terminal reaches byte-identical shared state |
 | `TestLateJoinerTakesTheRosterAndStaysInLockstep` | `internal/app` | The arrival crossing lands on both instances at one tick, and both then drive their own cursor in lockstep |
+| `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
+| `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
+| `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
+| `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption produces red `DESYNC`, equality produces transient green `SYNCED`, then the notice clears |
+| `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores independent wall origins and deadline-slip telemetry while keeping absolute simulation tick/state |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
 | `TestSessionLogSplitsAndRoundTrips`, `TestSessionLogChunksFitOneFrame` | `internal/event` | The catch-up transfer is lossless and every chunk fits one frame |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
@@ -594,11 +690,13 @@ to `"event"` for settle-pass attaches; `ClockScheduler.SetDispatchTap` and
 `ScriptOptions.Resizes`/`MapSetups`/`MapMotionsOnly`; `FastRand.State()`.
 
 The two-live harness owns one tick per participant per step. It disables random
-script ticks and the overlay round trip so neither App can outrun the three-tick
-playout lead. `Resizes`, `MapSetups`, FSM `Regions`, resets and ex commands are
-held fixed: each is an operator injection applied only to the App receiving it,
-and several intentionally rewrite shared scheduler or simulation state. They are
-not participant gameplay and are not transported under D-10.
+script ticks and the overlay round trip (whose driver explicitly ticks one App)
+so neither App can outrun the three-tick playout lead. The long random criterion
+also holds `Resizes`, `MapSetups`, FSM `Regions`, resets and ex commands fixed to
+isolate participant gameplay and avoid deliberately restarting the run. Separate
+multi-participant tests exercise the live operator policy: instance-local time,
+system, raw event and FSM controls are refused, while the coordinator's reset is
+transported under D-10.
 
 ### Manual two-terminal proof
 
@@ -611,14 +709,25 @@ not participant gameplay and are not transported under D-10.
 ```
 
 Both status bars must reach `NET:1P/LOCK`; each terminal must show both cursors,
-and movement, typing, combat and scoring from either side must resolve onto the
-same shared actors. Quit the joiner: the host must change to `NET:DOWN/OPEN`,
-remove only the remote cursor and continue accepting local input. `:d save` is
-not a byte-for-byte parity diagnostic because it deliberately includes local view
-and owner-authored metrics; a divergence is a different shared actor, position,
-kill or progression result, or a nonzero
-`network.barrier_late`/`network.barrier_ran_without_peer`/`network.transport_lost_*`
-trend under an otherwise healthy link.
+and both local cursors must begin at heat 10 and energy 100. Movement, typing,
+combat and scoring from either side must resolve onto the same shared actors.
+Open `:` or an overlay on one terminal and leave it open: both simulations keep
+running; `:speed` and `:step` report that they are unavailable. The host's `:new`
+must reset both terminals while preserving two cursors; the joiner's `:new` must
+be refused. The tenth drain defeat must produce one quasar, and missile smoke
+must remain on the firing terminal even though its damage resolves on both.
+
+No healthy run should show the high-priority red `DESYNC` item. Quit the joiner:
+the host must change to `NET:DOWN/OPEN`, remove only the remote cursor and
+continue accepting local input. `:d save` is refused while peers are live: its
+synchronous logger drain holds the world lock and can overrun the playout lead.
+On a solo or replayed copy it is still not a byte-for-byte parity diagnostic
+because it deliberately includes local view and owner-authored metrics; the
+runtime digest compares only the shared surface. A divergence is a
+`DESYNC` indication, a different shared actor, position, kill or progression
+result, or a nonzero `network.barrier_late`/
+`network.barrier_ran_without_peer`/`network.transport_lost_*` trend under an
+otherwise healthy link.
 
 For a larger lobby the host names the count it waits for and each participant
 joins the same address:
@@ -644,13 +753,14 @@ useful answer for one of the three kinds of state.
 |---|---|---|
 | Shared simulation | **None** | Every instance re-derives it from the same seed, config, corpus, map script and ordered artifact stream (D-11). Agreement is a property of determinism, not a decision. Nothing is sent: `OnWire` excludes the `Shared` class precisely because sending it would apply it twice. |
 | Owner-authored shared state (D-13) | **Per cursor**, the instance that simulates it | `SimulatesLocally` admits exactly one writer; the value is transported, never re-derived. This is per-object, not per-session, and does not depend on topology. |
-| Session identity, map bounds and roster changes | **The coordinator** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, the barrier delay, and the arrival and departure crossings. |
+| Session identity, map bounds, roster changes and live operator reset | **The coordinator** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, barrier delay, arrival/departure crossings, and serialization of the exceptional session-wide reset command. |
 
 The coordinator is not a state authority. It owns its own cursor's D-13 cells and
 nothing else; it cannot correct, override or arbitrate another participant's
 shared state, because it holds no copy more authoritative than anyone else's.
-What it owns is *allocation and announcement* — deciding who is in the session,
-not what happens in it. Even a roster change it announces is applied by everyone
+What it owns is *allocation and serialization* — deciding who is in the session
+and ensuring a session-wide operator reset has one producer, not choosing a
+gameplay outcome. A roster change or reset it announces is applied by everyone
 from the same artifact at the same tick, exactly like a crossing any participant
 could have produced.
 
@@ -685,8 +795,8 @@ C without A ever sending to it.
 
 What the coordinator still is, and only is: the allocator of participant
 identities and roster slots, the source of the anchor and the D-14 latch, and the
-single producer of roster-change crossings. It holds no shared state anyone else
-does not.
+single producer of roster-change and live operator-reset crossings. It holds no
+shared state anyone else does not.
 
 Three things remain open, and each is a property of the graph rather than of the
 transport:
@@ -701,8 +811,10 @@ transport:
    topology the session can currently build has a path to. If it departs, or a
    partition puts it out of reach, no departure is announced. Electing a
    replacement is a membership-agreement problem, not a transport one.
-3. **A partition is undetected.** In a graph, one link failure splits a session
-   into two components that both keep simulating happily. Nothing notices.
+3. **A partition has no session-wide detector.** Direct neighbours observe their
+   lost link, but after a graph splits there is no digest edge between the two
+   components. Both can keep simulating and each can agree internally while their
+   shared states diverge.
 
 The links themselves are still built as a star, because `-join` dials one address.
 The relay is what makes any other shape work; wiring a participant to dial more
@@ -717,6 +829,13 @@ artifact stream*. A divergence is always a disagreement about which artifacts, i
 which order, at which tick — never about the resulting world. The frame already
 carries the three fields such a log needs (source, per-source sequence, absolute
 apply tick), and the ordering is already independent of arrival order.
+
+The periodic shared digest now makes such a disagreement loud while the peers
+remain connected. It intentionally stops there: a hash does not identify the
+missing or extra artifact, establish which branch is trusted, cross a partition,
+or authorize overwriting one participant's state. The retained record stream and
+`FirstDiff` remain the evidence for diagnosis; identity and an agreement rule are
+still prerequisites for automated recovery.
 
 Rewind is no longer the obstacle it looks like. A run is a pure function of its
 anchor and its record stream, and a host retains that stream, so any position in
@@ -737,7 +856,7 @@ bind to. That is the prerequisite, not rewind.
 **Session and transport**
 
 - The playout lead is a constant rather than a function of the graph's diameter,
-  and a partition is undetected. See §9.2.
+  and a partition leaves no digest edge between its components. See §9.2.
 - Mid-run join is bounded by memory and by wall clock: the retained log is
   complete from tick zero, so it grows with session length, and catching up costs
   time proportional to it. A periodic world snapshot is what bounds both.
@@ -749,6 +868,13 @@ bind to. That is the prerequisite, not rewind.
 - Reconnect reuses the same machinery and is not separately wired: an identity is
   released when its participant departs, and a returning participant catches up
   like any other late arrival.
+- There is deliberately no live pause, slow motion or stepping. Suspending one
+  participant for minutes needs the same buffered catch-up and tick-phase handoff
+  as reconnect; the retained log is the source, but `cmd/vif` does not yet drive
+  that transition.
+- The runtime digest detects connected-peer divergence after its six-tick sample
+  cadence but neither stops play nor repairs it. `SYNCED` means the compared
+  surface became equal again; it does not explain why.
 - Plaintext and unauthenticated; no CLI TLS surface.
 - No lag compensation. A slow peer produces late artifacts and divergence rather
   than a stall — deliberate, since simulation never waits, but it means the
@@ -757,30 +883,37 @@ bind to. That is the prerequisite, not rewind.
   itself is reliable and ordered; the loss is in the bounded send queue ahead of it.
 - `float64` simulation means cross-platform bit-exact lockstep is not claimed; the
   guarantee is per implementation build.
-- `NetworkSystem.Init` on a game reset clears scheduled artifacts and restarts the
-  epoch, which is symmetric only because both instances reset at the same derived
-  tick.
+- A coordinated game reset deliberately discards all already-scheduled future
+  artifacts and restarts the epoch. Every participant does so at the reset's
+  agreed apply tick; there is no selective carry-over into the new run.
 
 **Domain boundary**
 
-- `unstampedLocal` in `internal/app/local_stamp_test.go` still holds 19
+- `unstampedLocal` in `internal/app/local_stamp_test.go` still holds 18
   `Local`-class types pushed with the ambient shared tag from app, engine, fsm and
   the shared species systems. Not a transport gate — the class keeps them off the
   wire regardless — but the journal record is dishonest about them.
 - Operator grant commands in `internal/mode/commands.go` push the owner-authored
   family with the ambient shared tag under `OriginCommand`. Harmless while those
   types are `Local`; retagging them changes recorded record domains.
-- `EventLevelSetup` and FSM region ops are `Shared` but operator-injectable. Both
-  are replicated only because every instance runs the same map script; one injected
-  into a single participant rewrites shared state its peers never see.
-  `ScriptOptions.MapSetups` holds the first fixed for a parity run, as `Resizes`
-  already does; the FSM op is held by `Regions`.
-- Ex commands and overlays are operator-injectable, not participant input. The
-  live criteria disable both: commands include direct scheduler and system
-  mutations that are not sent to a peer, while an overlay advances only its App's
-  paused clock. These remain valid in replay and single-instance soaks and are
-  outside the D-10 wire set by design — but it does mean any operator action
-  desynchronises a live session.
+- The live ex-command policy refuses time control, system toggles, raw `:emit`,
+  FSM region operations and synchronous `:d save`; overlays and non-blocking
+  inspection remain local and do not pause. Snapshot save is excluded because
+  its world-lock hold can exceed the fixed playout lead even though it does not
+  mutate simulation state.
+  Public embedder calls such as `App.SetupLevel` can still inject shared scheduler
+  state directly and remain the caller's responsibility. The random parity script
+  holds those programmatic operator paths fixed.
+- Player grant and effect commands remain available live because they author only
+  the invoking cursor's D-13 state or enter the ordinary player-domain crossing
+  path. They are development cheats, not a determinism exception. In a live
+  `:new!`, only the coordinator's own operator preferences are purged; peers reset
+  simulation but retain their local mouse, auto-fire and overlay choices.
+- The optional `config/main/tower.toml` and `config/td` scripts still capture one
+  `player_entity` and assign every shared tower to that cursor (deterministically
+  slot zero). They no longer collapse or mis-arm the roster, but deciding whether
+  towers should be session-owned or participant-owned is a separate gameplay
+  rule, not required by the default map defects fixed here.
 - `event.EmitDeath` writes the queue directly, bypassing `PushEvent`, so
   `WithDomain` does not reach death records. Batches are already domain-pure, which
   is what determinism needs; the domain travels as an explicit parameter.
@@ -803,7 +936,7 @@ bind to. That is the prerequisite, not rewind.
 1. **Live mid-run join in `cmd/vif`.** Give the joiner the session's tick phase and
    let it buffer epochs while it replays, so the handoff does not stall the host.
    This is what turns the proven mechanism into a feature a player can use, and it
-   carries reconnect with it.
+   carries reconnect and a future suspend/resume form of live pause with it.
 2. **A playout lead derived from the graph.** Negotiate it from the worst-case path
    rather than fixing it at three ticks, and act on `network.barrier_late` instead
    of only reporting it.
@@ -811,11 +944,18 @@ bind to. That is the prerequisite, not rewind.
    is the same primitive a branch-agreement rule would rewind to.
 4. **Multi-link topology from the CLI.** The relay makes any graph work; `-join`
    dialling more than one address is what lets an operator build one.
-5. **Partition detection**, and a membership rule that survives losing the
-   coordinator.
+5. **Partition and membership health.** The shared digest detects divergence on
+   connected edges, not a graph split. Add a membership rule that detects a
+   partition and survives losing the coordinator.
 6. **Authentication and transport security.** Populate `Config.TLS` from the CLI and
    give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so a participant identity
    exists to attribute artifacts to. This is the prerequisite for any agreement
    rule, and the only one still entirely missing.
-7. **Empty `unstampedLocal`,** then delete it and its exemption.
-8. **Windowed composite / vision box.**
+7. **Close the programmatic operator surface.** Make embedder-level map/FSM
+   mutation explicitly session-aware rather than relying on the interactive
+   command policy and harness discipline.
+8. **Empty `unstampedLocal`,** then delete it and its exemption.
+9. **Settle tower ownership in optional maps.** Replace their slot-zero
+   `player_entity` convention with an explicit session-owned or participant-owned
+   rule.
+10. **Windowed composite / vision box.**

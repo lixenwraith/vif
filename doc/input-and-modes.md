@@ -51,13 +51,14 @@ stateDiagram-v2
 | Visual | Select a characterwise range from an anchor and apply delete operations. | Continues; active shield bounds are exposed as the selection/ping boundary. |
 | Insert | Type glyphs at the cursor; arrows move; Delete/Space/Backspace support edit-like deletion. | Continues in real time. |
 | Search | Edit and confirm a forward search pattern; `n`/`N` repeat later. | Uses text-entry routing. |
-| Command | Edit and execute a colon command with history. | Pauses while the command line is active. |
-| Overlay | Navigate help, about, or debug content. | Pauses while the overlay owns input. |
+| Command | Edit and execute a colon command with history. | Pauses a single-instance game; a live network session continues. |
+| Overlay | Navigate help, about, or debug content. | Pauses a single-instance game; a live network session continues. |
 
 Escape resets pending parser state and normally returns to Normal. Command and
-overlay completion coordinate their own pause result so a command such as
-`:new`, `:help`, or `:debug` can intentionally keep the game paused until its
-follow-up state is ready.
+overlay completion coordinate their own pause result in a single-instance game,
+so a command such as `:new`, `:help`, or `:debug` can intentionally keep the game
+paused until its follow-up state is ready. `MetaSystem` refuses the pause request
+when a peer is live, leaving those modes available as non-blocking inspection.
 
 ## 3. Normal-mode grammar
 
@@ -223,8 +224,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | Command | Purpose |
 |---|---|
 | `:quit`, `:q` | Exit. |
-| `:new`, `:n` | Reset simulation state; keep operator preferences. |
-| `:new!` | Reset and purge free-mouse, auto-fire, speed, debug HUD, and pins. |
+| `:new`, `:n` | Reset simulation state; in a live session only the host may request it, and both participants reset. |
+| `:new!` | Reset and purge the initiating operator's free-mouse, auto-fire, speed, debug HUD, and pins. |
 | `:help`, `:h`, `:?`; `:about` | Open overlays. |
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:auto [on\|off]` | Toggle free mouse and auto-fire. |
@@ -239,7 +240,7 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:region list\|spawn\|pause\|resume\|terminate ...` | Issue one scheduler-owned region primitive. |
 | `:log ...` | Start/stop logging; set level/scope and snapshot period. |
 | `:log rec [ticks\|flush\|fsm [on\|off]]` | Configure, request, or transition-trigger the flight recorder. |
-| `:debug [save]` | Open debug overlay or write a point-in-time status snapshot. |
+| `:debug [save]` | Open debug overlay; `save` writes a solo point-in-time status snapshot and is unavailable live. |
 | `:emit <EventName> [{ TOML payload }]` | Construct and publish a registered event for testing. |
 | `:energy <value>`, `:heat <0-100>`, `:boost` | Directly manipulate player state for development. |
 | `:god`, `:demon` | Apply high positive/negative energy test states. |
@@ -247,13 +248,23 @@ The command dispatcher recognizes aliases shown in the first column.
 
 The event registry validates `:emit` names and uses generated payload type
 metadata to decode optional inline TOML. Commands below the first six rows are
-primarily developer/authoring controls and can substantially alter a live run.
+primarily developer/authoring controls.
+
+In a live session, pause, speed, step, system mutation, raw `:emit` and FSM region
+operations are refused because applying them to only one scheduler would
+desynchronise shared state. Resizes retain D-14's locked map bounds. Help, debug
+and about overlays remain local and do not pause; logging and view controls are
+local inspection. Player grants and effect commands remain available because
+they author the invoking cursor or use the ordinary player-to-shared crossing
+path. The host's reset is the exceptional session-wide command and crosses at an
+agreed tick; a guest reset is refused.
 
 Free-mouse and auto-fire preferences, time scale, debug HUD visibility, and
 pinned overlay cards are operator-owned and survive plain `:new`. Both reset
 forms clear macros and transient command/overlay state. `:new!` additionally
-turns the two preferences off, restores 1x, and clears HUD/pins. Logging state
-is process diagnostic configuration and survives both forms.
+turns the initiating instance's two preferences off, restores 1x, and clears its
+HUD/pins; peers retain their own operator choices when the shared reset arrives.
+Logging state is process diagnostic configuration and survives both forms.
 
 Debug cards contain at most 15 metrics. Empty player slots are omitted until
 they become active. A clipped selected card consumes `j`/`k` scroll steps before

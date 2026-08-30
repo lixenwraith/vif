@@ -194,15 +194,15 @@ payload, so a partial stream read never reaches the game. Per-peer send assigns
 sequence and ack values at actual write time; broadcast clones a message per peer.
 Ack is observational—there is no retransmission policy.
 
-Control messages carry heartbeat, join offer/reply and start/ready gates.
-Gameplay uses `MsgEvent` for a closed crossing epoch and `MsgStateSync` for one
-owner-authored cursor snapshot. The epoch is JSON containing journal-registry TOML
-payloads; representative complete-frame budgets are pinned by
-`TestWireEncodingBudget`. Those, plus the heartbeat, are the whole live set: the
-remaining codes in `protocol.go` are reserved placeholders that nothing sends and
-`NetworkSystem` counts as drops. Raw participant input is not among them, and
-0x10 stays reserved — a peer sends the resolved D-3 artifact, never the keystroke
-that produced it.
+Control messages carry heartbeat, join offer/reply, start/ready gates, session-log
+chunks and disconnect notices. Gameplay uses `MsgEvent` for a closed crossing
+epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
+`MsgStateDigest` for the periodic shared-world parity probe. The epoch is JSON
+containing journal-registry TOML payloads; representative complete-frame budgets
+are pinned by `TestWireEncodingBudget`. The remaining codes in `protocol.go` are
+reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
+Raw participant input is not among them, and 0x10 stays reserved — a peer sends
+the resolved D-3 artifact, never the keystroke that produced it.
 
 ## 9. Poll boundary and lockstep barrier
 
@@ -217,7 +217,9 @@ at tick close, `Flush` sends the closed production epoch. `Cross` withholds the
 local artifact so every participant applies it at the same fixed-delay boundary.
 The default lead is three 50 ms ticks and never waits for a per-tick round trip.
 `ActivateSession` closes the lobby-to-first-tick input window before the main loop
-reads terminal events.
+reads terminal events. The game clock is frozen before FSM deadlines are created
+and released only after the common start gate, so the host's lobby wait cannot age
+shared timers before a later-created joiner reaches tick one.
 
 An instance sends only to the peers it is linked to, so an epoch reaches the rest
 of the session by being forwarded: each node floods an epoch it has not seen to
@@ -232,6 +234,14 @@ newer than that slot's last. Disconnect drains through the same poll boundary,
 despawns only cursors owned by that participant, releases that slot's sync
 sequence, disables the barrier when no peer remains, and restores local map-size
 authority.
+
+At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
+over the exact `SnapshotShared` comparison surface, plus category hashes that
+identify position, kinetic, combat, context or status as the first differing
+surface. A mismatch logs once, increments `network.digest_mismatches`, and raises
+a red `DESYNC` status item; agreement after a mismatch shows green `SYNCED` for
+twenty ticks. The digest is a detector only: it does not flood, select an
+authority, repair state, or cross a partition.
 
 Loss that happens outside the barrier is published rather than swallowed, because
 either direction desynchronises silently: `network.transport_lost_in` counts
@@ -251,10 +261,12 @@ What the operator surface still does not cover:
 - `-join` dials one address, so the links form a star even though the relay makes
   any graph work;
 - the playout lead is a constant rather than a function of the graph's diameter,
-  and a partition is undetected;
+  and a partition has no digest edge between its components;
 - mid-run join is implemented and proven over the socket but not yet driven from
   `cmd/vif` against a live host, which needs the joiner placed on the session's
   tick phase;
+- live pause/speed/step are refused until that same catch-up path can support a
+  suspended participant rejoining the current tick phase;
 - no world snapshot, so the retained log and catch-up cost both grow with session
   length; no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
@@ -275,8 +287,13 @@ replaying the session log while the listener stays up.
 `TestDepartureReachesTheWholeMesh` its membership half, and
 `TestThreeParticipantLobbyClosesOnOneRoster` the socket handshake for a lobby
 larger than a pair. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers
-input immediately after the lobby gate. Framing, timeout, mismatch, log-transfer
-and encoding budgets have focused tests in `internal/network` and `internal/event`.
+input immediately after the lobby gate.
+`TestRuntimeDigestReportsAndClearsSharedDivergence` deliberately corrupts and
+restores shared state to cover the alert/recovery path;
+`TestSharedSnapshotExcludesLocalSchedulerTiming` keeps wall origins, tick slips
+and display-only deadline remainder out of that surface. Framing, timeout,
+mismatch, log-transfer and encoding budgets have focused tests in
+`internal/network` and `internal/event`.
 
 ```bash
 # terminal 1
@@ -287,11 +304,13 @@ and encoding budgets have focused tests in `internal/network` and `internal/even
 ```
 
 Both sides should reach `NET:1P/LOCK`, display two cursors and agree on shared
-actors, scoring and progression while both participants move/type/fire. Quit one;
-the other must continue at `NET:DOWN/OPEN`. Add `-players <n>` to the host for a
-larger lobby, which closes only once every participant has arrived. Bind the host
-to `:7777` for a LAN. Internet routing uses the same TCP path but is not safe for
-untrusted peers until authentication and TLS configuration are exposed.
+actors, scoring and progression while both participants move/type/fire; a healthy
+run never shows `DESYNC`. The host's `:new` resets both rosters and a guest's is
+refused. Quit one; the other must continue at `NET:DOWN/OPEN`. Add `-players <n>`
+to the host for a larger lobby, which closes only once every participant has
+arrived. Bind the host to `:7777` for a LAN. Internet routing uses the same TCP
+path but is not safe for untrusted peers until authentication and TLS
+configuration are exposed.
 
 ## 12. Adding a service
 

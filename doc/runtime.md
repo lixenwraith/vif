@@ -58,7 +58,10 @@ sequenceDiagram
 `JournalAnchor`, validates/adopts its seed and configuration identity, and only
 then calls `New`. `-host` composes first so its acceptor can snapshot the live
 tick-zero anchor. After service start, both roles complete the start/ready gate
-before the first frame token releases the scheduler.
+before the first frame token releases the scheduler. A session clock is frozen
+during construction and lobby wait, before the HFSM creates deadlines, and is
+resumed only after that gate; tick zero therefore does not inherit how long the
+host waited for its peers.
 
 The detailed construction order is significant:
 
@@ -319,12 +322,13 @@ critical section.
 
 `App.handleIntent` runs command mode under the world lock, so a command that
 performs I/O stalls the tick, the event loop and rendering for its duration.
-Two do: `:log on` opens the session file, and `:d save` opens a second logger,
-fills it, drains it and closes it, bounded by a 3 s drain timeout. Both are
-deliberate operator costs and neither is reachable from gameplay input.
-`:log off` and `:log rec flush` are explicitly not in this class — the first
-detaches the sink and drains on another goroutine, the second only sets a flag
-the tick goroutine reads.
+`:log on` opens the session file. `:d save` opens a second logger, fills it,
+drains it and closes it, bounded by a 3 s drain timeout; it is therefore refused
+while a live session has peers because that hold can exceed the playout lead.
+Both are deliberate operator costs and neither is reachable from gameplay
+input. `:log off` and `:log rec flush` are explicitly not in this class — the
+first detaches the sink and drains on another goroutine, the second only sets a
+flag the tick goroutine reads.
 
 ### Pointer and slice lifetime rules
 
@@ -349,7 +353,10 @@ pause gate. It does not freeze the whole process:
 - `AudioSystem` propagates pause to the mixer, which fades the audio path.
 
 `MetaSystem` is the single owner that keeps pause flag, clock, and pause-change
-events aligned.
+events aligned. It refuses a request to enter pause while a transport has a live
+peer: stopping one participant would also stop its barrier production and apply
+loop while every peer continued. Command and overlay modes still open, but do not
+pause a live network session.
 
 In a driven App, pause remains observable/operator state but never revokes the
 caller's authority: `App.Tick` uses the stepped tick path and still advances.
@@ -387,16 +394,21 @@ rate remains operator-owned.
 These controls are operator pacing under `ModePlay`. Replay records and
 reinjects their events, but its manual clock advances only under
 `ReplayDriver`; viewer `+`/`-` controls presentation pacing instead.
+Speed changes, tick stepping and run-until controls are refused in a live network
+session for the same per-instance-clock reason as pause.
 
 ## 10. Reset and operator state
 
 A `:new` command emits `EventGameResetRequest` and requests scheduler reset
-without reconstructing the process. `MetaSystem` first pauses audio/time,
-clears entities, the cursor roster, and `GameState`, advances the journal run
-while rebasing its tick to zero, restores viewport-sized map/camera/mode state,
-and cancels pending step controls. The reset FSM entry actions subsequently
-request replacement cursors. The scheduler serializes these phases with the
-world lock:
+without reconstructing the process. In a live session only the coordinator may
+request it; the request crosses and every participant applies it at one barrier
+tick. A reset from the shared monitor FSM remains re-derived on every instance.
+`MetaSystem` snapshots the roster's slot/control/peer assignments, pauses
+audio/time, clears entities and `GameState`, advances the journal run while
+rebasing its tick to zero, restores viewport-sized map/camera/mode state, and
+cancels pending step controls. The reset FSM's first cursor spawn carries the
+configured heat/energy template and expands the saved roster in deterministic
+slot order. The scheduler serializes these phases with the world lock:
 
 1. drain and discard stale queued events;
 2. reset deadlines and elapsed-time anchors;
@@ -414,10 +426,11 @@ being driven or observed and survives plain `:new`. Its explicit contract is:
 
 Both `:new` and `:new!` clear recorded/playing macros, close overlays, return to
 Normal mode, and clear command/search/status text. `:new!` additionally purges
-the operator contract: free mouse and auto-fire become off, speed returns to
-1x, and the debug HUD/pins are cleared. Logging target, level, scope, snapshot
-period, and recorder depth are process diagnostics and are never part of this
-purge.
+the initiating instance's operator contract: free mouse and auto-fire become
+off, speed returns to 1x, and the debug HUD/pins are cleared. A peer receiving
+the crossed reset retains its own operator state. Logging target, level, scope,
+snapshot period, and recorder depth are process diagnostics and are never part
+of this purge.
 
 Other session-observer fields have explicit behavior rather than belonging to
 that purge list: the render frame remains monotonic, reset ends paused state,
