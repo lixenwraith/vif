@@ -198,31 +198,39 @@ viewer terminal, content outside that buffer is clipped before pan is applied;
 pan can move toward the recorded area but cannot recover cells that were never
 rendered into the buffer. A windowed composite is the planned seam.
 
-## 5. Simulation tick phases
+## 5. Simulation tick steps
 
 ```mermaid
 flowchart TD
-    Time["Update game and real time"] --> Pre["Settle pre-existing events"]
+    Wire["Apply due wire artifacts, settle them"] --> Time["Update game and real time"]
+    Time --> Pre["Settle pre-existing events"]
     Pre --> FSM["Advance all active HFSM regions"]
     FSM --> Post["Settle FSM-emitted events"]
     Post --> Systems["Run priority-ordered systems"]
     Systems --> Stats["Publish counters, APM, queue and status snapshots"]
+    Stats --> Flush["Close and send this tick's production epoch"]
 ```
 
-`ClockScheduler.processTick` holds the world lock for phases 1–7:
+`ClockScheduler.processTick` holds the world lock for steps 1–9:
 
-1. open the next journal tick stamp, then update pause-aware `GameTime`,
+1. apply the wire artifacts whose fixed playout deadline has arrived and, if any
+   did, settle them in their own `"wire"` group — before the tick stamp advances,
+   so both copies of a crossing land at the same absolute tick (see the domain
+   model, §6). With no live peer this step returns zero and creates no group;
+2. open the next journal tick stamp, then update pause-aware `GameTime`,
    `RealTime`, and fixed `DeltaTime`;
-2. update elapsed-time status;
-3. consume/dispatch events accumulated before the tick until the queue is empty
+3. update elapsed-time status;
+4. consume/dispatch events accumulated before the tick until the queue is empty
    or the settling cap is reached;
-4. advance the FSM by the fixed interval, then publish foreground telemetry and
+5. advance the FSM by the fixed interval, then publish foreground telemetry and
    one metric set per declared region;
-5. settle events emitted by state transitions and actions;
-6. run all systems sequentially against that settled state;
-7. snapshot position-derived entity counts before unlocking.
+6. settle events emitted by state transitions and actions;
+7. run all systems sequentially against that settled state;
+8. snapshot position-derived entity counts before unlocking;
+9. close this tick's production epoch and hand it to the transport, so a peer
+   receives one tick's artifacts as one tick's worth.
 
-Phase 7 is inside the critical section deliberately: `Position` has no internal
+Step 8 is inside the critical section deliberately: `Position` has no internal
 lock, so counting entities after unlocking would race removals on the
 event-loop and main goroutines.
 
@@ -233,7 +241,7 @@ optionally emit a grouped status snapshot, and drain any pending recorder
 flush request.
 
 That tail is not a barrier. Because the lock is already released, the event
-loop, input path and render goroutine can commit between phase 7 and the
+loop, input path and render goroutine can commit between step 8 and the
 sample, so a status snapshot or recorder window is stamped with tick *n* but
 reads "at or after tick *n*" for anything not written inside the locked body.
 See [Logging and diagnostics](logging-and-diagnostics.md) §6.

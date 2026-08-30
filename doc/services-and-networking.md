@@ -197,7 +197,11 @@ Control messages carry heartbeat, join offer/reply and start/ready gates.
 Gameplay uses `MsgEvent` for a closed crossing epoch and `MsgStateSync` for one
 owner-authored cursor snapshot. The epoch is JSON containing journal-registry TOML
 payloads; representative complete-frame budgets are pinned by
-`TestWireEncodingBudget`.
+`TestWireEncodingBudget`. Those, plus the heartbeat, are the whole live set: the
+remaining codes in `protocol.go` are reserved placeholders that nothing sends and
+`NetworkSystem` counts as drops. Raw participant input is not among them, and
+0x10 stays reserved — a peer sends the resolved D-3 artifact, never the keystroke
+that produced it.
 
 ## 9. Poll boundary and lockstep barrier
 
@@ -214,10 +218,18 @@ The default lead is three 50 ms ticks and never waits for a per-tick round trip.
 `ActivateSession` closes the lobby-to-first-tick input window before the main loop
 reads terminal events.
 
-`MsgStateSync` periodically copies only the D-13 owner-authored cursor set.
-Disconnect drains through the same poll boundary, despawns only cursors owned by
-that participant, disables the barrier when no peer remains, and restores local
-map-size authority.
+`MsgStateSync` periodically copies only the D-13 owner-authored cursor set, and is
+applied only when the payload's entity and roster slot agree and its sequence is
+newer than that slot's last. Disconnect drains through the same poll boundary,
+despawns only cursors owned by that participant, releases that slot's sync
+sequence, disables the barrier when no peer remains, and restores local map-size
+authority.
+
+Loss that happens outside the barrier is published rather than swallowed, because
+either direction desynchronises silently: `network.transport_lost_in` counts
+inbound notifications a full poll buffer discarded, `network.transport_lost_out`
+counts outbound frames a peer's bounded send queue refused. A new loss is logged
+once as well as counted.
 
 ## 10. Timeouts, limits and security
 
@@ -233,7 +245,8 @@ The current operator feature is deliberately narrower than the transport shape:
 - trusted plaintext peers; no authentication or CLI TLS identity;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
-- sequence/ack fields detect ordering but do not retransmit.
+- sequence/ack fields detect ordering but do not retransmit, and a frame refused
+  by a full send queue is counted, not resent.
 
 The participant roster, source ordering and epoch format are vectors rather than
 two-peer pairs. Supporting four startup participants requires a coordinator

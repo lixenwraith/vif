@@ -9,27 +9,33 @@ import (
 // MessageType identifies the semantic meaning of a message
 type MessageType uint8
 
+// Live message types are the ones a session actually exchanges. The reserved codes
+// hold their place in the numbering for capabilities the transport does not have
+// yet; nothing sends or accepts them, and NetworkSystem counts an unrecognised type
+// as a drop rather than translating it.
 const (
-	// Control messages (reliable, ordered)
-	MsgHeartbeat  MessageType = 0x01
-	MsgConnect    MessageType = 0x02
-	MsgDisconnect MessageType = 0x03
-	MsgAck        MessageType = 0x04
+	// Control
+	MsgHeartbeat MessageType = 0x01 // Live: keeps a silent stream inside its read deadline
 
-	// Game messages. 0x10 is reserved: raw participant input is deliberately not a
-	// message kind — a peer sends the resolved D-3 artifact, never the keystroke.
-	MsgStateSync MessageType = 0x11 // Owner-authored cursor state (D-13)
-	MsgEvent     MessageType = 0x12 // One closed barrier production epoch
+	// Game. 0x10 is reserved and stays so: raw participant input is not a message
+	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
+	MsgStateSync MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)
+	MsgEvent     MessageType = 0x12 // Live: one closed barrier production epoch
 
-	// Coordination
-	MsgPeerList   MessageType = 0x20 // Server sends peer roster
-	MsgRoleAssign MessageType = 0x21 // Coordinator assignment
-	MsgJoinOffer  MessageType = 0x22 // Host offers the session anchor and roster assignment
-	MsgJoinReply  MessageType = 0x23 // Joiner accepts or rejects the offered identity
-	MsgStart      MessageType = 0x24 // Host releases both participants into tick zero
-	MsgReady      MessageType = 0x25 // Joiner confirms it received the start gate
+	// Coordination, in the order the startup handshake runs them
+	MsgJoinOffer MessageType = 0x22 // Live: host offers the session anchor and roster assignment
+	MsgJoinReply MessageType = 0x23 // Live: joiner accepts or rejects the offered identity
+	MsgStart     MessageType = 0x24 // Live: host releases the participants into tick zero
+	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Future: auth
+	// Reserved, unused: explicit connect/disconnect and acknowledgement control, which
+	// the stream's own lifecycle carries today; roster and coordinator assignment
+	// beyond the startup offer; and authentication.
+	MsgConnect      MessageType = 0x02
+	MsgDisconnect   MessageType = 0x03
+	MsgAck          MessageType = 0x04
+	MsgPeerList     MessageType = 0x20
+	MsgRoleAssign   MessageType = 0x21
 	MsgAuthRequest  MessageType = 0x30
 	MsgAuthResponse MessageType = 0x31
 )

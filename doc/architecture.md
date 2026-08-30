@@ -306,8 +306,8 @@ the bundled xterm.js page, uses embedded configuration/content, and compiles out
 logging; sound is disabled in the current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.
 
-Phase 8 exposes a startup-only two-participant TCP game through `-host` and
-`-join`. The join handshake resolves the host anchor before the joining world is
+A startup-only two-participant TCP game is exposed through `-host` and `-join`.
+The join handshake resolves the host anchor before the joining world is
 constructed, both schedulers remain at tick zero until the ready gate completes,
 and the manifest-registered `NetworkSystem` drains framed input only at the
 simulation's poll boundary. The fixed-delay artifact barrier exchanges crossings
@@ -318,8 +318,9 @@ The proof of concept has no reconnect, mid-run world snapshot, lag compensation,
 authentication, or CLI TLS identity, and currently admits one joining peer. The
 participant/session representation and poll/barrier contracts are not pair-shaped;
 larger lobbies need coordinator slot allocation rather than a transport rewrite.
-The domain boundary, event classification, wire protocol, and their enforcing
-tests are described by rules D-1..D-15 in [the domain model](domain-design.md).
+The domain boundary, event classification, wire protocol, their enforcing tests,
+and an analysis of what the model does not yet cover are in rules D-1..D-15 and
+§9 of [the domain model](domain-design.md).
 
 For build, diagnostics, platform, and repository-health details, see
 [Development and operations](development.md) and
