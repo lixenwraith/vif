@@ -15,11 +15,28 @@ import (
 // Soak profile. Each iteration is reproducible from its seed: rerun one with
 // -run 'TestReplaySoak/<seed>'.
 const (
-	soakSeedBase   = 0x50a4_0000
-	soakIterations = 120
-	soakSteps      = 200
-	soakShortIters = 8
+	soakSeedBase = 0x50a4_0000
+	soakSteps    = 200
 )
+
+// soakScale picks one of three effort profiles for a repetition count or a step
+// count. The default is what a change is validated against and what CI runs; the
+// long profile is the wide seed sweep, which is a nightly or a pre-release job
+// rather than something every edit pays for. Under the race detector the
+// difference was six minutes against two.
+//
+//	go test ./...                     # normal
+//	go test -short ./...              # smoke
+//	VIF_SOAK=full go test ./...       # the wide sweep
+func soakScale(short, normal, full int) int {
+	if testing.Short() {
+		return short
+	}
+	if os.Getenv("VIF_SOAK") == "full" {
+		return full
+	}
+	return normal
+}
 
 // soakRun is one journalled source run and everything a replay needs to reproduce it
 type soakRun struct {
@@ -121,10 +138,7 @@ func TestMainTowerConfigCursorOwnership(t *testing.T) {
 // TestReplaySoakTower spawns the tower region outright rather than waiting for the
 // escalation chain, which no 200-step run reaches, then soaks the same way
 func TestReplaySoakTower(t *testing.T) {
-	n := soakIterations / 4
-	if testing.Short() {
-		n = soakShortIters
-	}
+	n := soakScale(4, 8, 30)
 	for i := range n {
 		seed := uint64(soakSeedBase) + 0x2000 + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
@@ -207,10 +221,7 @@ func replaySoak(run soakRun, recs []event.JournalRecord) error {
 
 // TestReplaySoak drives many seeded scripts through journal → replay → FirstDiff
 func TestReplaySoak(t *testing.T) {
-	n := soakIterations
-	if testing.Short() {
-		n = soakShortIters
-	}
+	n := soakScale(8, 24, 120)
 	for i := range n {
 		seed := uint64(soakSeedBase) + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {

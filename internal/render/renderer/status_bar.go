@@ -39,13 +39,14 @@ type StatusBarRenderer struct {
 	statTicks *atomic.Int64
 
 	// Time control telemetry
-	statSpeed *status.AtomicString
-	statStep  *atomic.Int64
-	statBreak *status.AtomicString
-	statNet   *status.AtomicString
-	statSync  *status.AtomicString
-	statPeers *atomic.Int64
-	statLatch *atomic.Bool
+	statSpeed    *status.AtomicString
+	statStep     *atomic.Int64
+	statBreak    *status.AtomicString
+	statNet      *status.AtomicString
+	statSync     *status.AtomicString
+	statDiverged *atomic.Bool
+	statPeers    *atomic.Int64
+	statLatch    *atomic.Bool
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -77,13 +78,14 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statAPM:   statusReg.Ints.Get("engine.apm"),
 		statTicks: statusReg.Ints.Get("engine.ticks"),
 
-		statSpeed: statusReg.Strings.Get("engine.speed"),
-		statStep:  statusReg.Ints.Get("engine.step"),
-		statBreak: statusReg.Strings.Get("engine.breakpoint"),
-		statNet:   statusReg.Strings.Get("network.state"),
-		statSync:  statusReg.Strings.Get("network.sync_state"),
-		statPeers: statusReg.Ints.Get("network.peers"),
-		statLatch: statusReg.Bools.Get("network.map_latched"),
+		statSpeed:    statusReg.Strings.Get("engine.speed"),
+		statStep:     statusReg.Ints.Get("engine.step"),
+		statBreak:    statusReg.Strings.Get("engine.breakpoint"),
+		statNet:      statusReg.Strings.Get("network.state"),
+		statSync:     statusReg.Strings.Get("network.sync_state"),
+		statDiverged: statusReg.Bools.Get("network.diverged"),
+		statPeers:    statusReg.Ints.Get("network.peers"),
+		statLatch:    statusReg.Bools.Get("network.map_latched"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -439,10 +441,17 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
+// syncItem renders the runtime parity verdict. Divergence has two degrees: a
+// disagreement the peers may still resolve, and one that has persisted past the
+// point where anything could — nothing re-derives a missing artifact, so past it the
+// two participants are playing different games and the session needs restarting.
 func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
 	switch r.statSync.Load() {
 	case "desync":
-		return statusItem{text: " DESYNC ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+		if r.statDiverged.Load() {
+			return statusItem{text: " DIVERGED ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
+		}
+		return statusItem{text: " DESYNC ", fg: visual.RgbBlack, bg: visual.RgbOrange}, true
 	case "synced":
 		return statusItem{text: " SYNCED ", fg: visual.RgbBlack, bg: visual.RgbGreen}, true
 	default:

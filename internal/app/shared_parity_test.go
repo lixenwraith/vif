@@ -31,10 +31,7 @@ func parityScript(seed uint64, steps int) ScriptOptions {
 // before any Tick.
 func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 400
-	if testing.Short() {
-		steps = 60
-	}
+	steps := soakScale(60, 200, 400)
 
 	a := mustHeadless(t, seed, 120, 40)
 	defer a.Close()

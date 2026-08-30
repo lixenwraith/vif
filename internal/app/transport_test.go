@@ -242,10 +242,7 @@ func TestBarrierIsNoOpWithoutPeer(t *testing.T) {
 // one-way traffic: local and peer artifacts apply at the same future tick boundary.
 func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 1200
-	if testing.Short() {
-		steps = 120
-	}
+	steps := soakScale(120, 400, 1200)
 
 	live, observer := pair(t, seed, steps)
 	observeOnly(t, observer)
@@ -277,10 +274,7 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 // TestTwoLiveParticipantsStayInLockstep is the headless two-participant criterion.
 func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 1200
-	if testing.Short() {
-		steps = 120
-	}
+	steps := soakScale(120, 400, 1200)
 
 	a, b := pair(t, seed, steps)
 	localA, _ := mirrorCursors(t, a, b)
@@ -346,10 +340,9 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 // stream framing, the anchor handshake and canonical socket participant IDs.
 func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 1200
-	if testing.Short() {
-		steps = 120
-	}
+	// The socket leg re-proves the same criterion through framing, a real handshake
+	// and a mid-run join, none of which need the long run the in-process one takes.
+	steps := soakScale(80, 240, 800)
 
 	a, err := NewHeadless(Config{
 		Seed: seed, Width: 120, Height: 40, ForceDefault: true, RetainSessionLog: true,

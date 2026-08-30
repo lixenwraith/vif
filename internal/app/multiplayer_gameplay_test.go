@@ -215,12 +215,45 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 		p.X++
 		apps[0].World().Positions.SetPosition(target, p)
 	})
-	for range 2*parameter.NetworkDigestTicks + 2 {
+
+	// One disagreeing sample is not a report. An artifact that missed its apply tick
+	// lands one side late and the next sample finds the two equal again, so the
+	// indicator waits for the divergence to repeat before it says anything.
+	tickAll(apps)
+	for i, a := range apps {
+		reg := a.World().Resources.Status
+		if reg.Ints.Get("network.digest_mismatches").Load() == 0 {
+			continue // this instance has not sampled the corrupted tick yet
+		}
+		if got := reg.Strings.Get("network.sync_state").Load(); got == "desync" {
+			t.Fatalf("participant %d reported desync on its first disagreeing sample", i+1)
+		}
+	}
+
+	for range parameter.NetworkDesyncSamples*parameter.NetworkDigestTicks + 2 {
 		tickAll(apps)
 	}
 	for i, a := range apps {
-		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "desync" {
+		reg := a.World().Resources.Status
+		if got := reg.Strings.Get("network.sync_state").Load(); got != "desync" {
 			t.Fatalf("participant %d sync state=%q, want desync", i+1, got)
+		}
+		if got := reg.Strings.Get("network.sync_part").Load(); got != "positions" {
+			t.Fatalf("participant %d named %q as the first differing category, want positions", i+1, got)
+		}
+		if reg.Bools.Get("network.diverged").Load() {
+			t.Fatalf("participant %d escalated to diverged before the divergence persisted", i+1)
+		}
+	}
+
+	// Past NetworkDivergedSamples the disagreement is no longer something the two
+	// could still resolve between them, and the session says so.
+	for range parameter.NetworkDivergedSamples*parameter.NetworkDigestTicks + 2 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if !a.World().Resources.Status.Bools.Get("network.diverged").Load() {
+			t.Fatalf("participant %d never escalated a persistent divergence", i+1)
 		}
 	}
 
@@ -229,8 +262,12 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 		tickAll(apps)
 	}
 	for i, a := range apps {
-		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "synced" {
+		reg := a.World().Resources.Status
+		if got := reg.Strings.Get("network.sync_state").Load(); got != "synced" {
 			t.Fatalf("participant %d sync state=%q after repair, want synced", i+1, got)
+		}
+		if reg.Bools.Get("network.diverged").Load() {
+			t.Fatalf("participant %d held its diverged verdict after the state agreed again", i+1)
 		}
 	}
 

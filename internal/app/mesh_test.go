@@ -161,10 +161,7 @@ func TestChainRelayReachesANonAdjacentParticipant(t *testing.T) {
 // link with each other, so every pair's agreement is relayed agreement.
 func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 240
-	if testing.Short() {
-		steps = 40
-	}
+	steps := soakScale(40, 120, 240)
 
 	apps := meshSession(t, seed, 5, [][2]int{{1, 2}, {2, 3}, {3, 4}, {3, 5}})
 	local := localCursors(t, apps)

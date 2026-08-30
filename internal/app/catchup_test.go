@@ -46,10 +46,7 @@ func runningHost(t *testing.T, seed uint64, steps int) (*App, *Capture) {
 // byte-identical shared state is what says the reproduction was exact.
 func TestLateJoinerReplaysTheSessionToTheHostPosition(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	steps := 300
-	if testing.Short() {
-		steps = 60
-	}
+	steps := soakScale(60, 150, 300)
 
 	host, log := runningHost(t, seed, steps)
 	records, at := host.SessionLog()

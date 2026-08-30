@@ -20,6 +20,18 @@ const (
 	// one second after the last mismatching peer agrees again.
 	NetworkResyncNoticeTicks = 20
 
+	// NetworkDesyncSamples is how many consecutive disagreeing digest samples make a
+	// divergence a report rather than a blip. One sample can disagree while the two
+	// instances still agree about the run: an artifact that arrived after its apply
+	// tick lands on one side a tick late, and the next sample finds them equal again.
+	// Two samples is a quarter of a second at the digest cadence.
+	NetworkDesyncSamples = 2
+
+	// NetworkDivergedSamples is where a divergence stops being transient. Nothing
+	// re-derives the missing artifact, so past this point the two runs are different
+	// games and the participant needs the session again rather than a warning.
+	NetworkDivergedSamples = 5
+
 	// NetworkDrainWindow bounds one tick's inbound translation, so a flooding
 	// peer cannot stretch a tick without bound
 	NetworkDrainWindow = 64
