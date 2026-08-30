@@ -204,6 +204,11 @@ func (t *Transport) Broadcast(msg *Message) int {
 	return t.peers.Broadcast(msg)
 }
 
+// BroadcastExcept sends to all peers but one and returns the number that refused.
+func (t *Transport) BroadcastExcept(exclude PeerID, msg *Message) int {
+	return t.peers.BroadcastExcept(exclude, msg)
+}
+
 // PeerCount returns connected peer count
 func (t *Transport) PeerCount() int {
 	return t.peers.PeerCount()

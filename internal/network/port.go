@@ -66,7 +66,14 @@ func (p *SocketPort) Send(peerID uint32, msgType uint8, payload []byte) bool {
 // queue is full refuses the frame; the count is retained rather than discarded,
 // because a refused crossing is a divergence the session must be able to see.
 func (p *SocketPort) Broadcast(msgType uint8, payload []byte) {
-	if refused := p.transport.Broadcast(NewMessage(MessageType(msgType), payload)); refused > 0 {
+	p.BroadcastExcept(0, msgType, payload)
+}
+
+// BroadcastExcept queues one frame per peer but one, for relaying an artifact onward
+// without returning it to the link it arrived on.
+func (p *SocketPort) BroadcastExcept(exclude uint32, msgType uint8, payload []byte) {
+	refused := p.transport.BroadcastExcept(PeerID(exclude), NewMessage(MessageType(msgType), payload))
+	if refused > 0 {
 		p.refused.Add(uint64(refused))
 	}
 }

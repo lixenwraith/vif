@@ -1,6 +1,7 @@
 package network
 
 import (
+	"encoding/json"
 	"errors"
 	"net"
 	"testing"
@@ -44,7 +45,7 @@ func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(func() (SessionOffer, error) { return offer, nil }, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -76,7 +77,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	offer := testOffer()
 	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = HostAcceptor(func() (SessionOffer, error) { return offer, nil }, time.Second)
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{Assign: func() (SessionOffer, error) { return offer, nil }}, time.Second)
 	host := NewSocketPort(hostCfg)
 	defer host.Close()
 	if err := host.Start(); err != nil {
@@ -95,11 +96,17 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 		t.Fatalf("accept: %v", err)
 	}
 	waitFor(t, func() bool { return host.PeerCount() == 1 }, host.Changes(), "host peer")
-	if !host.Send(2, uint8(MsgStart), nil) {
+	final, err := json.Marshal(offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !host.Send(2, uint8(MsgStart), final) {
 		t.Fatal("host could not send start gate")
 	}
-	if err := pending.WaitStart(); err != nil {
+	if got, err := pending.WaitStart(); err != nil {
 		t.Fatalf("start gate: %v", err)
+	} else if len(got.Participants) != len(offer.Participants) || got.Assigned != offer.Assigned {
+		t.Fatalf("start roster = %#v, want the offered roster", got)
 	}
 	if err := pending.Ready(); err != nil {
 		t.Fatalf("ready: %v", err)

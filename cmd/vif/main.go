@@ -185,6 +185,7 @@ func buildConfig() app.Config {
 		Journal:       flagJournal,
 		HostAddress:   flagSession.host,
 		JoinAddress:   flagSession.join,
+		Participants:  flagSession.players,
 	}
 
 	if *flagAudioUnmute {
@@ -206,18 +207,24 @@ func buildConfig() app.Config {
 
 // sessionFlags expose startup-only hosting and joining without a mid-run mode switch.
 type sessionFlags struct {
-	host string
-	join string
+	host    string
+	join    string
+	players int
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
-	fs.StringVar(&f.host, "host", "", "Host a two-participant session on bind address, e.g. :7777")
+	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
 	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
+	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
+		"Participants a -host lobby waits for, itself included (2..%d, default 2)", parameter.MaxPlayers))
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
 	if (f.host != "" || f.join != "") && (schema || check || replay != "") {
 		return fmt.Errorf("-host and -join are available only in interactive play")
+	}
+	if f.players != 0 && f.host == "" {
+		return fmt.Errorf("-players applies to -host")
 	}
 	return nil
 }

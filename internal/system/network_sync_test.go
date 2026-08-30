@@ -1,6 +1,7 @@
 package system
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -55,10 +56,10 @@ func TestCursorStateSyncWritesOnlyACoherentRemoteCursor(t *testing.T) {
 	}
 }
 
-// TestPeerDespawnReleasesTheSlotSyncSequence covers slot reuse. Sequences are
+// TestDepartureReleasesTheSlotSyncSequence covers slot reuse. Sequences are
 // per-sender and restart at one, so a slot still holding its predecessor's high
 // water mark would silently discard every sync from the participant that replaces it.
-func TestPeerDespawnReleasesTheSlotSyncSequence(t *testing.T) {
+func TestDepartureReleasesTheSlotSyncSequence(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
 	net := NewNetworkSystem(w).(*NetworkSystem)
@@ -68,9 +69,9 @@ func TestPeerDespawnReleasesTheSlotSyncSequence(t *testing.T) {
 		t.Fatalf("remote energy after sync = %d, want 40", c.Current)
 	}
 
-	net.despawnPeer(7)
+	net.removeParticipant(&event.ParticipantDepartedPayload{Participant: 7, Slot: 2})
 	if net.lastSync[2] != 0 {
-		t.Fatalf("slot 2 sync sequence = %d after despawn, want 0", net.lastSync[2])
+		t.Fatalf("slot 2 sync sequence = %d after departure, want 0", net.lastSync[2])
 	}
 
 	// The successor's first message starts over at one and must still be admitted.
@@ -78,4 +79,38 @@ func TestPeerDespawnReleasesTheSlotSyncSequence(t *testing.T) {
 	if c, _ := w.Components.Energy.GetComponent(remote); c.Current != 63 {
 		t.Fatalf("remote energy after slot reuse = %d, want 63", c.Current)
 	}
+}
+
+// TestLinkLossDoesNotDespawnWhereItIsObserved pins the reason a departure crosses at
+// all: only a direct neighbour sees a disconnect, and it sees it at a tick of its own
+// transport's choosing, so removing the cursor there would remove it at a different
+// tick on every instance — and never on one that shared no link with the departing
+// participant. The observation produces an artifact; the artifact does the removal.
+func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	remote := spawnRemoteCursor(t, w, 2, 25, 5, 7)
+	net := NewNetworkSystem(w).(*NetworkSystem)
+
+	net.noticeDeparture(7)
+	w.Resources.Event.Queue.Consume()
+	if got := w.Resources.Player.Slot(2); got != remote {
+		t.Fatalf("slot 2 = %d after a link loss, want the cursor to survive until the crossing", got)
+	}
+
+	// Observing it twice announces once: a second notice for a participant already
+	// accounted for is a duplicate whatever path it arrived by.
+	before := net.statDuplicates.Load()
+	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 7, Slot: 2}))
+	if got := net.statDuplicates.Load(); got != before+1 {
+		t.Fatalf("duplicate notices counted = %d, want %d", got, before+1)
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

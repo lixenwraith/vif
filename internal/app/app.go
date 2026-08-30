@@ -51,6 +51,13 @@ type App struct {
 	pendingJoin  *network.PendingJoin
 	sessionMu    sync.Mutex
 	sessionOffer network.SessionOffer
+	// sessionLog retains every non-system record this run produced, so a participant
+	// arriving after tick zero can reproduce the session by replaying it. Present on
+	// a host; nil elsewhere.
+	sessionLog *Capture
+	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
+	// entry per accepted connection and closes into the offer the start gate sends.
+	sessionRoster []network.SessionParticipant
 }
 
 // New wires the runtime, releasing anything already started on failure
@@ -159,6 +166,9 @@ func (a *App) initWorld() {
 
 	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)
+	if r := a.world.Resources.Network; r != nil {
+		r.OnDeparture = a.releaseParticipant32
+	}
 
 	// The terminal supplies color whenever one exists, but dimensions only when the
 	// mode says so; a replay's come from the journal, via config
@@ -294,18 +304,32 @@ func resolveConfigID(cfg Config) string {
 // initJournal opens the replay journal and installs it on the event queue.
 // Opt-in: it records every non-system event for the life of the run.
 func (a *App) initJournal() error {
-	if !a.cfg.Journal {
+	// A host retains a replayable log whether or not a journal file was asked for:
+	// it is the only thing a participant arriving mid-run can be brought up to date
+	// from, since nothing transports world state.
+	if a.cfg.RetainSessionLog || a.cfg.HostAddress != "" {
+		a.sessionLog = NewCapture()
+	}
+	if !a.cfg.Journal && a.sessionLog == nil {
 		return nil
 	}
 
-	sink := a.cfg.JournalSink
-	if sink == nil {
-		path, err := vlog.StartJournal()
-		if err != nil {
-			return fmt.Errorf("journal: %w", err)
+	var sink event.JournalSink
+	if a.cfg.Journal {
+		sink = a.cfg.JournalSink
+		if sink == nil {
+			path, err := vlog.StartJournal()
+			if err != nil {
+				return fmt.Errorf("journal: %w", err)
+			}
+			vlog.Info("app", "msg", "journal open", "path", path)
+			sink = event.VlogSink()
 		}
-		vlog.Info("app", "msg", "journal open", "path", path)
-		sink = event.VlogSink()
+	}
+	// Passed only when it exists: a nil *Capture inside a non-nil interface is not
+	// something MultiSink can recognise as absent.
+	if a.sessionLog != nil {
+		sink = event.MultiSink(sink, a.sessionLog)
 	}
 
 	q := a.world.Resources.Event.Queue
@@ -351,12 +375,14 @@ func (a *App) Close() {
 	}
 	a.hub.StopAll()
 
-	if a.cfg.Journal && a.world != nil && a.world.Resources.Event != nil {
+	if (a.cfg.Journal || a.sessionLog != nil) && a.world != nil && a.world.Resources.Event != nil {
 		q := a.world.Resources.Event.Queue
 		emitted, encFail := q.Journal().Stats()
 		q.SetJournal(nil)
-		vlog.Info("app", "msg", "journal close",
-			"path", vlog.JournalPath(), "records", emitted, "encode_failed", encFail)
+		if a.cfg.Journal {
+			vlog.Info("app", "msg", "journal close",
+				"path", vlog.JournalPath(), "records", emitted, "encode_failed", encFail)
+		}
 	}
 	if vlog.JournalEnabled() {
 		if err := vlog.StopJournal(); err != nil {

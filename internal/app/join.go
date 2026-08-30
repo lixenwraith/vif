@@ -155,7 +155,9 @@ func (a *App) adoptMapLatch(an event.JournalAnchor) {
 // NetworkSystem reads the port per tick, so this needs no re-registration.
 func (a *App) AttachTransport(port engine.NetworkPort) {
 	a.world.RunSafe(func() {
-		a.world.Resources.Network = engine.NewNetworkResource(port)
+		r := engine.NewNetworkResource(port)
+		r.OnDeparture = a.releaseParticipant32
+		a.world.Resources.Network = r
 		a.ctx.PublishMapLock()
 	})
 }

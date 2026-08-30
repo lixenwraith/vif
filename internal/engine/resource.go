@@ -516,6 +516,10 @@ type AudioResource struct {
 type NetworkPort interface {
 	Send(peerID uint32, msgType uint8, payload []byte) bool
 	Broadcast(msgType uint8, payload []byte)
+	// BroadcastExcept sends to every connected participant but one. It is how a
+	// relayed artifact reaches the rest of a mesh without going back down the link
+	// it arrived on, where the sender already holds it.
+	BroadcastExcept(exclude uint32, msgType uint8, payload []byte)
 	PeerCount() int
 	IsRunning() bool
 	// Drain fills dst with pending inbound notifications, returns count
@@ -533,6 +537,11 @@ type NetworkResource struct {
 	Port              NetworkPort
 	ParticipantID     uint32
 	BarrierDelayTicks uint64
+
+	// OnDeparture is called under the world lock when a participant leaves, so the
+	// session layer can return its identity to the pool. It must not take a lock
+	// that a world-lock acquisition waits behind.
+	OnDeparture func(participant uint32)
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

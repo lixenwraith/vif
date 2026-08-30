@@ -1,7 +1,7 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was last audited on 2026-08-30, through the two-participant startup
+codebase. It was last audited on 2026-08-30, through the multi-participant
 networking surface. The implementation, generated manifest, and shipped
 configuration were treated as authoritative where older prose disagreed with the
 code.
@@ -75,8 +75,10 @@ This documentation distinguishes three states:
 - **Active** means constructed and used by the normal `cmd/vif` runtime.
 - **Optional** means supported by an explicit flag, config, build tag, or tool.
 - **Experimental/incomplete** means code exists but the normal application does
-  not expose a complete end-to-end feature. Mid-run join/reconnect and authenticated
-  multiplayer are examples; startup two-participant networking is optional and active.
+  not expose a complete end-to-end feature. Live mid-run join and authenticated
+  multiplayer are examples: the catch-up mechanism is implemented and tested but
+  `cmd/vif` does not yet drive it against a running host. Startup multi-participant
+  networking is optional and active.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

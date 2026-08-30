@@ -14,4 +14,17 @@ const (
 	// NetworkDrainWindow bounds one tick's inbound translation, so a flooding
 	// peer cannot stretch a tick without bound
 	NetworkDrainWindow = 64
+
+	// NetworkRelayHopLimit bounds how far one artifact travels. Per-source epoch
+	// dedupe is what actually terminates flooding; this is the backstop that keeps a
+	// bug in it from becoming unbounded traffic, and 16 exceeds the diameter of any
+	// graph MaxPlayers participants can form.
+	NetworkRelayHopLimit = 16
+
+	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
+	// still be admitted. A mesh delivers by several paths at once, so epochs from one
+	// source arrive out of order and a high-water mark alone would discard epochs the
+	// receiver never applied. At 20 ticks/s this is just over three seconds — far
+	// beyond any path an artifact can take and still meet its apply tick.
+	NetworkEpochWindow = 64
 )

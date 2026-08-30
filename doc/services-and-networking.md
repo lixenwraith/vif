@@ -2,8 +2,9 @@
 
 Services own process/host resources whose lifecycle differs from ECS systems:
 terminal raw mode, audio output, the immutable content corpus, and an optional
-network transport. Networking is assembled for a startup-only two-participant
-trusted-peer mode; a normal run still contributes no active network capability.
+network transport. Networking is assembled for a trusted-peer session of up to
+`parameter.MaxPlayers` participants; a normal run still contributes no active
+network capability.
 
 ## 1. Service lifecycle contract
 
@@ -152,7 +153,7 @@ map latch separately.
 |---|---|
 | `RoleNone` | Disabled/no-op. |
 | `RoleServer` | Generic TCP/TLS listener. |
-| `RoleHost` | Listener with `HostAcceptor`, anchor verification and canonical participant assignment. |
+| `RoleHost` | Listener with `HostAcceptor`: allocates a participant identity and slot per connection, offers the anchor, and transfers the session log to a mid-run joiner. |
 | `RoleClient` | Generic dialer. |
 | `RolePeer` | Dialed/preconnected stream admitted after the join and start gates. |
 
@@ -218,6 +219,13 @@ The default lead is three 50 ms ticks and never waits for a per-tick round trip.
 `ActivateSession` closes the lobby-to-first-tick input window before the main loop
 reads terminal events.
 
+An instance sends only to the peers it is linked to, so an epoch reaches the rest
+of the session by being forwarded: each node floods an epoch it has not seen to
+every link but the one it arrived on, and the per-source epoch window is what stops
+the flood. Because every frame names the absolute tick it applies at, a relayed
+artifact still lands on the same tick as the producer's own copy. A roster change
+travels the same way, produced only by the coordinator so it has one apply tick.
+
 `MsgStateSync` periodically copies only the D-13 owner-authored cursor set, and is
 applied only when the payload's entity and roster slot agree and its sequence is
 newer than that slot's last. Disconnect drains through the same poll boundary,
@@ -238,30 +246,37 @@ disconnect intervals, read/write buffer sizes, bounded send/receive queues, peer
 cap, barrier delay and optional TLS. Heartbeats are framed control messages and a
 silent connection closes through the normal disconnect path.
 
-The current operator feature is deliberately narrower than the transport shape:
+What the operator surface still does not cover:
 
-- exactly two participants and one startup join;
-- no world snapshot, reconnect or lag compensation;
+- `-join` dials one address, so the links form a star even though the relay makes
+  any graph work;
+- the playout lead is a constant rather than a function of the graph's diameter,
+  and a partition is undetected;
+- mid-run join is implemented and proven over the socket but not yet driven from
+  `cmd/vif` against a live host, which needs the joiner placed on the session's
+  tick phase;
+- no world snapshot, so the retained log and catch-up cost both grow with session
+  length; no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
 - sequence/ack fields detect ordering but do not retransmit, and a frame refused
   by a full send queue is counted, not resent.
 
-The participant roster, source ordering and epoch format are vectors rather than
-two-peer pairs. Supporting four startup participants requires a coordinator
-allocator and lobby target count; supporting a mid-run participant additionally
-requires a world snapshot. Neither change replaces the port or barrier shape.
-
 ## 11. Verification and manual run
 
-`TestTwoLiveParticipantsStayInLockstep` proves two independent drivers over
-`Loopback`; `TestTwoLiveParticipantsStayInLockstepOverTCP` repeats 1,200 paired
-boundaries over `127.0.0.1`, uses the production startup gates, checks disconnect
-continuation and rejects a later join with `ErrJoinMidRun` while the listener stays
-up. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers input immediately
-after the lobby gate. Framing, timeout, mismatch and encoding budgets have focused
-tests in `internal/network` and `internal/event`.
+`TestTwoLiveParticipantsStayInLockstep` proves two independent drivers over the
+in-process mesh; `TestTwoLiveParticipantsStayInLockstepOverTCP` repeats 1,200
+paired boundaries over `127.0.0.1`, uses the production startup gates, checks
+disconnect continuation, and then admits a mid-run joiner by transferring and
+replaying the session log while the listener stays up.
+`TestChainRelayReachesANonAdjacentParticipant` and
+`TestMeshPropagatesEveryParticipantToEveryOther` cover relayed propagation,
+`TestDepartureReachesTheWholeMesh` its membership half, and
+`TestThreeParticipantLobbyClosesOnOneRoster` the socket handshake for a lobby
+larger than a pair. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers
+input immediately after the lobby gate. Framing, timeout, mismatch, log-transfer
+and encoding budgets have focused tests in `internal/network` and `internal/event`.
 
 ```bash
 # terminal 1
@@ -273,9 +288,10 @@ tests in `internal/network` and `internal/event`.
 
 Both sides should reach `NET:1P/LOCK`, display two cursors and agree on shared
 actors, scoring and progression while both participants move/type/fire. Quit one;
-the other must continue at `NET:DOWN/OPEN`. Bind the host to `:7777` for a LAN.
-Internet routing uses the same TCP path but is not safe for untrusted peers until
-authentication and TLS configuration are exposed.
+the other must continue at `NET:DOWN/OPEN`. Add `-players <n>` to the host for a
+larger lobby, which closes only once every participant has arrived. Bind the host
+to `:7777` for a LAN. Internet routing uses the same TCP path but is not safe for
+untrusted peers until authentication and TLS configuration are exposed.
 
 ## 12. Adding a service
 

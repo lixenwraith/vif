@@ -103,8 +103,9 @@ useful CI addition even though the current workflow does not perform one.
 | `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
 | `-j`, `-journal` | Record non-system-origin events to a dedicated replay journal. |
 | `-replay <file>` | Present a recorded journal instead of starting interactive play. |
-| `-host <address>` | Bind a startup-only two-participant session, for example `:7777`. |
+| `-host <address>` | Bind a session, for example `:7777`. |
 | `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
+| `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. |
 | `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
 | `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |

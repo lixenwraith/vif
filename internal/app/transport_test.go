@@ -1,7 +1,6 @@
 package app
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -331,15 +330,20 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 		steps = 120
 	}
 
-	a := mustHeadless(t, seed, 120, 40)
-	t.Cleanup(a.Close)
-	offer, err := a.hostOffer()
+	a, err := NewHeadless(Config{
+		Seed: seed, Width: 120, Height: 40, ForceDefault: true, RetainSessionLog: true,
+	})
 	if err != nil {
-		t.Fatalf("host offer: %v", err)
+		t.Fatalf("host: %v", err)
 	}
+	t.Cleanup(a.Close)
+	// The lobby is not closed here: hostOffer closes it, and the coordinator has to
+	// allocate this run's guest identity from an open one.
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
-	hostCfg.ParticipantID = offer.Host
-	hostCfg.AcceptSession = network.HostAcceptor(a.hostOffer, time.Second)
+	hostCfg.ParticipantID = hostParticipantID
+	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
+		Assign: a.assignParticipant, Release: a.releaseParticipant, Log: a.SessionLogChunks,
+	}, time.Second)
 	host := network.NewSocketPort(hostCfg)
 	t.Cleanup(func() { _ = host.Close() })
 	if err := host.Start(); err != nil {
@@ -365,9 +369,9 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	t.Cleanup(b.Close)
 	b.pendingJoin = pending
 	b.sessionOffer = offered
-	if err := b.JoinSession(offered); err != nil {
+	if err := b.Join(offered.Anchor); err != nil {
 		_ = pending.Complete(err)
-		t.Fatalf("join session: %v", err)
+		t.Fatalf("join identity: %v", err)
 	}
 	if err := pending.Complete(nil); err != nil {
 		t.Fatalf("join reply: %v", err)
@@ -421,11 +425,25 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 			roster, host.IsRunning(), state, peers, latched)
 	}
 
+	// A participant arriving after tick zero reproduces the session instead of being
+	// refused: the handshake carries the host's record log, and replaying it is what
+	// puts the joiner in the world the host is already in.
 	retry, retryOffer, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
 	if err != nil {
 		t.Fatalf("retry dial: %v", err)
 	}
 	defer retry.Close()
+	if !retry.MidRun() {
+		t.Fatalf("retry offer describes tick %d, want a session already running",
+			retryOffer.Anchor.Anchor.Tick)
+	}
+	records, err := retry.ReceiveSessionLog()
+	if err != nil {
+		t.Fatalf("retry session log: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("retry received an empty session log")
+	}
 	retryCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, retryOffer)
 	if err != nil {
 		t.Fatalf("retry config: %v", err)
@@ -435,23 +453,15 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 		t.Fatalf("retry app: %v", err)
 	}
 	defer retryApp.Close()
-	joinErr := retryApp.JoinSession(retryOffer)
-	if !errors.Is(joinErr, ErrJoinMidRun) {
-		t.Fatalf("retry JoinSession() error = %v, want ErrJoinMidRun", joinErr)
+	if err := retryApp.CatchUp(retryOffer.Anchor, records); err != nil {
+		t.Fatalf("retry catch up: %v", err)
 	}
-	if err := retry.Complete(joinErr); !errors.Is(err, ErrJoinMidRun) {
-		t.Fatalf("retry Complete() error = %v, want unchanged ErrJoinMidRun", err)
+	if err := retry.Complete(nil); err != nil {
+		t.Fatalf("retry reply: %v", err)
 	}
-	select {
-	case err := <-host.Errors():
-		if err.Error() != joinErr.Error() {
-			t.Fatalf("host retry error = %v, want %v", err, joinErr)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("host did not report rejected mid-run join")
-	}
-	if !host.IsRunning() || host.PeerCount() != 0 {
-		t.Fatalf("host after rejected retry = running %t peers %d", host.IsRunning(), host.PeerCount())
+	assertSharedParity(t, a, retryApp, int(retryOffer.Anchor.Anchor.Tick))
+	if !host.IsRunning() {
+		t.Fatal("host stopped listening after admitting a mid-run join")
 	}
 }
 

@@ -277,12 +277,20 @@ func (pm *PeerManager) Send(id PeerID, msg *Message) bool {
 // Broadcast sends a message to all connected peers and reports how many could
 // not take it. A refused send is a frame the peer never sees; for a crossing that
 // is a permanent lockstep divergence, so the count is returned rather than dropped.
-func (pm *PeerManager) Broadcast(msg *Message) int {
+func (pm *PeerManager) Broadcast(msg *Message) int { return pm.BroadcastExcept(0, msg) }
+
+// BroadcastExcept is Broadcast skipping one participant, for relaying an artifact
+// onward without returning it to the link it arrived on. Participant zero is never
+// assigned, so it excludes nothing.
+func (pm *PeerManager) BroadcastExcept(exclude PeerID, msg *Message) int {
 	pm.mu.RLock()
 	defer pm.mu.RUnlock()
 
 	refused := 0
-	for _, peer := range pm.peers {
+	for id, peer := range pm.peers {
+		if id == exclude {
+			continue
+		}
 		// Clone message for independent sequence numbers
 		clone := *msg
 		if !peer.Send(&clone) {

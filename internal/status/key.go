@@ -89,9 +89,13 @@ func splitKey(key string) (group, name, playerSlot string) {
 		}
 
 	case "network":
-		switch name {
-		case "state", "peers", "connected", "map_latched":
+		switch {
+		case name == "state", name == "peers", name == "connected", name == "map_latched":
 			return "network.session", name, ""
+		case strings.HasPrefix(name, "barrier_"):
+			return "network.barrier", strings.TrimPrefix(name, "barrier_"), ""
+		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"):
+			return "network.link", name, ""
 		}
 
 	case "quasar", "snake", "storm", "swarm":

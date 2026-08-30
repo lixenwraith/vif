@@ -695,8 +695,9 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 | `-lr <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
 | `-j`, `-journal` | Capture replay input in a dedicated journal; does not imply a session log |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
-| `-host <bind-address>` | Host a startup-only two-participant TCP session |
-| `-join <host:port>` | Join a startup session and adopt the host anchor before world construction |
+| `-host <bind-address>` | Host a TCP session |
+| `-join <host:port>` | Join a session and adopt the host anchor before world construction |
+| `-players <n>` | Participants a `-host` lobby waits for, itself included |
 
 Log setup failure is non-fatal: the game runs unlogged and the process exits
 with `73` (`EX_CANTCREAT`) so a script can detect it.

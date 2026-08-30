@@ -2,6 +2,7 @@ package system
 
 import (
 	"cmp"
+	"encoding/json"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -30,7 +31,7 @@ type NetworkSystem struct {
 	mu              sync.Mutex
 	crossings       []event.ScheduledWireFrame
 	scheduled       []barrierArtifact
-	lastPeerTick    [parameter.MaxPlayers + 1]uint64
+	epochs          [parameter.MaxPlayers + 1]epochWindow
 	productionEpoch uint64
 	crossSeq        uint64
 	localSource     uint32
@@ -41,7 +42,8 @@ type NetworkSystem struct {
 	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
 
 	syncSeq   uint64
-	lastSync  [parameter.MaxPlayers]uint64 // last applied sync per slot, for reordering
+	lastSync  [parameter.MaxPlayers]uint64   // last applied sync per slot, for reordering
+	departed  [parameter.MaxPlayers + 1]bool // participants already announced or noticed
 	ticks     uint64
 	statSent  *atomic.Int64
 	statRecv  *atomic.Int64
@@ -62,6 +64,8 @@ type NetworkSystem struct {
 	statMapLatched    *atomic.Bool
 	statLostIn        *atomic.Int64
 	statLostOut       *atomic.Int64
+	statRelayed       *atomic.Int64
+	statDuplicates    *atomic.Int64
 
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
@@ -69,6 +73,72 @@ type NetworkSystem struct {
 
 	enabled bool
 }
+
+// epochWindow is one source's replay filter: the newest production epoch admitted
+// from it, plus a bitmap of the epochs immediately before that one.
+//
+// A single stream delivers a source's epochs in order, and a high-water mark is
+// enough for it. A mesh does not: the same epoch reaches a node by several paths,
+// and epochs from one source can arrive out of order because the paths differ in
+// length. Against a high-water mark an out-of-order epoch is indistinguishable from
+// a duplicate, so it would be discarded without ever being applied — a silent
+// divergence exactly where the relay is supposed to prevent one.
+//
+// The window admits each epoch once and no more, in any arrival order, as long as
+// it is within NetworkEpochWindow of the newest. Beyond that it is refused: an
+// artifact that far behind has already missed its apply tick.
+type epochWindow struct {
+	high uint64 // newest ProducedTick admitted; zero means nothing yet
+	seen uint64 // bit i set: epoch high-1-i was admitted
+}
+
+// admit reports whether tick is new to this source and records it. Zero is not a
+// valid production epoch — the first tick a session can close is one — so it is
+// refused rather than treated as "nothing seen yet".
+func (w *epochWindow) admit(tick uint64) bool {
+	switch {
+	case tick == 0:
+		return false
+
+	case w.high == 0:
+		w.high = tick
+		return true
+
+	case tick > w.high:
+		// The old high joins the backlog, shifted by the gap it now sits behind.
+		if shift := tick - w.high; shift < parameter.NetworkEpochWindow {
+			w.seen = (w.seen << shift) | (1 << (shift - 1))
+		} else {
+			w.seen = 0
+		}
+		w.high = tick
+		return true
+
+	case tick == w.high:
+		return false
+
+	default:
+		behind := w.high - tick
+		if behind > parameter.NetworkEpochWindow {
+			return false
+		}
+		bit := uint64(1) << (behind - 1)
+		if w.seen&bit != 0 {
+			return false
+		}
+		w.seen |= bit
+		return true
+	}
+}
+
+// newest reports the highest epoch admitted from this source, for the playout lag
+// telemetry that asks how far behind a peer's production is.
+func (w *epochWindow) newest() uint64 { return w.high }
+
+// coordinatorParticipant is the identity the handshake always assigns to the host.
+// It is the one participant every topology the session can build has a path to, which
+// is what makes it the single producer of a departure crossing.
+const coordinatorParticipant uint32 = 1
 
 // barrierArtifact is one encoded local or peer crossing waiting for its apply tick.
 type barrierArtifact struct {
@@ -100,6 +170,8 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statMapLatched = reg.Bools.Get("network.map_latched")
 	s.statLostIn = reg.Ints.Get("network.transport_lost_in")
 	s.statLostOut = reg.Ints.Get("network.transport_lost_out")
+	s.statRelayed = reg.Ints.Get("network.relay_forwarded")
+	s.statDuplicates = reg.Ints.Get("network.relay_duplicates")
 
 	s.Init()
 	return s
@@ -111,6 +183,7 @@ func (s *NetworkSystem) Init() {
 	s.ticks = 0
 	s.syncSeq = 0
 	s.lastSync = [parameter.MaxPlayers]uint64{}
+	s.departed = [parameter.MaxPlayers + 1]bool{}
 
 	s.statSent.Store(0)
 	s.statRecv.Store(0)
@@ -130,16 +203,18 @@ func (s *NetworkSystem) Init() {
 	s.statMapLatched.Store(false)
 	s.statLostIn.Store(0)
 	s.statLostOut.Store(0)
+	s.statRelayed.Store(0)
+	s.statDuplicates.Store(0)
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
 	s.scheduled = s.scheduled[:0]
-	s.lastPeerTick = [parameter.MaxPlayers + 1]uint64{}
+	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
 	s.crossSeq = 0
-	s.localSource = 1
+	s.localSource = 0
 	s.delayTicks = parameter.NetworkBarrierDelayTicks
 	if r := s.world.Resources.Network; r != nil {
 		s.localSource = r.ParticipantID
@@ -172,6 +247,8 @@ func (s *NetworkSystem) EventTypes() []event.EventType {
 	return []event.EventType{
 		event.EventMetaSystemCommandRequest,
 		event.EventGameResetRequest,
+		event.EventParticipantJoined,
+		event.EventParticipantDeparted,
 	}
 }
 
@@ -183,6 +260,79 @@ func (s *NetworkSystem) HandleEvent(ev event.GameEvent) {
 		if p, ok := ev.Payload.(*event.MetaSystemCommandPayload); ok && p.SystemName == s.Name() {
 			s.enabled = p.Enabled
 		}
+	case event.EventParticipantJoined:
+		if p, ok := ev.Payload.(*event.ParticipantJoinedPayload); ok {
+			s.addParticipant(p)
+		}
+	case event.EventParticipantDeparted:
+		if p, ok := ev.Payload.(*event.ParticipantDepartedPayload); ok {
+			s.removeParticipant(p)
+		}
+	}
+}
+
+// addParticipant applies the arrival crossing. Every instance runs it at the same
+// apply tick, so the cursor it creates takes the same shared entity everywhere (D-11)
+// — which is the reason a mid-run arrival cannot be a local reaction to a connect.
+// The instance the payload names is the one that goes on to simulate it.
+func (s *NetworkSystem) addParticipant(p *event.ParticipantJoinedPayload) {
+	if int(p.Slot) >= parameter.MaxPlayers || s.world.Resources.Player.Slot(p.Slot) != 0 {
+		return
+	}
+	control := component.ControlRemote
+	if p.Participant == s.participantID() {
+		control = component.ControlHuman
+	}
+	s.world.PushEvent(event.EventCursorSpawnRequest, &event.CursorSpawnRequestPayload{
+		Slot: p.Slot, Center: true, Control: uint8(control), PeerID: p.Participant,
+	})
+	if control == component.ControlHuman {
+		s.world.PushEvent(event.EventCursorSetLocalRequest, &event.CursorSetLocalPayload{Slot: p.Slot})
+	}
+	s.lastSync[p.Slot] = 0
+	if int(p.Participant) < len(s.departed) {
+		s.departed[p.Participant] = false
+	}
+}
+
+// participantID is this instance's canonical identity in the session.
+func (s *NetworkSystem) participantID() uint32 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.localSource
+}
+
+// DiscardArtifactsThrough drops scheduled artifacts whose apply tick a replayed
+// session log has already covered. A participant catching up receives live epochs
+// while it replays, and everything they carry up to the log's end is in the records
+// it just applied; applying both would double every crossing in that window.
+func (s *NetworkSystem) DiscardArtifactsThrough(tick uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	keep := s.scheduled[:0]
+	for _, a := range s.scheduled {
+		if a.applyTick > tick {
+			keep = append(keep, a)
+		}
+	}
+	s.scheduled = keep
+}
+
+// removeParticipant applies the departure crossing. It arrives at the same apply
+// tick on every instance, so the despawn it derives does too (D-5) — which is the
+// whole reason a disconnect is not acted on where it is observed.
+func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
+	if int(p.Slot) >= parameter.MaxPlayers {
+		return
+	}
+	cursor := s.world.Resources.Player.Slot(p.Slot)
+	if cursor == 0 || s.world.SimulatesLocally(cursor) {
+		return
+	}
+	s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
+	s.lastSync[p.Slot] = 0
+	if int(p.Participant) < len(s.departed) {
+		s.departed[p.Participant] = true
 	}
 }
 
@@ -285,29 +435,109 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
-			s.despawnPeer(uint32(in.Peer))
+			s.noticeDeparture(uint32(in.Peer))
 			queued++
 		case network.InboundMessage:
-			queued += s.dispatchMessage(in.Peer, in.Msg)
+			queued += s.dispatchMessage(uint32(in.Peer), in.Msg)
 		}
 	}
 	return queued
 }
 
-// despawnPeer leaves the local simulation alive with only its connected roster.
-// The slot's sync sequence is released with it: sequences are per-sender and restart
-// at one, so a slot refilled by a later participant must not be gated by the numbers
-// its predecessor already used.
-func (s *NetworkSystem) despawnPeer(peerID uint32) {
+// noticeDeparture reacts to a lost link. It deliberately does not despawn anything:
+// only a direct neighbour sees a disconnect, and it sees it at a moment of its own
+// transport's choosing, so acting here would remove a shared cursor at a different
+// tick on every instance — and not at all on instances that never linked to the
+// departing participant.
+//
+// Instead exactly one instance turns the observation into a crossing. The
+// coordinator is that instance: it is the only participant every topology this
+// session can build guarantees a path to, and one producer is what gives the
+// departure a single apply tick. A neighbour that is not the coordinator floods a
+// notice instead, deduped by departing participant like any other artifact.
+//
+// The identity release is separate and stays local: which identities the lobby may
+// hand out again is this instance's own bookkeeping, not shared state.
+func (s *NetworkSystem) noticeDeparture(peerID uint32) {
+	if r := s.world.Resources.Network; r != nil && r.OnDeparture != nil {
+		r.OnDeparture(peerID)
+	}
+	s.announceDeparture(peerID, 0)
+}
+
+// announceDeparture crosses or forwards one departure, once. from is the link a
+// notice arrived on, or zero when this instance observed the disconnect itself.
+func (s *NetworkSystem) announceDeparture(peerID uint32, from uint32) bool {
+	if peerID == 0 || int(peerID) >= len(s.departed) || s.departed[peerID] {
+		return false
+	}
+	s.departed[peerID] = true
+
+	slot, ok := s.participantSlot(peerID)
+	if !ok {
+		return true
+	}
+	if s.isCoordinator() {
+		s.crossSession(event.EventParticipantDeparted,
+			&event.ParticipantDepartedPayload{Participant: peerID, Slot: slot})
+		return true
+	}
+	p := s.port()
+	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
+		return true
+	}
+	body, err := json.Marshal(event.ParticipantDepartedPayload{Participant: peerID, Slot: slot})
+	if err != nil {
+		s.statDrop.Add(1)
+		return true
+	}
+	p.BroadcastExcept(from, uint8(network.MsgDisconnect), body)
+	s.statRelayed.Add(1)
+	return true
+}
+
+// receiveDeparture handles a neighbour's notice: the coordinator turns it into the
+// crossing, anyone else passes it on.
+func (s *NetworkSystem) receiveDeparture(from uint32, body []byte) {
+	var p event.ParticipantDepartedPayload
+	if err := json.Unmarshal(body, &p); err != nil {
+		s.statDrop.Add(1)
+		return
+	}
+	if !s.announceDeparture(p.Participant, from) {
+		s.statDuplicates.Add(1)
+	}
+}
+
+// crossSession pushes a roster change as a D-3 crossing carrying OriginSession, so
+// the record enters the replay journal. Nothing else in the stream implies a roster
+// change — it originates in a transport observation — and a participant catching up
+// by replaying that stream has to see it.
+func (s *NetworkSystem) crossSession(t event.EventType, payload any) {
+	s.world.PushEventFull(t, payload, event.OriginSession, core.DomainPlayer)
+}
+
+// isCoordinator reports whether this instance owns the session's first identity,
+// which is the one the handshake always assigns to the host.
+func (s *NetworkSystem) isCoordinator() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.localSource == coordinatorParticipant
+}
+
+// participantSlot finds the roster slot a peer-owned cursor occupies.
+// Caller MUST hold updateMutex.
+func (s *NetworkSystem) participantSlot(peerID uint32) (uint8, bool) {
+	var slot uint8
+	found := false
 	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
 		if c.Control == component.ControlRemote && c.PeerID == peerID {
-			s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: c.Slot})
-			if int(c.Slot) < parameter.MaxPlayers {
-				s.lastSync[c.Slot] = 0
-			}
+			slot, found = c.Slot, true
+			return false
 		}
 		return true
 	})
+	return slot, found
 }
 
 // publishConnectionTelemetry exposes the poll endpoint and D-14 latch state.
@@ -349,15 +579,17 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 // artifact epoch and the D-13 owner-authored sync. Raw participant input is not one
 // of them — a peer sends the resolved artifact, never the keystroke that produced
 // it — so an unrecognised type is counted and discarded rather than translated.
-func (s *NetworkSystem) dispatchMessage(_ network.PeerID, msg *network.Message) int {
+func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 	if msg == nil {
 		return 0
 	}
 	switch msg.Type {
 	case network.MsgEvent:
-		s.scheduleCrossings(msg.Payload)
+		s.scheduleCrossings(from, msg.Payload)
 	case network.MsgStateSync:
-		s.applyCursorState(msg.Payload)
+		s.applyCursorState(from, msg.Payload)
+	case network.MsgDisconnect:
+		s.receiveDeparture(from, msg.Payload)
 	default:
 		s.statDrop.Add(1)
 	}
@@ -422,31 +654,72 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 	s.statSent.Add(int64(len(pending)))
 }
 
-// scheduleCrossings buffers one peer epoch; application waits for its target tick.
-func (s *NetworkSystem) scheduleCrossings(body []byte) {
+// scheduleCrossings buffers one peer epoch and passes it on. Application waits for
+// the artifact's own target tick, which travels with it, so a relayed epoch applies
+// at the same tick however many links it crossed to arrive.
+//
+// The session is a mesh of links, not a star with an authority: a participant sends
+// only to the peers it dialled or accepted, so an artifact reaches everyone else by
+// being forwarded. Every node therefore floods each epoch it has not seen to every
+// link except the one it arrived on. What terminates the flood is the per-source
+// epoch window: a second copy arriving by another path is recognised and neither
+// applied nor forwarded again, so each node handles each epoch exactly once whatever
+// the topology. The hop limit is a backstop, not the termination argument.
+func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	batch, err := event.DecodeWireBatch(body)
 	if err != nil {
 		s.statDrop.Add(1)
 		vlog.Warn("app", "msg", "network decode", "error", err.Error())
 		return
 	}
-	if batch.Source == 0 || int(batch.Source) >= len(s.lastPeerTick) {
+	if batch.Source == 0 || int(batch.Source) >= len(s.epochs) {
 		s.statDrop.Add(int64(max(1, len(batch.Frames))))
 		return
 	}
+
 	s.mu.Lock()
-	if batch.ProducedTick <= s.lastPeerTick[batch.Source] {
-		s.mu.Unlock()
-		s.statDrop.Add(int64(len(batch.Frames)))
-		return
-	}
-	s.lastPeerTick[batch.Source] = batch.ProducedTick
-	for _, f := range batch.Frames {
-		s.scheduled = append(s.scheduled, barrierArtifact{
-			frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
-		})
+	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
+	if admitted {
+		for _, f := range batch.Frames {
+			s.scheduled = append(s.scheduled, barrierArtifact{
+				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
+			})
+		}
 	}
 	s.mu.Unlock()
+
+	if !admitted {
+		s.statDuplicates.Add(1)
+		return
+	}
+	s.relayBatch(from, batch)
+}
+
+// relayBatch forwards one admitted epoch onward, unchanged apart from the hop count.
+// Source, ProducedTick and every frame's ApplyTick and sequence are what make the
+// artifact identical on every instance, so a relay must not restamp any of them.
+func (s *NetworkSystem) relayBatch(from uint32, batch event.WireBatch) {
+	p := s.port()
+	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
+		return
+	}
+	if batch.Hops >= parameter.NetworkRelayHopLimit {
+		s.statDrop.Add(1)
+		vlog.Warn("app", "msg", "network relay hop limit",
+			"source", batch.Source, "produced_tick", batch.ProducedTick)
+		return
+	}
+	batch.Hops++
+	body, err := event.EncodeWireBatch(batch)
+	if err != nil {
+		s.statDrop.Add(int64(max(1, len(batch.Frames))))
+		vlog.Warn("app", "msg", "network relay encode", "error", err.Error())
+		return
+	}
+	// Excluding the arriving link is traffic economy, not correctness: that peer
+	// admitted the epoch before sending it and would recognise its own copy.
+	p.BroadcastExcept(from, uint8(network.MsgEvent), body)
+	s.statRelayed.Add(1)
 }
 
 // applyDue publishes due artifacts in the same source/sequence order everywhere.
@@ -513,13 +786,13 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	local := s.localSource
 	minPeer := uint64(0)
 	seen := 0
-	for source := 1; source < len(s.lastPeerTick); source++ {
-		if uint32(source) == local || s.lastPeerTick[source] == 0 {
+	for source := 1; source < len(s.epochs); source++ {
+		newest := s.epochs[source].newest()
+		if uint32(source) == local || newest == 0 {
 			continue
 		}
-		tick := s.lastPeerTick[source]
-		if seen == 0 || tick < minPeer {
-			minPeer = tick
+		if seen == 0 || newest < minPeer {
+			minPeer = newest
 		}
 		seen++
 	}
@@ -534,10 +807,25 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 		lag = required - minPeer
 	}
 	s.statPeerLag.Store(int64(lag))
-	// The guard above already established a running port with at least one peer.
-	if required != 0 && (seen < p.PeerCount() || lag != 0) {
+	// Sources are participants, not links: in a mesh most of them arrive relayed, so
+	// the count this instance should hear from is the remote half of the roster
+	// rather than the number of peers it happens to be connected to.
+	if required != 0 && (seen < s.remoteParticipants() || lag != 0) {
 		s.statRanWithout.Add(1)
 	}
+}
+
+// remoteParticipants counts the rostered cursors another instance simulates.
+// Caller MUST hold updateMutex.
+func (s *NetworkSystem) remoteParticipants() int {
+	n := 0
+	s.world.Components.Cursor.Each(func(_ core.Entity, c *component.CursorComponent) bool {
+		if c.Control == component.ControlRemote {
+			n++
+		}
+		return true
+	})
+	return n
 }
 
 // sendCursorState broadcasts the owner-authored state of every cursor this
@@ -607,12 +895,17 @@ func (s *NetworkSystem) readCursorState(cursor core.Entity, slot uint8) *event.C
 // applyCursorState writes a peer's cursor state. The write is admitted only for a
 // cursor this instance does not simulate, so the transported value and a local
 // writer can never both author one cell (D-2, D-13).
-func (s *NetworkSystem) applyCursorState(body []byte) {
+// A sync is relayed only when this instance had not already applied it. That is the
+// same termination argument as the epoch flood, using the per-slot sequence in place
+// of the per-source epoch window: state is a whole snapshot rather than a delta, so
+// the newest wins and an older one needs neither applying nor forwarding.
+func (s *NetworkSystem) applyCursorState(from uint32, body []byte) {
 	frames, err := event.DecodeFrames(body)
 	if err != nil {
 		s.statDrop.Add(1)
 		return
 	}
+	applied := false
 	for _, f := range frames {
 		et, payload, _, err := f.Decode()
 		if err != nil || et != event.EventCursorStateSync {
@@ -624,7 +917,15 @@ func (s *NetworkSystem) applyCursorState(body []byte) {
 			s.statDrop.Add(1)
 			continue
 		}
-		s.writeCursorState(p)
+		applied = s.writeCursorState(p) || applied
+	}
+	if !applied {
+		s.statDuplicates.Add(1)
+		return
+	}
+	if p := s.port(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
+		p.BroadcastExcept(from, uint8(network.MsgStateSync), body)
+		s.statRelayed.Add(1)
 	}
 }
 
@@ -633,19 +934,19 @@ func (s *NetworkSystem) applyCursorState(body []byte) {
 // selects the cells written and the slot keys the sequence that decides whether to
 // write them at all. A disagreement would age one participant's state under
 // another's sequence, so it is dropped rather than reconciled.
-func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) {
+func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) bool {
 	cursor := s.world.ResolveCursor(p.Entity)
 	if cursor == 0 || s.world.SimulatesLocally(cursor) || int(p.Slot) >= parameter.MaxPlayers {
 		s.statDrop.Add(1)
-		return
+		return false
 	}
 	if slot, ok := s.world.CursorSlot(cursor); !ok || slot != p.Slot {
 		s.statDrop.Add(1)
-		return
+		return false
 	}
 	if p.Seq <= s.lastSync[p.Slot] {
 		s.statDrop.Add(1) // reordered or replayed; the newer value already landed
-		return
+		return false
 	}
 	s.lastSync[p.Slot] = p.Seq
 
@@ -694,6 +995,7 @@ func (s *NetworkSystem) writeCursorState(p *event.CursorStatePayload) {
 		s.world.Components.Pulse.RemoveEntity(cursor, false)
 	}
 	s.statState.Add(1)
+	return true
 }
 
 // stateFrame wraps one cursor sync in the frame the codec already carries, so

@@ -306,21 +306,25 @@ the bundled xterm.js page, uses embedded configuration/content, and compiles out
 logging; sound is disabled in the current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.
 
-A startup-only two-participant TCP game is exposed through `-host` and `-join`.
-The join handshake resolves the host anchor before the joining world is
-constructed, both schedulers remain at tick zero until the ready gate completes,
-and the manifest-registered `NetworkSystem` drains framed input only at the
-simulation's poll boundary. The fixed-delay artifact barrier exchanges crossings
-without a synchronous per-tick round trip. A disconnect despawns the departed
-cursor and leaves the survivor running.
+A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed
+through `-host`, `-join` and `-players`. The join handshake resolves the host
+anchor before the joining world is constructed, the roster every instance builds
+from arrives with the start gate, every scheduler stays at tick zero until the
+lobby closes, and the manifest-registered `NetworkSystem` drains framed input only
+at the simulation's poll boundary. The fixed-delay artifact barrier exchanges
+crossings without a synchronous per-tick round trip, and because every artifact
+names the absolute tick it applies at, a node relays what it receives so a
+participant reaches instances its producer never linked to. Roster changes travel
+the same way, so a departure or an arrival lands on one tick everywhere. A
+participant arriving after tick zero reproduces the session by replaying the
+host's retained record log.
 
-The proof of concept has no reconnect, mid-run world snapshot, lag compensation,
-authentication, or CLI TLS identity, and currently admits one joining peer. The
-participant/session representation and poll/barrier contracts are not pair-shaped;
-larger lobbies need coordinator slot allocation rather than a transport rewrite.
-The domain boundary, event classification, wire protocol, their enforcing tests,
-and an analysis of what the model does not yet cover are in rules D-1..D-15 and
-§9 of [the domain model](domain-design.md).
+It has no lag compensation, authentication or CLI TLS identity, no world snapshot
+to bound the retained log, and no partition detection; `-join` dials one address,
+so the links form a star even though the relay makes any graph work. The domain
+boundary, event classification, wire protocol, their enforcing tests, and an
+analysis of what the model does not yet cover are in rules D-1..D-15 and §9 of
+[the domain model](domain-design.md).
 
 For build, diagnostics, platform, and repository-health details, see
 [Development and operations](development.md) and

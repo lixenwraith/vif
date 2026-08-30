@@ -386,6 +386,53 @@ path is therefore unchanged.
 `network.barrier_{deferred,applied_local,applied_peer,late,ran_without_peer,peer_lag_ticks,peer_artifacts}`
 and `network.barrier_peer_applied` expose the barrier state.
 
+**The mesh.** A session is a graph of links, not a star with an authority: an
+instance sends only to the peers it dialled or accepted, so an artifact reaches
+everyone else by being forwarded. Every node floods each epoch it has not seen to
+every link except the one it arrived on. What terminates the flood is the
+per-source epoch window — a copy arriving by a second path is recognised and
+neither applied nor forwarded again — so each node handles each epoch exactly
+once whatever the topology; `parameter.NetworkRelayHopLimit` is a backstop, not
+the termination argument. A relay preserves `Source`, `ProducedTick` and every
+frame's `ApplyTick` and sequence, which is what lets a relayed artifact apply at
+the same absolute tick however many links it crossed. Owner-authored state syncs
+relay on the same rule, using the per-slot sequence in place of the epoch window.
+
+The window matters because a mesh reorders. One stream delivers a source's epochs
+in order and a high-water mark suffices; a mesh delivers the same source by paths
+of different lengths, where an out-of-order epoch is indistinguishable from a
+duplicate and would be discarded without ever being applied.
+`parameter.NetworkEpochWindow` admits each epoch once in any arrival order, over a
+64-epoch backlog — three seconds at 20 ticks/s, beyond any path that could still
+meet its apply tick. `network.relay_forwarded` and `network.relay_duplicates`
+expose the flood.
+
+**Membership.** A roster change is shared state, so it travels as an artifact
+rather than as a local reaction to a link event. A disconnect is observed only by
+a direct neighbour, and at a moment of that neighbour's own transport's choosing:
+acting on it where it is seen would remove a shared cursor at a different tick on
+every instance, and not at all on one that never linked to the departing
+participant. Exactly one instance therefore turns the observation into a
+crossing — the coordinator, the one participant every topology this session can
+build has a path to — and a neighbour that is not the coordinator forwards a
+`MsgDisconnect` notice instead, deduped by departing participant. An arrival
+crosses the same way, so every instance creates the new cursor at one agreed tick
+and its shared entity is identical everywhere (D-11). Both carry `OriginSession`,
+which is journaled: nothing else in the record stream implies a roster change.
+
+**Mid-run join.** A participant arriving after tick zero reproduces the session
+rather than receiving it. A run is a pure function of its anchor and its
+non-system record stream, which is what replay already relies on, so a host
+retains that stream for the life of the session and the handshake carries it. The
+log is unbounded and a frame is capped at 64 KiB, so it crosses as sequenced
+chunks; past the offer the deadlines are per-write, because the transfer is as
+long as the session rather than as long as the link. `App.CatchUp` replays it,
+ticks over the quiet stretch the records do not cover, and discards the barrier
+artifacts the log already applied. It does not pre-adopt the D-14 latch: the
+records carry the level setup that produced it, and adopting as well would run
+that event twice. The cost is memory — the log is complete from tick zero because
+replay is, and grows with session length.
+
 **The stream.** The real endpoint is `network.SocketPort`. Every message has a
 fixed 12-byte header whose final field is payload length; `Decode` uses
 `io.ReadFull` for both header and payload, and `Encode` completes short writes.
@@ -403,25 +450,32 @@ desynchronises silently: `network.transport_lost_in` is inbound notifications a
 full poll buffer discarded, `network.transport_lost_out` is outbound frames a
 peer's send queue refused. A new loss is also logged once.
 
-**Startup.** The handshake sends the existing `JoinAnchor` inside `SessionOffer`,
-then the host assigns participant IDs and roster slots. `App.JoinSession` calls
-`App.Join`, so schema, tick interval, seed, session, config, corpus and D-14
-latch mismatches return the existing join error. A rejected connection never
-enters the peer manager. Canonical participant IDs, not connection-local accept
-order, key the barrier sort and disconnect roster cleanup. The tick-zero
-start/ready gate is startup coordination only; no per-tick round trip was added,
-and it is what gives every participant the same tick origin the barrier's
-absolute apply ticks presume.
+**Startup.** The handshake sends the existing `JoinAnchor` inside `SessionOffer`.
+The coordinator allocates a participant ID and a roster slot per accepted
+connection and releases it when a handshake fails or a participant departs, so the
+lobby grows to `parameter.MaxPlayers` rather than being fixed at two; `-players`
+sets the size it waits for. `App.Join` checks identity as soon as a joiner
+arrives, so schema, tick interval, seed, session, config, corpus and D-14 latch
+mismatches are refused before the rest of the lobby waits on it. A rejected
+connection never enters the peer manager. Canonical participant IDs, not
+connection-local accept order, key the barrier sort and roster cleanup.
+
+The roster every instance builds from arrives with the **start gate**, not with
+the offer: a joiner that dialled early saw only the participants ahead of it, and
+building from that partial view would give each instance a different shared
+creation order (D-11). The gate is otherwise startup coordination only — no
+per-tick round trip — and it is what gives every participant the same tick origin
+the barrier's absolute apply ticks presume.
 
 `cmd/vif` exposes that gate as startup flags rather than ex commands: `-host
-<bind-address>` and `-join <host:port>`. A host initializes its terminal, world
-and listener, renders a lobby message, and holds the scheduler at tick zero until
-one participant is ready. A joiner dials before constructing its `App`, so
-`ConfigForJoin` installs the host seed, config and corpus identity before
-`initWorld` can draw a seed or load content. Both sides activate the crossing
-sink before terminal input is consumed. The host remains playable and listening
-after a disconnect; a later connection receives the current nonzero position and
-is rejected with `ErrJoinMidRun`, because no world snapshot exists.
+<bind-address>`, `-join <host:port>` and `-players <n>`. A host initializes its
+terminal, world and listener, renders a lobby message, and holds the scheduler at
+tick zero until every expected participant is ready. A joiner dials before
+constructing its `App`, so `ConfigForJoin` installs the host seed, config and
+corpus identity before `initWorld` can draw a seed or load content. Both sides
+activate the crossing sink before terminal input is consumed. The host remains
+playable and listening after a disconnect, and a later connection is caught up
+from the retained log rather than refused.
 
 **Cost.** The wire keeps journal TOML payloads inside a JSON epoch envelope. The
 measured complete frames, including the 12-byte header, are 44 bytes for an empty
@@ -504,7 +558,7 @@ fails the build when the code stops matching the declaration.
 | `TestPersonalNuggetUsesPlayerDomainAndLocalCursor`, `TestPersonalNuggetJumpCrossesOnlyCursorMove` | `internal/system` | §4: nugget is personal; only the cursor move crosses |
 | `TestSharedSpeciesCrossesOnlyOwnedShieldImpact`, `TestCursorDefeatTransitionCrossesCombinedOwnerState`, `TestMetaDefeatGateRequiresEveryRosteredCursor` | `internal/system` | D-13: a remote shield cannot produce a second impact; defeat state crosses instead of being read from slot zero |
 | `TestRemoteCursorRejectsOwnerAuthoredWrites`, `TestRemoteCursorStateDoesNotAgeLocally` | `internal/system` | D-2: neither a grant nor a per-tick loop writes a cursor this instance does not simulate |
-| `TestCursorStateSyncWritesOnlyACoherentRemoteCursor`, `TestPeerDespawnReleasesTheSlotSyncSequence` | `internal/system` | D-13 receive side: entity and slot must agree, sequences gate replays, a released slot accepts a successor |
+| `TestCursorStateSyncWritesOnlyACoherentRemoteCursor`, `TestDepartureReleasesTheSlotSyncSequence` | `internal/system` | D-13 receive side: entity and slot must agree, sequences gate replays, a released slot accepts a successor |
 | `TestBusPayloadsNameOnlySharedEntities` | `internal/app` | D-4 over a soak, via a dispatch tap |
 | `TestLocalEventsCarryThePlayerDomain` | `internal/app` | D-10: a Local-class record is tagged player, against a shrinking exemption set |
 | `TestDomainAuditSoakClean` | `internal/app` | Zero component-domain violations over a 3,000-step soak |
@@ -513,11 +567,25 @@ fails the build when the code stops matching the declaration.
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |
 | `TestObserverSharedStateTracksTheLiveParticipant` | `internal/app` | 1,200 steps of an observer whose shared state arrives over the wire rather than re-derived |
 | `TestTwoLiveParticipantsStayInLockstep` | `internal/app` | 1,200 steps, two live participants, both moving, both crossing, both nonzero APM |
-| `TestTwoLiveParticipantsStayInLockstepOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing and clean remote-cursor removal on disconnect |
+| `TestTwoLiveParticipantsStayInLockstepOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing, clean remote-cursor removal on disconnect, and a real mid-run join |
+| `TestChainRelayReachesANonAdjacentParticipant` | `internal/app` | §6: a crossing reaches a participant its producer never linked to, at the same tick; fails without the relay |
+| `TestMeshPropagatesEveryParticipantToEveryOther` | `internal/app` | Five participants in 1—2, 2—3, 3—4, 3—5 agree on every shared record through 240 driven steps |
+| `TestDepartureReachesTheWholeMesh` | `internal/app` | A departure removes the cursor on an instance that never linked to the departing participant |
+| `TestThreeParticipantLobbyClosesOnOneRoster` | `internal/app` | The socket handshake for a lobby larger than a pair: partial offers, one closed roster |
+| `TestLateJoinerReplaysTheSessionToTheHostPosition` | `internal/app` | Mid-run join: replaying the log onto a different terminal reaches byte-identical shared state |
+| `TestLateJoinerTakesTheRosterAndStaysInLockstep` | `internal/app` | The arrival crossing lands on both instances at one tick, and both then drive their own cursor in lockstep |
+| `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
+| `TestSessionLogSplitsAndRoundTrips`, `TestSessionLogChunksFitOneFrame` | `internal/event` | The catch-up transfer is lossless and every chunk fits one frame |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
 | `TestAppsScopeOperatorState` | `internal/app` | Two Apps drive resize and debug mutations without cross-talk |
 | `TestWireEncodingBudget`, `TestFrameRoundTripSurvivesShortStreamIO` | `internal/event`, `internal/network` | Representative stream cost; framing survives short stream I/O |
 | `TestBroadcastReportsRefusedFrames` | `internal/network` | A refused outbound frame is counted rather than swallowed |
+
+The mesh harness is `network.Mesh`, an in-process link graph: what a node sends,
+its direct neighbours drain on their next tick. A real socket adds framing and
+latency, neither of which the domain rules depend on, but unlike a single stream
+it can express a topology that is not a star — which is the only way to test that
+an artifact reached a participant its producer never sent it to.
 
 Supporting machinery: `engine.PinDomainAudit`/`DomainMismatches`/
 `DomainViolations`; per-system audit attribution in `UpdateLocked`, falling back
@@ -552,10 +620,18 @@ kill or progression result, or a nonzero
 `network.barrier_late`/`network.barrier_ran_without_peer`/`network.transport_lost_*`
 trend under an otherwise healthy link.
 
-The same binary works on a LAN by binding the host to `:7777` or `0.0.0.0:7777`
-and joining its reachable address. Internet use is the same socket path but
-remains a trusted-peer proof: it requires external firewall/NAT routing and
-currently carries plaintext with no authentication.
+For a larger lobby the host names the count it waits for and each participant
+joins the same address:
+
+```bash
+./bin/vif -d -host 127.0.0.1:7777 -players 4
+```
+
+The status bar reaches `NET:<n>P/LOCK` once the lobby closes, and every terminal
+must show every cursor. The same binary works on a LAN by binding the host to
+`:7777` or `0.0.0.0:7777` and joining its reachable address. Internet use is the
+same socket path but remains a trusted-peer proof: it requires external
+firewall/NAT routing and currently carries plaintext with no authentication.
 
 ## 9. Analysis: authority, topology and open work
 
@@ -568,176 +644,178 @@ useful answer for one of the three kinds of state.
 |---|---|---|
 | Shared simulation | **None** | Every instance re-derives it from the same seed, config, corpus, map script and ordered artifact stream (D-11). Agreement is a property of determinism, not a decision. Nothing is sent: `OnWire` excludes the `Shared` class precisely because sending it would apply it twice. |
 | Owner-authored shared state (D-13) | **Per cursor**, the instance that simulates it | `SimulatesLocally` admits exactly one writer; the value is transported, never re-derived. This is per-object, not per-session, and does not depend on topology. |
-| Session identity and map bounds | **The coordinator**, at startup only | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots and the barrier delay. |
+| Session identity, map bounds and roster changes | **The coordinator** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, the barrier delay, and the arrival and departure crossings. |
 
-The host is a coordinator, not a state authority, and it stops being even that
-once the tick-zero gate releases. After startup a host is an ordinary
-participant: it owns its own cursor's D-13 cells and nothing else. It has no
-ability to correct, override or arbitrate another participant's shared state,
-because it holds no copy that is more authoritative than anyone else's.
+The coordinator is not a state authority. It owns its own cursor's D-13 cells and
+nothing else; it cannot correct, override or arbitrate another participant's
+shared state, because it holds no copy more authoritative than anyone else's.
+What it owns is *allocation and announcement* — deciding who is in the session,
+not what happens in it. Even a roster change it announces is applied by everyone
+from the same artifact at the same tick, exactly like a crossing any participant
+could have produced.
 
-So the chain question — *A joins B, B joins C; who is the host for A and C?* —
-is answered by the model rather than by the graph: **the coordinator is whoever
-issued the `SessionOffer` a participant adopted**, and the correct behaviour for
-a chain is not to elect a host per link but to propagate one session identity.
-Every participant in one session must adopt the same anchor, the same
-participant-ID space and the same barrier delay, whoever physically hands it
-over. A relay forwards an offer; it does not mint its own.
+So the chain question — *A joins B, B joins C; who is the host for A and C?* — has
+two halves, and they separate cleanly.
 
-### 9.2 Topology today, and what a graph needs
+**Identity** is answered by the model rather than by the graph: **the coordinator
+is whoever issued the `SessionOffer` a participant adopted**, and the right
+behaviour for a chain is not to elect a host per link but to propagate one session
+identity. Every participant in one session adopts the same anchor, the same
+participant-ID space and the same barrier delay, whoever physically hands it over.
+A relay forwards an offer; it does not mint its own.
 
-The implementation is a **star of exactly two**, and the limit lives in three
-separate places rather than one.
+**Propagation** is not an authority question at all, and was the real gap. A
+crossing A produces has to reach C, which A never sends to — and it does, because
+every node floods each artifact it has not seen to every link but the one it
+arrived on, and every artifact names the absolute tick it applies at. C applies
+A's attack on the same tick A did, having received it from B. Nothing about that
+depends on who the host is; see §6 and §9.2.
 
-1. *The session layer is fixed at two.* `hostParticipantID`/`joinParticipantID`
-   are constants, `hostOffer` builds a two-entry roster, the host's transport
-   sets `MaxPeers = 1`, and `startHostSessionOn` waits for `remoteCount = 1`.
-2. *The transport is single-hop.* `flushCrossings` broadcasts only this
-   instance's own epoch. A peer's decoded batch is scheduled locally and never
-   forwarded. In A—B—C, B applies A's artifacts and C never sees them.
-3. *Membership is link-local.* `despawnPeer` removes the cursors of a directly
-   connected participant on its own disconnect notification. A participant two
-   hops away leaving is invisible.
+### 9.2 Topology
 
-Everything below the session layer is already vector-shaped, which is why this is
-extension rather than rewrite: `SessionOffer.Participants` is a slice,
-`lastPeerTick` is indexed by participant ID, the barrier sorts by *(apply tick,
-participant ID, sequence)*, and `ScheduledWireFrame.ApplyTick` is an **absolute**
-tick, not a relative offset. That last property is what makes a relay
-tractable — a forwarded artifact still applies at the same tick everywhere,
-because the tick it names travelled with it.
+A session is a **mesh**: participants exchange artifacts over whatever links they
+have, and everything below the session layer is participant-shaped rather than
+pair-shaped. `SessionOffer.Participants` is a slice, the epoch window is indexed
+by participant ID, the barrier sorts by *(apply tick, participant ID, sequence)*,
+and `ScheduledWireFrame.ApplyTick` is an **absolute** tick, not a relative offset.
+That last property is what makes relaying sound: a forwarded artifact still
+applies at the same tick everywhere, because the tick it names travelled with it.
+Propagation itself is a flood with per-source suppression (§6), so A—B—C reaches
+C without A ever sending to it.
 
-Reaching A—B, B—C, (C,D)—E, with A's action visible to E and back, needs five
-things, in dependency order:
+What the coordinator still is, and only is: the allocator of participant
+identities and roster slots, the source of the anchor and the D-14 latch, and the
+single producer of roster-change crossings. It holds no shared state anyone else
+does not.
 
-1. **Artifact relay.** Forward a decoded batch unchanged, preserving `Source`,
-   `ProducedTick` and `ApplyTick`. The existing per-source
-   `batch.ProducedTick <= lastPeerTick[Source]` check is already the idempotence
-   a relay needs — a second copy arriving by another path is rejected. What is
-   missing is the forward itself, and a hop bound, because a graph with a cycle
-   re-delivers forever.
-2. **A playout lead that covers the graph diameter, not one link.**
-   `NetworkBarrierDelayTicks = 3` is negotiated once at 150 ms. An artifact
-   crossing several hops must still arrive before its absolute apply tick, or it
-   lands late and the instances diverge. `network.barrier_late` is already the
-   signal that the lead is too small; the delay has to become a function of the
-   worst-case path rather than a constant.
-3. **Session-wide participant-ID allocation.** IDs must be globally unique and
-   stable, because they key `lastPeerTick`, the barrier sort and the roster slot.
-   A participant joining through a relay must receive its ID from the same
-   allocator, forwarded, not from the peer it happened to dial.
-4. **Membership as shared state.** Join and leave must cross as artifacts every
-   instance applies at the same tick, rather than being derived from a local
-   link event — a cursor despawn is shared state, and today two instances agree
-   only because both are endpoints of the same link.
-5. **Partition handling.** In a graph, one link failure splits a session into two
-   components that both keep simulating happily. Nothing detects this.
+Three things remain open, and each is a property of the graph rather than of the
+transport:
 
-A star with N joiners is a much smaller step than a general graph: it needs (1)
-in its simplest form — the host rebroadcasting each peer's epoch — plus (3), (4)
-and a roster of N. It is the sensible next increment.
+1. **Delay is a constant, not a diameter.** `NetworkBarrierDelayTicks = 3` is
+   negotiated once at 150 ms. An artifact crossing several links must still
+   arrive before its absolute apply tick, or it lands late and the instances
+   diverge. `network.barrier_late` is the signal that the lead is too small; the
+   lead should become a function of the worst-case path.
+2. **Departure needs a reachable coordinator.** One producer is what gives a
+   roster change a single apply tick, and the coordinator is the participant every
+   topology the session can currently build has a path to. If it departs, or a
+   partition puts it out of reach, no departure is announced. Electing a
+   replacement is a membership-agreement problem, not a transport one.
+3. **A partition is undetected.** In a graph, one link failure splits a session
+   into two components that both keep simulating happily. Nothing notices.
+
+The links themselves are still built as a star, because `-join` dials one address.
+The relay is what makes any other shape work; wiring a participant to dial more
+than one peer is a CLI change, not a protocol one.
 
 ### 9.3 Toward a trusted branch
 
-The eventual "which branch do we trust" question is easier here than in a
-system that replicates state, and the reason is worth recording. Because shared
-state is re-derived rather than transported, there is nothing to reconcile
-*except the artifact stream*. A divergence is always a disagreement about which
-artifacts, in which order, at which tick — never about the resulting world. The
-frame already carries the three fields such a log needs (source, per-source
-sequence, absolute apply tick), and the ordering is already independent of
-arrival order.
+The eventual "which branch do we trust" question is easier here than in a system
+that replicates state, and the reason is worth recording. Because shared state is
+re-derived rather than transported, there is nothing to reconcile *except the
+artifact stream*. A divergence is always a disagreement about which artifacts, in
+which order, at which tick — never about the resulting world. The frame already
+carries the three fields such a log needs (source, per-source sequence, absolute
+apply tick), and the ordering is already independent of arrival order.
 
-Two prerequisites do not exist:
+Rewind is no longer the obstacle it looks like. A run is a pure function of its
+anchor and its record stream, and a host retains that stream, so any position in
+the session can be reconstructed by replaying to it — which is exactly what a
+mid-run join now does. Rejecting a branch after the fact is therefore replay to
+the fork point and forward along the other one, not a snapshot-and-rollback
+mechanism the engine lacks. What it costs is time proportional to session length,
+which is what a periodic world snapshot would bound.
 
-- **Rewind.** An applied artifact cannot be taken back. There is no world
-  snapshot and no rollback, which is also why `ErrJoinMidRun` refuses a late
-  joiner. Any scheme that rejects a branch after the fact needs a snapshot to
-  return to and a re-simulation from it.
-- **Identity.** The link is plaintext and unauthenticated; `MsgAuthRequest`/
-  `MsgAuthResponse` are reserved and unused, and `Config.TLS` is never populated
-  by the CLI. A participant cannot prove that an artifact attributed to it is
-  its own, so there is nothing for an agreement rule to bind to.
-
-Snapshot-and-resume is the higher-leverage of the two: it unlocks mid-run join,
-reconnect, and rollback in one piece of work.
+What is genuinely missing is **identity**. The link is plaintext and
+unauthenticated; `MsgAuthRequest`/`MsgAuthResponse` are reserved and unused, and
+`Config.TLS` is never populated by the CLI. A participant cannot prove that an
+artifact attributed to it is its own, so there is nothing for an agreement rule to
+bind to. That is the prerequisite, not rewind.
 
 ### 9.4 Known limitations
 
 **Session and transport**
 
-- Two participants, startup-only. No mid-run join (`ErrJoinMidRun`), no
-  reconnect, no world snapshot.
+- The playout lead is a constant rather than a function of the graph's diameter,
+  and a partition is undetected. See §9.2.
+- Mid-run join is bounded by memory and by wall clock: the retained log is
+  complete from tick zero, so it grows with session length, and catching up costs
+  time proportional to it. A periodic world snapshot is what bounds both.
+- Mid-run join is not yet driven from `cmd/vif` against a *live* host. The
+  mechanism, the transfer and the roster crossing are in place and proven over the
+  socket, but a running host advances while a joiner replays, so the handoff needs
+  either the host to hold its advance across it or the joiner to buffer epochs and
+  fast-forward onto the session's tick phase. Only the second scales.
+- Reconnect reuses the same machinery and is not separately wired: an identity is
+  released when its participant departs, and a returning participant catches up
+  like any other late arrival.
 - Plaintext and unauthenticated; no CLI TLS surface.
 - No lag compensation. A slow peer produces late artifacts and divergence rather
   than a stall — deliberate, since simulation never waits, but it means the
   playout lead is the only defence.
-- A refused outbound frame is now counted and logged but not retransmitted. The
-  stream itself is reliable and ordered; the loss is in the bounded send queue
-  ahead of it.
-- `float64` simulation means cross-platform bit-exact lockstep is not claimed;
-  the guarantee is per implementation build.
+- A refused outbound frame is counted and logged but not retransmitted. The stream
+  itself is reliable and ordered; the loss is in the bounded send queue ahead of it.
+- `float64` simulation means cross-platform bit-exact lockstep is not claimed; the
+  guarantee is per implementation build.
 - `NetworkSystem.Init` on a game reset clears scheduled artifacts and restarts the
-  epoch, which is symmetric only because both instances reset at the same
-  derived tick.
+  epoch, which is symmetric only because both instances reset at the same derived
+  tick.
 
 **Domain boundary**
 
-- `combat.` telemetry is a mixed aggregate and is dropped whole from the shared
-  snapshot. Splitting the counters per target domain would return the group to
-  the comparison.
 - `unstampedLocal` in `internal/app/local_stamp_test.go` still holds 19
-  `Local`-class types pushed with the ambient shared tag from app, engine, fsm
-  and the shared species systems. Not a transport gate — the class keeps them off
-  the wire regardless — but the journal record is dishonest about them.
+  `Local`-class types pushed with the ambient shared tag from app, engine, fsm and
+  the shared species systems. Not a transport gate — the class keeps them off the
+  wire regardless — but the journal record is dishonest about them.
 - Operator grant commands in `internal/mode/commands.go` push the owner-authored
   family with the ambient shared tag under `OriginCommand`. Harmless while those
   types are `Local`; retagging them changes recorded record domains.
 - `EventLevelSetup` and FSM region ops are `Shared` but operator-injectable. Both
-  are replicated only because every instance runs the same map script; one
-  injected into a single participant rewrites shared state its peers never see.
+  are replicated only because every instance runs the same map script; one injected
+  into a single participant rewrites shared state its peers never see.
   `ScriptOptions.MapSetups` holds the first fixed for a parity run, as `Resizes`
   already does; the FSM op is held by `Regions`.
 - Ex commands and overlays are operator-injectable, not participant input. The
-  two-live criterion disables both: commands include direct scheduler and system
+  live criteria disable both: commands include direct scheduler and system
   mutations that are not sent to a peer, while an overlay advances only its App's
   paused clock. These remain valid in replay and single-instance soaks and are
   outside the D-10 wire set by design — but it does mean any operator action
   desynchronises a live session.
 - `event.EmitDeath` writes the queue directly, bypassing `PushEvent`, so
-  `WithDomain` does not reach death records. Batches are already domain-pure,
-  which is what determinism needs; the domain travels as an explicit parameter.
-- `uint32(entity)` narrowing at `gateway.go` and `adaptation.go` is safe only
-  while route-graph anchors are shared (tag 0).
+  `WithDomain` does not reach death records. Batches are already domain-pure, which
+  is what determinism needs; the domain travels as an explicit parameter.
+- `uint32(entity)` narrowing at `gateway.go` and `adaptation.go` is safe only while
+  route-graph anchors are shared (tag 0).
+- `combat.` telemetry is a mixed aggregate and is dropped whole from the shared
+  snapshot. *Closed as not worth doing*: the shared world digest already hashes
+  hit points, enrage, stun and both immunities for every non-cursor combatant, so
+  splitting twenty-odd counters per target domain would restore a comparison that
+  is already covered.
 
 **Presentation**
 
 - A recording or session on a terminal smaller than the map is clipped by the
   render buffer. The pan offset in `play.go` is the seam a windowed composite
-  replaces. Pure presentation, no shared state, no abuse surface; needs its own
-  focused session.
+  replaces. Pure presentation, no shared state, no abuse surface; its own task.
 
 ### 9.5 Next work
 
-Roughly in dependency order; the first three are one coherent piece.
-
-1. **N-participant session layer.** Replace the two constants and the fixed
-   roster with coordinator slot allocation; raise `MaxPeers` and the startup gate
-   to the negotiated participant count.
-2. **Host rebroadcast.** The star form of the relay: the coordinator forwards
-   each peer's epoch to the others, deduped by the existing per-source epoch
-   check. Enough for an N-joiner star without touching the barrier's shape.
-3. **Membership as a crossing.** Join and leave become artifacts applied at a
-   common tick, so a roster change is shared state rather than a local inference
-   from a link event.
-4. **World snapshot and resume.** Unlocks mid-run join, reconnect and — later —
-   the rewind any branch-agreement rule needs.
-5. **General relay.** Hop bound, cycle rejection, and a playout lead derived from
-   the graph diameter rather than a constant.
-6. **Authentication and transport security.** Populate `Config.TLS` from the CLI
-   and give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so a participant
-   identity exists to attribute artifacts to.
-7. **Split `combat.` telemetry per target domain**, returning the group to the
-   shared snapshot comparison.
-8. **Empty `unstampedLocal`,** then delete it and its exemption.
-9. **Windowed composite / vision box.**
+1. **Live mid-run join in `cmd/vif`.** Give the joiner the session's tick phase and
+   let it buffer epochs while it replays, so the handoff does not stall the host.
+   This is what turns the proven mechanism into a feature a player can use, and it
+   carries reconnect with it.
+2. **A playout lead derived from the graph.** Negotiate it from the worst-case path
+   rather than fixing it at three ticks, and act on `network.barrier_late` instead
+   of only reporting it.
+3. **Periodic world snapshot.** Bounds both the retained log and catch-up time, and
+   is the same primitive a branch-agreement rule would rewind to.
+4. **Multi-link topology from the CLI.** The relay makes any graph work; `-join`
+   dialling more than one address is what lets an operator build one.
+5. **Partition detection**, and a membership rule that survives losing the
+   coordinator.
+6. **Authentication and transport security.** Populate `Config.TLS` from the CLI and
+   give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so a participant identity
+   exists to attribute artifacts to. This is the prerequisite for any agreement
+   rule, and the only one still entirely missing.
+7. **Empty `unstampedLocal`,** then delete it and its exemption.
+8. **Windowed composite / vision box.**
