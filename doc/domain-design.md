@@ -429,7 +429,15 @@ their producer stamped (D-7) and is the sole writer of a remote cursor's
 owner-authored set (D-13). It runs first — `parameter.PriorityNetwork` — but its
 transport work is not in `Update`.
 
-**The barrier.** `event.WireSink.Cross` ends production by encoding and
+**The barrier.** The barrier belongs to the *run*, not to the link. A session's
+crossings are deferred by a fixed playout lead and apply at an absolute tick, so a
+stretch with no peer attached — a lobby still waiting, every participant gone, or a
+replay reproducing the whole session — defers them by the same lead. Deriving it
+from the live peer count instead applied a re-derived crossing earlier than the run
+had, and a reproduction drifted by exactly the lead. Whether there is anyone to
+*send* to is the separate question, and the port answers it.
+
+`event.WireSink.Cross` ends production by encoding and
 withholding each local artifact. `Flush` closes the tick's epoch and sends it
 asynchronously, including an empty marker. `Receive` opens the next tick by
 applying local and peer artifacts whose fixed playout deadline has arrived, then
@@ -448,9 +456,18 @@ participants. A crossing produced by the wire settle belongs to the production
 epoch about to run and gets one complete delay of its own; it never recurses into
 the apply pass.
 
-With no live peer `Cross` declines ownership, `Receive` returns zero and the
+Outside a session `Cross` declines ownership, `Receive` returns zero and the
 scheduler creates no wire settle group. The original queue/journal/publication
-path is therefore unchanged.
+path is therefore unchanged for a solo run.
+
+A journaled crossing is stamped where it was *consumed*, which is already past the
+lead, so a replay republishes it directly through `World.PushRecord` rather than
+offering it to the barrier a second time. Its re-derived siblings — the crossings
+whose producer is the simulation, which carry `OriginSystem` and are never
+journaled — go through the ordinary push and take the lead exactly as the recorded
+run did. Both halves are needed: either one alone shifts a reproduction by one
+playout lead, which surfaces as a whole gameplay cycle once an FSM deadline falls
+inside it.
 `network.barrier_{deferred,applied_local,applied_peer,late,ran_without_peer,peer_lag_ticks,peer_artifacts}`
 and `network.barrier_peer_applied` expose the barrier state.
 
@@ -699,6 +716,7 @@ fails the build when the code stops matching the declaration.
 | `TestDepartureReachesTheWholeMesh` | `internal/app` | A departure removes the cursor on an instance that never linked to the departing participant |
 | `TestThreeParticipantLobbyClosesOnOneRoster` | `internal/app` | The socket handshake for a lobby larger than a pair: partial offers, one closed roster |
 | `TestLateJoinerReplaysTheSessionToTheHostPosition` | `internal/app` | Mid-run join: replaying the log onto a different terminal reaches byte-identical shared state |
+| `TestCatchUpReproducesALiveSessionsCrossings` | `internal/app` | §6: a reproduction of a *session* takes the playout lead on re-derived crossings and not on journaled ones; either mistake alone drifts it by the lead |
 | `TestLateJoinerTakesTheRosterAndStaysInLockstep` | `internal/app` | The arrival crossing lands on both instances at one tick, and both then drive their own cursor in lockstep |
 | `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
@@ -733,11 +751,10 @@ participant gameplay and avoid deliberately restarting the run.
 Two things it deliberately does *not* hold fixed any more, because holding them
 fixed is what let a resize desynchronise a live session with every test passing.
 `pair` joins a second participant on a **different terminal size**, so no
-viewport-derived value can match by accident; and `liveScript` drives **resizes**,
-so each participant's terminal moves under the session. The socket criterion keeps
-viewport-relative motions excluded for an unrelated reason recorded in §9.4: it
-ends in a mid-run catch-up, which replays input records rather than the cells they
-resolved against.
+viewport-derived value can match by accident; and `liveScript` drives **resizes**
+and **viewport-relative motions**, so each participant's terminal and camera move
+under the session. Both criteria carry them, the socket one included — and that one
+ends in a mid-run catch-up, so the same profile also proves the reproduction.
 
 Effort is tiered rather than fixed. `soakScale(short, normal, full)` picks a
 repetition or step count per profile: `-short` for a smoke run, the default for
@@ -933,17 +950,10 @@ bind to. That is the prerequisite, not rewind.
   connected, because those artifacts apply after the log ends and were broadcast
   before the joiner attached; and the joiner ticking to the session's phase before
   its scheduler starts, which the barrier already supports since every artifact
-  names an absolute apply tick. Its prerequisite is the fidelity item below.
+  names an absolute apply tick. Nothing below them is missing: reproducing a live
+  session's crossings is exact, and is pinned by
+  `TestCatchUpReproducesALiveSessionsCrossings`.
 
-- **Catch-up of a long networked run is not byte-faithful.** Replaying a host's
-  retained log reproduces its world exactly for the profiles the criteria drive,
-  but a run past roughly 1,200 driven steps that mixes resizes with
-  viewport-relative motions reaches a state one gold cycle behind, off by the
-  three-tick playout lead. The live participants stay in parity throughout; only
-  the reproduction drifts, so the defect is in what the log does not carry, not in
-  the session. This is the reason automatic resynchronisation is not built yet:
-  a participant that resynchronised onto a reproduction the digest still calls
-  diverged would resynchronise forever.
 - Reconnect reuses the same machinery and is not separately wired: an identity is
   released when its participant departs, and a returning participant catches up
   like any other late arrival.

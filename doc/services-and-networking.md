@@ -219,6 +219,11 @@ the socket. `NetworkService` contributes that port through `NetworkResource`.
 at tick close, `Flush` sends the closed production epoch. `Cross` withholds the
 local artifact so every participant applies it at the same fixed-delay boundary.
 The default lead is three 50 ms ticks and never waits for a per-tick round trip.
+The barrier is engaged for the life of a session run rather than while a peer is
+attached: the tick an artifact applies at is what a replay or a mid-run catch-up
+has to reach, and a reproduction holds no link. A journaled crossing is already
+stamped past the lead, so a replay republishes it directly; the crossings the
+simulation re-derives take the lead as the recorded run took it.
 `ActivateSession` closes the lobby-to-first-tick input window before the main loop
 reads terminal events. The game clock is frozen before FSM deadlines are created
 and released only after the common start gate, so the host's lobby wait cannot age
@@ -235,8 +240,11 @@ travels the same way, produced only by the coordinator so it has one apply tick.
 applied only when the payload's entity and roster slot agree and its sequence is
 newer than that slot's last. Disconnect drains through the same poll boundary,
 despawns only cursors owned by that participant, releases that slot's sync
-sequence, disables the barrier when no peer remains, and restores local map-size
-authority.
+sequence, and leaves both the barrier and the map latch in place: a session's
+playout lead and its bounds are properties of the run, so a stretch with no peer
+attached still defers its crossings by the same lead and still keeps the bounds
+every participant adopted. A departure is itself a crossing and lands at that lead
+rather than where the lost link was observed.
 
 At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
 over the exact `SnapshotShared` comparison surface, plus category hashes that

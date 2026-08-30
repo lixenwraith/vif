@@ -375,6 +375,13 @@ func (w *World) SessionShared() bool {
 	return net != nil && net.Port != nil
 }
 
+// SessionBarrier reports whether this run's crossings pass through the playout
+// barrier. It is the latch alone, not the roster: a local multi-cursor setup shares
+// no artifacts with anyone, while a reproduction of a session has to defer its
+// re-derived crossings by the same lead the run it reproduces did, or it applies
+// them earlier than the run did and drifts by exactly that lead.
+func (w *World) SessionBarrier() bool { return w.sessionShared.Load() }
+
 // MarkSessionShared latches the world as shared. Called when a session transport is
 // bound and when a run is constructed to reproduce one; never cleared, because the
 // bounds a participant has already adopted outlive the link that delivered them.
@@ -423,6 +430,23 @@ func (w *World) pushEvent(eventType event.EventType, payload any, origin event.O
 		Payload: payload,
 		Origin:  origin,
 		Domain:  domain,
+	})
+}
+
+// PushRecord republishes one journaled record without offering it to the wire.
+//
+// A record is already positioned: the journal stamps it where it was consumed, so a
+// crossing that the barrier deferred is recorded at the tick it applied at, not the
+// tick it was produced on. Offering it to the barrier again would defer it a second
+// playout lead past a position that already accounts for the first. Re-derived
+// crossings — the ones no record carries, because their producer is the simulation
+// — still go through Push and are deferred exactly as the recorded run deferred them.
+func (w *World) PushRecord(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {
+	if w.Resources.Event.Queue == nil {
+		return
+	}
+	w.Resources.Event.Queue.PushReady(event.GameEvent{
+		Type: eventType, Payload: payload, Origin: origin, Domain: domain,
 	})
 }
 

@@ -50,15 +50,17 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 // the clock and holds the operator mutations no artifact carries fixed: FSM regions,
 // the programmatic level setup, commands and the overlay round trip.
 //
-// A resize is deliberately not among them. Each participant drives its own terminal,
-// so a resize has to reflow that instance's view without touching shared state —
-// which is exactly what it failed to do, and what no parity criterion could see
-// while every one of them held the terminal fixed.
+// Resizes and viewport-relative motions are deliberately not among them. Each
+// participant drives its own terminal and its own camera, so a resize has to reflow
+// this instance's view without touching shared state and a screen-relative motion
+// has to resolve locally and cross as the absolute cell it selected — which is
+// exactly what they failed to do, and what no parity criterion could see while every
+// one of them held both fixed.
 func liveScript(seed uint64, steps int) ScriptOptions {
 	opt := parityScript(seed, steps)
 	opt.Regions, opt.MapSetups = false, false
 	opt.DisableTicks, opt.DisableCommands, opt.DisableOverlays = true, true, true
-	opt.Resizes = true
+	opt.Resizes, opt.MapMotionsOnly = true, false
 	return opt
 }
 
@@ -410,14 +412,7 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
 	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
-	// The socket criterion ends by catching a mid-run joiner up from the host's
-	// record log, and that reproduction replays input records rather than the cells
-	// they resolved to. A resize moves the camera a viewport-relative motion resolves
-	// against, so the two would part on that gap rather than on anything the session
-	// does; the live criterion above covers resizes over the in-process link.
-	tcpScript := liveScript(seed, steps)
-	tcpScript.Resizes = false
-	proveTwoLive(t, a, b, localA, localB, tcpScript, func() {
+	proveTwoLive(t, a, b, localA, localB, liveScript(seed, steps), func() {
 		recvA, recvB := host.Received(), guest.Received()
 		a.Tick(1)
 		b.Tick(1)
@@ -429,7 +424,11 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 		t.Fatalf("guest disconnect: %v", err)
 	}
 	waitSocket(t, host, func() bool { return host.PeerCount() == 0 }, "host disconnect")
-	a.Tick(1)
+	// A departure is a crossing like any other, so it lands at the playout lead the
+	// session runs on rather than where the lost link was observed. The barrier owns
+	// it even though there is no peer left to send it to: the tick it applies at is
+	// what a reproduction of this run has to reach.
+	a.Tick(parameter.NetworkBarrierDelayTicks + 1)
 	var roster int
 	var state string
 	var peers int64

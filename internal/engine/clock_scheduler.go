@@ -1185,12 +1185,12 @@ func (cs *ClockScheduler) processTick() {
 	// Anchor cadence: a rotated journal file must be interpretable on its own
 	if event.AnchorDue(ticks) {
 		cs.world.Resources.Event.Queue.AnchorJournal(event.AnchorLive{
-			Speed:        cs.ctl.Scale().String(),
-			Session:      cs.world.Resources.Rand.Session(),
-			Width:        screenW,
-			Height:       screenH,
-			MapWidth:     mapW,
-			MapHeight:    mapH,
+			Speed:         cs.ctl.Scale().String(),
+			Session:       cs.world.Resources.Rand.Session(),
+			Width:         screenW,
+			Height:        screenH,
+			MapWidth:      mapW,
+			MapHeight:     mapH,
 			CropOnResize:  cropOnResize,
 			SessionShared: sessionShared,
 			Slot:          slot,

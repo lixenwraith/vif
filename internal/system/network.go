@@ -411,7 +411,14 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 // gate, the update pass, tick open and tick close — needs the same answer, and the
 // endpoint may be attached or lost between any two of them.
 func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
-	active := s.enabled && p != nil && p.IsRunning() && p.PeerCount() > 0
+	// The barrier belongs to the run, not to the link. A session's crossings are
+	// deferred by a fixed playout lead and apply at an absolute tick; a stretch that
+	// happens to have no peer attached — a lobby still waiting, every participant
+	// gone, or a replay reproducing the whole thing — must defer them by the same
+	// lead, because the tick an artifact applies at is what the reproduction has to
+	// reach. Sending is a separate question, answered by the port.
+	active := s.enabled && (s.world.SessionBarrier() ||
+		(p != nil && p.IsRunning() && p.PeerCount() > 0))
 	if r := s.world.Resources.Network; r != nil {
 		s.mu.Lock()
 		s.localSource = r.ParticipantID
@@ -705,6 +712,12 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		if len(pending) != 0 {
 			s.statDrop.Add(int64(len(pending)))
 		}
+		return
+	}
+	// The barrier can own a tick that has nobody to send it to: a lobby still
+	// waiting, a session whose peers have all left, or a run being reproduced. The
+	// artifacts are still scheduled and still apply locally at their own tick.
+	if p == nil || !p.IsRunning() || p.PeerCount() == 0 {
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
