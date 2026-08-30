@@ -19,6 +19,23 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 	return a
 }
 
+// mustJoiner builds a participant that adopts a session's D-14 bounds before its
+// FSM boots, which is what ConfigForJoin does for a real join. Its terminal is its
+// own: a joiner whose world took its bounds from that terminal instead would spawn
+// cursor slot zero on a different cell than the host and never recover (D-11).
+func mustJoiner(t *testing.T, seed uint64, w, h int, an event.JoinAnchor) *App {
+	t.Helper()
+	a, err := NewHeadless(Config{
+		Seed: seed, Width: w, Height: h, ForceDefault: true,
+		MapWidth: an.Anchor.MapWidth, MapHeight: an.Anchor.MapHeight,
+		CropOnResize: an.Anchor.CropOnResize,
+	})
+	if err != nil {
+		t.Fatalf("headless joiner: %v", err)
+	}
+	return a
+}
+
 // tickUntilCursor advances until the FSM has spawned the first cursor
 func tickUntilCursor(t *testing.T, a *App) {
 	t.Helper()
@@ -127,5 +144,73 @@ func TestMapSizeCropsWithOneCursor(t *testing.T) {
 	}
 	if a.World().Resources.Status.Bools.Get("context.map_locked").Load() {
 		t.Fatal("context.map_locked set while the map still follows the terminal")
+	}
+}
+
+// TestJoinerOnAnotherTerminalSharesTheMapFromTickZero is the regression for the
+// divergence two windows of different size produced from the first tick: the FSM
+// boot script spawns cursor slot zero at the centre of the map, inside New and
+// before anything is joined, so a participant that adopted the session's bounds
+// afterwards held that shared cursor on its own terminal's centre instead. Nothing
+// in the model corrects a shared position, so the two never agreed again.
+func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
+	host := mustHeadless(t, 0x14AD, 160, 48)
+	defer host.Close()
+	an := host.JoinAnchor()
+	guest := mustJoiner(t, 0x14AD, 84, 26, an)
+	defer guest.Close()
+	if err := guest.Join(an); err != nil {
+		t.Fatalf("join: %v", err)
+	}
+
+	for _, a := range []*App{host, guest} {
+		tickUntilCursor(t, a)
+		a.Tick(1)
+	}
+	assertSharedParity(t, host, guest, 0)
+
+	var hostView, guestView int
+	host.World().RunSafe(func() { hostView = host.World().Resources.Config.ViewportWidth })
+	guest.World().RunSafe(func() { guestView = guest.World().Resources.Config.ViewportWidth })
+	if hostView == guestView {
+		t.Fatalf("both participants ran a %d-column viewport; the criterion proves nothing", hostView)
+	}
+}
+
+// TestSessionRunNeverCropsItsMap covers the window the peer count left open: a host
+// waiting in its lobby has no peer and one cursor, so the old guard let a resize
+// crop the very bounds the anchor it is handing out names.
+func TestSessionRunNeverCropsItsMap(t *testing.T) {
+	a, err := NewHeadless(Config{Seed: 0x14AE, Width: 200, Height: 60, ForceDefault: true, LockMap: true})
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	sentinel, mapW, mapH := plantSentinel(t, a)
+	before := a.JoinAnchor()
+
+	a.Resize(60, 24)
+	a.Tick(2)
+
+	cfg := a.World().Resources.Config
+	var gotW, gotH int
+	a.World().RunSafe(func() { gotW, gotH = cfg.MapWidth, cfg.MapHeight })
+	if gotW != mapW || gotH != mapH {
+		t.Fatalf("hosting run cropped to %dx%d, want the offered %dx%d", gotW, gotH, mapW, mapH)
+	}
+	if alive, doomed := sentinelState(a, sentinel); !alive || doomed {
+		t.Fatalf("hosting run cropped away an entity: alive=%v doomed=%v", alive, doomed)
+	}
+	after := a.JoinAnchor()
+	if after.Anchor.MapWidth != before.Anchor.MapWidth ||
+		after.Anchor.MapHeight != before.Anchor.MapHeight {
+		t.Fatalf("the anchor a joiner adopts moved under a resize: %dx%d then %dx%d",
+			before.Anchor.MapWidth, before.Anchor.MapHeight,
+			after.Anchor.MapWidth, after.Anchor.MapHeight)
+	}
+	if !after.Anchor.SessionShared {
+		t.Fatal("a hosting run's anchor does not carry the D-14 latch a reproduction adopts")
 	}
 }

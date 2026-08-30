@@ -14,14 +14,19 @@ import (
 // pair builds two joined participants on one seed, linked by an in-process
 // transport. Each spawns its own cursor in its own slot and mirrors the other's as
 // a remote, which is the roster a real join produces.
+//
+// The two terminals are deliberately unequal. Two participants of one size share
+// every viewport-derived value by accident, so a criterion built on them cannot see
+// a shared value that was derived from the local terminal — which is exactly the
+// divergence a second window, a tmux pane or a resize produces.
 func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	t.Helper()
 
 	a := mustHeadless(t, seed, 120, 40)
-	b := mustHeadless(t, seed, 120, 40)
+	an := a.JoinAnchor()
+	b := mustJoiner(t, seed, 84, 26, an)
 	t.Cleanup(func() { a.Close(); b.Close() })
 
-	an := a.JoinAnchor()
 	if err := b.Join(an); err != nil {
 		t.Fatalf("join: %v", err)
 	}
@@ -39,6 +44,22 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 		x.Tick(1)
 	}
 	return a, b
+}
+
+// liveScript is the action set a two-participant criterion drives. The harness owns
+// the clock and holds the operator mutations no artifact carries fixed: FSM regions,
+// the programmatic level setup, commands and the overlay round trip.
+//
+// A resize is deliberately not among them. Each participant drives its own terminal,
+// so a resize has to reflow that instance's view without touching shared state —
+// which is exactly what it failed to do, and what no parity criterion could see
+// while every one of them held the terminal fixed.
+func liveScript(seed uint64, steps int) ScriptOptions {
+	opt := parityScript(seed, steps)
+	opt.Regions, opt.MapSetups = false, false
+	opt.DisableTicks, opt.DisableCommands, opt.DisableOverlays = true, true, true
+	opt.Resizes = true
+	return opt
 }
 
 // mirrorCursors splits ownership of a two-slot roster. Both instances run the
@@ -265,7 +286,7 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	localA, _ := mirrorCursors(t, a, b)
 	var localB core.Entity
 	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
-	proveTwoLive(t, a, b, localA, localB, seed, steps, func() {
+	proveTwoLive(t, a, b, localA, localB, liveScript(seed, steps), func() {
 		a.Tick(1)
 		b.Tick(1)
 	})
@@ -396,7 +417,14 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
 	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
-	proveTwoLive(t, a, b, localA, localB, seed, steps, func() {
+	// The socket criterion ends by catching a mid-run joiner up from the host's
+	// record log, and that reproduction replays input records rather than the cells
+	// they resolved to. A resize moves the camera a viewport-relative motion resolves
+	// against, so the two would part on that gap rather than on anything the session
+	// does; the live criterion above covers resizes over the in-process link.
+	tcpScript := liveScript(seed, steps)
+	tcpScript.Resizes = false
+	proveTwoLive(t, a, b, localA, localB, tcpScript, func() {
 		recvA, recvB := host.Received(), guest.Received()
 		a.Tick(1)
 		b.Tick(1)
@@ -420,7 +448,9 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 		peers = reg.Ints.Get("network.peers").Load()
 		latched = reg.Bools.Get("network.map_latched").Load()
 	})
-	if roster != 1 || !host.IsRunning() || state != "down" || peers != 0 || latched {
+	// The latch survives the disconnect: a run that opened a session keeps the bounds
+	// its participants adopted, so a returning one replays onto the same map (D-14).
+	if roster != 1 || !host.IsRunning() || state != "down" || peers != 0 || !latched {
 		t.Fatalf("host after disconnect = roster %d running %t state %q peers %d latch %t",
 			roster, host.IsRunning(), state, peers, latched)
 	}
@@ -465,14 +495,11 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	}
 }
 
-func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, seed uint64, steps int, tickPair func()) {
+func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA ScriptOptions, tickPair func()) {
 	t.Helper()
+	steps := optA.Steps
 	assertSharedParity(t, a, b, -1)
 
-	// The harness owns the clock and holds non-transported operator mutations fixed.
-	optA := parityScript(seed, steps)
-	optA.Regions, optA.MapSetups = false, false
-	optA.DisableTicks, optA.DisableCommands, optA.DisableOverlays = true, true, true
 	optB := optA
 	optB.Seed ^= 0x9E3779B97F4A7C15
 	da, db := NewScriptDriver(a, optA), NewScriptDriver(b, optB)

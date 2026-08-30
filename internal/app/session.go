@@ -36,7 +36,11 @@ func newInteractiveApp(cfg Config) (*App, error) {
 }
 
 // newHostingApp installs a tick-zero acceptor before the service is initialized.
+// The map latch is engaged for the whole run: the anchor a joiner adopts names
+// these bounds, and a crop landing between that offer and the start gate would move
+// them under a participant that has already built its world on them (D-14).
 func newHostingApp(cfg Config) (*App, error) {
+	cfg.LockMap = true
 	a, err := New(cfg)
 	if err != nil {
 		return nil, err

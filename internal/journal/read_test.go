@@ -46,11 +46,11 @@ func itoa(v uint64) string {
 	return string(b[i:])
 }
 
-const anchorLine = `{"sub":"anchor","fields":{"schema":10,"jseq":0,"jrun":0,"jtick":0,` +
+const anchorLine = `{"sub":"anchor","fields":{"schema":11,"jseq":0,"jrun":0,"jtick":0,` +
 	`"start_run":0,"start_tick":0,"seed":42,"session":3,"config_id":"cfg","content_id":"c",` +
 	`"content_pin":"","content_files":1,"content_blocks":2,"content_lines":3,` +
 	`"tick_ns":16000000,"width":120,"height":40,"map_w":100,"map_h":30,` +
-	`"crop_on_resize":true,"slot":0,"speed":"1x"}}`
+	`"crop_on_resize":true,"session_shared":true,"slot":0,"speed":"1x"}}`
 
 // TestLoadRoundTripsRecordsAndAnchor covers the reader's whole contract: the
 // envelope, the field names the sink emits, and the enum parses that a
@@ -78,7 +78,7 @@ func TestLoadRoundTripsRecordsAndAnchor(t *testing.T) {
 
 	if a := s.Anchors[0]; a.Schema != event.JournalSchema || a.Seed != 42 ||
 		a.Session != 3 || a.Width != 120 || a.Height != 40 || a.Speed != "1x" ||
-		a.MapWidth != 100 || a.MapHeight != 30 || !a.CropOnResize {
+		a.MapWidth != 100 || a.MapHeight != 30 || !a.CropOnResize || !a.SessionShared {
 		t.Errorf("anchor round-trip lost fields: %+v", a)
 	}
 

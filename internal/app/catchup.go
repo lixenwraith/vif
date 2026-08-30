@@ -84,13 +84,10 @@ func (a *App) CatchUp(j event.JoinAnchor, records []event.JournalRecord) error {
 		return fmt.Errorf("catch up: reached run %d tick %d, host is at run %d tick %d",
 			st.Run, st.Tick, an.Run, an.Tick)
 	}
-	var latched bool
-	a.world.RunSafe(func() {
-		cfg := a.world.Resources.Config
-		latched = cfg.MapWidth == an.MapWidth && cfg.MapHeight == an.MapHeight &&
-			cfg.CropOnResize == an.CropOnResize
-	})
-	if !latched {
+	// The latch is adopted only if the replay did not arrive at it, which is the case
+	// for a session whose bounds were never journaled. Adopting it as well would run
+	// a level setup the session ran once, and the record stream already carried.
+	if !a.mapLatched(an) {
 		a.adoptMapLatch(an)
 	}
 

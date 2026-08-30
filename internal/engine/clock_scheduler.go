@@ -1031,14 +1031,15 @@ func (cs *ClockScheduler) anchorLive(session uint64) event.AnchorLive {
 	cfg := cs.world.Resources.Config
 	w, h := ScreenSize(cfg)
 	return event.AnchorLive{
-		Speed:        cs.ctl.Scale().String(),
-		Session:      session,
-		Width:        w,
-		Height:       h,
-		MapWidth:     cfg.MapWidth,
-		MapHeight:    cfg.MapHeight,
-		CropOnResize: cfg.CropOnResize,
-		Slot:         cs.world.Resources.Player.LocalSlot(),
+		Speed:         cs.ctl.Scale().String(),
+		Session:       session,
+		Width:         w,
+		Height:        h,
+		MapWidth:      cfg.MapWidth,
+		MapHeight:     cfg.MapHeight,
+		CropOnResize:  cfg.CropOnResize,
+		SessionShared: cs.world.SessionShared(),
+		Slot:          cs.world.Resources.Player.LocalSlot(),
 	}
 }
 
@@ -1062,6 +1063,7 @@ func (cs *ClockScheduler) processTick() {
 		screenW, screenH int       // terminal dims for the anchor, derived under the lock
 		mapW, mapH       int       // D-14 map latch for the anchor, read under the lock
 		cropOnResize     bool
+		sessionShared    bool  // D-14 crop admissibility, which a reproduction adopts
 		slot             uint8 // local roster slot for the anchor, read under the lock
 		ticks            uint64
 		dropped          uint64
@@ -1160,6 +1162,7 @@ func (cs *ClockScheduler) processTick() {
 		cfg := cs.world.Resources.Config
 		screenW, screenH = ScreenSize(cfg)
 		mapW, mapH, cropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
+		sessionShared = cs.world.SessionShared()
 		slot = cs.world.Resources.Player.LocalSlot()
 	})
 
@@ -1188,8 +1191,9 @@ func (cs *ClockScheduler) processTick() {
 			Height:       screenH,
 			MapWidth:     mapW,
 			MapHeight:    mapH,
-			CropOnResize: cropOnResize,
-			Slot:         slot,
+			CropOnResize:  cropOnResize,
+			SessionShared: sessionShared,
+			Slot:          slot,
 		})
 	}
 }

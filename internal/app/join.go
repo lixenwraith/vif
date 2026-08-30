@@ -101,6 +101,12 @@ func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID)
 func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerID) error {
 	participants := slices.Clone(o.Participants)
 	slices.SortFunc(participants, func(x, y network.SessionParticipant) int { return int(x.Slot) - int(y.Slot) })
+
+	// The boot script's cursor spawn may still be queued: the FSM enters its boot
+	// state inside New and nothing has ticked yet. Settling it is what publishes the
+	// heat and energy template every rostered cursor is then created and armed from.
+	a.scheduler.Settle()
+
 	var initialHeat, initialEnergy int
 	a.world.RunSafe(func() { initialHeat, initialEnergy = a.world.Resources.Player.InitialResources() })
 
@@ -152,8 +158,24 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 // setup path — rather than by writing Config, so the grid, the camera and every
 // cursor reflow exactly as they would for a map script. Entities are kept: the
 // joiner's world is the same seed's world, not a fresh one.
+//
+// A joining run now installs the latch before the FSM boots (Config.MapWidth), so
+// this is the confirmation rather than the adoption; it still runs the level setup
+// unconditionally, because that event is part of the session's record stream and a
+// participant reproducing the session by replay has to see the same one.
 func (a *App) adoptMapLatch(an event.JournalAnchor) {
 	a.SetupLevel(an.MapWidth, an.MapHeight, false, an.CropOnResize)
+}
+
+// mapLatched reports whether this instance already holds the anchor's D-14 bounds.
+func (a *App) mapLatched(an event.JournalAnchor) bool {
+	var latched bool
+	a.world.RunSafe(func() {
+		cfg := a.world.Resources.Config
+		latched = cfg.MapWidth == an.MapWidth && cfg.MapHeight == an.MapHeight &&
+			cfg.CropOnResize == an.CropOnResize
+	})
+	return latched
 }
 
 // AttachTransport binds a transport to this App, for a harness or an embedder that
@@ -165,6 +187,7 @@ func (a *App) AttachTransport(port engine.NetworkPort) {
 		r.OnDeparture = a.releaseParticipant32
 		r.SharedDigest = a.sharedDigestLocked
 		a.world.Resources.Network = r
+		a.world.MarkSessionShared()
 		a.ctx.PublishMapLock()
 	})
 }

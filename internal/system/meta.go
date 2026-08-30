@@ -319,9 +319,15 @@ func (s *MetaSystem) handleGameReset(purge bool) {
 	s.ctx.Correlation.SetRun(run)
 
 	// 5. Config reset (map dimensions to viewport)
+	// A reset is one logical shared action every participant applies from the same
+	// artifact, so the bounds it produces must not be a function of this terminal.
+	// While the map is not this instance's to derive (D-14) the session's bounds
+	// carry across the reset; only a run that owns them returns them to its viewport.
 	config := s.ctx.World.Resources.Config
-	config.MapWidth = config.ViewportWidth
-	config.MapHeight = config.ViewportHeight
+	if s.ctx.World.MapSizeLocal() {
+		config.MapWidth = config.ViewportWidth
+		config.MapHeight = config.ViewportHeight
+	}
 	config.CameraX = 0
 	config.CameraY = 0
 	config.CropOnResize = true
@@ -372,10 +378,16 @@ func (s *MetaSystem) handleLevelSetup(payload *event.LevelSetupPayload) {
 	height := payload.Height
 	cropOnResize := payload.CropOnResize
 
-	// Zero dimensions = reset to viewport with crop enabled
+	// Zero dimensions = reset to viewport with crop enabled. A map script runs
+	// identically on every participant, so under a locked map the viewport is the
+	// one input it must not read: the current bounds stand instead, which is the
+	// value every instance agrees on (D-14).
 	if width <= 0 || height <= 0 {
-		width = s.world.Resources.Config.ViewportWidth
-		height = s.world.Resources.Config.ViewportHeight
+		config := s.world.Resources.Config
+		width, height = config.MapWidth, config.MapHeight
+		if s.world.MapSizeLocal() {
+			width, height = config.ViewportWidth, config.ViewportHeight
+		}
 		cropOnResize = true
 	}
 

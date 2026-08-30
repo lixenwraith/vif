@@ -614,7 +614,7 @@ func (s *NetworkSystem) publishConnectionTelemetry(p engine.NetworkPort) {
 			}
 		}
 	}
-	latched := !s.world.MapSizeLocal()
+	latched := s.world.SessionShared()
 	s.statPeers.Store(int64(peers))
 	s.statConnected.Store(peers > 0)
 	s.statConnection.StoreIfChanged(state)

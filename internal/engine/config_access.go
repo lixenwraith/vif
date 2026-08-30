@@ -54,7 +54,7 @@ func ConfigKeyReplicated(field string) bool { return replicatedConfigKeys[field]
 // this only marks where a map script has made itself instance-dependent.
 func noteDivergentRead(w *World, field string) {
 	seen, watched := divergentReads[field]
-	if !watched || w.MapSizeLocal() || seen.Swap(true) {
+	if !watched || !w.SessionShared() || seen.Swap(true) {
 		return
 	}
 	vlog.Warn("fsm", "msg", "non-replicated config read under a locked map",

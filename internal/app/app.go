@@ -193,6 +193,8 @@ func (a *App) initWorld() {
 	}
 	a.world.Resources.Config.ColorMode = colorMode
 
+	a.applyMapLatch()
+
 	if n := a.cfg.StatTicks; n != 0 {
 		if n < 0 {
 			n = 0 // explicit disable
@@ -232,6 +234,29 @@ func (a *App) initWorld() {
 	}
 	// This game's streams are drawn; advance so the next game differs
 	a.world.Resources.Rand.NextSession()
+}
+
+// applyMapLatch installs this run's D-14 position before any system is built and
+// before the FSM boot script spawns cursor slot zero at the centre of the map.
+// Adopting bounds later would leave that shared cursor on this terminal's centre
+// rather than the session's, which is a shared position no crossing ever corrects.
+//
+// LockMap closes the crop path for the whole run; a reproduction of a session — a
+// join, a catch-up or a replay — additionally carries the bounds it must start on.
+// A hosting run keeps its own terminal's bounds and only stops cropping them.
+func (a *App) applyMapLatch() {
+	if a.cfg.LockMap {
+		a.world.MarkSessionShared()
+	}
+	cfg := a.world.Resources.Config
+	if a.cfg.MapWidth <= 0 || a.cfg.MapHeight <= 0 {
+		return
+	}
+	if a.cfg.MapWidth == cfg.MapWidth && a.cfg.MapHeight == cfg.MapHeight &&
+		a.cfg.CropOnResize == cfg.CropOnResize {
+		return
+	}
+	a.world.SetupLevel(a.cfg.MapWidth, a.cfg.MapHeight, false, a.cfg.CropOnResize)
 }
 
 // initPresentation builds the render pipeline. The buffer is terminal-sized while
@@ -368,6 +393,7 @@ func (a *App) buildAnchor() event.JournalAnchor {
 		MapWidth:      cfg.MapWidth,
 		MapHeight:     cfg.MapHeight,
 		CropOnResize:  cfg.CropOnResize,
+		SessionShared: a.world.SessionShared(),
 	}
 }
 

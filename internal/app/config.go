@@ -140,6 +140,25 @@ type Config struct {
 	// Ignored when the terminal owns geometry; zero selects the defaults.
 	Width, Height int
 
+	// MapWidth, MapHeight and CropOnResize are the D-14 map latch a joining run
+	// adopts instead of deriving from its own terminal. They are applied to the
+	// world before the FSM boots, because the boot script spawns cursor slot zero
+	// centred on the map: a joiner that adopted the latch after construction would
+	// already hold that cursor on a different cell than the host, which is a shared
+	// position and diverges permanently. Zero width or height means no latch and the
+	// terminal decides, which is what a solo or hosting run does.
+	MapWidth, MapHeight int
+	CropOnResize        bool
+
+	// LockMap clears CropOnResize before the FSM boots, so this run's terminal never
+	// rewrites shared map bounds. A hosting run sets it: its bounds are what every
+	// joiner adopts from the anchor, and a crop between the offer a participant
+	// dialled and the gate that starts it would move bounds that participant has
+	// already built its world on. The flag itself does not travel — the cleared flag
+	// does, in the anchor and in the record stream, which is what makes a replay and
+	// a catch-up reach the same bounds.
+	LockMap bool
+
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *network.Config
@@ -155,6 +174,14 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 	local.ForceDefault = fromAnchor.ForceDefault
 	local.GameScript = fromAnchor.GameScript
 	local.ContentPath = fromAnchor.ContentPath
+	// The map latch travels with identity rather than being adopted afterwards: the
+	// FSM boots inside New and spawns cursor slot zero at the centre of whatever map
+	// it finds, so a latch applied later leaves that shared cursor on this
+	// terminal's centre instead of the session's (D-14, D-11).
+	local.MapWidth = fromAnchor.MapWidth
+	local.MapHeight = fromAnchor.MapHeight
+	local.CropOnResize = fromAnchor.CropOnResize
+	local.LockMap = true
 	if !local.Mode.Driven() {
 		local.TimeScaleSpec = o.Anchor.Anchor.Speed
 	}
