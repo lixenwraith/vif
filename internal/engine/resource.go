@@ -361,6 +361,10 @@ func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
 	if shiftX == 0 && shiftY == 0 {
 		return
 	}
+	// Clamped low last, so an axis whose map is shorter than the viewport settles at
+	// zero rather than at a negative bound. Moving this out of CameraSystem changed
+	// that one case: the old order clamped high last and drove the camera negative on
+	// an axis it was not even scrolling.
 	c.CameraX = max(0, min(c.CameraX+shiftX, c.MapWidth-c.ViewportWidth))
 	c.CameraY = max(0, min(c.CameraY+shiftY, c.MapHeight-c.ViewportHeight))
 }
