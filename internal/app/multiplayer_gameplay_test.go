@@ -105,7 +105,7 @@ func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
 // logical fusion and therefore must yield one shared spawn request, not N.
 func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 	apps := meshSession(t, 0xA4A4, 2, [][2]int{{1, 2}})
-	localCursors(t, apps)
+	local := localCursors(t, apps)
 
 	spawns := make([]int, len(apps))
 	for i, a := range apps {
@@ -115,9 +115,13 @@ func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
 				spawns[i]++
 			}
 		})
-		a.Context().PushLocal(event.EventFuseQuasarRequest, nil)
-		a.Settle()
+		a.World().Resources.Status.Ints.Get("kills.drain").Store(9)
 	}
+	// Participant 2 produces the tenth shared defeat. The crossing is delivered
+	// to both FSMs, but its causal cursor elects only participant 2's fuse system.
+	apps[1].Context().PushCrossing(event.EventDrainDefeated,
+		&event.DrainDefeatedPayload{Entity: local[1]})
+	apps[1].Settle()
 
 	// Fusion waits 600ms; the driven clock advances 50ms per tick.
 	for range 20 + parameter.NetworkBarrierDelayTicks {

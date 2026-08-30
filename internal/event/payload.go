@@ -159,6 +159,13 @@ type CursorDefeatStatePayload struct {
 	Defeated bool        `toml:"defeated"`
 }
 
+// DrainDefeatedPayload names the shared cursor whose player domain produced one
+// personal drain defeat. When a shared threshold is crossed, this is the causal
+// election key that selects exactly one player-domain continuation.
+type DrainDefeatedPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // MetaStatusMessagePayload contains message to be displayed in status bar
 type MetaStatusMessagePayload struct {
 	Message          string        `toml:"message"`
@@ -709,6 +716,12 @@ type CursorSetLocalPayload struct {
 }
 
 // --- Fuse ---
+
+// FuseQuasarRequestPayload selects which participant owns the player-domain
+// continuation of one shared escalation decision.
+type FuseQuasarRequestPayload struct {
+	Entity core.Entity `toml:"entity"`
+}
 
 // FuseEffect defines visual effect type for fusion animations
 type FuseEffect int

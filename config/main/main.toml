@@ -6,7 +6,9 @@ on_exit = [
     { action = "EmitEvent", event = "EventGoldCancel" },
 ]
 transitions = [
-    { trigger = "Tick", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } },
+    # FSM sees the crossing before MetaSystem increments the shared counter, so
+    # nine prior defeats plus this event selects its causal participant.
+    { trigger = "EventDrainDefeated", target = "MainEscalate", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 9 }, capture_vars = { entity = "fuse_owner" } },
 ]
 
 # --- Gold Spawn ---
@@ -32,7 +34,7 @@ transitions = [
 [states.MainGoldActive]
 parent = "MainCycle"
 transitions = [
-    { trigger = "EventGoldCompleted", target = "MainGoldCompleted" },
+    { trigger = "EventGoldCompleted", target = "MainGoldCompleted", capture_vars = { entity = "reward_entity" } },
     { trigger = "EventGoldTimeout", target = "MainGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "MainGoldDestroyed" },
 ]
@@ -40,8 +42,8 @@ transitions = [
 [states.MainGoldCompleted]
 parent = "MainCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } },
+    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 100 }, payload_vars = { entity = "reward_entity" } },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { entity = 0, delta = 1000, type = 1 }, payload_vars = { entity = "reward_entity" } },
 ]
 transitions = [
     { trigger = "Tick", target = "MainDecayWait" },
@@ -80,8 +82,11 @@ transitions = [
 
 [states.MainEscalate]
 parent = "Root"
-on_enter = [
+on_exit = [
+    # Reset after the triggering EventDrainDefeated has reached MetaSystem.
     { action = "ResetStatusInt", payload = { key = "kills.drain" } },
+]
+on_enter = [
     { action = "SpawnRegion", region = "quasar", initial_state = "QuasarFuse" },
     { action = "PauseRegion", region = "main" },
 ]

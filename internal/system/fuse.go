@@ -108,7 +108,19 @@ func (s *FuseSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventFuseQuasarRequest:
-		if !s.hasQuasarFusion() {
+		owner := core.Entity(0)
+		if p, ok := ev.Payload.(*event.FuseQuasarRequestPayload); ok {
+			owner = p.Entity
+		}
+		// Nil is retained for debug/backward compatibility. In a live session it
+		// elects the coordinator, so a shared legacy trigger still cannot fan out.
+		if owner == 0 {
+			if s.world.LiveSession() && !s.world.IsSessionCoordinator() {
+				return
+			}
+			owner = s.world.Resources.Player.Entity
+		}
+		if s.world.ResolveOwnedCursor(owner) != 0 && !s.hasQuasarFusion() {
 			s.handleQuasarFuse()
 		}
 
@@ -177,15 +189,17 @@ func (s *FuseSystem) effectSpiritArea(sources []vmath.Point, area vmath.Area, c 
 	}
 }
 
-// effectMaterialize gates the shared spawn, so it crosses as shared even though the producer is player-domain
+// effectMaterialize is presentation for the elected participant. FuseSystem's own
+// timer gates the later shared spawn crossing; the beam must not create a shared
+// entity that exists only on the elected producer.
 func (s *FuseSystem) effectMaterialize(area vmath.Area) {
-	s.world.PushEventDomain(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
+	s.world.PushLocal(event.EventMaterializeAreaRequest, &event.MaterializeAreaRequestPayload{
 		X:          area.X,
 		Y:          area.Y,
 		AreaWidth:  area.Width,
 		AreaHeight: area.Height,
 		Type:       component.SpawnTypeSwarm,
-	}, core.DomainShared)
+	})
 }
 
 // killDrains reports and retires the consumed drains; the batch is domain-pure, so a
@@ -208,7 +222,9 @@ func (s *FuseSystem) killDrains(drains []core.Entity) {
 				X:       killX,
 				Y:       killY,
 			})
-			s.world.PushCrossing(event.EventDrainDefeated, nil)
+			s.world.PushCrossing(event.EventDrainDefeated, &event.DrainDefeatedPayload{
+				Entity: s.world.Resources.Player.Entity,
+			})
 		}
 		event.EmitDeath(s.world.Resources.Event.Queue, 0, drains...)
 	})

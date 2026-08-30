@@ -347,12 +347,12 @@ const (
 	EventSpeciesCreated
 	// EventSpeciesKilled (SpeciesKilledPayload) [stamped] announces a terminated species instance
 	EventSpeciesKilled
-	// EventDrainDefeated [bus] advances shared progression for one personal drain death
+	// EventDrainDefeated (DrainDefeatedPayload) [bus] advances progression and names the causal cursor domain
 	EventDrainDefeated
 
 	// --- Fuse ---
 
-	// EventFuseQuasarRequest [local] signals drains should fuse into quasar
+	// EventFuseQuasarRequest (FuseQuasarRequestPayload) [local] asks the elected cursor's drains to fuse into quasar
 	EventFuseQuasarRequest
 	// EventFuseSwarmRequest (FuseSwarmRequestPayload) [local] signals two enraged drains should fuse into swarm
 	EventFuseSwarmRequest

@@ -6,7 +6,7 @@ on_enter = [
     { action = "EmitEvent", event = "EventGrayoutStart" },
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200 } },
     { action = "EmitEvent", event = "EventDrainPause" },
-    { action = "EmitEvent", event = "EventFuseQuasarRequest" },
+    { action = "EmitEvent", event = "EventFuseQuasarRequest", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
 ]
 transitions = [
     { trigger = "EventSpeciesCreated", target = "QuasarGoldSpawn", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
@@ -65,7 +65,7 @@ transitions = [
 [states.QuasarGoldActive]
 parent = "QuasarGoldCycle"
 transitions = [
-    { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted" },
+    { trigger = "EventGoldCompleted", target = "QuasarGoldCompleted", capture_vars = { entity = "reward_entity" } },
     { trigger = "EventGoldTimeout", target = "QuasarGoldTimeout" },
     { trigger = "EventGoldDestroyed", target = "QuasarGoldDestroyed" },
     # Defensive: quasar died OOB without emitting a species kill event
@@ -78,8 +78,8 @@ transitions = [
 [states.QuasarGoldCompleted]
 parent = "QuasarGoldCycle"
 on_enter = [
-    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { delta = 100 } },
-    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { delta = 1000, type = 1 } },
+    { action = "EmitEvent", event = "EventHeatAddRequest", payload = { entity = 0, delta = 100 }, payload_vars = { entity = "reward_entity" } },
+    { action = "EmitEvent", event = "EventEnergyAddRequest", payload = { entity = 0, delta = 1000, type = 1 }, payload_vars = { entity = "reward_entity" } },
 ]
 transitions = [
     { trigger = "Tick", target = "QuasarDustAll" },

@@ -51,8 +51,8 @@ var crossingPushes = map[string]string{
 	// shared outcome is determined by the artifact it pushes, so each takes the
 	// same wire path as the rows above.
 	"drain:EventCombatHealRequest":  "a dying drain donating its hit points; target and amount cross",
-	"drain:EventDrainDefeated":      "one personal drain death advances shared progression",
-	"fuse:EventDrainDefeated":       "each fused personal drain advances shared progression",
+	"drain:EventDrainDefeated":      "one personal drain death and its causal cursor advance shared progression",
+	"fuse:EventDrainDefeated":       "each fused personal drain and its causal cursor advance shared progression",
 	"typing:EventCursorMoveRequest": "the post-typing advance moves the shared cursor",
 	"energy:EventCursorDefeatState": "the owner's combined energy/heat lifecycle state crosses",
 	"heat:EventCursorDefeatState":   "the owner's combined energy/heat lifecycle state crosses",

@@ -324,7 +324,7 @@ func (s *DrainSystem) processDrainStates() {
 				X:            killX,
 				Y:            killY,
 			}, core.DomainPlayer)
-			s.world.PushCrossing(event.EventDrainDefeated, nil)
+			s.crossDefeated()
 			continue
 		}
 
@@ -877,7 +877,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 				X:       killX,
 				Y:       killY,
 			}, core.DomainPlayer)
-			s.world.PushCrossing(event.EventDrainDefeated, nil)
+			s.crossDefeated()
 			s.statSuicides.Add(1)
 		}
 	}
@@ -922,9 +922,18 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 			X:            a.pos.X,
 			Y:            a.pos.Y,
 		}, core.DomainPlayer)
-		s.world.PushCrossing(event.EventDrainDefeated, nil)
+		s.crossDefeated()
 		s.statCollisions.Add(1)
 	}
+}
+
+// crossDefeated carries the shared cursor that owns this personal drain domain.
+// The cursor is not damage credit (a hazard may have killed the drain); it is the
+// causal key used when a global threshold selects one player continuation.
+func (s *DrainSystem) crossDefeated() {
+	s.world.PushCrossing(event.EventDrainDefeated, &event.DrainDefeatedPayload{
+		Entity: s.world.Resources.Player.Entity,
+	})
 }
 
 // handleEntityCollisions processes collisions with non-drain entities
