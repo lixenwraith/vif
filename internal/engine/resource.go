@@ -327,6 +327,44 @@ func (r *RandResource) sessionRoot() uint64 {
 	return vmath.DeriveSeed(r.root, "session:"+strconv.FormatUint(s, 10))
 }
 
+// FollowCamera soft-follows one cursor: the camera shifts by the least amount that
+// brings the cell back inside the dead zone, then clamps to the map. It lives here
+// rather than in CameraSystem because a resize has to re-anchor the view without
+// announcing a cursor move — an announcement is a shared event, and the flow-field
+// throttle it dirties is shared state, so a local view change that emitted one put
+// two instances on different recompute phases.
+func (c *ConfigResource) FollowCamera(cursorX, cursorY int) {
+	// Nothing to scroll: the renderer centres a map smaller than its viewport
+	if c.MapWidth <= c.ViewportWidth && c.MapHeight <= c.ViewportHeight {
+		c.CameraX, c.CameraY = 0, 0
+		return
+	}
+
+	marginX := min(parameter.CameraDeadZoneMarginX, c.ViewportWidth/2)
+	marginY := min(parameter.CameraDeadZoneMarginY, c.ViewportHeight/2)
+
+	shift := func(v, camera, viewport, margin int, scroll bool) int {
+		if !scroll {
+			return 0
+		}
+		rel := v - camera
+		switch {
+		case rel < margin:
+			return rel - margin
+		case rel > viewport-margin-1:
+			return rel - (viewport - margin - 1)
+		}
+		return 0
+	}
+	shiftX := shift(cursorX, c.CameraX, c.ViewportWidth, marginX, c.MapWidth > c.ViewportWidth)
+	shiftY := shift(cursorY, c.CameraY, c.ViewportHeight, marginY, c.MapHeight > c.ViewportHeight)
+	if shiftX == 0 && shiftY == 0 {
+		return
+	}
+	c.CameraX = max(0, min(c.CameraX+shiftX, c.MapWidth-c.ViewportWidth))
+	c.CameraY = max(0, min(c.CameraY+shiftY, c.MapHeight-c.ViewportHeight))
+}
+
 // === Target Resource ===
 
 // MaxTargetsPerGroup sets the hard limit for concurrent anchors in a single target group

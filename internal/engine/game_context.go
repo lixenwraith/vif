@@ -289,6 +289,18 @@ func (ctx *GameContext) HandleResizeLocked() {
 	// Grid tracks map dimensions (grow-only, no reallocation on shrink)
 	ctx.World.Positions.ResizeGrid(config.MapWidth, config.MapHeight)
 
+	if !cropped {
+		// The map did not move, so no cursor is out of bounds and there is nothing
+		// to reconcile. Announcing a same-cell move anyway would be a shared event
+		// produced by one instance's terminal: EventCursorMoved dirties the
+		// flow-field throttle, whose phase is shared state, so the two instances
+		// would recompute their fields on different ticks and steer shared species
+		// along fields of different ages. The view still has to follow, and that is
+		// this instance's own business — the camera re-anchors directly.
+		ctx.followLocalCursorCamera(config)
+		return
+	}
+
 	// Clamp every cursor into the new map bounds and free it if the reflow blocked it;
 	// CursorSystem applies the move, which is what re-anchors the camera
 	ctx.World.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
@@ -303,6 +315,20 @@ func (ctx *GameContext) HandleResizeLocked() {
 		ctx.PushEvent(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
 		return true
 	})
+}
+
+// followLocalCursorCamera re-anchors the view on this instance's own cursor after a
+// reflow that moved nothing in the world. Pure local view state: the camera is not
+// compared across instances, and the cursor it follows is this instance's binding.
+func (ctx *GameContext) followLocalCursorCamera(config *ConfigResource) {
+	if !parameter.CameraEnabled {
+		return
+	}
+	pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Player.Entity)
+	if !ok {
+		return
+	}
+	config.FollowCamera(pos.X, pos.Y)
 }
 
 // === Overlay ===

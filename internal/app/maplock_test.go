@@ -220,3 +220,51 @@ func TestSessionRunNeverCropsItsMap(t *testing.T) {
 		t.Fatal("a hosting run's anchor does not carry the D-14 latch a reproduction adopts")
 	}
 }
+
+// TestLockedResizeLeavesTheFlowFieldPhaseAlone is the second half of the resize
+// rule, and the one a locked map does not cover on its own.
+//
+// A resize used to reconcile every cursor even when the map had not moved, which
+// announced a same-cell EventCursorMoved. That announcement is a shared event, and
+// NavigationSystem's flow-field cache is throttled: MarkDirty only latches, and a
+// field is recomputed when the throttle allows. So a local view change put the two
+// instances on different recompute phases, and from then on they steered shared
+// species along fields of different ages — a divergence that begins in kinetics,
+// long before any cell moves.
+func TestLockedResizeLeavesTheFlowFieldPhaseAlone(t *testing.T) {
+	a := mustHeadless(t, 0x14AF, 200, 60)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	spawnCursor(t, a) // a second cursor locks the map (D-14)
+	a.Tick(2)
+
+	moves := 0
+	a.SetDispatchTap(func(ev event.GameEvent) {
+		if ev.Type == event.EventCursorMoved {
+			moves++
+		}
+	})
+	a.Resize(90, 30)
+	a.Tick(2)
+	if moves != 0 {
+		t.Fatalf("a resize under a locked map announced %d cursor moves", moves)
+	}
+
+	// The negative control: the same resize with one cursor crops the map, which
+	// really does move cursors, and there the announcement is the mechanism.
+	b := mustHeadless(t, 0x14AF, 200, 60)
+	defer b.Close()
+	tickUntilCursor(t, b)
+	b.Tick(2)
+	moves = 0
+	b.SetDispatchTap(func(ev event.GameEvent) {
+		if ev.Type == event.EventCursorMoved {
+			moves++
+		}
+	})
+	b.Resize(90, 30)
+	b.Tick(2)
+	if moves == 0 {
+		t.Fatal("a cropping resize announced no cursor move; the guard above proves nothing")
+	}
+}

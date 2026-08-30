@@ -1,7 +1,7 @@
 # Multi-instance domain model — vi-fighter
 
-Rules D-1..D-16 describe how one world is split between state every instance
-holds and state that belongs to one participant. All sixteen are implemented and
+Rules D-1..D-17 describe how one world is split between state every instance
+holds and state that belongs to one participant. All seventeen are implemented and
 verified; §8 maps each to the test that pins it. §9 records what the model does
 *not* yet do, and is the input to the next round of work.
 
@@ -258,7 +258,10 @@ Writers:
 - `World.SetupLevel`, driven by `EventLevelSetup` from the map script. Shared and
   replicated; this is the authority.
 - `GameContext.HandleResizeLocked`, driven by this instance's terminal, and
-  admissible only while `World.MapSizeLocal()` holds.
+  admissible only while `World.MapSizeLocal()` holds. Under a locked map it reflows
+  the viewport and re-anchors the camera and nothing else: it announces no cursor
+  move, because a same-cell `EventCursorMoved` is a shared event and dirties shared
+  state (see D-17).
 - `MetaSystem`'s full reset and its zero-dimension level setup, which return the
   map to the viewport — the same terminal derivation, under the same guard.
 
@@ -325,6 +328,27 @@ requests a swarm is one occurrence per participant and may produce one crossing
 per occurrence. Nor does D-16 require making drains shared: the election carries
 only a shared cursor identity across the boundary, leaving the mechanic that
 reads owner-authored drain state in the player domain.
+
+**D-17 Throttled derivations.** A shared derivation that is *cached with a
+throttle* makes the cache's phase shared state, not an implementation detail. The
+value is a pure function of shared inputs, but *when* it is recomputed is a
+function of the dirty history, and between two recomputes a consumer reads a field
+of some age. Two instances whose throttles are out of phase therefore read fields
+of different ages from identical inputs.
+
+`navigation.FlowFieldCache` is the instance: `MarkDirty` latches, `Update`
+recomputes only once `MinTicksBetweenCompute` has elapsed, and a recompute resets
+the counter. So every producer of a dirty mark must be shared. They are —
+`EventCursorMoved`, `EventCursorDespawned`, the wall lifecycle and
+`EventLevelSetup` — with one exception that took a long run to surface: a resize
+reconciled every cursor even when the map had not moved, and `CursorSystem.move`
+announces unconditionally. One participant's terminal therefore advanced its own
+flow-field phase, and shared species steered along fields of different ages. It
+begins in kinetics, not in position, so nothing looks wrong for a long time.
+
+`nav.recomputes` and `nav.roi_cells` are compared for exactly this reason. They
+count recomputes, so they are the direct statement that two instances' throttles
+agree, and they were the signal that named this defect.
 
 ## 3. Spatial partition
 
@@ -649,9 +673,15 @@ effect systems, plus `glyph.`, `fuse.`, `shield.`, `cleaner.`, `camera.`,
 `music.`, `death.`, `timer.` and `combat.`. The rule is the profile in
 `manifest.Systems`, not the name. `denySharedKey` drops a single key from an
 otherwise comparable group: `engine.apm` and `engine.music_apm` beside the tick
-counters, `nav.entities`, `content.served`/`content.rejected` beside the corpus
-fingerprint, and `engine.tick_slips`, `time.game_elapsed_ms` and `gold.timer`,
-which are local scheduler/wall-time gauges rather than shared state. The shared
+counters, `nav.entities`, `content.served`/`content.rejected`/`content.file` beside
+the corpus fingerprint, and `engine.tick_slips`, `time.game_elapsed_ms` and
+`gold.timer`, which are local scheduler/wall-time gauges rather than shared state.
+The corpus trio is the whole of what a draw writes — the count and the file the
+cursor has reached — because content glyphs are player-domain and two participants
+who type differently roll onto different files. What remains beside them describes
+the corpus rather than a position in it. `nav.recomputes` and `nav.roi_cells`
+deliberately stay compared: they count recomputes of a throttled shared derivation,
+which is what says the two instances' cache phases agree (D-17). The shared
 tick, FSM state and timeout result remain compared. A `.buf_*_hwm` suffix drops
 scratch high-water marks, which
 `newBufferTelemetry` names for every system that publishes one. A
@@ -707,6 +737,8 @@ fails the build when the code stops matching the declaration.
 | `TestMapSizeLockedWithSecondCursor`, `TestMapSizeCropsWithOneCursor` | `internal/app` | D-14, with the crop path as its own negative control |
 | `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` | `internal/app` | D-14/D-11: a participant on a different terminal holds the boot cursor on the session's cell, not its own |
 | `TestSessionRunNeverCropsItsMap` | `internal/app` | D-14: a run that opened a session keeps its bounds through a resize, so the anchor it offers cannot move |
+| `TestLockedResizeLeavesTheFlowFieldPhaseAlone` | `internal/app` | D-17: a resize that moves no cursor announces none, with the cropping resize as its negative control |
+| `TestParticipantsShareTheCorpusFingerprintNotItsCursor` | `internal/app` | §7: the corpus fingerprint is compared and the cursor's position in it is not, over a multi-file corpus the embedded one cannot express |
 | `TestSharedGlyphsAreGoldMembersOnly` | `internal/app` | §4: every shared-domain glyph is a gold composite member |
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |
 | `TestObserverSharedStateTracksTheLiveParticipant` | `internal/app` | 1,200 steps of an observer whose shared state arrives over the wire rather than re-derived |

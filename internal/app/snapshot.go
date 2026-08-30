@@ -71,17 +71,15 @@ var denySharedKey = map[string]bool{
 	// Whole-store counts, which sum both domains: a participant's own player-domain
 	// population moves them. The shared position digest covers the shared half.
 	"nav.entities": true,
-	// Flow-field cache work for this tick, not state: the field is re-derived from
-	// shared inputs and always read fresh in the tick it is used, but the dirty flag
-	// is also set by this instance's own view events — a resize reconciles cursors
-	// locally — so two instances holding the same field can miss the cache on
-	// different ticks. Nothing about the compared world depends on either number.
-	"nav.recomputes": true,
-	"nav.roi_cells":  true,
-	// Corpus consumption is a player-domain draw; the fingerprint beside it
-	// (files, blocks, lines, source) is shared and stays comparable.
+	// Corpus consumption is a player-domain draw: content glyphs are this instance's
+	// own, so two participants who type differently consume blocks at different
+	// rates. Both keys the draw writes are dropped — the count and the file the
+	// cursor has reached, which rolls over at whatever moment each instance gets
+	// there. The fingerprint beside them (files, blocks, lines, source) describes the
+	// corpus rather than a position in it, and stays comparable.
 	"content.served":   true,
 	"content.rejected": true,
+	"content.file":     true,
 }
 
 // allowSharedKey re-admits a key its group prefix denies. spatial.indexed_shared
