@@ -65,7 +65,7 @@ func (s *CameraSystem) HandleEvent(ev event.GameEvent) {
 		// A rebind moves the view, not the world. The camera re-anchors from the new
 		// binding rather than from a cursor move nobody made: EventCursorMoved is a
 		// shared event and dirties a throttled shared derivation (D-17).
-		if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
+		if pos, ok := s.world.LocalCursor(); ok {
 			s.updateCamera(pos.X, pos.Y)
 		}
 	}

@@ -12,11 +12,9 @@ import (
 type Role uint8
 
 const (
-	RoleNone   Role = iota // Network disabled
-	RoleClient             // Connects to server
-	RoleServer             // Accepts connections
-	RoleHost               // P2P: hosting peer
-	RolePeer               // P2P: joining peer
+	RoleNone Role = iota // Network disabled
+	RoleHost             // Binds and accepts participants
+	RolePeer             // Dials the coordinator
 )
 
 // Config holds network configuration

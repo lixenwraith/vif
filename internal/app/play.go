@@ -194,7 +194,7 @@ func (p *player) frame() {
 	a.world.RunSafe(func() {
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
-		if pos, ok := a.world.Positions.GetPosition(a.world.Resources.Player.Entity); ok {
+		if pos, ok := a.world.LocalCursor(); ok {
 			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
 		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)

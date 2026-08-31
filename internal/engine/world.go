@@ -603,6 +603,20 @@ func (w *World) ResolveOwnedCursor(e core.Entity) core.Entity {
 	return e
 }
 
+// LocalCursor returns the cell this instance's own cursor occupies.
+//
+// One accessor rather than the same three-line read at every input, view and
+// player-domain producer. It is also the seam a locally predicted position
+// installs itself behind: the authoritative cell is a D-3 crossing and reaches the
+// store a playout lead later, so an input path that resolves the next motion from
+// the store resolves it from a cell the player has already left. Every producer
+// that must see the player's own latest cell reads it here; a shared system must
+// not (D-1).
+// Caller MUST hold updateMutex
+func (w *World) LocalCursor() (component.PositionComponent, bool) {
+	return w.Positions.GetPosition(w.Resources.Player.Entity)
+}
+
 // CursorSlot returns the roster slot a cursor entity occupies
 func (w *World) CursorSlot(e core.Entity) (uint8, bool) {
 	c, ok := w.Components.Cursor.GetComponent(e)

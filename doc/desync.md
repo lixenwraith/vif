@@ -382,6 +382,11 @@ visible later.
 6. Repeat recovery at storm high-water and record bytes, capture/load time, replay
    rate, allocation peak, and total interruption.
 
+An implementation plan built on this analysis, with the measured tick costs that
+revise its rollback and cadence assumptions and with the separate responsiveness
+defect it does not cover, is in
+[Multiplayer enhancement plan](multi-player-enhancement.md).
+
 ## 10. Primary references for the patterns
 
 - Ensemble's [Age of Empires lockstep account](https://www.gamedeveloper.com/programming/1500-archers-on-a-28-8-network-programming-in-age-of-empires-and-beyond)

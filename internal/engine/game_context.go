@@ -324,7 +324,7 @@ func (ctx *GameContext) followLocalCursorCamera(config *ConfigResource) {
 	if !parameter.CameraEnabled {
 		return
 	}
-	pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Player.Entity)
+	pos, ok := ctx.World.LocalCursor()
 	if !ok {
 		return
 	}

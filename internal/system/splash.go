@@ -197,7 +197,7 @@ func (s *SplashSystem) Update() {
 
 			// If collision detected, attempt to find a new valid position
 			if collision {
-				if pos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
+				if pos, ok := s.world.LocalCursor(); ok {
 					newX, newY := s.calculateProximityAnchor(pos.X, pos.Y, splashComp.Length)
 					if newX != splashComp.AnchorX || newY != splashComp.AnchorY {
 						splashComp.AnchorX = newX
@@ -214,7 +214,7 @@ func (s *SplashSystem) Update() {
 
 // validateMagnifier checks if magnifier is still valid and updates content if entity changed, returns false if magnifier was destroyed
 func (s *SplashSystem) validateMagnifier(splashEntity core.Entity, splash *component.SplashComponent) bool {
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
 		event.EmitDeath(s.world.Resources.Event.Queue, 0, splashEntity)
 		return false

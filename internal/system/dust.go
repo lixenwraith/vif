@@ -247,7 +247,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 		}
 
 	case event.EventDustAllRequest:
-		if cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity); ok {
+		if cursorPos, ok := s.world.LocalCursor(); ok {
 			s.convertGlyphs(cursorPos.X, cursorPos.Y, nil)
 		}
 	}

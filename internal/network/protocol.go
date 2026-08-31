@@ -148,11 +148,3 @@ func NewMessage(t MessageType, payload []byte) *Message {
 		Payload: payload,
 	}
 }
-
-// NewAckMessage creates an acknowledgment for a received sequence
-func NewAckMessage(ackSeq uint32) *Message {
-	return &Message{
-		Type: MsgAck,
-		Ack:  ackSeq,
-	}
-}

@@ -17,7 +17,7 @@ func PerformSearch(ctx *engine.GameContext, searchText string, forward bool) boo
 	grid := buildCharacterGrid(ctx)
 
 	// Get cursor position from ECS
-	pos, ok := ctx.World.Positions.GetPosition(ctx.World.Resources.Player.Entity)
+	pos, ok := ctx.World.LocalCursor()
 	if !ok {
 		return false // Cursor entity missing - should never happen
 	}

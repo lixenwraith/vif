@@ -127,7 +127,7 @@ func (s *MotionMarkerSystem) Update() {
 
 	// Initial generation only when no markers exist
 	if len(s.baseMarkers) == 0 {
-		cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+		cursorPos, ok := s.world.LocalCursor()
 		if ok {
 			s.regenerateBaseMarkers(cursorPos.X, cursorPos.Y)
 		}
@@ -207,7 +207,7 @@ func (s *MotionMarkerSystem) regenerateBaseMarkers(cursorX, cursorY int) {
 func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 	s.clearColoredMarkers()
 
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
 		return
 	}
@@ -234,7 +234,7 @@ func (s *MotionMarkerSystem) showColoredMarkers(dx, dy int) {
 
 // validateBaseMarkers checks if glyphs still exist at marker positions, regenerates if changed
 func (s *MotionMarkerSystem) validateBaseMarkers() {
-	cursorPos, ok := s.world.Positions.GetPosition(s.world.Resources.Player.Entity)
+	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
 		s.clearBaseMarkers()
 		return

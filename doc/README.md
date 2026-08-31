@@ -22,6 +22,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
 | [Desynchronisation and recovery](desync.md) | Medium/detail | What caused the observed two-player divergence, what does the protocol guarantee today, and which recovery design best fits? |
+| [Multiplayer enhancement plan](multi-player-enhancement.md) | Medium/detail | Why is a session's own cursor slow, what does the code review say the recovery designs actually cost, and in what order should the work land? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |

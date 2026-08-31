@@ -50,9 +50,9 @@ func (t *Transport) Start() error {
 	}
 
 	switch t.config.Role {
-	case RoleServer, RoleHost:
+	case RoleHost:
 		return t.startServer()
-	case RoleClient, RolePeer:
+	case RolePeer:
 		return t.startClient()
 	default:
 		return nil // RoleNone, no-op

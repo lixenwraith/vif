@@ -86,7 +86,34 @@ type NetworkSystem struct {
 	lastLostIn  uint64
 	lastLostOut uint64
 
+	// Every counter this system publishes, collected as it is registered. Init
+	// clears the session by ranging these rather than by restating each name, so a
+	// counter added to the constructor cannot be left carrying the previous run.
+	resetInts    []*atomic.Int64
+	resetBools   []*atomic.Bool
+	resetStrings []*status.AtomicString
+
 	enabled bool
+}
+
+// intStat, boolStat and textStat register one counter and enrol it in the set Init
+// clears, so registration and reset cannot drift apart.
+func (s *NetworkSystem) intStat(reg *status.Registry, key string) *atomic.Int64 {
+	c := reg.Ints.Get(key)
+	s.resetInts = append(s.resetInts, c)
+	return c
+}
+
+func (s *NetworkSystem) boolStat(reg *status.Registry, key string) *atomic.Bool {
+	c := reg.Bools.Get(key)
+	s.resetBools = append(s.resetBools, c)
+	return c
+}
+
+func (s *NetworkSystem) textStat(reg *status.Registry, key string) *status.AtomicString {
+	c := reg.Strings.Get(key)
+	s.resetStrings = append(s.resetStrings, c)
+	return c
 }
 
 // stateDigest names one completed shared-world state. Valid distinguishes a real
@@ -189,32 +216,32 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s := &NetworkSystem{world: world}
 
 	reg := world.Resources.Status
-	s.statSent = reg.Ints.Get("network.crossings_sent")
-	s.statRecv = reg.Ints.Get("network.crossings_received")
-	s.statState = reg.Ints.Get("network.state_applied")
-	s.statDrop = reg.Ints.Get("network.frames_dropped")
-	s.statDeferred = reg.Ints.Get("network.barrier_deferred")
-	s.statAppliedLocal = reg.Ints.Get("network.barrier_applied_local")
-	s.statAppliedPeer = reg.Ints.Get("network.barrier_applied_peer")
-	s.statLate = reg.Ints.Get("network.barrier_late")
-	s.statRanWithout = reg.Ints.Get("network.barrier_ran_without_peer")
-	s.statPeerLag = reg.Ints.Get("network.barrier_peer_lag_ticks")
-	s.statPeerArtifacts = reg.Ints.Get("network.barrier_peer_artifacts")
-	s.statPeerApplied = reg.Bools.Get("network.barrier_peer_applied")
-	s.statPeers = reg.Ints.Get("network.peers")
-	s.statConnected = reg.Bools.Get("network.connected")
-	s.statConnection = reg.Strings.Get("network.state")
-	s.statMapLatched = reg.Bools.Get("network.map_latched")
-	s.statLostIn = reg.Ints.Get("network.transport_lost_in")
-	s.statLostOut = reg.Ints.Get("network.transport_lost_out")
-	s.statRelayed = reg.Ints.Get("network.relay_forwarded")
-	s.statDuplicates = reg.Ints.Get("network.relay_duplicates")
-	s.statDigestMismatch = reg.Ints.Get("network.digest_mismatches")
-	s.statSyncState = reg.Strings.Get("network.sync_state")
-	s.statSyncPart = reg.Strings.Get("network.sync_part")
-	s.statSyncRecords = reg.Strings.Get("network.sync_records")
-	s.statSyncTick = reg.Ints.Get("network.sync_tick")
-	s.statDiverged = reg.Bools.Get("network.diverged")
+	s.statSent = s.intStat(reg, "network.crossings_sent")
+	s.statRecv = s.intStat(reg, "network.crossings_received")
+	s.statState = s.intStat(reg, "network.state_applied")
+	s.statDrop = s.intStat(reg, "network.frames_dropped")
+	s.statDeferred = s.intStat(reg, "network.barrier_deferred")
+	s.statAppliedLocal = s.intStat(reg, "network.barrier_applied_local")
+	s.statAppliedPeer = s.intStat(reg, "network.barrier_applied_peer")
+	s.statLate = s.intStat(reg, "network.barrier_late")
+	s.statRanWithout = s.intStat(reg, "network.barrier_ran_without_peer")
+	s.statPeerLag = s.intStat(reg, "network.barrier_peer_lag_ticks")
+	s.statPeerArtifacts = s.intStat(reg, "network.barrier_peer_artifacts")
+	s.statPeerApplied = s.boolStat(reg, "network.barrier_peer_applied")
+	s.statPeers = s.intStat(reg, "network.peers")
+	s.statConnected = s.boolStat(reg, "network.connected")
+	s.statConnection = s.textStat(reg, "network.state")
+	s.statMapLatched = s.boolStat(reg, "network.map_latched")
+	s.statLostIn = s.intStat(reg, "network.transport_lost_in")
+	s.statLostOut = s.intStat(reg, "network.transport_lost_out")
+	s.statRelayed = s.intStat(reg, "network.relay_forwarded")
+	s.statDuplicates = s.intStat(reg, "network.relay_duplicates")
+	s.statDigestMismatch = s.intStat(reg, "network.digest_mismatches")
+	s.statSyncState = s.textStat(reg, "network.sync_state")
+	s.statSyncPart = s.textStat(reg, "network.sync_part")
+	s.statSyncRecords = s.textStat(reg, "network.sync_records")
+	s.statSyncTick = s.intStat(reg, "network.sync_tick")
+	s.statDiverged = s.boolStat(reg, "network.diverged")
 
 	s.Init()
 	return s
@@ -228,32 +255,16 @@ func (s *NetworkSystem) Init() {
 	s.lastSync = [parameter.MaxPlayers]uint64{}
 	s.departed = [parameter.MaxPlayers + 1]bool{}
 
-	s.statSent.Store(0)
-	s.statRecv.Store(0)
-	s.statState.Store(0)
-	s.statDrop.Store(0)
-	s.statDeferred.Store(0)
-	s.statAppliedLocal.Store(0)
-	s.statAppliedPeer.Store(0)
-	s.statLate.Store(0)
-	s.statRanWithout.Store(0)
-	s.statPeerLag.Store(0)
-	s.statPeerArtifacts.Store(0)
-	s.statPeerApplied.Store(false)
-	s.statPeers.Store(0)
-	s.statConnected.Store(false)
-	s.statConnection.Store("off")
-	s.statMapLatched.Store(false)
-	s.statLostIn.Store(0)
-	s.statLostOut.Store(0)
-	s.statRelayed.Store(0)
-	s.statDuplicates.Store(0)
-	s.statDigestMismatch.Store(0)
-	s.statSyncState.Store("")
-	s.statSyncPart.Store("")
-	s.statSyncRecords.Store("")
-	s.statSyncTick.Store(0)
-	s.statDiverged.Store(false)
+	for _, c := range s.resetInts {
+		c.Store(0)
+	}
+	for _, c := range s.resetBools {
+		c.Store(false)
+	}
+	for _, c := range s.resetStrings {
+		c.Store("")
+	}
+	s.statConnection.Store("off") // the link has a resting value; the counters do not
 	s.peerMismatches = [parameter.MaxPlayers + 1]int{}
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
