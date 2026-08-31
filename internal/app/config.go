@@ -129,11 +129,6 @@ type Config struct {
 	// two. The ceiling is parameter.MaxPlayers, which is also the roster width.
 	Participants int
 
-	// RetainSessionLog keeps every non-system record this run produces in memory, so
-	// a participant arriving after tick zero can reproduce the session by replaying
-	// it. Implied by HostAddress; separate so an embedder or a harness can ask for it
-	// without opening a listener. It grows with session length.
-	RetainSessionLog bool
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.

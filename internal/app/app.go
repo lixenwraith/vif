@@ -51,10 +51,6 @@ type App struct {
 	pendingJoin  *network.PendingJoin
 	sessionMu    sync.Mutex
 	sessionOffer network.SessionOffer
-	// sessionLog retains every non-system record this run produced, so a participant
-	// arriving after tick zero can reproduce the session by replaying it. Present on
-	// a host; nil elsewhere.
-	sessionLog *Capture
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.SessionParticipant
@@ -343,13 +339,7 @@ func resolveConfigID(cfg Config) string {
 // initJournal opens the replay journal and installs it on the event queue.
 // Opt-in: it records every non-system event for the life of the run.
 func (a *App) initJournal() error {
-	// A host retains a replayable log whether or not a journal file was asked for:
-	// it is the only thing a participant arriving mid-run can be brought up to date
-	// from, since nothing transports world state.
-	if a.cfg.RetainSessionLog || a.cfg.HostAddress != "" {
-		a.sessionLog = NewCapture()
-	}
-	if !a.cfg.Journal && a.sessionLog == nil {
+	if !a.cfg.Journal {
 		return nil
 	}
 
@@ -367,9 +357,6 @@ func (a *App) initJournal() error {
 	}
 	// Passed only when it exists: a nil *Capture inside a non-nil interface is not
 	// something MultiSink can recognise as absent.
-	if a.sessionLog != nil {
-		sink = event.MultiSink(sink, a.sessionLog)
-	}
 
 	q := a.world.Resources.Event.Queue
 	j := event.NewJournal(sink)
@@ -415,7 +402,7 @@ func (a *App) Close() {
 	}
 	a.hub.StopAll()
 
-	if (a.cfg.Journal || a.sessionLog != nil) && a.world != nil && a.world.Resources.Event != nil {
+	if a.cfg.Journal && a.world != nil && a.world.Resources.Event != nil {
 		q := a.world.Resources.Event.Queue
 		emitted, encFail := q.Journal().Stats()
 		q.SetJournal(nil)

@@ -167,17 +167,6 @@ func (a *App) adoptMapLatch(an event.JournalAnchor) {
 	a.SetupLevel(an.MapWidth, an.MapHeight, false, an.CropOnResize)
 }
 
-// mapLatched reports whether this instance already holds the anchor's D-14 bounds.
-func (a *App) mapLatched(an event.JournalAnchor) bool {
-	var latched bool
-	a.world.RunSafe(func() {
-		cfg := a.world.Resources.Config
-		latched = cfg.MapWidth == an.MapWidth && cfg.MapHeight == an.MapHeight &&
-			cfg.CropOnResize == an.CropOnResize
-	})
-	return latched
-}
-
 // AttachTransport binds a transport to this App, for a harness or an embedder that
 // builds its own endpoint instead of taking the one NetworkService contributes.
 // NetworkSystem reads the port per tick, so this needs no re-registration.

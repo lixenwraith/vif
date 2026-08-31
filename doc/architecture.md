@@ -315,15 +315,12 @@ at the simulation's poll boundary. The fixed-delay artifact barrier exchanges
 crossings without a synchronous per-tick round trip, and because every artifact
 names the absolute tick it applies at, a node relays what it receives so a
 participant reaches instances its producer never linked to. Roster changes travel
-the same way, so a departure or an arrival lands on one tick everywhere. The
-implemented socket/headless catch-up path can reconstruct a participant after
-tick zero by replaying the host's retained record log. `cmd/vif` does not yet
-complete that handoff against an advancing interactive host, and the bit-exact
-replay claim does not cover concurrent live scheduling.
+the same way, so a departure or an arrival lands on one tick everywhere.
+Participants join at the tick-zero gate only: there is no mid-run join, no
+reconnect, and no recovery once two instances disagree.
 
 It has no lag compensation, authentication or CLI TLS identity, no restorable
-world checkpoint to bound the retained log, and no partition detection; `-join`
-dials one address,
+world checkpoint, and no partition detection; `-join` dials one address,
 so the links form a star even though the relay makes any graph work. The domain
 boundary, event classification, wire protocol, their enforcing tests, and an
 analysis of what the model does not yet cover are in rules D-1..D-17 and §9 of

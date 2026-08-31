@@ -238,46 +238,6 @@ func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
 	}
 }
 
-// replayCapture rebuilds from the anchor, verifies it, replays and compares
-func replayCapture(t *testing.T, cap *Capture, want []string, ticks int) {
-	t.Helper()
-
-	anchors := cap.Anchors()
-	if len(anchors) == 0 {
-		t.Fatal("no anchor captured")
-	}
-	rcfg, err := ConfigFromAnchor(anchors[0])
-	if err != nil {
-		t.Fatalf("config from anchor: %v", err)
-	}
-	rep, err := NewHeadless(rcfg)
-	if err != nil {
-		t.Fatalf("replay run: %v", err)
-	}
-	defer rep.Close()
-
-	if err := rep.VerifyAnchor(anchors[0]); err != nil {
-		t.Fatalf("verify anchor: %v", err)
-	}
-
-	st, err := rep.Replay(cap.Records())
-	if err != nil {
-		t.Fatalf("replay: %v (%+v)", err, st)
-	}
-	switch rest := ticks - int(st.End.Tick); {
-	case rest > 0:
-		rep.Tick(rest)
-	case rest < 0:
-		t.Fatalf("replay ran %d ticks, source ran %d", st.End.Tick, ticks)
-	}
-
-	got := rep.SnapshotSimulation()
-	if i, _, _, ok := FirstDiff(want, got); ok {
-		t.Fatalf("replay diverged at line %d (%+v):\n%s",
-			i, st, strings.Join(Diff(want, got, 8), "\n"))
-	}
-}
-
 // TestJournalDoesNotPerturb drives one fixed-seed sequence twice, journaled and
 // not, and asserts the snapshots match and the capture is dense
 func TestJournalDoesNotPerturb(t *testing.T) {

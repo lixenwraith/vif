@@ -136,39 +136,6 @@ type JournalSink interface {
 	Anchor(JournalAnchor)
 }
 
-// MultiSink fans one journal out to several destinations. A hosted session retains
-// a replayable log whether or not the operator asked for a journal file, so the two
-// consumers coexist rather than one displacing the other.
-func MultiSink(sinks ...JournalSink) JournalSink {
-	live := make([]JournalSink, 0, len(sinks))
-	for _, s := range sinks {
-		if s != nil {
-			live = append(live, s)
-		}
-	}
-	switch len(live) {
-	case 0:
-		return nil
-	case 1:
-		return live[0]
-	}
-	return multiSink(live)
-}
-
-type multiSink []JournalSink
-
-func (m multiSink) Record(r JournalRecord) {
-	for _, s := range m {
-		s.Record(r)
-	}
-}
-
-func (m multiSink) Anchor(a JournalAnchor) {
-	for _, s := range m {
-		s.Anchor(a)
-	}
-}
-
 // AnchorIntervalTicks is the tick period between anchor records, so a rotated
 // file carries one within this many ticks of its first record
 const AnchorIntervalTicks = 600

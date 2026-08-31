@@ -133,10 +133,12 @@ Two flags activate the same composition path:
 | `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, build the mirrored roster, then pass the start/ready gate. |
 
 They are flags rather than ex commands because the protocol has no mid-run world
-snapshot. A host can be canceled in the lobby with `Ctrl-C`/`Ctrl-Q`. After a
-connected peer leaves, the remote cursor is removed and the survivor continues;
-the host listener remains active, but a later join is rejected with
-`ErrJoinMidRun` at the current position.
+snapshot — supplying one is the point of
+[the multiplayer enhancement plan](multi-player-enhancement.md), and it is what
+would let a running solo game be toggled into a host. A host can be canceled in the
+lobby with `Ctrl-C`/`Ctrl-Q`. After a connected peer leaves, the remote cursor is
+removed and the survivor continues; the host listener remains active, but a later
+join is rejected with `ErrJoinMidRun` at the current position.
 
 The join anchor owns the seed, RNG session, tick rate, config, corpus fingerprint
 and D-14 map latch. `ConfigForJoin` runs before `New`, so `initWorld` cannot draw a
@@ -198,8 +200,8 @@ payload, so a partial stream read never reaches the game. Per-peer send assigns
 sequence and ack values at actual write time; broadcast clones a message per peer.
 Ack is observational—there is no retransmission policy.
 
-Control messages carry heartbeat, join offer/reply, start/ready gates, session-log
-chunks and disconnect notices. Gameplay uses `MsgEvent` for a closed crossing
+Control messages carry heartbeat, join offer/reply, start/ready gates and
+disconnect notices. Gameplay uses `MsgEvent` for a closed crossing
 epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateDigest` for the periodic shared-world parity probe. The epoch is JSON
 containing journal-registry TOML payloads; representative complete-frame budgets
@@ -287,15 +289,13 @@ What the operator surface still does not cover:
   any graph work;
 - the playout lead is a constant rather than a function of the graph's diameter,
   and a partition has no digest edge between its components;
-- mid-run join is implemented and exercised through socket/caller-driven tests but
-  not yet driven from `cmd/vif` against an advancing interactive host, which needs
-  the joiner placed on the session's tick phase and does not inherit the narrower
-  headless bit-exact replay claim;
-- live pause/speed/step are refused until that same catch-up path can support a
-  suspended participant rejoining the current tick phase;
-- no restorable world checkpoint, so `SnapshotShared` can diagnose but not load,
-  and the retained log and catch-up cost both grow with session length; no lag
-  compensation;
+- there is no mid-run join and no reconnect: a participant enters at the tick-zero
+  gate or not at all. The replay-from-tick-zero path that nominally provided one
+  was never reachable from `cmd/vif` and has been removed;
+- live pause/speed/step are refused, because a suspended participant has no way
+  back into the running session;
+- no restorable world checkpoint, so `SnapshotShared` can diagnose but not load;
+  no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
@@ -307,8 +307,7 @@ What the operator surface still does not cover:
 `TestTwoLiveParticipantsStayInLockstep` proves two independent drivers over the
 in-process mesh; `TestTwoLiveParticipantsStayInLockstepOverTCP` repeats 1,200
 paired boundaries over `127.0.0.1`, uses the production startup gates, checks
-disconnect continuation, and then admits a mid-run joiner by transferring and
-replaying the session log while the listener stays up.
+disconnect continuation while the listener stays up.
 `TestChainRelayReachesANonAdjacentParticipant` and
 `TestMeshPropagatesEveryParticipantToEveryOther` cover relayed propagation,
 `TestDepartureReachesTheWholeMesh` its membership half, and
@@ -319,8 +318,8 @@ input immediately after the lobby gate.
 restores shared state to cover the alert/clear path;
 `TestSharedSnapshotExcludesLocalSchedulerTiming` keeps wall origins, tick slips
 and display-only deadline remainder out of that surface. Framing, timeout,
-mismatch, log-transfer and encoding budgets have focused tests in
-`internal/network` and `internal/event`.
+mismatch and encoding budgets have focused tests in `internal/network` and
+`internal/event`.
 `TestCoordinatorLossRaisesLocalStatus` pins the direct guest warning that does not
 depend on a surviving digest edge.
 

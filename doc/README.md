@@ -21,8 +21,8 @@ reader can start with the application shape and then descend into a subsystem.
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
-| [Desynchronisation and recovery](desync.md) | Medium/detail | What caused the observed two-player divergence, what does the protocol guarantee today, and which recovery design best fits? |
-| [Multiplayer enhancement plan](multi-player-enhancement.md) | Medium/detail | Why is a session's own cursor slow, what does the code review say the recovery designs actually cost, and in what order should the work land? |
+| [Multiplayer enhancement plan](multi-player-enhancement.md) | Medium/detail | Why does the current session feel slow and diverge, what replaces it, and in what order does the work land? **Start here for multiplayer.** |
+| [Desynchronisation and recovery](desync.md) | Medium/detail | Diagnosis of the 2026-08-30 divergence and a survey of the recovery option space. Its recommendation is superseded by the plan above. |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |
@@ -77,10 +77,10 @@ This documentation distinguishes three states:
 - **Active** means constructed and used by the normal `cmd/vif` runtime.
 - **Optional** means supported by an explicit flag, config, build tag, or tool.
 - **Experimental/incomplete** means code exists but the normal application does
-  not expose a complete end-to-end feature. Live mid-run join and authenticated
-  multiplayer are examples: the catch-up mechanism is implemented and tested but
-  `cmd/vif` does not yet drive it against a running host. Startup multi-participant
-  networking is optional and active.
+  not expose a complete end-to-end feature. Authenticated multiplayer is an
+  example: the message kinds are reserved and nothing populates them. Startup
+  multi-participant networking is optional and active; mid-run join and reconnect
+  do not exist.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

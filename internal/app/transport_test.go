@@ -340,14 +340,18 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 
 // TestTwoLiveParticipantsStayInLockstepOverTCP proves the same session through
 // stream framing, the anchor handshake and canonical socket participant IDs.
+//
+// It no longer ends in a mid-run join. That leg exercised the retired
+// replay-the-session-from-tick-zero path; the authoritative snapshot join that
+// replaces it is the next implementation's to prove.
 func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	const seed = 0x5EEDBEEF
-	// The socket leg re-proves the same criterion through framing, a real handshake
-	// and a mid-run join, none of which need the long run the in-process one takes.
+	// The socket leg re-proves the same criterion through framing and a real
+	// handshake, neither of which needs the long run the in-process one takes.
 	steps := soakScale(80, 240, 800)
 
 	a, err := NewHeadless(Config{
-		Seed: seed, Width: 120, Height: 40, ForceDefault: true, RetainSessionLog: true,
+		Seed: seed, Width: 120, Height: 40, ForceDefault: true,
 	})
 	if err != nil {
 		t.Fatalf("host: %v", err)
@@ -358,7 +362,7 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = hostParticipantID
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
-		Assign: a.assignParticipant, Release: a.releaseParticipant, Log: a.SessionLogChunks,
+		Assign: a.assignParticipant, Release: a.releaseParticipant,
 	}, time.Second)
 	host := network.NewSocketPort(hostCfg)
 	t.Cleanup(func() { _ = host.Close() })
@@ -447,44 +451,6 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 			roster, host.IsRunning(), state, peers, latched)
 	}
 
-	// A participant arriving after tick zero reproduces the session instead of being
-	// refused: the handshake carries the host's record log, and replaying it is what
-	// puts the joiner in the world the host is already in.
-	retry, retryOffer, err := network.DialSession(host.Addr().String(), network.DebugConfig(network.RolePeer, ""))
-	if err != nil {
-		t.Fatalf("retry dial: %v", err)
-	}
-	defer retry.Close()
-	if !retry.MidRun() {
-		t.Fatalf("retry offer describes tick %d, want a session already running",
-			retryOffer.Anchor.Anchor.Tick)
-	}
-	records, err := retry.ReceiveSessionLog()
-	if err != nil {
-		t.Fatalf("retry session log: %v", err)
-	}
-	if len(records) == 0 {
-		t.Fatal("retry received an empty session log")
-	}
-	retryCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, retryOffer)
-	if err != nil {
-		t.Fatalf("retry config: %v", err)
-	}
-	retryApp, err := NewHeadless(retryCfg)
-	if err != nil {
-		t.Fatalf("retry app: %v", err)
-	}
-	defer retryApp.Close()
-	if err := retryApp.CatchUp(retryOffer.Anchor, records); err != nil {
-		t.Fatalf("retry catch up: %v", err)
-	}
-	if err := retry.Complete(nil); err != nil {
-		t.Fatalf("retry reply: %v", err)
-	}
-	assertSharedParity(t, a, retryApp, int(retryOffer.Anchor.Anchor.Tick))
-	if !host.IsRunning() {
-		t.Fatal("host stopped listening after admitting a mid-run join")
-	}
 }
 
 func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA ScriptOptions, tickPair func()) {
@@ -685,13 +651,4 @@ func TestCursorStatePayloadRoundTrips(t *testing.T) {
 		len(got.WeaponCooldown) != 3 || got.WeaponCooldown[2] != 9 {
 		t.Fatalf("cursor state round trip = %#v, want %#v", got, want)
 	}
-}
-
-// disableSystem turns one system off on an instance, through the same command the
-// operator surface uses
-func disableSystem(t *testing.T, a *App, name string) {
-	t.Helper()
-	a.Context().PushEventOrigin(event.EventMetaSystemCommandRequest,
-		&event.MetaSystemCommandPayload{SystemName: name, Enabled: false}, event.OriginDebug)
-	a.Settle()
 }

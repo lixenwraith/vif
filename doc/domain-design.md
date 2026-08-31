@@ -2,13 +2,15 @@
 
 Rules D-1..D-17 describe how one world is split between state every instance
 holds and state that belongs to one participant. All seventeen are implemented and
-verified; §8 maps each to the test that pins it. §9 records what the model does
-*not* yet do, and is the input to the next round of work. The observed divergence,
-recovery alternatives, quantitative sizing, and staged recommendation are in
-[Desynchronisation and recovery](desync.md).
+verified; §8 maps each to the test that pins it, and §9 records what the model does
+*not* do.
 
-This document supersedes every earlier design note, including the phase plan it
-replaces.
+**This document describes the code as it stands, not where it is going.** Live
+sessions are being rebuilt around an authoritative host with deterministic guests;
+that plan, and which of these rules each of its phases changes, are in
+[Multiplayer enhancement plan](multi-player-enhancement.md). The 2026-08-30
+divergence and the option survey behind that decision are in
+[Desynchronisation and recovery](desync.md).
 
 ## 1. Domains
 
@@ -252,7 +254,7 @@ snapshot they held. Each now admits only `SimulatesLocally` cursors and crosses
 shared simulation state. Every writer of them must therefore be a function of
 state every participant agrees on — and, because a run is reproduced by replaying
 its record stream, of state a *reproduction* agrees on too. That second half is
-what the rule turns on: a replay and a mid-run catch-up hold no transport and no
+what the rule turns on: a replay holds no transport and no
 terminal of their own.
 
 Writers:
@@ -586,21 +588,26 @@ snapshots the closed roster, clears the world and barrier, then rebuilds every
 cursor in slot order from the boot template. Thus reset changes the run without
 silently reducing the session to slot zero.
 
-**Mid-run join.** The implemented catch-up path reconstructs a participant after
-tick zero from the session record rather than from a world snapshot. A
-caller-driven/headless run is a pure function of its anchor and injected
-non-system record stream, which is what replay relies on, so a host retains that
-stream for the life of the session and the handshake carries it. The
-log is unbounded and a frame is capped at 64 KiB, so it crosses as sequenced
-chunks; past the offer the deadlines are per-write, because the transfer is as
-long as the session rather than as long as the link. `App.CatchUp` replays it,
-ticks over the quiet stretch the records do not cover, and discards the barrier
-artifacts the log already applied. It does not pre-adopt the D-14 latch: the
-records carry the level setup that produced it, and adopting as well would run
-that event twice. The cost is memory — the log is complete from tick zero and
-grows with session length. The socket/headless catch-up tests prove this code path;
-they do not extend the bit-exact claim to concurrent interactive live execution,
-and `cmd/vif` does not yet complete its running-host tick-phase handoff.
+**Mid-run join — removed.** There is none. A participant may join only at tick
+zero, through the startup gate.
+
+The path that existed replayed the coordinator's complete record stream from tick
+zero into the joining instance. It was deleted rather than repaired, for three
+reasons that are worth keeping written down because they constrain its
+replacement. It never ran: `App.hostNetworkConfig` built its `network.Coordinator`
+without a `Log` accessor, so the handshake refused every mid-run joiner with *this
+session retains no replayable log* while a `-host` run retained the whole stream in
+memory for the life of the session — unbounded cost, no delivered feature. Its
+cost model was wrong in principle as well as in practice: transfer and catch-up
+both grow with session length, so the later a participant arrives the worse it
+gets. And it could not survive the thing it most needed to survive, since a
+running host advances while a joiner replays, and nothing put the joiner onto the
+session's tick phase at the end of it.
+
+Its replacement is an authoritative state snapshot: the coordinator sends what the
+world *is*, not what it *did*, so join cost is a function of world size rather than
+of session length, and a participant may arrive at any moment. See
+[Multiplayer enhancement plan](multi-player-enhancement.md).
 
 **The stream.** The real endpoint is `network.SocketPort`. Every message has a
 fixed 12-byte header whose final field is payload length; `Decode` uses
@@ -649,9 +656,8 @@ tick zero until every expected participant is ready. A joiner dials before
 constructing its `App`, so `ConfigForJoin` installs the host seed, config and
 corpus identity before `initWorld` can draw a seed or load content. Both sides
 activate the crossing sink before terminal input is consumed. The host remains
-playable and listening after a disconnect. The App/transport layer can catch a
-later connection up from the retained log rather than refusing it, but `cmd/vif`
-does not yet complete the running-host tick-phase handoff described in §9.4.
+playable and listening after a disconnect, but a connection arriving after the
+start gate has nothing to join: the lobby is the only entry point (§9.4).
 
 **Cost.** The wire keeps journal TOML payloads inside a JSON epoch envelope. The
 measured complete frames, including the 12-byte header, are 44 bytes for an empty
@@ -769,13 +775,11 @@ fails the build when the code stops matching the declaration.
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |
 | `TestObserverSharedStateTracksTheLiveParticipant` | `internal/app` | 1,200 steps of an observer whose shared state arrives over the wire rather than re-derived |
 | `TestTwoLiveParticipantsStayInLockstep` | `internal/app` | 1,200 steps, two live participants, both moving, both crossing, both nonzero APM |
-| `TestTwoLiveParticipantsStayInLockstepOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing, clean remote-cursor removal on disconnect, and a real mid-run join |
+| `TestTwoLiveParticipantsStayInLockstepOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing and clean remote-cursor removal on disconnect |
 | `TestChainRelayReachesANonAdjacentParticipant` | `internal/app` | §6: a crossing reaches a participant its producer never linked to, at the same tick; fails without the relay |
 | `TestMeshPropagatesEveryParticipantToEveryOther` | `internal/app` | Five participants in 1—2, 2—3, 3—4, 3—5 agree on every shared record through 240 driven steps |
 | `TestDepartureReachesTheWholeMesh` | `internal/app` | A departure removes the cursor on an instance that never linked to the departing participant |
 | `TestThreeParticipantLobbyClosesOnOneRoster` | `internal/app` | The socket handshake for a lobby larger than a pair: partial offers, one closed roster |
-| `TestLateJoinerReplaysTheSessionToTheHostPosition` | `internal/app` | Mid-run join: replaying the log onto a different terminal reaches byte-identical shared state |
-| `TestCatchUpReproducesALiveSessionsCrossings` | `internal/app` | §6: a reproduction of a *session* takes the playout lead on re-derived crossings and not on journaled ones; either mistake alone drifts it by the lead |
 | `TestLateJoinerTakesTheRosterAndStaysInLockstep` | `internal/app` | The arrival crossing lands on both instances at one tick, and both then drive their own cursor in lockstep |
 | `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
@@ -783,7 +787,6 @@ fails the build when the code stops matching the declaration.
 | `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption is not reported on its first sample, becomes amber `DESYNC`, escalates to red `DIVERGED`, and equality clears both through a transient green `SYNCED` |
 | `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores independent wall origins and deadline-slip telemetry while keeping absolute simulation tick/state |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
-| `TestSessionLogSplitsAndRoundTrips`, `TestSessionLogChunksFitOneFrame` | `internal/event` | The catch-up transfer is lossless and every chunk fits one frame |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
 | `TestAppsScopeOperatorState` | `internal/app` | Two Apps drive resize and debug mutations without cross-talk |
 | `TestWireEncodingBudget`, `TestFrameRoundTripSurvivesShortStreamIO` | `internal/event`, `internal/network` | Representative stream cost; framing survives short stream I/O |
@@ -812,8 +815,7 @@ fixed is what let a resize desynchronise a live session with every test passing.
 `pair` joins a second participant on a **different terminal size**, so no
 viewport-derived value can match by accident; and `liveScript` drives **resizes**
 and **viewport-relative motions**, so each participant's terminal and camera move
-under the session. Both criteria carry them, the socket one included — and that one
-ends in a mid-run catch-up, so the same profile also proves the reproduction.
+under the session. Both criteria carry them, the socket one included.
 
 Effort is tiered rather than fixed. `soakScale(short, normal, full)` picks a
 repetition or step count per profile: `-short` for a smoke run, the default for
@@ -995,42 +997,21 @@ in [Desynchronisation and recovery](desync.md).
   after the silent timeout, but losing participant one still has no coordinator
   election, roster authority, or automatic state migration. The guest says so
   directly instead of waiting for a digest that can no longer arrive.
-- Mid-run join is bounded by memory and by wall clock: the retained log is
-  complete from tick zero, so it grows with session length, and catching up costs
-  time proportional to it. A periodic restorable checkpoint is what bounds both.
-- Mid-run join is not yet driven from `cmd/vif` against a *live* host. The
-  mechanism, the transfer and the roster crossing are in place and proven over the
-  socket, but a running host advances while a joiner replays, so the handoff needs
-  either the host to hold its advance across it or the joiner to buffer epochs and
-  fast-forward onto the session's tick phase. Only the second scales.
-
-  What the handoff needs is now specific. Three pieces, none of them large on its
-  own: the coordinator serving a *delta* log from the tick a joiner reached rather
-  than only a complete one, so the residual gap shrinks geometrically across two or
-  three rounds instead of being whatever the first replay cost; the coordinator
-  re-sending its last `NetworkBarrierDelayTicks` epochs to a peer that has just
-  connected, because those artifacts apply after the log ends and were broadcast
-  before the joiner attached; and the joiner ticking to the session's phase before
-  its scheduler starts, which the barrier already supports since every artifact
-  names an absolute apply tick. `TestCatchUpReproducesALiveSessionsCrossings` pins
-  the caller-driven crossing path; it does not prove bit-exact recovery of a
-  concurrently scheduled interactive world. A restorable checkpoint plus a
-  canonical suffix is the stronger long-term handoff described in `desync.md`.
-
-- Reconnect reuses the same machinery and is not separately wired: an identity is
-  released when its participant departs, and a returning participant catches up
-  like any other late arrival.
+- **There is no mid-run join.** A participant joins at tick zero or not at all.
+  The replay-from-tick-zero path that nominally provided one was never reachable
+  from `cmd/vif` and has been removed; see §6. Its replacement is an authoritative
+  state snapshot, which is the subject of
+  [Multiplayer enhancement plan](multi-player-enhancement.md).
+- There is no reconnect. An identity is released when its participant departs,
+  and there is no path back into a running session — reconnect and mid-run join
+  are the same problem and need the same snapshot.
 - There is deliberately no live pause, slow motion or stepping. Suspending one
-  participant for minutes needs the same buffered catch-up and tick-phase handoff
-  as reconnect; the retained log is the source, but `cmd/vif` does not yet drive
-  that transition.
+  participant for minutes needs the same rejoin path as reconnect.
 - The runtime digest detects connected-peer divergence after its six-tick sample
   cadence but neither stops play nor repairs it. `SYNCED` means the compared
   surface became equal again; it does not explain why. `DIVERGED` states that it
   will not: past `NetworkDivergedSamples` nothing re-derives the missing artifact,
-  and the current runtime has no in-place recovery. Reproducing from the
-  coordinator's log exists as a catch-up building block, with the scope and
-  prerequisites above; it is not yet an interactive recovery guarantee.
+  and the current runtime has no in-place recovery of any kind.
 - Plaintext and unauthenticated; no CLI TLS surface.
 - No lag compensation. A slow peer produces late artifacts and divergence rather
   than a stall — deliberate, since simulation never waits, but it means the
@@ -1089,35 +1070,23 @@ in [Desynchronisation and recovery](desync.md).
 
 ### 9.5 Next work
 
-1. **Canonical artifact delivery.** Add contiguous ledger acknowledgements, gap
-   requests and a bounded resend window; a missed apply deadline must enter a
-   recovery state rather than silently creating two branches.
-2. **An adaptive playout lead.** Measure RTT/jitter and negotiate from the
-   worst-case active path rather than fixing it at three ticks; act on
-   `network.barrier_late` instead of only reporting it.
-3. **Restorable full shared checkpoints.** Serialize components plus every hidden
-   future-affecting RNG, FSM, scheduler, system, barrier and allocator value. Keep
-   an agreed rolling ring; `SnapshotShared` is not this format.
-4. **Checkpoint-plus-suffix live recovery.** Buffer live epochs, load a common
-   checkpoint into a shadow world, replay the canonical suffix, verify equality,
-   and switch at one tick. This completes late join and reconnect without claiming
-   that the current interactive journal is a world snapshot.
-5. **Partition and membership health.** Add coordinator election with state/ledger
-   migration and a safe partition rule. Election alone does not preserve a game.
-6. **Authentication and transport security.** Populate `Config.TLS` from the CLI
-   and give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so identity and artifact
-   authorship can bind the agreement rule.
-7. **Multi-link topology from the CLI.** The relay makes any graph work; `-join`
-   dialling more than one address is what lets an operator build one.
-8. **Close the programmatic operator surface.** Make embedder-level map/FSM
+**The multiplayer work this section used to list is superseded.** Sessions are
+being rebuilt around an authoritative host with deterministic guests, which changes
+the premise of the old items rather than reordering them: there is no ledger to
+make canonical, no playout lead on the local path, and no "recovery" as a distinct
+state once a guest's own derivation is provisional by design. The plan of record, with its measured
+evidence, obstacles and phases, is
+[Multiplayer enhancement plan](multi-player-enhancement.md). Rules D-1..D-17 below
+continue to describe the code as it stands; §5 of that plan states which of them
+each phase changes.
+
+What remains outstanding and independent of that work:
+
+1. **Close the programmatic operator surface.** Make embedder-level map/FSM
    mutation explicitly session-aware rather than relying on the interactive
    command policy and harness discipline.
-9. **Empty `unstampedLocal`,** then delete it and its exemption.
-10. **Settle tower ownership in optional maps.** Replace their slot-zero
+2. **Empty `unstampedLocal`,** then delete it and its exemption.
+3. **Settle tower ownership in optional maps.** Replace their slot-zero
    `player_entity` convention with an explicit session-owned or participant-owned
    rule.
-11. **Windowed composite / vision box.**
-
-The ordering and option scores are justified in
-[Desynchronisation and recovery](desync.md); delta snapshots and rollback remain
-measured optimisations after full checkpoint recovery is correct.
+4. **Windowed composite / vision box.**

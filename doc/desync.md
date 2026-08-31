@@ -57,9 +57,11 @@ raise `DIVERGED`, and later agreement clears the active divergence. Current buil
 request per-record hashes after the first mismatch and expose differing records in
 `network.sync_records`. This identifies a surface; it does not contain repair data.
 
-Late join uses a retained session log from tick zero. It is not general live
-resynchronisation: the CLI does not phase a mid-run joiner onto a running host, the
-log grows without bound, and no agreed checkpoint accepts a partial suffix.
+There is no late join. The retained-log path this section described was never
+reachable from `cmd/vif` and has since been removed; a participant now joins at the
+tick-zero gate or not at all. See
+[Multiplayer enhancement plan](multi-player-enhancement.md), which supersedes the
+staged recommendation in §8 below.
 
 | Condition | Detected today | Repaired today |
 |---|---|---|
@@ -382,9 +384,11 @@ visible later.
 6. Repeat recovery at storm high-water and record bytes, capture/load time, replay
    rate, allocation peak, and total interruption.
 
-An implementation plan built on this analysis, with the measured tick costs that
-revise its rollback and cadence assumptions and with the separate responsiveness
-defect it does not cover, is in
+**This document is retained as the diagnosis of the 2026-08-30 incident and as the
+survey of the option space. Its staged recommendation is superseded.** The measured
+responsiveness defect it does not cover, and the architecture actually selected —
+an authoritative host with deterministic guests, which changes the premise of §6
+rather than refining it — are in
 [Multiplayer enhancement plan](multi-player-enhancement.md).
 
 ## 10. Primary references for the patterns

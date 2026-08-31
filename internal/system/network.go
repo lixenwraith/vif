@@ -376,22 +376,6 @@ func (s *NetworkSystem) barrierDelayTicks() uint64 {
 	return s.delayTicks
 }
 
-// DiscardArtifactsThrough drops scheduled artifacts whose apply tick a replayed
-// session log has already covered. A participant catching up receives live epochs
-// while it replays, and everything they carry up to the log's end is in the records
-// it just applied; applying both would double every crossing in that window.
-func (s *NetworkSystem) DiscardArtifactsThrough(tick uint64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	keep := s.scheduled[:0]
-	for _, a := range s.scheduled {
-		if a.applyTick > tick {
-			keep = append(keep, a)
-		}
-	}
-	s.scheduled = keep
-}
-
 // removeParticipant applies the departure crossing. It arrives at the same apply
 // tick on every instance, so the despawn it derives does too (D-5) — which is the
 // whole reason a disconnect is not acted on where it is observed.

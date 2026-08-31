@@ -33,13 +33,11 @@ const (
 	MsgStart     MessageType = 0x24 // Live: host releases the participants into tick zero
 	MsgReady     MessageType = 0x25 // Live: joiner confirms it received the start gate
 
-	// Catch-up. A participant arriving after tick zero reproduces the session from
-	// the host's record log, which is unbounded and so crosses as chunks.
-	MsgSessionLog MessageType = 0x26 // Live: one chunk of the host's replayable log
-
 	// Reserved, unused: explicit connect and acknowledgement control, which the
 	// stream's own lifecycle carries today; roster and coordinator assignment beyond
-	// the startup offer; and authentication.
+	// the startup offer; authentication; and 0x26, which carried the retired
+	// replay-the-session-from-tick-zero join and is reserved for the authoritative
+	// state snapshot that replaces it.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20
@@ -53,7 +51,7 @@ const (
 const HeaderSize = 12
 
 // MaxPayloadSize is what the header's 16-bit length field can describe. Anything
-// larger than this has to be split by its producer; see event.EncodeSessionLog.
+// larger than this has to be split by its producer.
 const MaxPayloadSize = 65535
 
 // Header flags

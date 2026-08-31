@@ -1,676 +1,458 @@
-# Multiplayer enhancement: local-first input and a restorable shared checkpoint
+# Multiplayer enhancement plan: authoritative host, deterministic guests
 
-This is the outcome of a code review of the live multiplayer surface —
-`internal/engine`, `internal/event`, `internal/journal`, `internal/network`,
-`internal/service`, `internal/manifest`, and their consumers in `internal/system`,
-`internal/mode` and `internal/app`. It states what the review measured, weighs the
-recovery designs against what the code can carry, selects one, and plans it in
-phases that each compile, ship, and can be checked from two terminals.
+**Status: this is the plan of record for multiplayer.** It supersedes the staged
+recommendation in [desync.md](desync.md), which is retained as the diagnosis of the
+2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-17
+in [domain-design.md](domain-design.md) remain authoritative for the *existing*
+code; §5 of this document states which of them the target architecture keeps,
+changes, and adds to.
 
-Domain rules remain authoritative in [domain-design.md](domain-design.md); the
-divergence incident and the option scoring are in [desync.md](desync.md). This
-document does not replace either. It adds a defect neither covers, and revises two
-of desync.md's assumptions on measured evidence.
+## 1. Why the current design is being replaced rather than repaired
 
-Every number below was measured during the review, on this commit, by driving the
-real input path and the real two-participant harness. The probe source is
-reproduced in §9 so the figures can be regenerated.
+The session model that exists today was assembled from compromises, and the
+compromises are load-bearing. Restating the original requirements makes that
+visible:
 
-## 1. Conclusion first
-
-Three problems are usually discussed as one. They are separable, they have
-separable fixes, and conflating them is why the roadmap looks larger than it is.
-
-| Problem | Measured symptom | Mechanism |
-|---|---|---|
-| **Responsiveness** | A session discards 80 % of fast cursor motion and scores 5 of 6 fast keystrokes as *typing errors* | Predict the owner's own cursor cell locally (**D-18**) — no wire change at all |
-| **Delivery** | A lost, refused or late artifact forks the session silently | Session-ordered ledger with acknowledgement, gap detection, bounded retransmission |
-| **Continuity** | Once forked nothing re-converges; mid-run join is *refused*; a departed host ends the run | A restorable shared checkpoint (**D-19**) plus a canonical artifact suffix |
-
-The recommended architecture is **deterministic shared simulation, kept — with a
-reliable ordered ledger, a restorable host-committed checkpoint, and a local-first
-input path.** That agrees with desync.md's selection of checkpoint-plus-suffix over
-the alternatives. It revises it in three ways:
-
-1. **Responsiveness is phase one.** It is not polish. The measurements in §2.1
-   show a session actively punishing a player for typing at speed, and it is the
-   only item on the roadmap that needs no wire change, no codec and no authority.
-2. **Shortening the playout lead does not fix it.** Measured at leads of 3, 2 and
-   1 tick, the input loss is *identical*. The defect is a stale read, not a delay,
-   so the adaptive-lead work — worth doing — must not be mistaken for the fix.
-3. **Re-simulation is not the expensive part.** A full tick costs ~0.35 ms at six
-   times the observed shared high-water. Catch-up, checkpoint validation and even
-   bounded rollback are all affordable. The binding constraint is the save/load
-   contract, which makes the checkpoint codec the *single* enabling investment.
-
-## 2. What the review measured
-
-### 2.1 A session discards most fast input
-
-`World.PushCrossing` routes a D-3 artifact into `EventQueue.Push`, which offers it
-to the wire sink before publishing (`internal/event/queue.go:41`). In a live
-session `NetworkSystem.Cross` takes ownership and returns true, so **the event is
-never published locally**: it is scheduled at `productionEpoch + delayTicks` and
-published by `applyDue` at the opening of that tick. `EventCursorMoveRequest` is
-`ClassBus` and `mode.OpJump` pushes it as a crossing, so every cursor move — `h`,
-`w`, `f`, mouse, and the post-typing advance — takes the full lead.
-
-Probe A, one `l` press, measuring when the producing instance's *own* store moves:
-
-| | Applied after |
+| Original requirement | What exists |
 |---|---|
-| Solo | Immediately, without a tick at all (`DispatchEventsImmediately`) |
-| Session | **4 ticks — 200 ms** |
+| A solo game can be toggled into a host, and others join **at any time** | Join is only possible at tick zero, through a lobby gate fixed before the run starts. The replay-from-tick-zero path that nominally provided mid-run join was never reachable from `cmd/vif`; it has been removed. |
+| A **true multiplayer experience** | Fast input is discarded, not merely delayed: measured, a session drops 4 of 5 rapid cursor motions and scores 5 of 6 fast keystrokes as *typing errors*. |
+| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. |
 
-Latency alone would be tolerable. The compounding defect is that the input path
-re-reads the authoritative store for every subsequent action:
-`Router.handleMotion`, `handleCharMotion` and `handleInsertChar` all resolve from
-`World.LocalCursor()`, and `TypingSystem.moveCursorRight` reads the store again to
-request the advance. Inside the lead window every one of them sees a cell the
-player has already left.
+The root cause of all three is one decision: **shared state is agreed by having
+every instance re-derive it, so nothing may be applied until everyone can apply
+it.** That forces input through a playout barrier (which is the responsiveness
+defect), forces agreement to be all-or-nothing (which is why jitter forks the
+session and why nothing re-converges), and leaves no object that describes the
+world (which is why joining means replaying the entire session).
 
-Probe B — five `l` presses with no tick between them, as a fast player produces
-them:
+Determinism is not the problem and is not being discarded. Using determinism *as
+the replication mechanism* is the problem. The target keeps the deterministic
+simulation and demotes it from "the source of truth" to "a very good predictor".
 
-| | Cursor moved |
+## 2. The target architecture
+
+**Authoritative host, deterministic guests, snapshot-corrected.**
+
+- The **host is the sole authority** for shared state. Its simulation is the game.
+- **Guests keep running the same deterministic shared simulation**, but as a
+  *predictor* seeded from the host's most recent authoritative snapshot, not as an
+  independent source of truth.
+- The host sends **periodic authoritative snapshots** (full, then deltas) plus the
+  ordered stream of inputs/crossings. Guests apply corrections when they arrive.
+- **Local input applies immediately.** A guest never waits for anyone to move its
+  own cursor, fire its own weapon, or type its own glyph.
+- **Joining is sending a snapshot.** Cost is a function of world size, not of
+  session length, so a participant may arrive at any moment — and a solo run can
+  become a host at any moment.
+
+### 2.1 Why this shape, for this codebase
+
+Because both sides run identical deterministic code, guest prediction is
+extremely accurate: divergence between a guest's extrapolation and the host's
+truth accumulates slowly and only where an unmodelled input intervened. That has a
+direct consequence the naive authoritative model does not get:
+
+> **The snapshot rate can be low.** A classic authoritative server must stream
+> state at or near tick rate because its clients cannot simulate. Here the guest
+> *can*, so snapshots are corrections rather than the picture itself — 2–5 Hz
+> rather than 20 Hz, with the artifact stream filling the gaps.
+
+That is the bandwidth-resilience answer, and it is only available because the
+determinism work already exists. It also degrades gracefully in exactly the way
+the requirement asks: under bandwidth pressure the snapshot rate drops and
+prediction carries more of the load; under jitter a late snapshot simply means the
+guest extrapolates a little longer; under loss the next snapshot is self-sufficient
+or names its baseline. None of these fork the session, because a guest's own
+derivation was never authoritative to begin with.
+
+The existing domain split is already the right foundation. The player domain —
+glyphs, weapons, projectiles, drains, nuggets, every effect, 26 of the 53 declared
+systems — already runs locally with no replication at all. That half needs no
+change. What changes is the 19 shared systems: they keep running on every
+instance, but on a guest their output is provisional.
+
+### 2.2 What each mechanism is for
+
+| Concern | Mechanism |
 |---|---|
-| Solo | 5 of 5 cells |
-| Session | **1 of 5 cells** |
+| Local responsiveness | Local-first input: a guest applies its own player-domain action and its own cursor placement immediately, and tells the host afterwards |
+| Remote cursors and shared entities looking smooth | Guest extrapolation between snapshots, which is just the existing simulation |
+| Correctness | Host authority: where guest and host disagree, the host wins, always, with no negotiation |
+| Jitter | Extrapolation absorbs it; a late snapshot is not an error |
+| Bandwidth | Low snapshot rate, deltas, and an adaptive cadence |
+| Join anytime / reconnect / solo-to-host | One mechanism: send the current snapshot |
+| Loss | The next snapshot supersedes; the ordered stream carries acknowledgement and gap repair for the artifacts that must not be missed |
 
-Probe C — park on a run of typeable glyphs and type the exact six runes back to
-back, which is the game's core loop:
+### 2.3 What is deliberately *not* in the target
 
-| | Advanced | Typing errors scored |
+- **No lockstep barrier on input.** The playout lead is removed from the local
+  path entirely. It may survive as a receive-side interpolation delay for *remote*
+  actions, which is a different thing with a different justification.
+- **No bit-exact cross-instance agreement requirement.** Guests are allowed to
+  drift between corrections. This is the single biggest conceptual change and it is
+  what buys the resilience.
+- **No host election or partition survival** in this plan. Host loss ends the
+  session, explicitly and with a message. Election without state migration
+  produces an empty authority; it is a separate project.
+- **No discarding of the journal.** Deterministic replay stays, for solo runs and
+  for debugging, and the host's own journal remains a faithful record. It simply
+  stops being the multiplayer transport.
+
+## 3. Measured evidence
+
+All figures were measured on this repository by driving the real input path
+(`App.Inject`, which is what `cmd/vif`'s event loop calls) and the real
+two-participant harness (`meshSession`).
+
+**Responsiveness.** `EventCursorMoveRequest` is `ClassBus`; `mode.OpJump` pushes it
+as a crossing; in a live session `NetworkSystem.Cross` takes ownership and the
+event is *never published locally* until its apply tick.
+
+| Probe | Solo | Session |
 |---|---|---|
-| Solo | 6 of 6 cells | 0 |
-| Session | **1 of 6 cells** | **5** |
+| One `l` press reaches the producing instance's own store | immediately, without a tick | **after 4 ticks (200 ms)** |
+| Five `l` presses issued between two ticks | 5 of 5 cells | **1 of 5 cells** |
+| Six correct keystrokes typed back to back over a glyph run | 6 cells, **0 typing errors** | 1 cell, **5 typing errors** |
 
-That last row is the finding that reorders the roadmap. In a session, fast typing
-does not merely fail to register: five of six correct keystrokes are resolved
-against a cell whose glyph has already been consumed, so they are scored as
-errors, which costs heat and energy and fires the error feedback path. The player
-is punished for typing quickly, in a typing game.
+The third row is the one that matters most: fast typing is not merely dropped, it
+is *scored against the player*, because five of six correct keystrokes resolve
+against a cell whose glyph has already been consumed. In a typing game.
 
-Probe D — the same five presses at each negotiated lead:
+**The lead is not the cause.** Repeating the five-press probe at negotiated leads
+of 3, 2 and 1 ticks loses identically (1 of 5 cells every time). Any deferral
+collapses everything issued between two ticks onto one stale cell, because the
+input path re-reads the authoritative store for each action. **Shortening the lead
+cannot fix responsiveness; only applying locally can.**
 
-| Lead | Cursor moved |
-|---|---|
-| 3 ticks | 1 of 5 cells |
-| 2 ticks | 1 of 5 cells |
-| 1 tick | 1 of 5 cells |
+**Simulation cost is not a constraint.** Driven on `config/main` with tower and
+storm forced:
 
-**The loss does not depend on the lead.** A one-tick lead is the shortest a session
-can negotiate (`SessionOffer.Validate` rejects zero) and it loses exactly as much.
-Any amount of deferral collapses every action issued between two ticks onto one
-stale cell. Only a locally applied value fixes it.
-
-Nothing in the current suite can see any of this: the parity harness drives one
-tick per participant per step and asserts *agreement*, never *responsiveness*, and
-both instances are equally late.
-
-### 2.2 Detection exists; repair does not
-
-The runtime digest is a good detector and, since per-record escalation, a good
-diagnostic. It is not a protocol. Confirming desync.md §2, there is no repair on
-any edge:
-
-- **Delivery.** `SocketPort.push` drops an inbound notification when the poll
-  buffer is full; `PeerManager.BroadcastExcept` counts a refused frame. Both are
-  counted and logged once, neither retransmitted. `epochWindow.admit` suppresses
-  duplicates but never *detects* a gap, although epochs are contiguous by
-  construction — an idle tick still closes one — so the information is there and
-  simply unused.
-- **Lateness.** `applyDue` publishes an artifact whose apply tick has passed,
-  increments `barrier_late`, and continues. Applying a crossing one tick late on
-  one instance is precisely the divergence the barrier exists to prevent; the code
-  chooses to apply it anyway.
-- **Logic.** A determinism defect — the D-17 flow-field cache phase is the proven
-  instance — loses no artifact, so no delivery mechanism can repair it. Only a
-  state transfer can.
-- **Membership.** `reportDisconnect` correctly names an unrecoverable host loss
-  rather than waiting for a digest that can no longer arrive. There is no
-  election, no state migration, no partition detector.
-
-### 2.3 Mid-run join is refused, and the memory for it is paid anyway
-
-This is sharper than domain-design §9.4's "`cmd/vif` does not yet complete its
-running-host tick-phase handoff".
-
-`App.initJournal` retains a complete record log for the life of any run started
-with `-host` (`a.cfg.RetainSessionLog || a.cfg.HostAddress != ""`), growing
-without bound. But `App.hostNetworkConfig` builds
-`network.Coordinator{Assign, Release}` and **never sets `Log`**. So
-`sendSessionLog` finds a nil accessor, returns `join: this session retains no
-replayable log`, and `HostAcceptor` propagates it — the connection is closed.
-
-A participant joining a `vif` host after tick zero is therefore **rejected**, while
-the host pays unbounded memory for the log that would have served it. A dead-code
-scan from the `cmd/vif` entry point confirms the whole transfer is unreachable in
-the shipped binary: `event.EncodeSessionLog`, `event.DecodeSessionLogChunk`,
-`LogRecord.record`, `PendingJoin.MidRun` and `PendingJoin.ReceiveSessionLog` are
-all test-only. Phase 5 deletes this path, which is therefore strictly a win: it
-removes the memory growth *and* code that no shipped path executes.
-
-### 2.4 The checkpoint's real cost is the hidden-state surface
-
-desync.md §6.2 lists what a keyframe must contain. The review's finding is that
-the *list* is the risk, not the size, and that it is longer than that section
-suggests. State that decides a future shared outcome lives in places a component
-walk will not reach:
-
-| Hidden state | Where | Serializable? |
-|---|---|---|
-| ~24 per-system RNG streams | private `*vmath.FastRand`, seeded in each `Init` | `State()` exists; **there is no `SetState`** |
-| A second generator | `WallSystem.mazeRng`, a `math/rand.Rand` | not directly |
-| **EXP3 route learning** | `AdaptationResource.Entries`: weights, pre-sampled `Pool`, consumer `Head`, `spin` — decides which route a spawned eye takes | yes, but it is a resource, not a store |
-| **Genetic populations** | `GeneticResource.Registry`, a whole GA registry behind `sync.Mutex`/`atomic.Pointer` in `pkg/genetic` | needs an export contract it does not have |
-| FSM runtime | `fsm.Machine` regions, `variables`, `delayedActions` | yes, and small |
-| Throttled derivation phase | `FlowFieldCache.TicksSinceCompute`, `PendingUpdate`, `LastTargets` (D-17) | phase yes; the field itself should be recomputed, not shipped |
-| Barrier | scheduled artifacts, `productionEpoch`, per-source epoch windows, `crossSeq` | yes |
-| Allocator, scheduler | `nextEntityID`, per-domain counters, settle stamp, run/tick | yes |
-| Per-system scratch | dirty sets, `NavigationSystem.routeRebuildTicks`, throttles, `GeneticSystem.tracking` | **no inventory exists** |
-
-Two of these — the bandit and the GA — are `shared`-profile learned state that
-neither existing document lists, and neither is covered by the digest, so a
-divergence in either is silent until it moves an entity.
-
-**A trap the round-trip test must be designed to catch.** Shared components store
-*absolute* instants: `GenotypeComponent.SpawnTime`, `QuasarComponent.LastSpeedIncreaseAt`,
-`ShieldComponent.LastDrainTime`, and `AdaptationEntry.DrainTime`. This is sound
-today by a subtle argument — every reader takes a *difference* against
-`Time.GameTime`, and the start gate freezes game time until every participant is
-ready, so the origins align. It stops being sound the moment state is transferred:
-a checkpoint captured on one process and installed on another imports instants
-from a foreign clock origin, and every `now.Sub(stored)` is wrong by that
-difference. None of it appears in `worldDigestScopedLocked`, so the error would be
-invisible until an eye changed speed at the wrong moment. **The checkpoint must
-store these as tick-relative values, and the round-trip test must run
-cross-process with a deliberately offset clock origin** — a same-process
-round-trip would pass while the real transfer fails.
-
-This is why the plan makes checkpoint participation a **declared, statically
-checked, per-system contract in `internal/manifest/definition.go`** — the
-mechanism that already made domain profiles mechanical rather than reviewed
-(D-15) — instead of one large serializer written by inspection.
-
-### 2.5 Tick cost
-
-Driven headless on `config/main` with the tower and storm regions forced, so the
-shared population sits far above the incident trace's 500-entity high water:
-
-| Shared positioned | Live total | Cost of one full tick |
+| Shared positioned entities | Live total | One full tick |
 |---:|---:|---:|
 | 12 | ~400 | 13 µs |
 | 2,487 | 3,157 | 123 µs |
-| 2,866 | 3,854 | 239 µs |
 | 2,984 | 4,046 | **353 µs** |
 
-One `sharedDigestLocked(false)` costs 273 µs at that load, i.e. 45 µs/tick
-amortised at the six-tick cadence.
+At six times the observed incident high-water, a tick costs 0.7 % of its 50 ms
+budget. Guest extrapolation, snapshot validation and catch-up are all affordable;
+`sharedDigestLocked` costs 273 µs at that load.
 
-Three consequences, and they are the evidence for §1's third revision:
+**Where the sizing lands.** At the incident trace's 500-entity shared high water, a
+snapshot carrying identity, position, kinetics and combat is on the order of tens
+of kilobytes uncompressed. At 2–5 Hz that is single-digit to low-tens KB/s, in the
+same envelope as today's 3–38 KB/s artifact stream — which is the point of using
+determinism to keep the rate low.
 
-1. **A tick costs 0.7 % of its 50 ms budget at six times the observed high
-   water.** Simulation headroom is not the constraint anywhere in this plan.
-2. **Catch-up runs at 3,000–75,000 ticks/second.** Replaying a ten-minute session
-   costs seconds. Bounding the log is a memory decision, not a latency one.
-3. **Rollback is CPU-affordable.** Re-simulating the whole lead costs ~1 ms, ~2 %
-   of a tick. desync.md scored rollback tractability at 1 assuming many-tick
-   re-simulation is expensive; it is not. What remains hard is the save/load
-   contract and bounded side effects — and Phase 4 *is* that contract. Rollback
-   therefore becomes an option this plan unlocks, though still not the first step,
-   because Phase 1 removes the symptom rollback would exist to hide.
+## 4. The obstacles this plan has to clear
 
-### 2.6 Findings fixed in this pass
+These are the findings that determine the phase order. They are stated here rather
+than discovered mid-implementation.
 
-Behaviour-neutral, and net **−161 lines**:
+### 4.1 The hidden-state surface
 
-- **`World.LocalCursor()`** replaces 26 copies of
-  `Positions.GetPosition(Resources.Player.Entity)` across `mode`, `app`, `engine`
-  and four player-profile systems. It is a reduction now and the **single seam
-  Phase 1 installs behind**: with one accessor, prediction is one implementation
-  change rather than 26 call-site edits. Every current caller is `player`-profile
-  or view, so the D-1 boundary the accessor must respect already holds.
-- **`internal/mode/router.go` is 64 lines shorter.** Four handlers duplicated the
-  same shape; `recordCommand`, `applyOperator`, `rememberFind` and `charCells`
-  name the four repeated concepts. Three one-armed `switch intent.Operator` blocks
-  and eight copies of the `SetLastCommand` tail collapse into one each.
-- **The fabricated-identity admission path is gone.** `PeerManager.AddConnection`
-  assigned a *connection-local* `nextID` to any stream accepted without a session
-  handshake. The barrier's per-source epoch window and every roster lookup are
-  keyed by canonical participant ID, so that path would have admitted a peer under
-  an identity the session never issued — silent corruption rather than a refusal.
-  Both call sites now fail loudly. `GetPeer` and `nextID` went with it.
-- **The wall batch pool was write-only.** `ReleaseWallBatchRequest` was called
-  from `WallSystem.HandleEvent`, but nothing ever called
-  `AcquireWallBatchRequest`: all three producers use a composite literal. Payloads
-  were being returned to a pool no allocation ever drew from. Removed.
-- Dead on arrival, removed: `network.NewAckMessage`, `event.EmitBatch`,
-  `event.HasPayload`, `Hub.Get`, `Hub.Names`, and the unreachable
-  `RoleClient`/`RoleServer` aliases that gave `Transport.Start` two names for one
-  branch.
-- **`NetworkSystem` telemetry reset is table-driven.** Registration enrols each
-  counter in the set `Init` clears, so a counter added to the constructor can no
-  longer survive a reset holding the previous run's value.
+A snapshot must carry everything that decides a future shared outcome. Much of it
+is not in a component store:
 
-Observed and deliberately left alone:
-
-- `readCursorState`/`writeCursorState` are ~110 lines of symmetric field copying
-  and could be collapsed. They should not be: they are the D-13 contract written
-  out, and the domain model's claim that `NetworkSystem` is the *only* writer of a
-  remote cursor's owner-authored cells is auditable precisely because the list is
-  explicit. A table or reflection would trade a checkable invariant for lines.
-- The reserved message codes (`MsgAck`, `MsgPeerList`, `MsgRoleAssign`,
-  `MsgAuthRequest`/`Response`) are documented placeholders and Phase 3 claims
-  `MsgAck`. Removing them would only churn the numbering.
-- `Peer.OutSeq`/`InSeq` already put a per-link sequence and acknowledgement in
-  every frame header, consumed by nothing. Phase 3 needs the *session* sequence
-  instead — a per-link number cannot name a relayed artifact — but the header
-  fields are free carriage for it.
-- `event.EncodeSessionLog` marshals every chunk twice. It is unreachable from the
-  binary (§2.3) and Phase 5 deletes it; not worth touching first.
-
-## 3. Approaches, briefly
-
-desync.md §5 scored nine options; that analysis stands and is not repeated. What
-this review adds is where the measurements move a score.
-
-| Direction | Fit | Verdict |
+| State | Where | Obstacle |
 |---|---|---|
-| **Keep determinism; add ledger + checkpoint + suffix** | Preserves the architecture, its tests, its 3–38 KB/s wire cost and its replay story. Repairs delivery loss and logic divergence alike, because a checkpoint does not care which caused the fork. | **Selected** |
-| Authoritative state stream (full or delta) | Repairs trivially, but discards deterministic re-simulation — what nine of the seventeen domain rules exist to protect — and makes host uplink scale with clients. At the measured 2,900-entity load a naive full stream is >100 KB/tick. | Rejected as a first move; the fallback if determinism proves unmaintainable |
-| Input prediction with world rollback | Now CPU-affordable (§2.5) and the only design that removes prediction error entirely. Needs the same save/load contract *plus* bounded side effects across ~50 systems, to solve a symptom Phase 1 removes for free. | Deferred to Phase 6, on evidence |
-| Strict lockstep, replay-from-zero, restart, CRDT | Unchanged from desync.md: stalls, unbounded growth, no continuity, or wrong semantics for ordered combat. | Rejected |
+| ~24 per-system RNG streams | private `*vmath.FastRand`, seeded in each `Init` | `State()` exists; **there is no `SetState`** |
+| A second generator | `WallSystem.mazeRng`, a `math/rand.Rand` | not restorable as written |
+| **EXP3 route learning** | `AdaptationResource.Entries` — weights, pre-sampled `Pool`, consumer `Head`, `spin`; decides which route a spawned eye takes | a resource, not a store; not in the digest |
+| **Genetic populations** | `GeneticResource.Registry` — a whole GA registry behind `sync.Mutex`/`atomic.Pointer` in `pkg/genetic` | needs an export contract it does not have |
+| FSM runtime | `fsm.Machine` regions, `variables`, `delayedActions` | straightforward, and small |
+| Throttled derivation phase | `FlowFieldCache.TicksSinceCompute`, `PendingUpdate`, `LastTargets` (D-17) | phase must travel; the field itself should be recomputed |
+| Allocator, scheduler | `nextEntityID`, per-domain counters, settle stamp, run/tick | straightforward |
+| Per-system scratch | dirty sets, `NavigationSystem.routeRebuildTicks`, `GeneticSystem.tracking`, throttles | **no inventory exists** |
 
-The argument for keeping determinism is structural, not sentimental. The
-shared/player split means **the entire player domain already runs locally with no
-replication** — glyphs, weapons, projectiles, drains, nuggets, every effect. An
-authoritative-stream rewrite would buy authority over the ~500 shared entities the
-deterministic model already agrees on cheaply, at the cost of the mechanism that
-makes the several thousand others free. Add authority only where the deterministic
-model has no answer: as a tie-breaking checkpoint, not as a per-tick truth.
+The two learned resources are `shared`-profile state that neither existing
+document lists, and neither is covered by the digest — so a divergence in either
+is silent until it moves an entity.
 
-## 4. The selected design
+### 4.2 Absolute timestamps will not survive a transfer
 
-### 4.1 Two new rules
+Shared components store *absolute* instants: `GenotypeComponent.SpawnTime`,
+`QuasarComponent.LastSpeedIncreaseAt`, `ShieldComponent.LastDrainTime`, and
+`AdaptationEntry.DrainTime`. This is sound today only by a subtle argument — every
+reader takes a *difference* against `Time.GameTime`, and the start gate freezes
+game time until all participants are ready, so origins align.
 
-**D-18 Predicted local state.** A value the local participant's own input
-determines may be applied locally before its authoritative counterpart arrives,
-provided that (a) the authoritative value is a pure function of the *same* local
-producer's crossing, (b) only player-domain producers and the view read the
-prediction, and (c) the prediction emits no event and enters no shared state,
-digest or snapshot record outside `view`. When an authoritative value arrives that
-the prediction did not produce, the prediction is discarded, not merged.
+It stops being sound the moment state is transferred between processes: a snapshot
+installed on a machine with a different clock origin makes every `now.Sub(stored)`
+wrong by that difference, and none of it appears in `worldDigestScopedLocked`, so
+the error is invisible until an eye changes speed at the wrong moment.
 
-This is exactly the cursor cell's shape and no more. `EventCursorMoveRequest`
-names an **absolute** target cell, so the authoritative result of the local
-producer's own crossing is already known at production time: prediction here is
-bookkeeping, not extrapolation, and cannot drift. The exceptions are the moves the
-local producer did not make — the shared wall push-out, the gold jump, level setup
-and reset. Each is a shared re-derivation landing identically on every instance,
-and clause (c) resolves it by snapping.
+**Consequence for the plan:** snapshots must carry tick-relative durations, and the
+round-trip test must run **cross-process with a deliberately offset clock origin**.
+A same-process round-trip would pass while the real transfer fails, so it must not
+be the gate.
 
-The rule is statically checkable by the machinery `TestSystemDomainProfiles`
-already uses for `ownerAuthoredStores`: a `shared`-profile system calling the
-prediction accessor fails the build. Today's callers are `camera`, `dust`,
-`motion_marker` and `splash` — all `player` — plus the input router and the view,
-so the boundary holds before the first line of Phase 1 is written.
+### 4.3 The digest is narrower than the state
 
-**D-19 Restorable shared state.** Every value that can change a future shared
-outcome is either (a) a component in a shared entity's store, (b) declared by its
-owning system in `internal/manifest/definition.go` as checkpoint state and
-serialized through that declaration, or (c) provably re-derivable from (a) and (b)
-at install time. Durations are stored relative to the checkpoint's tick, never as
-absolute instants (§2.4). A system holding future-affecting private state without
-declaring it fails the boundary suite.
+`worldDigestScopedLocked` hashes positions, kinetics and non-cursor combat. It does
+not hash genotype, quasar timers, adaptation weights, GA populations, or FSM
+variables. It is a good cheap detector and must not be mistaken for a completeness
+check on a snapshot.
 
-`SnapshotShared` and its FNV digest remain a comparison surface and are explicitly
-*not* the checkpoint format — desync.md says so; stating it as a rule stops a
-future change from quietly conflating them.
+## 5. Rule changes
 
-### 4.2 Where each mechanism sits
+The target keeps most of D-1..D-17. Three entries change meaning and two are added;
+`domain-design.md` is updated as each phase lands, not in advance.
 
-```
-  input ──► predicted cell (D-18) ──► player domain + view          [Phase 1]
-      │                                    (instant, local)
-      └──► crossing ──► ledger ──► barrier ──► shared simulation    [Phase 3]
-                          │            ▲          (deterministic)
-                          │            └── adaptive lead            [Phase 2]
-                          ▼
-                   retained suffix ──┐
-                                     ├──► recovery / join / reconnect [Phase 5]
-        host checkpoint (D-19) ──────┘                                [Phase 4]
-```
+**D-11 is weakened, deliberately.** "Identical shared component values on every
+instance at every tick" becomes "identical on the host; on a guest, equal to the
+host as of the last applied snapshot, and converging". Bit-exact cross-instance
+agreement stops being a runtime invariant and becomes a *test* invariant for the
+host's own replay.
 
-Phase 1 is independent of everything to its right; Phases 2 and 3 are
-independently useful whether or not Phase 4 ever ships.
+**D-3 keeps its shape but changes its destination.** A crossing artifact still
+names the smallest thing that determines a shared outcome, but it is now a
+*request to the authority* rather than a fact every instance applies at an agreed
+tick.
 
-### 4.3 Authority, restated
+**D-13 generalises.** Owner-authored state stops being a special exception to
+re-derivation and becomes the ordinary case for one class of value: the owner
+applies immediately, the host arbitrates, everyone else receives.
 
-The coordinator gains one new power and no others: it **commits** a checkpoint
-identity `(session, run, tick, session sequence, shared-state hash)` and serves
-the bytes on request. During normal play it still holds no copy of shared state
-more authoritative than anyone else's — agreement remains a property of
-determinism. The checkpoint is the tie-breaker used only once determinism has
-already failed; the ledger is what makes "the suffix after the checkpoint" a
-well-defined object.
+**D-18 Predicted local state (new).** A value the local participant's own input
+determines is applied locally at once. Only player-domain producers and the view
+read the prediction; it emits no event and enters no snapshot record outside
+`view`. An authoritative value the prediction did not produce replaces it — the
+prediction is discarded, never merged.
 
-## 5. Phased plan
+**D-19 Restorable shared state (new).** Every value that can change a future shared
+outcome is either a component in a shared entity's store, or declared by its owning
+system in `internal/manifest/definition.go` as snapshot state and serialized
+through that declaration, or provably re-derivable from those at install time.
+Durations are stored relative to the snapshot's tick, never as absolute instants
+(§4.2). A system holding future-affecting private state without declaring it fails
+the boundary suite — the same construction that made D-15's domain profiles
+mechanical rather than reviewed.
 
-Every phase compiles, passes `make verify`, and ends with a two-terminal check a
-person can run. No phase depends on a later one. The journal schema is 11 today;
-a phase that changes it says so.
+## 6. Phases
+
+Each phase compiles, passes `make verify`, and ends with a check a person can run
+from two terminals. Phase 1 is independent of everything after it and is the one a
+player will feel.
 
 ---
 
-### Phase 1 — Local-first input (D-18)
+### Phase 1 — Local-first input
 
-**Goal.** A session's local cursor responds like a solo run: motions and typed
-characters resolve against the cell the player has actually reached.
+**Goal.** A session's local cursor and typing respond exactly as a solo run does.
+This is worth shipping on its own, before any protocol work, and it is the phase
+the next session should start with.
 
 **Requirements.**
 
-1. `Resources.Player` holds a predicted cell for the locally simulated cursor plus
-   the ordered queue of crossings that produced it.
+1. A predicted cell for the locally simulated cursor, plus the ordered queue of
+   crossings that produced it, held in `Resources.Player`.
 2. `World.LocalCursor()` returns the predicted cell. It is already the single read
-   site (§2.6); no other change is needed at the 26 callers.
-3. Every producer of a local `EventCursorMoveRequest` — `mode.OpJump`,
-   `TypingSystem.moveCursorRight`, `NuggetSystem`'s jump — advances the prediction
-   at production time through one helper, so prediction and crossing leave from
-   the same statement and cannot disagree.
+   site — 26 call sites were consolidated behind it for exactly this — so no
+   consumer changes.
+3. Every producer of a local `EventCursorMoveRequest` (`mode.OpJump`,
+   `TypingSystem.moveCursorRight`, `NuggetSystem`'s jump) advances the prediction
+   at production time, through one helper, so prediction and crossing leave from
+   the same statement.
 4. `CursorSystem.move` announcing `EventCursorMoved` for the local cursor
    reconciles: matching the oldest outstanding prediction pops it; anything else
    clears the queue and snaps.
 5. Render, camera and player-domain effects keyed to the local cursor read the
    prediction. `SnapshotContext` reports it in the `view` record only.
-6. A `shared`-profile system may not read it: extend the existing static check.
+6. A `shared`-profile system may not read it; extend the existing static check.
 
-**Boundaries — must not.** Change any wire message, the barrier, an apply tick or
+**Boundaries — must not.** Change any wire message, the barrier, an apply tick, or
 an event class. Predict anything but the local cursor's cell. Emit an event from
 the prediction. Add a value to `SnapshotShared`. Predict for a cursor
 `SimulatesLocally` rejects.
 
-**Tests.** Promote the four probes in §9 to assertions: session figures must reach
-the solo figures. The existing `TestTwoLiveParticipantsStayInLockstep*` must be
-untouched and still green — this phase must not move the shared digest at all,
-which is the strongest statement that it stayed inside the player domain.
+**Tests.** Promote the §3 probes to assertions: the session figures must reach the
+solo figures. `TestTwoLiveParticipantsStayInLockstep*` must be untouched and still
+green — this phase must not move the shared digest at all, which is the proof it
+stayed inside the player domain.
 
-**Manual acceptance.** Two terminals, `-host`/`-join`. Hold `w` and `l`: the local
-cursor tracks the keys with no perceptible lag and no swallowed motion. Type a
-corpus line at full speed: every character lands on its own cell and the error
-counter stays at zero, as it does solo. The remote cursor still moves in its
-six-tick sync steps — unchanged, and the visible proof that only local state was
-predicted. Neither status bar shows `DESYNC`.
-
----
-
-### Phase 2 — Adaptive playout lead
-
-**Goal.** Stop paying 150 ms of lead on a 5 ms path and stop under-paying on a
-200 ms one. This shrinks Phase 1's residual prediction gap and makes
-`barrier_late` actionable rather than merely reported. It is *not* the
-responsiveness fix — §2.1 probe D shows the lead length does not affect input
-loss.
-
-**Requirements.**
-
-1. Measure per-link RTT and jitter from the existing heartbeat; derive the
-   session's worst-case active path across the mesh.
-2. The coordinator owns the lead and publishes a change as a crossing applying at
-   an absolute tick, so every instance changes lead at one tick — the same shape
-   as a roster change.
-3. The lead travels in the journal anchor and the record stream, so a reproduction
-   adopts the lead the run actually used at each point rather than a constant.
-   This is the trap D-14's map latch fell into and it has the same answer.
-4. `cmd/vif` exposes bounds (`-lead-min`, `-lead-max`), not a fixed value.
-5. A path that cannot meet the minimum lead is refused at join time with a
-   message, not admitted and left to diverge.
-
-**Boundaries — must not.** Let two instances hold different leads at one tick.
-Change the lead from anywhere but the coordinator. Derive it from the live peer
-count — `SessionBarrier` exists because that was wrong. Let a reproduction read it
-from a transport it does not hold.
-
-**Manual acceptance.** A loopback session converges to the minimum lead and the
-status bar reports it. Add 150 ms with `tc netem` and watch the lead rise,
-`barrier_late` stay at zero and no `DESYNC` appear; remove it and watch it fall.
+**Manual acceptance.** Two terminals. Hold `w` and `l`: the local cursor tracks the
+keys with no perceptible lag and no swallowed motion. Type a corpus line at full
+speed: every character lands on its own cell and `typing.errors` stays at zero.
+The remote cursor still moves in its six-tick sync steps — unchanged, and the
+visible proof that only local state was predicted.
 
 ---
 
-### Phase 3 — The ordered crossing ledger
+### Phase 2 — The snapshot (D-19)
 
-**Goal.** Make delivery loss repairable and an unrepairable gap loud, so a missing
-artifact stops the session instead of forking it.
-
-**Requirements.**
-
-1. Every crossing carries a session-global sequence. The producer assigns
-   `(participant, producer sequence)`; the coordinator assigns the session
-   sequence and republishes. Both travel with the artifact and survive relaying,
-   as `ApplyTick` already does.
-2. Receivers acknowledge the highest contiguous session sequence, in the `Ack`
-   header field every frame already carries.
-3. Each participant retains an unacknowledged window, bounded by ticks rather than
-   count, and answers a gap request from it.
-4. A detected gap is requested once with a deadline derived from the current lead.
-   A gap unfilled by its apply tick enters a new `RECOVERING` state; **it is never
-   applied late.** This replaces `applyDue`'s current behaviour of publishing a
-   late artifact and counting it.
-5. `RECOVERING` freezes shared simulation on that instance and appears in the
-   status bar beside `DESYNC`/`DIVERGED`. Until Phase 5 it resolves only by the
-   gap being filled or the session ending — honest, and already better than a
-   silent fork.
-6. Separate the four failure kinds that today share counters: queue refusal,
-   disconnect, decode failure, simulation mismatch.
-
-**Boundaries — must not.** Repair state; it repairs *delivery*. Change what an
-artifact means or when it applies. Make the coordinator an authority over gameplay
-outcomes — it orders and retains. Retain unboundedly.
-
-**Manual acceptance.** Two terminals with `SendQueueSize` shrunk so refusal is
-reachable: drive a busy shield/storm exchange, confirm `transport_lost_out` rises,
-a retransmission fills the gap, and no `DESYNC` follows. Then block the
-retransmission and confirm the receiver reaches `RECOVERING` at a named sequence
-rather than `DIVERGED` seconds later.
-
----
-
-### Phase 4 — Restorable shared checkpoint (D-19)
-
-**Goal.** Produce a checkpoint that reconstructs the shared world exactly, and
-prove it by construction. This is the large phase and everything after it depends
-on it.
+**Goal.** Produce an object that reconstructs the shared world exactly, and prove
+it by construction. Everything after this depends on it; nothing before it does.
 
 **Requirements.**
 
-1. **A declared contract.** `SystemDef` gains a checkpoint declaration — `none`
-   (holds no future-affecting private state) or `state` (implements
-   `SaveShared`/`LoadShared`). The generator emits the table; the boundary suite
-   fails a system whose declaration does not match what its file holds, the same
-   construction that made D-15's profiles mechanical. This turns §2.4's unknown
-   inventory into a build-time list.
-2. **RNG continuation.** Add `FastRand.SetState`. Replace `WallSystem.mazeRng`'s
-   `math/rand` with the project generator or declare and serialize it.
-3. **The two learned resources get export contracts**: `AdaptationResource`
+1. **A declared contract.** `SystemDef` gains a snapshot declaration — `none` or
+   `state` (implements `SaveShared`/`LoadShared`). The generator emits the table;
+   the boundary suite fails a system whose declaration does not match what its file
+   holds. This turns §4.1's unknown inventory into a build-time list.
+2. **RNG continuation.** Add `FastRand.SetState`; replace or declare
+   `WallSystem.mazeRng`.
+3. **Export contracts for the two learned resources**: `AdaptationResource`
    (weights, pool, head, spin) and `GeneticResource` (per-species populations, via
-   a new `pkg/genetic` export/import that does not leak the mutex).
-4. **A versioned codec** with schema, build, config and corpus fingerprints and a
-   transfer-integrity hash. References use `core.Entity`, never dense indices.
-5. **Tick-relative durations.** No absolute `time.Time` crosses the boundary
-   (§2.4).
-6. **Derived, not shipped.** The flow field, spatial index and passability grid
-   are recomputed at install; only D-17's *phase* is serialized. Most of the naive
-   size estimate disappears here.
-7. **Player domain never imports.** No player entity, no D-13 owner-authored cell
-   except through an explicit ownership record, no view, audio, transport or
+   a `pkg/genetic` export/import that does not leak the mutex).
+4. **A versioned codec** with schema, build, config and corpus fingerprints and an
+   integrity hash. References use `core.Entity`, never dense indices.
+5. **Tick-relative durations only** (§4.2).
+6. **Derived, not shipped**: flow field, spatial index and passability grid are
+   recomputed at install; only D-17's phase travels.
+7. **Player domain never imports.** No player entity, no view, audio, transport or
    effect state.
-8. **Staged install.** Load into a second world, validate, swap at a tick
-   boundary; a checkpoint failing validation is rejected before the swap.
-9. **The round-trip test is the deliverable, not the codec.** Capture at tick T,
-   load **in a separate process whose clock origin is deliberately offset**, then
-   assert: identical `SnapshotShared`; identical next shared entity ID; identical
-   next draw from every shared stream; and — the one that catches §2.4's hidden
-   state — **identical shared digest after a further 500 ticks driven by an
-   identical record stream**. Run it across the soak seeds and inside storm, gold,
-   composite destruction and reset. A same-process round-trip is not sufficient
-   and must not be the gate.
+8. **Staged install**: load into a second world, validate, swap at a tick boundary.
+9. **The gate is a cross-process, clock-offset round trip.** Capture at tick T,
+   load in a separate process whose clock origin is deliberately offset, then
+   assert identical `SnapshotShared`, identical next shared entity ID, identical
+   next draw from every shared stream, and **identical shared digest after a
+   further 500 ticks driven by an identical record stream**. Across the soak seeds,
+   and inside storm, gold, composite destruction and reset. A same-process
+   round-trip is not sufficient and must not be the gate.
 
-**Boundaries — must not.** Send a checkpoint on the wire yet, or change any live
+**Boundaries — must not.** Send a snapshot on the wire yet, or change any live
 behaviour. Load one into a running session. Serialize anything derivable. Treat
-`SnapshotShared` as the format.
+`SnapshotShared` as the format (§4.3).
 
-**Manual acceptance.** `:d checkpoint save` and a headless `-checkpoint <file>`
-resume: a solo run saved at T and resumed in a fresh process reaches the same
-shared digest as the uninterrupted run at T+500. Once mid-storm, once across a
-`:new` reset. Record bytes, capture time, install time and allocation peak at the
-storm high water — Phase 5's cadence is chosen from those numbers.
+**Manual acceptance.** A solo run saved at tick T and resumed in a fresh process
+reaches the same shared digest as the uninterrupted run at T+500 — once mid-storm,
+once across a `:new` reset. Record bytes, capture time, install time and allocation
+peak at the storm high water; Phase 4's cadence is chosen from those numbers.
 
 ---
 
-### Phase 5 — Checkpoint-plus-suffix recovery, join and reconnect
+### Phase 3 — Join anytime
 
-**Goal.** Turn a detected fork into a repair, bound join cost, and delete the
-unreachable log path.
+**Goal.** Deliver the original requirement: a running solo game can be toggled into
+a host, and a participant can arrive at any moment.
 
 **Requirements.**
 
-1. The coordinator captures on a measured cadence (start at every 100 ticks
-   retaining three intervals, plus one after each large lifecycle transition) and
-   commits the identity. Normal play transmits the identity, not the bytes.
-2. **Recovery.** On confirmed divergence or an unresolved Phase 3 gap: freeze
-   shared simulation, request the newest committed checkpoint this instance lacks,
-   install into a staging world, replay the retained suffix from the ledger,
-   verify the digest against the commit, swap at one tick. Failure to verify ends
-   the session with a message rather than resuming on a guess.
-3. **Guest-local merge**, as desync.md §6.3 specifies: capture the local bundle
-   first; rebind to the rostered cursor; restore D-13 state only if the ownership
-   epoch matches; restore durable personal mechanics whose shared references are
-   live; discard disposable effects; resubmit only unacknowledged producer
-   sequences. Phase 1's prediction queue is discarded and re-seeded from the
-   installed authoritative cell — D-18 clause (c) already says how.
-4. **Join and reconnect use the same path.** A mid-run joiner receives a
-   checkpoint plus a suffix. This is what makes the joiner's residual gap a
-   function of the cadence rather than of session length, and it closes the
-   running-host handoff domain-design §9.4 leaves open.
-5. **Delete the tick-zero retention.** `App.SessionLog`, `SessionLogChunks`,
-   `event.EncodeSessionLog`/`DecodeSessionLogChunk`, `MsgSessionLog`,
-   `PendingJoin.MidRun`/`ReceiveSessionLog` and `App.CatchUp`'s full-replay path
-   all go, along with the `HostAddress != ""` clause in `initJournal`. Per §2.3
-   none of it is reachable from the binary today, so this removes unbounded memory
-   growth *and* dead code in one step.
+1. A running instance can begin hosting on request (`:host <addr>`, or the existing
+   flag) without restarting the run.
+2. A joiner receives the anchor, then a snapshot at a named tick, installs it,
+   and enters the session at the following tick. No replay, no session log.
+3. The roster arrival remains a crossing, so every participant creates the new
+   cursor at one agreed tick.
+4. Reconnect is the same path with the same code.
+5. The host stays playable throughout; the snapshot is captured without stalling
+   its tick beyond a bounded, measured pause.
 
-**Boundaries — must not.** Elect a coordinator, migrate authority, or survive host
-loss: that stays an explicit session end and a separate project with its own
-prerequisites (replicated ledger, split-brain rule). Recover across a partition.
-Resume without a verified digest. Accept a checkpoint whose fingerprints do not
-match the running build.
+**Boundaries — must not.** Reintroduce a retained record stream. Require the host
+to pause. Elect a coordinator or survive host loss.
 
-**Manual acceptance.** (a) Two terminals in a storm; corrupt one shared component
-on the guest via a debug command; it reaches `DESYNC`, recovers, both digests
-agree, and the interruption is visible and bounded. (b) Kill the guest process and
-rejoin mid-run against a *live, playing* host — which today is refused outright
-(§2.3): the joiner arrives at the session's tick within a bounded time and both
-terminals show both cursors. (c) Black-hole the link past the silent timeout,
-restore it, confirm reconnect takes the same path. (d) Quit the host: the guest
-still reports unrecoverable host loss — this phase deliberately does not change
-that.
+**Manual acceptance.** Start a solo run, play into a storm, toggle hosting, join
+from a second terminal: the guest arrives inside the storm with the same world, and
+both cursors work. Kill the guest and rejoin. Repeat with the join deliberately
+delayed until several minutes in — join cost must not grow with session length.
 
 ---
 
-### Phase 6 — Optimise from evidence
+### Phase 4 — Authority and correction
 
-Nothing here is committed; each ships only if Phase 5's measurements ask for it.
+**Goal.** The host becomes the authority and guests become predictors. This is
+where divergence stops being a failure mode and becomes a routine, corrected
+condition.
 
-- **Deltas**, if checkpoint bandwidth is material. A delta names its base and ends
-  with the resulting digest; one missing delta invalidates its descendants, so
-  periodic full checkpoints stay mandatory. Prefer store generation counters over
-  per-tick snapshot comparison.
-- **Bounded rollback**, if Phase 2's minimum lead is still visible in play. §2.5
-  says the CPU is there and Phase 4 supplies the save/load contract; what remains
-  is bounding player-domain side effects across re-simulated ticks.
-- **Multi-link topology** from the CLI (`-join` taking more than one address). The
-  relay already works; this is the operator surface for it.
-- **Authentication.** Populate `Config.TLS`, give `MsgAuthRequest`/`Response`
-  meaning, bind artifact authorship to identity. A prerequisite for anything
-  beyond trusted peers, and for any future host election.
-- **Host migration and partition health**, as a separate project. Election without
-  replicated checkpoint and ledger history produces an empty authority.
+**Requirements.**
 
-## 6. What each phase retires
+1. Guests apply local input immediately (Phase 1 already does this for the cursor;
+   extend to the rest of the player domain's shared-facing actions) and submit the
+   artifact to the host.
+2. The host orders, validates and applies; its result is the truth.
+3. Periodic authoritative snapshots at an adaptive cadence, full first, deltas once
+   full snapshots are correct and measured.
+4. Guests apply corrections into the staging world and swap; the correction
+   magnitude is telemetry, not an error.
+5. The playout barrier is removed from the local path. Any remaining receive-side
+   delay is an interpolation buffer for remote action, justified separately.
+6. `DESYNC`/`DIVERGED` are retired as failure states and replaced by a correction
+   magnitude and a staleness indicator.
 
-| Risk | Retired by | Proof |
-|---|---|---|
-| A session discards most fast input and scores it as errors | Phase 1 | §9 probes reach their solo figures |
-| Lead is wrong for the actual path | Phase 2 | `barrier_late` at zero under injected delay |
-| A dropped or refused frame forks the session silently | Phase 3 | Forced refusal recovers; blocked retransmit reaches `RECOVERING`, not a fork |
-| Hidden per-system and learned state is missing from any transfer | Phase 4 | Declared contract + cross-process, clock-offset, 500-tick digest equality |
-| A logic divergence is permanent | Phase 5 | Deliberate corruption recovers to digest equality |
-| Mid-run join is refused while its memory is paid | Phase 5 | A live host accepts a joiner; retention deleted |
-| Host loss ends the game | Phase 6 / separate project | Out of scope, stated |
+**Boundaries — must not.** Let a guest's derivation override the host. Make the
+host's uplink scale with entity count at tick rate — the whole point is the low
+snapshot cadence prediction buys. Break solo replay.
 
-## 7. Instrumentation to add
+**Manual acceptance.** Two terminals through injected delay, jitter and loss
+(`tc netem`): play stays responsive, remote entities stay smooth, no session ever
+enters an unrecoverable state, and the correction magnitude stays bounded. Kill the
+link entirely and restore it: the guest resumes from the next snapshot.
 
-desync.md §7's measurement plan stands. Three additions this review found missing,
-each landing with the phase that needs it:
+---
 
-- **Input-to-apply latency** for locally produced crossings, p50/p95/max, in ticks
-  and milliseconds. This is the number Phase 1 exists to move and no counter for
-  it exists.
-- **Prediction reconciliation**: predictions outstanding, snaps taken, cell
-  distance per snap. A rising snap rate means a shared producer is moving the
-  cursor more than expected — a gameplay signal as well as a health one.
-- **Ledger health**: contiguous acknowledged sequence per peer, gaps opened and
-  filled, retransmitted bytes, time in `RECOVERING`.
+### Phase 5 — Adaptive cadence and bandwidth resilience
 
-For every manual reproduction keep both logs *and* both journals, the exact
-commit, both terminal sizes, the CLI arguments, and every pause or resize. A
-one-sided log cannot name a first unequal value, which is what cost the
-2026-08-30 investigation its byte-level proof.
+**Goal.** Make the system degrade gracefully rather than fail at the edge of the
+link's capacity — the explicit priority.
+
+**Requirements.**
+
+1. Measure RTT, jitter, throughput and correction magnitude; drive snapshot rate
+   and delta/full choice from them.
+2. Relevance and priority: entities that matter to a given participant update more
+   often.
+3. A floor that still guarantees convergence, and a refusal path for links that
+   cannot meet it.
+4. Report the operating point in the status bar, so a player can see the link is
+   constrained rather than guessing that the game is broken.
+
+**Boundaries — must not.** Let adaptation silently reach a rate at which
+convergence is not guaranteed.
+
+**Manual acceptance.** Shape the link down in stages and confirm play degrades
+smoothly — snapshot rate falls, prediction carries more, correction magnitude rises
+but stays bounded, and nothing forks or disconnects.
+
+---
+
+### Phase 6 — From evidence
+
+Not committed. Bounded rollback where prediction error is still visible; host
+migration and partition health as a separate project with its own prerequisites;
+authentication (`Config.TLS`, `MsgAuthRequest`/`Response`) before anything beyond
+trusted peers; multi-link topology from the CLI.
+
+## 7. Cleanup already performed
+
+This document's branch removed what the target architecture will not use, so the
+implementation starts clean:
+
+- **The replay-based mid-run join is gone** — `App.CatchUp`, `SessionLog`,
+  `SessionLogChunks`, `event.EncodeSessionLog`/`DecodeSessionLogChunk`,
+  `LogRecord`, `MsgSessionLog`, `PendingJoin.MidRun`/`ReceiveSessionLog`, the
+  handshake's log leg, `NetworkSystem.DiscardArtifactsThrough`, `event.MultiSink`,
+  the `RetainSessionLog` config flag and the `HostAddress` retention clause, plus
+  their tests. It was unreachable from `cmd/vif`, cost unbounded memory, and is
+  replaced by Phase 3. **The journal, `Capture`, `ReplayDriver` and solo
+  deterministic replay are untouched** and remain valuable for debugging.
+- **`World.LocalCursor()`** consolidates 26 copies of the local-cursor read across
+  `mode`, `app`, `engine` and four player-profile systems. It is the seam Phase 1
+  installs behind.
+- **`internal/mode/router.go` is 64 lines shorter**: `recordCommand`,
+  `applyOperator`, `rememberFind` and `charCells` name four repeated concepts.
+- **The fabricated-identity admission path is gone.** `PeerManager.AddConnection`
+  assigned a connection-local `nextID` to any stream accepted without a session
+  handshake; participant IDs key the barrier's epoch window and every roster
+  lookup, so it would have admitted a peer under an identity the session never
+  issued. Both call sites now fail loudly.
+- **The wall batch pool was write-only** — released into, never acquired from.
+  Removed.
+- Dead on arrival: `network.NewAckMessage`, `event.EmitBatch`, `event.HasPayload`,
+  `Hub.Get`, `Hub.Names`, the `RoleClient`/`RoleServer` aliases.
+- `NetworkSystem` telemetry reset is table-driven, so a counter added to the
+  constructor cannot survive a reset holding the previous run's value.
 
 ## 8. Open questions
 
-1. **Prediction scope.** Phase 1 predicts the cursor cell only. Should the local
-   `EventCompositeMemberDestroyed` (gold typing) also predict its visual removal,
-   or is a lead's delay on a *shared* glyph vanishing acceptable? The conservative
-   answer is the one taken here; the aggressive one needs a rollback of that
-   glyph's presentation when the crossing is refused.
-2. **Checkpoint cadence and retention** are guesses until Phase 4 measures. 100
-   ticks and three intervals is desync.md's starting point, not a constant.
-3. **Session end on host loss** stays Phase 5 behaviour. Confirm that is
-   acceptable for the intended deployment before sizing Phase 6.
-4. **Mid-run join today.** §2.3 shows it is refused. Wiring `Coordinator.Log`
-   would make it *attempt* to work, but the tick-phase handoff is incomplete, so a
-   joiner could arrive subtly desynced. Leaving the clean refusal until Phase 5 is
-   the safer call — confirm.
-5. **Tower ownership in optional maps** (`config/main/tower.toml`, `config/td`)
-   still binds every tower to slot zero. It does not block this plan, but it is a
-   gameplay rule to settle before towers appear in a real session.
-
-## 9. Reproducing the measurements
-
-The probes were run as a temporary `internal/app` test file against the real input
-path (`App.Inject` is what `cmd/vif`'s event loop calls) and the real
-two-participant harness (`meshSession`). They are reproduced here rather than
-committed, because as assertions they would encode the current defect; Phase 1
-promotes them to tests asserting the solo figures.
-
-```go
-func motion(op input.MotionOp) *input.Intent {
-    return &input.Intent{Type: input.IntentMotion, Motion: op, Count: 1}
-}
-
-// A: ticks between an input and the producing instance's own store moving.
-// B: five presses with no tick between them -> cells actually moved.
-// C: park on a glyph run, type its exact runes back to back -> cells advanced
-//    and typing.errors delta.
-// D: B repeated with Resources.Network.BarrierDelayTicks overridden to 3, 2, 1.
-```
-
-Solo runs use `mustHeadless` and `a.Tick(1)`; session runs use
-`meshSession(t, seed, 2, [][2]int{{1, 2}})` and `tickAll`. For D, override the
-negotiated lead after `AttachTransport` and re-run `activateNetworkSession`.
-
-The tick-cost table in §2.5 comes from `towerConfig` with the tower and storm
-regions forced via `a.Region(event.RegionSpawn, ...)`, timing `a.Tick(200)`
-batches and counting `engine.ScopeShared`-selected entities in
-`world.Positions.Entities()`.
+1. **Prediction scope in Phase 1.** Cursor cell only, or also the visual removal of
+   a typed *shared* gold member? The conservative answer is taken here.
+2. **Snapshot cadence** is a guess until Phase 2 measures. 2–5 Hz is the starting
+   hypothesis, not a constant.
+3. **Host loss** ends the session. Confirm that is acceptable before sizing Phase 6.
+4. **Does the host keep re-deriving, or become the only simulator?** This plan
+   keeps guests simulating (§2.1). If measurement later shows correction magnitude
+   is large enough to be distracting, the fallback is thinner guests and a higher
+   snapshot rate — a tuning change, not a rewrite.
+5. **Tower ownership in optional maps** still binds every tower to slot zero. Not a
+   blocker; a gameplay rule to settle before towers appear in a real session.
