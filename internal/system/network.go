@@ -3,6 +3,7 @@ package system
 import (
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
@@ -357,6 +358,13 @@ func (s *NetworkSystem) participantID() uint32 {
 	return s.localSource
 }
 
+// barrierDelayTicks returns the session's negotiated playout lead.
+func (s *NetworkSystem) barrierDelayTicks() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.delayTicks
+}
+
 // DiscardArtifactsThrough drops scheduled artifacts whose apply tick a replayed
 // session log has already covered. A participant catching up receives live epochs
 // while it replays, and everything they carry up to the log's end is in the records
@@ -445,8 +453,17 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 // The regular tick path keeps the same state current after disconnects.
 func (s *NetworkSystem) ActivateSession() {
 	p := s.port()
-	s.refreshLink(p)
+	active := s.refreshLink(p)
 	s.publishConnectionTelemetry(p)
+	if active {
+		peers := 0
+		if p != nil {
+			peers = p.PeerCount()
+		}
+		vlog.Info("app", "msg", "network session active",
+			"participant", s.participantID(), "coordinator", s.isCoordinator(),
+			"barrier_delay_ticks", s.barrierDelayTicks(), "peers", peers)
+	}
 }
 
 func (s *NetworkSystem) Update() {
@@ -500,6 +517,7 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 			queued++
 		case network.InboundDisconnect:
 			s.world.PushLocal(event.EventNetworkDisconnect, &event.NetworkDisconnectPayload{PeerID: uint32(in.Peer)})
+			s.reportDisconnect(uint32(in.Peer), p.PeerCount())
 			s.forgetDigestPeer(uint32(in.Peer))
 			s.noticeDeparture(uint32(in.Peer))
 			queued++
@@ -508,6 +526,25 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 		}
 	}
 	return queued
+}
+
+// reportDisconnect makes link loss visible independently of digest comparison.
+// Once a link disappears there is no peer left on that edge to send a mismatching
+// digest, so waiting for DESYNC would make the most serious transport failure look
+// like silence. NET:DOWN remains the persistent indicator; this local message and
+// warning name the event when it happens. Losing participant one is called out on a
+// guest because the current membership protocol cannot replace its coordinator.
+func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
+	coordinatorLost := peerID == coordinatorParticipant && !s.isCoordinator()
+	message := fmt.Sprintf("Participant %d disconnected", peerID)
+	if coordinatorLost {
+		message = "Host connection lost; this session cannot recover automatically"
+	}
+	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
+		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
+	})
+	vlog.Warn("app", "msg", "network peer disconnected", "participant", s.participantID(), "peer", peerID,
+		"coordinator_lost", coordinatorLost, "remaining_peers", remaining)
 }
 
 func (s *NetworkSystem) forgetDigestPeer(peer uint32) {

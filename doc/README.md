@@ -1,7 +1,7 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was last audited on 2026-08-30, through the multi-participant
+codebase. It was last audited on 2026-08-31, through the multi-participant
 networking surface. The implementation, generated manifest, and shipped
 configuration were treated as authoritative where older prose disagreed with the
 code.
@@ -21,6 +21,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [ECS and events](ecs-and-events.md) | Medium/detail | How are entities stored, systems ordered, spatial queries performed, and events settled? |
 | [Logging and diagnostics](logging-and-diagnostics.md) | Medium/detail | How do scopes, telemetry, the replay journal, snapshots, and the flight recorder work? |
 | [Multi-instance domain model](domain-design.md) | Medium/detail | How are entities, events, RNG streams and systems split between shared and player domains, who holds authority over what, and what is still missing? |
+| [Desynchronisation and recovery](desync.md) | Medium/detail | What caused the observed two-player divergence, what does the protocol guarantee today, and which recovery design best fits? |
 | [Gameplay systems](gameplay.md) | Domain detail | What are the player mechanics, world mechanics, species, encounters, and system responsibilities? |
 | [Input and modes](input-and-modes.md) | Domain detail | How do terminal events become vi commands, gameplay intents, macros, mouse actions, and commands? |
 | [HFSM and configuration](fsm-and-configuration.md) | Domain detail | How are parallel regions, hierarchical transitions, actions, guards, and shipped scenarios composed? |

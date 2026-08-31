@@ -5,7 +5,9 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 )
 
 // syncFor builds one owner-authored state message for a cursor (D-13).
@@ -103,6 +105,35 @@ func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
 	net.receiveDeparture(3, mustJSON(t, event.ParticipantDepartedPayload{Participant: 7, Slot: 2}))
 	if got := net.statDuplicates.Load(); got != before+1 {
 		t.Fatalf("duplicate notices counted = %d, want %d", got, before+1)
+	}
+}
+
+// TestCoordinatorLossRaisesLocalStatus covers the failure mode a digest cannot:
+// once the host link is gone there is no peer left to disagree with, so the guest
+// must report the disconnect directly rather than waiting for DESYNC.
+func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
+	w, _, _ := testCursorWorld(t)
+	host, guest := network.NewLoopbackPair(1, 2)
+	w.Resources.Network = engine.NewNetworkResource(guest)
+	net := NewNetworkSystem(w).(*NetworkSystem)
+
+	if err := host.Close(); err != nil {
+		t.Fatal(err)
+	}
+	net.Receive(1)
+
+	want := "Host connection lost; this session cannot recover automatically"
+	got := ""
+	for _, ev := range w.Resources.Event.Queue.Consume() {
+		if ev.Type != event.EventMetaStatusMessageRequest {
+			continue
+		}
+		if p, ok := ev.Payload.(*event.MetaStatusMessagePayload); ok {
+			got = p.Message
+		}
+	}
+	if got != want {
+		t.Fatalf("coordinator-loss message = %q, want %q", got, want)
 	}
 }
 

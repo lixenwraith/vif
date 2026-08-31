@@ -24,7 +24,7 @@ const (
 	// divergence a report rather than a blip. One sample can disagree while the two
 	// instances still agree about the run: an artifact that arrived after its apply
 	// tick lands on one side a tick late, and the next sample finds them equal again.
-	// Two samples is a quarter of a second at the digest cadence.
+	// Two samples report one 300ms digest interval after the first disagreement.
 	NetworkDesyncSamples = 2
 
 	// NetworkDivergedRecordsLogged bounds how many differing snapshot record names

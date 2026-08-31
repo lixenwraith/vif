@@ -3,7 +3,9 @@
 Rules D-1..D-17 describe how one world is split between state every instance
 holds and state that belongs to one participant. All seventeen are implemented and
 verified; §8 maps each to the test that pins it. §9 records what the model does
-*not* yet do, and is the input to the next round of work.
+*not* yet do, and is the input to the next round of work. The observed divergence,
+recovery alternatives, quantitative sizing, and staged recommendation are in
+[Desynchronisation and recovery](desync.md).
 
 This document supersedes every earlier design note, including the phase plan it
 replaces.
@@ -532,7 +534,8 @@ category on the transition and holds a high-priority `DESYNC` status-bar item.
 Once every neighbour agrees again, a green `SYNCED` acknowledgement remains for
 twenty ticks and disappears. This detects divergence; it neither chooses an
 authoritative copy nor repairs one, and it deliberately excludes D-13
-owner-authored values.
+owner-authored values. `SnapshotShared` is a comparison surface, not a restorable
+world checkpoint.
 
 Divergence has two degrees, because one disagreeing sample and a permanent one
 call for different statements. An artifact that missed its apply tick lands on one
@@ -567,6 +570,10 @@ build has a path to — and a neighbour that is not the coordinator forwards a
 crosses the same way, so every instance creates the new cursor at one agreed tick
 and its shared entity is identical everywhere (D-11). Both carry `OriginSession`,
 which is journaled: nothing else in the record stream implies a roster change.
+The observing instance also raises a local status message immediately. In
+particular, a guest losing participant one is told that the host connection was
+lost and that the current session cannot recover automatically; no digest could
+report that failure after its comparison edge disappeared.
 
 **Session control.** Time control remains an instance-local operator facility,
 so pause, speed and step requests are refused while a live peer is attached.
@@ -579,18 +586,21 @@ snapshots the closed roster, clears the world and barrier, then rebuilds every
 cursor in slot order from the boot template. Thus reset changes the run without
 silently reducing the session to slot zero.
 
-**Mid-run join.** A participant arriving after tick zero reproduces the session
-rather than receiving it. A run is a pure function of its anchor and its
-non-system record stream, which is what replay already relies on, so a host
-retains that stream for the life of the session and the handshake carries it. The
+**Mid-run join.** The implemented catch-up path reconstructs a participant after
+tick zero from the session record rather than from a world snapshot. A
+caller-driven/headless run is a pure function of its anchor and injected
+non-system record stream, which is what replay relies on, so a host retains that
+stream for the life of the session and the handshake carries it. The
 log is unbounded and a frame is capped at 64 KiB, so it crosses as sequenced
 chunks; past the offer the deadlines are per-write, because the transfer is as
 long as the session rather than as long as the link. `App.CatchUp` replays it,
 ticks over the quiet stretch the records do not cover, and discards the barrier
 artifacts the log already applied. It does not pre-adopt the D-14 latch: the
 records carry the level setup that produced it, and adopting as well would run
-that event twice. The cost is memory — the log is complete from tick zero because
-replay is, and grows with session length.
+that event twice. The cost is memory — the log is complete from tick zero and
+grows with session length. The socket/headless catch-up tests prove this code path;
+they do not extend the bit-exact claim to concurrent interactive live execution,
+and `cmd/vif` does not yet complete its running-host tick-phase handoff.
 
 **The stream.** The real endpoint is `network.SocketPort`. Every message has a
 fixed 12-byte header whose final field is payload length; `Decode` uses
@@ -599,7 +609,9 @@ Transport goroutines append only `network.Inbound` values to the port buffer;
 `NetworkSystem` drains that buffer under the world lock, preserving the poll
 boundary. Idle peers exchange framed heartbeats; read and write deadlines close a
 silent stream without blocking a tick. The resulting disconnect notification is
-drained through the same path and removes only cursors owned by that participant.
+drained through the same path, raises a local status message, and—while the
+coordinator remains reachable—produces the crossing that removes only cursors
+owned by that participant.
 The steady-state simulation stream has three message kinds — one closed barrier
 epoch, one owner-authored cursor sync and one shared-state digest — plus the
 membership notice and four-step startup handshake; anything else is counted as a
@@ -945,34 +957,33 @@ than one peer is a CLI change, not a protocol one.
 
 ### 9.3 Toward a trusted branch
 
-The eventual "which branch do we trust" question is easier here than in a system
-that replicates state, and the reason is worth recording. Because shared state is
-re-derived rather than transported, there is nothing to reconcile *except the
-artifact stream*. A divergence is always a disagreement about which artifacts, in
-which order, at which tick — never about the resulting world. The frame already
-carries the three fields such a log needs (source, per-source sequence, absolute
-apply tick), and the ordering is already independent of arrival order.
+The artifact stream is necessary but not sufficient. The 2026-08-30 incident is
+the counterexample to the earlier, stronger claim: both participants could receive
+the same artifacts and still derive different worlds because a guest-only camera
+operation shifted shared navigation cache timing. Recovery therefore has to cover
+both delivery gaps and deterministic implementation defects.
 
-The periodic shared digest now makes such a disagreement loud while the peers
-remain connected. It intentionally stops there: a hash does not identify the
-missing or extra artifact, establish which branch is trusted, cross a partition,
-or authorize overwriting one participant's state. The retained record stream and
-`FirstDiff` remain the evidence for diagnosis; identity and an agreement rule are
-still prerequisites for automated recovery.
+The periodic shared digest makes a disagreement loud while the peers remain
+connected. It intentionally stops there: a hash does not identify a missing or
+extra artifact, establish which branch is trusted, cross a partition, or authorize
+overwriting one participant's state. Per-record detail, paired journals, and
+`FirstDiff` are diagnostic evidence, not a recovery protocol.
 
-Rewind is no longer the obstacle it looks like. A run is a pure function of its
-anchor and its record stream, and a host retains that stream, so any position in
-the session can be reconstructed by replaying to it — which is exactly what a
-mid-run join now does. Rejecting a branch after the fact is therefore replay to
-the fork point and forward along the other one, not a snapshot-and-rollback
-mechanism the engine lacks. What it costs is time proportional to session length,
-which is what a periodic world snapshot would bound.
+Replay remains useful, but it is not rewind. The current journal captures injected
+non-system records, not a complete serialization of every future-affecting system
+and scheduler value, and bit-exact replay is claimed only for caller-driven/
+headless source runs. A live interactive participant also needs a tick-phase
+handoff while the host continues to advance. A recoverable branch needs a
+versioned restorable shared checkpoint, an agreed canonical artifact suffix, and a
+procedure for buffering, replaying, validating, and switching at one tick.
 
-What is genuinely missing is **identity**. The link is plaintext and
+Identity is another prerequisite, not the only one. The link is plaintext and
 unauthenticated; `MsgAuthRequest`/`MsgAuthResponse` are reserved and unused, and
 `Config.TLS` is never populated by the CLI. A participant cannot prove that an
-artifact attributed to it is its own, so there is nothing for an agreement rule to
-bind to. That is the prerequisite, not rewind.
+artifact attributed to it is its own, and coordinator election without state and
+ledger migration would still produce an empty authority. The comparative options,
+checkpoint contract, and recommended checkpoint-plus-suffix design are detailed
+in [Desynchronisation and recovery](desync.md).
 
 ### 9.4 Known limitations
 
@@ -980,9 +991,13 @@ bind to. That is the prerequisite, not rewind.
 
 - The playout lead is a constant rather than a function of the graph's diameter,
   and a partition leaves no digest edge between its components. See §9.2.
+- A clean disconnect is visible immediately and a black-holed link becomes visible
+  after the silent timeout, but losing participant one still has no coordinator
+  election, roster authority, or automatic state migration. The guest says so
+  directly instead of waiting for a digest that can no longer arrive.
 - Mid-run join is bounded by memory and by wall clock: the retained log is
   complete from tick zero, so it grows with session length, and catching up costs
-  time proportional to it. A periodic world snapshot is what bounds both.
+  time proportional to it. A periodic restorable checkpoint is what bounds both.
 - Mid-run join is not yet driven from `cmd/vif` against a *live* host. The
   mechanism, the transfer and the roster crossing are in place and proven over the
   socket, but a running host advances while a joiner replays, so the handoff needs
@@ -997,9 +1012,10 @@ bind to. That is the prerequisite, not rewind.
   connected, because those artifacts apply after the log ends and were broadcast
   before the joiner attached; and the joiner ticking to the session's phase before
   its scheduler starts, which the barrier already supports since every artifact
-  names an absolute apply tick. Nothing below them is missing: reproducing a live
-  session's crossings is exact, and is pinned by
-  `TestCatchUpReproducesALiveSessionsCrossings`.
+  names an absolute apply tick. `TestCatchUpReproducesALiveSessionsCrossings` pins
+  the caller-driven crossing path; it does not prove bit-exact recovery of a
+  concurrently scheduled interactive world. A restorable checkpoint plus a
+  canonical suffix is the stronger long-term handoff described in `desync.md`.
 
 - Reconnect reuses the same machinery and is not separately wired: an identity is
   released when its participant departs, and a returning participant catches up
@@ -1012,8 +1028,9 @@ bind to. That is the prerequisite, not rewind.
   cadence but neither stops play nor repairs it. `SYNCED` means the compared
   surface became equal again; it does not explain why. `DIVERGED` states that it
   will not: past `NetworkDivergedSamples` nothing re-derives the missing artifact,
-  and the only recovery the model admits is reproducing the session from the
-  coordinator's log — which is the mid-run join above, with its prerequisites.
+  and the current runtime has no in-place recovery. Reproducing from the
+  coordinator's log exists as a catch-up building block, with the scope and
+  prerequisites above; it is not yet an interactive recovery guarantee.
 - Plaintext and unauthenticated; no CLI TLS surface.
 - No lag compensation. A slow peer produces late artifacts and divergence rather
   than a stall — deliberate, since simulation never waits, but it means the
@@ -1072,31 +1089,35 @@ bind to. That is the prerequisite, not rewind.
 
 ### 9.5 Next work
 
-1. **Live mid-run join in `cmd/vif`,** on the three pieces §9.4 now names, and the
-   catch-up fidelity defect ahead of them. This is what turns the proven mechanism
-   into a feature a player can use; it carries reconnect and a future
-   suspend/resume form of live pause with it, and it is the one recovery a
-   `DIVERGED` session can be given — the participant rejoins and reproduces rather
-   than being repaired in place.
-2. **A playout lead derived from the graph.** Negotiate it from the worst-case path
-   rather than fixing it at three ticks, and act on `network.barrier_late` instead
-   of only reporting it.
-3. **Periodic world snapshot.** Bounds both the retained log and catch-up time, and
-   is the same primitive a branch-agreement rule would rewind to.
-4. **Multi-link topology from the CLI.** The relay makes any graph work; `-join`
+1. **Canonical artifact delivery.** Add contiguous ledger acknowledgements, gap
+   requests and a bounded resend window; a missed apply deadline must enter a
+   recovery state rather than silently creating two branches.
+2. **An adaptive playout lead.** Measure RTT/jitter and negotiate from the
+   worst-case active path rather than fixing it at three ticks; act on
+   `network.barrier_late` instead of only reporting it.
+3. **Restorable full shared checkpoints.** Serialize components plus every hidden
+   future-affecting RNG, FSM, scheduler, system, barrier and allocator value. Keep
+   an agreed rolling ring; `SnapshotShared` is not this format.
+4. **Checkpoint-plus-suffix live recovery.** Buffer live epochs, load a common
+   checkpoint into a shadow world, replay the canonical suffix, verify equality,
+   and switch at one tick. This completes late join and reconnect without claiming
+   that the current interactive journal is a world snapshot.
+5. **Partition and membership health.** Add coordinator election with state/ledger
+   migration and a safe partition rule. Election alone does not preserve a game.
+6. **Authentication and transport security.** Populate `Config.TLS` from the CLI
+   and give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so identity and artifact
+   authorship can bind the agreement rule.
+7. **Multi-link topology from the CLI.** The relay makes any graph work; `-join`
    dialling more than one address is what lets an operator build one.
-5. **Partition and membership health.** The shared digest detects divergence on
-   connected edges, not a graph split. Add a membership rule that detects a
-   partition and survives losing the coordinator.
-6. **Authentication and transport security.** Populate `Config.TLS` from the CLI and
-   give `MsgAuthRequest`/`MsgAuthResponse` a meaning, so a participant identity
-   exists to attribute artifacts to. This is the prerequisite for any agreement
-   rule, and the only one still entirely missing.
-7. **Close the programmatic operator surface.** Make embedder-level map/FSM
+8. **Close the programmatic operator surface.** Make embedder-level map/FSM
    mutation explicitly session-aware rather than relying on the interactive
    command policy and harness discipline.
-8. **Empty `unstampedLocal`,** then delete it and its exemption.
-9. **Settle tower ownership in optional maps.** Replace their slot-zero
+9. **Empty `unstampedLocal`,** then delete it and its exemption.
+10. **Settle tower ownership in optional maps.** Replace their slot-zero
    `player_entity` convention with an explicit session-owned or participant-owned
    rule.
-10. **Windowed composite / vision box.**
+11. **Windowed composite / vision box.**
+
+The ordering and option scores are justified in
+[Desynchronisation and recovery](desync.md); delta snapshots and rollback remain
+measured optimisations after full checkpoint recovery is correct.

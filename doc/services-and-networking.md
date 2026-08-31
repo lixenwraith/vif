@@ -4,7 +4,8 @@ Services own process/host resources whose lifecycle differs from ECS systems:
 terminal raw mode, audio output, the immutable content corpus, and an optional
 network transport. Networking is assembled for a trusted-peer session of up to
 `parameter.MaxPlayers` participants; a normal run still contributes no active
-network capability.
+network capability. The current failure model and recovery alternatives are
+analysed in [Desynchronisation and recovery](desync.md).
 
 ## 1. Service lifecycle contract
 
@@ -238,9 +239,11 @@ travels the same way, produced only by the coordinator so it has one apply tick.
 
 `MsgStateSync` periodically copies only the D-13 owner-authored cursor set, and is
 applied only when the payload's entity and roster slot agree and its sequence is
-newer than that slot's last. Disconnect drains through the same poll boundary,
-despawns only cursors owned by that participant, releases that slot's sync
-sequence, and leaves both the barrier and the map latch in place: a session's
+newer than that slot's last. Disconnect drains through the same poll boundary and
+raises a local eight-second status message. While the coordinator remains
+reachable, its roster crossing despawns only cursors owned by that participant,
+releases that slot's sync sequence, and leaves both the barrier and the map latch
+in place: a session's
 playout lead and its bounds are properties of the run, so a stretch with no peer
 attached still defers its crossings by the same lead and still keeps the bounds
 every participant adopted. A departure is itself a crossing and lands at that lead
@@ -258,10 +261,13 @@ the individual snapshot records that disagree: once a sample has mismatched the
 digest carries a hash per record, so a category becomes something to read. A
 healthy session sends no breakdown at all. Agreement after a mismatch shows
 green `SYNCED` for twenty ticks. The digest is a detector only: it does not flood,
-select an authority, repair state, or cross a partition.
+select an authority, repair state, or cross a partition. Losing the comparison
+edge therefore reports the disconnect directly; a guest that loses participant
+one is explicitly told that the session cannot recover automatically.
 
 Loss that happens outside the barrier is published rather than swallowed, because
-either direction desynchronises silently: `network.transport_lost_in` counts
+either direction would otherwise desynchronise silently:
+`network.transport_lost_in` counts
 inbound notifications a full poll buffer discarded, `network.transport_lost_out`
 counts outbound frames a peer's bounded send queue refused. A new loss is logged
 once as well as counted.
@@ -271,7 +277,9 @@ once as well as counted.
 `network.Config` applies connection/read/write deadlines, heartbeat and silent
 disconnect intervals, read/write buffer sizes, bounded send/receive queues, peer
 cap, barrier delay and optional TLS. Heartbeats are framed control messages and a
-silent connection closes through the normal disconnect path.
+silent connection closes through the normal disconnect path. The defaults send a
+heartbeat every 10 seconds and declare the peer silent after 30 seconds; clean EOF
+is observed immediately.
 
 What the operator surface still does not cover:
 
@@ -279,13 +287,15 @@ What the operator surface still does not cover:
   any graph work;
 - the playout lead is a constant rather than a function of the graph's diameter,
   and a partition has no digest edge between its components;
-- mid-run join is implemented and proven over the socket but not yet driven from
-  `cmd/vif` against a live host, which needs the joiner placed on the session's
-  tick phase;
+- mid-run join is implemented and exercised through socket/caller-driven tests but
+  not yet driven from `cmd/vif` against an advancing interactive host, which needs
+  the joiner placed on the session's tick phase and does not inherit the narrower
+  headless bit-exact replay claim;
 - live pause/speed/step are refused until that same catch-up path can support a
   suspended participant rejoining the current tick phase;
-- no world snapshot, so the retained log and catch-up cost both grow with session
-  length; no lag compensation;
+- no restorable world checkpoint, so `SnapshotShared` can diagnose but not load,
+  and the retained log and catch-up cost both grow with session length; no lag
+  compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
@@ -306,11 +316,13 @@ replaying the session log while the listener stays up.
 larger than a pair. `TestActivatedSessionDefersCrossingBeforeFirstTick` covers
 input immediately after the lobby gate.
 `TestRuntimeDigestReportsAndClearsSharedDivergence` deliberately corrupts and
-restores shared state to cover the alert/recovery path;
+restores shared state to cover the alert/clear path;
 `TestSharedSnapshotExcludesLocalSchedulerTiming` keeps wall origins, tick slips
 and display-only deadline remainder out of that surface. Framing, timeout,
 mismatch, log-transfer and encoding budgets have focused tests in
 `internal/network` and `internal/event`.
+`TestCoordinatorLossRaisesLocalStatus` pins the direct guest warning that does not
+depend on a surviving digest edge.
 
 ```bash
 # terminal 1
@@ -324,8 +336,10 @@ Both sides should reach `NET:1P/LOCK`, display two cursors and agree on shared
 actors, scoring and progression while both participants move/type/fire; a healthy
 run never shows `DESYNC`. Give the two terminals different sizes and resize one
 mid-run: the map must not move and neither side may desynchronise. The host's
-`:new` resets both rosters and a guest's is refused. Quit one; the other must
-continue at `NET:DOWN/LOCK`. Add `-players <n>`
+`:new` resets both rosters and a guest's is refused. Quit the guest; the host must
+show a participant-disconnected message and continue at `NET:DOWN/LOCK`. Quit the
+host; the guest must show `Host connection lost; this session cannot recover
+automatically` and remain at `NET:DOWN/LOCK`. Add `-players <n>`
 to the host for a larger lobby, which closes only once every participant has
 arrived. Bind the host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
