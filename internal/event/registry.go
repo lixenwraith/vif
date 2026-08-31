@@ -73,12 +73,6 @@ func NewPayloadStruct(et EventType) any {
 	return reflect.New(t).Interface()
 }
 
-// HasPayload reports whether a TOML-decodable payload prototype is registered
-func HasPayload(et EventType) bool {
-	_, ok := typeToPayload[et]
-	return ok
-}
-
 // EnsureRegistry initialises the event registry exactly once, safe against
 // concurrent App construction. InitRegistry is generated and carries no guard.
 func EnsureRegistry() { registryOnce.Do(InitRegistry) }

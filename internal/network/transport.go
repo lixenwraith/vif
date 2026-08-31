@@ -115,19 +115,22 @@ func (t *Transport) acceptLoop() {
 			continue
 		}
 
-		if t.config.AcceptSession != nil {
-			id, err := t.config.AcceptSession(conn)
-			if err != nil {
-				_ = conn.Close()
-				t.report(err)
-				continue
-			}
-			if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
-				t.report(err)
-			}
+		// A participant is admitted only under the identity the session assigned it.
+		// Accept order is not an identity: the barrier's per-source epoch window and
+		// every roster lookup are keyed by canonical participant ID, so admitting a
+		// stream under a connection-local number would corrupt both silently.
+		if t.config.AcceptSession == nil {
+			_ = conn.Close()
+			t.report(errors.New("transport: host accepted a connection with no session handshake"))
 			continue
 		}
-		if _, err := t.peers.AddConnection(conn); err != nil {
+		id, err := t.config.AcceptSession(conn)
+		if err != nil {
+			_ = conn.Close()
+			t.report(err)
+			continue
+		}
+		if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
 			t.report(err)
 		}
 	}
@@ -135,29 +138,26 @@ func (t *Transport) acceptLoop() {
 
 // startClient connects to server
 func (t *Transport) startClient() error {
-	conn := t.config.preconnected
-	id := t.config.preconnectedPeer
+	conn, id := t.config.preconnected, t.config.preconnectedPeer
 	if conn == nil {
 		var err error
-		conn, err = dial(t.config.Address, t.config)
-		if err != nil {
+		if conn, err = dial(t.config.Address, t.config); err != nil {
 			t.running.Store(false)
 			return err
 		}
 	}
-
-	var err error
-	if id != 0 {
-		_, err = t.peers.AddConnectionAs(conn, id)
-	} else {
-		_, err = t.peers.AddConnection(conn)
+	// The coordinator's identity comes from the offer this stream already accepted;
+	// a client that reached here without one has no session to join.
+	if id == 0 {
+		_ = conn.Close()
+		t.running.Store(false)
+		return errors.New("transport: peer has no coordinator identity from the join handshake")
 	}
-	if err != nil {
+	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
 		_ = conn.Close()
 		t.running.Store(false)
 		return err
 	}
-
 	return nil
 }
 
@@ -197,11 +197,6 @@ func (t *Transport) Stop() error {
 // Send transmits to a specific peer
 func (t *Transport) Send(id PeerID, msg *Message) bool {
 	return t.peers.Send(id, msg)
-}
-
-// Broadcast sends to all peers and returns the number that refused the frame.
-func (t *Transport) Broadcast(msg *Message) int {
-	return t.peers.Broadcast(msg)
 }
 
 // BroadcastExcept sends to all peers but one and returns the number that refused.

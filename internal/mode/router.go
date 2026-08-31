@@ -346,6 +346,48 @@ func (r *Router) handleToggleAudioCycle() bool {
 
 // --- Motion Handlers ---
 
+// recordCommand remembers a completed command for the '.' repeat. Every motion,
+// operator and special handler ends this way, so the tail lives here rather than
+// eight times over.
+func (r *Router) recordCommand(intent *input.Intent) bool {
+	if intent.Command != "" {
+		r.ctx.SetLastCommand(intent.Command)
+	}
+	return true
+}
+
+// applyOperator hands a resolved range to the intent's operator. One arm today;
+// this is where a second operator attaches, and it is why the three call sites do
+// not each carry their own switch.
+func (r *Router) applyOperator(intent *input.Intent, result MotionResult) {
+	switch intent.Operator {
+	case input.OperatorDelete:
+		OpDelete(r.ctx, result)
+	}
+}
+
+// rememberFind stores what ';' and ',' repeat. Both the plain and the operator
+// char-motion handler need it and neither owns it.
+func (r *Router) rememberFind(intent *input.Intent, result MotionResult) {
+	if !result.Valid {
+		return
+	}
+	r.lastFindChar = intent.Char
+	r.lastFindType = motionOpToRune(intent.Motion)
+	r.lastFindForward = intent.Motion == input.MotionFindForward ||
+		intent.Motion == input.MotionTillForward
+}
+
+// charCells is the inclusive character range from (x,y) to (endX,y).
+func charCells(x, y, endX int) MotionResult {
+	return MotionResult{
+		StartX: x, StartY: y,
+		EndX: endX, EndY: y,
+		Type: RangeChar, Style: StyleInclusive,
+		Valid: true,
+	}
+}
+
 func (r *Router) handleMotion(intent *input.Intent) bool {
 	motionFn, ok := r.motionLUT[intent.Motion]
 	if !ok {
@@ -355,15 +397,9 @@ func (r *Router) handleMotion(intent *input.Intent) bool {
 	r.captureForUndo()
 
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
-		OpMove(r.ctx, result)
+		OpMove(r.ctx, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) handleCharMotion(intent *input.Intent) bool {
@@ -377,19 +413,9 @@ func (r *Router) handleCharMotion(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
 		result := charFn(r.ctx, pos.X, pos.Y, intent.Count, intent.Char)
 		OpMove(r.ctx, result)
-		// Track for ; and , repeat
-		if result.Valid {
-			r.lastFindChar = intent.Char
-			r.lastFindType = motionOpToRune(intent.Motion)
-			r.lastFindForward = intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward
-		}
+		r.rememberFind(intent, result)
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) handleMotionMarkerShow(intent *input.Intent) bool {
@@ -419,14 +445,9 @@ func (r *Router) handleMotionMarkerJump(intent *input.Intent) bool {
 			glyphType = component.GlyphBlue
 		}
 
-		result := MotionColoredGlyph(r.ctx, pos.X, pos.Y, intent.Count, intent.Motion, glyphType)
-		OpMove(r.ctx, result)
+		OpMove(r.ctx, MotionColoredGlyph(r.ctx, pos.X, pos.Y, intent.Count, intent.Motion, glyphType))
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) motionToDirection(motion input.MotionOp) [2]int {
@@ -452,46 +473,22 @@ func (r *Router) handleOperatorMotion(intent *input.Intent) bool {
 	}
 
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
-
-		switch intent.Operator {
-		case input.OperatorDelete:
-			OpDelete(r.ctx, result)
-		}
+		r.applyOperator(intent, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) handleOperatorLine(intent *input.Intent) bool {
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
-		endY := pos.Y + intent.Count - 1
-		if endY >= r.ctx.World.Resources.Config.MapHeight {
-			endY = r.ctx.World.Resources.Config.MapHeight - 1
-		}
-
-		result := MotionResult{
+		cfg := r.ctx.World.Resources.Config
+		r.applyOperator(intent, MotionResult{
 			StartX: 0, StartY: pos.Y,
-			EndX: r.ctx.World.Resources.Config.MapWidth - 1, EndY: endY,
+			EndX: cfg.MapWidth - 1, EndY: min(pos.Y+intent.Count-1, cfg.MapHeight-1),
 			Type: RangeLine, Style: StyleInclusive,
 			Valid: true,
-		}
-
-		switch intent.Operator {
-		case input.OperatorDelete:
-			OpDelete(r.ctx, result)
-		}
+		})
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
@@ -502,25 +499,10 @@ func (r *Router) handleOperatorCharMotion(intent *input.Intent) bool {
 
 	if pos, ok := r.ctx.World.LocalCursor(); ok {
 		result := charFn(r.ctx, pos.X, pos.Y, intent.Count, intent.Char)
-
-		switch intent.Operator {
-		case input.OperatorDelete:
-			OpDelete(r.ctx, result)
-		}
-
-		// Track for ; and , repeat
-		if result.Valid {
-			r.lastFindChar = intent.Char
-			r.lastFindType = motionOpToRune(intent.Motion)
-			r.lastFindForward = (intent.Motion == input.MotionFindForward || intent.Motion == input.MotionTillForward)
-		}
+		r.applyOperator(intent, result)
+		r.rememberFind(intent, result)
 	}
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 // --- Special Command Handlers ---
@@ -530,22 +512,12 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 		switch intent.Special {
 		case input.SpecialDeleteChar:
 			// x = delete chars forward
-			endX := pos.X + intent.Count - 1
-			if endX >= r.ctx.World.Resources.Config.MapWidth {
-				endX = r.ctx.World.Resources.Config.MapWidth - 1
-			}
-			result := MotionResult{
-				StartX: pos.X, StartY: pos.Y,
-				EndX: endX, EndY: pos.Y,
-				Type: RangeChar, Style: StyleInclusive,
-				Valid: true,
-			}
-			OpDelete(r.ctx, result)
+			OpDelete(r.ctx, charCells(pos.X, pos.Y,
+				min(pos.X+intent.Count-1, r.ctx.World.Resources.Config.MapWidth-1)))
 
 		case input.SpecialDeleteToEnd:
 			// D = d$
-			result := MotionLineEnd(r.ctx, pos.X, pos.Y, 1)
-			OpDelete(r.ctx, result)
+			OpDelete(r.ctx, MotionLineEnd(r.ctx, pos.X, pos.Y, 1))
 
 		case input.SpecialSearchNext:
 			RepeatSearch(r.ctx, r.lastSearchText, true)
@@ -560,11 +532,7 @@ func (r *Router) handleSpecial(intent *input.Intent) bool {
 			r.executeRepeatFind(true)
 		}
 	}
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 func (r *Router) handleNuggetJump() bool {
@@ -827,8 +795,7 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 		r.captureForUndo()
 
 		if pos, ok := r.ctx.World.LocalCursor(); ok {
-			result := motionFn(r.ctx, pos.X, pos.Y, intent.Count)
-			OpMove(r.ctx, result)
+			OpMove(r.ctx, motionFn(r.ctx, pos.X, pos.Y, intent.Count))
 		}
 	}
 
@@ -836,17 +803,9 @@ func (r *Router) handleTextNav(intent *input.Intent) bool {
 }
 
 func (r *Router) handleInsertDeleteCurrent() bool {
-	pos, ok := r.ctx.World.LocalCursor()
-	if !ok {
-		return true
+	if pos, ok := r.ctx.World.LocalCursor(); ok {
+		OpDelete(r.ctx, charCells(pos.X, pos.Y, pos.X))
 	}
-	result := MotionResult{
-		StartX: pos.X, StartY: pos.Y,
-		EndX: pos.X, EndY: pos.Y,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: true,
-	}
-	OpDelete(r.ctx, result)
 	return true
 }
 
@@ -855,17 +814,8 @@ func (r *Router) handleInsertDeleteForward() bool {
 	if !ok {
 		return true
 	}
-	// Delete at current position
-	result := MotionResult{
-		StartX: pos.X, StartY: pos.Y,
-		EndX: pos.X, EndY: pos.Y,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: true,
-	}
-	OpDelete(r.ctx, result)
-	// Move cursor right
-	moveResult := MotionRight(r.ctx, pos.X, pos.Y, 1)
-	OpMove(r.ctx, moveResult)
+	OpDelete(r.ctx, charCells(pos.X, pos.Y, pos.X))
+	OpMove(r.ctx, MotionRight(r.ctx, pos.X, pos.Y, 1))
 	return true
 }
 
@@ -874,17 +824,8 @@ func (r *Router) handleInsertDeleteBack() bool {
 	if !ok || pos.X == 0 {
 		return true
 	}
-	// Delete at pos-1
-	result := MotionResult{
-		StartX: pos.X - 1, StartY: pos.Y,
-		EndX: pos.X - 1, EndY: pos.Y,
-		Type: RangeChar, Style: StyleInclusive,
-		Valid: true,
-	}
-	OpDelete(r.ctx, result)
-	// Move to pos-1
-	moveResult := MotionLeft(r.ctx, pos.X, pos.Y, 1)
-	OpMove(r.ctx, moveResult)
+	OpDelete(r.ctx, charCells(pos.X-1, pos.Y, pos.X-1))
+	OpMove(r.ctx, MotionLeft(r.ctx, pos.X, pos.Y, 1))
 	return true
 }
 
@@ -927,12 +868,7 @@ func (r *Router) handleUndo(intent *input.Intent) bool {
 	}
 
 	OpJump(r.ctx, x, y)
-
-	if intent.Command != "" {
-		r.ctx.SetLastCommand(intent.Command)
-	}
-
-	return true
+	return r.recordCommand(intent)
 }
 
 // --- Command History ---

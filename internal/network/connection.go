@@ -168,7 +168,6 @@ func (p *Peer) writeLoop() {
 type PeerManager struct {
 	mu       sync.RWMutex
 	peers    map[PeerID]*Peer
-	nextID   atomic.Uint32
 	maxPeers int
 	config   *Config
 
@@ -196,16 +195,6 @@ func (pm *PeerManager) SetHandlers(
 	pm.onConnect = onConnect
 	pm.onDisconnect = onDisconnect
 	pm.onMessage = onMessage
-}
-
-// AddConnection registers a new peer from a raw connection
-func (pm *PeerManager) AddConnection(conn net.Conn) (PeerID, error) {
-	for {
-		id := PeerID(pm.nextID.Add(1))
-		if _, exists := pm.GetPeer(id); !exists {
-			return pm.AddConnectionAs(conn, id)
-		}
-	}
 }
 
 // AddConnectionAs registers a stream under its session-assigned participant ID.
@@ -298,14 +287,6 @@ func (pm *PeerManager) BroadcastExcept(exclude PeerID, msg *Message) int {
 		}
 	}
 	return refused
-}
-
-// GetPeer retrieves a peer by ID
-func (pm *PeerManager) GetPeer(id PeerID) (*Peer, bool) {
-	pm.mu.RLock()
-	defer pm.mu.RUnlock()
-	p, ok := pm.peers[id]
-	return p, ok
 }
 
 // PeerCount returns current connected peer count

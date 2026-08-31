@@ -40,38 +40,6 @@ func ReleaseDeathRequest(p *DeathRequestPayload) {
 	deathRequestPool.Put(p)
 }
 
-// --- Wall batch pool ---
-
-var wallBatchRequestPool = sync.Pool{
-	New: func() any {
-		return &WallBatchSpawnRequestPayload{
-			Cells: make([]component.WallCellDef, 0, 512),
-		}
-	},
-}
-
-// AcquireWallBatchRequest returns a pooled payload with zero-length retained-capacity slice
-func AcquireWallBatchRequest() *WallBatchSpawnRequestPayload {
-	p := wallBatchRequestPool.Get().(*WallBatchSpawnRequestPayload)
-	p.Cells = p.Cells[:0]
-	p.X = 0
-	p.Y = 0
-	p.BlockMask = 0
-	p.BoxStyle = 0
-	p.CollisionMode = 0
-	p.Composite = false
-	return p
-}
-
-// ReleaseWallBatchRequest returns payload to pool
-func ReleaseWallBatchRequest(p *WallBatchSpawnRequestPayload) {
-	if p == nil {
-		return
-	}
-	p.Cells = p.Cells[:0]
-	wallBatchRequestPool.Put(p)
-}
-
 // --- Explosion batch pool ---
 
 var explosionBatchRequestPool = sync.Pool{

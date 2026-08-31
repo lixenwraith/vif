@@ -45,14 +45,6 @@ func (h *Hub) Register(svc Service) error {
 	return nil
 }
 
-// Get retrieves a service by name
-func (h *Hub) Get(name string) (Service, bool) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	svc, ok := h.services[name]
-	return svc, ok
-}
-
 // MustGet retrieves a service and casts to type T
 // Panics if service not found or type mismatch
 func MustGet[T any](h *Hub, name string) T {
@@ -172,18 +164,6 @@ func (h *Hub) topologicalSort() ([]string, error) {
 		return nil, fmt.Errorf("circular dependency detected in services: %w", err)
 	}
 	return order, nil
-}
-
-// Names returns all registered service names (unordered)
-func (h *Hub) Names() []string {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-
-	names := make([]string, 0, len(h.services))
-	for name := range h.services {
-		names = append(names, name)
-	}
-	return names
 }
 
 // BindResources lets initialized services attach typed resources

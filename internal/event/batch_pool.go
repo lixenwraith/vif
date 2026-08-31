@@ -42,20 +42,6 @@ func (p *BatchPool[T]) Release(bp *BatchPayload[T]) {
 	p.pool.Put(bp)
 }
 
-// EmitBatch acquires a pooled payload, copies entries, and pushes to queue
-// Single generic API replacing per-type emit helpers
-func EmitBatch[T any](q *EventQueue, pool *BatchPool[T], eventType EventType, entries []T) {
-	if len(entries) == 0 {
-		return
-	}
-	p := pool.Acquire()
-	p.Entries = append(p.Entries, entries...)
-	q.Push(GameEvent{
-		Type:    eventType,
-		Payload: p,
-	})
-}
-
 // --- Pool instances ---
 
 var (

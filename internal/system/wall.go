@@ -118,7 +118,6 @@ func (s *WallSystem) HandleEvent(ev event.GameEvent) {
 	case event.EventWallBatchSpawnRequest:
 		if payload, ok := ev.Payload.(*event.WallBatchSpawnRequestPayload); ok {
 			s.executeBatchSpawn(payload)
-			event.ReleaseWallBatchRequest(payload)
 		}
 
 	case event.EventWallCompositeSpawnRequest:
