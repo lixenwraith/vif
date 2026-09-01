@@ -574,12 +574,16 @@ a configured log directory, it opens a standalone
 sidecar path. An embedder can also enable `Config.RecTicks` without starting a
 session logger.
 
+The native default is `$XDG_STATE_HOME/vi-fighter/log/` (normally
+`~/.local/state/vi-fighter/log/`), overridden by `-l=DIR`. Runtime stderr
+captures and on-demand snapshots use the same diagnostic directory.
+
 Both files carry the same envelope and open together in one viewer instance,
 correlated by `run` and `tick`.
 
 ## 9. Replay journal
 
-`-j` / `-journal` asks `internal/journal.Recorder` to attach an
+`-j[=DIR]` / `-journal[=DIR]` asks `internal/journal.Recorder` to attach an
 `event.Journal` to the event queue and open a dedicated
 `vif-jrn-*.jsonl` logger. The Recorder owns attachment, final counters, and file
 drain; an injected in-memory `journal.Capture` remains caller-owned. Capture
@@ -588,6 +592,11 @@ assign one of the valid origins below.
 The journal logger is separate from the session logger and has no level or
 scope gate: `:log off`, `-lv error`, or
 `-ls none` cannot silence a capture.
+
+Its default is the separate `$XDG_STATE_HOME/vi-fighter/journal/` directory.
+Only a platform with no resolvable user-state/cache location falls back to the
+deprecated `./log/` destination. See
+[External filesystem layout](filesystem-layout.md).
 
 `event.Origin` identifies the producer, not the consumer:
 
@@ -697,13 +706,14 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 
 | Flag | Effect |
 |---|---|
-| `-l`, `-log` | Enable logging in `parameter.LogDir` |
+| `-l`, `-log` | Enable logging in the platform user-state log directory |
 | `-l=DIR` | Enable logging in `DIR`; the space form is not supported |
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, `error`; implies `-l` |
 | `-ls <spec>` | Scope spec (§4); implies `-l` |
 | `-lt <ticks>` | Status snapshot period, `0` disables; implies `-l` |
 | `-lr <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
-| `-j`, `-journal` | Capture replay input in a dedicated journal; does not imply a session log |
+| `-j`, `-journal` | Capture replay input in the user-state journal directory; does not imply a session log |
+| `-j=DIR`, `-journal=DIR` | Capture replay input in `DIR`; the space form is not supported |
 | `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-host <bind-address>` | Host a TCP session |
@@ -719,9 +729,10 @@ explicit `-lt=0` or `-lr=0` to `-1`; embedders must preserve the same
 convention.
 
 `-ls` is validated through `vlog.ParseScopes` during flag parsing, before the
-terminal enters its alternate screen. The recorder resolves its directory
-from log configuration but does not require the session to remain running;
-after `:log off`, a trigger writes a sidecar instead.
+terminal enters its alternate screen. The flight recorder resolves its
+directory from log configuration but does not require the session to remain
+running; after `:log off`, a trigger writes a sidecar instead. Replay journals
+use their independently configured journal directory.
 
 ### Runtime commands
 

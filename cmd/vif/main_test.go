@@ -87,6 +87,52 @@ func TestLogFlagsImplyLogging(t *testing.T) {
 	}
 }
 
+func TestJournalFlagAcceptsIndependentDirectory(t *testing.T) {
+	for _, tt := range []struct {
+		args    []string
+		enabled bool
+		dir     string
+	}{
+		{args: []string{"-j"}, enabled: true},
+		{args: []string{"-j=./journal"}, enabled: true, dir: "./journal"},
+		{args: []string{"-journal=./journal"}, enabled: true, dir: "./journal"},
+		{args: []string{"-j=false"}},
+	} {
+		fs := flag.NewFlagSet("journal", flag.ContinueOnError)
+		fs.SetOutput(io.Discard)
+		journal := newSetFlag(true, parseOutputDirFlag)
+		fs.Var(&journal, "j", "")
+		fs.Var(&journal, "journal", "")
+		if err := fs.Parse(tt.args); err != nil {
+			t.Fatalf("Parse(%v) error = %v", tt.args, err)
+		}
+		if journal.set != tt.enabled || journal.value != tt.dir {
+			t.Errorf("Parse(%v) = enabled %v dir %q, want %v %q",
+				tt.args, journal.set, journal.value, tt.enabled, tt.dir)
+		}
+	}
+}
+
+func TestConfigFlagAliasesShareOneConfig(t *testing.T) {
+	fs := flag.NewFlagSet("config", flag.ContinueOnError)
+	fs.SetOutput(io.Discard)
+	cfg := newConfigFlags()
+	cfg.register(fs)
+	args := []string{
+		"-config-dir", "root", "-config-game", "game.toml",
+		"-config-content", "content", "-config-keymap", "keys.toml",
+		"-config-music", "music.toml", "-config-sounds", "sounds.toml",
+		"-config-embedded=false",
+	}
+	if err := fs.Parse(args); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.dir != "root" || cfg.game != "game.toml" || cfg.content != "content" ||
+		cfg.keymap != "keys.toml" || cfg.music != "music.toml" || cfg.sounds != "sounds.toml" || cfg.embedded {
+		t.Fatalf("config flags = %+v", cfg)
+	}
+}
+
 func TestScopeFlagValidatesDuringParse(t *testing.T) {
 	fs, _, _ := newDiagnosticFlagSet()
 	err := fs.Parse([]string{"-ls", "not-a-scope"})

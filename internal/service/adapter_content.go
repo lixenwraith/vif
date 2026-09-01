@@ -7,8 +7,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/lixenwraith/vi-fighter/content"
 	"github.com/lixenwraith/vi-fighter/internal/asset"
+	"github.com/lixenwraith/vi-fighter/internal/content"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/status"

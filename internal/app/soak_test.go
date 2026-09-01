@@ -9,7 +9,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
-	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -64,7 +64,7 @@ var towerRegions = []journal.FuzzRegion{
 // towerConfig pins the external map set and a viewport the tower layout fits in
 func towerConfig(t *testing.T, seed uint64) Config {
 	t.Helper()
-	if _, err := os.Stat(filepath.Join(soakConfigDir, parameter.GameConfigFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(soakConfigDir, paths.GameConfigFile)); err != nil {
 		t.Skipf("external map set %s not present", soakConfigDir)
 	}
 	cfg := Config{Mode: ModeHeadless, Seed: seed, GameScript: soakConfigDir, Width: 160, Height: 50}
@@ -79,7 +79,7 @@ func towerConfig(t *testing.T, seed uint64) Config {
 // tower requests inject player_entity into their payloads.
 func TestTowerDefenseConfigCursorOwnership(t *testing.T) {
 	const tdConfigDir = "../../config/td"
-	if _, err := os.Stat(filepath.Join(tdConfigDir, parameter.GameConfigFile)); err != nil {
+	if _, err := os.Stat(filepath.Join(tdConfigDir, paths.GameConfigFile)); err != nil {
 		t.Skipf("external map set %s not present", tdConfigDir)
 	}
 

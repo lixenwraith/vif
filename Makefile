@@ -6,10 +6,13 @@ GOFLAGS := -trimpath
 LDFLAGS := -s -w
 TAGS ?=
 PORT ?= 8080
+VIF_CONFIG_BASE := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
+VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
+VIF_CONFIG_FORCE ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve
+.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install-config install-config-force
 
 help:
 	@echo "Usage: make [target]"
@@ -23,6 +26,8 @@ help:
 	@echo "  tools    Build all auxiliary tools and cmds (includes vif-log, the log/journal viewer)"
 	@echo "  serve    Build wasm and http-server, then serve web/ directory (use PORT=8080 to change)"
 	@echo "  run      Build (dev) and run the game"
+	@echo "  install-config Install external game/input/content files under $(VIF_CONFIG_DIR)"
+	@echo "  install-config-force Replace files previously installed there"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
 	@echo "  arch-check Verify pkg/ packages do not import internal/ (non-blocking)"
 	@echo "  clean    Remove build artifacts"
@@ -104,6 +109,31 @@ verify: generate test
 
 run: dev
 	./$(BIN_DIR)/$(BINARY)
+
+# User configuration is installed without replacing edits by default. Override
+# VIF_CONFIG_DIR for packaging/staging; use the force target only deliberately.
+install-config:
+	@set -eu; \
+	root='$(VIF_CONFIG_DIR)'; force='$(VIF_CONFIG_FORCE)'; \
+	install -d -m 0755 "$$root/game" "$$root/input" "$$root/audio" "$$root/content" \
+		"$$root/games/blank" "$$root/games/td"; \
+	copy_file() { \
+		src="$$1"; dst="$$2"; \
+		if [ -e "$$dst" ] && [ "$$force" != 1 ]; then \
+			echo "keep    $$dst"; \
+		else \
+			install -m 0644 "$$src" "$$dst"; \
+			echo "install $$dst"; \
+		fi; \
+	}; \
+	for src in config/main/*.toml; do copy_file "$$src" "$$root/game/$${src##*/}"; done; \
+	for src in config/blank/*.toml; do copy_file "$$src" "$$root/games/blank/$${src##*/}"; done; \
+	for src in config/td/*.toml; do copy_file "$$src" "$$root/games/td/$${src##*/}"; done; \
+	for src in data/*.txt; do copy_file "$$src" "$$root/content/$${src##*/}"; done; \
+	copy_file internal/input/default_keymap.toml "$$root/input/keymap.toml"
+
+install-config-force:
+	@$(MAKE) --no-print-directory install-config VIF_CONFIG_FORCE=1
 
 # arch-check covers architectural boundaries, isolated from standard build blockers.
 # The list of packages is snapshot dynamically at execution to avoid build delays across other targets.

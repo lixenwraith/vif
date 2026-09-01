@@ -6,14 +6,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/genetic"
 )
 
-// Genetic Algorithm - Persistence
-const (
-	GeneticPersistencePath = "./config/genetic"
-
-	// GeneticAutosaveTicks is the tick period between population saves; 0 disables
-	GeneticAutosaveTicks = 1200
-)
-
 // Genetic Algorithm - Population
 const (
 	GAPoolSize                = 32

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -14,14 +15,16 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/fsm"
 	"github.com/lixenwraith/vi-fighter/internal/fsm/std"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/service"
+	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
 // schemaVersion is the FSM schema contract version consumed by the map editor
 const schemaVersion = 1
 
-// Check validates the resolved FSM config and content corpus without starting the game
+// Check validates every resolved external config without starting the game.
 func Check(cfg Config, w io.Writer) error {
 	if err := cfg.Validate(); err != nil {
 		return err
@@ -31,7 +34,66 @@ func Check(cfg Config, w io.Writer) error {
 	if err := checkFSM(cfg, w); err != nil {
 		return err
 	}
+	if err := checkKeymap(cfg, w); err != nil {
+		return err
+	}
+	if err := checkAudio(cfg, w); err != nil {
+		return err
+	}
 	return checkContent(cfg, w)
+}
+
+func checkKeymap(cfg Config, w io.Writer) error {
+	path, err := ResolveKeymap(cfg)
+	if err != nil {
+		return err
+	}
+	if path == "" {
+		_ = input.DefaultKeyTable() // parse and validate the embedded document
+		fmt.Fprintln(w, "keymap ok: embedded default")
+		return nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("keymap %s: %w", path, err)
+	}
+	if _, err := input.LoadKeyConfig(data); err != nil {
+		return fmt.Errorf("keymap %s: %w", path, err)
+	}
+	fmt.Fprintln(w, "keymap ok:", path)
+	return nil
+}
+
+func checkAudio(cfg Config, w io.Writer) error {
+	src, err := ResolveAudioConfig(cfg)
+	if err != nil {
+		return err
+	}
+	if src.MusicPath == "" && src.SoundPath == "" {
+		fmt.Fprintln(w, "audio ok: embedded defaults")
+		return nil
+	}
+	if src.MusicPath != "" {
+		data, err := os.ReadFile(src.MusicPath)
+		if err != nil {
+			return fmt.Errorf("music %s: %w", src.MusicPath, err)
+		}
+		if _, err := audio.LoadPatternsTOML(data); err != nil {
+			return fmt.Errorf("music %s: %w", src.MusicPath, err)
+		}
+		fmt.Fprintln(w, "music ok:", src.MusicPath)
+	}
+	if src.SoundPath != "" {
+		data, err := os.ReadFile(src.SoundPath)
+		if err != nil {
+			return fmt.Errorf("sounds %s: %w", src.SoundPath, err)
+		}
+		if _, err := audio.LoadSoundsTOML(data); err != nil {
+			return fmt.Errorf("sounds %s: %w", src.SoundPath, err)
+		}
+		fmt.Fprintln(w, "sounds ok:", src.SoundPath)
+	}
+	return nil
 }
 
 // checkFSM loads the resolved FSM config and reports its source

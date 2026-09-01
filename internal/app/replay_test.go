@@ -19,7 +19,7 @@ import (
 const fixtureSeed = 0x5eed1e55
 
 // scriptConfig builds a hermetic headless config: ForceDefault pins the embedded
-// FSM and corpus, so a run does not depend on cwd or $XDG_CONFIG_HOME
+// FSM and corpus, so a run does not depend on cwd or any external config root
 func scriptConfig(seed uint64) Config {
 	return Config{Mode: ModeHeadless, ForceDefault: true, Seed: seed}
 }

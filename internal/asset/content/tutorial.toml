@@ -113,8 +113,7 @@ lines = [
 [[blocks]]
 id = "corpus"
 lines = [
-  "drop txt files into data/",
+  "drop txt files into ~/.config/vi-fighter/content/",
   "pass -f dir to pick a corpus",
   "this text ships in the binary",
 ]
-

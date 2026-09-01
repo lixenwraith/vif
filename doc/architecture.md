@@ -53,7 +53,7 @@ The main architectural planes are:
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
 | Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
-| I/O boundaries | `internal/service`, `content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and framed network sessions. |
+| I/O boundaries | `internal/service`, `internal/content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and framed network sessions. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, and terminal-image conversion. |
 
 See [Package map](package-map.md) for the medium-level dependency view.
@@ -312,8 +312,9 @@ The primary build targets Linux and FreeBSD terminals. On those builds the same
 composition root supports interactive play, deterministic harnesses and authored
 headless scripts, and terminal journal playback. A headless script has no terminal
 or audio, but may deliberately attach the TCP service with `-host`/`-join`. A WASM build runs inside
-the bundled xterm.js page, uses embedded configuration/content, and compiles out
-logging; sound is disabled in the current web build. The Makefile also contains
+the bundled xterm.js page, uses embedded FSM/content/keymap/audio assets without
+host-directory discovery, and compiles out logging; sound is disabled in the
+current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.
 
 A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed

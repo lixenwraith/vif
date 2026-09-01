@@ -45,10 +45,11 @@ var ErrDisabled = errors.New("vlog: built without logging support")
 
 // Config mirrors the real build's setup struct
 type Config struct {
-	Spawn func(func())
-	Dir   string
-	Level string
-	Scope string
+	Spawn      func(func())
+	Dir        string
+	JournalDir string
+	Level      string
+	Scope      string
 }
 
 func Init(Config) (string, error)      { return "", ErrDisabled }

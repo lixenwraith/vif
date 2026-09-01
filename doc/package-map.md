@@ -56,9 +56,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | CLI flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/check/schema selection, process exit policy. |
-| `content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. |
-| `internal/app` | Resolve paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, verify anchor/config identity, and expose check/schema tools. |
+| `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/check/schema selection, process exit policy. |
+| `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
+| `internal/app` | Apply resource precedence to discovered paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, verify anchor/config identity, and expose check/schema tools. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -66,13 +66,14 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/event` | Event catalog/payload registry, producer origins, replay record/anchor schema, MPSC queue, handler router, pooled/batched payload support. |
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
-| `internal/input` | Terminal-event parser, semantic intents, default key table, keymap decoding/merging. It does not import the ECS. |
+| `internal/input` | Terminal-event parser, semantic intents, embedded/installable default keymap TOML, override decoding/merging. It does not import the ECS. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, peers, sequence/ack fields, and bounded inbound notifications. |
-| `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, paths, navigation/genetics settings. |
+| `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
+| `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and deprecated fallback names; performs no resource I/O. |
 | `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |

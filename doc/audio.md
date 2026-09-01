@@ -134,7 +134,8 @@ structure before rendering.
 At startup the engine:
 
 1. registers built-in sounds from `pkg/audio/builtin/sfx.toml`;
-2. loads optional `./sounds.toml`, replacing same-name definitions;
+2. loads a resolved optional `audio/sounds.toml`, replacing same-name
+   definitions;
 3. freezes the name-to-ID registry;
 4. pre-renders the variant cache and drum kit;
 5. resolves game volume/shape overrides by stable sound name.
@@ -217,15 +218,22 @@ and `internal/system`, leaving `pkg/audio` reusable.
 
 ## 9. Authored music and sound overrides
 
-The service reads optional files from the process working directory:
+The service receives optional files resolved through the common config-root
+hierarchy:
 
 - `sounds.toml` supplies sound definitions and name-based overrides;
 - `music.toml` supplies pattern definitions.
 
+The categorized locations are `audio/sounds.toml` and `audio/music.toml`.
+`-config-sounds` and `-config-music` are strict individual overrides; legacy
+flat and working-directory files remain migration fallbacks. See
+[External filesystem layout](filesystem-layout.md).
+
 Malformed user definitions currently degrade to successfully loaded built-ins;
 the engine retains a combined specification error, but the game service does
-not yet present that error to the player. Treat `soundlab validate/apply` and
-tests as the authoring validation surface.
+not yet present that error during play. `vi-fighter -check` now validates and
+reports both documents before startup; soundlab remains the interactive
+authoring surface.
 
 Built-in patterns and drums remain available even when no external file exists.
 Later same-name registrations replace a definition while preserving its runtime

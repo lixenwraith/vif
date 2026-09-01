@@ -47,9 +47,12 @@ The Makefile targets are:
 | `arch-check` | Report `pkg/*` packages that import `internal/*`; diagnostic and separate from `verify`. |
 | `tools` | Build `cmd/ascimage`, `cmd/soundlab`, and every `tool/*` command. |
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
+| `install-config` | Install categorized user config without replacing existing files. |
+| `install-config-force` | Replace files in the selected user config root. |
 | `clean` | Remove `bin/`. |
 
-`TAGS` appends native build tags and `PORT` changes the WASM server port.
+`TAGS` appends native build tags, `PORT` changes the WASM server port, and
+`VIF_CONFIG_DIR` retargets config installation for packaging or staging.
 Release/nolog/wasm use stripped linker flags; `dev` intentionally retains
 diagnostics and enables race instrumentation.
 
@@ -93,15 +96,18 @@ useful CI addition even though the current workflow does not perform one.
 | `-cx`, `-ct` | Force xterm-256 or truecolor; neither means auto-detect. |
 | `-ab <backend>` | Force audio backend (`pacat`, `pw-cat`, `aplay`, `sox`, `ffplay`, `oss`, `null`, or `wav:path`). |
 | `-am`, `-au` | Start muted/unmuted; default is muted. |
+| `-config-dir <root>` | Search one categorized config root before user/system roots. |
 | `-f <path>` | Content directory or single pinned `.txt`/`.toml` file. |
 | `-g <path>` | FSM `game.toml` or directory containing it. |
 | `-d` | Force embedded FSM/content; mutually exclusive with `-g`/`-f`. |
 | `-k <path>` | Keymap override TOML. |
-| `-check` | Resolve and validate FSM/content, print result, exit. |
+| `-config-music`, `-config-sounds` | Strict optional audio TOML paths. |
+| `-config-game`, `-config-content`, `-config-keymap`, `-config-embedded` | Discoverable aliases for `-g`, `-f`, `-k`, and `-d`. |
+| `-check` | Resolve and validate FSM, keymap, audio, and content; print result and exit. |
 | `-schema` | Print FSM/event schema JSON, exit. |
 | `-speed <rate>` | Initial play-mode rate: `1/8`, `1/4`, `1/2`, `1`, `2`, `4`, or `8`. |
 | `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
-| `-j`, `-journal` | Record non-system-origin events to a dedicated replay journal. |
+| `-j[=DIR]`, `-journal[=DIR]` | Record non-system-origin events to a dedicated replay journal. |
 | `-replay <file>` | Present a recorded journal instead of starting interactive play. |
 | `-script <file>` | Run a bounded authored TOML schedule headlessly; may be combined with `-host` or `-join`. |
 | `-host <address>` | Bind a session, for example `:7777`. |
@@ -333,7 +339,7 @@ advertising a Windows capability.
 |---|---|---|
 | Linux | Primary native target | Unix signals/crash reset; process audio backends; optional stderr fd capture. |
 | FreeBSD | Native target | Unix handling plus optional `/dev/dsp` OSS backend. |
-| `js/wasm` | Supported constrained build | xterm.js host, embedded config/content fallback, `vlog` stub, no native process audio backend. |
+| `js/wasm` | Supported constrained build | xterm.js host, embedded FSM/content/keymap/audio fallback, `vlog` stub, no host discovery or native process audio backend. |
 | Windows amd64 | Experimental/untested cross-build | `CGO_ENABLED=0`; non-Unix crash/redirect path; requires a compatible terminal; recipe needs live validation. |
 | Other native OSes | Not a documented support contract | May compile through generic files but are not covered by Makefile verification. |
 
@@ -344,9 +350,9 @@ addon, and a Go WASM instance. JavaScript batches Go writes into microtasks,
 forwards text/binary input, reports resizes, prevents the context menu, and
 maintains focus. `make serve` builds `web/vif.wasm` and serves this directory.
 
-The browser build cannot discover arbitrary host `game.toml`, keymap, content,
-logs, or executable audio tools in the native filesystem sense. The embedded
-assets make it playable; logging compiles to a stub. Feature claims for WASM
+The browser build does not perform native config-root discovery for `game.toml`,
+keymap, content, audio overrides, or logs. Embedded assets make it playable;
+logging compiles to a stub. Feature claims for WASM
 should be verified against the terminal module's browser implementation.
 
 ## 8. Structured logging
@@ -460,7 +466,7 @@ domain model rests on.
 | Concern | Primary source |
 |---|---|
 | Build targets | `Makefile`, `go.mod` |
-| CLI | `cmd/vif/main.go`, `internal/app/config.go`, `path.go` |
+| CLI and filesystem policy | `cmd/vif/main.go`, `internal/app/config.go`, `internal/app/path.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |

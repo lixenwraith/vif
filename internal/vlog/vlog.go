@@ -68,12 +68,14 @@ const (
 // LevelTrace is below debug; reserved for per-emission taps
 const LevelTrace = log.LevelTrace
 
-// Config is the resolved logger setup; Dir must be non-empty
+// Config is the resolved file-output setup. Dir owns diagnostic artifacts;
+// JournalDir may separate replay streams and defaults to Dir for embedders.
 type Config struct {
-	Spawn func(func()) // goroutine launcher owning panic recovery
-	Dir   string
-	Level string // debug, info, warn, error; empty means debug
-	Scope string // scope spec; empty means all. Pre-validate with ParseScopes
+	Spawn      func(func()) // goroutine launcher owning panic recovery
+	Dir        string
+	JournalDir string
+	Level      string // debug, info, warn, error; empty means debug
+	Scope      string // scope spec; empty means all. Pre-validate with ParseScopes
 }
 
 var (
@@ -106,6 +108,9 @@ func Configure(c Config) {
 
 	if c.Level == "" {
 		c.Level = defaultLevel
+	}
+	if c.JournalDir == "" {
+		c.JournalDir = c.Dir
 	}
 	cfg = c
 	if lv, err := log.Level(c.Level); err == nil {
@@ -413,12 +418,12 @@ func StartJournal() (string, error) {
 	if jsink.Load() != nil {
 		return currentJournalPath(), fmt.Errorf("vlog: journal already running")
 	}
-	if cfg.Dir == "" {
+	if cfg.JournalDir == "" {
 		return "", fmt.Errorf("vlog: no directory configured")
 	}
 
 	name := journalPrefix + time.Now().Format(fileTimeFormat)
-	l, p, err := buildLogger(cfg.Dir, name, journalLevel)
+	l, p, err := buildLogger(cfg.JournalDir, name, journalLevel)
 	if err != nil {
 		return "", err
 	}

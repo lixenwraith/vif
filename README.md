@@ -61,8 +61,10 @@ make release
 ```
 
 Useful targets include `make dev`, `make test`, `make verify`, `make tools`,
-`make wasm`, and `make serve`. Audio starts muted; press `Ctrl-S` to cycle audio
-channels or launch with `-au`. Run `./bin/vif -h` for all flags.
+`make wasm`, and `make serve`. `make install-config` safely installs editable
+game, keymap, and content files under the user config root without replacing
+existing files. Audio starts muted; press `Ctrl-S` to cycle audio channels or
+launch with `-au`. Run `./bin/vif -h` for all flags.
 
 Primary native targets are Linux and FreeBSD. The repository also contains a
 constrained xterm.js/WASM build and an experimental Windows cross-build.
@@ -72,12 +74,15 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 - `-g <game.toml|directory>` selects an encounter configuration.
 - `-f <content-file|directory>` selects typeable `.txt`/`.toml` content.
 - `-k <keymap.toml>` applies sparse key overrides.
-- `-check` validates resolved FSM/content without opening the game.
+- `-config-dir <root>` puts one categorized config tree ahead of user/system
+  discovery; `-config-music` and `-config-sounds` select audio overrides.
+- `-check` validates resolved FSM, keymap, audio, and content without opening
+  the game.
 - `-schema` exports the current event/action/guard schema as JSON.
 - `-seed <n>` selects the root RNG seed and `-speed <rate>` selects an exact
   startup rate from `1/8` through `8`.
-- `-j` records replay input to a dedicated journal; `-replay <file>` presents a
-  journal on the terminal with fixed playback controls.
+- `-j[=DIR]` records replay input to a dedicated journal; `-replay <file>`
+  presents a journal on the terminal with fixed playback controls.
 - `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
   it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
@@ -86,6 +91,11 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
 - `cmd/ascimage` converts and previews dual-mode `.vifimg` assets.
+
+User configuration defaults to `$XDG_CONFIG_HOME/vi-fighter`; logs and journals
+default to separate directories under `$XDG_STATE_HOME/vi-fighter`. See the
+[external filesystem layout](doc/filesystem-layout.md) for exact precedence,
+legacy fallbacks, installation, and WASM behavior.
 
 For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
 in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add

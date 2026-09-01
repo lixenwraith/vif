@@ -4,33 +4,39 @@
 
 Entry config search order:
 
-1. `-g <path>` — file, or directory containing `game.toml`
-2. `./game.toml`
-3. `./config/game.toml`
-4. `$XDG_CONFIG_HOME/vi-fighter/game.toml` (`~/.config/vi-fighter/` default)
-5. Embedded default (`internal/asset/config/`; forced with `-d`)
+1. `-g <path>` — file, or directory containing `game.toml`;
+2. `game/game.toml`, then legacy `game.toml`, under `-config-dir <root>`;
+3. the same pair under `$XDG_CONFIG_HOME/vi-fighter` (normally
+   `~/.config/vi-fighter`);
+4. the same pair under each corresponding root in `$XDG_CONFIG_DIRS`;
+5. `./game.toml`, then `./config/game.toml`;
+6. embedded default (`internal/asset/config/`; forced with `-d`).
 
 `-d` is mutually exclusive with both `-g` and `-f`; by itself it selects the
 embedded FSM and content corpus. For the runtime design behind this reference, see
-[`doc/fsm-and-configuration.md`](../doc/fsm-and-configuration.md).
+[`doc/fsm-and-configuration.md`](../doc/fsm-and-configuration.md). The complete
+cross-resource order and migration policy are in
+[`doc/filesystem-layout.md`](../doc/filesystem-layout.md).
 
 Region `file` references resolve relative to the entry config's directory and
-cannot escape it (`..` is rejected). Flat layout:
+cannot escape it (`..` is rejected). Installed layout:
 
 ```text
 ~/.config/vi-fighter/
-├── game.toml
-├── main.toml
-├── quasar.toml
-├── storm.toml
-├── monitor.toml
-├── tower.toml
-└── keymap.toml
+├── game/
+│   ├── game.toml
+│   ├── main.toml
+│   ├── quasar.toml
+│   ├── storm.toml
+│   ├── monitor.toml
+│   └── tower.toml
+└── input/
+    └── keymap.toml
 ```
 
-`vi-fighter -check [-g <path>]` validates the resolved config and exits;
-all state-level errors are reported in one pass. `vi-fighter -schema` prints
-the machine schema (events, guards, actions) as JSON.
+`vi-fighter -check [-g <path>]` validates resolved FSM, keymap, audio, and
+content config and exits; all state-level FSM errors are reported in one pass.
+`vi-fighter -schema` prints the machine schema (events, guards, actions) as JSON.
 
 ---
 

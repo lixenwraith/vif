@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -65,11 +66,16 @@ func (m Mode) OwnsInput() bool { return m == ModePlay }
 func (m Mode) Audio() bool { return m == ModePlay || m == ModeReplay }
 
 // Config is the resolved startup configuration
-// Built from CLI flags by cmd/vi-fighter, or programmatically by embedders
+// Built from CLI flags by cmd/vif, or programmatically by embedders
 // (map editor, wasm entry, headless harness) that have no flag set
 type Config struct {
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
+
+	// ConfigDir is an optional root searched before the user and system roots.
+	// It may use the categorized game/, input/, audio/, content/ layout or the
+	// legacy flat layout. Empty selects platform discovery.
+	ConfigDir string
 
 	// ColorMode overrides terminal detection when ColorModeSet is true
 	ColorMode    terminal.ColorMode
@@ -81,17 +87,22 @@ type Config struct {
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
 
+	// MusicPath and SoundPath explicitly select optional audio TOML overrides.
+	// Empty paths use normal config-root discovery, then built-in audio assets.
+	MusicPath string
+	SoundPath string
+
 	// ContentPath is a corpus directory or a single content file;
-	// "" = discovery, falling back to the embedded corpus
+	// "" = config-root discovery, falling back to the embedded corpus
 	ContentPath string
 
-	// GameScript is a game.toml path or a map directory; "" = config discovery
+	// GameScript is a game.toml path or a map directory; "" = config-root discovery
 	GameScript string
 
 	// ForceDefault selects the embedded FSM config and corpus, ignoring GameScript and ContentPath
 	ForceDefault bool
 
-	// KeymapPath is a keymap TOML path; "" = keymap discovery
+	// KeymapPath is a keymap TOML path; "" = config-root discovery
 	KeymapPath string
 
 	// LogScope is the initial scope spec; "" = all
@@ -203,6 +214,15 @@ func (c *Config) Normalize() {
 
 // Validate reports configuration conflicts
 func (c Config) Validate() error {
+	if c.ConfigDir != "" {
+		info, err := os.Stat(c.ConfigDir)
+		if err != nil {
+			return fmt.Errorf("-config-dir: %w", err)
+		}
+		if !info.IsDir() {
+			return fmt.Errorf("-config-dir %q is not a directory", c.ConfigDir)
+		}
+	}
 	if c.HostAddress != "" && c.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")
 	}
@@ -248,6 +268,9 @@ func (c Config) validateDriven() error {
 	}
 	if c.AudioBackend != "" && !c.Mode.Audio() {
 		return fmt.Errorf("%s: audio backend is unused, no audio service is created", c.Mode)
+	}
+	if (c.MusicPath != "" || c.SoundPath != "") && !c.Mode.Audio() {
+		return fmt.Errorf("%s: audio config is unused, no audio service is created", c.Mode)
 	}
 	// TimeScaleSpec sets the simulation rate, which a manual clock records but never
 	// applies; playback pacing is a presentation knob and gets its own field

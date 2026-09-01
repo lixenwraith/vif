@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/app"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/paths"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -30,28 +31,26 @@ var (
 	flagAudioBackend = flag.String("ab", "", "Force audio backend by name")
 	flagAudioMute    = flag.Bool("am", false, "Start with audio muted")
 	flagAudioUnmute  = flag.Bool("au", false, "Start with audio unmuted")
-	flagContentPath  = flag.String("f", "", "Content directory or single content file")
-	flagGameScript   = flag.String("g", "", "Game config: game.toml path or map directory")
-	flagDefault      = flag.Bool("d", false, "Force embedded FSM script and content, ignore -g and -f")
-	flagKeymapPath   = flag.String("k", "", "Keymap config file path (TOML)")
-	flagCheck        = flag.Bool("check", false, "Validate FSM and content config, then exit")
+	flagCheck        = flag.Bool("check", false, "Validate resolved game, keymap, audio, and content config, then exit")
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
 	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
 	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
 	flagScript       = flag.String("script", "", "Run an authored deterministic TOML script headlessly")
 
+	flagConfig  = newConfigFlags()
 	flagLogs    = newLogFlags()
 	flagSession sessionFlags
-	flagJournal bool
+	flagJournal = newSetFlag(true, parseOutputDirFlag)
 	flagDev     = newSetFlag(true, parseBoolFlag)
 )
 
 func init() {
+	flagConfig.register(flag.CommandLine)
 	flagLogs.register(flag.CommandLine)
 	flagSession.register(flag.CommandLine)
-	flag.BoolVar(&flagJournal, "j", false, "Record a replay journal to its own file")
-	flag.BoolVar(&flagJournal, "journal", false, "Alias of -j")
+	flag.Var(&flagJournal, "j", "Record a replay journal; -j=DIR overrides the user-state directory")
+	flag.Var(&flagJournal, "journal", "Alias of -j")
 	flag.Var(&flagDev, "dev", "Capture runtime stderr to a file; defaults on for -race builds, -dev=false disables")
 }
 
@@ -94,20 +93,25 @@ func setupDiagnostics() int {
 	core.SetCrashHook(vlog.CrashHook)
 	vlog.SetCrashFlush(status.CrashFlush) // drains while the sink is still live
 
-	dir := flagLogs.dir.value
-	if dir == "" {
-		dir = parameter.LogDir
+	logDir := flagLogs.dir.value
+	if logDir == "" {
+		logDir = paths.DefaultLogDir()
+	}
+	journalDir := flagJournal.value
+	if journalDir == "" {
+		journalDir = paths.DefaultJournalDir()
 	}
 	vlog.Configure(vlog.Config{
-		Dir:   dir,
-		Level: flagLogs.level.value,
-		Scope: flagLogs.scope.value,
-		Spawn: core.Go, // processor panics reach HandleCrash, terminal restored
+		Dir:        logDir,
+		JournalDir: journalDir,
+		Level:      flagLogs.level.value,
+		Scope:      flagLogs.scope.value,
+		Spawn:      core.Go, // processor panics reach HandleCrash, terminal restored
 	})
 
-	// -l is a boolean flag, so the space form leaves the path unparsed
+	// -l and -j are boolean flags, so the space form leaves a path unparsed.
 	if flag.NArg() > 0 {
-		fmt.Fprintf(os.Stderr, "ignoring arguments %v; use -l=DIR\n", flag.Args())
+		fmt.Fprintf(os.Stderr, "ignoring arguments %v; use -l=DIR or -j=DIR\n", flag.Args())
 	}
 
 	diagStatus := 0
@@ -123,7 +127,7 @@ func setupDiagnostics() int {
 	}
 
 	if flagDev.valueOr(core.RaceEnabled) {
-		path, err := core.CaptureStderr(dir)
+		path, err := core.CaptureStderr(logDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
 			return diagStatus
@@ -176,16 +180,19 @@ func buildConfig() app.Config {
 	cfg := app.Config{
 		AudioBackend:  *flagAudioBackend,
 		AudioMuted:    true, // default muted
-		ContentPath:   *flagContentPath,
-		GameScript:    *flagGameScript,
-		ForceDefault:  *flagDefault,
-		KeymapPath:    *flagKeymapPath,
+		ConfigDir:     flagConfig.dir,
+		ContentPath:   flagConfig.content,
+		GameScript:    flagConfig.game,
+		ForceDefault:  flagConfig.embedded,
+		KeymapPath:    flagConfig.keymap,
+		MusicPath:     flagConfig.music,
+		SoundPath:     flagConfig.sounds,
 		LogScope:      flagLogs.scope.value,
 		StatTicks:     flagLogs.stat.value,
 		RecTicks:      flagLogs.rec.value,
 		TimeScaleSpec: *flagSpeed,
 		Seed:          *flagSeed,
-		Journal:       flagJournal,
+		Journal:       flagJournal.set,
 		HostAddress:   flagSession.host,
 		JoinAddress:   flagSession.join,
 		Participants:  flagSession.players,
@@ -206,6 +213,37 @@ func buildConfig() app.Config {
 	// Neither flag: terminal auto-detects
 
 	return cfg
+}
+
+// configFlags groups every runtime file override. Short flags remain for
+// compatibility; config-* aliases make the family discoverable in CLI help.
+type configFlags struct {
+	dir      string
+	game     string
+	content  string
+	keymap   string
+	music    string
+	sounds   string
+	embedded bool
+}
+
+func newConfigFlags() *configFlags { return &configFlags{} }
+
+func (f *configFlags) register(fs *flag.FlagSet) {
+	fs.StringVar(&f.dir, "config-dir", "", "Configuration root (game/, input/, audio/, content/)")
+
+	fs.StringVar(&f.game, "g", "", "Game config: game.toml path or map directory")
+	fs.StringVar(&f.game, "config-game", "", "Alias of -g")
+	fs.StringVar(&f.content, "f", "", "Content directory or single content file")
+	fs.StringVar(&f.content, "config-content", "", "Alias of -f")
+	fs.StringVar(&f.keymap, "k", "", "Keymap config file path (TOML)")
+	fs.StringVar(&f.keymap, "config-keymap", "", "Alias of -k")
+	fs.StringVar(&f.music, "config-music", "", "Music pattern override file (TOML)")
+	fs.StringVar(&f.sounds, "config-sounds", "", "Sound definition override file (TOML)")
+
+	usage := "Force embedded FSM script and content, ignoring -g and -f"
+	fs.BoolVar(&f.embedded, "d", false, usage)
+	fs.BoolVar(&f.embedded, "config-embedded", false, "Alias of -d")
 }
 
 // sessionFlags expose startup-only hosting and joining without a mid-run mode switch.
@@ -291,7 +329,7 @@ type logFlags struct {
 
 func newLogFlags() *logFlags {
 	return &logFlags{
-		dir:   newSetFlag(true, parseLogDirFlag),
+		dir:   newSetFlag(true, parseOutputDirFlag),
 		level: newSetFlag(false, parseStringFlag),
 		scope: newSetFlag(false, parseScopeFlag),
 		stat:  newSetFlag(false, parseTicksFlag),
@@ -301,7 +339,7 @@ func newLogFlags() *logFlags {
 
 // register installs the logging flags and their aliases.
 func (f *logFlags) register(fs *flag.FlagSet) {
-	usage := "Enable logging; -l=DIR overrides " + parameter.LogDir
+	usage := "Enable logging; -l=DIR overrides " + paths.DefaultLogDir()
 	fs.Var(&f.dir, "l", usage)
 	fs.Var(&f.dir, "log", "Alias of -l")
 	fs.Var(&f.level, "lv", "Log level: trace, debug, info, warn, error; implies -l")
@@ -316,8 +354,8 @@ func (f *logFlags) enabled() bool {
 	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set
 }
 
-// parseLogDirFlag keeps -l boolean while accepting -l=DIR.
-func parseLogDirFlag(s, current string) (string, bool, error) {
+// parseOutputDirFlag keeps -l and -j boolean while accepting -l=DIR/-j=DIR.
+func parseOutputDirFlag(s, current string) (string, bool, error) {
 	switch s {
 	case "false":
 		return "", false, nil

@@ -12,6 +12,7 @@ import (
 var runeAliases = map[string]rune{
 	"space":     ' ',
 	"backslash": '\\',
+	"zero":      '0', // TOML parser rejects quoted numeric keys
 }
 
 // TOML section names → KeyTable field mapping

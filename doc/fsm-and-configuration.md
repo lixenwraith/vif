@@ -34,12 +34,17 @@ The result is a strict policy/mechanism split:
 Entry configuration is resolved in this order:
 
 1. `-g <path>`, where the path is `game.toml` or a directory containing it;
-2. `./game.toml`;
-3. `./config/game.toml`;
-4. the user config location, normally
-   `$XDG_CONFIG_HOME/vi-fighter/game.toml` or
-   `~/.config/vi-fighter/game.toml`;
-5. the embedded default.
+2. `game/game.toml`, then legacy `game.toml`, under a root passed with
+   `-config-dir`;
+3. the same pair under the user config root, normally
+   `$XDG_CONFIG_HOME/vi-fighter` or `~/.config/vi-fighter`;
+4. the same pair under each `$XDG_CONFIG_DIRS` system root;
+5. `./game.toml`, then `./config/game.toml`;
+6. the embedded default.
+
+All external resources share this root hierarchy; see
+[External filesystem layout](filesystem-layout.md) for the categorized tree and
+migration policy.
 
 `-d` selects the embedded FSM and content. It is mutually exclusive with `-g`
 and `-f`; combining them fails configuration validation. It is a single flag;
@@ -52,7 +57,8 @@ duplicate state names are errors, and filesystem traversal outside the config
 root is not accepted.
 
 Use `vi-fighter -check [-g <path>]` to resolve, parse, assemble, and validate
-the configuration without starting the terminal game. `vi-fighter -schema`
+the FSM plus keymap, audio overrides, and content without starting the terminal
+game. `vi-fighter -schema`
 prints generated JSON describing known events, actions, guards, and payloads.
 
 ## 3. Root schema

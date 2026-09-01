@@ -29,10 +29,14 @@ Source resolution is:
 
 1. `-f <path>`: an explicit directory, or a single file pinned within its
    parent directory;
-2. `./data`;
-3. `$XDG_CONFIG_HOME/vi-fighter/data` (normally
-   `~/.config/vi-fighter/data`);
-4. embedded tutorial content.
+2. `content/`, then legacy `data/`, under `-config-dir`;
+3. the same pair under the user root, then under each system root;
+4. deprecated repository-relative `./data`;
+5. embedded tutorial content.
+
+`make install-config` copies the repository corpus into the categorized user
+directory. The complete common precedence is documented in
+[External filesystem layout](filesystem-layout.md).
 
 `-d` skips discovery and forces the embedded FSM and corpus. It is mutually
 exclusive with `-g` and `-f`.
@@ -256,11 +260,11 @@ experimental dependencies.
 
 | Concern | Primary source |
 |---|---|
-| Corpus/policy | `content/corpus.go`, `policy.go`, `load.go` |
-| Plain text | `content/text.go` |
-| Authored TOML | `content/toml.go` |
-| Selection cursor | `content/cursor.go` |
-| Service/resolution | `internal/service/adapter_content.go`, `internal/app/path.go` |
+| Corpus/policy | `internal/content/corpus.go`, `policy.go`, `load.go` |
+| Plain text | `internal/content/text.go` |
+| Authored TOML | `internal/content/toml.go` |
+| Selection cursor | `internal/content/cursor.go` |
+| Service/resolution | `internal/service/adapter_content.go`, `internal/app/path.go`, `internal/paths` |
 | Embedded assets | `internal/asset/*.go`, `internal/asset/config`, `internal/asset/content` |
 | Pattern conversion | `internal/pattern/*.go` |
 | Image codec/tool | `pkg/ascimage`, `cmd/ascimage` |

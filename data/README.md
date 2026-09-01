@@ -1,6 +1,10 @@
 # Vi-Fighter Content Corpus
 
-Files in this directory are loaded once at startup and spawned as typeable
+This directory is the installation source copied to
+`$XDG_CONFIG_HOME/vi-fighter/content/` by `make install-config`. Direct
+discovery of `./data/` remains a deprecated development fallback.
+
+Corpus files are loaded once at startup and spawned as typeable
 glyphs. Nothing here is read again while the game runs. The detailed design and
 resolution behavior are documented in
 [`doc/content-assets-and-tools.md`](../doc/content-assets-and-tools.md).
@@ -56,9 +60,11 @@ One accepted source is selected randomly and walked block by block. At EOF,
 another source is selected; a single source cycles.
 
 `-f <file>` pins one file and cycles it. `-f <directory>` uses that directory.
-Without `-f`, resolution is `./data`, then the user config directory's `data`,
-then the embedded tutorial corpus. `-d` skips discovery and forces embedded FSM
-and content.
+Without `-f`, each override/user/system root is checked for categorized
+`content/` and then legacy `data/` before the next root. Deprecated `./data/`
+and the embedded tutorial corpus follow. `-d` skips discovery and forces
+embedded FSM and content. See
+[`doc/filesystem-layout.md`](../doc/filesystem-layout.md) for the exact order.
 
 Run `vif -check -f <path>` to validate with the real loader. Verify licensing
 before adding third-party source text.

@@ -297,16 +297,21 @@ refuses a disable that a system declares required, naming the dependents.
 Resolution order is:
 
 1. path passed with `-k`;
-2. `./keymap.toml`;
-3. the user configuration path;
-4. compiled defaults.
+2. `input/keymap.toml`, then legacy `keymap.toml`, under `-config-dir`;
+3. the same pair under the user root, then under each system root;
+4. deprecated `./keymap.toml` and `./config/keymap.toml`;
+5. the embedded `internal/input/default_keymap.toml` document.
+
+The exact embedded document is installed to the user input directory by
+`make install-config`, so the editable and WASM-safe defaults cannot drift. See
+[External filesystem layout](filesystem-layout.md) for the shared root policy.
 
 An override is sparse: unspecified bindings retain defaults. The accepted TOML
 sections are:
 
 | Section | Key form | Context |
 |---|---|---|
-| `[normal]` | one rune, `space`, or `backslash` | Normal-mode rune bindings. |
+| `[normal]` | one rune, `space`, `backslash`, or `zero` | Normal-mode rune bindings. |
 | `[normal_keys]` | terminal key name | Normal/global special keys. |
 | `[operator]` | rune | Motions accepted after `d`. |
 | `[prefix_g]` | rune | Second key after `g`. |

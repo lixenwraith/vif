@@ -154,7 +154,11 @@ func (a *App) initServices() error {
 		_ = a.hub.Register(a.networkSvc)
 	}
 	if a.cfg.Mode.Audio() {
-		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend))
+		audioSrc, err := ResolveAudioConfig(a.cfg)
+		if err != nil {
+			return err
+		}
+		_ = a.hub.Register(service.NewAudioService(a.cfg.AudioMuted, a.cfg.AudioBackend, audioSrc))
 	}
 
 	contentSrc, err := ResolveContent(a.cfg)
@@ -416,19 +420,21 @@ func (a *App) Close() {
 	vlog.Info("app", "msg", "shutdown complete")
 }
 
-// loadKeymap merges an external key table over the defaults
-// A missing discovered file is silent; a missing explicit path is an error
+// loadKeymap merges an external key table over the embedded default document.
 func (a *App) loadKeymap() error {
-	path := ResolveKeymap(a.cfg)
+	base := input.DefaultKeyTable()
+	path, err := ResolveKeymap(a.cfg)
+	if err != nil {
+		return fmt.Errorf("keymap path: %w", err)
+	}
 	if path == "" {
+		a.inputMachine.SetKeyTable(base)
+		a.ctx.KeyTable = base
 		return nil
 	}
 
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if a.cfg.KeymapPath == "" {
-			return nil // discovered path vanished between stat and read
-		}
 		return fmt.Errorf("keymap load: %w", err)
 	}
 
@@ -436,7 +442,7 @@ func (a *App) loadKeymap() error {
 	if err != nil {
 		return fmt.Errorf("keymap config %s: %w", path, err)
 	}
-	kt := input.MergeKeyTable(input.DefaultKeyTable(), override)
+	kt := input.MergeKeyTable(base, override)
 	a.inputMachine.SetKeyTable(kt)
 	a.ctx.KeyTable = kt
 	return nil

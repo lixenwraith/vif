@@ -31,6 +31,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [AI, navigation, physics, and evolution](ai-physics-and-evolution.md) | Domain detail | How do flow fields, route learning, genetics, float64 geometry, and collision/steering work together? |
 | [Content, assets, and tools](content-assets-and-tools.md) | Domain detail | How are corpora and embedded assets resolved, parsed, validated, and authored? |
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
+| [External filesystem layout](filesystem-layout.md) | Operational detail | Where are config, content, logs, and journals discovered, installed, and migrated? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
 
 Existing focused references remain useful:

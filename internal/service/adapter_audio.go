@@ -11,18 +11,27 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
+// AudioSource names optional external overrides. Empty paths retain pkg/audio's
+// embedded sounds and patterns.
+type AudioSource struct {
+	MusicPath string
+	SoundPath string
+}
+
 type AudioService struct {
 	audioEngine *audio.AudioEngine
 	disabled    atomic.Bool
 
 	initMuted   bool
 	initBackend string
+	src         AudioSource
 }
 
-func NewAudioService(muted bool, forceBackend string) *AudioService {
+func NewAudioService(muted bool, forceBackend string, src AudioSource) *AudioService {
 	return &AudioService{
 		initMuted:   muted,
 		initBackend: forceBackend,
+		src:         src,
 	}
 }
 
@@ -38,10 +47,18 @@ func (s *AudioService) Init() error {
 	config.EffectVolumes = parameter.GameEffectVolumes
 	config.EffectShapes = parameter.GameEffectShapes
 
-	if data, err := os.ReadFile(parameter.MusicConfigFile); err == nil {
+	if s.src.MusicPath != "" {
+		data, err := os.ReadFile(s.src.MusicPath)
+		if err != nil {
+			return fmt.Errorf("audio music %s: %w", s.src.MusicPath, err)
+		}
 		config.PatternTOML = data
 	}
-	if data, err := os.ReadFile(parameter.SoundConfigFile); err == nil {
+	if s.src.SoundPath != "" {
+		data, err := os.ReadFile(s.src.SoundPath)
+		if err != nil {
+			return fmt.Errorf("audio sounds %s: %w", s.src.SoundPath, err)
+		}
 		config.SoundTOML = data
 	}
 
@@ -79,8 +96,9 @@ func (s *AudioService) Start() error {
 		return fmt.Errorf("audio service: %w", err)
 	}
 
-	// TODO: audioEngine.SpecError() still has no surface — a malformed user
-	// sounds.toml degrades to built-ins silently.
+	// TODO: audioEngine.SpecError() still has no in-game surface — malformed
+	// user specs degrade to built-ins during play. The -check startup mode does
+	// validate and report the same resolved documents.
 	return nil
 }
 

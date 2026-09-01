@@ -1,25 +1,25 @@
-### Example config
+# Keymap configuration
+
+The complete runtime default is [`default_keymap.toml`](default_keymap.toml).
+It is embedded into every native and WASM build and installed as
+`$XDG_CONFIG_HOME/vi-fighter/input/keymap.toml` by `make install-config`.
+
+User documents may remain sparse: only supplied keys override the embedded
+table, and `"none"` removes a binding. For example:
 
 ```toml
-# ~/.config/vi-fighter/keymap.toml
-# Only overrides — unspecified keys retain defaults
-
 [normal]
-# Swap h/l (why not)
 h = "motion_right"
 l = "motion_left"
-
-# Remap space to fire main instead of fire special
 space = "fire_main"
-
-# Unbind visual mode
 v = "none"
 
 [normal_keys]
-# Remap backspace to undo
 backspace = "undo"
 
 [prefix_g]
-# Remap gm to origin
 m = "motion_origin"
 ```
+
+See [`doc/input-and-modes.md`](../../doc/input-and-modes.md) for sections,
+actions, resolution order, and interaction semantics.
