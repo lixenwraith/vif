@@ -130,18 +130,43 @@ uses `RoleNone`, so Init/Start are no-ops and no `NetworkResource` is contribute
 `NewHeadless` deliberately rejects address flags so no caller can bypass the
 start/ready gate. Two flags activate the shared composition path:
 
-| Flag | Startup behavior |
+| Entry point | Behavior |
 |---|---|
 | `-host <bind-address>` | Build the host App, start a listener, show or log the lobby, and hold the scheduler at tick zero until the requested peers are ready. |
-| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, build the mirrored roster, then pass the start/ready gate. |
+| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
+| `:host <addr>` | Open a run that is **already playing**. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
+| `:session` | Report the role, address, participant identity, peer count and tick. |
 
-They are flags rather than ex commands because the protocol has no mid-run world
-snapshot — supplying one is the point of
-[the multiplayer enhancement plan](multi-player-enhancement.md), and it is what
-would let a running solo game be toggled into a host. A host can be canceled in the
-lobby with `Ctrl-C`/`Ctrl-Q`. After a connected peer leaves, the remote cursor is
-removed and the survivor continues; the host listener remains active, but a later
-join is rejected with `ErrJoinMidRun` at the current position.
+The flags and the command reach the same place. `-host` freezes tick zero for a
+fixed lobby, which is the right shape when every participant is present before the
+run starts; `:host` opens the same acceptor on a run that is hundreds of ticks in.
+Both hand a joiner the same thing: the closed roster, then the world that roster
+names, as a chunked `MsgStateSnapshot`. A host can be canceled in the lobby with
+`Ctrl-C`/`Ctrl-Q`. After a connected peer leaves, the remote cursor is removed and
+the survivor continues; the listener stays active and the same participant may
+dial again, which is the reconnect path and is not a separate mechanism.
+
+`:host` runs inside `App.handleIntent`'s critical section, because the whole
+router path does — so `engine.SessionController`'s methods are the *locked* forms
+and `App.BeginHosting` is the wrapper for a caller holding nothing. Getting that
+backwards deadlocks the instance at the tick the command lands on, which is what it
+did the first time it was wired through a script.
+
+**The join, in order.** The ordering is D-22 and it is not the obvious one:
+
+1. The acceptor allocates an identity and exchanges offer/reply.
+2. The stream becomes a **peer** — so this instance's crossings start reaching it.
+3. *Then* the world is read, under one acquisition of the world lock, and sent with
+   the closed roster.
+4. The joiner holds the session traffic that arrives while it reads, installs the
+   capture into a staging world, swaps at a tick boundary, hands the held frames to
+   its port, and simulates the ticks the transfer cost.
+5. It confirms with `MsgReady`, and the coordinator crosses `EventParticipantJoined`
+   so every instance creates its cursor at one agreed tick.
+
+Reading the world before admitting the peer would lose every artifact produced in
+between — not in the capture, because the capture predates it; not on the wire,
+because the participant was not yet a peer. Nothing would detect that.
 
 The join anchor owns the seed, RNG session, tick rate, config, corpus fingerprint
 and D-14 map latch. `ConfigForJoin` runs before `New`, so `initWorld` cannot draw a
@@ -162,7 +187,7 @@ map latch separately.
 |---|---|
 | `RoleNone` | Disabled/no-op. |
 | `RoleServer` | Generic TCP/TLS listener. |
-| `RoleHost` | Listener with `HostAcceptor`: allocates a participant identity and slot per connection, offers the anchor, and transfers the session log to a mid-run joiner. |
+| `RoleHost` | Listener with `HostAcceptor`: allocates a participant identity and slot per connection and offers the anchor. `Config.OnAdmit` then runs the mid-run gate on the accept goroutine once the stream is a peer, which serialises joins by construction. |
 | `RoleClient` | Generic dialer. |
 | `RolePeer` | Dialed/preconnected stream admitted after the join and start gates. |
 
@@ -212,6 +237,27 @@ are pinned by `TestWireEncodingBudget`. The remaining codes in `protocol.go` are
 reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
 Raw participant input is not among them, and 0x10 stays reserved — a peer sends
 the resolved D-3 artifact, never the keystroke that produced it.
+
+`MsgStateSnapshot` (0x26, the code the retired replay-based join reserved) carries
+one chunk of a shared-world capture. It is the only message whose size is a
+function of the world rather than of the format — the measured storm high water is
+176 KiB against a 65,535-byte frame — so it is the only one that is split. Each
+chunk carries a 20-byte header before its payload:
+
+| Byte range | Width | Field |
+|---|---:|---|
+| 0–7 | 8 | the tick this capture describes |
+| 8–11 | 4 | chunk index |
+| 12–15 | 4 | chunk count |
+| 16–19 | 4 | total body length |
+
+`SnapshotAssembly` admits chunks in order only and refuses a skipped predecessor, a
+frame that names a different transfer, a body that overruns its declared length and
+a frame shorter than the header. Each of those would otherwise reassemble into a
+world that looks installed and is not, which is worse than a refused join. The
+gate's `SessionOffer` names `snapshot_tick` and `snapshot_bytes` before the
+transfer starts, so a stream that stops halfway is a failed join rather than a
+world installed from a prefix.
 
 ## 9. Poll boundary and lockstep barrier
 
@@ -326,6 +372,18 @@ mismatch and encoding budgets have focused tests in `internal/network` and
 `TestCoordinatorLossRaisesLocalStatus` pins the direct guest warning that does not
 depend on a surviving digest edge.
 
+The mid-run join has its own set. `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun`
+runs the whole thing over a socket — a solo run opens a port hundreds of ticks in,
+a joiner installs the world it is sent, closes the tick gap the transfer opened and
+takes its cursor from the arrival crossing — with the host ticking throughout, so
+the gap is real rather than arranged away. `TestAReconnectIsTheSameJoin` runs it
+twice against one host with a disconnect between.
+`TestHostCommandRunsUnderTheWorldLock` types `:host` through the intent pipeline,
+which is the only path that runs it where the runtime does, and is the regression
+for the deadlock a direct call cannot see. `TestSnapshotChunksRoundTrip` and
+`TestSnapshotAssemblyRefusesAConfusedTransfer` cover the chunk framing in
+`internal/network`.
+
 ```bash
 # terminal 1
 ./bin/vif -d -host 127.0.0.1:7777
@@ -347,11 +405,19 @@ arrived. Bind the host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
 configuration are exposed.
 
+To open a session on a run already in progress, type `:host :7777` instead of
+passing the flag; the guest dials it the same way. `:session` on either side
+reports what it is part of.
+
 For a repeatable no-terminal run, combine the flags with the paired authored
 scripts in `script/phase3-host.toml` and `script/phase3-guest.toml`. Their manual
 clocks are wall-paced after the ready gate so socket delivery observes the same
-tick cadence as play mode; see [Development](development.md) for the exact
-commands and script schema.
+tick cadence as play mode. `script/phase4-host.toml` and `script/phase4-guest.toml`
+are the mid-run pair: the host half takes **no** flag, runs flat out to tick 400,
+opens hosting there with `:host`, and is wall-paced from that point — pacing is a
+property of the run rather than of the flags, so a script that opens a session
+starts keeping step with its peer the moment it has one. See
+[Development](development.md) for the exact commands and script schema.
 
 ## 12. Adding a service
 

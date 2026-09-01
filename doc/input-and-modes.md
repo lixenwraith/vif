@@ -230,6 +230,8 @@ The command dispatcher recognizes aliases shown in the first column.
 | `:content` | Show corpus telemetry. |
 | `:free [on\|off]`, `:auto [on\|off]` | Toggle free mouse and auto-fire. |
 | `:mouse enable\|disable\|free` | Control terminal mouse input. |
+| `:host <addr>` | Open this running game to participants (`:host :7777`). Refused if the run is already in a session. |
+| `:session` | Report the session role, address, participant identity, peer count and tick. |
 | `:system <runtime-name> enable\|disable` | Toggle a system that honors meta-system commands. |
 | `:flow [group]`, `:graph [group]` | Toggle navigation flow-field or route-graph debug views. |
 | `:speed [rate\|+\|-\|reset]`, `:sp` | Report or set the rational simulation rate. |
@@ -252,7 +254,17 @@ primarily developer/authoring controls.
 
 In a live session, pause, speed, step, system mutation, raw `:emit` and FSM region
 operations are refused because applying them to only one scheduler would
-desynchronise shared state. Resizes retain D-14's locked map bounds. Help, debug
+desynchronise shared state. `:host` is deliberately outside that guard: the guard
+exists to stop an operator changing shared scheduling under a session that has
+already agreed on it, and this is the command that creates one. It refuses a run
+that is already in a session, which is the same rule stated where it belongs.
+
+`:host` also binds a socket and starts goroutines, which is more than any other
+command does, and it does it **inside the router's critical section** — the whole
+intent path runs under the world lock and `mode/` must never acquire it itself. The
+command reaches `engine.SessionController`, whose methods are therefore the
+lock-held forms; an implementation that took the lock again wedges the instance at
+the tick the command lands on, with neither a tick nor a signal able to recover it. Resizes retain D-14's locked map bounds. Help, debug
 and about overlays remain local and do not pause; logging and view controls are
 local inspection. Player grants and effect commands remain available because
 they author the invoking cursor or use the ordinary player-to-shared crossing

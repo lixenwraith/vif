@@ -1,8 +1,8 @@
 # Vi-Fighter Engineering Documentation
 
 This directory describes the architecture and design of the current Vi-Fighter
-codebase. It was last audited on 2026-08-31, through the multi-participant
-networking surface. The implementation, generated manifest, and shipped
+codebase. It was last audited on 2026-09-01, through the multi-participant
+networking surface and the shared-world capture that a mid-run join installs. The implementation, generated manifest, and shipped
 configuration were treated as authoritative where older prose disagreed with the
 code.
 
@@ -60,6 +60,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go` | `App`, `ClockScheduler`, services |
 | Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
+| Shared-world capture layout and its declared carriers | `internal/app/snapshot_shared_state.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
 | Alternate scenarios | `config/blank`, `config/main`, `config/td` | selected with `-g` |
@@ -79,8 +80,9 @@ This documentation distinguishes three states:
 - **Experimental/incomplete** means code exists but the normal application does
   not expose a complete end-to-end feature. Authenticated multiplayer is an
   example: the message kinds are reserved and nothing populates them. Startup
-  multi-participant networking is optional and active; mid-run join and reconnect
-  do not exist.
+  multi-participant networking is optional and active, and so are mid-run join and
+  reconnect (`:host <addr>`); host authority and correction are not — a guest still
+  re-derives shared state rather than predicting it.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

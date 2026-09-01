@@ -426,8 +426,23 @@ player-domain effect keyed to the local cursor against a cell the run never show
 **D-19 Restorable shared state.** Every value that can change a future shared
 outcome is either a component in a shared entity's store, or declared by its
 owning system in `internal/manifest/definition.go` as `Snapshot: "state"` and
-carried through `engine.SharedStateSaver`, or provably re-derivable from those at
-install time.
+carried through `engine.SharedStateSaver`, or provably re-derivable from those
+**by** the install.
+
+The last clause used to read "at install time", which is weaker than it looks and
+was wrong in exactly the way that matters. Derived state left to the tick *after*
+an install is not re-derived by the install: it is re-derived by whatever
+condition the next tick finds, from the inputs that tick has, and the derivation
+usually overwrites the very phase the carrier just restored. Phase 3 found both
+halves of that in `navigation`. The composite passability grid was still the one
+computed from the walls the install had replaced, and the flow field was left
+underived — so the first tick took `FlowFieldCache.Update`'s `!Field.Valid`
+branch, derived from *that* tick's targets rather than the ones the restored phase
+belonged to, and zeroed `TicksSinceCompute` on the way. The carrier preserved a
+phase that the next tick destroyed, and the 500-tick gate could not see it because
+`nav.recomputes` is a per-tick gauge and the gate compared every fifty.
+`LoadShared` derives both now, from `LastTargets`, which is also what makes the
+installed field the one the sender held.
 
 The declaration is checked, not trusted.
 `TestSnapshotDeclarationsMatchImplementations` fails in **both** directions: a
@@ -445,7 +460,7 @@ Declared carriers, and why each holds state a store cannot:
 | `wall` | the maze generator's position — a `math/rand/v2` source, the one simulation stream that is not a `vmath.FastRand` and so is not in `RandResource`'s inventory |
 | `adaptation` | EXP3 route weights, the pre-sampled pool, the consumer head and its fallback rotation, which decide the route a spawned eye takes |
 | `genetic` | per-species GA populations, plus the telemetry throttle and running per-type average that decide when `eye.ga.typefit` publishes |
-| `navigation` | D-17's recompute phase and `LastTargets`; the fields, the passability grid and the route graph are re-derived at install |
+| `navigation` | D-17's recompute phase, `LastTargets` and whether a field has been derived at all; the fields, the passability grid and the route graph are re-derived *by* `LoadShared`, from the targets the phase belongs to |
 | `gold` | sequence liveness, its header entity, both deadlines and per-slot contribution |
 
 Beside the declared carriers a capture also holds what belongs to no system:
@@ -467,6 +482,24 @@ through.
 Durations are written relative to the capture's tick, never as absolute instants.
 Since D-21 made the simulation clock tick-derived the two forms agree, but the
 relative one stays correct if a capture is rebased.
+
+A shared *component* still carries absolute instants — a genotype's spawn time, a
+quasar's last speed step, a shield's last drain — and a capture carries them as
+they stand. That is sound for one reason and it is worth naming: `engine.SimEpoch`
+is a build constant, so tick N is the same instant in every process of the same
+build and there is no per-process origin left for a transfer to get wrong.
+`TestSimulationEpochIsSessionIdentity` breaks it deliberately — a receiver whose
+epoch differs installs the same bytes and diverges — which puts SimEpoch in
+session identity beside the seed.
+
+Two things an install re-derives rather than adopts, and both are D-13 rather than
+D-19. The slot→entity roster mirrors the cursor store and nothing updated it, so
+after the shared entities were replaced it still named the destroyed ones. And a
+cursor's *control assignment* travels inside a shared component: a capture carries
+the sender's answer to which cursor it drives, and a receiver that adopted it
+would start simulating the sender's cursor and stop simulating its own. Both are
+rebuilt from the installed store by `rebindCursorRosterLocked`, keyed by the
+participant identity the handshake assigned.
 
 **D-20 A shared region is steered only by replicated events.** Every FSM region
 is shared state and `fsm.<region>` is compared across the session, so a region
@@ -506,6 +539,30 @@ by exactly `tickInterval`; only the instant stamped beside it drifted.
 `time.game_elapsed_ms` is in the compared surface as a result — it is `tick *
 interval` now, and comparing it is what pins the clock. Its previous exclusion is
 why nothing caught the divergence at its source.
+
+**D-22 An arrival is admitted before the world is read for it.** A participant
+joining a running session becomes a peer — receiving this instance's crossings —
+*before* the capture it will install is taken, and holds that traffic until the
+world it applies to exists. The artifacts a capture already contains are refused
+rather than applied a second time: an installed world has applied everything due
+at or before its own tick, and `NetworkSystem.AdoptSnapshot` records that tick as
+the floor.
+
+The obvious order is the other one, and it loses data silently. Read the world at
+tick T, transfer it, then admit the joiner, and every artifact produced between T
+and the admission reaches nobody: it is not in the capture, because the capture
+predates it, and it is not on the wire, because the participant was not yet a
+peer. Nothing detects that. It is the same class of failure as a missing crossing,
+which is what this whole plan exists to stop having.
+
+What the ordering costs is a gap in *time* rather than in state: a world read at
+tick T is installed some milliseconds later, by which point the session is at T+k.
+Left open, k is permanent and every crossing the new participant produces arrives
+k ticks late. So the join closes it by simulating those k ticks before its own
+clock starts — reading the target from the epochs the session closes, since every
+tick closes one — and refuses the join if what remains exceeds the playout lead.
+k is a function of world size and link speed, never of how long the session has
+been running, which is the property that makes join-anytime possible at all.
 
 ## 3. Spatial partition
 
@@ -958,6 +1015,15 @@ fails the build when the code stops matching the declaration.
 | `TestSetStateResumesTheSequence`, `TestSetStateRejectsZero` | `pkg/vmath` | A recorded position reproduces a sequence from where a run reached, and a zero state cannot produce a dead stream |
 | `TestCaptureReconstructsTheSharedWorld`, `TestCaptureCarriesEveryDeclaredSystem`, `TestCaptureCarriesNoPlayerState`, `TestVerifyCaptureRejectsATamperedBody` | `internal/app` | D-19: a capture encoded, decoded and installed leaves the shared surface equal; every declared carrier is present; no player placement reaches a capture; a modified body and a foreign seed are both refused |
 | `TestInstalledWorldStaysIdenticalForFiveHundredTicks` | `internal/app` | D-19's construction proof over three seeds: an installed world's *future* matches for 500 further ticks with shared species live. Player-domain production is stopped first, because a capture carries no player state and a crossing is Phase 4's subject |
+| `TestCaptureContinuesInAnotherProcess` | `internal/app` | The same gate with the two halves in **different processes**: the capture is bytes on a disk, the two start at different wall instants, and the receiver paces its 500 ticks in bursts. Nothing about the pacing clock can reach the simulation (D-21) |
+| `TestSimulationEpochIsSessionIdentity` | `internal/app` | The control behind D-19's absolute instants: a receiver whose `SimEpoch` differs installs the same bytes and diverges, so the epoch is session identity beside the seed |
+| `TestNavigationPhaseIsLoadBearing`, `TestNavigationPhaseSurvivesAnInstall` | `internal/app` | D-17/D-19: a capture carrying the phase a world with *no* carrier would hold, or targets the sender never had, diverges one tick after the install; the unmodified capture holds for 200. `route_rebuild_ticks` stays uncovered — the shipped scenario builds no gateways for it to pace |
+| `TestSnapshotJoinCarriesTheGoldDeadline` | `internal/app` | The Phase 2 defect, closed: a joiner arriving mid-sequence reads the same remaining time as its host, and keeps reading it. `gold.timer` is in the compared surface again |
+| `TestSnapshotJoinTakesTheHostsWorldNotItsOwn`, `TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor` | `internal/app` | A joiner adopts the host's world and record position rather than re-deriving them, and the D-13 control assignment is re-derived rather than adopted with the component that carries it |
+| `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun` | `internal/app` | D-22 end to end over a socket: a solo run opens a port hundreds of ticks in, a joiner installs the world it is sent, closes the tick gap the transfer opened, and takes its cursor from the arrival crossing |
+| `TestAReconnectIsTheSameJoin` | `internal/app` | A dropped participant returns through the same path, at a tick the host has moved well past |
+| `TestSnapshotChunksRoundTrip`, `TestSnapshotAssemblyRefusesAConfusedTransfer` | `internal/network` | The capture's chunk framing over the sizes that occur, and the four confusions its header refuses — a skipped predecessor, a frame from another capture, a truncated frame, an empty body |
+| `TestSnapshotCostAtTheStormHighWater` | `internal/app` | Reports rather than asserts: the bytes, host stall, install cost and allocation peak Phase 4's cadence is chosen from |
 | `TestSwarmKeepsIntegratingWhenLockCannotResolve`, `TestSwarmLeavesLockWhenChargeCannotResolve` | `internal/system` | A refused species state entry is a delay, never a wedge: the chase keeps integrating and the lock is not held frozen and enraged |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
@@ -1170,16 +1236,24 @@ in [Desynchronisation and recovery](desync.md).
   after the silent timeout, but losing participant one still has no coordinator
   election, roster authority, or automatic state migration. The guest says so
   directly instead of waiting for a digest that can no longer arrive.
-- **There is no mid-run join.** A participant joins at tick zero or not at all.
-  The replay-from-tick-zero path that nominally provided one was never reachable
-  from `cmd/vif` and has been removed; see §6. Its replacement is an authoritative
-  state snapshot, which is the subject of
-  [Multiplayer enhancement plan](multi-player-enhancement.md).
-- There is no reconnect. An identity is released when its participant departs,
-  and there is no path back into a running session — reconnect and mid-run join
-  are the same problem and need the same snapshot.
+- Mid-run join and reconnect exist and are one mechanism (D-22): a running
+  instance opens a socket with `:host <addr>`, a joiner receives the world as a
+  chunked capture, installs it into a staging world, swaps at a tick boundary and
+  closes the tick gap the transfer opened. A reconnect is that same path a second
+  time. What remains a *guest* is still a re-deriver rather than a predictor —
+  authority and correction are Phase 4's subject, and until then a guest that
+  falls behind the playout lead diverges rather than being corrected.
+- A joiner's admission is refused if the gap it has to close exceeds the playout
+  lead. That is the honest failure for a link or a machine that cannot keep up,
+  and it is a refusal rather than a degraded session; adaptive cadence, which is
+  what would let such a link participate at all, is Phase 5's subject.
+- A join serialises the accept loop: the gate runs on the accepting goroutine, so
+  a second participant dialling mid-join waits behind the first. With
+  `MaxPlayers` participants this is bounded and deliberate — two captures read
+  concurrently would be two acquisitions of the world lock racing one tick.
 - There is deliberately no live pause, slow motion or stepping. Suspending one
-  participant for minutes needs the same rejoin path as reconnect.
+  participant for minutes is now a reconnect rather than an impossibility, but
+  the suspension itself is still refused.
 - The runtime digest detects connected-peer divergence after its six-tick sample
   cadence but neither stops play nor repairs it. `SYNCED` means the compared
   surface became equal again; it does not explain why. `DIVERGED` states that it

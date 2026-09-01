@@ -48,8 +48,14 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 	if err != nil {
 		return journal.ScriptStats{}, err
 	}
-	pace := cfg.HostAddress != "" || cfg.JoinAddress != ""
-	nextTick := time.Now()
+	// Pacing is a property of the run, not of the flags. A script that starts in a
+	// session is wall-paced from its first tick so it cannot outrun its peer; a
+	// solo script runs flat out — until it opens a session itself with :host, from
+	// which point it has a peer to keep step with. The clock is re-anchored at that
+	// moment rather than carried forward, or the ticks it ran flat out would be a
+	// debt the pacing immediately spends.
+	paced := cfg.HostAddress != "" || cfg.JoinAddress != ""
+	nextTick := time.Now() // [wall] pacing only
 	for {
 		select {
 		case <-signals:
@@ -64,7 +70,12 @@ func RunScript(cfg Config, path string) (journal.ScriptStats, error) {
 		if !more {
 			break
 		}
-		if pace {
+		if !paced && a.HostAddr() != "" {
+			paced, nextTick = true, time.Now() // [wall]
+			vlog.Info("app", "msg", "script pacing engaged",
+				"address", a.HostAddr(), "tick", a.Position().Tick)
+		}
+		if paced {
 			nextTick = nextTick.Add(parameter.GameUpdateInterval)
 			if !waitScriptTick(signals, time.Until(nextTick)) {
 				return driver.Stats(), nil

@@ -165,6 +165,9 @@ func (t *Transport) startClient() error {
 	return nil
 }
 
+// Disconnect drops one peer, reporting whether it was connected.
+func (t *Transport) Disconnect(id PeerID) bool { return t.peers.Disconnect(id) }
+
 // Addr returns the bound listener address, nil for a client or before Start.
 func (t *Transport) Addr() net.Addr {
 	if t.listener == nil {

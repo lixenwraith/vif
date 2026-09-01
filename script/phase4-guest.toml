@@ -1,0 +1,34 @@
+# Headless guest half of the Phase 4 mid-run join diagnostic run.
+#
+# Pair with phase4-host.toml, started after the host reports "hosting opened
+# mid-run". This half deliberately carries no action before tick 1000: a joiner
+# enters at whatever tick the host had reached, which depends on when the operator
+# started it, and a script action at an absolute tick the run has already passed is
+# an error rather than a no-op. Everything here is placed well beyond any plausible
+# entry tick.
+#
+# The tick budget is relative — the driver counts the ticks it issues, not the
+# absolute tick — so this runs 1,600 ticks from wherever the join landed.
+schema = 1
+ticks = 1600
+width = 120
+height = 40
+
+[[action]]
+tick = 1000
+command = "god"
+
+[[action]]
+tick = 1004
+intent = "motion_left"
+count = 6
+
+# No heat burst here, deliberately. A burst needs HeatAddRequest naming an entity,
+# and the entity a mid-run arrival takes is allocated at the crossing's apply tick
+# rather than at tick zero — so the id a script would have to name is not knowable
+# when the script is written. The interactive run in §10.2 is where the guest-side
+# burst is checked.
+[[action]]
+tick = 1400
+intent = "motion_down"
+count = 4

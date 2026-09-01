@@ -411,13 +411,17 @@ func (a *App) socketPort() (*network.SocketPort, error) {
 
 // activateNetworkSession closes the crossing window before terminal input is read.
 func (a *App) activateNetworkSession() {
-	a.world.RunSafe(func() {
-		for _, sys := range a.world.Systems() {
-			if activator, ok := sys.(interface{ ActivateSession() }); ok {
-				activator.ActivateSession()
-			}
+	a.world.RunSafe(a.activateNetworkSessionLocked)
+}
+
+// activateNetworkSessionLocked is the same for a caller that already holds the
+// world lock. Caller MUST hold updateMutex.
+func (a *App) activateNetworkSessionLocked() {
+	for _, sys := range a.world.Systems() {
+		if activator, ok := sys.(interface{ ActivateSession() }); ok {
+			activator.ActivateSession()
 		}
-	})
+	}
 }
 
 // showStartupStatus renders a frozen tick-zero lobby message.

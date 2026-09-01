@@ -29,17 +29,44 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// BeginHosting opens a running instance to participants.
+// sessionControl adapts App to engine.SessionController.
+//
+// Every method here is the *locked* form, and that is the whole reason the adapter
+// exists. The operator command surface runs inside App.handleIntent's critical
+// section — "mode/ must never acquire the world lock itself" — so a controller
+// method that took the lock would deadlock the instance at the moment the command
+// fired. It did, once: `:host` from a script wedged the process at the tick the
+// command landed on, and neither the tick loop nor a signal could get it back.
+type sessionControl struct{ a *App }
+
+func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
+func (c sessionControl) SessionSummary() string         { return c.a.sessionSummaryLocked() }
+
+// BeginHosting opens a running instance to participants, for a caller that holds
+// no lock. The operator command path reaches beginHostingLocked instead.
+func (a *App) BeginHosting(addr string) error {
+	var err error
+	a.world.RunSafe(func() { err = a.beginHostingLocked(addr) })
+	return err
+}
+
+// beginHostingLocked opens a running instance to participants.
 //
 // It is the same session every other path builds — the same acceptor, the same
 // identity allocation, the same capture — started at a tick that is not zero. What
 // it adds is the transport, because a solo run has none: the port is created,
 // started and attached here, and this App owns it for the rest of the run.
-func (a *App) BeginHosting(addr string) error {
+//
+// Binding the socket happens under the world lock, which is a tick this instance
+// does not run. It is the same deliberate operator cost `:log on` pays to open a
+// file, and it is bounded by one `listen(2)`.
+//
+// Caller MUST hold updateMutex.
+func (a *App) beginHostingLocked(addr string) error {
 	if addr == "" {
 		return errors.New("host: no address")
 	}
-	if a.sessionTransport() != nil {
+	if a.sessionTransportLocked() != nil {
 		return errors.New("host: this run is already in a session")
 	}
 	a.sessionMu.Lock()
@@ -53,6 +80,9 @@ func (a *App) BeginHosting(addr string) error {
 		return fmt.Errorf("host %q: %w", addr, err)
 	}
 
+	// The address is recorded before the listener exists, so every later reader —
+	// the accept goroutine's anchor, the status line — sees it already set. Nothing
+	// writes it again once a peer can arrive.
 	a.cfg.HostAddress = addr
 	netCfg := a.hostNetworkConfig()
 	netCfg.OnAdmit = a.releaseMidRunJoiner
@@ -67,11 +97,11 @@ func (a *App) BeginHosting(addr string) error {
 	a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
 	a.sessionMu.Unlock()
 
-	// AttachTransport latches the world as shared (D-14) and installs the departure
-	// and digest hooks; activating closes the pre-session crossing window so this
+	// Attaching latches the world as shared (D-14) and installs the departure and
+	// digest hooks; activating closes the pre-session crossing window so this
 	// instance's own artifacts start taking the session's playout lead.
-	a.AttachTransport(port)
-	a.activateNetworkSession()
+	a.attachTransportLocked(port)
+	a.activateNetworkSessionLocked()
 
 	bound := addr
 	if b := port.Addr(); b != nil {
@@ -88,25 +118,34 @@ func (a *App) BeginHosting(addr string) error {
 // waiting alone is in a session and a second :host would open a second one.
 func (a *App) sessionTransport() engine.NetworkPort {
 	var port engine.NetworkPort
-	a.world.RunSafe(func() {
-		if r := a.world.Resources.Network; r != nil {
-			port = r.Port
-		}
-	})
+	a.world.RunSafe(func() { port = a.sessionTransportLocked() })
 	return port
+}
+
+// sessionTransportLocked is the same read for a caller that holds the world lock.
+// Caller MUST hold updateMutex.
+func (a *App) sessionTransportLocked() engine.NetworkPort {
+	if r := a.world.Resources.Network; r != nil {
+		return r.Port
+	}
+	return nil
 }
 
 // SessionSummary is a one-line description of what this run is part of.
 func (a *App) SessionSummary() string {
-	if a.sessionTransport() == nil {
+	var out string
+	a.world.RunSafe(func() { out = a.sessionSummaryLocked() })
+	return out
+}
+
+// sessionSummaryLocked is the same for the operator command path.
+// Caller MUST hold updateMutex.
+func (a *App) sessionSummaryLocked() string {
+	if a.sessionTransportLocked() == nil {
 		return "Solo run; :host <addr> opens it to participants"
 	}
-	var peers int64
-	var participant uint32
-	a.world.RunSafe(func() {
-		peers = a.world.Resources.Status.Ints.Get("network.peers").Load()
-		participant = a.localParticipantLocked()
-	})
+	peers := a.world.Resources.Status.Ints.Get("network.peers").Load()
+	participant := a.localParticipantLocked()
 	addr := a.cfg.HostAddress
 	role := "host"
 	if a.cfg.JoinAddress != "" {
@@ -131,8 +170,13 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 	}
 	if err := a.sendMidRunGate(port, id); err != nil {
 		vlog.Warn("app", "msg", "mid-run join failed", "participant", id, "error", err.Error())
+		// The stream is already a peer by the time this runs, so refusing the join
+		// means dropping it: a participant holding a handshake it could not finish
+		// would otherwise stay in the session receiving crossings for a world it
+		// never installed. Dropping it runs the ordinary departure path, which is
+		// what returns its identity to the pool.
+		port.Disconnect(uint32(id))
 		a.releaseParticipant(id)
-		return
 	}
 }
 

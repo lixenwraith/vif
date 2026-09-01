@@ -163,11 +163,23 @@ func (p *PendingJoin) hold(msg *Message) bool {
 	case MsgHeartbeat:
 		return true
 	case MsgEvent, MsgStateSync, MsgStateDigest, MsgDisconnect:
+		// Bounded, because this buffer is filled by the peer on the other end of the
+		// stream and drained only when the world arrives. The ceiling is far above
+		// the epochs a transfer can span — one per tick, and a transfer that took
+		// this many ticks has already failed the join's lag check — so reaching it
+		// means a sender that is not sending a capture. Dropping the oldest keeps
+		// the newest epochs, which are the ones the catch-up reads its target from.
+		if len(p.deferred) >= maxDeferredJoinFrames {
+			p.deferred = append(p.deferred[:0], p.deferred[1:]...)
+		}
 		p.deferred = append(p.deferred, msg)
 		return true
 	}
 	return false
 }
+
+// maxDeferredJoinFrames bounds what one join may buffer off its stream.
+const maxDeferredJoinFrames = 512
 
 // DialSession connects and receives the host's anchor before an App is built.
 func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {

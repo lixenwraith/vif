@@ -326,15 +326,22 @@ crossings without a synchronous per-tick round trip, and because every artifact
 names the absolute tick it applies at, a node relays what it receives so a
 participant reaches instances its producer never linked to. Roster changes travel
 the same way, so a departure or an arrival lands on one tick everywhere.
-Participants join at the tick-zero gate only: there is no mid-run join, no
-reconnect, and no recovery once two instances disagree.
 
-It has no lag compensation, authentication or CLI TLS identity, no restorable
-world checkpoint, and no partition detection; `-join` dials one address,
-so the links form a star even though the relay makes any graph work. The domain
-boundary, event classification, wire protocol, their enforcing tests, and an
-analysis of what the model does not yet cover are in rules D-1..D-17 and §9 of
-[the domain model](domain-design.md). The observed incident, current failure
+A participant may also arrive at any tick. `:host <addr>` opens a run that is
+already playing; the joiner receives the shared world as a chunked capture (D-19),
+resolves it into a staging world, swaps at a tick boundary, and simulates the ticks
+the transfer cost so it stands where the session does. It is admitted as a peer
+*before* that world is read for it, so the crossings produced during the transfer
+reach it rather than falling into the gap (D-22). Reconnect is the same path a
+second time. Cost is a function of world size, not of session length.
+
+What is still missing is *correction*: a guest re-derives shared state rather than
+predicting it, so two instances that disagree stay disagreed. It has no lag
+compensation, authentication or CLI TLS identity, and no partition detection;
+`-join` dials one address, so the links form a star even though the relay makes
+any graph work. The domain boundary, event classification, wire protocol, their
+enforcing tests, and an analysis of what the model does not yet cover are in rules
+D-1..D-22 and §9 of [the domain model](domain-design.md). The observed incident, current failure
 signals, and checkpoint-plus-suffix recovery recommendation are in
 [Desynchronisation and recovery](desync.md).
 

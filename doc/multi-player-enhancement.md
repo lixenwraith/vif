@@ -2,15 +2,15 @@
 
 **Status: this is the plan of record for multiplayer.** It supersedes the staged
 recommendation in [desync.md](desync.md), which is retained as the diagnosis of the
-2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-21
+2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-22
 in [domain-design.md](domain-design.md) remain authoritative for the *existing*
 code; §5 of this document states which of them the target architecture keeps,
 changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
-Phase 2.
+Phase 2; D-22 landed with Phase 3.
 
-**Phases 1 and 2 and the Phase 3 test-machinery preparation are done. Phase 3 is
-next**, and §6's Phase 3 entry says what it starts from. §9 records the defects
-the 2026-08-31 session surfaced and what each turned out to be.
+**Phases 1, 2 and 3 are done. Phase 4 is next**, and §6's Phase 4 entry says what
+it starts from. §9 records the defects each session surfaced and what each turned
+out to be.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -18,11 +18,11 @@ The session model that exists today was assembled from compromises, and the
 compromises are load-bearing. Restating the original requirements makes that
 visible:
 
-| Original requirement | What exists |
-|---|---|
-| A solo game can be toggled into a host, and others join **at any time** | Join is only possible at tick zero, through a lobby gate fixed before the run starts. The replay-from-tick-zero path that nominally provided mid-run join was never reachable from `cmd/vif`; it has been removed. |
-| A **true multiplayer experience** | Fast input is discarded, not merely delayed: measured, a session drops 4 of 5 rapid cursor motions and scores 5 of 6 fast keystrokes as *typing errors*. |
-| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. |
+| Original requirement | What existed when this was written | Where it stands |
+|---|---|---|
+| A solo game can be toggled into a host, and others join **at any time** | Join is only possible at tick zero, through a lobby gate fixed before the run starts. The replay-from-tick-zero path that nominally provided mid-run join was never reachable from `cmd/vif`; it has been removed. | **Done** (Phase 3). `:host <addr>` opens a running instance and a participant installs the world at whatever tick it has reached. |
+| A **true multiplayer experience** | Fast input is discarded, not merely delayed: measured, a session drops 4 of 5 rapid cursor motions and scores 5 of 6 fast keystrokes as *typing errors*. | **Done** (Phase 1). Local input applies immediately; §3 carries the after figures. |
+| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. | **Open.** Phases 4 and 5. A guest still re-derives rather than predicts, and a divergence is still a failure state rather than a correction. |
 
 The root cause of all three is one decision: **shared state is agreed by having
 every instance re-derive it, so nothing may be applied until everyone can apply
@@ -163,7 +163,7 @@ than discovered mid-implementation.
 *Sections 4.1 and 4.2 are resolved; 4.3 stands.* They are kept as written because
 they are the reasoning the phase order came from, and because §9 shows §4.2 was
 right about the hazard and wrong about when it bites. What each turned into is
-noted at the end of the section.
+noted at the end of the section. §4.2's cross-process gate landed with Phase 3.
 
 ### 4.1 The hidden-state surface
 
@@ -222,8 +222,19 @@ speed step landed on different *ticks* in a live session with no transfer
 involved (§9.1). D-21 makes the instant a function of the tick, which fixes the
 live defect and largely dissolves the transfer hazard — an instant no longer
 carries a process origin at all. Captures still write durations relative to the
-capture tick, because that stays correct if a capture is rebased; and the
-cross-process gate is still owed, for the reason the section gives.
+capture tick, because that stays correct if a capture is rebased.
+
+**The gate arrived in Phase 3, and the residue has a name.**
+`TestCaptureContinuesInAnotherProcess` runs the 500-tick continuation with the two
+halves in different processes, started at different wall instants and pacing their
+ticks differently. It passes, and the reason it passes is worth stating rather than
+enjoying: a shared *component* still carries absolute instants and a capture
+carries them as they stand, which is sound only because `engine.SimEpoch` is a
+build constant, so tick N is the same instant in every process of the same build.
+`TestSimulationEpochIsSessionIdentity` breaks that deliberately and the
+continuation diverges — so what this section called "a different clock origin" is
+now a *build* property rather than a process one, and it belongs to session
+identity beside the seed.
 
 ### 4.3 The digest is narrower than the state
 
@@ -281,6 +292,21 @@ tick reads is a function of the tick number and a constant epoch, never of the
 pacing clock. §4.2 predicted this would matter *for transfers*; the log showed it
 already mattered *live* (§9), which is why it landed as a rule rather than as a
 snapshot convention.
+
+**D-22 An arrival is admitted before the world is read for it (new, landed with
+Phase 3).** A participant joining a running session becomes a peer — receiving this
+instance's crossings — before the capture it will install is taken, and holds that
+traffic until the world it applies to exists. Artifacts a capture already contains
+are refused rather than applied twice.
+
+The obvious order is the other one and it loses data silently: read at tick T,
+transfer, then admit, and every artifact produced in between reaches nobody. What
+the correct order costs is a gap in *time* — a world read at T is installed when the
+session is at T+k — and the joiner closes that by simulating the k ticks before its
+own clock starts, refusing the join if what is left exceeds the playout lead. k is
+a function of world size and link speed, never of session length, which is the
+property that makes join-anytime possible. The rule as built is in
+`domain-design.md`.
 
 ## 6. Phases
 
@@ -484,63 +510,125 @@ depending on terminal choreography.
 
 ---
 
-### Phase 3 — Join anytime  ← next
+### Phase 3 — Join anytime  ✅ landed
 
 **Goal.** Deliver the original requirement: a running solo game can be toggled into
 a host, and a participant can arrive at any moment.
 
-**Requirements.**
+**What was built.**
 
-1. A running instance can begin hosting on request (`:host <addr>`, or the existing
-   flag) without restarting the run.
-2. A joiner receives the anchor, then a snapshot at a named tick, installs it,
-   and enters the session at the following tick. No replay, no session log.
-3. The roster arrival remains a crossing, so every participant creates the new
-   cursor at one agreed tick.
-4. Reconnect is the same path with the same code.
-5. The host stays playable throughout; the snapshot is captured without stalling
-   its tick beyond a bounded, measured pause.
+`:host <addr>` opens a run that is already playing. The port is created, started
+and attached; the world latches as shared (D-14) and the crossing barrier takes
+ownership of this instance's artifacts from that tick. `:session` reports the role,
+address, participant identity, peer count and tick. A run started with `-host`
+still uses the tick-zero lobby, and both paths now hand a joiner the same thing.
 
-**Boundaries — must not.** Reintroduce a retained record stream. Require the host
-to pause. Elect a coordinator or survive host loss.
+**The capture travels.** `MsgStateSnapshot` takes the code the retired
+replay-from-tick-zero join reserved. It is the one message whose size is a function
+of the world rather than of the format, so it is the one that is chunked, under a
+header naming the tick, the piece, the count and the whole body's length —
+`SnapshotAssembly` refuses a skipped predecessor, a frame from another capture, a
+truncated frame and an empty body, each of which would otherwise install a world
+that looks installed and is not.
 
-**Manual acceptance.** Start a solo run, play into a storm, toggle hosting, join
-from a second terminal: the guest arrives inside the storm with the same world, and
-both cursors work. Kill the guest and rejoin. Repeat with the join deliberately
-delayed until several minutes in — join cost must not grow with session length.
+**The install is staged.** `App.StageShared` resolves the whole capture into a
+*second world* — this build's system set, its FSM, its RNG stream inventory — and
+`Commit` then writes the same bytes into the live world. `World.RunSafe` holds the
+update mutex and a tick runs entirely inside one acquisition of it, so the swap is
+between two ticks by construction rather than by a scheduler handshake. What
+survives the staging pass is what the live pass cannot fail on: identical code,
+identical input, no dependence on the state being written over.
 
-**What Phase 3 starts from.** Phase 2 left five things on its doorstep, in the
-order they are wanted:
+**A joiner receives the world instead of reproducing it.** `JoinSessionAt` adopts
+the map latch, settles the FSM boot queue (which is what declares the cursor
+template a late arrival is armed from), stages and commits, and then applies only
+the D-13 control assignment. Its own cursor is *not* in the capture — it arrives as
+the `EventParticipantJoined` crossing, at one agreed tick, on every instance.
 
-1. **The staged install.** `App.InstallShared` validates everything before writing
-   but writes into the live world. Phase 3 needs the second world and the swap at
-   a tick boundary, because the instance being installed into is a running one.
-2. **The capture carrier and cross-process gate.** The process/tick/input driver
-   now exists as `-script`, including two independently scripted TCP instances.
-   Phase 3 must add the missing carrier: capture in one process, transfer/load in
-   another, deliberately offset the pacing-clock origin, then continue 500 ticks
-   under the same authored or recorded stream and compare the declared surface.
-   D-21 makes the clock-offset half much less dangerous than it was, but the gate
-   still has to demonstrate it. The script runner deliberately does not smuggle a
-   capture or a verdict into this preparation.
-3. **The gold spawn-tick defect.** A joiner's FSM reaches `MainSpawnGold` one tick
-   before the host's, so the two carry deadline origins a tick apart for the life
-   of the sequence. `gold.timer` is excluded from the compared surface only
-   because of this; re-admitting the key is the check that closes it. Reproduce
-   with `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` and the deny entry
-   removed from `internal/app/snapshot.go`.
-4. **The storm high-water sizing.** Capture bytes, capture time, install time and
-   allocation peak at the storm high water. The checked-in Phase 3 script pair
-   makes the storm repeatable and the paired `stat` records locate high water; the
-   capture benchmark and numbers are still owed. Phase 4's cadence is chosen from
-   those numbers and Phase 2 only has the quiet-world ones.
-5. **A failing case for the navigation phase.** The route-rebuild phase is carried
-   but no sabotage of it fails the gate, so its coverage is asserted rather than
-   demonstrated.
+**The ordering is the design, and it is D-22.** A joiner is admitted as a peer
+*before* the world is read for it, so the crossings the host produces during the
+transfer reach it rather than falling into the gap between the capture and the
+admission. It holds that traffic while it reads its gate and its capture, hands it
+to the port once the transport owns the stream, and the barrier drops the artifacts
+the capture already contains. Reading first and admitting second loses every
+artifact produced in between, silently, which is the failure this plan exists to
+stop having.
+
+**The gap that is left is time, and it is closed rather than tolerated.** A world
+read at tick T is installed some milliseconds later, by which point the session is
+at T+k. Left open, k is permanent and every crossing the new participant produces
+arrives k ticks late. `resumeJoinedSession` simulates those k ticks before the
+joiner's own clock starts, learning the target from the epochs the session closes —
+every tick closes one, empty or not — and refuses the join if what remains exceeds
+the playout lead. k is a function of world size and link speed, never of session
+length.
+
+**Reconnect is that path a second time.** Nothing about it is reconnect-specific:
+the departure crossing returns the identity to the pool, and the next dial gets the
+same acceptor, the same allocation, a capture at whatever tick the host has now
+reached, the same install and the same arrival crossing.
+
+**What the boundaries cost.** The host is never paused: the only stall is the
+capture's own read under the world lock, and that is measured (§8, question 2). No
+record stream is retained — the frames a joiner holds are the transfer window's
+epochs and nothing older. No coordinator is elected and host loss still ends the
+session.
+
+**The five items Phase 2 left, and what happened to each.**
+
+1. **The staged install** — built, as above. Building it is what exposed two
+   things an install must *re-derive rather than adopt*: the slot→entity roster,
+   which mirrored the cursor store and named destroyed entities after an install;
+   and a cursor's control assignment, which travels inside a shared component, so
+   a receiver that adopted it would start simulating the sender's cursor and stop
+   simulating its own. Both are D-13 and both fail two join tests when removed.
+2. **The capture carrier and cross-process gate** — both built.
+   `TestCaptureContinuesInAnotherProcess` runs Phase 2's 500-tick gate with the two
+   halves in *different processes*: the capture is bytes on a disk, the two start
+   at different wall instants, and the receiver paces its five hundred ticks in
+   bursts while the sender ran them in one go. Beside it,
+   `TestSimulationEpochIsSessionIdentity` breaks the reason it works — a receiver
+   on a different `SimEpoch` installs the same bytes and diverges — which is the
+   honest statement of what §4.2's hazard became.
+3. **The gold spawn-tick defect** — closed. A joiner no longer reproduces the
+   session, so nothing is a tick early; the gold carrier writes both deadlines
+   relative to the capture's tick and the origin is the host's everywhere.
+   `gold.timer` is back in the compared surface and
+   `TestSnapshotJoinCarriesTheGoldDeadline` is what holds it.
+4. **The storm high-water sizing** — measured. §8, question 2 carries the numbers.
+5. **A failing case for the navigation phase** — built, and it found two defects
+   first. See below.
+
+**What Phase 3 found that was not on the list.**
+
+- *The navigation carrier preserved a phase the next tick destroyed.* The install
+  left the flow field underived, so the first tick took `FlowFieldCache.Update`'s
+  `!Field.Valid` branch: derived from that tick's targets rather than the ones the
+  restored phase belonged to, and zeroed `TicksSinceCompute` on the way. It also
+  left the composite passability grid computed from the walls the install had just
+  replaced. Both are re-derived by `LoadShared` now, the field from `LastTargets`,
+  which is also what makes it the field the sender held. D-19's "re-derivable at
+  install time" is now "re-derivable **by** the install", which is a different and
+  stronger claim.
+- *Phase 2's own 500-tick gate was weaker than it read.* It spawned three swarms
+  and then advanced to the next status-cadence boundary, which can be nearly a
+  whole cadence away; the escalation FSM swept in the meantime and the capture the
+  comment claims carries species carried none. The species are spawned after the
+  advance now and asserted alive — the capture grew from four kilobytes to
+  seventeen, which is the measure of what the gate was not exercising.
+- *`route_rebuild_ticks` is still uncovered.* It paces one gateway route graph
+  rebuild per interval and the shipped scenario builds no gateways, so a sabotaged
+  value changes nothing observable. A scenario with gateways is what would close
+  it; it is on Phase 4's list.
+
+**Boundaries kept.** No retained record stream; no host pause beyond the measured
+capture read; no coordinator election and no survival of host loss.
+
+**Manual acceptance.** §10.
 
 ---
 
-### Phase 4 — Authority and correction
+### Phase 4 — Authority and correction  ← next
 
 **Goal.** The host becomes the authority and guests become predictors. This is
 where divergence stops being a failure mode and becomes a routine, corrected
@@ -569,6 +657,41 @@ snapshot cadence prediction buys. Break solo replay.
 (`tc netem`): play stays responsive, remote entities stay smooth, no session ever
 enters an unrecoverable state, and the correction magnitude stays bounded. Kill the
 link entirely and restore it: the guest resumes from the next snapshot.
+
+**What Phase 4 starts from.** Phase 3 leaves six things on its doorstep, in the
+order they are wanted:
+
+1. **The staging world is built per install and thrown away.** `StageShared`
+   constructs a whole second `App` — measured at 9–31 ms — which is right for a
+   join that happens once and wrong for a correction that happens two to five
+   times a second. Phase 4's requirement 4 says corrections go into the staging
+   world and swap; that world has to become persistent, built when the session
+   starts and re-used, and `Commit` has to stop being a second full write.
+2. **Deltas.** The measured storm high water is 176 KiB, which is 859 KiB/s at
+   5 Hz and 344 KiB/s at 2 Hz for full snapshots (§8, question 2). The 2–5 Hz
+   hypothesis is affordable at rest — 11 KiB, 54 KiB/s — and is not affordable at
+   the high water without the deltas requirement 3 already plans for. That is the
+   measurement's finding and it is what decides the shape of the cadence, not just
+   its number.
+3. **The gap a guest can be behind is enforced once, at admission, and never
+   again.** `resumeJoinedSession` closes it and refuses a join it cannot close,
+   but nothing re-measures afterwards: a guest whose machine falls behind
+   mid-session produces late artifacts and diverges, exactly as §9.4's limitation
+   says. `network.join_lag_ticks` is the measurement; a running one is what
+   requirement 6 turns into a staleness indicator.
+4. **A guest still re-derives rather than predicts.** Every rule Phase 3 landed
+   assumes both instances run the same shared simulation and agree. Weakening D-11
+   the way §5 describes — "identical on the host; on a guest, equal to the host as
+   of the last applied snapshot, and converging" — is what makes a correction
+   ordinary rather than a repair, and nothing in the code says that yet.
+5. **The route-rebuild phase has no failing case**, because the shipped scenario
+   builds no gateways for it to pace. A scenario with gateways closes it, and the
+   navigation sabotage suite already has the shape to hold it.
+6. **A join serialises the accept loop.** The gate runs on the accepting
+   goroutine, so a second participant dialling mid-join waits behind the first.
+   Bounded and deliberate at `MaxPlayers`, but Phase 4's periodic captures make
+   the same world-lock contention a per-cadence question rather than a per-join
+   one.
 
 ---
 
@@ -639,10 +762,27 @@ implementation starts clean:
 
 1. **Prediction scope in Phase 1.** Cursor cell only, or also the visual removal of
    a typed *shared* gold member? The conservative answer is taken here.
-2. **Snapshot cadence** is a guess until it is measured at the storm high water.
-   Phase 2 measured a quiet world — ~4 KB per capture with three swarms and a gold
-   sequence — which supports the 2–5 Hz hypothesis but does not test it. The
-   figure that decides it is still owed (§6, Phase 3's starting list).
+2. **Snapshot cadence — measured, and the answer changes the design rather than
+   just filling in a number.** `TestSnapshotCostAtTheStormHighWater` reports it.
+   At rest this world holds 12 shared entities and a capture is 11 KiB; at the
+   storm high water it holds 492 and a capture is 176 KiB — sixteen times.
+
+   | | quiet | storm high water |
+   |---|---|---|
+   | shared placements | 12 | 492 |
+   | capture bytes | 10,891 | 175,910 |
+   | read under the world lock | 1.3 ms | 1.2 ms |
+   | encode (outside the lock) | 0.04 ms | 0.43 ms |
+   | joiner stage / commit | 9.6 / 6.1 ms | 12.4 / 4.1 ms |
+   | allocated per capture | 531 KiB | 1,032 KiB |
+
+   The host stall is the reassuring half: 1.2 ms is 2.4% of a 50 ms tick, so the
+   read is affordable at any cadence this plan contemplates. The link is the other
+   half: *full* snapshots at the high water are 859 KiB/s at 5 Hz and 344 KiB/s at
+   2 Hz. The 2–5 Hz hypothesis holds comfortably at rest (54 KiB/s at 5 Hz) and
+   does not hold at the high water without the deltas Phase 4's requirement 3
+   already plans for. That is the finding: the cadence question was never only a
+   rate, and the storm is what says so.
 3. **Host loss** ends the session. Confirm that is acceptable before sizing Phase 6.
 4. **Does the host keep re-deriving, or become the only simulator?** This plan
    keeps guests simulating (§2.1). If measurement later shows correction magnitude
@@ -650,8 +790,41 @@ implementation starts clean:
    snapshot rate — a tuning change, not a rewrite.
 5. **Tower ownership in optional maps** still binds every tower to slot zero. Not a
    blocker; a gameplay rule to settle before towers appear in a real session.
+6. **How many participants may join a run that started solo.** `:host <addr>`
+   opens a lobby sized by `-players`, which a solo run never set, so it admits one.
+   Giving the command its own count is a one-line change and nobody has needed it
+   yet; it is recorded here so the limit is a decision rather than an oversight.
 
-## 9. What the 2026-08-31 session showed
+## 9. What each session showed
+
+### 9.0 The 2026-09-01 run — the D-20 and D-21 fixes hold
+
+Two participants, ~2,930 ticks each, host and guest logs both returned. Nothing to
+fix; recorded because a clean run is evidence and because the checks §10 asked for
+were answered by it.
+
+- **No divergence at all.** Zero `WARN` or `ERROR` records on the host; one on the
+  guest, and it is the host's own shutdown (`network peer disconnected` at tick
+  2924). No `DESYNC`, no `DIVERGED`.
+- **All 106 `fsm` records are byte-identical between the two files, tick for
+  tick** — every region transition, every spawn, every timeout, in both directions.
+  That covers checks 2, 3 and 5 in one comparison: `monitor` reached `MonitorActive`
+  at tick 1 and never left it, so the `EventHeatBurst` region move D-20 was written
+  for did not recur; a quasar lived from roughly tick 400 to 1000, several speed
+  steps, with no `part=kinetics` report, which is the tick-744 defect exercised and
+  absent.
+- **`gold.timer` matched exactly at all fourteen sampled ticks**, including
+  mid-sequence values. That is the key Phase 2 excluded, agreeing in a live session
+  before Phase 3 admitted it to the compared surface — which is what said the defect
+  was in the reproduction path rather than in the deadline.
+- **`swarm.transition_stalls` stayed 0 throughout**, and `physics_steps` rose
+  whenever a swarm was alive. The one window where `shield_hit` rose while
+  `physics_steps` was flat (ticks 2000–2200, +214 and +0) had `swarm.count = 0` at
+  both samples: the shield was striking something else. Not the 9.3 stall.
+- Check 4's actual reproduction — a swarm parked in a shield under god mode — did
+  not occur in this run. `swarm_stall_test.go` is what holds it.
+
+### The 2026-08-31 session
 
 Two participants, both in god mode, ~1,940 ticks. The log carried three defects
 and none of them was the one the plan expected next. All three are fixed; the
@@ -729,66 +902,66 @@ stall. Worth a look when the quasar is next touched.
 
 ## 10. Manual verification for the next session
 
-Everything below is a two-terminal check. Phases 1 and 2 changed the clock, the
-monitor region and the swarm state machine, and none of those is on the wire — so
-what is being verified is that nothing regressed *and* that the two reported
-defects are gone.
+Everything below is a two-terminal check. Phase 3 put a world on the wire and let a
+participant arrive at any tick, so what is being verified is that the join lands on
+one world and stays there — and that nothing Phases 1 and 2 fixed came back.
 
-### 10.1 How to run it, and what to send back
+### 10.1 The join, which is the phase
+
+`:host <addr>` on a run that is already playing, then dial it. This is the headline
+and it wants doing by hand at least once.
 
 ```bash
-# terminal 1 — host, logging on, journal on
-./bin/vif -host :7777 -players 2 -lv info -ls afs -lt 200 -j
+# terminal 1 — start solo, play for a minute, then open the session
+./bin/vif -lv info -ls afs -lt 200 -j
+#   ... play into a storm, then type:  :host :7777
+#   the status bar answers "Hosting on 127.0.0.1:7777"
 
-# terminal 2 — guest
+# terminal 2 — arrive whenever
 ./bin/vif -join 127.0.0.1:7777 -lv info -ls afs -lt 200 -j
 ```
 
-The repeatable headless form uses the same gate and the checked-in script pair:
+The repeatable headless form is the checked-in Phase 4 pair. The host half starts
+**solo**, runs flat out to tick 400, opens hosting there, and is wall-paced from
+that point — so the operator has the rest of the run to start the guest:
 
 ```bash
-# terminal 1 — host script
-./bin/vif -host :7777 -players 2 -script script/phase3-host.toml \
-  -l=log/phase3-host -lv info -ls afs -lt 200 -j
+# terminal 1 — host script; opens hosting at tick 400
+./bin/vif -script script/phase4-host.toml \
+  -l=log/phase4-host -lv info -ls afs -lt 100 -j
 
-# terminal 2 — guest script
-./bin/vif -join 127.0.0.1:7777 -script script/phase3-guest.toml \
-  -l=log/phase3-guest -lv info -ls afs -lt 200 -j
+# terminal 2 — once "hosting opened mid-run" appears in the host log
+./bin/vif -join 127.0.0.1:7777 -script script/phase4-guest.toml \
+  -l=log/phase4-guest -lv info -ls afs -lt 100 -j
 ```
 
-That pair runs exactly 2,000 wall-paced ticks, bursts host heat at tick 40 and
-guest heat at tick 80, crosses one quasar at tick 100, injects the shared storm
-on both at tick 200, and crosses a swarm at tick 300. Distinct log directories
-keep each process's session log and journal separate. It is the reproduction and
-diagnostic path; the interactive invocation remains the acceptance check for
-typing responsiveness, rendering, and hands-on reset/gold behavior.
+The Phase 3 pair (`script/phase3-host.toml`, `script/phase3-guest.toml`, both with
+`-host`/`-join` and 2,000 wall-paced ticks) remains the tick-zero regression and
+still exercises the heat bursts, the crossed quasar, the shared storm and the swarm
+in the shield.
 
 `-ls afs` keeps `app`, `fsm` and `stat`: the divergence reports, the region
-transitions and the periodic counters. That is the mask both 2026-08-31 findings
-were diagnosed from, and it keeps the file small enough to attach. Add `+e` only
-if a specific event needs chasing — it was 5,634 of the last log's 6,801 lines and
-carried nothing.
-
-**Send back the log from *both* terminals.** The last session had only one side,
-which was enough to see that the two disagreed but not to see which one was
-wrong. With both, `part` and `records` on one side can be read against the other's
-records at the same tick.
-
-Run interactively for **at least 2,000 ticks (about 100 s)**, since both reported
-divergences appeared after tick 700. The authored pair stops at that boundary by
-construction.
+transitions and the periodic counters. Add `+e` only if a specific event needs
+chasing — it was 5,634 of the 2026-08-31 log's 6,801 lines and carried nothing.
+**Send back the log from both terminals**; one side shows that two instances
+disagree and never which one is wrong.
 
 ### 10.2 What to check
 
 | # | Check | Pass |
 |---|---|---|
-| 1 | Play both cursors normally for 2,000+ ticks | No `shared state divergence` (WARN) and no `shared state diverged` (ERROR) in either log. The status bar never shows `DESYNC` or `DIVERGED`. |
-| 2 | **Heat burst, both sides.** Drive one participant's heat to a burst, then the other's | The cleaner sweep still appears for the participant who burst, and only for them. `fsm.monitor` never enters a heat state — the region should stay `MonitorActive`. No divergence follows either burst. |
-| 3 | **Quasar speed.** Play until a quasar spawns and survives ~30 s | No `part=kinetics` divergence. This is the tick-744 defect; a quasar living through several speed steps is what exercised it. |
-| 4 | **Swarm in a shield.** Both in god mode, let a swarm reach a shield and sit in it | The swarm is ejected rather than parking. In the `stat` records, `swarm.physics_steps` keeps rising while `shield.shield_hit` does; the two moving together is the fix, `shield_hit` rising while `physics_steps` is flat is the bug. `swarm.transition_stalls` should stay 0; a non-zero value is not a failure but is worth reporting. |
-| 5 | **Gold across a join.** Let a gold sequence run to its timeout | Both instances resolve it on the same tick. (`gold.timer` is still excluded from the compared surface, so a divergence here will not be reported automatically — read the two `stat` records for `gold` at the same tick and compare.) |
-| 6 | **Reset.** `:new` on the coordinator | Both reset together, no divergence follows, and the swarm/gold counters restart from zero on both. |
-| 7 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed: the clock change touched every run, not only sessions. Speed control (`:speed 1/2`, `:speed 2`) and pause still behave. |
+| 1 | **The join itself.** Play solo into a storm, `:host :7777`, dial from terminal 2 | The guest arrives inside the storm holding the same world. Its `app` log carries `capture staged`, `capture installed`, `join installed the session world` and `join caught up`; the host's carries `session capture` and `mid-run participant admitted`. Both cursors work. |
+| 2 | **The arrival is one crossing.** Read `cursor spawn` on both logs after the join | The same `entity` and `slot` on both instances. A different entity id on each side is a D-11 failure and the most serious thing this check can find. |
+| 3 | **The join cost.** Read the `snapshot` stat group on both | Host: `bytes`, `capture_us` (the stall — should be a low single-digit percentage of the 50 ms tick), `encode_us`. Guest: `install_tick`, `stage_us`, `commit_us`, `catch_up_ticks`. Send these back — they are what Phase 4's cadence is chosen against, and the storm figures in §8 came from a bench rather than a session. |
+| 4 | **No divergence after the join.** Play both for 2,000+ ticks | No `shared state divergence` (WARN) or `shared state diverged` (ERROR) in either log; no `DESYNC`/`DIVERGED` in the status bar; `network.digest_mismatches` stays 0 and `network.barrier.late` stays 0. |
+| 5 | **Reconnect.** Kill terminal 2, watch the host despawn the guest cursor, then dial again | The second arrival installs at a *later* `install_tick` than the first and lands the same way. The host's roster returns to one cursor in between. |
+| 6 | **Join late.** Repeat with the join delayed several minutes | `bytes` and `stage_us` are a function of what is on the map, not of how long the host has been running. A join cost that grew with session length would be the boundary this phase is built on failing. |
+| 7 | **Gold across a join.** Join while a gold sequence is live | Both instances report the same `gold.timer` at the same tick, and keep reporting it. This key is in the compared surface now, so a disagreement is also a divergence report — it no longer has to be read by hand. |
+| 8 | **Quasar speed.** Let a quasar live ~30 s across the join | No `part=kinetics` divergence. The capture carries `LastSpeedIncreaseAt`, so the guest inherits the deadline instead of arming a fresh one. |
+| 9 | **Heat burst, both sides** | The cleaner sweep appears for the participant who burst and only for them; `fsm.monitor` stays `MonitorActive`. |
+| 10 | **Swarm in a shield.** Both in god mode, park a swarm in a shield | The swarm is ejected. `swarm.physics_steps` keeps rising while `shield.shield_hit` does; `swarm.transition_stalls` stays 0. |
+| 11 | **Reset.** `:new` on the coordinator | Both reset together, no divergence follows, and the counters restart from zero on both. |
+| 12 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed. `:session` says "Solo run"; `:speed`, `:step` and pause still behave. |
 
 ### 10.3 What to look at first in the returned logs
 
@@ -796,21 +969,32 @@ construction.
 # every divergence report, both files
 jq -c 'select(.level=="WARN" or .level=="ERROR")' <log>
 
-# the ~20 ticks before the first one — the cause is usually not adjacent
+# the join itself, both files
+jq -c 'select(.sub=="app" and (.fields.msg|test("capture|join|hosting|admitted")))' <log>
+
+# the ~30 ticks before the first divergence — the cause is usually not adjacent
 jq -c 'select(.tick>=<T-30> and .tick<=<T+5> and .sub!="event")' <log>
 
-# the counters that named the swarm stall
-jq -c 'select(.sub=="stat" and (.fields.msg=="swarm" or .fields.msg=="shield"))' <log>
+# the join's cost, and the counters that would name a late artifact
+jq -c 'select(.sub=="stat" and (.fields.msg=="snapshot" or .fields.msg=="network.barrier"))' <log>
+
+# fsm transitions should be identical, tick for tick, from the join onward
+jq -r 'select(.sub=="fsm")|"\(.tick) \(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <host> > h
+jq -r 'select(.sub=="fsm")|"\(.tick) \(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <guest> > g
+diff h g
 ```
 
-Both 2026-08-31 findings were 10—30 ticks *downstream* of their cause, so the
-second command is the one that matters: read the window before the report, not
-the report.
+That last one is the cheapest whole-session check there is: on the 2026-09-01 run
+all 106 `fsm` records matched tick for tick between the two files, and on the
+Phase 4 script pair every record after the join matched. One `nav.entities`
+difference is expected and excluded — it counts both domains, so a participant's own
+player-domain population moves it.
 
-### 10.4 Phase 3 wants one more thing
+### 10.4 What Phase 4 wants from these runs
 
-Phase 3 is join-anytime, and its sizing depends on numbers Phase 2 could not take
-(§6, Phase 3's starting list, item 4). If a storm can be reached in one of these
-runs, note the `stat` record for `entity` and `spatial` at the storm high water
-and send it with the log — that is what Phase 4's snapshot cadence gets chosen
-from.
+The `snapshot` group from check 3, taken in a real session rather than from the
+bench. §8's storm figures are measured in-process on one machine with no link at
+all; a cadence chosen from them is a cadence chosen without a network in the
+picture. What is wanted is `capture_us` under a real tick loop, `bytes` at whatever
+the session's actual high water turns out to be, and `catch_up_ticks` over a link
+that is not loopback.

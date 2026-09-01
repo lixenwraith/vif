@@ -1,0 +1,52 @@
+# Headless host half of the Phase 4 mid-run join diagnostic run.
+#
+# Unlike the phase3 pair this one does NOT take -host. It starts solo, runs flat
+# out to tick 400 — a world with a gold sequence, an escalation and a quasar in
+# it — and only then opens a socket with :host. Wall pacing engages at that
+# moment, so the operator has from there until the script ends to start the guest.
+#
+#   ./bin/vif -script script/phase4-host.toml \
+#     -l=log/phase4-host -lv info -ls afs -lt 200 -j
+#
+# Then, once "hosting opened mid-run" appears in the log:
+#
+#   ./bin/vif -join 127.0.0.1:7777 -script script/phase4-guest.toml \
+#     -l=log/phase4-guest -lv info -ls afs -lt 200 -j
+#
+# The join is the check. Everything after it is the two instances holding one
+# world, which is what the paired stat and fsm records say.
+schema = 1
+ticks = 2400
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_right"
+count = 6
+
+# A quasar well before the join, so the capture carries one and the guest inherits
+# its speed-step deadline rather than arming a fresh one. This is the entity behind
+# the 2026-08-31 kinetics divergence.
+[[action]]
+tick = 100
+event = "QuasarSpawnRequest"
+payload = "x = 40\ny = 15"
+
+# Hosting opens here. Ticks up to this point run flat out; from here the run is
+# wall-paced at the 50 ms game interval, because it now has a peer to keep step
+# with.
+[[action]]
+tick = 400
+command = "host 127.0.0.1:7777"
+
+# A swarm inside the host's god-mode shield, after the join, so the ejection path
+# runs on a world both instances hold.
+[[action]]
+tick = 1200
+event = "SwarmSpawnRequest"
+payload = "x = 64\ny = 18"

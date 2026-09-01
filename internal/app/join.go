@@ -251,12 +251,17 @@ func (a *App) adoptMapLatch(an event.JournalAnchor) {
 // builds its own endpoint instead of taking the one NetworkService contributes.
 // NetworkSystem reads the port per tick, so this needs no re-registration.
 func (a *App) AttachTransport(port engine.NetworkPort) {
-	a.world.RunSafe(func() {
-		r := engine.NewNetworkResource(port)
-		r.OnDeparture = a.releaseParticipant32
-		r.SharedDigest = a.sharedDigestLocked
-		a.world.Resources.Network = r
-		a.world.MarkSessionShared()
-		a.ctx.PublishMapLock()
-	})
+	a.world.RunSafe(func() { a.attachTransportLocked(port) })
+}
+
+// attachTransportLocked is AttachTransport for a caller that already holds the
+// world lock — the operator command path does, because mode/ runs inside it.
+// Caller MUST hold updateMutex.
+func (a *App) attachTransportLocked(port engine.NetworkPort) {
+	r := engine.NewNetworkResource(port)
+	r.OnDeparture = a.releaseParticipant32
+	r.SharedDigest = a.sharedDigestLocked
+	a.world.Resources.Network = r
+	a.world.MarkSessionShared()
+	a.ctx.PublishMapLock()
 }

@@ -126,7 +126,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
-	a.ctx.SessionCtl = a
+	a.ctx.SessionCtl = sessionControl{a}
 
 	vlog.Info("app", "msg", "init complete",
 		"width", a.ctx.Width,

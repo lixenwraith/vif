@@ -60,7 +60,8 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
 | Music | None | — | — | — | — |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.all_defeated` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.all_defeated` are FSM guards; remainder generic |
-| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched}` | `NewNetworkSystem` | Transport polling, fixed-delay admission, cursor sync and connection state | `Init` | Status bar reads peer/state/latch; remainder generic |
+| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched,artifacts_pre_install,join_lag_ticks}` | `NewNetworkSystem` | Transport polling, fixed-delay admission, cursor sync and connection state | `Init` | Status bar reads peer/state/latch; remainder generic |
+| Snapshot transfer | `snapshot.{bytes,capture_us,encode_us,stage_us,commit_us,install_tick,catch_up_ticks}` | `newSnapshotTelemetry` during App construction | A capture read, or a capture installed | **Not reset** — a join is not undone by `:new`, and these describe a transfer rather than a game | Generic only; excluded from the compared shared surface, because a host publishes what a read cost and a joiner what an install cost |
 
 ## Engine and event audit
 
@@ -301,7 +302,16 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `network.peers` (int) | Current connected session-peer count. |
 | `network.state` (string) | Operator connection state: off, connecting, connected or disconnected. |
 | `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors. |
+| `network.artifacts_pre_install` (int) | Peer artifacts refused because the installed world already contains them — everything due at or before a capture's tick (D-22). Non-zero on a joiner is the ordering working, not a loss. |
+| `network.join_lag_ticks` (int) | Ticks this participant still stood behind the session after its join caught up. Zero is the ordinary result; anything above the playout lead refuses the join. |
 | `ping.cursor_rejects` (int) | Requests rejected because ping could not resolve a roster cursor. |
+| `snapshot.bytes` (int) | Encoded length of the last shared-world capture this instance read. |
+| `snapshot.capture_us` (int) | What that read cost under the world lock — the one stall a join is allowed. |
+| `snapshot.encode_us` (int) | What encoding it cost outside the lock, which stalls nothing. |
+| `snapshot.stage_us` (int) | What resolving the last received capture into a staging world cost. |
+| `snapshot.commit_us` (int) | What writing it into the live world cost. |
+| `snapshot.install_tick` (int) | The tick the last installed capture described. |
+| `snapshot.catch_up_ticks` (int) | Ticks simulated after the install to close the gap the transfer opened. |
 | `ping.disabled_rejects` (int) | Action requests dropped while the ping system was disabled. |
 | `player.cursor_rejects` (int) | Requests rejected because player could not resolve a roster cursor. |
 | `player.spawn_failures` (int) | player spawn requests that could not produce an entity. |

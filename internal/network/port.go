@@ -78,6 +78,14 @@ func (p *SocketPort) BroadcastExcept(exclude uint32, msgType uint8, payload []by
 	}
 }
 
+// Disconnect drops one participant's stream, reporting whether it was connected.
+// It is how a coordinator refuses a join that got as far as being admitted: a
+// participant left holding a handshake it could not finish would otherwise stay in
+// the session receiving crossings for a world it never installed.
+func (p *SocketPort) Disconnect(peerID uint32) bool {
+	return p.transport.Disconnect(PeerID(peerID))
+}
+
 // PeerCount reports the currently connected participants.
 func (p *SocketPort) PeerCount() int { return p.transport.PeerCount() }
 

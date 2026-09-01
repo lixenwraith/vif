@@ -122,11 +122,16 @@ terminal startup. A bare `-l` remains boolean, so a directory requires
 
 `-host` and `-join` are mutually exclusive and available on interactive play or
 the authored headless `-script` path; combining either with `-check`, `-schema`,
-or `-replay` is an error. They remain startup flags rather than ex commands
-because no world snapshot supports a mid-run transition. The host holds tick
-zero until every requested participant passes anchor, roster and start/ready
-checks. The joiner dials before constructing its `App`, so the anchor seed is
-installed before RNG/content initialization.
+or `-replay` is an error. The host holds tick zero until every requested
+participant passes anchor, roster and start/ready checks. The joiner dials before
+constructing its `App`, so the anchor seed is installed before RNG/content
+initialization.
+
+`-host` is not the only way in. `:host <addr>` opens a run that is **already
+playing**, at whatever tick it has reached — same acceptor, same identity
+allocation, same capture. The flag is the right shape when every participant is
+present before the run starts; the command is the right shape for everything else,
+including reconnect. `:session` reports what a run is part of.
 
 ### Two-terminal verification
 
@@ -137,6 +142,11 @@ installed before RNG/content initialization.
 # joiner
 ./bin/vif -join 127.0.0.1:7777
 ```
+
+Or, on a run that is already playing, type `:host :7777` in terminal 1 and dial it
+from terminal 2 — the guest arrives holding the host's world at the tick it had
+reached. `:session` on either side reports the role, address, identity, peers and
+tick.
 
 Both sides should show `NET:1P/LOCK`, two cursors, and the same shared actors and
 score/progression after either participant moves, types and fires. Use terminals
@@ -186,10 +196,16 @@ Unknown top-level and action fields are errors. `run` and `tick` default to zero
 `count` applies only to an intent, and the four char-wait intents additionally
 require a one-rune `char`. Geometry must either omit both dimensions or set both.
 
-Solo scripts execute flat out. A host/join pair is wall-paced at the fixed game
-tick so two independent processes can exchange artifacts normally. The checked-in
-Phase 3 pair runs the previous 2,000-tick diagnostic, forces one owner-local heat
-burst on each side, and forces a quasar, storm, and shield-overlapping swarm:
+Pacing is a property of the run, not of the flags. Solo scripts execute flat out;
+a host/join pair is wall-paced at the fixed game tick so two independent processes
+can exchange artifacts normally; and a solo script that opens a session itself with
+`:host` starts pacing at that moment, with the clock re-anchored there rather than
+carried forward — otherwise the ticks it ran flat out would be a debt the pacing
+immediately spends. That is what makes a mid-run join scriptable at all.
+
+The checked-in Phase 3 pair runs the tick-zero 2,000-tick diagnostic, forces one
+owner-local heat burst on each side, and forces a quasar, storm, and
+shield-overlapping swarm:
 
 ```bash
 # terminal 1
@@ -201,11 +217,31 @@ burst on each side, and forces a quasar, storm, and shield-overlapping swarm:
   -l=log/phase3-guest -lv info -ls afs -lt 200 -j
 ```
 
+The Phase 4 pair is the mid-run form. Its host half takes **no** flag: it runs flat
+out to tick 400, opens hosting there with `:host`, and is wall-paced from that
+point, so the operator has the rest of the run to start the guest.
+
+```bash
+# terminal 1 — starts solo, opens hosting at tick 400
+./bin/vif -script script/phase4-host.toml \
+  -l=log/phase4-host -lv info -ls afs -lt 100 -j
+
+# terminal 2 — once "hosting opened mid-run" appears in the host log
+./bin/vif -join 127.0.0.1:7777 -script script/phase4-guest.toml \
+  -l=log/phase4-guest -lv info -ls afs -lt 100 -j
+```
+
+A guest half of a mid-run pair carries no action before a tick the join cannot
+have passed: a joiner enters at whatever tick the host had reached, which depends
+on when the operator started it, and a script action at an absolute tick the run is
+already past is an error rather than a no-op. The tick *budget* is relative — the
+driver counts the ticks it issues — so the budget itself needs no adjusting.
+
 Use distinct log directories so each terminal's session log and journal are
 unambiguous. Scripts do not inspect/assert world state or transport a snapshot;
-process exit, paired journals, status records, and Phase 3's cross-process gate
-provide those verdicts. Interactive play remains the acceptance path for actual
-terminal responsiveness and rendering.
+process exit, paired journals, status records, and the cross-process gate provide
+those verdicts. Interactive play remains the acceptance path for actual terminal
+responsiveness and rendering.
 
 `app.PlayJournal(paths ...string)` and `journal.Load` can reassemble several
 rotated files by `jseq`. The current CLI flag stores one string and passes one

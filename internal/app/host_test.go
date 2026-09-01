@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -231,6 +232,42 @@ func pumpHost(t *testing.T, host *App, ticks int) {
 		host.Tick(1)
 		time.Sleep(joinTestTickInterval / 2)
 	}
+}
+
+// TestHostCommandRunsUnderTheWorldLock is the regression for a deadlock, and it
+// exists because the unit test that did not have it passed.
+//
+// The whole router path runs inside App.handleIntent's critical section — mode/
+// must never acquire the world lock itself — so a SessionController method that
+// took the lock wedges the instance at the moment the operator presses enter, with
+// neither a tick nor a signal able to get it back. Calling BeginHosting directly
+// cannot see that; only the real input path can, so this test takes it.
+func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
+	a := mustHeadless(t, 0x301A, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	injectExCommand(t, a, "host 127.0.0.1:0")
+	a.Tick(1)
+	if a.HostAddr() == "" {
+		t.Fatalf("the command opened no socket; status bar says %q", a.Context().GetStatusMessage())
+	}
+	injectExCommand(t, a, "session")
+	a.Tick(1)
+	if got := a.Context().GetStatusMessage(); !strings.Contains(got, "host") {
+		t.Fatalf(":session reports %q", got)
+	}
+}
+
+// injectExCommand types one ex command through the intent pipeline, which is the
+// only path that runs it where the runtime actually runs it.
+func injectExCommand(t *testing.T, a *App, command string) {
+	t.Helper()
+	a.Inject(&input.Intent{Type: input.IntentModeSwitch, ModeTarget: input.ModeTargetCommand, Count: 1})
+	for _, r := range command {
+		a.Inject(&input.Intent{Type: input.IntentTextChar, Char: r, Count: 1})
+	}
+	a.Inject(&input.Intent{Type: input.IntentTextConfirm, Count: 1})
 }
 
 // TestBeginHostingRefusesASecondSession pins the one rule the command carries: a

@@ -28,6 +28,13 @@ type NavigationDebugState struct {
 // SessionController is what an operator command may ask of the session. Kept to
 // the two questions the command surface actually has: start hosting this run, and
 // describe what it is part of now.
+//
+// **Every method is called with the world lock already held.** The whole router
+// path runs inside App.handleIntent's critical section — mode/ must never acquire
+// the lock itself — so an implementation that took it would deadlock the instance
+// at the moment the operator pressed enter, with no tick and no signal able to get
+// it back. That is not hypothetical: it is what `:host` did the first time it was
+// wired through a script.
 type SessionController interface {
 	// BeginHosting opens this running instance to participants at addr. It returns
 	// an error rather than reporting one, because the operator typed the address.
