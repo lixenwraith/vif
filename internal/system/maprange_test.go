@@ -16,7 +16,7 @@ import (
 var lintDirs = []string{
 	".", "../engine", "../mode", "../fsm", "../fsm/std", "../status", "../event",
 	"../../pkg/genetic", "../../pkg/genetic/registry", "../../pkg/navigation",
-	"../../content",
+	"../content",
 }
 
 // allowedMapRanges lists iterations whose order provably cannot affect
