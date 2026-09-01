@@ -73,7 +73,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 		}
 	}()
 
-	guest := mustSocketJoiner(t, addr, seed, 120, 40)
+	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
 	close(stop)
 	<-ticking
 
@@ -136,6 +136,103 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	}
 }
 
+// TestAReconnectIsTheSameJoin covers Phase 3's fourth requirement, which is a
+// requirement about there being no fourth mechanism.
+//
+// A participant that drops leaves a departure crossing behind, and the coordinator
+// returns its identity to the pool. What comes back is a new dial: the same
+// acceptor, the same identity allocation, the same capture at whatever tick the
+// host has now reached, the same install, the same arrival crossing. Nothing here
+// is reconnect-specific, and that is the whole claim — so the test is the join test
+// run twice against one host, with a disconnect in between, asserting the second
+// arrival lands on a world the host has moved well past since the first.
+func TestAReconnectIsTheSameJoin(t *testing.T) {
+	const seed = 0x3019
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(120)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	addr := host.HostAddr()
+
+	firstTick := joinAndLeave(t, host, addr, seed)
+
+	// The host keeps playing between the two joins, so the second capture describes
+	// a world the first participant never saw.
+	pumpHost(t, host, 60)
+	secondTick := joinAndLeave(t, host, addr, seed)
+
+	if secondTick <= firstTick {
+		t.Fatalf("the reconnect installed tick %d, the first join installed %d; "+
+			"the host has to have moved on between them or this proves nothing",
+			secondTick, firstTick)
+	}
+}
+
+// joinAndLeave runs one full join against a live host, returns the tick the guest
+// installed at, and then drops the link.
+func joinAndLeave(t *testing.T, host *App, addr string, seed uint64) uint64 {
+	t.Helper()
+	stop := make(chan struct{})
+	ticking := make(chan struct{})
+	go func() {
+		defer close(ticking)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			host.Tick(1)
+			time.Sleep(joinTestTickInterval)
+		}
+	}()
+
+	guest, port := mustSocketJoiner(t, addr, seed, 120, 40)
+	close(stop)
+	<-ticking
+
+	installed := uint64(guest.World().Resources.Status.Ints.Get("snapshot.install_tick").Load())
+	waitForRosterPair(t, host, guest)
+
+	// The departure is a crossing like any other, so the host applies it a playout
+	// lead after it observes the lost link, not where the link was lost.
+	_ = port.Close()
+	guest.Close()
+	waitForHostRoster(t, host, 1)
+	return installed
+}
+
+// waitForHostRoster ticks the host until its roster falls to want, which is the
+// departure crossing applying a playout lead after the link was seen to go.
+func waitForHostRoster(t *testing.T, host *App, want int) {
+	t.Helper()
+	for range 80 {
+		var roster int
+		host.World().RunSafe(func() { roster = host.World().Resources.Player.Count() })
+		if roster == want {
+			return
+		}
+		host.Tick(1)
+		time.Sleep(joinTestTickInterval / 2)
+	}
+	var roster int
+	host.World().RunSafe(func() { roster = host.World().Resources.Player.Count() })
+	t.Fatalf("host roster holds %d cursors after the guest left, want %d", roster, want)
+}
+
+// pumpHost advances a hosting instance at something like its wall pacing, so the
+// transport's own goroutines see the ticks pass.
+func pumpHost(t *testing.T, host *App, ticks int) {
+	t.Helper()
+	for range ticks {
+		host.Tick(1)
+		time.Sleep(joinTestTickInterval / 2)
+	}
+}
+
 // TestBeginHostingRefusesASecondSession pins the one rule the command carries: a
 // run is in one session or none.
 func TestBeginHostingRefusesASecondSession(t *testing.T) {
@@ -158,7 +255,7 @@ func TestBeginHostingRefusesASecondSession(t *testing.T) {
 // identity, the start gate, the capture, the install and the catch-up. It is the
 // production sequence, assembled here because Loop owns it in a run with a
 // terminal and this harness owns its own ticks.
-func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) *App {
+func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *network.SocketPort) {
 	t.Helper()
 	pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
 	if err != nil {
@@ -203,7 +300,7 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) *App {
 	if err := guest.resumeJoinedSession(); err != nil {
 		t.Fatalf("join catch-up: %v", err)
 	}
-	return guest
+	return guest, port
 }
 
 // alignTicks advances whichever instance is behind until the two stand on one tick,
