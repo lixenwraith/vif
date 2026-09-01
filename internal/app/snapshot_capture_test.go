@@ -231,13 +231,27 @@ func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 			// Without them the 500 ticks are quiet and the gate proves far less
 			// than it appears to: a capture that dropped every stream position
 			// still passed until this was added.
-			spawnSharedSpecies(t, origin)
+			//
 			// Advance to a status-cadence boundary before capturing. Gauges like
 			// spatial.indexed_shared are published every StatSnapshotTicks, which
 			// is a function of the tick counter, so two instances agree on them at
 			// a boundary and need not between two. Capturing on one keeps the
 			// comparison about the capture rather than about publish phase.
+			//
+			// The species have to survive that advance. They did not, for a while:
+			// the boundary can be nearly a whole cadence away, the escalation FSM
+			// sweeps in the meantime, and the capture this comment claims carries
+			// three swarms carried none — so the 500 ticks below ran on a world
+			// with no shared species in it and proved much less than they read as.
+			// The species are spawned after the advance now, and asserted alive.
 			tickToStatBoundary(origin)
+			spawnSharedSpecies(t, origin)
+			origin.Tick(1)
+			var swarms int
+			origin.World().RunSafe(func() { swarms = origin.World().Components.Swarm.CountEntities() })
+			if swarms == 0 {
+				t.Fatal("the captured world holds no shared species; the 500 ticks would be quiet")
+			}
 
 			cap, err := origin.CaptureShared()
 			if err != nil {
