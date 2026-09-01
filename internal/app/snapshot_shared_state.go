@@ -299,11 +299,19 @@ func (a *App) captureSystemStatesLocked() ([]SystemStateRecord, error) {
 // offered — and only if all of that succeeds does anything get written. A world
 // half-installed is worse than one not installed at all: the first is a
 // divergence that looks like a working session.
+//
+// This is the direct form: it writes into the world it is called on. A running
+// instance takes StageShared instead, which resolves the capture into a second
+// world first and swaps at a tick boundary — see snapshot_stage.go.
 func (a *App) InstallShared(cap SharedCapture) error {
 	if err := a.VerifyCapture(cap); err != nil {
 		return err
 	}
+	return a.installShared(cap)
+}
 
+// installShared writes a capture whose identity has already been established.
+func (a *App) installShared(cap SharedCapture) error {
 	var err error
 	a.world.RunSafe(func() {
 		// Dry run first: a carrier that rejects its record must do so before the
@@ -316,13 +324,27 @@ func (a *App) InstallShared(cap SharedCapture) error {
 			}
 		}
 
+		// The roster and every cursor's control assignment are read before the
+		// stores are replaced, because both are re-derived from this instance's own
+		// position afterwards rather than adopted (D-13).
+		local := a.captureCursorControlLocked()
+
 		a.world.InstallSharedWorld(cap.World)
+		a.rebindCursorRosterLocked(local)
 
 		// The tick is shared identity. Adopting it also adopts the simulation
 		// clock, because engine.SimTime derives the instant from the tick — which
 		// is what lets an installed world resolve its stored deadlines on the same
 		// ticks the run it came from will.
 		a.world.Resources.Game.State.SetGameTicks(cap.Header.Tick)
+
+		// The record position is the same identity seen from the event queue. Every
+		// crossing's apply tick is computed from it, so an installed world stamping
+		// its own tick zero would schedule the session's next artifact into a past
+		// the barrier has already refused.
+		a.world.Resources.Event.Queue.RebaseStamp(cap.Header.Run, cap.Header.Tick)
+		a.world.Resources.Status.Correlation().SetRun(cap.Header.Run)
+		a.world.Resources.Status.Correlation().SetTick(cap.Header.Tick)
 
 		// Telemetry the scheduler publishes from the tick alone is republished
 		// with it, so the installed world reports the instant it is at rather than

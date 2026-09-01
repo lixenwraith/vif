@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
 
@@ -100,9 +101,11 @@ func newJoiningApp(cfg Config) (*App, error) {
 	}
 	a.pendingJoin = pending
 	a.sessionOffer = offer
-	// Identity now, roster at the start gate: a mismatched joiner must be refused
-	// before the host spends the rest of the lobby waiting for it.
-	if err := a.Join(offer.Anchor); err != nil {
+	// Identity now, world and roster at the start gate: a mismatched joiner must be
+	// refused before the host spends the rest of the lobby waiting for it. The
+	// position is deliberately not checked — the gate carries the host's world, so
+	// what tick it has reached is no longer this instance's problem to reproduce.
+	if err := a.JoinAt(offer.Anchor); err != nil {
 		_ = pending.Complete(err)
 		a.Close()
 		return nil, err
@@ -249,20 +252,41 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if err := a.HostSession(offer); err != nil {
 		return err
 	}
-	// Each joiner receives the closed roster addressed to itself. Sending the same
-	// participant list to everyone is what makes shared creation order identical.
+
+	// The capture is taken after the roster closes and before the gate opens. Both
+	// halves matter: the world a joiner installs has to already contain every cursor
+	// the roster names, and it has to describe a tick no participant has moved past.
+	body, tick, err := a.encodeJoinCapture()
+	if err != nil {
+		return err
+	}
+	offer.SnapshotTick, offer.SnapshotBytes = tick, len(body)
+	chunks, err := network.EncodeSnapshotChunks(tick, body)
+	if err != nil {
+		return err
+	}
+
+	// Each joiner receives the closed roster addressed to itself, then the world it
+	// names. Sending the same participant list and the same capture to everyone is
+	// what makes shared creation order identical.
 	for _, participant := range offer.Participants {
 		if participant.ID == offer.Host {
 			continue
 		}
 		addressed := offer
 		addressed.Assigned = participant.ID
-		body, err := json.Marshal(addressed)
+		start, err := json.Marshal(addressed)
 		if err != nil {
 			return err
 		}
-		if !port.Send(uint32(participant.ID), uint8(network.MsgStart), body) {
+		if !port.Send(uint32(participant.ID), uint8(network.MsgStart), start) {
 			return fmt.Errorf("host could not release participant %d", participant.ID)
+		}
+		for i, chunk := range chunks {
+			if !port.Send(uint32(participant.ID), uint8(network.MsgStateSnapshot), chunk) {
+				return fmt.Errorf("host could not send capture chunk %d/%d to participant %d",
+					i+1, len(chunks), participant.ID)
+			}
 		}
 	}
 	if err := a.waitForStartup(port, signals, remoteCount, true, func() bool {
@@ -287,7 +311,20 @@ func (a *App) startJoinSession() error {
 		return fmt.Errorf("join start gate: %w", err)
 	}
 	a.sessionOffer = final
-	if err := a.JoinSession(final); err != nil {
+	if !final.CarriesSnapshot() {
+		return fmt.Errorf("join start gate carries no capture; host is running an older build")
+	}
+	_, body, err := a.pendingJoin.ReceiveSnapshot()
+	if err != nil {
+		return err
+	}
+	cap, err := DecodeCapture(body)
+	if err != nil {
+		return err
+	}
+	a.showStartupStatus(fmt.Sprintf("Installing the session world at tick %d (%d bytes)",
+		cap.Header.Tick, len(body)))
+	if err := a.JoinSessionAt(final, cap); err != nil {
 		return fmt.Errorf("join roster: %w", err)
 	}
 	if err := a.pendingJoin.Ready(); err != nil {
@@ -295,6 +332,40 @@ func (a *App) startJoinSession() error {
 	}
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(final.Participants)))
 	return nil
+}
+
+// encodeJoinCapture reads and encodes the world a joiner installs, and reports what
+// the read cost.
+//
+// The whole capture is taken inside one acquisition of the world lock, which is a
+// tick the host does not run. That is the bounded pause Phase 3 is allowed and the
+// number that decides whether it stays bounded, so it is measured and published
+// rather than assumed: capture_ms is the stall, encode_ms is not (the encode runs
+// outside the lock), and snapshot_bytes is what the link then has to carry.
+func (a *App) encodeJoinCapture() ([]byte, uint64, error) {
+	started := time.Now() // [wall] measures the stall, not the simulation
+	cap, err := a.CaptureShared()
+	captureDur := time.Since(started)
+	if err != nil {
+		return nil, 0, fmt.Errorf("host capture: %w", err)
+	}
+
+	encodeStart := time.Now() // [wall]
+	body, err := EncodeCapture(cap)
+	encodeDur := time.Since(encodeStart)
+	if err != nil {
+		return nil, 0, fmt.Errorf("host capture encode: %w", err)
+	}
+
+	reg := a.world.Resources.Status
+	reg.Ints.Get("snapshot.capture_us").Store(captureDur.Microseconds())
+	reg.Ints.Get("snapshot.encode_us").Store(encodeDur.Microseconds())
+	reg.Ints.Get("snapshot.bytes").Store(int64(len(body)))
+	vlog.Info("app", "msg", "session capture",
+		"tick", cap.Header.Tick, "bytes", len(body),
+		"capture_us", captureDur.Microseconds(), "encode_us", encodeDur.Microseconds(),
+		"streams", len(cap.Streams), "systems", len(cap.Systems))
+	return body, cap.Header.Tick, nil
 }
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.

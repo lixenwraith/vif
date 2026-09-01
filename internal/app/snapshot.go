@@ -65,13 +65,14 @@ var denySharedKey = map[string]bool{
 	// engine.SimTime derives it from the tick, so it is tick * interval on every
 	// instance, and comparing it is what pins the simulation clock deterministic.
 	"engine.tick_slips": true,
-	// Remaining time on the gold sequence. Deterministic since the simulation clock
-	// became tick-derived, but not yet comparable: the value is measured from the
-	// tick the sequence spawned on, and a joiner's FSM reaches MainSpawnGold one
-	// tick before the host's does, so the two carry origins one tick apart for the
-	// life of the sequence. Admitting this key is the check that closes that gap;
-	// it is an open item for Phase 3 (join anytime), not scheduler jitter.
-	"gold.timer": true,
+	// gold.timer is no longer here. Phase 2 excluded it because a joiner reproduced
+	// the session from tick zero and its FSM reached MainSpawnGold one tick before
+	// the host's, so the two carried deadline origins a tick apart for the life of
+	// the sequence. Phase 3 removed the reproduction: a joiner installs the host's
+	// world, and the gold carrier writes its deadlines relative to the capture's
+	// tick, so the origin is the host's on every instance. The key is compared, and
+	// what it now pins is exactly the defect it was excluded for.
+	//
 	// Whole-store counts, which sum both domains: a participant's own player-domain
 	// population moves them. The shared position digest covers the shared half.
 	"nav.entities": true,

@@ -23,6 +23,12 @@ const (
 	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
 	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
 
+	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
+	// (D-19). It is the only message whose total size is a function of the world
+	// rather than of the format, so it is the only one that is split; see
+	// snapshot.go for the chunk header.
+	MsgStateSnapshot MessageType = 0x26 // Live: one chunk of a shared-world capture
+
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect MessageType = 0x03 // Live: a participant's link was lost
@@ -35,9 +41,9 @@ const (
 
 	// Reserved, unused: explicit connect and acknowledgement control, which the
 	// stream's own lifecycle carries today; roster and coordinator assignment beyond
-	// the startup offer; authentication; and 0x26, which carried the retired
-	// replay-the-session-from-tick-zero join and is reserved for the authoritative
-	// state snapshot that replaces it.
+	// the startup offer; and authentication. 0x26 is no longer among them: it
+	// carried the retired replay-the-session-from-tick-zero join and now carries the
+	// authoritative state snapshot that replaced it.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20

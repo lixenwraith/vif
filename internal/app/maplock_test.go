@@ -159,19 +159,29 @@ func TestMapSizeCropsWithOneCursor(t *testing.T) {
 // before anything is joined, so a participant that adopted the session's bounds
 // afterwards held that shared cursor on its own terminal's centre instead. Nothing
 // in the model corrects a shared position, so the two never agreed again.
+//
+// It runs the production sequence rather than half of it. The host closes its
+// roster and captures the world that produced; the guest adopts the bounds before
+// its own FSM boots — which is what mustJoiner is for and what the criterion below
+// still measures — and then installs the capture instead of re-deriving it. Phase 2
+// had the guest reproduce, and only the guest ran the level setup, so the two
+// settled the boot queue at different points and reached MainSpawnGold a tick
+// apart. gold.timer was excluded from the compared surface for exactly that reason;
+// it is compared here.
 func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 	host := mustHeadless(t, 0x14AD, 160, 48)
 	defer host.Close()
 	an := host.JoinAnchor()
 	guest := mustJoiner(t, 0x14AD, 84, 26, an)
 	defer guest.Close()
-	if err := guest.Join(an); err != nil {
-		t.Fatalf("join: %v", err)
-	}
 
-	for _, a := range []*App{host, guest} {
-		tickUntilCursor(t, a)
-		a.Tick(1)
+	offer := sessionOfferFor(an, 2)
+	if err := host.HostSession(offer); err != nil {
+		t.Fatalf("host session: %v", err)
+	}
+	host.Tick(1)
+	if err := guest.JoinSessionAt(offer, mustCapture(t, host)); err != nil {
+		t.Fatalf("join session: %v", err)
 	}
 	assertSharedParity(t, host, guest, 0)
 

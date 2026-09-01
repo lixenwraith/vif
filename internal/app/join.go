@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
 // ErrJoinMidRun is returned when the two participants are not at the same position.
@@ -43,7 +44,17 @@ func (a *App) JoinAnchor() event.JoinAnchor {
 // Join admits this App into the session an anchor describes: it verifies that this
 // instance reproduces the identity, refuses a position it cannot reconstruct, and
 // adopts the map latch. Call after NewHeadless, before the first Tick.
-func (a *App) Join(j event.JoinAnchor) error {
+//
+// Reproducing the position is what a capture removes the need for; JoinAt is the
+// same admission for a participant that receives the world instead of re-deriving it.
+func (a *App) Join(j event.JoinAnchor) error { return a.join(j, false) }
+
+// JoinAt admits this App into a session at whatever tick the host has reached. The
+// caller installs the capture; this only checks that the two instances are the same
+// simulation and adopts the shared bounds.
+func (a *App) JoinAt(j event.JoinAnchor) error { return a.join(j, true) }
+
+func (a *App) join(j event.JoinAnchor, midRun bool) error {
 	an := j.Anchor
 	if err := firstAnchorMismatch("join", a.anchorIdentity(an)); err != nil {
 		return err
@@ -51,7 +62,7 @@ func (a *App) Join(j event.JoinAnchor) error {
 	if an.MapWidth <= 0 || an.MapHeight <= 0 {
 		return fmt.Errorf("join: anchor carries no map latch (%dx%d)", an.MapWidth, an.MapHeight)
 	}
-	if st := a.Position(); st.Run != an.Run || st.Tick != an.Tick {
+	if st := a.Position(); !midRun && (st.Run != an.Run || st.Tick != an.Tick) {
 		return fmt.Errorf("%w: host at run %d tick %d, this instance at run %d tick %d",
 			ErrJoinMidRun, an.Run, an.Tick, st.Run, st.Tick)
 	}
@@ -59,7 +70,9 @@ func (a *App) Join(j event.JoinAnchor) error {
 	return nil
 }
 
-// JoinSession verifies a coordinator offer and adopts its map and roster.
+// JoinSession verifies a coordinator offer and adopts its map and roster. It is the
+// tick-zero form, kept for a harness that builds both worlds itself; the session
+// path takes JoinSessionAt.
 func (a *App) JoinSession(o network.SessionOffer) error {
 	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
@@ -68,6 +81,43 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 		return err
 	}
 	return a.configureSessionRoster(o, o.Assigned)
+}
+
+// JoinSessionAt admits this instance into a running session by installing the
+// host's world rather than reproducing it.
+//
+// The order is the whole of the join. The map latch first, because the bounds
+// decide what the level setup reflows and a capture's placements are relative to
+// them. Then the FSM boot's queued spawn is settled — not because the entities it
+// creates are wanted, but because it is what declares the cursor template a late
+// arrival is armed from, and because leaving it queued would spawn a second cursor
+// into slot zero after the install. Then the capture is staged into a second world
+// and swapped in, which is where this instance stops being its own session and
+// becomes part of the host's. The roster is configured last, on the installed
+// world: every cursor the offer names is already there, so what is left is which of
+// them this participant drives (D-13).
+func (a *App) JoinSessionAt(o network.SessionOffer, cap SharedCapture) error {
+	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
+		return err
+	}
+	if err := a.JoinAt(o.Anchor); err != nil {
+		return err
+	}
+	a.scheduler.Settle()
+
+	staged, err := a.StageShared(cap)
+	if err != nil {
+		return fmt.Errorf("join capture: %w", err)
+	}
+	if err := staged.Commit(); err != nil {
+		return err
+	}
+	stage, commit := staged.Timings()
+	vlog.Info("app", "msg", "join installed the session world",
+		"tick", cap.Header.Tick, "run", cap.Header.Run,
+		"stage_ms", stage.Milliseconds(), "commit_ms", commit.Milliseconds())
+
+	return a.bindSessionControl(o, o.Assigned)
 }
 
 // HostSession applies the same map and roster sequence after a guest accepts.
@@ -123,12 +173,35 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 		a.scheduler.Settle()
 	}
 
-	localAssignment, _ := o.Participant(local)
 	var count int
+	a.world.RunSafe(func() { count = a.world.Resources.Player.Count() })
+	if count != len(participants) {
+		return fmt.Errorf("join roster created %d cursors, want %d", count, len(participants))
+	}
+	if err := a.bindSessionControl(o, local); err != nil {
+		return err
+	}
+	a.ctx.PushLocal(event.EventCursorArmRequest,
+		&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
+	a.scheduler.Settle()
+	a.world.RunSafe(a.ctx.PublishMapLock)
+	return nil
+}
+
+// bindSessionControl applies the D-13 control assignment for this instance over a
+// roster that already exists: which participant owns each cursor, and which of them
+// this one drives. It creates nothing.
+//
+// It is the whole of a mid-run join's roster work. The cursors the offer names came
+// from the capture, and the one this participant is about to take does not exist on
+// any instance yet — it arrives as the EventParticipantJoined crossing, at one
+// agreed tick, which is the only way a shared entity may be created after tick zero
+// (D-11). A slot the offer names and the world does not hold is therefore normal
+// here rather than an error.
+func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) error {
 	a.world.RunSafe(func() {
 		roster := a.world.Resources.Player
-		count = roster.Count()
-		for _, p := range participants {
+		for _, p := range o.Participants {
 			e := roster.Slot(p.Slot)
 			if c, ok := a.world.Components.Cursor.GetPtr(e); ok {
 				c.PeerID = uint32(p.ID)
@@ -139,19 +212,26 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 			}
 		}
 	})
-	if count != len(participants) {
-		return fmt.Errorf("join roster created %d cursors, want %d", count, len(participants))
+	localAssignment, ok := o.Participant(local)
+	if !ok {
+		return fmt.Errorf("join roster omits local participant %d", local)
 	}
-	if localAssignment.Slot != 0 {
+	var owned bool
+	a.world.RunSafe(func() { owned = a.world.Resources.Player.Slot(localAssignment.Slot) != 0 })
+	if owned && localAssignment.Slot != a.localSlot() {
 		a.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
 			&event.CursorSetLocalPayload{Slot: localAssignment.Slot}, event.OriginDebug)
 		a.scheduler.Settle()
 	}
-	a.ctx.PushLocal(event.EventCursorArmRequest,
-		&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
-	a.scheduler.Settle()
 	a.world.RunSafe(a.ctx.PublishMapLock)
 	return nil
+}
+
+// localSlot returns the roster slot this instance's input follows.
+func (a *App) localSlot() uint8 {
+	var slot uint8
+	a.world.RunSafe(func() { slot = a.world.Resources.Player.LocalSlot() })
+	return slot
 }
 
 // adoptMapLatch applies the host's bounds through the D-14 authority — the level

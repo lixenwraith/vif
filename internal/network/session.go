@@ -24,7 +24,18 @@ type SessionOffer struct {
 	Assigned          PeerID               `json:"assigned"`
 	Participants      []SessionParticipant `json:"participants"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
+
+	// SnapshotTick names the tick of the capture that follows the start gate, and
+	// SnapshotBytes its encoded length. A joiner reads them before the transfer so a
+	// stream that stops halfway is a failed join rather than a world installed from
+	// a prefix. Zero means the gate carries no capture, which is what an offer
+	// written by a build that predates this looks like.
+	SnapshotTick  uint64 `json:"snapshot_tick,omitempty"`
+	SnapshotBytes int    `json:"snapshot_bytes,omitempty"`
 }
+
+// CarriesSnapshot reports whether the start gate is followed by a capture.
+func (o SessionOffer) CarriesSnapshot() bool { return o.SnapshotBytes > 0 }
 
 type sessionReply struct {
 	Error string `json:"error,omitempty"`
@@ -236,6 +247,34 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	p.offer = final
 	p.started = true
 	return final, nil
+}
+
+// ReceiveSnapshot reads the capture the start gate announced.
+//
+// It follows MsgStart on the same stream rather than preceding it, because the
+// roster the gate closes on is what decides which cursors the capture must already
+// contain: the host configures its own roster, captures the world that produced,
+// and sends the two in that order.
+func (p *PendingJoin) ReceiveSnapshot() (uint64, []byte, error) {
+	if !p.started {
+		return 0, nil, errors.New("join start gate not received")
+	}
+	if !p.offer.CarriesSnapshot() {
+		return 0, nil, errors.New("join start gate carries no capture")
+	}
+	tick, body, err := readSnapshot(p.conn, p.base.ReadTimeout)
+	if err != nil {
+		return 0, nil, fmt.Errorf("join snapshot: %w", err)
+	}
+	if tick != p.offer.SnapshotTick {
+		return 0, nil, fmt.Errorf("join snapshot: arrived for tick %d, gate named %d",
+			tick, p.offer.SnapshotTick)
+	}
+	if len(body) != p.offer.SnapshotBytes {
+		return 0, nil, fmt.Errorf("join snapshot: %d bytes arrived, gate named %d",
+			len(body), p.offer.SnapshotBytes)
+	}
+	return tick, body, nil
 }
 
 // Ready releases the host and transfers stream ownership to TransportConfig.

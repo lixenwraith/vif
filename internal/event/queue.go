@@ -233,6 +233,17 @@ func (eq *EventQueue) BeginTick(tick uint64) {
 	eq.stamp.Store(&Stamp{Run: eq.stamp.Load().Run, Tick: tick})
 }
 
+// RebaseStamp moves the record position onto an installed world's run and tick.
+//
+// It is the counterpart of NextRun for a capture rather than a reset: the tick is
+// shared identity, and an instance that adopted a world without adopting the
+// position it was taken at would stamp its records — and schedule every crossing's
+// apply tick — against a tick number the session left behind. Settle group 0,
+// because an install lands between two ticks. Caller MUST hold the world lock.
+func (eq *EventQueue) RebaseStamp(run, tick uint64) {
+	eq.stamp.Store(&Stamp{Run: run, Tick: tick})
+}
+
 // NextBoundary closes the current settle group; a replay settles the same groups.
 // Caller MUST hold the world lock.
 func (eq *EventQueue) NextBoundary() {

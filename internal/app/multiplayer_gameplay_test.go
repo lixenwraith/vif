@@ -299,11 +299,15 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 // schedulers have different wall origins and can miss different deadlines even
 // while they complete the same absolute simulation tick.
 //
-// The set is narrower than it was. Elapsed game time used to be here on the same
-// argument, and that argument was wrong in a way that cost a session: it was true
-// only because the simulation instant came from the pacing clock. engine.SimTime
-// derives it from the tick instead, so it is tick * interval everywhere, and
-// TestSharedSnapshotComparesElapsedGameTime below asserts it is compared.
+// The set is narrower than it was, twice over. Elapsed game time used to be here on
+// the same argument, and that argument was wrong in a way that cost a session: it
+// was true only because the simulation instant came from the pacing clock.
+// engine.SimTime derives it from the tick instead, so it is tick * interval
+// everywhere, and TestSharedSnapshotComparesElapsedGameTime below asserts it is
+// compared. The gold sequence's remaining time was here for a different reason —
+// a tick-zero joiner reached MainSpawnGold one tick before its host — and Phase 3
+// removed the reproduction that caused it, so it is compared too;
+// TestSnapshotJoinCarriesTheGoldDeadline is what now holds it.
 func TestSharedSnapshotExcludesLocalSchedulerTiming(t *testing.T) {
 	a := mustHeadless(t, 0xD165E58, 120, 40)
 	b := mustHeadless(t, 0xD165E58, 120, 40)
@@ -313,7 +317,6 @@ func TestSharedSnapshotExcludesLocalSchedulerTiming(t *testing.T) {
 	tickUntilCursor(t, b)
 
 	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
-	a.World().Resources.Status.Ints.Get("gold.timer").Store(4_200)
 	assertSharedParity(t, a, b, 0)
 }
 
