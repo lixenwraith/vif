@@ -83,7 +83,7 @@ type SnapshotAssembly struct {
 func (s *SnapshotAssembly) Add(frame []byte) (done bool, err error) {
 	admitted, done, err := s.AddChunk(frame)
 	if err == nil && !admitted && !done {
-		return false, errors.New("snapshot chunk: a repeat of one already taken")
+		return false, errors.New("snapshot chunk: out of the transfer's order")
 	}
 	return done, err
 }
@@ -123,7 +123,10 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 	}
 	if !s.started {
 		if index != 0 {
-			return false, false, fmt.Errorf("snapshot chunk %d arrived first, expected 0", index)
+			// A transfer already in flight when this receiver started listening.
+			// There is no body to build from its middle and nothing to report: the
+			// next one starts at its own first chunk.
+			return false, false, nil
 		}
 		s.tick, s.count, s.total, s.started = tick, count, total, true
 		s.body = make([]byte, 0, total)

@@ -112,6 +112,14 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 			offset, parameter.NetworkJoinLagTicks)
 	}
 
+	// The authority's cadence is stopped for the rest of this test, and everything
+	// it already sent is drained. The subject here is the join, and a correction is
+	// a *clock* as much as a world — installing one pins this guest's tick to the
+	// host's at the moment the capture was read — so one landing between two
+	// assertions would move the very thing they compare. Phase 4's own criteria are
+	// where a correction is the subject.
+	settleCorrections(t, host, guest)
+
 	// Bring the two onto one tick, then hold them there. The residual offset is this
 	// harness's wall pacing, not the join's: the guest caught up to the newest epoch
 	// it had seen, and the host closed a few more while the goroutine was stopping.
@@ -122,6 +130,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// the same shared entity. It is not in the capture: the capture was read before
 	// the participant had one.
 	waitForRosterPair(t, host, guest)
+	alignTicks(t, host, guest)
 	assertControl(t, host, 1, component.ControlRemote)
 	assertControl(t, guest, 1, component.ControlHuman)
 	if got := guest.localSlot(); got != 1 {
@@ -356,6 +365,19 @@ func alignTicks(t *testing.T, a, b *App) {
 		}
 	}
 	t.Fatalf("could not align: a at tick %d, b at tick %d", a.Position().Tick, b.Position().Tick)
+}
+
+// settleCorrections stops a host's publication cadence and drains whatever it has
+// already put on the wire, so a test whose subject is not the correction can compare
+// two instances without one of them being re-based mid-comparison.
+func settleCorrections(t *testing.T, host, guest *App) {
+	t.Helper()
+	host.corrections.close()
+	for range 8 {
+		guest.Tick(1)
+		host.Tick(1)
+	}
+	guest.ApplyPendingCorrections()
 }
 
 // waitForRosterPair ticks both instances until the arrival crossing has applied on

@@ -7,6 +7,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // The storm high water. Phase 2 measured a quiet world — around four kilobytes with
@@ -239,4 +240,126 @@ func BenchmarkCaptureAtStormHighWater(b *testing.B) {
 		bytes = len(body)
 	}
 	b.ReportMetric(float64(bytes), "bytes/capture")
+}
+
+// The correction at the storm high water, which is the measurement Phase 4's
+// cadence is actually chosen from.
+//
+// The capture figures above answered "what does one world cost". They are what said
+// the 2–5 Hz hypothesis does not hold at load: 176 KiB at 5 Hz is 859 KiB/s, in a
+// game whose artifact stream is 3–38 KB/s. What this measures is the thing that was
+// built in response — a correction is a whole capture only every
+// SnapshotKeyframeCorrections, and a difference against the last one in between —
+// so the number that decides the cadence is the *average* correction, not the peak.
+//
+// Reported rather than asserted, for the same reason as above: a byte threshold
+// here would fail on a world that got busier for honest reasons. What is asserted is
+// that the delta is smaller than the capture and that it carries something, because
+// a measurement of an unchanging world measures nothing.
+func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
+	peakTick, _ := findStormHighWater(t)
+	a := stormWorld(t, peakTick)
+
+	base, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("baseline capture: %v", err)
+	}
+	baseBody, err := EncodeCapture(base)
+	if err != nil {
+		t.Fatalf("baseline encode: %v", err)
+	}
+
+	// One cadence later: the difference a correction actually carries.
+	a.Tick(parameter.SnapshotCorrectionTicks)
+	next, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+
+	diffStart := time.Now() // [wall] cost measurement; runs outside the world lock
+	delta := DiffCapture(base, next)
+	diffDur := time.Since(diffStart)
+
+	deltaBody, err := EncodeCorrectionDelta(delta)
+	if err != nil {
+		t.Fatalf("delta encode: %v", err)
+	}
+
+	applyStart := time.Now() // [wall]
+	rebuilt, err := ApplyCaptureDelta(base, delta)
+	applyDur := time.Since(applyStart)
+	if err != nil {
+		t.Fatalf("apply delta: %v", err)
+	}
+	rebuiltBody, err := EncodeCapture(rebuilt)
+	if err != nil {
+		t.Fatalf("rebuilt encode: %v", err)
+	}
+	if string(rebuiltBody) != string(mustEncode(t, next)) {
+		t.Fatal("the delta did not reproduce the capture it was computed for")
+	}
+	if len(deltaBody) >= len(baseBody) {
+		t.Fatalf("delta is %d bytes against a %d-byte capture; it is buying nothing",
+			len(deltaBody), len(baseBody))
+	}
+	if delta.World.DeltaEntries() == 0 {
+		t.Fatalf("one cadence at the storm high water moved nothing; this measures a still world")
+	}
+
+	// The install, on a receiver that already holds the baseline — which is what a
+	// guest is, and is a different measurement from the join the test above makes.
+	// The staging world is built by the first install and re-used by the second, and
+	// the commit reconciles rather than replaces, so both halves of what Phase 3 left
+	// on the doorstep show up here as the difference between the two numbers.
+	receiver := mustHeadless(t, a.Seed(), 120, 40)
+	defer receiver.Close()
+	tickUntilCursor(t, receiver)
+	joinStaged, err := receiver.StageShared(base)
+	if err != nil {
+		t.Fatalf("stage baseline: %v", err)
+	}
+	if err := joinStaged.Commit(); err != nil {
+		t.Fatalf("commit baseline: %v", err)
+	}
+	joinStage, joinCommit := joinStaged.Timings()
+
+	correctionStaged, err := receiver.StageShared(rebuilt)
+	if err != nil {
+		t.Fatalf("stage correction: %v", err)
+	}
+	if err := correctionStaged.Commit(); err != nil {
+		t.Fatalf("commit correction: %v", err)
+	}
+	corrStage, corrCommit := correctionStaged.Timings()
+	magnitude := correctionStaged.Difference()
+
+	// The cadence's actual uplink: one keyframe every SnapshotKeyframeCorrections
+	// corrections and a delta the rest of the time.
+	perSecond := func(hz float64) float64 {
+		k := float64(parameter.SnapshotKeyframeCorrections)
+		avg := (float64(len(baseBody)) + (k-1)*float64(len(deltaBody))) / k
+		return hz * avg / 1024
+	}
+	t.Logf("storm high water: keyframe %6d bytes | delta %6d bytes (%.1f%%) | "+
+		"%d component cells over %d shared placements | diff %9s apply %9s",
+		len(baseBody), len(deltaBody), 100*float64(len(deltaBody))/float64(len(baseBody)),
+		delta.World.DeltaEntries(), sharedPlacements(a), diffDur, applyDur)
+	t.Logf("install: first (a join) stage %9s commit %9s | second (a correction) stage %9s commit %9s | "+
+		"magnitude %d cells over %d entities, %d cells of placement",
+		joinStage, joinCommit, corrStage, corrCommit,
+		magnitude.Entries, magnitude.Entities, magnitude.CellShift)
+	t.Logf("cadence uplink with a keyframe every %d corrections: %.1f KiB/s at 5 Hz, %.1f KiB/s at 2 Hz "+
+		"(full snapshots would be %.1f and %.1f)",
+		parameter.SnapshotKeyframeCorrections, perSecond(5), perSecond(2),
+		5*float64(len(baseBody))/1024, 2*float64(len(baseBody))/1024)
+}
+
+// mustEncode is EncodeCapture with the error folded into the test.
+func mustEncode(t *testing.T, cap SharedCapture) []byte {
+	t.Helper()
+	body, err := EncodeCapture(cap)
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+	return body
 }

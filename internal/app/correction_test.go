@@ -3,6 +3,7 @@ package app
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -616,5 +617,101 @@ func TestWorldDifferenceCountsWhatMoved(t *testing.T) {
 	}
 	if d.CellShift != 5 {
 		t.Fatalf("cell shift = %d, want the five cells the cursor moved", d.CellShift)
+	}
+}
+
+// TestJoinReusesTheCadencesKeyframe is doorstep item 6, or the half of it that is
+// about the world lock.
+//
+// Phase 3 read the world once per participant, on the accept goroutine, so a second
+// participant dialling mid-join waited behind the first one's read as well as behind
+// its transfer. A host publishes keyframes on a cadence now, so a join takes
+// whichever one is fresh enough and only reads the world when none is — which is
+// what makes the read per-cadence rather than per-join, and what makes two joins
+// arriving together share one.
+func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
+	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(20)
+
+	deadline := time.Now().Add(2 * time.Second)
+	first, firstTick, err := a.corrections.keyframeAt(0, deadline)
+	if err != nil {
+		t.Fatalf("first keyframe: %v", err)
+	}
+	second, secondTick, err := a.corrections.keyframeAt(firstTick, deadline)
+	if err != nil {
+		t.Fatalf("second keyframe: %v", err)
+	}
+	if secondTick != firstTick || &second[0] != &first[0] {
+		t.Fatalf("a second join at tick %d read the world again instead of taking the keyframe at %d",
+			secondTick, firstTick)
+	}
+
+	// A join needs a world *later* than its admission, and asking for one this run
+	// has not reached is a refusal rather than a stale capture.
+	if _, _, err := a.corrections.keyframeAt(firstTick+4, time.Now().Add(50*time.Millisecond)); err == nil {
+		t.Fatal("a keyframe was produced for a tick the session has not reached")
+	}
+
+	a.Tick(8)
+	third, thirdTick, err := a.corrections.keyframeAt(firstTick+4, deadline)
+	if err != nil {
+		t.Fatalf("third keyframe: %v", err)
+	}
+	if thirdTick <= firstTick {
+		t.Fatalf("keyframe tick %d, want one past %d", thirdTick, firstTick)
+	}
+	if len(third) == 0 {
+		t.Fatal("the fresh keyframe is empty")
+	}
+}
+
+// TestMidRunJoinWaitsOutThePlayoutLead is the window this phase closed.
+//
+// D-22 admits a participant before the world is read for it, so that the epochs
+// produced in between reach it rather than falling into the gap. What that ordering
+// does not cover is an epoch produced *before* the admission and flushed to the
+// peers this instance had at that moment: it reaches the joiner not at all, and a
+// capture taken at the admission tick does not contain it either, because its apply
+// tick is still a playout lead ahead and the barrier's floor does not drop it.
+//
+// A join therefore asks for a world a lead further on. By then every artifact
+// produced before the admission has applied into the capture, and the copies that do
+// arrive are recognised as already-contained.
+func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
+	host := mustHeadless(t, 0x5EEDBEEF, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(30)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+
+	admission := host.Position().Tick
+	done := make(chan uint64, 1)
+	go func() {
+		_, tick, err := host.corrections.keyframeAt(
+			admission+parameter.NetworkBarrierDelayTicks, time.Now().Add(2*time.Second))
+		if err != nil {
+			done <- 0
+			return
+		}
+		done <- tick
+	}()
+
+	// The join is waiting on ticks it cannot take itself.
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		host.Tick(1)
+	}
+	select {
+	case tick := <-done:
+		if tick < admission+parameter.NetworkBarrierDelayTicks {
+			t.Fatalf("a join installed the world at tick %d, admitted at %d with a lead of %d",
+				tick, admission, parameter.NetworkBarrierDelayTicks)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("the join never got its world")
 	}
 }

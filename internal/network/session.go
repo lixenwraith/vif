@@ -162,6 +162,14 @@ func (p *PendingJoin) hold(msg *Message) bool {
 	switch msg.Type {
 	case MsgHeartbeat:
 		return true
+	case MsgStateCorrection:
+		// Swallowed rather than held. The host broadcasts its cadence to every peer
+		// it has, and this stream became one the moment the participant was admitted
+		// — before the world was read for it (D-22) — so correction chunks arrive
+		// interleaved with the gate. There is nothing to keep: this participant is
+		// about to install a whole world, and every correction before that describes
+		// one it does not have yet.
+		return true
 	case MsgEvent, MsgStateSync, MsgStateDigest, MsgDisconnect:
 		// Bounded, because this buffer is filled by the peer on the other end of the
 		// stream and drained only when the world arrives. The ceiling is far above
