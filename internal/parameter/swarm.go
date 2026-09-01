@@ -23,6 +23,12 @@ const (
 	// SwarmPatternDuration is time per pattern before cycling
 	SwarmPatternDuration = 500 * time.Millisecond
 
+	// SwarmTransitionRetryInterval re-arms a state timer whose transition could not
+	// resolve this tick. It exists so a failed entry is a short delay rather than a
+	// wedge: a timer left expired takes its transition branch on every subsequent
+	// tick, and the branch returns before the state integrates.
+	SwarmTransitionRetryInterval = 200 * time.Millisecond
+
 	// SwarmChargeInterval is time between charge sequences
 	SwarmChargeInterval = 5 * time.Second
 	// SwarmLockDuration is freeze time before charge

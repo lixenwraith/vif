@@ -33,6 +33,7 @@ type SwarmSystem struct {
 	statPlayerKills     *atomic.Int64
 	statProtected       *atomic.Int64
 	statProtectedPlayer *atomic.Int64
+	statStalls          *atomic.Int64
 	lifecycle           lifecycleTelemetry
 	motion              bounceTelemetry
 	sweep               cellSweep
@@ -51,6 +52,7 @@ func NewSwarmSystem(world *engine.World) engine.System {
 	s.statPlayerKills = world.Resources.Status.Ints.Get("swarm.player_kills")
 	s.statProtected = world.Resources.Status.Ints.Get("swarm.protected_rejects")
 	s.statProtectedPlayer = world.Resources.Status.Ints.Get("swarm.protected_player_rejects")
+	s.statStalls = world.Resources.Status.Ints.Get("swarm.transition_stalls")
 	s.lifecycle = newLifecycleTelemetry(world.Resources.Status, "swarm")
 	s.motion = newBounceTelemetry(world.Resources.Status, "swarm")
 
@@ -66,6 +68,7 @@ func (s *SwarmSystem) Init() {
 	s.statPlayerKills.Store(0)
 	s.statProtected.Store(0)
 	s.statProtectedPlayer.Store(0)
+	s.statStalls.Store(0)
 	s.lifecycle.Reset()
 	s.motion.Reset()
 	s.enabled = true
@@ -408,9 +411,19 @@ func (s *SwarmSystem) updateChaseState(
 	// Charge interval countdown
 	swarmComp.ChargeIntervalRemaining -= dt
 	if swarmComp.ChargeIntervalRemaining <= 0 {
-		// Transition to Lock
-		s.enterLockState(headerEntity, swarmComp)
-		return
+		if s.enterLockState(headerEntity, swarmComp) {
+			return
+		}
+		// The lock could not resolve a target this tick. Re-arm the interval
+		// before falling through, because an expired interval takes this branch
+		// again on every following tick and the early return above skips both the
+		// homing and integrateAndSync — the swarm would stop integrating for good.
+		// A knockback still lands on its velocity, but nothing turns that velocity
+		// into movement, so it sits exactly where it stopped while the shield
+		// strikes it every tick and never ejects it. That is the swarm found
+		// parked inside a shield on 2026-08-31.
+		swarmComp.ChargeIntervalRemaining = parameter.SwarmTransitionRetryInterval
+		s.statStalls.Add(1)
 	}
 
 	// Homing movement (only if not in kinetic immunity)
@@ -435,8 +448,15 @@ func (s *SwarmSystem) updateLockState(
 	// Timer countdown
 	swarmComp.LockRemaining -= dt
 	if swarmComp.LockRemaining <= 0 {
-		// Transition to Charge
-		s.enterChargeState(headerEntity, swarmComp)
+		if !s.enterChargeState(headerEntity, swarmComp) {
+			// Lock freezes the swarm in place and holds it enraged, which is what
+			// makes it immune to the shield's ejection. Retrying a charge entry
+			// that keeps failing would hold it there permanently. Deceleration
+			// always succeeds and leads back to chase, which is a state that moves
+			// and can be knocked back.
+			s.enterDecelerateState(swarmComp)
+			s.statStalls.Add(1)
+		}
 	}
 	// No movement during lock - freeze in place
 }
@@ -523,12 +543,15 @@ func (s *SwarmSystem) updateDecelerateState(
 	s.integrateAndSync(headerEntity, dtSec)
 }
 
-// enterLockState transitions to lock phase, locking current target position for charge
-func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
+// enterLockState transitions to lock phase, locking current target position for
+// charge. It reports whether the transition took: a caller that assumed it always
+// did would leave the swarm in a state whose timer has already expired, which is
+// a wedge rather than a delay.
+func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
 	// Resolve base target for this swarm's group (cursor or tower etc)
 	baseX, baseY, ok := resolveBaseTarget(s.world, headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
 	swarmComp.State = component.SwarmStateLock
@@ -541,13 +564,15 @@ func (s *SwarmSystem) enterLockState(headerEntity core.Entity, swarmComp *compon
 		kineticComp.VelX = 0
 		kineticComp.VelY = 0
 	}
+	return true
 }
 
-// enterChargeState transitions to charge phase, or teleport if LOS blocked
-func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *component.SwarmComponent) {
+// enterChargeState transitions to charge phase, or teleport if LOS blocked.
+// Reports whether the swarm left the lock; see enterLockState.
+func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *component.SwarmComponent) bool {
 	headerPos, ok := s.world.Positions.GetPosition(headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
 	// Check LOS to locked target
@@ -558,14 +583,15 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 	)
 
 	if !hasLOS {
+		// Teleport entry is total: it either takes, or falls back to deceleration.
 		s.enterTeleportState(headerEntity, swarmComp, headerPos.X, headerPos.Y)
-		return
+		return true
 	}
 
 	// Normal charge
 	kineticComp, ok := s.world.Components.Kinetic.GetPtr(headerEntity)
 	if !ok {
-		return
+		return false
 	}
 
 	swarmComp.State = component.SwarmStateCharge
@@ -584,6 +610,7 @@ func (s *SwarmSystem) enterChargeState(headerEntity core.Entity, swarmComp *comp
 
 	kineticComp.VelX = dx / chargeSec
 	kineticComp.VelY = dy / chargeSec
+	return true
 }
 
 // enterTeleportState initiates teleport to locked target
