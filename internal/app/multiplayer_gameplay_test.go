@@ -298,6 +298,12 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 // digest needs but the manual-clock harness cannot produce naturally: two real
 // schedulers have different wall origins and can miss different deadlines even
 // while they complete the same absolute simulation tick.
+//
+// The set is narrower than it was. Elapsed game time used to be here on the same
+// argument, and that argument was wrong in a way that cost a session: it was true
+// only because the simulation instant came from the pacing clock. engine.SimTime
+// derives it from the tick instead, so it is tick * interval everywhere, and
+// TestSharedSnapshotComparesElapsedGameTime below asserts it is compared.
 func TestSharedSnapshotExcludesLocalSchedulerTiming(t *testing.T) {
 	a := mustHeadless(t, 0xD165E58, 120, 40)
 	b := mustHeadless(t, 0xD165E58, 120, 40)
@@ -307,7 +313,43 @@ func TestSharedSnapshotExcludesLocalSchedulerTiming(t *testing.T) {
 	tickUntilCursor(t, b)
 
 	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
-	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
 	a.World().Resources.Status.Ints.Get("gold.timer").Store(4_200)
 	assertSharedParity(t, a, b, 0)
+}
+
+// TestSharedSnapshotComparesElapsedGameTime is the regression for the 2026-08-31
+// kinetics divergence. Game time was read from each process's pacing clock, so
+// every shared reader that measures now.Sub(stored) — the quasar's speed step is
+// the one that diverged — crossed its threshold on a different tick per instance,
+// and nothing compared the clock itself. Two instances driven the same number of
+// ticks must report the same elapsed game time, and the shared surface must be
+// the thing that says so.
+func TestSharedSnapshotComparesElapsedGameTime(t *testing.T) {
+	a := mustHeadless(t, 0xD165E58, 120, 40)
+	b := mustHeadless(t, 0xD165E58, 120, 40)
+	defer a.Close()
+	defer b.Close()
+	tickUntilCursor(t, a)
+	tickUntilCursor(t, b)
+
+	elapsed := func(x *App) int64 {
+		return x.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Load()
+	}
+	if elapsed(a) != elapsed(b) {
+		t.Fatalf("elapsed game time %d vs %d at the same tick", elapsed(a), elapsed(b))
+	}
+	if want := int64(a.World().Resources.Game.State.GetGameTicks()) *
+		parameter.GameUpdateInterval.Milliseconds(); elapsed(a) != want {
+		t.Fatalf("elapsed game time %d, want tick * interval = %d", elapsed(a), want)
+	}
+
+	// The key is inside the compared surface, so a clock that drifts back onto the
+	// wall fails here rather than surfacing as a kinetics digest mismatch minutes in.
+	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
+	if sharedKey("time.game_elapsed_ms") == false {
+		t.Fatal("time.game_elapsed_ms is excluded from the shared surface again")
+	}
+	if _, _, _, differs := FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
+		t.Fatal("a forged elapsed game time did not move the shared snapshot")
+	}
 }

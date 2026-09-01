@@ -60,13 +60,17 @@ var denySharedPrefix = []string{
 var denySharedKey = map[string]bool{
 	"engine.apm":       true, // actions this participant took, not the session's
 	"engine.music_apm": true,
-	// Interactive schedulers start and slip independently. Tick identity is shared;
-	// wall elapsed time and missed-deadline telemetry are not simulation state.
-	"engine.tick_slips":    true,
-	"time.game_elapsed_ms": true,
-	// Remaining wall-clock duration is a display gauge. The shared FSM state and
-	// resulting timeout event are the deterministic surface; scheduler wake jitter
-	// makes the nanosecond remainder unsuitable for equality.
+	// Interactive schedulers slip independently: a missed deadline is this
+	// process's pacing, not simulation state. Elapsed game time is no longer here —
+	// engine.SimTime derives it from the tick, so it is tick * interval on every
+	// instance, and comparing it is what pins the simulation clock deterministic.
+	"engine.tick_slips": true,
+	// Remaining time on the gold sequence. Deterministic since the simulation clock
+	// became tick-derived, but not yet comparable: the value is measured from the
+	// tick the sequence spawned on, and a joiner's FSM reaches MainSpawnGold one
+	// tick before the host's does, so the two carry origins one tick apart for the
+	// life of the sequence. Admitting this key is the check that closes that gap;
+	// it is an open item for Phase 3 (join anytime), not scheduler jitter.
 	"gold.timer": true,
 	// Whole-store counts, which sum both domains: a participant's own player-domain
 	// population moves them. The shared position digest covers the shared half.

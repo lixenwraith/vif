@@ -5,9 +5,10 @@ import (
 	"time"
 )
 
-// ManualEpoch is the fixed origin of manual time. A constant rather than time.Now
-// so a replay produces identical timestamps across runs and machines.
-var ManualEpoch = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+// ManualEpoch is the origin of manual time, and the same constant every other
+// clock's simulation instant is measured from (SimEpoch). Sharing it means a
+// manual run's Now and the tick-derived instant in processTick coincide exactly.
+var ManualEpoch = SimEpoch
 
 // ManualClock is a discrete time source advanced only by Step: game time is a pure
 // function of accumulated steps, with no wall clock input at all. Drives headless

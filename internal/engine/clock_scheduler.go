@@ -141,7 +141,9 @@ func NewClockScheduler(
 		ctl:          ctl,
 		tickInterval: tickInterval,
 
-		gameStartTime: ctl.Now(),
+		// SimEpoch, not the pacing clock: elapsed game time is tick * interval on
+		// every instance, which is what makes time.game_elapsed_ms comparable.
+		gameStartTime: SimEpoch,
 
 		eventRouter: event.NewRouter(world.Resources.Event.Queue),
 
@@ -994,10 +996,11 @@ func (cs *ClockScheduler) executeReset() {
 	cs.world.Resources.Event.Queue.ResetTelemetry()
 	cs.resetTelemetry()
 
-	// 3. Reset Scheduler internal timing
-	now := cs.ctl.Now()
-	cs.nextTickDeadline = now.Add(cs.tickInterval)
-	cs.gameStartTime = now
+	// 3. Reset Scheduler internal timing. The deadline is a pacing value and stays
+	// on the wall clock; the game-time origin is SimEpoch, because the tick counter
+	// the elapsed figure is derived from restarts with the run.
+	cs.nextTickDeadline = cs.ctl.Now().Add(cs.tickInterval)
+	cs.gameStartTime = SimEpoch
 
 	// 4. Reset FSM state - This will trigger OnEnter actions
 	if err := cs.fsm.Reset(cs.world); err != nil {
@@ -1075,11 +1078,15 @@ func (cs *ClockScheduler) processTick() {
 			cs.tickSlips++
 			cs.tickSlipPending = false
 		}
-		tickTime = cs.ctl.Now()
-
 		// The barrier applies against the completed tick's stamp. Its settle group
 		// therefore replays between ticks, before the next BeginTick resets Boundary.
 		tick := cs.world.Resources.Game.State.GetGameTicks() + 1
+
+		// The simulation instant is derived from the tick, never from the pacing
+		// clock: it is shared state, and every participant must read the same value
+		// at the same tick (SimEpoch). The pacing clock still decides *when* this
+		// tick runs, and RealTime below still reports the wall.
+		tickTime = SimTime(tick, cs.tickInterval)
 		if cs.world.Resources.Event.Queue.ReceiveWire(tick) > 0 {
 			cs.settleLocked("wire")
 		}
