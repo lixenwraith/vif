@@ -1,6 +1,8 @@
 package system
 
 import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
@@ -398,4 +400,42 @@ func (s *GeneticSystem) updateTelemetry() {
 	s.typeFitBuf = buf
 	s.buffers.Observe(2, len(s.typeFitBuf))
 	s.statTypeFit.Store(string(buf))
+}
+
+// SaveShared carries the genetic populations (D-19).
+//
+// The second learned resource the hidden-state survey named. The registry lives
+// behind a mutex and per-slot atomics in pkg/genetic, which is why it needed an
+// export contract it did not have: persistence could write one species at a time
+// to a caller-supplied store, and a transfer needs all of them as one value with
+// no store involved and no lock reaching here.
+func (s *GeneticSystem) SaveShared() ([]byte, error) {
+	s.mu.Lock()
+	reg := s.registry
+	s.mu.Unlock()
+	if reg == nil {
+		return json.Marshal([]registry.SpeciesPopulation{})
+	}
+	return json.Marshal(reg.Export())
+}
+
+// LoadShared installs exported populations. A species this build does not
+// register is an error rather than a skip: a population that silently fails to
+// install leaves this instance evolving from its own archive while believing it
+// adopted the capture's.
+func (s *GeneticSystem) LoadShared(data []byte) error {
+	var pops []registry.SpeciesPopulation
+	if err := json.Unmarshal(data, &pops); err != nil {
+		return fmt.Errorf("genetic: %w", err)
+	}
+	s.mu.Lock()
+	reg := s.registry
+	s.mu.Unlock()
+	if reg == nil {
+		if len(pops) == 0 {
+			return nil
+		}
+		return errors.New("genetic: registry is not initialized")
+	}
+	return reg.Import(pops)
 }

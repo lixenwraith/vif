@@ -72,3 +72,44 @@ func TestFastRandIntnRange(t *testing.T) {
 		t.Fatalf("Intn(-5) = %d", v)
 	}
 }
+
+// TestSetStateResumesTheSequence is the property a snapshot needs from a stream:
+// not that a seed reproduces a sequence from its start, but that a recorded
+// position reproduces it from where the run had reached.
+func TestSetStateResumesTheSequence(t *testing.T) {
+	origin := NewFastRand(0xC0FFEE)
+	for range 97 {
+		origin.Next()
+	}
+	mark := origin.State()
+
+	want := make([]uint64, 16)
+	for i := range want {
+		want[i] = origin.Next()
+	}
+
+	// A different generator, at a different position, resumed from the mark.
+	resumed := NewFastRand(0xDEADBEEF)
+	for range 13 {
+		resumed.Next()
+	}
+	resumed.SetState(mark)
+	for i, w := range want {
+		if got := resumed.Next(); got != w {
+			t.Fatalf("draw %d after resume: got %x want %x", i, got, w)
+		}
+	}
+}
+
+// TestSetStateRejectsZero keeps a zero-valued field from producing a dead stream:
+// xorshift64 has a fixed point at zero and would return it forever.
+func TestSetStateRejectsZero(t *testing.T) {
+	r := NewFastRand(1)
+	r.SetState(0)
+	if r.State() == 0 {
+		t.Fatal("SetState(0) left the generator at its fixed point")
+	}
+	if r.Next() == 0 || r.Next() == 0 {
+		t.Fatal("generator is stuck at zero")
+	}
+}

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -352,11 +353,40 @@ func (pr *PlayerResource) PredictedDepth() int { return pr.predCount }
 type RandResource struct {
 	root    uint64
 	session atomic.Uint64
+
+	// The generator most recently issued for each domain and label. A system draws
+	// its stream once in Init and holds that pointer for its lifetime, so these are
+	// the very generators the simulation draws from — which is what lets a snapshot
+	// resume all of them without every system having to hand its own over.
+	//
+	// Not cleared by NextSession: the counter advances immediately after a game's
+	// systems have finished drawing, so a map cleared there would be empty for the
+	// whole of the game it describes. A re-Init overwrites each key with the fresh
+	// generator it just drew, which is the same replacement the system does to its
+	// own field, so the two stay the same object.
+	streamMu sync.Mutex
+	streams  map[streamKey]*vmath.FastRand
+}
+
+// streamKey names one labelled generator. Domain is part of the identity: a dual
+// system draws the same label in both domains and the two must not collapse (D-8).
+type streamKey struct {
+	domain core.Domain
+	label  string
+}
+
+// StreamState is one generator's position, named by the domain and label that
+// identify it rather than by an index, so a snapshot survives a system being
+// added, removed or reordered.
+type StreamState struct {
+	Domain core.Domain `toml:"domain"`
+	Label  string      `toml:"label"`
+	State  uint64      `toml:"state"`
 }
 
 // NewRandResource creates the stream factory for a root seed
 func NewRandResource(root uint64) *RandResource {
-	return &RandResource{root: root}
+	return &RandResource{root: root, streams: make(map[streamKey]*vmath.FastRand, 64)}
 }
 
 // Root returns the seed the run was started with
@@ -369,9 +399,62 @@ func (r *RandResource) Session() uint64 { return r.session.Load() }
 // finished initializing, so the next game draws different streams from one root.
 func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 
-// Stream returns the labelled generator for a domain in the current session
+// Stream returns the labelled generator for a domain in the current session, and
+// records it as that name's live generator so SaveStreams can report where the
+// stream has reached.
+//
+// Every call issues a fresh generator, which is what a re-Init after a reset
+// needs: a resumed one would carry the finished game's position into the new one.
+// Two live holders of a single name would therefore be one stream by name and two
+// by behaviour, and only the later would be restorable —
+// TestSystemStreamLabelsAreUnique rules that out over the real system set.
 func (r *RandResource) Stream(d core.Domain, label string) *vmath.FastRand {
-	return vmath.NewSeededRand(r.DomainRoot(d), label)
+	g := vmath.NewSeededRand(r.DomainRoot(d), label)
+	r.streamMu.Lock()
+	r.streams[streamKey{domain: d, label: label}] = g
+	r.streamMu.Unlock()
+	return g
+}
+
+// SaveStreams reports every issued generator's position, sorted by domain then
+// label so two instances that issued the same streams produce byte-identical
+// output. This is the D-19 answer to §4.1's "~24 per-system RNG streams": they are
+// enumerable because they are issued through one factory, not because anything
+// keeps a list by hand.
+func (r *RandResource) SaveStreams() []StreamState {
+	r.streamMu.Lock()
+	defer r.streamMu.Unlock()
+	out := make([]StreamState, 0, len(r.streams))
+	for k, g := range r.streams {
+		out = append(out, StreamState{Domain: k.domain, Label: k.label, State: g.State()})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Domain != out[j].Domain {
+			return out[i].Domain < out[j].Domain
+		}
+		return out[i].Label < out[j].Label
+	})
+	return out
+}
+
+// LoadStreams resumes each named generator in place, so a system holding the
+// pointer it drew in Init continues from the captured position without knowing a
+// transfer happened. A name the receiving build does not issue is reported rather
+// than dropped: it means the two sides disagree about which streams exist, and a
+// stream that silently restarts is a divergence nothing else would catch.
+func (r *RandResource) LoadStreams(states []StreamState) []string {
+	r.streamMu.Lock()
+	defer r.streamMu.Unlock()
+	var unknown []string
+	for _, st := range states {
+		g, ok := r.streams[streamKey{domain: st.Domain, label: st.Label}]
+		if !ok {
+			unknown = append(unknown, core.DomainNames[st.Domain]+":"+st.Label)
+			continue
+		}
+		g.SetState(st.State)
+	}
+	return unknown
 }
 
 // DomainRoot returns a domain's root seed, for packages that build their own

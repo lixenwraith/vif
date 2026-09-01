@@ -42,6 +42,19 @@ type SystemDef struct {
 	Domain      string
 	Requires    []string
 	Optional    []string
+	Snapshot    string
+}
+
+// SnapshotConst renders the engine.SnapshotProfile constant for a declared
+// snapshot obligation (D-19). Empty declares none, which is the common case.
+func (s SystemDef) SnapshotConst() string {
+	switch s.Snapshot {
+	case "", "none":
+		return "SnapshotNone"
+	case "state":
+		return "SnapshotState"
+	}
+	return ""
 }
 
 // DomainConst renders the engine.SystemDomain constant for a declared profile
@@ -225,6 +238,9 @@ func parseSystems(comp *ast.CompositeLit) []SystemDef {
 		if def.DomainConst() == "" {
 			panic(fmt.Sprintf("system %s: domain %q is not \"shared\", \"player\" or \"dual\"", def.Name, def.Domain))
 		}
+		if def.SnapshotConst() == "" {
+			panic(fmt.Sprintf("system %s: snapshot %q is not \"\", \"none\" or \"state\"", def.Name, def.Snapshot))
+		}
 		result = append(result, def)
 	}
 	return result
@@ -253,6 +269,8 @@ func parseSystemDef(lit *ast.CompositeLit) SystemDef {
 			def.Requires = extractStringList(kv.Value)
 		case "Optional":
 			def.Optional = extractStringList(kv.Value)
+		case "Snapshot":
+			def.Snapshot = extractString(kv.Value)
 		}
 	}
 	return def
@@ -812,6 +830,20 @@ var systemProfiles = map[string]engine.SystemProfile{
 {{- end }}
 {{- range .ContextSystems }}
 	"{{ .Name }}": {Domain: engine.{{ .DomainConst }}, Requires: {{ .RequiresExpr }}},
+{{- end }}
+}
+
+// systemSnapshots is every system's declared D-19 obligation: whether it holds
+// future-affecting state outside the component stores, and therefore whether it
+// must implement engine.SharedStateSaver. The boundary suite asserts the
+// declaration against the code, which is what turns the hidden-state survey from
+// a list someone maintains into one the build checks.
+var systemSnapshots = map[string]engine.SnapshotProfile{
+{{- range .Systems }}
+	"{{ .Name }}": engine.{{ .SnapshotConst }},
+{{- end }}
+{{- range .ContextSystems }}
+	"{{ .Name }}": engine.{{ .SnapshotConst }},
 {{- end }}
 }
 `))

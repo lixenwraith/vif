@@ -1,6 +1,9 @@
 package system
 
 import (
+	"encoding/json"
+	"fmt"
+	"slices"
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -936,4 +939,86 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 	}
 
 	return 0, 0, false
+}
+
+// navSnapshot is the navigation system's D-17 derivation phase. The flow fields,
+// the composite passability grid and the route graph are all recomputed at
+// install, so none of them travels; what does travel is *where in the throttle
+// cycle* the capture stood, because two instances that recompute on different
+// ticks produce different routes for anything spawned in between.
+//
+// LastTargets travels with the phase for the same reason: the dirty-distance test
+// compares this tick's targets against it, so a cache installed without it
+// recomputes on a different tick than the run it reproduces.
+type navSnapshot struct {
+	RouteRebuildTicks int             `json:"route_rebuild_ticks"`
+	Groups            []navGroupPhase `json:"groups"`
+}
+
+// navGroupPhase is one target group's throttle phase, named by group ID so the
+// capture survives groups being created or destroyed between capture and install.
+type navGroupPhase struct {
+	GroupID              uint8         `json:"group_id"`
+	PointTicks           int           `json:"point_ticks"`
+	PointPending         bool          `json:"point_pending"`
+	PointLastTargets     []vmath.Point `json:"point_last_targets"`
+	CompositeTicks       int           `json:"composite_ticks"`
+	CompositePending     bool          `json:"composite_pending"`
+	CompositeLastTargets []vmath.Point `json:"composite_last_targets"`
+}
+
+// SaveShared carries the D-17 recompute phase (D-19). The fields themselves are
+// derived at install and deliberately not serialized.
+func (s *NavigationSystem) SaveShared() ([]byte, error) {
+	snap := navSnapshot{RouteRebuildTicks: s.routeRebuildTicks}
+	ids := make([]uint8, 0, len(s.groups))
+	for id := range s.groups {
+		ids = append(ids, id)
+	}
+	// Canonical order: a capture is compared as well as installed, so map order
+	// must not reach the bytes.
+	slices.Sort(ids)
+	for _, id := range ids {
+		g := s.groups[id]
+		if g == nil {
+			continue
+		}
+		phase := navGroupPhase{GroupID: id}
+		if c := g.pointFlowCache; c != nil {
+			phase.PointTicks, phase.PointPending = c.TicksSinceCompute, c.PendingUpdate
+			phase.PointLastTargets = slices.Clone(c.LastTargets)
+		}
+		if c := g.compositeFlowCache; c != nil {
+			phase.CompositeTicks, phase.CompositePending = c.TicksSinceCompute, c.PendingUpdate
+			phase.CompositeLastTargets = slices.Clone(c.LastTargets)
+		}
+		snap.Groups = append(snap.Groups, phase)
+	}
+	return json.Marshal(snap)
+}
+
+// LoadShared restores the recompute phase onto caches this world has already
+// created, and forces a recompute of the fields themselves: the phase says when
+// the next recompute is due, not what the last one produced.
+func (s *NavigationSystem) LoadShared(data []byte) error {
+	var snap navSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("navigation: phase: %w", err)
+	}
+	s.routeRebuildTicks = snap.RouteRebuildTicks
+	for _, phase := range snap.Groups {
+		g := s.getOrCreateGroup(phase.GroupID)
+		if g == nil {
+			continue
+		}
+		if c := g.pointFlowCache; c != nil {
+			c.TicksSinceCompute, c.PendingUpdate = phase.PointTicks, phase.PointPending
+			c.LastTargets = append(c.LastTargets[:0], phase.PointLastTargets...)
+		}
+		if c := g.compositeFlowCache; c != nil {
+			c.TicksSinceCompute, c.PendingUpdate = phase.CompositeTicks, phase.CompositePending
+			c.LastTargets = append(c.LastTargets[:0], phase.CompositeLastTargets...)
+		}
+	}
+	return nil
 }

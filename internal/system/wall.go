@@ -1,6 +1,8 @@
 package system
 
 import (
+	"errors"
+	"fmt"
 	"math/rand/v2"
 	"sync/atomic"
 
@@ -26,7 +28,13 @@ type WallSystem struct {
 	// Configuration
 	pushCheckEveryTick bool // When true, runs full push check in Update()
 
-	// Maze generator source, reused across spawns so two mazes in one session differ
+	// Maze generator source, reused across spawns so two mazes in one session
+	// differ. The PCG source is held beside the Rand that wraps it because only the
+	// source can report and resume its position, which is what D-19 needs: this is
+	// the "second generator" the hidden-state survey named, the one stream in the
+	// simulation that is not a vmath.FastRand and so is not in RandResource's
+	// inventory. WallSystem declares Snapshot: "state" for exactly this field.
+	mazePCG *rand.PCG
 	mazeRng *rand.Rand
 
 	// Metrics
@@ -56,8 +64,9 @@ func NewWallSystem(world *engine.World) engine.System {
 func (s *WallSystem) Init() {
 	s.pendingPushChecks = make([]vmath.Point, 0, 64)
 	s.pushCheckEveryTick = false
-	s.mazeRng = rand.New(rand.NewPCG(
-		vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name()+":maze"), 0))
+	s.mazePCG = rand.NewPCG(
+		vmath.DeriveSeed(s.world.Resources.Rand.DomainRoot(core.DomainShared), s.Name()+":maze"), 0)
+	s.mazeRng = rand.New(s.mazePCG)
 	s.statEnabled.Store(true)
 	s.statWallCount.Store(0)
 	s.statPushEvents.Store(0)
@@ -1135,4 +1144,34 @@ func (s *WallSystem) invalidateBoxNeighbors(x, y int) {
 			wall.Rune = s.computeBoxChar(nx, ny, wall.BoxStyle)
 		}
 	}
+}
+
+// SaveShared carries the maze generator's position (D-19).
+//
+// Every other simulation stream is a vmath.FastRand issued through RandResource,
+// which enumerates them all. This one is a math/rand/v2 source, because the maze
+// generator in pkg/maze takes a *rand.Rand and uses Shuffle, which FastRand does
+// not provide. Its position decides the layout of every maze the run has yet to
+// build, so a snapshot that omitted it would reconstruct a world whose next maze
+// differs from the one the captured run was going to produce.
+//
+// PCG's own binary form is the encoding: it is canonical, versioned by the
+// standard library, and round-trips exactly.
+func (s *WallSystem) SaveShared() ([]byte, error) {
+	if s.mazePCG == nil {
+		return nil, errors.New("wall: maze generator is not initialized")
+	}
+	return s.mazePCG.MarshalBinary()
+}
+
+// LoadShared resumes the maze generator at a captured position. The Rand wrapper
+// reads through the same source, so no rewrap is needed.
+func (s *WallSystem) LoadShared(data []byte) error {
+	if s.mazePCG == nil {
+		return errors.New("wall: maze generator is not initialized")
+	}
+	if err := s.mazePCG.UnmarshalBinary(data); err != nil {
+		return fmt.Errorf("wall: maze generator state: %w", err)
+	}
+	return nil
 }

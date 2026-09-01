@@ -16,6 +16,13 @@ type SystemDef struct {
 	Domain      string   // Domain profile: "shared", "player" or "dual"
 	Requires    []string // Systems this one cannot function without
 	Optional    []string // Systems whose absence only degrades this one
+	// Snapshot is the D-19 obligation: "" (none) when the system holds no
+	// future-affecting state outside the component stores, "state" when it does
+	// and implements engine.SharedStateSaver to carry it. The declaration is
+	// asserted against the code by TestSnapshotDeclarationsMatchImplementations,
+	// so the pair cannot drift: a system that grows private state and forgets to
+	// declare it fails the build rather than a session.
+	Snapshot string
 }
 
 // RendererDef defines a renderer for registration
@@ -126,7 +133,8 @@ var Systems = []SystemDef{
 
 	// --- Composite / Structure ---
 	{Name: "composite", Constructor: "NewCompositeSystem", Domain: "shared"},                                                                      // owns the shared header and member contract
-	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation"}},             // shared walls push occupants from both domains (D-12)
+	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Snapshot: "state",
+		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // holds the maze generator's position, which is not a vmath stream             // shared walls push occupants from both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
 	{Name: "gateway", Constructor: "NewGatewaySystem", Domain: "shared", Requires: []string{"navigation"}, Optional: []string{"eye", "snake"}},    // shared route anchor; gated species are optional
 
@@ -155,7 +163,7 @@ var Systems = []SystemDef{
 		Optional: []string{"explosion", "combat"}}, // player missile impact crosses through an explosion request (D-3)
 
 	// --- Movement / Collision ---
-	{Name: "navigation", Constructor: "NewNavigationSystem", Domain: "shared"},      // derives flow fields and route graphs from the map and shared species
+	{Name: "navigation", Constructor: "NewNavigationSystem", Domain: "shared", Snapshot: "state"}, // D-17 recompute phase; the field itself is re-derived at install      // derives flow fields and route graphs from the map and shared species
 	{Name: "soft_collision", Constructor: "NewSoftCollisionSystem", Domain: "dual"}, // one impulse stream per occupant domain (D-8)
 
 	// --- Combat ---
@@ -193,8 +201,10 @@ var Systems = []SystemDef{
 	// --- Lifecycle ---
 	{Name: "death", Constructor: "NewDeathSystem", Domain: "dual"},                                                  // routes one death batch per domain; effect systems subscribe to its output
 	{Name: "timer", Constructor: "NewTimerSystem", Domain: "dual", Requires: []string{"death"}},                     // expires entities of either domain through the death pipeline
-	{Name: "adaptation", Constructor: "NewAdaptationSystem", Domain: "shared", Requires: []string{"navigation"}},    // shared stream and route state; scores navigation graphs
-	{Name: "genetic", Constructor: "NewGeneticSystem", Domain: "shared", Optional: []string{"death", "adaptation"}}, // shared genotype state; observes lifecycle and route outcomes
+	{Name: "adaptation", Constructor: "NewAdaptationSystem", Domain: "shared", Snapshot: "state",
+		Requires: []string{"navigation"}}, // EXP3 route weights, pre-sampled pool and consumer head decide a spawned eye's route    // shared stream and route state; scores navigation graphs
+	{Name: "genetic", Constructor: "NewGeneticSystem", Domain: "shared", Snapshot: "state",
+		Optional: []string{"death", "adaptation"}}, // per-species GA populations behind pkg/genetic's registry // shared genotype state; observes lifecycle and route outcomes
 
 	// --- Audio ---
 	{Name: "audio", Constructor: "NewAudioSystem", Domain: "player"},                              // per-instance sound sink with no simulation writes
