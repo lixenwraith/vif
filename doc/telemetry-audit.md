@@ -286,10 +286,10 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `nugget.cursor_rejects` (int) | Requests rejected because nugget could not resolve a roster cursor. |
 | `nugget.disabled_rejects` (int) | Action requests dropped while the nugget system was disabled. |
 | `nugget.spawn_failures` (int) | nugget spawn requests that could not produce an entity. |
-| `network.barrier_applied_local` (int) | Deferred local artifacts admitted at their playout boundary. |
+| `network.barrier_applied_local` (int) | Deferred local artifacts admitted at their playout boundary. Only the three that still take one: an arrival, a departure and a reset. Everything else a participant produces is in `network.crossings_local`. |
 | `network.barrier_applied_peer` (int) | Peer artifacts admitted at their playout boundary. |
-| `network.barrier_deferred` (int) | Local crossing artifacts accepted by the barrier. |
-| `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. |
+| `network.barrier_deferred` (int) | Local crossing artifacts the barrier took ownership of, which since Phase 4 is only the three that create or destroy a shared entity. |
+| `network.barrier_late` (int) | Artifacts admitted after their scheduled apply tick. Under an authority this is an ordering decision rather than a divergence — the host applies what reaches it in the order it reaches it — but it is still what says a participant's link is not keeping the playout lead. |
 | `network.barrier_peer_applied` (bool) | Whether the most recent boundary admitted a peer artifact. |
 | `network.barrier_peer_artifacts` (int) | Peer artifacts admitted at the most recent boundary. |
 | `network.barrier_peer_lag_ticks` (int) | Closed-epoch lag beyond the negotiated playout lead. |

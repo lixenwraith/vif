@@ -143,7 +143,7 @@ func (c *corrections) publish() error {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 
-	cap, err := c.captureLocked()
+	cap, err := c.readWorld()
 	if err != nil {
 		return err
 	}
@@ -199,9 +199,12 @@ func (c *corrections) publish() error {
 	return nil
 }
 
-// captureLocked reads the world and publishes what the read cost.
-// Caller MUST hold publishMu; it MUST NOT hold the world lock.
-func (c *corrections) captureLocked() (SharedCapture, error) {
+// readWorld takes one capture and publishes what the read cost.
+//
+// Deliberately not named *Locked: in this package that suffix means the caller holds
+// the *world* lock, and here the caller must hold publishMu and must NOT hold the
+// world lock, because this acquires it.
+func (c *corrections) readWorld() (SharedCapture, error) {
 	started := time.Now() // [wall] measures the stall this instance takes
 	cap, err := c.a.CaptureShared()
 	dur := time.Since(started)
@@ -235,7 +238,7 @@ func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 			return body, tick, nil
 		}
 		if c.a.Position().Tick >= minTick {
-			body, tick, err := c.keyframeNowLocked()
+			body, tick, err := c.takeKeyframe()
 			c.publishMu.Unlock()
 			return body, tick, err
 		}
@@ -249,10 +252,10 @@ func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 	}
 }
 
-// keyframeNowLocked reads the world and makes the result this host's baseline.
-// Caller MUST hold publishMu.
-func (c *corrections) keyframeNowLocked() ([]byte, uint64, error) {
-	cap, err := c.captureLocked()
+// takeKeyframe reads the world and makes the result this host's baseline.
+// Caller MUST hold publishMu, and MUST NOT hold the world lock.
+func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
+	cap, err := c.readWorld()
 	if err != nil {
 		return nil, 0, err
 	}
