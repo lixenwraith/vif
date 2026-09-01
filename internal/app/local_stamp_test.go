@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 )
 
 // unstampedLocal pins the Local-class types some producer still pushes in the
@@ -64,7 +65,7 @@ func TestLocalEventsCarryThePlayerDomain(t *testing.T) {
 		}
 	})
 
-	if _, err := RunScript(a, DefaultScript(seed, steps)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(seed, steps)); err != nil {
 		t.Fatalf("soak: %v", err)
 	}
 

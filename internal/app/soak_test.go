@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -40,7 +41,7 @@ func soakScale(short, normal, full int) int {
 
 // soakRun is one journalled source run and everything a replay needs to reproduce it
 type soakRun struct {
-	cap  *Capture
+	cap  *journal.Capture
 	want []string
 	end  event.Stamp
 	seed uint64
@@ -52,12 +53,12 @@ const soakConfigDir = "../../config/main"
 const soakContentDir = "../../data"
 
 // towerRegions mirrors config/main's declared regions and their entry states
-var towerRegions = []ScriptRegion{
-	{"main", "MainSpawnGold"},
-	{"quasar", "QuasarFuse"},
-	{"storm", "StormSetup"},
-	{"monitor", "MonitorWarmup"},
-	{"tower", "TowerSetup"},
+var towerRegions = []journal.FuzzRegion{
+	{Name: "main", State: "MainSpawnGold"},
+	{Name: "quasar", State: "QuasarFuse"},
+	{Name: "storm", State: "StormSetup"},
+	{Name: "monitor", State: "MonitorWarmup"},
+	{Name: "tower", State: "TowerSetup"},
 }
 
 // towerConfig pins the external map set and a viewport the tower layout fits in
@@ -142,7 +143,7 @@ func TestReplaySoakTower(t *testing.T) {
 	for i := range n {
 		seed := uint64(soakSeedBase) + 0x2000 + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
-			opt := DefaultScript(seed, soakSteps)
+			opt := journal.DefaultFuzz(seed, soakSteps)
 			opt.RegionSet = towerRegions
 			run := runSoakScriptCfg(t, towerConfig(t, seed), opt, func(a *App) {
 				a.Tick(1) // boot and capture player_entity before TowerSetup reads it
@@ -157,12 +158,12 @@ func TestReplaySoakTower(t *testing.T) {
 }
 
 // runSoakScriptCfg is runSoakScript with the config and options injected and
-// a prelude called before RunScript. The prelude's Region call is OriginDebug,
+// a prelude called before journal.RunFuzz. The prelude's Region call is OriginDebug,
 // so it journals and replays like any other record.
-func runSoakScriptCfg(t *testing.T, cfg Config, opt ScriptOptions, prelude func(*App)) soakRun {
+func runSoakScriptCfg(t *testing.T, cfg Config, opt journal.FuzzOptions, prelude func(*App)) soakRun {
 	t.Helper()
 
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg.Journal, cfg.JournalSink = true, cap
 
 	a, err := NewHeadless(cfg)
@@ -174,7 +175,7 @@ func runSoakScriptCfg(t *testing.T, cfg Config, opt ScriptOptions, prelude func(
 		prelude(a)
 	}
 
-	if _, err := RunScript(a, opt); err != nil {
+	if _, err := journal.RunFuzz(a, opt); err != nil {
 		a.Close()
 		t.Fatalf("script: %v", err)
 	}
@@ -211,7 +212,7 @@ func runSoakScriptCfg(t *testing.T, cfg Config, opt ScriptOptions, prelude func(
 // itself was clean before any replay is attempted
 func runSoakScript(t *testing.T, seed uint64, steps int) soakRun {
 	t.Helper()
-	return runSoakScriptCfg(t, scriptConfig(seed), DefaultScript(seed, steps), nil)
+	return runSoakScriptCfg(t, scriptConfig(seed), journal.DefaultFuzz(seed, steps), nil)
 }
 
 // replaySoak reproduces a source run from its capture
@@ -243,7 +244,7 @@ func TestSoakSessionStateStaysOperator(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plain run: %v", err)
 	}
-	if _, err := RunScript(plain, DefaultScript(seed, soakSteps)); err != nil {
+	if _, err := journal.RunFuzz(plain, journal.DefaultFuzz(seed, soakSteps)); err != nil {
 		t.Fatalf("plain script: %v", err)
 	}
 	want := plain.SnapshotSimulation()
@@ -256,9 +257,9 @@ func TestSoakSessionStateStaysOperator(t *testing.T) {
 	defer noisy.Close()
 
 	rng := vmath.NewSeededRand(seed, "perturb")
-	opt := DefaultScript(seed, soakSteps)
-	opt.Perturb = func(a *App) {
-		ctx := a.Context()
+	opt := journal.DefaultFuzz(seed, soakSteps)
+	opt.Perturb = func() {
+		ctx := noisy.Context()
 		ctx.MouseDisabled.Store(rng.Intn(2) == 0)
 		ctx.MouseFreeMode.Store(rng.Intn(2) == 0)
 		ctx.OverlayHUD.Store(rng.Intn(2) == 0)
@@ -266,7 +267,7 @@ func TestSoakSessionStateStaysOperator(t *testing.T) {
 		ctx.SetStatusMessage("perturb", 0, true)
 		ctx.IncrementFrameNumber()
 	}
-	if _, err := RunScript(noisy, opt); err != nil {
+	if _, err := journal.RunFuzz(noisy, opt); err != nil {
 		t.Fatalf("perturbed script: %v", err)
 	}
 
@@ -295,7 +296,7 @@ func pick(rng *vmath.FastRand, sites []int) int {
 func groupPairs(recs []event.JournalRecord, distinct bool) []int {
 	var out []int
 	for i := 0; i+1 < len(recs); i++ {
-		if keyOf(recs[i]) != keyOf(recs[i+1]) || recs[i].Seq == recs[i+1].Seq {
+		if !journal.SameReplayGroup(recs[i], recs[i+1]) || recs[i].Seq == recs[i+1].Seq {
 			continue
 		}
 		if distinct && recs[i].Type == recs[i+1].Type {
@@ -342,10 +343,10 @@ func swapInGroup(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Journ
 func splitGroup(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.JournalRecord, string, bool) {
 	var sites []int
 	for i := 1; i < len(recs); i++ {
-		if keyOf(recs[i-1]) != keyOf(recs[i]) {
+		if !journal.SameReplayGroup(recs[i-1], recs[i]) {
 			continue // starts a group rather than ending one
 		}
-		if i+1 < len(recs) && keyOf(recs[i+1]) == keyOf(recs[i]) {
+		if i+1 < len(recs) && journal.SameReplayGroup(recs[i+1], recs[i]) {
 			continue
 		}
 		sites = append(sites, i)
@@ -452,7 +453,7 @@ func soakSnapshot(t *testing.T, seed uint64) []string {
 		t.Fatalf("run: %v", err)
 	}
 	defer a.Close()
-	if _, err := RunScript(a, DefaultScript(seed, soakSteps)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(seed, soakSteps)); err != nil {
 		t.Fatalf("script: %v", err)
 	}
 	return a.SnapshotSimulation()

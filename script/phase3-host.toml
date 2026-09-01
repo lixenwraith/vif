@@ -1,0 +1,40 @@
+# Headless half of the Phase 3 multiplayer diagnostic run.
+# Pair with phase3-guest.toml; both advance 2,000 ticks in real time.
+schema = 1
+ticks = 2000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_right"
+count = 6
+
+[[action]]
+tick = 40
+# Slot 0 is shared entity 1. God mode left it at max heat, so adding another
+# full bar triggers the owner-local burst path rather than merely setting heat.
+event = "HeatAddRequest"
+payload = "entity = 1\ndelta = 100"
+
+# A Bus event is owner-produced by default, so only the host script emits it.
+[[action]]
+tick = 100
+event = "QuasarSpawnRequest"
+payload = "x = 40\ny = 15"
+
+# Shared events are re-derived, so the guest script emits this at the same tick.
+[[action]]
+tick = 200
+event = "StormSpawnRequest"
+
+[[action]]
+tick = 300
+event = "SwarmSpawnRequest"
+# The slot-0 cursor starts near (58,18); this remains inside its god-mode shield
+# after the scripted six-cell move and targets the shield-ejection regression.
+payload = "x = 64\ny = 18"

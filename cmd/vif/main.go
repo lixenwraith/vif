@@ -39,6 +39,7 @@ var (
 	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
 	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
+	flagScript       = flag.String("script", "", "Run an authored deterministic TOML script headlessly")
 
 	flagLogs    = newLogFlags()
 	flagSession sessionFlags
@@ -60,7 +61,7 @@ func main() {
 	logStatus := setupDiagnostics()
 
 	var err error
-	sessionErr := flagSession.validateInvocation(*flagSchema, *flagCheck, *flagReplay)
+	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, flagSession)
 	switch {
 	case sessionErr != nil:
 		err = sessionErr
@@ -70,6 +71,8 @@ func main() {
 		err = app.Check(buildConfig(), os.Stdout)
 	case *flagReplay != "":
 		err = app.PlayJournal(*flagReplay)
+	case *flagScript != "":
+		_, err = app.RunScript(buildConfig(), *flagScript)
 	default:
 		err = app.Run(buildConfig())
 	}
@@ -227,6 +230,19 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-players applies to -host")
 	}
 	return nil
+}
+
+func validateInvocation(schema, check bool, replay, script string, session sessionFlags) error {
+	modes := 0
+	for _, selected := range []bool{schema, check, replay != "", script != ""} {
+		if selected {
+			modes++
+		}
+	}
+	if modes > 1 {
+		return fmt.Errorf("-schema, -check, -replay, and -script are mutually exclusive")
+	}
+	return session.validateInvocation(schema, check, replay)
 }
 
 // --- Flag types ---

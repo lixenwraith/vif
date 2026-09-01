@@ -61,7 +61,7 @@ func PlayJournal(paths ...string) error {
 	if err := a.VerifyAnchor(an); err != nil {
 		return err
 	}
-	d, err := NewReplayDriver(a, set.Records)
+	d, err := newReplayDriver(a, set.Records)
 	if err != nil {
 		return err
 	}
@@ -82,7 +82,7 @@ func parseSpeed(tok string) engine.TimeScale {
 // player paces a ReplayDriver against wall time and presents each frame
 type player struct {
 	a *App
-	d *ReplayDriver
+	d *journal.ReplayDriver
 
 	interval time.Duration    // recorded game time per tick
 	rec      engine.TimeScale // rate the run was recorded at

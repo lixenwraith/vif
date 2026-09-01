@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -56,7 +57,7 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 // has to resolve locally and cross as the absolute cell it selected — which is
 // exactly what they failed to do, and what no parity criterion could see while every
 // one of them held both fixed.
-func liveScript(seed uint64, steps int) ScriptOptions {
+func liveScript(seed uint64, steps int) journal.FuzzOptions {
 	opt := parityScript(seed, steps)
 	opt.Regions, opt.MapSetups = false, false
 	opt.DisableTicks, opt.DisableCommands, opt.DisableOverlays = true, true, true
@@ -257,7 +258,7 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	opt := parityScript(seed, steps)
 	opt.Regions = false
 	opt.MapSetups = false
-	d := NewScriptDriver(live, opt)
+	d := journal.NewFuzzDriver(live, opt)
 	for i := range steps {
 		before := live.Position().Tick
 		if !d.Step() {
@@ -453,14 +454,14 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 
 }
 
-func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA ScriptOptions, tickPair func()) {
+func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA journal.FuzzOptions, tickPair func()) {
 	t.Helper()
 	steps := optA.Steps
 	assertSharedParity(t, a, b, -1)
 
 	optB := optA
 	optB.Seed ^= 0x9E3779B97F4A7C15
-	da, db := NewScriptDriver(a, optA), NewScriptDriver(b, optB)
+	da, db := journal.NewFuzzDriver(a, optA), journal.NewFuzzDriver(b, optB)
 
 	startA, startB := cursorPosition(a, localA), cursorPosition(b, localB)
 	movedA, movedB := false, false

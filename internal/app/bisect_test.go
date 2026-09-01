@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 )
 
 var bisectSeed = flag.Uint64("soak.seed", 0, "seed to bisect in TestReplayBisect")
@@ -14,7 +15,7 @@ var bisectSeed = flag.Uint64("soak.seed", 0, "seed to bisect in TestReplayBisect
 // bisectOnce journals the first steps script actions and replays them
 func bisectOnce(t *testing.T, seed uint64, steps int) error {
 	t.Helper()
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(seed)
 	cfg.Journal, cfg.JournalSink = true, cap
 
@@ -22,7 +23,7 @@ func bisectOnce(t *testing.T, seed uint64, steps int) error {
 	if err != nil {
 		t.Fatalf("source run: %v", err)
 	}
-	if _, err := RunScript(a, DefaultScript(seed, steps)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(seed, steps)); err != nil {
 		a.Close()
 		t.Fatalf("script: %v", err)
 	}
@@ -55,11 +56,11 @@ func TestReplayBisect(t *testing.T) {
 		}
 	}
 
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(seed)
 	cfg.Journal, cfg.JournalSink = true, cap
 	a, _ := NewHeadless(cfg)
-	_, _ = RunScript(a, DefaultScript(seed, hi))
+	_, _ = journal.RunFuzz(a, journal.DefaultFuzz(seed, hi))
 	end := a.Position()
 	a.Close()
 
@@ -82,7 +83,7 @@ func TestReplayLockstep(t *testing.T) {
 	}
 	seed := *bisectSeed
 
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(seed)
 	cfg.Journal, cfg.JournalSink = true, cap
 
@@ -93,12 +94,12 @@ func TestReplayLockstep(t *testing.T) {
 	// Perturb runs after every action and draws from no stream, so snapshotting
 	// here records the source's state at the last action of each tick
 	want := make(map[event.Stamp][]string, soakSteps)
-	opt := DefaultScript(seed, soakSteps)
-	opt.Perturb = func(a *App) {
-		p := a.Position()
-		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = a.SnapshotSimulation()
+	opt := journal.DefaultFuzz(seed, soakSteps)
+	opt.Perturb = func() {
+		p := src.Position()
+		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = src.SnapshotSimulation()
 	}
-	if _, err := RunScript(src, opt); err != nil {
+	if _, err := journal.RunFuzz(src, opt); err != nil {
 		src.Close()
 		t.Fatalf("script: %v", err)
 	}
@@ -117,7 +118,7 @@ func TestReplayLockstep(t *testing.T) {
 	if err := rep.VerifyAnchor(anchors[0]); err != nil {
 		t.Fatalf("verify anchor: %v", err)
 	}
-	d, err := NewReplayDriver(rep, cap.Records())
+	d, err := newReplayDriver(rep, cap.Records())
 	if err != nil {
 		t.Fatalf("driver: %v", err)
 	}

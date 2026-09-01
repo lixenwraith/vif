@@ -11,8 +11,8 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | Mode | Presents | Driven | Geometry/input owner | Audio | Execution |
 |---|---:|---:|---|---:|---|
 | `ModePlay` | Yes | No | terminal / terminal | Yes | `PausableClock`; scheduler and event goroutines |
-| `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; caller invokes `App.Tick` and `App.Inject` |
-| `ModeReplay` | Yes | Yes | journal / playback controls | Yes | `ManualClock`; `ReplayDriver` invokes ticks and injections |
+| `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; harness or authored `ScriptDriver` invokes ticks and injections; an authored host/join script may attach network I/O |
+| `ModeReplay` | Yes | Yes | journal / playback controls | Yes | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
 
 The five predicates in `internal/app/config.go` are the policy boundary:
 `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly checks
@@ -22,12 +22,15 @@ supplied, rejects a simulation speed setting because only `Tick` advances its
 clock, and rejects I/O settings the selected mode cannot honor.
 
 `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
-from the journal anchor. `-check` and `-schema` are non-runtime tool paths:
+from the journal anchor, and `-script <file>` constructs a caller-driven
+`ModeHeadless` run from an authored tick schedule. `-check` and `-schema` are
+non-runtime tool paths:
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
 | Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
+| Run script | `app.RunScript` | No | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
 
 Diagnostics are configured before the terminal enters its alternate screen so
 startup failures and runtime reports remain recoverable.
@@ -54,14 +57,14 @@ sequenceDiagram
     App->>Runtime: Register event handlers
 ```
 
-`-join` adds a pre-composition step: `Run` dials, receives the host's
+`-join` adds a pre-composition step: `Run` or `RunScript` dials, receives the host's
 `JournalAnchor`, validates/adopts its seed and configuration identity, and only
 then calls `New`. `-host` composes first so its acceptor can snapshot the live
 tick-zero anchor. After service start, both roles complete the start/ready gate
-before the first frame token releases the scheduler. A session clock is frozen
-during construction and lobby wait, before the HFSM creates deadlines, and is
-resumed only after that gate; tick zero therefore does not inherit how long the
-host waited for its peers.
+before interactive play releases its first frame token or the authored driver
+advances its first tick. A session clock is frozen during construction and lobby
+wait, before the HFSM creates deadlines, and is resumed only after that gate;
+tick zero therefore does not inherit how long the host waited for its peers.
 
 The detailed construction order is significant:
 
@@ -71,7 +74,8 @@ The detailed construction order is significant:
    `:emit` reflection depend on it.
 3. Register services selected by the mode: content always; terminal for
    presenting modes; audio for play/replay; network for play in `RoleNone`,
-   `RoleHost`, or `RolePeer` according to startup configuration.
+   or for play/headless script sessions in `RoleHost` or `RolePeer` according
+   to startup configuration.
 4. Create an empty world and initialize services in deterministic topological
    order.
 5. Let initialized services contribute typed resources to the world.
@@ -124,14 +128,17 @@ goroutine; `App.Settle` drains an injected event group without advancing time.
 `Tick` deliberately executes even when operator pause state is true, because
 the caller is the clock authority.
 
-For a driven App, the resulting run is a pure function of seed, resolved
-config, and injected event groups. Concurrent Apps in one process are still
+For a solo driven App, the resulting run is a pure function of seed, resolved
+config, and injected event groups. A headless TCP script additionally consumes
+the peer's ordered stream; the authored driver paces those sessions at the fixed
+50 ms tick interval so one process cannot race thousands of ticks ahead of the
+other. Concurrent Apps in one process are still
 not fully isolated: the status recorder trigger hook, navigation debug
 pointers, help key table, and vlog correlation stamp are package/process-wide.
 They do not enter a simulation snapshot, but harnesses should run Apps
 sequentially unless those observer surfaces are deliberately coordinated.
 
-## 4. Play and playback loops
+## 4. Play, playback, and authored-script loops
 
 ### Interactive play
 
@@ -200,6 +207,30 @@ The current render buffer is terminal-sized. If a recording is wider than the
 viewer terminal, content outside that buffer is clipped before pan is applied;
 pan can move toward the recorded area but cannot recover cells that were never
 rendered into the buffer. A windowed composite is the planned seam.
+
+### Authored headless scripts
+
+`app.RunScript` loads a versioned TOML file through `internal/journal`, applies
+its optional terminal-equivalent geometry, and builds a driven App. Actions are
+addressed by `(run, tick)` and execute before the next tick at that position.
+Same-position actions retain file order and each settles independently, matching
+separate live input groups. Four deliberately small action forms exist:
+
+- a canonical semantic input action from `input.ActionNames`, with optional
+  count and target character;
+- a string of semantic text-character intents;
+- a complete ex-command round trip;
+- a registered event plus journal-compatible TOML payload and, when needed, an
+  explicit replication domain.
+
+The script's `ticks` is a hard bound, so a process terminates without terminal
+input and reports an action whose `(run, tick)` was never reached. With neither
+`-host` nor `-join`, ticks run flat out. A networked script uses the same
+anchor/roster/start/ready gate as play mode, then wall-paces the caller-driven
+ticks. The two processes may use different files; this is how one schedule
+targets the host's local participant and another targets the guest's.
+Unknown top-level/action fields are rejected rather than ignored; action fields
+that apply only to intents or events are rejected on the other forms.
 
 ## 5. Simulation tick steps
 
@@ -488,8 +519,9 @@ not indefinitely leave the terminal in raw mode.
 | Concern | Primary source |
 |---|---|
 | Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
-| Interactive and playback loops | `internal/app/loop.go`, `play.go` |
-| Replay driver and comparison boundary | `internal/app/replay.go`, `snapshot.go` |
+| Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
+| Recording, replay, fuzz, and authored script drivers | `internal/journal` |
+| Replay identity and comparison boundary | `internal/app/replay.go`, `snapshot.go` |
 | Tick and event scheduling | `internal/engine/clock_scheduler.go` |
 | World locking and system execution | `internal/engine/world.go`, `sync_*.go` |
 | Play/manual clocks and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `time_control.go` |

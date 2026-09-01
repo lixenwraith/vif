@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -52,7 +53,7 @@ func TestSharedGlyphsAreGoldMembersOnly(t *testing.T) {
 	}
 
 	// Soak phase: no other shared glyph population may appear
-	if _, err := RunScript(a, DefaultScript(0x901D, 1200)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(0x901D, 1200)); err != nil {
 		t.Fatalf("soak: %v", err)
 	}
 	if _, bad = sharedGlyphs(a); len(bad) > 0 {

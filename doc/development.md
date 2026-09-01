@@ -103,6 +103,7 @@ useful CI addition even though the current workflow does not perform one.
 | `-seed <uint64>` | Root RNG seed; zero draws a seed and logs it. |
 | `-j`, `-journal` | Record non-system-origin events to a dedicated replay journal. |
 | `-replay <file>` | Present a recorded journal instead of starting interactive play. |
+| `-script <file>` | Run a bounded authored TOML schedule headlessly; may be combined with `-host` or `-join`. |
 | `-host <address>` | Bind a session, for example `:7777`. |
 | `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
 | `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. |
@@ -119,12 +120,13 @@ checks `-ct` first. When both audio start flags are passed, unmute wins.
 terminal startup. A bare `-l` remains boolean, so a directory requires
 `-l=DIR`, not `-l DIR`.
 
-`-host` and `-join` are mutually exclusive and available only on the interactive
-play path; combining either with `-check`, `-schema`, or `-replay` is an error.
-They are flags rather than ex commands because no world snapshot supports a
-mid-run transition. The host holds tick zero until one joiner passes anchor,
-roster and start/ready checks. The joiner dials before constructing its `App`,
-so the anchor seed is installed before RNG/content initialization.
+`-host` and `-join` are mutually exclusive and available on interactive play or
+the authored headless `-script` path; combining either with `-check`, `-schema`,
+or `-replay` is an error. They remain startup flags rather than ex commands
+because no world snapshot supports a mid-run transition. The host holds tick
+zero until every requested participant passes anchor, roster and start/ready
+checks. The joiner dials before constructing its `App`, so the anchor seed is
+installed before RNG/content initialization.
 
 ### Two-terminal verification
 
@@ -146,6 +148,65 @@ reachable address. Public-internet routing uses the same socket code, but the
 current operator path is plaintext and unauthenticated, so it is for trusted
 peers only.
 
+### Authored headless scripts
+
+The `-script` format is a deliberately small deterministic input schedule. Its
+top level names schema 1, a hard tick budget, and optional headless geometry.
+Each `[[action]]` targets the completed `(run, tick)` position and sets exactly
+one of `intent`, `text`, `command`, or `event`:
+
+```toml
+schema = 1
+ticks = 2000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 10
+intent = "motion_right"
+count = 6
+
+[[action]]
+tick = 100
+event = "QuasarSpawnRequest"
+payload = "x = 40\ny = 15"
+```
+
+Intent names are canonical keymap action names. `text` emits one semantic
+text-character intent per rune; `command` performs command-mode entry, text,
+and confirmation as separate settled groups. An event resolves through the
+generated registry and its payload uses the same TOML field names as the
+journal. Local and Bus events default to the player domain, Shared events to
+shared; Stamped events require `domain = "player"` or `"shared"`.
+Unknown top-level and action fields are errors. `run` and `tick` default to zero;
+`count` applies only to an intent, and the four char-wait intents additionally
+require a one-rune `char`. Geometry must either omit both dimensions or set both.
+
+Solo scripts execute flat out. A host/join pair is wall-paced at the fixed game
+tick so two independent processes can exchange artifacts normally. The checked-in
+Phase 3 pair runs the previous 2,000-tick diagnostic, forces one owner-local heat
+burst on each side, and forces a quasar, storm, and shield-overlapping swarm:
+
+```bash
+# terminal 1
+./bin/vif -host :7777 -players 2 -script script/phase3-host.toml \
+  -l=log/phase3-host -lv info -ls afs -lt 200 -j
+
+# terminal 2
+./bin/vif -join 127.0.0.1:7777 -script script/phase3-guest.toml \
+  -l=log/phase3-guest -lv info -ls afs -lt 200 -j
+```
+
+Use distinct log directories so each terminal's session log and journal are
+unambiguous. Scripts do not inspect/assert world state or transport a snapshot;
+process exit, paired journals, status records, and Phase 3's cross-process gate
+provide those verdicts. Interactive play remains the acceptance path for actual
+terminal responsiveness and rendering.
+
 `app.PlayJournal(paths ...string)` and `journal.Load` can reassemble several
 rotated files by `jseq`. The current CLI flag stores one string and passes one
 path, so positional paths after `-replay` are not a supported multi-file form.
@@ -165,9 +226,9 @@ make verify
 It covers race-enabled tests, package compilation, `novlog`, `js/wasm`, and
 vet. It does not cross-build Windows or exercise a real terminal/audio backend.
 
-At the audited revision, 41 Go test files cover `cmd/vif`, `cmd/soundlab`, the
+The Go test suite covers `cmd/vif`, `cmd/soundlab`, the
 headless/replay application harness, clocks/scheduler/time control, event
-journaling, input/help/mode commands, selected gameplay-system surfaces,
+journaling and authored scripts, input/help/mode commands, selected gameplay-system surfaces,
 parameters, profiling, audio, genetics, `float64` vectors/geometry, cell
 mapping, and physics. Focused system/renderer tests now also cover multi-cursor
 ownership, delayed drain interactions, and cleaner trail behavior. The app
@@ -369,5 +430,5 @@ domain model rests on.
 | Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |
 | Logging | `internal/vlog/*.go` |
 | Metrics and flight recorder | `internal/status/*.go`, `internal/engine/snapshot.go` |
-| Journal and replay | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go` |
+| Journal, replay, fuzz, and authored scripts | `internal/event/journal*.go`, `origin.go`, `internal/journal`, `internal/app/replay.go`, `play.go`, `script.go` |
 | Crash/runtime capture | `internal/core/crash_handler*.go`, `dev.go`, `redirect_*.go` |

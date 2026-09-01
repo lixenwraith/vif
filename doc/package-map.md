@@ -12,7 +12,8 @@ flowchart TD
     App --> Services["internal/service"]
     App --> Runtime["engine, input, mode, FSM"]
     App --> Assembly["manifest, systems, renderers"]
-    App --> Replay["journal reader and replay driver"]
+    App --> Journal["internal/journal"]
+    Journal --> Streams["record, replay, fuzz, authored scripts"]
     Services --> External["terminal and I/O capabilities"]
 ```
 
@@ -55,9 +56,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | CLI flags including startup host/join selection, logging/journal/runtime-capture setup, replay/check/schema selection, process exit policy. |
+| `cmd/vif` | CLI flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/check/schema selection, process exit policy. |
 | `content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. |
-| `internal/app` | Resolve paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback loops, verify/replay journals, and expose check/schema tools. |
+| `internal/app` | Resolve paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, verify anchor/config identity, and expose check/schema tools. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -66,7 +67,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/fsm` | Generic hierarchical, parallel-region machine; TOML graph loader; transitions, delayed actions, variables, per-region trigger masks, and optional transition/region observation hooks. |
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, default key table, keymap decoding/merging. It does not import the ECS. |
-| `internal/journal` | Leaf JSONL reader that reassembles rotated replay files by dense journal sequence. |
+| `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, peers, sequence/ack fields, and bounded inbound notifications. |
@@ -144,16 +145,17 @@ The practical dependency rules are:
 
 1. `cmd` may depend on `internal/app`; lower packages must not depend on `cmd`.
 2. `app` may compose all runtime layers; domain packages should not import it.
-3. `engine` owns data/lifecycle infrastructure but should not import concrete
+3. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
+4. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
-4. `input` produces pure intents and must remain free of engine dependencies.
-5. `mode`, systems, and renderers may depend on engine data, but communicate
+5. `input` produces pure intents and must remain free of engine dependencies.
+6. `mode`, systems, and renderers may depend on engine data, but communicate
    laterally through resources/events rather than concrete peer references.
-6. Generic FSM core/std stays independent of the game through `std.Host`; the
+7. Generic FSM core/std stays independent of the game through `std.Host`; the
    manifest bridge is the adapter.
-7. Blocking I/O stays behind services, render flush, audio backends, tools, or
+8. Blocking I/O stays behind services, render flush, audio backends, tools, or
    diagnostics—not inside a simulation update.
-8. Reusable algorithms accept callbacks/data structures instead of reaching
+9. Reusable algorithms accept callbacks/data structures instead of reaching
    into global world state where practical.
 
 ## 8. External module boundary
@@ -174,6 +176,7 @@ duplicating version strings that would become stale.
 |---|---|
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
+| `script/*` | Authored deterministic `vif -script` schedules; the Phase 3 host/guest pair is the checked-in multiplayer diagnostic. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Analyze and visualize Go package/import hierarchy. |

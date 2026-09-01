@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 )
 
 // TestDomainAuditSoakClean asserts the audit counts zero over a full soak, which is
@@ -18,7 +19,7 @@ func TestDomainAuditSoakClean(t *testing.T) {
 	a := mustHeadless(t, 0xD0A17, 120, 40)
 	defer a.Close()
 
-	if _, err := RunScript(a, DefaultScript(0xD0A17, 3000)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(0xD0A17, 3000)); err != nil {
 		t.Fatalf("soak: %v", err)
 	}
 	if n := engine.DomainMismatches(); n != 0 {

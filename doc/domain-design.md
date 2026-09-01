@@ -974,8 +974,8 @@ an artifact reached a participant its producer never sent it to.
 Supporting machinery: `engine.PinDomainAudit`/`DomainMismatches`/
 `DomainViolations`; per-system audit attribution in `UpdateLocked`, falling back
 to `"event"` for settle-pass attaches; `ClockScheduler.SetDispatchTap` and
-`App.SetDispatchTap`; `ScriptDriver` with `Step()` for lockstep driving;
-`ScriptOptions.Resizes`/`MapSetups`/`MapMotionsOnly`; `FastRand.State()`.
+`App.SetDispatchTap`; `journal.FuzzDriver` with `Step()` for lockstep driving;
+`journal.FuzzOptions.Resizes`/`MapSetups`/`MapMotionsOnly`; `FastRand.State()`.
 
 The two-live harness owns one tick per participant per step. It disables random
 script ticks and the overlay round trip (whose driver explicitly ticks one App)

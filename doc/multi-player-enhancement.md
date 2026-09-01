@@ -8,9 +8,9 @@ code; §5 of this document states which of them the target architecture keeps,
 changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
 Phase 2.
 
-**Phases 1 and 2 are done. Phase 3 is next**, and §6's Phase 3 entry says what it
-starts from. §9 records the defects the 2026-08-31 session surfaced and what each
-turned out to be.
+**Phases 1 and 2 and the Phase 3 test-machinery preparation are done. Phase 3 is
+next**, and §6's Phase 3 entry says what it starts from. §9 records the defects
+the 2026-08-31 session surfaced and what each turned out to be.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -445,6 +445,45 @@ instance is the thing being installed into.
 
 ---
 
+### Phase 3 preparation — deterministic run machinery  ✅ landed
+
+**Goal.** Make the cross-process gate and repeatable two-terminal diagnosis a
+supported runtime path before snapshot transport changes the session protocol.
+No multiplayer authority or join behavior changes in this preparation.
+
+`internal/journal` now owns the deterministic external-run layer rather than
+only parsing its output: recording attachment/lifecycle, in-memory capture,
+rotated-file loading, replay ordering and payload decode, the seeded soak fuzzer,
+and a versioned authored tick-script driver. Each driver depends on a narrow
+target interface and never imports `internal/app`; App retains construction,
+anchor/config verification, terminal playback, and session startup.
+
+`cmd/vif -script <file>` constructs a caller-driven `ModeHeadless` App. Schema 1
+scripts declare a hard tick budget, optional geometry, and ordered actions at a
+completed `(run, tick)`: a canonical semantic intent, text, an ex command, or a
+registered event with journal-compatible TOML payload. Event domains are derived
+from D-10 where unambiguous; a Stamped event must state its domain. Same-position
+actions preserve file order and settle separately.
+
+The existing `-host`/`-join` gate is available to this headless path. Two
+processes may run different scripts, and their manual clocks are wall-paced at
+the 50 ms game interval after the ready gate so one cannot race ahead of the
+socket peer. `script/phase3-host.toml` and `script/phase3-guest.toml` are the
+checked-in 2,000-tick pair: separate heat bursts, local motion on each side, one
+crossed quasar, a swarm request inside the host shield, and a shared storm
+request injected on both.
+With `-j`, the result is an ordinary journal of the resulting non-system events,
+not a second script format.
+
+**Boundaries kept.** A script does not inspect or assert world state, carry a
+capture, compare processes, stage an install, or permit a mid-run join. Networked
+headless execution is intentionally real-time; single-process scripts and the
+seeded fuzzer still run flat out. The cross-process capture continuation remains
+a Phase 3 gate, but it now has a reproducible process/tick/input driver instead of
+depending on terminal choreography.
+
+---
+
 ### Phase 3 — Join anytime  ← next
 
 **Goal.** Deliver the original requirement: a running solo game can be toggled into
@@ -476,12 +515,14 @@ order they are wanted:
 1. **The staged install.** `App.InstallShared` validates everything before writing
    but writes into the live world. Phase 3 needs the second world and the swap at
    a tick boundary, because the instance being installed into is a running one.
-2. **The cross-process gate.** §6's requirement 9 — capture in one process, load
-   in another whose clock origin is deliberately offset, then 500 ticks under an
-   identical record stream. D-21 makes the clock-offset half much less dangerous
-   than it was (the simulation instant no longer carries a process origin at all),
-   but it must still be the gate rather than an argument, and the record-stream
-   half is only expressible once a capture travels.
+2. **The capture carrier and cross-process gate.** The process/tick/input driver
+   now exists as `-script`, including two independently scripted TCP instances.
+   Phase 3 must add the missing carrier: capture in one process, transfer/load in
+   another, deliberately offset the pacing-clock origin, then continue 500 ticks
+   under the same authored or recorded stream and compare the declared surface.
+   D-21 makes the clock-offset half much less dangerous than it was, but the gate
+   still has to demonstrate it. The script runner deliberately does not smuggle a
+   capture or a verdict into this preparation.
 3. **The gold spawn-tick defect.** A joiner's FSM reaches `MainSpawnGold` one tick
    before the host's, so the two carry deadline origins a tick apart for the life
    of the sequence. `gold.timer` is excluded from the compared surface only
@@ -489,8 +530,10 @@ order they are wanted:
    with `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` and the deny entry
    removed from `internal/app/snapshot.go`.
 4. **The storm high-water sizing.** Capture bytes, capture time, install time and
-   allocation peak at the storm high water. Phase 4's cadence is chosen from those
-   numbers and Phase 2 only has the quiet-world ones.
+   allocation peak at the storm high water. The checked-in Phase 3 script pair
+   makes the storm repeatable and the paired `stat` records locate high water; the
+   capture benchmark and numbers are still owed. Phase 4's cadence is chosen from
+   those numbers and Phase 2 only has the quiet-world ones.
 5. **A failing case for the navigation phase.** The route-rebuild phase is carried
    but no sabotage of it fails the gate, so its coverage is asserted rather than
    demonstrated.
@@ -573,7 +616,8 @@ implementation starts clean:
   the `RetainSessionLog` config flag and the `HostAddress` retention clause, plus
   their tests. It was unreachable from `cmd/vif`, cost unbounded memory, and is
   replaced by Phase 3. **The journal, `Capture`, `ReplayDriver` and solo
-  deterministic replay are untouched** and remain valuable for debugging.
+  deterministic replay remain intact** (now organized under `internal/journal`)
+  and remain valuable for debugging.
 - **`World.LocalCursor()`** consolidates 26 copies of the local-cursor read across
   `mode`, `app`, `engine` and four player-profile systems. It is the seam Phase 1
   installs behind.
@@ -700,6 +744,25 @@ defects are gone.
 ./bin/vif -join 127.0.0.1:7777 -lv info -ls afs -lt 200 -j
 ```
 
+The repeatable headless form uses the same gate and the checked-in script pair:
+
+```bash
+# terminal 1 — host script
+./bin/vif -host :7777 -players 2 -script script/phase3-host.toml \
+  -l=log/phase3-host -lv info -ls afs -lt 200 -j
+
+# terminal 2 — guest script
+./bin/vif -join 127.0.0.1:7777 -script script/phase3-guest.toml \
+  -l=log/phase3-guest -lv info -ls afs -lt 200 -j
+```
+
+That pair runs exactly 2,000 wall-paced ticks, bursts host heat at tick 40 and
+guest heat at tick 80, crosses one quasar at tick 100, injects the shared storm
+on both at tick 200, and crosses a swarm at tick 300. Distinct log directories
+keep each process's session log and journal separate. It is the reproduction and
+diagnostic path; the interactive invocation remains the acceptance check for
+typing responsiveness, rendering, and hands-on reset/gold behavior.
+
 `-ls afs` keeps `app`, `fsm` and `stat`: the divergence reports, the region
 transitions and the periodic counters. That is the mask both 2026-08-31 findings
 were diagnosed from, and it keeps the file small enough to attach. Add `+e` only
@@ -711,8 +774,9 @@ which was enough to see that the two disagreed but not to see which one was
 wrong. With both, `part` and `records` on one side can be read against the other's
 records at the same tick.
 
-Run for **at least 2,000 ticks (about 100 s)**, since both reported divergences
-appeared after tick 700.
+Run interactively for **at least 2,000 ticks (about 100 s)**, since both reported
+divergences appeared after tick 700. The authored pair stops at that boundary by
+construction.
 
 ### 10.2 What to check
 
@@ -750,4 +814,3 @@ Phase 3 is join-anytime, and its sizing depends on numbers Phase 2 could not tak
 runs, note the `stat` record for `entity` and `spatial` at the storm high water
 and send it with the log — that is what Phase 4's snapshot cadence gets chosen
 from.
-

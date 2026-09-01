@@ -8,14 +8,15 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 )
 
 // parityScript builds the option set two instances step in lockstep. Resizes and
 // resets both re-derive map bounds from this instance's terminal, so both are
 // excluded; motions are restricted to the map-relative set, since a screen- or
 // page-relative motion resolves against a viewport the instances do not share.
-func parityScript(seed uint64, steps int) ScriptOptions {
-	opt := DefaultScript(seed, steps)
+func parityScript(seed uint64, steps int) journal.FuzzOptions {
+	opt := journal.DefaultFuzz(seed, steps)
 	opt.Resizes = false
 	opt.Resets = false
 	opt.MapMotionsOnly = true
@@ -52,7 +53,7 @@ func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 	assertSharedParity(t, a, b, -1)
 
 	opt := parityScript(seed, steps)
-	da, db := NewScriptDriver(a, opt), NewScriptDriver(b, opt)
+	da, db := journal.NewFuzzDriver(a, opt), journal.NewFuzzDriver(b, opt)
 	for i := range steps {
 		if !da.Step() {
 			t.Fatalf("step %d quit instance a", i)

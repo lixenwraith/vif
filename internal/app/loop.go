@@ -23,7 +23,7 @@ func Run(cfg Config) error {
 	if cfg.Mode != ModePlay {
 		return fmt.Errorf("%s mode is caller-driven; Run owns the frame loop", cfg.Mode)
 	}
-	a, err := newInteractiveApp(cfg)
+	a, err := newSessionApp(cfg)
 	if err != nil {
 		return err
 	}

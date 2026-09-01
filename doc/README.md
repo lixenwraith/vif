@@ -57,8 +57,8 @@ changing a subsystem, update the source that actually owns its shape.
 | Components, systems, renderers | `internal/manifest/definition.go` | `internal/manifest/build_gen.go`, `internal/engine/component_store_gen.go` |
 | System domain profiles and dependencies | `SystemDef.Domain`/`Requires` in `internal/manifest/definition.go` | `manifest.ProfileFor`/`SystemProfiles`, `World.SystemInitOrder`, `app.checkSystems` |
 | Event names, payload association, replication class | `internal/event/type.go` comments and constants | `internal/event/registry_gen.go` |
-| Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go` | `App`, `ClockScheduler`, services |
-| Replay journal format and producer origins | `internal/event/journal.go`, `origin.go` | `internal/journal`, `internal/app/replay.go` |
+| Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go` | `App`, `ClockScheduler`, services |
+| Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |

@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/network"
@@ -43,6 +44,7 @@ type App struct {
 	orchestrator *render.RenderOrchestrator
 	inputMachine *input.Machine
 	router       *mode.Router
+	recorder     *journal.Recorder
 
 	scheduler      *engine.ClockScheduler
 	frameReady     chan struct{}
@@ -136,7 +138,7 @@ func (a *App) initServices() error {
 		a.termSvc = service.NewTerminalService(colorMode)
 		_ = a.hub.Register(a.termSvc)
 	}
-	if a.cfg.Mode == ModePlay {
+	if a.cfg.Mode == ModePlay || a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.networkSvc = service.NewNetworkService(a.cfg.networkConfig)
 		_ = a.hub.Register(a.networkSvc)
 	}
@@ -343,25 +345,12 @@ func (a *App) initJournal() error {
 		return nil
 	}
 
-	var sink event.JournalSink
-	if a.cfg.Journal {
-		sink = a.cfg.JournalSink
-		if sink == nil {
-			path, err := vlog.StartJournal()
-			if err != nil {
-				return fmt.Errorf("journal: %w", err)
-			}
-			vlog.Info("app", "msg", "journal open", "path", path)
-			sink = event.VlogSink()
-		}
+	r, err := journal.Start(a.world.Resources.Event.Queue, a.buildAnchor(), a.cfg.JournalSink)
+	if err != nil {
+		return err
 	}
-	// Passed only when it exists: a nil *Capture inside a non-nil interface is not
-	// something MultiSink can recognise as absent.
-
-	q := a.world.Resources.Event.Queue
-	j := event.NewJournal(sink)
-	q.SetJournal(j)
-	j.SetAnchor(a.buildAnchor(), q.Stamp())
+	a.recorder = r
+	vlog.Info("app", "msg", "journal open", "path", r.Path())
 	return nil
 }
 
@@ -402,17 +391,11 @@ func (a *App) Close() {
 	}
 	a.hub.StopAll()
 
-	if a.cfg.Journal && a.world != nil && a.world.Resources.Event != nil {
-		q := a.world.Resources.Event.Queue
-		emitted, encFail := q.Journal().Stats()
-		q.SetJournal(nil)
-		if a.cfg.Journal {
-			vlog.Info("app", "msg", "journal close",
-				"path", vlog.JournalPath(), "records", emitted, "encode_failed", encFail)
-		}
-	}
-	if vlog.JournalEnabled() {
-		if err := vlog.StopJournal(); err != nil {
+	if a.recorder != nil {
+		stats, err := a.recorder.Close()
+		vlog.Info("app", "msg", "journal close",
+			"path", stats.Path, "records", stats.Emitted, "encode_failed", stats.EncodeFailed)
+		if err != nil {
 			vlog.Error("app", "msg", "journal close", "error", err.Error())
 		}
 	}

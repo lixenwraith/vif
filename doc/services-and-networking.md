@@ -74,12 +74,13 @@ Assembly is mode-dependent:
 | App mode | Registered services |
 |---|---|
 | `ModePlay` | terminal, content, audio, and network; `RoleNone` normally, `RoleHost`/`RolePeer` with startup flags |
-| `ModeHeadless` | content only |
+| `ModeHeadless` | content only for ordinary harnesses; `app.RunScript` additionally registers `RoleHost`/`RolePeer` network when a startup flag is present |
 | `ModeReplay` | terminal, content, and audio |
 
-The predicates in `internal/app/config.go` are authoritative: presenting modes
-own a terminal, audio modes register audio, and only play constructs the
-network adapter. Replay input controls playback rather than the mode router,
+The predicates in `internal/app/config.go` are authoritative for terminal and
+audio capabilities. Network is role-selected separately: play always constructs
+the no-op-capable adapter, while an authored headless script constructs it only
+for `-host`/`-join`. Replay input controls playback rather than the mode router,
 and its terminal resize affects presentation rather than recorded geometry.
 
 Content and audio details are covered in
@@ -125,11 +126,13 @@ a `NetworkPort` that drains notifications and sends opaque framed messages.
 
 `ModePlay` registers `NetworkService` on every run. With neither startup flag it
 uses `RoleNone`, so Init/Start are no-ops and no `NetworkResource` is contributed.
-Two flags activate the same composition path:
+`app.RunScript` can register the same active service without a terminal; ordinary
+`NewHeadless` deliberately rejects address flags so no caller can bypass the
+start/ready gate. Two flags activate the shared composition path:
 
 | Flag | Startup behavior |
 |---|---|
-| `-host <bind-address>` | Build the host App, start a listener, render a lobby, and hold the scheduler at tick zero until one peer is ready. |
+| `-host <bind-address>` | Build the host App, start a listener, show or log the lobby, and hold the scheduler at tick zero until the requested peers are ready. |
 | `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, build the mirrored roster, then pass the start/ready gate. |
 
 They are flags rather than ex commands because the protocol has no mid-run world
@@ -343,6 +346,12 @@ to the host for a larger lobby, which closes only once every participant has
 arrived. Bind the host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
 configuration are exposed.
+
+For a repeatable no-terminal run, combine the flags with the paired authored
+scripts in `script/phase3-host.toml` and `script/phase3-guest.toml`. Their manual
+clocks are wall-paced after the ready gate so socket delivery observes the same
+tick cadence as play mode; see [Development](development.md) for the exact
+commands and script schema.
 
 ## 12. Adding a service
 

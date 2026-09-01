@@ -26,7 +26,8 @@ const (
 	// ModePlay is the interactive game: terminal, audio, network, renderer, and
 	// the scheduler and event goroutines
 	ModePlay Mode = iota
-	// ModeHeadless has no I/O at all and runs on a manual clock the caller ticks
+	// ModeHeadless has no presentation or audio and runs on a manual clock the
+	// caller ticks. An authored script may still attach the network service.
 	ModeHeadless
 	// ModeReplay presents a recorded run: terminal and renderer, but a manual clock
 	// the caller ticks and geometry taken from the journal rather than the terminal
@@ -129,7 +130,6 @@ type Config struct {
 	// two. The ceiling is parameter.MaxPlayers, which is also the roster width.
 	Participants int
 
-
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
 	// assumes; margins apply as usual, so the viewport is smaller than these.
 	// Ignored when the terminal owns geometry; zero selects the defaults.
@@ -158,6 +158,10 @@ type Config struct {
 	// networkConfig is prepared by Run after host/join negotiation. Keeping the
 	// transport detail private leaves Config's public session surface role-neutral.
 	networkConfig *network.Config
+
+	// scriptedSession admits headless network I/O only through RunScript, which
+	// performs the startup gate and owns wall pacing.
+	scriptedSession bool
 }
 
 // ConfigForJoin applies the host-authored simulation identity to local operator options.
@@ -202,8 +206,13 @@ func (c Config) Validate() error {
 	if c.HostAddress != "" && c.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")
 	}
-	if (c.HostAddress != "" || c.JoinAddress != "") && c.Mode != ModePlay {
-		return fmt.Errorf("%s: network sessions require interactive play mode", c.Mode)
+	if c.HostAddress != "" || c.JoinAddress != "" {
+		switch {
+		case c.Mode == ModeReplay:
+			return fmt.Errorf("%s: journal playback cannot join a network session", c.Mode)
+		case c.Mode == ModeHeadless && !c.scriptedSession:
+			return fmt.Errorf("%s: network sessions require app.RunScript", c.Mode)
+		}
 	}
 	if c.Participants != 0 && (c.Participants < 2 || c.Participants > parameter.MaxPlayers) {
 		return fmt.Errorf("-players %d is outside the supported range 2..%d",

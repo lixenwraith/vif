@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -155,10 +156,10 @@ func runOverlayScript(t *testing.T, a *App) int {
 
 // journalRun drives a script under a capture sink, returning the capture, the
 // simulation snapshot, the drawn seed and the end position
-func journalRun(t *testing.T, script func(*testing.T, *App) int) (*Capture, []string, uint64, event.Stamp) {
+func journalRun(t *testing.T, script func(*testing.T, *App) int) (*journal.Capture, []string, uint64, event.Stamp) {
 	t.Helper()
 
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(0) // drawn seed: the anchor is its only channel to the replay
 	cfg.Journal, cfg.JournalSink = true, cap
 
@@ -249,7 +250,7 @@ func TestJournalDoesNotPerturb(t *testing.T) {
 	want := plain.Snapshot()
 	plain.Close()
 
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(fixtureSeed)
 	cfg.Journal, cfg.JournalSink = true, cap
 
@@ -614,7 +615,7 @@ func TestReplayAcrossReset(t *testing.T) { replayAndCompare(t, runResetScript) }
 
 // TestCursorMoveRequestAppliesWithoutRouter covers the cursor-owned placement path.
 func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
-	cap := NewCapture()
+	cap := journal.NewCapture()
 	cfg := scriptConfig(fixtureSeed)
 	cfg.Journal = true
 	cfg.JournalSink = cap

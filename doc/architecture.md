@@ -36,6 +36,7 @@ protocol details to `github.com/lixenwraith/terminal`, TOML parsing to
 ```mermaid
 flowchart TD
     Entry["cmd/vif: flags and diagnostics"] --> App["internal/app: composition root"]
+    App --> Journal["internal/journal: deterministic run streams"]
     App --> Runtime["World, scheduler, FSM, input router"]
     App --> IO["Service hub: terminal, content, audio, network"]
     Runtime --> Presentation["Render orchestrator and renderers"]
@@ -50,6 +51,7 @@ The main architectural planes are:
 | Simulation data | `internal/engine`, `internal/component`, `internal/core` | Entity identities, typed sparse-set component stores, singleton resources, spatial indexing, and shared time/state. |
 | Simulation behavior | `internal/system`, `internal/fsm`, `internal/event` | Per-tick mechanics, event reactions, encounter control, reset, and system enablement. |
 | Interaction | `internal/input`, `internal/mode` | Parse terminal events into semantic intents and apply them under the world lock. |
+| Deterministic run streams | `internal/journal` | Attach recording sinks, capture/load journals, order replay records, generate seeded fuzz input, and execute authored tick scripts through App-independent target contracts. |
 | Presentation | `internal/render`, `internal/render/renderer`, `internal/parameter/visual` | Snapshot frame context, layer cells, apply masks/effects, and flush to the terminal. |
 | I/O boundaries | `internal/service`, `content`, `internal/network`, external modules | Terminal polling, corpus loading, audio device/process management, and framed network sessions. |
 | Reusable algorithms | `pkg/*` | Audio, float64 math/physics, navigation, maze generation, evolution, and terminal-image conversion. |
@@ -63,8 +65,8 @@ See [Package map](package-map.md) for the medium-level dependency view.
 | Shape | I/O and presentation | Clock/owner |
 |---|---|---|
 | `ModePlay` | terminal, content, audio, and optional startup host/join networking; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
-| `ModeHeadless` | content only; caller supplies geometry and events | manual clock advanced only by `App.Tick` |
-| `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `ReplayDriver` |
+| `ModeHeadless` | content; caller supplies geometry and events; authored scripts may add startup host/join networking | manual clock advanced by a harness or `journal.ScriptDriver` |
+| `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
 
 The `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio` predicates
 are the composition policy. A driven App spawns no scheduler/event goroutines,
@@ -106,6 +108,13 @@ and stamps events in a `(run, tick, settle-boundary)` lattice. A headless
 recording can therefore be reinjected at the same boundaries into a fresh
 manual-clock App; a live recording reconstructs player input but is not the
 source class for which bit-exact world comparison is claimed.
+
+`internal/event` owns the queue-level record/anchor schema; `internal/journal`
+owns everything that turns those values into a deterministic external run:
+recording lifecycle, in-memory capture, rotated-file loading, replay ordering,
+the seeded soak fuzzer, and the authored `-script` format. It imports no App.
+`internal/app` supplies narrow adapters and retains configuration identity,
+session startup, terminal playback, and process lifetime.
 
 The exact lifecycle and synchronization rules are in
 [Runtime and concurrency](runtime.md).
@@ -300,8 +309,9 @@ enabled.
 ## 12. Deployment shapes and current limitations
 
 The primary build targets Linux and FreeBSD terminals. On those builds the same
-composition root supports interactive play, no-I/O deterministic harnesses,
-and terminal journal playback. A WASM build runs inside
+composition root supports interactive play, deterministic harnesses and authored
+headless scripts, and terminal journal playback. A headless script has no terminal
+or audio, but may deliberately attach the TCP service with `-host`/`-join`. A WASM build runs inside
 the bundled xterm.js page, uses embedded configuration/content, and compiles out
 logging; sound is disabled in the current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.

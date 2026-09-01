@@ -21,8 +21,10 @@ const hostParticipantID network.PeerID = 1
 
 var errSessionCanceled = errors.New("network session canceled")
 
-// newInteractiveApp resolves the startup handshake before a joining App draws a seed.
-func newInteractiveApp(cfg Config) (*App, error) {
+// newSessionApp resolves the startup handshake before a joining App draws a
+// seed. Interactive play and authored headless scripts share this construction.
+func newSessionApp(cfg Config) (*App, error) {
+	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

@@ -1,0 +1,27 @@
+# Headless half of the Phase 3 multiplayer diagnostic run.
+# Pair with phase3-host.toml; both advance 2,000 ticks in real time.
+schema = 1
+ticks = 2000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_left"
+count = 6
+
+[[action]]
+tick = 80
+# Slot 1 is shared entity 2. As on the host, adding a full bar above max forces
+# the owner-local burst path.
+event = "HeatAddRequest"
+payload = "entity = 2\ndelta = 100"
+
+# Shared events are injected on both instances at the same simulation tick.
+[[action]]
+tick = 200
+event = "StormSpawnRequest"

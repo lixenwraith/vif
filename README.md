@@ -17,8 +17,8 @@ configuration, audio policy, and reusable simulation libraries.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
   spatial grid, composite actors, FSM-owned player cursors, and a single
   explicit world-lock boundary.
-- Three runtime shapes: interactive play, deterministic caller-driven headless
-  runs, and terminal playback of recorded runs.
+- Three runtime shapes: interactive play, deterministic caller-driven or
+  authored-script headless runs, and terminal playback of recorded runs.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
   encounters, payload capture/injection, guards, delayed actions, and system
   control.
@@ -33,7 +33,8 @@ configuration, audio policy, and reusable simulation libraries.
 - Plain-text and authored TOML typing corpora, embedded fallback scenarios and
   tutorial content, image-to-terminal wall assets, and dedicated audio/image/
   visual authoring tools.
-- A replay journal, manual-clock harness, exact rational time controls,
+- A replay journal, versioned tick-script runner, manual-clock harness, exact
+  rational time controls,
   per-region FSM telemetry, structured logs, status snapshots, and a triggered
   flight recorder for reproduction and diagnosis.
 - Multi-participant play over framed TCP, with deterministic shared simulation,
@@ -77,6 +78,8 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   startup rate from `1/8` through `8`.
 - `-j` records replay input to a dedicated journal; `-replay <file>` presents a
   journal on the terminal with fixed playback controls.
+- `-script <file>` runs a bounded authored TOML input/event schedule headlessly;
+  it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
   `-join <host:port>` joins it and adopts the host's seed/config/content identity.
 - `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
@@ -87,8 +90,11 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
 in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add
 `-players <n>` to the host for a larger lobby. The session is currently
-plaintext and trusted-peer, and a participant still joins at startup: catching one
-up mid-run is implemented and tested but not yet driven from the CLI.
+plaintext and trusted-peer, and a participant still joins only at startup. The
+old replay-from-zero catch-up path was removed; an authoritative shared snapshot
+is the planned join-anytime mechanism. For an automatic 2,000-tick headless pair,
+use `script/phase3-host.toml` and `script/phase3-guest.toml` as documented in
+`doc/development.md`.
 
 ## Documentation
 

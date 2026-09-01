@@ -9,6 +9,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 )
 
 // targetFields name the receiving side of a payload. The emitter side is asserted
@@ -52,7 +53,7 @@ func TestBusPayloadsNameOnlySharedEntities(t *testing.T) {
 			})
 	})
 
-	if _, err := RunScript(a, DefaultScript(seed, steps)); err != nil {
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(seed, steps)); err != nil {
 		t.Fatalf("soak: %v", err)
 	}
 	if named == 0 {

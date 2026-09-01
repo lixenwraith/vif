@@ -579,9 +579,12 @@ correlated by `run` and `tick`.
 
 ## 9. Replay journal
 
-`-j` / `-journal` installs an `event.Journal` on the event queue and opens a
-dedicated `vif-jrn-*.jsonl` logger. It records every event whose origin is not
-`OriginSystem`; application producers assign one of the valid origins below.
+`-j` / `-journal` asks `internal/journal.Recorder` to attach an
+`event.Journal` to the event queue and open a dedicated
+`vif-jrn-*.jsonl` logger. The Recorder owns attachment, final counters, and file
+drain; an injected in-memory `journal.Capture` remains caller-owned. Capture
+records every event whose origin is not `OriginSystem`; application producers
+assign one of the valid origins below.
 The journal logger is separate from the session logger and has no level or
 scope gate: `:log off`, `-lv error`, or
 `-ls none` cannot silence a capture.
@@ -596,6 +599,7 @@ scope gate: `:log off`, `-lv error`, or
 | `command` | Ex command line, including a typed `:region`. |
 | `network` | Remote producer. |
 | `debug` | Harness or out-of-band APIs such as `App.Region`. |
+| `session` | Roster/lifecycle observation from the session layer. |
 
 The dispatcher does not branch on origin. The value exists for APM admission
 and replay capture; replay injects the same event with the recorded origin.
@@ -654,6 +658,12 @@ format does not contain.
 the keymap. See [Runtime and concurrency](runtime.md) for playback keys,
 manual-clock semantics, audio, and the current clipping/pan limit.
 
+The same package owns the replay timeline and authored-script timeline. A
+`-script` event is emitted with `OriginDebug`; semantic intents retain the
+ordinary input/command origin selected by the App router. Combining `-script`
+with `-j` therefore produces an ordinary replayable journal of what the script
+actually caused, rather than recording the script file itself.
+
 ## 10. Runtime output capture
 
 Go runtime diagnostics — race reports, `fatal error:`, unrecovered panics from
@@ -694,6 +704,7 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 | `-lt <ticks>` | Status snapshot period, `0` disables; implies `-l` |
 | `-lr <ticks>` | Flight recorder depth, `0` disables; implies `-l` |
 | `-j`, `-journal` | Capture replay input in a dedicated journal; does not imply a session log |
+| `-script <file>` | Execute an authored headless tick schedule; may also host/join and may be journaled with `-j` |
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-host <bind-address>` | Host a TCP session |
 | `-join <host:port>` | Join a session and adopt the host anchor before world construction |
@@ -857,9 +868,9 @@ both the snapshot and the recorder.
 | Key convention, integer units | `internal/status/key.go`, `format.go` |
 | Atomic float and string cells | `internal/status/atomic_float.go`, `atomic_string.go` |
 | Flight recorder | `internal/status/recorder.go` |
-| Journal record/anchor schema and sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
-| Journal file reader | `internal/journal/read.go` |
-| Replay/config verification | `internal/app/replay.go`, `play.go`, `snapshot.go` |
+| Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
+| Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
+| Replay/config verification and presentation | `internal/app/replay.go`, `play.go`, `snapshot.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/clock_scheduler.go` |
 | Lock hold sampling | `internal/engine/sync_std.go` |
 | Frame stamping | `internal/engine/game_context.go` |

@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
@@ -166,14 +167,14 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 	apps := meshSession(t, seed, 5, [][2]int{{1, 2}, {2, 3}, {3, 4}, {3, 5}})
 	local := localCursors(t, apps)
 
-	drivers := make([]*ScriptDriver, len(apps))
+	drivers := make([]*journal.FuzzDriver, len(apps))
 	starts := make([]component.PositionComponent, len(apps))
 	for i, a := range apps {
 		opt := parityScript(seed, steps)
 		opt.Regions, opt.MapSetups = false, false
 		opt.DisableTicks, opt.DisableCommands, opt.DisableOverlays = true, true, true
 		opt.Seed ^= uint64(i) * 0x9E3779B97F4A7C15
-		drivers[i] = NewScriptDriver(a, opt)
+		drivers[i] = journal.NewFuzzDriver(a, opt)
 		starts[i] = cursorPosition(a, local[i])
 	}
 

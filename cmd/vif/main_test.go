@@ -149,6 +149,19 @@ func TestSessionFlags(t *testing.T) {
 	}
 }
 
+func TestScriptInvocation(t *testing.T) {
+	hosted := sessionFlags{host: ":7777", players: 2}
+	if err := validateInvocation(false, false, "", "scenario.toml", hosted); err != nil {
+		t.Fatalf("hosted script rejected: %v", err)
+	}
+	if err := validateInvocation(false, false, "run.jrn", "scenario.toml", sessionFlags{}); err == nil {
+		t.Fatal("-replay and -script were accepted together")
+	}
+	if err := validateInvocation(true, false, "", "scenario.toml", sessionFlags{}); err == nil {
+		t.Fatal("-schema and -script were accepted together")
+	}
+}
+
 func newDiagnosticFlagSet() (*flag.FlagSet, *logFlags, *setFlag[bool]) {
 	fs := flag.NewFlagSet("diagnostics", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
