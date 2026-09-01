@@ -87,11 +87,13 @@ func (a *App) beginHostingLocked(addr string) error {
 	netCfg := a.hostNetworkConfig()
 	netCfg.OnAdmit = a.releaseMidRunJoiner
 	port := network.NewSocketPort(netCfg)
-	if err := port.Start(); err != nil {
-		a.cfg.HostAddress = ""
-		return fmt.Errorf("host %s: %w", addr, err)
-	}
 
+	// Everything the accept goroutine reads is published before the listener that
+	// wakes it exists. Start returns with the accept loop already running, so a
+	// participant dialling in that instant reaches OnAdmit; finding no port there
+	// would leave it admitted with no gate and no world, waiting forever. Its
+	// capture read then blocks on the world lock this call holds, which is what
+	// makes the attach below happen first.
 	a.sessionMu.Lock()
 	a.midRunPort = port
 	a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
@@ -102,6 +104,15 @@ func (a *App) beginHostingLocked(addr string) error {
 	// instance's own artifacts start taking the session's playout lead.
 	a.attachTransportLocked(port)
 	a.activateNetworkSessionLocked()
+
+	if err := port.Start(); err != nil {
+		a.sessionMu.Lock()
+		a.midRunPort, a.sessionRoster = nil, nil
+		a.sessionMu.Unlock()
+		a.cfg.HostAddress = ""
+		a.world.Resources.Network = nil
+		return fmt.Errorf("host %s: %w", addr, err)
+	}
 
 	bound := addr
 	if b := port.Addr(); b != nil {
@@ -245,7 +256,7 @@ func (a *App) awaitJoinerReady(port *network.SocketPort, id network.PeerID, was 
 		if port.ReadyCount() > was {
 			return nil
 		}
-		if port.PeerCount() == 0 {
+		if !port.Connected(uint32(id)) {
 			return fmt.Errorf("participant %d dropped during its join", id)
 		}
 		select {
@@ -281,11 +292,11 @@ func (a *App) crossParticipantArrival(id network.PeerID, slot uint8) {
 // how long the session has been running. Left open it would be permanent, and a
 // participant k ticks behind produces every crossing k ticks late — under the
 // playout lead that is still on time, over it the session diverges from the first
-// artifact this participant sends. So the gap is closed by running those k ticks
-// here, with the held artifacts applying at the ticks they name, before this
-// instance's own clock starts.
+// artifact this participant sends.
 //
-// Call after the transport has taken the stream and before game time is released.
+// Call after the transport has taken the stream and before game time is released:
+// the catch-up runs on the paused clock's step path, and releasing first would
+// start this instance's own pacing at the wrong tick.
 func (a *App) resumeJoinedSession() error {
 	if a.pendingJoin == nil {
 		return nil
@@ -300,28 +311,21 @@ func (a *App) resumeJoinedSession() error {
 		port.Inject(host, uint8(msg.Type), msg.Payload)
 	}
 
-	// The gap is real and it is not an error, but it is only partly readable from
-	// what the gate held. Epochs the host closed while this instance was reading its
-	// world land in the held set; epochs it closed during the install sat in the
-	// socket until the port started, and the barrier only learns of those once a
-	// tick drains them. So the gap is closed by rounds: catch up to the newest tick
-	// known so far, let that draining reveal the next, and stop when it stops moving.
-	//
-	// A tick-zero lobby has no gap by construction — the host is frozen at tick zero
-	// until every participant is ready, so it has produced nothing — and running a
-	// probe tick there would put this instance one tick ahead of a session that has
-	// not started.
+	// A tick-zero lobby has no gap by construction: the host is frozen at tick zero
+	// until every participant is ready, so it has produced nothing, and a probe tick
+	// here would put this instance one tick ahead of a session that has not started.
 	if !a.sessionOffer.CarriesSnapshot() || a.sessionOffer.SnapshotTick == 0 {
 		a.reportJoinLag(0)
 		return nil
 	}
 
-	// Held epochs are only part of the gap: the ones the host closed while this
-	// instance was staging and committing sat in the socket, not on this stream. So
-	// each round drains the transport without ticking, waits briefly for the next
-	// epoch if none has arrived, and then runs exactly the ticks that names. The
-	// host is still advancing while the catch-up runs, which is what the second and
-	// third rounds are for.
+	// The gap is only partly readable from what the gate held. Epochs the host
+	// closed while this instance was reading its world land in the held set; epochs
+	// it closed during the install sat in the socket until the port started, and the
+	// barrier learns of those only once something drains them. So it is closed by
+	// rounds: catch up to the newest tick known so far, let that draining reveal the
+	// next, and stop when it stops moving. The host is still advancing while the
+	// catch-up runs, which is what the second and third rounds are for.
 	caught := uint64(0)
 	for range joinCatchUpRounds {
 		local := a.Position().Tick

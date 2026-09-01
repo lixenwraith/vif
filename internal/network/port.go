@@ -78,6 +78,13 @@ func (p *SocketPort) BroadcastExcept(exclude uint32, msgType uint8, payload []by
 	}
 }
 
+// Connected reports whether one participant's stream is still attached. It answers
+// about that participant rather than about the session, which is what a join
+// waiting on one joiner needs: a peer count says nothing when others are present.
+func (p *SocketPort) Connected(peerID uint32) bool {
+	return p.transport.Connected(PeerID(peerID))
+}
+
 // Disconnect drops one participant's stream, reporting whether it was connected.
 // It is how a coordinator refuses a join that got as far as being admitted: a
 // participant left holding a handshake it could not finish would otherwise stay in

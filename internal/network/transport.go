@@ -165,6 +165,9 @@ func (t *Transport) startClient() error {
 	return nil
 }
 
+// Connected reports whether one peer is still attached.
+func (t *Transport) Connected(id PeerID) bool { return t.peers.Connected(id) }
+
 // Disconnect drops one peer, reporting whether it was connected.
 func (t *Transport) Disconnect(id PeerID) bool { return t.peers.Disconnect(id) }
 

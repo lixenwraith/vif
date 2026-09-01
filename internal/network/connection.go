@@ -289,6 +289,14 @@ func (pm *PeerManager) BroadcastExcept(exclude PeerID, msg *Message) int {
 	return refused
 }
 
+// Connected reports whether one peer is still in the manager.
+func (pm *PeerManager) Connected(id PeerID) bool {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	_, ok := pm.peers[id]
+	return ok
+}
+
 // Disconnect drops one peer, reporting whether it was connected. The monitor
 // goroutine notices the close and runs the ordinary departure path, so a peer
 // dropped here leaves exactly the way one that lost its link does.
