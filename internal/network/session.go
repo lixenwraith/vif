@@ -136,6 +136,37 @@ type PendingJoin struct {
 	replied     bool
 	started     bool
 	transferred bool
+
+	// deferred holds the session traffic that arrived on this stream before the
+	// port owned it. A mid-run host admits a participant *before* it reads the
+	// world that participant will install, precisely so the epochs produced in
+	// between reach it; they arrive interleaved with the gate and the capture, and
+	// dropping them here would lose exactly the crossings the ordering exists to
+	// preserve.
+	deferred []*Message
+}
+
+// Deferred returns the session traffic read off the stream during the gate, oldest
+// first. Every frame came from the coordinator, which is the only peer this stream
+// has. Valid after Ready; the slice is not reused.
+func (p *PendingJoin) Deferred() []*Message { return p.deferred }
+
+// HostID names the coordinator on the other end of this stream.
+func (p *PendingJoin) HostID() PeerID { return p.offer.Host }
+
+// hold buffers one session frame that arrived out of the handshake's turn, and
+// reports whether it was one. Anything the handshake itself expects is left to the
+// caller, and an unrecognised type is a protocol error rather than something to
+// stash.
+func (p *PendingJoin) hold(msg *Message) bool {
+	switch msg.Type {
+	case MsgHeartbeat:
+		return true
+	case MsgEvent, MsgStateSync, MsgStateDigest, MsgDisconnect:
+		p.deferred = append(p.deferred, msg)
+		return true
+	}
+	return false
 }
 
 // DialSession connects and receives the host's anchor before an App is built.
@@ -226,9 +257,15 @@ func (p *PendingJoin) WaitStart() (SessionOffer, error) {
 	if p.started {
 		return SessionOffer{}, errors.New("join start gate already received")
 	}
-	msg, err := Decode(p.conn)
-	if err != nil {
-		return SessionOffer{}, err
+	var msg *Message
+	for {
+		var err error
+		if msg, err = Decode(p.conn); err != nil {
+			return SessionOffer{}, err
+		}
+		if !p.hold(msg) {
+			break
+		}
 	}
 	if msg.Type != MsgStart {
 		return SessionOffer{}, fmt.Errorf("join handshake: got message %#x, want start", msg.Type)
@@ -262,7 +299,7 @@ func (p *PendingJoin) ReceiveSnapshot() (uint64, []byte, error) {
 	if !p.offer.CarriesSnapshot() {
 		return 0, nil, errors.New("join start gate carries no capture")
 	}
-	tick, body, err := readSnapshot(p.conn, p.base.ReadTimeout)
+	tick, body, err := readSnapshot(p, p.base.ReadTimeout)
 	if err != nil {
 		return 0, nil, fmt.Errorf("join snapshot: %w", err)
 	}

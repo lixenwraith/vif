@@ -375,11 +375,25 @@ func (a *App) installShared(cap SharedCapture) error {
 			return
 		}
 
+		// The barrier is rebased with the world: an installed world has applied
+		// everything due at or before its tick, and produces its next epoch from it.
+		a.adoptSnapshotBarrierLocked(cap.Header.Tick)
+
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.
 		a.installStatusLocked(cap.Status)
 	})
 	return err
+}
+
+// adoptSnapshotBarrierLocked tells the crossing barrier which tick the world it now
+// holds was taken at. Caller MUST hold updateMutex.
+func (a *App) adoptSnapshotBarrierLocked(tick uint64) {
+	for _, sys := range a.world.Systems() {
+		if b, ok := sys.(interface{ AdoptSnapshot(uint64) }); ok {
+			b.AdoptSnapshot(tick)
+		}
+	}
 }
 
 // sharedStateSaversLocked indexes this world's declared carriers by name.

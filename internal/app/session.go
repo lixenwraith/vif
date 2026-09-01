@@ -357,10 +357,9 @@ func (a *App) encodeJoinCapture() ([]byte, uint64, error) {
 		return nil, 0, fmt.Errorf("host capture encode: %w", err)
 	}
 
-	reg := a.world.Resources.Status
-	reg.Ints.Get("snapshot.capture_us").Store(captureDur.Microseconds())
-	reg.Ints.Get("snapshot.encode_us").Store(encodeDur.Microseconds())
-	reg.Ints.Get("snapshot.bytes").Store(int64(len(body)))
+	a.snapshotTelemetry.captureUS.Store(captureDur.Microseconds())
+	a.snapshotTelemetry.encodeUS.Store(encodeDur.Microseconds())
+	a.snapshotTelemetry.bytes.Store(int64(len(body)))
 	vlog.Info("app", "msg", "session capture",
 		"tick", cap.Header.Tick, "bytes", len(body),
 		"capture_us", captureDur.Microseconds(), "encode_us", encodeDur.Microseconds(),

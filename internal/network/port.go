@@ -116,6 +116,15 @@ func (p *SocketPort) Drain(dst []Inbound) int {
 	return n
 }
 
+// Inject replays a frame the join handshake read off the stream before this port
+// owned it. A mid-run joiner reads its start gate and its capture from the raw
+// connection, and the host's crossings arrive on the same stream in the meantime;
+// they are the epochs produced between admission and install, so they are held and
+// handed to the port here rather than dropped.
+func (p *SocketPort) Inject(peer uint32, msgType uint8, payload []byte) {
+	p.onMessage(PeerID(peer), NewMessage(MessageType(msgType), payload))
+}
+
 // Changes wakes startup coordination after connect, disconnect or ready.
 func (p *SocketPort) Changes() <-chan struct{} { return p.changes }
 

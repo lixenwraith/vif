@@ -136,38 +136,41 @@ func writeSnapshot(conn net.Conn, timeout time.Duration, tick uint64, body []byt
 	return nil
 }
 
-// readSnapshot reads a whole capture from a raw handshake stream.
+// readSnapshot reads a whole capture from a raw handshake stream, holding the
+// session traffic that arrives alongside it.
 //
-// A heartbeat may land in the middle of the transfer: the sender's peer writer runs
-// on its own schedule and the joiner's stream is already a peer connection by the
-// time the capture is sent. It carries no state and is skipped. Anything else is a
-// protocol error rather than something to skip past, because the next message on
+// The interleaving is by design rather than by accident. A mid-run host admits a
+// participant before it reads the world for it, so the epochs it produces during
+// the transfer reach that participant instead of falling into the gap; they arrive
+// on this stream, between chunks, and hold keeps them for the barrier to receive
+// once the world they apply to exists. A heartbeat is skipped the same way and
+// carries nothing. Anything else is a protocol error, because the next message on
 // this stream decides what the joiner does with the world it just received.
-func readSnapshot(conn net.Conn, timeout time.Duration) (uint64, []byte, error) {
+func readSnapshot(p *PendingJoin, timeout time.Duration) (uint64, []byte, error) {
 	var asm SnapshotAssembly
 	for {
 		if timeout > 0 {
-			_ = conn.SetReadDeadline(time.Now().Add(timeout))
+			_ = p.conn.SetReadDeadline(time.Now().Add(timeout))
 		}
-		msg, err := Decode(conn)
+		msg, err := Decode(p.conn)
 		if err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
+			_ = p.conn.SetReadDeadline(time.Time{})
 			return 0, nil, err
 		}
-		if msg.Type == MsgHeartbeat {
+		if p.hold(msg) {
 			continue
 		}
 		if msg.Type != MsgStateSnapshot {
-			_ = conn.SetReadDeadline(time.Time{})
+			_ = p.conn.SetReadDeadline(time.Time{})
 			return 0, nil, fmt.Errorf("join snapshot: got message %#x, want a capture chunk", msg.Type)
 		}
 		done, err := asm.Add(msg.Payload)
 		if err != nil {
-			_ = conn.SetReadDeadline(time.Time{})
+			_ = p.conn.SetReadDeadline(time.Time{})
 			return 0, nil, err
 		}
 		if done {
-			_ = conn.SetReadDeadline(time.Time{})
+			_ = p.conn.SetReadDeadline(time.Time{})
 			tick, body := asm.Result()
 			return tick, body, nil
 		}

@@ -25,6 +25,17 @@ type NavigationDebugState struct {
 }
 
 // GameContext holds all game state including the ECS world
+// SessionController is what an operator command may ask of the session. Kept to
+// the two questions the command surface actually has: start hosting this run, and
+// describe what it is part of now.
+type SessionController interface {
+	// BeginHosting opens this running instance to participants at addr. It returns
+	// an error rather than reporting one, because the operator typed the address.
+	BeginHosting(addr string) error
+	// SessionSummary is a one-line description of the session for the status bar.
+	SessionSummary() string
+}
+
 type GameContext struct {
 	// === Immutable After Init ===
 
@@ -41,6 +52,12 @@ type GameContext struct {
 	// === Channels ===
 
 	ResetChan chan<- struct{} // FSM reset signal; wired to ClockScheduler
+
+	// SessionCtl is the App-level session lifecycle the operator surface reaches
+	// through. It is nil in a harness that builds no transport, so every caller
+	// checks. The context cannot own this itself: opening a session binds a socket
+	// and starts goroutines, which belong to the runtime rather than to the world.
+	SessionCtl SessionController
 
 	// === Atomic (Self-Synchronized) ===
 

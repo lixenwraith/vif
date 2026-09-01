@@ -79,6 +79,29 @@ func (c *FlowFieldCache) MarkDirty() {
 	c.PendingUpdate = true
 }
 
+// Rebuild recomputes the field for the targets the cache last computed for and
+// leaves the throttle phase exactly as it found it. It reports whether it ran.
+//
+// It exists for one caller: a cache whose throttle phase was restored from another
+// instance but whose field was not, because a field is derived rather than carried.
+// Update cannot serve that caller. It would derive from *this* tick's targets, which
+// are not the ones the restored phase belongs to, so the field would be one the
+// sender never held; and it would then reset TicksSinceCompute and clear
+// PendingUpdate, which is the phase itself. Deriving from LastTargets reproduces the
+// sender's field, and leaving the counters alone leaves the next recompute due on
+// the tick the sender's is.
+func (c *FlowFieldCache) Rebuild(isBlocked WallChecker) {
+	ticks, pending := c.TicksSinceCompute, c.PendingUpdate
+	c.Field.Compute(c.LastTargets, isBlocked)
+	c.TicksSinceCompute, c.PendingUpdate = ticks, pending
+}
+
+// Computed reports whether a field has been derived at least once. It is part of
+// the throttle phase for the same reason the counters are: an install that left the
+// field underived would force a compute on the next tick that the instance it
+// copied is not making.
+func (c *FlowFieldCache) Computed() bool { return c.Field != nil && c.Field.Valid }
+
 // GetDirection returns cached flow direction
 func (c *FlowFieldCache) GetDirection(x, y int) int8 {
 	return c.Field.GetDirection(x, y)

@@ -52,6 +52,11 @@ var denySharedPrefix = []string{
 	// Kill tallies mix shared species with the player-domain drain, so the total
 	// and the drain column move with this participant's own population
 	"kills.",
+	// What a capture cost this instance: a host publishes what reading the world
+	// took, a joiner publishes what installing it took, and the tick it installed
+	// at. None of it is a fact about the world the two now share — it is the
+	// measurement Phase 4's cadence gets chosen from.
+	"snapshot.",
 }
 
 // denySharedKey drops a single per-instance key from a group that is otherwise
@@ -156,6 +161,15 @@ var denySim = map[string]bool{
 	"stat.late":         true,
 	"stat.groups":       true,
 	"stat.metrics":      true,
+	// Wall-clock costs and the position a capture was installed at. A replay
+	// installs none and re-derives everything, so there is nothing here to compare.
+	"snapshot.capture_us":     true,
+	"snapshot.encode_us":      true,
+	"snapshot.bytes":          true,
+	"snapshot.stage_us":       true,
+	"snapshot.commit_us":      true,
+	"snapshot.install_tick":   true,
+	"snapshot.catch_up_ticks": true,
 }
 
 // Snapshot returns the sorted context and registry state as comparable lines.

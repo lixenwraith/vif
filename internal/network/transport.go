@@ -132,6 +132,10 @@ func (t *Transport) acceptLoop() {
 		}
 		if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
 			t.report(err)
+			continue
+		}
+		if t.config.OnAdmit != nil {
+			t.config.OnAdmit(id)
 		}
 	}
 }

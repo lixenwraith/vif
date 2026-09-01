@@ -63,7 +63,12 @@ const (
 )
 
 func persistentTelemetryKey(kind, key string) bool {
-	if strings.HasPrefix(key, "content.") || strings.HasPrefix(key, "rec.") || strings.HasPrefix(key, "stat.") {
+	// snapshot.* is what a capture cost this process — the read, the encode, the
+	// bytes, the install, the ticks a join had to catch up. It describes a transfer
+	// rather than a game, and :new does not undo a join, so it survives a reset for
+	// the same reason the corpus fingerprint and the recorder's own counters do.
+	if strings.HasPrefix(key, "content.") || strings.HasPrefix(key, "rec.") ||
+		strings.HasPrefix(key, "stat.") || strings.HasPrefix(key, "snapshot.") {
 		return true
 	}
 	switch kind {

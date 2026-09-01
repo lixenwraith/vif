@@ -1,5 +1,7 @@
 package parameter
 
+import "time"
+
 // Transport cadence. Crossings use a fixed playout delay; owner-authored state is
 // a periodic value sync whose interval trades freshness against traffic.
 const (
@@ -47,6 +49,32 @@ const (
 	// bug in it from becoming unbounded traffic, and 16 exceeds the diameter of any
 	// graph MaxPlayers participants can form.
 	NetworkRelayHopLimit = 16
+
+	// NetworkJoinReadyTimeout bounds how long a coordinator waits for a mid-run
+	// joiner to install the world it was sent and confirm it. It is a link and
+	// install bound rather than a game one: a participant that needs longer than
+	// this has a link or a machine that cannot keep the playout lead, and refusing
+	// its join is better than admitting a participant whose crossings will arrive
+	// after the ticks they name.
+	NetworkJoinReadyTimeout = 5 * time.Second
+
+	// NetworkJoinLagTicks is how far behind the session a freshly installed
+	// participant may land and still be admitted, in ticks.
+	//
+	// It is the playout lead, and that is not a coincidence: a participant N ticks
+	// behind produces a crossing for tick Q+lead when the rest of the session is
+	// already at Q+N, so the artifact is late by N-lead. At or under the lead it
+	// still lands on time. The join measures its own lag against this and refuses
+	// rather than joining a session it will immediately diverge from.
+	NetworkJoinLagTicks = NetworkBarrierDelayTicks
+
+	// NetworkJoinCatchUpTicks bounds the ticks a joining participant may simulate
+	// to close the gap between the world it installed and the session's current
+	// tick. The gap is the transfer and install cost, which is a function of world
+	// size rather than of session length; this ceiling is far above the measured
+	// cost and exists so a pathological link fails the join instead of stalling
+	// inside it.
+	NetworkJoinCatchUpTicks = 200
 
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one

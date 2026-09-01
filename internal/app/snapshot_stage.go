@@ -16,8 +16,10 @@ package app
 import (
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -113,6 +115,12 @@ func (s *StagedInstall) Commit() error {
 			"tick", s.capture.Header.Tick, "error", err.Error())
 		return fmt.Errorf("commit a staged capture: %w", err)
 	}
+	s.live.world.RunSafe(func() {
+		m := s.live.snapshotTelemetry
+		m.stageUS.Store(s.stageDur.Microseconds())
+		m.commitUS.Store(s.commitDur.Microseconds())
+		m.installTick.Store(int64(s.capture.Header.Tick))
+	})
 	vlog.Info("app", "msg", "capture installed",
 		"tick", s.capture.Header.Tick,
 		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds())
@@ -126,6 +134,38 @@ func (s *StagedInstall) Discard() {
 	}
 	s.discarded = true
 	s.release()
+}
+
+// snapshotTelemetry is the capture and install cost, reserved before the metric set
+// is frozen so a join can publish into it.
+//
+// It is deliberately per-instance and deliberately excluded from the compared
+// surface: a host publishes what a read cost it and a joiner publishes what an
+// install cost it, and neither is a fact about the world they now share. What the
+// numbers are for is Phase 4's cadence, which has to be chosen from a measurement
+// rather than a guess.
+type snapshotTelemetry struct {
+	captureUS   *atomic.Int64
+	encodeUS    *atomic.Int64
+	bytes       *atomic.Int64
+	stageUS     *atomic.Int64
+	commitUS    *atomic.Int64
+	installTick *atomic.Int64
+	catchUp     *atomic.Int64
+}
+
+// newSnapshotTelemetry reserves the cells. Called during construction, because a
+// key first written after Freeze is counted late rather than stored.
+func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
+	return snapshotTelemetry{
+		captureUS:   reg.Ints.Get("snapshot.capture_us"),
+		encodeUS:    reg.Ints.Get("snapshot.encode_us"),
+		bytes:       reg.Ints.Get("snapshot.bytes"),
+		stageUS:     reg.Ints.Get("snapshot.stage_us"),
+		commitUS:    reg.Ints.Get("snapshot.commit_us"),
+		installTick: reg.Ints.Get("snapshot.install_tick"),
+		catchUp:     reg.Ints.Get("snapshot.catch_up_ticks"),
+	}
 }
 
 // Timings reports what the two halves cost, for the cadence Phase 4 has to choose.

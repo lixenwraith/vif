@@ -51,7 +51,16 @@ type Config struct {
 	// AcceptSession authenticates and assigns a canonical participant ID before
 	// an accepted stream reaches the poll endpoint.
 	AcceptSession func(net.Conn) (PeerID, error)
-	OnError       func(error)
+
+	// OnAdmit is called once an accepted stream has become a peer, on the accept
+	// goroutine. It is where a mid-run join sends its start gate and its capture,
+	// and the ordering is the reason it exists rather than being folded into
+	// AcceptSession: a participant has to be receiving this instance's crossings
+	// before the world it is about to install is read, or the epochs produced
+	// between the two are lost to it and to nothing else.
+	OnAdmit func(PeerID)
+
+	OnError func(error)
 
 	preconnected     net.Conn
 	preconnectedPeer PeerID

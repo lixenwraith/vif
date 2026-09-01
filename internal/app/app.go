@@ -56,6 +56,16 @@ type App struct {
 	// sessionRoster is the lobby the coordinator has admitted so far. It grows one
 	// entry per accepted connection and closes into the offer the start gate sends.
 	sessionRoster []network.SessionParticipant
+
+	// midRunPort is the socket a solo run opened for itself with :host. A run
+	// started with -host takes its endpoint from NetworkService instead, which the
+	// hub owns and closes; this one is owned here because nothing else knows it
+	// exists.
+	midRunPort *network.SocketPort
+
+	// snapshotTelemetry is reserved during construction so a capture or an install
+	// can publish its cost into a registry that is frozen by then.
+	snapshotTelemetry snapshotTelemetry
 }
 
 // New wires the runtime, releasing anything already started on failure
@@ -116,6 +126,7 @@ func (a *App) init() error {
 	if err := a.initScheduler(); err != nil {
 		return err
 	}
+	a.ctx.SessionCtl = a
 
 	vlog.Info("app", "msg", "init complete",
 		"width", a.ctx.Width,
@@ -218,6 +229,7 @@ func (a *App) initWorld() {
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
+	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
@@ -389,6 +401,7 @@ func (a *App) Close() {
 	if a.pendingJoin != nil {
 		_ = a.pendingJoin.Close()
 	}
+	a.closeMidRunPort()
 	a.hub.StopAll()
 
 	if a.recorder != nil {

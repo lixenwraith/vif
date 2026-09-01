@@ -42,6 +42,13 @@ type NetworkSystem struct {
 	encodeErr       int64
 	barrierActive   atomic.Bool
 
+	// snapshotFloor is the tick of the last world this instance installed. An
+	// installed world has already applied everything due at or before its own tick,
+	// so an artifact arriving for one of those ticks is not a late crossing to
+	// apply — it is a crossing the capture already contains, and applying it again
+	// would double it. Zero on an instance that never installed one.
+	snapshotFloor uint64
+
 	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
 
 	syncSeq   uint64
@@ -81,6 +88,8 @@ type NetworkSystem struct {
 	statSyncRecords *status.AtomicString
 	statSyncTick    *atomic.Int64
 	statDiverged    *atomic.Bool
+	statPreInstall  *atomic.Int64
+	statJoinLag     *atomic.Int64
 
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
@@ -242,6 +251,8 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statSyncRecords = s.textStat(reg, "network.sync_records")
 	s.statSyncTick = s.intStat(reg, "network.sync_tick")
 	s.statDiverged = s.boolStat(reg, "network.diverged")
+	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
+	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
 
 	s.Init()
 	return s
@@ -277,6 +288,7 @@ func (s *NetworkSystem) Init() {
 	s.crossings = s.crossings[:0]
 	s.scheduled = s.scheduled[:0]
 	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
+	s.snapshotFloor = 0
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
 	s.crossSeq = 0
 	s.localSource = 0
@@ -443,6 +455,89 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 	s.barrierActive.Store(active)
 	return active
 }
+
+// AdoptSnapshot rebases the barrier onto a world this instance just installed.
+//
+// Three things move at once and all three are the same fact. The production epoch
+// belongs to the installed tick rather than to the one this instance had reached,
+// or the next crossing it produces would name an apply tick the session left
+// behind. Artifacts already scheduled for a tick at or before the installed one are
+// dropped, because the capture contains their effect. And the floor is remembered,
+// so the artifacts still in flight for those ticks — the ones the host produced
+// between admitting this participant and reading the world for it — are recognised
+// as already-applied rather than applied twice.
+//
+// Caller MUST hold updateMutex: it runs inside the install.
+func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if n := len(s.crossings); n > 0 {
+		s.statDrop.Add(int64(n))
+		s.crossings = s.crossings[:0]
+	}
+	keep := s.scheduled[:0]
+	dropped := 0
+	for _, a := range s.scheduled {
+		if a.applyTick <= tick {
+			dropped++
+			continue
+		}
+		keep = append(keep, a)
+	}
+	s.scheduled = keep
+	s.snapshotFloor = tick
+	s.productionEpoch = tick + 1
+	if r := s.world.Resources.Network; r != nil {
+		s.localSource = r.ParticipantID
+		s.delayTicks = r.BarrierDelayTicks
+	}
+	if dropped > 0 {
+		s.statPreInstall.Add(int64(dropped))
+	}
+}
+
+// DrainPeers translates whatever the transport is holding without advancing a tick.
+//
+// It exists for the join, which has to know the tick the session has reached before
+// it decides how many ticks to run. Receive answers that question only as part of a
+// tick, and a tick is the thing being decided; this is the same drain with the
+// applying half left out, so an artifact is scheduled at the tick it names and
+// nothing is applied early.
+//
+// Caller MUST hold updateMutex.
+func (s *NetworkSystem) DrainPeers() {
+	p := s.port()
+	if p == nil || !s.enabled {
+		return
+	}
+	s.refreshLink(p)
+	s.drain(p)
+}
+
+// NewestPeerEpoch is the highest production epoch any peer has been seen closing.
+// Every tick closes one, empty or not, so it is the session's tick as far as this
+// instance can observe it — which is what a freshly installed participant measures
+// its own lag against.
+func (s *NetworkSystem) NewestPeerEpoch() uint64 {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var newest uint64
+	for source, w := range s.epochs {
+		if uint32(source) == s.localSource {
+			continue
+		}
+		if n := w.newest(); n > newest {
+			newest = n
+		}
+	}
+	return newest
+}
+
+// ReportJoinLag publishes how far behind the session a joining participant landed,
+// in ticks. It is telemetry rather than a gate: the gate is in App, which refuses a
+// join whose lag exceeds the playout lead, because past that its own crossings
+// would arrive after the tick they name.
+func (s *NetworkSystem) ReportJoinLag(ticks uint64) { s.statJoinLag.Store(int64(ticks)) }
 
 // ActivateSession closes the pre-first-tick input window after startup gates.
 // The regular tick path keeps the same state current after disconnects.
@@ -993,14 +1088,25 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 
 	s.mu.Lock()
 	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
+	installed := 0
 	if admitted {
 		for _, f := range batch.Frames {
+			// Everything due at or before the installed world's tick is already in
+			// it. The epoch is still admitted, so the relay and the duplicate
+			// window stay coherent for the peers that did not install one.
+			if f.ApplyTick <= s.snapshotFloor {
+				installed++
+				continue
+			}
 			s.scheduled = append(s.scheduled, barrierArtifact{
 				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
 			})
 		}
 	}
 	s.mu.Unlock()
+	if installed > 0 {
+		s.statPreInstall.Add(int64(installed))
+	}
 
 	if !admitted {
 		s.statDuplicates.Add(1)

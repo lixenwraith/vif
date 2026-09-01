@@ -32,6 +32,7 @@ var commandNames = []string{
 	"boost", "god", "demon", "blossom", "decay", "cleaner", "dust",
 	"sp", "speed", "st", "step",
 	"r", "region",
+	"host", "session",
 }
 
 // CommandNames returns the recognised command names and aliases
@@ -116,6 +117,10 @@ func ExecuteCommand(ctx *engine.GameContext, command string) CommandResult {
 		return handleCleanerCommand(ctx)
 	case "dust":
 		return handleDustCommand(ctx)
+	case "host":
+		return handleHostCommand(ctx, args)
+	case "session":
+		return handleSessionCommand(ctx)
 	default:
 		setCommandError(ctx, fmt.Sprintf("Unknown command: %s", cmd))
 		return CommandResult{Continue: true, KeepPaused: false}
@@ -571,6 +576,39 @@ func handleHelpCommand(ctx *engine.GameContext) CommandResult {
 	ctx.SetPaused(true)
 	ctx.PushLocal(event.EventMetaHelpRequest, nil)
 	return CommandResult{Continue: true, KeepPaused: true}
+}
+
+// handleHostCommand opens a running instance to participants.
+// Usage: :host <addr>   e.g. :host :7777, :host 0.0.0.0:7777
+//
+// It is deliberately not gated by the live-session guard above: the guard exists to
+// stop an operator changing shared scheduling under a session that has already
+// agreed on it, and this command is what creates one. BeginHosting refuses a run
+// that is already in a session, which is the same rule stated where it belongs.
+func handleHostCommand(ctx *engine.GameContext, args []string) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime has no session transport")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if len(args) != 1 {
+		setCommandError(ctx, "Usage: :host <addr>  (e.g. :host :7777)")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	if err := ctx.SessionCtl.BeginHosting(args[0]); err != nil {
+		setCommandError(ctx, "Host: "+err.Error())
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	return CommandResult{Continue: true, KeepPaused: false}
+}
+
+// handleSessionCommand reports what this run is part of.
+func handleSessionCommand(ctx *engine.GameContext) CommandResult {
+	if ctx.SessionCtl == nil {
+		setCommandError(ctx, "This runtime has no session transport")
+		return CommandResult{Continue: true, KeepPaused: false}
+	}
+	ctx.SetStatusMessage(ctx.SessionCtl.SessionSummary(), parameter.StatusMessageDefaultTimeout, true)
+	return CommandResult{Continue: true, KeepPaused: false}
 }
 
 // handleAboutCommand triggers about overlay event

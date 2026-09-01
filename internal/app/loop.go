@@ -62,6 +62,12 @@ func (a *App) Loop() error {
 	}
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
+		// Held artifacts and catch-up ticks come before game time is released: the
+		// catch-up runs on the paused clock's step path, and releasing first would
+		// start this instance's own pacing at the wrong tick.
+		if err := a.resumeJoinedSession(); err != nil {
+			return err
+		}
 		// Paused directly during construction, without emitting an operator event:
 		// the start gate is the authority that releases tick-zero game time.
 		a.ctx.TimeCtl.SetPaused(false)

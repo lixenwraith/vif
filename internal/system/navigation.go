@@ -958,12 +958,15 @@ type navSnapshot struct {
 // navGroupPhase is one target group's throttle phase, named by group ID so the
 // capture survives groups being created or destroyed between capture and install.
 type navGroupPhase struct {
-	GroupID              uint8         `json:"group_id"`
-	PointTicks           int           `json:"point_ticks"`
-	PointPending         bool          `json:"point_pending"`
-	PointLastTargets     []vmath.Point `json:"point_last_targets"`
+	GroupID          uint8         `json:"group_id"`
+	PointTicks       int           `json:"point_ticks"`
+	PointPending     bool          `json:"point_pending"`
+	PointComputed    bool          `json:"point_computed"`
+	PointLastTargets []vmath.Point `json:"point_last_targets"`
+
 	CompositeTicks       int           `json:"composite_ticks"`
 	CompositePending     bool          `json:"composite_pending"`
+	CompositeComputed    bool          `json:"composite_computed"`
 	CompositeLastTargets []vmath.Point `json:"composite_last_targets"`
 }
 
@@ -986,10 +989,12 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 		phase := navGroupPhase{GroupID: id}
 		if c := g.pointFlowCache; c != nil {
 			phase.PointTicks, phase.PointPending = c.TicksSinceCompute, c.PendingUpdate
+			phase.PointComputed = c.Computed()
 			phase.PointLastTargets = slices.Clone(c.LastTargets)
 		}
 		if c := g.compositeFlowCache; c != nil {
 			phase.CompositeTicks, phase.CompositePending = c.TicksSinceCompute, c.PendingUpdate
+			phase.CompositeComputed = c.Computed()
 			phase.CompositeLastTargets = slices.Clone(c.LastTargets)
 		}
 		snap.Groups = append(snap.Groups, phase)
@@ -997,15 +1002,38 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 	return json.Marshal(snap)
 }
 
-// LoadShared restores the recompute phase onto caches this world has already
-// created, and forces a recompute of the fields themselves: the phase says when
-// the next recompute is due, not what the last one produced.
+// LoadShared restores the recompute phase and derives, here and now, the state the
+// capture deliberately does not carry.
+//
+// Leaving the derivation to the next tick does not work, and the way it fails is
+// the reason this is written out. A cache holding a restored phase but no field
+// takes Update's !Field.Valid branch, which computes from *this* tick's targets
+// rather than the ones the phase belongs to, and then sets TicksSinceCompute to
+// zero and clears PendingUpdate — so the first tick after an install destroys the
+// phase the carrier exists to preserve, and the two instances recompute on
+// different ticks from then on. That is a divergence in flow direction, which is
+// kinetics, which is what the whole D-17 argument is about.
+//
+// So the field is derived from the targets the phase belongs to, the throttle
+// counters are left exactly as the capture set them, and the composite passability
+// grid — derived from the walls the install just replaced — is rebuilt in the same
+// breath. Nothing here is carried; all of it is re-derived, which is the D-19
+// clause this system sits under.
 func (s *NavigationSystem) LoadShared(data []byte) error {
 	var snap navSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("navigation: phase: %w", err)
 	}
 	s.routeRebuildTicks = snap.RouteRebuildTicks
+
+	// The walls are the installed ones now, so the grid every composite path is
+	// tested against has to be rebuilt before any field is derived from it.
+	s.recomputeCompositePassability()
+	isBlockedPoint := func(x, y int) bool {
+		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
+	}
+	isBlockedComposite := s.compositePassability.IsBlocked
+
 	for _, phase := range snap.Groups {
 		g := s.getOrCreateGroup(phase.GroupID)
 		if g == nil {
@@ -1014,10 +1042,16 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 		if c := g.pointFlowCache; c != nil {
 			c.TicksSinceCompute, c.PendingUpdate = phase.PointTicks, phase.PointPending
 			c.LastTargets = append(c.LastTargets[:0], phase.PointLastTargets...)
+			if phase.PointComputed {
+				c.Rebuild(isBlockedPoint)
+			}
 		}
 		if c := g.compositeFlowCache; c != nil {
 			c.TicksSinceCompute, c.PendingUpdate = phase.CompositeTicks, phase.CompositePending
 			c.LastTargets = append(c.LastTargets[:0], phase.CompositeLastTargets...)
+			if phase.CompositeComputed {
+				c.Rebuild(isBlockedComposite)
+			}
 		}
 	}
 	return nil

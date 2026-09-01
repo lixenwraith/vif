@@ -161,6 +161,8 @@ var topics = []topicDef{
 			{Keys: ":free [on|off]", Desc: "Track the cursor with mouse motion; on by default"},
 			{Keys: ":auto [on|off]", Desc: "Auto-fire both weapons; on by default"},
 			{Keys: ":mouse enable|disable|free", Desc: "Pointer master switch"},
+			{Keys: ":host <addr>", Desc: "Open this running game to participants, e.g. :host :7777; they join at the current tick"},
+			{Keys: ":session", Desc: "Report the session role, address, participant identity, peers and tick"},
 		},
 	},
 	{

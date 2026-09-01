@@ -149,6 +149,17 @@ func (p *MeshPort) deliverTo(peer *MeshPort, msgType uint8, payload []byte) bool
 	return true
 }
 
+// Inject replays a frame into this node's inbound queue as if a neighbour had sent
+// it. It is the mesh's half of the join gate: a participant that read session
+// traffic off its stream before the port owned it hands the frames over here.
+func (p *MeshPort) Inject(peer uint32, msgType uint8, payload []byte) {
+	p.deliver(Inbound{
+		Kind: InboundMessage,
+		Peer: PeerID(peer),
+		Msg:  NewMessage(MessageType(msgType), append([]byte(nil), payload...)),
+	})
+}
+
 // PeerCount reports directly linked participants; D-14 reads it to latch the map.
 func (p *MeshPort) PeerCount() int {
 	p.mu.Lock()

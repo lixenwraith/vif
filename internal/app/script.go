@@ -104,6 +104,9 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 	}
 	if a.cfg.HostAddress != "" || a.cfg.JoinAddress != "" {
 		a.activateNetworkSession()
+		if err := a.resumeJoinedSession(); err != nil {
+			return fail(err)
+		}
 		a.ctx.TimeCtl.SetPaused(false)
 	}
 	a.scheduler.Prepare()
