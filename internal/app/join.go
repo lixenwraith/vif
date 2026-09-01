@@ -117,6 +117,12 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap SharedCapture) error {
 		"tick", cap.Header.Tick, "run", cap.Header.Run,
 		"stage_ms", stage.Milliseconds(), "commit_ms", commit.Milliseconds())
 
+	// The world a join installs is the host's current keyframe, which is what the
+	// deltas that follow it are computed against. Adopting it here is what lets a
+	// participant start applying corrections at the next cadence rather than at the
+	// next keyframe.
+	a.adoptCorrectionBaseline(cap)
+
 	return a.bindSessionControl(o, o.Assigned)
 }
 
@@ -261,6 +267,10 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	r := engine.NewNetworkResource(port)
 	r.OnDeparture = a.releaseParticipant32
 	r.SharedDigest = a.sharedDigestLocked
+	// The correction queue takes bytes and nothing else: this runs inside a tick,
+	// and decoding or installing a correction here would do both under the lock the
+	// install itself needs.
+	r.OnCorrection = func(_ uint64, body []byte) { a.corrections.receive(body) }
 	a.world.Resources.Network = r
 	a.world.MarkSessionShared()
 	a.ctx.PublishMapLock()

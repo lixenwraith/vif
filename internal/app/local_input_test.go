@@ -86,17 +86,23 @@ func TestOneKeypressMovesTheLocalCursorWithoutATick(t *testing.T) {
 			liveAfter, liveBefore)
 	}
 
-	// The barrier is untouched. The shared cell still crosses and still applies at
-	// the agreed tick, on both instances — only the local read ran ahead of it.
+	// Phase 1 predicted the cell this participant reads; Phase 4 took the playout
+	// lead off the shared store as well, so the producer's own crossing is applied
+	// in the tick that produced it and the prediction and the store agree at once.
+	// The peers keep the lead, which is where a remote participant's motion is
+	// interpolated from.
 	local := localCursorEntity(live)
-	if got := cursorPosition(live, local); got != liveBefore {
-		t.Fatalf("the crossing reached the shared store at %#v before its apply tick", got)
+	want := liveBefore
+	want.X++
+	if got := cursorPosition(live, local); got != want {
+		t.Fatalf("the producer's own crossing landed at %#v, want %#v with no lead", got, want)
+	}
+	if got := cursorPosition(apps[1], local); got != liveBefore {
+		t.Fatalf("a peer applied the crossing at %#v before its apply tick", got)
 	}
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		tickAll(apps)
 	}
-	want := liveBefore
-	want.X++
 	for i, a := range apps {
 		if got := cursorPosition(a, local); got != want {
 			t.Fatalf("participant %d applied the crossing as %#v, want %#v", i+1, got, want)
@@ -240,9 +246,8 @@ func TestFastTypingOverAGlyphRunScoresNoErrors(t *testing.T) {
 
 // TestPredictedLocalCursorReconcilesAndSnaps is D-18's reconcile half. A placement
 // this participant did not request is the authority, and the prediction it disagrees
-// with is discarded rather than merged: the queue is emptied, the local cell falls
-// back to the store, and the crossings still outstanding apply at their barrier tick
-// exactly as they would have.
+// with is discarded rather than merged: the queue is emptied and the local cell
+// falls back to the store.
 func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
 	live, apps := liveInstance(t, 0xD18ADD)
 	local := localCursorEntity(live)
@@ -273,17 +278,22 @@ func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
 		t.Fatalf("store after an unpredicted placement = %#v, want %#v", got, snap)
 	}
 
-	// Discarded, not merged: the two crossings the prediction described are still in
-	// flight and still land on every instance at their agreed tick.
+	// Discarded, not merged, and nothing comes back to un-discard it. Phase 4 took
+	// the playout lead off the local path, so the two crossings the prediction
+	// described had already applied on this instance before the authoritative
+	// placement replaced them; what is still in flight is the peers' copies, which
+	// land at the agreed tick and are then corrected by the host like any other
+	// disagreement.
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		tickAll(apps)
 	}
-	if got, _ := localCell(live); got != predicted {
-		t.Fatalf("local cell after the barrier drained = %#v, want %#v", got, predicted)
+	if got, _ := localCell(live); got != snap {
+		t.Fatalf("local cell after the lead drained = %#v, want the authoritative %#v", got, snap)
 	}
-	for i, a := range apps {
-		if got := cursorPosition(a, local); got != predicted {
-			t.Fatalf("participant %d applied the outstanding crossings as %#v, want %#v", i+1, got, predicted)
-		}
+	if got := cursorPosition(live, local); got != snap {
+		t.Fatalf("store after the lead drained = %#v, want %#v", got, snap)
+	}
+	if got := cursorPosition(apps[1], local); got != predicted {
+		t.Fatalf("the peer applied the outstanding crossings as %#v, want %#v", got, predicted)
 	}
 }

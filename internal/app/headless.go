@@ -46,10 +46,16 @@ func newDriven(cfg Config) (*App, error) {
 
 // Tick advances the simulation by n ticks, servicing a pending FSM reset before
 // each one. Pause does not gate a stepped tick, so n ticks always execute.
+//
+// Authority that has arrived is applied first, which is what makes a driven run a
+// participant rather than an observer: a correction installs between two ticks, and
+// on this path the caller is the thing between two ticks. An interactive run has no
+// caller here and runs the same drain on a goroutine of its own.
 func (a *App) Tick(n int) {
 	if n < 0 {
 		return
 	}
+	a.ApplyPendingCorrections()
 	a.scheduler.RunTicks(n)
 }
 

@@ -11,6 +11,15 @@
 // writes the same bytes into the live world, between two ticks. What survives the
 // staging pass is what the live pass cannot fail on: identical code, identical
 // input, and no dependence on the state being written over.
+//
+// Phase 4 changed what this has to cost. Phase 3 built a whole second App per
+// install and threw it away — 9 to 31 ms, which is right for a join that happens
+// once and wrong for a correction that happens five times a second. The staging
+// world is kept now: it is built the first time something is staged into it and
+// re-used for the life of the run, so a correction pays the load and not the
+// construction. And Commit stopped being a second full write: it reconciles the
+// live world onto the capture instead of clearing and re-inserting it, so what it
+// writes is the size of the correction rather than the size of the world.
 package app
 
 import (
@@ -19,6 +28,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -26,9 +36,10 @@ import (
 // StagedInstall is a capture that has been resolved against a second world and is
 // waiting for its tick boundary. Nothing in the live world has been touched.
 //
-// The handle owns the staging world and must be released — Commit does that on the
-// way out, Discard does it on the way out of a join that failed for some other
-// reason.
+// The handle borrows the staging world and must release it — Commit does that on
+// the way out, Discard on the way out of a join that failed for some other reason.
+// Releasing hands the world back to the run rather than closing it: it is built
+// once and every later correction resolves into the same one.
 type StagedInstall struct {
 	live    *App
 	staging *App
@@ -39,6 +50,12 @@ type StagedInstall struct {
 	committed  bool
 	discarded  bool
 	encodedLen int
+
+	// difference is how far the live world had drifted from the capture when the
+	// commit wrote it. On a guest that is the correction magnitude — the distance
+	// between what this instance predicted and what the host actually had — and it
+	// is telemetry rather than an error (D-11 as Phase 4 weakened it).
+	difference engine.WorldDifference
 }
 
 // StageShared resolves a capture into a second world without touching this one.
@@ -56,18 +73,22 @@ func (a *App) StageShared(cap SharedCapture) (*StagedInstall, error) {
 		return nil, err
 	}
 
-	staging, err := a.newStagingApp(cap)
+	staging, fresh, err := a.stagingWorld(cap)
 	if err != nil {
 		return nil, fmt.Errorf("stage: %w", err)
 	}
-	// The FSM boot script's queued spawn is what declares the cursor template a
-	// late arrival is created from, and it is still queued: the machine enters its
-	// boot state inside New and nothing has ticked. Settling it here makes the
-	// staging world the same shape as the instance it stands in for — a joiner
-	// settles the same queue before it installs, for the same reason.
-	staging.Settle()
+	if fresh {
+		// The FSM boot script's queued spawn is what declares the cursor template a
+		// late arrival is created from, and it is still queued: the machine enters
+		// its boot state inside New and nothing has ticked. Settling it here makes
+		// the staging world the same shape as the instance it stands in for — a
+		// joiner settles the same queue before it installs, for the same reason.
+		// A re-used staging world has settled it already and has never ticked
+		// since, so there is nothing queued to settle a second time.
+		staging.Settle()
+	}
 	if err := staging.installSharedResolved(cap); err != nil {
-		staging.Close()
+		a.discardStagingWorld()
 		return nil, fmt.Errorf("stage: %w", err)
 	}
 
@@ -105,8 +126,9 @@ func (s *StagedInstall) Commit() error {
 	case s.discarded:
 		return errors.New("staged install already discarded")
 	}
+	var err error
 	started := time.Now() // [wall] telemetry only
-	err := s.live.installSharedResolved(s.capture)
+	s.difference, err = s.live.reconcileSharedResolved(s.capture)
 	s.commitDur = time.Since(started)
 	s.committed = true
 	s.release()
@@ -123,9 +145,16 @@ func (s *StagedInstall) Commit() error {
 	})
 	vlog.Info("app", "msg", "capture installed",
 		"tick", s.capture.Header.Tick,
-		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds())
+		"stage_ms", s.stageDur.Milliseconds(), "commit_ms", s.commitDur.Milliseconds(),
+		"correction_entries", s.difference.Entries,
+		"correction_entities", s.difference.Entities,
+		"correction_cells", s.difference.CellShift)
 	return nil
 }
+
+// Difference is how far the live world had drifted from the capture at the moment
+// it was committed: the correction magnitude, valid after Commit.
+func (s *StagedInstall) Difference() engine.WorldDifference { return s.difference }
 
 // Discard releases the staging world without writing anything.
 func (s *StagedInstall) Discard() {
@@ -135,6 +164,61 @@ func (s *StagedInstall) Discard() {
 	s.discarded = true
 	s.release()
 }
+
+// stagingWorld returns the second world captures resolve into, building it the
+// first time and re-using it after.
+//
+// Re-use is the whole point and it is also the thing that could go wrong. A staging
+// world that kept anything from the previous install — a carrier that merged rather
+// than replaced, an entity a store did not drop — would resolve the next capture
+// against a world the sender never had, and the staging pass would stop being the
+// question it is asked. TestStagingWorldReuseMatchesAFreshOne is what holds that:
+// two captures installed into one staging world in sequence must leave exactly what
+// a world built for the second alone would.
+//
+// What it cannot re-use is a world built on different bounds. The D-14 map latch
+// decides what the level setup reflows and what a capture's placements mean, so a
+// capture that names other bounds gets a world built for them.
+//
+// The second return reports whether the world was just built, which is what decides
+// whether its FSM boot queue still needs settling.
+func (a *App) stagingWorld(cap SharedCapture) (*App, bool, error) {
+	a.stageMu.Lock()
+	defer a.stageMu.Unlock()
+
+	if a.staging != nil {
+		if a.stagingW == cap.Header.MapWidth && a.stagingH == cap.Header.MapHeight {
+			return a.staging, false, nil
+		}
+		a.staging.Close()
+		a.staging = nil
+	}
+	staging, err := a.newStagingApp(cap)
+	if err != nil {
+		return nil, false, err
+	}
+	a.staging = staging
+	a.stagingW, a.stagingH = cap.Header.MapWidth, cap.Header.MapHeight
+	return staging, true, nil
+}
+
+// discardStagingWorld throws away a staging world a capture failed to resolve into.
+//
+// A failed load may have written part of itself, so the world is no longer a
+// faithful stand-in for this instance and the next correction must not be resolved
+// against it. This is the one path that closes one before the run ends.
+func (a *App) discardStagingWorld() {
+	a.stageMu.Lock()
+	staging := a.staging
+	a.staging, a.stagingW, a.stagingH = nil, 0, 0
+	a.stageMu.Unlock()
+	if staging != nil {
+		staging.Close()
+	}
+}
+
+// closeStagingWorld releases the run's staging world. Called from Close.
+func (a *App) closeStagingWorld() { a.discardStagingWorld() }
 
 // snapshotTelemetry is the capture and install cost, reserved before the metric set
 // is frozen so a join can publish into it.
@@ -152,6 +236,29 @@ type snapshotTelemetry struct {
 	commitUS    *atomic.Int64
 	installTick *atomic.Int64
 	catchUp     *atomic.Int64
+
+	// The correction counters. sent/sent_bytes/keyframes are the host's side of
+	// the cadence — what it published and how much of it had to be whole — and
+	// applied/refused/superseded are the guest's. None of them is an error count:
+	// a refused delta is one whose keyframe this instance does not hold, and a
+	// superseded correction is one a fresher correction overtook, both of which a
+	// keyframe resolves on its own.
+	sent       *atomic.Int64
+	sentBytes  *atomic.Int64
+	keyframes  *atomic.Int64
+	applied    *atomic.Int64
+	refused    *atomic.Int64
+	superseded *atomic.Int64
+
+	// The correction magnitude, which is what Phase 4 puts where DESYNC was. It is
+	// how far this instance's prediction had drifted from the authority at the
+	// moment the authority arrived: component cells, the distinct entities behind
+	// them, and the largest distance a shared placement moved — the one a player
+	// would actually see.
+	correctionEntries  *atomic.Int64
+	correctionEntities *atomic.Int64
+	correctionCells    *atomic.Int64
+	correctionTick     *atomic.Int64
 }
 
 // newSnapshotTelemetry reserves the cells. Called during construction, because a
@@ -165,18 +272,28 @@ func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
 		commitUS:    reg.Ints.Get("snapshot.commit_us"),
 		installTick: reg.Ints.Get("snapshot.install_tick"),
 		catchUp:     reg.Ints.Get("snapshot.catch_up_ticks"),
+
+		sent:       reg.Ints.Get("snapshot.corrections_sent"),
+		sentBytes:  reg.Ints.Get("snapshot.correction_bytes_sent"),
+		keyframes:  reg.Ints.Get("snapshot.keyframes"),
+		applied:    reg.Ints.Get("snapshot.corrections_applied"),
+		refused:    reg.Ints.Get("snapshot.corrections_refused"),
+		superseded: reg.Ints.Get("snapshot.corrections_superseded"),
+
+		correctionEntries:  reg.Ints.Get("snapshot.correction_entries"),
+		correctionEntities: reg.Ints.Get("snapshot.correction_entities"),
+		correctionCells:    reg.Ints.Get("snapshot.correction_cells"),
+		correctionTick:     reg.Ints.Get("snapshot.correction_tick"),
 	}
 }
 
 // Timings reports what the two halves cost, for the cadence Phase 4 has to choose.
 func (s *StagedInstall) Timings() (stage, commit time.Duration) { return s.stageDur, s.commitDur }
 
-func (s *StagedInstall) release() {
-	if s.staging != nil {
-		s.staging.Close()
-		s.staging = nil
-	}
-}
+// release hands the staging world back. It is not closed: the world is the run's,
+// built once and re-used by every later install, and closing it here is what made
+// a correction pay for a construction.
+func (s *StagedInstall) release() { s.staging = nil }
 
 // newStagingApp builds the second world a capture is resolved into.
 //
@@ -225,4 +342,11 @@ func (a *App) newStagingApp(cap SharedCapture) (*App, error) {
 // reset, whose session counter a freshly constructed world has not reached.
 func (a *App) installSharedResolved(cap SharedCapture) error {
 	return a.installShared(cap)
+}
+
+// reconcileSharedResolved is the live half of a staged install: the same capture,
+// already proved loadable by the staging pass, written onto the world this instance
+// is holding rather than over the top of it.
+func (a *App) reconcileSharedResolved(cap SharedCapture) (engine.WorldDifference, error) {
+	return a.reconcileShared(cap)
 }

@@ -256,7 +256,9 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	// The capture is taken after the roster closes and before the gate opens. Both
 	// halves matter: the world a joiner installs has to already contain every cursor
 	// the roster names, and it has to describe a tick no participant has moved past.
-	body, tick, err := a.encodeJoinCapture()
+	// The tick-zero gate's capture is a keyframe like any other, and taking it
+	// through the same path is what makes it the baseline the first delta names.
+	body, tick, err := a.corrections.keyframeAt(0, time.Now().Add(parameter.NetworkJoinReadyTimeout))
 	if err != nil {
 		return err
 	}
@@ -295,6 +297,7 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		return err
 	}
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(offer.Participants)))
+	a.corrections.startPump()
 	return nil
 }
 
@@ -332,39 +335,6 @@ func (a *App) startJoinSession() error {
 	}
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(final.Participants)))
 	return nil
-}
-
-// encodeJoinCapture reads and encodes the world a joiner installs, and reports what
-// the read cost.
-//
-// The whole capture is taken inside one acquisition of the world lock, which is a
-// tick the host does not run. That is the bounded pause Phase 3 is allowed and the
-// number that decides whether it stays bounded, so it is measured and published
-// rather than assumed: capture_ms is the stall, encode_ms is not (the encode runs
-// outside the lock), and snapshot_bytes is what the link then has to carry.
-func (a *App) encodeJoinCapture() ([]byte, uint64, error) {
-	started := time.Now() // [wall] measures the stall, not the simulation
-	cap, err := a.CaptureShared()
-	captureDur := time.Since(started)
-	if err != nil {
-		return nil, 0, fmt.Errorf("host capture: %w", err)
-	}
-
-	encodeStart := time.Now() // [wall]
-	body, err := EncodeCapture(cap)
-	encodeDur := time.Since(encodeStart)
-	if err != nil {
-		return nil, 0, fmt.Errorf("host capture encode: %w", err)
-	}
-
-	a.snapshotTelemetry.captureUS.Store(captureDur.Microseconds())
-	a.snapshotTelemetry.encodeUS.Store(encodeDur.Microseconds())
-	a.snapshotTelemetry.bytes.Store(int64(len(body)))
-	vlog.Info("app", "msg", "session capture",
-		"tick", cap.Header.Tick, "bytes", len(body),
-		"capture_us", captureDur.Microseconds(), "encode_us", encodeDur.Microseconds(),
-		"streams", len(cap.Streams), "systems", len(cap.Systems))
-	return body, cap.Header.Tick, nil
 }
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.

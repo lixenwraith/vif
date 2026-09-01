@@ -807,6 +807,14 @@ type NetworkResource struct {
 	// session layer can return its identity to the pool. It must not take a lock
 	// that a world-lock acquisition waits behind.
 	OnDeparture func(participant uint32)
+
+	// OnCorrection hands one reassembled authoritative correction to the session
+	// layer. It is called under the world lock, from the tick that drained the last
+	// chunk, so it must do nothing but take the bytes: decoding a correction is
+	// hundreds of kilobytes of JSON and installing one needs the lock this call
+	// already holds. What it hands to is a queue the corrector drains between two
+	// ticks.
+	OnCorrection func(tick uint64, body []byte)
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

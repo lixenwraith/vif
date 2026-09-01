@@ -29,6 +29,14 @@ const (
 	// snapshot.go for the chunk header.
 	MsgStateSnapshot MessageType = 0x26 // Live: one chunk of a shared-world capture
 
+	// MsgStateCorrection carries one chunk of a periodic authoritative correction:
+	// either a whole capture or a delta against the last one the host sent whole.
+	// It is the same chunking as MsgStateSnapshot and a different message because
+	// it arrives at a different moment — a capture is part of a handshake, on a
+	// stream nothing else owns yet, and a correction arrives mid-session on a port
+	// that is also carrying epochs, syncs and digests.
+	MsgStateCorrection MessageType = 0x27 // Live: one chunk of an authoritative correction
+
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect MessageType = 0x03 // Live: a participant's link was lost
@@ -43,7 +51,8 @@ const (
 	// stream's own lifecycle carries today; roster and coordinator assignment beyond
 	// the startup offer; and authentication. 0x26 is no longer among them: it
 	// carried the retired replay-the-session-from-tick-zero join and now carries the
-	// authoritative state snapshot that replaced it.
+	// authoritative state snapshot that replaced it. Neither is 0x27, which carries
+	// the periodic correction that snapshot became once the host was the authority.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20

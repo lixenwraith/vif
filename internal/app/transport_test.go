@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -179,13 +180,14 @@ func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
 			t.Fatalf("cursor on participant = (%d, %d), target applied = %t, want %t", pos.X, pos.Y, got, want)
 		}
 	}
-	assertPosition(a, false)
+	// The producer applies its own artifact at once (requirement 5); the peer keeps
+	// the playout lead, which is the interpolation buffer for remote action.
+	assertPosition(a, true)
 	assertPosition(b, false)
 	for range parameter.NetworkBarrierDelayTicks {
 		a.Tick(1)
 		b.Tick(1)
-		assertPosition(a, false)
-		assertPosition(b, false)
+		assertPosition(a, true)
 	}
 	a.Tick(1)
 	b.Tick(1)
@@ -241,8 +243,10 @@ func TestBarrierIsNoOpWithoutPeer(t *testing.T) {
 	}
 }
 
-// TestObserverSharedStateTracksTheLiveParticipant proves the barrier first with
-// one-way traffic: local and peer artifacts apply at the same future tick boundary.
+// TestObserverSharedStateTracksTheLiveParticipant proves the correction with
+// one-way traffic: only one participant produces anything, so everything the
+// observer holds arrived from the authority — its own artifacts a playout lead
+// after the producer applied them, and its whole world at every correction.
 func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	const seed = 0x5EEDBEEF
 	steps := soakScale(120, 400, 1200)
@@ -259,6 +263,11 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 	opt.Regions = false
 	opt.MapSetups = false
 	d := journal.NewFuzzDriver(live, opt)
+	corrections := 0
+	step := func() {
+		live.Tick(1)
+		observer.Tick(1)
+	}
 	for i := range steps {
 		before := live.Position().Tick
 		if !d.Step() {
@@ -268,14 +277,24 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 		if n := int(live.Position().Tick - before); n > 0 {
 			observer.Tick(n)
 		}
-		live.Tick(1)
-		observer.Tick(1)
-		assertSharedParity(t, live, observer, i)
+		step()
+		if (i+1)%correctionSteps == 0 {
+			assertCorrected(t, deliverCorrection(t, live, []*App{observer}, step), observer,
+				fmt.Sprintf("step %d observer", i))
+			corrections++
+		}
+	}
+	if corrections == 0 {
+		t.Fatal("the run asserted convergence never")
 	}
 }
 
-// TestTwoLiveParticipantsStayInLockstep is the headless two-participant criterion.
-func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
+// TestTwoLiveParticipantsConvergeOnCorrections is the headless two-participant
+// criterion, and it used to be a lockstep one. Phase 4 weakened D-11: two
+// participants no longer agree at every tick, because each applies its own
+// artifacts a playout lead before the other sees them, and what is asserted instead
+// is that every correction closes the gap exactly.
+func TestTwoLiveParticipantsConvergeOnCorrections(t *testing.T) {
 	const seed = 0x5EEDBEEF
 	steps := soakScale(120, 400, 1200)
 
@@ -289,7 +308,11 @@ func TestTwoLiveParticipantsStayInLockstep(t *testing.T) {
 	})
 }
 
-// TestActivatedSessionDefersCrossingBeforeFirstTick closes the lobby/input gap.
+// TestActivatedSessionDefersCrossingBeforeFirstTick closes the lobby/input gap: an
+// artifact produced after the session is activated and before the first tick still
+// reaches its peer at the agreed apply tick, rather than falling into the window
+// between the two. What the producer does with its own copy changed in Phase 4 —
+// it applies it at once — and the gap this test exists for is the peer's.
 func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	const seed = 0x5EEDBEEF
 	a := mustHeadless(t, seed, 120, 40)
@@ -318,19 +341,19 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	a.Context().PushCrossing(event.EventCursorMoveRequest,
 		&event.CursorMoveRequestPayload{Entity: target, X: start.X + 1, Y: start.Y})
 	a.Settle()
-	if got := cursorPosition(a, target); got != start {
-		t.Fatalf("host applied pre-tick crossing immediately: %#v", got)
+	want := start
+	want.X++
+	if got := cursorPosition(a, target); got != want {
+		t.Fatalf("host held its own pre-tick crossing behind the lead: %#v", got)
 	}
 	if got := cursorPosition(b, target); got != start {
-		t.Fatalf("joiner applied pre-tick crossing immediately: %#v", got)
+		t.Fatalf("joiner applied a pre-tick crossing before its apply tick: %#v", got)
 	}
 
 	for range parameter.NetworkBarrierDelayTicks + 1 {
 		a.Tick(1)
 		b.Tick(1)
 	}
-	want := start
-	want.X++
 	if got := cursorPosition(a, target); got != want {
 		t.Fatalf("host crossing position = %#v, want %#v", got, want)
 	}
@@ -339,13 +362,15 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 	}
 }
 
-// TestTwoLiveParticipantsStayInLockstepOverTCP proves the same session through
-// stream framing, the anchor handshake and canonical socket participant IDs.
+// TestTwoLiveParticipantsConvergeOverTCP proves the same session through stream
+// framing, the anchor handshake and canonical socket participant IDs — including
+// the correction, which is chunked and reassembled off a real socket rather than
+// handed across in one piece.
 //
 // It no longer ends in a mid-run join. That leg exercised the retired
 // replay-the-session-from-tick-zero path; the authoritative snapshot join that
 // replaces it is the next implementation's to prove.
-func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
+func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	const seed = 0x5EEDBEEF
 	// The socket leg re-proves the same criterion through framing and a real
 	// handshake, neither of which needs the long run the in-process one takes.
@@ -454,6 +479,14 @@ func TestTwoLiveParticipantsStayInLockstepOverTCP(t *testing.T) {
 
 }
 
+// proveTwoLive drives two live participants and asserts the criterion Phase 4
+// replaced lockstep with: the guest is equal to the host as of every correction.
+//
+// Between corrections the two are *expected* to disagree — each applies its own
+// artifacts a playout lead before the other does — so asserting parity per tick
+// would now be asserting the thing this phase removed. What has to stay true is
+// that each participant is really driving something, which the moved/sent/apm
+// checks below are for, and that the disagreement is closed rather than tolerated.
 func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA journal.FuzzOptions, tickPair func()) {
 	t.Helper()
 	steps := optA.Steps
@@ -465,6 +498,7 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 
 	startA, startB := cursorPosition(a, localA), cursorPosition(b, localB)
 	movedA, movedB := false, false
+	corrections := 0
 	for i := range steps {
 		if !da.Step() {
 			t.Fatalf("step %d quit participant a", i)
@@ -475,11 +509,15 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 		tickPair()
 		movedA = movedA || cursorPosition(a, localA) != startA
 		movedB = movedB || cursorPosition(b, localB) != startB
-		assertSharedParity(t, a, b, i)
+		if (i+1)%correctionSteps == 0 {
+			assertCorrected(t, deliverCorrection(t, a, []*App{b}, tickPair), b, fmt.Sprintf("step %d guest", i))
+			corrections++
+		}
 	}
-	for i := range parameter.NetworkBarrierDelayTicks + 1 {
-		tickPair()
-		assertSharedParity(t, a, b, steps+i)
+	assertCorrected(t, deliverCorrection(t, a, []*App{b}, tickPair), b, "final guest")
+	corrections++
+	if corrections < 2 {
+		t.Fatalf("the run asserted convergence %d times, want a criterion that repeats", corrections)
 	}
 
 	var sentA, sentB int64

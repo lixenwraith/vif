@@ -98,6 +98,14 @@ func splitKey(key string) (group, name, playerSlot string) {
 			return "network.link", name, ""
 		}
 
+	case "snapshot":
+		// The correction counters are a card of their own: they describe the
+		// authority's cadence and how far this instance's prediction was from it,
+		// where the rest of the group describes what one capture cost.
+		if strings.HasPrefix(name, "correction") {
+			return "snapshot.correction", name, ""
+		}
+
 	case "quasar", "snake", "storm", "swarm":
 		if strings.HasPrefix(name, "protected_") {
 			return domain + ".protection", name, ""

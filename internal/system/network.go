@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -77,19 +75,24 @@ type NetworkSystem struct {
 	statRelayed        *atomic.Int64
 	statDuplicates     *atomic.Int64
 	statDigestMismatch *atomic.Int64
-	statSyncState      *status.AtomicString
 
 	digestHistory   [parameter.NetworkEpochWindow]stateDigest
 	pendingDigest   [parameter.MaxPlayers + 1]stateDigest
-	peerDesync      [parameter.MaxPlayers + 1]bool
-	peerMismatches  [parameter.MaxPlayers + 1]int
-	syncNoticeUntil uint64
-	statSyncPart    *status.AtomicString
-	statSyncRecords *status.AtomicString
-	statSyncTick    *atomic.Int64
-	statDiverged    *atomic.Bool
+	statDriftPart   *status.AtomicString
+	statDriftTick   *atomic.Int64
 	statPreInstall  *atomic.Int64
 	statJoinLag     *atomic.Int64
+	statLag         *atomic.Int64
+	statStale       *atomic.Bool
+	statLocalNow    *atomic.Int64
+	statCorrections *atomic.Int64
+	statForged      *atomic.Int64
+
+	// snapshots reassembles one authoritative correction per peer. A correction is
+	// the only message whose size is a function of the world, so it is the only one
+	// that arrives in pieces, and the pieces of two peers' corrections must not be
+	// able to interleave into a body that hashes as neither.
+	snapshots [parameter.MaxPlayers + 1]network.SnapshotAssembly
 
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
@@ -137,12 +140,6 @@ type stateDigest struct {
 	Context   uint64 `json:"context"`
 	Status    uint64 `json:"status"`
 	Surface   uint64 `json:"surface"`
-
-	// Groups carries one hash per snapshot record, and only while a mismatch is
-	// already outstanding. A category names the surface that disagrees; this names
-	// the record, which is what a two-host post-mortem actually needs and what a
-	// single host's log cannot otherwise recover.
-	Groups map[string]uint64 `json:"groups,omitempty"`
 
 	Valid bool `json:"-"`
 }
@@ -246,13 +243,15 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statRelayed = s.intStat(reg, "network.relay_forwarded")
 	s.statDuplicates = s.intStat(reg, "network.relay_duplicates")
 	s.statDigestMismatch = s.intStat(reg, "network.digest_mismatches")
-	s.statSyncState = s.textStat(reg, "network.sync_state")
-	s.statSyncPart = s.textStat(reg, "network.sync_part")
-	s.statSyncRecords = s.textStat(reg, "network.sync_records")
-	s.statSyncTick = s.intStat(reg, "network.sync_tick")
-	s.statDiverged = s.boolStat(reg, "network.diverged")
+	s.statDriftPart = s.textStat(reg, "network.drift_part")
+	s.statDriftTick = s.intStat(reg, "network.drift_tick")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
 	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
+	s.statLag = s.intStat(reg, "network.lag_ticks")
+	s.statStale = s.boolStat(reg, "network.stale")
+	s.statLocalNow = s.intStat(reg, "network.crossings_local")
+	s.statCorrections = s.intStat(reg, "network.corrections_received")
+	s.statForged = s.intStat(reg, "network.artifacts_refused")
 
 	s.Init()
 	return s
@@ -276,13 +275,11 @@ func (s *NetworkSystem) Init() {
 		c.Store("")
 	}
 	s.statConnection.Store("off") // the link has a resting value; the counters do not
-	s.peerMismatches = [parameter.MaxPlayers + 1]int{}
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [parameter.MaxPlayers + 1]stateDigest{}
-	s.peerDesync = [parameter.MaxPlayers + 1]bool{}
-	s.syncNoticeUntil = 0
+	s.snapshots = [parameter.MaxPlayers + 1]network.SnapshotAssembly{}
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
@@ -424,13 +421,64 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 	frame.Seq = s.crossSeq
 	applyTick := s.productionEpoch + s.delayTicks
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
-	s.scheduled = append(s.scheduled, barrierArtifact{
-		frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
-	})
+	agreed := barrierBound(ev.Type)
+	if agreed {
+		s.scheduled = append(s.scheduled, barrierArtifact{
+			frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
+		})
+	}
 	s.mu.Unlock()
-	event.ReleaseDeferredPayload(ev.Payload)
-	s.statDeferred.Add(1)
-	return true
+	if agreed {
+		event.ReleaseDeferredPayload(ev.Payload)
+		s.statDeferred.Add(1)
+		return true
+	}
+	s.statLocalNow.Add(1)
+
+	// Ownership is *not* taken: the queue publishes this artifact now, in the tick
+	// that produced it, and what was scheduled above is only the copy the peers get.
+	//
+	// This is Phase 4's requirement 5 and it is the point where D-3 changes its
+	// destination. A crossing used to be a fact every instance applied at one agreed
+	// tick, which meant the producer waited for its own action as long as everyone
+	// else did — a playout lead's worth of latency charged to the one participant
+	// who did not need it. It is a *request to the authority* now: the producer
+	// applies it immediately, the host applies it in its own order, and the
+	// difference between the two is what the next correction repairs. On the host
+	// that difference is nothing, because the host is the authority.
+	//
+	// The receive side keeps the lead, and keeps it for a different reason: it is
+	// an interpolation buffer that lets a remote participant's artifacts arrive out
+	// of order and still be applied in one. Nothing about that is a barrier on this
+	// instance's own input.
+	return false
+}
+
+// barrierBound names the artifacts that must still apply at one agreed tick on
+// every instance, the producer included.
+//
+// Requirement 5 takes the playout lead off the local path, and the reason it can is
+// that an artifact's effect is provisional on a guest: the producer applies it now,
+// the host applies it in its own order, and the next correction repairs the gap.
+// That argument holds for every D-3 crossing, which describes an *effect* on a
+// world both instances already have.
+//
+// It does not hold for the three artifacts that decide what the world *is*. An
+// arrival creates a shared cursor and a departure destroys one, and a shared
+// entity's identity and creation order are what a capture references by; a reset
+// replaces the run. Applied a lead early on the producer, each of those would
+// allocate an entity — or a run — the rest of the session numbers differently, and
+// a correction would then be repairing identity rather than state. So the
+// coordinator, which is their only producer, waits with everyone else. Nobody's
+// input is waiting on them: they are the session's own bookkeeping rather than a
+// participant's action.
+func barrierBound(et event.EventType) bool {
+	switch et {
+	case event.EventParticipantJoined, event.EventParticipantDeparted, event.EventGameResetRequest:
+		return true
+	default:
+		return false
+	}
 }
 
 // refreshLink re-reads the negotiated session identity and reports whether the
@@ -563,9 +611,6 @@ func (s *NetworkSystem) Update() {
 	if s.enabled && p != nil && p.IsRunning() {
 		s.ticks++
 	}
-	if s.statSyncState.Load() == "synced" && s.ticks >= s.syncNoticeUntil {
-		s.statSyncState.Store("")
-	}
 }
 
 // Receive drains transport state and publishes every artifact due before nextTick.
@@ -638,19 +683,11 @@ func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 }
 
 func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
-	if peer == 0 || int(peer) >= len(s.peerDesync) {
+	if peer == 0 || int(peer) >= len(s.pendingDigest) {
 		return
 	}
-	s.peerDesync[peer] = false
-	s.peerMismatches[peer] = 0
 	s.pendingDigest[peer] = stateDigest{}
-	if !s.anyPeerDesynced() {
-		s.statSyncState.Store("")
-		s.statSyncPart.Store("")
-		s.statSyncRecords.Store("")
-		s.statDiverged.Store(false)
-		s.syncNoticeUntil = 0
-	}
+	s.snapshots[peer] = network.SnapshotAssembly{}
 }
 
 // noticeDeparture reacts to a lost link. It deliberately does not despawn anything:
@@ -802,10 +839,60 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 		s.receiveStateDigest(from, msg.Payload)
 	case network.MsgDisconnect:
 		s.receiveDeparture(from, msg.Payload)
+	case network.MsgStateCorrection:
+		s.receiveCorrection(from, msg.Payload)
 	default:
 		s.statDrop.Add(1)
 	}
 	return 0
+}
+
+// receiveCorrection reassembles one authoritative correction and hands the body to
+// the session layer.
+//
+// Nothing here decodes or installs it. This runs inside the tick that drained the
+// chunk, under the world lock a correction's install needs for itself, and a
+// correction is hundreds of kilobytes of JSON — so what happens here is a copy into
+// a queue and nothing else.
+//
+// A malformed transfer resets that peer's assembly rather than poisoning it: the
+// host sends a whole correction every SnapshotKeyframeCorrections and each one is
+// self-sufficient, so the recovery from a broken transfer is to wait for the next.
+func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
+	if from == 0 || int(from) >= len(s.snapshots) {
+		s.statDrop.Add(1)
+		return
+	}
+	asm := &s.snapshots[from]
+	admitted, done, err := asm.AddChunk(body)
+	if err != nil {
+		*asm = network.SnapshotAssembly{}
+		s.statDrop.Add(1)
+		vlog.Warn("app", "msg", "correction chunk refused", "peer", from, "error", err.Error())
+		return
+	}
+	if !admitted {
+		s.statDuplicates.Add(1)
+		return
+	}
+	// Forwarded on the same argument the artifact flood uses: a node relays only
+	// what it admitted, so a copy arriving by a second path is recognised and the
+	// flood terminates. Without it the authority would reach only the participants
+	// the host happens to be linked to directly, and a relayed session would have
+	// crossings but no corrections.
+	if p := s.port(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
+		p.BroadcastExcept(from, uint8(network.MsgStateCorrection), body)
+		s.statRelayed.Add(1)
+	}
+	if !done {
+		return
+	}
+	tick, whole := asm.Result()
+	*asm = network.SnapshotAssembly{}
+	s.statCorrections.Add(1)
+	if r := s.world.Resources.Network; r != nil && r.OnCorrection != nil {
+		r.OnCorrection(tick, whole)
+	}
 }
 
 // publishTransportLoss exposes frames the link lost outside the barrier: inbound
@@ -882,10 +969,14 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 	if r == nil || r.SharedDigest == nil {
 		return
 	}
-	// Detail costs a map on the wire, so it is sent only once this instance has
-	// something to explain: one disagreeing sample is enough to start, which puts
-	// the breakdown on both sides before the second sample reports.
-	digest := r.SharedDigest(s.anyPeerMismatching())
+	// No breakdown on the wire. Detail used to be requested as soon as a sample
+	// disagreed, because a disagreement was a fault worth naming record by record.
+	// Under an authority a guest disagrees with the host between every pair of
+	// corrections by design, so asking for detail would mean sending a map of
+	// per-record hashes with every digest for the whole session — bandwidth spent
+	// describing the condition this phase exists to make ordinary. The App-side
+	// breakdown stays, for the tests and the tools that compare two runs offline.
+	digest := r.SharedDigest(false)
 	sample := stateDigest{
 		Run:       s.world.Resources.Event.Queue.Stamp().Run,
 		Tick:      completedTick,
@@ -896,7 +987,6 @@ func (s *NetworkSystem) sendStateDigest(p engine.NetworkPort, completedTick uint
 		Context:   digest.Context,
 		Status:    digest.Status,
 		Surface:   digest.Surface,
-		Groups:    digest.Groups,
 		Valid:     true,
 	}
 	s.recordStateDigest(sample)
@@ -941,87 +1031,31 @@ func (s *NetworkSystem) recordStateDigest(local stateDigest) {
 	}
 }
 
-// compareStateDigest folds one peer's sample against this instance's own at the same
-// tick. A single disagreement is not yet a report: an artifact that missed its apply
-// tick lands one side late and the next sample finds the two equal again, so the
-// indicator waits for NetworkDesyncSamples consecutive disagreements. Past
-// NetworkDivergedSamples the divergence is no longer transient — nothing re-derives
-// a missing artifact — and the session is marked diverged, which is what a recovery
-// acts on.
+// compareStateDigest folds one peer's sample against this instance's own at the
+// same tick, and records the difference as a *gauge* rather than as a verdict.
+//
+// This is where D-11's weakening lands in the runtime. Before Phase 4 a
+// disagreement was a fault: both instances re-derived the shared world from one
+// artifact stream, so if they disagreed one of them had lost an artifact and
+// nothing would ever re-derive it — DESYNC after two samples, DIVERGED after five,
+// and the session was over. Under an authority none of that holds. A guest applies
+// its own input immediately and extrapolates between corrections, so it is
+// *expected* to differ from the host, and the difference is repaired on a cadence
+// rather than mourned. The counter and the part name survive because they are still
+// the cheapest description of where two instances stand apart; the escalation does
+// not, because there is nothing left for it to be right about.
+//
+// What replaced it is two numbers with better claims: the correction magnitude,
+// which says how far apart the two actually were at the moment the authority
+// arrived, and the staleness, which says whether this instance is far enough behind
+// that its own artifacts are reaching the host late.
 func (s *NetworkSystem) compareStateDigest(peer uint32, local, remote stateDigest) {
-	wasDesynced := s.anyPeerDesynced()
-
 	if local.Hash == remote.Hash {
-		s.peerMismatches[peer] = 0
-		s.peerDesync[peer] = false
-		if wasDesynced && !s.anyPeerDesynced() {
-			s.statSyncState.Store("synced")
-			s.statSyncPart.Store("")
-			s.statSyncRecords.Store("")
-			s.statDiverged.Store(false)
-			s.syncNoticeUntil = s.ticks + parameter.NetworkResyncNoticeTicks
-			vlog.Info("app", "msg", "shared state resynchronised",
-				"run", local.Run, "tick", local.Tick)
-		}
 		return
 	}
-
 	s.statDigestMismatch.Add(1)
-	s.peerMismatches[peer]++
-	n := s.peerMismatches[peer]
-	if n < parameter.NetworkDesyncSamples {
-		return
-	}
-
-	part := digestDifference(local, remote)
-	records := digestRecordDifference(local, remote)
-	if !s.peerDesync[peer] {
-		s.peerDesync[peer] = true
-		s.statSyncState.Store("desync")
-		s.statSyncPart.Store(part)
-		s.statSyncTick.Store(int64(local.Tick))
-		s.statSyncRecords.StoreIfChanged(records)
-		s.syncNoticeUntil = 0
-		vlog.Warn("app", "msg", "shared state divergence", "peer", peer,
-			"run", local.Run, "tick", local.Tick, "part", part, "records", records,
-			"samples", n, "local", local.Hash, "remote", remote.Hash)
-	} else if records != "" {
-		s.statSyncRecords.StoreIfChanged(records)
-	}
-	if n >= parameter.NetworkDivergedSamples && !s.statDiverged.Swap(true) {
-		vlog.Error("app", "msg", "shared state diverged", "peer", peer,
-			"run", local.Run, "tick", local.Tick, "part", part, "records", records,
-			"samples", n)
-	}
-}
-
-// digestRecordDifference names the snapshot records whose hashes disagree, which is
-// what turns "the status surface differs" into something to read. Empty until both
-// sides carry the breakdown, which starts one sample after the first disagreement;
-// a name present on one side only is reported with the side that has it.
-func digestRecordDifference(local, remote stateDigest) string {
-	if len(local.Groups) == 0 || len(remote.Groups) == 0 {
-		return ""
-	}
-	names := make([]string, 0, 4)
-	for name, hash := range local.Groups {
-		if other, ok := remote.Groups[name]; !ok {
-			names = append(names, name+"(local only)")
-		} else if other != hash {
-			names = append(names, name)
-		}
-	}
-	for name := range remote.Groups {
-		if _, ok := local.Groups[name]; !ok {
-			names = append(names, name+"(peer only)")
-		}
-	}
-	slices.Sort(names)
-	if len(names) > parameter.NetworkDivergedRecordsLogged {
-		names = append(names[:parameter.NetworkDivergedRecordsLogged],
-			"+"+strconv.Itoa(len(names)-parameter.NetworkDivergedRecordsLogged)+" more")
-	}
-	return strings.Join(names, ",")
+	s.statDriftPart.StoreIfChanged(digestDifference(local, remote))
+	s.statDriftTick.Store(int64(local.Tick))
 }
 
 func digestDifference(local, remote stateDigest) string {
@@ -1041,26 +1075,6 @@ func digestDifference(local, remote stateDigest) string {
 	default:
 		return "combined"
 	}
-}
-
-// anyPeerMismatching reports whether any peer's last sample disagreed, which is
-// what turns on the per-record breakdown.
-func (s *NetworkSystem) anyPeerMismatching() bool {
-	for peer := 1; peer < len(s.peerMismatches); peer++ {
-		if s.peerMismatches[peer] > 0 {
-			return true
-		}
-	}
-	return false
-}
-
-func (s *NetworkSystem) anyPeerDesynced() bool {
-	for peer := 1; peer < len(s.peerDesync); peer++ {
-		if s.peerDesync[peer] {
-			return true
-		}
-	}
-	return false
 }
 
 // scheduleCrossings buffers one peer epoch and passes it on. Application waits for
@@ -1175,7 +1189,18 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 			s.statDrop.Add(1)
 			continue
 		}
+		if !admissibleFromSource(et, a.source) {
+			s.statForged.Add(1)
+			vlog.Warn("app", "msg", "artifact refused",
+				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
+			continue
+		}
 		if a.applyTick < nextTick {
+			// Late, and no longer a divergence. Under an authority the host applies
+			// what reaches it in the order it reaches it, and a guest whose artifact
+			// arrived after the tick it named gets the host's ordering back in the
+			// next correction. The counter stays because it is what says a
+			// participant's link is not keeping the playout lead.
 			s.statLate.Add(1)
 		}
 		s.world.Resources.Event.Queue.PushReady(event.GameEvent{
@@ -1193,6 +1218,32 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 	s.statPeerApplied.Store(peer != 0)
 	s.statRecv.Add(int64(peer))
 	return len(due)
+}
+
+// admissibleFromSource is the host's validation, and it is deliberately narrow.
+//
+// Requirement 2 makes the host the authority over what happens, and most of that is
+// structural: it applies the artifacts it receives in its own order and its
+// resulting world is what ships, so a guest cannot make the session believe
+// something by producing an artifact — it can only make the session believe it for
+// as long as the next correction takes to arrive. What that argument does *not*
+// cover is the roster, because a roster crossing does not describe a shared outcome,
+// it creates or destroys a shared entity: an arrival spawns a cursor at one agreed
+// tick on every instance and a departure despawns one, and both are produced by the
+// coordinator alone precisely so that there is one apply tick for them. An artifact
+// of either kind arriving from anyone else is refused.
+//
+// Everything past this — a guest attributing a crossing to another participant's
+// cursor, a peer replaying an artifact it never produced — is an *authentication*
+// question rather than an authority one, and this plan puts authentication in
+// Phase 6, before anything beyond trusted peers.
+func admissibleFromSource(et event.EventType, source uint32) bool {
+	switch et {
+	case event.EventParticipantJoined, event.EventParticipantDeparted:
+		return source == coordinatorParticipant
+	default:
+		return true
+	}
 }
 
 // publishBarrierTelemetry reports playout lead and epochs that ran before a marker.
@@ -1227,12 +1278,36 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 		lag = required - minPeer
 	}
 	s.statPeerLag.Store(int64(lag))
+	s.publishStaleness(nextTick)
 	// Sources are participants, not links: in a mesh most of them arrive relayed, so
 	// the count this instance should hear from is the remote half of the roster
 	// rather than the number of peers it happens to be connected to.
 	if required != 0 && (seen < s.remoteParticipants() || lag != 0) {
 		s.statRanWithout.Add(1)
 	}
+}
+
+// publishStaleness reports how far behind the session this instance stands, every
+// tick, which is the measurement Phase 3 took once at admission and never again.
+//
+// resumeJoinedSession closes the gap a transfer opens and refuses a join it cannot
+// close — and then nothing looked at it for the rest of the run, so a participant
+// whose machine fell behind mid-session produced artifacts that reached the host
+// after the ticks they named and had no way to know. The number is the same one:
+// the newest tick any peer has been seen closing, minus this instance's own. Past
+// the playout lead this participant's own crossings are landing late on the host,
+// which is exactly when a player should be told the link is the problem.
+//
+// It is a gauge and not a gate. A guest that falls behind is corrected like any
+// other guest; what changes is that it can say so.
+func (s *NetworkSystem) publishStaleness(nextTick uint64) {
+	newest := s.NewestPeerEpoch()
+	lag := uint64(0)
+	if local := nextTick; newest > local {
+		lag = newest - local
+	}
+	s.statLag.Store(int64(lag))
+	s.statStale.Store(lag > parameter.SnapshotStaleTicks)
 }
 
 // remoteParticipants counts the rostered cursors another instance simulates.

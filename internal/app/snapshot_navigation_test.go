@@ -2,8 +2,14 @@ package app
 
 import (
 	"encoding/json"
+	"fmt"
+	"slices"
+	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -28,11 +34,10 @@ import (
 // composite passability grid was still the one derived from the walls the install
 // had replaced. Both are derived inside the install now.
 //
-// What is *not* covered here: route_rebuild_ticks. It paces one gateway route graph
-// rebuild per interval, and the shipped scenario builds no gateways, so nothing in
-// the default world is paced by it and a sabotaged value changes nothing to observe.
-// Its coverage still rests on the code rather than on a result, and a scenario with
-// gateways is what would close it.
+// route_rebuild_ticks used to be the exception, for the same reason: it paces one
+// gateway route graph rebuild per interval and the shipped scenario builds no
+// gateways, so a sabotaged value changed nothing to observe. The gateway scenario at
+// the bottom of this file is what closes it.
 
 // navRecord returns the navigation system's record from a capture.
 func navRecord(t *testing.T, cap SharedCapture) (int, map[string]any) {
@@ -230,3 +235,276 @@ func navGateOrigin(t *testing.T) (*App, SharedCapture) {
 	}
 	return a, decoded
 }
+
+// The route-rebuild phase, which Phase 3 left uncovered.
+//
+// `route_rebuild_ticks` paces one gateway route graph rebuild per interval, and the
+// navigation carrier has always carried it. Nothing exercised it: the shipped
+// scenario builds no gateways, so no graph is ever rebuilt, so a sabotaged value
+// changes nothing an install can be caught by. That is a coverage claim resting on
+// the code rather than on a result, and it is the shape of defect this whole plan
+// exists to stop having.
+//
+// What closes it is a scenario with gateways. A gateway that steers by a route
+// graph rebuilds it whenever its target moves off the cell the graph was computed
+// for, and the interval decides *which tick* that rebuild lands on; the entities the
+// gateway spawns then follow the routes it produced, so a rebuild a tick early moves
+// them differently for the rest of the run.
+
+// navRouteSeed is the world the gateway scenario builds on top of.
+const navRouteSeed = 0x0FA57
+
+// TestNavigationRouteRebuildPhaseIsLoadBearing is doorstep item 5.
+//
+// The sabotage is the value a world with no carrier holds: a zeroed budget, which
+// puts the next rebuild a whole interval away from where the sender had it. The
+// receiver installs cleanly, holds the sender's world at the install tick, and then
+// rebuilds its gateways' routes on different ticks — which is what the compared
+// surface has to catch.
+func TestNavigationRouteRebuildPhaseIsLoadBearing(t *testing.T) {
+	origin, cap := navRouteOrigin(t)
+	defer origin.Close()
+
+	idx, body := navRecord(t, cap)
+	ticks, ok := body["route_rebuild_ticks"].(float64)
+	if !ok {
+		t.Fatal("the navigation record carries no route_rebuild_ticks; nothing to sabotage")
+	}
+	if ticks == 0 {
+		t.Fatal("the capture was taken on a rebuild tick, so the sabotage below is a no-op")
+	}
+	body["route_rebuild_ticks"] = float64(0)
+	sabotaged := resealCapture(t, cap, idx, body)
+
+	receiver := navRouteWorld(t)
+	defer receiver.Close()
+	if err := receiver.InstallShared(sabotaged); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if !navRouteDiverges(t, origin, receiver) {
+		t.Fatal("a capture carrying a different route-rebuild budget rebuilt on the sender's " +
+			"ticks anyway; the budget this carrier transfers is then deciding nothing")
+	}
+}
+
+// TestNavigationRouteRebuildSurvivesAnInstall is the positive half: without the
+// sabotage the same scenario has to hold, or the case above is catching its setup.
+func TestNavigationRouteRebuildSurvivesAnInstall(t *testing.T) {
+	origin, cap := navRouteOrigin(t)
+	defer origin.Close()
+
+	receiver := navRouteWorld(t)
+	defer receiver.Close()
+	if err := receiver.InstallShared(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if navRouteDiverges(t, origin, receiver) {
+		t.Fatal("the unmodified capture rebuilt on different ticks; the sabotage case is " +
+			"catching its setup rather than the sabotage")
+	}
+}
+
+// navRouteDiverges drives both instances through the same target motion and reports
+// whether their gateways rebuilt their route graphs on different ticks.
+//
+// The motion is the point. A route graph is stale only when its target has moved off
+// the cell it was computed for, so a world whose target stands still rebuilds nothing
+// and the budget decides nothing — which is exactly the state the shipped scenario
+// leaves it in, and why this had no failing case. The same placement is written to
+// both instances at the same tick, so what differs between them is the schedule the
+// carrier restored and not the input.
+//
+// What is compared is the graph each gateway holds — the cell it was computed to
+// reach and how many routes came out — rather than the whole shared surface. That is
+// the budget's own consequence and nothing else's: a rebuild is precisely the moment
+// a graph adopts the target's current cell, so two instances whose budgets stand
+// apart hold graphs aimed at different cells for as long as the gap lasts.
+//
+// The whole surface cannot be the observable here, and the reason is a defect this
+// scenario found rather than a weakness of this test: with gateways spawning, a
+// receiver hands the next eye a different genotype than the sender did, and the two
+// worlds come apart within ten ticks for a reason that has nothing to do with
+// navigation. The note at the end of this file says what that is.
+func navRouteDiverges(t *testing.T, origin, receiver *App) bool {
+	t.Helper()
+	if routeGraphSignature(origin) == "" {
+		t.Fatal("no gateway holds a route graph; the budget would pace nothing")
+	}
+	for step := range navSabotageTicks {
+		moveRouteTarget(origin, step)
+		moveRouteTarget(receiver, step)
+		origin.Tick(1)
+		receiver.Tick(1)
+		want, got := routeGraphSignature(origin), routeGraphSignature(receiver)
+		if want != got {
+			t.Logf("route graphs came apart %d ticks after the install\n  origin:   %s\n  receiver: %s",
+				step+1, want, got)
+			return true
+		}
+	}
+	return false
+}
+
+// routeGraphSignature renders every gateway's route graph: the cell it was computed
+// to reach and the number of routes it produced, in gateway order.
+func routeGraphSignature(a *App) string {
+	var b strings.Builder
+	a.World().RunSafe(func() {
+		w := a.World()
+		ids := make([]uint32, 0, 8)
+		for _, e := range w.Components.Gateway.Entities() {
+			if gw, ok := w.Components.Gateway.GetPtr(e); ok && gw.RouteDistID != 0 {
+				ids = append(ids, gw.RouteDistID)
+			}
+		}
+		slices.Sort(ids)
+		for _, id := range ids {
+			rg := w.Resources.RouteGraph.Get(id)
+			if rg == nil {
+				fmt.Fprintf(&b, "%d:none ", id)
+				continue
+			}
+			fmt.Fprintf(&b, "%d:(%d,%d):%d ", id, rg.TargetX, rg.TargetY, len(rg.Routes))
+		}
+	})
+	return b.String()
+}
+
+// moveRouteTarget walks the gateways' target group in a slow rectangle.
+//
+// It writes the placement directly rather than emitting a request, for the same
+// reason the sabotages above edit an encoded capture: what is being tested is the
+// schedule, and the cleanest way to hold everything else equal is to give both
+// instances the identical write at the identical tick. Group zero is the cursors and
+// is not what a gateway steers by; the tower chain's gateways name group one, whose
+// target is the anchor this moves.
+func moveRouteTarget(a *App, step int) {
+	if step%navRouteTargetStride != 0 {
+		return
+	}
+	ring := []struct{ x, y int }{{40, 20}, {96, 20}, {96, 30}, {40, 30}}
+	p := ring[(step/navRouteTargetStride)%len(ring)]
+	a.World().RunSafe(func() {
+		w := a.World()
+		for _, e := range w.Components.TargetAnchor.Entities() {
+			anchor, ok := w.Components.TargetAnchor.GetPtr(e)
+			if !ok || anchor.GroupID == 0 {
+				continue
+			}
+			w.Positions.SetPosition(e, component.PositionComponent{X: p.x, Y: p.y})
+		}
+	})
+}
+
+// navRouteTargetStride is how often the target moves, in ticks. Half the rebuild
+// interval, so a graph is stale every time the budget allows a rebuild and the
+// budget is what decides which tick that is.
+const navRouteTargetStride = parameter.NavRouteRebuildInterval / 2
+
+// navRouteWorld builds the one scenario this game has that engages gateways.
+//
+// The tower region is it: its chain spawns four pylons and attaches a route-graph
+// gateway to each, which is the only path in any shipped config that makes
+// route_rebuild_ticks pace anything. Nothing in the default escalation reaches it
+// inside a test-length run, so the region is entered outright — the same thing the
+// tower soak does, for the same reason.
+func navRouteWorld(t *testing.T) *App {
+	t.Helper()
+	a, err := NewHeadless(towerConfig(t, navRouteSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	a.Tick(1)
+	a.Region(event.RegionSpawn, "tower", "TowerSetup")
+	// The chain has to finish before the target starts moving: a pylon is spawned,
+	// its gateway attached, and its route graph computed once, and a target that
+	// moves before that leaves every graph unbuilt rather than stale.
+	a.Tick(navRouteSettleTicks)
+	// Player-domain production is stopped for the same reason the other gates stop
+	// it: a capture carries no player state, so two instances holding one shared
+	// world still hold different drains, and a drain that reaches a shared entity
+	// moves the compared surface for a reason that is not the phase under test.
+	quiescePlayerDomain(t, a)
+	for step := range navRouteWarmupTicks {
+		moveRouteTarget(a, step)
+		a.Tick(1)
+	}
+	return a
+}
+
+// navRouteSettleTicks is how long the tower chain is given to attach its gateways
+// and compute their first route graphs.
+const navRouteSettleTicks = 120
+
+// navRouteOrigin returns the gateway world beside a capture of it, having checked
+// that the scenario is exercising the phase under test rather than sitting past it.
+func navRouteOrigin(t *testing.T) (*App, SharedCapture) {
+	t.Helper()
+	a := navRouteWorld(t)
+	tickToStatBoundary(a)
+
+	var gateways, routed int
+	a.World().RunSafe(func() {
+		w := a.World()
+		gateways = w.Components.Gateway.CountEntities()
+		w.Components.Navigation.Each(func(_ core.Entity, nav *component.NavigationComponent) bool {
+			if nav.UseRouteGraph {
+				routed++
+			}
+			return true
+		})
+	})
+	if gateways == 0 {
+		a.Close()
+		t.Fatal("the tower region built no gateway; route_rebuild_ticks would pace nothing")
+	}
+	if routed == 0 {
+		a.Close()
+		t.Fatal("no entity follows a route graph; a rebuild would change nothing observable")
+	}
+
+	cap, err := a.CaptureShared()
+	if err != nil {
+		a.Close()
+		t.Fatalf("capture: %v", err)
+	}
+	encoded, err := EncodeCapture(cap)
+	if err != nil {
+		a.Close()
+		t.Fatalf("encode: %v", err)
+	}
+	decoded, err := DecodeCapture(encoded)
+	if err != nil {
+		a.Close()
+		t.Fatalf("decode: %v", err)
+	}
+	return a, decoded
+}
+
+// navRouteWarmupTicks is long enough for the tower chain to have attached its four
+// gateways and for the eyes that follow their routes to exist and be moving.
+const navRouteWarmupTicks = 240
+
+// What this scenario found, and did not fix.
+//
+// The route-rebuild budget is covered now. The gateway world it needed also showed
+// something else, and it belongs to D-19 rather than to navigation: a receiver that
+// installs a capture and then lets a gateway spawn its next eye gets a *different
+// genotype* than the sender did.
+//
+// The genetic carrier exports each species' archive — its members and its generation
+// — and that is all `Registry.Export` has to give it. `pkg/genetic`'s streaming
+// engine holds more than an archive: its own `math/rand/v2` generator, a ring of
+// offspring it has *already produced* and will hand out before it makes any more, a
+// pending-evaluation table and the id counter that names them. All four decide the
+// next genotype, none of them is in the export, and an installed world therefore
+// resumes evolution from the sender's population and the receiver's queue.
+//
+// It is the same shape as the two defects Phase 2 fixed for the adaptation resource,
+// which carries its pre-sampled pool and consumer head for exactly this reason, and
+// as the maze generator, which carries its PCG's binary form. It is out of Phase 4's
+// scope — it is in pkg/, it is not on the transport path, and the export contract
+// this needs is a piece of work rather than a line — so it is recorded here and in
+// the plan rather than fixed in passing. Its practical effect today is bounded: it
+// changes what a *newly spawned* species looks like after an install, and the
+// correction that follows replaces it.

@@ -1000,6 +1000,140 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	w.Positions.PublishTelemetry()
 }
 
+// SharedWorldDelta is one shared world expressed against another, store by store.
+// Generated for the same reason the capture is: a component added to the manifest
+// has to reach a correction without anyone remembering to add it, or the delta
+// silently omits state the baseline then keeps forever.
+//
+// The scalars are carried whole. They are three numbers, and a delta that omitted
+// an unchanged one would need a way to say "unchanged" that costs more than the
+// number.
+type SharedWorldDelta struct {
+	NextEntity uint64 ` + "`json:\"next_entity\"`" + `
+	Created    int64  ` + "`json:\"created\"`" + `
+	Destroyed  int64  ` + "`json:\"destroyed\"`" + `
+
+	Positions StoreDelta[component.PositionComponent] ` + "`json:\"positions,omitzero\"`" + `
+{{- range .Components }}
+	{{ .Field }} StoreDelta[component.{{ .Type }}] ` + "`json:\"{{ .Field | lower }},omitzero\"`" + `
+{{- end }}
+}
+
+// DiffSharedWorld expresses next as a difference against base.
+//
+// Applying the result to base reproduces next exactly — same entries, same order —
+// which is the property the receiver's integrity check depends on. Nothing here
+// reads the world, so it runs on whatever goroutine took the two captures rather
+// than under the world lock.
+func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
+	var d SharedWorldDelta
+	d.NextEntity, d.Created, d.Destroyed = next.NextEntity, next.Created, next.Destroyed
+	d.Positions = diffStore(base.Positions, next.Positions)
+{{- range .Components }}
+	d.{{ .Field }} = diffStore(base.{{ .Field }}, next.{{ .Field }})
+{{- end }}
+	return d
+}
+
+// ApplySharedWorldDelta reconstructs the world a delta was computed for.
+func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorldState {
+	var s SharedWorldState
+	s.NextEntity, s.Created, s.Destroyed = d.NextEntity, d.Created, d.Destroyed
+	s.Positions = applyStore(base.Positions, d.Positions)
+{{- range .Components }}
+	s.{{ .Field }} = applyStore(base.{{ .Field }}, d.{{ .Field }})
+{{- end }}
+	return s
+}
+
+// DeltaEntries counts the component cells a delta moves, which is what a
+// correction's size is reported in.
+func (d SharedWorldDelta) DeltaEntries() int {
+	n := d.Positions.Entries()
+{{- range .Components }}
+	n += d.{{ .Field }}.Entries()
+{{- end }}
+	return n
+}
+
+// SharedWorldDifference measures how far apart two readings of the shared world
+// are. On a guest that is the correction magnitude: the distance between what it
+// predicted and what the host is telling it.
+func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
+	touched := make(map[core.Entity]struct{}, 64)
+	var w WorldDifference
+	w.Entries = countStoreDifference(a.Positions, b.Positions, touched)
+{{- range .Components }}
+	w.Entries += countStoreDifference(a.{{ .Field }}, b.{{ .Field }}, touched)
+{{- end }}
+	w.Entities = len(touched)
+	w.CellShift = positionShift(a.Positions, b.Positions)
+	return w
+}
+
+// ReconcileSharedWorld brings this world's shared half to s by writing what
+// differs instead of replacing everything.
+//
+// It exists because a correction is not a join. InstallSharedWorld clears every
+// shared entity out of all fifty-two stores and re-inserts the capture, which is
+// the right shape once, for a participant that has no world yet, and the wrong
+// shape two to five times a second for one that has a world nearly identical to
+// the capture already. The teardown is the expensive half — every removal is a
+// mask edit, a dense swap-back in each store it touches, and a spatial index
+// eviction — and a correction throws away and rebuilds state that never moved.
+//
+// What this writes is bounded by the *correction magnitude* rather than by the
+// world size: the entities the authority no longer has, the components an entity
+// no longer carries, and every entry's value. What it still scans is the world,
+// because finding the first two means looking.
+//
+// The result is the same world InstallSharedWorld would leave, with one difference
+// that is deliberate: the dense store order is whatever the live world already had
+// rather than the sender's. Nothing compares it — the shared digest sorts, and the
+// compared surface is keyed — and preserving it is what keeps the spatial index
+// from churning. TestReconcileMatchesAFullInstall is what holds the equality.
+//
+// Caller MUST hold updateMutex.
+func (w *World) ReconcileSharedWorld(s SharedWorldState) {
+	target := make(map[core.Entity]struct{}, len(s.Positions))
+	for _, en := range s.Positions {
+		target[en.Entity] = struct{}{}
+	}
+{{- range .Components }}
+	for _, en := range s.{{ .Field }} {
+		target[en.Entity] = struct{}{}
+	}
+{{- end }}
+
+	// Entities the authority no longer holds leave whole, so no zero-component
+	// mask entry is left behind for clearSharedEntities to find later.
+	gone := make([]core.Entity, 0, 8)
+	for e := range w.componentMask {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if _, ok := target[e]; !ok {
+			gone = append(gone, e)
+		}
+	}
+	slices.Sort(gone)
+	for _, e := range gone {
+		w.removeEntity(e)
+	}
+
+	reconcilePositions(w.Positions, s.Positions)
+{{- range .Components }}
+	reconcileStore(w.Components.{{ .Field }}, s.{{ .Field }})
+{{- end }}
+
+	if s.NextEntity > 0 {
+		w.nextEntityID[core.DomainShared] = s.NextEntity
+	}
+	w.createdCount[core.DomainShared].Store(s.Created)
+	w.destroyedCount[core.DomainShared].Store(s.Destroyed)
+	w.Positions.PublishTelemetry()
+}
+
 // clearSharedEntities removes every shared entity from every store, so an install
 // replaces the shared world rather than merging into it. Merging would leave
 // entities this instance had derived on its own beside the capture's, which is

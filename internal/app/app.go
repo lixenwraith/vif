@@ -66,6 +66,20 @@ type App struct {
 	// snapshotTelemetry is reserved during construction so a capture or an install
 	// can publish its cost into a registry that is frozen by then.
 	snapshotTelemetry snapshotTelemetry
+
+	// corrections is the authority half of a session: the host's publication
+	// cadence or a guest's apply loop, whichever this run turns out to be. It
+	// exists from construction and starts nothing until a transport is attached.
+	corrections *corrections
+
+	// staging is the second world a capture resolves into before it is written
+	// into this one, built on first use and re-used for the life of the run. Phase
+	// 3 built one per install and threw it away, which is 9 to 31 ms a correction
+	// cannot afford five times a second.
+	stageMu  sync.Mutex
+	staging  *App
+	stagingW int
+	stagingH int
 }
 
 // New wires the runtime, releasing anything already started on failure
@@ -234,6 +248,7 @@ func (a *App) initWorld() {
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
 	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
+	a.corrections = newCorrections(a)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {
@@ -405,7 +420,11 @@ func (a *App) Close() {
 	if a.pendingJoin != nil {
 		_ = a.pendingJoin.Close()
 	}
+	if a.corrections != nil {
+		a.corrections.close()
+	}
 	a.closeMidRunPort()
+	a.closeStagingWorld()
 	a.hub.StopAll()
 
 	if a.recorder != nil {

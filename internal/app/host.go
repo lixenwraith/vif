@@ -114,6 +114,11 @@ func (a *App) beginHostingLocked(addr string) error {
 		return fmt.Errorf("host %s: %w", addr, err)
 	}
 
+	// The authority's cadence starts with the session. Nothing is published while
+	// no peer is connected — publish returns on an empty roster — so a host waiting
+	// alone pays a ticker and no world reads.
+	a.corrections.startPump()
+
 	bound := addr
 	if b := port.Addr(); b != nil {
 		bound = b.String()
@@ -193,6 +198,23 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 
 // sendMidRunGate sends one joiner the closed roster and the world it names, then
 // crosses its arrival.
+//
+// The world is the *cadence's* keyframe rather than a read taken for this join.
+// Phase 3 read the world once per participant, on the accept goroutine, so a second
+// participant dialling mid-join waited behind the first one's world read as well as
+// behind its transfer; a host now publishes keyframes anyway, and a join takes
+// whichever one is fresh enough. Only when none is does it read the world itself,
+// and then the two joins share that read rather than taking one each.
+//
+// "Fresh enough" is not the current tick, and the difference is a hole this phase
+// closes. D-22 admits a participant before the world is read for it so that the
+// epochs produced in between reach it — but an epoch produced *before* the
+// admission, and flushed to the peers this instance had at that moment, reaches
+// this one at all. A capture taken at the admission tick does not contain it
+// either: its apply tick is still a playout lead ahead, so the barrier's floor
+// does not drop it and nothing delivers it. Waiting for a capture a lead further on
+// closes that window by construction — every artifact produced before the
+// admission has applied into it by then — and costs the join three ticks.
 func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error {
 	offer, err := a.midRunOffer(id)
 	if err != nil {
@@ -203,7 +225,9 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	// what this join waits for is an increase rather than a value.
 	ready := port.ReadyCount()
 
-	body, tick, err := a.encodeJoinCapture()
+	minTick := a.Position().Tick + parameter.NetworkBarrierDelayTicks
+	deadline := time.Now().Add(parameter.NetworkJoinReadyTimeout) // [wall] a link bound
+	body, tick, err := a.corrections.keyframeAt(minTick, deadline)
 	if err != nil {
 		return err
 	}

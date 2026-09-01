@@ -953,6 +953,25 @@ func (s *NavigationSystem) resolveTargetPosition(groupID uint8) (int, int, bool)
 type navSnapshot struct {
 	RouteRebuildTicks int             `json:"route_rebuild_ticks"`
 	Groups            []navGroupPhase `json:"groups"`
+
+	// Routes names the gateway route graphs this world holds and the two cells each
+	// was computed between. The graphs themselves are derived and do not travel;
+	// their *inputs* have to, for the same reason LastTargets does. A receiver that
+	// re-derived them from its own current targets would hold graphs aimed at cells
+	// the sender's were not, and one that did not derive them at all would keep the
+	// graphs it had built for a world it no longer has — including graphs for
+	// gateways the sender has none for, which is what an entity then steers by.
+	Routes []navRouteGraph `json:"routes,omitempty"`
+}
+
+// navRouteGraph is one gateway route graph's derivation inputs, named by the graph
+// ID the gateway carries so it survives gateways being added or removed.
+type navRouteGraph struct {
+	GraphID uint32 `json:"graph_id"`
+	SourceX int    `json:"source_x"`
+	SourceY int    `json:"source_y"`
+	TargetX int    `json:"target_x"`
+	TargetY int    `json:"target_y"`
 }
 
 // navGroupPhase is one target group's throttle phase, named by group ID so the
@@ -999,7 +1018,88 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 		}
 		snap.Groups = append(snap.Groups, phase)
 	}
+	snap.Routes = s.saveRouteGraphs()
 	return json.Marshal(snap)
+}
+
+// saveRouteGraphs records what every live gateway route graph was computed between,
+// in graph-ID order so two instances holding equal state produce equal bytes.
+func (s *NavigationSystem) saveRouteGraphs() []navRouteGraph {
+	if s.world.Resources.RouteGraph == nil {
+		return nil
+	}
+	ids := make([]uint32, 0, 8)
+	for _, e := range s.world.Components.Gateway.Entities() {
+		gw, ok := s.world.Components.Gateway.GetPtr(e)
+		if !ok || gw.RouteDistID == 0 {
+			continue
+		}
+		ids = append(ids, gw.RouteDistID)
+	}
+	slices.Sort(ids)
+
+	out := make([]navRouteGraph, 0, len(ids))
+	for _, id := range ids {
+		rg := s.world.Resources.RouteGraph.Get(id)
+		if rg == nil {
+			continue
+		}
+		out = append(out, navRouteGraph{
+			GraphID: id,
+			SourceX: rg.SourceX, SourceY: rg.SourceY,
+			TargetX: rg.TargetX, TargetY: rg.TargetY,
+		})
+	}
+	return out
+}
+
+// deriveRouteGraphs rebuilds every gateway route graph the capture named, from the
+// cells it named, and drops everything else.
+//
+// Clearing first is the load-bearing half. A graph is derived state, so no capture
+// carries one — but "derived" only means "not transferred" if something derives it,
+// and until this existed the install left the receiver holding whatever graphs its
+// own run had built: for gateways the sender does not have, aimed at cells the
+// sender's graphs are not, with route indices the installed NavigationComponents
+// name. That is the same defect the composite passability grid had, one layer up.
+//
+// Nothing is emitted. handleRouteGraphRequest announces a computed graph so the rest
+// of the session can react to it; an install is not an event in the run, and a
+// receiver that announced four of them would have a settle group the sender never
+// had.
+func (s *NavigationSystem) deriveRouteGraphs(routes []navRouteGraph) {
+	if s.world.Resources.RouteGraph == nil || s.compositePassability == nil {
+		return
+	}
+	s.world.Resources.RouteGraph.Clear()
+	config := s.world.Resources.Config
+	live := make(map[uint32]struct{}, len(routes))
+	for _, r := range routes {
+		rg := navigation.ComputeRouteGraph(
+			r.SourceX, r.SourceY, r.TargetX, r.TargetY,
+			config.MapWidth, config.MapHeight,
+			parameter.EyeWidth, parameter.EyeHeight,
+			parameter.EyeHeaderOffsetX, parameter.EyeHeaderOffsetY,
+			s.compositePassability.IsBlocked,
+		)
+		if rg == nil {
+			continue
+		}
+		s.world.Resources.RouteGraph.Set(r.GraphID, rg)
+		live[r.GraphID] = struct{}{}
+	}
+	// An entity whose graph did not come back has to stop naming it, or it steers by
+	// a route index into a graph that is not there.
+	s.world.Components.Navigation.Each(func(_ core.Entity, nav *component.NavigationComponent) bool {
+		if !nav.UseRouteGraph {
+			return true
+		}
+		if _, ok := live[nav.RouteGraphID]; !ok {
+			nav.UseRouteGraph = false
+			nav.RouteID = -1
+		}
+		return true
+	})
 }
 
 // LoadShared restores the recompute phase and derives, here and now, the state the
@@ -1017,8 +1117,11 @@ func (s *NavigationSystem) SaveShared() ([]byte, error) {
 // So the field is derived from the targets the phase belongs to, the throttle
 // counters are left exactly as the capture set them, and the composite passability
 // grid — derived from the walls the install just replaced — is rebuilt in the same
-// breath. Nothing here is carried; all of it is re-derived, which is the D-19
-// clause this system sits under.
+// breath. The gateway route graphs are the third of the same kind and were the one
+// this missed: they are derived, so none travels, but nothing derived them either,
+// so a receiver kept the ones its own run had built while the installed entities
+// named route indices into the sender's. Nothing here is carried; all of it is
+// re-derived, which is the D-19 clause this system sits under.
 func (s *NavigationSystem) LoadShared(data []byte) error {
 	var snap navSnapshot
 	if err := json.Unmarshal(data, &snap); err != nil {
@@ -1054,5 +1157,6 @@ func (s *NavigationSystem) LoadShared(data []byte) error {
 			}
 		}
 	}
+	s.deriveRouteGraphs(snap.Routes)
 	return nil
 }

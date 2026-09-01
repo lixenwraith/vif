@@ -36,13 +36,13 @@ var allowedMapRanges = map[string]string{
 	"MetricMap.Keys:items":                     "collects keys, sorted before caching",
 	"Registry.buildIndex:byGroup":              "collects group names, sorted before index build",
 	"CleanerSystem.scanTargetRows:targetRows":  "collects rows, sorted before spawn",
-	"digestRecordDifference:Groups":            "collects differing record names, sorted before joining",
 	"RandResource.SaveStreams:streams":         "collects stream positions, sorted by domain and label before return",
 	"AdaptationResource.SaveState:Entries":     "collects gateway IDs, sorted before export",
 	"AdaptationResource.SaveState:Populations": "collects sub-types, sorted before export",
 	"NavigationSystem.SaveShared:groups":       "collects group IDs, sorted before export",
 	"Machine.Export:variables":                 "collects variable names, sorted before export",
 	"World.clearSharedEntities:componentMask":  "collects shared entities, sorted before removal",
+	"World.ReconcileSharedWorld:componentMask": "collects shared entities the correction drops, sorted before removal",
 	"MacroManager.StartAllPlayback:buffers":    "collects labels, sorted before playback start",
 
 	// --- Writes target a map or distinct keys; order cannot change the result ---

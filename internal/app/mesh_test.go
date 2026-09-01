@@ -179,6 +179,8 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 	}
 
 	assertMeshParity(t, apps, -1)
+	advance := func() { tickAll(apps) }
+	corrections := 0
 	for step := range steps {
 		for i, d := range drivers {
 			if !d.Step() {
@@ -186,11 +188,15 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 			}
 		}
 		tickAll(apps)
-		assertMeshParity(t, apps, step)
+		if (step+1)%correctionSteps == 0 {
+			correctMesh(t, apps, advance, step)
+			corrections++
+		}
 	}
-	for i := range parameter.NetworkBarrierDelayTicks + 1 {
-		tickAll(apps)
-		assertMeshParity(t, apps, steps+i)
+	correctMesh(t, apps, advance, steps)
+	corrections++
+	if corrections < 2 {
+		t.Fatalf("the run asserted convergence %d times, want a criterion that repeats", corrections)
 	}
 
 	// Non-vacuous: every participant drove its own cursor and produced crossings,
@@ -210,8 +216,24 @@ func TestMeshPropagatesEveryParticipantToEveryOther(t *testing.T) {
 	}
 }
 
-// assertMeshParity compares every participant against the first: shared state is
-// re-derived, so any two instances that disagree have applied different artifacts.
+// correctMesh publishes one authoritative correction from the coordinator and
+// asserts every other participant converged on it.
+//
+// The relay is what is being proved as much as the correction. A correction is
+// broadcast to the coordinator's direct links only, so participants 4 and 5 — three
+// links away — hold the host's world at all only because every node forwards the
+// chunks it admitted, on the same termination argument the artifact flood uses.
+func correctMesh(t *testing.T, apps []*App, advance func(), step int) {
+	t.Helper()
+	want := deliverCorrection(t, apps[0], apps[1:], advance)
+	for i, a := range apps[1:] {
+		assertCorrected(t, want, a, fmt.Sprintf("step %d participant %d", step, i+2))
+	}
+}
+
+// assertMeshParity compares every participant against the first. It holds before
+// anyone has produced anything: every instance built the same world from the same
+// seed, and what Phase 4 changed is what happens once they start disagreeing.
 func assertMeshParity(t *testing.T, apps []*App, step int) {
 	t.Helper()
 	for i := 1; i < len(apps); i++ {

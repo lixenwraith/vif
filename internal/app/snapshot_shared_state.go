@@ -310,9 +310,35 @@ func (a *App) InstallShared(cap SharedCapture) error {
 	return a.installShared(cap)
 }
 
-// installShared writes a capture whose identity has already been established.
+// installShared writes a capture whose identity has already been established, by
+// replacing the shared world wholesale.
 func (a *App) installShared(cap SharedCapture) error {
-	var err error
+	_, err := a.writeShared(cap, false)
+	return err
+}
+
+// reconcileShared writes a capture by moving the live world onto it rather than
+// replacing it, and reports how far apart the two were.
+//
+// The difference is read first and inside the same critical section as the write,
+// because it is a statement about one instant: the world this instance predicted
+// against the world the authority is handing it. Read a tick later and it would be
+// the magnitude of a correction that had already happened.
+func (a *App) reconcileShared(cap SharedCapture) (engine.WorldDifference, error) {
+	return a.writeShared(cap, true)
+}
+
+// writeShared is the one install, with the store pass chosen by the caller.
+//
+// Everything outside that pass is identical and has to be: the roster rebind, the
+// tick and record rebase, the stream positions, every declared carrier, the FSM
+// and the compared surface are what make the world the sender's, and a correction
+// that skipped any of them would leave an instance that looks corrected and is not.
+func (a *App) writeShared(cap SharedCapture, reconcile bool) (engine.WorldDifference, error) {
+	var (
+		err  error
+		diff engine.WorldDifference
+	)
 	a.world.RunSafe(func() {
 		// Dry run first: a carrier that rejects its record must do so before the
 		// stores are touched.
@@ -329,7 +355,13 @@ func (a *App) installShared(cap SharedCapture) error {
 		// position afterwards rather than adopted (D-13).
 		local := a.captureCursorControlLocked()
 
-		a.world.InstallSharedWorld(cap.World)
+		if reconcile {
+			// The measurement and the write are one pass over the same stores.
+			diff = engine.SharedWorldDifference(a.world.CaptureSharedWorld(), cap.World)
+			a.world.ReconcileSharedWorld(cap.World)
+		} else {
+			a.world.InstallSharedWorld(cap.World)
+		}
 		a.rebindCursorRosterLocked(local)
 
 		// The tick is shared identity. Adopting it also adopts the simulation
@@ -383,7 +415,7 @@ func (a *App) installShared(cap SharedCapture) error {
 		// captured surface with a value derived from this instance's own history.
 		a.installStatusLocked(cap.Status)
 	})
-	return err
+	return diff, err
 }
 
 // adoptSnapshotBarrierLocked tells the crossing barrier which tick the world it now

@@ -708,6 +708,585 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	w.Positions.PublishTelemetry()
 }
 
+// SharedWorldDelta is one shared world expressed against another, store by store.
+// Generated for the same reason the capture is: a component added to the manifest
+// has to reach a correction without anyone remembering to add it, or the delta
+// silently omits state the baseline then keeps forever.
+//
+// The scalars are carried whole. They are three numbers, and a delta that omitted
+// an unchanged one would need a way to say "unchanged" that costs more than the
+// number.
+type SharedWorldDelta struct {
+	NextEntity uint64 `json:"next_entity"`
+	Created    int64  `json:"created"`
+	Destroyed  int64  `json:"destroyed"`
+
+	Positions    StoreDelta[component.PositionComponent]     `json:"positions,omitzero"`
+	Glyph        StoreDelta[component.GlyphComponent]        `json:"glyph,omitzero"`
+	Sigil        StoreDelta[component.SigilComponent]        `json:"sigil,omitzero"`
+	Nugget       StoreDelta[component.NuggetComponent]       `json:"nugget,omitzero"`
+	Cursor       StoreDelta[component.CursorComponent]       `json:"cursor,omitzero"`
+	Protection   StoreDelta[component.ProtectionComponent]   `json:"protection,omitzero"`
+	Kinetic      StoreDelta[component.KineticComponent]      `json:"kinetic,omitzero"`
+	Wall         StoreDelta[component.WallComponent]         `json:"wall,omitzero"`
+	Loot         StoreDelta[component.LootComponent]         `json:"loot,omitzero"`
+	Gateway      StoreDelta[component.GatewayComponent]      `json:"gateway,omitzero"`
+	Energy       StoreDelta[component.EnergyComponent]       `json:"energy,omitzero"`
+	Heat         StoreDelta[component.HeatComponent]         `json:"heat,omitzero"`
+	Shield       StoreDelta[component.ShieldComponent]       `json:"shield,omitzero"`
+	Boost        StoreDelta[component.BoostComponent]        `json:"boost,omitzero"`
+	Weapon       StoreDelta[component.WeaponComponent]       `json:"weapon,omitzero"`
+	Orb          StoreDelta[component.OrbComponent]          `json:"orb,omitzero"`
+	Ping         StoreDelta[component.PingComponent]         `json:"ping,omitzero"`
+	CursorView   StoreDelta[component.CursorViewComponent]   `json:"cursorview,omitzero"`
+	Decay        StoreDelta[component.DecayComponent]        `json:"decay,omitzero"`
+	Blossom      StoreDelta[component.BlossomComponent]      `json:"blossom,omitzero"`
+	Cleaner      StoreDelta[component.CleanerComponent]      `json:"cleaner,omitzero"`
+	Dust         StoreDelta[component.DustComponent]         `json:"dust,omitzero"`
+	Navigation   StoreDelta[component.NavigationComponent]   `json:"navigation,omitzero"`
+	Combat       StoreDelta[component.CombatComponent]       `json:"combat,omitzero"`
+	Genotype     StoreDelta[component.GenotypeComponent]     `json:"genotype,omitzero"`
+	Lightning    StoreDelta[component.LightningComponent]    `json:"lightning,omitzero"`
+	Missile      StoreDelta[component.MissileComponent]      `json:"missile,omitzero"`
+	Pulse        StoreDelta[component.PulseComponent]        `json:"pulse,omitzero"`
+	Spirit       StoreDelta[component.SpiritComponent]       `json:"spirit,omitzero"`
+	Materialize  StoreDelta[component.MaterializeComponent]  `json:"materialize,omitzero"`
+	Target       StoreDelta[component.TargetComponent]       `json:"target,omitzero"`
+	TargetAnchor StoreDelta[component.TargetAnchorComponent] `json:"targetanchor,omitzero"`
+	Drain        StoreDelta[component.DrainComponent]        `json:"drain,omitzero"`
+	Quasar       StoreDelta[component.QuasarComponent]       `json:"quasar,omitzero"`
+	Swarm        StoreDelta[component.SwarmComponent]        `json:"swarm,omitzero"`
+	Storm        StoreDelta[component.StormComponent]        `json:"storm,omitzero"`
+	StormCircle  StoreDelta[component.StormCircleComponent]  `json:"stormcircle,omitzero"`
+	Bullet       StoreDelta[component.BulletComponent]       `json:"bullet,omitzero"`
+	Pylon        StoreDelta[component.PylonComponent]        `json:"pylon,omitzero"`
+	Snake        StoreDelta[component.SnakeComponent]        `json:"snake,omitzero"`
+	SnakeHead    StoreDelta[component.SnakeHeadComponent]    `json:"snakehead,omitzero"`
+	SnakeBody    StoreDelta[component.SnakeBodyComponent]    `json:"snakebody,omitzero"`
+	SnakeMember  StoreDelta[component.SnakeMemberComponent]  `json:"snakemember,omitzero"`
+	Eye          StoreDelta[component.EyeComponent]          `json:"eye,omitzero"`
+	Tower        StoreDelta[component.TowerComponent]        `json:"tower,omitzero"`
+	Header       StoreDelta[component.HeaderComponent]       `json:"header,omitzero"`
+	Member       StoreDelta[component.MemberComponent]       `json:"member,omitzero"`
+	Flash        StoreDelta[component.FlashComponent]        `json:"flash,omitzero"`
+	Fadeout      StoreDelta[component.FadeoutComponent]      `json:"fadeout,omitzero"`
+	Splash       StoreDelta[component.SplashComponent]       `json:"splash,omitzero"`
+	Marker       StoreDelta[component.MarkerComponent]       `json:"marker,omitzero"`
+	Death        StoreDelta[component.DeathComponent]        `json:"death,omitzero"`
+	Timer        StoreDelta[component.TimerComponent]        `json:"timer,omitzero"`
+}
+
+// DiffSharedWorld expresses next as a difference against base.
+//
+// Applying the result to base reproduces next exactly — same entries, same order —
+// which is the property the receiver's integrity check depends on. Nothing here
+// reads the world, so it runs on whatever goroutine took the two captures rather
+// than under the world lock.
+func DiffSharedWorld(base, next SharedWorldState) SharedWorldDelta {
+	var d SharedWorldDelta
+	d.NextEntity, d.Created, d.Destroyed = next.NextEntity, next.Created, next.Destroyed
+	d.Positions = diffStore(base.Positions, next.Positions)
+	d.Glyph = diffStore(base.Glyph, next.Glyph)
+	d.Sigil = diffStore(base.Sigil, next.Sigil)
+	d.Nugget = diffStore(base.Nugget, next.Nugget)
+	d.Cursor = diffStore(base.Cursor, next.Cursor)
+	d.Protection = diffStore(base.Protection, next.Protection)
+	d.Kinetic = diffStore(base.Kinetic, next.Kinetic)
+	d.Wall = diffStore(base.Wall, next.Wall)
+	d.Loot = diffStore(base.Loot, next.Loot)
+	d.Gateway = diffStore(base.Gateway, next.Gateway)
+	d.Energy = diffStore(base.Energy, next.Energy)
+	d.Heat = diffStore(base.Heat, next.Heat)
+	d.Shield = diffStore(base.Shield, next.Shield)
+	d.Boost = diffStore(base.Boost, next.Boost)
+	d.Weapon = diffStore(base.Weapon, next.Weapon)
+	d.Orb = diffStore(base.Orb, next.Orb)
+	d.Ping = diffStore(base.Ping, next.Ping)
+	d.CursorView = diffStore(base.CursorView, next.CursorView)
+	d.Decay = diffStore(base.Decay, next.Decay)
+	d.Blossom = diffStore(base.Blossom, next.Blossom)
+	d.Cleaner = diffStore(base.Cleaner, next.Cleaner)
+	d.Dust = diffStore(base.Dust, next.Dust)
+	d.Navigation = diffStore(base.Navigation, next.Navigation)
+	d.Combat = diffStore(base.Combat, next.Combat)
+	d.Genotype = diffStore(base.Genotype, next.Genotype)
+	d.Lightning = diffStore(base.Lightning, next.Lightning)
+	d.Missile = diffStore(base.Missile, next.Missile)
+	d.Pulse = diffStore(base.Pulse, next.Pulse)
+	d.Spirit = diffStore(base.Spirit, next.Spirit)
+	d.Materialize = diffStore(base.Materialize, next.Materialize)
+	d.Target = diffStore(base.Target, next.Target)
+	d.TargetAnchor = diffStore(base.TargetAnchor, next.TargetAnchor)
+	d.Drain = diffStore(base.Drain, next.Drain)
+	d.Quasar = diffStore(base.Quasar, next.Quasar)
+	d.Swarm = diffStore(base.Swarm, next.Swarm)
+	d.Storm = diffStore(base.Storm, next.Storm)
+	d.StormCircle = diffStore(base.StormCircle, next.StormCircle)
+	d.Bullet = diffStore(base.Bullet, next.Bullet)
+	d.Pylon = diffStore(base.Pylon, next.Pylon)
+	d.Snake = diffStore(base.Snake, next.Snake)
+	d.SnakeHead = diffStore(base.SnakeHead, next.SnakeHead)
+	d.SnakeBody = diffStore(base.SnakeBody, next.SnakeBody)
+	d.SnakeMember = diffStore(base.SnakeMember, next.SnakeMember)
+	d.Eye = diffStore(base.Eye, next.Eye)
+	d.Tower = diffStore(base.Tower, next.Tower)
+	d.Header = diffStore(base.Header, next.Header)
+	d.Member = diffStore(base.Member, next.Member)
+	d.Flash = diffStore(base.Flash, next.Flash)
+	d.Fadeout = diffStore(base.Fadeout, next.Fadeout)
+	d.Splash = diffStore(base.Splash, next.Splash)
+	d.Marker = diffStore(base.Marker, next.Marker)
+	d.Death = diffStore(base.Death, next.Death)
+	d.Timer = diffStore(base.Timer, next.Timer)
+	return d
+}
+
+// ApplySharedWorldDelta reconstructs the world a delta was computed for.
+func ApplySharedWorldDelta(base SharedWorldState, d SharedWorldDelta) SharedWorldState {
+	var s SharedWorldState
+	s.NextEntity, s.Created, s.Destroyed = d.NextEntity, d.Created, d.Destroyed
+	s.Positions = applyStore(base.Positions, d.Positions)
+	s.Glyph = applyStore(base.Glyph, d.Glyph)
+	s.Sigil = applyStore(base.Sigil, d.Sigil)
+	s.Nugget = applyStore(base.Nugget, d.Nugget)
+	s.Cursor = applyStore(base.Cursor, d.Cursor)
+	s.Protection = applyStore(base.Protection, d.Protection)
+	s.Kinetic = applyStore(base.Kinetic, d.Kinetic)
+	s.Wall = applyStore(base.Wall, d.Wall)
+	s.Loot = applyStore(base.Loot, d.Loot)
+	s.Gateway = applyStore(base.Gateway, d.Gateway)
+	s.Energy = applyStore(base.Energy, d.Energy)
+	s.Heat = applyStore(base.Heat, d.Heat)
+	s.Shield = applyStore(base.Shield, d.Shield)
+	s.Boost = applyStore(base.Boost, d.Boost)
+	s.Weapon = applyStore(base.Weapon, d.Weapon)
+	s.Orb = applyStore(base.Orb, d.Orb)
+	s.Ping = applyStore(base.Ping, d.Ping)
+	s.CursorView = applyStore(base.CursorView, d.CursorView)
+	s.Decay = applyStore(base.Decay, d.Decay)
+	s.Blossom = applyStore(base.Blossom, d.Blossom)
+	s.Cleaner = applyStore(base.Cleaner, d.Cleaner)
+	s.Dust = applyStore(base.Dust, d.Dust)
+	s.Navigation = applyStore(base.Navigation, d.Navigation)
+	s.Combat = applyStore(base.Combat, d.Combat)
+	s.Genotype = applyStore(base.Genotype, d.Genotype)
+	s.Lightning = applyStore(base.Lightning, d.Lightning)
+	s.Missile = applyStore(base.Missile, d.Missile)
+	s.Pulse = applyStore(base.Pulse, d.Pulse)
+	s.Spirit = applyStore(base.Spirit, d.Spirit)
+	s.Materialize = applyStore(base.Materialize, d.Materialize)
+	s.Target = applyStore(base.Target, d.Target)
+	s.TargetAnchor = applyStore(base.TargetAnchor, d.TargetAnchor)
+	s.Drain = applyStore(base.Drain, d.Drain)
+	s.Quasar = applyStore(base.Quasar, d.Quasar)
+	s.Swarm = applyStore(base.Swarm, d.Swarm)
+	s.Storm = applyStore(base.Storm, d.Storm)
+	s.StormCircle = applyStore(base.StormCircle, d.StormCircle)
+	s.Bullet = applyStore(base.Bullet, d.Bullet)
+	s.Pylon = applyStore(base.Pylon, d.Pylon)
+	s.Snake = applyStore(base.Snake, d.Snake)
+	s.SnakeHead = applyStore(base.SnakeHead, d.SnakeHead)
+	s.SnakeBody = applyStore(base.SnakeBody, d.SnakeBody)
+	s.SnakeMember = applyStore(base.SnakeMember, d.SnakeMember)
+	s.Eye = applyStore(base.Eye, d.Eye)
+	s.Tower = applyStore(base.Tower, d.Tower)
+	s.Header = applyStore(base.Header, d.Header)
+	s.Member = applyStore(base.Member, d.Member)
+	s.Flash = applyStore(base.Flash, d.Flash)
+	s.Fadeout = applyStore(base.Fadeout, d.Fadeout)
+	s.Splash = applyStore(base.Splash, d.Splash)
+	s.Marker = applyStore(base.Marker, d.Marker)
+	s.Death = applyStore(base.Death, d.Death)
+	s.Timer = applyStore(base.Timer, d.Timer)
+	return s
+}
+
+// DeltaEntries counts the component cells a delta moves, which is what a
+// correction's size is reported in.
+func (d SharedWorldDelta) DeltaEntries() int {
+	n := d.Positions.Entries()
+	n += d.Glyph.Entries()
+	n += d.Sigil.Entries()
+	n += d.Nugget.Entries()
+	n += d.Cursor.Entries()
+	n += d.Protection.Entries()
+	n += d.Kinetic.Entries()
+	n += d.Wall.Entries()
+	n += d.Loot.Entries()
+	n += d.Gateway.Entries()
+	n += d.Energy.Entries()
+	n += d.Heat.Entries()
+	n += d.Shield.Entries()
+	n += d.Boost.Entries()
+	n += d.Weapon.Entries()
+	n += d.Orb.Entries()
+	n += d.Ping.Entries()
+	n += d.CursorView.Entries()
+	n += d.Decay.Entries()
+	n += d.Blossom.Entries()
+	n += d.Cleaner.Entries()
+	n += d.Dust.Entries()
+	n += d.Navigation.Entries()
+	n += d.Combat.Entries()
+	n += d.Genotype.Entries()
+	n += d.Lightning.Entries()
+	n += d.Missile.Entries()
+	n += d.Pulse.Entries()
+	n += d.Spirit.Entries()
+	n += d.Materialize.Entries()
+	n += d.Target.Entries()
+	n += d.TargetAnchor.Entries()
+	n += d.Drain.Entries()
+	n += d.Quasar.Entries()
+	n += d.Swarm.Entries()
+	n += d.Storm.Entries()
+	n += d.StormCircle.Entries()
+	n += d.Bullet.Entries()
+	n += d.Pylon.Entries()
+	n += d.Snake.Entries()
+	n += d.SnakeHead.Entries()
+	n += d.SnakeBody.Entries()
+	n += d.SnakeMember.Entries()
+	n += d.Eye.Entries()
+	n += d.Tower.Entries()
+	n += d.Header.Entries()
+	n += d.Member.Entries()
+	n += d.Flash.Entries()
+	n += d.Fadeout.Entries()
+	n += d.Splash.Entries()
+	n += d.Marker.Entries()
+	n += d.Death.Entries()
+	n += d.Timer.Entries()
+	return n
+}
+
+// SharedWorldDifference measures how far apart two readings of the shared world
+// are. On a guest that is the correction magnitude: the distance between what it
+// predicted and what the host is telling it.
+func SharedWorldDifference(a, b SharedWorldState) WorldDifference {
+	touched := make(map[core.Entity]struct{}, 64)
+	var w WorldDifference
+	w.Entries = countStoreDifference(a.Positions, b.Positions, touched)
+	w.Entries += countStoreDifference(a.Glyph, b.Glyph, touched)
+	w.Entries += countStoreDifference(a.Sigil, b.Sigil, touched)
+	w.Entries += countStoreDifference(a.Nugget, b.Nugget, touched)
+	w.Entries += countStoreDifference(a.Cursor, b.Cursor, touched)
+	w.Entries += countStoreDifference(a.Protection, b.Protection, touched)
+	w.Entries += countStoreDifference(a.Kinetic, b.Kinetic, touched)
+	w.Entries += countStoreDifference(a.Wall, b.Wall, touched)
+	w.Entries += countStoreDifference(a.Loot, b.Loot, touched)
+	w.Entries += countStoreDifference(a.Gateway, b.Gateway, touched)
+	w.Entries += countStoreDifference(a.Energy, b.Energy, touched)
+	w.Entries += countStoreDifference(a.Heat, b.Heat, touched)
+	w.Entries += countStoreDifference(a.Shield, b.Shield, touched)
+	w.Entries += countStoreDifference(a.Boost, b.Boost, touched)
+	w.Entries += countStoreDifference(a.Weapon, b.Weapon, touched)
+	w.Entries += countStoreDifference(a.Orb, b.Orb, touched)
+	w.Entries += countStoreDifference(a.Ping, b.Ping, touched)
+	w.Entries += countStoreDifference(a.CursorView, b.CursorView, touched)
+	w.Entries += countStoreDifference(a.Decay, b.Decay, touched)
+	w.Entries += countStoreDifference(a.Blossom, b.Blossom, touched)
+	w.Entries += countStoreDifference(a.Cleaner, b.Cleaner, touched)
+	w.Entries += countStoreDifference(a.Dust, b.Dust, touched)
+	w.Entries += countStoreDifference(a.Navigation, b.Navigation, touched)
+	w.Entries += countStoreDifference(a.Combat, b.Combat, touched)
+	w.Entries += countStoreDifference(a.Genotype, b.Genotype, touched)
+	w.Entries += countStoreDifference(a.Lightning, b.Lightning, touched)
+	w.Entries += countStoreDifference(a.Missile, b.Missile, touched)
+	w.Entries += countStoreDifference(a.Pulse, b.Pulse, touched)
+	w.Entries += countStoreDifference(a.Spirit, b.Spirit, touched)
+	w.Entries += countStoreDifference(a.Materialize, b.Materialize, touched)
+	w.Entries += countStoreDifference(a.Target, b.Target, touched)
+	w.Entries += countStoreDifference(a.TargetAnchor, b.TargetAnchor, touched)
+	w.Entries += countStoreDifference(a.Drain, b.Drain, touched)
+	w.Entries += countStoreDifference(a.Quasar, b.Quasar, touched)
+	w.Entries += countStoreDifference(a.Swarm, b.Swarm, touched)
+	w.Entries += countStoreDifference(a.Storm, b.Storm, touched)
+	w.Entries += countStoreDifference(a.StormCircle, b.StormCircle, touched)
+	w.Entries += countStoreDifference(a.Bullet, b.Bullet, touched)
+	w.Entries += countStoreDifference(a.Pylon, b.Pylon, touched)
+	w.Entries += countStoreDifference(a.Snake, b.Snake, touched)
+	w.Entries += countStoreDifference(a.SnakeHead, b.SnakeHead, touched)
+	w.Entries += countStoreDifference(a.SnakeBody, b.SnakeBody, touched)
+	w.Entries += countStoreDifference(a.SnakeMember, b.SnakeMember, touched)
+	w.Entries += countStoreDifference(a.Eye, b.Eye, touched)
+	w.Entries += countStoreDifference(a.Tower, b.Tower, touched)
+	w.Entries += countStoreDifference(a.Header, b.Header, touched)
+	w.Entries += countStoreDifference(a.Member, b.Member, touched)
+	w.Entries += countStoreDifference(a.Flash, b.Flash, touched)
+	w.Entries += countStoreDifference(a.Fadeout, b.Fadeout, touched)
+	w.Entries += countStoreDifference(a.Splash, b.Splash, touched)
+	w.Entries += countStoreDifference(a.Marker, b.Marker, touched)
+	w.Entries += countStoreDifference(a.Death, b.Death, touched)
+	w.Entries += countStoreDifference(a.Timer, b.Timer, touched)
+	w.Entities = len(touched)
+	w.CellShift = positionShift(a.Positions, b.Positions)
+	return w
+}
+
+// ReconcileSharedWorld brings this world's shared half to s by writing what
+// differs instead of replacing everything.
+//
+// It exists because a correction is not a join. InstallSharedWorld clears every
+// shared entity out of all fifty-two stores and re-inserts the capture, which is
+// the right shape once, for a participant that has no world yet, and the wrong
+// shape two to five times a second for one that has a world nearly identical to
+// the capture already. The teardown is the expensive half — every removal is a
+// mask edit, a dense swap-back in each store it touches, and a spatial index
+// eviction — and a correction throws away and rebuilds state that never moved.
+//
+// What this writes is bounded by the *correction magnitude* rather than by the
+// world size: the entities the authority no longer has, the components an entity
+// no longer carries, and every entry's value. What it still scans is the world,
+// because finding the first two means looking.
+//
+// The result is the same world InstallSharedWorld would leave, with one difference
+// that is deliberate: the dense store order is whatever the live world already had
+// rather than the sender's. Nothing compares it — the shared digest sorts, and the
+// compared surface is keyed — and preserving it is what keeps the spatial index
+// from churning. TestReconcileMatchesAFullInstall is what holds the equality.
+//
+// Caller MUST hold updateMutex.
+func (w *World) ReconcileSharedWorld(s SharedWorldState) {
+	target := make(map[core.Entity]struct{}, len(s.Positions))
+	for _, en := range s.Positions {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Glyph {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Sigil {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Nugget {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Cursor {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Protection {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Kinetic {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Wall {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Loot {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Gateway {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Energy {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Heat {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Shield {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Boost {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Weapon {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Orb {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Ping {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.CursorView {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Decay {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Blossom {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Cleaner {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Dust {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Navigation {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Combat {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Genotype {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Lightning {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Missile {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Pulse {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Spirit {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Materialize {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Target {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.TargetAnchor {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Drain {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Quasar {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Swarm {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Storm {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.StormCircle {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Bullet {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Pylon {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Snake {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.SnakeHead {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.SnakeBody {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.SnakeMember {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Eye {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Tower {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Header {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Member {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Flash {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Fadeout {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Splash {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Marker {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Death {
+		target[en.Entity] = struct{}{}
+	}
+	for _, en := range s.Timer {
+		target[en.Entity] = struct{}{}
+	}
+
+	// Entities the authority no longer holds leave whole, so no zero-component
+	// mask entry is left behind for clearSharedEntities to find later.
+	gone := make([]core.Entity, 0, 8)
+	for e := range w.componentMask {
+		if e.Domain() != core.DomainShared {
+			continue
+		}
+		if _, ok := target[e]; !ok {
+			gone = append(gone, e)
+		}
+	}
+	slices.Sort(gone)
+	for _, e := range gone {
+		w.removeEntity(e)
+	}
+
+	reconcilePositions(w.Positions, s.Positions)
+	reconcileStore(w.Components.Glyph, s.Glyph)
+	reconcileStore(w.Components.Sigil, s.Sigil)
+	reconcileStore(w.Components.Nugget, s.Nugget)
+	reconcileStore(w.Components.Cursor, s.Cursor)
+	reconcileStore(w.Components.Protection, s.Protection)
+	reconcileStore(w.Components.Kinetic, s.Kinetic)
+	reconcileStore(w.Components.Wall, s.Wall)
+	reconcileStore(w.Components.Loot, s.Loot)
+	reconcileStore(w.Components.Gateway, s.Gateway)
+	reconcileStore(w.Components.Energy, s.Energy)
+	reconcileStore(w.Components.Heat, s.Heat)
+	reconcileStore(w.Components.Shield, s.Shield)
+	reconcileStore(w.Components.Boost, s.Boost)
+	reconcileStore(w.Components.Weapon, s.Weapon)
+	reconcileStore(w.Components.Orb, s.Orb)
+	reconcileStore(w.Components.Ping, s.Ping)
+	reconcileStore(w.Components.CursorView, s.CursorView)
+	reconcileStore(w.Components.Decay, s.Decay)
+	reconcileStore(w.Components.Blossom, s.Blossom)
+	reconcileStore(w.Components.Cleaner, s.Cleaner)
+	reconcileStore(w.Components.Dust, s.Dust)
+	reconcileStore(w.Components.Navigation, s.Navigation)
+	reconcileStore(w.Components.Combat, s.Combat)
+	reconcileStore(w.Components.Genotype, s.Genotype)
+	reconcileStore(w.Components.Lightning, s.Lightning)
+	reconcileStore(w.Components.Missile, s.Missile)
+	reconcileStore(w.Components.Pulse, s.Pulse)
+	reconcileStore(w.Components.Spirit, s.Spirit)
+	reconcileStore(w.Components.Materialize, s.Materialize)
+	reconcileStore(w.Components.Target, s.Target)
+	reconcileStore(w.Components.TargetAnchor, s.TargetAnchor)
+	reconcileStore(w.Components.Drain, s.Drain)
+	reconcileStore(w.Components.Quasar, s.Quasar)
+	reconcileStore(w.Components.Swarm, s.Swarm)
+	reconcileStore(w.Components.Storm, s.Storm)
+	reconcileStore(w.Components.StormCircle, s.StormCircle)
+	reconcileStore(w.Components.Bullet, s.Bullet)
+	reconcileStore(w.Components.Pylon, s.Pylon)
+	reconcileStore(w.Components.Snake, s.Snake)
+	reconcileStore(w.Components.SnakeHead, s.SnakeHead)
+	reconcileStore(w.Components.SnakeBody, s.SnakeBody)
+	reconcileStore(w.Components.SnakeMember, s.SnakeMember)
+	reconcileStore(w.Components.Eye, s.Eye)
+	reconcileStore(w.Components.Tower, s.Tower)
+	reconcileStore(w.Components.Header, s.Header)
+	reconcileStore(w.Components.Member, s.Member)
+	reconcileStore(w.Components.Flash, s.Flash)
+	reconcileStore(w.Components.Fadeout, s.Fadeout)
+	reconcileStore(w.Components.Splash, s.Splash)
+	reconcileStore(w.Components.Marker, s.Marker)
+	reconcileStore(w.Components.Death, s.Death)
+	reconcileStore(w.Components.Timer, s.Timer)
+
+	if s.NextEntity > 0 {
+		w.nextEntityID[core.DomainShared] = s.NextEntity
+	}
+	w.createdCount[core.DomainShared].Store(s.Created)
+	w.destroyedCount[core.DomainShared].Store(s.Destroyed)
+	w.Positions.PublishTelemetry()
+}
+
 // clearSharedEntities removes every shared entity from every store, so an install
 // replaces the shared world rather than merging into it. Merging would leave
 // entities this instance had derived on its own beside the capture's, which is

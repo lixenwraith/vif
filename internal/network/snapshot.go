@@ -53,13 +53,22 @@ func EncodeSnapshotChunks(tick uint64, body []byte) ([][]byte, error) {
 	return out, nil
 }
 
-// SnapshotAssembly reassembles a chunked capture. The zero value is ready to use.
+// SnapshotAssembly reassembles a chunked capture or correction. The zero value is
+// ready to use.
 //
-// It admits chunks in order only. A capture arrives on one stream, before the
-// participant sending it is admitted to anything that could reorder it, so
-// out-of-order delivery here means a confused sender rather than a mesh path — and
-// silently tolerating it would let two different captures interleave into one body
-// that hashes as neither.
+// It admits chunks in order, and what it does with the ones that are not in order
+// depends on which of two situations it is in. During a join a capture arrives on
+// one stream, before the participant sending it is admitted to anything that could
+// reorder it, so anything out of order is a confused sender: tolerating it silently
+// would let two captures interleave into one body that hashes as neither.
+//
+// A correction arrives mid-session on a mesh, where the same chunk reaches a node by
+// several paths and a newer transfer can start before an older one finishes. Two
+// out-of-order cases are therefore *expected* rather than wrong, and are the same
+// two the per-source epoch window admits for artifacts: a chunk of the transfer in
+// progress that this node has already taken is a duplicate and is ignored, and a
+// chunk of a *newer* transfer supersedes the one in progress, because a correction
+// carries no information the one after it lacks. Everything else is still an error.
 type SnapshotAssembly struct {
 	tick    uint64
 	count   uint32
@@ -69,10 +78,26 @@ type SnapshotAssembly struct {
 	started bool
 }
 
-// Add admits one chunk and reports whether the transfer is complete.
+// Add admits one chunk and reports whether the transfer is complete. It is the
+// join's form: a chunk this assembly cannot take in order is an error.
 func (s *SnapshotAssembly) Add(frame []byte) (done bool, err error) {
+	admitted, done, err := s.AddChunk(frame)
+	if err == nil && !admitted && !done {
+		return false, errors.New("snapshot chunk: a repeat of one already taken")
+	}
+	return done, err
+}
+
+// AddChunk admits one chunk and reports whether it was new to this assembly as well
+// as whether the transfer is complete.
+//
+// The first return is what a relay forwards on. It is the same termination argument
+// the artifact flood uses: a node forwards only what it admitted, a second copy
+// arriving by another path is recognised and neither taken nor forwarded again, so
+// each node handles each chunk exactly once whatever the topology.
+func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err error) {
 	if len(frame) < SnapshotChunkHeader {
-		return false, fmt.Errorf("snapshot chunk: %d bytes, want at least %d", len(frame), SnapshotChunkHeader)
+		return false, false, fmt.Errorf("snapshot chunk: %d bytes, want at least %d", len(frame), SnapshotChunkHeader)
 	}
 	tick := binary.BigEndian.Uint64(frame[0:8])
 	index := binary.BigEndian.Uint32(frame[8:12])
@@ -82,33 +107,52 @@ func (s *SnapshotAssembly) Add(frame []byte) (done bool, err error) {
 
 	switch {
 	case count == 0:
-		return false, errors.New("snapshot chunk: names a zero-chunk transfer")
+		return false, false, errors.New("snapshot chunk: names a zero-chunk transfer")
 	case total == 0 || total > MaxSnapshotBytes:
-		return false, fmt.Errorf("snapshot chunk: names a %d-byte body", total)
+		return false, false, fmt.Errorf("snapshot chunk: names a %d-byte body", total)
+	case index >= count:
+		return false, false, fmt.Errorf("snapshot chunk %d of %d is past the end", index, count)
+	}
+	// A newer transfer supersedes whatever is half-assembled, and must start at its
+	// own first chunk: joining one in the middle would build a body from two.
+	if s.started && tick > s.tick {
+		if index != 0 {
+			return false, false, nil
+		}
+		*s = SnapshotAssembly{}
 	}
 	if !s.started {
+		if index != 0 {
+			return false, false, fmt.Errorf("snapshot chunk %d arrived first, expected 0", index)
+		}
 		s.tick, s.count, s.total, s.started = tick, count, total, true
 		s.body = make([]byte, 0, total)
 	}
+	if tick < s.tick {
+		return false, false, nil // a transfer this node has already moved past
+	}
 	if tick != s.tick || count != s.count || total != s.total {
-		return false, fmt.Errorf("snapshot chunk %d: transfer changed to tick %d, %d chunks, %d bytes",
+		return false, false, fmt.Errorf("snapshot chunk %d: transfer changed to tick %d, %d chunks, %d bytes",
 			index, tick, count, total)
 	}
+	if index < s.next {
+		return false, false, nil // a second copy of a chunk already taken
+	}
 	if index != s.next {
-		return false, fmt.Errorf("snapshot chunk %d arrived out of order, expected %d", index, s.next)
+		return false, false, fmt.Errorf("snapshot chunk %d arrived out of order, expected %d", index, s.next)
 	}
 	if uint32(len(s.body)+len(payload)) > s.total {
-		return false, errors.New("snapshot chunks overrun the body length they declared")
+		return false, false, errors.New("snapshot chunks overrun the body length they declared")
 	}
 	s.body = append(s.body, payload...)
 	s.next++
 	if s.next < s.count {
-		return false, nil
+		return true, false, nil
 	}
 	if uint32(len(s.body)) != s.total {
-		return false, fmt.Errorf("snapshot reassembled to %d bytes, declared %d", len(s.body), s.total)
+		return false, false, fmt.Errorf("snapshot reassembled to %d bytes, declared %d", len(s.body), s.total)
 	}
-	return true, nil
+	return true, true, nil
 }
 
 // Result returns the reassembled body and the tick it describes.

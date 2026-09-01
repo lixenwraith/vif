@@ -1,7 +1,6 @@
 package app
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -183,10 +182,18 @@ func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
 	}
 }
 
-// TestRuntimeDigestReportsAndClearsSharedDivergence proves the live instrument
-// against a deliberately corrupted shared position. It also pins the transient
-// SYNCED acknowledgement after the exact state is restored.
-func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
+// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict is what the divergence report
+// became.
+//
+// Before Phase 4 this test drove a corrupted shared position and then asserted the
+// escalation: DESYNC after two disagreeing samples, DIVERGED after five, SYNCED for
+// a second after the state agreed again. Every one of those was a statement that
+// two instances re-deriving one world had lost an artifact and would never get it
+// back — which was true while both re-derived, and is not true of a guest that
+// predicts and is corrected. So the escalation is gone and the measurement stayed:
+// a mismatch is counted and the surface that disagrees is named, and neither is a
+// failure state a session can be stuck in.
+func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
 	localCursors(t, apps)
 
@@ -208,7 +215,7 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 		tickAll(apps)
 	}
 	if target == 0 {
-		t.Fatal("no shared composite available for divergence probe")
+		t.Fatal("no shared composite available for the drift probe")
 	}
 
 	apps[0].World().RunSafe(func() {
@@ -216,82 +223,39 @@ func TestRuntimeDigestReportsAndClearsSharedDivergence(t *testing.T) {
 		p.X++
 		apps[0].World().Positions.SetPosition(target, p)
 	})
+	for range 3*parameter.NetworkDigestTicks + 2 {
+		tickAll(apps)
+	}
 
-	// One disagreeing sample is not a report. An artifact that missed its apply tick
-	// lands one side late and the next sample finds the two equal again, so the
-	// indicator waits for the divergence to repeat before it says anything.
-	tickAll(apps)
 	for i, a := range apps {
 		reg := a.World().Resources.Status
 		if reg.Ints.Get("network.digest_mismatches").Load() == 0 {
-			continue // this instance has not sampled the corrupted tick yet
+			t.Fatalf("participant %d counted no mismatch against a corrupted position", i+1)
 		}
-		if got := reg.Strings.Get("network.sync_state").Load(); got == "desync" {
-			t.Fatalf("participant %d reported desync on its first disagreeing sample", i+1)
+		if got := reg.Strings.Get("network.drift_part").Load(); got != "positions" {
+			t.Fatalf("participant %d named %q as the drifting surface, want positions", i+1, got)
 		}
-	}
-
-	for range parameter.NetworkDesyncSamples*parameter.NetworkDigestTicks + 2 {
-		tickAll(apps)
-	}
-	for i, a := range apps {
-		reg := a.World().Resources.Status
-		if got := reg.Strings.Get("network.sync_state").Load(); got != "desync" {
-			t.Fatalf("participant %d sync state=%q, want desync", i+1, got)
-		}
-		if got := reg.Strings.Get("network.sync_part").Load(); got != "positions" {
-			t.Fatalf("participant %d named %q as the first differing category, want positions", i+1, got)
-		}
-		if reg.Bools.Get("network.diverged").Load() {
-			t.Fatalf("participant %d escalated to diverged before the divergence persisted", i+1)
+		if reg.Ints.Get("network.drift_tick").Load() == 0 {
+			t.Fatalf("participant %d named no tick for the drift it reported", i+1)
 		}
 	}
 
-	// Past NetworkDivergedSamples the disagreement is no longer something the two
-	// could still resolve between them, and the session says so.
-	for range parameter.NetworkDivergedSamples*parameter.NetworkDigestTicks + 2 {
-		tickAll(apps)
-	}
-	for i, a := range apps {
-		if !a.World().Resources.Status.Bools.Get("network.diverged").Load() {
-			t.Fatalf("participant %d never escalated a persistent divergence", i+1)
+	// The retired surface is retired, not renamed: a session cannot enter a state
+	// the next correction does not leave, so there is nothing left to report one.
+	for _, key := range []string{"network.sync_state", "network.sync_part", "network.sync_records"} {
+		if apps[0].World().Resources.Status.Strings.Has(key) {
+			t.Fatalf("%s is still registered; DESYNC and DIVERGED were retired", key)
 		}
+	}
+	if apps[0].World().Resources.Status.Bools.Has("network.diverged") {
+		t.Fatal("network.diverged is still registered; DESYNC and DIVERGED were retired")
 	}
 
-	// A category is not a diagnosis: "the status surface differs" leaves a hundred
-	// records to search, and one host's own log cannot narrow it. Once a mismatch is
-	// outstanding the digest carries a hash per record, so the report names the one
-	// that moved. Here that is the world digest, which is where the corruption is.
-	for i, a := range apps {
-		got := a.World().Resources.Status.Strings.Get("network.sync_records").Load()
-		if !strings.Contains(got, "world") {
-			t.Fatalf("participant %d named %q as the differing records, want the world digest among them",
-				i+1, got)
-		}
-	}
-
-	apps[0].World().RunSafe(func() { apps[0].World().Positions.SetPosition(target, original) })
-	for range 2*parameter.NetworkDigestTicks + 2 {
-		tickAll(apps)
-	}
-	for i, a := range apps {
-		reg := a.World().Resources.Status
-		if got := reg.Strings.Get("network.sync_state").Load(); got != "synced" {
-			t.Fatalf("participant %d sync state=%q after repair, want synced", i+1, got)
-		}
-		if reg.Bools.Get("network.diverged").Load() {
-			t.Fatalf("participant %d held its diverged verdict after the state agreed again", i+1)
-		}
-	}
-
-	for range parameter.NetworkResyncNoticeTicks + 1 {
-		tickAll(apps)
-	}
-	for i, a := range apps {
-		if got := a.World().Resources.Status.Strings.Get("network.sync_state").Load(); got != "" {
-			t.Fatalf("participant %d retained sync notice %q", i+1, got)
-		}
-	}
+	// And the authority closes it. A correction is what repairs a disagreement now,
+	// including one nothing in the simulation caused.
+	advance := func() { tickAll(apps) }
+	want := deliverCorrection(t, apps[0], apps[1:], advance)
+	assertCorrected(t, want, apps[1], "guest after a corrupted position")
 }
 
 // TestSharedSnapshotExcludesLocalSchedulerTiming pins the distinction the live

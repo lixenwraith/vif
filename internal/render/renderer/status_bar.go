@@ -39,14 +39,15 @@ type StatusBarRenderer struct {
 	statTicks *atomic.Int64
 
 	// Time control telemetry
-	statSpeed    *status.AtomicString
-	statStep     *atomic.Int64
-	statBreak    *status.AtomicString
-	statNet      *status.AtomicString
-	statSync     *status.AtomicString
-	statDiverged *atomic.Bool
-	statPeers    *atomic.Int64
-	statLatch    *atomic.Bool
+	statSpeed      *status.AtomicString
+	statStep       *atomic.Int64
+	statBreak      *status.AtomicString
+	statNet        *status.AtomicString
+	statStale      *atomic.Bool
+	statLag        *atomic.Int64
+	statCorrection *atomic.Int64
+	statPeers      *atomic.Int64
+	statLatch      *atomic.Bool
 
 	// FSM telemetry
 	statFSMName    *status.AtomicString
@@ -78,14 +79,15 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statAPM:   statusReg.Ints.Get("engine.apm"),
 		statTicks: statusReg.Ints.Get("engine.ticks"),
 
-		statSpeed:    statusReg.Strings.Get("engine.speed"),
-		statStep:     statusReg.Ints.Get("engine.step"),
-		statBreak:    statusReg.Strings.Get("engine.breakpoint"),
-		statNet:      statusReg.Strings.Get("network.state"),
-		statSync:     statusReg.Strings.Get("network.sync_state"),
-		statDiverged: statusReg.Bools.Get("network.diverged"),
-		statPeers:    statusReg.Ints.Get("network.peers"),
-		statLatch:    statusReg.Bools.Get("network.map_latched"),
+		statSpeed:      statusReg.Strings.Get("engine.speed"),
+		statStep:       statusReg.Ints.Get("engine.step"),
+		statBreak:      statusReg.Strings.Get("engine.breakpoint"),
+		statNet:        statusReg.Strings.Get("network.state"),
+		statStale:      statusReg.Bools.Get("network.stale"),
+		statLag:        statusReg.Ints.Get("network.lag_ticks"),
+		statCorrection: statusReg.Ints.Get("snapshot.correction_entities"),
+		statPeers:      statusReg.Ints.Get("network.peers"),
+		statLatch:      statusReg.Bools.Get("network.map_latched"),
 
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
@@ -441,22 +443,37 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// syncItem renders the runtime parity verdict. Divergence has two degrees: a
-// disagreement the peers may still resolve, and one that has persisted past the
-// point where anything could — nothing re-derives a missing artifact, so past it the
-// two participants are playing different games and the session needs restarting.
+// syncItem renders what a participant needs to know about its own picture, which
+// Phase 4 changed from a verdict into two measurements.
+//
+// It used to say DESYNC and then DIVERGED: two instances re-derived the shared
+// world from one artifact stream, so a disagreement meant one of them had lost an
+// artifact and nothing would ever re-derive it — the second state was a statement
+// about the rest of the session rather than about a moment. Under an authority
+// neither is true. A guest predicts between corrections and is expected to differ;
+// the host's next snapshot replaces whatever it drifted to; there is no state a
+// session can enter that the next correction does not leave.
+//
+// What is worth showing instead is the two things that are not automatically fine.
+// LAG says this instance is far enough behind the session that its own crossings
+// are reaching the host after the ticks they name — the link, not the game. COR is
+// the size of the last correction in shared entities, which is how visibly the
+// authority disagreed with the prediction; it is absent when the prediction was
+// exact, which at rest it usually is.
 func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
-	switch r.statSync.Load() {
-	case "desync":
-		if r.statDiverged.Load() {
-			return statusItem{text: " DIVERGED ", fg: visual.RgbBlack, bg: visual.RgbCursorError}, true
-		}
-		return statusItem{text: " DESYNC ", fg: visual.RgbBlack, bg: visual.RgbOrange}, true
-	case "synced":
-		return statusItem{text: " SYNCED ", fg: visual.RgbBlack, bg: visual.RgbGreen}, true
-	default:
-		return statusItem{}, false
+	if r.statStale.Load() {
+		return statusItem{
+			text: fmt.Sprintf(" LAG %d ", r.statLag.Load()),
+			fg:   visual.RgbBlack, bg: visual.RgbOrange,
+		}, true
 	}
+	if n := r.statCorrection.Load(); n > 0 {
+		return statusItem{
+			text: fmt.Sprintf(" COR %d ", n),
+			fg:   visual.RgbBlack, bg: visual.RgbGtBg,
+		}, true
+	}
+	return statusItem{}, false
 }
 
 // networkItem reports connection, peer count and the D-14 map latch.

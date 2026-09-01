@@ -65,6 +65,14 @@ func (a *App) Loop() error {
 		if err := a.resumeJoinedSession(); err != nil {
 			return err
 		}
+		if a.cfg.JoinAddress != "" {
+			// A guest applies corrections between two ticks, and nothing on this
+			// side calls Tick: the scheduler owns the tick loop, so the apply loop
+			// needs a goroutine of its own. World.RunSafe is what makes "between
+			// two ticks" true by construction — a tick runs entirely inside one
+			// acquisition of the update mutex.
+			a.corrections.startCorrector()
+		}
 		// Paused directly during construction, without emitting an operator event:
 		// the start gate is the authority that releases tick-zero game time.
 		a.ctx.TimeCtl.SetPaused(false)

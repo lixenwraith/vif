@@ -76,6 +76,45 @@ const (
 	// inside it.
 	NetworkJoinCatchUpTicks = 200
 
+	// SnapshotCorrectionTicks is the authoritative correction cadence, in ticks.
+	// At the 50 ms tick this is 5 Hz, which is the fast end of §2.1's hypothesis
+	// and the one the storm measurement said is only affordable with deltas.
+	//
+	// The rate is low because it can be: both instances run the same deterministic
+	// simulation, so a guest between corrections is extrapolating rather than
+	// guessing, and a correction is a repair of the difference an unmodelled input
+	// made rather than the picture itself. Phase 5 drives this from the link
+	// instead of from a constant.
+	SnapshotCorrectionTicks = 4
+
+	// SnapshotKeyframeCorrections is how many deltas the host sends between whole
+	// captures. A delta is worthless without the keyframe it names, so this is the
+	// longest a participant that missed one — or that has just arrived — waits
+	// before it can apply anything again: 10 corrections is two seconds at the
+	// cadence above.
+	//
+	// It is also the loss bound. Nothing here acknowledges a correction, and
+	// nothing needs to: a keyframe supersedes everything before it, so a lost
+	// delta costs freshness for at most this many corrections and never
+	// correctness.
+	SnapshotKeyframeCorrections = 10
+
+	// SnapshotStaleTicks is where the staleness indicator turns on: how far behind
+	// the session's newest observed tick this instance may stand before a player
+	// should be told the link rather than the game is the problem.
+	//
+	// It is the playout lead, for the same reason NetworkJoinLagTicks is: past it
+	// this participant's own crossings reach the host after the tick they name, so
+	// the host reorders them and the correction magnitude grows. Under it, nothing
+	// is late and there is nothing to say.
+	SnapshotStaleTicks = NetworkBarrierDelayTicks
+
+	// SnapshotCorrectionQueue bounds the corrections one instance may hold
+	// un-applied. A correction supersedes every earlier one, so the queue is
+	// small on purpose and drops the *oldest* when it overflows: falling behind
+	// should cost freshness, never the newest authority.
+	SnapshotCorrectionQueue = 4
+
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one
 	// source arrive out of order and a high-water mark alone would discard epochs the

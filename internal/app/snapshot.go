@@ -52,10 +52,12 @@ var denySharedPrefix = []string{
 	// Kill tallies mix shared species with the player-domain drain, so the total
 	// and the drain column move with this participant's own population
 	"kills.",
-	// What a capture cost this instance: a host publishes what reading the world
-	// took, a joiner publishes what installing it took, and the tick it installed
-	// at. None of it is a fact about the world the two now share — it is the
-	// measurement Phase 4's cadence gets chosen from.
+	// What a capture cost this instance and what its corrections moved: a host
+	// publishes what reading the world took and what it broadcast, a guest what an
+	// install cost it and how far its own prediction had drifted. None of it is a
+	// fact about the world the two now share — it is the measurement Phase 4's
+	// cadence gets chosen from, and under weakened D-11 the correction magnitude is
+	// deliberately *not* something two instances agree on.
 	"snapshot.",
 }
 
@@ -108,7 +110,7 @@ var denySharedField = map[string]bool{
 
 // sharedKey reports whether a status key belongs in a cross-instance comparison
 func sharedKey(key string) bool {
-	if denySim[key] || denySharedKey[key] {
+	if simDeniedKey(key) || denySharedKey[key] {
 		return false
 	}
 	// Scratch high-water marks: allocation telemetry sized by this instance's own
@@ -161,15 +163,18 @@ var denySim = map[string]bool{
 	"stat.late":         true,
 	"stat.groups":       true,
 	"stat.metrics":      true,
-	// Wall-clock costs and the position a capture was installed at. A replay
-	// installs none and re-derives everything, so there is nothing here to compare.
-	"snapshot.capture_us":     true,
-	"snapshot.encode_us":      true,
-	"snapshot.bytes":          true,
-	"snapshot.stage_us":       true,
-	"snapshot.commit_us":      true,
-	"snapshot.install_tick":   true,
-	"snapshot.catch_up_ticks": true,
+}
+
+// simDeniedKey is denySim plus the whole snapshot group.
+//
+// A replay installs no capture and applies no correction: it re-derives the run
+// from its record stream, so every key the group carries — what a read cost, what
+// an install cost, how many corrections arrived and how far this instance's
+// prediction had drifted when they did — describes the session the run was part of
+// rather than the simulation the replay reproduces. Comparing any of them would
+// assert that a replay had a network.
+func simDeniedKey(key string) bool {
+	return denySim[key] || strings.HasPrefix(key, "snapshot.")
 }
 
 // Snapshot returns the sorted context and registry state as comparable lines.
@@ -227,7 +232,7 @@ func filterFields(args []any) []any {
 // state, and the registry reading belongs to the same instant
 func (a *App) snapshot(simOnly bool) []string {
 	lines := make([]string, 0, 64)
-	keep := func(key string) bool { return !simOnly || !denySim[key] }
+	keep := func(key string) bool { return !simOnly || !simDeniedKey(key) }
 
 	a.world.RunSafe(func() {
 		wd := a.worldDigestLocked()
