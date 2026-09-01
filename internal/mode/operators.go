@@ -13,13 +13,12 @@ func OpMove(ctx *engine.GameContext, result MotionResult) {
 	OpJump(ctx, result.EndX, result.EndY)
 }
 
-// OpJump requests an absolute placement for producers that resolve a target directly
+// OpJump requests an absolute placement for producers that resolve a target
+// directly. The crossing and the D-18 prediction that answers it locally leave
+// together, so the next motion resolves from the cell this press selected rather
+// than from the one the shared store still holds.
 func OpJump(ctx *engine.GameContext, x, y int) {
-	ctx.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
-		Entity: ctx.World.Resources.Player.Entity,
-		X:      x,
-		Y:      y,
-	})
+	ctx.PushCursorMove(ctx.World.Resources.Player.Entity, x, y)
 }
 
 // OpDelete emits a deletion request event based on the motion result

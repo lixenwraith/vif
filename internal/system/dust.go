@@ -188,8 +188,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 			if p.Level == component.GlyphDark {
 				return
 			}
-			cursorEntity := s.world.Resources.Player.Entity
-			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+			cursorPos, ok := s.world.LocalCursor()
 			if !ok {
 				return
 			}
@@ -206,8 +205,7 @@ func (s *DustSystem) HandleEvent(ev event.GameEvent) {
 				return
 			}
 
-			cursorEntity := s.world.Resources.Player.Entity
-			cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+			cursorPos, ok := s.world.LocalCursor()
 			if !ok {
 				event.DustBatchPool.Release(p)
 				return
@@ -265,8 +263,10 @@ func (s *DustSystem) Update() {
 	}
 
 	// 1. PRE-FETCH Context Data (Cursor, Energy, etc.) BEFORE Positions lock to avoid deadlock
+	// Attraction pulls toward the cursor the player can see, which is the D-18
+	// prediction while this instance's own placements are outstanding
 	cursorEntity := s.world.Resources.Player.Entity
-	cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+	cursorPos, ok := s.world.LocalCursor()
 	if !ok {
 		return
 	}

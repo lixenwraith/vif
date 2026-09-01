@@ -201,12 +201,8 @@ func (s *NuggetSystem) handleJumpRequest(cursorEntity core.Entity) {
 		return
 	}
 
-	// 3. Move Cursor
-	s.world.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{
-		Entity: cursorEntity,
-		X:      nuggetPos.X,
-		Y:      nuggetPos.Y,
-	})
+	// 3. Move Cursor; the jump is answered locally and crosses unchanged (D-18)
+	s.world.PushCursorMove(cursorEntity, nuggetPos.X, nuggetPos.Y)
 
 	// 4. Pay Energy Cost (spend, non-convergent)
 	s.world.PushLocal(event.EventEnergyAddRequest, &event.EnergyAddPayload{

@@ -8,6 +8,14 @@ import (
 
 const MaxPlayers = 16
 
+// MaxPredictedCursorCells bounds D-18's outstanding local cursor predictions: the
+// cells this instance has requested and not yet seen announced. One playout lead of
+// input fits many times over, so reaching it means reconciliation has stopped
+// arriving at all — a peer stalled, or a request the barrier never applied. The
+// queue is dropped at that point and the local cell falls back to the store, which
+// is what the participant saw before prediction existed.
+const MaxPredictedCursorCells = 64
+
 // Shield
 const (
 	// ShieldPassiveEnergyPercentDrain is the energy percentage of total per second while shield is active

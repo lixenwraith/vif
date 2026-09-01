@@ -122,6 +122,13 @@ func (s *CursorSystem) move(p *event.CursorMoveRequestPayload) {
 	if x != pos.X || y != pos.Y {
 		s.world.Positions.SetPosition(e, component.PositionComponent{X: x, Y: y})
 	}
+
+	// The applied cell is the authority. It settles one D-18 prediction if this
+	// instance requested it, and replaces the whole queue if it did not — a level
+	// setup, a wall push-out or a peer's reset places the local cursor too, and
+	// nothing the local participant predicted describes where it landed.
+	s.world.ReconcileLocalCursor(e, x, y)
+
 	s.world.PushEvent(event.EventCursorMoved, &event.CursorMovedPayload{Entity: e, X: x, Y: y})
 }
 

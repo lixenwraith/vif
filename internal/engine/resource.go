@@ -162,6 +162,17 @@ type PlayerResource struct {
 	restore      [parameter.MaxPlayers]CursorRosterEntry
 	restoreCount int
 	restoreLocal uint8
+
+	// D-18: the cells this instance's own input has placed the local cursor on and
+	// not yet seen announced, oldest first. A placement crosses as a D-3 artifact
+	// and reaches the store a playout lead later, so a producer that resolved its
+	// next motion from the store would resolve it from a cell the player has
+	// already left. Ring rather than slice: the depth is bounded by the lead, and
+	// prediction must not allocate on the input path.
+	predicted  [parameter.MaxPredictedCursorCells]component.PositionComponent
+	predHead   int
+	predCount  int
+	predLatest component.PositionComponent
 }
 
 // CursorRosterEntry is the instance-local control assignment for one shared
@@ -198,6 +209,7 @@ func (pr *PlayerResource) SetLocal(slot uint8) {
 	}
 	pr.local = slot
 	pr.Entity = pr.slots[slot]
+	pr.DropPrediction()
 }
 
 // Slot returns the entity in a roster slot, 0 when empty
@@ -260,6 +272,7 @@ func (pr *PlayerResource) Bind(slot uint8, e core.Entity) {
 	pr.count++
 	if slot == pr.local {
 		pr.Entity = e
+		pr.DropPrediction()
 	}
 }
 
@@ -272,6 +285,7 @@ func (pr *PlayerResource) Unbind(slot uint8) {
 	pr.count--
 	if slot == pr.local {
 		pr.Entity = 0
+		pr.DropPrediction()
 	}
 }
 
@@ -280,7 +294,55 @@ func (pr *PlayerResource) Clear() {
 	pr.slots = [parameter.MaxPlayers]core.Entity{}
 	pr.Entity = 0
 	pr.count = 0
+	pr.DropPrediction()
 }
+
+// Predict records a cell this instance has requested for its own cursor (D-18).
+// The caller has already resolved the cell CursorSystem will announce, so a
+// prediction that survives to its announcement matches it exactly.
+func (pr *PlayerResource) Predict(pos component.PositionComponent) {
+	if pr.predCount == len(pr.predicted) {
+		// Nothing is reconciling. Fall back to the store rather than carry a queue
+		// whose head no announcement will ever match.
+		pr.DropPrediction()
+	}
+	pr.predicted[(pr.predHead+pr.predCount)%len(pr.predicted)] = pos
+	pr.predCount++
+	pr.predLatest = pos
+}
+
+// Reconcile settles one announced placement of the local cursor against the
+// prediction queue. Matching the oldest outstanding prediction pops it; anything
+// else is an authoritative value the prediction did not produce, and D-18 discards
+// the prediction rather than merging it.
+func (pr *PlayerResource) Reconcile(pos component.PositionComponent) {
+	if pr.predCount == 0 {
+		return
+	}
+	if pr.predicted[pr.predHead] != pos {
+		pr.DropPrediction()
+		return
+	}
+	pr.predHead = (pr.predHead + 1) % len(pr.predicted)
+	pr.predCount--
+}
+
+// DropPrediction abandons every outstanding prediction, so the local cell reads
+// the store again. Paired with anything that rebinds or retires the local cursor:
+// a queue outliving the entity it described would place its successor.
+func (pr *PlayerResource) DropPrediction() {
+	pr.predHead, pr.predCount = 0, 0
+	pr.predLatest = component.PositionComponent{}
+}
+
+// PredictedCell returns the cell this instance's own input has placed the local
+// cursor on, valid only while a prediction is outstanding.
+func (pr *PlayerResource) PredictedCell() (component.PositionComponent, bool) {
+	return pr.predLatest, pr.predCount > 0
+}
+
+// PredictedDepth returns the number of outstanding predictions, for the view record
+func (pr *PlayerResource) PredictedDepth() int { return pr.predCount }
 
 // --- Random Resource ---
 

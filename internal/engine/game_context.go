@@ -547,6 +547,12 @@ func (ctx *GameContext) PushCrossing(eventType event.EventType, payload any) {
 	ctx.World.PushCrossing(eventType, payload)
 }
 
+// PushCursorMove requests a cursor placement from a producer outside the world
+// lock, advancing the D-18 prediction with it; see World.PushCursorMove
+func (ctx *GameContext) PushCursorMove(e core.Entity, x, y int) {
+	ctx.World.PushCursorMove(e, x, y)
+}
+
 // PushEventFull emits with explicit origin and domain tags, for replay and
 // transport, which restore both from a record rather than from the ambient tags
 func (ctx *GameContext) PushEventFull(eventType event.EventType, payload any, origin event.Origin, domain core.Domain) {

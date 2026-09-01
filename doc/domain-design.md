@@ -1,7 +1,7 @@
 # Multi-instance domain model — vi-fighter
 
-Rules D-1..D-17 describe how one world is split between state every instance
-holds and state that belongs to one participant. All seventeen are implemented and
+Rules D-1..D-18 describe how one world is split between state every instance
+holds and state that belongs to one participant. All eighteen are implemented and
 verified; §8 maps each to the test that pins it, and §9 records what the model does
 *not* do.
 
@@ -357,6 +357,60 @@ so nothing looks wrong for a long time.
 `nav.recomputes` and `nav.roi_cells` are compared for exactly this reason. They
 count recomputes, so they are the direct statement that two instances' throttles
 agree, and they were the signal that named this defect.
+
+**D-18 Predicted local state.** A value this participant's own input determines is
+applied locally at once. Only player-domain producers and the view read the
+prediction; it emits no event and enters no snapshot record outside `view`. An
+authoritative value the prediction did not produce replaces it — the prediction is
+discarded, never merged.
+
+The instance is the local cursor's cell, and the reason is D-3. A cursor placement
+crosses as `EventCursorMoveRequest`, so in a live session `NetworkSystem.Cross`
+takes ownership of it and the shared store does not move until its apply tick a
+playout lead later. Every producer of the *next* placement resolves from that
+store, so a session collapsed everything a player issued between two ticks onto one
+stale cell: measured, four of five rapid motions were lost, and five of six correct
+keystrokes were scored as typing errors because they resolved against a glyph the
+first keystroke had already consumed. Shortening the lead does not help — leads of
+3, 2 and 1 lose identically — because the defect is the stale read, not the delay.
+
+The prediction is a bounded queue in `PlayerResource`, oldest first: the cells this
+instance has requested and not yet seen announced. `World.PushCursorMove` is its
+only producer — it advances the prediction and pushes the crossing in one statement,
+so a local placement cannot leave without the answer to it — and there are three
+call sites: `mode.OpJump`, `TypingSystem.moveCursorRight` and the nugget jump, the
+last two being the D-3 table's two cursor-move rows. `CursorSystem.move` reconciles
+through `World.ReconcileLocalCursor`: the applied cell matching the oldest
+outstanding prediction pops it, and anything else — a level setup, a wall push-out,
+a reset — clears the queue and snaps. A cursor `SimulatesLocally` rejects is never
+predicted (D-2); rebinding or retiring the local cursor drops the queue with it; and
+a queue that fills is a queue nothing is reconciling, so it is dropped rather than
+carried.
+
+`World.LocalCursor()` is the seam, and it was consolidated to one accessor for
+exactly this: every input, camera, splash and render site behind it answers with the
+prediction unchanged. Three kinds of site did need work. Four copies of the same
+read that the consolidation had missed — dust spawn, dust attraction and the motion
+marker — now go through it. `World.CursorCell` is the per-cursor form, for producers
+scoped to a cursor entity rather than to "the local one", and the shield, ember and
+ping rasterizers read it so the ring stays centred on the cursor glyph instead of
+trailing it by a playout lead. And `PingAbsoluteBoundsOf` follows it, because every
+motion measures its step from those bounds: bounds a lead behind the cursor
+accelerate a run of keypresses away from the player, which is how the seam announces
+itself if it is left half-installed.
+
+Nothing shared reads it. `TestSystemDomainProfiles` fails a shared-profile system
+that calls any of the accessors above (`predictedLocalReads`), which is the same
+construction that makes D-13's owner-authored stores mechanical. The shared digest
+therefore cannot move: `TestTwoLiveParticipantsStayInLockstep*` is untouched by the
+rule and is the proof it stayed inside the player domain.
+
+The prediction is private state and no record carries it, so a *reproduction*
+derives it from the artifact its producer emitted: `World.PushRecord` predicts a
+player-stamped `EventCursorMoveRequest` naming the local cursor, exactly as
+`PushCursorMove` did in the run. Without that, a replay would resolve every
+player-domain effect keyed to the local cursor against a cell the run never showed
+— the dust conversion is the one that finds it first.
 
 ## 3. Spatial partition
 
@@ -770,6 +824,9 @@ fails the build when the code stops matching the declaration.
 | `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` | `internal/app` | D-14/D-11: a participant on a different terminal holds the boot cursor on the session's cell, not its own |
 | `TestSessionRunNeverCropsItsMap` | `internal/app` | D-14: a run that opened a session keeps its bounds through a resize, so the anchor it offers cannot move |
 | `TestLocalViewChangesLeaveTheFlowFieldPhaseAlone` | `internal/app` | D-17: neither a resize that moves no cursor nor a local rebind announces one, with the cropping resize as the negative control |
+| `TestOneKeypressMovesTheLocalCursorWithoutATick`, `TestFiveKeypressesBetweenTicksReachFiveCells`, `TestFastTypingOverAGlyphRunScoresNoErrors` | `internal/app` | D-18: the same probe solo and on the producing instance of a live session must agree — one press before any tick, five cells from five presses, six correct keystrokes and no typing error — while the crossing still applies at its barrier tick on both instances |
+| `TestPredictedLocalCursorReconcilesAndSnaps` | `internal/app` | D-18: an authoritative placement the prediction did not produce clears the queue instead of merging with it |
+| `TestCrossingHelpersPushWhatTheyDeclare` | `internal/system` | D-3/D-18: the helper the D-3 table trusts by name really pushes the crossing it claims |
 | `TestParticipantsShareTheCorpusFingerprintNotItsCursor` | `internal/app` | §7: the corpus fingerprint is compared and the cursor's position in it is not, over a multi-file corpus the embedded one cannot express |
 | `TestSharedGlyphsAreGoldMembersOnly` | `internal/app` | §4: every shared-domain glyph is a gold composite member |
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |

@@ -27,6 +27,17 @@ var stampingPush = map[string]bool{
 	"PushLocal": true, "PushEventDomain": true, "PushEventFull": true, "PushCrossing": true,
 }
 
+// crossingHelpers are World methods that wrap exactly one D-3 crossing, so their
+// call sites name no event constant. A helper exists where the crossing must not
+// leave alone: World.PushCursorMove carries the D-18 prediction that answers a local
+// cursor placement immediately, and requirement 3 of Phase 1 is that the two leave
+// from one statement. The D-3 table still has to see the push, so both walks resolve
+// the helper to the type and the method it stands for, and
+// TestCrossingHelpersPushWhatTheyDeclare pins each mapping against the helper body.
+var crossingHelpers = map[string]string{
+	"PushCursorMove": "EventCursorMoveRequest",
+}
+
 // crossingPushes is the D-3 table as code: every owner-resolved push of a
 // replicated event, keyed "system:EventName", with the artifact that crosses.
 // Adding a player-domain push of a shared or bus event without an entry here fails
@@ -150,6 +161,55 @@ func TestCrossingPushesAreLive(t *testing.T) {
 	}
 }
 
+// TestCrossingHelpersPushWhatTheyDeclare pins each crossing helper against its body.
+// Two D-3 tests read a call site that names no event, so the name they trust has to
+// be checked against the World method it stands for: a helper that stopped stamping,
+// or started wrapping a different type, would otherwise take its callers out of the
+// D-3 table without a single test noticing.
+func TestCrossingHelpersPushWhatTheyDeclare(t *testing.T) {
+	const path = "../engine/world.go"
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+
+	found := make(map[string]string, len(crossingHelpers))
+	for _, decl := range f.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Body == nil {
+			continue
+		}
+		if _, wrapped := crossingHelpers[fn.Name.Name]; !wrapped {
+			continue
+		}
+		ast.Inspect(fn.Body, func(node ast.Node) bool {
+			call, ok := node.(*ast.CallExpr)
+			if !ok || len(call.Args) == 0 {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok || sel.Sel.Name != "PushCrossing" {
+				return true
+			}
+			if ev := eventConstName(call.Args[0]); ev != "" {
+				found[fn.Name.Name] = ev
+			}
+			return true
+		})
+	}
+
+	for name, want := range crossingHelpers {
+		switch got := found[name]; got {
+		case want:
+		case "":
+			t.Errorf("crossingHelpers[%q]: %s declares no World.%s pushing a crossing", name, path, name)
+		default:
+			t.Errorf("crossingHelpers[%q] wraps %s, but World.%s crosses %s", name, want, name, got)
+		}
+	}
+}
+
 // parseSystemPushes walks every non-test file and records the event constants it
 // pushes by name. A push whose type is a variable cannot be resolved here and is
 // left to the runtime tap in internal/app.
@@ -174,20 +234,30 @@ func parseSystemPushes(t *testing.T, dir string) []systemPushes {
 		}
 
 		p := systemPushes{name: name, file: n, domain: domain, events: map[string]map[string]bool{}}
+		record := func(ev, method string) {
+			if p.events[ev] == nil {
+				p.events[ev] = map[string]bool{}
+			}
+			p.events[ev][method] = true
+		}
 		ast.Inspect(f, func(node ast.Node) bool {
 			call, ok := node.(*ast.CallExpr)
 			if !ok || len(call.Args) == 0 {
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !pushMethods[sel.Sel.Name] {
+			if !ok {
+				return true
+			}
+			if ev, wrapped := crossingHelpers[sel.Sel.Name]; wrapped {
+				record(ev, "PushCrossing")
+				return true
+			}
+			if !pushMethods[sel.Sel.Name] {
 				return true
 			}
 			if ev := eventConstName(call.Args[0]); ev != "" {
-				if p.events[ev] == nil {
-					p.events[ev] = map[string]bool{}
-				}
-				p.events[ev][sel.Sel.Name] = true
+				record(ev, sel.Sel.Name)
 			}
 			return true
 		})
@@ -271,7 +341,14 @@ func collectStampingEvidence(t *testing.T, dir string, pushed, stamped map[strin
 				return true
 			}
 			sel, ok := call.Fun.(*ast.SelectorExpr)
-			if !ok || !pushMethods[sel.Sel.Name] {
+			if !ok {
+				return true
+			}
+			if ev, wrapped := crossingHelpers[sel.Sel.Name]; wrapped {
+				pushed[ev], stamped[ev] = true, true
+				return true
+			}
+			if !pushMethods[sel.Sel.Name] {
 				return true
 			}
 			ev := eventConstName(call.Args[0])

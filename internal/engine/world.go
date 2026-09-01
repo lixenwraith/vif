@@ -445,9 +445,26 @@ func (w *World) PushRecord(eventType event.EventType, payload any, origin event.
 	if w.Resources.Event.Queue == nil {
 		return
 	}
+	w.predictRecordedCursorMove(eventType, payload, domain)
 	w.Resources.Event.Queue.PushReady(event.GameEvent{
 		Type: eventType, Payload: payload, Origin: origin, Domain: domain,
 	})
+}
+
+// predictRecordedCursorMove rebuilds the D-18 prediction the record's producer left
+// behind. The prediction is private state that enters no record, so a reproduction
+// has to derive it from the artifact the producer emitted — every player-domain
+// effect and view keyed to the local cursor reads it, and a replay pushing the
+// crossing without it would resolve them against a cell the run never showed.
+// Player-stamped only: a shared system re-deriving its own copy of the same type
+// predicted nothing (World.PushCursorMove is the only producer that does).
+func (w *World) predictRecordedCursorMove(eventType event.EventType, payload any, domain core.Domain) {
+	if eventType != event.EventCursorMoveRequest || domain != core.DomainPlayer {
+		return
+	}
+	if p, ok := payload.(*event.CursorMoveRequestPayload); ok {
+		w.predictCursorMove(p.Entity, p.X, p.Y)
+	}
 }
 
 // CreatedCount returns total entities created this session across both domains
@@ -513,9 +530,13 @@ func (w *World) GetPingAbsoluteBounds() PingAbsoluteBounds {
 	return w.PingAbsoluteBoundsOf(w.Resources.Player.Entity)
 }
 
-// PingAbsoluteBoundsOf derives absolute bounds for one cursor from its position and stored radius
+// PingAbsoluteBoundsOf derives absolute bounds for one cursor from its position and
+// stored radius. Keyed to the cell the cursor is on, which for this instance's own
+// is the D-18 prediction: every consumer is view or input, and a motion whose step
+// is measured from the bounds would accelerate away from the player's own cursor if
+// the two disagreed by a playout lead.
 func (w *World) PingAbsoluteBoundsOf(e core.Entity) PingAbsoluteBounds {
-	pos, ok := w.Positions.GetPosition(e)
+	pos, ok := w.CursorCell(e)
 	if !ok {
 		return PingAbsoluteBounds{}
 	}
@@ -606,15 +627,71 @@ func (w *World) ResolveOwnedCursor(e core.Entity) core.Entity {
 // LocalCursor returns the cell this instance's own cursor occupies.
 //
 // One accessor rather than the same three-line read at every input, view and
-// player-domain producer. It is also the seam a locally predicted position
-// installs itself behind: the authoritative cell is a D-3 crossing and reaches the
-// store a playout lead later, so an input path that resolves the next motion from
-// the store resolves it from a cell the player has already left. Every producer
-// that must see the player's own latest cell reads it here; a shared system must
-// not (D-1).
+// player-domain producer. It is also the seam the locally predicted position
+// installs itself behind (D-18): the authoritative cell is a D-3 crossing and
+// reaches the store a playout lead later, so an input path that resolved the next
+// motion from the store resolved it from a cell the player had already left. Every
+// producer that must see the player's own latest cell reads it here; a shared
+// system must not (D-1, D-18), which TestSystemDomainProfiles enforces.
 // Caller MUST hold updateMutex
 func (w *World) LocalCursor() (component.PositionComponent, bool) {
-	return w.Positions.GetPosition(w.Resources.Player.Entity)
+	return w.CursorCell(w.Resources.Player.Entity)
+}
+
+// CursorCell returns the cell a producer must resolve one cursor's next placement
+// from: the D-18 prediction for the cursor this instance drives, the store for any
+// other. A remote cursor is never predicted — its cells arrive as transported
+// values and this instance authors none of them (D-2).
+// Caller MUST hold updateMutex
+func (w *World) CursorCell(e core.Entity) (component.PositionComponent, bool) {
+	if w.Resources.Player.IsLocal(e) {
+		if pos, ok := w.Resources.Player.PredictedCell(); ok {
+			return pos, true
+		}
+	}
+	return w.Positions.GetPosition(e)
+}
+
+// PushCursorMove requests a placement for a cursor this instance drives and
+// advances the D-18 prediction in the same statement, so no producer of a local
+// cursor move can emit the crossing without the prediction that answers it locally.
+// The placement itself is unchanged: the artifact is the same D-3 crossing, deferred
+// by the same playout lead, and the store still moves only when CursorSystem
+// applies it.
+// Caller MUST hold updateMutex
+func (w *World) PushCursorMove(e core.Entity, x, y int) {
+	w.predictCursorMove(e, x, y)
+	w.PushCrossing(event.EventCursorMoveRequest, &event.CursorMoveRequestPayload{Entity: e, X: x, Y: y})
+}
+
+// predictCursorMove records the cell CursorSystem.move will announce for this
+// request. It clamps exactly as that handler does: a prediction of the requested
+// cell rather than the applied one would never match its own announcement, and
+// every request would snap.
+func (w *World) predictCursorMove(e core.Entity, x, y int) {
+	if !w.Resources.Player.IsLocal(e) || !w.SimulatesLocally(e) {
+		return
+	}
+	if _, ok := w.Positions.GetPosition(e); !ok {
+		return // move announces nothing for a cursor with no cell, so nothing reconciles
+	}
+	config := w.Resources.Config
+	w.Resources.Player.Predict(component.PositionComponent{
+		X: max(0, min(x, config.MapWidth-1)),
+		Y: max(0, min(y, config.MapHeight-1)),
+	})
+}
+
+// ReconcileLocalCursor settles an announced placement against the D-18 prediction
+// queue. CursorSystem calls it for every cursor it moves; only the local one holds
+// predictions, and the caller learns nothing about them — the prediction is read by
+// player-domain producers and the view alone.
+// Caller MUST hold updateMutex
+func (w *World) ReconcileLocalCursor(e core.Entity, x, y int) {
+	if !w.Resources.Player.IsLocal(e) {
+		return
+	}
+	w.Resources.Player.Reconcile(component.PositionComponent{X: x, Y: y})
 }
 
 // CursorSlot returns the roster slot a cursor entity occupies

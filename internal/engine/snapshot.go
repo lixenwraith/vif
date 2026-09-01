@@ -31,11 +31,18 @@ func (ctx *GameContext) SnapshotContext(emit func(sub string, args ...any)) {
 
 	// Roster size is shared; which slot this instance drives, and where that cursor
 	// stands, is this instance's binding and travels with the view record.
+	//
+	// The cell reported is the one this instance is looking at and typing against,
+	// so it is the D-18 prediction while this participant's own placements are
+	// outstanding, with the depth of that queue beside it. This is the only record
+	// the prediction appears in: it is owner-authored input the shared world has not
+	// agreed yet, and a consumer comparing two instances drops the whole record.
 	player := ctx.World.Resources.Player
 	view = append(view,
 		"entity", uint64(player.Entity),
-		"slot", player.LocalSlot())
-	if pos, ok := ctx.World.Positions.GetPosition(player.Entity); ok {
+		"slot", player.LocalSlot(),
+		"predicted", player.PredictedDepth())
+	if pos, ok := ctx.World.LocalCursor(); ok {
 		view = append(view, "x", pos.X, "y", pos.Y)
 	}
 	// Ping bounds are cursor view state, so they travel with the view record

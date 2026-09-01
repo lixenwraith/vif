@@ -226,7 +226,9 @@ func (r *ShieldRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 			return true
 		}
 
-		shieldPos, ok := r.gameCtx.World.Positions.GetPosition(shieldEntity)
+		// The ellipse is centred on its owner, so it reads that owner's cell: the
+		// D-18 prediction for this instance's own cursor, the store for anything else.
+		shieldPos, ok := r.gameCtx.World.CursorCell(shieldEntity)
 		if !ok {
 			return true
 		}

@@ -2,10 +2,11 @@
 
 **Status: this is the plan of record for multiplayer.** It supersedes the staged
 recommendation in [desync.md](desync.md), which is retained as the diagnosis of the
-2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-17
+2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-18
 in [domain-design.md](domain-design.md) remain authoritative for the *existing*
 code; §5 of this document states which of them the target architecture keeps,
-changes, and adds to.
+changes, and adds to. D-18 is the first of them this plan added, and it landed with
+Phase 1.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -109,11 +110,17 @@ two-participant harness (`meshSession`).
 as a crossing; in a live session `NetworkSystem.Cross` takes ownership and the
 event is *never published locally* until its apply tick.
 
-| Probe | Solo | Session |
+| Probe | Solo | Session, before Phase 1 |
 |---|---|---|
 | One `l` press reaches the producing instance's own store | immediately, without a tick | **after 4 ticks (200 ms)** |
 | Five `l` presses issued between two ticks | 5 of 5 cells | **1 of 5 cells** |
 | Six correct keystrokes typed back to back over a glyph run | 6 cells, **0 typing errors** | 1 cell, **5 typing errors** |
+
+Phase 1 has since landed and every session figure above now equals its solo
+neighbour; the three probes are assertions in `internal/app/local_input_test.go`.
+The store column is unchanged and deliberately so: the crossing still applies at
+its barrier tick on every instance, and what moved is the cell the producing
+instance reads.
 
 The third row is the one that matters most: fast typing is not merely dropped, it
 is *scored against the player*, because five of six correct keystrokes resolve
@@ -214,11 +221,12 @@ tick.
 re-derivation and becomes the ordinary case for one class of value: the owner
 applies immediately, the host arbitrates, everyone else receives.
 
-**D-18 Predicted local state (new).** A value the local participant's own input
-determines is applied locally at once. Only player-domain producers and the view
-read the prediction; it emits no event and enters no snapshot record outside
-`view`. An authoritative value the prediction did not produce replaces it — the
-prediction is discarded, never merged.
+**D-18 Predicted local state (new, landed with Phase 1).** A value the local
+participant's own input determines is applied locally at once. Only player-domain
+producers and the view read the prediction; it emits no event and enters no
+snapshot record outside `view`. An authoritative value the prediction did not
+produce replaces it — the prediction is discarded, never merged. The rule as built,
+with the accessors and the checks that pin it, is in `domain-design.md`.
 
 **D-19 Restorable shared state (new).** Every value that can change a future shared
 outcome is either a component in a shared entity's store, or declared by its owning
@@ -276,6 +284,22 @@ keys with no perceptible lag and no swallowed motion. Type a corpus line at full
 speed: every character lands on its own cell and `typing.errors` stays at zero.
 The remote cursor still moves in its six-tick sync steps — unchanged, and the
 visible proof that only local state was predicted.
+
+**Landed.** D-18 is in `domain-design.md` with the rule as built. The prediction is
+a bounded queue in `Resources.Player`; `World.PushCursorMove` is its only producer
+and pushes the crossing in the same statement, which is why the D-3 table resolves
+that helper by name (`crossingHelpers`, pinned by
+`TestCrossingHelpersPushWhatTheyDeclare`). `World.LocalCursor` and its per-cursor
+form `World.CursorCell` are the read seam; `PingAbsoluteBoundsOf` follows them,
+because every motion measures its step from those bounds and bounds a lead behind
+the cursor accelerate a run of keypresses away from the player. A shared-profile
+system reading any of them fails `TestSystemDomainProfiles`. Two things the
+requirements did not anticipate: the shield, ember and ping rasterizers read their
+owner's cell, so they were detaching from the cursor they are drawn around; and the
+prediction is private state no record carries, so `World.PushRecord` rebuilds it
+from the replayed crossing — without that, a replay resolves every player-domain
+effect keyed to the local cursor against a cell the run never showed.
+`TestTwoLiveParticipantsStayInLockstep*` is untouched and green.
 
 ---
 

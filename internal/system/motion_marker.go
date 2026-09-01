@@ -103,8 +103,9 @@ func (s *MotionMarkerSystem) HandleEvent(ev event.GameEvent) {
 			s.clearAllMarkers()
 			return
 		}
-		cursorEntity := s.world.Resources.Player.Entity
-		cursorPos, ok := s.world.Positions.GetPosition(cursorEntity)
+		// Markers show where a motion would land, and a motion resolves from the
+		// D-18 predicted cell, so they are generated around the same one
+		cursorPos, ok := s.world.LocalCursor()
 		if !ok {
 			return
 		}

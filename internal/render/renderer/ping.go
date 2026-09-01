@@ -95,7 +95,9 @@ func (r *PingRenderer) computeExclusionMask(world *engine.World, ctx render.Rend
 			return true
 		}
 
-		shieldPos, ok := world.Positions.GetPosition(shieldEntity)
+		// Rasterized where the shield is drawn, which for this instance's own cursor
+		// is the D-18 predicted cell (see ShieldRenderer).
+		shieldPos, ok := world.CursorCell(shieldEntity)
 		if !ok {
 			return true
 		}

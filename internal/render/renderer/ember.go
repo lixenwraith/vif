@@ -91,7 +91,10 @@ func (r *EmberRenderer) Render(ctx render.RenderContext, buf *render.RenderBuffe
 			return true
 		}
 
-		pos, ok := r.gameCtx.World.Positions.GetPosition(entity)
+		// Drawn around the cursor it belongs to, so it reads the cell that cursor
+		// is on — the D-18 prediction for this instance's own, which is where the
+		// cursor glyph is; the store would trail it by a playout lead.
+		pos, ok := r.gameCtx.World.CursorCell(entity)
 		if !ok {
 			return true
 		}

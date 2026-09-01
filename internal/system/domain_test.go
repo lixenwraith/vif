@@ -36,6 +36,24 @@ var ownerAuthoredStores = map[string]bool{
 // the entity, and the initial values are constants the shared creation order carries.
 var ownerAuthoredCreators = map[string]bool{"cursor": true}
 
+// predictedLocalReads are the accessors — on World and on its player roster — that
+// answer with the D-18 predicted local cursor cell: the placement this instance's
+// own input has already applied, before the crossing that shares it has reached
+// anyone. Only player-domain producers and the view may read them. A shared
+// derivation keyed to one would be a function of a single participant's un-agreed
+// input, which is what D-1 forbids, and it would move the shared digest by exactly
+// one playout lead. World.ReconcileLocalCursor is deliberately absent: it hands the
+// authoritative cell to the prediction and learns nothing back, which is why the
+// shared CursorSystem may call it.
+var predictedLocalReads = map[string]string{
+	"LocalCursor":           "the local cursor's predicted cell",
+	"CursorCell":            "a cursor's cell, predicted for the local one",
+	"GetPingAbsoluteBounds": "bounds derived from the local cursor's predicted cell",
+	"PingAbsoluteBoundsOf":  "bounds derived from a cursor's cell, predicted for the local one",
+	"PredictedCell":         "the prediction queue's newest cell",
+	"PredictedDepth":        "the depth of the prediction queue",
+}
+
 // storeWriters are the Store methods that can mutate a component. GetPtr hands
 // out a mutable pointer, so it counts as a write unless allowedDomainAccess
 // records that the call site only reads.
@@ -53,6 +71,7 @@ type systemEvidence struct {
 	draws   map[string]bool // shared, player
 	writes  map[string]bool // component store field names
 	reads   map[string]bool // component store field names
+	calls   map[string]bool // method names the file calls, for the D-18 read ban
 	stamps  bool            // calls WithDomain
 }
 
@@ -101,6 +120,13 @@ func TestSystemDomainProfiles(t *testing.T) {
 				}
 				if storeDomains[store] == "player" && !exempt(e.name, store) {
 					t.Errorf("%s: declared shared but reads the player-only %s store (D-1)", e.file, store)
+				}
+			}
+			// D-18: the prediction is this participant's own input, applied before the
+			// crossing that shares it. Nothing re-derived may resolve against it.
+			for _, call := range sortedStores(e.calls) {
+				if what := predictedLocalReads[call]; what != "" {
+					t.Errorf("%s: declared shared but reads %s through %s (D-18)", e.file, what, call)
 				}
 			}
 
@@ -249,6 +275,7 @@ func parseSystemEvidence(t *testing.T, dir string) []systemEvidence {
 			name: name, domain: domain, file: n,
 			creates: map[string]bool{}, draws: map[string]bool{},
 			writes: map[string]bool{}, reads: map[string]bool{},
+			calls: map[string]bool{},
 		}
 		collectEvidence(f, &e, collectStoreAliases(f))
 		systems = append(systems, e)
@@ -489,6 +516,8 @@ func collectEvidence(f *ast.File, e *systemEvidence, aliases map[string]string) 
 		if !ok {
 			return true
 		}
+
+		e.calls[sel.Sel.Name] = true
 
 		switch sel.Sel.Name {
 		case "CreateEntity":
