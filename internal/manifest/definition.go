@@ -146,7 +146,7 @@ var Systems = []SystemDef{
 		Optional: []string{"cleaner", "energy", "heat"}}, // personal: each participant owns its spawn, collection and reward
 	{Name: "decay", Constructor: "NewDecaySystem", Domain: "player", Optional: []string{"glyph", "death"}}, // player entities that idle without glyph and death events
 	{Name: "blossom", Constructor: "NewBlossomSystem", Domain: "player", Optional: []string{"death"}},      // player entities requested on death and idle without it
-	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared",
+	{Name: "gold", Constructor: "NewGoldSystem", Domain: "shared", Snapshot: "state", // sequence liveness, its header, and both deadlines live outside any store
 		Requires: []string{"composite"}, Optional: []string{"nugget", "energy", "splash"}}, // contested: the composite sequence is shared, the reward owner-authored
 
 	// --- Spawning / Materialize ---

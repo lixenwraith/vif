@@ -308,6 +308,37 @@ func (cs *ClockScheduler) RegisterEventHandler(handler event.Handler) {
 // set before Start, or any time on a driven App, never on a running scheduler.
 func (cs *ClockScheduler) SetDispatchTap(fn func(event.GameEvent)) { cs.tap = fn }
 
+// ExportFSM reads the FSM runtime's position for a D-19 capture: which state each
+// region stands in, how long it has stood there, the variables guards read, and
+// the delayed actions still pending. The state graph itself is configuration and
+// travels with the build.
+//
+// Caller MUST hold updateMutex: the machine is tick-owned.
+func (cs *ClockScheduler) ExportFSM() fsm.MachineState { return cs.fsm.Export() }
+
+// ImportFSM places the FSM runtime where a capture found it. Region entry actions
+// are deliberately not re-run: the capture describes a machine that has already
+// entered these states, and re-entering would emit everything that entry produced
+// a second time.
+//
+// Caller MUST hold updateMutex.
+func (cs *ClockScheduler) ImportFSM(state fsm.MachineState) error {
+	if err := cs.fsm.Import(cs.world, state); err != nil {
+		return err
+	}
+	// Region telemetry is derived from the position that just changed, and it is
+	// part of the compared shared surface. Republish it here rather than waiting
+	// for the next tick, so an installed world reports where it stands.
+	cs.publishRegionStats()
+	stateName, stateID, timeInState := cs.fsm.GetActiveRegionTelemetry()
+	cs.statFSMName.StoreIfChanged(stateName)
+	cs.statFSMElapsed.Store(int64(timeInState))
+	cs.statFSMMaxDur.Store(int64(cs.fsm.StateDurations[stateID]))
+	cs.statFSMIndex.Store(int64(cs.fsm.StateIndices[stateID]))
+	cs.statFSMTotal.Store(int64(cs.fsm.StateCount))
+	return nil
+}
+
 // LoadFSMFromFS initializes HFSM from a filesystem (embed.FS or os.DirFS)
 func (cs *ClockScheduler) LoadFSMFromFS(fsys fs.FS, entry string, registerComponents func(*fsm.Machine[*World])) error {
 	registerComponents(cs.fsm)

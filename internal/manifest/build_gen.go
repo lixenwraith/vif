@@ -261,7 +261,7 @@ var systemSnapshots = map[string]engine.SnapshotProfile{
 	"nugget":         engine.SnapshotNone,
 	"decay":          engine.SnapshotNone,
 	"blossom":        engine.SnapshotNone,
-	"gold":           engine.SnapshotNone,
+	"gold":           engine.SnapshotState,
 	"materialize":    engine.SnapshotNone,
 	"cleaner":        engine.SnapshotNone,
 	"fuse":           engine.SnapshotNone,

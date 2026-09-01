@@ -389,17 +389,24 @@ func (s *GeneticSystem) updateTelemetry() {
 		return
 	}
 	s.telemetryTicks = 0
+	s.publishTypeFit()
+}
 
-	buf := s.typeFitBuf[:0]
-	for i, v := range s.typeFitEMA {
-		if i > 0 {
-			buf = append(buf, '/')
-		}
-		buf = strconv.AppendInt(buf, int64(v*100), 10)
-	}
-	s.typeFitBuf = buf
-	s.buffers.Observe(2, len(s.typeFitBuf))
-	s.statTypeFit.Store(string(buf))
+// geneticSnapshot is this system's D-19 record: the populations, plus the two
+// pieces of per-system scratch that decide a published value.
+//
+// The telemetry throttle is here for the reason §4.1 predicted when it listed
+// "per-system scratch: throttles" as state with no inventory. eye.ga.typefit is
+// part of the compared shared surface, and it is published once every
+// StatSnapshotTicks — so two instances whose throttles stand at different counts
+// publish on different ticks and disagree until both have cycled. The running
+// per-type average travels for the same reason: it is what the published value is
+// computed from.
+type geneticSnapshot struct {
+	Populations    []registry.SpeciesPopulation    `json:"populations"`
+	TelemetryTicks int                             `json:"telemetry_ticks"`
+	TypeFitEMA     [parameter.EyeTypeCount]float64 `json:"type_fit_ema"`
+	EyeTracked     int64                           `json:"eye_tracked"`
 }
 
 // SaveShared carries the genetic populations (D-19).
@@ -413,10 +420,16 @@ func (s *GeneticSystem) SaveShared() ([]byte, error) {
 	s.mu.Lock()
 	reg := s.registry
 	s.mu.Unlock()
-	if reg == nil {
-		return json.Marshal([]registry.SpeciesPopulation{})
+
+	snap := geneticSnapshot{
+		TelemetryTicks: s.telemetryTicks,
+		TypeFitEMA:     s.typeFitEMA,
+		EyeTracked:     s.eyeTracked,
 	}
-	return json.Marshal(reg.Export())
+	if reg != nil {
+		snap.Populations = reg.Export()
+	}
+	return json.Marshal(snap)
 }
 
 // LoadShared installs exported populations. A species this build does not
@@ -424,18 +437,41 @@ func (s *GeneticSystem) SaveShared() ([]byte, error) {
 // install leaves this instance evolving from its own archive while believing it
 // adopted the capture's.
 func (s *GeneticSystem) LoadShared(data []byte) error {
-	var pops []registry.SpeciesPopulation
-	if err := json.Unmarshal(data, &pops); err != nil {
+	var snap geneticSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("genetic: %w", err)
 	}
 	s.mu.Lock()
 	reg := s.registry
 	s.mu.Unlock()
 	if reg == nil {
-		if len(pops) == 0 {
+		if len(snap.Populations) == 0 {
 			return nil
 		}
 		return errors.New("genetic: registry is not initialized")
 	}
-	return reg.Import(pops)
+	if err := reg.Import(snap.Populations); err != nil {
+		return err
+	}
+	s.telemetryTicks = snap.TelemetryTicks
+	s.typeFitEMA = snap.TypeFitEMA
+	s.eyeTracked = snap.EyeTracked
+	s.publishTypeFit()
+	return nil
+}
+
+// publishTypeFit writes the per-type average into its cell without touching the
+// throttle. Called on install so the compared surface reports the populations
+// just adopted rather than the ones this instance had.
+func (s *GeneticSystem) publishTypeFit() {
+	buf := s.typeFitBuf[:0]
+	for i, v := range s.typeFitEMA {
+		if i > 0 {
+			buf = append(buf, '/')
+		}
+		buf = strconv.AppendInt(buf, int64(v*100), 10)
+	}
+	s.typeFitBuf = buf
+	s.buffers.Observe(2, len(s.typeFitBuf))
+	s.statTypeFit.Store(string(buf))
 }
