@@ -148,23 +148,45 @@ selectors such as `RouletteSelector` rely on this.
 
 ### Determinism
 
-Identical `Seed` values yield identical archives **provided `TickBudget` does not
-bind**. The budget caps proposal generation by wall clock, so under load a refill
-may produce fewer offspring and consume less randomness. For reproducible runs
-set `TickBudget` to something unreachable (`time.Hour`); for real-time hosts leave
-it at the default and accept run-to-run variation.
+Identical `Seed` values and operation sequences yield identical proposal streams.
+`RefillDeterministic` is the default: it fills the bounded proposal queue by work
+count and never consults a clock. `Seed == 0` is a valid, reproducible seed; the
+package never chooses a wall-clock seed on a caller's behalf.
 
-`Seed == 0` selects a random seed.
+`RefillTimeBudget` is an explicit throughput/latency tradeoff. It stops a refill
+after `TickBudget`, so machine load may change how many proposals were derived
+from the current archive and therefore the later stream. Use it only when that
+variation is acceptable.
 
-### Persistence hooks
+The determinism contract assumes the initializer and operators derive their
+semantic output only from their arguments and the supplied `*rand.Rand`. Built-in
+operators satisfy that contract; caller-owned hidden state is outside an engine
+checkpoint.
+
+### Archive persistence and exact continuation
 
 ```go
 p := e.Snapshot()                    // Deep copy of the archive + stats
 e.Inject(p.Members, p.Generation)    // Replaces the archive; engine takes ownership
 ```
 
-`Inject` discards queued proposals (they were derived from the old archive) and
-refills if running.
+`Snapshot`/`Inject` are deliberately archive-only persistence hooks. `Inject`
+discards queued proposals and starts a new stream position from the receiving
+engine; use them when retaining learned candidates matters but exact continuation
+does not.
+
+```go
+state, err := e.Checkpoint()         // Complete, caller-owned continuation point
+err = other.Restore(state)           // Exact next proposal and EvalID
+```
+
+`StreamingState` also carries the normalized configuration, PCG position, FIFO
+proposal ring, pending evaluations, partial-generation outcome count, next ID,
+eviction counter and running state. `Restore` validates the complete value before
+changing the engine. The destination must use the same normalized configuration
+and equivalent initializer/operators. The state is plain generic data and
+standard-library `encoding/json` can encode it when the solution type can be
+encoded.
 
 ---
 
@@ -251,8 +273,9 @@ cfg.Seed = 0xC0FFEE
 | `PerturbationStrength` | 0.15 | Mutation sigma as a fraction of element range, clamped to [0,1] |
 | `MaxIterations` | 1000 | Batch engine generation cap |
 | `Parallelism` | 4 | Batch engine evaluator concurrency |
-| `Seed` | 0 | 0 selects a random seed |
-| `TickBudget` | 500µs | Wall-clock cap on one proposal refill |
+| `Seed` | 0 | PCG seed; every value including 0 is reproducible |
+| `RefillMode` | `RefillDeterministic` | Full deterministic refill; opt into `RefillTimeBudget` only when scheduling-dependent streams are acceptable |
+| `TickBudget` | 500µs | Wall-clock cap for `RefillTimeBudget`; ignored by deterministic refills |
 | `ProposalCapacity` | 32 | Depth of the unevaluated offspring ring; rounded up to a power of two |
 | `PendingCapacity` | 512 | In-flight evaluation slots; rounded up to a power of two. Older entries are evicted on collision |
 | `MinOutcomesPerGen` | 5 | Completed evaluations that advance `Generation` |
@@ -297,6 +320,11 @@ not an error; other I/O failures are returned.
 Hot-path methods (`Sample`, `SampleScout`, `Stats`, `ReportFitness`) resolve the
 species through an `atomic.Pointer` array — no map, no lock. `Register`/`Start`
 take a mutex.
+
+`Export`/`Import` are the registry-level exact-continuation contract. Each
+`SpeciesState` contains the engine checkpoint plus the scout PCG position and
+stratification counter; species name and ID must match exactly. This is distinct
+from `SaveAll`, whose files intentionally retain only learned archives.
 
 ### Sampling
 
@@ -441,6 +469,10 @@ One file per species named after `SpeciesConfig.Name`. Writes go through a temp
 file + `fsync` + `rename`, so a crash mid-save leaves the previous file intact.
 `PopulationDTO.Version` is stamped from `SchemaVersion` on every save.
 
+File persistence is archive persistence, not an in-flight checkpoint: proposal
+queues, pending evaluations, IDs and RNG positions are not written. Use
+`Registry.Export`/`Import` when the next sample must continue exactly.
+
 Supply a `Codec` to change format:
 
 ```go
@@ -527,6 +559,8 @@ whole point of the streaming model.
 - `pending` never exceeds `PendingCapacity`, regardless of host behaviour.
 - With a non-nil `Cloner`, no solution handed to a caller aliases engine memory.
 - `Stats()` never blocks and never observes a torn snapshot.
+- A successful `Restore(Checkpoint())` reproduces the next proposal, ID and every
+  later state transition under the same operation sequence.
 
 ## Gotchas
 
@@ -535,9 +569,10 @@ whole point of the streaming model.
   intentional zeros.
 - `EliteCount` does nothing in the streaming engine.
 - `PendingCapacity` and `ProposalCapacity` round up to powers of two.
-- `Snapshot` and `Best` clone; `Stats` does not touch solutions at all. Prefer
-  `Stats` for telemetry.
+- `Snapshot`, `Checkpoint`, and `Best` clone when a `Cloner` is configured;
+  `Stats` does not touch solutions at all. Prefer `Stats` for telemetry.
+- `RefillTimeBudget` intentionally weakens seeded reproducibility; deterministic
+  refill is the default.
 - The batch `Engine`'s evaluator runs concurrently when `Parallelism > 1`.
 - `RouletteSelector` carries a scratch buffer; do not share one instance across
   engines.
-

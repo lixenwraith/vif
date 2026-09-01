@@ -3,7 +3,6 @@ package registry
 import (
 	"math/rand/v2"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/pkg/genetic"
@@ -17,9 +16,8 @@ type TrackedSpecies struct {
 	Engine     *genetic.StreamingEngine[[]float64, float64]
 	Aggregator fitness.Aggregator
 
-	started atomic.Bool
-
 	probeMu      sync.Mutex
+	probeSource  *rand.PCG
 	probeRng     *rand.Rand
 	probeCounter uint64
 
@@ -36,6 +34,7 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 	if cfg.PerturbationStdDev > 0 {
 		engineCfg.PerturbationStrength = cfg.PerturbationStdDev
 	}
+	probeSource := rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)
 
 	bounds := cfg.Bounds
 	initializer := func(rng *rand.Rand) []float64 {
@@ -52,7 +51,8 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 		Config:     cfg,
 		Aggregator: agg,
 		// Probe stream derives from the engine seed so both replay together
-		probeRng: rand.New(rand.NewPCG(engineCfg.Seed^0xA5A5A5A5, engineCfg.Seed)),
+		probeSource: probeSource,
+		probeRng:    rand.New(probeSource),
 		Engine: genetic.NewStreamingEngine[[]float64, float64](
 			initializer,
 			&genetic.TournamentSelector[[]float64, float64]{TournamentSize: cfg.TournamentSize},
@@ -66,15 +66,13 @@ func NewTrackedSpecies(cfg SpeciesConfig, agg fitness.Aggregator) *TrackedSpecie
 
 func (ts *TrackedSpecies) Start() {
 	ts.Engine.Start()
-	ts.started.Store(true)
 }
 
 func (ts *TrackedSpecies) Stop() {
 	ts.Engine.Stop()
-	ts.started.Store(false)
 }
 
-func (ts *TrackedSpecies) Started() bool { return ts.started.Load() }
+func (ts *TrackedSpecies) Started() bool { return ts.Engine.Running() }
 
 // Sample returns a genotype and evaluation id, falling back to bound midpoints
 // with a zero id when the engine is stopped
@@ -90,7 +88,7 @@ func (ts *TrackedSpecies) Sample() ([]float64, uint64) {
 // across ProbeBins (bin center); remaining genes are uniform within bounds
 func (ts *TrackedSpecies) SampleScout() ([]float64, uint64) {
 	n := ts.Config.GeneCount
-	if n == 0 || len(ts.Config.Bounds) == 0 || !ts.started.Load() {
+	if n == 0 || len(ts.Config.Bounds) == 0 || !ts.Engine.Running() {
 		return nil, 0
 	}
 
@@ -106,9 +104,56 @@ func (ts *TrackedSpecies) SampleScout() ([]float64, uint64) {
 		ts.probeCounter++
 		g[0] = ts.Config.Bounds[0].BinCenter(bin, bins)
 	}
+	id := ts.Engine.BeginEvaluation(g)
 	ts.probeMu.Unlock()
 
-	return g, uint64(ts.Engine.BeginEvaluation(g))
+	return g, uint64(id)
+}
+
+// checkpoint takes the probe lock before the engine lock, the same order
+// SampleScout uses, so a probe and the pending evaluation it creates appear
+// together or not at all.
+func (ts *TrackedSpecies) checkpoint() (SpeciesState, error) {
+	ts.probeMu.Lock()
+	defer ts.probeMu.Unlock()
+
+	engineState, err := ts.Engine.Checkpoint()
+	if err != nil {
+		return SpeciesState{}, err
+	}
+	probeState, err := ts.probeSource.MarshalBinary()
+	if err != nil {
+		return SpeciesState{}, err
+	}
+	return SpeciesState{
+		Engine:       engineState,
+		ProbeRNG:     probeState,
+		ProbeCounter: ts.probeCounter,
+	}, nil
+}
+
+func (ts *TrackedSpecies) validateState(state SpeciesState) (*rand.PCG, error) {
+	if err := ts.Engine.ValidateState(state.Engine); err != nil {
+		return nil, err
+	}
+	source := rand.NewPCG(0, 0)
+	if err := source.UnmarshalBinary(state.ProbeRNG); err != nil {
+		return nil, err
+	}
+	return source, nil
+}
+
+func (ts *TrackedSpecies) restore(state SpeciesState, probeSource *rand.PCG) error {
+	ts.probeMu.Lock()
+	defer ts.probeMu.Unlock()
+
+	if err := ts.Engine.Restore(state.Engine); err != nil {
+		return err
+	}
+	ts.probeSource = probeSource
+	ts.probeRng = rand.New(probeSource)
+	ts.probeCounter = state.ProbeCounter
+	return nil
 }
 
 func (ts *TrackedSpecies) midpoint() []float64 {

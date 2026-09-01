@@ -403,13 +403,29 @@ func (s *GeneticSystem) updateTelemetry() {
 // per-type average travels for the same reason: it is what the published value is
 // computed from.
 type geneticSnapshot struct {
-	Populations    []registry.SpeciesPopulation    `json:"populations"`
+	Registry       []registry.SpeciesState         `json:"registry"`
+	Tracking       []geneticTrackedState           `json:"tracking,omitempty"`
+	PendingDeaths  []event.SpeciesKilledPayload    `json:"pending_deaths,omitempty"`
 	TelemetryTicks int                             `json:"telemetry_ticks"`
 	TypeFitEMA     [parameter.EyeTypeCount]float64 `json:"type_fit_ema"`
 	EyeTracked     int64                           `json:"eye_tracked"`
+	Enabled        bool                            `json:"enabled"`
 }
 
-// SaveShared carries the genetic populations (D-19).
+// geneticTrackedState is the canonical, serializable form of one live fitness
+// evaluation. The map itself is system-private state; the entity and EvalID tie it
+// back to the captured GenotypeComponent and streaming pending table.
+type geneticTrackedState struct {
+	Entity        core.Entity           `json:"entity"`
+	EvalID        uint64                `json:"eval_id"`
+	Species       component.SpeciesType `json:"species"`
+	SubType       uint8                 `json:"sub_type"`
+	TargetGroupID uint8                 `json:"target_group_id"`
+	DealtDamage   float64               `json:"dealt_damage"`
+	MinDistSq     float64               `json:"min_dist_sq"`
+}
+
+// SaveShared carries the complete genetic continuation point (D-19).
 //
 // The second learned resource the hidden-state survey named. The registry lives
 // behind a mutex and per-slot atomics in pkg/genetic, which is why it needed an
@@ -418,16 +434,34 @@ type geneticSnapshot struct {
 // no store involved and no lock reaching here.
 func (s *GeneticSystem) SaveShared() ([]byte, error) {
 	s.mu.Lock()
-	reg := s.registry
-	s.mu.Unlock()
+	defer s.mu.Unlock()
 
 	snap := geneticSnapshot{
 		TelemetryTicks: s.telemetryTicks,
 		TypeFitEMA:     s.typeFitEMA,
 		EyeTracked:     s.eyeTracked,
+		Enabled:        s.enabled,
+		PendingDeaths:  append([]event.SpeciesKilledPayload(nil), s.pendingDeaths...),
 	}
-	if reg != nil {
-		snap.Populations = reg.Export()
+	if s.registry != nil {
+		var err error
+		snap.Registry, err = s.registry.Export()
+		if err != nil {
+			return nil, err
+		}
+	}
+	keys := sortedKeys(make([]core.Entity, 0, len(s.tracking)), s.tracking)
+	for _, entity := range keys {
+		tracked := s.tracking[entity]
+		snap.Tracking = append(snap.Tracking, geneticTrackedState{
+			Entity:        entity,
+			EvalID:        tracked.evalID,
+			Species:       tracked.species,
+			SubType:       tracked.subType,
+			TargetGroupID: tracked.targetGroupID,
+			DealtDamage:   tracked.dealtDamage,
+			MinDistSq:     tracked.minDistSq,
+		})
 	}
 	return json.Marshal(snap)
 }
@@ -441,21 +475,41 @@ func (s *GeneticSystem) LoadShared(data []byte) error {
 	if err := json.Unmarshal(data, &snap); err != nil {
 		return fmt.Errorf("genetic: %w", err)
 	}
+	tracking := make(map[core.Entity]*trackedEntity, len(snap.Tracking))
+	for _, state := range snap.Tracking {
+		if state.Entity == 0 {
+			return errors.New("genetic: tracked state names entity zero")
+		}
+		if _, exists := tracking[state.Entity]; exists {
+			return fmt.Errorf("genetic: tracked entity %d appears more than once", state.Entity)
+		}
+		tracking[state.Entity] = &trackedEntity{
+			evalID:        state.EvalID,
+			species:       state.Species,
+			subType:       state.SubType,
+			targetGroupID: state.TargetGroupID,
+			dealtDamage:   state.DealtDamage,
+			minDistSq:     state.MinDistSq,
+		}
+	}
+
 	s.mu.Lock()
-	reg := s.registry
-	s.mu.Unlock()
-	if reg == nil {
-		if len(snap.Populations) == 0 {
+	defer s.mu.Unlock()
+	if s.registry == nil {
+		if len(snap.Registry) == 0 {
 			return nil
 		}
 		return errors.New("genetic: registry is not initialized")
 	}
-	if err := reg.Import(snap.Populations); err != nil {
+	if err := s.registry.Import(snap.Registry); err != nil {
 		return err
 	}
+	s.tracking = tracking
+	s.pendingDeaths = append(s.pendingDeaths[:0], snap.PendingDeaths...)
 	s.telemetryTicks = snap.TelemetryTicks
 	s.typeFitEMA = snap.TypeFitEMA
 	s.eyeTracked = snap.EyeTracked
+	s.enabled = snap.Enabled
 	s.publishTypeFit()
 	return nil
 }

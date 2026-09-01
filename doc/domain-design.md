@@ -14,10 +14,10 @@ divergence and the option survey behind that decision are in
 
 ## 1. Domains
 
-Two per `World`: **Shared**, identical on every instance and replicated, and
-**Player**, this instance's participant and never replicated. One `World` per
-local participant. The roster slot lives on `CursorComponent`; it is not part of
-the domain tag.
+Two per `World`: **Shared**, authoritative on the host and predicted then
+periodically corrected on guests, and **Player**, this instance's participant and
+never replicated. One `World` per local participant. The roster slot lives on
+`CursorComponent`; it is not part of the domain tag.
 
 `core.Entity` is `[domain:8][id:56]`. `core.DomainNames` indexes the domain for
 seed derivation, telemetry keys and log fields — changing a name re-keys every
@@ -516,9 +516,19 @@ Declared carriers, and why each holds state a store cannot:
 |---|---|
 | `wall` | the maze generator's position — a `math/rand/v2` source, the one simulation stream that is not a `vmath.FastRand` and so is not in `RandResource`'s inventory |
 | `adaptation` | EXP3 route weights, the pre-sampled pool, the consumer head and its fallback rotation, which decide the route a spawned eye takes |
-| `genetic` | per-species GA populations, plus the telemetry throttle and running per-type average that decide when `eye.ga.typefit` publishes |
+| `genetic` | each species' complete streaming checkpoint (PCG position, archive, queued proposals, pending evaluations/IDs and generation phase), registry scout PCG/counter, live fitness accumulators and pending deaths, plus the telemetry throttle/running type average |
 | `navigation` | D-17's recompute phase, `LastTargets`, whether a field has been derived at all, the gateway route-rebuild budget, and the two cells each gateway route graph was computed between; the fields, the passability grid and the route graphs are re-derived *by* `LoadShared`, from those inputs |
 | `gold` | sequence liveness, its header entity, both deadlines and per-slot contribution |
+
+The genetic row is intentionally stronger than archive persistence. A seed can
+reproduce a PCG stream from its beginning, but it cannot say how far the engine
+has advanced; an archive cannot account for offspring already generated from an
+older archive or evaluations already attached to live entities. Snapshot schema 2
+therefore uses `StreamingEngine.Checkpoint`/`Restore`, while the generic
+`Snapshot`/`Inject` pair remains the lighter archive-only persistence contract.
+The root `pkg/genetic` implementation uses `math/rand/v2` and the standard library
+only. Deterministic queue refill is its default; a wall-clock refill budget is an
+explicit opt-in because it cannot promise one seeded output stream.
 
 Beside the declared carriers a capture also holds what belongs to no system:
 every RNG stream's position (`RandResource.SaveStreams`, enumerable because the
@@ -784,51 +794,39 @@ their producer stamped (D-7) and is the sole writer of a remote cursor's
 owner-authored set (D-13). It runs first — `parameter.PriorityNetwork` — but its
 transport work is not in `Update`.
 
-**The barrier.** The barrier belongs to the *run*, not to the link. A session's
-crossings are deferred by a fixed playout lead and apply at an absolute tick, so a
-stretch with no peer attached — a lobby still waiting, every participant gone, or a
-replay reproducing the whole session — defers them by the same lead. Deriving it
-from the live peer count instead applied a re-derived crossing earlier than the run
-had, and a reproduction drifted by exactly the lead. Whether there is anyone to
-*send* to is the separate question, and the port answers it.
+**The receive lead.** The schedule belongs to the *run*, not to whether a link is
+attached at this instant. Every crossing is encoded into an epoch with an absolute
+apply tick. For an ordinary D-3 request, `WireSink.Cross` keeps only the peer copy
+and declines queue ownership, so the producer publishes its original immediately;
+the remote copies wait out the fixed lead. That is the Phase 4 local-first rule,
+not lockstep: on a guest the early result is provisional, and the host's next
+correction wins.
 
-`event.WireSink.Cross` ends production by encoding and
-withholding each local artifact. `Flush` closes the tick's epoch and sends it
-asynchronously, including an empty marker. `Receive` opens the next tick by
-applying local and peer artifacts whose fixed playout deadline has arrived, then
-`settleLocked("wire")` completes that dedicated between-tick settle group before
-`BeginTick`. Existing pre/post settle groups are neither merged nor split, so
-replay keeps their exact granularity. Both copies of an artifact — the producer's
-and the receiver's — therefore apply at the same absolute tick; without the
-barrier a crossing applied locally in its producing settle and remotely at the
-next tick opening, a one-tick 50 ms divergence window.
+Three `barrierBound` artifacts still transfer queue ownership and wait on their
+producer too: participant arrival, participant departure and full reset. They
+create or destroy shared identity rather than changing values in an existing
+world, so applying them on different ticks would give captures different entity or
+run numbers (D-11).
 
-The default delay is three 50 ms ticks. It is session metadata rather than a
-round-trip gate: simulation never waits for a peer, and a deployment can
-negotiate a larger lead for a higher-latency path. Artifacts sort by apply tick,
-participant ID and per-source sequence — the shape required beyond two
-participants. A crossing produced by the wire settle belongs to the production
-epoch about to run and gets one complete delay of its own; it never recurses into
-the apply pass.
+`Flush` closes and asynchronously sends each tick's epoch, including an empty
+marker. `Receive` opens the next tick by applying remote and barrier-bound local
+artifacts whose deadline has arrived; `settleLocked("wire")` completes that
+dedicated between-tick group before `BeginTick`. Due artifacts sort by apply tick,
+participant ID and sequence. The default lead is three 50 ms ticks and simulation
+never waits for a round trip. A crossing produced by the wire settle belongs to
+the production epoch about to run and receives a complete lead of its own.
 
-Outside a session `Cross` declines ownership, `Receive` returns zero and the
-scheduler creates no wire settle group. The original queue/journal/publication
-path is therefore unchanged for a solo run.
+Outside a session `Cross` declines ownership without retaining a peer copy and the
+solo queue/journal path is unchanged. A journaled crossing is stamped where it was
+consumed, so replay republishes it directly rather than applying the receive lead a
+second time; a re-derived crossing follows the same local/remote rule its source
+run did. `network.barrier_*`, `network.local_crossings_now`, peer-lag and late
+counters expose this schedule.
 
-A journaled crossing is stamped where it was *consumed*, which is already past the
-lead, so a replay republishes it directly through `World.PushRecord` rather than
-offering it to the barrier a second time. Its re-derived siblings — the crossings
-whose producer is the simulation, which carry `OriginSystem` and are never
-journaled — go through the ordinary push and take the lead exactly as the recorded
-run did. Both halves are needed: either one alone shifts a reproduction by one
-playout lead, which surfaces as a whole gameplay cycle once an FSM deadline falls
-inside it.
-`network.barrier_{deferred,applied_local,applied_peer,late,ran_without_peer,peer_lag_ticks,peer_artifacts}`
-and `network.barrier_peer_applied` expose the barrier state.
-
-**The mesh.** A session is a graph of links, not a star with an authority: an
-instance sends only to the peers it dialled or accepted, so an artifact reaches
-everyone else by being forwarded. Every node floods each epoch it has not seen to
+**The mesh.** Authority and topology are separate. The coordinator/host owns the
+canonical shared world, while a session may still be a graph of links: an instance
+sends only to its direct neighbours, so an artifact or authoritative correction
+reaches everyone else by being forwarded. Every node floods each epoch it has not seen to
 every link except the one it arrived on. What terminates the flood is the
 per-source epoch window — a copy arriving by a second path is recognised and
 neither applied nor forwarded again — so each node handles each epoch exactly
@@ -836,7 +834,8 @@ once whatever the topology; `parameter.NetworkRelayHopLimit` is a backstop, not
 the termination argument. A relay preserves `Source`, `ProducedTick` and every
 frame's `ApplyTick` and sequence, which is what lets a relayed artifact apply at
 the same absolute tick however many links it crossed. Owner-authored state syncs
-relay on the same rule, using the per-slot sequence in place of the epoch window.
+relay on the same rule, using the per-slot sequence in place of the epoch window;
+correction chunks carry the authority's capture tick and are relayed unchanged.
 
 The window matters because a mesh reorders. One stream delivers a source's epochs
 in order and a high-water mark suffices; a mesh delivers the same source by paths
@@ -919,26 +918,18 @@ snapshots the closed roster, clears the world and barrier, then rebuilds every
 cursor in slot order from the boot template. Thus reset changes the run without
 silently reducing the session to slot zero.
 
-**Mid-run join — removed.** There is none. A participant may join only at tick
-zero, through the startup gate.
+**Join and reconnect.** A participant may arrive at tick zero or during a running
+session. A solo instance can open the session with `:host <addr>`. The coordinator
+admits the connection before reading the world for it (D-22), then sends a chunked
+authoritative keyframe; the joiner resolves it in the reusable staging world,
+commits between ticks, and catches up only the bounded transfer gap. A reconnect is
+the same path at a later capture tick.
 
-The path that existed replayed the coordinator's complete record stream from tick
-zero into the joining instance. It was deleted rather than repaired, for three
-reasons that are worth keeping written down because they constrain its
-replacement. It never ran: `App.hostNetworkConfig` built its `network.Coordinator`
-without a `Log` accessor, so the handshake refused every mid-run joiner with *this
-session retains no replayable log* while a `-host` run retained the whole stream in
-memory for the life of the session — unbounded cost, no delivered feature. Its
-cost model was wrong in principle as well as in practice: transfer and catch-up
-both grow with session length, so the later a participant arrives the worse it
-gets. And it could not survive the thing it most needed to survive, since a
-running host advances while a joiner replays, and nothing put the joiner onto the
-session's tick phase at the end of it.
-
-Its replacement is an authoritative state snapshot: the coordinator sends what the
-world *is*, not what it *did*, so join cost is a function of world size rather than
-of session length, and a participant may arrive at any moment. See
-[Multiplayer enhancement plan](multi-player-enhancement.md).
+No record history is retained for admission. The retired replay-from-zero path had
+unbounded session-length cost and no sound tick-phase handoff; sending what the
+world *is* makes transfer cost a function of world size. A join normally reuses the
+publication cadence's recent keyframe, so simultaneous arrivals share the world
+read rather than each stopping the host for another capture.
 
 **The stream.** The real endpoint is `network.SocketPort`. Every message has a
 fixed 12-byte header whose final field is payload length; `Decode` uses
@@ -950,45 +941,36 @@ silent stream without blocking a tick. The resulting disconnect notification is
 drained through the same path, raises a local status message, and—while the
 coordinator remains reachable—produces the crossing that removes only cursors
 owned by that participant.
-The steady-state simulation stream has three message kinds — one closed barrier
-epoch, one owner-authored cursor sync and one shared-state digest — plus the
-membership notice and four-step startup handshake; anything else is counted as a
-drop rather than translated.
+The steady-state stream carries closed crossing epochs, owner-authored cursor
+syncs, shared-state digests and authoritative correction chunks. Membership
+notices and the offer/gate/snapshot handshake surround admission; anything else is
+counted as a drop rather than translated.
 
-Loss that happens outside the barrier is counted, because either kind
-desynchronises silently: `network.transport_lost_in` is inbound notifications a
-full poll buffer discarded, `network.transport_lost_out` is outbound frames a
-peer's send queue refused. A new loss is also logged once.
+Loss outside the receive lead is counted: `network.transport_lost_in` is inbound
+notifications a full poll buffer discarded, `network.transport_lost_out` is
+outbound frames a peer's send queue refused. A missing crossing can move a guest's
+prediction, but the next authoritative keyframe supersedes it; a new loss is still
+logged once because it raises correction magnitude and staleness.
 
-**Startup.** The handshake sends the existing `JoinAnchor` inside `SessionOffer`.
-The coordinator allocates a participant ID and a roster slot per accepted
-connection and releases it when a handshake fails or a participant departs, so the
-lobby grows to `parameter.MaxPlayers` rather than being fixed at two; `-players`
-sets the size it waits for. `App.Join` checks identity as soon as a joiner
-arrives, so schema, tick interval, seed, session, config, corpus and D-14 latch
-mismatches are refused before the rest of the lobby waits on it. A rejected
-connection never enters the peer manager. Canonical participant IDs, not
-connection-local accept order, key the barrier sort and roster cleanup.
+**Admission.** The handshake sends `JoinAnchor` inside `SessionOffer`. The
+coordinator allocates a participant ID and roster slot, releasing both on a failed
+handshake or departure. Identity is checked before state is accepted: schema, tick
+interval, seed/session, config, corpus and D-14 map latch must agree. Canonical
+participant IDs, not connection accept order, key epoch ordering and cleanup.
 
-The roster every instance builds from arrives with the **start gate**, not with
-the offer: a joiner that dialled early saw only the participants ahead of it, and
-building from that partial view would give each instance a different shared
-creation order (D-11). The gate is otherwise startup coordination only — no
-per-tick round trip — and it is what gives every participant the same tick origin
-the barrier's absolute apply ticks presume. The interactive game clock is frozen
-before the FSM creates any deadline and released only after this gate. Without
-that hold, the host's lobby wait aged its ten-second gold timer before tick one
-while a late-created joiner's timer remained fresh.
+A `-host ... -players N` launch still has a tick-zero start gate. Its closed roster
+arrives with the gate rather than the earlier partial offer, so every participant
+creates the same cursors in the same order; the clock stays frozen until that gate
+so lobby time cannot age simulation deadlines. A joiner dials before constructing
+its `App`, allowing `ConfigForJoin` to install the authority's seed, configuration,
+corpus identity and map bounds before the FSM boots.
 
-`cmd/vif` exposes that gate as startup flags rather than ex commands: `-host
-<bind-address>`, `-join <host:port>` and `-players <n>`. A host initializes its
-terminal, world and listener, renders a lobby message, and holds the scheduler at
-tick zero until every expected participant is ready. A joiner dials before
-constructing its `App`, so `ConfigForJoin` installs the host seed, config and
-corpus identity before `initWorld` can draw a seed or load content. Both sides
-activate the crossing sink before terminal input is consumed. The host remains
-playable and listening after a disconnect, but a connection arriving after the
-start gate has nothing to join: the lobby is the only entry point (§9.4).
+Mid-run admission replaces the closed-roster boot with D-22's snapshot path. The
+existing participants keep ticking, the joiner installs the authority's current
+world, and `EventParticipantJoined` creates its cursor at one agreed future tick.
+Both paths activate the crossing sink before participant input is accepted. A host
+remains playable and listening after a disconnect; later connections take a fresh
+join snapshot rather than being limited to the original gate.
 
 **Cost.** The wire keeps journal TOML payloads inside a JSON epoch envelope. The
 measured complete frames, including the 12-byte header, are 44 bytes for an empty
@@ -1001,6 +983,13 @@ same six-tick cadence.
 A denser payload codec does not justify a second registry/schema path at these
 rates. `TestWireEncodingBudget` pins the representative budgets;
 `TestFrameRoundTripSurvivesShortStreamIO` pins framing.
+
+Authoritative state is the larger stream and has its own measurements: at the
+storm high water a 176 KiB keyframe and a 29 KiB delta, with one keyframe per ten
+corrections, cost about 215 KiB/s at the current 5 Hz cadence. Snapshot schema 2
+adds exact genetic continuation to the opaque `genetic` carrier; delta generation
+already treats every carrier record as whole state, so no transport special case
+was added.
 
 Journal schema is 11, and the wire shares its encoder: 7 made `Domain` meaningful,
 8 added the D-14 map latch to the anchor, 9 moved the nugget event family out of
@@ -1045,11 +1034,10 @@ argument was wrong in a way that cost a session: it held only while the
 simulation instant came from the pacing clock. D-21 derives it from the tick, so
 the value is `tick * interval` on every instance, it is compared, and comparing
 it is what pins the clock deterministic — `TestSharedSnapshotComparesElapsedGameTime`
-fails if a forged value does not move the surface. `gold.timer` stays denied but
-for a corrected reason: it is deterministic now, and what still separates two
-instances is that a joiner's FSM reaches `MainSpawnGold` one tick before the
-host's, so the sequence carries origins a tick apart for its whole life. That is
-a real defect and an open item for Phase 3, recorded rather than hidden.
+fails if a forged value does not move the surface. `gold.timer` is compared too:
+the join path no longer replays an FSM one tick ahead, and the gold carrier writes
+both deadlines relative to the capture tick. `TestSnapshotJoinCarriesTheGoldDeadline`
+pins the mid-sequence case.
 The corpus trio is the whole of what a draw writes — the count and the file the
 cursor has reached — because content glyphs are player-domain and two participants
 who type differently roll onto different files. What remains beside them describes
@@ -1125,7 +1113,7 @@ fails the build when the code stops matching the declaration.
 | `TestMeshPropagatesEveryParticipantToEveryOther` | `internal/app` | Five participants in 1—2, 2—3, 3—4, 3—5 agree on every shared record through 240 driven steps |
 | `TestDepartureReachesTheWholeMesh` | `internal/app` | A departure removes the cursor on an instance that never linked to the departing participant |
 | `TestThreeParticipantLobbyClosesOnOneRoster` | `internal/app` | The socket handshake for a lobby larger than a pair: partial offers, one closed roster |
-| `TestLateJoinerTakesTheRosterAndStaysInLockstep` | `internal/app` | The arrival crossing lands on both instances at one tick, and both then drive their own cursor in lockstep |
+| `TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor`, `TestRosterCrossingsKeepTheAgreedApplyTick` | `internal/app` | A joined participant drives its own cursor after adopting the host world; the arrival itself remains barrier-bound and lands at one agreed tick |
 | `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
 | `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
@@ -1145,12 +1133,15 @@ fails the build when the code stops matching the declaration.
 | `TestSnapshotStateSystemsRoundTrip`, `TestSnapshotCarriersAreSharedOrDual` | `internal/manifest` | D-19: every declared carrier writes bytes it can read back, and none is player-profile |
 | `TestSaveStreamsReportsEveryIssuedStream`, `TestLoadStreamsResumesTheGeneratorsSystemsHold`, `TestLoadStreamsNamesUnknownStreams`, `TestStreamIssuesAFreshGeneratorPerDraw` | `internal/engine` | D-8/D-19: the stream inventory is complete, restoring moves the generator a system holds, an unknown name is reported, and a re-draw does not resume the finished game |
 | `TestSetStateResumesTheSequence`, `TestSetStateRejectsZero` | `pkg/vmath` | A recorded position reproduces a sequence from where a run reached, and a zero state cannot produce a dead stream |
+| `TestStreaming_Deterministic`, `TestStreaming_CheckpointContinuesTheExactStream`, `TestStreaming_RestoreRejectsInvalidStateWithoutMutation` | `pkg/genetic` | D-19: deterministic refill makes seed plus operations one stream; a JSON-round-tripped checkpoint preserves PCG/queue/pending/ID state for 250 further transitions; a rejected state is atomic |
+| `TestRegistry_ExportImportContinuesSamplesAndScouts` | `pkg/genetic/registry` | Registry continuation includes the ordinary engine plus the independent scout PCG and bin counter, matched by exact species ID/name |
 | `TestCaptureReconstructsTheSharedWorld`, `TestCaptureCarriesEveryDeclaredSystem`, `TestCaptureCarriesNoPlayerState`, `TestVerifyCaptureRejectsATamperedBody` | `internal/app` | D-19: a capture encoded, decoded and installed leaves the shared surface equal; every declared carrier is present; no player placement reaches a capture; a modified body and a foreign seed are both refused |
 | `TestInstalledWorldStaysIdenticalForFiveHundredTicks` | `internal/app` | D-19's construction proof over three seeds: an installed world's *future* matches for 500 further ticks with shared species live. Player-domain production is stopped first, because a capture carries no player state and a crossing is Phase 4's subject |
 | `TestCaptureContinuesInAnotherProcess` | `internal/app` | The same gate with the two halves in **different processes**: the capture is bytes on a disk, the two start at different wall instants, and the receiver paces its 500 ticks in bursts. Nothing about the pacing clock can reach the simulation (D-21) |
 | `TestSimulationEpochIsSessionIdentity` | `internal/app` | The control behind D-19's absolute instants: a receiver whose `SimEpoch` differs installs the same bytes and diverges, so the epoch is session identity beside the seed |
 | `TestNavigationPhaseIsLoadBearing`, `TestNavigationPhaseSurvivesAnInstall` | `internal/app` | D-17/D-19: a capture carrying the phase a world with *no* carrier would hold, or targets the sender never had, diverges one tick after the install; the unmodified capture holds for 200 |
 | `TestNavigationRouteRebuildPhaseIsLoadBearing`, `TestNavigationRouteRebuildSurvivesAnInstall` | `internal/app` | D-17/D-19: the gateway half, in the tower region — the only scenario any shipped config has that makes `route_rebuild_ticks` pace anything. A zeroed budget rebuilds its route graphs on different ticks than the sender within 22; the unmodified capture rebuilds on the sender's for 200 |
+| `TestGeneticContinuationSurvivesAnInstall` | `internal/app` | D-19: the gateway world keeps spawning for 200 ticks after an install and every captured genotype/EvalID agrees; the former archive-only carrier failed within ten |
 | `TestSnapshotJoinCarriesTheGoldDeadline` | `internal/app` | The Phase 2 defect, closed: a joiner arriving mid-sequence reads the same remaining time as its host, and keeps reading it. `gold.timer` is in the compared surface again |
 | `TestSnapshotJoinTakesTheHostsWorldNotItsOwn`, `TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor` | `internal/app` | A joiner adopts the host's world and record position rather than re-deriving them, and the D-13 control assignment is re-derived rather than adopted with the component that carries it |
 | `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun` | `internal/app` | D-22 end to end over a socket: a solo run opens a port hundreds of ticks in, a joiner installs the world it is sent, closes the tick gap the transfer opened, and takes its cursor from the arrival crossing |
@@ -1258,40 +1249,26 @@ firewall/NAT routing and currently carries plaintext with no authentication.
 
 ### 9.1 Who decides what
 
-There is no single authority, and asking "which peer is the host" only has a
-useful answer for one of the three kinds of state.
+Authority is explicit, but it is not uniform across every component.
 
 | State | Authority | Mechanism |
 |---|---|---|
-| Shared simulation | **None** | Every instance re-derives it from the same seed, config, corpus, map script and ordered artifact stream (D-11). Agreement is a property of determinism, not a decision. Nothing is sent: `OnWire` excludes the `Shared` class precisely because sending it would apply it twice. |
+| Shared simulation | **Host/coordinator** | The host simulates the canonical world and publishes keyframe/delta corrections (D-23). Guests run the same deterministic code as a predictor; their result is provisional. |
 | Owner-authored shared state (D-13) | **Per cursor**, the instance that simulates it | `SimulatesLocally` admits exactly one writer; the value is transported, never re-derived. This is per-object, not per-session, and does not depend on topology. |
 | Session identity, map bounds, roster changes and live operator reset | **The coordinator** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, barrier delay, arrival/departure crossings, and serialization of the exceptional session-wide reset command. |
 
-The coordinator is not a state authority. It owns its own cursor's D-13 cells and
-nothing else; it cannot correct, override or arbitrate another participant's
-shared state, because it holds no copy more authoritative than anyone else's.
-What it owns is *allocation and serialization* — deciding who is in the session
-and ensuring a session-wide operator reset has one producer, not choosing a
-gameplay outcome. A roster change or reset it announces is applied by everyone
-from the same artifact at the same tick, exactly like a crossing any participant
-could have produced.
+The coordinator currently is the host, participant one. Its two roles are related
+but distinct: it allocates identity and serializes membership, and its world is the
+answer when predicted shared values disagree. It is *not* the writer of another
+cursor's D-13 cells; those remain per-owner values and travel on their own stream.
+`event.OnWire` still excludes re-derived `Shared` events because sending them would
+apply them twice. What crosses from a participant is the request, and what makes
+the host's resulting state canonical is the correction.
 
-So the chain question — *A joins B, B joins C; who is the host for A and C?* — has
-two halves, and they separate cleanly.
-
-**Identity** is answered by the model rather than by the graph: **the coordinator
-is whoever issued the `SessionOffer` a participant adopted**, and the right
-behaviour for a chain is not to elect a host per link but to propagate one session
-identity. Every participant in one session adopts the same anchor, the same
-participant-ID space and the same barrier delay, whoever physically hands it over.
-A relay forwards an offer; it does not mint its own.
-
-**Propagation** is not an authority question at all, and was the real gap. A
-crossing A produces has to reach C, which A never sends to — and it does, because
-every node floods each artifact it has not seen to every link but the one it
-arrived on, and every artifact names the absolute tick it applies at. C applies
-A's attack on the same tick A did, having received it from B. Nothing about that
-depends on who the host is; see §6 and §9.2.
+In an A—B—C link chain, the coordinator that issued the adopted offer remains the
+authority for all three. B relays A's request to the host path and relays the
+host's correction toward C; it does not mint a second session or become a local
+authority.
 
 ### 9.2 Topology
 
@@ -1305,62 +1282,56 @@ applies at the same tick everywhere, because the tick it names travelled with it
 Propagation itself is a flood with per-source suppression (§6), so A—B—C reaches
 C without A ever sending to it.
 
-What the coordinator still is, and only is: the allocator of participant
-identities and roster slots, the source of the anchor and the D-14 latch, and the
-single producer of roster-change and live operator-reset crossings. It holds no
-shared state anyone else does not.
+Crossing epochs, owner-state syncs and corrections all relay. Epoch deduplication
+is per source and correction deduplication is per authority capture/chunk, so a
+second path neither applies nor forwards the same information twice. A relayed
+correction retains the host's capture tick and integrity proof.
 
 Three things remain open, and each is a property of the graph rather than of the
 transport:
 
 1. **Delay is a constant, not a diameter.** `NetworkBarrierDelayTicks = 3` is
    negotiated once at 150 ms. An artifact crossing several links must still
-   arrive before its absolute apply tick, or it lands late and the instances
-   diverge. `network.barrier_late` is the signal that the lead is too small; the
-   lead should become a function of the worst-case path.
-2. **Departure needs a reachable coordinator.** One producer is what gives a
-   roster change a single apply tick, and the coordinator is the participant every
-   topology the session can currently build has a path to. If it departs, or a
-   partition puts it out of reach, no departure is announced. Electing a
-   replacement is a membership-agreement problem, not a transport one.
+   arrive before its absolute apply tick, or the host sees it late and the guest
+   predicts longer than intended. `network.barrier_late` and `network.stale` are
+   the signals; Phase 5 makes cadence and admission a function of measured link
+   conditions.
+2. **Departure and authority need a reachable coordinator.** One producer gives a
+   roster change one apply tick, and one world supplies corrections. If participant
+   one departs or a partition makes it unreachable, no election or state migration
+   replaces either role; the session reports the loss and ends on that side.
 3. **A partition has no session-wide detector.** Direct neighbours observe their
    lost link, but after a graph splits there is no digest edge between the two
-   components. Both can keep simulating and each can agree internally while their
-   shared states diverge.
+   components. A component without the host can keep predicting, but it cannot
+   receive authoritative corrections and must not promote its prediction.
 
 The links themselves are still built as a star, because `-join` dials one address.
 The relay is what makes any other shape work; wiring a participant to dial more
 than one peer is a CLI change, not a protocol one.
 
-### 9.3 Toward a trusted branch
+### 9.3 Trust, rollback and host migration
 
-The artifact stream is necessary but not sufficient. The 2026-08-30 incident is
-the counterexample to the earlier, stronger claim: both participants could receive
-the same artifacts and still derive different worlds because a guest-only camera
-operation shifted shared navigation cache timing. Recovery therefore has to cover
-both delivery gaps and deterministic implementation defects.
+The trusted branch now exists: it is the host's versioned `SharedCapture`, and a
+guest installs it rather than asking a digest which peer is right. Keyframes make
+loss recoverable without an artifact ledger; deltas are accepted only against the
+named keyframe and only when the rebuilt capture passes its own integrity hash.
+The digest remains diagnostic telemetry between corrections.
 
-The periodic shared digest makes a disagreement loud while the peers remain
-connected. It intentionally stops there: a hash does not identify a missing or
-extra artifact, establish which branch is trusted, cross a partition, or authorize
-overwriting one participant's state. Per-record detail, paired journals, and
-`FirstDiff` are diagnostic evidence, not a recovery protocol.
+What is not built is rollback *and replay*. Installing a correction adopts the
+authority's earlier capture tick, so the guest has not yet replayed its own
+outstanding requests from that point to its former predicted present. That is the
+bounded flicker and repeated simulation Phase 6 would remove. The deterministic
+capture contract—including exact genetic stream continuation in snapshot schema
+2—is the state prerequisite for that work; a retained, canonical input suffix is
+the remaining replay prerequisite.
 
-Replay remains useful, but it is not rewind. The current journal captures injected
-non-system records, not a complete serialization of every future-affecting system
-and scheduler value, and bit-exact replay is claimed only for caller-driven/
-headless source runs. A live interactive participant also needs a tick-phase
-handoff while the host continues to advance. A recoverable branch needs a
-versioned restorable shared checkpoint, an agreed canonical artifact suffix, and a
-procedure for buffering, replaying, validating, and switching at one tick.
-
-Identity is another prerequisite, not the only one. The link is plaintext and
-unauthenticated; `MsgAuthRequest`/`MsgAuthResponse` are reserved and unused, and
-`Config.TLS` is never populated by the CLI. A participant cannot prove that an
-artifact attributed to it is its own, and coordinator election without state and
-ledger migration would still produce an empty authority. The comparative options,
-checkpoint contract, and recommended checkpoint-plus-suffix design are detailed
-in [Desynchronisation and recovery](desync.md).
+Trust is still operational rather than cryptographic. Links are plaintext,
+`MsgAuthRequest`/`MsgAuthResponse` remain reserved, and `Config.TLS` has no CLI
+surface. The host structurally rejects roster artifacts from non-coordinators, but
+cannot authenticate a participant's claim to ordinary crossings. Host migration
+would additionally require transferring the newest authority, membership and
+in-flight admission state before electing a replacement; election alone would
+promote an arbitrary predictor.
 
 ### 9.4 Known limitations
 
@@ -1460,15 +1431,14 @@ in [Desynchronisation and recovery](desync.md).
 
 ### 9.5 Next work
 
-**The multiplayer work this section used to list is superseded.** Sessions are
-being rebuilt around an authoritative host with deterministic guests, which changes
-the premise of the old items rather than reordering them: there is no ledger to
-make canonical, no playout lead on the local path, and no "recovery" as a distinct
-state once a guest's own derivation is provisional by design. The plan of record, with its measured
-evidence, obstacles and phases, is
-[Multiplayer enhancement plan](multi-player-enhancement.md). Rules D-1..D-17 below
-continue to describe the code as it stands; §5 of that plan states which of them
-each phase changes.
+Phase 5 is the next multiplayer step: measure RTT, jitter and usable throughput,
+then adapt correction cadence and keyframe choice without crossing a convergence
+floor. Corrections are still broadcast whole to every guest; relevance/priority
+has no implementation yet. The exact requirements, measurements and manual link
+shaping gate are in [Multiplayer enhancement plan](multi-player-enhancement.md).
+Bounded rollback/replay, authentication and host migration remain Phase 6 inputs,
+not hidden parts of Phase 5. The Phase 4 genetic continuation gap is closed and is
+no longer on this list.
 
 What remains outstanding and independent of that work:
 

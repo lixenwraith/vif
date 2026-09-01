@@ -304,6 +304,63 @@ func TestNavigationRouteRebuildSurvivesAnInstall(t *testing.T) {
 	}
 }
 
+// TestGeneticContinuationSurvivesAnInstall is the Phase 4 cleanup gate. The
+// gateway world keeps spawning GA-managed eyes after the install; an archive-only
+// restore handed the receiver a different queued genotype within ten ticks. The
+// complete registry checkpoint now has to keep the genotype stream equal,
+// including pending evaluations already attached to live eyes.
+func TestGeneticContinuationSurvivesAnInstall(t *testing.T) {
+	origin, cap := navRouteOrigin(t)
+	defer origin.Close()
+
+	receiver := navRouteWorld(t)
+	defer receiver.Close()
+	if err := receiver.InstallShared(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	_, initialMax := genotypeSignature(origin)
+	spawned := false
+
+	for step := range navSabotageTicks {
+		moveRouteTarget(origin, step)
+		moveRouteTarget(receiver, step)
+		origin.Tick(1)
+		receiver.Tick(1)
+		want, wantMax := genotypeSignature(origin)
+		got, gotMax := genotypeSignature(receiver)
+		if want != got || wantMax != gotMax {
+			t.Fatalf("genetic continuation diverged %d ticks after install\n"+
+				"  origin:   %s\n  receiver: %s", step+1, want, got)
+		}
+		if wantMax > initialMax {
+			spawned = true
+		}
+	}
+	if !spawned {
+		t.Fatal("no genotype changed after install; the continuation gate exercised no new sample")
+	}
+}
+
+// genotypeSignature renders the captured shared genotype store. It deliberately
+// excludes adaptation telemetry: this gate is the genetic stream's contract, while
+// the route-learning carrier has its own tests above.
+func genotypeSignature(a *App) (string, uint64) {
+	var (
+		data  []byte
+		maxID uint64
+	)
+	a.World().RunSafe(func() {
+		entries := a.World().CaptureSharedWorld().Genotype
+		data, _ = json.Marshal(entries)
+		for _, entry := range entries {
+			if entry.Value.EvalID > maxID {
+				maxID = entry.Value.EvalID
+			}
+		}
+	})
+	return string(data), maxID
+}
+
 // navRouteDiverges drives both instances through the same target motion and reports
 // whether their gateways rebuilt their route graphs on different ticks.
 //
@@ -320,11 +377,10 @@ func TestNavigationRouteRebuildSurvivesAnInstall(t *testing.T) {
 // a graph adopts the target's current cell, so two instances whose budgets stand
 // apart hold graphs aimed at different cells for as long as the gap lasts.
 //
-// The whole surface cannot be the observable here, and the reason is a defect this
-// scenario found rather than a weakness of this test: with gateways spawning, a
-// receiver hands the next eye a different genotype than the sender did, and the two
-// worlds come apart within ten ticks for a reason that has nothing to do with
-// navigation. The note at the end of this file says what that is.
+// The route graph remains the narrow observable here so an unrelated shared-state
+// difference cannot masquerade as a route-rebuild phase failure. The complete
+// genetic continuation defect this scenario originally exposed is now covered by
+// TestGeneticContinuationSurvivesAnInstall above.
 func navRouteDiverges(t *testing.T, origin, receiver *App) bool {
 	t.Helper()
 	if routeGraphSignature(origin) == "" {
@@ -485,26 +541,17 @@ func navRouteOrigin(t *testing.T) (*App, SharedCapture) {
 // gateways and for the eyes that follow their routes to exist and be moving.
 const navRouteWarmupTicks = 240
 
-// What this scenario found, and did not fix.
+// What this scenario found and the Phase 4 cleanup fixed.
 //
 // The route-rebuild budget is covered now. The gateway world it needed also showed
 // something else, and it belongs to D-19 rather than to navigation: a receiver that
 // installs a capture and then lets a gateway spawn its next eye gets a *different
 // genotype* than the sender did.
 //
-// The genetic carrier exports each species' archive — its members and its generation
-// — and that is all `Registry.Export` has to give it. `pkg/genetic`'s streaming
-// engine holds more than an archive: its own `math/rand/v2` generator, a ring of
-// offspring it has *already produced* and will hand out before it makes any more, a
-// pending-evaluation table and the id counter that names them. All four decide the
-// next genotype, none of them is in the export, and an installed world therefore
-// resumes evolution from the sender's population and the receiver's queue.
-//
-// It is the same shape as the two defects Phase 2 fixed for the adaptation resource,
-// which carries its pre-sampled pool and consumer head for exactly this reason, and
-// as the maze generator, which carries its PCG's binary form. It is out of Phase 4's
-// scope — it is in pkg/, it is not on the transport path, and the export contract
-// this needs is a piece of work rather than a line — so it is recorded here and in
-// the plan rather than fixed in passing. Its practical effect today is bounded: it
-// changes what a *newly spawned* species looks like after an install, and the
-// correction that follows replaces it.
+// The old genetic carrier exported only each species' archive and generation.
+// `pkg/genetic` also owns the PCG position, pre-produced proposal ring, pending
+// table, partial-generation count and next ID; the registry adds a probe PCG and
+// counter. All decide the next genotype. The carrier now transfers that complete
+// continuation point plus GeneticSystem's live fitness accumulators, and
+// TestGeneticContinuationSurvivesAnInstall above leaves gateway spawning enabled
+// while comparing the resulting world tick by tick.

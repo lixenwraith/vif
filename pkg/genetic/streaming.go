@@ -28,16 +28,17 @@ type StreamingEngine[S Solution, F Numeric] struct {
 
 	cfg StreamingConfig
 
-	mu       sync.Mutex
-	rng      *rand.Rand
-	archive  []Candidate[S, F]
-	gen      int
-	outcomes int
-	lastDiv  float64
-	aggBest  F
-	aggWorst F
-	aggAvg   F
-	aggDirty bool
+	mu        sync.Mutex
+	rngSource *rand.PCG
+	rng       *rand.Rand
+	archive   []Candidate[S, F]
+	gen       int
+	outcomes  int
+	lastDiv   float64
+	aggBest   F
+	aggWorst  F
+	aggAvg    F
+	aggDirty  bool
 
 	proposals ring[S]
 	free      []S
@@ -63,6 +64,7 @@ func NewStreamingEngine[S Solution, F Numeric](
 	config StreamingConfig,
 ) *StreamingEngine[S, F] {
 	cfg := config.Normalize()
+	rngSource := rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)
 
 	e := &StreamingEngine[S, F]{
 		initializer: initializer,
@@ -71,7 +73,8 @@ func NewStreamingEngine[S Solution, F Numeric](
 		perturbator: perturbator,
 		cloner:      cloner,
 		cfg:         cfg,
-		rng:         rand.New(rand.NewPCG(cfg.Seed, cfg.Seed^defaultSeed)),
+		rngSource:   rngSource,
+		rng:         rand.New(rngSource),
 		archive:     make([]Candidate[S, F], 0, cfg.PoolSize),
 		parents:     make([]Candidate[S, F], 2),
 		offspring:   make([]S, 2),
@@ -304,6 +307,11 @@ func (e *StreamingEngine[S, F]) insertLocked(sol S, score F) {
 // fillLocked tops up the proposal queue within the tick budget
 func (e *StreamingEngine[S, F]) fillLocked() {
 	if e.proposals.free() == 0 {
+		return
+	}
+	if e.cfg.RefillMode == RefillDeterministic {
+		for e.proposals.free() > 0 && e.produceLocked() {
+		}
 		return
 	}
 	deadline := time.Now().Add(e.cfg.TickBudget)

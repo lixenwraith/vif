@@ -2,85 +2,96 @@ package registry
 
 import (
 	"fmt"
+	"math/rand/v2"
 	"sort"
 
-	"github.com/lixenwraith/vi-fighter/pkg/genetic/persistence"
+	"github.com/lixenwraith/vi-fighter/pkg/genetic"
 )
 
-// SpeciesPopulation is one registered species' population, named by the species
-// name rather than by slot index so an export survives the registration order
-// changing between the instance that produced it and the one that installs it.
-type SpeciesPopulation struct {
-	ID   uint8                     `toml:"id" json:"id"`
-	Name string                    `toml:"name" json:"name"`
-	Pool persistence.PopulationDTO `toml:"pool" json:"pool"`
+// SpeciesState is one registered species' complete continuation point. Species
+// are named as well as numbered so an import detects a registration-layout
+// mismatch instead of installing one population into another.
+type SpeciesState struct {
+	ID           uint8                                      `toml:"id" json:"id"`
+	Name         string                                     `toml:"name" json:"name"`
+	Engine       genetic.StreamingState[[]float64, float64] `toml:"engine" json:"engine"`
+	ProbeRNG     []byte                                     `toml:"probe_rng" json:"probe_rng"`
+	ProbeCounter uint64                                     `toml:"probe_counter" json:"probe_counter"`
 }
 
-// Export returns every registered species' population, in species-ID order.
-//
-// This is the transfer contract the registry did not have. Persistence could
-// already write a population to a file, one species at a time, through a Store
-// the caller supplies; a transfer needs all of them as one value, with no store
-// involved and no lock reaching the caller. The mutex stays inside: callers
-// receive plain data that is safe to hold, compare and serialize, and the deep
-// copy comes from the engine's own Snapshot.
-//
-// The order is canonical because a capture is compared as well as installed.
-func (r *Registry) Export() []SpeciesPopulation {
+// Export returns every registered species' complete state, in species-ID order.
+// It carries the streaming engine position rather than only its scored archive:
+// queued offspring, pending evaluations, IDs and both PCG streams all decide the
+// next genotype. Callers receive plain, deep-copied data with no mutex exposed.
+func (r *Registry) Export() ([]SpeciesState, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	out := make([]SpeciesPopulation, 0, 8)
+	out := make([]SpeciesState, 0, 8)
 	for i := range r.slots {
 		ts := r.slots[i].Load()
 		if ts == nil {
 			continue
 		}
-		out = append(out, SpeciesPopulation{
-			ID:   uint8(i),
-			Name: ts.Config.Name,
-			Pool: persistence.FromPool(ts.Engine.Snapshot()),
-		})
+		state, err := ts.checkpoint()
+		if err != nil {
+			return nil, fmt.Errorf("genetic: export species %q: %w", ts.Config.Name, err)
+		}
+		state.ID = uint8(i)
+		state.Name = ts.Config.Name
+		out = append(out, state)
 	}
 	sort.Slice(out, func(a, b int) bool { return out[a].ID < out[b].ID })
-	return out
+	return out, nil
 }
 
-// Import installs exported populations, replacing each named species' archive
-// and generation. A species the receiving registry has not registered is
-// reported rather than skipped: it means the two sides disagree about which
-// species exist, and a population that silently fails to install leaves the
-// receiver evolving from its own archive while believing it adopted the
-// sender's.
-//
-// Species are matched by name, and the ID is checked against it. A name that
-// resolves to a different slot than the export recorded is a build mismatch, not
-// something to reconcile.
-func (r *Registry) Import(populations []SpeciesPopulation) error {
+// Import installs complete exported states. The registered species set must
+// match exactly; omitting one would leave that engine evolving from receiver-local
+// state while the caller believed the registry had been restored.
+func (r *Registry) Import(states []SpeciesState) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	byName := make(map[string]int, len(r.slots))
+	registered := 0
 	for i := range r.slots {
-		if ts := r.slots[i].Load(); ts != nil {
-			byName[ts.Config.Name] = i
+		if r.slots[i].Load() != nil {
+			registered++
 		}
 	}
+	if len(states) != registered {
+		return fmt.Errorf("genetic: state carries %d species, registry has %d", len(states), registered)
+	}
 
-	for _, sp := range populations {
-		slot, ok := byName[sp.Name]
-		if !ok {
-			return fmt.Errorf("genetic: species %q is not registered in this build", sp.Name)
+	resolved := make([]*TrackedSpecies, len(states))
+	seen := make(map[int]bool, len(states))
+	probeSources := make([]*rand.PCG, len(states))
+	for i, state := range states {
+		slot := int(state.ID)
+		if seen[slot] {
+			return fmt.Errorf("genetic: species slot %d appears more than once", slot)
 		}
-		if uint8(slot) != sp.ID {
-			return fmt.Errorf("genetic: species %q is slot %d here and %d in the capture",
-				sp.Name, slot, sp.ID)
-		}
+		seen[slot] = true
 		ts := r.slots[slot].Load()
 		if ts == nil {
-			return fmt.Errorf("genetic: species %q vanished during import", sp.Name)
+			return fmt.Errorf("genetic: species %q uses unregistered slot %d", state.Name, slot)
 		}
-		ts.Engine.Inject(sp.Pool.ToPool(), sp.Pool.Generation)
+		if ts.Config.Name != state.Name {
+			return fmt.Errorf("genetic: slot %d is species %q here and %q in the capture",
+				slot, ts.Config.Name, state.Name)
+		}
+		source, err := ts.validateState(state)
+		if err != nil {
+			return fmt.Errorf("genetic: import species %q: %w", state.Name, err)
+		}
+		resolved[i], probeSources[i] = ts, source
+	}
+
+	// Validation above is complete. Each restore now performs only copies and a
+	// PCG assignment, so a malformed later species cannot leave a partial import.
+	for i, state := range states {
+		if err := resolved[i].restore(state, probeSources[i]); err != nil {
+			return fmt.Errorf("genetic: import species %q: %w", state.Name, err)
+		}
 	}
 	return nil
 }

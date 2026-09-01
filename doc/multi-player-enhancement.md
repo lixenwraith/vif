@@ -9,9 +9,9 @@ changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
 Phase 2; D-22 landed with Phase 3; D-23 landed with Phase 4, which also weakened
 D-11 and changed D-3's destination.
 
-**Phases 1 through 4 are done. Phase 5 is next**, and §6's Phase 5 entry says what
-it starts from. §9 records the defects each session surfaced and what each turned
-out to be.
+**Phases 1 through 4 and the Phase 4 genetic-continuation cleanup are done. Phase
+5 is next**, and §6's Phase 5 entry says what it starts from. §9 records the
+defects each session surfaced and what each turned out to be.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -179,7 +179,7 @@ is not in a component store:
 | ~24 per-system RNG streams | private `*vmath.FastRand`, seeded in each `Init` | `State()` exists; **there is no `SetState`** |
 | A second generator | `WallSystem.mazeRng`, a `math/rand.Rand` | not restorable as written |
 | **EXP3 route learning** | `AdaptationResource.Entries` — weights, pre-sampled `Pool`, consumer `Head`, `spin`; decides which route a spawned eye takes | a resource, not a store; not in the digest |
-| **Genetic populations** | `GeneticResource.Registry` — a whole GA registry behind `sync.Mutex`/`atomic.Pointer` in `pkg/genetic` | needs an export contract it does not have |
+| **Genetic evolution** | `GeneticResource.Registry` — PCG positions, scored archives, pre-produced proposals, pending evaluations/IDs and scout phase behind package locks | complete checkpoint contract; archive persistence alone is insufficient |
 | FSM runtime | `fsm.Machine` regions, `variables`, `delayedActions` | straightforward, and small |
 | Throttled derivation phase | `FlowFieldCache.TicksSinceCompute`, `PendingUpdate`, `LastTargets` (D-17) | phase must travel; the field itself should be recomputed |
 | Allocator, scheduler | `nextEntityID`, per-domain counters, settle stamp, run/tick | straightforward |
@@ -194,7 +194,10 @@ declares the obligation, the generator emits the table, and the boundary suite
 fails a system whose declaration does not match its code (D-19). `FastRand.SetState`
 exists; `RandResource` enumerates the streams because they all come from one
 factory; `WallSystem.mazeRng` carries the PCG source's own binary form; both
-learned resources have export contracts; the FSM runtime travels. The last row —
+learned resources have export contracts; the FSM runtime travels. The genetic
+contract was initially archive-only. The Phase 4 cleanup strengthened it to the
+complete streaming and scout continuation point after the gateway gate proved an
+archive cannot determine the next genotype. The last row —
 "per-system scratch: no inventory exists" — turned out to be the interesting one:
 the 500-tick gate found the genetic telemetry throttle, the gold deadlines and the
 D-17 recompute phase by failing, one at a time. What the survey could not list, a
@@ -409,7 +412,8 @@ it by construction. Everything after this depends on it; nothing before it does.
    `WallSystem.mazeRng`.
 3. **Export contracts for the two learned resources**: `AdaptationResource`
    (weights, pool, head, spin) and `GeneticResource` (per-species populations, via
-   a `pkg/genetic` export/import that does not leak the mutex).
+   a `pkg/genetic` export/import that does not leak the mutex; since strengthened
+   to include the full streaming position rather than only the archive).
 4. **A versioned codec** with schema, build, config and corpus fingerprints and an
    integrity hash. References use `core.Entity`, never dense indices.
 5. **Tick-relative durations only** (§4.2).
@@ -756,19 +760,14 @@ would mean sending a map of per-record hashes for the whole session.
   correction chunks arrive interleaved with the gate. They are swallowed there:
   there is nothing to keep, because the participant is about to install a whole
   world.
-- *The genetic carrier restores an archive and not a position, and this is **not**
-  fixed.* `Registry.Export` gives each species' members and generation.
-  `pkg/genetic`'s streaming engine holds more: its own `math/rand/v2` generator, a
-  ring of offspring it has already produced and will hand out before making more, a
-  pending-evaluation table, and the id counter that names them. All four decide the
-  next genotype and none is in the export, so a receiver that installs a capture and
-  then lets a gateway spawn its next eye gets a different one than the sender did.
-  It is the same shape as the two defects Phase 2 fixed for the adaptation resource
-  and as the maze generator's PCG. It is recorded rather than fixed because it is in
-  `pkg/`, off the transport path, and needs an export contract rather than a line;
-  its practical effect is bounded, since it changes what a *newly spawned* species
-  looks like after an install and the next correction replaces it. The route-rebuild
-  case works around it by silencing spawning for its comparison, and says so.
+- *The genetic carrier restored an archive and not a position.* Phase 4 recorded
+  rather than hid it: `Registry.Export` carried members and generation, while the
+  streaming engine also owned its PCG position, pre-produced offspring, pending
+  evaluations, partial-generation phase and next ID. The registry's scout PCG and
+  counter, plus `GeneticSystem`'s live fitness accumulators, were adjacent state the
+  original report did not list. The Phase 4 cleanup below closes the complete set;
+  the gateway gate now leaves spawning enabled and compares every resulting
+  genotype tick by tick.
 
 **Boundaries kept.** A guest's derivation never overrides the host: a correction is
 installed whole and the guest's own drift is discarded, never merged. The host's
@@ -787,6 +786,41 @@ structural (the coordinator is the only producer of a roster change) rather than
 adversarial; authentication is Phase 6's.
 
 **Manual acceptance.** §10.
+
+---
+
+### Phase 4 cleanup — exact genetic continuation  ✅ landed
+
+**Goal.** Make an installed world issue the same next genotype as the authority,
+instead of restarting from the same scored archive at a different stream position.
+
+`pkg/genetic` now separates two contracts. `Snapshot`/`Inject` remain
+archive-only persistence. `StreamingEngine.Checkpoint`/`Restore` carry the complete
+continuation point: the `math/rand/v2` PCG binary state, scored archive, FIFO
+proposal ring, pending evaluations, partial-generation outcome count, next ID,
+eviction count, running state and normalized configuration. The state is generic
+plain data, the root package still imports only the standard library, and restore
+validates the whole value before changing an engine.
+
+Seeded output no longer depends on how much work fit inside a wall-clock window.
+Deterministic full refill is the default; the old time-budgeted behavior survives
+as explicit `RefillTimeBudget` opt-in for callers willing to trade reproducibility
+for a wall-time cap. Seed zero is a valid deterministic seed, not an implicit clock
+request.
+
+The registry composes that contract with the scout PCG position and bin counter,
+and requires the complete registered species set on import. The game carrier also
+carries live per-entity fitness accumulators and pending deaths, which affect the
+scores later returned to those restored pending evaluations. Snapshot schema 2
+marks the stronger carrier.
+
+**Gate.** Package tests JSON-round-trip a checkpoint with queued and pending work,
+restore it over a deliberately different engine, then compare 250 exact proposal
+and ID transitions. The registry gate interleaves ordinary and scout samples for
+another 180 transitions. `TestGeneticContinuationSurvivesAnInstall` runs the tower
+gateway world with spawning enabled for 200 ticks after an install and compares the
+captured genotype store on every tick; the old archive-only carrier failed there
+within ten.
 
 ---
 
@@ -813,7 +847,7 @@ convergence is not guaranteed.
 smoothly — snapshot rate falls, prediction carries more, correction magnitude rises
 but stays bounded, and nothing forks or disconnects.
 
-**What Phase 5 starts from.** Phase 4 leaves four things, in the order they are
+**What Phase 5 starts from.** Phase 4 leaves three things, in the order they are
 wanted:
 
 1. **The cadence is a constant.** `SnapshotCorrectionTicks` and
@@ -831,10 +865,6 @@ wanted:
 3. **Corrections are broadcast whole to everyone.** Requirement 2's relevance and
    priority has nothing built for it: every guest receives the same bytes whether or
    not any of it is near its cursor.
-4. **The genetic carrier's export is incomplete** (§6, Phase 4). It affects a newly
-   spawned species after an install and nothing else, and closing it needs an export
-   contract in `pkg/genetic` for the streaming engine's generator, proposal ring,
-   pending table and id counter.
 
 ---
 
@@ -875,6 +905,9 @@ implementation starts clean:
   `Hub.Get`, `Hub.Names`, the `RoleClient`/`RoleServer` aliases.
 - `NetworkSystem` telemetry reset is table-driven, so a counter added to the
   constructor cannot survive a reset holding the previous run's value.
+- `pkg/genetic` no longer conflates learned-archive persistence with exact stream
+  continuation. The latter is a versioned, standard-library-only checkpoint, and
+  the game carrier consumes it rather than reaching through package locks.
 
 ## 8. Open questions
 

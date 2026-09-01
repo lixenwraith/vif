@@ -97,7 +97,7 @@ flowchart TD
 |---|---|---|
 | `pkg/ascimage` | Convert images to terminal cells/dual assets and provide a viewer. | Viewer uses the in-repo render buffer; conversion uses external terminal/color types. |
 | `pkg/audio` | Synthesis, sound registry/cache, PCM mixer, patterns, harmony, voices, sequencer, backend detection, WAV sink. | Game policy is injected; the package does not import `internal/system` or APM state. |
-| `pkg/genetic` | Generic generational and caller-driven streaming genetic engines plus operators. | Core package uses the standard library only. |
+| `pkg/genetic` | Generic generational and caller-driven streaming genetic engines, deterministic PCG streams, exact continuation checkpoints, and operators. | Core package uses the standard library only. |
 | `pkg/genetic/fitness` | Convert lifetime metric bundles to scalar fitness. | Depends on tracking types. |
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
 | `pkg/genetic/registry` | Up to 256 species/populations, sampling, probes, tracking, stats, optional persistence. | Composes core genetic, fitness, tracking, and persistence. |

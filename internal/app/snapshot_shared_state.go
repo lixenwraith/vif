@@ -19,7 +19,7 @@ import (
 // SnapshotSchema is the capture layout's version. It is not the journal's schema:
 // the two describe different things and change for different reasons, and a
 // capture names both so a mismatch says which one moved.
-const SnapshotSchema = 1
+const SnapshotSchema = 2
 
 // SharedCapture is a complete description of the shared world at one tick (D-19).
 //

@@ -19,6 +19,19 @@ const (
 	DefaultMixProbability       = 0.5
 )
 
+// RefillMode selects how StreamingEngine bounds proposal refills.
+//
+// Deterministic refills are the default: the queue is filled completely, so a
+// seed and an operation sequence determine one proposal stream independently of
+// machine speed. Time-budgeted refills are available for callers that prefer a
+// wall-clock bound and accept that scheduling can change the stream.
+type RefillMode uint8
+
+const (
+	RefillDeterministic RefillMode = iota
+	RefillTimeBudget
+)
+
 // EngineConfig holds parameters shared by the batch and steady-state engines
 type EngineConfig struct {
 	// PoolSize is the archive capacity (retained scored candidates)
@@ -72,7 +85,10 @@ func (c EngineConfig) Normalize() EngineConfig {
 // StreamingConfig extends EngineConfig with steady-state parameters
 type StreamingConfig struct {
 	EngineConfig
-	// TickBudget caps time spent generating proposals in one refill
+	// RefillMode selects deterministic full refills or the opt-in wall-clock cap.
+	RefillMode RefillMode
+	// TickBudget caps time spent generating proposals in one RefillTimeBudget
+	// refill. It is ignored by RefillDeterministic.
 	TickBudget time.Duration
 	// ProposalCapacity is the depth of the unevaluated offspring queue
 	ProposalCapacity int
@@ -95,6 +111,9 @@ func DefaultStreamingConfig() StreamingConfig {
 
 func (c StreamingConfig) Normalize() StreamingConfig {
 	c.EngineConfig = c.EngineConfig.Normalize()
+	if c.RefillMode != RefillDeterministic && c.RefillMode != RefillTimeBudget {
+		c.RefillMode = RefillDeterministic
+	}
 	if c.TickBudget <= 0 {
 		c.TickBudget = DefaultTickBudget
 	}

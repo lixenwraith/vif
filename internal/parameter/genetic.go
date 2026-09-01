@@ -1,10 +1,6 @@
 package parameter
 
-import (
-	"time"
-
-	"github.com/lixenwraith/vi-fighter/pkg/genetic"
-)
+import "github.com/lixenwraith/vi-fighter/pkg/genetic"
 
 // Genetic Algorithm - Population
 const (
@@ -21,9 +17,6 @@ const (
 
 // Genetic Algorithm - Streaming
 const (
-	// GATickBudget caps proposal generation per refill
-	GATickBudget = 400 * time.Microsecond
-
 	GAProposalCapacity = 32
 	GAPendingCapacity  = 1024
 
@@ -46,7 +39,7 @@ func GAStreamingConfig() genetic.StreamingConfig {
 	c.PoolSize = GAPoolSize
 	c.PerturbationRate = GAPerturbationRate
 	c.PerturbationStrength = GAPerturbationStrength
-	c.TickBudget = GATickBudget
+	c.RefillMode = genetic.RefillDeterministic
 	c.ProposalCapacity = GAProposalCapacity
 	c.PendingCapacity = GAPendingCapacity
 	c.MinOutcomesPerGen = GAMinOutcomesPerGen

@@ -1,10 +1,11 @@
 package genetic
 
 import (
+	"encoding/json"
 	"math/rand/v2"
+	"reflect"
 	"sync"
 	"testing"
-	"time"
 )
 
 func newTestEngine(t *testing.T, cfg StreamingConfig) *StreamingEngine[[]float64, float64] {
@@ -134,21 +135,152 @@ func TestStreaming_Concurrent(t *testing.T) {
 	wg.Wait()
 }
 
-// Identical seeds must yield identical archives
+// Identical seeds determine the complete proposal stream. The nanosecond budget
+// is deliberately impossible: deterministic refill is the default and never
+// consults it.
 func TestStreaming_Deterministic(t *testing.T) {
-	run := func() float64 {
+	run := func() ([]float64, StreamingState[[]float64, float64]) {
 		cfg := DefaultStreamingConfig()
 		cfg.Seed = 0xDECAFBAD
-		cfg.TickBudget = time.Hour // Determinism requires a non-binding budget
+		cfg.TickBudget = 1
 		e := newTestEngine(t, cfg)
+		stream := make([]float64, 0, 300)
 		for range 300 {
 			g, id := e.Propose()
+			stream = append(stream, g[0])
 			e.CompleteEvaluation(id, g[0])
 		}
-		return e.Stats().BestScore
+		state, err := e.Checkpoint()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return stream, state
 	}
-	if a, b := run(), run(); a != b {
-		t.Fatalf("nondeterministic: %v != %v", a, b)
+	aStream, aState := run()
+	bStream, bState := run()
+	if !reflect.DeepEqual(aStream, bStream) {
+		t.Fatal("identical seeds produced different proposal streams")
+	}
+	if !reflect.DeepEqual(aState, bState) {
+		t.Fatal("identical seeded operation sequences produced different states")
+	}
+}
+
+// TestStreaming_CheckpointContinuesTheExactStream exercises every value that an
+// archive-only snapshot used to lose: PCG position, queued offspring, pending
+// genotypes, partial-generation outcomes, and the next evaluation id.
+func TestStreaming_CheckpointContinuesTheExactStream(t *testing.T) {
+	cfg := DefaultStreamingConfig()
+	cfg.Seed = 0x51A7E
+	cfg.PoolSize = 8
+	cfg.ProposalCapacity = 8
+	cfg.PendingCapacity = 16
+	cfg.MinOutcomesPerGen = 3
+
+	source := newTestEngine(t, cfg)
+	for i := range 15 {
+		g, id := source.Propose()
+		switch i % 4 {
+		case 0, 1:
+			source.CompleteEvaluation(id, g[0]+float64(i)/100)
+		case 2:
+			source.AbandonEvaluation(id)
+		case 3:
+			// Deliberately leave work in flight.
+		}
+	}
+
+	checkpoint, err := source.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(checkpoint)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded StreamingState[[]float64, float64]
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	restored := newTestEngine(t, cfg)
+	for range 5 { // Prove Restore replaces receiver-local state.
+		g, id := restored.Propose()
+		restored.CompleteEvaluation(id, -g[0])
+	}
+	if err := restored.Restore(decoded); err != nil {
+		t.Fatal(err)
+	}
+	got, err := restored.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(checkpoint, got) {
+		t.Fatal("restored engine does not equal its checkpoint")
+	}
+
+	// Resolve the evaluations that crossed the checkpoint, then compare a long
+	// mixture of completion and abandonment. IDs and genotypes must agree at every
+	// issuance, not merely converge on the same best score.
+	for _, pending := range checkpoint.Pending {
+		score := pending.Data[0]
+		source.CompleteEvaluation(pending.ID, score)
+		restored.CompleteEvaluation(pending.ID, score)
+	}
+	for i := range 250 {
+		a, aid := source.Propose()
+		b, bid := restored.Propose()
+		if aid != bid || !reflect.DeepEqual(a, b) {
+			t.Fatalf("proposal %d differs: (%d, %v) != (%d, %v)", i, aid, a, bid, b)
+		}
+		if i%7 == 0 {
+			source.AbandonEvaluation(aid)
+			restored.AbandonEvaluation(bid)
+		} else {
+			score := a[0] + float64(i%11)/100
+			source.CompleteEvaluation(aid, score)
+			restored.CompleteEvaluation(bid, score)
+		}
+	}
+	aState, err := source.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	bState, err := restored.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(aState, bState) {
+		t.Fatal("restored engine diverged after identical operations")
+	}
+}
+
+func TestStreaming_RestoreRejectsInvalidStateWithoutMutation(t *testing.T) {
+	e := newTestEngine(t, DefaultStreamingConfig())
+	before, err := e.Checkpoint()
+	if err != nil {
+		t.Fatal(err)
+	}
+	badVersion := before
+	badVersion.Version++
+	badConfig := before
+	badConfig.Config.PoolSize++
+	for name, bad := range map[string]StreamingState[[]float64, float64]{
+		"version": badVersion,
+		"config":  badConfig,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := e.Restore(bad); err == nil {
+				t.Fatal("invalid checkpoint was accepted")
+			}
+			after, err := e.Checkpoint()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(before, after) {
+				t.Fatal("failed restore changed the engine")
+			}
+		})
 	}
 }
 

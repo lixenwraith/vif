@@ -188,6 +188,15 @@ bounded; an evaluation can be abandoned explicitly or evicted when capacity is
 overrun. The registry manages up to 256 independent species through atomic
 slots and provides lock-free sampling/stat snapshots after registration.
 
+The root `genetic` package uses `math/rand/v2` PCG streams and depends only on the
+standard library. `Seed` is explicit (`0` is valid), and deterministic queue
+refill is the default, so a seed plus one operation sequence yields one proposal
+stream without consulting wall time. `StreamingEngine.Checkpoint`/`Restore`
+carry the complete continuation point: PCG position, archive, queued proposals,
+pending evaluations, partial generation, IDs and counters. Archive-only
+`Snapshot`/`Inject` remain available when learned candidates should persist but
+in-flight work need not.
+
 Operators include tournament/roulette selection, uniform/N-point crossover,
 bounded or Gaussian perturbation, and capacity-reusing slice cloning. The
 optional fitness/tracking packages scalarize multi-metric lifetimes, and the
@@ -216,6 +225,12 @@ On `:new`/game reset, in-flight evaluations and proposals are dropped but the
 scored archive is retained, so learning survives a level reset. Because the
 game registry has no persistence store, it does not survive process exit. The
 generic persistence package is available but not wired into the application.
+
+An authoritative multiplayer capture is different from file persistence. The
+genetic D-19 carrier exports each registry engine's complete checkpoint, the
+scout PCG/counter, and the game adapter's live fitness accumulators. A join or
+correction therefore continues with the same next genotype and the same pending
+evaluation IDs; it does not restart evolution from the scored archive.
 
 ## 9. Physics primitives
 

@@ -275,7 +275,10 @@ The generic genetic library offers both classic generational and streaming
 steady-state engines. The game adapter currently evolves eye parameters,
 tracking closest approach and successful self-destruct damage as fitness. The
 adapter uses an in-memory registry: archives survive an in-process `:new`, but
-no persistence store is attached for cross-process saves.
+no persistence store is attached for process-lifetime saves. Multiplayer
+captures use the separate exact-continuation contract, carrying each streaming
+engine's PCG position, proposal/pending work and IDs together with the registry's
+scout stream and the adapter's live fitness accumulators.
 
 Gameplay motion uses cell-centered `float64` positions, velocities, and
 accelerations. Integer `Point`/`Area` values represent discrete cells, while

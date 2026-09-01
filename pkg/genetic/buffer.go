@@ -87,7 +87,7 @@ func (t *pendingTable[S]) take(id EvalID) (S, bool) {
 
 func (t *pendingTable[S]) clear() {
 	var zero S
-	for i := range t.ids {
+	for i := 0; i < len(t.ids); i++ {
 		t.ids[i], t.data[i] = 0, zero
 	}
 	t.live = 0

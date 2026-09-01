@@ -1,6 +1,8 @@
 package registry
 
 import (
+	"encoding/json"
+	"reflect"
 	"testing"
 	"time"
 
@@ -207,5 +209,116 @@ func TestRegistry_Evolution(t *testing.T) {
 	}
 	if st.PendingCount != 0 {
 		t.Errorf("expected no pending evaluations, got %d", st.PendingCount)
+	}
+}
+
+func TestRegistry_ExportImportContinuesSamplesAndScouts(t *testing.T) {
+	cfg := genetic.DefaultStreamingConfig()
+	cfg.Seed = 0xC01A71
+	cfg.PoolSize = 8
+	cfg.ProposalCapacity = 8
+	cfg.PendingCapacity = 32
+	cfg.MinOutcomesPerGen = 3
+
+	newRegistry := func() *Registry {
+		reg := NewRegistry(nil)
+		err := reg.Register(SpeciesConfig{
+			ID:             3,
+			Name:           "continuation",
+			GeneCount:      2,
+			Bounds:         []genetic.ParameterBounds{{Min: 0, Max: 1}, {Min: -2, Max: 2}},
+			ProbeBins:      5,
+			TournamentSize: 3,
+			MixProbability: 0.5,
+			EngineConfig:   &cfg,
+		}, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := reg.Start(); err != nil {
+			t.Fatal(err)
+		}
+		return reg
+	}
+
+	source := newRegistry()
+	defer source.Stop()
+	for i := range 24 {
+		var genes []float64
+		var id uint64
+		if i%3 == 0 {
+			genes, id = source.SampleScout(3)
+		} else {
+			genes, id = source.Sample(3)
+		}
+		if i%4 == 0 {
+			source.AbandonFitness(3, id)
+		} else if i%4 != 3 { // Keep one quarter pending across the checkpoint.
+			source.ReportFitness(3, id, genes[0]+genes[1]/10)
+		}
+	}
+
+	state, err := source.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	encoded, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var decoded []SpeciesState
+	if err := json.Unmarshal(encoded, &decoded); err != nil {
+		t.Fatal(err)
+	}
+
+	restored := newRegistry()
+	defer restored.Stop()
+	for range 7 {
+		genes, id := restored.Sample(3)
+		restored.ReportFitness(3, id, -genes[0])
+	}
+	if err := restored.Import(decoded); err != nil {
+		t.Fatal(err)
+	}
+	got, err := restored.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(state, got) {
+		t.Fatal("registry import did not reproduce the exported state")
+	}
+
+	for i := range 180 {
+		var a, b []float64
+		var aid, bid uint64
+		if i%4 == 0 {
+			a, aid = source.SampleScout(3)
+			b, bid = restored.SampleScout(3)
+		} else {
+			a, aid = source.Sample(3)
+			b, bid = restored.Sample(3)
+		}
+		if aid != bid || !reflect.DeepEqual(a, b) {
+			t.Fatalf("sample %d differs: (%d, %v) != (%d, %v)", i, aid, a, bid, b)
+		}
+		if i%6 == 0 {
+			source.AbandonFitness(3, aid)
+			restored.AbandonFitness(3, bid)
+		} else {
+			score := a[0] + a[1]/10
+			source.ReportFitness(3, aid, score)
+			restored.ReportFitness(3, bid, score)
+		}
+	}
+	finalA, err := source.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	finalB, err := restored.Export()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(finalA, finalB) {
+		t.Fatal("restored registry diverged after identical use")
 	}
 }

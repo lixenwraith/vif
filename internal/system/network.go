@@ -1081,13 +1081,14 @@ func digestDifference(local, remote stateDigest) string {
 // the artifact's own target tick, which travels with it, so a relayed epoch applies
 // at the same tick however many links it crossed to arrive.
 //
-// The session is a mesh of links, not a star with an authority: a participant sends
-// only to the peers it dialled or accepted, so an artifact reaches everyone else by
-// being forwarded. Every node therefore floods each epoch it has not seen to every
-// link except the one it arrived on. What terminates the flood is the per-source
-// epoch window: a second copy arriving by another path is recognised and neither
-// applied nor forwarded again, so each node handles each epoch exactly once whatever
-// the topology. The hop limit is a backstop, not the termination argument.
+// Authority and topology are separate: the host owns the canonical shared world,
+// while a participant sends only to peers it dialled or accepted. An artifact
+// therefore reaches everyone else by being forwarded. Every node floods each epoch
+// it has not seen to every link except the one it arrived on. What terminates the
+// flood is the per-source epoch window: a second copy arriving by another path is
+// recognised and neither applied nor forwarded again, so each node handles each
+// epoch exactly once whatever the topology. The hop limit is a backstop, not the
+// termination argument.
 func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 	batch, err := event.DecodeWireBatch(body)
 	if err != nil {
