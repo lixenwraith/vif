@@ -133,6 +133,17 @@ only two. A wholly player-domain system draws one player stream: `FuseSystem`,
 `DrainSystem`, `LootSystem`, `LightningSystem`. No simulation path seeds from a
 clock; `TimeResource.GameTimeNano` is explicitly not a seed source.
 
+`Stream` records the generator it issues under its domain and label, which is
+what makes the streams *enumerable* for D-19: the inventory comes from the one
+factory they all pass through rather than from a list someone maintains. Every
+call still issues a fresh generator, because a system re-running `Init` after a
+reset must start the new session's sequence rather than resume the finished
+game's position; the map holds the live pointer each system kept, so
+`LoadStreams` moves the generator the simulation actually draws from.
+`vmath.FastRand.SetState` is what lets a stream resume at a recorded position —
+a seed reproduces a sequence from its beginning, and only a position reproduces
+it from where a run had reached.
+
 **D-9 Entity identity.** `World.nextEntityID [2]uint64`; `CreateEntity(domain)`
 explicit at every call site; `Clear()` resets both. Zero remains invalid in both
 domains. Created and destroyed counts are tracked per domain
@@ -411,6 +422,90 @@ player-stamped `EventCursorMoveRequest` naming the local cursor, exactly as
 `PushCursorMove` did in the run. Without that, a replay would resolve every
 player-domain effect keyed to the local cursor against a cell the run never showed
 — the dust conversion is the one that finds it first.
+
+**D-19 Restorable shared state.** Every value that can change a future shared
+outcome is either a component in a shared entity's store, or declared by its
+owning system in `internal/manifest/definition.go` as `Snapshot: "state"` and
+carried through `engine.SharedStateSaver`, or provably re-derivable from those at
+install time.
+
+The declaration is checked, not trusted.
+`TestSnapshotDeclarationsMatchImplementations` fails in **both** directions: a
+system declaring `state` that does not implement the interface, and — the one
+that matters — a system that implements it without declaring, whose state would
+then reach no capture while looking implemented. `TestSnapshotCarriersAreSharedOrDual`
+refuses a player-profile carrier, because a capture describes the shared world
+and nothing else (D-1, D-6). This is the same construction that made D-15's
+domain profiles mechanical rather than reviewed.
+
+Declared carriers, and why each holds state a store cannot:
+
+| System | What it carries |
+|---|---|
+| `wall` | the maze generator's position — a `math/rand/v2` source, the one simulation stream that is not a `vmath.FastRand` and so is not in `RandResource`'s inventory |
+| `adaptation` | EXP3 route weights, the pre-sampled pool, the consumer head and its fallback rotation, which decide the route a spawned eye takes |
+| `genetic` | per-species GA populations, plus the telemetry throttle and running per-type average that decide when `eye.ga.typefit` publishes |
+| `navigation` | D-17's recompute phase and `LastTargets`; the fields, the passability grid and the route graph are re-derived at install |
+| `gold` | sequence liveness, its header entity, both deadlines and per-slot contribution |
+
+Beside the declared carriers a capture also holds what belongs to no system:
+every RNG stream's position (`RandResource.SaveStreams`, enumerable because the
+streams come from one factory rather than from a maintained list), the FSM's
+runtime position (`fsm.Machine.Export` — which state each region stands in and
+how long it has stood there), the shared component stores, the allocator's next
+ID and lifetime counters, and the compared status surface.
+
+*The status surface is in a capture for a different reason from everything else.*
+Cumulative species counters — swarms spawned, physics steps taken — affect no
+future outcome, which is precisely why no system declares them under this rule.
+But D-11 requires two instances to agree on them, so a joiner arriving with its
+own totals reads as divergent on the compared surface from its first tick and
+never converges. A capture therefore reproduces the *surface* as well as the
+state, filtered through the same `sharedKey` predicate `snapshotShared` compares
+through.
+
+Durations are written relative to the capture's tick, never as absolute instants.
+Since D-21 made the simulation clock tick-derived the two forms agree, but the
+relative one stays correct if a capture is rebased.
+
+**D-20 A shared region is steered only by replicated events.** Every FSM region
+is shared state and `fsm.<region>` is compared across the session, so a region
+can stay in agreement only if every event that moves it is one every instance
+holds. A `ClassLocal` trigger is not: it never replicates, so the region advances
+on the one instance whose participant produced it and nowhere else, and nothing
+re-derives a missing local event.
+
+`TestFSMTriggersAreReplicated` enforces this over every config tree a build can
+boot, the embedded copy included, naming the state and the class it found.
+
+The rule was written from a defect. `MonitorActive` transitioned on
+`EventHeatBurst`, which `HeatSystem` pushes with `PushLocal` for the cursor that
+overheated; in the 2026-08-31 session that fired at tick 1903 and the session was
+marked `DIVERGED` at 1934. The state name recovered a tick later, which is why
+the transition looked harmless — what stayed apart was the region's *elapsed
+time*, measured from a re-entry only one instance made. The sweep it wanted is a
+per-instance effect (D-6) and `HeatSystem` emits it directly now.
+
+**D-21 The simulation instant is a function of the tick.** `engine.SimTime(tick,
+interval)` measured from `engine.SimEpoch` is the only value a system may treat
+as "now". The pacing clock still decides *when* a tick runs, and `RealTime` still
+reports the wall.
+
+Game time was read from each process's `PausableClock`, which projects
+`time.Now()`, so two participants read different instants at the same tick:
+different origins, and different scheduler jitter on top. Every shared reader
+measures a difference against a stored instant — a quasar's speed step, a gold
+deadline, adaptation drain ages, genotype ages — and a difference against a
+wall-paced clock crosses its threshold on a different *tick* per instance. That
+is the 2026-08-31 kinetics divergence: a quasar spawned at tick 712, one instance
+stepped its `SpeedMultiplier` a tick before the other, and because the multiplier
+compounds the two velocity streams never re-converged.
+
+The rule also makes `DeltaTime` honest. A tick has always advanced the simulation
+by exactly `tickInterval`; only the instant stamped beside it drifted.
+`time.game_elapsed_ms` is in the compared surface as a result — it is `tick *
+interval` now, and comparing it is what pins the clock. Its previous exclusion is
+why nothing caught the divergence at its source.
 
 ## 3. Spatial partition
 
@@ -760,8 +855,19 @@ effect systems, plus `glyph.`, `fuse.`, `shield.`, `cleaner.`, `camera.`,
 `manifest.Systems`, not the name. `denySharedKey` drops a single key from an
 otherwise comparable group: `engine.apm` and `engine.music_apm` beside the tick
 counters, `nav.entities`, `content.served`/`content.rejected`/`content.file` beside
-the corpus fingerprint, and `engine.tick_slips`, `time.game_elapsed_ms` and
-`gold.timer`, which are local scheduler/wall-time gauges rather than shared state.
+the corpus fingerprint, and `engine.tick_slips`, a missed-deadline count that is
+this process's pacing rather than simulation state.
+
+`time.game_elapsed_ms` used to sit beside it on the same argument, and that
+argument was wrong in a way that cost a session: it held only while the
+simulation instant came from the pacing clock. D-21 derives it from the tick, so
+the value is `tick * interval` on every instance, it is compared, and comparing
+it is what pins the clock deterministic — `TestSharedSnapshotComparesElapsedGameTime`
+fails if a forged value does not move the surface. `gold.timer` stays denied but
+for a corrected reason: it is deterministic now, and what still separates two
+instances is that a joiner's FSM reaches `MainSpawnGold` one tick before the
+host's, so the sequence carries origins a tick apart for its whole life. That is
+a real defect and an open item for Phase 3, recorded rather than hidden.
 The corpus trio is the whole of what a draw writes — the count and the file the
 cursor has reached — because content glyphs are player-domain and two participants
 who type differently roll onto different files. What remains beside them describes
@@ -842,7 +948,17 @@ fails the build when the code stops matching the declaration.
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
 | `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
 | `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption is not reported on its first sample, becomes amber `DESYNC`, escalates to red `DIVERGED`, and equality clears both through a transient green `SYNCED` |
-| `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores independent wall origins and deadline-slip telemetry while keeping absolute simulation tick/state |
+| `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores deadline-slip telemetry while keeping absolute simulation tick/state |
+| `TestSharedSnapshotComparesElapsedGameTime` | `internal/app` | D-21: two instances driven the same number of ticks report the same elapsed game time, it equals `tick * interval`, and a forged value moves the shared surface |
+| `TestSimTimeIsAFunctionOfTheTick`, `TestSimTimeAdvancesByExactlyTheTickInterval`, `TestManualEpochIsTheSimEpoch` | `internal/engine` | D-21: the instant is decided by the tick alone, advances by exactly `DeltaTime`, and a 20-tick threshold lands on tick 20 rather than 19 |
+| `TestFSMTriggersAreReplicated` | `internal/app` | D-20: no FSM transition in any bootable config tree, the embedded copy included, triggers on a `ClassLocal` or unclassified event |
+| `TestSnapshotDeclarationsMatchImplementations` | `internal/manifest` | D-19 in both directions: a declared carrier must implement `SharedStateSaver`, and an implementer must be declared |
+| `TestSnapshotStateSystemsRoundTrip`, `TestSnapshotCarriersAreSharedOrDual` | `internal/manifest` | D-19: every declared carrier writes bytes it can read back, and none is player-profile |
+| `TestSaveStreamsReportsEveryIssuedStream`, `TestLoadStreamsResumesTheGeneratorsSystemsHold`, `TestLoadStreamsNamesUnknownStreams`, `TestStreamIssuesAFreshGeneratorPerDraw` | `internal/engine` | D-8/D-19: the stream inventory is complete, restoring moves the generator a system holds, an unknown name is reported, and a re-draw does not resume the finished game |
+| `TestSetStateResumesTheSequence`, `TestSetStateRejectsZero` | `pkg/vmath` | A recorded position reproduces a sequence from where a run reached, and a zero state cannot produce a dead stream |
+| `TestCaptureReconstructsTheSharedWorld`, `TestCaptureCarriesEveryDeclaredSystem`, `TestCaptureCarriesNoPlayerState`, `TestVerifyCaptureRejectsATamperedBody` | `internal/app` | D-19: a capture encoded, decoded and installed leaves the shared surface equal; every declared carrier is present; no player placement reaches a capture; a modified body and a foreign seed are both refused |
+| `TestInstalledWorldStaysIdenticalForFiveHundredTicks` | `internal/app` | D-19's construction proof over three seeds: an installed world's *future* matches for 500 further ticks with shared species live. Player-domain production is stopped first, because a capture carries no player state and a crossing is Phase 4's subject |
+| `TestSwarmKeepsIntegratingWhenLockCannotResolve`, `TestSwarmLeavesLockWhenChargeCannotResolve` | `internal/system` | A refused species state entry is a delay, never a wedge: the chase keeps integrating and the lock is not held frozen and enraged |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
 | `TestAppsScopeOperatorState` | `internal/app` | Two Apps drive resize and debug mutations without cross-talk |

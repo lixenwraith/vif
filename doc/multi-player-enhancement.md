@@ -2,11 +2,15 @@
 
 **Status: this is the plan of record for multiplayer.** It supersedes the staged
 recommendation in [desync.md](desync.md), which is retained as the diagnosis of the
-2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-18
+2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-21
 in [domain-design.md](domain-design.md) remain authoritative for the *existing*
 code; §5 of this document states which of them the target architecture keeps,
-changes, and adds to. D-18 is the first of them this plan added, and it landed with
-Phase 1.
+changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
+Phase 2.
+
+**Phases 1 and 2 are done. Phase 3 is next**, and §6's Phase 3 entry says what it
+starts from. §9 records the defects the 2026-08-31 session surfaced and what each
+turned out to be.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -156,6 +160,11 @@ determinism to keep the rate low.
 These are the findings that determine the phase order. They are stated here rather
 than discovered mid-implementation.
 
+*Sections 4.1 and 4.2 are resolved; 4.3 stands.* They are kept as written because
+they are the reasoning the phase order came from, and because §9 shows §4.2 was
+right about the hazard and wrong about when it bites. What each turned into is
+noted at the end of the section.
+
 ### 4.1 The hidden-state surface
 
 A snapshot must carry everything that decides a future shared outcome. Much of it
@@ -176,6 +185,17 @@ The two learned resources are `shared`-profile state that neither existing
 document lists, and neither is covered by the digest — so a divergence in either
 is silent until it moves an entity.
 
+**Resolved by Phase 2.** The inventory is a build-time list now: `SystemDef`
+declares the obligation, the generator emits the table, and the boundary suite
+fails a system whose declaration does not match its code (D-19). `FastRand.SetState`
+exists; `RandResource` enumerates the streams because they all come from one
+factory; `WallSystem.mazeRng` carries the PCG source's own binary form; both
+learned resources have export contracts; the FSM runtime travels. The last row —
+"per-system scratch: no inventory exists" — turned out to be the interesting one:
+the 500-tick gate found the genetic telemetry throttle, the gold deadlines and the
+D-17 recompute phase by failing, one at a time. What the survey could not list, a
+gate could.
+
 ### 4.2 Absolute timestamps will not survive a transfer
 
 Shared components store *absolute* instants: `GenotypeComponent.SpawnTime`,
@@ -193,6 +213,17 @@ the error is invisible until an eye changes speed at the wrong moment.
 round-trip test must run **cross-process with a deliberately offset clock origin**.
 A same-process round-trip would pass while the real transfer fails, so it must not
 be the gate.
+
+**Resolved by Phase 2, and the scoping here was wrong.** This section says the
+absolute instants are "sound today by a subtle argument" and stop being sound "the
+moment state is transferred between processes". The 2026-08-31 log shows they were
+never sound: each instance's game time came from its own wall clock, so a quasar's
+speed step landed on different *ticks* in a live session with no transfer
+involved (§9.1). D-21 makes the instant a function of the tick, which fixes the
+live defect and largely dissolves the transfer hazard — an instant no longer
+carries a process origin at all. Captures still write durations relative to the
+capture tick, because that stays correct if a capture is rebased; and the
+cross-process gate is still owed, for the reason the section gives.
 
 ### 4.3 The digest is narrower than the state
 
@@ -228,14 +259,28 @@ snapshot record outside `view`. An authoritative value the prediction did not
 produce replaces it — the prediction is discarded, never merged. The rule as built,
 with the accessors and the checks that pin it, is in `domain-design.md`.
 
-**D-19 Restorable shared state (new).** Every value that can change a future shared
-outcome is either a component in a shared entity's store, or declared by its owning
-system in `internal/manifest/definition.go` as snapshot state and serialized
-through that declaration, or provably re-derivable from those at install time.
-Durations are stored relative to the snapshot's tick, never as absolute instants
-(§4.2). A system holding future-affecting private state without declaring it fails
-the boundary suite — the same construction that made D-15's domain profiles
-mechanical rather than reviewed.
+**D-19 Restorable shared state (new, landed with Phase 2).** Every value that can
+change a future shared outcome is either a component in a shared entity's store,
+or declared by its owning system in `internal/manifest/definition.go` as snapshot
+state and serialized through that declaration, or provably re-derivable from those
+at install time. Durations are stored relative to the snapshot's tick, never as
+absolute instants (§4.2). A system holding future-affecting private state without
+declaring it fails the boundary suite — the same construction that made D-15's
+domain profiles mechanical rather than reviewed. The rule as built, its five
+declared carriers and the reason the *status surface* is in a capture for a
+different reason from everything else, are in `domain-design.md`.
+
+**D-20 Replicated triggers for shared regions (new, landed with Phase 2).** An FSM
+region is shared state, so only an event every instance holds may move it. A
+`ClassLocal` trigger advances the region on the one instance whose participant
+produced it and nowhere else, and nothing re-derives a missing local event. Not
+anticipated by this plan: it was found in the 2026-08-31 log (§9).
+
+**D-21 Tick-derived simulation instant (new, landed with Phase 2).** The instant a
+tick reads is a function of the tick number and a constant epoch, never of the
+pacing clock. §4.2 predicted this would matter *for transfers*; the log showed it
+already mattered *live* (§9), which is why it landed as a rule rather than as a
+snapshot convention.
 
 ## 6. Phases
 
@@ -245,7 +290,7 @@ player will feel.
 
 ---
 
-### Phase 1 — Local-first input
+### Phase 1 — Local-first input  ✅ landed
 
 **Goal.** A session's local cursor and typing respond exactly as a solo run does.
 This is worth shipping on its own, before any protocol work, and it is the phase
@@ -303,7 +348,7 @@ effect keyed to the local cursor against a cell the run never showed.
 
 ---
 
-### Phase 2 — The snapshot (D-19)
+### Phase 2 — The snapshot (D-19)  ✅ landed
 
 **Goal.** Produce an object that reconstructs the shared world exactly, and prove
 it by construction. Everything after this depends on it; nothing before it does.
@@ -344,9 +389,63 @@ reaches the same shared digest as the uninterrupted run at T+500 — once mid-st
 once across a `:new` reset. Record bytes, capture time, install time and allocation
 peak at the storm high water; Phase 4's cadence is chosen from those numbers.
 
+**Landed.** D-19, D-20 and D-21 are in `domain-design.md` with the rules as built.
+
+*The declaration.* `SystemDef.Snapshot` is `""` or `"state"`; the generator emits
+`systemSnapshots` beside `systemProfiles`, and
+`TestSnapshotDeclarationsMatchImplementations` fails in both directions. The
+second direction is the one that matters: a system growing save/load methods
+without a manifest entry would look implemented while its state reached no
+capture. Five carriers are declared — `wall`, `adaptation`, `genetic`,
+`navigation`, `gold` — and the table in D-19 says what each holds.
+
+*The capture.* `app.SharedCapture` is the object. Its world half is generated from
+the manifest, so a component added to the declaration list appears in a capture
+without anyone remembering to add it: 52 stores, filtered to shared entities,
+referenced by `core.Entity` and never by a dense index. Around it: the allocator's
+next ID and lifetime counters, every RNG stream's position, the FSM's runtime
+position, each declared carrier's bytes, and the compared status surface. The
+header carries the same identity set `anchorIdentity` compares, so a capture and a
+replay answer "are these the same simulation" the same way; integrity is a hash
+over the body with its own field zeroed. Both are checked and every carrier
+resolved before anything is written.
+
+*What the gate found.* Requirement 9's 500-tick continuation is what made this
+real, and every item below was discovered by that loop failing, one at a time,
+with none of them in a component store: the FSM's time in state; the gold
+sequence's liveness, header and both deadlines; the genetic telemetry throttle and
+its running per-type average; the shared lifetime counters and the whole shared
+status surface; and the spatial gauges, republished at install because the index
+is rebuilt there. §4.1's "no inventory exists" is answered by construction now,
+and the loop is how the inventory was actually assembled.
+
+*Two limits, and they are the honest ones.* The gate stops player-domain
+production in both runs first. A capture carries no player state by design (D-2,
+D-6), so two instances holding one shared world still hold different drains, and a
+drain defeated on one advances the shared escalation FSM there and nowhere else.
+That is a crossing, not a capture defect, and delivering crossings is Phase 4. And
+the gate is in-process: **§6's cross-process, clock-offset, record-stream-driven
+form is not yet built**, and it is the first thing Phase 3 should stand up, since
+Phase 3 is what puts a capture on a wire. Sabotage checks confirm the in-process
+gate is not vacuous — dropping the RNG stream restore diverges it at 300 ticks —
+but the navigation route-rebuild phase is carried without a failing case that
+exercises it, which is a known soft spot.
+
+*Sizing, measured.* ~4 KB per capture at three swarms and a gold sequence; 24 RNG
+streams, 5 system records, 2 FSM regions. The storm high-water figure §6 asks for
+still needs taking, and Phase 4's cadence should be chosen from that rather than
+from this.
+
+*Not done in Phase 2, deliberately.* No capture goes on the wire and no live
+behaviour changed (the boundaries hold). Staged install into a second world is
+**not** built: `InstallShared` validates fully before writing, and resolves every
+carrier first, but it writes into the live world rather than swapping at a tick
+boundary. Phase 3 needs the swap and should build it there, where a joining
+instance is the thing being installed into.
+
 ---
 
-### Phase 3 — Join anytime
+### Phase 3 — Join anytime  ← next
 
 **Goal.** Deliver the original requirement: a running solo game can be toggled into
 a host, and a participant can arrive at any moment.
@@ -370,6 +469,31 @@ to pause. Elect a coordinator or survive host loss.
 from a second terminal: the guest arrives inside the storm with the same world, and
 both cursors work. Kill the guest and rejoin. Repeat with the join deliberately
 delayed until several minutes in — join cost must not grow with session length.
+
+**What Phase 3 starts from.** Phase 2 left five things on its doorstep, in the
+order they are wanted:
+
+1. **The staged install.** `App.InstallShared` validates everything before writing
+   but writes into the live world. Phase 3 needs the second world and the swap at
+   a tick boundary, because the instance being installed into is a running one.
+2. **The cross-process gate.** §6's requirement 9 — capture in one process, load
+   in another whose clock origin is deliberately offset, then 500 ticks under an
+   identical record stream. D-21 makes the clock-offset half much less dangerous
+   than it was (the simulation instant no longer carries a process origin at all),
+   but it must still be the gate rather than an argument, and the record-stream
+   half is only expressible once a capture travels.
+3. **The gold spawn-tick defect.** A joiner's FSM reaches `MainSpawnGold` one tick
+   before the host's, so the two carry deadline origins a tick apart for the life
+   of the sequence. `gold.timer` is excluded from the compared surface only
+   because of this; re-admitting the key is the check that closes it. Reproduce
+   with `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` and the deny entry
+   removed from `internal/app/snapshot.go`.
+4. **The storm high-water sizing.** Capture bytes, capture time, install time and
+   allocation peak at the storm high water. Phase 4's cadence is chosen from those
+   numbers and Phase 2 only has the quiet-world ones.
+5. **A failing case for the navigation phase.** The route-rebuild phase is carried
+   but no sabotage of it fails the gate, so its coverage is asserted rather than
+   demonstrated.
 
 ---
 
@@ -471,8 +595,10 @@ implementation starts clean:
 
 1. **Prediction scope in Phase 1.** Cursor cell only, or also the visual removal of
    a typed *shared* gold member? The conservative answer is taken here.
-2. **Snapshot cadence** is a guess until Phase 2 measures. 2–5 Hz is the starting
-   hypothesis, not a constant.
+2. **Snapshot cadence** is a guess until it is measured at the storm high water.
+   Phase 2 measured a quiet world — ~4 KB per capture with three swarms and a gold
+   sequence — which supports the 2–5 Hz hypothesis but does not test it. The
+   figure that decides it is still owed (§6, Phase 3's starting list).
 3. **Host loss** ends the session. Confirm that is acceptable before sizing Phase 6.
 4. **Does the host keep re-deriving, or become the only simulator?** This plan
    keeps guests simulating (§2.1). If measurement later shows correction magnitude
@@ -480,3 +606,148 @@ implementation starts clean:
    snapshot rate — a tuning change, not a rewrite.
 5. **Tower ownership in optional maps** still binds every tower to slot zero. Not a
    blocker; a gameplay rule to settle before towers appear in a real session.
+
+## 9. What the 2026-08-31 session showed
+
+Two participants, both in god mode, ~1,940 ticks. The log carried three defects
+and none of them was the one the plan expected next. All three are fixed; the
+first two are why D-20 and D-21 exist.
+
+### 9.1 Kinetics divergence at tick 744 — the wall-derived clock
+
+Reported as `part=kinetics, records=world`, first sample at tick 744 and
+`DIVERGED` at 762, with no proximate cause anywhere near it. The cause was 30
+ticks earlier: a quasar spawned at tick 712.
+
+Game time came from each process's `PausableClock`, which projects `time.Now()`.
+`QuasarSystem` steps `SpeedMultiplier` when `now.Sub(LastSpeedIncreaseAt)` passes
+one second, so a sub-millisecond difference between two schedulers puts that step
+on tick N for one instance and N+1 for the other. The multiplier compounds, so the
+two velocity streams never re-converged.
+
+§4.2 of this plan had already identified absolute instants as a hazard, but
+scoped it to *transfers* — "it stops being sound the moment state is transferred
+between processes". The log shows the argument was too generous: the origins do
+not align during a live session either, because the start gate freezes game time
+until everyone is ready and then each instance's wall clock runs on its own. Every
+reader §4.2 lists was already exposed.
+
+The fix is D-21. It also removed the reason `time.game_elapsed_ms` was excluded
+from the compared surface, and that exclusion is exactly why nothing caught this:
+the clock itself was never compared.
+
+### 9.2 Status divergence at tick 1914 — a shared region on a local event
+
+Reported as `part=status, records=reg|stat|fsm.monitor`. The cause is eleven ticks
+earlier and visible in the same log: at tick 1903 the monitor region transitioned
+`MonitorActive → MonitorHeatBurst via EventHeatBurst`, and back at 1904.
+
+`EventHeatBurst` is `ClassLocal`, pushed by `HeatSystem` for the cursor that
+overheated. Only the bursting participant's region moved. The state name recovered
+a tick later, which is why the transition looks harmless in the log — what stayed
+apart was the region's *elapsed* time, measured from a re-entry only one instance
+made, and `fsm.monitor` is in the compared surface.
+
+The fix is D-20 plus moving the sweep into `HeatSystem`, where a per-instance
+effect belongs (D-6). Its hits on shared targets already cross as combat events
+under D-3, so nothing about the gameplay changed.
+
+### 9.3 A swarm parked inside a shield — a wedged state machine
+
+Not a divergence; a gameplay stall, and the telemetry named it precisely.
+Between ticks 800 and 1000 `shield.shield_hit` rose by 64 while
+`swarm.physics_steps` did not move at all, and `combat.effects.kinetic` reached
+404 over the run. The shield was striking the swarm every tick and combat was
+applying knockback impulses to its velocity, but nothing was integrating that
+velocity into a position.
+
+`updateChaseState` decremented `ChargeIntervalRemaining`, called `enterLockState`
+and returned. `enterLockState` refuses when no target resolves — and refused
+without re-arming the interval, so an expired interval took the same branch on
+every following tick and returned before applying homing or integrating. The
+shield deals no damage by design; its whole job is ejection, and with god mode it
+never dropped, so nothing resolved the stall.
+
+The observation in the report — "as if immunity to damage and kinetic were both
+being reset" — was close. `IsEnraged`, which `updateLockState` re-asserts every
+tick, is one of the two gates that reject a knockback, and it is latched rather
+than reset. But the load-bearing failure was the frozen integrator, and the fix
+makes every swarm state total: an entry that refuses is a delay, never a wedge,
+and `swarm.transition_stalls` counts refusals so the condition is visible in a log
+rather than only as a species that stopped moving.
+
+**What this suggests for the other species.** `QuasarSystem` refreshes
+`RemainingDamageImmunity` to its full duration on every tick a quasar is shielded,
+which makes a shielded quasar permanently invulnerable. That reads as deliberate
+and was left alone, but it is the same shape as the swarm's latched `IsEnraged`,
+and a shielded quasar that cannot leave its shielded state would be the same
+stall. Worth a look when the quasar is next touched.
+
+## 10. Manual verification for the next session
+
+Everything below is a two-terminal check. Phases 1 and 2 changed the clock, the
+monitor region and the swarm state machine, and none of those is on the wire — so
+what is being verified is that nothing regressed *and* that the two reported
+defects are gone.
+
+### 10.1 How to run it, and what to send back
+
+```bash
+# terminal 1 — host, logging on, journal on
+./bin/vif -host :7777 -players 2 -lv info -ls afs -lt 200 -j
+
+# terminal 2 — guest
+./bin/vif -join 127.0.0.1:7777 -lv info -ls afs -lt 200 -j
+```
+
+`-ls afs` keeps `app`, `fsm` and `stat`: the divergence reports, the region
+transitions and the periodic counters. That is the mask both 2026-08-31 findings
+were diagnosed from, and it keeps the file small enough to attach. Add `+e` only
+if a specific event needs chasing — it was 5,634 of the last log's 6,801 lines and
+carried nothing.
+
+**Send back the log from *both* terminals.** The last session had only one side,
+which was enough to see that the two disagreed but not to see which one was
+wrong. With both, `part` and `records` on one side can be read against the other's
+records at the same tick.
+
+Run for **at least 2,000 ticks (about 100 s)**, since both reported divergences
+appeared after tick 700.
+
+### 10.2 What to check
+
+| # | Check | Pass |
+|---|---|---|
+| 1 | Play both cursors normally for 2,000+ ticks | No `shared state divergence` (WARN) and no `shared state diverged` (ERROR) in either log. The status bar never shows `DESYNC` or `DIVERGED`. |
+| 2 | **Heat burst, both sides.** Drive one participant's heat to a burst, then the other's | The cleaner sweep still appears for the participant who burst, and only for them. `fsm.monitor` never enters a heat state — the region should stay `MonitorActive`. No divergence follows either burst. |
+| 3 | **Quasar speed.** Play until a quasar spawns and survives ~30 s | No `part=kinetics` divergence. This is the tick-744 defect; a quasar living through several speed steps is what exercised it. |
+| 4 | **Swarm in a shield.** Both in god mode, let a swarm reach a shield and sit in it | The swarm is ejected rather than parking. In the `stat` records, `swarm.physics_steps` keeps rising while `shield.shield_hit` does; the two moving together is the fix, `shield_hit` rising while `physics_steps` is flat is the bug. `swarm.transition_stalls` should stay 0; a non-zero value is not a failure but is worth reporting. |
+| 5 | **Gold across a join.** Let a gold sequence run to its timeout | Both instances resolve it on the same tick. (`gold.timer` is still excluded from the compared surface, so a divergence here will not be reported automatically — read the two `stat` records for `gold` at the same tick and compare.) |
+| 6 | **Reset.** `:new` on the coordinator | Both reset together, no divergence follows, and the swarm/gold counters restart from zero on both. |
+| 7 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed: the clock change touched every run, not only sessions. Speed control (`:speed 1/2`, `:speed 2`) and pause still behave. |
+
+### 10.3 What to look at first in the returned logs
+
+```bash
+# every divergence report, both files
+jq -c 'select(.level=="WARN" or .level=="ERROR")' <log>
+
+# the ~20 ticks before the first one — the cause is usually not adjacent
+jq -c 'select(.tick>=<T-30> and .tick<=<T+5> and .sub!="event")' <log>
+
+# the counters that named the swarm stall
+jq -c 'select(.sub=="stat" and (.fields.msg=="swarm" or .fields.msg=="shield"))' <log>
+```
+
+Both 2026-08-31 findings were 10—30 ticks *downstream* of their cause, so the
+second command is the one that matters: read the window before the report, not
+the report.
+
+### 10.4 Phase 3 wants one more thing
+
+Phase 3 is join-anytime, and its sizing depends on numbers Phase 2 could not take
+(§6, Phase 3's starting list, item 4). If a storm can be reached in one of these
+runs, note the `stat` record for `entity` and `spatial` at the storm high water
+and send it with the log — that is what Phase 4's snapshot cadence gets chosen
+from.
+
