@@ -46,18 +46,15 @@ transitions = [
 [states.MonitorActive]
 parent = "MonitorCycle"
 transitions = [
-    { trigger = "EventHeatBurst", target = "MonitorHeatBurst", capture_vars = { entity = "burst_entity" } },
     { trigger = "Tick", target = "MonitorGlobalReset", guard = "StatusBoolEquals", guard_args = { key = "session.all_defeated", value = true } },
 ]
 
-[states.MonitorHeatBurst]
-parent = "MonitorCycle"
-on_enter = [
-    { action = "EmitEvent", event = "EventCleanerSweepingRequest", payload = { entity = 0 }, payload_vars = { entity = "burst_entity" } },
-]
-transitions = [
-    { trigger = "Tick", target = "MonitorActive" },
-]
+# The heat burst used to route through this region: MonitorActive transitioned on
+# EventHeatBurst and emitted the cleaner sweep from its on_enter. EventHeatBurst is
+# owner-authored and player-domain — it never replicates — so only the bursting
+# participant's copy of this shared region transitioned, and fsm.monitor diverged
+# for the rest of the session. HeatSystem emits the sweep directly now, in its own
+# domain, which is what D-6 says a per-instance effect is. See D-20.
 
 [states.MonitorGlobalReset]
 parent = "Root"

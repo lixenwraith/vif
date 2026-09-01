@@ -199,6 +199,17 @@ func (s *HeatSystem) addHeat(cursor core.Entity, delta int) {
 		heatComp.EmberActive = true
 		heatComp.EmberDecayTime = s.world.Resources.Time.GameTime
 		s.world.PushLocal(event.EventHeatBurst, &event.HeatBurstPayload{Entity: cursor})
+
+		// The sweep is this participant's own effect and is emitted here, in this
+		// system's domain (D-6). It used to be the on_enter of a shared FSM state
+		// the burst transitioned into, which meant the shared monitor region moved
+		// on an owner-authored event that never replicates: only the bursting
+		// participant's copy transitioned, and fsm.monitor then disagreed for the
+		// rest of the session. A shared region may not be steered by a value only
+		// one participant holds (D-20).
+		s.world.PushLocal(event.EventCleanerSweepingRequest, &event.CleanerSweepingRequestPayload{
+			Entity: cursor,
+		})
 	}
 
 	s.publish(cursor, heatComp)

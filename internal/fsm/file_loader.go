@@ -33,6 +33,19 @@ func LoadConfigFromFS[T any](m *Machine[T], fsys fs.FS, entry string) error {
 	return m.LoadConfigFromMap(merged)
 }
 
+// ResolveConfig merges an entry file and its region includes into the map
+// LoadConfigFromMap consumes, without building a machine. It is the seam a
+// checker reads: a rule about what the shipped configuration may declare has to
+// see the declarations, and decoding RootConfig from this map is the only way to
+// reach a transition's trigger without running the game.
+func ResolveConfig(fsys fs.FS, entry string) (map[string]any, error) {
+	merged, err := loadAndResolve(fsys, entry, make(map[string]bool))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load FSM config '%s': %w", entry, err)
+	}
+	return merged, nil
+}
+
 // loadAndResolve recursively loads a TOML file and resolves region file includes
 // stack holds the ancestors currently being resolved; entries are popped on return
 func loadAndResolve(fsys fs.FS, name string, stack map[string]bool) (map[string]any, error) {
