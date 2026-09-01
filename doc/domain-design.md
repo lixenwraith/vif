@@ -1,9 +1,9 @@
 # Multi-instance domain model — vi-fighter
 
-Rules D-1..D-18 describe how one world is split between state every instance
-holds and state that belongs to one participant. All eighteen are implemented and
-verified; §8 maps each to the test that pins it, and §9 records what the model does
-*not* do.
+Rules D-1..D-23 describe how one world is split between state every instance holds
+and state that belongs to one participant, and how the two are kept in agreement.
+All twenty-three are implemented and verified; §8 maps each to the test that pins
+it, and §9 records what the model does *not* do.
 
 **This document describes the code as it stands, not where it is going.** Live
 sessions are being rebuilt around an authoritative host with deterministic guests;
@@ -42,7 +42,20 @@ view, input, or a player-domain effect keyed to the local participant
 splash), which is what D-6 says those are.
 
 **D-3 The crossing.** When a player mechanic affects a shared entity, the
-smallest artifact that determines the shared outcome crosses as a Bus event:
+smallest artifact that determines the shared outcome crosses as a Bus event.
+
+Its *destination* changed with Phase 4. A crossing used to be a fact every instance
+applied at one agreed tick, which meant the producer waited for its own action
+exactly as long as everyone else did. It is a **request to the authority** now: the
+producer applies it in the tick it produced it for, sends it, and the host applies
+it in its own order — and where the two disagree the next correction repairs the
+producer, never the host. The playout lead survives only on the receiving side,
+where it is an interpolation buffer that lets a remote participant's artifacts
+arrive out of order and be applied in one. The three artifacts that create or
+destroy a shared entity are the exception and keep the agreed apply tick on every
+instance including their producer; D-11 says why.
+
+The artifacts themselves are unchanged:
 
 | effect | crossing artifact |
 |---|---|
@@ -202,10 +215,34 @@ the transported set but not on the wire — the receiver derives it from the roo
 and opts out through the `event.Derived` payload interface (D-5).
 
 **D-11 Determinism invariants.** Across instances: identical shared event order,
-identical shared entity creation order, identical shared RNG derivation,
-identical shared component values except where D-13 applies. Verified by
-comparing `App.SnapshotShared()` between instances and by stripping player
-records from two journals and asserting equality.
+identical shared entity creation order, identical shared RNG derivation, and
+identical shared component values — **on the host**. On a guest, equal to the host
+as of the last applied correction, and converging.
+
+The weakening is Phase 4's and it is the point of Phase 4 rather than a concession
+to it. Bit-exact agreement at every tick was only ever achievable by making every
+instance wait: a crossing applied at one agreed tick everywhere, which charged the
+playout lead to the participant that produced it and made a lost artifact permanent,
+because nothing re-derives one. Under an authority a guest applies its own artifact
+in the tick it produced it for and extrapolates until the host tells it otherwise,
+so it differs from the host between corrections *by construction* — and the
+difference is repaired on a cadence rather than mourned. What survives unchanged is
+the first two clauses: shared entity **identity** and **creation order** are still
+identical everywhere, because a capture references entities by id and a correction
+that had to repair identity would be repairing the thing it is written in terms of.
+That is why the three artifacts which create or destroy a shared entity — an
+arrival, a departure, a reset — still apply at one agreed tick on their producer as
+well (`barrierBound` in `internal/system/network.go`).
+
+Verified in three places, and the three are different claims. Bit-exactness across
+instances is now a *test* invariant for the host's own reproduction: two journals
+stripped of player records must be equal, and a replay must reproduce its run.
+Convergence is the live invariant — `TestGuestConvergesOnEveryCorrection` and the
+two-participant criteria assert that a guest's `SnapshotShared()` equals the host's
+as of every correction, and that the two really did disagree in between, since a
+criterion a guest could pass by never predicting anything proves nothing. And the
+distance in between is measured rather than asserted: `snapshot.correction_entries`,
+`snapshot.correction_entities` and `snapshot.correction_cells`.
 
 **D-12 Claimed geometry.** A shared system that *claims* cells — spawn footprint
 clear, composite sweep-over, wall push-out — enumerates both domains and acts on
@@ -225,7 +262,16 @@ weapon, combat), `CursorComponent.Control`/`PeerID`, and
 `CursorViewComponent`/`PingComponent`/`PulseComponent`, which are pure local
 view. D-11 is refined: shared entity *identity* and *creation order* are
 identical on every instance; shared component *values* are either re-derived
-identically or owner-authored and transported — never both. Owner-authored state
+identically or owner-authored and transported — never both.
+
+Phase 4 generalised the shape rather than the list. "The owner applies immediately,
+the host arbitrates, everyone else receives" stopped being this rule's special
+exception and became the ordinary case for every crossing: a producer applies its
+own artifact at once and sends it, the host applies it in its own order, and its
+result is what the next correction carries. What still distinguishes the components
+above is that they are *transported* rather than arbitrated — no instance but their
+owner ever computes them, so a correction does not carry them and a capture that did
+would make a receiver adopt the sender's answer to which cursor it drives. Owner-authored state
 must not appear in a cross-instance digest, and the metric keys mirroring it are
 excluded by `denySharedPrefix` in `internal/app/snapshot.go`.
 
@@ -413,7 +459,7 @@ itself if it is left half-installed.
 Nothing shared reads it. `TestSystemDomainProfiles` fails a shared-profile system
 that calls any of the accessors above (`predictedLocalReads`), which is the same
 construction that makes D-13's owner-authored stores mechanical. The shared digest
-therefore cannot move: `TestTwoLiveParticipantsStayInLockstep*` is untouched by the
+therefore cannot move: `TestTwoLiveParticipantsConverge*` is untouched by the
 rule and is the proof it stayed inside the player domain.
 
 The prediction is private state and no record carries it, so a *reproduction*
@@ -444,6 +490,17 @@ phase that the next tick destroyed, and the 500-tick gate could not see it becau
 `LoadShared` derives both now, from `LastTargets`, which is also what makes the
 installed field the one the sender held.
 
+There was a third of the same kind and it took Phase 4's gateway scenario to find
+it. The gateway route graphs are derived too, so no capture carries one — but until
+that scenario existed nothing derived them either, so an install left the receiver
+holding the graphs *its own* run had built: aimed at cells the sender's were not,
+present for gateways the sender has none for, and named by route indices the
+installed `NavigationComponent`s carry. `LoadShared` clears the resource and rebuilds
+every graph the capture named now, from the source and target cells it named — the
+same reason `LastTargets` travels, one layer up. Re-deriving from *this* instance's
+current targets would not do: the graph a gateway holds belongs to the cell it was
+computed for, not to wherever the target has since gone.
+
 The declaration is checked, not trusted.
 `TestSnapshotDeclarationsMatchImplementations` fails in **both** directions: a
 system declaring `state` that does not implement the interface, and — the one
@@ -460,7 +517,7 @@ Declared carriers, and why each holds state a store cannot:
 | `wall` | the maze generator's position — a `math/rand/v2` source, the one simulation stream that is not a `vmath.FastRand` and so is not in `RandResource`'s inventory |
 | `adaptation` | EXP3 route weights, the pre-sampled pool, the consumer head and its fallback rotation, which decide the route a spawned eye takes |
 | `genetic` | per-species GA populations, plus the telemetry throttle and running per-type average that decide when `eye.ga.typefit` publishes |
-| `navigation` | D-17's recompute phase, `LastTargets` and whether a field has been derived at all; the fields, the passability grid and the route graph are re-derived *by* `LoadShared`, from the targets the phase belongs to |
+| `navigation` | D-17's recompute phase, `LastTargets`, whether a field has been derived at all, the gateway route-rebuild budget, and the two cells each gateway route graph was computed between; the fields, the passability grid and the route graphs are re-derived *by* `LoadShared`, from those inputs |
 | `gold` | sequence liveness, its header entity, both deadlines and per-slot contribution |
 
 Beside the declared carriers a capture also holds what belongs to no system:
@@ -563,6 +620,65 @@ clock starts — reading the target from the epochs the session closes, since ev
 tick closes one — and refuses the join if what remains exceeds the playout lead.
 k is a function of world size and link speed, never of how long the session has
 been running, which is the property that makes join-anytime possible at all.
+
+Phase 4 found the half of the gap this ordering does not close, and closed it. An
+epoch produced *before* the admission — and flushed to the peers this instance had
+at that moment — reaches the new participant not at all, and a capture taken at the
+admission tick does not contain it either, because its apply tick is still a playout
+lead ahead and the floor above does not drop it. So a join asks for a world a lead
+further on: by tick A+lead every artifact produced before the admission has applied
+into the capture, and the copies that do arrive are recognised as already-contained.
+It costs the join three ticks. It is also no longer a world read of its own — the
+join takes the publication cadence's most recent keyframe when one is fresh enough,
+which is what makes the read per-cadence rather than per-participant.
+
+**D-23 The host's world is the correction.** The host is the sole authority for
+shared state. It publishes its world on a cadence — a whole capture, or a delta
+against the last whole one — and a guest applies what arrives into a staging world
+and swaps it in between two ticks. Where a guest's derivation and the host's
+disagree, the host wins, with no negotiation and no acknowledgement; the distance
+between them is telemetry.
+
+Four properties are what the rule is for, and each one is a thing the previous
+design could not do:
+
+- **Nothing acknowledges a correction, and nothing retransmits one.** A keyframe
+  supersedes everything before it, so a lost delta costs freshness until the next
+  keyframe and never correctness. There is no repair path because there is nothing
+  to repair. `SnapshotKeyframeCorrections` bounds the wait.
+- **A correction cannot fail.** It arrives late, or it names a keyframe this
+  instance does not hold, or a fresher one overtakes it before it is applied. Each
+  of those is a counter — `snapshot.corrections_refused`,
+  `snapshot.corrections_superseded` — because the next correction is self-sufficient.
+- **A delta is exact or it is refused.** Applying one to the baseline it names
+  reproduces the sender's capture byte for byte, entity order included, and what
+  proves it is the capture's own integrity hash rather than a comparison. A delta
+  that rebuilt an *equivalent* world — the same entities in a different store
+  order — passes every value check and fails that hash, which is why the delta
+  carries store order at all.
+- **The magnitude is measured, not asserted.** How far a guest's prediction had
+  drifted when the authority arrived is read inside the same critical section that
+  writes the correction, and it is what a cadence gets chosen from.
+
+Two things the install does that a join's install does not. It reconciles the live
+world onto the capture — removing what the authority no longer has, writing what
+differs, leaving the rest — so the write is the size of the correction rather than
+the size of the world; `TestReconcileMatchesAFullInstall` is what says the two
+produce the same world. And it resolves into a staging world that is built once and
+re-used, because constructing one costs 9 to 31 ms and a correction happens five
+times a second; `TestStagingWorldIsBuiltOnceAndReused` is what says re-use leaves
+what a fresh world would.
+
+What the host validates is deliberately narrow, and the boundary is worth stating.
+Most of its authority is structural: it applies what reaches it in its own order and
+its result is what ships, so a guest cannot make the session believe something — it
+can only make *itself* believe it until the next correction. The exception is the
+roster, because an arrival and a departure do not describe a shared outcome, they
+create and destroy a shared entity at one agreed tick; the coordinator is their only
+producer and an artifact of either kind from anyone else is refused
+(`network.artifacts_refused`). Everything past that — a participant attributing a
+crossing to a cursor it does not drive — is an *authentication* question, and this
+plan puts authentication before anything beyond trusted peers.
 
 ## 3. Spatial partition
 
@@ -737,34 +853,43 @@ sample names the run and absolute tick and carries category hashes for position,
 kinetic, combat, context and status diagnosis; a ring holds local samples so
 sequential polling or different link latency cannot compare unlike ticks. Digest
 messages do not flood: equality on every edge implies equality across a connected
-graph. A mismatch increments `network.digest_mismatches`, logs its first differing
-category on the transition and holds a high-priority `DESYNC` status-bar item.
-Once every neighbour agrees again, a green `SYNCED` acknowledgement remains for
-twenty ticks and disappears. This detects divergence; it neither chooses an
-authoritative copy nor repairs one, and it deliberately excludes D-13
-owner-authored values. `SnapshotShared` is a comparison surface, not a restorable
-world checkpoint.
+graph.
 
-Divergence has two degrees, because one disagreeing sample and a permanent one
-call for different statements. An artifact that missed its apply tick lands on one
-side a tick late and the next sample finds the two equal again, so the indicator
-waits for `NetworkDesyncSamples` consecutive disagreements before reporting.
-`NetworkDivergedSamples` of them is past anything the participants could still
-resolve between themselves — nothing re-derives a missing artifact — so the
-session publishes `network.diverged`, logs at error, and the indicator turns from
-amber `DESYNC` to red `DIVERGED`. `network.sync_part` and `network.sync_tick` name
-the first differing category and the tick it was first seen on, so the diagnosis
-survives into `:d` and the journal.
+What a mismatch *means* changed with D-11. Before Phase 4 both instances re-derived
+the shared world from one artifact stream, so a disagreement meant one of them had
+lost an artifact and nothing would ever re-derive it: two consecutive disagreeing
+samples raised an amber `DESYNC`, five turned it red `DIVERGED`, and the session was
+over. Under an authority none of that holds — a guest applies its own input at once
+and extrapolates between corrections, so it is *expected* to differ from the host —
+and the escalation was retired with the failure state it described.
 
-A category is not a diagnosis. "The status surface differs" leaves a hundred
-records to search, and one host's own log cannot narrow it — both instances hold
-half the evidence. So once a sample has disagreed, and only then, the digest
-carries a hash per snapshot record alongside the category hashes, and the report
-names the records that moved in `network.sync_records`. It is a diagnostic rather
-than a probe: a healthy session sends none of it, which
-`TestSharedDigestCarriesDetailOnlyOnRequest` pins, and the first disagreeing sample
-turns it on early enough that the second one — the one that reports — already has
-it from both sides. Agreement clears every degree.
+The measurement stayed. A mismatch increments `network.digest_mismatches` and names
+the surface that moved in `network.drift_part`, with `network.drift_tick`. That is a
+gauge: it says how often and where two instances stand apart, which is the same
+thing the correction magnitude says from the other side. Nothing escalates, nothing
+is logged at error, and no status item reports it. The per-record breakdown is no
+longer requested on the wire either — a guest disagrees with the host between every
+pair of corrections by design, so asking for detail would mean sending a map of
+per-record hashes for the whole session. `sharedDigestLocked` still produces it, for
+the tests and for a tool comparing two runs offline.
+
+What replaced the verdict is two numbers with better claims, and they are in the
+`snapshot` and `network` groups rather than in a status word:
+
+- **The correction magnitude** — `snapshot.correction_entries`,
+  `snapshot.correction_entities` and `snapshot.correction_cells` — is how far this
+  instance's prediction had drifted at the moment the authority arrived, measured
+  inside the same critical section that writes the correction. It is telemetry, not
+  an error, and the status bar shows it as `COR n` only while it is non-zero.
+- **The staleness** — `network.lag_ticks` and `network.stale` — is how far behind the
+  newest tick any peer has been seen closing this instance stands, taken every tick.
+  Past the playout lead this participant's own crossings are reaching the host after
+  the ticks they name, which is when a player should be told the link rather than
+  the game is the problem: the status bar shows `LAG n`. Phase 3 measured this once,
+  at admission, and never again.
+
+`SnapshotShared` remains a comparison surface, not a restorable world checkpoint,
+and the digest still deliberately excludes D-13 owner-authored values.
 
 **Membership.** A roster change is shared state, so it travels as an artifact
 rather than as a local reaction to a link event. A disconnect is observed only by
@@ -994,8 +1119,8 @@ fails the build when the code stops matching the declaration.
 | `TestSharedGlyphsAreGoldMembersOnly` | `internal/app` | §4: every shared-domain glyph is a gold composite member |
 | `TestSharedSnapshotParityAcrossTerminalSizes` | `internal/app` | D-11: two instances of one seed on different terminal sizes agree at every step |
 | `TestObserverSharedStateTracksTheLiveParticipant` | `internal/app` | 1,200 steps of an observer whose shared state arrives over the wire rather than re-derived |
-| `TestTwoLiveParticipantsStayInLockstep` | `internal/app` | 1,200 steps, two live participants, both moving, both crossing, both nonzero APM |
-| `TestTwoLiveParticipantsStayInLockstepOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing and clean remote-cursor removal on disconnect |
+| `TestTwoLiveParticipantsConvergeOnCorrections` | `internal/app` | 1,200 steps, two live participants, both moving, both crossing, both nonzero APM; D-11 as weakened — the guest equals the host as of every correction rather than at every tick |
+| `TestTwoLiveParticipantsConvergeOverTCP` | `internal/app` | The same criterion through `127.0.0.1`, plus handshake, roster, framing, a chunked correction off a real socket and clean remote-cursor removal on disconnect |
 | `TestChainRelayReachesANonAdjacentParticipant` | `internal/app` | §6: a crossing reaches a participant its producer never linked to, at the same tick; fails without the relay |
 | `TestMeshPropagatesEveryParticipantToEveryOther` | `internal/app` | Five participants in 1—2, 2—3, 3—4, 3—5 agree on every shared record through 240 driven steps |
 | `TestDepartureReachesTheWholeMesh` | `internal/app` | A departure removes the cursor on an instance that never linked to the departing participant |
@@ -1004,7 +1129,14 @@ fails the build when the code stops matching the declaration.
 | `TestSessionRosterStartsAndRestartsEveryParticipant` | `internal/app` | Every closed-roster cursor receives the boot template at admission and survives the monitor's global reset |
 | `TestLiveSessionRefusesAnInstanceLocalPause`, `TestCoordinatorResetCrossesAndPreservesRoster` | `internal/app` | Live operator policy: time cannot stop on one instance; the coordinator serialises a full reset without collapsing membership |
 | `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
-| `TestRuntimeDigestReportsAndClearsSharedDivergence`, `TestStatusBarSyncIndicatorUsesAlertAndRecoveryColors` | `internal/app`, `internal/render/renderer` | A deliberate shared corruption is not reported on its first sample, becomes amber `DESYNC`, escalates to red `DIVERGED`, and equality clears both through a transient green `SYNCED` |
+| `TestRuntimeDigestIsADriftGaugeRatherThanAVerdict`, `TestStatusBarSyncIndicatorReportsStalenessAndCorrection` | `internal/app`, `internal/render/renderer` | D-11/D-23: a deliberate shared corruption is counted and its surface named, nothing escalates, the retired `DESYNC`/`DIVERGED` keys are gone, and a correction closes it; the indicator reports staleness and correction size instead |
+| `TestGuestConvergesOnEveryCorrection`, `TestCorrectionMagnitudeIsMeasuredNotAsserted` | `internal/app` | D-11/D-23: a guest that predicted and drifted is exactly equal to the host as of every correction, and the drift it had is published rather than escalated |
+| `TestCorrectionDeltaRoundTripsExactly`, `TestCorrectionDeltaRefusesAForeignBaseline`, `TestCorrectionCarriesTheWholeDeclaredSurface` | `internal/app` | D-23: a delta applied to the baseline it names reproduces the sender's capture byte for byte over three seeds and is smaller than it; applied to any other baseline, or with a body its header does not describe, it is refused; every declared carrier, stream and FSM region travels whole in both shapes |
+| `TestStagingWorldIsBuiltOnceAndReused`, `TestReconcileMatchesAFullInstall` | `internal/app` | D-23: two captures installed into one re-used staging world leave what a world built for the second alone would, and a reconciled live world equals a fully re-installed one — then and 60 ticks later |
+| `TestLocalCrossingSkipsThePlayoutLead`, `TestRosterCrossingsKeepTheAgreedApplyTick` | `internal/app` | D-3/D-11: a producer's own crossing lands in the tick it produced it for while the peer keeps the lead; an arrival still applies at one agreed tick everywhere and takes the same shared entity on both |
+| `TestHostRefusesARosterCrossingFromAnyoneElse` | `internal/app` | D-23: an arrival produced by a participant that is not the coordinator creates no cursor and is counted as refused |
+| `TestSessionLagIsMeasuredEveryTick` | `internal/app` | D-23: a participant in step reports no lag, and one left behind the session reports it and is flagged stale without anything asking |
+| `TestJoinReusesTheCadencesKeyframe`, `TestMidRunJoinWaitsOutThePlayoutLead` | `internal/app` | D-22/D-23: a second join takes the keyframe the first read rather than reading the world again, a keyframe for a tick the session has not reached is refused, and a join waits for a world a playout lead past its admission |
 | `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores deadline-slip telemetry while keeping absolute simulation tick/state |
 | `TestSharedSnapshotComparesElapsedGameTime` | `internal/app` | D-21: two instances driven the same number of ticks report the same elapsed game time, it equals `tick * interval`, and a forged value moves the shared surface |
 | `TestSimTimeIsAFunctionOfTheTick`, `TestSimTimeAdvancesByExactlyTheTickInterval`, `TestManualEpochIsTheSimEpoch` | `internal/engine` | D-21: the instant is decided by the tick alone, advances by exactly `DeltaTime`, and a 20-tick threshold lands on tick 20 rather than 19 |
@@ -1017,13 +1149,14 @@ fails the build when the code stops matching the declaration.
 | `TestInstalledWorldStaysIdenticalForFiveHundredTicks` | `internal/app` | D-19's construction proof over three seeds: an installed world's *future* matches for 500 further ticks with shared species live. Player-domain production is stopped first, because a capture carries no player state and a crossing is Phase 4's subject |
 | `TestCaptureContinuesInAnotherProcess` | `internal/app` | The same gate with the two halves in **different processes**: the capture is bytes on a disk, the two start at different wall instants, and the receiver paces its 500 ticks in bursts. Nothing about the pacing clock can reach the simulation (D-21) |
 | `TestSimulationEpochIsSessionIdentity` | `internal/app` | The control behind D-19's absolute instants: a receiver whose `SimEpoch` differs installs the same bytes and diverges, so the epoch is session identity beside the seed |
-| `TestNavigationPhaseIsLoadBearing`, `TestNavigationPhaseSurvivesAnInstall` | `internal/app` | D-17/D-19: a capture carrying the phase a world with *no* carrier would hold, or targets the sender never had, diverges one tick after the install; the unmodified capture holds for 200. `route_rebuild_ticks` stays uncovered — the shipped scenario builds no gateways for it to pace |
+| `TestNavigationPhaseIsLoadBearing`, `TestNavigationPhaseSurvivesAnInstall` | `internal/app` | D-17/D-19: a capture carrying the phase a world with *no* carrier would hold, or targets the sender never had, diverges one tick after the install; the unmodified capture holds for 200 |
+| `TestNavigationRouteRebuildPhaseIsLoadBearing`, `TestNavigationRouteRebuildSurvivesAnInstall` | `internal/app` | D-17/D-19: the gateway half, in the tower region — the only scenario any shipped config has that makes `route_rebuild_ticks` pace anything. A zeroed budget rebuilds its route graphs on different ticks than the sender within 22; the unmodified capture rebuilds on the sender's for 200 |
 | `TestSnapshotJoinCarriesTheGoldDeadline` | `internal/app` | The Phase 2 defect, closed: a joiner arriving mid-sequence reads the same remaining time as its host, and keeps reading it. `gold.timer` is in the compared surface again |
 | `TestSnapshotJoinTakesTheHostsWorldNotItsOwn`, `TestSnapshotJoinLeavesEachParticipantDrivingItsOwnCursor` | `internal/app` | A joiner adopts the host's world and record position rather than re-deriving them, and the D-13 control assignment is re-derived rather than adopted with the component that carries it |
 | `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun` | `internal/app` | D-22 end to end over a socket: a solo run opens a port hundreds of ticks in, a joiner installs the world it is sent, closes the tick gap the transfer opened, and takes its cursor from the arrival crossing |
 | `TestAReconnectIsTheSameJoin` | `internal/app` | A dropped participant returns through the same path, at a tick the host has moved well past |
 | `TestSnapshotChunksRoundTrip`, `TestSnapshotAssemblyRefusesAConfusedTransfer` | `internal/network` | The capture's chunk framing over the sizes that occur, and the four confusions its header refuses — a skipped predecessor, a frame from another capture, a truncated frame, an empty body |
-| `TestSnapshotCostAtTheStormHighWater` | `internal/app` | Reports rather than asserts: the bytes, host stall, install cost and allocation peak Phase 4's cadence is chosen from |
+| `TestSnapshotCostAtTheStormHighWater`, `TestCorrectionCostAtTheStormHighWater` | `internal/app` | Report rather than assert: the bytes, host stall, install cost and allocation peak a cadence is chosen from, and the same for a correction — the delta against the keyframe, the diff and apply cost, and the difference between a join's install and a correction's into the same receiver |
 | `TestSwarmKeepsIntegratingWhenLockCannotResolve`, `TestSwarmLeavesLockWhenChargeCannotResolve` | `internal/system` | A refused species state entry is a delay, never a wedge: the chase keeps integrating and the lock is not held frozen and enraged |
 | `TestLinkLossDoesNotDespawnWhereItIsObserved` | `internal/system` | A lost link produces an artifact, not a removal, and a second notice is a duplicate |
 | `TestActivatedSessionDefersCrossingBeforeFirstTick` | `internal/app` | Input arriving before the first system update enters the barrier rather than applying locally |
@@ -1087,21 +1220,24 @@ must remain on the firing terminal even though its damage resolves on both.
 
 Give the two terminals **different sizes**, and resize one of them mid-run — a
 tmux pane change is the ordinary case. The map must not move on either side and
-neither status bar may show `DESYNC`: a resize reflows one instance's view and
-touches no shared state. The latch stays `LOCK` for the life of a session run,
-including before a joiner has arrived and after it leaves, so `NET:WAIT/LOCK` and
+neither status bar may show `LAG`: a resize reflows one instance's view and touches
+no shared state. The latch stays `LOCK` for the life of a session run, including
+before a joiner has arrived and after it leaves, so `NET:WAIT/LOCK` and
 `NET:DOWN/LOCK` are both expected.
 
-No healthy run should show the amber `DESYNC` item, and none should ever reach red
-`DIVERGED`, which says the two are past resolving it between themselves. Quit the
-joiner: the host must change to `NET:DOWN/LOCK`, remove only the remote cursor and
-continue accepting local input. `:d save` is refused while peers are live: its
-synchronous logger drain holds the world lock and can overrun the playout lead.
-On a solo or replayed copy it is still not a byte-for-byte parity diagnostic
-because it deliberately includes local view and owner-authored metrics; the
-runtime digest compares only the shared surface. A divergence is a
-`DESYNC` indication, a different shared actor, position, kill or progression
-result, or a nonzero `network.barrier_late`/
+A healthy run may show `COR n` and should not show `LAG`. The first is the size of
+the last correction and a small one is the ordinary condition — a guest predicts
+between corrections and is told what it got wrong. The second says this instance is
+far enough behind the session that its own crossings reach the host after the ticks
+they name, and it is about the link rather than the game. Quit the joiner: the host
+must change to `NET:DOWN/LOCK`, remove only the remote cursor and continue accepting
+local input. `:d save` is refused while peers are live: its synchronous logger drain
+holds the world lock and can overrun the playout lead. On a solo or replayed copy it
+is still not a byte-for-byte parity diagnostic because it deliberately includes
+local view and owner-authored metrics; the runtime digest compares only the shared
+surface. What is worth chasing is a correction magnitude that *grows* rather than
+one that is non-zero, a persistent `LAG`, a different shared actor or progression
+result after a correction, or a nonzero
 `network.barrier_ran_without_peer`/`network.transport_lost_*` trend under an
 otherwise healthy link.
 
@@ -1240,29 +1376,36 @@ in [Desynchronisation and recovery](desync.md).
   instance opens a socket with `:host <addr>`, a joiner receives the world as a
   chunked capture, installs it into a staging world, swaps at a tick boundary and
   closes the tick gap the transfer opened. A reconnect is that same path a second
-  time. What remains a *guest* is still a re-deriver rather than a predictor —
-  authority and correction are Phase 4's subject, and until then a guest that
-  falls behind the playout lead diverges rather than being corrected.
+  time.
 - A joiner's admission is refused if the gap it has to close exceeds the playout
   lead. That is the honest failure for a link or a machine that cannot keep up,
   and it is a refusal rather than a degraded session; adaptive cadence, which is
   what would let such a link participate at all, is Phase 5's subject.
-- A join serialises the accept loop: the gate runs on the accepting goroutine, so
-  a second participant dialling mid-join waits behind the first. With
-  `MaxPlayers` participants this is bounded and deliberate — two captures read
-  concurrently would be two acquisitions of the world lock racing one tick.
+- A join no longer reads the world for itself: it takes the publication cadence's
+  most recent keyframe, and only reads when none is fresh enough, so two joins
+  arriving together share one acquisition of the world lock. The *gate* still runs
+  on the accepting goroutine, so a second participant dialling mid-join waits
+  behind the first one's transfer. With `MaxPlayers` participants that is bounded
+  and deliberate.
+- A correction pins a guest's simulation clock to the authority's. D-21 makes every
+  stored deadline a function of the tick, so installing a world means adopting the
+  tick it describes; a guest that had extrapolated past it is re-based back by the
+  transfer's latency, which `network.lag_ticks` reports and `network.stale` flags
+  once it exceeds the playout lead. Re-simulating the gap forward — rollback and
+  replay, rather than rollback — is Phase 6's *bounded rollback* entry.
 - There is deliberately no live pause, slow motion or stepping. Suspending one
   participant for minutes is now a reconnect rather than an impossibility, but
   the suspension itself is still refused.
-- The runtime digest detects connected-peer divergence after its six-tick sample
-  cadence but neither stops play nor repairs it. `SYNCED` means the compared
-  surface became equal again; it does not explain why. `DIVERGED` states that it
-  will not: past `NetworkDivergedSamples` nothing re-derives the missing artifact,
-  and the current runtime has no in-place recovery of any kind.
+- The runtime digest reports how far two instances stand apart and does not judge
+  it. Under an authority a guest is expected to differ between corrections, so
+  `network.digest_mismatches` and `network.drift_part` are a gauge rather than a
+  verdict, and the repair is the next correction rather than anything the digest
+  does.
 - Plaintext and unauthenticated; no CLI TLS surface.
-- No lag compensation. A slow peer produces late artifacts and divergence rather
-  than a stall — deliberate, since simulation never waits, but it means the
-  playout lead is the only defence.
+- No lag compensation. A slow peer produces late artifacts, which the host applies
+  in the order they reach it and the next correction repairs on the peer. The
+  playout lead is still the only thing that keeps a remote artifact on time, and
+  `network.stale` is what says this instance is past it.
 - A refused outbound frame is counted and logged but not retransmitted. The stream
   itself is reliable and ordered; the loss is in the bounded send queue ahead of it.
 - `float64` simulation means cross-platform bit-exact lockstep is not claimed; the

@@ -486,11 +486,18 @@ exact `denySim` keys in `internal/app/snapshot.go`:
 | Live contention | `event.backoffs` |
 | Recorder bookkeeping | `rec.depth`, `rec.flushes`, `rec.records`, `rec.skipped` |
 | Snapshot bookkeeping | `stat.late`, `stat.groups`, `stat.metrics` |
+| Capture and correction | the whole `snapshot.` prefix |
 
 `engine.fps` is meaningless under a manual clock; the other entries describe
 pacing, contention, or telemetry rather than world behavior. The deny-list
 uses exact keys, not whole prefixes, because the same metric groups also
-contain simulation counters that must still compare.
+contain simulation counters that must still compare — with one exception, and it
+is a whole group rather than a compromise. A replay installs no capture and applies
+no correction: it re-derives the run from its record stream, so what a read cost,
+what an install cost, how many corrections arrived and how far this instance's
+prediction had drifted when they did all describe the session the run was part of
+rather than the simulation the replay reproduces. Comparing any of them would be
+asserting that a replay had a network.
 
 ## 11. Shutdown and failure handling
 

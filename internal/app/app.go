@@ -91,6 +91,9 @@ func New(cfg Config) (*App, error) {
 	}
 
 	a := &App{cfg: cfg, hub: service.NewHub()}
+	// Before init, because initWorld binds the correction queue to whatever
+	// transport a service contributed and a peer can reach it from that moment.
+	a.corrections = newCorrections(a)
 	if a.cfg.HostAddress != "" && a.cfg.networkConfig == nil {
 		a.cfg.networkConfig = a.hostNetworkConfig()
 	}
@@ -196,6 +199,7 @@ func (a *App) initWorld() {
 	if r := a.world.Resources.Network; r != nil {
 		r.OnDeparture = a.releaseParticipant32
 		r.SharedDigest = a.sharedDigestLocked
+		r.OnCorrection = a.receiveCorrection
 		// A session endpoint exists, so this run is shared for its whole life
 		// whether or not a peer is attached at a given tick. Latching it here rather
 		// than reading the port keeps the anchor, the D-14 verdict and the playout
@@ -248,7 +252,6 @@ func (a *App) initWorld() {
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
 	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
-	a.corrections = newCorrections(a)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {

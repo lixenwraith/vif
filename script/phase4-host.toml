@@ -13,8 +13,13 @@
 #   ./bin/vif -join 127.0.0.1:7777 -script script/phase4-guest.toml \
 #     -l=log/phase4-guest -lv info -ls afs -lt 200 -j
 #
-# The join is the check. Everything after it is the two instances holding one
-# world, which is what the paired stat and fsm records say.
+# The join is the check for Phase 3. For Phase 4 the check is what happens after
+# it: the host publishes a correction every SnapshotCorrectionTicks from the moment
+# hosting opens, and what the two logs then say is `snapshot.corrections_sent` on
+# this side against `snapshot.corrections_applied` and the `snapshot.correction`
+# magnitudes on the guest's. The fsm records still have to match as a *sequence*
+# from the join onward — not tick for tick, since each instance now applies its own
+# artifacts a playout lead before the other sees them.
 schema = 1
 ticks = 2400
 width = 120

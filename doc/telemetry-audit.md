@@ -60,8 +60,8 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Audio | `audio.{backend,silent,played,dropped,mask,effect_muted,music_muted,rej_*}` | `NewAudioSystem` | Session deltas from backend/update | `Init` with backend baselines | `audio.mask` is read by the status bar; remainder generic |
 | Music | None | — | — | — | — |
 | Meta | `context.{map_w,map_h,camera_x,camera_y}`, `player.<slot>.{x,y}`, `kills.{<species>,total,uncredited}`, `session.all_defeated` | `NewMetaSystem` | Debug/map publication, lifecycle fold and resolved species-kill handler | `Init` | Kill keys and `session.all_defeated` are FSM guards; remainder generic |
-| Network | `network.{crossings_sent,crossings_received,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched,artifacts_pre_install,join_lag_ticks}` | `NewNetworkSystem` | Transport polling, fixed-delay admission, cursor sync and connection state | `Init` | Status bar reads peer/state/latch; remainder generic |
-| Snapshot transfer | `snapshot.{bytes,capture_us,encode_us,stage_us,commit_us,install_tick,catch_up_ticks}` | `newSnapshotTelemetry` during App construction | A capture read, or a capture installed | **Not reset** — a join is not undone by `:new`, and these describe a transfer rather than a game | Generic only; excluded from the compared shared surface, because a host publishes what a read cost and a joiner what an install cost |
+| Network | `network.{crossings_sent,crossings_received,crossings_local,state_applied,frames_dropped,barrier_deferred,barrier_applied_local,barrier_applied_peer,barrier_late,barrier_ran_without_peer,barrier_peer_lag_ticks,barrier_peer_artifacts,barrier_peer_applied,peers,connected,state,map_latched,artifacts_pre_install,artifacts_refused,corrections_received,join_lag_ticks,lag_ticks,stale,digest_mismatches,drift_part,drift_tick}` | `NewNetworkSystem` | Transport polling, playout admission, cursor sync, connection state and the running staleness measurement | `Init` | Status bar reads peer/state/latch and `stale`/`lag_ticks`; remainder generic |
+| Snapshot transfer | `snapshot.{bytes,capture_us,encode_us,stage_us,commit_us,install_tick,catch_up_ticks,keyframes,corrections_sent,correction_bytes_sent,corrections_applied,corrections_refused,corrections_superseded,correction_entries,correction_entities,correction_cells,correction_tick}` | `newSnapshotTelemetry` during App construction | A capture read, a correction published, or a correction installed | **Not reset** — a join is not undone by `:new`, and these describe a transfer rather than a game | Generic only; the whole prefix is excluded from the compared shared surface *and* from a replay comparison: a host publishes what a read cost, a guest what an install cost and how far its own prediction had drifted, and under weakened D-11 the last of those is deliberately not something two instances agree on |
 
 ## Engine and event audit
 
@@ -296,6 +296,14 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `network.barrier_ran_without_peer` (int) | Tick boundaries reached before every required peer epoch marker. |
 | `network.crossings_received` (int) | Peer crossing artifacts decoded and admitted. |
 | `network.crossings_sent` (int) | Local crossing artifacts sent in closed epochs. |
+| `network.crossings_local` (int) | Local crossing artifacts applied in the tick that produced them rather than at the playout lead (D-3 as Phase 4 changed it). |
+| `network.corrections_received` (int) | Authoritative corrections reassembled from the wire. |
+| `network.artifacts_refused` (int) | Peer artifacts the authority refused — an arrival or a departure produced by a participant that is not the coordinator. |
+| `network.digest_mismatches` (int) | Runtime parity samples that disagreed. A gauge under weakened D-11, not a fault: a guest differs from the host between corrections by design. |
+| `network.drift_part` (string) | The surface the last disagreement was in: positions, kinetics, combat, context, status or snapshot. |
+| `network.drift_tick` (int) | The tick it was seen on. |
+| `network.lag_ticks` (int) | How far behind the newest tick any peer has been seen closing this instance stands, measured every tick. |
+| `network.stale` (bool) | Whether that lag exceeds the playout lead, past which this participant's own crossings reach the host after the ticks they name. Shown in the status bar as `LAG n`. |
 | `network.connected` (bool) | Whether at least one session peer is currently connected. |
 | `network.frames_dropped` (int) | Transport frames rejected by encoding, framing, ordering or identity checks. |
 | `network.map_latched` (bool) | Whether the host-authored D-14 map dimensions are latched. |
@@ -312,6 +320,16 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `snapshot.commit_us` (int) | What writing it into the live world cost. |
 | `snapshot.install_tick` (int) | The tick the last installed capture described. |
 | `snapshot.catch_up_ticks` (int) | Ticks simulated after the install to close the gap the transfer opened. |
+| `snapshot.keyframes` (int) | Whole captures this host has published, as a join's gate or as a cadence keyframe. |
+| `snapshot.corrections_sent` (int) | Corrections broadcast, keyframes and deltas together. |
+| `snapshot.correction_bytes_sent` (int) | Their total encoded size, which is the uplink the cadence costs. |
+| `snapshot.corrections_applied` (int) | Corrections this instance installed. |
+| `snapshot.corrections_refused` (int) | Corrections that could not be resolved — a delta naming a keyframe this instance does not hold, or a body its header does not describe. Not an error: the next keyframe is self-sufficient. |
+| `snapshot.corrections_superseded` (int) | Corrections a fresher one overtook before they were applied, plus any the queue dropped. |
+| `snapshot.correction_entries` (int) | Component cells the last correction moved: how far this instance's prediction had drifted when the authority arrived. |
+| `snapshot.correction_entities` (int) | The distinct shared entities behind them. Shown in the status bar as `COR n`. |
+| `snapshot.correction_cells` (int) | The largest distance a shared placement moved — the correction a player would actually see. |
+| `snapshot.correction_tick` (int) | The tick the last applied correction described. |
 | `ping.disabled_rejects` (int) | Action requests dropped while the ping system was disabled. |
 | `player.cursor_rejects` (int) | Requests rejected because player could not resolve a roster cursor. |
 | `player.spawn_failures` (int) | player spawn requests that could not produce an entity. |

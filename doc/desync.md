@@ -57,11 +57,15 @@ raise `DIVERGED`, and later agreement clears the active divergence. Current buil
 request per-record hashes after the first mismatch and expose differing records in
 `network.sync_records`. This identifies a surface; it does not contain repair data.
 
-There is no late join. The retained-log path this section described was never
-reachable from `cmd/vif` and has since been removed; a participant now joins at the
-tick-zero gate or not at all. See
-[Multiplayer enhancement plan](multi-player-enhancement.md), which supersedes the
-staged recommendation in §8 below.
+**Both paragraphs above describe the runtime this document diagnosed, and neither is
+the runtime any more.** Phase 4 of the plan retired `DESYNC` and `DIVERGED`: a guest
+predicts between authoritative corrections and is *expected* to differ from the host,
+so the escalation had nothing left to be right about. The digest survives as a gauge
+— `network.digest_mismatches` with `network.drift_part` — and what a session reports
+instead is the correction magnitude and a staleness measurement. A late join exists
+too, and so does repair: the host publishes its world on a cadence and a guest
+installs it. See [Multiplayer enhancement plan](multi-player-enhancement.md), which
+supersedes the staged recommendation in §8 below and the table that follows.
 
 | Condition | Detected today | Repaired today |
 |---|---|---|
@@ -364,9 +368,9 @@ swap; and host loss cannot present as `SYNCED`.
 
 Manual play remains the quickest leak detector. For the next reproduction preserve
 both logs, both journals, exact commit, terminal sizes, CLI arguments, and all
-pause/resize actions. At first `DESYNC`, record both `network.sync_records` and dump
-both shared snapshots. Attribute cause from the first unequal tick, not the boss
-visible later.
+pause/resize actions. At the first disagreement, record `network.drift_part` and the
+`snapshot.correction` group from both sides and dump both shared snapshots.
+Attribute cause from the first unequal tick, not the boss visible later.
 
 ### Manual acceptance for the current branch
 
@@ -375,7 +379,7 @@ visible later.
 2. Move/type/fire both cursors concurrently through storm, then issue `:new` on
    the host; require the same reset and shared digest.
 3. Quit the host cleanly; require the guest host-loss message and
-   `NET:DOWN/LOCK` without waiting for `DESYNC`.
+   `NET:DOWN/LOCK` immediately, rather than by way of any parity report.
 4. Black-hole the connection without closing either process; require the same
    message after the configured silent timeout (30 seconds by default) and record
    the observed duration.

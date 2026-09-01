@@ -322,11 +322,14 @@ through `-host`, `-join` and `-players`. The join handshake resolves the host
 anchor before the joining world is constructed, the roster every instance builds
 from arrives with the start gate, every scheduler stays at tick zero until the
 lobby closes, and the manifest-registered `NetworkSystem` drains framed input only
-at the simulation's poll boundary. The fixed-delay artifact barrier exchanges
-crossings without a synchronous per-tick round trip, and because every artifact
-names the absolute tick it applies at, a node relays what it receives so a
-participant reaches instances its producer never linked to. Roster changes travel
-the same way, so a departure or an arrival lands on one tick everywhere.
+at the simulation's poll boundary. The artifact barrier exchanges crossings without
+a synchronous per-tick round trip, and because every artifact names the absolute
+tick it applies at, a node relays what it receives so a participant reaches
+instances its producer never linked to. Its playout lead is a receive-side
+interpolation buffer: a participant applies its *own* crossing in the tick it
+produced it for, which is what makes local input feel local. Roster changes are the
+exception and land on one agreed tick everywhere, because they create and destroy
+shared entities that a capture references by id.
 
 A participant may also arrive at any tick. `:host <addr>` opens a run that is
 already playing; the joiner receives the shared world as a chunked capture (D-19),
@@ -336,13 +339,24 @@ the transfer cost so it stands where the session does. It is admitted as a peer
 reach it rather than falling into the gap (D-22). Reconnect is the same path a
 second time. Cost is a function of world size, not of session length.
 
-What is still missing is *correction*: a guest re-derives shared state rather than
-predicting it, so two instances that disagree stay disagreed. It has no lag
-compensation, authentication or CLI TLS identity, and no partition detection;
-`-join` dials one address, so the links form a star even though the relay makes
-any graph work. The domain boundary, event classification, wire protocol, their
-enforcing tests, and an analysis of what the model does not yet cover are in rules
-D-1..D-22 and §9 of [the domain model](domain-design.md). The observed incident, current failure
+The host is the authority and a guest is a predictor (D-23). The host publishes its
+world on a cadence — a whole capture, or a delta against the last whole one — and a
+guest applies what arrives into a staging world built once and swapped in between
+two ticks; where the two disagree the host wins, and how far apart they were is
+telemetry rather than a failure state. Loss costs freshness until the next keyframe
+and never correctness, because nothing acknowledges a correction and a keyframe
+supersedes everything before it.
+
+What is still missing is *adaptation*: the cadence is a constant rather than a
+function of the link, nothing measures a round trip, and every guest receives the
+same bytes whether or not any of it is near its cursor. There is no bounded
+rollback, so a guest's own un-arbitrated artifact flickers for about one cadence on
+shared entities — never on its own cursor, which is predicted privately. There is no
+authentication or CLI TLS identity and no partition detection; `-join` dials one
+address, so the links form a star even though the relay makes any graph work. The
+domain boundary, event classification, wire protocol, their enforcing tests, and an
+analysis of what the model does not yet cover are in rules D-1..D-23 and §9 of
+[the domain model](domain-design.md). The observed incident, current failure
 signals, and checkpoint-plus-suffix recovery recommendation are in
 [Desynchronisation and recovery](desync.md).
 

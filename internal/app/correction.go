@@ -470,6 +470,18 @@ func (c *corrections) close() {
 
 // === App surface ===
 
+// receiveCorrection queues one reassembled correction. It is the seam every
+// transport binds to — the one a service contributes at construction and the one a
+// mid-run `:host` or a join attaches later — so a correction reaches the same queue
+// however this run came to be in a session.
+//
+// Caller holds the world lock: this must do nothing but take the bytes.
+func (a *App) receiveCorrection(_ uint64, body []byte) {
+	if a.corrections != nil {
+		a.corrections.receive(body)
+	}
+}
+
 // ApplyPendingCorrections installs whatever authority has arrived, between two
 // ticks. A caller-driven run reaches it from Tick; an interactive one has a
 // goroutine of its own, because nothing on its side calls Tick.

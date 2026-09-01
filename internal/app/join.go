@@ -270,7 +270,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	// The correction queue takes bytes and nothing else: this runs inside a tick,
 	// and decoding or installing a correction here would do both under the lock the
 	// install itself needs.
-	r.OnCorrection = func(_ uint64, body []byte) { a.corrections.receive(body) }
+	r.OnCorrection = a.receiveCorrection
 	a.world.Resources.Network = r
 	a.world.MarkSessionShared()
 	a.ctx.PublishMapLock()

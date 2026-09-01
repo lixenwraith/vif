@@ -82,8 +82,9 @@ This documentation distinguishes three states:
   not expose a complete end-to-end feature. Authenticated multiplayer is an
   example: the message kinds are reserved and nothing populates them. Startup
   multi-participant networking is optional and active, and so are mid-run join and
-  reconnect (`:host <addr>`); host authority and correction are not — a guest still
-  re-derives shared state rather than predicting it.
+  reconnect (`:host <addr>`) and host authority with periodic correction. What is
+  not active is *adaptive* cadence: the host publishes at a fixed rate rather than
+  one driven by the link.
 
 Performance and determinism statements are intentionally scoped. Several hot
 paths reuse buffers and avoid routine allocation, but the application is not

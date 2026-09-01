@@ -303,18 +303,35 @@ rather than where the lost link was observed.
 At the same six-tick cadence, direct neighbours exchange a run/tick/hash sample
 over the exact `SnapshotShared` comparison surface, plus category hashes that
 identify position, kinetic, combat, context or status as the first differing
-surface. Two consecutive mismatching samples log once, increment
-`network.digest_mismatches`, and raise an amber `DESYNC` status item;
-`NetworkDivergedSamples` of them publish `network.diverged`, log at error and turn
-it red `DIVERGED`. `network.sync_part` and `network.sync_tick` carry the first
-differing category and the tick it appeared on, and `network.sync_records` names
-the individual snapshot records that disagree: once a sample has mismatched the
-digest carries a hash per record, so a category becomes something to read. A
-healthy session sends no breakdown at all. Agreement after a mismatch shows
-green `SYNCED` for twenty ticks. The digest is a detector only: it does not flood,
-select an authority, repair state, or cross a partition. Losing the comparison
-edge therefore reports the disconnect directly; a guest that loses participant
-one is explicitly told that the session cannot recover automatically.
+surface. A mismatch increments `network.digest_mismatches` and names the surface in
+`network.drift_part` with `network.drift_tick`, and that is the whole of what it
+does. It used to escalate — amber `DESYNC` after two consecutive disagreements, red
+`DIVERGED` after five — and that was a statement about two instances re-deriving one
+world from one artifact stream: a disagreement meant a lost artifact and nothing
+re-derives one. Under an authoritative host a guest is *expected* to disagree
+between corrections, so the verdict was retired with the failure state it described.
+The digest does not flood, select an authority, repair state, or cross a partition;
+what repairs a disagreement is the next correction. Losing the comparison edge is
+still reported directly, and a guest that loses participant one is explicitly told
+that the session cannot recover automatically.
+
+The host publishes its world on a cadence of `SnapshotCorrectionTicks`, as a whole
+capture every `SnapshotKeyframeCorrections` and a delta against the last whole one
+in between, chunked under `MsgStateCorrection` and reassembled per peer. A node
+relays the chunks it admitted, on the same argument the epoch flood uses, so the
+authority reaches a participant the host is not linked to directly. A guest queues
+what arrives and installs the newest that resolves between two ticks, into a staging
+world built once and re-used; the `snapshot.correction` group carries what it cost
+and how far its prediction had drifted. Measured at the storm high water, a delta is
+29 KiB against a 176 KiB keyframe — 215 KiB/s at 5 Hz where full snapshots would be
+859.
+
+Two measurements replace the retired verdict in the status bar. `network.lag_ticks`
+is how far behind the newest tick any peer has been seen closing this instance
+stands, taken every tick rather than once at admission, with `network.stale` set
+past the playout lead — the point at which this participant's own crossings reach
+the host after the ticks they name. `snapshot.correction_entities` is how much of
+the world the last correction moved.
 
 Loss that happens outside the barrier is published rather than swallowed, because
 either direction would otherwise desynchronise silently:
@@ -394,8 +411,8 @@ for the deadlock a direct call cannot see. `TestSnapshotChunksRoundTrip` and
 
 Both sides should reach `NET:1P/LOCK`, display two cursors and agree on shared
 actors, scoring and progression while both participants move/type/fire; a healthy
-run never shows `DESYNC`. Give the two terminals different sizes and resize one
-mid-run: the map must not move and neither side may desynchronise. The host's
+run shows a small `COR` and never `LAG`. Give the two terminals different sizes and
+resize one mid-run: the map must not move and neither side may fall behind. The host's
 `:new` resets both rosters and a guest's is refused. Quit the guest; the host must
 show a participant-disconnected message and continue at `NET:DOWN/LOCK`. Quit the
 host; the guest must show `Host connection lost; this session cannot recover

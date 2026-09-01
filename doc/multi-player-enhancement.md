@@ -2,13 +2,14 @@
 
 **Status: this is the plan of record for multiplayer.** It supersedes the staged
 recommendation in [desync.md](desync.md), which is retained as the diagnosis of the
-2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-22
+2026-08-30 divergence and as the survey of the option space. Domain rules D-1..D-23
 in [domain-design.md](domain-design.md) remain authoritative for the *existing*
 code; §5 of this document states which of them the target architecture keeps,
 changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
-Phase 2; D-22 landed with Phase 3.
+Phase 2; D-22 landed with Phase 3; D-23 landed with Phase 4, which also weakened
+D-11 and changed D-3's destination.
 
-**Phases 1, 2 and 3 are done. Phase 4 is next**, and §6's Phase 4 entry says what
+**Phases 1 through 4 are done. Phase 5 is next**, and §6's Phase 5 entry says what
 it starts from. §9 records the defects each session surfaced and what each turned
 out to be.
 
@@ -22,7 +23,7 @@ visible:
 |---|---|---|
 | A solo game can be toggled into a host, and others join **at any time** | Join is only possible at tick zero, through a lobby gate fixed before the run starts. The replay-from-tick-zero path that nominally provided mid-run join was never reachable from `cmd/vif`; it has been removed. | **Done** (Phase 3). `:host <addr>` opens a running instance and a participant installs the world at whatever tick it has reached. |
 | A **true multiplayer experience** | Fast input is discarded, not merely delayed: measured, a session drops 4 of 5 rapid cursor motions and scores 5 of 6 fast keystrokes as *typing errors*. | **Done** (Phase 1). Local input applies immediately; §3 carries the after figures. |
-| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. | **Open.** Phases 4 and 5. A guest still re-derives rather than predicts, and a divergence is still a failure state rather than a correction. |
+| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. | **Mostly done** (Phase 4). A guest predicts and is corrected on a cadence, a divergence is a magnitude rather than a failure state, and jitter costs freshness rather than the session. What is left is Phase 5: driving the cadence from the link instead of from a constant. |
 
 The root cause of all three is one decision: **shared state is agreed by having
 every instance re-derive it, so nothing may be applied until everyone can apply
@@ -122,9 +123,12 @@ event is *never published locally* until its apply tick.
 
 Phase 1 has since landed and every session figure above now equals its solo
 neighbour; the three probes are assertions in `internal/app/local_input_test.go`.
-The store column is unchanged and deliberately so: the crossing still applies at
-its barrier tick on every instance, and what moved is the cell the producing
-instance reads.
+The store column was unchanged by Phase 1 and deliberately so: the crossing still
+applied at its barrier tick on every instance, and what moved was the cell the
+producing instance reads. **Phase 4 moved the store column too** — the playout lead
+came off the local path entirely, so a producer's own crossing reaches its own
+shared store in the tick that produced it, and only the peers still wait out the
+lead.
 
 The third row is the one that matters most: fast typing is not merely dropped, it
 is *scored against the player*, because five of six correct keystrokes resolve
@@ -248,20 +252,26 @@ check on a snapshot.
 The target keeps most of D-1..D-17. Three entries change meaning and two are added;
 `domain-design.md` is updated as each phase lands, not in advance.
 
-**D-11 is weakened, deliberately.** "Identical shared component values on every
-instance at every tick" becomes "identical on the host; on a guest, equal to the
-host as of the last applied snapshot, and converging". Bit-exact cross-instance
-agreement stops being a runtime invariant and becomes a *test* invariant for the
-host's own replay.
+**D-11 is weakened, deliberately (landed with Phase 4).** "Identical shared
+component values on every instance at every tick" becomes "identical on the host; on
+a guest, equal to the host as of the last applied snapshot, and converging".
+Bit-exact cross-instance agreement stops being a runtime invariant and becomes a
+*test* invariant for the host's own replay. What did *not* weaken is shared entity
+identity and creation order, because a capture references entities by id; the three
+artifacts that create or destroy one still apply at an agreed tick everywhere. The
+rule as built is in `domain-design.md`.
 
-**D-3 keeps its shape but changes its destination.** A crossing artifact still
-names the smallest thing that determines a shared outcome, but it is now a
-*request to the authority* rather than a fact every instance applies at an agreed
-tick.
+**D-3 keeps its shape but changes its destination (landed with Phase 4).** A
+crossing artifact still names the smallest thing that determines a shared outcome,
+but it is now a *request to the authority* rather than a fact every instance applies
+at an agreed tick. The producer applies it in the tick it produced it for; the
+playout lead survives only on the receive side, where it is an interpolation buffer.
 
-**D-13 generalises.** Owner-authored state stops being a special exception to
-re-derivation and becomes the ordinary case for one class of value: the owner
-applies immediately, the host arbitrates, everyone else receives.
+**D-13 generalises (landed with Phase 4).** Owner-authored state stops being a
+special exception to re-derivation and becomes the ordinary case for one class of
+value: the owner applies immediately, the host arbitrates, everyone else receives.
+What still distinguishes the D-13 components is that they are *transported* rather
+than arbitrated — no instance but their owner ever computes them.
 
 **D-18 Predicted local state (new, landed with Phase 1).** A value the local
 participant's own input determines is applied locally at once. Only player-domain
@@ -292,6 +302,16 @@ tick reads is a function of the tick number and a constant epoch, never of the
 pacing clock. §4.2 predicted this would matter *for transfers*; the log showed it
 already mattered *live* (§9), which is why it landed as a rule rather than as a
 snapshot convention.
+
+**D-23 The host's world is the correction (new, landed with Phase 4).** The host
+publishes its world on a cadence — a whole capture, or a delta against the last
+whole one — and a guest applies what arrives into a staging world and swaps it in
+between two ticks. Nothing acknowledges a correction and nothing retransmits one: a
+keyframe supersedes everything before it, so loss costs freshness and never
+correctness. A delta is exact or it is refused, and what proves it is the capture's
+own integrity hash rather than a comparison. The magnitude is measured rather than
+asserted, and it is what replaced `DESYNC`. The rule as built, its four properties
+and the one thing the host validates beyond structure are in `domain-design.md`.
 
 **D-22 An arrival is admitted before the world is read for it (new, landed with
 Phase 3).** A participant joining a running session becomes a peer — receiving this
@@ -628,74 +648,149 @@ capture read; no coordinator election and no survival of host loss.
 
 ---
 
-### Phase 4 — Authority and correction  ← next
+### Phase 4 — Authority and correction  ✅ landed
 
 **Goal.** The host becomes the authority and guests become predictors. This is
 where divergence stops being a failure mode and becomes a routine, corrected
 condition.
 
-**Requirements.**
+**What was built.**
 
-1. Guests apply local input immediately (Phase 1 already does this for the cursor;
-   extend to the rest of the player domain's shared-facing actions) and submit the
-   artifact to the host.
-2. The host orders, validates and applies; its result is the truth.
-3. Periodic authoritative snapshots at an adaptive cadence, full first, deltas once
-   full snapshots are correct and measured.
-4. Guests apply corrections into the staging world and swap; the correction
-   magnitude is telemetry, not an error.
-5. The playout barrier is removed from the local path. Any remaining receive-side
-   delay is an interpolation buffer for remote action, justified separately.
-6. `DESYNC`/`DIVERGED` are retired as failure states and replaced by a correction
-   magnitude and a staleness indicator.
+*The host publishes.* A run that is hosting takes a capture every
+`SnapshotCorrectionTicks` — 5 Hz — on a goroutine of its own rather than on the tick
+loop: the read is one acquisition of the world lock (1.6 ms at the storm high water,
+3.2 % of a tick) and the encode, the diff and the chunking hold no lock at all.
+Every `SnapshotKeyframeCorrections`th correction is a whole capture; the rest are
+deltas against it.
 
-**Boundaries — must not.** Let a guest's derivation override the host. Make the
-host's uplink scale with entity count at tick rate — the whole point is the low
-snapshot cadence prediction buys. Break solo replay.
+*The delta is generated, and it is exact.* `SharedWorldDelta` is emitted from the
+manifest beside the capture, so a component added to the declaration reaches a
+correction without anyone remembering to add it. Applying one to the baseline it
+names reproduces the sender's capture **byte for byte** — entity order included —
+and what says so is the capture's own integrity hash rather than a value comparison:
+a delta that rebuilt an equivalent world in a different store order passes every
+value check and fails that hash, which is why the delta carries order at all. A
+receiver holding a different baseline refuses the delta and waits for the next
+keyframe, which is a bounded wait by construction.
 
-**Manual acceptance.** Two terminals through injected delay, jitter and loss
-(`tc netem`): play stays responsive, remote entities stay smooth, no session ever
-enters an unrecoverable state, and the correction magnitude stays bounded. Kill the
-link entirely and restore it: the guest resumes from the next snapshot.
+*The measurement is the answer to §8's question 2.* At the storm high water a
+keyframe is 175,908 bytes and a delta is 29,488 — 16.8 % — so the cadence's uplink
+with one keyframe in ten is **215 KiB/s at 5 Hz and 86 KiB/s at 2 Hz**, against 859
+and 344 for full snapshots. The 2–5 Hz hypothesis holds at the load this game
+actually reaches, and it holds *because* of the deltas rather than in spite of the
+storm.
 
-**What Phase 4 starts from.** Phase 3 leaves six things on its doorstep, in the
-order they are wanted:
+*A guest predicts.* The playout lead came off the local path: a producer applies its
+own crossing in the tick it produced it for and sends it, and the peers keep the
+lead as an interpolation buffer for remote action. Three artifacts are exempt and
+the exemption is D-11's — an arrival, a departure and a reset create or destroy a
+shared entity, and identity is what a capture references by, so those still apply at
+one agreed tick on their producer too.
 
-1. **The staging world is built per install and thrown away.** `StageShared`
-   constructs a whole second `App` — measured at 9–31 ms — which is right for a
-   join that happens once and wrong for a correction that happens two to five
-   times a second. Phase 4's requirement 4 says corrections go into the staging
-   world and swap; that world has to become persistent, built when the session
-   starts and re-used, and `Commit` has to stop being a second full write.
-2. **Deltas.** The measured storm high water is 176 KiB, which is 859 KiB/s at
-   5 Hz and 344 KiB/s at 2 Hz for full snapshots (§8, question 2). The 2–5 Hz
-   hypothesis is affordable at rest — 11 KiB, 54 KiB/s — and is not affordable at
-   the high water without the deltas requirement 3 already plans for. That is the
-   measurement's finding and it is what decides the shape of the cadence, not just
-   its number.
-3. **The gap a guest can be behind is enforced once, at admission, and never
-   again.** `resumeJoinedSession` closes it and refuses a join it cannot close,
-   but nothing re-measures afterwards: a guest whose machine falls behind
-   mid-session produces late artifacts and diverges, exactly as §9.4's limitation
-   says. `network.join_lag_ticks` is the measurement; a running one is what
-   requirement 6 turns into a staleness indicator.
-4. **A guest still re-derives rather than predicts.** Every rule Phase 3 landed
-   assumes both instances run the same shared simulation and agree. Weakening D-11
-   the way §5 describes — "identical on the host; on a guest, equal to the host as
-   of the last applied snapshot, and converging" — is what makes a correction
-   ordinary rather than a repair, and nothing in the code says that yet.
-5. **The route-rebuild phase has no failing case**, because the shipped scenario
-   builds no gateways for it to pace. A scenario with gateways closes it, and the
-   navigation sabotage suite already has the shape to hold it.
-6. **A join serialises the accept loop.** The gate runs on the accepting
-   goroutine, so a second participant dialling mid-join waits behind the first.
-   Bounded and deliberate at `MaxPlayers`, but Phase 4's periodic captures make
-   the same world-lock contention a per-cadence question rather than a per-join
-   one.
+*A correction is a clock as much as a world.* D-21 makes every stored deadline a
+function of the tick, so installing a capture means adopting the tick it describes;
+a guest that had extrapolated past it is re-based back by the transfer's latency.
+That is bounded, measured, and reported: `network.lag_ticks` every tick, with
+`network.stale` past the playout lead. Re-simulating the gap forward — rollback and
+*replay* — is Phase 6's bounded-rollback entry, and until then the guest's own
+un-arbitrated artifacts are erased by a correction and restored by the one after it.
+
+*`DESYNC` and `DIVERGED` are gone.* Not renamed: removed, with `network.sync_state`,
+`network.sync_part`, `network.sync_records` and `network.diverged`. A guest is
+expected to differ from the host between corrections, so an escalation had nothing
+left to be right about. The digest survives as a gauge — `network.digest_mismatches`
+with `network.drift_part` — and the status bar shows `COR n`, the size of the last
+correction, and `LAG n`, the staleness. The per-record breakdown is no longer
+requested on the wire, because a guest disagrees by design and asking for detail
+would mean sending a map of per-record hashes for the whole session.
+
+**The six things Phase 3 left, and what happened to each.**
+
+1. **The staging world** — built once and re-used. `Commit` stopped being a second
+   full write: it reconciles the live world onto the capture rather than clearing
+   and re-inserting it, so what it writes is the size of the correction. Measured on
+   one receiver at the storm high water, the first install (a join) costs 11.6 ms
+   staging and 6.9 ms committing; the second (a correction) costs 3.0 and 2.9.
+   `TestStagingWorldIsBuiltOnceAndReused` is what says re-use leaves what a fresh
+   world would, and `TestReconcileMatchesAFullInstall` that the reconciled world and
+   a fully re-installed one agree — then and sixty ticks later.
+2. **Deltas** — built, measured above.
+3. **The gap a guest can be behind** — measured every tick now, as
+   `network.lag_ticks`/`network.stale`, and turned into requirement 6's staleness
+   indicator. `network.join_lag_ticks` still reports what the join itself closed.
+4. **A guest predicts rather than re-derives**, and the code says so: D-11 is
+   weakened in `domain-design.md`, the lockstep criteria became convergence criteria
+   (`TestTwoLiveParticipantsConvergeOnCorrections`, `TestGuestConvergesOnEveryCorrection`),
+   and each of them asserts that the two really did disagree in between — a
+   criterion a guest could pass by never predicting anything proves nothing.
+5. **The route-rebuild phase has a failing case.** The tower region is the only
+   scenario any shipped config has that attaches route-graph gateways, so that is
+   what the case runs; a zeroed budget rebuilds on different ticks than the sender
+   within 22, and the unmodified capture rebuilds on the sender's for 200. Building
+   it found two things — see below.
+6. **A join no longer reads the world for itself.** It takes the cadence's most
+   recent keyframe when one is fresh enough, and only reads when none is, so two
+   joins arriving together share one acquisition of the world lock. The gate still
+   runs on the accepting goroutine, which the plan already called bounded and
+   deliberate at `MaxPlayers`.
+
+**What Phase 4 found that was not on the list.**
+
+- *A window D-22 did not close.* An epoch produced **before** a joiner was admitted,
+  and flushed to the peers the host had at that moment, reaches the joiner not at
+  all — and a capture taken at the admission tick does not contain it either,
+  because its apply tick is still a playout lead ahead and the barrier's floor does
+  not drop it. A join asks for a world a lead further on now, which closes it by
+  construction and costs three ticks.
+- *The install did not re-derive gateway route graphs.* D-19 says derived state is
+  re-derived **by** the install; the flow fields and the passability grid were, and
+  the route graphs were not — so a receiver kept the graphs its own run had built,
+  aimed at cells the sender's were not and present for gateways the sender has none
+  for, while the installed `NavigationComponent`s named route indices into them.
+  `LoadShared` clears the resource and rebuilds every graph the capture named now,
+  from the source and target cells it named. It is exactly the defect Phase 3 found
+  in the passability grid, one layer up, and only a scenario with gateways could
+  show it.
+- *A correction chunk reaching a participant mid-handshake.* The host broadcasts to
+  every peer it has, and D-22 makes a joiner one before the world is read for it, so
+  correction chunks arrive interleaved with the gate. They are swallowed there:
+  there is nothing to keep, because the participant is about to install a whole
+  world.
+- *The genetic carrier restores an archive and not a position, and this is **not**
+  fixed.* `Registry.Export` gives each species' members and generation.
+  `pkg/genetic`'s streaming engine holds more: its own `math/rand/v2` generator, a
+  ring of offspring it has already produced and will hand out before making more, a
+  pending-evaluation table, and the id counter that names them. All four decide the
+  next genotype and none is in the export, so a receiver that installs a capture and
+  then lets a gateway spawn its next eye gets a different one than the sender did.
+  It is the same shape as the two defects Phase 2 fixed for the adaptation resource
+  and as the maze generator's PCG. It is recorded rather than fixed because it is in
+  `pkg/`, off the transport path, and needs an export contract rather than a line;
+  its practical effect is bounded, since it changes what a *newly spawned* species
+  looks like after an install and the next correction replaces it. The route-rebuild
+  case works around it by silencing spawning for its comparison, and says so.
+
+**Boundaries kept.** A guest's derivation never overrides the host: a correction is
+installed whole and the guest's own drift is discarded, never merged. The host's
+uplink does not scale with entity count at tick rate — it scales with the *delta* at
+5 Hz, which is the point. Solo replay is untouched: `PushRecord` bypasses the wire
+sink, and the local path publishes at production tick in a run and in its replay
+alike, which is one fewer difference between the two than before.
+
+**Not done in Phase 4, deliberately.** The cadence is a constant rather than a
+function of the link — that is Phase 5's whole subject. There is no bounded
+rollback, so a guest's own un-arbitrated artifact is erased by the correction that
+predates it and restored by the one after: a bounded flicker of about one cadence on
+shared entities, never on the local cursor, which D-18 predicts privately and no
+capture touches. Nothing authenticates a peer, so the host's validation is
+structural (the coordinator is the only producer of a roster change) rather than
+adversarial; authentication is Phase 6's.
+
+**Manual acceptance.** §10.
 
 ---
 
-### Phase 5 — Adaptive cadence and bandwidth resilience
+### Phase 5 — Adaptive cadence and bandwidth resilience  ← next
 
 **Goal.** Make the system degrade gracefully rather than fail at the edge of the
 link's capacity — the explicit priority.
@@ -717,6 +812,29 @@ convergence is not guaranteed.
 **Manual acceptance.** Shape the link down in stages and confirm play degrades
 smoothly — snapshot rate falls, prediction carries more, correction magnitude rises
 but stays bounded, and nothing forks or disconnects.
+
+**What Phase 5 starts from.** Phase 4 leaves four things, in the order they are
+wanted:
+
+1. **The cadence is a constant.** `SnapshotCorrectionTicks` and
+   `SnapshotKeyframeCorrections` are parameters, and the instruments requirement 1
+   asks to drive them from already exist: `snapshot.correction_bytes_sent` is the
+   uplink, `snapshot.correction_entities` the magnitude,
+   `network.lag_ticks` the staleness. What does not exist is RTT or jitter — nothing
+   measures a round trip, because nothing in this protocol makes one.
+2. **A correction re-bases a guest's clock backwards** by the transfer's latency, so
+   a guest re-simulates that gap every cadence. It is bounded and reported, and it
+   is the cost of adopting the authority's tick with its world (D-21). Rollback
+   *and replay* — re-simulating forward, with this participant's own outstanding
+   artifacts — is Phase 6's bounded-rollback entry and would remove the visible
+   flicker as well as the re-simulation.
+3. **Corrections are broadcast whole to everyone.** Requirement 2's relevance and
+   priority has nothing built for it: every guest receives the same bytes whether or
+   not any of it is near its cursor.
+4. **The genetic carrier's export is incomplete** (§6, Phase 4). It affects a newly
+   spawned species after an install and nothing else, and closing it needs an export
+   contract in `pkg/genetic` for the streaming engine's generator, proposal ring,
+   pending table and id counter.
 
 ---
 
@@ -783,11 +901,31 @@ implementation starts clean:
    does not hold at the high water without the deltas Phase 4's requirement 3
    already plans for. That is the finding: the cadence question was never only a
    rate, and the storm is what says so.
+
+   **Answered, with the deltas built.** `TestCorrectionCostAtTheStormHighWater` is
+   the second half of the measurement, taken on the same world one cadence apart:
+
+   | | storm high water |
+   |---|---|
+   | keyframe bytes | 175,908 |
+   | delta bytes | 29,488 (16.8%) |
+   | component cells the delta moves | 529, over 492 shared placements |
+   | diff / apply (outside the lock) | 0.71 / 0.90 ms |
+   | first install into a receiver (a join) | stage 11.6 ms / commit 6.9 ms |
+   | second install into the same one (a correction) | stage 3.0 ms / commit 2.9 ms |
+
+   With one keyframe every ten corrections the uplink is **215 KiB/s at 5 Hz and
+   86 KiB/s at 2 Hz**. So the hypothesis holds at the load this game actually
+   reaches, and the second pair of install rows is the other half of what Phase 3
+   left on the doorstep: the staging world is built once, and the commit reconciles
+   rather than replaces, which is why a correction costs a third of what the join
+   before it did.
 3. **Host loss** ends the session. Confirm that is acceptable before sizing Phase 6.
 4. **Does the host keep re-deriving, or become the only simulator?** This plan
-   keeps guests simulating (§2.1). If measurement later shows correction magnitude
-   is large enough to be distracting, the fallback is thinner guests and a higher
-   snapshot rate — a tuning change, not a rewrite.
+   keeps guests simulating (§2.1), and Phase 4 kept it. The magnitude is published
+   now (`snapshot.correction_entities`), so the question has an instrument rather
+   than an argument: if it turns out large enough to be distracting, the fallback is
+   thinner guests and a higher snapshot rate — a tuning change, not a rewrite.
 5. **Tower ownership in optional maps** still binds every tower to slot zero. Not a
    blocker; a gameplay rule to settle before towers appear in a real session.
 6. **How many participants may join a run that started solo.** `:host <addr>`
@@ -797,11 +935,47 @@ implementation starts clean:
 
 ## 9. What each session showed
 
+### 9.A The Phase 4 script pair — the correction, in two processes
+
+`script/phase4-host.toml` and `script/phase4-guest.toml`, run as §10.1 describes:
+the host starts solo, opens hosting at tick 400, and the guest dials in and runs
+1,600 ticks against it. Recorded because it is the first evidence that the cadence
+works outside a harness, and because one number in it is the phase's whole claim.
+
+- **The guest applied 371 corrections and refused none.** `corrections_refused` and
+  `corrections_superseded` both stayed 0, so every delta found the keyframe it named
+  and nothing arrived faster than the guest could take it.
+- **The magnitude is small and bounded.** Sampled at three points across the run,
+  `correction_entries` read 10, 9 and 6 over `correction_entities` of 5, 5 and 4,
+  with `correction_cells` at 0 — the prediction was never more than a handful of
+  component cells out and no shared placement was ever visibly moved by a
+  correction. Bounded rather than zero is the right answer: zero would mean the
+  guest was not predicting anything.
+- **No `WARN` or `ERROR` on the guest at all**, and one on the host, which is its
+  own shutdown. `network.lag_ticks` read 0 and 1; `stale` never set.
+- **`digest_mismatches` reached 17 over ~1,600 ticks**, naming `positions` and then
+  `kinetics`. That is the drift *between* corrections, which is the condition this
+  phase created deliberately, and it is exactly what the counter is now for.
+- **`gold.timer` matched exactly, tick for tick** — 1,100,000,000 at tick 2000 on
+  both files. That is the key Phase 2 had to exclude and Phase 3 admitted; it now
+  survives a session in which the two instances are not in lockstep at all.
+- **The `fsm` sequences agree where the two logs overlap.** Not tick for tick any
+  more, and §10.3 says why: each instance applies its own artifacts a playout lead
+  before the other sees them.
+- **The host's uplink was 4.2 MB over 402 corrections**, about 10.5 KiB each, in a
+  world whose whole capture is 9.7 KiB. That is the honest shape of the delta in a
+  *quiet* world: it compresses the world half, which is a small share of a small
+  capture, so most of what remains is the fixed sections. The delta earns its keep
+  where the world is large — 16.8 % at the storm high water — which is where it is
+  needed and where §8's table says the constraint actually is.
+
 ### 9.0 The 2026-09-01 run — the D-20 and D-21 fixes hold
 
 Two participants, ~2,930 ticks each, host and guest logs both returned. Nothing to
 fix; recorded because a clean run is evidence and because the checks §10 asked for
-were answered by it.
+were answered by it. The check numbers below are §10.2's as it stood for Phase 3;
+Phase 4 renumbered that table, and the tick-for-tick `fsm` comparison this entry
+relies on is now a sequence comparison for the reason §10.3 gives.
 
 - **No divergence at all.** Zero `WARN` or `ERROR` records on the host; one on the
   guest, and it is the host's own shutdown (`network peer disconnected` at tick
@@ -902,9 +1076,11 @@ stall. Worth a look when the quasar is next touched.
 
 ## 10. Manual verification for the next session
 
-Everything below is a two-terminal check. Phase 3 put a world on the wire and let a
-participant arrive at any tick, so what is being verified is that the join lands on
-one world and stays there — and that nothing Phases 1 and 2 fixed came back.
+Everything below is a two-terminal check. Phase 4 made the host the authority and
+the guest a predictor, so what is being verified is that the correction closes what
+the prediction opened, that the numbers replacing `DESYNC` say something a player
+can act on, and that nothing the earlier phases fixed came back. The scripts are the
+same pair as before, and the join it makes is still worth watching once by hand.
 
 ### 10.1 The join, which is the phase
 
@@ -940,61 +1116,79 @@ The Phase 3 pair (`script/phase3-host.toml`, `script/phase3-guest.toml`, both wi
 still exercises the heat bursts, the crossed quasar, the shared storm and the swarm
 in the shield.
 
-`-ls afs` keeps `app`, `fsm` and `stat`: the divergence reports, the region
+`-ls afs` keeps `app`, `fsm` and `stat`: the join and correction records, the region
 transitions and the periodic counters. Add `+e` only if a specific event needs
 chasing — it was 5,634 of the 2026-08-31 log's 6,801 lines and carried nothing.
-**Send back the log from both terminals**; one side shows that two instances
-disagree and never which one is wrong.
+**Send back the log from both terminals**; one side shows the correction it applied
+and never what the host thought it was sending.
 
 ### 10.2 What to check
 
 | # | Check | Pass |
 |---|---|---|
 | 1 | **The join itself.** Play solo into a storm, `:host :7777`, dial from terminal 2 | The guest arrives inside the storm holding the same world. Its `app` log carries `capture staged`, `capture installed`, `join installed the session world` and `join caught up`; the host's carries `session capture` and `mid-run participant admitted`. Both cursors work. |
-| 2 | **The arrival is one crossing.** Read `cursor spawn` on both logs after the join | The same `entity` and `slot` on both instances. A different entity id on each side is a D-11 failure and the most serious thing this check can find. |
-| 3 | **The join cost.** Read the `snapshot` stat group on both | Host: `bytes`, `capture_us` (the stall — should be a low single-digit percentage of the 50 ms tick), `encode_us`. Guest: `install_tick`, `stage_us`, `commit_us`, `catch_up_ticks`. Send these back — they are what Phase 4's cadence is chosen against, and the storm figures in §8 came from a bench rather than a session. |
-| 4 | **No divergence after the join.** Play both for 2,000+ ticks | No `shared state divergence` (WARN) or `shared state diverged` (ERROR) in either log; no `DESYNC`/`DIVERGED` in the status bar; `network.digest_mismatches` stays 0 and `network.barrier.late` stays 0. |
-| 5 | **Reconnect.** Kill terminal 2, watch the host despawn the guest cursor, then dial again | The second arrival installs at a *later* `install_tick` than the first and lands the same way. The host's roster returns to one cursor in between. |
-| 6 | **Join late.** Repeat with the join delayed several minutes | `bytes` and `stage_us` are a function of what is on the map, not of how long the host has been running. A join cost that grew with session length would be the boundary this phase is built on failing. |
-| 7 | **Gold across a join.** Join while a gold sequence is live | Both instances report the same `gold.timer` at the same tick, and keep reporting it. This key is in the compared surface now, so a disagreement is also a divergence report — it no longer has to be read by hand. |
-| 8 | **Quasar speed.** Let a quasar live ~30 s across the join | No `part=kinetics` divergence. The capture carries `LastSpeedIncreaseAt`, so the guest inherits the deadline instead of arming a fresh one. |
-| 9 | **Heat burst, both sides** | The cleaner sweep appears for the participant who burst and only for them; `fsm.monitor` stays `MonitorActive`. |
-| 10 | **Swarm in a shield.** Both in god mode, park a swarm in a shield | The swarm is ejected. `swarm.physics_steps` keeps rising while `shield.shield_hit` does; `swarm.transition_stalls` stays 0. |
-| 11 | **Reset.** `:new` on the coordinator | Both reset together, no divergence follows, and the counters restart from zero on both. |
-| 12 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed. `:session` says "Solo run"; `:speed`, `:step` and pause still behave. |
+| 2 | **The arrival is one crossing.** Read `cursor spawn` on both logs after the join | The same `entity` and `slot` on both instances. A different entity id on each side is still the most serious thing this check can find: D-11 weakened its *values* clause and not its identity one. |
+| 3 | **Local input is immediate.** Hold `l`, then type a corpus line at full speed | The cursor tracks the keys with no perceptible lag on either side, `typing.errors` stays at zero, and the shared cell moves with the local one rather than a playout lead behind it. The *remote* cursor still steps in its sync cadence. |
+| 4 | **The correction, which is the phase.** Read the `snapshot.correction` stat group on the guest over several minutes | `corrections_applied` rises steadily. `correction_entities` is small and **does not trend upward** — a bounded magnitude is convergence, a growing one is not. `corrections_refused` may be non-zero briefly after the join and must not keep rising; `corrections_superseded` rising means this machine cannot keep up with the cadence. |
+| 5 | **The cadence's cost.** Read `snapshot` on the host | `corrections_sent`, `keyframes` and `correction_bytes_sent` — the last divided by elapsed seconds is the actual uplink, and it is the number Phase 5 adapts. `capture_us` is the host's stall and should stay a low single-digit percentage of the 50 ms tick even in a storm. **Send these back**: §8's figures are in-process on one machine with no link at all. |
+| 6 | **Staleness says something true.** Watch `network.lag_ticks` and the status bar | Zero or one on a healthy loopback link and no `LAG` item. Under `tc netem` delay it rises and the item appears; remove the delay and it clears. A `LAG` that never clears on a quiet local link is a defect, not a slow network. |
+| 7 | **Nothing enters an unrecoverable state.** Kill the link entirely (`tc qdisc` drop-all, or unplug), leave it down for ten seconds, restore it | The guest keeps playing on its prediction, `LAG` appears, and the *next keyframe* restores it — within `SnapshotKeyframeCorrections` corrections at most. No `DESYNC`, no `DIVERGED`, nothing to restart. This is the check the phase exists for. |
+| 8 | **Jitter and loss.** `tc netem delay 80ms 40ms loss 2%` on the guest | Play stays responsive because local input never waits. Remote entities stay smooth between corrections. `correction_entities` rises and stays bounded; `corrections_refused` rises with loss and is harmless. |
+| 9 | **Join cost is a function of the world, not the session.** Repeat the join after several minutes | `snapshot.bytes` and `stage_us` track what is on the map, not how long the host has been running. `stage_us` on the *second* install of a session is far below the first: the staging world is built once. |
+| 10 | **Reconnect.** Kill terminal 2, watch the host despawn the guest cursor, then dial again | The second arrival installs at a *later* `install_tick` than the first and lands the same way. The host's roster returns to one cursor in between. |
+| 11 | **Gold, quasar and heat across a join** | Both instances report the same `gold.timer` at the same tick; a quasar living ~30 s across the join produces no kinetics disagreement; the cleaner sweep appears only for the participant that burst and `fsm.monitor` stays `MonitorActive`. |
+| 12 | **Swarm in a shield.** Both in god mode, park a swarm in a shield | The swarm is ejected. `swarm.physics_steps` keeps rising while `shield.shield_hit` does; `swarm.transition_stalls` stays 0. |
+| 13 | **Reset.** `:new` on the coordinator | Both reset together, the counters restart from zero on both, and corrections resume against the new run. |
+| 14 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed. `:session` says "Solo run"; `:speed`, `:step` and pause still behave, and no `snapshot` counter moves. |
 
 ### 10.3 What to look at first in the returned logs
 
 ```bash
-# every divergence report, both files
+# anything the session called a problem, both files
 jq -c 'select(.level=="WARN" or .level=="ERROR")' <log>
 
 # the join itself, both files
 jq -c 'select(.sub=="app" and (.fields.msg|test("capture|join|hosting|admitted")))' <log>
 
-# the ~30 ticks before the first divergence — the cause is usually not adjacent
-jq -c 'select(.tick>=<T-30> and .tick<=<T+5> and .sub!="event")' <log>
+# every correction the guest installed, with what it had to move
+jq -c 'select(.sub=="app" and .fields.msg=="capture installed")
+       | {tick, t:.fields.tick, cells:.fields.correction_entries,
+          entities:.fields.correction_entities, shift:.fields.correction_cells}' <guest>
 
-# the join's cost, and the counters that would name a late artifact
-jq -c 'select(.sub=="stat" and (.fields.msg=="snapshot" or .fields.msg=="network.barrier"))' <log>
+# the cadence's cost and this instance's staleness, over the run
+jq -c 'select(.sub=="stat" and (.fields.msg|test("^snapshot|^network")))' <log>
 
-# fsm transitions should be identical, tick for tick, from the join onward
-jq -r 'select(.sub=="fsm")|"\(.tick) \(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <host> > h
-jq -r 'select(.sub=="fsm")|"\(.tick) \(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <guest> > g
+# fsm transitions, host against guest
+jq -r 'select(.sub=="fsm")|"\(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <host> > h
+jq -r 'select(.sub=="fsm")|"\(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <guest> > g
 diff h g
 ```
 
-That last one is the cheapest whole-session check there is: on the 2026-09-01 run
-all 106 `fsm` records matched tick for tick between the two files, and on the
-Phase 4 script pair every record after the join matched. One `nav.entities`
-difference is expected and excluded — it counts both domains, so a participant's own
-player-domain population moves it.
+The correction line is the one to read first, and what it says is a *trend* rather
+than a value: a magnitude that stays in the same range is a guest predicting well
+and being corrected, and one that climbs is a guest falling behind faster than the
+cadence repairs it.
 
-### 10.4 What Phase 4 wants from these runs
+The `fsm` diff is the cheapest whole-session check there is, and Phase 4 changed how
+to read it. It used to be tick-for-tick: on the 2026-09-01 run all 106 records
+matched exactly. A guest applies its own artifacts a playout lead earlier now, so
+the *ticks* may differ by up to that lead — the **sequence** must not. Dropping the
+tick from the key, as above, is what makes it a comparison of what happened rather
+than of when. One `nav.entities` difference is expected and excluded: it counts both
+domains, so a participant's own player-domain population moves it.
 
-The `snapshot` group from check 3, taken in a real session rather than from the
-bench. §8's storm figures are measured in-process on one machine with no link at
-all; a cadence chosen from them is a cadence chosen without a network in the
-picture. What is wanted is `capture_us` under a real tick loop, `bytes` at whatever
-the session's actual high water turns out to be, and `catch_up_ticks` over a link
-that is not loopback.
+### 10.4 What Phase 5 wants from these runs
+
+The `snapshot` group from checks 4 and 5, over a link that is not loopback, and the
+same group again under each `tc netem` shape from check 8. Phase 5 drives the
+cadence from measurement rather than from a constant, and what it needs is the
+relationship between the three: how much shaping it takes before
+`snapshot.correction_entities` stops being bounded, what `network.lag_ticks` reads
+when that happens, and what the uplink was at the time. §8's figures were taken
+in-process on one machine with no link at all, so they say what the world costs and
+nothing about what a link can carry.
+
+One number is missing by construction and Phase 5 has to add it: nothing measures a
+round trip, because nothing in this protocol makes one. Everything above is
+one-directional — what this instance sent, and how far behind the newest tick it has
+*heard about* it stands.
