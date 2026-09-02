@@ -42,10 +42,21 @@ func TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom(t *testing.T) {
 		&event.DrainDefeatedPayload{Entity: local[1]})
 	apps[1].Settle()
 
-	// Far enough in that the barrier has delivered the crossing to the peer and
-	// both machines are inside the region, and short of the gold cycle ending it.
+	// The strobe is a 200 ms flash rather than a standing state, so it is observed
+	// while it is running rather than asserted at the end. It follows the same
+	// cursor as the other two: the region emits it with `cursor` bound to
+	// fuse_owner, and an instance that does not simulate that cursor ignores it.
+	strobed := make([]bool, len(apps))
 	for range 12 {
 		tickAll(apps)
+		for i, a := range apps {
+			strobed[i] = strobed[i] || strobing(a)
+		}
+	}
+	for i, got := range strobed {
+		if want := i == 1; got != want {
+			t.Fatalf("participant %d strobe = %v, want %v", i+1, got, want)
+		}
 	}
 	for i, a := range apps {
 		if quasarState(a) == "-" {
@@ -102,6 +113,13 @@ func quasarState(a *App) (state string) {
 // telemetry key beside it, so the assertion is on the effect and not its report.
 func grayedOut(a *App) (active bool) {
 	a.World().RunSafe(func() { active = a.World().Resources.View.Grayout.Active })
+	return active
+}
+
+// strobing reads the flash the transient system owns, for the same reason
+// grayedOut reads the overlay rather than the key beside it.
+func strobing(a *App) (active bool) {
+	a.World().RunSafe(func() { active = a.World().Resources.View.Strobe.Active })
 	return active
 }
 

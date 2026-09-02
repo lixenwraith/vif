@@ -10,10 +10,12 @@ on_enter = [
     # quasar. `fuse_owner` is the variable the fuse request below already elects
     # by, and an instance that does not simulate that cursor ignores all three.
     #
-    # The strobe stays session-wide for now: it is a 200 ms flash rather than a
-    # standing state, and scoping it needs a field on its own payload.
+    # The strobe follows the same cursor. It is a 200 ms flash rather than a
+    # standing state, which is why it was left session-wide when the other two were
+    # scoped; the reason was mechanical — it shares no payload with them — and the
+    # answer is a `cursor` field of its own, zero meaning session-wide.
     { action = "EmitEvent", event = "EventGrayoutStart", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
-    { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200 } },
+    { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200, cursor = 0 }, payload_vars = { cursor = "fuse_owner" } },
     { action = "EmitEvent", event = "EventDrainPause", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
     { action = "EmitEvent", event = "EventFuseQuasarRequest", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
 ]

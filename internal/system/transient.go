@@ -4,6 +4,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -109,7 +110,7 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 		s.statGrayoutActive.Store(false)
 
 	case event.EventStrobeRequest:
-		if payload, ok := ev.Payload.(*event.StrobeRequestPayload); ok {
+		if payload, ok := ev.Payload.(*event.StrobeRequestPayload); ok && s.ownedHere(payload.Cursor) {
 			s.handleStrobeRequest(payload)
 		}
 
@@ -137,10 +138,16 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 // check removes.
 func (s *TransientSystem) scopedHere(ev event.GameEvent) bool {
 	p, ok := ev.Payload.(*event.CursorScopePayload)
-	if !ok || p.Entity == 0 {
+	if !ok {
 		return true
 	}
-	return p.Entity == s.world.Resources.Player.Entity
+	return s.ownedHere(p.Entity)
+}
+
+// ownedHere is the same admission against a cursor named directly, which is what
+// a payload carrying a scope beside its own fields offers — the strobe.
+func (s *TransientSystem) ownedHere(cursor core.Entity) bool {
+	return cursor == 0 || cursor == s.world.Resources.Player.Entity
 }
 
 func (s *TransientSystem) Update() {

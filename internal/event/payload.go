@@ -792,11 +792,19 @@ type SwarmSpawnRequestPayload struct {
 
 // --- Post-Process ---
 
-// StrobeRequestPayload configures screen flash effect
+// StrobeRequestPayload configures screen flash effect.
+//
+// Cursor scopes the flash the way CursorScopePayload scopes the grayout and the
+// drain pause: entity zero is the session-wide form every region belonging to
+// nobody emits, and a nonzero entity is one participant's to see. It is a field
+// here rather than a shared scope payload because a strobe carries a colour and a
+// duration as well, and a caller that only wants the flash should not have to
+// choose between describing it and scoping it.
 type StrobeRequestPayload struct {
-	Color      color.RGB `toml:"color"`
-	Intensity  float64   `toml:"intensity"`   // Base intensity 0.0-1.0
-	DurationMs int64     `toml:"duration_ms"` // 0 = default value from parameters
+	Color      color.RGB   `toml:"color"`
+	Intensity  float64     `toml:"intensity"`   // Base intensity 0.0-1.0
+	DurationMs int64       `toml:"duration_ms"` // 0 = default value from parameters
+	Cursor     core.Entity `toml:"cursor"`      // 0 = session-wide
 }
 
 // --- Spirit ---

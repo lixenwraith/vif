@@ -12,8 +12,9 @@ import (
 )
 
 // unstampedLocal pins the Local-class types some producer still pushes in the
-// ambient domain. The owner-authored grants, the D-6 effects and internal/mode all
-// stamp; app, engine, fsm and the shared species systems still push these unstamped.
+// ambient domain. The owner-authored grants, the D-6 effects, internal/mode and
+// every artifact an FSM region emits now stamp; app, engine and the shared species
+// systems still push these unstamped.
 // The set must only shrink: an entry that stops appearing fails, and a type not
 // listed here fails on first sight.
 // Not a transport gate — the class keeps a Local type off the wire whatever its
@@ -22,23 +23,16 @@ import (
 // TODO: empty this, then delete it and the exemption with it.
 var unstampedLocal = map[string]bool{
 	"EventCombatAttackAreaRequest":  true,
-	"EventCursorArmRequest":         true,
 	"EventDecaySpawnOne":            true,
-	"EventDrainPause":               true,
-	"EventDrainResume":              true,
 	"EventDustAllRequest":           true,
-	"EventFuseQuasarRequest":        true,
 	"EventGamePauseChanged":         true,
 	"EventGamePauseRequest":         true,
 	"EventGameSpeedChanged":         true,
-	"EventGrayoutEnd":               true,
-	"EventGrayoutStart":             true,
 	"EventLightningSpawnRequest":    true,
 	"EventMetaStatusMessageRequest": true,
 	"EventMissileSpawnRequest":      true,
 	"EventModeChanged":              true,
 	"EventScreenResize":             true,
-	"EventStrobeRequest":            true,
 }
 
 // TestLocalEventsCarryThePlayerDomain asserts that a Local-class record is tagged
