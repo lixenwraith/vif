@@ -3,6 +3,7 @@ bin/
 dev/
 logs/
 log/
+journal/*.jsonl
 cmake-build-*/
 build.sh
 vi-fighter
