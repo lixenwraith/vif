@@ -271,6 +271,7 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	// and decoding or installing a correction here would do both under the lock the
 	// install itself needs.
 	r.OnCorrection = a.receiveCorrection
+	r.OnSelective = a.receiveSelective
 	a.world.Resources.Network = r
 	a.world.MarkSessionShared()
 	a.ctx.PublishMapLock()

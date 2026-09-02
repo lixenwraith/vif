@@ -228,6 +228,65 @@ const (
 	// should cost freshness, never the newest authority.
 	SnapshotCorrectionQueue = 4
 
+	// === Phase 6: hash-guided selective correction ===
+
+	// SnapshotManifestPageRows is how many rows a manifest page holds at the
+	// nominal partition. A page is the unit of both proof and repair, so it is a
+	// trade between the two: larger pages hash and compare more cheaply and repair
+	// more coarsely, smaller ones the reverse. Thirty-two cells is roughly one
+	// storm circle's worth of a component store — small enough that a single
+	// diverged entity does not drag a hundred unrelated ones onto the wire, and
+	// large enough that a healthy section's page list stays short.
+	SnapshotManifestPageRows = 32
+
+	// SnapshotManifestMaxPages bounds a section's page count whatever its row
+	// count. It is what keeps the page vector in a request bounded by the protocol
+	// rather than by the world: at MaxPlayers-scale worlds a section is at most
+	// this many hashes, so the descent from a section to its pages costs a fixed
+	// amount of wire however large the store grows.
+	SnapshotManifestMaxPages = 64
+
+	// SnapshotManifestRetention is how many recent captures and manifests a host
+	// keeps so it can answer a request naming an earlier one. A guest answers the
+	// manifest it last received, so the retention only has to cover the round trip
+	// plus the queue; past it the host answers with a keyframe instead, which is
+	// the bounded fallback the whole protocol is allowed to reach.
+	SnapshotManifestRetention = 4
+
+	// SnapshotShardBytesMax bounds one repair. A shard set larger than this is not
+	// a repair, it is a capture with extra steps: the host sends a keyframe
+	// instead, which is smaller once the mismatch is that wide because it carries
+	// no per-page identity or proof. It is also what keeps a repair inside one
+	// transport frame.
+	SnapshotShardBytesMax = 48 << 10
+
+	// SnapshotManifestSilenceCorrections is how many manifests a peer may leave
+	// unanswered before the host stops assuming it is in the selective protocol
+	// and sends it whole bodies again.
+	//
+	// A guest answers every manifest — with a request or with the ack that records
+	// convergence — so silence means the answer cannot get back: a peer reached
+	// only by relay, or one whose uplink has failed while its downlink has not.
+	// Neither can be repaired selectively, and both are still owed an authority,
+	// so the host falls back to the Phase 5 stream for them. Three is one nominal
+	// round trip plus a lost answer.
+	SnapshotManifestSilenceCorrections = 3
+
+	// SnapshotReplayTicks, SnapshotReplayRecords and SnapshotReplayBytes bound the
+	// suffix of its own accepted crossings a guest retains for replay after a
+	// correction rebases it.
+	//
+	// All three are needed and they bound different failures. The tick span is the
+	// useful window — a correction older than the convergence floor is not
+	// something local input should be replayed onto — the record count bounds a
+	// participant typing or firing far faster than the cadence, and the byte bound
+	// is what keeps a pathological payload from turning retention into an
+	// unbounded buffer. Overflowing any of them makes the suffix unavailable
+	// rather than partial: a partial replay is a guess, and this never guesses.
+	SnapshotReplayTicks   = SnapshotFloorKeyframeTicks
+	SnapshotReplayRecords = 512
+	SnapshotReplayBytes   = 256 << 10
+
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one
 	// source arrive out of order and a high-water mark alone would discard epochs the

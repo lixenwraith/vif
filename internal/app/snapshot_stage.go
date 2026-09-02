@@ -285,6 +285,62 @@ type snapshotTelemetry struct {
 	// guarantee: the host promises to publish one per floor window, and this is
 	// what says whether one actually arrived.
 	keyframeAge *atomic.Int64
+
+	// The Phase 6 selective-correction counters.
+	//
+	// They are grouped by the question each group answers. The first is "what did
+	// the index cost" — manifests published and received, and their bytes, which
+	// is the traffic that replaces a whole delta on a healthy link. The second is
+	// "how often did it prove convergence outright": hashOnly is the case the
+	// whole design is for, and sectionsCompared/pagesCompared say how much work
+	// finding that answer took. The third is the repair itself, counted at every
+	// point a shard can be at — asked for, sent, arrived, refused, applied — so a
+	// gap between two of them names which side dropped it.
+	manifestSent      *atomic.Int64
+	manifestRecv      *atomic.Int64
+	manifestBytesSent *atomic.Int64
+	manifestBytesRecv *atomic.Int64
+	hashOnly          *atomic.Int64
+	sectionsCompared  *atomic.Int64
+	pagesCompared     *atomic.Int64
+
+	shardsRequested *atomic.Int64
+	shardsSent      *atomic.Int64
+	shardsRecv      *atomic.Int64
+	shardsRefused   *atomic.Int64
+	shardsApplied   *atomic.Int64
+	shardBytesSent  *atomic.Int64
+	shardBytesRecv  *atomic.Int64
+	requestBytes    *atomic.Int64
+	selectiveBytes  *atomic.Int64
+
+	// What a repair moved, and what refused one. proofFailures counts a shard
+	// whose rows did not reproduce their declared page hash or whose root did not
+	// verify; baselineRefusals a set naming a tick, run or session this instance
+	// is not holding. Neither is an error condition on its own — both end at the
+	// keyframe fallback, which keyframeFallbacks counts.
+	pagesRepaired    *atomic.Int64
+	entitiesRepaired *atomic.Int64
+	cellsRepaired    *atomic.Int64
+	proofFailures    *atomic.Int64
+	baselineRefusals *atomic.Int64
+	keyframeFallback *atomic.Int64
+
+	// hashUS is what indexing and comparing one capture cost outside the world
+	// lock, beside captureUS which is the bounded read inside it. The pair is the
+	// whole of requirement 8 as a measurement: if the second grows with the first,
+	// work has moved under the lock that should not have.
+	hashUS *atomic.Int64
+
+	// The bounded replay suffix (deliverable 2). retained is what this instance is
+	// currently holding, replayed what the last correction re-applied, overflowed
+	// how many records retention dropped, and skipped how many corrections found
+	// the suffix unavailable and fell back to the authority alone.
+	replaySuffix   *atomic.Int64
+	replayReplayed *atomic.Int64
+	replayOverflow *atomic.Int64
+	replaySkipped  *atomic.Int64
+	replayUnusable *atomic.Bool
 }
 
 // newSnapshotTelemetry reserves the cells. Called during construction, because a
@@ -320,6 +376,39 @@ func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
 		constrained:      reg.Bools.Get("snapshot.cadence_constrained"),
 		floorBreached:    reg.Bools.Get("snapshot.cadence_floor_breached"),
 		keyframeAge:      reg.Ints.Get("snapshot.cadence_keyframe_age_ticks"),
+
+		manifestSent:      reg.Ints.Get("snapshot.manifests_sent"),
+		manifestRecv:      reg.Ints.Get("snapshot.manifests_received"),
+		manifestBytesSent: reg.Ints.Get("snapshot.manifest_bytes_sent"),
+		manifestBytesRecv: reg.Ints.Get("snapshot.manifest_bytes_received"),
+		hashOnly:          reg.Ints.Get("snapshot.corrections_hash_only"),
+		sectionsCompared:  reg.Ints.Get("snapshot.sections_compared"),
+		pagesCompared:     reg.Ints.Get("snapshot.pages_compared"),
+
+		shardsRequested: reg.Ints.Get("snapshot.shards_requested"),
+		shardsSent:      reg.Ints.Get("snapshot.shards_sent"),
+		shardsRecv:      reg.Ints.Get("snapshot.shards_received"),
+		shardsRefused:   reg.Ints.Get("snapshot.shards_refused"),
+		shardsApplied:   reg.Ints.Get("snapshot.shards_applied"),
+		shardBytesSent:  reg.Ints.Get("snapshot.shard_bytes_sent"),
+		shardBytesRecv:  reg.Ints.Get("snapshot.shard_bytes_received"),
+		requestBytes:    reg.Ints.Get("snapshot.request_bytes"),
+		selectiveBytes:  reg.Ints.Get("snapshot.selective_bytes"),
+
+		pagesRepaired:    reg.Ints.Get("snapshot.pages_repaired"),
+		entitiesRepaired: reg.Ints.Get("snapshot.entities_repaired"),
+		cellsRepaired:    reg.Ints.Get("snapshot.cells_repaired"),
+		proofFailures:    reg.Ints.Get("snapshot.proof_failures"),
+		baselineRefusals: reg.Ints.Get("snapshot.baseline_refusals"),
+		keyframeFallback: reg.Ints.Get("snapshot.keyframe_fallbacks"),
+
+		hashUS: reg.Ints.Get("snapshot.hash_us"),
+
+		replaySuffix:   reg.Ints.Get("snapshot.replay_suffix_records"),
+		replayReplayed: reg.Ints.Get("snapshot.replay_records"),
+		replayOverflow: reg.Ints.Get("snapshot.replay_overflow"),
+		replaySkipped:  reg.Ints.Get("snapshot.replay_skipped"),
+		replayUnusable: reg.Bools.Get("snapshot.replay_suffix_unavailable"),
 	}
 }
 

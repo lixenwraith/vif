@@ -767,6 +767,21 @@ type NetworkPort interface {
 	Drain(dst []network.Inbound) int
 }
 
+// OffTickDrainPort is a transport that can be polled between two ticks without the
+// poll counting as one.
+//
+// The Drain contract is "once per game tick", and some transports measure
+// themselves against it: a virtual link's clock, its shaping credit and its probe
+// interval are all denominated in polls. Phase 6's correction exchange has to
+// translate what has already arrived without moving that clock — a manifest
+// answered a tick late is a manifest answered about a world the receiver has
+// already predicted past — so a port that measures itself offers this second door.
+// A transport with no such measurement (a socket) need not implement it; the
+// caller falls back to Drain, which for it is the same operation.
+type OffTickDrainPort interface {
+	DrainOffTick(dst []network.Inbound) int
+}
+
 // NetworkSessionPort exposes barrier metadata negotiated before simulation starts.
 type NetworkSessionPort interface {
 	ParticipantID() uint32
@@ -850,6 +865,18 @@ type NetworkResource struct {
 	// already holds. What it hands to is a queue the corrector drains between two
 	// ticks.
 	OnCorrection func(tick uint64, body []byte)
+
+	// OnSelective hands one Phase 6 selective-correction frame to the session
+	// layer: a manifest, a receiver's answer to one, or the repair that answers
+	// that. Like OnCorrection it is called under the world lock, from the tick that
+	// drained the frame, so it must do nothing but take the bytes — the comparison,
+	// the hashing and the apply all happen between two ticks.
+	//
+	// kind is the network.MessageType the frame arrived as. One seam rather than
+	// three keeps the transport's knowledge of the protocol to "this is a
+	// selective-correction frame from that peer", which is all it can usefully
+	// have.
+	OnSelective func(kind uint8, from uint32, body []byte)
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.

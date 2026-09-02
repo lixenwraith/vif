@@ -200,6 +200,7 @@ func (a *App) initWorld() {
 		r.OnDeparture = a.releaseParticipant32
 		r.SharedDigest = a.sharedDigestLocked
 		r.OnCorrection = a.receiveCorrection
+		r.OnSelective = a.receiveSelective
 		// A session endpoint exists, so this run is shared for its whole life
 		// whether or not a peer is attached at a given tick. Latching it here rather
 		// than reading the port keeps the anchor, the D-14 verdict and the playout

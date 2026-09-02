@@ -22,6 +22,20 @@ import (
 // only moments the rule makes a claim about.
 const correctionSteps = 8
 
+// The Phase 6 exchange's settling budget between two ticks.
+//
+// correctionExchangeFastPasses is what an in-process link needs: the manifest is
+// answered on the first pass, the repair it provoked is served and applied on the
+// second, and the third is the margin a keyframe fallback takes. The passes past
+// it exist for a socket, which delivers on its own goroutine — they wait
+// correctionExchangePoll each, so a round trip over loopback has about six
+// milliseconds to complete before the harness gives up and advances a tick.
+const (
+	correctionExchangeFastPasses = 3
+	correctionExchangePasses     = 30
+	correctionExchangePoll       = 200 * time.Microsecond
+)
+
 // deliverCorrection publishes one authoritative correction from the host and gets
 // it applied on the guest, returning the host's shared state at the instant it was
 // read.
@@ -66,8 +80,14 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 	for i, g := range guests {
 		before[i] = statOf(g, "snapshot.corrections_applied")
 	}
-	for range parameter.NetworkRelayHopLimit {
-		advance()
+	// The exchange is driven before the clock is. Phase 6 answers a manifest and
+	// serves the repair it provokes between two ticks — the drain and the install
+	// both belong there — so a correction over a direct link completes without the
+	// participants moving at all, and what this returns is then a comparison at the
+	// tick the correction actually describes. A tick is still advanced when a round
+	// did not complete, which is what a relayed session needs: its bodies travel as
+	// chunks and every hop costs one.
+	applied := func() bool {
 		done := true
 		for i, g := range guests {
 			g.ApplyPendingCorrections()
@@ -75,9 +95,34 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 				done = false
 			}
 		}
-		if done {
-			return want
+		return done
+	}
+	for range parameter.NetworkRelayHopLimit {
+		// Each leg of the Phase 6 exchange is drained, answered and served between
+		// two ticks, so the whole round trip completes without the participants
+		// moving: the manifest is answered on one pass and the repair it provoked
+		// is served and applied on the next. Settling it here is what makes the
+		// comparison below one about the tick the correction describes rather than
+		// about a guest that has predicted past it.
+		//
+		// The later passes wait a moment first. An in-process link hands a frame
+		// over inside the call that sent it, so the exchange finishes in the first
+		// two passes and no wait is paid; a socket delivers on its own goroutine,
+		// and without the wait the harness would advance a tick before the manifest
+		// had crossed the loopback interface — turning an asynchronous transport
+		// into a divergence the protocol never had.
+		for pass := range correctionExchangePasses {
+			if pass >= correctionExchangeFastPasses {
+				time.Sleep(correctionExchangePoll) // [wall] a transport wait, not a game one
+			}
+			host.ApplyPendingCorrections()
+			if applied() {
+				return want
+			}
 		}
+		// A tick is still advanced when a round did not complete, which is what a
+		// relayed session needs: its bodies travel as chunks and every hop costs one.
+		advance()
 	}
 	t.Fatalf("a correction for tick %d never reached every guest", tick)
 	return nil

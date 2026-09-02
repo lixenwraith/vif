@@ -113,6 +113,25 @@ type NetworkSystem struct {
 	// able to interleave into a body that hashes as neither.
 	snapshots [parameter.MaxPlayers + 1]network.SnapshotAssembly
 
+	// suffix is the bounded ring of this instance's own accepted crossings, kept so
+	// a correction that rebases the world onto an earlier tick can put them back.
+	//
+	// Only the crossings that applied *immediately* are here — the ones Cross does
+	// not take ownership of. The three barrier-bound artifacts (an arrival, a
+	// departure, a reset) are deliberately absent: they decide what the world *is*
+	// rather than what happens in it, every instance applies them at one agreed
+	// tick including their producer, and replaying one would create a roster entry
+	// or a run the session numbers differently.
+	//
+	// lostTick is the newest production tick retention has dropped. A replay is
+	// offered only when it lies at or before the correction's baseline, because a
+	// suffix missing one of its records is not a shorter suffix — it is a different
+	// history, and this never guesses at one.
+	suffix        []localCrossing
+	suffixBytes   int
+	lostTick      uint64
+	suffixDropped int64
+
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
 	lastLostOut uint64
@@ -125,6 +144,29 @@ type NetworkSystem struct {
 	resetStrings []*status.AtomicString
 
 	enabled bool
+}
+
+// localCrossing is one of this instance's own crossings, retained in the wire
+// representation it was already encoded into.
+//
+// Reusing event.ScheduledWireFrame is the point rather than an economy: the frame
+// is what the host will apply, the journal writes the same payload text, and a
+// replay that decoded a second representation could differ from both. The apply
+// tick beside it is the session's agreed instant for the artifact, which is what
+// decides whether a correction already contains it.
+type localCrossing struct {
+	frame event.ScheduledWireFrame
+
+	// produced is the tick this instance published the artifact on — the epoch it
+	// belongs to, not the tick the session applies it at. It is what the replay
+	// window is measured in: an artifact produced after the correction's baseline
+	// is one this participant did in a stretch the authority has not described
+	// yet, and an artifact produced at or before it is in flight rather than
+	// outstanding — the authority will apply it in its own order and the next
+	// correction will carry it, exactly as it did before there was a replay.
+	produced uint64
+	origin   event.Origin
+	bytes    int
 }
 
 // intStat, boolStat and textStat register one counter and enrol it in the set Init
@@ -463,6 +505,11 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 		s.scheduled = append(s.scheduled, barrierArtifact{
 			frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
 		})
+	} else {
+		// Retained for replay: this is the artifact the queue is about to publish
+		// here and now, and the one a correction rebasing this instance onto an
+		// earlier tick would undo.
+		s.retainLocked(frame, s.productionEpoch, applyTick, ev.Origin)
 	}
 	s.mu.Unlock()
 	if agreed {
@@ -518,6 +565,112 @@ func barrierBound(et event.EventType) bool {
 	}
 }
 
+// retainLocked adds one of this instance's own crossings to the replay suffix,
+// dropping the oldest whenever any of the three bounds is exceeded.
+//
+// All three bounds are needed and each answers a different failure. The tick span
+// keeps the suffix inside the window a correction can rebase onto — past the
+// convergence floor a whole world has arrived and there is nothing older to
+// preserve. The record count bounds a participant producing faster than the
+// cadence. The byte bound is what stops a pathological payload from turning a
+// bounded ring into an unbounded buffer.
+//
+// A dropped record raises lostApplyTick rather than merely shortening the ring,
+// because a suffix with a hole is not a shorter suffix — it is a different
+// history. LocalReplaySuffix refuses to offer one.
+//
+// Caller MUST hold mu.
+func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick uint64, origin event.Origin) {
+	rec := localCrossing{
+		frame:    event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick},
+		produced: produced,
+		origin:   origin,
+		bytes:    len(frame.Payload) + len(frame.Event) + len(frame.Domain),
+	}
+	s.suffix = append(s.suffix, rec)
+	s.suffixBytes += rec.bytes
+
+	drop := func() {
+		if len(s.suffix) == 0 {
+			return
+		}
+		old := s.suffix[0]
+		if old.produced > s.lostTick {
+			s.lostTick = old.produced
+		}
+		s.suffixBytes -= old.bytes
+		s.suffix = append(s.suffix[:0], s.suffix[1:]...)
+		s.suffixDropped++
+	}
+	horizon := uint64(0)
+	if produced > parameter.SnapshotReplayTicks {
+		horizon = produced - parameter.SnapshotReplayTicks
+	}
+	for len(s.suffix) > 0 && s.suffix[0].produced < horizon {
+		drop()
+	}
+	for len(s.suffix) > parameter.SnapshotReplayRecords {
+		drop()
+	}
+	for s.suffixBytes > parameter.SnapshotReplayBytes && len(s.suffix) > 1 {
+		drop()
+	}
+}
+
+// LocalReplaySuffix returns this instance's own crossings produced after the
+// correction's baseline, in the order the session applies them.
+//
+// The window is measured in production ticks, and that is the whole of the
+// "exactly once" argument. An artifact produced on tick P applies at P plus the
+// playout lead, so an artifact produced after the correction's baseline T applies
+// strictly after T and cannot be in a capture taken at T — the authority has not
+// reached it. Replaying it therefore restores exactly what the install undid, and
+// can never double an effect the capture already carries.
+//
+// The complement is deliberate rather than an omission. An artifact produced at or
+// before T is *in flight*: the producer applied it immediately (D-3 as Phase 4
+// changed it), the authority will apply it in its own order, and the correction
+// after that carries it. Rolling it back and letting it return is what happened
+// before there was a replay at all, and it is what keeps a corrected guest equal to
+// the authority at the tick the correction describes — which is the claim the
+// convergence criterion makes.
+//
+// ok is false when retention has dropped a record the suffix would need. The
+// caller then installs the authority alone and reports that replay was skipped;
+// there is no partial answer, because a partial replay is a guess about what the
+// participant did.
+func (s *NetworkSystem) LocalReplaySuffix(tick uint64) ([]event.ScheduledWireFrame, []event.Origin, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.lostTick > tick {
+		return nil, nil, false
+	}
+	frames := make([]event.ScheduledWireFrame, 0, len(s.suffix))
+	origins := make([]event.Origin, 0, len(s.suffix))
+	for _, rec := range s.suffix {
+		if rec.produced <= tick {
+			continue
+		}
+		frames = append(frames, rec.frame)
+		origins = append(origins, rec.origin)
+	}
+	slices.SortStableFunc(frames, func(a, b event.ScheduledWireFrame) int {
+		if n := cmp.Compare(a.ApplyTick, b.ApplyTick); n != 0 {
+			return n
+		}
+		return cmp.Compare(a.Frame.Seq, b.Frame.Seq)
+	})
+	return frames, origins, true
+}
+
+// ReplaySuffixSize is how many records this instance is currently retaining, and
+// how many retention has dropped, for the telemetry the plan asks for.
+func (s *NetworkSystem) ReplaySuffixSize() (retained int, dropped int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.suffix), s.suffixDropped
+}
+
 // refreshLink re-reads the negotiated session identity and reports whether the
 // barrier owns crossings this tick. Every entry point the system has — the startup
 // gate, the update pass, tick open and tick close — needs the same answer, and the
@@ -570,6 +723,19 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 		keep = append(keep, a)
 	}
 	s.scheduled = keep
+	// The retained suffix is pruned by the replay window's own test: an artifact
+	// produced at or before the installed world's tick can never be replayed onto
+	// a later correction either, so holding it would only cost retention.
+	pruned := s.suffix[:0]
+	s.suffixBytes = 0
+	for _, rec := range s.suffix {
+		if rec.produced <= tick {
+			continue
+		}
+		pruned = append(pruned, rec)
+		s.suffixBytes += rec.bytes
+	}
+	s.suffix = pruned
 	s.snapshotFloor = tick
 	s.productionEpoch = tick + 1
 	if r := s.world.Resources.Network; r != nil {
@@ -750,7 +916,30 @@ func (s *NetworkSystem) linkReport(completedTick uint64) network.LinkReport {
 
 // drain translates one tick's transport notifications into events
 func (s *NetworkSystem) drain(p engine.NetworkPort) int {
-	n := p.Drain(s.buf[:])
+	return s.drainWith(p, p.Drain)
+}
+
+// DrainOffTick translates what the endpoint already holds without the poll
+// counting as a tick, so a Phase 6 manifest, request or repair is acted on at the
+// tick it describes rather than at the next one.
+//
+// Caller MUST hold updateMutex.
+func (s *NetworkSystem) DrainOffTick() {
+	p := s.port()
+	if p == nil || !s.enabled {
+		return
+	}
+	s.refreshLink(p)
+	poll := p.Drain
+	if off, ok := p.(engine.OffTickDrainPort); ok {
+		poll = off.DrainOffTick
+	}
+	s.drainWith(p, poll)
+}
+
+// drainWith is one poll of the endpoint, whichever door it came through.
+func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbound) int) int {
+	n := poll(s.buf[:])
 	queued := 0
 	for i := range n {
 		in := &s.buf[i]
@@ -951,6 +1140,8 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 		s.receiveDeparture(from, msg.Payload)
 	case network.MsgStateCorrection:
 		s.receiveCorrection(from, msg.Payload)
+	case network.MsgStateManifest, network.MsgStateRequest, network.MsgStateShard:
+		s.receiveSelective(msg.Type, from, msg.Payload)
 	default:
 		s.statDrop.Add(1)
 	}
@@ -1002,6 +1193,27 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	s.statCorrections.Add(1)
 	if r := s.world.Resources.Network; r != nil && r.OnCorrection != nil {
 		r.OnCorrection(tick, whole)
+	}
+}
+
+// receiveSelective hands one Phase 6 manifest, request or repair to the session
+// layer.
+//
+// None of the three is relayed, and that is deliberate rather than an omission.
+// All three are one exchange between an authority and a receiver that can answer
+// it: a manifest forwarded to a participant whose reply cannot get back would
+// arrive as a question nobody can act on, and a request or a repair forwarded to a
+// peer that did not ask would deliver a page vector it holds no retention for. The
+// authority publishes the index only when every participant is directly linked and
+// keeps the Phase 5 stream otherwise, so a relayed participant is never left
+// holding an index it cannot use — see corrections.everyParticipantIsDirect.
+func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, body []byte) {
+	if from == 0 {
+		s.statDrop.Add(1)
+		return
+	}
+	if r := s.world.Resources.Network; r != nil && r.OnSelective != nil {
+		r.OnSelective(uint8(kind), from, body)
 	}
 }
 

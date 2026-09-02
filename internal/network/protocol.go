@@ -49,6 +49,22 @@ const (
 	// that is also carrying epochs, syncs and digests.
 	MsgStateCorrection MessageType = 0x27 // Live: one chunk of an authoritative correction
 
+	// The Phase 6 selective-correction exchange. A manifest is a compact index over
+	// the same capture a correction would carry; a request is a receiver's answer to
+	// one, naming the pages it could not reproduce; a shard set is the repair. All
+	// three are separate message kinds rather than shapes of MsgStateCorrection
+	// because they travel in different directions and are handled at different
+	// moments — a manifest is broadcast on the cadence, a request is unicast back to
+	// the authority, and a repair is unicast to the peer that asked.
+	//
+	// None of the three is chunked: each is bounded to one transport frame by
+	// construction (see parameter.SnapshotShardBytesMax), and a repair too wide for
+	// one frame is not a repair — the host answers it with a keyframe, which is
+	// chunked, self-sufficient and already part of the protocol.
+	MsgStateManifest MessageType = 0x28 // Live: a correction manifest, root and section hashes
+	MsgStateRequest  MessageType = 0x29 // Live: one receiver's answer to a manifest
+	MsgStateShard    MessageType = 0x2A // Live: the pages one request asked for
+
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect MessageType = 0x03 // Live: a participant's link was lost
@@ -65,7 +81,8 @@ const (
 	// carried the retired replay-the-session-from-tick-zero join and now carries the
 	// authoritative state snapshot that replaced it. Neither is 0x27, which carries
 	// the periodic correction that snapshot became once the host was the authority,
-	// nor 0x14/0x15, which carry the round trip Phase 5 added.
+	// nor 0x14/0x15, which carry the round trip Phase 5 added, nor 0x28..0x2A,
+	// which carry Phase 6's manifest, request and repair.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20

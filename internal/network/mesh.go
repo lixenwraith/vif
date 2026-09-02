@@ -389,6 +389,31 @@ func (p *MeshPort) Drain(dst []Inbound) int {
 	return n
 }
 
+// DrainOffTick releases what the shape has already let through, without counting
+// as one of this node's ticks.
+//
+// The three things Drain does beside releasing frames are all denominated in
+// ticks — the virtual clock advances, the shaping credit refills, and the probe
+// interval is measured — so a second poll inside one tick would double this link's
+// apparent bandwidth and halve every round trip it reports. This is the same
+// release with none of that: what has arrived is handed over, and the link's
+// measurement of itself is untouched.
+func (p *MeshPort) DrainOffTick(dst []Inbound) int {
+	n := 0
+	for n < len(dst) {
+		frame, ok := p.release()
+		if !ok {
+			break
+		}
+		if frame.in.Kind == InboundMessage && p.answerLocally(frame.in) {
+			continue
+		}
+		dst[n] = frame.in
+		n++
+	}
+	return n
+}
+
 // probesDueLocked advances the probe sequence when this drain is a probe
 // interval and returns the peers to measure. Caller MUST hold mu.
 func (p *MeshPort) probesDueLocked() []PeerID {

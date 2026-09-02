@@ -100,15 +100,22 @@ func splitKey(key string) (group, name, playerSlot string) {
 		}
 
 	case "snapshot":
-		// Three cards, three questions. The correction counters say how far this
+		// Six cards, six questions. The correction counters say how far this
 		// instance's prediction was from the authority and how much of the
 		// authority arrived; the cadence card says what operating point the link
-		// put the session at; and what is left describes what one capture cost.
+		// put the session at; the index card what proving equality cost and how
+		// often it succeeded outright; the repair card what a selective correction
+		// asked for, carried and refused; the replay card what this participant's
+		// own actions cost to preserve across one; and what is left describes what
+		// one capture cost.
 		if metric, ok := strings.CutPrefix(name, "cadence_"); ok {
 			return "snapshot.cadence", metric, ""
 		}
 		if name == "cadence" {
 			return "snapshot.cadence", "ticks", ""
+		}
+		if group, ok := snapshotSelectiveGroup(name); ok {
+			return group, name, ""
 		}
 		if strings.HasPrefix(name, "correction") {
 			return "snapshot.correction", name, ""
@@ -121,6 +128,34 @@ func splitKey(key string) (group, name, playerSlot string) {
 	}
 
 	return domain, name, ""
+}
+
+// snapshotSelectiveGroup partitions the Phase 6 correction counters into the three
+// cards their questions divide into: what the index cost, what the repair moved,
+// and what replaying this participant's own actions across one took.
+//
+// It is a prefix table rather than three CutPrefix chains because the keys do not
+// share one stem — "hash_us" and "selective_bytes" belong with the manifests, and
+// "corrections_hash_only" has to be claimed here before the "correction" prefix
+// below takes it.
+func snapshotSelectiveGroup(name string) (string, bool) {
+	switch name {
+	case "corrections_hash_only", "hash_us", "selective_bytes",
+		"sections_compared", "pages_compared":
+		return "snapshot.index", true
+	case "request_bytes", "keyframe_fallbacks", "proof_failures", "baseline_refusals":
+		return "snapshot.repair", true
+	}
+	switch {
+	case strings.HasPrefix(name, "manifest"):
+		return "snapshot.index", true
+	case strings.HasPrefix(name, "shard"), strings.HasPrefix(name, "pages_repaired"),
+		strings.HasPrefix(name, "entities_repaired"), strings.HasPrefix(name, "cells_repaired"):
+		return "snapshot.repair", true
+	case strings.HasPrefix(name, "replay"):
+		return "snapshot.replay", true
+	}
+	return "", false
 }
 
 // splitPlayerMetric recognizes player.<slot>.<metric> without depending on

@@ -152,6 +152,14 @@ type corrections struct {
 	guestBreached  bool
 	saidGuestFloor bool
 
+	// selective is the Phase 6 exchange's state on whichever side this run is:
+	// the host's retention ring and request queue, or the receiver's outstanding
+	// manifest and awaited repair. selectiveMu covers the receiver's half, which is
+	// written by the tick that drained a frame and read between two ticks;
+	// publishMu covers the host's, which belongs to the publication schedule.
+	selectiveMu sync.Mutex
+	selective   selectiveState
+
 	applyMu   sync.Mutex
 	stop      chan struct{}
 	wake      chan struct{}
@@ -189,6 +197,17 @@ type peerPublisher struct {
 
 	sent    int64
 	refused int64
+
+	// The Phase 6 exchange's per-peer standing. manifestTick is the last index
+	// this peer was sent, answeredTick the last it answered, and silence how many
+	// manifests have gone unanswered — which is what decides whether this peer can
+	// still be repaired selectively or is owed a whole body. converged records
+	// that its last answer needed no state at all, which is the hash-only
+	// correction seen from the publishing side.
+	manifestTick uint64
+	answeredTick uint64
+	silence      int
+	converged    bool
 }
 
 // newCorrections builds the correction half of a session. It starts nothing: a
@@ -346,8 +365,27 @@ func (c *corrections) publishRound(force bool) error {
 		return err
 	}
 
+	// Phase 6 leads a non-keyframe cadence with the index rather than the body.
+	// Every peer that is still answering manifests is repaired selectively — which
+	// on a converged link means no state travels at all — and only the ones that
+	// are not are still owed the whole difference. The keyframe cadence is
+	// untouched: it is the convergence floor, and the floor is not adaptive.
+	bodyPeers := due
+	if !keyframe && c.everyParticipantIsDirect(ids) {
+		covered, mErr := c.publishManifest(port, cap, due)
+		switch {
+		case mErr != nil:
+			vlog.Warn("app", "msg", "correction index not published", "error", mErr.Error())
+		case covered:
+			bodyPeers = nil
+		default:
+			bodyPeers = c.silentPeersLocked(due)
+		}
+	}
+
 	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
 	var body, joinBody []byte
+	var chunks [][]byte
 	if keyframe {
 		// Two encodings of one capture, and the second is not waste. A correction
 		// travels in an envelope that says which of the two shapes it is; the join
@@ -360,17 +398,17 @@ func (c *corrections) publishRound(force bool) error {
 		if err == nil {
 			joinBody, err = EncodeCapture(cap)
 		}
-	} else {
+	} else if len(bodyPeers) > 0 {
 		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
 	}
 	if err != nil {
 		return fmt.Errorf("correction encode: %w", err)
 	}
 	encodeDur := time.Since(encodeStart)
-
-	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
-	if err != nil {
-		return fmt.Errorf("correction chunk: %w", err)
+	if len(body) > 0 {
+		if chunks, err = network.EncodeSnapshotChunks(cap.Header.Tick, body); err != nil {
+			return fmt.Errorf("correction chunk: %w", err)
+		}
 	}
 
 	// Relevance is measured against what this correction actually moves, so it
@@ -380,21 +418,35 @@ func (c *corrections) publishRound(force bool) error {
 
 	c.scoreRelevanceLocked(ids, near)
 
+	wants := make(map[uint32]struct{}, len(bodyPeers))
+	for _, id := range bodyPeers {
+		wants[id] = struct{}{}
+	}
 	sent := 0
 	for _, id := range due {
 		p := c.peers[id]
-		if !c.sendTo(port, id, chunks) {
-			p.refused++
-			continue
+		if _, whole := wants[id]; whole && len(chunks) > 0 {
+			if !c.sendTo(port, id, chunks) {
+				p.refused++
+				continue
+			}
+			sent++
 		}
 		p.sent++
-		sent++
 		p.nextTick = tick + p.plan.CadenceTicks
 	}
 
-	c.recordSizeLocked(keyframe, len(body))
+	if len(body) > 0 {
+		c.recordSizeLocked(keyframe, len(body))
+	}
 	if keyframe {
 		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
+		// A whole world resets every peer's standing in the selective exchange: it
+		// is the state each one now holds, so the next manifest is answered against
+		// it rather than against whatever the peer had drifted to.
+		for _, p := range c.peers {
+			p.silence = 0
+		}
 	}
 
 	m := c.a.snapshotTelemetry
@@ -408,10 +460,47 @@ func (c *corrections) publishRound(force bool) error {
 	c.publishPlanTelemetryLocked(ids)
 	vlog.Debug("app", "msg", "correction published",
 		"tick", cap.Header.Tick, "keyframe", keyframe, "bytes", len(body),
-		"chunks", len(chunks), "peers", sent, "of", len(ids),
+		"chunks", len(chunks), "whole_bodies", sent, "peers", len(due), "of", len(ids),
 		"cadence_ticks", c.base, "keyframe_period_ticks", c.keyPeriod,
 		"encode_us", encodeDur.Microseconds())
 	return nil
+}
+
+// everyParticipantIsDirect reports whether this instance is linked to every
+// participant in the session.
+//
+// The selective exchange is between an authority and a receiver that can answer
+// it, and only a directly linked participant can: a relayed one receives the flood
+// but its request goes to the neighbour that forwarded it, which holds no
+// retention and no authority. Rather than teach the flood to route an answer — a
+// routing layer this protocol deliberately does not have — a session with a
+// relayed participant keeps the Phase 5 stream, which reaches everyone by the same
+// flood the artifacts use.
+//
+// This is a bounded, stated limitation rather than a hidden one, and it is the
+// shape a relay peer would fit into later: a relay that could answer for the
+// participants behind it would be a peer with retention, which is a role rather
+// than a topology change.
+func (c *corrections) everyParticipantIsDirect(ids []uint32) bool {
+	roster := 0
+	c.a.world.RunSafe(func() { roster = c.a.world.Resources.Player.Count() })
+	if roster == 0 {
+		return true // no roster yet: nobody is behind a relay
+	}
+	return roster <= len(ids)+1
+}
+
+// silentPeersLocked names the due peers the selective exchange cannot repair: the
+// ones that have left SnapshotManifestSilenceCorrections manifests unanswered.
+// Caller MUST hold publishMu.
+func (c *corrections) silentPeersLocked(due []uint32) []uint32 {
+	out := make([]uint32, 0, len(due))
+	for _, id := range due {
+		if p := c.peers[id]; p != nil && p.silence >= parameter.SnapshotManifestSilenceCorrections {
+			out = append(out, id)
+		}
+	}
+	return out
 }
 
 // publishBroadcast is the unmeasured path: one correction to everyone on the
@@ -815,7 +904,31 @@ func (c *corrections) apply() {
 	c.applyMu.Lock()
 	defer c.applyMu.Unlock()
 
+	// Whatever the transport is holding is translated first, without advancing a
+	// tick. It is the same drain the join makes mid-run — an artifact is still
+	// scheduled at the tick it names and nothing is applied early — and doing it
+	// here is what lets the exchange complete inside one cadence instead of paying
+	// a tick per leg.
+	//
+	// It is also what makes a comparison tick-aligned in the ordinary case. A
+	// receiver that could only see a manifest as part of a tick would always index
+	// a world one tick past the one the manifest describes, and the clock-derived
+	// half of the compared surface — the FSM's time in state, the gold deadline,
+	// the elapsed counters — moves every tick. It would then never agree with the
+	// authority about anything, and the cheapest correction the protocol has would
+	// be unreachable in principle.
+	c.drainTransport()
+
 	c.observeFloor()
+
+	// Both halves of the Phase 6 exchange live here rather than on a side of their
+	// own, because both belong between two ticks: serving a request means hashing
+	// and compressing, and answering a manifest means reading this instance's own
+	// world. A host reaches this from its pump or its driver and serves requests;
+	// a guest reaches it the same way and answers manifests. Neither does the
+	// other's work, because neither has the other's traffic.
+	c.serveRequests()
+	c.applySelective()
 
 	c.inboxMu.Lock()
 	pending := c.inbox
@@ -859,6 +972,20 @@ func (c *corrections) apply() {
 		vlog.Warn("app", "msg", "correction not applied",
 			"tick", newest.Header.Tick, "error", err.Error())
 	}
+}
+
+// drainTransport translates whatever the endpoint is holding without advancing a
+// tick, so a manifest, a request or a repair is acted on the moment it lands
+// rather than one tick later.
+func (c *corrections) drainTransport() {
+	c.a.world.RunSafe(func() {
+		for _, sys := range c.a.world.Systems() {
+			if d, ok := sys.(interface{ DrainOffTick() }); ok {
+				d.DrainOffTick()
+				return
+			}
+		}
+	})
 }
 
 // resolve turns one correction body into a whole capture, reconstructing a delta
@@ -913,6 +1040,10 @@ func (c *corrections) install(cap SharedCapture) error {
 	c.lastInstalled = cap.Header.Tick
 	c.installedMu.Unlock()
 
+	// The authority is in place; this participant's own actions after its baseline
+	// go back on top of it. See replay_suffix.go for why the set is exact.
+	c.a.replayLocalSuffix(cap.Header.Tick)
+
 	m := c.a.snapshotTelemetry
 	m.applied.Add(1)
 	m.correctionEntries.Store(int64(diff.Entries))
@@ -928,6 +1059,9 @@ func (c *corrections) setBaseline(cap SharedCapture) {
 	c.installedMu.Lock()
 	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()
+	// A whole world is the answer to every request the selective exchange can
+	// make, so whatever this instance was waiting for it is no longer waiting.
+	c.clearKeyframeWait()
 }
 
 // observeFloor is the guest's half of the convergence guarantee, and it is a
@@ -1019,6 +1153,15 @@ func (c *corrections) close() {
 func (a *App) receiveCorrection(_ uint64, body []byte) {
 	if a.corrections != nil {
 		a.corrections.receive(body)
+	}
+}
+
+// receiveSelective queues one Phase 6 manifest, request or repair. It is the same
+// seam and the same rule as receiveCorrection: the caller holds the world lock, so
+// this takes the bytes and decides nothing.
+func (a *App) receiveSelective(kind uint8, from uint32, body []byte) {
+	if a.corrections != nil {
+		a.corrections.receiveSelective(kind, from, body)
 	}
 }
 
