@@ -491,7 +491,7 @@ func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("repaired manifest: %v", err)
 	}
-	if err := validateShardSet(set, next.Header.Tick, 1, next.Header); err != nil {
+	if err := validateShardSet(set, next.Header.Tick, 1, set.Root, next.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
 	rep, err := applyShardSet(&repaired, repairedIndex, set)

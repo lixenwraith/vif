@@ -15,7 +15,34 @@ const (
 	RoleNone Role = iota // Network disabled
 	RoleHost             // Binds and accepts participants
 	RolePeer             // Dials the coordinator
+	// RoleRelay is a participant that forwards the authority's artifacts to the
+	// participants behind it and retains what it forwards, so it can answer their
+	// selective requests from its own retention rather than leaving them on the
+	// whole-body flood.
+	//
+	// It is a *session* role rather than a transport mode, which is the whole point
+	// of it: nothing about the flood changes, nothing about who authors changes,
+	// and the transport still dials or binds exactly as it did. What changes is
+	// that a relayed participant has somewhere to send a request that can answer
+	// it. The transport therefore treats it as RolePeer; SessionRole below is what
+	// the protocol reads.
+	RoleRelay
 )
+
+// SessionRole is the role a participant holds in the protocol, as a function of
+// what it is rather than of how it connected: the instance authoring is the host,
+// a participant with more than one link is relaying for the ones behind it, and
+// everything else is a peer.
+func SessionRole(authoring bool, links int) Role {
+	switch {
+	case authoring:
+		return RoleHost
+	case links > 1:
+		return RoleRelay
+	default:
+		return RolePeer
+	}
+}
 
 // Config holds network configuration
 type Config struct {

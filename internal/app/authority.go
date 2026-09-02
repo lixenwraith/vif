@@ -489,6 +489,18 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 		u.mu.Unlock()
 		return err
 	}
+	// The conflict check comes first, and the order is the invariant rather than a
+	// preference: a rival record for a term this instance has already adopted is
+	// the split-brain case, and reaching the staleness test before it would
+	// silently drop the very thing that has to be reported.
+	if prior, ok := u.accepted[rec.Term]; ok {
+		u.mu.Unlock()
+		if prior.Authority != rec.Authority {
+			return fmt.Errorf("term %d was already handed to participant %d; participant %d also claims it",
+				rec.Term, prior.Authority, rec.Authority)
+		}
+		return nil // the same record arriving by a second path
+	}
 	if rec.Term <= u.term {
 		u.mu.Unlock()
 		return nil // the session has already moved past this record
@@ -498,11 +510,6 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 		u.mu.Unlock()
 		return fmt.Errorf("handoff enters term %d from term %d; a term is never skipped",
 			rec.Term, held)
-	}
-	if prior, ok := u.accepted[rec.Term]; ok && prior.Authority != rec.Authority {
-		u.mu.Unlock()
-		return fmt.Errorf("term %d was already handed to participant %d; participant %d also claims it",
-			rec.Term, prior.Authority, rec.Authority)
 	}
 	u.term, u.holder = rec.Term, rec.Authority
 	u.roster = slices.Clone(rec.Roster)

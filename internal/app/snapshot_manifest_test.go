@@ -131,7 +131,7 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 	if repaired != 1 || len(set.Shards) != 1 {
 		t.Fatalf("one changed cell moved %d pages", repaired)
 	}
-	if err := validateShardSet(set, cap.Header.Tick, 1, cap.Header); err != nil {
+	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
 	rep, err := applyShardSet(&mine, guest, set)
@@ -182,7 +182,7 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 			t.Fatalf("the repair carried unrelated section %q", sh.Section)
 		}
 	}
-	if err := validateShardSet(set, cap.Header.Tick, 1, cap.Header); err != nil {
+	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
 	if _, err := applyShardSet(&mine, guest, set); err != nil {
@@ -279,7 +279,7 @@ func TestReorderedRowsFailTheProof(t *testing.T) {
 	rows := set.Shards[target].Rows
 	rows[0], rows[1] = rows[1], rows[0]
 
-	if err := validateShardSet(set, cap.Header.Tick, 1, cap.Header); err == nil {
+	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err == nil {
 		t.Fatal("a shard with reordered rows passed its integrity proof")
 	}
 	// And nothing was written: the receiver's capture is what it was.
@@ -338,7 +338,7 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			set := cloneShardSet(t, good)
 			tc.mutate(&set)
-			err := validateShardSet(set, cap.Header.Tick, 1, cap.Header)
+			err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header)
 			if err == nil {
 				t.Fatalf("%s was accepted", tc.name)
 			}
@@ -381,7 +381,7 @@ func TestOneSetIsOneBaseline(t *testing.T) {
 	// A set answering another baseline is refused before anything is spliced, and
 	// the receiver's capture is unchanged.
 	before := guest.Root()
-	if err := validateShardSet(set, cap.Header.Tick+1, 1, cap.Header); err == nil {
+	if err := validateShardSet(set, cap.Header.Tick+1, 1, set.Root, cap.Header); err == nil {
 		t.Fatal("a repair naming another baseline was accepted")
 	}
 	if guest.Root() != before {
@@ -392,7 +392,7 @@ func TestOneSetIsOneBaseline(t *testing.T) {
 	// refused, which is what stops a repair assembled from two baselines.
 	mixed := cloneShardSet(t, set)
 	mixed.Sections[0].Hash++
-	if err := validateShardSet(mixed, cap.Header.Tick, 1, cap.Header); err == nil {
+	if err := validateShardSet(mixed, cap.Header.Tick, 1, mixed.Root, cap.Header); err == nil {
 		t.Fatal("a repair whose summary does not produce its root was accepted")
 	}
 }

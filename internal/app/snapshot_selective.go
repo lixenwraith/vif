@@ -84,6 +84,12 @@ type CorrectionRequest struct {
 	// Sections is empty exactly when the roots matched, which is the healthy case
 	// and the one this protocol exists to make cheap.
 	Sections []SectionRequest `json:"sections,omitempty"`
+
+	// Relayed names the participants this answer's sender forwarded the manifest
+	// to and holds retention for. It is how the authority learns that a
+	// participant it has no link to can nonetheless be answered — the one fact the
+	// gate needs and the only one this instance can state on its behalf.
+	Relayed []uint32 `json:"relayed,omitempty"`
 }
 
 // Converged reports whether this request asks for nothing: the hash-only case.
@@ -326,7 +332,7 @@ type shardRepair struct {
 //     disagrees with the set's own section summary, because both make the page
 //     identity ambiguous;
 //   - a page whose rows do not reproduce its declared hash, which is the proof.
-func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, an CaptureHeader) error {
+func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, root uint64, an CaptureHeader) error {
 	switch {
 	case set.Version != ManifestVersion:
 		return fmt.Errorf("shard set version %d, this build reads %d", set.Version, ManifestVersion)
@@ -338,6 +344,14 @@ func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, an 
 		return errors.New("shard set describes another run")
 	case set.Authority != authority:
 		return errors.New("shard set names another authority than the manifest it answers")
+	case set.Root != root:
+		// The binding a relayed answer rests on. A relay serves pages it did not
+		// author, so what makes its answer sound is that the root it declares is
+		// the *authority's* — the one the receiver was sent in the manifest — and
+		// that the repaired capture then reproduces it. A relay that substitutes,
+		// truncates or corrupts a page fails one of the two, exactly as a corrupt
+		// wire does.
+		return errors.New("shard set declares a root the manifest it answers does not")
 	case len(set.Sections) == 0:
 		return errors.New("shard set carries no section summary")
 	}

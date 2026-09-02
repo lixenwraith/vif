@@ -115,6 +115,7 @@ type corrections struct {
 	keyPeriod     uint64
 	breached      bool
 	saidFloor     bool
+	saidUnrelayed bool
 	nextBroadcast uint64
 
 	// driven marks a run whose caller paces the cadence itself. Two things pacing
@@ -224,6 +225,12 @@ type peerPublisher struct {
 	answeredTick uint64
 	silence      int
 	converged    bool
+
+	// relayed names the participants this peer forwards the index to and holds
+	// retention for. It is what turns "every participant is directly linked" into
+	// "every participant can be answered": the authority cannot see past its own
+	// links, and the neighbour that can is the one that says so.
+	relayed []uint32
 
 	// wide counts the publications this peer is owed a whole body for because its
 	// last repair would have been wider than the world it was repairing toward.
@@ -396,21 +403,42 @@ func (c *corrections) publishRound(force bool) error {
 		return err
 	}
 
+	// One index per publication, whether or not it leads the correction.
+	//
+	// A keyframe does not carry the index and does not need to, but the authority
+	// still retains it: retention is what answers a request naming that tick, and
+	// under Phase 7 it is also this instance's evidence that its world is current
+	// if it ever has to be elected. Paying for it on the keyframe as well is one
+	// hash pass per keyframe period, against a whole capture that has already been
+	// read, encoded and compressed.
+	index, err := buildManifest(cap, c.a.localParticipant())
+	if err != nil {
+		return fmt.Errorf("correction manifest: %w", err)
+	}
+	c.retainLocked(cap, index, true)
+
 	// Phase 6 leads a non-keyframe cadence with the index rather than the body.
 	// Every peer that is still answering manifests is repaired selectively — which
 	// on a converged link means no state travels at all — and only the ones that
 	// are not are still owed the whole difference. The keyframe cadence is
 	// untouched: it is the convergence floor, and the floor is not adaptive.
 	bodyPeers := due
-	if !keyframe && c.everyParticipantIsDirect(ids) {
-		covered, mErr := c.publishManifest(port, cap, due)
+	if !keyframe {
+		covered, mErr := c.publishManifest(port, index, due)
+		answerable := c.canAnswerEveryParticipant(ids)
 		switch {
 		case mErr != nil:
 			vlog.Warn("app", "msg", "correction index not published", "error", mErr.Error())
-		case covered:
+		case covered && answerable:
 			bodyPeers = nil
-		default:
+		case answerable:
 			bodyPeers = c.silentPeersLocked(due)
+		default:
+			// A participant nobody can answer is still owed an authority, and the
+			// only thing that reaches it is the flood. The index still goes to the
+			// direct peers — it is what a relaying neighbour answers, and its answer
+			// is how this instance learns the session has become answerable — but
+			// the whole body goes out beside it until that is true.
 		}
 	}
 
@@ -495,30 +523,6 @@ func (c *corrections) publishRound(force bool) error {
 		"cadence_ticks", c.base, "keyframe_period_ticks", c.keyPeriod,
 		"encode_us", encodeDur.Microseconds())
 	return nil
-}
-
-// everyParticipantIsDirect reports whether this instance is linked to every
-// participant in the session.
-//
-// The selective exchange is between an authority and a receiver that can answer
-// it, and only a directly linked participant can: a relayed one receives the flood
-// but its request goes to the neighbour that forwarded it, which holds no
-// retention and no authority. Rather than teach the flood to route an answer — a
-// routing layer this protocol deliberately does not have — a session with a
-// relayed participant keeps the Phase 5 stream, which reaches everyone by the same
-// flood the artifacts use.
-//
-// This is a bounded, stated limitation rather than a hidden one, and it is the
-// shape a relay peer would fit into later: a relay that could answer for the
-// participants behind it would be a peer with retention, which is a role rather
-// than a topology change.
-func (c *corrections) everyParticipantIsDirect(ids []uint32) bool {
-	roster := 0
-	c.a.world.RunSafe(func() { roster = c.a.world.Resources.Player.Count() })
-	if roster == 0 {
-		return true // no roster yet: nobody is behind a relay
-	}
-	return roster <= len(ids)+1
 }
 
 // silentPeersLocked names the due peers the selective exchange cannot repair: the

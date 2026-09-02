@@ -52,7 +52,9 @@ func (t *Transport) Start() error {
 	switch t.config.Role {
 	case RoleHost:
 		return t.startServer()
-	case RolePeer:
+	case RolePeer, RoleRelay:
+		// A relay dials like any other participant. Its role is what it does with
+		// the artifacts once they arrive, not how the stream was established.
 		return t.startClient()
 	default:
 		return nil // RoleNone, no-op
