@@ -99,6 +99,11 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 	return func(conn net.Conn) (id PeerID, err error) {
 		o, err := c.Assign()
 		if err != nil {
+			// Answered rather than dropped. A refusal the dialer can read is the
+			// difference between "retry against the new authority" and a stream
+			// that ended for no stated reason, and a succession is exactly the
+			// case where the two need telling apart.
+			refuseJoin(conn, err, timeout)
 			return 0, err
 		}
 		defer func() {
@@ -137,6 +142,21 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		return o.Assigned, nil
 	}
+}
+
+// refuseJoin writes one pre-offer rejection. A failure to write it is not worth
+// reporting: the connection is being closed either way, and the joiner falls back
+// to reading the stream's end.
+func refuseJoin(conn net.Conn, cause error, timeout time.Duration) {
+	body, err := json.Marshal(sessionReply{Error: cause.Error()})
+	if err != nil {
+		return
+	}
+	if timeout > 0 {
+		_ = conn.SetWriteDeadline(time.Now().Add(timeout))
+		defer conn.SetWriteDeadline(time.Time{})
+	}
+	_ = NewMessage(MsgJoinReply, body).Encode(conn)
 }
 
 // PendingJoin owns a dialled stream until the startup gate transfers it to a port.
@@ -258,6 +278,17 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	if err != nil {
 		_ = conn.Close()
 		return nil, SessionOffer{}, err
+	}
+	if msg.Type == MsgJoinReply {
+		// Refused before an identity was allocated. The coordinator says why, and
+		// the one reason worth acting on rather than reporting is a succession:
+		// IsHandoffRefusal is what a caller retries on.
+		_ = conn.Close()
+		var reply sessionReply
+		if err := json.Unmarshal(msg.Payload, &reply); err != nil || reply.Error == "" {
+			return nil, SessionOffer{}, errors.New("join refused with no reason given")
+		}
+		return nil, SessionOffer{}, errors.New(reply.Error)
 	}
 	if msg.Type != MsgJoinOffer {
 		_ = conn.Close()

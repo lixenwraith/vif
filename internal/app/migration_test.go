@@ -2,7 +2,10 @@ package app
 
 import (
 	"testing"
+	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -434,4 +437,315 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 			t.Fatalf("survivor %d stopped simulating its own cursor across the handoff", i+2)
 		}
 	}
+}
+
+// TestAJoinerDiallingMidHandoffIsRefusedAndRetries is requirement 3's admission
+// half. A dial that lands while the session is electing must not be half-admitted
+// into a term that is about to end: it would hold a roster slot the successor's
+// record does not carry and would receive an authority that has stopped
+// publishing. The refusal is distinguishable so the joiner can retry.
+func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
+	const seed = 0x3017
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+	tickUntilCursor(t, host)
+	host.Tick(20)
+	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+		t.Fatalf("begin hosting: %v", err)
+	}
+	addr := host.HostAddr()
+
+	// Open a succession by hand: the authority is this instance, so nothing is
+	// actually lost — what is being tested is the admission gate, and the gate
+	// reads "is a succession running" rather than "who went".
+	host.authority.mu.Lock()
+	host.authority.contested = host.authority.term + 1
+	host.authority.lost = 9
+	host.authority.reports = map[network.PeerID]network.AuthorityReport{}
+	host.authority.grants = map[network.PeerID]network.PeerID{}
+	host.authority.mu.Unlock()
+
+	_, _, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+	if err == nil {
+		t.Fatal("a dial that landed mid-succession was admitted")
+	}
+	if !network.IsHandoffRefusal(err) {
+		t.Fatalf("the refusal is not distinguishable: %v", err)
+	}
+
+	// The succession resolves; the retry is an ordinary join and lands in the same
+	// slot discipline the first one would have.
+	host.authority.mu.Lock()
+	host.authority.contested = 0
+	host.authority.mu.Unlock()
+
+	stop := make(chan struct{})
+	ticking := make(chan struct{})
+	go func() {
+		defer close(ticking)
+		for {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			host.Tick(1)
+			time.Sleep(joinTestTickInterval)
+		}
+	}()
+	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
+	close(stop)
+	<-ticking
+
+	waitForRosterPair(t, host, guest)
+	if got := guest.localSlot(); got != 1 {
+		t.Fatalf("the retried join took slot %d, want the next free slot", got)
+	}
+	if got := guest.AuthorityState(); got.Term != network.FirstTerm || got.Authority != 1 {
+		t.Fatalf("the retried join adopted term %d under participant %d",
+			got.Term, got.Authority)
+	}
+}
+
+// TestTheFirstCorrectionAfterAHandoffIsHashOnly is requirement 5, and the reason
+// the successor seeds its baseline from what it already installed rather than
+// capturing afresh: a session that answered a migration with a keyframe to every
+// survivor would spend the most expensive frame it has at the moment it can least
+// afford one.
+func TestTheFirstCorrectionAfterAHandoffIsHashOnly(t *testing.T) {
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	for range 3 {
+		deliverCorrection(t, apps[0], apps[1:], func() { tickAll(apps) })
+	}
+
+	closeParticipant(apps[0])
+	survivors := apps[1:]
+	if !settleAuthority(t, survivors, func() bool {
+		return authorityOf(survivors[0]).Term > network.FirstTerm &&
+			authorityOf(survivors[1]).Term > network.FirstTerm
+	}) {
+		t.Fatal("no succession")
+	}
+	successor, follower := survivors[0], survivors[1]
+
+	// Measured from the moment the handoff is adopted: what the first correction
+	// under the new term actually costs the participant that follows it.
+	base := struct{ manifest, request, shard, body, keyframes, hashOnly int64 }{
+		manifest:  statOf(follower, "snapshot.manifest_bytes_received"),
+		request:   statOf(follower, "snapshot.request_bytes"),
+		shard:     statOf(follower, "snapshot.shard_bytes_received"),
+		body:      statOf(successor, "snapshot.correction_bytes_sent"),
+		keyframes: statOf(successor, "snapshot.keyframes"),
+		hashOnly:  statOf(follower, "snapshot.corrections_hash_only"),
+	}
+
+	advance := func() { tickAll(survivors) }
+	deliverCorrection(t, successor, []*App{follower}, advance)
+
+	manifest := statOf(follower, "snapshot.manifest_bytes_received") - base.manifest
+	request := statOf(follower, "snapshot.request_bytes") - base.request
+	shard := statOf(follower, "snapshot.shard_bytes_received") - base.shard
+	body := statOf(successor, "snapshot.correction_bytes_sent") - base.body
+	keyframes := statOf(successor, "snapshot.keyframes") - base.keyframes
+
+	t.Logf("first correction after the handoff: index out %d B, answer back %d B, repair %d B, whole bodies %d B",
+		manifest, request, shard, body)
+
+	// Adoption is not a keyframe storm. The successor seeds its baseline from the
+	// capture every survivor already installed, so the first correction under the
+	// new term is an ordinary indexed one — and what it repairs is bounded by the
+	// one thing the handoff itself changed, which is the roster.
+	if keyframes != 0 {
+		t.Fatalf("the successor published %d keyframes on its first correction", keyframes)
+	}
+	if body != 0 {
+		t.Fatalf("the successor published %d whole-body bytes on its first correction", body)
+	}
+	if shard > 8<<10 {
+		t.Fatalf("the first repair after the handoff moved %d bytes, want the roster change and no more", shard)
+	}
+
+	// Once the departure the handoff produced has applied on both, the exchange is
+	// hash-only: an index out and an ack back and no state at all.
+	converged := false
+	var idx, ack int64
+	for range 4 {
+		was := struct{ manifest, request, shard, body, hashOnly int64 }{
+			manifest: statOf(follower, "snapshot.manifest_bytes_received"),
+			request:  statOf(follower, "snapshot.request_bytes"),
+			shard:    statOf(follower, "snapshot.shard_bytes_received"),
+			body:     statOf(successor, "snapshot.correction_bytes_sent"),
+			hashOnly: statOf(follower, "snapshot.corrections_hash_only"),
+		}
+		deliverCorrection(t, successor, []*App{follower}, advance)
+		idx = statOf(follower, "snapshot.manifest_bytes_received") - was.manifest
+		ack = statOf(follower, "snapshot.request_bytes") - was.request
+		if statOf(follower, "snapshot.corrections_hash_only") > was.hashOnly &&
+			statOf(follower, "snapshot.shard_bytes_received") == was.shard &&
+			statOf(successor, "snapshot.correction_bytes_sent") == was.body {
+			converged = true
+			break
+		}
+	}
+	if !converged {
+		t.Fatal("the exchange never reached hash-only after the handoff")
+	}
+	t.Logf("converged exchange under the new term: index out %d B, ack back %d B", idx, ack)
+	// §3 measures the converged exchange at about 1.5 KiB on the storm world; this
+	// fixture is smaller. The assertion is that it is bounded by an index and an
+	// ack rather than that it hits a number.
+	if total := idx + ack; total == 0 || total > 4<<10 {
+		t.Fatalf("the converged exchange moved %d bytes, want a bounded index and ack", total)
+	}
+}
+
+// TestALocalForkRejoiningAHigherTermIsRefused is requirement 8. Partition merging
+// is a non-goal; refusing to merge is the deliverable, and what makes it a
+// deliverable rather than an omission is that the operator is told.
+func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+
+	// A partition that cannot elect: the succession opens and its deadline passes
+	// with nothing eligible, which is exactly §4.3's local continuation.
+	fork := apps[2]
+	fork.authority.beginSuccession(1)
+	fork.authority.giveUp()
+	if got := authorityOf(fork); !got.Fork {
+		t.Fatalf("the instance did not become a local fork: %+v", got)
+	}
+
+	before := fork.SnapshotShared()
+	refused := statOf(fork, "network.term_refused")
+
+	// The session it left has moved on. Every artifact it now carries names a term
+	// this instance was never handed, and every one of them is refused.
+	if fork.admitArtifactTerm(network.FirstTerm+2, 1) {
+		t.Fatal("a fork adopted an artifact from a term it was never handed")
+	}
+	if statOf(fork, "network.term_refused") <= refused {
+		t.Fatal("the refusal was not counted")
+	}
+	if got := authorityOf(fork); got.Term != network.FirstTerm || !got.Fork {
+		t.Fatalf("the refused artifact moved the fork's authority: %+v", got)
+	}
+	if idx, x, y, differs := FirstDiff(before, fork.SnapshotShared()); differs {
+		t.Fatalf("state crossed into the fork at line %d\n  %s\n  %s", idx, x, y)
+	}
+
+	// And a handoff record for a term two generations ahead — the record the
+	// session actually produced while this instance was away — is refused for the
+	// same reason rather than adopted as a way back in.
+	roster, anchor, delay := membershipOf(fork)
+	if err := fork.authority.adopt(network.HandoffRecord{
+		Term: network.FirstTerm + 2, Authority: 2, Predecessor: 1,
+		Voters: []network.PeerID{1, 2}, Roster: roster, Anchor: anchor,
+		BarrierDelayTicks: delay,
+	}, 1); err == nil {
+		t.Fatal("a fork adopted a handoff that skipped the term it missed")
+	}
+}
+
+// TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay is the invariant
+// that must not regress. A successor authors the Shared domain and nothing else:
+// it does not begin authoring the D-13 owner-authored cells of cursors it does not
+// simulate, and a relayed answer carries no Player-domain state either.
+func TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay(t *testing.T) {
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
+	local := localCursors(t, apps)
+	primeRetention(t, apps)
+
+	owned := func(a *App, e core.Entity) component.EnergyComponent {
+		var out component.EnergyComponent
+		a.World().RunSafe(func() { out, _ = a.World().Components.Energy.GetComponent(e) })
+		return out
+	}
+	players := func(a *App) int {
+		n := 0
+		a.World().RunSafe(func() {
+			for _, e := range a.World().Positions.Entities() {
+				if e.Domain() == core.DomainPlayer {
+					n++
+				}
+			}
+		})
+		return n
+	}
+
+	// Perturb the follower's own owner-authored cells so a correction that adopted
+	// them would be visible.
+	follower := apps[2]
+	follower.World().RunSafe(func() {
+		if c, ok := follower.World().Components.Energy.GetPtr(local[2]); ok {
+			c.Current = max(c.Current-7, 0)
+		}
+	})
+	wantOwned := owned(follower, local[2])
+	wantPlayers := players(follower)
+
+	closeParticipant(apps[0])
+	survivors := apps[1:]
+	if !settleAuthority(t, survivors, func() bool {
+		return authorityOf(survivors[1]).Term > network.FirstTerm
+	}) {
+		t.Fatal("no succession")
+	}
+
+	// Sampled across the correction rather than around the ticks between two: the
+	// player domain is this instance's own simulation and moves on its own, and
+	// what the invariant claims is that a correction does not move it.
+	for range 3 {
+		for range parameter.NetworkBarrierDelayTicks + 1 {
+			tickAll(survivors)
+		}
+		wantPlayers = players(follower)
+		wantOwned = owned(follower, local[2])
+		deliverCorrectionNow(t, survivors[0], []*App{survivors[1]}, func() {})
+		if got := owned(follower, local[2]); got != wantOwned {
+			t.Fatalf("the successor authored a cursor it does not simulate: %+v, was %+v",
+				got, wantOwned)
+		}
+		if got := players(follower); got != wantPlayers {
+			t.Fatalf("a correction under the new term moved the player-domain population from %d to %d",
+				wantPlayers, got)
+		}
+	}
+	if !ownsCursor(follower, local[2]) {
+		t.Fatal("the follower stopped simulating its own cursor")
+	}
+}
+
+// TestMeshParityAcrossAHandoff is the whole phase seen from the world: after the
+// successor's first two corrections every survivor holds the same Shared state.
+func TestMeshParityAcrossAHandoff(t *testing.T) {
+	apps := meshSession(t, 0x5EEDBEEF, 4, [][2]int{{1, 2}, {1, 3}, {1, 4}, {2, 3}, {2, 4}, {3, 4}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+
+	closeParticipant(apps[0])
+	survivors := apps[1:]
+	if !settleAuthority(t, survivors, func() bool {
+		for _, a := range survivors {
+			if authorityOf(a).Term == network.FirstTerm {
+				return false
+			}
+		}
+		return true
+	}) {
+		t.Fatalf("no succession: %+v %+v %+v",
+			authorityOf(survivors[0]), authorityOf(survivors[1]), authorityOf(survivors[2]))
+	}
+	successor := survivors[0]
+	if !successor.authority.IsAuthority() {
+		t.Fatal("the roster-lowest survivor is not authoring")
+	}
+
+	advance := func() { tickAll(survivors) }
+	for range 2 {
+		deliverCorrection(t, successor, survivors[1:], advance)
+	}
+	assertMeshParity(t, survivors, -1)
 }

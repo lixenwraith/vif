@@ -43,6 +43,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
@@ -774,9 +775,41 @@ func (a *App) applyAuthorityChange(rec network.HandoffRecord, mine bool) {
 	}
 	if mine {
 		a.corrections.becomeAuthority(rec)
+		a.crossPredecessorDeparture(rec)
 		return
 	}
 	a.corrections.followAuthority(rec)
+}
+
+// crossPredecessorDeparture removes the authority that was lost from the roster.
+//
+// A departure is a shared entity's destruction, so it may be produced by exactly
+// one instance at exactly one tick (D-11) — and the instance the protocol names is
+// the authority. That is precisely what was missing when the authority itself was
+// what went: the neighbour that saw the link drop floods a notice, and the
+// participant that would have turned it into a crossing is the one that is gone.
+// The successor is the first instance that may, so it does, as its first act under
+// the new term.
+func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
+	if rec.Predecessor == 0 {
+		return
+	}
+	slot, ok := uint8(0), false
+	for _, p := range rec.Roster {
+		if p.ID == rec.Predecessor {
+			slot, ok = p.Slot, true
+			break
+		}
+	}
+	if !ok {
+		return
+	}
+	a.world.RunSafe(func() {
+		a.world.PushEventFull(event.EventParticipantDeparted,
+			&event.ParticipantDepartedPayload{Participant: uint32(rec.Predecessor), Slot: slot},
+			event.OriginSession, core.DomainPlayer)
+	})
+	a.releaseParticipant(rec.Predecessor)
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:
