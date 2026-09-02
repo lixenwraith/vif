@@ -249,7 +249,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	held, ok := c.retainedAtLocked(req.Tick)
 	if !ok || req.Keyframe {
 		c.publishMu.Unlock()
-		c.sendKeyframeTo(port, pending.from)
+		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
 	m.shardsRequested.Add(int64(countRequestedPages(req)))
@@ -259,16 +259,19 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		m.shardsRefused.Add(1)
 		vlog.Debug("app", "msg", "repair not built",
 			"peer", pending.from, "tick", req.Tick, "error", err.Error())
-		c.sendKeyframeTo(port, pending.from)
+		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
 
 	body, err := EncodeShardSet(set)
-	if err != nil || len(body) > parameter.SnapshotShardBytesMax || len(body) > network.MaxPayloadSize {
-		// Past the bound a repair is a capture with per-page overhead on top. The
-		// keyframe is smaller, stronger and already part of the protocol.
+	if err != nil || !c.repairIsWorthSending(len(body)) {
+		// Past the bound a repair is a capture with per-page overhead on top, and
+		// past the measured keyframe size it is strictly worse than the whole
+		// world: the keyframe is smaller, self-sufficient, and needs no round trip
+		// to have been asked for. A receiver that has diverged that widely is not
+		// being repaired, it is being rebuilt.
 		m.keyframeFallback.Add(1)
-		c.sendKeyframeTo(port, pending.from)
+		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
 	if port == nil || !port.Send(pending.from, uint8(network.MsgStateShard), body) {
@@ -284,6 +287,24 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
 }
 
+// repairIsWorthSending reports whether a repair of this size is still cheaper than
+// the whole world it stands in for.
+//
+// Two bounds, and they answer different questions. SnapshotShardBytesMax is the
+// protocol's: past it a repair no longer fits one transport frame. The measured
+// keyframe size is the session's: a repair wider than the capture it is repairing
+// toward has stopped being an optimisation, and the fallback is what keeps the
+// selective path from ever costing more than the Phase 5 stream it replaced.
+func (c *corrections) repairIsWorthSending(bytes int) bool {
+	if bytes > parameter.SnapshotShardBytesMax || bytes > network.MaxPayloadSize {
+		return false
+	}
+	c.publishMu.Lock()
+	keyframe := c.sizes.Keyframe
+	c.publishMu.Unlock()
+	return keyframe == 0 || int64(bytes) < keyframe
+}
+
 // countRequestedPages is how many pages a request put in play, which is the unit
 // the shard counters are reported in.
 func countRequestedPages(req CorrectionRequest) int {
@@ -296,16 +317,34 @@ func countRequestedPages(req CorrectionRequest) int {
 
 // sendKeyframeTo pushes a whole compressed capture at one peer. It is the bounded
 // fallback every refusal in this protocol reaches.
-func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32) {
+//
+// minTick is the tick the receiver was asking about, and the keyframe has to be at
+// least that fresh. The retained baseline usually is not: it is the last *whole*
+// world this host published, which on a healthy link is up to a keyframe period
+// old, and a receiver refuses an authority it has already moved past. So a stale
+// baseline is refreshed by reading the world — the one place in this protocol that
+// pays a capture outside the cadence, and only on a path that has already given up
+// on repairing selectively.
+func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick uint64) {
 	if port == nil {
 		return
 	}
 	c.publishMu.Lock()
-	have, cap := c.haveKey, c.baseline
-	c.publishMu.Unlock()
-	if !have {
-		return // nothing published yet; the next keyframe is the answer
+	if !c.haveKey || c.baseline.Header.Tick < minTick {
+		if _, _, err := c.takeKeyframe(); err != nil {
+			c.publishMu.Unlock()
+			vlog.Warn("app", "msg", "keyframe fallback capture", "error", err.Error())
+			return
+		}
 	}
+	cap := c.baseline
+	// The peer is being served a whole world, so its standing in the selective
+	// exchange starts again from the state it is about to hold.
+	if p := c.peers[id]; p != nil {
+		p.silence = 0
+	}
+	c.publishMu.Unlock()
+
 	body, err := EncodeCorrection(cap)
 	if err != nil {
 		vlog.Warn("app", "msg", "keyframe fallback encode", "error", err.Error())

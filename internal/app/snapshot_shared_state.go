@@ -342,11 +342,27 @@ func (a *App) writeShared(cap SharedCapture, reconcile bool) (engine.WorldDiffer
 	a.world.RunSafe(func() {
 		// Dry run first: a carrier that rejects its record must do so before the
 		// stores are touched.
+		//
+		// Two questions, and the second is the one a staging pass cannot answer. A
+		// capture naming a system this build does not run is a build mismatch, and
+		// any world would say so. A capture a carrier refuses because of state the
+		// *live* world holds — a genetic registry whose species set this instance
+		// entered a level ahead of the authority to reach — is invisible to a
+		// staging world that has never been in that state, so it would arrive as a
+		// failure after the store pass had already rewritten everything. Asking the
+		// live carrier here is what keeps the refusal atomic.
 		savers := a.sharedStateSaversLocked()
 		for _, rec := range cap.Systems {
-			if _, ok := savers[rec.System]; !ok {
+			saver, ok := savers[rec.System]
+			if !ok {
 				err = fmt.Errorf("capture names system %q, which this build does not run", rec.System)
 				return
+			}
+			if checker, ok := saver.(engine.SharedStateChecker); ok {
+				if e := checker.CheckShared(rec.Data); e != nil {
+					err = fmt.Errorf("refuse %s: %w", rec.System, e)
+					return
+				}
 			}
 		}
 

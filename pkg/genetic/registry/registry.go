@@ -46,6 +46,39 @@ func (r *Registry) Register(config SpeciesConfig, aggregator fitness.Aggregator)
 	return nil
 }
 
+// Deregister drops a species this registry holds, returning whether it held one.
+//
+// It exists for the same reason Import is strict: a registry whose registered set
+// does not match the state being installed is a registry evolving from its own
+// archive while its holder believes it adopted someone else's. A caller that
+// speculatively registered a species the authority has not — a predicting
+// participant that reached a level transition first — has to be able to take it
+// back rather than refuse the authority forever.
+func (r *Registry) Deregister(id SpeciesID) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	ts := r.slots[id].Load()
+	if ts == nil {
+		return false
+	}
+	ts.Stop()
+	r.slots[id].Store(nil)
+	return true
+}
+
+// Registered lists the species ids this registry currently holds, ascending.
+func (r *Registry) Registered() []SpeciesID {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]SpeciesID, 0, 8)
+	for i := range r.slots {
+		if r.slots[i].Load() != nil {
+			out = append(out, SpeciesID(i))
+		}
+	}
+	return out
+}
+
 // Start loads persisted populations and starts every species not yet running.
 // Idempotent: re-running never re-injects an already started species
 func (r *Registry) Start() error {

@@ -36,6 +36,26 @@ type SharedStateSaver interface {
 	LoadShared(data []byte) error
 }
 
+// SharedStateChecker is an optional second half of SharedStateSaver: a carrier
+// that can refuse a record before anything is written.
+//
+// The staging pass answers "can this build load this capture", and for most
+// carriers that is the whole question — the same bytes into the same code twice.
+// It is not the whole question for a carrier whose acceptance depends on state the
+// staging world does not have: a genetic registry's registered species set is
+// entered by a level transition the staging world has never made, so it accepts
+// what the live world would refuse, and the refusal then arrives *after* the store
+// pass has already rewritten the world.
+//
+// A carrier in that position implements this. It is asked on the live instance, in
+// the same dry run that checks a capture does not name a system this build lacks,
+// and a refusal there stops the install before a single store is touched. It must
+// not mutate anything: it is a question, and the answer has to still be true a
+// moment later when LoadShared is called for real.
+type SharedStateChecker interface {
+	CheckShared(data []byte) error
+}
+
 // SnapshotProfile is a system's declared snapshot obligation, generated from the
 // manifest beside its domain profile.
 type SnapshotProfile uint8

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"sort"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -45,6 +46,22 @@ type GeneticSystem struct {
 	trackKeys     []core.Entity
 	pendingDeaths []event.SpeciesKilledPayload
 
+	// registrations is every species declaration this run has processed, by
+	// species id.
+	//
+	// It is here because a registration is a *shared* fact with a private effect.
+	// The declaration arrives as EventGeneticRegisterSpecies from an FSM region's
+	// entry actions (config/main/tower.toml raises the one this game has), so both
+	// participants derive it — but not at the same tick, because a guest predicts
+	// the transition and may reach it before the authority does. The registered set
+	// then differs, and Registry.Import refuses a state whose set does not match:
+	// a guest that ran ahead could never adopt the authority again, and every
+	// correction after it failed. Carrying the declarations in the capture makes
+	// the set adoptable in both directions — register what the authority has and
+	// this instance does not, drop what it does not have — which is what D-19 asks
+	// of any private state that decides a future shared outcome.
+	registrations []event.GeneticRegisterSpeciesPayload
+
 	eyeTracked     int64
 	telemetryTicks int
 
@@ -73,6 +90,7 @@ func NewGeneticSystem(world *engine.World) engine.System {
 		registry:      reg,
 		tracking:      make(map[core.Entity]*trackedEntity, 64),
 		pendingDeaths: make([]event.SpeciesKilledPayload, 0, 16),
+		registrations: make([]event.GeneticRegisterSpeciesPayload, 0, 4),
 		typeFitBuf:    make([]byte, 0, 64),
 	}
 
@@ -105,6 +123,12 @@ func (s *GeneticSystem) Init() {
 	s.statTypeFit.Store("-")
 	s.buffers.Reset()
 
+	// A reset replaces the run, so the declarations belong to it as well: the FSM
+	// re-enters its regions and raises them again.
+	for _, r := range s.registrations {
+		s.registry.Deregister(registry.SpeciesID(r.Species))
+	}
+	s.registrations = s.registrations[:0]
 	s.registry.Reset() // Drop evaluations belonging to the previous run
 	_ = s.registry.Start()
 }
@@ -188,6 +212,34 @@ func (s *GeneticSystem) HandleEvent(ev event.GameEvent) {
 }
 
 func (s *GeneticSystem) handleRegistration(payload *event.GeneticRegisterSpeciesPayload) {
+	s.rememberRegistrationLocked(*payload)
+	s.registerSpeciesLocked(payload)
+}
+
+// rememberRegistrationLocked records one declaration, in species order so a
+// capture is byte-comparable. Caller MUST hold mu.
+func (s *GeneticSystem) rememberRegistrationLocked(p event.GeneticRegisterSpeciesPayload) {
+	for i := range s.registrations {
+		if s.registrations[i].Species == p.Species {
+			s.registrations[i] = p
+			return
+		}
+	}
+	s.registrations = append(s.registrations, p)
+	sort.Slice(s.registrations, func(a, b int) bool {
+		return s.registrations[a].Species < s.registrations[b].Species
+	})
+}
+
+// registerSpeciesLocked builds one species' configuration and registers it.
+//
+// The configuration is a deterministic function of the declaration and of build
+// constants — the per-species seed is derived from the shared RNG root — so two
+// instances that process the same declaration register identical species. That is
+// what lets a capture carry the declaration rather than the configuration.
+//
+// Caller MUST hold mu.
+func (s *GeneticSystem) registerSpeciesLocked(payload *event.GeneticRegisterSpeciesPayload) {
 	bounds := make([]genetic.ParameterBounds, len(payload.Bounds))
 	for i, b := range payload.Bounds {
 		bounds[i] = genetic.ParameterBounds{Min: b.Min, Max: b.Max}
@@ -403,13 +455,14 @@ func (s *GeneticSystem) updateTelemetry() {
 // per-type average travels for the same reason: it is what the published value is
 // computed from.
 type geneticSnapshot struct {
-	Registry       []registry.SpeciesState         `json:"registry"`
-	Tracking       []geneticTrackedState           `json:"tracking,omitempty"`
-	PendingDeaths  []event.SpeciesKilledPayload    `json:"pending_deaths,omitempty"`
-	TelemetryTicks int                             `json:"telemetry_ticks"`
-	TypeFitEMA     [parameter.EyeTypeCount]float64 `json:"type_fit_ema"`
-	EyeTracked     int64                           `json:"eye_tracked"`
-	Enabled        bool                            `json:"enabled"`
+	Registry       []registry.SpeciesState               `json:"registry"`
+	Registrations  []event.GeneticRegisterSpeciesPayload `json:"registrations,omitempty"`
+	Tracking       []geneticTrackedState                 `json:"tracking,omitempty"`
+	PendingDeaths  []event.SpeciesKilledPayload          `json:"pending_deaths,omitempty"`
+	TelemetryTicks int                                   `json:"telemetry_ticks"`
+	TypeFitEMA     [parameter.EyeTypeCount]float64       `json:"type_fit_ema"`
+	EyeTracked     int64                                 `json:"eye_tracked"`
+	Enabled        bool                                  `json:"enabled"`
 }
 
 // geneticTrackedState is the canonical, serializable form of one live fitness
@@ -437,6 +490,7 @@ func (s *GeneticSystem) SaveShared() ([]byte, error) {
 	defer s.mu.Unlock()
 
 	snap := geneticSnapshot{
+		Registrations:  s.sortedRegistrationsLocked(),
 		TelemetryTicks: s.telemetryTicks,
 		TypeFitEMA:     s.typeFitEMA,
 		EyeTracked:     s.eyeTracked,
@@ -464,6 +518,96 @@ func (s *GeneticSystem) SaveShared() ([]byte, error) {
 		})
 	}
 	return json.Marshal(snap)
+}
+
+// sortedRegistrationsLocked copies the declarations for a capture. They are held
+// in species order, so two instances with equal state produce equal bytes.
+// Caller MUST hold mu.
+func (s *GeneticSystem) sortedRegistrationsLocked() []event.GeneticRegisterSpeciesPayload {
+	if len(s.registrations) == 0 {
+		return nil
+	}
+	return append([]event.GeneticRegisterSpeciesPayload(nil), s.registrations...)
+}
+
+// reconcileRegistrationsLocked brings this instance's registered species set to the
+// capture's before the populations are imported.
+//
+// Both directions are needed and both are ordinary prediction, not corruption. A
+// guest that reached the level transition first holds a species the authority has
+// not declared yet, and keeps it only until the authority gets there — so it is
+// dropped, and the declaration will arrive again with the corrected FSM. A guest
+// that has not reached it holds none and the capture holds one, so it is registered
+// from the declaration the capture carries. Either way Registry.Import then finds
+// the exact set it requires, and a level transition stops being a divergence a
+// session cannot recover from.
+//
+// Caller MUST hold mu.
+func (s *GeneticSystem) reconcileRegistrationsLocked(want []event.GeneticRegisterSpeciesPayload) {
+	keep := make(map[uint8]bool, len(want))
+	for i := range want {
+		keep[uint8(want[i].Species)] = true
+		if s.heldRegistrationLocked(want[i].Species) {
+			continue
+		}
+		s.rememberRegistrationLocked(want[i])
+		s.registerSpeciesLocked(&want[i])
+	}
+	kept := s.registrations[:0]
+	for _, r := range s.registrations {
+		if keep[uint8(r.Species)] {
+			kept = append(kept, r)
+			continue
+		}
+		s.registry.Deregister(registry.SpeciesID(r.Species))
+	}
+	s.registrations = kept
+}
+
+// heldRegistrationLocked reports whether this instance already processed a
+// declaration for a species. Caller MUST hold mu.
+func (s *GeneticSystem) heldRegistrationLocked(species component.SpeciesType) bool {
+	for i := range s.registrations {
+		if s.registrations[i].Species == species {
+			return true
+		}
+	}
+	return false
+}
+
+// CheckShared reports whether this instance could install the record without
+// touching anything.
+//
+// It exists because a carrier that refuses halfway through a live install leaves a
+// world that is neither this instance's nor the authority's — the store pass has
+// already run. The staging pass cannot catch this one: a staging world has never
+// entered a level region, so its registered set is empty and it accepts what the
+// live world would refuse. So the answer is asked of the live system, before the
+// write, and the reconciliation below is what makes it yes.
+func (s *GeneticSystem) CheckShared(data []byte) error {
+	var snap geneticSnapshot
+	if err := json.Unmarshal(data, &snap); err != nil {
+		return fmt.Errorf("genetic: %w", err)
+	}
+	if s.registry == nil {
+		if len(snap.Registry) == 0 {
+			return nil
+		}
+		return errors.New("genetic: registry is not initialized")
+	}
+	declared := make(map[uint8]bool, len(snap.Registrations))
+	for _, r := range snap.Registrations {
+		declared[uint8(r.Species)] = true
+	}
+	for _, st := range snap.Registry {
+		if declared[st.ID] {
+			continue
+		}
+		if s.registry.GetTracker(registry.SpeciesID(st.ID)) == nil {
+			return fmt.Errorf("genetic: capture carries species %q with no declaration this build can register", st.Name)
+		}
+	}
+	return nil
 }
 
 // LoadShared installs exported populations. A species this build does not
@@ -501,6 +645,7 @@ func (s *GeneticSystem) LoadShared(data []byte) error {
 		}
 		return errors.New("genetic: registry is not initialized")
 	}
+	s.reconcileRegistrationsLocked(snap.Registrations)
 	if err := s.registry.Import(snap.Registry); err != nil {
 		return err
 	}

@@ -377,3 +377,167 @@ func mustEncode(t *testing.T, cap SharedCapture) []byte {
 	}
 	return body
 }
+
+// TestSelectiveCorrectionCostAtTheStormHighWater is the Phase 6 measurement, and it
+// is the one that decides whether the index was worth building.
+//
+// Four shapes are reported for one world at its fullest, all of them real bodies
+// produced by the paths a session uses:
+//
+//   - the plain schema, which is what the wire would carry with no codec at all;
+//   - the compressed keyframe and the compressed exact delta, which are Phase 5's
+//     two shapes and the operating point this phase started from;
+//   - the correction manifest, which is what a healthy correction now costs in
+//     full — root, section summaries and header, and no state;
+//   - the shard set an injected disagreement provokes, which is what a repair
+//     costs when there is something to repair. The disagreement used here is the
+//     widest one this world produces — a receiver whose state is a whole cadence
+//     stale, which is what a guest that predicted *nothing* would hold — so it is
+//     an upper bound rather than a typical repair. A repair wider than the
+//     keyframe is not sent at all: the host answers with the whole world instead,
+//     so the selective path can never cost more than the stream it replaced.
+//
+// The projections are the numbers a cadence is chosen from: a keyframe every
+// SnapshotKeyframeCorrections corrections and the rest of the interval spent on
+// whichever non-keyframe shape the session is using.
+//
+// Everything here is reported. The one assertion is the reason the phase exists: a
+// converged correction has to be materially cheaper than the delta it replaces, on
+// this fixed fixture, or the round trip buys nothing.
+func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
+	peakTick, _ := findStormHighWater(t)
+	a := stormWorld(t, peakTick)
+
+	base, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("baseline capture: %v", err)
+	}
+	basePlain, err := json.Marshal(base)
+	if err != nil {
+		t.Fatalf("plain encode: %v", err)
+	}
+	keyframeBody, err := EncodeCorrection(base)
+	if err != nil {
+		t.Fatalf("keyframe encode: %v", err)
+	}
+
+	a.Tick(parameter.SnapshotCorrectionTicks)
+	next, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	deltaBody, err := EncodeCorrectionDelta(DiffCapture(base, next))
+	if err != nil {
+		t.Fatalf("delta encode: %v", err)
+	}
+
+	// The index, built and hashed outside the world lock, as the publisher does.
+	indexStart := time.Now() // [wall] cost measurement; runs outside the world lock
+	index, err := buildManifest(next, 1)
+	if err != nil {
+		t.Fatalf("manifest: %v", err)
+	}
+	indexDur := time.Since(indexStart)
+	manifestBody, err := EncodeManifest(index.Summary())
+	if err != nil {
+		t.Fatalf("manifest encode: %v", err)
+	}
+
+	// A converged receiver: one root comparison, an empty request, no state.
+	mirror, err := buildManifest(cloneCapture(t, next), 1)
+	if err != nil {
+		t.Fatalf("mirror manifest: %v", err)
+	}
+	compareStart := time.Now() // [wall]
+	converged, sections, hashedPages := compareRequest(mirror, index.Summary())
+	compareDur := time.Since(compareStart)
+	if !converged.Converged() {
+		t.Fatal("two indexes over one capture did not agree")
+	}
+	convergedBody, err := EncodeCorrectionRequest(converged)
+	if err != nil {
+		t.Fatalf("request encode: %v", err)
+	}
+
+	// A diverged receiver: the storm's whole swarm has moved a cadence under it,
+	// which is the widest ordinary disagreement this world produces.
+	stale, err := buildManifest(cloneCapture(t, base), 1)
+	if err != nil {
+		t.Fatalf("stale manifest: %v", err)
+	}
+	req, _, staleHashed := compareRequest(stale, index.Summary())
+	if req.Converged() {
+		t.Fatal("a cadence of storm motion left the two agreeing")
+	}
+	requestBody, err := EncodeCorrectionRequest(req)
+	if err != nil {
+		t.Fatalf("request encode: %v", err)
+	}
+	shardStart := time.Now() // [wall]
+	set, pages, err := buildShardSet(index, req)
+	if err != nil {
+		t.Fatalf("shard set: %v", err)
+	}
+	shardDur := time.Since(shardStart)
+	shardBody, err := EncodeShardSet(set)
+	if err != nil {
+		t.Fatalf("shard encode: %v", err)
+	}
+
+	// The repair reproduces the authority exactly, which is what makes the byte
+	// figures above a comparison of equals rather than of a shortcut.
+	repaired := cloneCapture(t, base)
+	repairedIndex, err := buildManifest(repaired, 1)
+	if err != nil {
+		t.Fatalf("repaired manifest: %v", err)
+	}
+	if err := validateShardSet(set, next.Header.Tick, 1, next.Header); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	rep, err := applyShardSet(&repaired, repairedIndex, set)
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if repairedIndex.Root() != index.Root() {
+		t.Fatal("the repaired capture does not reproduce the authority's root")
+	}
+
+	perSecond := func(hz float64, nonKeyframe int) float64 {
+		k := float64(parameter.SnapshotKeyframeCorrections)
+		avg := (float64(len(keyframeBody)) + (k-1)*float64(nonKeyframe)) / k
+		return hz * avg / 1024
+	}
+	convergedWire := len(manifestBody) + len(convergedBody)
+	repairWire := len(manifestBody) + len(requestBody) + len(shardBody)
+
+	t.Logf("storm high water: %d shared placements | plain schema %d | "+
+		"compressed keyframe %d | compressed delta %d",
+		sharedPlacements(a), len(basePlain), len(keyframeBody), len(deltaBody))
+	t.Logf("index: %d sections, %d bytes | converged exchange %d bytes "+
+		"(%d section hashes compared, %d page hashes) | build %9s compare %9s",
+		len(index.Summary().Sections), len(manifestBody), convergedWire,
+		sections, hashedPages, indexDur, compareDur)
+	t.Logf("repair: %d pages over %d entities and %d cells | request %d bytes "+
+		"(%d page hashes) | shards %d bytes | whole exchange %d bytes | build %9s | "+
+		"cheaper than the keyframe: %v",
+		rep.Pages, rep.Entities, rep.Rows, len(requestBody), staleHashed,
+		len(shardBody), repairWire, shardDur, len(shardBody) < len(keyframeBody))
+	t.Logf("projected uplink with a keyframe every %d corrections: "+
+		"converged %.1f KiB/s at 5 Hz and %.1f at 2 Hz | "+
+		"a receiver that predicted nothing %.1f and %.1f | Phase 5 deltas %.1f and %.1f",
+		parameter.SnapshotKeyframeCorrections,
+		perSecond(5, convergedWire), perSecond(2, convergedWire),
+		perSecond(5, repairWire), perSecond(2, repairWire),
+		perSecond(5, len(deltaBody)), perSecond(2, len(deltaBody)))
+	t.Logf("pages: %d shards of %d requested, %d bytes each on average",
+		pages, staleHashed, len(shardBody)/max(1, pages))
+
+	// The correctness claim: proving convergence costs materially less than
+	// carrying it. Half is conservative — the measured figure on this fixture is
+	// closer to a fifth — and it is asserted rather than reported because a change
+	// that lost it would have removed the phase's reason to exist.
+	if convergedWire*2 >= len(deltaBody) {
+		t.Fatalf("a converged correction costs %d bytes against a %d-byte delta; "+
+			"the index is not buying its round trip", convergedWire, len(deltaBody))
+	}
+}
