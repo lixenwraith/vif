@@ -12,9 +12,22 @@ divergence and the option survey behind that decision are in
 
 Terminology is orthogonal by design: a **network peer** is a transport endpoint; a
 **game host** is the Shared-domain authority and current protocol coordinator; a
-**game guest** predicts that Shared world; and **Shared** versus **Player** names
-simulation ownership, not topology or network role. Relay peers and richer
-player-domain groupings remain compatible future directions, not current features.
+**game guest** predicts that Shared world; a **relay** is a participant with more
+than one link that forwards for the participants behind it and retains what it
+forwards; and **Shared** versus **Player** names simulation ownership, not topology
+or network role. Richer player-domain groupings remain a compatible future
+direction, not a current feature.
+
+There is a fourth seam beside role, domain and participant ID: the **authority
+term**. Authorship is a generation rather than a property of participant one — a
+monotonically increasing `uint64`, one per session, incremented exactly once per
+successful handoff — and every authoritative artifact carries the term it was
+produced under. Read authorship off the term, never off an identity: participant
+one is the instance that *opened* the session, and a handoff moves who authors it
+without moving anyone's identity, slot or domain. Raft's word, because the
+invariant is Raft's: at most one authority per term, and a term never goes
+backwards on any instance. `epoch` was unavailable — here an epoch is a closed
+barrier production epoch, one tick's worth of artifacts.
 
 ## 1. Domains
 
@@ -1506,6 +1519,21 @@ fails the build when the code stops matching the declaration.
 | `TestAppsScopeOperatorState` | `internal/app` | Two Apps drive resize and debug mutations without cross-talk |
 | `TestWireEncodingBudget`, `TestFrameRoundTripSurvivesShortStreamIO` | `internal/event`, `internal/network` | Representative stream cost; framing survives short stream I/O |
 | `TestBroadcastReportsRefusedFrames` | `internal/network` | A refused outbound frame is counted rather than swallowed |
+| `TestSuccessionElectsOneParticipantOnEverySurvivor` | `internal/app` | The migration criterion: a three-participant session loses its coordinator and every survivor adopts the same authority under exactly one term increment — the roster-lowest survivor with current retention, not the first to notice |
+| `TestASuccessorWithStaleRetentionIsNotElected` | `internal/app` | The succession rule as a function: a survivor that is behind is skipped even when the roster would choose it, a minority partition elects nothing, and a session where nobody retains an authority elects nothing |
+| `TestNoEligibleSuccessorFallsBackToLocalContinuation` | `internal/app` | The same over the real path: losing an articulation point leaves both halves unable to reach a majority, and each continues locally with `network.host_lost` and `network.fork` set |
+| `TestOneTermHasOneAuthority`, `TestASecondHandoffForOneTermIsRefused` | `internal/app` | One vote per participant per term makes two majorities of one roster impossible, over every way five participants could have split; and a receiver adopts one record per term, refusing a rival, a skipped term and a record carrying fewer votes than a majority |
+| `TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded` | `internal/app` | The wire rule: an artifact from the previous term is ignored and counted, one from a term never handed is refused and counted, neither moves the term, and the current term still passes |
+| `TestMembershipIsByteIdenticalAcrossAHandoff` | `internal/app` | Roster, slot assignments, join anchor, barrier delay and every cursor entity are identical on every survivor before and after a handoff, and each still simulates its own cursor |
+| `TestAJoinerDiallingMidHandoffIsRefusedAndRetries` | `internal/app` | A dial that lands mid-succession is refused with the distinguishable tag rather than half-admitted into a term about to end, and the retry lands in the same slot discipline |
+| `TestTheFirstCorrectionAfterAHandoffIsHashOnly` | `internal/app` | Adoption is not a keyframe storm: the successor's first correction carries no keyframe and no whole body, and the exchange reaches hash-only at a bounded index and ack |
+| `TestALocalForkRejoiningAHigherTermIsRefused` | `internal/app` | A fork refuses every artifact from a term it was never handed, reports it, and takes no state; a handoff record skipping the term it missed is refused too |
+| `TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay`, `TestMeshParityAcrossAHandoff` | `internal/app` | A successor authors the Shared domain and nothing else — no Player-domain movement and no D-13 cell of a cursor the receiver authors — and every survivor holds the same Shared world after its first two corrections |
+| `TestARelayedParticipantKeepsTheSelectiveStream` | `internal/app` | A chain keeps the index: the far participant is answered from its neighbour's retention rather than by a whole-body flood, with the wire totals reported against the direct-link case |
+| `TestARelayCannotForgeAPage` | `internal/app` | A relayed answer is bound to the authority's manifest: a substituted, truncated or rebased page is refused by the page hash or the root, and only an honest one installs |
+| `TestARelayThatDroppedTheManifestSaysSo`, `TestARelayWithNoRetentionLeavesTheSessionOnWholeBodies` | `internal/app` | Bounded staleness is answered in words rather than with a body from another baseline; a relay holding nothing keeps the session on the flood, the authority believes it, and the reason is reported |
+| `TestACaptureDoesNotShareStorageWithTheLiveWorld` | `internal/engine` | A capture is a reading of one instant: the two shared components that own a slice are detached at both boundaries, so a retained baseline cannot be rewritten by the world it was read from |
+| `TestAuthorityContinuityCostAtTheStormHighWater` | `internal/app` | Report rather than assert: what a succession, a handoff record, an adoption and a relay's retention cost, and that a relayed repair is never larger than the direct one it stands in for |
 
 The mesh harness is `network.Mesh`, an in-process link graph: what a node sends,
 its direct neighbours drain on their next tick. A real socket adds framing and
@@ -1610,8 +1638,10 @@ Authority is explicit, but it is not uniform across every component.
 | Shared simulation | **Game host** | The host simulates the canonical world and publishes keyframe/delta corrections (D-23). Game guests run the same deterministic code as predictors; their result is provisional. |
 | Owner-authored shared state (D-13) | **Per cursor**, the instance that simulates it | `SimulatesLocally` admits exactly one writer; the value is transported, never re-derived. This is per-object, not per-session, and does not depend on topology. |
 | Session identity, map bounds, roster changes and live operator reset | **Game host** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, barrier delay, arrival/departure crossings, and serialization of the exceptional session-wide reset command. |
+| Which instance is the game host | **The authority term** | A session opens at term 1 under the instance that opened it. Losing that instance runs a succession over the closed roster — report, vote, handoff — and a successor that reaches a strict majority and holds current retention authors under the next term. Every authoritative artifact carries its term; a receiver ignores an older one, acts on its own, and refuses one it was never handed. |
 
-The game host is participant one and also implements the protocol's coordinator.
+The game host is the participant currently authoring, which is participant one
+until a handoff moves it, and it also implements the protocol's coordinator.
 Its two roles are related
 but distinct: it allocates identity and serializes membership, and its world is the
 answer when predicted shared values disagree. It is *not* the writer of another
@@ -1620,10 +1650,14 @@ cursor's D-13 cells; those remain per-owner values and travel on their own strea
 apply them twice. What crosses from a participant is the request, and what makes
 the host's resulting state canonical is the correction.
 
-In an A—B—C link chain, the coordinator that issued the adopted offer remains the
-authority for all three. B relays A's request to the host path and relays the
-host's correction toward C; it does not mint a second session or become a local
-authority.
+In an A—B—C link chain, the participant currently authoring remains the authority
+for all three. B relays A's request to the host path and relays the host's
+correction toward C; it does not mint a second session or become a local authority.
+What B *does* hold is retention: an index over each authoritative capture it can
+prove it holds, which lets it answer C's selective request from the authority's own
+content rather than leaving C on the whole-body flood. That is a role rather than
+an authority — the answer is bound to the authority's root, and C re-derives that
+root from the repaired capture before installing anything.
 
 ### 9.2 Topology
 
@@ -1656,22 +1690,33 @@ transport:
    one. Per-peer cadence is also a property of a *direct* link — a participant
    reached by relay rides its neighbour's schedule, because the flood forwards
    what the neighbour was sent.
-2. **Departure and authority need a reachable game host.** One producer gives a
-   roster change one apply tick, and one world supplies corrections. If participant
-   one departs or a partition makes it unreachable, no coordinated election or
-   state migration replaces either role. Each affected game guest continues its
-   own local fork from the last authoritative state and displays
-   `HOST LOST:LOCAL`; it cannot extend the old roster or claim authority for other
-   peers.
-3. **A partition has no session-wide detector.** Direct neighbours observe their
-   lost link, but after a graph splits there is no digest edge between the two
-   components. A component without the host can keep predicting, but it cannot
-   receive authoritative corrections. Its prediction becomes local game state,
-   not a promoted authority shared with the other component.
+2. **Departure and authority need a reachable *majority*, not a reachable host.**
+   One producer gives a roster change one apply tick, and one world supplies
+   corrections. Losing the participant that authors now runs a succession: each
+   survivor floods what it can reach and how current its retention is, votes once
+   for the lowest eligible candidate, and adopts the record a majority elected.
+   The successor's first act under the new term is to cross its predecessor's
+   departure, because a departure has exactly one producer and the authority is
+   what went. A partition that cannot reach a strict majority elects nothing:
+   each affected instance continues its own local fork from the last authoritative
+   state, displays `HOST LOST:LOCAL`, sets `network.fork`, and refuses — loudly —
+   any later artifact from a higher term.
+3. **A partition has no session-wide detector, and merging one is still a
+   non-goal.** Direct neighbours observe their lost link, but after a graph splits
+   there is no digest edge between the two components. A component that holds a
+   strict majority elects a successor and carries on as the session; one that does
+   not keeps predicting locally and says so. Neither ever adopts the other: a fork
+   that regains a link to a component running a higher term refuses every artifact
+   it carries, because a term is granted by a handoff record and never adopted from
+   an artifact. Refusing to merge is the built behaviour; merging is not.
 
 The links themselves are still built as a star, because `-join` dials one address.
-The relay is what makes any other shape work; wiring a participant to dial more
-than one peer is a CLI change, not a protocol one.
+The relay is what makes any other shape work — including, now, keeping the
+selective exchange over one — and wiring a participant to dial more than one peer
+is a CLI change, not a protocol one. It is also why the socket acceptance can only
+demonstrate the succession's fallback: a star's leaves reach one participant out of
+three, which is not a majority, so the elected-successor path is proved over the
+mesh harness instead.
 
 ### 9.3 Trust, rollback and host migration
 
@@ -1694,19 +1739,39 @@ deliberately deferred while functional correction and bandwidth work remains.
 Links are plaintext,
 `MsgAuthRequest`/`MsgAuthResponse` remain reserved, and `Config.TLS` has no CLI
 surface. The host structurally rejects roster artifacts from non-coordinators, but
-cannot authenticate a participant's claim to ordinary crossings. Host migration
-would additionally require transferring the newest authority, membership and
-in-flight admission state before electing a replacement; election alone would
-promote an arbitrary predictor.
+cannot authenticate a participant's claim to ordinary crossings.
+
+Host migration is built, and it transfers exactly what this paragraph used to say
+it would have to: the newest authoritative state — as the successor's *retained
+ring* rather than a fresh capture, because a fresh capture proves only what the
+successor believes — the membership, and the admission surface, all before the
+successor publishes anything. Election alone would indeed promote an arbitrary
+predictor, so eligibility is two conditions rather than one: a candidate must be
+directly linked to a strict majority of the closed roster, and must hold retention
+as new as the newest any survivor reports.
+
+**The exposure is larger than it was, and this is the plain statement of it.**
+Nothing in the succession is authenticated. A participant that lies about its links
+or its retention can make itself eligible; one that ignores the one-vote rule can
+vote twice; one that fabricates a handoff record with invented voters can make
+every receiver adopt it, because a receiver counts the voter list against the roster
+it holds and cannot establish that those participants voted. The structural checks
+that remain — a term is never skipped, one record per term, a majority of roster
+members must appear in it — bound accidents and races rather than a hostile peer. A
+hostile peer that can now also *become* the authority is why authentication is the
+next security-shaped work, and until it exists a session is for trusted peers in a
+stronger sense than before.
 
 ### 9.4 Known limitations
 
 | Area | Current limit |
 |---|---|
 | Playout | The three-tick receive lead is constant, not graph-diameter aware. Late artifacts are measured; there is no lag compensation. |
-| Topology | The protocol can relay, but `-join` dials one address. Per-peer cadence and relevance describe direct links; a relayed participant inherits its neighbour's schedule. |
+| Topology | The protocol can relay, but `-join` dials one address, so a shipped binary still builds a star. Per-peer cadence and relevance describe direct links; a relayed participant inherits its neighbour's schedule, and a relayed repair is priced against the relaying participant's link rather than the authority's. |
 | Correction content | Relevance changes *when* a whole correction is sent, not its content. Phase 6 supplies hash-guided, independently proved shards and partial reconcile. |
-| Host loss | Each affected game guest continues an explicit local fork. There is no election, shared roster authority, partition merge or automatic migration. |
+| Host loss | Survivors run a succession over the closed roster and a majority elects a successor, which authors under the next term and carries the membership with it. A partition that cannot reach a majority continues as an explicit local fork and refuses any later higher term. Partition merging is still not built. |
+| Authority trust | The succession is unauthenticated. A peer that lies about its links or retention, votes twice, or fabricates a handoff record's voter list is not caught; the structural checks bound races, not hostility. |
+| Relay retention | A relay answers from a ring `SnapshotManifestRetention` deep, so it is older than the authority's by construction. A request naming a dropped tick is refused in words and the receiver takes the next whole world. A relay that holds nothing leaves the session on the whole-body flood. |
 | Join | Admission refuses an excessive catch-up gap or a link below the convergence floor. Join gates serialize transfer, though arrivals can share a cadence keyframe read. |
 | Rewind | A correction adopts its host tick and does not yet replay later local crossings. Phase 6 adds a bounded canonical suffix and replay. |
 | Operations | Live pause/speed/step, raw shared mutation and synchronous snapshot save are refused. Programmatic embedder mutation remains the caller's responsibility. |
@@ -1718,7 +1783,9 @@ promote an arbitrary predictor.
 Domain-boundary debt that remains visible to tests:
 
 - `unstampedLocal` still exempts Local-class pushes with an ambient Shared tag;
-  empty it, then remove the exemption.
+  empty it, then remove the exemption. Every artifact an FSM region emits now
+  stamps, which took seven entries out; what is left is `app`, `engine` and the
+  shared species systems.
 - `event.EmitDeath` bypasses `PushEvent`; batches remain domain-pure only because
   callers pass the domain explicitly.
 - `uint32(entity)` in gateway/adaptation code assumes route anchors stay Shared.
@@ -1728,19 +1795,29 @@ Domain-boundary debt that remains visible to tests:
   slots remain cursor-only. The deferred rule is entity zero for
   session-owned/uncredited, nonzero for explicitly cursor-owned, applied to both
   tower regions and their gateways without a new ownership type or config value.
+- `kills.drain` is a session total, so the tenth drain defeat by anyone fuses a
+  quasar rather than one player's tenth. The region it gates is shared and every
+  instance must enter it at the same tick, so the guard has to read a key every
+  instance agrees on: what would move is the tally that key carries — a per-cursor
+  streak published as one shared key, with the reset clearing the fusing cursor's —
+  and that is a balance change to make with the tower ownership rule above.
 
 ### 9.5 Next work
 
-Phases 1–6 are implemented. Phase 6 made steady-state bytes proportional to
+Phases 1–7 are implemented. Phase 6 made steady-state bytes proportional to
 disagreement through a versioned hash hierarchy and selectively proved shards,
 with compressed keyframes as the bounded fallback, and added the bounded replay
 that lets a game guest's own outstanding crossings survive a correction that
-predates them; both are described in §6 and their scope is recorded in
+predates them. Phase 7 separated *authorship* from the instance that opened the
+session: an authority term on every authoritative artifact, a majority succession
+with one vote per participant per term, and retention that an instance which did
+not author the state can hold and serve — which is simultaneously a successor's
+eligibility evidence and a relay's ability to answer for the participants behind
+it. All three are described in §6 and their scope is recorded in
 [Multiplayer enhancement plan](multi-player-enhancement.md).
 
-Authentication is deferred. Coordinated host migration remains a later project
-that must transfer authority, membership and in-flight admission before election;
-the current independent local continuation does not substitute for it.
+Authentication is deferred, and Phase 7 enlarged what it would buy: the succession
+is structurally sound against races and not against a hostile peer.
 
 What remains outstanding and independent of that work:
 
