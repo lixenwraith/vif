@@ -522,6 +522,14 @@ host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
 configuration are exposed.
 
+Use an unmodified loadout when checking for duplicated presentation. `:god` is an
+intentional stress mode: it sets the invoking cursor's energy to 100 billion,
+grants rod, launcher and disruptor, and the default auto-fire then drives the main
+cleaners, specials and every ready weapon about four times per second. Those
+entities and effects are the invoking peer's Player domain; they are deliberately
+visible there and are not evidence that a correction copied another participant's
+visual world.
+
 To open a session on a run already in progress, type `:host :7777` instead of
 passing the flag; the guest dials it the same way. `:session` on either side
 reports what it is part of.
