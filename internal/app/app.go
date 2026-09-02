@@ -72,6 +72,12 @@ type App struct {
 	// exists from construction and starts nothing until a transport is attached.
 	corrections *corrections
 
+	// authority is which generation of the session this run is part of and who is
+	// authoring it. It is separate from corrections because the two answer
+	// different questions and change on different events: corrections is what this
+	// instance sends and applies, authority is whether it is allowed to.
+	authority *authority
+
 	// staging is the second world a capture resolves into before it is written
 	// into this one, built on first use and re-used for the life of the run. Phase
 	// 3 built one per install and threw it away, which is 9 to 31 ms a correction
@@ -201,6 +207,8 @@ func (a *App) initWorld() {
 		r.SharedDigest = a.sharedDigestLocked
 		r.OnCorrection = a.receiveCorrection
 		r.OnSelective = a.receiveSelective
+		r.OnAuthority = a.receiveAuthorityFrame
+		r.OnPeerLost = a.reportPeerLost
 		// A session endpoint exists, so this run is shared for its whole life
 		// whether or not a peer is attached at a given tick. Latching it here rather
 		// than reading the port keeps the anchor, the D-14 verdict and the playout
@@ -252,7 +260,9 @@ func (a *App) initWorld() {
 	// Corpus telemetry needs the registry NewGameContext creates
 	service.MustGet[*service.ContentService](a.hub, "content").
 		PublishStatus(a.world.Resources.Status)
+	ensureAuthorityCells(a.world.Resources.Status)
 	a.snapshotTelemetry = newSnapshotTelemetry(a.world.Resources.Status)
+	a.authority = newAuthority(a)
 
 	// Initial rate; ParseScale rejects "" so a bare run stays at real time
 	if s, ok := engine.ParseScale(a.cfg.TimeScaleSpec); ok {

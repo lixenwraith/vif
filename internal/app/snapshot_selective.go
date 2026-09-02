@@ -44,6 +44,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -67,12 +68,13 @@ type SectionRequest struct {
 // SnapshotManifestSilenceCorrections). Root is the receiver's own, so a host can
 // record convergence from the message rather than infer it from an absence.
 type CorrectionRequest struct {
-	Version int    `json:"version"`
-	Schema  int    `json:"schema"`
-	Tick    uint64 `json:"tick"`
-	Run     uint64 `json:"run"`
-	Session uint64 `json:"session"`
-	Root    uint64 `json:"root"`
+	Version int                   `json:"version"`
+	Schema  int                   `json:"schema"`
+	Tick    uint64                `json:"tick"`
+	Run     uint64                `json:"run"`
+	Session uint64                `json:"session"`
+	Root    uint64                `json:"root"`
+	Term    network.AuthorityTerm `json:"term,omitempty"`
 
 	// Keyframe asks for a whole world instead of a repair. A receiver sets it when
 	// it has nothing to compare against, when a repair failed its proof, or when
@@ -112,13 +114,51 @@ type CorrectionShard struct {
 // validated on its own — a receiver that lost the manifest it answers still has
 // everything the apply needs, and a set can never be read against the wrong one.
 type CorrectionShardSet struct {
-	Version   int               `json:"version"`
-	Schema    int               `json:"schema"`
-	Header    CaptureHeader     `json:"header"`
-	Root      uint64            `json:"root"`
-	Authority uint32            `json:"authority"`
-	Sections  []SectionSummary  `json:"sections"`
-	Shards    []CorrectionShard `json:"shards"`
+	Version int           `json:"version"`
+	Schema  int           `json:"schema"`
+	Header  CaptureHeader `json:"header"`
+	Root    uint64        `json:"root"`
+
+	// Authority is the participant whose world these pages describe, and Served
+	// the peer that produced the answer. They differ exactly when a relay answered
+	// for the authority, which is the only thing about a relayed repair a receiver
+	// treats differently: the proof is the authority's either way, so nothing about
+	// validation changes, and what Served buys is that the bytes are priced against
+	// the edge that carried them.
+	Authority uint32 `json:"authority"`
+	Served    uint32 `json:"served,omitempty"`
+
+	Sections []SectionSummary  `json:"sections"`
+	Shards   []CorrectionShard `json:"shards"`
+}
+
+// CorrectionUnserved is the answer a retention holder gives to a request it
+// cannot produce pages for: it dropped the manifest the request names, or its own
+// world never agreed with the authority's at that tick.
+//
+// It is a message rather than a silence because silence costs the receiver a
+// whole cadence waiting for a repair that is not coming, and it is not a body
+// because a body from a different baseline is exactly what the supersession rules
+// make unreachable. The receiver degrades: it asks the authority instead, and
+// failing that, for a keyframe.
+type CorrectionUnserved struct {
+	Version int                   `json:"version"`
+	Tick    uint64                `json:"tick"`
+	Term    network.AuthorityTerm `json:"term,omitempty"`
+	From    uint32                `json:"from"`
+	Reason  string                `json:"reason"`
+}
+
+// EncodeUnserved renders one cannot-serve answer.
+func EncodeUnserved(u CorrectionUnserved) ([]byte, error) { return encodeSnapshotJSON(u) }
+
+// DecodeUnserved parses what EncodeUnserved produced.
+func DecodeUnserved(b []byte) (CorrectionUnserved, error) {
+	var u CorrectionUnserved
+	if err := decodeSnapshotJSON(b, &u); err != nil {
+		return CorrectionUnserved{}, fmt.Errorf("unserved answer decode: %w", err)
+	}
+	return u, nil
 }
 
 // EncodeManifest renders a manifest summary in the bounded, compressed envelope.

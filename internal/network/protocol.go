@@ -65,6 +65,25 @@ const (
 	MsgStateRequest  MessageType = 0x29 // Live: one receiver's answer to a manifest
 	MsgStateShard    MessageType = 0x2A // Live: the pages one request asked for
 
+	// MsgStateUnserved is the answer a retention holder gives when it cannot
+	// produce the pages a request names: it has dropped the manifest, or its own
+	// world never agreed with the authority's at that tick. It exists because the
+	// alternative answers are both wrong — silence costs the receiver a cadence
+	// waiting for a repair that is not coming, and a body from a different
+	// baseline is the mixed-baseline assembly the supersession rules exist to make
+	// unreachable.
+	MsgStateUnserved MessageType = 0x2B // Live: a request this peer's retention cannot answer
+
+	// Phase 7's succession, in the order it runs. A report is information about
+	// one survivor's reach and retention and is flooded and revisable; a vote is
+	// one participant's single immutable choice for one term; a handoff is the
+	// record that lets a receiver adopt a term it has never seen. Three kinds
+	// rather than one because a receiver acts on each at a different moment, and
+	// because only the middle one is a commitment.
+	MsgAuthorityReport  MessageType = 0x2C // Live: one survivor's succession input
+	MsgAuthorityVote    MessageType = 0x2D // Live: one participant's vote for a term
+	MsgAuthorityHandoff MessageType = 0x2E // Live: the record a successor authors under
+
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour
 	// that is not the coordinator forwards a notice rather than acting on it.
 	MsgDisconnect MessageType = 0x03 // Live: a participant's link was lost
@@ -82,7 +101,8 @@ const (
 	// authoritative state snapshot that replaced it. Neither is 0x27, which carries
 	// the periodic correction that snapshot became once the host was the authority,
 	// nor 0x14/0x15, which carry the round trip Phase 5 added, nor 0x28..0x2A,
-	// which carry Phase 6's manifest, request and repair.
+	// which carry Phase 6's manifest, request and repair, nor 0x2B..0x2E, which
+	// carry Phase 7's unserved answer and its succession.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20

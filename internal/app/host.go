@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -103,7 +104,17 @@ func (a *App) beginHostingLocked(addr string) error {
 	a.sessionMu.Lock()
 	a.midRunPort = port
 	a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
+	roster := slices.Clone(a.sessionRoster)
 	a.sessionMu.Unlock()
+
+	// The run that opens a session authors its first term. Everything downstream
+	// reads authorship from here rather than from the identity the handshake
+	// assigns, which is what lets a later handoff move it.
+	a.openAuthorityLocked(network.SessionOffer{
+		Anchor: a.joinAnchorLocked(), Host: hostParticipantID, Assigned: hostParticipantID,
+		Term: network.FirstTerm, Participants: roster,
+		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+	}, hostParticipantID)
 
 	// Attaching latches the world as shared (D-14) and installs the departure and
 	// digest hooks; activating closes the pre-session crossing window so this
@@ -177,6 +188,11 @@ func (a *App) sessionSummaryLocked() string {
 	reg := a.world.Resources.Status
 	line := fmt.Sprintf("Session %s %s, participant %d, %d peer(s), tick %d",
 		role, addr, participant, peers, a.Position().Tick)
+	if a.authority != nil {
+		if s := a.authority.summary(); s != "" {
+			line += "; " + s
+		}
+	}
 	if reg.Bools.Get("network.host_lost").Load() {
 		return line + "; HOST LOST, continuing locally from the last authoritative state"
 	}

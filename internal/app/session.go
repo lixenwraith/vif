@@ -125,6 +125,16 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 	a.sessionMu.Lock()
 	defer a.sessionMu.Unlock()
 
+	// A dial that lands mid-succession is refused rather than admitted. The offer
+	// this call would write names a term that is about to end, and a participant
+	// admitted under one is in a session nobody owns: it holds a roster slot the
+	// successor's record does not carry and receives an authority that has
+	// already stopped publishing. The refusal is distinguishable so the joiner can
+	// retry against whatever authority emerges.
+	if a.authority != nil && a.authority.Migrating() {
+		return network.SessionOffer{}, ErrSessionHandoff
+	}
+
 	limit := a.remoteParticipantCount() + 1
 	if len(a.sessionRoster) == 0 {
 		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
@@ -183,10 +193,15 @@ func (a *App) releaseParticipant(id network.PeerID) {
 // which is why the anchor is passed in rather than read here: JoinAnchor takes the
 // world lock, and a departure released from under that lock takes sessionMu.
 func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) network.SessionOffer {
+	term := a.authorityTerm()
+	if term == 0 {
+		term = network.FirstTerm
+	}
 	return network.SessionOffer{
 		Anchor:            anchor,
-		Host:              hostParticipantID,
+		Host:              a.authorityID(),
 		Assigned:          assigned,
+		Term:              term,
 		Participants:      slices.Clone(a.sessionRoster),
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}
@@ -205,9 +220,9 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 			{ID: hostParticipantID, Slot: 0}, {ID: 2, Slot: 1},
 		}
 	}
-	assigned := hostParticipantID
+	assigned := a.authorityID()
 	for _, p := range a.sessionRoster {
-		if p.ID != hostParticipantID {
+		if p.ID != a.authorityID() {
 			assigned = p.ID
 			break
 		}

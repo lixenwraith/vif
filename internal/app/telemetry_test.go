@@ -71,6 +71,17 @@ func persistentTelemetryKey(kind, key string) bool {
 		strings.HasPrefix(key, "stat.") || strings.HasPrefix(key, "snapshot.") {
 		return true
 	}
+	// Who is authoring and under which generation is a property of the session
+	// rather than of the run inside it. A reset starts a new run; it does not undo
+	// a handoff, restore a lost authority or un-fork a local continuation, so the
+	// whole authority card survives one for the same reason a join's counters do.
+	if strings.HasPrefix(key, "network.term") || strings.HasPrefix(key, "network.handoff") {
+		return true
+	}
+	switch key {
+	case "network.authority", "network.migrations", "network.fork", "network.migrating":
+		return true
+	}
 	switch kind {
 	case "int":
 		switch key {

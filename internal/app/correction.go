@@ -160,12 +160,28 @@ type corrections struct {
 	selectiveMu sync.Mutex
 	selective   selectiveState
 
-	applyMu   sync.Mutex
-	stop      chan struct{}
-	wake      chan struct{}
-	done      chan struct{}
-	once      sync.Once
-	closeOnce sync.Once
+	// authorityMu covers the succession queue: frames and departures arrive under
+	// the world lock, from the tick that drained them, and are acted on between two
+	// ticks. It is the same lock-order rule selectiveMu documents, for the same
+	// reason — a queue an inbound frame appends to may not sit behind publishMu.
+	authorityMu sync.Mutex
+	authorityIn []authorityFrame
+	peersLost   []uint32
+
+	applyMu sync.Mutex
+	stop    chan struct{}
+	wake    chan struct{}
+
+	// The pump and the corrector are separate lifetimes because Phase 7 lets one
+	// run be both. A guest that becomes the authority keeps its apply loop — it is
+	// still a receiver of its own replayed suffix and the thing that serves
+	// requests — and gains a publication cadence, so a single Once shared between
+	// the two would silently retire whichever started second.
+	pumpDone    chan struct{}
+	correctDone chan struct{}
+	pumpOnce    sync.Once
+	correctOnce sync.Once
+	closeOnce   sync.Once
 }
 
 // peerPublisher is one direct link's schedule.
@@ -227,9 +243,10 @@ func newCorrections(a *App) *corrections {
 		base:   parameter.SnapshotCorrectionTicks,
 		keyPeriod: parameter.SnapshotCorrectionTicks *
 			parameter.SnapshotKeyframeCorrections,
-		stop: make(chan struct{}),
-		wake: make(chan struct{}, 1),
-		done: make(chan struct{}),
+		stop:        make(chan struct{}),
+		wake:        make(chan struct{}, 1),
+		pumpDone:    make(chan struct{}),
+		correctDone: make(chan struct{}),
 	}
 }
 
@@ -263,7 +280,7 @@ func CadenceBounds() linkpace.Bounds {
 // the cadence is a property of the simulation: a paused or slowed run should not
 // keep publishing a world that is not moving.
 func (c *corrections) startPump() {
-	c.once.Do(func() { go c.pump() })
+	c.pumpOnce.Do(func() { go c.pump() })
 }
 
 // pump publishes on the cadence and whenever a join asks for a keyframe.
@@ -282,7 +299,7 @@ func (c *corrections) startPump() {
 // benefit is that a peer whose link just improved does not wait out the old
 // cadence before the new one takes effect.
 func (c *corrections) pump() {
-	defer close(c.done)
+	defer close(c.pumpDone)
 	interval := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval
 	ticker := time.NewTicker(interval) // [wall] a publication cadence, not a game clock
 	defer ticker.Stop()
@@ -886,11 +903,11 @@ func (c *corrections) receive(body []byte) {
 // acquisition of the update mutex, so a commit that takes the mutex is necessarily
 // between two of them. That is why this can be its own goroutine at all.
 func (c *corrections) startCorrector() {
-	c.once.Do(func() { go c.correct() })
+	c.correctOnce.Do(func() { go c.correct() })
 }
 
 func (c *corrections) correct() {
-	defer close(c.done)
+	defer close(c.correctDone)
 	// A wake accompanies every arrival; the ticker is the backstop for a wake lost
 	// to a full channel, and costs one queue check per cadence when idle.
 	ticker := time.NewTicker(parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval) // [wall]
@@ -936,6 +953,11 @@ func (c *corrections) apply() {
 	// authority about anything, and the cheapest correction the protocol has would
 	// be unreachable in principle.
 	c.drainTransport()
+
+	// The succession runs here for the same reason both halves of the selective
+	// exchange do: it belongs between two ticks, and this is the one loop every
+	// instance runs whichever half of the protocol it is.
+	c.driveAuthority()
 
 	c.observeFloor()
 
@@ -1015,6 +1037,18 @@ func (c *corrections) resolve(body []byte) (SharedCapture, error) {
 	if err != nil {
 		return SharedCapture{}, err
 	}
+	// The term gate, applied where the artifact is decoded rather than where it is
+	// queued: an inbound frame arrives under the world lock and the queue may only
+	// take bytes. A correction from a term this instance has left is in flight
+	// across a handoff and is dropped; one from a term it was never handed is the
+	// split-brain case and is refused loudly.
+	header := full.Header
+	if kind == CorrectionDelta {
+		header = delta.Header
+	}
+	if !c.a.admitArtifactTerm(header.Term, 0) {
+		return SharedCapture{}, errors.New("correction carries a term this instance does not hold")
+	}
 	if kind == CorrectionKeyframe {
 		c.setBaseline(full)
 		return full, nil
@@ -1061,6 +1095,14 @@ func (c *corrections) install(cap SharedCapture) error {
 	// The authority is in place; this participant's own actions after its baseline
 	// go back on top of it. See replay_suffix.go for why the set is exact.
 	c.a.replayLocalSuffix(cap.Header.Tick)
+
+	// What was just installed is provably the authority's world at that tick — a
+	// whole correction re-checks its own integrity hash and a repair reproduces the
+	// authority's root — so an index over it carries the authority's root and can
+	// be served. That retention is the primitive both halves of Phase 7 rest on: a
+	// successor's evidence that its world is current, and a relay's ability to
+	// answer for a participant behind it.
+	c.retainInstalled(cap)
 
 	m := c.a.snapshotTelemetry
 	m.applied.Add(1)
@@ -1151,11 +1193,15 @@ func (c *corrections) baselineCapture() (SharedCapture, bool) {
 // fires here.
 func (c *corrections) close() {
 	c.closeOnce.Do(func() {
-		neverStarted := false
-		c.once.Do(func() { neverStarted = true })
+		pumped, corrected := true, true
+		c.pumpOnce.Do(func() { pumped = false })
+		c.correctOnce.Do(func() { corrected = false })
 		close(c.stop)
-		if !neverStarted {
-			<-c.done
+		if pumped {
+			<-c.pumpDone
+		}
+		if corrected {
+			<-c.correctDone
 		}
 	})
 }

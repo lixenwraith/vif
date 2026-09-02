@@ -18,6 +18,7 @@ func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 		Anchor:            an,
 		Host:              hostParticipantID,
 		Assigned:          2,
+		Term:              network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}
 	for i := range n {

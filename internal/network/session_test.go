@@ -13,7 +13,7 @@ import (
 func testOffer() SessionOffer {
 	return SessionOffer{
 		Anchor: event.JoinAnchor{Anchor: event.JournalAnchor{Schema: event.JournalSchema, Seed: 7}},
-		Host:   1, Assigned: 2, BarrierDelayTicks: 3,
+		Host:   1, Assigned: 2, Term: FirstTerm, BarrierDelayTicks: 3,
 		Participants: []SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}},
 	}
 }

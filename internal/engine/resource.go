@@ -877,11 +877,35 @@ type NetworkResource struct {
 	// selective-correction frame from that peer", which is all it can usefully
 	// have.
 	OnSelective func(kind uint8, from uint32, body []byte)
+
+	// OnAuthority hands one Phase 7 succession frame — a report, a vote or a
+	// handoff record — to the session layer, under the same rule as the two seams
+	// above: called under the world lock, so it takes the bytes and decides
+	// nothing. Succession is a decision about who may author, which belongs beside
+	// the correction protocol rather than inside the transport.
+	OnAuthority func(kind uint8, from uint32, body []byte)
+
+	// OnPeerLost reports a direct neighbour's departure to the session layer,
+	// beside the identity release OnDeparture does. It is a different question:
+	// which identities the lobby may hand out again is local bookkeeping, and
+	// whether the participant that just left was the one authoring is what starts
+	// a succession.
+	OnPeerLost func(participant uint32)
+
+	// Authority is the participant currently authoring the Shared world, and Term
+	// the generation it authors under. Both are written by the session layer when
+	// a handoff is adopted and read here per tick, so the roster artifacts only
+	// the authority may produce follow the authority rather than the participant
+	// that opened the session.
+	Authority atomic.Uint32
+	Term      atomic.Uint64
 }
 
 // NewNetworkResource binds a poll endpoint and its deterministic barrier identity.
 func NewNetworkResource(port NetworkPort) *NetworkResource {
 	r := &NetworkResource{Port: port, ParticipantID: 1, BarrierDelayTicks: parameter.NetworkBarrierDelayTicks}
+	r.Authority.Store(1)
+	r.Term.Store(uint64(1))
 	if session, ok := port.(NetworkSessionPort); ok {
 		if id := session.ParticipantID(); id != 0 {
 			r.ParticipantID = id

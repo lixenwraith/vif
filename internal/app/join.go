@@ -30,13 +30,20 @@ var ErrJoinMidRun = errors.New("join: participants are not at the same position"
 // identity VerifyAnchor already checks, plus the live D-14 map latch.
 // The terminal fields describe this instance and the joiner ignores them.
 func (a *App) JoinAnchor() event.JoinAnchor {
+	var out event.JoinAnchor
+	a.world.RunSafe(func() { out = a.joinAnchorLocked() })
+	return out
+}
+
+// joinAnchorLocked is JoinAnchor for a caller that already holds the world lock —
+// the operator `:host` path does, because mode/ runs inside it.
+// Caller MUST hold updateMutex.
+func (a *App) joinAnchorLocked() event.JoinAnchor {
 	an := a.buildAnchor()
 	an.Schema = event.JournalSchema
-	a.world.RunSafe(func() {
-		cfg := a.world.Resources.Config
-		an.MapWidth, an.MapHeight, an.CropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
-	})
-	st := a.Position()
+	cfg := a.world.Resources.Config
+	an.MapWidth, an.MapHeight, an.CropOnResize = cfg.MapWidth, cfg.MapHeight, cfg.CropOnResize
+	st := a.world.Resources.Event.Queue.Stamp()
 	an.Run, an.Tick = st.Run, st.Tick
 	return event.JoinAnchor{Anchor: an}
 }
@@ -80,6 +87,7 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 	if err := a.Join(o.Anchor); err != nil {
 		return err
 	}
+	a.openAuthority(o, o.Assigned)
 	return a.configureSessionRoster(o, o.Assigned)
 }
 
@@ -103,6 +111,7 @@ func (a *App) JoinSessionAt(o network.SessionOffer, cap SharedCapture) error {
 	if err := a.JoinAt(o.Anchor); err != nil {
 		return err
 	}
+	a.openAuthority(o, o.Assigned)
 	a.scheduler.Settle()
 
 	staged, err := a.StageShared(cap)
@@ -132,6 +141,7 @@ func (a *App) HostSession(o network.SessionOffer) error {
 		return err
 	}
 	a.adoptMapLatch(o.Anchor.Anchor)
+	a.openAuthority(o, o.Host)
 	return a.configureSessionRoster(o, o.Host)
 }
 
@@ -272,6 +282,13 @@ func (a *App) attachTransportLocked(port engine.NetworkPort) {
 	// install itself needs.
 	r.OnCorrection = a.receiveCorrection
 	r.OnSelective = a.receiveSelective
+	r.OnAuthority = a.receiveAuthorityFrame
+	r.OnPeerLost = a.reportPeerLost
+	term, holder := a.authorityStamp()
+	if holder != 0 {
+		r.Authority.Store(holder)
+		r.Term.Store(uint64(term))
+	}
 	a.world.Resources.Network = r
 	a.world.MarkSessionShared()
 	a.ctx.PublishMapLock()

@@ -341,6 +341,25 @@ type snapshotTelemetry struct {
 	replayOverflow *atomic.Int64
 	replaySkipped  *atomic.Int64
 	replayUnusable *atomic.Bool
+
+	// Phase 7. staleTerm counts artifacts the term gate dropped as belonging to a
+	// generation the session has left, which is the ordinary in-flight case across
+	// a handoff rather than an error; handoffBytes is what one handoff cost this
+	// instance on the wire, so the migration's price is measured beside the
+	// correction's.
+	staleTerm    *atomic.Int64
+	handoffBytes *atomic.Int64
+
+	// The relay role's retention. retained is how many authoritative records this
+	// instance is currently holding for a neighbour to ask about, served how many
+	// repairs it answered from them, and unserved how many requests it had to turn
+	// down — the bounded staleness made countable. The bytes are priced against
+	// the relaying participant's own link, never the authority's.
+	relayRetained  *atomic.Int64
+	relayServed    *atomic.Int64
+	relayUnserved  *atomic.Int64
+	relayBytesSent *atomic.Int64
+	relayBytesRecv *atomic.Int64
 }
 
 // newSnapshotTelemetry reserves the cells. Called during construction, because a
@@ -394,6 +413,15 @@ func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
 		shardBytesRecv:  reg.Ints.Get("snapshot.shard_bytes_received"),
 		requestBytes:    reg.Ints.Get("snapshot.request_bytes"),
 		selectiveBytes:  reg.Ints.Get("snapshot.selective_bytes"),
+
+		staleTerm:    reg.Ints.Get("network.term_stale"),
+		handoffBytes: reg.Ints.Get("network.handoff_bytes"),
+
+		relayRetained:  reg.Ints.Get("snapshot.relay_retained"),
+		relayServed:    reg.Ints.Get("snapshot.relay_served"),
+		relayUnserved:  reg.Ints.Get("snapshot.relay_unserved"),
+		relayBytesSent: reg.Ints.Get("snapshot.relay_bytes_sent"),
+		relayBytesRecv: reg.Ints.Get("snapshot.relay_bytes_received"),
 
 		pagesRepaired:    reg.Ints.Get("snapshot.pages_repaired"),
 		entitiesRepaired: reg.Ints.Get("snapshot.entities_repaired"),

@@ -63,6 +63,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -186,6 +187,13 @@ type CorrectionManifest struct {
 	// of the authority's own cursor from ever being corrected.
 	Authority uint32 `json:"authority"`
 
+	// Term is the authority generation the indexed capture was produced under. It
+	// is beside Authority rather than folded into it because the two answer
+	// different questions: Authority decides which cursors' owner-authored cells
+	// are inside the hashed surface (D-13), and Term decides whether this index may
+	// be acted on at all.
+	Term network.AuthorityTerm `json:"term,omitempty"`
+
 	// Sections is every section, always. The alternative — sending only the
 	// sections that changed since the last manifest — would make a manifest
 	// meaningful only against the one before it, and the point of the index is
@@ -224,6 +232,7 @@ func buildManifest(cap SharedCapture, authority uint32) (*captureManifest, error
 			Version:   ManifestVersion,
 			Header:    cap.Header,
 			Authority: authority,
+			Term:      cap.Header.Term,
 		},
 		authority: authority,
 		sections:  make(map[string]*manifestSection, engine.SharedWorldStoreCount+5),
@@ -438,8 +447,9 @@ func sectionHash(section string, pages []uint64) uint64 {
 // authority: including the tick would make every comparison fail for a reason that
 // is not a disagreement about the world. What *is* absorbed is the identity a
 // disagreement would otherwise be silent about — the manifest version, the capture
-// schema, and the run, session and seed — so two instances that are not in the
-// same session cannot reach an equal root.
+// schema, the run, session and seed, and the authority term — so two instances
+// that are not in the same session, or not in the same generation of it, cannot
+// reach an equal root.
 func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) uint64 {
 	w := fnv.New64a()
 	_, _ = w.Write([]byte(hashDomainRoot))
@@ -452,6 +462,7 @@ func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) 
 	writeUint64(w, uint64(h.MapWidth))
 	writeUint64(w, uint64(h.MapHeight))
 	writeUint64(w, uint64(authority))
+	writeUint64(w, uint64(h.Term))
 	writeUint64(w, uint64(len(sections)))
 	for _, s := range sections {
 		writeString(w, s.ID)

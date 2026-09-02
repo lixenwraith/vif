@@ -49,6 +49,7 @@ type StatusBarRenderer struct {
 	statPeers      *atomic.Int64
 	statLatch      *atomic.Bool
 	statHostLost   *atomic.Bool
+	statMigrating  *atomic.Bool
 
 	// The operating point. Phase 5 made the correction cadence a function of the
 	// link, and a player whose picture has gone coarse needs to be told which of
@@ -101,6 +102,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statPeers:      statusReg.Ints.Get("network.peers"),
 		statLatch:      statusReg.Bools.Get("network.map_latched"),
 		statHostLost:   statusReg.Bools.Get("network.host_lost"),
+		statMigrating:  statusReg.Bools.Get("network.migrating"),
 
 		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
 		statKeyframe:    statusReg.Ints.Get("snapshot.cadence_keyframe_interval"),
@@ -148,6 +150,9 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	// Priority 0: losing the game host is a permanent change of authority for this
 	// run. It must survive even the narrowest useful status bar.
+	if item, ok := r.migratingItem(); ok {
+		rightItems = append(rightItems, item)
+	}
 	if item, ok := r.hostLossItem(); ok {
 		rightItems = append(rightItems, item)
 	}
@@ -470,6 +475,22 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 			}
 		}
 	}
+}
+
+// migratingItem marks the moment between one authority and the next.
+//
+// It sits where NET:.../LOCK sits and replaces the latch half of it, because what
+// it is saying is about the same thing: the session is still one session, and the
+// instance authoring it is changing. It is transient by construction — the badge
+// is cleared a fixed number of ticks after the handoff is adopted — so the two
+// states a player actually reads are the ones on either side of it.
+func (r *StatusBarRenderer) migratingItem() (statusItem, bool) {
+	if !r.statMigrating.Load() {
+		return statusItem{}, false
+	}
+	return statusItem{
+		text: " MIGRATING ", fg: visual.RgbBlack, bg: visual.RgbOrange,
+	}, true
 }
 
 // hostLossItem marks the guest's independent continuation after authority loss.

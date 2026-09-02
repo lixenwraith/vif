@@ -12,6 +12,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/fsm"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/service"
 )
@@ -189,6 +190,16 @@ type CaptureHeader struct {
 	MapWidth  int `json:"map_width"`
 	MapHeight int `json:"map_height"`
 
+	// Term is the authority generation this capture was produced under, and
+	// Authority the participant that produced it. Every authoritative artifact
+	// carries them, because "which world is this" and "who was allowed to say so"
+	// are different questions and a receiver has to answer both: it ignores an
+	// artifact from a term older than the one it holds, and refuses one from a
+	// term it has never been handed. Zero on a solo run's capture, which has no
+	// session to be authoritative in.
+	Term      network.AuthorityTerm `json:"term,omitempty"`
+	Authority uint32                `json:"authority,omitempty"`
+
 	// Integrity is a hash over the capture's body. It answers "did this arrive
 	// intact", which is a different question from "does this describe my build",
 	// and both have to be answered before an install writes anything.
@@ -230,7 +241,10 @@ func (a *App) CaptureShared() (SharedCapture, error) {
 
 	st := a.Position()
 	reg := a.world.Resources.Status
+	term, holder := a.authorityStamp()
 	cap.Header = CaptureHeader{
+		Term:          term,
+		Authority:     holder,
 		Schema:        SnapshotSchema,
 		JournalSchema: uint64(event.JournalSchema),
 		Run:           st.Run,

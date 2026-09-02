@@ -19,9 +19,17 @@ type SessionParticipant struct {
 
 // SessionOffer carries the replay identity and the coordinator-owned roster.
 type SessionOffer struct {
-	Anchor            event.JoinAnchor     `json:"anchor"`
-	Host              PeerID               `json:"host"`
-	Assigned          PeerID               `json:"assigned"`
+	Anchor   event.JoinAnchor `json:"anchor"`
+	Host     PeerID           `json:"host"`
+	Assigned PeerID           `json:"assigned"`
+
+	// Term is the authority generation this offer was written under, and Host the
+	// participant authoring it. A joiner adopts both: an admission is an
+	// authoritative artifact like any other, and one written under a term that is
+	// about to end is exactly what a mid-handoff dial must not be half-admitted
+	// into.
+	Term AuthorityTerm `json:"term,omitempty"`
+
 	Participants      []SessionParticipant `json:"participants"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
@@ -48,6 +56,9 @@ func (o SessionOffer) Validate() error {
 	}
 	if o.BarrierDelayTicks == 0 {
 		return errors.New("join offer carries no barrier delay")
+	}
+	if o.Term < FirstTerm {
+		return errors.New("join offer carries no authority term")
 	}
 	ids := make(map[PeerID]bool, len(o.Participants))
 	slots := make(map[uint8]bool, len(o.Participants))

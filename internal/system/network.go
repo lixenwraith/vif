@@ -1025,17 +1025,28 @@ func (s *NetworkSystem) drainWith(p engine.NetworkPort, poll func([]network.Inbo
 // game guest: simulation continues from the last authoritative state, but the
 // current membership protocol does not coordinate that local fork with other peers.
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
-	coordinatorLost := peerID == coordinatorParticipant && !s.isCoordinator()
+	authorityLost := peerID == s.authorityParticipant() && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
-	if coordinatorLost {
+	if authorityLost {
+		// The badge and the message are the fallback's, and the session layer may
+		// clear both: a succession that finds an eligible successor ends with an
+		// authority rather than a fork. What it may not do is leave the loss
+		// unsaid while it tries, so the honest state is published first and
+		// withdrawn only once a handoff has actually been adopted.
 		s.statHostLost.Store(true)
 		message = "Host connection lost; continuing locally from the last authoritative state"
+	}
+	// Every departure reaches the session layer, not only the authority's: a
+	// survivor's own reach is what the succession rule counts, and it changes
+	// whenever any link does.
+	if r := s.world.Resources.Network; r != nil && r.OnPeerLost != nil {
+		r.OnPeerLost(peerID)
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,
 	})
 	vlog.Warn("app", "msg", "network peer disconnected", "participant", s.participantID(), "peer", peerID,
-		"coordinator_lost", coordinatorLost, "remaining_peers", remaining)
+		"authority_lost", authorityLost, "remaining_peers", remaining)
 }
 
 func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
@@ -1119,12 +1130,30 @@ func (s *NetworkSystem) crossSession(t event.EventType, payload any) {
 	s.world.PushEventFull(t, payload, event.OriginSession, core.DomainPlayer)
 }
 
-// isCoordinator reports whether this instance owns the session's first identity,
-// which is the one the handshake always assigns to the host.
+// isCoordinator reports whether this instance is the one currently authoring the
+// Shared world.
+//
+// It used to be "does this instance own the session's first identity", because
+// that is the identity the handshake assigns to the host and the host authored
+// for the life of the session. A handoff moves authorship, so the question moves
+// with it: the roster artifacts only one producer may raise follow the authority,
+// not the participant that opened the session.
 func (s *NetworkSystem) isCoordinator() bool {
 	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.localSource == coordinatorParticipant
+	local := s.localSource
+	s.mu.Unlock()
+	return local != 0 && local == s.authorityParticipant()
+}
+
+// authorityParticipant is the participant currently authoring, defaulting to the
+// session's first identity for a transport that carries no authority yet.
+func (s *NetworkSystem) authorityParticipant() uint32 {
+	if r := s.world.Resources.Network; r != nil {
+		if id := r.Authority.Load(); id != 0 {
+			return id
+		}
+	}
+	return coordinatorParticipant
 }
 
 // participantSlot finds the roster slot a peer-owned cursor occupies.
@@ -1197,8 +1226,11 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 		s.receiveDeparture(from, msg.Payload)
 	case network.MsgStateCorrection:
 		s.receiveCorrection(from, msg.Payload)
-	case network.MsgStateManifest, network.MsgStateRequest, network.MsgStateShard:
+	case network.MsgStateManifest, network.MsgStateRequest, network.MsgStateShard,
+		network.MsgStateUnserved:
 		s.receiveSelective(msg.Type, from, msg.Payload)
+	case network.MsgAuthorityReport, network.MsgAuthorityVote, network.MsgAuthorityHandoff:
+		s.receiveAuthority(msg.Type, from, msg.Payload)
 	default:
 		s.statDrop.Add(1)
 	}
@@ -1271,6 +1303,24 @@ func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, 
 	}
 	if r := s.world.Resources.Network; r != nil && r.OnSelective != nil {
 		r.OnSelective(uint8(kind), from, body)
+	}
+}
+
+// receiveAuthority hands one succession frame to the session layer.
+//
+// Unlike the selective exchange these are flooded rather than unicast, and the
+// flood is the point: a survivor two links from the lost authority learns of the
+// loss from the reports that cross it, because the departure crossing that used
+// to carry that news is produced by the authority — the thing that is gone. The
+// session layer decides what to relay onward, because it is what deduplicates by
+// term and participant.
+func (s *NetworkSystem) receiveAuthority(kind network.MessageType, from uint32, body []byte) {
+	if from == 0 {
+		s.statDrop.Add(1)
+		return
+	}
+	if r := s.world.Resources.Network; r != nil && r.OnAuthority != nil {
+		r.OnAuthority(uint8(kind), from, body)
 	}
 }
 
@@ -1569,7 +1619,7 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 			s.statDrop.Add(1)
 			continue
 		}
-		if !admissibleFromSource(et, a.source) {
+		if !s.admissibleFromSource(et, a.source) {
 			s.statForged.Add(1)
 			vlog.Warn("app", "msg", "artifact refused",
 				"peer", a.source, "event", event.GetEventName(et), "apply_tick", a.applyTick)
@@ -1620,10 +1670,10 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 // cursor, a peer replaying an artifact it never produced — is an *authentication*
 // question rather than an authority one, and this plan puts authentication in
 // Phase 6, before anything beyond trusted peers.
-func admissibleFromSource(et event.EventType, source uint32) bool {
+func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted:
-		return source == coordinatorParticipant
+		return source == s.authorityParticipant()
 	default:
 		return true
 	}

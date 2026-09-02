@@ -22,6 +22,7 @@ func meshSession(t *testing.T, seed uint64, n int, links [][2]int) []*App {
 	offer := network.SessionOffer{
 		Host:              1,
 		Assigned:          2,
+		Term:              network.FirstTerm,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 	}
 	for i := range n {

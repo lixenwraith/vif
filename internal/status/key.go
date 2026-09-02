@@ -92,8 +92,17 @@ func splitKey(key string) (group, name, playerSlot string) {
 		switch {
 		case name == "state", name == "peers", name == "connected", name == "map_latched":
 			return "network.session", name, ""
+		// Who is authoring and under which generation, plus the two facts that
+		// only mean anything beside it: how many handoffs this session has run,
+		// and whether this instance is a local fork of it rather than part of it.
+		case name == "term", name == "authority", name == "migrations",
+			name == "fork", name == "host_lost", name == "migrating",
+			name == "term_refused", name == "term_stale", name == "handoff_bytes":
+			return "network.authority", name, ""
 		case strings.HasPrefix(name, "barrier_"):
 			return "network.barrier", strings.TrimPrefix(name, "barrier_"), ""
+		case strings.HasPrefix(name, "artifacts_"):
+			return "network.barrier", name, ""
 		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"),
 			strings.HasPrefix(name, "link_"):
 			return "network.link", name, ""
@@ -147,6 +156,8 @@ func snapshotSelectiveGroup(name string) (string, bool) {
 		return "snapshot.repair", true
 	}
 	switch {
+	case strings.HasPrefix(name, "relay_"):
+		return "snapshot.relay", true
 	case strings.HasPrefix(name, "manifest"):
 		return "snapshot.index", true
 	case strings.HasPrefix(name, "shard"), strings.HasPrefix(name, "pages_repaired"),

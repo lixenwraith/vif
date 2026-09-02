@@ -287,6 +287,24 @@ const (
 	SnapshotReplayRecords = 512
 	SnapshotReplayBytes   = 256 << 10
 
+	// NetworkSuccessionTicks bounds a succession. A survivor that has neither
+	// adopted a handoff nor been elected within it falls back to local
+	// continuation and says so.
+	//
+	// It is a deadline rather than a timer to elect by: nothing about the choice
+	// of successor depends on it, because a randomized or racing timer is exactly
+	// what would let two instances elect themselves in one term. What it bounds is
+	// how long an instance waits before admitting there is no succession — one
+	// convergence floor, which is the window the session already promises a whole
+	// authoritative world inside.
+	NetworkSuccessionTicks = SnapshotFloorKeyframeTicks
+
+	// NetworkMigrationBadgeTicks is how long the status bar shows MIGRATING after
+	// a handoff is adopted. The badge marks a transition rather than a state, so
+	// it is measured in ticks a person can read rather than held until something
+	// clears it.
+	NetworkMigrationBadgeTicks = 40
+
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one
 	// source arrive out of order and a high-water mark alone would discard epochs the
