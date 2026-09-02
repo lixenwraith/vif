@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -539,5 +540,195 @@ func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if convergedWire*2 >= len(deltaBody) {
 		t.Fatalf("a converged correction costs %d bytes against a %d-byte delta; "+
 			"the index is not buying its round trip", convergedWire, len(deltaBody))
+	}
+}
+
+// TestAuthorityContinuityCostAtTheStormHighWater is the Phase 7 measurement,
+// reported beside the Phase 6 numbers rather than asserted against a clock.
+//
+// Three things this phase adds have a price, and each is a different question:
+//
+//   - **What a handoff moves.** The succession itself — reports, votes and the
+//     record — plus the first correction each survivor pays under the new term.
+//     The record carries the membership, so it grows with the roster and with
+//     nothing else; the correction is an ordinary indexed one, which is the whole
+//     of requirement 5 stated as a number.
+//   - **What a relayed repair costs against a direct one at the same
+//     disagreement.** The pages are identical — a relay serves the authority's own
+//     content — so what differs is which link carries them and how many times the
+//     index crosses one.
+//   - **What retention costs a relay.** SnapshotManifestRetention indexes over a
+//     capture of this size, which is what a participant now holds so the ones
+//     behind it can be answered.
+func TestAuthorityContinuityCostAtTheStormHighWater(t *testing.T) {
+	peakTick, _ := findStormHighWater(t)
+	a := stormWorld(t, peakTick)
+
+	base, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("baseline capture: %v", err)
+	}
+	base.Header.Term, base.Header.Authority = network.FirstTerm, 1
+	keyframeBody, err := EncodeCorrection(base)
+	if err != nil {
+		t.Fatalf("keyframe encode: %v", err)
+	}
+
+	// The succession, at the roster this build allows. Every message is the real
+	// encoding: what a survivor floods, what it commits to, and what the successor
+	// publishes before it authors.
+	roster := make([]network.SessionParticipant, 0, parameter.MaxPlayers)
+	voters := make([]network.PeerID, 0, parameter.MaxPlayers)
+	for i := range parameter.MaxPlayers {
+		roster = append(roster, network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
+		voters = append(voters, network.PeerID(i+1))
+	}
+	links := make([]network.PeerID, 0, len(roster))
+	for _, p := range roster {
+		links = append(links, p.ID)
+	}
+	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
+		Term: network.FirstTerm + 1, From: 2, Lost: 1, Links: links,
+		RetainedTick: base.Header.Tick, Retained: parameter.SnapshotManifestRetention,
+	})
+	if err != nil {
+		t.Fatalf("report encode: %v", err)
+	}
+	voteBody, err := network.EncodeAuthorityVote(network.AuthorityVote{
+		Term: network.FirstTerm + 1, Voter: 2, Candidate: 2,
+	})
+	if err != nil {
+		t.Fatalf("vote encode: %v", err)
+	}
+	handoffBody, err := network.EncodeHandoff(network.HandoffRecord{
+		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1, Voters: voters,
+		Roster: roster, Anchor: a.JoinAnchor(),
+		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		EvidenceTick:      base.Header.Tick,
+	})
+	if err != nil {
+		t.Fatalf("handoff encode: %v", err)
+	}
+
+	// The first correction under the new term, for a survivor that agrees: the
+	// successor's index out and the ack back, and no state at all.
+	index, err := buildManifest(base, 2)
+	if err != nil {
+		t.Fatalf("successor manifest: %v", err)
+	}
+	manifestBody, err := EncodeManifest(index.Summary())
+	if err != nil {
+		t.Fatalf("manifest encode: %v", err)
+	}
+	mirror, err := buildManifest(cloneCapture(t, base), 2)
+	if err != nil {
+		t.Fatalf("mirror manifest: %v", err)
+	}
+	ack, _, _ := compareRequest(mirror, index.Summary())
+	if !ack.Converged() {
+		t.Fatal("a survivor holding the successor's own capture did not agree with it")
+	}
+	ack.Term = base.Header.Term
+	ackBody, err := EncodeCorrectionRequest(ack)
+	if err != nil {
+		t.Fatalf("ack encode: %v", err)
+	}
+
+	survivors := len(roster) - 1
+	succession := len(reportBody)*survivors + len(voteBody)*survivors + len(handoffBody)*survivors
+	adoption := (len(manifestBody) + len(ackBody)) * survivors
+	t.Logf("handoff at a roster of %d: report %d B, vote %d B, record %d B | "+
+		"succession %d B, first correction per survivor %d B, whole handoff %d B | "+
+		"a keyframe to every survivor would be %d B",
+		len(roster), len(reportBody), len(voteBody), len(handoffBody),
+		succession, len(manifestBody)+len(ackBody), succession+adoption,
+		len(keyframeBody)*survivors)
+
+	// The relayed path against the direct one, at the same disagreement: a
+	// receiver a whole cadence behind, which is the widest this world produces.
+	a.Tick(parameter.SnapshotCorrectionTicks)
+	next, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	next.Header.Term, next.Header.Authority = network.FirstTerm, 1
+	authority, err := buildManifest(next, 1)
+	if err != nil {
+		t.Fatalf("authority manifest: %v", err)
+	}
+	authorityBody, err := EncodeManifest(authority.Summary())
+	if err != nil {
+		t.Fatalf("manifest encode: %v", err)
+	}
+	stale, err := buildManifest(cloneCapture(t, base), 1)
+	if err != nil {
+		t.Fatalf("stale manifest: %v", err)
+	}
+	req, _, _ := compareRequest(stale, authority.Summary())
+	if req.Converged() {
+		t.Fatal("a cadence of storm motion left the two agreeing")
+	}
+	req.Term = next.Header.Term
+	reqBody, err := EncodeCorrectionRequest(req)
+	if err != nil {
+		t.Fatalf("request encode: %v", err)
+	}
+
+	// A relay answering from retention builds the same set the authority would,
+	// out of the index it kept over the authority's own capture.
+	relayIndex, err := buildManifest(cloneCapture(t, next), 1)
+	if err != nil {
+		t.Fatalf("relay index: %v", err)
+	}
+	if relayIndex.Root() != authority.Root() {
+		t.Fatal("a relay's index over the authority's capture does not reproduce its root")
+	}
+	relaySet, pages, err := buildShardSet(relayIndex, req)
+	if err != nil {
+		t.Fatalf("relayed shard set: %v", err)
+	}
+	relaySet.Served = 2
+	relayBody, err := EncodeShardSet(relaySet)
+	if err != nil {
+		t.Fatalf("relayed shard encode: %v", err)
+	}
+	if err := validateShardSet(relaySet, next.Header.Tick, 1, authority.Root(), next.Header); err != nil {
+		t.Fatalf("a relayed answer did not bind to the authority's manifest: %v", err)
+	}
+	directSet, _, err := buildShardSet(authority, req)
+	if err != nil {
+		t.Fatalf("direct shard set: %v", err)
+	}
+	directBody, err := EncodeShardSet(directSet)
+	if err != nil {
+		t.Fatalf("direct shard encode: %v", err)
+	}
+
+	// The authority's uplink carries the index once on the direct path and once on
+	// the relayed one; what the relay adds is a second index hop and the repair,
+	// both on its own link.
+	directWire := len(authorityBody) + len(reqBody) + len(directBody)
+	relayAuthorityWire := len(authorityBody)
+	relayOwnWire := len(authorityBody) + len(reqBody) + len(relayBody)
+	t.Logf("one repair of %d pages at the same disagreement: direct %d B on the "+
+		"authority's link | relayed %d B on the authority's link and %d B on the relay's | "+
+		"served %d B against %d B direct",
+		pages, directWire, relayAuthorityWire, relayOwnWire, len(relayBody), len(directBody))
+
+	// What retention costs the participant that holds it.
+	rows := 0
+	for _, s := range authority.Summary().Sections {
+		rows += int(s.Rows)
+	}
+	t.Logf("relay retention footprint: %d records of %d sections and %d indexed rows, "+
+		"against a %d B compressed keyframe each",
+		parameter.SnapshotManifestRetention, len(authority.Summary().Sections), rows,
+		len(keyframeBody))
+
+	// The one assertion: a relayed answer is the authority's content, so it may
+	// not cost more than the direct one. Anything else here is reported.
+	if len(relayBody) > len(directBody)+64 {
+		t.Fatalf("a relayed repair is %d bytes against %d direct; a relay serves the "+
+			"same pages and must not cost more to say so", len(relayBody), len(directBody))
 	}
 }

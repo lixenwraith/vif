@@ -264,11 +264,11 @@ func (u *authority) beginSuccession(lost network.PeerID) {
 func (u *authority) sendReport() {
 	u.mu.Lock()
 	term, local, lost := u.contested, u.local, u.lost
-	roster := slices.Clone(u.roster)
 	u.mu.Unlock()
 	if term == 0 || local == 0 {
 		return
 	}
+	roster := u.currentRoster()
 	tick, records := u.a.corrections.retentionEvidence()
 	rep := network.AuthorityReport{
 		Term: term, From: local, Lost: lost,
@@ -280,6 +280,44 @@ func (u *authority) sendReport() {
 		return
 	}
 	u.flood(network.MsgAuthorityReport, 0, body)
+}
+
+// currentRoster is the closed roster as the *world* holds it rather than as the
+// offer that admitted this instance described it.
+//
+// The difference matters for a session that grew after this participant arrived. A
+// mid-run joiner's offer names the lobby at the moment it dialled, so two
+// participants admitted a minute apart hold two different lists — and a succession
+// computed over them would use two different majorities. The cursor roster does
+// not have that problem: an arrival and a departure are barrier-bound crossings
+// that every instance applies at one agreed tick (D-11), so what the world holds is
+// the same list everywhere. The stored offer stays as the fallback for a run whose
+// world has not built its cursors yet.
+func (u *authority) currentRoster() []network.SessionParticipant {
+	var out []network.SessionParticipant
+	u.a.world.RunSafe(func() {
+		w := u.a.world
+		for slot := range parameter.MaxPlayers {
+			e := w.Resources.Player.Slot(uint8(slot))
+			if e == 0 {
+				continue
+			}
+			c, ok := w.Components.Cursor.GetComponent(e)
+			if !ok || c.PeerID == 0 {
+				continue
+			}
+			out = append(out, network.SessionParticipant{
+				ID: network.PeerID(c.PeerID), Slot: uint8(slot),
+			})
+		}
+	})
+	slices.SortFunc(out, func(a, b network.SessionParticipant) int { return int(a.ID) - int(b.ID) })
+	if len(out) == 0 {
+		u.mu.Lock()
+		out = slices.Clone(u.roster)
+		u.mu.Unlock()
+	}
+	return out
 }
 
 // linkedRoster is the roster members this instance is directly linked to, which is
@@ -371,12 +409,12 @@ func (u *authority) tryVote() {
 		return
 	}
 	term, lost, local := u.contested, u.lost, u.local
-	roster := slices.Clone(u.roster)
 	reports := make(map[network.PeerID]network.AuthorityReport, len(u.reports))
 	for k, v := range u.reports {
 		reports[k] = v
 	}
 	u.mu.Unlock()
+	roster := u.currentRoster()
 
 	if len(reports) < network.Majority(len(roster)) {
 		return
@@ -407,7 +445,8 @@ func (u *authority) tryVote() {
 		return
 	}
 	vlog.Info("app", "msg", "succession vote cast",
-		"term", uint64(term), "voter", uint64(local), "candidate", uint64(candidate))
+		"term", uint64(term), "voter", uint64(local), "candidate", uint64(candidate),
+		"roster", len(roster), "reports", len(reports))
 	u.flood(network.MsgAuthorityVote, 0, body)
 }
 
@@ -416,6 +455,7 @@ func (u *authority) tryVote() {
 // majority is what makes that safe: every participant grants one vote per term, so
 // two candidates cannot both reach one.
 func (u *authority) tryPublish() {
+	roster := u.currentRoster()
 	u.mu.Lock()
 	if u.contested == 0 || u.published || u.local == 0 || u.vote != u.local {
 		u.mu.Unlock()
@@ -427,7 +467,7 @@ func (u *authority) tryPublish() {
 			voters = append(voters, voter)
 		}
 	}
-	if len(voters) < network.Majority(len(u.roster)) {
+	if len(voters) < network.Majority(len(roster)) {
 		u.mu.Unlock()
 		return
 	}
@@ -438,7 +478,7 @@ func (u *authority) tryPublish() {
 		Authority:         u.local,
 		Predecessor:       u.lost,
 		Voters:            voters,
-		Roster:            slices.Clone(u.roster),
+		Roster:            roster,
 		Anchor:            u.anchor,
 		BarrierDelayTicks: u.delay,
 	}
@@ -485,8 +525,9 @@ func (u *authority) giveUp() {
 //
 // from is the link the record arrived on, or zero when this instance produced it.
 func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
+	roster := u.currentRoster()
 	u.mu.Lock()
-	if err := rec.Validate(u.roster); err != nil {
+	if err := rec.Validate(roster); err != nil {
 		u.mu.Unlock()
 		return err
 	}
@@ -531,7 +572,7 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 	vlog.Warn("app", "msg", "authority handed off",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority),
 		"predecessor", uint64(rec.Predecessor), "voters", len(rec.Voters),
-		"evidence_tick", rec.EvidenceTick, "local", mine)
+		"roster", len(rec.Roster), "evidence_tick", rec.EvidenceTick, "local", mine)
 	u.a.ctx.SetStatusMessage(
 		fmt.Sprintf("Authority moved to participant %d (term %d)", rec.Authority, rec.Term),
 		2*parameter.StatusMessageDefaultTimeout, false)

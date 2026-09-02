@@ -1,0 +1,45 @@
+# Headless participant half of the Phase 7 authority-continuity run.
+#
+# Both participants run this same script: they are symmetric by construction, and
+# what the run is about is that they reach the same answer about who authors from
+# the same closed roster rather than from anything asymmetric in their input.
+#
+# Pair with phase7-host.toml, started once the coordinator reports "hosting opened
+# mid-run". As in every earlier pair, each action sits well beyond any plausible
+# entry tick: a joiner enters at whatever tick the coordinator had reached, and a
+# script action at an absolute tick the run has already passed is an error rather
+# than a no-op.
+#
+# The tick budget outlives the coordinator on purpose. What this half has to show
+# is what it does *after* the process it was following is killed — whether it
+# adopted a handoff, or fell back to local continuation and said so.
+schema = 1
+ticks = 1600
+width = 120
+height = 40
+
+[[action]]
+tick = 1000
+command = "god"
+
+# Motion after the join, so this participant's prediction has something to drift
+# and its own crossings have something to be replayed onto.
+[[action]]
+tick = 1010
+intent = "motion_left"
+count = 6
+
+[[action]]
+tick = 1300
+intent = "motion_up"
+count = 6
+
+[[action]]
+tick = 1700
+intent = "motion_right"
+count = 8
+
+[[action]]
+tick = 2100
+intent = "motion_down"
+count = 4

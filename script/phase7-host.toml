@@ -1,0 +1,60 @@
+# Headless coordinator half of the Phase 7 authority-continuity run.
+#
+# Phase 6's pair asked what a correction puts on the wire. This one asks what
+# happens to a session when the process holding that answer goes away, and it is
+# the coordinator's half: it opens the session, admits two participants, drives a
+# storm, and is killed in the middle of it by script/phase7-migration.sh.
+#
+# Nothing here is Phase 7-specific except the tick budget, which is deliberately
+# longer than the script's kill: the point of the run is that the process is
+# killed rather than that it stops.
+#
+#   ./bin/vif -script script/phase7-host.toml \
+#     -l=log/phase7-host -lv info -ls afs -lt 100 -j
+#
+# What to read afterwards is `network.authority` on all three logs: the term each
+# instance holds, the participant it believes is authoring, how many handoffs it
+# has adopted and whether it has become a local fork.
+schema = 1
+ticks = 2000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_right"
+count = 6
+
+# Hosting opens here. Ticks to this point run flat out; from here the run is
+# wall-paced at the 50 ms game interval, which is what makes a wall-clock link
+# shape mean anything to it.
+[[action]]
+tick = 200
+command = "host 127.0.0.1:7777"
+
+# A quiet stretch: this is where the retained ring fills on every participant,
+# which is the eligibility evidence a succession is decided on.
+[[action]]
+tick = 500
+intent = "motion_down"
+count = 4
+
+# Then the storm, so the coordinator is killed with the world at its busiest and
+# the survivors are holding the widest disagreement this fixture produces.
+[[action]]
+tick = 700
+event = "StormSpawnRequest"
+
+[[action]]
+tick = 900
+event = "SwarmSpawnRequest"
+payload = "x = 64\ny = 18"
+
+[[action]]
+tick = 1400
+intent = "motion_up"
+count = 8

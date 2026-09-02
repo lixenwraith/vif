@@ -216,13 +216,31 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		// This end sends no probes during the gate, so an echo here is a stray from
 		// a previous connection. Nothing to fold it into.
 		return true
-	case MsgStateCorrection:
+	case MsgStateCorrection, MsgStateManifest, MsgStateRequest, MsgStateShard, MsgStateUnserved:
 		// Swallowed rather than held. The host broadcasts its cadence to every peer
 		// it has, and this stream became one the moment the participant was admitted
 		// — before the world was read for it (D-22) — so correction chunks arrive
 		// interleaved with the gate. There is nothing to keep: this participant is
 		// about to install a whole world, and every correction before that describes
 		// one it does not have yet.
+		//
+		// The selective exchange is swallowed for the same reason and one more: an
+		// index, a request or a repair is a question about a world this stream's
+		// owner does not hold, and it cannot answer one until it does. Leaving them
+		// out of this list is what made a second mid-run join fail outright — the
+		// gate read a manifest where it wanted the start record and refused the
+		// join — as soon as a session had a participant the host was already
+		// publishing an index to.
+		return true
+	case MsgAuthorityReport, MsgAuthorityVote, MsgAuthorityHandoff:
+		// Held rather than swallowed. These say who is allowed to author, which is
+		// exactly what a joiner needs and cannot re-derive: it adopts a term from
+		// the offer, and a succession that ran between the offer and the install
+		// would otherwise leave it following an authority that has stopped.
+		if len(p.deferred) >= maxDeferredJoinFrames {
+			p.deferred = append(p.deferred[:0], p.deferred[1:]...)
+		}
+		p.deferred = append(p.deferred, msg)
 		return true
 	case MsgEvent, MsgStateSync, MsgStateDigest, MsgDisconnect:
 		// Bounded, because this buffer is filled by the peer on the other end of the
