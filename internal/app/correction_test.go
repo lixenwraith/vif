@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -714,4 +715,151 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("the join never got its world")
 	}
+}
+
+// TestCorrectionsLeaveOneOrbPerArmedWeapon is the D-4/D-13 boundary a correction
+// used to cross, and the shape of the defect is worth stating because nothing in
+// the suite could see it.
+//
+// A weapon orb is a player-domain entity, and its handle means nothing on any other
+// instance. The index that named a cursor's orbs by weapon type lived on
+// `CursorViewComponent`, which is attached to the *shared* cursor, so it travelled
+// in every capture: the host does not simulate a guest's weapons, its copy of that
+// array is zero, and each correction handed the guest back zeroes over its own live
+// handles. The next tick found three missing references and spawned three
+// replacements. The entities the zeroes had named stayed in the Orb store —
+// protected from decay, no longer followed by updateOrbs, and drawn by a renderer
+// that iterates the store — so an armed guest accumulated three permanently
+// rendered, permanently frozen orbs per correction until the player-domain per-cell
+// limit started rejecting them.
+//
+// The index is derived from the Orb store now and no shared component names a
+// player entity at all, which is what this asserts: after repeated corrections the
+// guest holds exactly one orb per armed weapon, and every one of them is its own.
+func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
+	const seed = 0x5EEDBEEF
+	host, guest := pair(t, seed, 0)
+	mirrorCursors(t, host, guest)
+	advance := func() { host.Tick(1); guest.Tick(1) }
+
+	var cursor core.Entity
+	guest.World().RunSafe(func() { cursor = guest.World().Resources.Player.Slot(1) })
+
+	armed := []component.WeaponType{component.WeaponRod, component.WeaponLauncher, component.WeaponDisruptor}
+	for _, wt := range armed {
+		guest.Context().PushLocal(event.EventWeaponAddRequest,
+			&event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
+	}
+	guest.Settle()
+	advance()
+
+	if got := orbsPerWeapon(guest, cursor); got != [component.WeaponCount]int{1, 1, 1} {
+		t.Fatalf("orbs after arming = %v, want one per armed weapon", got)
+	}
+	before := statOf(guest, "snapshot.corrections_applied")
+
+	for round := range 6 {
+		deliverCorrection(t, host, []*App{guest}, advance)
+		advance()
+
+		// The guest still authors its own cursor, or the rest is vacuous: a cursor
+		// this instance stopped simulating grows no orbs at all (D-2).
+		if !simulatesLocally(guest, cursor) {
+			t.Fatalf("round %d: the guest stopped simulating its own cursor %d", round, cursor)
+		}
+		if got := orbsPerWeapon(guest, cursor); got != [component.WeaponCount]int{1, 1, 1} {
+			t.Fatalf("round %d: orbs = %v, want exactly one per armed weapon", round, got)
+		}
+		if got := orbCount(guest); got != len(armed) {
+			t.Fatalf("round %d: the world holds %d orbs, the roster justifies %d",
+				round, got, len(armed))
+		}
+	}
+	if statOf(guest, "snapshot.corrections_applied") <= before {
+		t.Fatal("no correction was applied; the pile-up had no chance to form")
+	}
+}
+
+// TestCorrectionKeepsTheReceiversOwnCursorState is the other half of the same
+// boundary. The owner-authored set has exactly one author and travels as values on
+// its own stream (D-13); what a capture holds for a cursor the *receiver* drives is
+// the sender's mirror of that stream, a sync period behind at best. A correction
+// that adopted it rolled the guest's own energy, heat and loadout back to whatever
+// the host had last heard, five times a second.
+//
+// The grant is settled and the correction published with no tick in between, so the
+// host cannot have been told: what it publishes is provably its stale mirror, and
+// the guest's own value is the only one with an author.
+func TestCorrectionKeepsTheReceiversOwnCursorState(t *testing.T) {
+	const seed = 0x5EEDBEEF
+	host, guest := pair(t, seed, 0)
+	mirrorCursors(t, host, guest)
+	advance := func() { host.Tick(1); guest.Tick(1) }
+
+	var cursor core.Entity
+	guest.World().RunSafe(func() { cursor = guest.World().Resources.Player.Slot(1) })
+
+	guest.Context().PushLocal(event.EventWeaponAddRequest,
+		&event.WeaponAddRequestPayload{Entity: cursor, Weapon: component.WeaponRod})
+	guest.Settle()
+
+	armed := rodCharges(guest, cursor)
+	if armed == 0 {
+		t.Fatal("the guest did not arm its own cursor")
+	}
+	if mirrored := rodCharges(host, cursor); mirrored == armed {
+		t.Fatalf("the host already mirrors %d charges without a tick having passed", mirrored)
+	}
+
+	deliverCorrectionNow(t, host, []*App{guest}, advance)
+
+	if got := rodCharges(guest, cursor); got != armed {
+		t.Fatalf("the correction rewrote the guest's own loadout to %d charges, it authored %d",
+			got, armed)
+	}
+	// And the host's own cursor is still the host's to author: the guest holds
+	// whatever the correction carried for it, not a value of its own.
+	if !simulatesLocally(guest, cursor) {
+		t.Fatal("the guest stopped simulating the cursor it authors")
+	}
+}
+
+// rodCharges reads one instance's copy of a cursor's rod loadout.
+func rodCharges(a *App, cursor core.Entity) (n int) {
+	a.World().RunSafe(func() {
+		if c, ok := a.World().Components.Weapon.GetComponent(cursor); ok {
+			n = c.Charges[component.WeaponRod]
+		}
+	})
+	return n
+}
+
+// orbsPerWeapon counts one cursor's orbs by weapon type, from the store rather than
+// from any index: the count this pins is the number of entities that exist.
+func orbsPerWeapon(a *App, cursor core.Entity) (out [component.WeaponCount]int) {
+	a.World().RunSafe(func() {
+		w := a.World()
+		for _, e := range w.Components.Orb.Entities() {
+			orb, ok := w.Components.Orb.GetComponent(e)
+			if !ok || orb.OwnerEntity != cursor {
+				continue
+			}
+			if orb.WeaponType >= 0 && orb.WeaponType < component.WeaponCount {
+				out[orb.WeaponType]++
+			}
+		}
+	})
+	return out
+}
+
+// orbCount is every orb in one instance's world, whoever owns it.
+func orbCount(a *App) (n int) {
+	a.World().RunSafe(func() { n = a.World().Components.Orb.CountEntities() })
+	return n
+}
+
+// simulatesLocally reports whether an instance still authors a cursor (D-2).
+func simulatesLocally(a *App, cursor core.Entity) (ok bool) {
+	a.World().RunSafe(func() { ok = a.World().SimulatesLocally(cursor) })
+	return ok
 }

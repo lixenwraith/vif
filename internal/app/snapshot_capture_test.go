@@ -1,10 +1,13 @@
 package app
 
 import (
+	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
@@ -137,6 +140,87 @@ func TestCaptureCarriesNoPlayerState(t *testing.T) {
 	if live == 0 {
 		t.Fatal("the run holds no player-domain entities; the exclusion proves nothing")
 	}
+}
+
+// TestCaptureNamesNoPlayerDomainEntity is the same boundary one level in, and it
+// is the check that would have caught the orb defect at its source.
+//
+// A capture excludes player-domain *entities* by construction — every store loop
+// skips them — but a shared entity's components are copied whole, and a component
+// field is free to hold whatever entity its writer put there. `CursorViewComponent`
+// held an array of the local cursor's orb entities: player-domain handles, on a
+// shared cursor, in every capture. The live cursor-state sync excluded the array by
+// hand and the capture had no such rule, so a correction handed the receiver another
+// instance's zeroes and stranded the entities its own handles had named.
+//
+// So the assertion is on the reference rather than on the store: no core.Entity
+// anywhere in a capture's world may name a player-domain entity. Reflection is the
+// point — a field added to any shared component is covered without anyone
+// remembering this rule, which is what the hand-written exclusion could not offer.
+func TestCaptureNamesNoPlayerDomainEntity(t *testing.T) {
+	a := mustHeadless(t, 0x5A4E, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(120)
+
+	// The cursor is armed first, because the defect this pins needs a shared entity
+	// that *has* something player-domain to point at: an unarmed run holds no orbs
+	// and the walk below would pass over an empty array.
+	var cursor core.Entity
+	a.World().RunSafe(func() { cursor = a.World().Resources.Player.Slot(0) })
+	for _, wt := range []component.WeaponType{component.WeaponRod, component.WeaponLauncher, component.WeaponDisruptor} {
+		a.Context().PushLocal(event.EventWeaponAddRequest,
+			&event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
+	}
+	a.Settle()
+	a.Tick(2)
+	if got := orbsPerWeapon(a, cursor); got != [component.WeaponCount]int{1, 1, 1} {
+		t.Fatalf("orbs = %v; the walk would have no player entity to find", got)
+	}
+
+	cap, err := a.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	found := namedPlayerEntities(reflect.ValueOf(cap.World), "world")
+	if len(found) > 0 {
+		sort.Strings(found)
+		t.Fatalf("a capture names player-domain entities:\n  %s", strings.Join(found, "\n  "))
+	}
+}
+
+// namedPlayerEntities walks a value and returns the path of every core.Entity in it
+// that names a player-domain entity. Zero is not one: it is the absence of a
+// reference, which several shared components use as a sentinel.
+func namedPlayerEntities(v reflect.Value, path string) []string {
+	if v.Type() == reflect.TypeOf(core.Entity(0)) {
+		if e := core.Entity(v.Uint()); e != 0 && e.Domain() != core.DomainShared {
+			return []string{path + " = " + strconv.FormatUint(uint64(e), 10) +
+				" (domain " + strconv.Itoa(int(e.Domain())) + ")"}
+		}
+		return nil
+	}
+	var out []string
+	switch v.Kind() {
+	case reflect.Struct:
+		for i := range v.NumField() {
+			out = append(out, namedPlayerEntities(v.Field(i), path+"."+v.Type().Field(i).Name)...)
+		}
+	case reflect.Slice, reflect.Array:
+		for i := range v.Len() {
+			out = append(out, namedPlayerEntities(v.Index(i), path+"["+strconv.Itoa(i)+"]")...)
+		}
+	case reflect.Map:
+		for _, k := range v.MapKeys() {
+			out = append(out, namedPlayerEntities(k, path+"<key>")...)
+			out = append(out, namedPlayerEntities(v.MapIndex(k), path+"["+k.String()+"]")...)
+		}
+	case reflect.Pointer, reflect.Interface:
+		if !v.IsNil() {
+			out = append(out, namedPlayerEntities(v.Elem(), path)...)
+		}
+	}
+	return out
 }
 
 // TestVerifyCaptureRejectsATamperedBody keeps a corrupted or truncated transfer

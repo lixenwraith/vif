@@ -620,7 +620,10 @@ type CompositeDestroyRequestPayload struct {
 // quasar, loot and species state, which is re-derived and must not travel.
 // ShieldActive, ShieldInvRxSq/RySq and EmberActive reproduce the remote cursor's
 // presentation and owner-local interactions. No shared outcome reads this snapshot.
-// CursorViewComponent.Orbs is absent: it names player-domain entities (D-4).
+// CursorViewComponent carries no player-domain reference for this payload to
+// exclude: its orb array named player entities, and a per-payload exclusion could
+// not stop a shared capture from copying the whole component, so WeaponSystem
+// derives that index from the Orb store instead (D-4).
 // Durations are nanoseconds so the TOML round trip is exact.
 type CursorStatePayload struct {
 	WeaponCharges  []int   `toml:"weapon_charges"`

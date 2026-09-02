@@ -70,6 +70,14 @@ func liveScript(seed uint64, steps int) journal.FuzzOptions {
 // same spawn requests, so the two rosters hold the same shared entities in the same
 // slots (D-11); what differs is Control and the local binding, which is the whole
 // of what D-2 keys on. a drives slot 0 and mirrors slot 1; b is its inverse.
+//
+// Both cursors are stamped with the participant identity that owns them — pair
+// links the two through NewLoopbackPair(1, 2), so slot 0 is participant 1 and slot
+// 1 is participant 2. That is not decoration. An install re-derives control from
+// the identity rather than adopting the capture's answer (D-13), so a roster whose
+// PeerIDs name nobody leaves *every* cursor ControlRemote on the guest at its first
+// correction: the guest stops simulating its own cursor, and every criterion that
+// drives it past a correction quietly proves nothing after the first one.
 func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 	t.Helper()
 
@@ -77,10 +85,16 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 		x.Context().PushEventOrigin(event.EventCursorSpawnRequest,
 			&event.CursorSpawnRequestPayload{
 				Slot: 1, X: 20, Y: 10,
-				Control: uint8(component.ControlRemote), PeerID: 1,
+				Control: uint8(component.ControlRemote), PeerID: 2,
 			}, event.OriginDebug)
 		x.Settle()
 	}
+	a.World().RunSafe(func() {
+		w := a.World()
+		if c, ok := w.Components.Cursor.GetPtr(w.Resources.Player.Slot(0)); ok {
+			c.Control, c.PeerID = component.ControlHuman, 1
+		}
+	})
 
 	// b owns the second cursor and mirrors the first
 	b.World().RunSafe(func() {
@@ -89,7 +103,7 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 			c.Control, c.PeerID = component.ControlRemote, 1
 		}
 		if c, ok := w.Components.Cursor.GetPtr(w.Resources.Player.Slot(1)); ok {
-			c.Control, c.PeerID = component.ControlHuman, 0
+			c.Control, c.PeerID = component.ControlHuman, 2
 		}
 	})
 	b.Context().PushEventOrigin(event.EventCursorSetLocalRequest,

@@ -307,9 +307,40 @@ keeps configuration in the FSM without addressing the roster through one
 The transport is `CursorStatePayload`, written by `NetworkSystem` and by nothing
 else, and only onto a cursor `SimulatesLocally` rejects and whose roster slot
 matches the payload's. Shield and Combat travel as their cursor fields alone.
-`CursorViewComponent.Orbs` does not travel: it names player-domain entities
-(D-4). Shield geometry and ember state reproduce the remote cursor's presentation
+Shield geometry and ember state reproduce the remote cursor's presentation
 and owner-local interactions; no shared outcome reads the periodic snapshot.
+
+Two things about the set are stronger than "it travels on its own stream", and
+both were written from the same defect.
+
+*No component of a shared entity may name a player-domain one.* This used to read
+as a rule about the transport — `CursorViewComponent.Orbs` indexed the local
+cursor's weapon orbs by weapon type, `readCursorState` left the array out because
+it names player entities (D-4), and that was taken to be the whole of it. It was
+not. A shared *capture* copies whole components, so the array travelled in every
+correction: the host does not simulate a guest's weapons, its copy of that cursor's
+array is zero, and each correction wrote those zeroes over the guest's live
+handles. `ensureOrbs` then read a zero as "this weapon has no orb" and created
+another — while the entities the zeroes had named stayed in the `Orb` store,
+protected from decay, no longer advanced by `updateOrbs`, and still drawn by a
+renderer that iterates the store. Three orbs per correction, permanently rendered
+and permanently frozen, until the player-domain per-cell limit began rejecting
+them. The index is `WeaponSystem`'s now and is derived from the `Orb` store, which
+already names each orb's owner and weapon type; the component is values only, and
+`TestCaptureNamesNoPlayerDomainEntity` walks a capture for a `core.Entity` naming
+any player-domain entity rather than trusting one store's exclusion.
+
+*A receiver keeps its own.* A capture carries the owner-authored components
+because a joiner has to materialise a cursor it has never held. But for a cursor
+the *receiver* authors, what the capture holds is the sender's mirror of a stream
+the sender does not write — a sync period behind at best — so an install that
+adopted it made every correction roll the receiver's own energy, heat, shield and
+loadout back to whatever the host had last heard. `snapshot_roster.go` reads the
+set before the stores are replaced and writes it back for the cursors this
+instance still authors once the control assignment has been re-derived, which is
+the same seam and the same rule as the control assignment itself. It applies
+inside a session only: outside one there is no second author, the capture is this
+instance's own world, and an install must mean the same thing whoever is watching.
 
 Shield/species collision used to contradict that last sentence: quasar, swarm,
 storm, eye, pylon and snake all re-derived shared knockback from whichever shield
@@ -568,14 +599,17 @@ build and there is no per-process origin left for a transfer to get wrong.
 epoch differs installs the same bytes and diverges — which puts SimEpoch in
 session identity beside the seed.
 
-Two things an install re-derives rather than adopts, and both are D-13 rather than
-D-19. The slot→entity roster mirrors the cursor store and nothing updated it, so
-after the shared entities were replaced it still named the destroyed ones. And a
-cursor's *control assignment* travels inside a shared component: a capture carries
-the sender's answer to which cursor it drives, and a receiver that adopted it
-would start simulating the sender's cursor and stop simulating its own. Both are
-rebuilt from the installed store by `rebindCursorRosterLocked`, keyed by the
-participant identity the handshake assigned.
+Three things an install does not adopt, and all three are D-13 rather than D-19.
+The slot→entity roster mirrors the cursor store and nothing updated it, so after
+the shared entities were replaced it still named the destroyed ones. A cursor's
+*control assignment* travels inside a shared component: a capture carries the
+sender's answer to which cursor it drives, and a receiver that adopted it would
+start simulating the sender's cursor and stop simulating its own. Both are rebuilt
+from the installed store by `rebindCursorRosterLocked`, keyed by the participant
+identity the handshake assigned. The third is the owner-authored set on the cursors
+the receiver itself authors: it is not re-derived but *kept*, read before the write
+and put back after it by the same function, because the capture's copy of it is the
+sender's mirror of a stream the sender does not write. D-13 says why.
 
 **D-20 A shared region is steered only by replicated events.** Every FSM region
 is shared state and `fsm.<region>` is compared across the session, so a region
@@ -1252,6 +1286,9 @@ fails the build when the code stops matching the declaration.
 | `TestSharedSpeciesCrossesOnlyOwnedShieldImpact`, `TestCursorDefeatTransitionCrossesCombinedOwnerState`, `TestMetaDefeatGateRequiresEveryRosteredCursor` | `internal/system` | D-13: a remote shield cannot produce a second impact; defeat state crosses instead of being read from slot zero |
 | `TestRemoteCursorRejectsOwnerAuthoredWrites`, `TestRemoteCursorStateDoesNotAgeLocally` | `internal/system` | D-2: neither a grant nor a per-tick loop writes a cursor this instance does not simulate |
 | `TestCursorStateSyncWritesOnlyACoherentRemoteCursor`, `TestDepartureReleasesTheSlotSyncSequence` | `internal/system` | D-13 receive side: entity and slot must agree, sequences gate replays, a released slot accepts a successor |
+| `TestCaptureNamesNoPlayerDomainEntity` | `internal/app` | D-4/D-13: a reflective walk of a capture's world finds no `core.Entity` naming a player-domain entity, so a component of a shared entity cannot carry a handle that means nothing on the receiver |
+| `TestCorrectionsLeaveOneOrbPerArmedWeapon`, `TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated` | `internal/app`, `internal/system` | D-4/D-2: repeated corrections leave an armed guest exactly one orb per weapon, and the store-derived index recovers an existing orb, drops a duplicate, a remote-owned one and one whose charges are gone |
+| `TestCorrectionKeepsTheReceiversOwnCursorState` | `internal/app` | D-13: a correction published with no tick between the grant and the capture cannot carry the guest's loadout, and does not overwrite it |
 | `TestBusPayloadsNameOnlySharedEntities` | `internal/app` | D-4 over a soak, via a dispatch tap |
 | `TestLocalEventsCarryThePlayerDomain` | `internal/app` | D-10: a Local-class record is tagged player, against a shrinking exemption set |
 | `TestDomainAuditSoakClean` | `internal/app` | Zero component-domain violations over a 3,000-step soak |

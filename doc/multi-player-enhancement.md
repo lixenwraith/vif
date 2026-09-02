@@ -36,7 +36,7 @@ Phases 1–5 are implemented.
 | Local input | The producing peer applies ordinary crossings immediately. Remote peers retain the receive-side playout lead. |
 | Gold typing | A correctly typed shared gold member is destroyed on the producing peer before the next frame or tick; the destruction still crosses and is corrected authoritatively. |
 | Shared authority | The host's Shared world is canonical. Guests run the same deterministic simulation between corrections and may differ provisionally. |
-| Player state | Each instance simulates only its local Player domain. D-13 cursor values have exactly one owner and travel as values. |
+| Player state | Each instance simulates only its local Player domain. D-13 cursor values have exactly one owner and travel as values; a capture carries them so a joiner can materialise a cursor, and a receiver keeps its own over any it authors. No component of a shared entity names a player-domain entity. |
 | Corrections | Whole keyframes and exact deltas use a versioned, bounded deflate envelope, then the existing chunk transport. |
 | Join/reconnect | A running solo game may use `:host <addr>`; join and reconnect install a current capture through the same staging path. |
 | Cadence | Each directly linked peer gets a bounded plan derived from measured link state. The convergence floor remains non-negotiable. |
@@ -179,8 +179,17 @@ Phase 6 has two coupled deliverables, ordered by user-visible cost.
 ### 5.1 Content-addressed selective correction
 
 Build a deterministic correction index over stable capture sections and bounded
-pages. The index must exclude Player-domain and D-13 owner-authored state exactly
-as captures do. A peer compares the host root with its matching baseline:
+pages. The index must exclude Player-domain state exactly as captures do, and must
+handle the D-13 owner-authored set the way an install does rather than the way its
+absence was once assumed: a capture *carries* those components, because a joiner
+has to materialise a cursor it has never held, and the receiver keeps its own
+values for the cursors it authors instead of adopting the sender's mirror
+(`snapshot_roster.go`). A page hash computed over a receiver-authored cursor will
+therefore mismatch forever, and a selective repair that "fixed" it would undo the
+owner. Either exclude those cells from the hashed surface or make the repair a
+no-op for them; do not let a root disagreement that no shard can close drive an
+endless keyframe fallback. A peer compares the host root with its matching
+baseline:
 
 1. Equal root: record convergence and send no correction body.
 2. Different root: exchange the minimum child hashes needed to identify mismatched
@@ -233,7 +242,9 @@ At minimum, Phase 6 must prove:
 - a healthy equal guest receives hash metadata but no state body;
 - one injected store/page mismatch repairs only that shard and restores the root;
 - a missing or corrupt proof is refused and reaches a bounded keyframe fallback;
-- selective apply never changes Player-domain or D-13 owner-authored state;
+- selective apply never changes Player-domain state, nor the D-13 owner-authored
+  set of a cursor the receiver authors, and a persistent hash disagreement over
+  those cells does not degrade into a repeated keyframe fallback;
 - loss, duplication and supersession cannot assemble mixed-baseline state;
 - rapid local cursor motion and a full gold sequence remain tick-free locally;
 - replay preserves local actions issued after the authority's baseline exactly once;

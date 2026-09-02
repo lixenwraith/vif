@@ -16,7 +16,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Shield | `shield.{active,shield_hit,cursor_rejects,disabled_rejects}`, `player.<slot>.shield.active` | `NewShieldSystem` | Resolved shield handlers/update | `Init` / player reset | Generic only |
 | Heat | `heat.{current,overheat,at_max,ember,cursor_rejects,disabled_rejects}`, `player.<slot>.heat.*` | `NewHeatSystem` | Resolved heat handlers/update | `Init` / player reset | Generic only |
 | Boost | `boost.{active,remaining,truncated,cursor_rejects,disabled_rejects}`, `player.<slot>.boost.*` | `NewBoostSystem` | Resolved boost handlers/update | `Init` / player reset | Generic only |
-| Weapon | `weapon.{rod,launcher,disruptor,orbs,*_fired,cursor_rejects,disabled_rejects}`, `player.<slot>.weapon.*` | `NewWeaponSystem` | Resolved fire/weapon handlers | `Init` / player reset | Generic only |
+| Weapon | `weapon.{rod,launcher,disruptor,orbs,*_fired,orbs_reaped,cursor_rejects,disabled_rejects}`, `player.<slot>.weapon.*` | `NewWeaponSystem` | Resolved fire/weapon handlers | `Init` / player reset | Generic only |
 | Typing | `typing.{correct,errors,max_streak,buf_delete_hwm,cursor_rejects,disabled_rejects}`, `player.<slot>.typing.max_streak` | `NewTypingSystem` | Resolved typing/delete paths | `Init` / player reset | Generic only |
 | Composite | None | — | — | — | — |
 | Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers/update and buffer observation | `Init` | Generic only |
@@ -426,6 +426,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `typing.cursor_rejects` (int) | Requests rejected because typing could not resolve a roster cursor. |
 | `typing.disabled_rejects` (int) | Action requests dropped while the typing system was disabled. |
 | `wall.buf_pending_push_checks_hwm` (int) | High-water live length of the reusable pending push checks buffer/state collection. |
+| `weapon.orbs_reaped` (int) | Orbs the `Orb` store held that no loadout justified — a duplicate, one owned by a cursor this instance does not simulate, or one whose charges are gone. Zero is the ordinary reading; a rising count is an orb lifecycle the store-derived index disagrees with. |
 | `weapon.cursor_rejects` (int) | Requests rejected because weapon could not resolve a roster cursor. |
 | `weapon.disabled_rejects` (int) | Action requests dropped while the weapon system was disabled. |
 | `event.dead_by_type` (string) | Snapshot-cadence sparse `EventType=count` dead-letter summary. |
