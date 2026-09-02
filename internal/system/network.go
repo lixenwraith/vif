@@ -79,17 +79,18 @@ type NetworkSystem struct {
 	statDuplicates     *atomic.Int64
 	statDigestMismatch *atomic.Int64
 
-	digestHistory   [parameter.NetworkEpochWindow]stateDigest
-	pendingDigest   [parameter.MaxPlayers + 1]stateDigest
-	statDriftPart   *status.AtomicString
-	statDriftTick   *atomic.Int64
-	statPreInstall  *atomic.Int64
-	statJoinLag     *atomic.Int64
-	statLag         *atomic.Int64
-	statStale       *atomic.Bool
-	statLocalNow    *atomic.Int64
-	statCorrections *atomic.Int64
-	statForged      *atomic.Int64
+	digestHistory      [parameter.NetworkEpochWindow]stateDigest
+	pendingDigest      [parameter.MaxPlayers + 1]stateDigest
+	statDriftPart      *status.AtomicString
+	statDriftTick      *atomic.Int64
+	statPreInstall     *atomic.Int64
+	statAgreedRestored *atomic.Int64
+	statJoinLag        *atomic.Int64
+	statLag            *atomic.Int64
+	statStale          *atomic.Bool
+	statLocalNow       *atomic.Int64
+	statCorrections    *atomic.Int64
+	statForged         *atomic.Int64
 
 	// The link measurement, published for the worst peer this instance has. It is
 	// the transport's own estimate rather than anything this system derives: what
@@ -131,6 +132,20 @@ type NetworkSystem struct {
 	suffixBytes   int
 	lostTick      uint64
 	suffixDropped int64
+
+	// agreed is the bounded set of barrier-bound artifacts this instance has
+	// already applied and whose apply tick a correction may still predate.
+	//
+	// The suffix above answers "what did this participant do that the authority
+	// has not described yet"; this answers the same question for the three
+	// artifacts nobody replays. An arrival applies at one agreed tick on every
+	// instance, but a guest running ahead applies it before the authority's next
+	// capture contains it — and installing that capture then undoes the arrival
+	// with nothing left to put it back, because the scheduled copy was consumed
+	// when it applied. The membership test is the barrier's own: an artifact whose
+	// apply tick is past the installed world's tick is not in that world, so it is
+	// scheduled again rather than lost.
+	agreed []barrierArtifact
 
 	// Last reported transport loss, so a new one is logged once rather than per tick.
 	lastLostIn  uint64
@@ -311,6 +326,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statDriftPart = s.textStat(reg, "network.drift_part")
 	s.statDriftTick = s.intStat(reg, "network.drift_tick")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
+	s.statAgreedRestored = s.intStat(reg, "network.artifacts_restored")
 	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
 	s.statLag = s.intStat(reg, "network.lag_ticks")
 	s.statStale = s.boolStat(reg, "network.stale")
@@ -363,6 +379,7 @@ func (s *NetworkSystem) Init() {
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
 	s.scheduled = s.scheduled[:0]
+	s.agreed = s.agreed[:0]
 	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
 	s.snapshotFloor = 0
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
@@ -617,6 +634,28 @@ func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick 
 	}
 }
 
+// retainAgreed records one applied barrier-bound artifact, so an install that
+// rebases this instance behind its apply tick can put it back.
+//
+// The set is bounded by the roster rather than by a byte budget: the three
+// artifacts are an arrival, a departure and a reset, and a session produces one
+// per participant plus a reset. AdoptSnapshot prunes it by the same membership
+// test that prunes the scheduled queue, so it holds only what a correction could
+// still undo; the cap is what stops a session that installs nothing from growing
+// it without end.
+func (s *NetworkSystem) retainAgreed(a barrierArtifact) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.agreed = append(s.agreed, a)
+	if n := len(s.agreed); n > maxAgreedRetained {
+		s.agreed = append(s.agreed[:0], s.agreed[n-maxAgreedRetained:]...)
+	}
+}
+
+// maxAgreedRetained bounds the applied barrier-bound artifacts kept for an
+// install to restore: every participant's arrival and departure, plus a reset.
+const maxAgreedRetained = 2*parameter.MaxPlayers + 1
+
 // LocalReplaySuffix returns this instance's own crossings produced after the
 // correction's baseline, in the order the session applies them.
 //
@@ -736,6 +775,24 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 		s.suffixBytes += rec.bytes
 	}
 	s.suffix = pruned
+	// The agreed artifacts the installed world predates go back on the schedule.
+	// Their effect is not in the capture — the membership test is the same one two
+	// lines up — and nothing else would ever re-apply them: the scheduled copy was
+	// consumed when they applied, and the replay suffix deliberately never retains
+	// one. A guest that ran ahead of the authority would otherwise lose an arrival
+	// permanently to a correction taken a tick before it.
+	restored := s.agreed[:0]
+	for _, a := range s.agreed {
+		if a.applyTick <= tick {
+			continue
+		}
+		restored = append(restored, a)
+		s.scheduled = append(s.scheduled, a)
+	}
+	s.agreed = restored
+	if len(restored) > 0 {
+		s.statAgreedRestored.Add(int64(len(restored)))
+	}
 	s.snapshotFloor = tick
 	s.productionEpoch = tick + 1
 	if r := s.world.Resources.Network; r != nil {
@@ -1529,6 +1586,9 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 		s.world.Resources.Event.Queue.PushReady(event.GameEvent{
 			Type: et, Payload: payload, Origin: a.origin, Domain: domain,
 		})
+		if barrierBound(et) {
+			s.retainAgreed(a)
+		}
 		if a.source == localSource {
 			local++
 		} else {

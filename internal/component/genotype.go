@@ -26,3 +26,10 @@ type GeneticStats struct {
 	PendingCount  int
 	OutcomesTotal uint64
 }
+
+// DetachSnapshot returns a copy whose gene vector shares no storage with this
+// one; GeneticSystem writes genes in place. See HeaderComponent.DetachSnapshot.
+func (g GenotypeComponent) DetachSnapshot() GenotypeComponent {
+	g.Genes = append([]float64(nil), g.Genes...)
+	return g
+}

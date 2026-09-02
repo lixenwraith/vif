@@ -297,6 +297,14 @@ func (c *corrections) pump() {
 		if c.driven.Load() {
 			continue // this run's caller paces its own corrections
 		}
+		// The authority's half of the selective exchange runs here. Both halves of
+		// it belong between two ticks — serving a request means hashing and
+		// compressing, answering a manifest means reading a world — and on an
+		// interactive host this goroutine is the only thing that is. Without it a
+		// host published manifests, received the answers and never served one: the
+		// exchange fell back to a whole body after SnapshotManifestSilenceCorrections
+		// and stayed there until the next keyframe reset it.
+		c.apply()
 		if err := c.publishDue(); err != nil {
 			vlog.Warn("app", "msg", "correction not published", "error", err.Error())
 		}

@@ -115,7 +115,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Glyph.GetComponent(e); ok {
-			s.Glyph = append(s.Glyph, StoreEntry[component.GlyphComponent]{Entity: e, Value: v})
+			s.Glyph = append(s.Glyph, StoreEntry[component.GlyphComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Sigil.Entities() {
@@ -123,7 +123,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Sigil.GetComponent(e); ok {
-			s.Sigil = append(s.Sigil, StoreEntry[component.SigilComponent]{Entity: e, Value: v})
+			s.Sigil = append(s.Sigil, StoreEntry[component.SigilComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Nugget.Entities() {
@@ -131,7 +131,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Nugget.GetComponent(e); ok {
-			s.Nugget = append(s.Nugget, StoreEntry[component.NuggetComponent]{Entity: e, Value: v})
+			s.Nugget = append(s.Nugget, StoreEntry[component.NuggetComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Cursor.Entities() {
@@ -139,7 +139,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Cursor.GetComponent(e); ok {
-			s.Cursor = append(s.Cursor, StoreEntry[component.CursorComponent]{Entity: e, Value: v})
+			s.Cursor = append(s.Cursor, StoreEntry[component.CursorComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Protection.Entities() {
@@ -147,7 +147,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Protection.GetComponent(e); ok {
-			s.Protection = append(s.Protection, StoreEntry[component.ProtectionComponent]{Entity: e, Value: v})
+			s.Protection = append(s.Protection, StoreEntry[component.ProtectionComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Kinetic.Entities() {
@@ -155,7 +155,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Kinetic.GetComponent(e); ok {
-			s.Kinetic = append(s.Kinetic, StoreEntry[component.KineticComponent]{Entity: e, Value: v})
+			s.Kinetic = append(s.Kinetic, StoreEntry[component.KineticComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Wall.Entities() {
@@ -163,7 +163,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Wall.GetComponent(e); ok {
-			s.Wall = append(s.Wall, StoreEntry[component.WallComponent]{Entity: e, Value: v})
+			s.Wall = append(s.Wall, StoreEntry[component.WallComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Loot.Entities() {
@@ -171,7 +171,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Loot.GetComponent(e); ok {
-			s.Loot = append(s.Loot, StoreEntry[component.LootComponent]{Entity: e, Value: v})
+			s.Loot = append(s.Loot, StoreEntry[component.LootComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Gateway.Entities() {
@@ -179,7 +179,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Gateway.GetComponent(e); ok {
-			s.Gateway = append(s.Gateway, StoreEntry[component.GatewayComponent]{Entity: e, Value: v})
+			s.Gateway = append(s.Gateway, StoreEntry[component.GatewayComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Energy.Entities() {
@@ -187,7 +187,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Energy.GetComponent(e); ok {
-			s.Energy = append(s.Energy, StoreEntry[component.EnergyComponent]{Entity: e, Value: v})
+			s.Energy = append(s.Energy, StoreEntry[component.EnergyComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Heat.Entities() {
@@ -195,7 +195,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Heat.GetComponent(e); ok {
-			s.Heat = append(s.Heat, StoreEntry[component.HeatComponent]{Entity: e, Value: v})
+			s.Heat = append(s.Heat, StoreEntry[component.HeatComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Shield.Entities() {
@@ -203,7 +203,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Shield.GetComponent(e); ok {
-			s.Shield = append(s.Shield, StoreEntry[component.ShieldComponent]{Entity: e, Value: v})
+			s.Shield = append(s.Shield, StoreEntry[component.ShieldComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Boost.Entities() {
@@ -211,7 +211,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Boost.GetComponent(e); ok {
-			s.Boost = append(s.Boost, StoreEntry[component.BoostComponent]{Entity: e, Value: v})
+			s.Boost = append(s.Boost, StoreEntry[component.BoostComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Weapon.Entities() {
@@ -219,7 +219,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Weapon.GetComponent(e); ok {
-			s.Weapon = append(s.Weapon, StoreEntry[component.WeaponComponent]{Entity: e, Value: v})
+			s.Weapon = append(s.Weapon, StoreEntry[component.WeaponComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Orb.Entities() {
@@ -227,7 +227,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Orb.GetComponent(e); ok {
-			s.Orb = append(s.Orb, StoreEntry[component.OrbComponent]{Entity: e, Value: v})
+			s.Orb = append(s.Orb, StoreEntry[component.OrbComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Ping.Entities() {
@@ -235,7 +235,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Ping.GetComponent(e); ok {
-			s.Ping = append(s.Ping, StoreEntry[component.PingComponent]{Entity: e, Value: v})
+			s.Ping = append(s.Ping, StoreEntry[component.PingComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.CursorView.Entities() {
@@ -243,7 +243,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.CursorView.GetComponent(e); ok {
-			s.CursorView = append(s.CursorView, StoreEntry[component.CursorViewComponent]{Entity: e, Value: v})
+			s.CursorView = append(s.CursorView, StoreEntry[component.CursorViewComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Decay.Entities() {
@@ -251,7 +251,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Decay.GetComponent(e); ok {
-			s.Decay = append(s.Decay, StoreEntry[component.DecayComponent]{Entity: e, Value: v})
+			s.Decay = append(s.Decay, StoreEntry[component.DecayComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Blossom.Entities() {
@@ -259,7 +259,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Blossom.GetComponent(e); ok {
-			s.Blossom = append(s.Blossom, StoreEntry[component.BlossomComponent]{Entity: e, Value: v})
+			s.Blossom = append(s.Blossom, StoreEntry[component.BlossomComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Cleaner.Entities() {
@@ -267,7 +267,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Cleaner.GetComponent(e); ok {
-			s.Cleaner = append(s.Cleaner, StoreEntry[component.CleanerComponent]{Entity: e, Value: v})
+			s.Cleaner = append(s.Cleaner, StoreEntry[component.CleanerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Dust.Entities() {
@@ -275,7 +275,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Dust.GetComponent(e); ok {
-			s.Dust = append(s.Dust, StoreEntry[component.DustComponent]{Entity: e, Value: v})
+			s.Dust = append(s.Dust, StoreEntry[component.DustComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Navigation.Entities() {
@@ -283,7 +283,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Navigation.GetComponent(e); ok {
-			s.Navigation = append(s.Navigation, StoreEntry[component.NavigationComponent]{Entity: e, Value: v})
+			s.Navigation = append(s.Navigation, StoreEntry[component.NavigationComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Combat.Entities() {
@@ -291,7 +291,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Combat.GetComponent(e); ok {
-			s.Combat = append(s.Combat, StoreEntry[component.CombatComponent]{Entity: e, Value: v})
+			s.Combat = append(s.Combat, StoreEntry[component.CombatComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Genotype.Entities() {
@@ -299,7 +299,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Genotype.GetComponent(e); ok {
-			s.Genotype = append(s.Genotype, StoreEntry[component.GenotypeComponent]{Entity: e, Value: v})
+			s.Genotype = append(s.Genotype, StoreEntry[component.GenotypeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Lightning.Entities() {
@@ -307,7 +307,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Lightning.GetComponent(e); ok {
-			s.Lightning = append(s.Lightning, StoreEntry[component.LightningComponent]{Entity: e, Value: v})
+			s.Lightning = append(s.Lightning, StoreEntry[component.LightningComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Missile.Entities() {
@@ -315,7 +315,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Missile.GetComponent(e); ok {
-			s.Missile = append(s.Missile, StoreEntry[component.MissileComponent]{Entity: e, Value: v})
+			s.Missile = append(s.Missile, StoreEntry[component.MissileComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Pulse.Entities() {
@@ -323,7 +323,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Pulse.GetComponent(e); ok {
-			s.Pulse = append(s.Pulse, StoreEntry[component.PulseComponent]{Entity: e, Value: v})
+			s.Pulse = append(s.Pulse, StoreEntry[component.PulseComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Spirit.Entities() {
@@ -331,7 +331,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Spirit.GetComponent(e); ok {
-			s.Spirit = append(s.Spirit, StoreEntry[component.SpiritComponent]{Entity: e, Value: v})
+			s.Spirit = append(s.Spirit, StoreEntry[component.SpiritComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Materialize.Entities() {
@@ -339,7 +339,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Materialize.GetComponent(e); ok {
-			s.Materialize = append(s.Materialize, StoreEntry[component.MaterializeComponent]{Entity: e, Value: v})
+			s.Materialize = append(s.Materialize, StoreEntry[component.MaterializeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Target.Entities() {
@@ -347,7 +347,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Target.GetComponent(e); ok {
-			s.Target = append(s.Target, StoreEntry[component.TargetComponent]{Entity: e, Value: v})
+			s.Target = append(s.Target, StoreEntry[component.TargetComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.TargetAnchor.Entities() {
@@ -355,7 +355,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.TargetAnchor.GetComponent(e); ok {
-			s.TargetAnchor = append(s.TargetAnchor, StoreEntry[component.TargetAnchorComponent]{Entity: e, Value: v})
+			s.TargetAnchor = append(s.TargetAnchor, StoreEntry[component.TargetAnchorComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Drain.Entities() {
@@ -363,7 +363,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Drain.GetComponent(e); ok {
-			s.Drain = append(s.Drain, StoreEntry[component.DrainComponent]{Entity: e, Value: v})
+			s.Drain = append(s.Drain, StoreEntry[component.DrainComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Quasar.Entities() {
@@ -371,7 +371,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Quasar.GetComponent(e); ok {
-			s.Quasar = append(s.Quasar, StoreEntry[component.QuasarComponent]{Entity: e, Value: v})
+			s.Quasar = append(s.Quasar, StoreEntry[component.QuasarComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Swarm.Entities() {
@@ -379,7 +379,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Swarm.GetComponent(e); ok {
-			s.Swarm = append(s.Swarm, StoreEntry[component.SwarmComponent]{Entity: e, Value: v})
+			s.Swarm = append(s.Swarm, StoreEntry[component.SwarmComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Storm.Entities() {
@@ -387,7 +387,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Storm.GetComponent(e); ok {
-			s.Storm = append(s.Storm, StoreEntry[component.StormComponent]{Entity: e, Value: v})
+			s.Storm = append(s.Storm, StoreEntry[component.StormComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.StormCircle.Entities() {
@@ -395,7 +395,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.StormCircle.GetComponent(e); ok {
-			s.StormCircle = append(s.StormCircle, StoreEntry[component.StormCircleComponent]{Entity: e, Value: v})
+			s.StormCircle = append(s.StormCircle, StoreEntry[component.StormCircleComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Bullet.Entities() {
@@ -403,7 +403,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Bullet.GetComponent(e); ok {
-			s.Bullet = append(s.Bullet, StoreEntry[component.BulletComponent]{Entity: e, Value: v})
+			s.Bullet = append(s.Bullet, StoreEntry[component.BulletComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Pylon.Entities() {
@@ -411,7 +411,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Pylon.GetComponent(e); ok {
-			s.Pylon = append(s.Pylon, StoreEntry[component.PylonComponent]{Entity: e, Value: v})
+			s.Pylon = append(s.Pylon, StoreEntry[component.PylonComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Snake.Entities() {
@@ -419,7 +419,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Snake.GetComponent(e); ok {
-			s.Snake = append(s.Snake, StoreEntry[component.SnakeComponent]{Entity: e, Value: v})
+			s.Snake = append(s.Snake, StoreEntry[component.SnakeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.SnakeHead.Entities() {
@@ -427,7 +427,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.SnakeHead.GetComponent(e); ok {
-			s.SnakeHead = append(s.SnakeHead, StoreEntry[component.SnakeHeadComponent]{Entity: e, Value: v})
+			s.SnakeHead = append(s.SnakeHead, StoreEntry[component.SnakeHeadComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.SnakeBody.Entities() {
@@ -435,7 +435,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.SnakeBody.GetComponent(e); ok {
-			s.SnakeBody = append(s.SnakeBody, StoreEntry[component.SnakeBodyComponent]{Entity: e, Value: v})
+			s.SnakeBody = append(s.SnakeBody, StoreEntry[component.SnakeBodyComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.SnakeMember.Entities() {
@@ -443,7 +443,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.SnakeMember.GetComponent(e); ok {
-			s.SnakeMember = append(s.SnakeMember, StoreEntry[component.SnakeMemberComponent]{Entity: e, Value: v})
+			s.SnakeMember = append(s.SnakeMember, StoreEntry[component.SnakeMemberComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Eye.Entities() {
@@ -451,7 +451,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Eye.GetComponent(e); ok {
-			s.Eye = append(s.Eye, StoreEntry[component.EyeComponent]{Entity: e, Value: v})
+			s.Eye = append(s.Eye, StoreEntry[component.EyeComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Tower.Entities() {
@@ -459,7 +459,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Tower.GetComponent(e); ok {
-			s.Tower = append(s.Tower, StoreEntry[component.TowerComponent]{Entity: e, Value: v})
+			s.Tower = append(s.Tower, StoreEntry[component.TowerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Header.Entities() {
@@ -467,7 +467,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Header.GetComponent(e); ok {
-			s.Header = append(s.Header, StoreEntry[component.HeaderComponent]{Entity: e, Value: v})
+			s.Header = append(s.Header, StoreEntry[component.HeaderComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Member.Entities() {
@@ -475,7 +475,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Member.GetComponent(e); ok {
-			s.Member = append(s.Member, StoreEntry[component.MemberComponent]{Entity: e, Value: v})
+			s.Member = append(s.Member, StoreEntry[component.MemberComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Flash.Entities() {
@@ -483,7 +483,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Flash.GetComponent(e); ok {
-			s.Flash = append(s.Flash, StoreEntry[component.FlashComponent]{Entity: e, Value: v})
+			s.Flash = append(s.Flash, StoreEntry[component.FlashComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Fadeout.Entities() {
@@ -491,7 +491,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Fadeout.GetComponent(e); ok {
-			s.Fadeout = append(s.Fadeout, StoreEntry[component.FadeoutComponent]{Entity: e, Value: v})
+			s.Fadeout = append(s.Fadeout, StoreEntry[component.FadeoutComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Splash.Entities() {
@@ -499,7 +499,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Splash.GetComponent(e); ok {
-			s.Splash = append(s.Splash, StoreEntry[component.SplashComponent]{Entity: e, Value: v})
+			s.Splash = append(s.Splash, StoreEntry[component.SplashComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Marker.Entities() {
@@ -507,7 +507,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Marker.GetComponent(e); ok {
-			s.Marker = append(s.Marker, StoreEntry[component.MarkerComponent]{Entity: e, Value: v})
+			s.Marker = append(s.Marker, StoreEntry[component.MarkerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Death.Entities() {
@@ -515,7 +515,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Death.GetComponent(e); ok {
-			s.Death = append(s.Death, StoreEntry[component.DeathComponent]{Entity: e, Value: v})
+			s.Death = append(s.Death, StoreEntry[component.DeathComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	for _, e := range w.Components.Timer.Entities() {
@@ -523,7 +523,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.Timer.GetComponent(e); ok {
-			s.Timer = append(s.Timer, StoreEntry[component.TimerComponent]{Entity: e, Value: v})
+			s.Timer = append(s.Timer, StoreEntry[component.TimerComponent]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 	return s
@@ -541,160 +541,160 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 		w.Positions.SetPosition(en.Entity, en.Value)
 	}
 	for _, en := range s.Glyph {
-		w.Components.Glyph.SetComponent(en.Entity, en.Value)
+		w.Components.Glyph.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Sigil {
-		w.Components.Sigil.SetComponent(en.Entity, en.Value)
+		w.Components.Sigil.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Nugget {
-		w.Components.Nugget.SetComponent(en.Entity, en.Value)
+		w.Components.Nugget.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Cursor {
-		w.Components.Cursor.SetComponent(en.Entity, en.Value)
+		w.Components.Cursor.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Protection {
-		w.Components.Protection.SetComponent(en.Entity, en.Value)
+		w.Components.Protection.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Kinetic {
-		w.Components.Kinetic.SetComponent(en.Entity, en.Value)
+		w.Components.Kinetic.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Wall {
-		w.Components.Wall.SetComponent(en.Entity, en.Value)
+		w.Components.Wall.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Loot {
-		w.Components.Loot.SetComponent(en.Entity, en.Value)
+		w.Components.Loot.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Gateway {
-		w.Components.Gateway.SetComponent(en.Entity, en.Value)
+		w.Components.Gateway.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Energy {
-		w.Components.Energy.SetComponent(en.Entity, en.Value)
+		w.Components.Energy.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Heat {
-		w.Components.Heat.SetComponent(en.Entity, en.Value)
+		w.Components.Heat.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Shield {
-		w.Components.Shield.SetComponent(en.Entity, en.Value)
+		w.Components.Shield.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Boost {
-		w.Components.Boost.SetComponent(en.Entity, en.Value)
+		w.Components.Boost.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Weapon {
-		w.Components.Weapon.SetComponent(en.Entity, en.Value)
+		w.Components.Weapon.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Orb {
-		w.Components.Orb.SetComponent(en.Entity, en.Value)
+		w.Components.Orb.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Ping {
-		w.Components.Ping.SetComponent(en.Entity, en.Value)
+		w.Components.Ping.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.CursorView {
-		w.Components.CursorView.SetComponent(en.Entity, en.Value)
+		w.Components.CursorView.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Decay {
-		w.Components.Decay.SetComponent(en.Entity, en.Value)
+		w.Components.Decay.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Blossom {
-		w.Components.Blossom.SetComponent(en.Entity, en.Value)
+		w.Components.Blossom.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Cleaner {
-		w.Components.Cleaner.SetComponent(en.Entity, en.Value)
+		w.Components.Cleaner.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Dust {
-		w.Components.Dust.SetComponent(en.Entity, en.Value)
+		w.Components.Dust.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Navigation {
-		w.Components.Navigation.SetComponent(en.Entity, en.Value)
+		w.Components.Navigation.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Combat {
-		w.Components.Combat.SetComponent(en.Entity, en.Value)
+		w.Components.Combat.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Genotype {
-		w.Components.Genotype.SetComponent(en.Entity, en.Value)
+		w.Components.Genotype.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Lightning {
-		w.Components.Lightning.SetComponent(en.Entity, en.Value)
+		w.Components.Lightning.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Missile {
-		w.Components.Missile.SetComponent(en.Entity, en.Value)
+		w.Components.Missile.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Pulse {
-		w.Components.Pulse.SetComponent(en.Entity, en.Value)
+		w.Components.Pulse.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Spirit {
-		w.Components.Spirit.SetComponent(en.Entity, en.Value)
+		w.Components.Spirit.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Materialize {
-		w.Components.Materialize.SetComponent(en.Entity, en.Value)
+		w.Components.Materialize.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Target {
-		w.Components.Target.SetComponent(en.Entity, en.Value)
+		w.Components.Target.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.TargetAnchor {
-		w.Components.TargetAnchor.SetComponent(en.Entity, en.Value)
+		w.Components.TargetAnchor.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Drain {
-		w.Components.Drain.SetComponent(en.Entity, en.Value)
+		w.Components.Drain.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Quasar {
-		w.Components.Quasar.SetComponent(en.Entity, en.Value)
+		w.Components.Quasar.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Swarm {
-		w.Components.Swarm.SetComponent(en.Entity, en.Value)
+		w.Components.Swarm.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Storm {
-		w.Components.Storm.SetComponent(en.Entity, en.Value)
+		w.Components.Storm.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.StormCircle {
-		w.Components.StormCircle.SetComponent(en.Entity, en.Value)
+		w.Components.StormCircle.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Bullet {
-		w.Components.Bullet.SetComponent(en.Entity, en.Value)
+		w.Components.Bullet.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Pylon {
-		w.Components.Pylon.SetComponent(en.Entity, en.Value)
+		w.Components.Pylon.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Snake {
-		w.Components.Snake.SetComponent(en.Entity, en.Value)
+		w.Components.Snake.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.SnakeHead {
-		w.Components.SnakeHead.SetComponent(en.Entity, en.Value)
+		w.Components.SnakeHead.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.SnakeBody {
-		w.Components.SnakeBody.SetComponent(en.Entity, en.Value)
+		w.Components.SnakeBody.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.SnakeMember {
-		w.Components.SnakeMember.SetComponent(en.Entity, en.Value)
+		w.Components.SnakeMember.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Eye {
-		w.Components.Eye.SetComponent(en.Entity, en.Value)
+		w.Components.Eye.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Tower {
-		w.Components.Tower.SetComponent(en.Entity, en.Value)
+		w.Components.Tower.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Header {
-		w.Components.Header.SetComponent(en.Entity, en.Value)
+		w.Components.Header.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Member {
-		w.Components.Member.SetComponent(en.Entity, en.Value)
+		w.Components.Member.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Flash {
-		w.Components.Flash.SetComponent(en.Entity, en.Value)
+		w.Components.Flash.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Fadeout {
-		w.Components.Fadeout.SetComponent(en.Entity, en.Value)
+		w.Components.Fadeout.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Splash {
-		w.Components.Splash.SetComponent(en.Entity, en.Value)
+		w.Components.Splash.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Marker {
-		w.Components.Marker.SetComponent(en.Entity, en.Value)
+		w.Components.Marker.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Death {
-		w.Components.Death.SetComponent(en.Entity, en.Value)
+		w.Components.Death.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	for _, en := range s.Timer {
-		w.Components.Timer.SetComponent(en.Entity, en.Value)
+		w.Components.Timer.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 	if s.NextEntity > 0 {
 		w.nextEntityID[core.DomainShared] = s.NextEntity

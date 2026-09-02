@@ -57,3 +57,13 @@ type MemberEntry struct {
 	OffsetX int // Relative to Phantom Head
 	OffsetY int // Relative to Phantom Head
 }
+
+// DetachSnapshot returns a copy whose member table shares no storage with this
+// one. CompositeSystem tombstones and compacts MemberEntries in place through
+// GetPtr, so a capture that kept the live backing array would be rewritten under
+// whoever retained it — a correction baseline, or a capture between its integrity
+// hash and its verification.
+func (h HeaderComponent) DetachSnapshot() HeaderComponent {
+	h.MemberEntries = append([]MemberEntry(nil), h.MemberEntries...)
+	return h
+}

@@ -967,7 +967,7 @@ func (w *World) CaptureSharedWorld() SharedWorldState {
 			continue
 		}
 		if v, ok := w.Components.{{ .Field }}.GetComponent(e); ok {
-			s.{{ .Field }} = append(s.{{ .Field }}, StoreEntry[component.{{ .Type }}]{Entity: e, Value: v})
+			s.{{ .Field }} = append(s.{{ .Field }}, StoreEntry[component.{{ .Type }}]{Entity: e, Value: DetachSnapshotValue(v)})
 		}
 	}
 {{- end }}
@@ -987,7 +987,7 @@ func (w *World) InstallSharedWorld(s SharedWorldState) {
 	}
 {{- range .Components }}
 	for _, en := range s.{{ .Field }} {
-		w.Components.{{ .Field }}.SetComponent(en.Entity, en.Value)
+		w.Components.{{ .Field }}.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 {{- end }}
 	if s.NextEntity > 0 {

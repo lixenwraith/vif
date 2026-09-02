@@ -59,6 +59,27 @@ func (d StoreDelta[T]) Empty() bool {
 // correction magnitude is reported in.
 func (d StoreDelta[T]) Entries() int { return len(d.Changed) + len(d.Removed) }
 
+// snapshotDetacher is a component that owns storage a capture must not share
+// with the live world. Two shared components do — a composite header's member
+// table and a genotype's gene vector — and both are written in place through
+// Store.GetPtr, so a capture holding the live backing array is not a reading of
+// one instant: it changes under whoever retained it.
+//
+// The interface is on the component rather than a list here for the same reason
+// the capture is generated: a component that grows a slice has to be detached
+// without anyone remembering to add it to a list somewhere else.
+type snapshotDetacher[T any] interface{ DetachSnapshot() T }
+
+// DetachSnapshotValue returns a component value that shares no storage with the
+// world it came from, at both boundaries: reading a capture out of the stores and
+// writing one back into them.
+func DetachSnapshotValue[T any](v T) T {
+	if d, ok := any(v).(snapshotDetacher[T]); ok {
+		return d.DetachSnapshot()
+	}
+	return v
+}
+
 // diffStore computes one store's delta against a baseline.
 //
 // Values are compared with reflect.DeepEqual rather than with ==, and that is a
@@ -279,7 +300,7 @@ func reconcileStore[T any](s *Store[T], entries []StoreEntry[T]) {
 		s.RemoveEntity(e)
 	}
 	for _, en := range entries {
-		s.SetComponent(en.Entity, en.Value)
+		s.SetComponent(en.Entity, DetachSnapshotValue(en.Value))
 	}
 }
 
