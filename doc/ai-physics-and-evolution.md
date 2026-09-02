@@ -71,10 +71,29 @@ Group 0 contains the live cursor roster up to the eight-target navigation cap;
 other groups can also contain up to eight targets. A field seeded from a group
 naturally selects the nearest reachable target at each cell.
 
+That last property is the group model's boundary, and it is worth stating as
+one. "Nearest reachable cursor" is the right answer for a hostile species and
+the wrong one for anything that belongs to a *particular* participant. Loot is
+the case: a drop is owned by the cursor whose kill produced it, it is
+player-domain, and it may only be collected by that cursor. Steered by group 0
+it walked to whichever cursor was nearer and stalled there, and — worse — the
+line-of-sight flag the same phase writes was computed against that nearest
+cursor while the movement homed at the owner, so a drop beside somebody else's
+cursor read "direct path" and drove into the wall between it and its own.
+
+`LootSystem` therefore keeps one single-goal field per owner cursor, built from
+the same `FlowFieldCache` and the same shared walls, and does its own
+line-of-sight check against the same cursor it steers toward. A field is built
+the first time a cursor drops something and released when that cursor goes; a
+tick with none of its drops in flight recomputes nothing. Anything else that
+becomes owned rather than contested belongs on the same seam: give it a private
+single-goal field, do not add a target group per participant.
+
 `NavigationComponent` records whether an actor follows a normal group flow
 field or a route graph, along with graph/route IDs and movement state. The
 system updates component actors but delegates special formation movement to
-their species systems.
+their species systems. Loot no longer carries one: its route is its owner's,
+not its group's.
 
 ## 4. Composite passability
 
@@ -258,6 +277,18 @@ radius, near-target drag/acceleration, and a snap dead zone. Profiles under
 `internal/parameter` choose these values for loot, missiles, species, and
 effects.
 
+Two of those values are read together, because a constant pull toward a target
+with nothing damping the sideways component of velocity is an orbit, not an
+approach: the radius such a pull sustains is `cruise² / accel`. Overspeed drag
+does not break it — a body circling at exactly the cruise speed is never
+overspeed — so an actor whose sustained radius falls outside its arrival radius
+circles until something else stops it. Loot did, at 60 cells per second against
+120 cells per second squared: a thirty-cell orbit, six times the radius its
+arrival damping covered. Every homing species also applies the cornering brake
+(`TurnSeverity` × `NavCorneringBrake`), which damps a sideways heading at any
+distance and is what actually forecloses the orbit; loot was the one homing
+entity that did not, and does now.
+
 ## 10. Numeric model and determinism
 
 `pkg/vmath` is a `float64` numeric and geometry package. It provides scalar and
@@ -306,7 +337,12 @@ the resulting boolean grid and solution metadata into ECS walls/level state.
 ## 12. Extension guidance
 
 - Use a shared flow field for many actors with the same footprint/targets; do
-  not compute one per entity.
+  not compute one per entity. Do give an actor whose goal is *one participant's*
+  entity its own single-goal field: a group field selects the nearest target,
+  which is a different question.
+- Pair every homing profile with a damping term that acts at cruise speed — the
+  cornering brake, in this codebase. Arrival damping alone leaves an orbit at
+  `cruise² / accel` that nothing removes.
 - Build composite passability before routing a large footprint.
 - Choose route adaptation for path policy and genetics for continuous actor
   parameters; do not mix their fitness meanings.
@@ -324,6 +360,8 @@ the resulting boolean grid and solution metadata into ECS walls/level state.
 | Concern | Primary source |
 |---|---|
 | Flow fields/cache | `pkg/navigation/flowfield.go`, `cache.go` |
+| Flow steering (interpolation, escape) | `pkg/navigation/steering.go` |
+| Owner-scoped loot routing | `internal/system/loot.go` |
 | Composite navigation | `pkg/navigation/composite.go` |
 | Route generation | `pkg/navigation/routegraph.go` |
 | ECS navigation adapter | `internal/system/navigation.go` |

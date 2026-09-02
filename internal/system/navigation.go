@@ -15,28 +15,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
-// LUT for normalized flow direction vectors
-var flowDirLUT [8][2]float64
-
-func init() {
-	// Y halved for terminal 2:1 cell aspect before normalization
-	for i, vec := range navigation.DirVectors {
-		fx := float64(vec[0])
-		fy := float64(vec[1]) * 0.5
-		if fx != 0 || fy != 0 {
-			fx, fy = vmath.Normalize2DF(fx, fy)
-		}
-		flowDirLUT[i] = [2]float64{fx, fy}
-	}
-}
-
-// flowSource abstracts direction/distance queries over flow field data
-// Satisfied by *navigation.FlowFieldCache and *navigation.FlowField
-type flowSource interface {
-	GetDirection(x, y int) int8
-	GetDistance(x, y int) int
-}
-
 // targetGroupNav holds per-group flow fields and entity buffers
 type targetGroupNav struct {
 	pointFlowCache     *navigation.FlowFieldCache // For point entities (1×1)
@@ -452,7 +430,7 @@ func (s *NavigationSystem) Update() {
 				if isComposite {
 					fx, fy = s.getCompositeFlowDirection(preciseX, preciseY, field)
 				} else {
-					fx, fy = s.getInterpolatedFlowDirection(preciseX, preciseY, field)
+					fx, fy = navigation.InterpolatedDirection(field, preciseX, preciseY)
 				}
 				// zero flow = entity outside its narrow route corridor
 				// (knockback, spawn relocation); fall through to shared field
@@ -468,7 +446,7 @@ func (s *NavigationSystem) Update() {
 		if isComposite {
 			navComp.FlowX, navComp.FlowY = s.getCompositeFlowDirection(preciseX, preciseY, group.compositeFlowCache)
 		} else {
-			navComp.FlowX, navComp.FlowY = s.getInterpolatedFlowDirection(preciseX, preciseY, group.pointFlowCache)
+			navComp.FlowX, navComp.FlowY = navigation.InterpolatedDirection(group.pointFlowCache, preciseX, preciseY)
 		}
 
 	}
@@ -621,7 +599,7 @@ func (s *NavigationSystem) resolveGroupTargets() {
 
 // getCompositeFlowDirection returns flow direction from composite-aware flow field
 // Handles case where entity's current cell is blocked in passability
-func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64, src flowSource) (float64, float64) {
+func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64, src navigation.Source) (float64, float64) {
 	cell := vmath.PointAtF(preciseX, preciseY)
 	x0, y0 := cell.X, cell.Y
 
@@ -632,11 +610,11 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	}
 	// Blocked/unvisited — escape to best neighbor
 	if dir < 0 || dir >= navigation.DirCount {
-		escDir := s.findBestNeighborDirection(x0, y0, src)
+		escDir := navigation.BestNeighborDirection(src, x0, y0)
 		if escDir < 0 || escDir >= navigation.DirCount {
 			return 0, 0
 		}
-		return flowDirLUT[escDir][0], flowDirLUT[escDir][1]
+		return navigation.UnitVectors[escDir][0], navigation.UnitVectors[escDir][1]
 	}
 
 	// Bilinear interpolation, header-anchored (no half-cell offset, unlike point entities)
@@ -650,10 +628,10 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 	w01 := invU * v
 	w11 := u * v
 
-	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
-	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
-	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
-	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
+	v00x, v00y, valid00 := navigation.FlowVector(src, x0, y0)
+	v10x, v10y, valid10 := navigation.FlowVector(src, x0+1, y0)
+	v01x, v01y, valid01 := navigation.FlowVector(src, x0, y0+1)
+	v11x, v11y, valid11 := navigation.FlowVector(src, x0+1, y0+1)
 
 	var sumX, sumY, totalWeight float64
 
@@ -692,90 +670,6 @@ func (s *NavigationSystem) getCompositeFlowDirection(preciseX, preciseY float64,
 }
 
 // findBestNeighborDirection finds direction toward lowest-distance passable neighbor, used when entity is at a blocked cell
-func (s *NavigationSystem) findBestNeighborDirection(x, y int, src flowSource) int8 {
-	bestDir := int8(-1)
-	bestDist := 1 << 30
-
-	for d := range navigation.DirCount {
-		nx := x + navigation.DirVectors[d][0]
-		ny := y + navigation.DirVectors[d][1]
-		dist := src.GetDistance(nx, ny)
-		if dist >= 0 && dist < bestDist {
-			bestDist = dist
-			bestDir = d
-		}
-	}
-	return bestDir
-}
-
-// getInterpolatedFlowDirection performs bilinear interpolation for point entities
-func (s *NavigationSystem) getInterpolatedFlowDirection(preciseX, preciseY float64, src flowSource) (float64, float64) {
-	sampleX := preciseX - vmath.CellCenterF
-	sampleY := preciseY - vmath.CellCenterF
-
-	cell := vmath.PointAtF(sampleX, sampleY)
-	x0, y0 := cell.X, cell.Y
-
-	u := sampleX - float64(x0)
-	v := sampleY - float64(y0)
-
-	invU := 1.0 - u
-	invV := 1.0 - v
-
-	w00 := invU * invV
-	w10 := u * invV
-	w01 := invU * v
-	w11 := u * v
-
-	v00x, v00y, valid00 := s.getFlowVectorAndValidity(x0, y0, src)
-	v10x, v10y, valid10 := s.getFlowVectorAndValidity(x0+1, y0, src)
-	v01x, v01y, valid01 := s.getFlowVectorAndValidity(x0, y0+1, src)
-	v11x, v11y, valid11 := s.getFlowVectorAndValidity(x0+1, y0+1, src)
-
-	var sumX, sumY, totalWeight float64
-
-	if valid00 {
-		sumX += v00x * w00
-		sumY += v00y * w00
-		totalWeight += w00
-	}
-	if valid10 {
-		sumX += v10x * w10
-		sumY += v10y * w10
-		totalWeight += w10
-	}
-	if valid01 {
-		sumX += v01x * w01
-		sumY += v01y * w01
-		totalWeight += w01
-	}
-	if valid11 {
-		sumX += v11x * w11
-		sumY += v11y * w11
-		totalWeight += w11
-	}
-
-	if totalWeight == 0 {
-		return 0, 0
-	}
-
-	resX := sumX / totalWeight
-	resY := sumY / totalWeight
-
-	if resX != 0 || resY != 0 {
-		return vmath.Normalize2DF(resX, resY)
-	}
-	return 0, 0
-}
-
-func (s *NavigationSystem) getFlowVectorAndValidity(x, y int, src flowSource) (float64, float64, bool) {
-	dir := src.GetDirection(x, y)
-	if dir < 0 || dir >= navigation.DirCount {
-		return 0, 0, false
-	}
-	return flowDirLUT[dir][0], flowDirLUT[dir][1], true
-}
-
 // resolveRouteField returns the per-route flow field for an entity's route assignment
 // Returns nil for invalid routes or graphs whose goal no longer matches the group
 // target (retargeted tower), forcing fallback to the shared group flow field

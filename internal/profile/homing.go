@@ -39,14 +39,15 @@ var SnakeHoming = physics.HomingProfile{
 	DeadZone:         0.5,
 }
 
-// LootHoming: aggressive arrival drag kills orbital momentum for reliable capture
+// LootHoming: aggressive arrival drag kills orbital momentum for reliable capture.
+// LootSystem applies the cornering brake beside it, as every homing species does.
 var LootHoming = physics.HomingProfile{
 	BaseSpeed:        parameter.LootHomingMaxSpeed,
 	HomingAccel:      parameter.LootHomingAccel,
-	Drag:             2.0,
-	ArrivalRadius:    5.0,
-	ArrivalDragBoost: 25.0,
-	DeadZone:         0.5,
+	Drag:             parameter.LootHomingDrag,
+	ArrivalRadius:    parameter.LootHomingArrivalRadius,
+	ArrivalDragBoost: parameter.LootHomingArrivalDrag,
+	DeadZone:         parameter.LootHomingDeadZone,
 }
 
 // MissileHoming: BaseSpeed 0 makes drag continuous; full accel through arrival

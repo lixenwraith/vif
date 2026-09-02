@@ -63,6 +63,7 @@ var allowedMapRanges = map[string]string{
 	"NavigationSystem.Init:groups":                  "per-group resize; independent",
 	"NavigationSystem.HandleEvent:groups":           "per-group dirty flag; independent",
 	"NavigationSystem.Update:groups":                "per-group field update; recompute sum is commutative",
+	"LootSystem.refreshOwnerRoutes:ownerRoutes":     "per-owner field update and eviction; independent, and the recompute sum is commutative",
 	"Machine.Import:delayedActions":                 "clears every key; order cannot change an empty queue",
 
 	// --- Output re-sorted by a unique deterministic key ---

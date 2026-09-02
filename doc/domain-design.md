@@ -873,6 +873,21 @@ nugget jump crosses only the resulting shared cursor move. This puts nugget
 beside loot, which is also rolled and owned per participant because its mechanic
 reads owner-authored state.
 
+Loot's *route* is owned per participant for the same reason, and that took a
+second pass to get right. A drop is collected by exactly one cursor, but it
+steered by the shared navigation system's target group zero — every live cursor
+— whose field leads to the nearest one and whose line-of-sight flag is computed
+against that nearest one while the movement homes at the owner. A drop beside
+another participant's cursor therefore read "direct path" and drove into the
+wall between it and its own, and one that had no sight line walked to the wrong
+cursor and stopped. `LootSystem` keeps a private single-goal flow field per
+owner now (`internal/system/loot.go`): derived from shared walls and one shared
+cursor cell, but existing only because this instance has drops in flight, so it
+is player-domain state no capture carries and its telemetry sits under the
+`loot.` prefix the compared surface already drops. The general rule is D-6's:
+shared machinery answers "nearest", and "mine" is a question only the owner can
+ask.
+
 Quasar progression is shared but its source drains are personal. D-16 makes the
 threshold defeat's cursor the causal owner of the one fusion, avoiding both an
 N-way shared spawn and a migration of drains into the shared domain. A swarm
@@ -1290,6 +1305,8 @@ fails the build when the code stops matching the declaration.
 | `TestCorrectionsLeaveOneOrbPerArmedWeapon`, `TestOrbsAreRecoveredFromTheStoreRatherThanDuplicated` | `internal/app`, `internal/system` | D-4/D-2: repeated corrections leave an armed guest exactly one orb per weapon, and the store-derived index recovers an existing orb, drops a duplicate, a remote-owned one and one whose charges are gone |
 | `TestCorrectionKeepsTheReceiversOwnCursorState` | `internal/app` | D-13: a correction published with no tick between the grant and the capture cannot carry the guest's loadout, and does not overwrite it |
 | `TestBusPayloadsNameOnlySharedEntities` | `internal/app` | D-4 over a soak, via a dispatch tap |
+| `TestLootRoutesToItsOwnCursorNotTheNearestOne`, `TestLootWithoutLineOfSightKeepsItsOwnRoute`, `TestLootReachesItsOwnerAcrossAMaze` | `internal/system` | D-6: a drop routes to the participant that owns it, a second cursor beside it changes nothing, and the tower region's own maze is crossed by every drop |
+| `TestLootSettlesInsteadOfOrbitingItsOwner`, `TestLootWalledOffComesToRest` | `internal/system` | A drop launched across the line to its owner settles instead of circling, and one sealed away from it comes to rest and says so |
 | `TestLocalEventsCarryThePlayerDomain` | `internal/app` | D-10: a Local-class record is tagged player, against a shrinking exemption set |
 | `TestDomainAuditSoakClean` | `internal/app` | Zero component-domain violations over a 3,000-step soak |
 | `TestMapSizeLockedWithSecondCursor`, `TestMapSizeCropsWithOneCursor` | `internal/app` | D-14, with the crop path as its own negative control |

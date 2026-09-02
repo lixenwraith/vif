@@ -205,6 +205,13 @@ fallback count to a later tier. Pity-adjusted rolls improve repeated misses.
 Drops burst away from the death point, then home using direct line of sight or a
 flow field and collect near the player.
 
+A drop belongs to the cursor whose kill produced it and only that cursor can
+collect it, so both halves of the route are the owner's: the line of sight is
+tested against the owner, and the flow field it falls back to is a private one
+seeded from the owner's cell rather than the shared field over every cursor on
+the map. With two participants, a drop that lands beside the other one still
+goes home. A drop walled off from its owner comes to rest where it is.
+
 | Loot | Collection effect |
 |---|---|
 | Rod | Adds a rod charge/orb. |
@@ -356,6 +363,7 @@ Each entry declares a domain profile and its dependencies in
 | Species tuning | `internal/parameter/{drain,quasar,swarm,storm,pylon,snake,eye,tower}.go` |
 | Combat matrix and profiles | `internal/component/combat.go`, `internal/system/combat.go` |
 | Drop tables and rewards | `internal/component/loot.go`, `internal/parameter/loot.go` |
+| Drop routing and homing | `internal/system/loot.go`, `internal/profile/homing.go` |
 | System behavior | Matching files in `internal/system` |
 | Default progression | `internal/asset/config/*.toml` |
 | External scenarios | `config/main`, `config/td`, `config/blank` |

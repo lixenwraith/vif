@@ -22,7 +22,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Wall | `wall.{enabled,count,push_events,buf_pending_push_checks_hwm}` | `NewWallSystem` | Wall handlers/update and buffer observation | `Init` | Generic only |
 | Tower | `tower.{active,count,spawned,despawned,killed_by_player,killed_by_lifecycle,spawn_failures}` | `NewTowerSystem` | Spawn/cancel/death handlers and update | `Init` | Generic only |
 | Gateway | `gateway.{active,count}` | `NewGatewaySystem` | Spawn/despawn handlers/update | `Init` | Generic only |
-| Loot | `loot.{drops,active,collects,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm}` | `NewLootSystem` | Drop/collect handlers, bounce integration, buffer observation | `Init` | Generic only |
+| Loot | `loot.{drops,active,collects,routes,route_recomputes,unreachable,wall_collisions,boundary_reflections,physics_steps,buf_pity_hwm,buf_routes_hwm}` | `NewLootSystem` | Drop/collect handlers, owner-route maintenance, bounce integration, buffer observation | `Init` | Generic only |
 | Glyph | `glyph.{enabled,next_spawn_ms,orphan_glyph,density,rate_mult,buf_placement_hwm}` | `NewGlyphSystem` | Spawn/update and snapshot publication | `Init` | Generic only |
 | Nugget | `nugget.{active,spawned,collected,jumps,spawn_failures,cursor_rejects,disabled_rejects}` | `NewNuggetSystem` | Resolved nugget handlers/update | `Init` | Generic only |
 | Decay | `decay.{count,applied,wall_collisions,boundary_hits,grid_steps,protected_rejects,buf_hit_entities_hwm,buf_processed_cells_hwm}` | `NewDecaySystem` | Spawn/apply/update paths | `Init` | Generic only |
@@ -275,6 +275,10 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `heat.disabled_rejects` (int) | Action requests dropped while the heat system was disabled. |
 | `loot.boundary_reflections` (int) | Resolved loot reflections at simulation bounds. |
 | `loot.buf_pity_hwm` (int) | High-water live length of the reusable pity buffer/state collection. |
+| `loot.buf_routes_hwm` (int) | High-water count of owner flow fields held at once. |
+| `loot.routes` (int) | Owner flow fields currently held: one per cursor that has dropped something and still exists. |
+| `loot.route_recomputes` (int) | Owner flow fields rebuilt, cumulative. A drop in flight rebuilds its owner's field when that cursor moves past the dirty distance, so this rises with player movement while loot is out and not otherwise. |
+| `loot.unreachable` (int) | Drops with no route home this tick: their owner is gone, or walls seal them off. They bleed to rest rather than press against what is in the way, so a sustained nonzero reading is geometry, not motion. |
 | `loot.physics_steps` (int) | Physics integration substeps executed for loot movers. |
 | `loot.wall_collisions` (int) | Resolved loot contacts with blocking wall cells. |
 | `missile.boundary_hits` (int) | missile swept paths terminated at simulation bounds. |

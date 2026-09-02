@@ -10,6 +10,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 	"github.com/lixenwraith/vi-fighter/internal/profile"
+	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath/physics"
 )
@@ -41,6 +42,28 @@ type pityKey struct {
 	slot    uint8
 }
 
+// ownerRoute is one cursor's private flow field: the route every loot that cursor
+// owns follows home.
+//
+// It is not the shared NavigationSystem's, and that is the whole point. Group 0 is
+// every live cursor, so the field it maintains is a multi-source Dijkstra whose
+// gradient leads to the *nearest* cursor — the right answer for a hostile species
+// and the wrong one for a drop that belongs to exactly one participant. Loot
+// steered by it walked to whichever cursor was closer and stalled there, and the
+// line-of-sight flag beside it was computed against that same nearest cursor while
+// the loot homed at its owner, so a loot standing next to the wrong cursor read
+// "direct path" and drove itself into the wall between it and its own.
+//
+// The field is derived from shared walls and one shared cursor cell, but *which*
+// fields exist is a function of this instance's own drops, so it is player-domain
+// state (D-6): no capture carries it, and its telemetry is under the `loot.` prefix
+// the compared surface already drops.
+type ownerRoute struct {
+	cache *navigation.FlowFieldCache
+	cell  vmath.Point
+	live  bool // some loot named this owner during this tick
+}
+
 type LootSystem struct {
 	world *engine.World
 
@@ -50,12 +73,20 @@ type LootSystem struct {
 	// Pity tracking per species type and roster slot
 	pity map[pityKey]*pityState
 
+	// One route per owner that currently has loot in flight, and the single-element
+	// target slice its recompute is fed from
+	ownerRoutes map[core.Entity]*ownerRoute
+	routeGoal   [1]vmath.Point
+
 	// Telemetry
-	statDrops    *atomic.Int64
-	statActive   *atomic.Int64
-	statCollects *atomic.Int64
-	buffers      bufferTelemetry
-	motion       bounceTelemetry
+	statDrops       *atomic.Int64
+	statActive      *atomic.Int64
+	statCollects    *atomic.Int64
+	statRoutes      *atomic.Int64
+	statRecomputes  *atomic.Int64
+	statUnreachable *atomic.Int64
+	buffers         bufferTelemetry
+	motion          bounceTelemetry
 
 	enabled bool
 }
@@ -68,7 +99,12 @@ func NewLootSystem(world *engine.World) engine.System {
 	s.statDrops = world.Resources.Status.Ints.Get("loot.drops")
 	s.statActive = world.Resources.Status.Ints.Get("loot.active")
 	s.statCollects = world.Resources.Status.Ints.Get("loot.collects")
-	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity")
+	// Owner routes: how many are live, how often they are rebuilt, and how many
+	// drops are walled off from the cursor that owns them
+	s.statRoutes = world.Resources.Status.Ints.Get("loot.routes")
+	s.statRecomputes = world.Resources.Status.Ints.Get("loot.route_recomputes")
+	s.statUnreachable = world.Resources.Status.Ints.Get("loot.unreachable")
+	s.buffers = newBufferTelemetry(world.Resources.Status, "loot", "pity", "routes")
 	s.motion = newBounceTelemetry(world.Resources.Status, "loot")
 
 	s.Init()
@@ -78,9 +114,13 @@ func NewLootSystem(world *engine.World) engine.System {
 func (s *LootSystem) Init() {
 	s.rng = s.world.Rand(core.DomainPlayer, s.Name())
 	s.pity = make(map[pityKey]*pityState)
+	s.ownerRoutes = make(map[core.Entity]*ownerRoute)
 	s.statDrops.Store(0)
 	s.statActive.Store(0)
 	s.statCollects.Store(0)
+	s.statRoutes.Store(0)
+	s.statRecomputes.Store(0)
+	s.statUnreachable.Store(0)
 	s.buffers.Reset()
 	s.motion.Reset()
 
@@ -148,13 +188,17 @@ func (s *LootSystem) Update() {
 	lootEntities := s.world.Components.Loot.GetAllEntities()
 	if len(lootEntities) == 0 {
 		s.statActive.Store(0)
+		s.statUnreachable.Store(0)
 		return
 	}
 
 	config := s.world.Resources.Config
 	dtSec := min(s.world.Resources.Time.DeltaTime.Seconds(), 0.1)
 
+	s.refreshOwnerRoutes(lootEntities)
+
 	var activeCount int64
+	var unreachable int64
 	for _, lootEntity := range lootEntities {
 		lootComp, ok := s.world.Components.Loot.GetPtr(lootEntity)
 		if !ok {
@@ -177,20 +221,22 @@ func (s *LootSystem) Update() {
 			continue
 		}
 
-		// Movement logic - always process, navigation handles LOS internally
-		navComp, hasNav := s.world.Components.Navigation.GetComponent(lootEntity)
-
-		if hasOwner && hasNav && navComp.HasDirectPath {
-			// Direct LOS: standard homing
-			ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.CenterF()
-			physics.ApplyHoming(&kineticComp.Kinetic, ownerCenterX, ownerCenterY, &profile.LootHoming, dtSec)
-		} else if hasNav && (navComp.FlowX != 0 || navComp.FlowY != 0) {
-			// No LOS but have flow field: follow flow with lookahead
-			targetX := kineticComp.PreciseX + navComp.FlowX*parameter.LootFlowLookahead
-			targetY := kineticComp.PreciseY + navComp.FlowY*parameter.LootFlowLookahead
+		targetX, targetY, routed := s.homingTarget(lootComp, kineticComp, curX, curY, ownerPos, hasOwner)
+		if routed {
+			// Cornering brake, as every homing species applies it: acceleration
+			// alone conserves the sideways component of an approach, which is what
+			// left a drop circling its own cursor until something else moved it.
+			turnSeverity := physics.TurnSeverity(&kineticComp.Kinetic, targetX, targetY,
+				parameter.NavCorneringThreshold, 1.0)
 			physics.ApplyHoming(&kineticComp.Kinetic, targetX, targetY, &profile.LootHoming, dtSec)
+			if turnSeverity > 0 {
+				physics.ApplyLinearDrag(&kineticComp.Kinetic,
+					turnSeverity*parameter.NavCorneringBrake, dtSec)
+			}
 		} else {
-			// No nav or no flow: velocity bleed (stuck/lost)
+			// Owner gone, or walled off from every route: bleed to rest rather than
+			// press against whatever is in the way.
+			unreachable++
 			physics.ApplyLinearDrag(&kineticComp.Kinetic, parameter.LootVelocityBleed, dtSec)
 			if vmath.AbsF(kineticComp.VelX) < parameter.LootStopSpeed &&
 				vmath.AbsF(kineticComp.VelY) < parameter.LootStopSpeed {
@@ -218,6 +264,125 @@ func (s *LootSystem) Update() {
 		activeCount++
 	}
 	s.statActive.Store(activeCount)
+	s.statUnreachable.Store(unreachable)
+}
+
+// refreshOwnerRoutes brings one flow field up to date per cursor that currently has
+// loot in flight, and drops the rest.
+//
+// The goal is that cursor's cell and nothing else, which is the difference that
+// matters: a drop belongs to one participant, so the field it steers by must lead
+// to that participant and not to whoever happens to be nearer. A field is built the
+// first time that cursor drops something and released when the cursor itself goes;
+// in between, a tick with none of its loot in flight recomputes nothing.
+func (s *LootSystem) refreshOwnerRoutes(loots []core.Entity) {
+	for _, r := range s.ownerRoutes {
+		r.live = false
+	}
+
+	for _, lootEntity := range loots {
+		lootComp, ok := s.world.Components.Loot.GetComponent(lootEntity)
+		if !ok {
+			continue
+		}
+		pos, ok := s.world.Positions.GetPosition(lootComp.Owner)
+		if !ok {
+			continue // owner despawned; its drops bleed to rest
+		}
+		r, ok := s.ownerRoutes[lootComp.Owner]
+		if !ok {
+			r = &ownerRoute{}
+			s.ownerRoutes[lootComp.Owner] = r
+		}
+		r.live = true
+		r.cell = vmath.Point{X: pos.X, Y: pos.Y}
+	}
+
+	config := s.world.Resources.Config
+	if config.MapWidth <= 0 || config.MapHeight <= 0 {
+		return
+	}
+	blocked := func(x, y int) bool {
+		return s.world.Positions.HasBlockingWallAt(x, y, component.WallBlockKinetic)
+	}
+
+	var recomputes int64
+	for owner, r := range s.ownerRoutes {
+		if !s.world.Positions.HasPosition(owner) {
+			// The cursor is gone; so is any reason to hold a field aimed at it.
+			delete(s.ownerRoutes, owner)
+			continue
+		}
+		if !r.live {
+			// A field is a map-sized allocation and a cursor keeps dropping loot,
+			// so an idle owner keeps its field and stops paying for it: the next
+			// drop finds the throttle where it left it, and Update recomputes
+			// because the cursor has moved since.
+			continue
+		}
+		switch {
+		case r.cache == nil:
+			r.cache = navigation.NewFlowFieldCache(
+				config.MapWidth, config.MapHeight,
+				parameter.NavFlowMinTicksBetweenCompute,
+				parameter.NavFlowDirtyDistance,
+			)
+		case r.cache.Field.Width != config.MapWidth || r.cache.Field.Height != config.MapHeight:
+			r.cache.Resize(config.MapWidth, config.MapHeight)
+		}
+		s.routeGoal[0] = r.cell
+		if r.cache.Update(s.routeGoal[:], blocked) {
+			recomputes++
+		}
+	}
+	s.statRoutes.Store(int64(len(s.ownerRoutes)))
+	s.statRecomputes.Add(recomputes)
+	s.buffers.Observe(1, len(s.ownerRoutes))
+}
+
+// homingTarget resolves one drop's steering target: its owner when the way there is
+// clear, and the next step of that owner's route when it is not.
+//
+// The two answers agree about which cursor they mean, which is what the shared
+// navigation component could not promise. Its line-of-sight flag was computed
+// against the nearest cursor in the roster while the movement homed at the owner,
+// so a drop beside someone else's cursor read "direct path" and accelerated into
+// the wall between it and its own.
+//
+// The lookahead is capped by the remaining distance to the owner. Homing at a point
+// a fixed distance ahead is a target that recedes as fast as the drop approaches
+// it, so the arrival steering in the profile never engages and the drop reaches
+// full cruising speed in a corridor one cell wide; capping it means the last
+// stretch of a blocked approach is steered like an arrival rather than a charge.
+func (s *LootSystem) homingTarget(
+	lootComp *component.LootComponent,
+	kineticComp *component.KineticComponent,
+	curX, curY int,
+	ownerPos component.PositionComponent,
+	hasOwner bool,
+) (float64, float64, bool) {
+	if !hasOwner {
+		return 0, 0, false
+	}
+
+	ownerCenterX, ownerCenterY := vmath.Point{X: ownerPos.X, Y: ownerPos.Y}.CenterF()
+	if s.world.Positions.HasLineOfSight(curX, curY, ownerPos.X, ownerPos.Y, component.WallBlockKinetic) {
+		return ownerCenterX, ownerCenterY, true
+	}
+
+	r, ok := s.ownerRoutes[lootComp.Owner]
+	if !ok || r.cache == nil {
+		return 0, 0, false
+	}
+	flowX, flowY := navigation.InterpolatedDirection(r.cache, kineticComp.PreciseX, kineticComp.PreciseY)
+	if flowX == 0 && flowY == 0 {
+		return 0, 0, false
+	}
+
+	lookahead := vmath.ClampF(
+		vmath.MagnitudeF(ownerCenterX-kineticComp.PreciseX, ownerCenterY-kineticComp.PreciseY),
+		1.0, parameter.LootFlowLookahead)
+	return kineticComp.PreciseX + flowX*lookahead, kineticComp.PreciseY + flowY*lookahead, true
 }
 
 // --- Drop Resolution ---
@@ -364,13 +529,6 @@ func (s *LootSystem) spawnLootWithBurst(lootType component.LootType, x, y, burst
 	// Protection
 	s.world.Components.Protection.SetComponent(entity, component.ProtectionComponent{
 		Mask: component.ProtectFromSpecies | component.ProtectFromDecay,
-	})
-
-	// Navigation for wall-aware pathfinding (loot is not a species and emits no SpeciesCreated event)
-	s.world.Components.Navigation.SetComponent(entity, component.NavigationComponent{
-		Width:         1,
-		Height:        1,
-		FlowLookahead: parameter.NavFlowLookaheadDefault,
 	})
 }
 
