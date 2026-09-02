@@ -363,9 +363,9 @@ const (
 
 	// --- Drain ---
 
-	// EventDrainPause [local] signals DrainSystem to stop spawning
+	// EventDrainPause (CursorScopePayload) [local] signals DrainSystem to stop spawning for one cursor, or for every cursor when it names none
 	EventDrainPause
-	// EventDrainResume [local] signals DrainSystem to resume spawning
+	// EventDrainResume (CursorScopePayload) [local] releases one cursor's spawning pause, or every pause when it names none
 	EventDrainResume
 
 	// --- Quasar ---
@@ -391,9 +391,9 @@ const (
 
 	// --- Post-Process ---
 
-	// EventGrayoutStart [local] signals persistent grayout activation
+	// EventGrayoutStart (CursorScopePayload) [local] signals persistent grayout activation for one cursor, or for every cursor when it names none
 	EventGrayoutStart
-	// EventGrayoutEnd [local] signals persistent grayout deactivation
+	// EventGrayoutEnd (CursorScopePayload) [local] signals persistent grayout deactivation, scoped the same way
 	EventGrayoutEnd
 	// EventStrobeRequest (StrobeRequestPayload) [local] triggers screen flash effect
 	EventStrobeRequest

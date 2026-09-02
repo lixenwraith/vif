@@ -238,6 +238,23 @@ apply optional `min`/`max` clamps. Division and modulo by zero are no-ops.
 `"rooms.0.center_x"`. Struct segments use TOML tags first; numeric segments
 index an already populated slice. Injection does not append elements.
 
+An action with no `payload` table still emits the registered payload type,
+zero-valued, which is what makes an effect's *scope* configurable without
+touching the regions that do not care about it. A region is session-wide: every
+instance runs the same machine and enters the same state, so an effect it raises
+reaches every participant. Where that is wrong — the quasar's grayout and drain
+pause belong to the one cursor the quasar was fused from — the event carries
+`CursorScopePayload`, entity zero means session-wide, and the region injects the
+owner it already elected by:
+
+```toml
+{ action = "EmitEvent", event = "EventDrainPause",
+  payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } }
+```
+
+Only the instance simulating that cursor acts on it. Every other `EmitEvent` of
+the same event keeps the session-wide meaning it had.
+
 A delayed action is scheduled against its owning state and counts down in
 region time. It survives child-to-child transitions while its owner remains on
 the active path and is discarded when that owner exits. Transition-delayed

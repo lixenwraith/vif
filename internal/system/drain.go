@@ -67,9 +67,23 @@ type DrainSystem struct {
 	statBoundaryReflections *atomic.Int64
 	statGridSteps           *atomic.Int64
 	statProtectedRejects    *atomic.Int64
+	statPaused              *atomic.Bool
 	buffers                 bufferTelemetry
 
-	paused bool
+	// The outstanding reasons drains are not spawning.
+	//
+	// Scoped rather than a flag because two shapes overlap. A session-wide region
+	// — a storm, a tower defence, a reset — pauses every participant's drains and
+	// releases them all again. A quasar pauses one cursor's, because it is fused
+	// from that cursor's drains and belongs to that participant alone. A single
+	// boolean could not tell them apart: one participant's quasar stopped every
+	// participant's drains, and its exit resumed drains a storm was still holding.
+	//
+	// pausedFor is a slice rather than a set because it is read on every tick and
+	// is bounded by the roster; membership is the only question ever asked of it,
+	// so nothing here depends on an order.
+	pausedAll bool
+	pausedFor []core.Entity
 
 	enabled bool
 }
@@ -82,6 +96,7 @@ func NewDrainSystem(world *engine.World) engine.System {
 
 	s.pendingSpawns = make([]pendingDrainSpawn, parameter.DrainMaxCount)
 	s.drainCache = make([]drainCacheEntry, 0, parameter.DrainMaxCount)
+	s.pausedFor = make([]core.Entity, 0, parameter.MaxPlayers)
 
 	s.statCount = s.world.Resources.Status.Ints.Get("drain.count")
 	s.statPending = s.world.Resources.Status.Ints.Get("drain.pending")
@@ -96,6 +111,10 @@ func NewDrainSystem(world *engine.World) engine.System {
 	s.statBoundaryReflections = s.world.Resources.Status.Ints.Get("drain.boundary_reflections")
 	s.statGridSteps = s.world.Resources.Status.Ints.Get("drain.grid_steps")
 	s.statProtectedRejects = s.world.Resources.Status.Ints.Get("drain.protected_rejects")
+	// Whether a hold applies to this instance's cursor, not whether any hold is
+	// held: an operator watching one participant wants to know why their own
+	// drains stopped, and a hold naming somebody else is not an answer.
+	s.statPaused = s.world.Resources.Status.Bools.Get("drain.paused")
 	s.buffers = newBufferTelemetry(s.world.Resources.Status, "drain", "pending_spawns", "drain_cache")
 
 	s.Init()
@@ -109,6 +128,8 @@ func (s *DrainSystem) Init() {
 	s.drainCache = s.drainCache[:0]
 	s.nextSpawnOrder = 0
 	s.spawnCooldownUntil = 0
+	s.pausedAll = false
+	s.pausedFor = s.pausedFor[:0]
 	s.statCount.Store(0)
 	s.statPending.Store(0)
 	s.statCollisions.Store(0)
@@ -119,8 +140,8 @@ func (s *DrainSystem) Init() {
 	s.statBoundaryReflections.Store(0)
 	s.statGridSteps.Store(0)
 	s.statProtectedRejects.Store(0)
+	s.statPaused.Store(false)
 	s.buffers.Reset()
-	s.paused = false
 	s.enabled = true
 }
 
@@ -176,17 +197,19 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventDrainPause:
-		s.paused = true
-		// Clear pending spawns to prevent stale materialize
-		s.pendingSpawns = s.pendingSpawns[:0]
+		s.holdPause(cursorScope(ev))
+		if s.spawningPaused() {
+			// Clear pending spawns to prevent stale materialize
+			s.pendingSpawns = s.pendingSpawns[:0]
+		}
 
 	case event.EventDrainResume:
-		s.paused = false
+		s.releasePause(cursorScope(ev))
 		// Spawning resumes naturally in Update() based on heat
 
 	case event.EventMaterializeComplete:
 		// Prevent race condition where drain materializes after fuse sequence started
-		if s.paused {
+		if s.spawningPaused() {
 			s.statSpawnFailure.Add(1)
 			return
 		}
@@ -201,6 +224,10 @@ func (s *DrainSystem) HandleEvent(ev event.GameEvent) {
 
 // Update runs the drain system logic
 func (s *DrainSystem) Update() {
+	// Published before the enabled gate so the key answers "are my drains held"
+	// even for a tick this system does not run.
+	s.statPaused.Store(s.spawningPaused())
+
 	if !s.enabled {
 		return
 	}
@@ -215,7 +242,7 @@ func (s *DrainSystem) Update() {
 	s.detectSwarmFusions()
 
 	// Skip spawn logic when paused
-	if s.paused {
+	if s.spawningPaused() {
 		s.statCount.Store(int64(s.liveDrainCount()))
 		s.statPending.Store(0)
 		return
@@ -341,7 +368,7 @@ func (s *DrainSystem) processDrainStates() {
 
 // detectSwarmFusions pairs enraged drains and emits fusion requests
 func (s *DrainSystem) detectSwarmFusions() {
-	if s.paused {
+	if s.spawningPaused() {
 		return
 	}
 
@@ -456,6 +483,80 @@ func (s *DrainSystem) queueDrainSpawn(targetX, targetY int, staggerIndex int) {
 		scheduledTick: scheduledTick,
 	})
 	s.buffers.Observe(0, len(s.pendingSpawns))
+}
+
+// cursorScope reads the cursor a scoped local effect names, zero for the
+// session-wide form. A payload that is absent or of another shape is the
+// session-wide form too: an action that names no cursor is one nobody owns.
+func cursorScope(ev event.GameEvent) core.Entity {
+	if p, ok := ev.Payload.(*event.CursorScopePayload); ok {
+		return p.Entity
+	}
+	return 0
+}
+
+// holdPause records one reason drains are not spawning.
+func (s *DrainSystem) holdPause(owner core.Entity) {
+	if owner == 0 {
+		s.pausedAll = true
+		return
+	}
+	for _, held := range s.pausedFor {
+		if held == owner {
+			return
+		}
+	}
+	if len(s.pausedFor) < cap(s.pausedFor) {
+		s.pausedFor = append(s.pausedFor, owner)
+		return
+	}
+	// More owners than the roster can hold means a hold is leaking somewhere.
+	// Falling back to the session-wide form keeps the pause honest — drains stop
+	// — rather than silently dropping a hold nothing would ever release.
+	s.pausedAll = true
+}
+
+// releasePause clears one hold, or every hold when it names no cursor.
+//
+// A resume with no owner clears the owner-scoped holds as well, deliberately: it
+// is what a region terminating everything and a game reset both emit, and a hold
+// left behind by a region that no longer exists is one nothing would ever release.
+func (s *DrainSystem) releasePause(owner core.Entity) {
+	if owner == 0 {
+		s.pausedAll = false
+		s.pausedFor = s.pausedFor[:0]
+		return
+	}
+	for i, held := range s.pausedFor {
+		if held != owner {
+			continue
+		}
+		s.pausedFor = append(s.pausedFor[:i], s.pausedFor[i+1:]...)
+		return
+	}
+}
+
+// spawningPaused reports whether a hold applies to the cursor this instance's
+// drains belong to.
+//
+// The drain population is a function of one cursor — its heat decides the count
+// and its cell decides where they spawn — so "my drains" is exactly
+// Resources.Player.Entity, and an owner-scoped hold naming any other cursor is a
+// hold on a participant this instance does not simulate.
+func (s *DrainSystem) spawningPaused() bool {
+	if s.pausedAll {
+		return true
+	}
+	if len(s.pausedFor) == 0 {
+		return false
+	}
+	local := s.world.Resources.Player.Entity
+	for _, held := range s.pausedFor {
+		if held == local {
+			return true
+		}
+	}
+	return false
 }
 
 // calcTargetDrainCount returns the desired number of drains based on current heat

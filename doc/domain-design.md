@@ -842,6 +842,23 @@ instances. The crossing artifact is instead the immutable geometry in
 it without consulting `TransientResource`. `ViewResource` (grayout, strobe) is
 also player-domain.
 
+Player-domain does not mean instance-private, though, because the producer of
+several of these effects is the shared FSM. A region is session-wide by
+construction — every instance runs the same machine and enters the same state — so
+an effect its actions raise reaches every participant whether or not the cause was
+theirs. `CursorScopePayload` is how an effect that should not reach everybody
+names its cursor instead: entity zero is the session-wide form — and is what an
+`EmitEvent` action with no payload table produces, so an unscoped action keeps its
+meaning — while a nonzero entity is acted on only by the instance that simulates
+that cursor, the same `ResolveOwnedCursor` admission the D-13 owner-authored set
+uses. `EventGrayoutStart`/`EventGrayoutEnd` and
+`EventDrainPause`/`EventDrainResume` carry it, so a storm
+darkens and holds everybody while a quasar darkens and holds the player it was
+fused from. Because the two overlap, `DrainSystem` holds a *set* of reasons rather
+than a flag — one session-wide, one per owning cursor, bounded by the roster — and
+a resume naming no cursor clears them all, which is what a terminating region and a
+reset both emit.
+
 **Glyph.** Content glyphs are player-domain: the corpus and the map are the only
 inputs, so every instance derives the same text from its own player counter and
 types against its own copy, and `GlyphSystem` carries a `player` profile. The
@@ -892,7 +909,10 @@ Quasar progression is shared but its source drains are personal. D-16 makes the
 threshold defeat's cursor the causal owner of the one fusion, avoiding both an
 N-way shared spawn and a migration of drains into the shared domain. A swarm
 fusion remains personal from trigger through drain selection; only its resulting
-shared spawn crosses.
+shared spawn crosses. The region's two standing per-instance effects follow the
+same election rather than the region: `fuse_owner` is injected into the scope
+payload of the grayout and the drain pause, so the participant whose drains were
+consumed is the one whose screen darkens and whose spawning stops.
 
 ## 5. System classification
 
@@ -1401,6 +1421,8 @@ fails the build when the code stops matching the declaration.
 | `TestCombatKnockbackDrawsFromTheTargetsStream`, `TestSoftCollisionImpulseDrawsFromTheTargetsStream` | `internal/system` | D-8: a player-target impulse never advances the shared stream, the shared case proving it non-vacuous |
 | `TestEventClassMatchesSystemProfile`, `TestCrossingPushesAreLive` | `internal/system` | D-3/D-10: every player-profile push of a replicated event is a named crossing, and every named crossing stamps |
 | `TestOneSharedQuasarTriggerProducesOneSpawn` | `internal/app` | D-16: a shared progression trigger elects one causal player fuse and yields one shared spawn |
+| `TestAQuasarsEffectsReachOnlyTheCursorItWasFusedFrom` | `internal/app` | The same election scopes the region's per-instance effects: across two linked instances the grayout and the drain pause reach the fused cursor's participant only, and both clear when the region ends |
+| `TestADrainPauseFollowsTheCursorItNames`, `TestGrayoutFollowsTheCursorItNames`, `TestOverlappingPausesAreHeldSeparately`, `TestASessionWideDrainPauseStillReachesEveryCursor` | `internal/system` | `CursorScopePayload`: a scoped effect admits on `ResolveOwnedCursor`, entity zero stays session-wide, and the two overlap without either clearing the other |
 | `TestPersonalNuggetUsesPlayerDomainAndLocalCursor`, `TestPersonalNuggetJumpCrossesOnlyCursorMove` | `internal/system` | §4: nugget is personal; only the cursor move crosses |
 | `TestSharedSpeciesCrossesOnlyOwnedShieldImpact`, `TestCursorDefeatTransitionCrossesCombinedOwnerState`, `TestMetaDefeatGateRequiresEveryRosteredCursor` | `internal/system` | D-13: a remote shield cannot produce a second impact; defeat state crosses instead of being read from slot zero |
 | `TestRemoteCursorRejectsOwnerAuthoredWrites`, `TestRemoteCursorStateDoesNotAgeLocally` | `internal/system` | D-2: neither a grant nor a per-tick loop writes a cursor this instance does not simulate |
@@ -1537,7 +1559,9 @@ Open `:` or an overlay on one terminal and leave it open: both simulations keep
 running; `:speed` and `:step` report that they are unavailable. The host's `:new`
 must reset both terminals while preserving two cursors; the joiner's `:new` must
 be refused. The tenth drain defeat must produce one quasar, and missile smoke
-must remain on the firing terminal even though its damage resolves on both.
+must remain on the firing terminal even though its damage resolves on both, and
+that quasar must grey out and stop the drains of only the terminal whose cursor
+took the tenth drain — both terminals strobe, and both must recover when it ends.
 
 Give the two terminals **different sizes**, and resize one of them mid-run — a
 tmux pane change is the ordinary case. The map must not move on either side and

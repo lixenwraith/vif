@@ -246,16 +246,39 @@ drained and answered *between* two ticks rather than as part of one
 (`DrainOffTick`), which makes the comparison tick-aligned in the ordinary case. A
 receiver that is genuinely behind still repairs; it simply repairs more.
 
-**The quasar's region-wide effects are open level design.** A quasar is fused for
-one cursor — the FSM captures `fuse_owner` and the fuse request carries it — but
-the region's entry actions raise `EventGrayoutStart` and `EventDrainPause` with no
-owner, so both apply on every instance and to every cursor. That is not baked in:
-the two events could carry the owner the fuse request already carries, with
-`DrainSystem` holding a per-owner pause and the grayout applying only for the local
-cursor. What *is* baked in is that the region itself is session-wide — one quasar
-at a time — because a per-cursor region would mean nested player-domain state
-machines, which §6 rules out. Settle the level design first; the mechanism can
-follow it either way.
+**A shared region's per-instance effects name the cursor they belong to.** A
+region is session-wide by construction: every instance runs the same machine and
+enters the same state, so an effect its actions raise reaches every participant
+whether or not the thing that caused it was theirs. That is right for a storm,
+which is one encounter every participant is inside, and wrong for a quasar, which
+is fused from *one* cursor's drains — before the scope, one player's quasar
+darkened every player's screen and stopped every player's drains.
+
+`EventGrayoutStart`, `EventGrayoutEnd`, `EventDrainPause` and `EventDrainResume`
+therefore carry `CursorScopePayload`, a single cursor entity. Entity zero is the
+session-wide form and is what an `EmitEvent` action with no payload table already
+produces — `compileEmitEvent` allocates the registered prototype — so the storm,
+the tower defence and the reset paths keep their existing behaviour with no
+configuration change. The quasar's actions inject `fuse_owner`, the variable the
+fuse request beside them already elects by, and an instance that does not simulate
+that cursor ignores them: the same `ResolveOwnedCursor` admission the D-13
+owner-authored set uses.
+
+Because the two shapes overlap — a quasar inside a storm — `DrainSystem` holds a
+set of reasons rather than a flag: a session-wide hold plus one per owning cursor,
+bounded by the roster, published as `drain.paused` for the cursor this instance
+drives. A resume naming no cursor clears every hold, which is what a terminating
+region and a reset both emit; an overflow of the bound falls back to the pause
+rather than dropping a hold nothing would release.
+
+The shared half is untouched, which is the point: the region is still spawned by
+one shared decision, the fusion is still elected by D-16 to exactly one causal
+cursor, and `EventQuasarSpawnRequest` still crosses once. Only the two standing
+per-instance effects changed. What remains session-wide is the strobe — a 200 ms
+flash rather than a standing state, and scoping it needs a field on a payload it
+shares with other callers — and the region itself, one quasar at a time, because a
+per-cursor region would mean nested player-domain state machines, which §6 rules
+out.
 
 ## 8. Verification gates
 

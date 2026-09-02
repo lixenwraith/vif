@@ -37,7 +37,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Navigation | `nav.{entities,recomputes,roi_cells,buf_groups_hwm}` | `NewNavigationSystem` | Recompute/update paths and group observation | `Init` | Generic only |
 | Soft collision | `soft_collision.{collisions,immune_rejects,buf_{drains,swarms,quasars,storms,pylons}_hwm}` | `NewSoftCollisionSystem` | Resolved collision pass and buffer observation | `Init` | Generic only |
 | Combat | `combat.{active,count,hits_direct,hits_area,knockbacks,stuns,damage_dealt,immune_rejects,unprofiled,*_rejects,effect_*,chain_*,damage_{attacker,defender}_*,absorbed_{attacker,defender}_*}` | `NewCombatSystem` | Resolved direct/area attacks | `Init` | Generic only |
-| Drain | `drain.{count,pending,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
+| Drain | `drain.{count,pending,paused,collisions,suicides,spawned,fusions,despawned,spawn_failures,killed_by_*,wall_collisions,boundary_reflections,grid_steps,protected_rejects,buf_*_hwm}` | `NewDrainSystem` | Spawn/lifecycle/collision/movement paths | `Init` | Generic only |
 | Quasar | `quasar.{active,count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewQuasarSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Swarm | `swarm.{active,count,player_kills,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects}` | `NewSwarmSystem` | Spawn/lifecycle/bounce paths | `Init` | Generic only |
 | Storm | `storm.{active,circle_count,*_active_frames,nudge_count,spawned,despawned,killed_by_*,spawn_failures,wall_collisions,boundary_reflections,physics_steps,protected_rejects,protected_player_rejects,buf_*_hwm}` | `NewStormSystem` | Spawn/lifecycle/3-D physics/update paths | `Init` | Generic only |
@@ -218,6 +218,7 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `drain.grid_steps` (int) | Grid-traversal steps executed by swept drain movers. |
 | `drain.killed_by_lifecycle` (int) | drain deaths with no resolved roster-cursor killer. |
 | `drain.killed_by_player` (int) | drain deaths credited to a resolved roster cursor. |
+| `drain.paused` (bool) | Whether a spawning hold applies to this instance's own cursor. A session-wide region holds every participant; a quasar holds only the cursor it was fused from. |
 | `drain.protected_rejects` (int) | drain interactions rejected by the applicable protection mask. |
 | `drain.wall_collisions` (int) | Resolved drain contacts with blocking wall cells. |
 | `dust.boundary_reflections` (int) | Resolved dust reflections at simulation bounds. |

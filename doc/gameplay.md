@@ -310,9 +310,11 @@ The actual flow is:
    wave, waits five seconds, and repeats.
 2. At ten drain kills it resets that counter, elects the cursor responsible for
    the threshold defeat, spawns one `quasar`, and pauses `main`.
-3. `quasar` starts local grayout/strobe, pauses drains, asks only that causal
-   participant's drains to fuse, and runs a faster gold/dust loop until the
-   quasar dies.
+3. `quasar` greys out that participant's screen, pauses that participant's
+   drains, strobes every screen, asks only that causal participant's drains to
+   fuse, and runs a faster gold/dust loop until the quasar dies. The grayout and
+   the drain pause name the elected cursor, so a quasar in a session affects the
+   player it was fused from; the region itself is session-wide.
 4. Before three cumulative quasar kills it resumes `main`; at three it starts
    `storm` instead.
 5. Destroying a storm increases the species energy-damage multiplier. Current

@@ -92,6 +92,9 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 
 	switch ev.Type {
 	case event.EventGrayoutStart:
+		if !s.scopedHere(ev) {
+			return
+		}
 		s.world.Resources.View.Grayout = engine.GrayoutState{
 			Active:    true,
 			Intensity: 1.0,
@@ -99,6 +102,9 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 		s.statGrayoutActive.Store(true)
 
 	case event.EventGrayoutEnd:
+		if !s.scopedHere(ev) {
+			return
+		}
 		s.world.Resources.View.Grayout.Active = false
 		s.statGrayoutActive.Store(false)
 
@@ -119,6 +125,22 @@ func (s *TransientSystem) HandleEvent(ev event.GameEvent) {
 			}
 		}
 	}
+}
+
+// scopedHere reports whether a scoped local effect belongs to this instance.
+//
+// The grayout is a screen effect, so "this instance" is the cursor a player is
+// looking through: Resources.Player.Entity. An effect naming no cursor is
+// session-wide and applies everywhere, which is what a region belonging to nobody
+// — a storm, a reset — emits. An effect naming another participant's cursor is
+// that participant's to see, and darkening this screen for it was the defect this
+// check removes.
+func (s *TransientSystem) scopedHere(ev event.GameEvent) bool {
+	p, ok := ev.Payload.(*event.CursorScopePayload)
+	if !ok || p.Entity == 0 {
+		return true
+	}
+	return p.Entity == s.world.Resources.Player.Entity
 }
 
 func (s *TransientSystem) Update() {

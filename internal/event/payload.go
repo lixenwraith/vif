@@ -159,6 +159,25 @@ type CursorDefeatStatePayload struct {
 	Defeated bool        `toml:"defeated"`
 }
 
+// CursorScopePayload names the cursor a local effect belongs to.
+//
+// It exists because the shared FSM is the producer of several per-instance
+// effects. A region is session-wide by construction — every instance runs the
+// same machine and enters the same state — so an effect its actions raise reaches
+// every participant whether or not the thing that caused it was theirs. That is
+// right for a storm, which is one encounter every participant is inside, and
+// wrong for a quasar, which is fused from *one* cursor's drains and should darken
+// one player's screen and stop one player's drains.
+//
+// Entity zero is the session-wide form and is what an action with no payload
+// emits, so a region that belongs to nobody needs no configuration. A nonzero
+// entity is one cursor's, and only the instance that simulates that cursor acts —
+// the same admission ResolveOwnedCursor makes for the D-13 owner-authored set,
+// and the same one FuseSystem already makes for the fusion this scope accompanies.
+type CursorScopePayload struct {
+	Entity core.Entity `toml:"entity"`
+}
+
 // DrainDefeatedPayload names the shared cursor whose player domain produced one
 // personal drain defeat. When a shared threshold is crossed, this is the causal
 // election key that selects exactly one player-domain continuation.
