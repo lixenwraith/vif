@@ -49,6 +49,17 @@ type StatusBarRenderer struct {
 	statPeers      *atomic.Int64
 	statLatch      *atomic.Bool
 
+	// The operating point. Phase 5 made the correction cadence a function of the
+	// link, and a player whose picture has gone coarse needs to be told which of
+	// the two it is — a constrained link, or a link that cannot converge at all.
+	statCadence     *atomic.Int64
+	statKeyframe    *atomic.Int64
+	statLinkRTT     *atomic.Int64
+	statLinkJitter  *atomic.Int64
+	statLinkBps     *atomic.Int64
+	statConstrained *atomic.Bool
+	statFloor       *atomic.Bool
+
 	// FSM telemetry
 	statFSMName    *status.AtomicString
 	statFSMElapsed *atomic.Int64
@@ -89,6 +100,14 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statPeers:      statusReg.Ints.Get("network.peers"),
 		statLatch:      statusReg.Bools.Get("network.map_latched"),
 
+		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
+		statKeyframe:    statusReg.Ints.Get("snapshot.cadence_keyframe_interval"),
+		statLinkRTT:     statusReg.Ints.Get("network.link_rtt_ms"),
+		statLinkJitter:  statusReg.Ints.Get("network.link_jitter_ms"),
+		statLinkBps:     statusReg.Ints.Get("network.link_bps"),
+		statConstrained: statusReg.Bools.Get("snapshot.cadence_constrained"),
+		statFloor:       statusReg.Bools.Get("snapshot.cadence_floor_breached"),
+
 		statFSMName:    statusReg.Strings.Get("fsm.state"),
 		statFSMElapsed: statusReg.Ints.Get("fsm.elapsed"),
 		statFSMMaxDur:  statusReg.Ints.Get("fsm.max_duration"),
@@ -125,7 +144,11 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	var rightItems []statusItem
 
-	// Priority 0: parity failure must survive even the narrowest useful status bar.
+	// Priority 0: a link that cannot converge, and the staleness beside it, must
+	// survive even the narrowest useful status bar.
+	if item, ok := r.linkItem(); ok {
+		rightItems = append(rightItems, item)
+	}
 	if item, ok := r.syncItem(); ok {
 		rightItems = append(rightItems, item)
 	}
@@ -474,6 +497,60 @@ func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
 		}, true
 	}
 	return statusItem{}, false
+}
+
+// linkItem reports the operating point the link put this session at, and it is
+// absent while there is nothing to say.
+//
+// A player whose picture has gone coarse has two very different problems and
+// deserves to be told which. A *constrained* link is the system working: the
+// cadence has slowed, prediction is carrying more, and the correction magnitude
+// is rising and bounded — the game is fine and the link is small. A link *below
+// the convergence floor* is not: no cadence the controller may choose delivers a
+// whole authoritative world inside the guaranteed window, so this instance may
+// stop converging, and the plan's boundary is that this is said rather than
+// silently adapted past.
+//
+// The item carries all of it because the operating point is not one number: the
+// round trip and its variation say what the link is, the cadence and keyframe
+// interval say what was chosen, and the rate says how much of the link that
+// choice is spending. It is only ever on screen when the link is constrained, so
+// the width it costs is width a healthy session never pays.
+func (r *StatusBarRenderer) linkItem() (statusItem, bool) {
+	cadence := r.statCadence.Load()
+	if cadence == 0 {
+		return statusItem{}, false
+	}
+	breached := r.statFloor.Load()
+	if !breached && !r.statConstrained.Load() {
+		return statusItem{}, false
+	}
+	label := "LNK"
+	bg := visual.RgbOrange
+	if breached {
+		label, bg = "LINK!", visual.RgbCursorError
+	}
+	return statusItem{
+		text: fmt.Sprintf(" %s %d±%dms %dx%d %s ", label,
+			r.statLinkRTT.Load(), r.statLinkJitter.Load(),
+			cadence, r.statKeyframe.Load(), byteRate(r.statLinkBps.Load())),
+		fg: visual.RgbBlack, bg: bg,
+	}, true
+}
+
+// byteRate renders a bandwidth estimate in the width a status bar has, which is
+// three or four characters rather than the nine a byte count wants.
+func byteRate(bps int64) string {
+	switch {
+	case bps <= 0:
+		return "-"
+	case bps < 1000:
+		return fmt.Sprintf("%dB", bps)
+	case bps < 1000*1000:
+		return fmt.Sprintf("%dK", bps/1000)
+	default:
+		return fmt.Sprintf("%.1fM", float64(bps)/1e6)
+	}
 }
 
 // networkItem reports connection, peer count and the D-14 map latch.

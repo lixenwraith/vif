@@ -21,8 +21,8 @@ func gameBounds() Bounds {
 		MaxKeyframe:         30,
 		FloorKeyframeTicks:  60,
 		Utilisation:         0.75,
-		UrgentMagnitude:     8,
-		UrgentRelevance:     4,
+		UrgentDrift:         50,
+		UrgentRelevance:     100,
 		QuietCadence:        8,
 		RecoverStepTicks:    2,
 		RecoverStepKeyframe: 2,
@@ -135,8 +135,8 @@ func TestTheFloorIsNeverCrossed(t *testing.T) {
 	rates := []float64{0, 1, 500, 5_000, 50_000, 215_000, 5 << 20}
 	jitters := []time.Duration{0, 5 * time.Millisecond, 90 * time.Millisecond, 4 * time.Second}
 	demands := []Demand{
-		{}, {Known: true}, {Known: true, Magnitude: 40},
-		{Known: true, Relevance: 12}, {Known: true, Magnitude: 1, Relevance: 1},
+		{}, {Known: true}, {Known: true, Idle: true}, {Known: true, Drift: 400},
+		{Known: true, Relevance: 900}, {Known: true, Drift: 1, Relevance: 1},
 	}
 
 	for _, s := range sizes {
@@ -235,7 +235,7 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 	b, s := gameBounds(), quietSizes()
 	fat := measured(10<<20, 0)
 
-	urgent := mustController(t, b).Update(fat, s, Demand{Known: true, Magnitude: b.UrgentMagnitude})
+	urgent := mustController(t, b).Update(fat, s, Demand{Known: true, Drift: b.UrgentDrift})
 	if urgent.CadenceTicks != b.MinCadenceTicks {
 		t.Fatalf("an urgent peer on a fat link got cadence %d, want the minimum %d",
 			urgent.CadenceTicks, b.MinCadenceTicks)
@@ -244,11 +244,11 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 	if near.CadenceTicks != b.MinCadenceTicks {
 		t.Fatalf("a peer with a busy neighbourhood got cadence %d", near.CadenceTicks)
 	}
-	quiet := mustController(t, b).Update(fat, s, Demand{Known: true})
+	quiet := mustController(t, b).Update(fat, s, Demand{Known: true, Idle: true})
 	if quiet.CadenceTicks != b.QuietCadence {
 		t.Fatalf("a peer with nothing near it got cadence %d, want %d", quiet.CadenceTicks, b.QuietCadence)
 	}
-	ordinary := mustController(t, b).Update(fat, s, Demand{Known: true, Magnitude: 1})
+	ordinary := mustController(t, b).Update(fat, s, Demand{Known: true, Drift: 1})
 	if ordinary.CadenceTicks != b.NominalCadenceTicks {
 		t.Fatalf("an ordinary peer got cadence %d, want the nominal %d",
 			ordinary.CadenceTicks, b.NominalCadenceTicks)
@@ -261,7 +261,7 @@ func TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits(t *testing.T) {
 func TestDemandCannotBuyACadenceTheLinkCannotCarry(t *testing.T) {
 	b, s := gameBounds(), stormSizes()
 	thin := measured(b.FloorBps(s)*1.1/b.Utilisation, 0)
-	urgent := mustController(t, b).Update(thin, s, Demand{Known: true, Magnitude: 100, Relevance: 100})
+	urgent := mustController(t, b).Update(thin, s, Demand{Known: true, Drift: 400, Relevance: 400})
 	if urgent.CadenceTicks == b.MinCadenceTicks {
 		t.Fatalf("demand bought the minimum cadence on a link at the floor: %+v", urgent)
 	}
@@ -275,7 +275,7 @@ func TestDemandCannotBuyACadenceTheLinkCannotCarry(t *testing.T) {
 // twice the measured jitter.
 func TestJitterKeepsTheCadenceOffItsOwnNoise(t *testing.T) {
 	b, s := gameBounds(), quietSizes()
-	p := mustController(t, b).Update(measured(10<<20, 200*time.Millisecond), s, Demand{Known: true, Magnitude: 100})
+	p := mustController(t, b).Update(measured(10<<20, 200*time.Millisecond), s, Demand{Known: true, Drift: 400})
 	want := ticksFor(b, 400*time.Millisecond)
 	if p.CadenceTicks < want {
 		t.Fatalf("cadence %d is faster than twice the link's %s of jitter (%d ticks)",
@@ -356,7 +356,7 @@ func TestPlansAreReproducible(t *testing.T) {
 		var out []Plan
 		for i := range 30 {
 			m := measured(float64(20_000+i*3_000), time.Duration(i)*time.Millisecond)
-			out = append(out, c.Update(m, stormSizes(), Demand{Known: true, Magnitude: i % 12, Relevance: i % 5}))
+			out = append(out, c.Update(m, stormSizes(), Demand{Known: true, Drift: i * 11 % 120, Relevance: i * 37 % 150, Idle: i%5 == 0}))
 		}
 		return out
 	}

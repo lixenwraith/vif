@@ -1,0 +1,76 @@
+# Headless host half of the Phase 5 staged link-shaping run.
+#
+# The Phase 4 pair proved the correction cadence works over a real socket. This
+# one is the same shape, run long enough that the link can be shaped underneath
+# it in stages: a session that opens mid-run at tick 400 and then plays for two
+# and a half thousand ticks while `tc netem` walks the link down and back.
+#
+# It is normally driven by script/phase5-linkshape.sh, which starts both halves,
+# applies the stages and extracts the numbers. By hand:
+#
+#   ./bin/vif -script script/phase5-host.toml \
+#     -l=log/phase5-host -lv info -ls afs -lt 100 -j
+#
+#   # once "hosting opened mid-run" appears in the host log
+#   ./bin/vif -join 127.0.0.1:7777 -script script/phase5-guest.toml \
+#     -l=log/phase5-guest -lv info -ls afs -lt 100 -j
+#
+#   # then, as root, in a third terminal
+#   sudo tc qdisc add dev lo root netem delay 80ms 40ms loss 2%
+#   sudo tc qdisc change dev lo root netem rate 512kbit delay 40ms
+#   sudo tc qdisc del dev lo root
+#
+# What to read afterwards is the `snapshot.cadence` group on this side against
+# the `snapshot.correction` group on the guest's: the cadence and keyframe
+# interval move with the shape, the magnitude rises and stays bounded, and
+# `cadence_keyframe_period_ticks` never exceeds SnapshotFloorKeyframeTicks. The
+# `-lt 100` stat cadence is deliberately faster than the phase4 pair's, because
+# the point of this run is the trend rather than the endpoint.
+schema = 1
+ticks = 3000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_right"
+count = 6
+
+# A quasar before the join, so the capture carries one and the guest inherits its
+# speed-step deadline rather than arming a fresh one.
+[[action]]
+tick = 100
+event = "QuasarSpawnRequest"
+payload = "x = 40\ny = 15"
+
+# Hosting opens here. Ticks to this point run flat out; from here the run is
+# wall-paced at the 50 ms game interval, which is what makes a wall-clock link
+# shape mean anything to it.
+[[action]]
+tick = 400
+command = "host 127.0.0.1:7777"
+
+# A storm well into the shaped window. This is the load the sizing table is taken
+# at: a keyframe is sixteen times its quiet size here, so it is where the cadence
+# has something to actually decide.
+[[action]]
+tick = 900
+event = "StormSpawnRequest"
+
+# A swarm inside the host's god-mode shield, so the ejection path runs on a world
+# both instances hold while the link is at its narrowest.
+[[action]]
+tick = 1800
+event = "SwarmSpawnRequest"
+payload = "x = 64\ny = 18"
+
+# Motion through the last stage, so the shared world keeps moving while the link
+# is being restored and the correction magnitude has something to close.
+[[action]]
+tick = 2400
+intent = "motion_down"
+count = 8

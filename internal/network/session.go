@@ -144,6 +144,11 @@ type PendingJoin struct {
 	// dropping them here would lose exactly the crossings the ordering exists to
 	// preserve.
 	deferred []*Message
+
+	// gateBytes is what this stream has decoded during the handshake. It answers a
+	// probe that arrives mid-gate, so a host measuring this link sees a running
+	// counter rather than a silence it would have to score as loss.
+	gateBytes uint64
 }
 
 // Deferred returns the session traffic read off the stream during the gate, oldest
@@ -159,8 +164,26 @@ func (p *PendingJoin) HostID() PeerID { return p.offer.Host }
 // caller, and an unrecognised type is a protocol error rather than something to
 // stash.
 func (p *PendingJoin) hold(msg *Message) bool {
+	p.gateBytes += uint64(HeaderSize + len(msg.Payload))
 	switch msg.Type {
 	case MsgHeartbeat:
+		return true
+	case MsgLinkProbe:
+		// Answered rather than swallowed. A host admits a participant before it
+		// reads the world for it (D-22), so this stream is a peer — and therefore
+		// probed — while the gate is still running. Ignoring the probe would score
+		// the whole transfer as loss on the link it is measuring, which is exactly
+		// backwards: the transfer is the busiest that link will ever be.
+		//
+		// The report is empty because there is nothing true to put in it yet: this
+		// instance holds no world, so it has no tick, no lag and no cursor. The
+		// byte counter is this gate's own, and the meter on the other end re-bases
+		// when the port takes the stream over and starts counting again from zero.
+		p.answerProbe(msg)
+		return true
+	case MsgLinkEcho:
+		// This end sends no probes during the gate, so an echo here is a stray from
+		// a previous connection. Nothing to fold it into.
 		return true
 	case MsgStateCorrection:
 		// Swallowed rather than held. The host broadcasts its cadence to every peer
@@ -184,6 +207,21 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		return true
 	}
 	return false
+}
+
+// answerProbe replies to one link probe read off the handshake stream. A failed
+// write is not the join's problem: the probe is a measurement and losing one
+// costs an estimate, where raising it here would fail a join over telemetry.
+func (p *PendingJoin) answerProbe(msg *Message) {
+	echo := encodeEcho(msg.Payload, p.gateBytes, LinkReport{})
+	if echo == nil {
+		return
+	}
+	if p.base.WriteTimeout > 0 {
+		_ = p.conn.SetWriteDeadline(time.Now().Add(p.base.WriteTimeout))
+		defer p.conn.SetWriteDeadline(time.Time{})
+	}
+	_ = NewMessage(MsgLinkEcho, echo).Encode(p.conn)
 }
 
 // maxDeferredJoinFrames bounds what one join may buffer off its stream.

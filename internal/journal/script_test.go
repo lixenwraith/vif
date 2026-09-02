@@ -121,15 +121,31 @@ intnet = "motion_right"
 	}
 }
 
-func TestPhase3ScriptsCompile(t *testing.T) {
-	for _, name := range []string{"phase3-host.toml", "phase3-guest.toml"} {
-		t.Run(name, func(t *testing.T) {
-			script, err := LoadScript(filepath.Join("..", "..", "script", name))
+// TestCheckedInScriptsCompile parses every script the repository ships.
+//
+// It used to name the Phase 3 pair, which meant each later phase's pair went in
+// unchecked: a script is only read by an operator running a two-terminal
+// diagnostic, so a typo in one is discovered at the moment it is least welcome.
+// Globbing the directory is what makes a new pair covered by existing it.
+func TestCheckedInScriptsCompile(t *testing.T) {
+	paths, err := filepath.Glob(filepath.Join("..", "..", "script", "*.toml"))
+	if err != nil {
+		t.Fatalf("Glob() error = %v", err)
+	}
+	if len(paths) == 0 {
+		t.Fatal("no checked-in scripts found")
+	}
+	for _, path := range paths {
+		t.Run(filepath.Base(path), func(t *testing.T) {
+			script, err := LoadScript(path)
 			if err != nil {
 				t.Fatalf("LoadScript() error = %v", err)
 			}
-			if script.Ticks != 2000 {
-				t.Fatalf("ticks = %d, want 2000", script.Ticks)
+			if script.Ticks <= 0 {
+				t.Fatalf("ticks = %d; a script declares a hard budget", script.Ticks)
+			}
+			if _, err := NewScriptDriver(&scriptFake{}, script); err != nil {
+				t.Fatalf("NewScriptDriver() error = %v", err)
 			}
 		})
 	}

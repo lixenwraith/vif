@@ -1,0 +1,47 @@
+# Headless guest half of the Phase 5 staged link-shaping run.
+#
+# Pair with phase5-host.toml, started once the host reports "hosting opened
+# mid-run". As in the Phase 4 pair, every action sits well beyond any plausible
+# entry tick: a joiner enters at whatever tick the host had reached, and a script
+# action at an absolute tick the run has already passed is an error rather than a
+# no-op.
+#
+# The tick budget is relative, so this runs 2,400 ticks from wherever the join
+# landed — long enough to cross every shaping stage the driver applies.
+#
+# What this half carries that the host's does not is the receiving end of the
+# convergence floor: `snapshot.cadence_keyframe_age_ticks` and
+# `snapshot.cadence_floor_breached` say whether a whole authoritative world
+# actually arrived inside the guaranteed window, which is a different claim from
+# the host's estimate that its link could carry one.
+schema = 1
+ticks = 2400
+width = 120
+height = 40
+
+[[action]]
+tick = 1000
+command = "god"
+
+[[action]]
+tick = 1004
+intent = "motion_left"
+count = 6
+
+# Motion in the middle of the shaped window: a guest that keeps moving is a guest
+# whose prediction keeps drifting, which is what gives the correction magnitude
+# something to measure.
+[[action]]
+tick = 1600
+intent = "motion_up"
+count = 6
+
+[[action]]
+tick = 2200
+intent = "motion_right"
+count = 8
+
+[[action]]
+tick = 2800
+intent = "motion_down"
+count = 4

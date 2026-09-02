@@ -42,10 +42,20 @@ type Bounds struct {
 	// the digests, which travel on the same link and are not in this model.
 	Utilisation float64
 
-	// UrgentMagnitude is the correction magnitude at which a participant is
-	// treated as drifting faster than the nominal cadence repairs, and QuietTicks
-	// the cadence a participant with nothing relevant near it falls back to.
-	UrgentMagnitude int
+	// UrgentDrift and UrgentRelevance are where a participant stops being
+	// ordinary, and both are stated as percentages for the same reason: an
+	// absolute threshold is a threshold about the world rather than about the
+	// participant. A correction that moves five hundred entities is enormous in a
+	// quiet world and unremarkable in a storm, so a fixed magnitude would pin
+	// every storm at the fastest cadence the link allows and spend the whole link
+	// on a condition that is simply what a storm looks like.
+	//
+	// UrgentDrift is therefore a *rise*: how far the far end's prediction error
+	// stands above its own recent level. UrgentRelevance is a *comparison*: how
+	// far one participant's share of what the correction moves stands above the
+	// session's mean. QuietCadence is where a participant with neither settles,
+	// which is what pays for the other two.
+	UrgentDrift     int
 	UrgentRelevance int
 	QuietCadence    uint64
 
@@ -106,8 +116,24 @@ type Demand struct {
 	// installed a world is the one most likely to need the next correction.
 	Known bool
 
-	Magnitude int
+	// Drift is how far the far end's correction magnitude stands above its own
+	// recent level, in percent. A *level* says how busy the world is; a *rise*
+	// says the cadence is no longer keeping up with it, and only the second is a
+	// reason to publish sooner.
+	Drift int
+
+	// Relevance is how far this participant's share of what the next correction
+	// moves stands above the session's mean, in percent. It is comparative by
+	// construction, which is the honest shape for a signal whose whole purpose is
+	// to decide which of several participants gets served first: with one peer
+	// there is nobody to prioritise against and the whole link is already its own.
 	Relevance int
+
+	// Idle marks a participant with nothing near it and a prediction the last
+	// correction did not have to move. It is what frees the budget the other two
+	// spend, and it is a separate flag rather than a zero because zero drift is
+	// the ordinary state of a session that is converging well.
+	Idle bool
 }
 
 // Plan is one peer's operating point, and the reason for it.
@@ -115,9 +141,11 @@ type Plan struct {
 	CadenceTicks     uint64
 	KeyframeInterval int
 
-	// Constrained reports that this plan is not the nominal one — the link, or
-	// the demand, moved it. A player seeing it should be told the link is the
-	// reason the picture is coarser, rather than guessing the game is broken.
+	// Constrained reports that this plan is *worse* than the nominal one: a slower
+	// cadence, a longer keyframe interval, or both. A plan the demand pulled
+	// faster is not constrained — the link is carrying more than it was asked to,
+	// which is the opposite condition — and reporting the two alike would put a
+	// warning on the status bar of the participant being served best.
 	Constrained bool
 
 	// FloorBreached reports the condition adaptation must never hide: the link
@@ -206,11 +234,10 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 	// the nominal point rather than to throttle on a number that means "the
 	// sender was idle".
 	if !m.Ready || !m.Saturated || m.Throughput <= 0 {
-		if d.Known && (d.Magnitude >= b.UrgentMagnitude || d.Relevance >= b.UrgentRelevance) {
+		if d.Known && (d.Drift >= b.UrgentDrift || d.Relevance >= b.UrgentRelevance) {
 			out.Reason = "demand"
-			out.Constrained = out.CadenceTicks != b.NominalCadenceTicks ||
-				out.KeyframeInterval != b.NominalKeyframe
 		}
+		out.Constrained = b.degraded(out)
 		return out
 	}
 
@@ -236,8 +263,7 @@ func (c *Controller) decide(m Metrics, s Sizes, d Demand) Plan {
 
 	if plan, ok := search(b, minTicks, s, budget); ok {
 		plan.FloorBps, plan.BudgetBps = out.FloorBps, budget
-		plan.Constrained = plan.CadenceTicks != b.NominalCadenceTicks ||
-			plan.KeyframeInterval != b.NominalKeyframe
+		plan.Constrained = b.degraded(plan)
 		if plan.Constrained && plan.Reason == "" {
 			plan.Reason = "link"
 		} else if plan.Reason == "" {
@@ -266,11 +292,11 @@ func (c *Controller) desired(d Demand) uint64 {
 	switch {
 	case !d.Known:
 		return b.NominalCadenceTicks
-	case b.UrgentMagnitude > 0 && d.Magnitude >= b.UrgentMagnitude:
+	case b.UrgentDrift > 0 && d.Drift >= b.UrgentDrift:
 		return b.MinCadenceTicks
 	case b.UrgentRelevance > 0 && d.Relevance >= b.UrgentRelevance:
 		return b.MinCadenceTicks
-	case d.Magnitude == 0 && d.Relevance == 0 && b.QuietCadence > b.NominalCadenceTicks:
+	case d.Idle && b.QuietCadence > b.NominalCadenceTicks:
 		return min(b.QuietCadence, b.MaxCadenceTicks)
 	default:
 		return b.NominalCadenceTicks
@@ -369,13 +395,18 @@ func (c *Controller) step(next Plan) Plan {
 	}
 	if out.CadenceTicks != next.CadenceTicks || out.KeyframeInterval != next.KeyframeInterval {
 		out.PlannedBps = 0 // recomputed by the next decision; a stepped plan has no priced rate
-		out.Constrained = out.CadenceTicks != c.b.NominalCadenceTicks ||
-			out.KeyframeInterval != c.b.NominalKeyframe
+		out.Constrained = c.b.degraded(out)
 		if out.Reason == "" || out.Reason == "nominal" {
 			out.Reason = "recovering"
 		}
 	}
 	return out
+}
+
+// degraded reports whether a plan is worse than the nominal operating point, in
+// either of the two directions a plan can be worse in.
+func (b Bounds) degraded(p Plan) bool {
+	return p.CadenceTicks > b.NominalCadenceTicks || p.KeyframeInterval > b.NominalKeyframe
 }
 
 // rate prices one schedule: a keyframe plus the deltas that follow it, over the

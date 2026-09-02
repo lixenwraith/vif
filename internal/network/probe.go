@@ -142,6 +142,18 @@ type linkMeter struct {
 	lastDelivered uint64
 	lastEchoAt    time.Time
 	haveDelivered bool
+
+	// The two cumulative counters have no shared origin: this end starts counting
+	// when it accepted the stream, the far end when its port took the stream over,
+	// and a mid-run join means those are different moments separated by a whole
+	// capture. Only their *differences* mean anything, so the first sample after
+	// either counter restarts establishes an origin and the ones after it measure
+	// growth from there. Without this a join would leave a standing backlog the
+	// size of the world it installed, and the link would read as permanently
+	// saturated for the rest of the session.
+	baseSent      uint64
+	baseDelivered uint64
+	haveBase      bool
 }
 
 func newLinkMeter() *linkMeter {
@@ -170,19 +182,24 @@ func (m *linkMeter) nextProbe() uint32 {
 // it does not clear the outstanding flag, so the newer probe is still charged as
 // lost if it never returns.
 func (m *linkMeter) observe(now, sent time.Time, seq uint32, delivered uint64, sentBytes uint64, report LinkReport) {
-	rtt := now.Sub(sent)
 	sample := linkpace.Sample{
-		RTT:       rtt,
+		RTT:       now.Sub(sent),
 		LagTicks:  uint64(report.LagTicks),
 		Magnitude: int(report.Magnitude),
 		Interest:  report.interest(),
 	}
-	if sentBytes > delivered {
-		sample.Backlog = int64(sentBytes - delivered)
-	}
-	if m.haveDelivered && delivered >= m.lastDelivered && now.After(m.lastEchoAt) {
-		sample.Delivered = int64(delivered - m.lastDelivered)
-		sample.Elapsed = now.Sub(m.lastEchoAt)
+	rebase := !m.haveBase || delivered < m.baseDelivered || sentBytes < m.baseSent ||
+		delivered < m.lastDelivered
+	if rebase {
+		m.baseSent, m.baseDelivered, m.haveBase = sentBytes, delivered, true
+	} else {
+		if offered, arrived := sentBytes-m.baseSent, delivered-m.baseDelivered; offered > arrived {
+			sample.Backlog = int64(offered - arrived)
+		}
+		if m.haveDelivered && now.After(m.lastEchoAt) {
+			sample.Delivered = int64(delivered - m.lastDelivered)
+			sample.Elapsed = now.Sub(m.lastEchoAt)
+		}
 	}
 	m.lastDelivered, m.lastEchoAt, m.haveDelivered = delivered, now, true
 	if seq >= m.echoed {

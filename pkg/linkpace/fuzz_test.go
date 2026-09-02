@@ -51,7 +51,7 @@ func FuzzControllerHoldsItsEnvelope(f *testing.F) {
 			Ready:      true,
 		}
 		s := Sizes{Keyframe: keyframe, Delta: delta}
-		d := Demand{Known: known, Magnitude: magnitude, Relevance: relevance}
+		d := Demand{Known: known, Drift: magnitude, Relevance: relevance, Idle: magnitude == 0}
 
 		for range 12 {
 			p := c.Update(m, s, d)

@@ -165,6 +165,17 @@ type peerPublisher struct {
 	// so a keyframe goes to everyone and resets everyone's schedule.
 	nextTick uint64
 
+	// near is how many of the entities the last correction moved stood within the
+	// relevance radius of this participant's cursor, and share how far that stands
+	// above the session's mean, in percent. magEWMA is the far end's own recent
+	// correction magnitude, which is what makes a *rise* in it detectable — a
+	// level says how busy the world is, and only a rise says the cadence is
+	// falling behind it.
+	near    int
+	share   int
+	magEWMA float64
+	haveMag bool
+
 	sent    int64
 	refused int64
 }
@@ -202,8 +213,8 @@ func CadenceBounds() linkpace.Bounds {
 		MaxKeyframe:         parameter.SnapshotKeyframeMaxCorrections,
 		FloorKeyframeTicks:  parameter.SnapshotFloorKeyframeTicks,
 		Utilisation:         parameter.SnapshotLinkUtilisation,
-		UrgentMagnitude:     parameter.SnapshotUrgentMagnitude,
-		UrgentRelevance:     parameter.SnapshotUrgentRelevance,
+		UrgentDrift:         parameter.SnapshotUrgentDriftPercent,
+		UrgentRelevance:     parameter.SnapshotUrgentRelevancePercent,
 		QuietCadence:        parameter.SnapshotCadenceQuietTicks,
 		RecoverStepTicks:    parameter.SnapshotCadenceRecoverTicks,
 		RecoverStepKeyframe: parameter.SnapshotCadenceRecoverKeyframe,
@@ -349,6 +360,8 @@ func (c *corrections) publishRound(force bool) error {
 	// honest shape: the alternative is scoring a delta before computing it.
 	near := c.relevanceLocked(cap, keyframe, link, ids)
 
+	c.scoreRelevanceLocked(ids, near)
+
 	sent := 0
 	for _, id := range due {
 		p := c.peers[id]
@@ -359,7 +372,6 @@ func (c *corrections) publishRound(force bool) error {
 		p.sent++
 		sent++
 		p.nextTick = tick + p.plan.CadenceTicks
-		p.demand = linkpace.Demand{Known: true, Relevance: near[id]}
 	}
 
 	c.recordSizeLocked(keyframe, len(body))
@@ -505,11 +517,16 @@ func (c *corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) 
 		p.metrics = m
 		// The magnitude comes back on the peer's own echo: it is how far *that*
 		// participant's prediction had drifted when the last correction reached
-		// it, which is the one number that says whether its cadence is repairing
-		// the drift as fast as the drift accumulates.
+		// it. What is fed to the controller is the rise rather than the level —
+		// see driftPercent — and the relevance beside it is this participant's
+		// share of the last correction measured against the session's mean.
 		if m.Samples > 0 {
-			p.demand.Known = true
-			p.demand.Magnitude = m.Magnitude
+			p.demand = linkpace.Demand{
+				Known:     true,
+				Drift:     p.driftPercent(m.Magnitude),
+				Relevance: p.share,
+				Idle:      p.near == 0 && m.Magnitude == 0,
+			}
 		}
 		p.plan = p.ctrl.Update(m, sizes, p.demand)
 
@@ -572,7 +589,34 @@ func urgency(d linkpace.Demand) int {
 	if !d.Known {
 		return 0
 	}
-	return d.Magnitude + d.Relevance
+	return d.Drift + d.Relevance
+}
+
+// driftPercent folds the far end's reported correction magnitude into a running
+// level and returns how far this one stands above it.
+//
+// The level is what a busy world produces and is not by itself a reason to
+// publish sooner: measured on the shipped storm scenario, a correction moves the
+// whole shared population every cadence, so a threshold on the level fires
+// permanently and spends the entire uplink on a condition that is simply what a
+// storm looks like. A *rise* above the peer's own level is the thing worth
+// reacting to, because it says the prediction is now drifting faster than the
+// cadence repairs it.
+func (p *peerPublisher) driftPercent(magnitude int) int {
+	const smoothing = 0.25
+	cur := float64(magnitude)
+	out := 0
+	if p.haveMag && p.magEWMA >= 1 {
+		if rise := cur - p.magEWMA; rise > 0 {
+			out = int(100 * rise / p.magEWMA)
+		}
+	}
+	if !p.haveMag {
+		p.magEWMA, p.haveMag = cur, true
+	} else {
+		p.magEWMA += smoothing * (cur - p.magEWMA)
+	}
+	return out
 }
 
 // sizesLocked is what a correction currently costs, falling back to the nominal
@@ -999,8 +1043,13 @@ type PeerCadence struct {
 	Jitter           time.Duration
 	ThroughputBps    float64
 	Saturated        bool
-	Magnitude        int
-	Relevance        int
+
+	// Drift is the rise in this participant's own correction magnitude, in
+	// percent; Relevance how far its share of the last correction stood above the
+	// session's mean; Near the raw count behind that share.
+	Drift     int
+	Relevance int
+	Near      int
 }
 
 // CadenceReport is the session's operating point: the timeline the host is
@@ -1052,8 +1101,9 @@ func (a *App) CadenceReport() CadenceReport {
 			Jitter:           p.metrics.Jitter,
 			ThroughputBps:    p.metrics.Throughput,
 			Saturated:        p.metrics.Saturated,
-			Magnitude:        p.demand.Magnitude,
+			Drift:            p.demand.Drift,
 			Relevance:        p.demand.Relevance,
+			Near:             p.near,
 		})
 	}
 	slices.SortFunc(out.Peers, func(x, y PeerCadence) int {

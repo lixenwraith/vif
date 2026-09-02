@@ -110,6 +110,47 @@ func movedEntities(base, next SharedCapture, keyframe bool) map[core.Entity]stru
 	return out
 }
 
+// scoreRelevanceLocked turns each participant's raw near-count into the
+// comparative share the controller and the priority order read.
+//
+// Comparative rather than absolute, and that is the whole of why relevance is
+// usable as a scheduling signal at all. A count is a fact about the world: in a
+// storm every participant has hundreds of moved entities beside it, so any fixed
+// threshold fires for everyone at once and the signal says nothing. What is worth
+// acting on is that *this* participant has more at stake in the next correction
+// than the others do — which with one guest is nobody, and the whole link is
+// already its own.
+//
+// Caller MUST hold publishMu.
+func (c *corrections) scoreRelevanceLocked(ids []uint32, near map[uint32]int) {
+	total := 0
+	counted := 0
+	for _, id := range ids {
+		if c.peers[id] == nil {
+			continue
+		}
+		total += near[id]
+		counted++
+	}
+	if counted == 0 {
+		return
+	}
+	mean := float64(total) / float64(counted)
+	for _, id := range ids {
+		p := c.peers[id]
+		if p == nil {
+			continue
+		}
+		p.near = near[id]
+		p.share = 0
+		if mean >= 1 {
+			if above := float64(p.near) - mean; above > 0 {
+				p.share = int(100 * above / mean)
+			}
+		}
+	}
+}
+
 // publishPlanTelemetryLocked publishes the operating point: what cadence is in
 // force, how long the session leaves between whole worlds, what the link was
 // measured to carry, and whether either of the two conditions a player should be

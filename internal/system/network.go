@@ -95,6 +95,7 @@ type NetworkSystem struct {
 	// happens here is a read and a store, so that a network round trip never
 	// becomes a value a tick could branch on.
 	statRTT       *atomic.Int64
+	statRTTMicros *atomic.Int64
 	statJitter    *atomic.Int64
 	statLinkBps   *atomic.Int64
 	statLinkLoss  *atomic.Int64
@@ -270,6 +271,12 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statCorrections = s.intStat(reg, "network.corrections_received")
 	s.statForged = s.intStat(reg, "network.artifacts_refused")
 	s.statRTT = s.intStat(reg, "network.link_rtt_ms")
+	// Milliseconds are the unit a person reads and the unit `tc netem delay`
+	// speaks, and they round a loopback round trip to zero — which reads as "not
+	// measured" rather than as "fast". The microsecond form is the same number at
+	// the resolution the estimator actually works in, so a local session can show
+	// that the round trip exists at all.
+	s.statRTTMicros = s.intStat(reg, "network.link_rtt_us")
 	s.statJitter = s.intStat(reg, "network.link_jitter_ms")
 	s.statLinkBps = s.intStat(reg, "network.link_bps")
 	s.statLinkLoss = s.intStat(reg, "network.link_loss_pct")
@@ -705,6 +712,7 @@ func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTi
 		return
 	}
 	s.statRTT.Store(worst.RTTMillis())
+	s.statRTTMicros.Store(worst.RTT.Microseconds())
 	s.statJitter.Store(worst.JitterMillis())
 	s.statLinkBps.Store(int64(worst.Throughput))
 	s.statLinkLoss.Store(int64(worst.Loss * 100))

@@ -432,3 +432,50 @@ func transportOf(t *testing.T, a *App) *network.MeshPort {
 	}
 	return port
 }
+
+// TestTheOperatingPointIsPublished is requirement 5 as a criterion: every value
+// the phase adapts has to be readable, or a player watching their picture go
+// coarse has no way to tell a small link from a broken game.
+func TestTheOperatingPointIsPublished(t *testing.T) {
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 1200})
+	runSession(host, guest, 300)
+
+	for _, key := range []string{
+		"snapshot.cadence_ticks",
+		"snapshot.cadence_keyframe_interval",
+		"snapshot.cadence_keyframe_period_ticks",
+		"snapshot.cadence_uplink_bps",
+		"snapshot.cadence_floor_bps",
+		"network.link_rtt_us",
+		"network.link_bps",
+	} {
+		if statOf(host, key) <= 0 {
+			t.Errorf("%s is not published (%d)", key, statOf(host, key))
+		}
+	}
+	// Jitter and loss are legitimately zero on a link that has neither, so they
+	// are asserted to exist rather than to be non-zero.
+	for _, key := range []string{"network.link_rtt_ms", "network.link_jitter_ms", "network.link_loss_pct"} {
+		if statOf(host, key) < 0 {
+			t.Errorf("%s reads %d", key, statOf(host, key))
+		}
+	}
+	if !statBoolOf(host, "snapshot.cadence_constrained") {
+		t.Error("the constrained-link state is not published")
+	}
+
+	// The operator surface carries the same set in one line, which is what a
+	// person types :session for.
+	summary := host.SessionSummary()
+	for _, want := range []string{"cadence", "keyframe every", "link", "uplink", "floor", "constrained"} {
+		if !strings.Contains(summary, want) {
+			t.Errorf(":session does not report %q: %s", want, summary)
+		}
+	}
+	if solo := mustHeadless(t, 0x5EEDBEEF, 80, 24); true {
+		defer solo.Close()
+		if got := solo.SessionSummary(); !strings.Contains(got, "Solo run") {
+			t.Errorf("a solo run reports %q", got)
+		}
+	}
+}

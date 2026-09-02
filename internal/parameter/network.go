@@ -110,14 +110,25 @@ const (
 	// relevance is a budget reallocation, not a free increase.
 	SnapshotCadenceQuietTicks = 8
 
-	// SnapshotUrgentMagnitude and SnapshotUrgentRelevance are where a peer stops
-	// being ordinary. The first is the correction magnitude — shared entities the
-	// authority had to move — past which a prediction is drifting faster than the
-	// nominal cadence repairs. The second is how many of the entities the next
-	// correction moves stand within SnapshotRelevanceRadius of that participant's
-	// own cursor.
-	SnapshotUrgentMagnitude = 8
-	SnapshotUrgentRelevance = 4
+	// SnapshotUrgentDriftPercent and SnapshotUrgentRelevancePercent are where a
+	// peer stops being ordinary, and both are percentages rather than counts
+	// because an absolute threshold is a threshold about the world rather than
+	// about the participant.
+	//
+	// A correction that moves five hundred shared entities is enormous in a quiet
+	// world and unremarkable in a storm — measured, the storm's magnitude is the
+	// whole shared population every cadence — so a fixed magnitude would pin every
+	// storm at the fastest cadence the link allows and spend the entire uplink on
+	// a condition that is simply what a storm looks like. What says the cadence is
+	// no longer keeping up is the *rise*: how far the far end's correction
+	// magnitude stands above its own recent level.
+	//
+	// Relevance is a comparison for the same reason, against the session's mean
+	// rather than a count: with one guest there is nobody to prioritise against
+	// and the whole link is already its own, and with several the question is
+	// which of them has more at stake in the next correction.
+	SnapshotUrgentDriftPercent     = 50
+	SnapshotUrgentRelevancePercent = 100
 
 	// SnapshotRelevanceRadius is how far from a participant's cursor a shared
 	// entity is still that participant's business, in cells. It is a scheduling
