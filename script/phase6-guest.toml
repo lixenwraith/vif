@@ -1,0 +1,43 @@
+# Headless guest half of the Phase 6 selective-correction run.
+#
+# Pair with phase6-host.toml, started once the host reports "hosting opened
+# mid-run". As in the Phase 4 and 5 pairs, every action sits well beyond any
+# plausible entry tick: a joiner enters at whatever tick the host had reached,
+# and a script action at an absolute tick the run has already passed is an error
+# rather than a no-op.
+#
+# What this half carries that the host's does not is the receiving end of the
+# exchange. `snapshot.index` says how much of each correction was hashes and how
+# often the roots agreed outright; `snapshot.repair` says what a disagreement
+# cost and whether any of it was refused; `snapshot.replay` says whether this
+# participant's own crossings survived the corrections that rebased it.
+schema = 1
+ticks = 1100
+width = 120
+height = 40
+
+[[action]]
+tick = 1000
+command = "god"
+
+# Motion after the join, so this participant's prediction has something to drift
+# and its own crossings have something to be replayed onto.
+[[action]]
+tick = 1010
+intent = "motion_left"
+count = 6
+
+[[action]]
+tick = 1300
+intent = "motion_up"
+count = 6
+
+[[action]]
+tick = 1600
+intent = "motion_right"
+count = 8
+
+[[action]]
+tick = 1900
+intent = "motion_down"
+count = 4

@@ -331,9 +331,14 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 
 	before := statOf(guest, "snapshot.shards_refused")
 	baselines := statOf(guest, "snapshot.baseline_refusals")
+	applied := statOf(guest, "snapshot.corrections_applied")
 	guest.corrections.applyRepair(stale)
 	if statOf(guest, "snapshot.shards_refused") <= before {
 		t.Fatal("a superseded repair was accepted")
+	}
+	if got := statOf(guest, "snapshot.corrections_applied"); got != applied {
+		t.Fatalf("a superseded repair was installed anyway (%d corrections applied, was %d)",
+			got, applied)
 	}
 	if statOf(guest, "snapshot.baseline_refusals") <= baselines {
 		t.Fatal("a superseded repair was refused for some reason other than its baseline")
@@ -366,11 +371,12 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*CorrectionS
 	guest.ApplyPendingCorrections() // answers the index, now awaiting a repair
 
 	guest.corrections.selectiveMu.Lock()
-	awaiting := guest.corrections.selective.awaiting
+	outstanding := guest.corrections.selective.awaiting
 	guest.corrections.selectiveMu.Unlock()
-	if awaiting == nil {
+	if len(outstanding) == 0 {
 		t.Fatal("the guest is not awaiting a repair; the injected divergence produced none")
 	}
+	awaiting := outstanding[len(outstanding)-1]
 	req, _, _ := compareRequest(awaiting.index, awaiting.manifest)
 	if req.Converged() {
 		t.Fatal("the guest reported convergence; the injected divergence produced no request")

@@ -231,7 +231,9 @@ Ack is observational—there is no retransmission policy.
 Control messages carry heartbeat, join offer/reply, start/ready gates and
 disconnect notices. Gameplay uses `MsgEvent` for a closed crossing
 epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
-`MsgStateDigest` for the periodic shared-world parity probe. The epoch is JSON
+`MsgStateDigest` for the periodic shared-world parity probe. Authority travels as
+`MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
+`MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below. The epoch is JSON
 containing journal-registry TOML payloads; representative complete-frame budgets
 are pinned by `TestWireEncodingBudget`. The remaining codes in `protocol.go` are
 reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
@@ -295,6 +297,29 @@ world that looks installed and is not, which is worse than a refused join. The
 gate's `SessionOffer` names `snapshot_tick` and `snapshot_bytes` before the
 transfer starts, so a stream that stops halfway is a failed join rather than a
 world installed from a prefix.
+
+`MsgStateManifest` (0x28), `MsgStateRequest` (0x29) and `MsgStateShard` (0x2A) are
+the Phase 6 selective exchange, and they are the only three messages in this
+protocol that form a request/response pair carrying game state. A manifest is a
+compact index over the same capture a correction would have carried — root, one
+summary per section, and the capture header. A request is a receiver's answer to
+one: either an acknowledgement that the roots agreed, or the page hashes of the
+sections that did not. A shard set is the repair the second kind provokes.
+
+None of the three is chunked. Each is bounded to one transport frame by
+construction — `parameter.SnapshotShardBytesMax` caps a repair well inside the
+65,535-byte payload field — and a repair too wide for one frame is not a repair:
+the host answers it with a keyframe, which is chunked, self-sufficient and already
+part of the protocol. All three use the same 10-byte compression envelope as a
+capture, so the wire figures the cadence is priced from are compressed bytes.
+
+They are also the only three that are never relayed. All three are one exchange
+between an authority and a receiver that can answer it: a manifest forwarded to a
+participant whose reply cannot get back would arrive as a question nobody can act
+on, and a request or a repair forwarded to a peer that did not ask would deliver a
+page vector it holds no retention for. The authority publishes the index only when
+every participant is directly linked, and keeps the Phase 5 stream otherwise, so a
+relayed participant is never left holding an index it cannot use.
 
 ## 9. Poll boundary and receive lead
 

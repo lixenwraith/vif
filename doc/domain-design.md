@@ -1072,6 +1072,98 @@ reached through a neighbour rides that neighbour's schedule, because the flood
 forwards what the neighbour was sent; per-peer cadence is a property of a direct
 link.
 
+**The index, and the repair it selects.** Phase 5 left the correction stream
+carrying a whole body every cadence, and the measurement said what that costs:
+about 40 KiB/s at the storm high water, paid whether or not the receiver already
+agreed. A deterministic guest usually does agree — it runs the same simulation
+from the same state, so between two corrections it diverges only where an input
+differed — and Phase 6 makes that checkable.
+
+A **correction manifest** is a deterministic, versioned index over the same
+capture the correction path already builds. It is partitioned into **sections**
+— one per component store, generated from `manifest.Components` beside the
+capture itself, plus the capture's allocator scalars, RNG streams, declared system
+state, compared status surface and shared FSM — and each section into bounded
+**pages**. Every page has a hash, every section a hash over its pages, and the
+manifest a root over its sections, each level seeded with its own domain
+separator. The cadence then runs:
+
+1. the host publishes the manifest, and retains the capture and its index for
+   `SnapshotManifestRetention` corrections;
+2. the receiver indexes its own world and compares roots. Equal ends the exchange:
+   it acknowledges, records a **hash-only correction**, and no state travels;
+3. otherwise it descends — only into the sections whose hashes differ — and sends
+   its page hashes for those;
+4. the host compares them against its own and returns the pages that differ, each
+   carrying the page hash its rows reproduce;
+5. the receiver validates every shard, splices them into its own capture,
+   re-indexes the sections it touched, and installs only if the result reproduces
+   the root the repair declares.
+
+Two exclusions keep the index honest about D-13, and both are exact rather than
+approximate. A cursor's owner-authored cells are hashed only when the *authority*
+owns that cursor: cells a receiver adopts at install are compared and repaired,
+cells it authors are outside the hashed surface on both sides, and a cursor naming
+no participant is ordinary shared state. And the cursor's control assignment,
+which every instance re-derives from its own participant identity, is zeroed for
+hashing and repair alike. Without either the root would carry a disagreement no
+shard could ever close, and the protocol would fall back to a whole world every
+correction for the life of the session.
+
+Ordering is not part of the hashed surface, and cannot be: a reconciled world
+keeps its own dense store order, so two instances holding identical state hold it
+in different slots. A page is read in entity-ascending order, which neither
+instance chose, and page membership is a function of the entity rather than of a
+position in a slice. What order *does* commit to is the shard: its rows must
+arrive in that canonical order or the page hash does not reproduce.
+
+Everything past the capture runs outside the world lock. The bounded read is
+unchanged; the partition, the per-cell marshalling, the hashing, the diff, the
+proof and the compression are charged to the publisher's goroutine, and
+`snapshot.hash_us` beside `snapshot.capture_us` is what says so.
+
+The Phase 5 stream remains the floor under all of it. Keyframes keep their
+schedule, so the convergence floor and the maximum repair age are exactly what
+they were. A peer that leaves `SnapshotManifestSilenceCorrections` manifests
+unanswered — a relayed participant, or one whose uplink has failed while its
+downlink has not — is sent whole bodies again. A session with any participant not
+directly linked keeps whole bodies throughout. And every refusal in the new
+path — an unknown version or schema, a stale or foreign baseline, a
+duplicate-conflicting page, a repair wider than the keyframe it stands in for, a
+failed page proof, a root that did not verify — ends at a keyframe, with the live
+world untouched.
+
+**The replay suffix.** A correction describes the host's world at an earlier tick,
+and a guest applying one has been predicting past it. What it produced in between
+is real, and Phase 5 discarded all of it on every correction. Each instance now
+retains a bounded suffix of its own accepted crossings — in `ScheduledWireFrame`,
+the representation the transport already encoded and the journal already writes,
+so a replay cannot differ from what the session was told happened — and replays
+the ones produced after the correction's baseline.
+
+The window is measured in **production** ticks, and that is the whole of the
+exactly-once argument. An artifact produced after the baseline applies strictly
+after it (production plus the playout lead) and therefore cannot be in a capture
+taken at the baseline, so replaying it restores exactly what the install undid. An
+artifact produced at or before the baseline is *in flight*: the producer applied
+it immediately, the authority will apply it in its own order, and the correction
+after that carries it — which is what keeps a corrected guest equal to the
+authority at the tick the correction describes.
+
+Three artifacts are never retained, so no replay can carry them: participant
+arrival, participant departure and full reset. They decide what the world *is*
+rather than what happens in it, every instance applies them at one agreed tick
+including their producer, and a replay of one would create a roster entry, or a
+run, the rest of the session numbers differently. Nor is anything a peer produced
+(the barrier orders those) or anything a shared system re-derives (D-5 — it would
+apply twice).
+
+Retention is bounded by tick span, record count and encoded bytes, and dropping a
+record the caller would have needed makes the suffix *unavailable* rather than
+shorter: a partial replay is a guess about what the participant did. The guest
+then installs the authority alone and publishes `snapshot.replay_skipped` and
+`snapshot.replay_suffix_unavailable`.
+
 **Membership.** A roster change is shared state, so it travels as an artifact
 rather than as a local reaction to a link event. A disconnect is observed only by
 a direct neighbour, and at a moment of that neighbour's own transport's choosing:
@@ -1175,10 +1267,22 @@ rates. `TestWireEncodingBudget` pins the representative budgets;
 Authoritative state is the larger stream and has its own measurements. At the
 storm high water the schema is about 176 KiB for a keyframe and 29 KiB for a delta;
 the bounded deflate envelope reduces those to about 15.4 KiB and 7.1 KiB. With one
-keyframe per ten corrections that is about **39.6 KiB/s at 5 Hz** and 15.8 KiB/s
+keyframe per ten corrections that was about 39.6 KiB/s at 5 Hz and 15.8 KiB/s
 at 2 Hz, down from 216 and 86 KiB/s. Snapshot schema 2 adds exact genetic
 continuation to the opaque `genetic` carrier; delta generation already treats
 every carrier record as whole state, so compression needs no carrier special case.
+
+The index changed what a correction costs when the receiver already agrees. On the
+same fixture the manifest is about 1.4 KiB over 58 sections, and the whole
+converged exchange — index out, acknowledgement back — is about **1.5 KiB against
+the 7.1 KiB delta it replaces**. With the keyframe schedule unchanged that is
+about **14.2 KiB/s at 5 Hz** and 5.7 KiB/s at 2 Hz. A repair costs what the
+disagreement is worth: a page averages under 300 bytes, and the widest ordinary
+disagreement this world produces — a receiver whose state is a whole cadence
+stale, which is what a guest that predicted *nothing* would hold — is about
+14.7 KiB of shards, which is where the rule that a repair wider than the keyframe
+is not sent at all takes over. `TestSelectiveCorrectionCostAtTheStormHighWater`
+reports all of it and asserts only the halving.
 
 The link measurement adds 12 bytes out and 45 bytes back per peer per
 `NetworkProbeInterval` — under half a kilobyte a second at `MaxPlayers`, small
@@ -1603,12 +1707,12 @@ Domain-boundary debt that remains visible to tests:
 
 ### 9.5 Next work
 
-Phase 6 first makes steady-state bytes proportional to disagreement through a
-versioned hash hierarchy and selectively proved shards, with compressed keyframes
-as bounded fallback. It also adds bounded rollback *and replay* so a game guest's
-own outstanding crossings survive a correction that predates them. Exact scope and
-acceptance gates are in [Multiplayer enhancement plan](multi-player-enhancement.md)
-and [Phase 6 implementation prompt](phase6-implementation-prompt.md).
+Phases 1–6 are implemented. Phase 6 made steady-state bytes proportional to
+disagreement through a versioned hash hierarchy and selectively proved shards,
+with compressed keyframes as the bounded fallback, and added the bounded replay
+that lets a game guest's own outstanding crossings survive a correction that
+predates them; both are described in §6 and their scope is recorded in
+[Multiplayer enhancement plan](multi-player-enhancement.md).
 
 Authentication is deferred. Coordinated host migration remains a later project
 that must transfer authority, membership and in-flight admission before election;

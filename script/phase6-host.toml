@@ -1,0 +1,66 @@
+# Headless host half of the Phase 6 selective-correction run.
+#
+# Phase 5's staged shaping proved the cadence follows a real link. This one is
+# the same two-process shape asked of a different question: what does a
+# correction actually put on the wire once the host leads with an index instead
+# of a body, and does a guest that predicts well ever need a state shard at all.
+#
+# It is normally driven by script/phase6-selective.sh, which starts both halves,
+# applies the same `tc netem` stages when the machine has them, and extracts the
+# counters. By hand:
+#
+#   ./bin/vif -script script/phase6-host.toml \
+#     -l=log/phase6-host -lv info -ls afs -lt 100 -j
+#
+#   # once "hosting opened mid-run" appears in the host log
+#   ./bin/vif -join 127.0.0.1:7777 -script script/phase6-guest.toml \
+#     -l=log/phase6-guest -lv info -ls afs -lt 100 -j
+#
+# What to read afterwards is the `snapshot.index` and `snapshot.repair` groups on
+# both sides against `snapshot.correction` and `snapshot.cadence`. The claim the
+# run is for: manifest bytes flow every cadence, shard bytes flow only when the
+# two disagree, and `corrections_hash_only` is non-zero — a guest that predicted
+# correctly proved it with a hash and was sent no state.
+schema = 1
+ticks = 1400
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 4
+intent = "motion_right"
+count = 6
+
+# Hosting opens here. Ticks to this point run flat out; from here the run is
+# wall-paced at the 50 ms game interval, which is what makes a wall-clock link
+# shape mean anything to it.
+[[action]]
+tick = 200
+command = "host 127.0.0.1:7777"
+
+# A quiet stretch first: this is where the index is supposed to be the whole of
+# the correction, and where the hash-only counter has to move.
+[[action]]
+tick = 500
+intent = "motion_down"
+count = 4
+
+# Then the storm, which is where the sizing table is taken and where a repair
+# has something to repair.
+[[action]]
+tick = 700
+event = "StormSpawnRequest"
+
+[[action]]
+tick = 1000
+event = "SwarmSpawnRequest"
+payload = "x = 64\ny = 18"
+
+[[action]]
+tick = 1200
+intent = "motion_up"
+count = 8

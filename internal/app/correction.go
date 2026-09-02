@@ -208,6 +208,12 @@ type peerPublisher struct {
 	answeredTick uint64
 	silence      int
 	converged    bool
+
+	// wide counts the publications this peer is owed a whole body for because its
+	// last repair would have been wider than the world it was repairing toward.
+	// It is a property of how far this participant's prediction has drifted rather
+	// than of its link, so it decays on its own and the index is tried again.
+	wide int
 }
 
 // newCorrections builds the correction half of a session. It starts nothing: a
@@ -445,7 +451,7 @@ func (c *corrections) publishRound(force bool) error {
 		// is the state each one now holds, so the next manifest is answered against
 		// it rather than against whatever the peer had drifted to.
 		for _, p := range c.peers {
-			p.silence = 0
+			p.silence, p.wide = 0, 0
 		}
 	}
 
@@ -496,7 +502,11 @@ func (c *corrections) everyParticipantIsDirect(ids []uint32) bool {
 func (c *corrections) silentPeersLocked(due []uint32) []uint32 {
 	out := make([]uint32, 0, len(due))
 	for _, id := range due {
-		if p := c.peers[id]; p != nil && p.silence >= parameter.SnapshotManifestSilenceCorrections {
+		p := c.peers[id]
+		if p == nil {
+			continue
+		}
+		if p.wide > 0 || p.silence >= parameter.SnapshotManifestSilenceCorrections {
 			out = append(out, id)
 		}
 	}

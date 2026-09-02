@@ -73,12 +73,20 @@ type pendingRequest struct {
 // repair arriving: the capture it compared, the index over it, and the manifest it
 // is answering.
 //
-// It is one entry, not a queue. A newer manifest supersedes an older one outright
-// — the state it describes is fresher and the older repair could only move this
-// instance backwards — so a repair whose tick does not match what is being awaited
-// is refused rather than held. That is the whole of "a newer repair may replace an
-// older incomplete one, never combine with it accidentally": there is nothing to
-// combine, because only one is ever outstanding.
+// A bounded few are outstanding at once, because a cadence can elapse between the
+// request and the repair and the receiver has answered a newer manifest by then.
+// Holding only the newest cost a repair for every round trip longer than one
+// cadence — measured at about a fifth of them over a real socket — and each of
+// those is a cadence of freshness spent on nothing.
+//
+// What the several entries do *not* do is combine. Each is a whole baseline with
+// its own capture, index and root, a repair is matched to exactly one of them by
+// tick, and applying one drops it and everything older — so a repair is spliced
+// into the state its manifest described and no other, and an older repair that
+// arrives after a newer one has landed matches nothing and is refused. That is
+// "a newer repair may replace an older incomplete one, never combine with it
+// accidentally", with the replacement made explicit rather than implied by there
+// being room for one.
 type awaitingRepair struct {
 	tick     uint64
 	capture  SharedCapture
@@ -89,16 +97,26 @@ type awaitingRepair struct {
 
 // selectiveState is the Phase 6 half of the correction protocol, on whichever side
 // this run turns out to be.
+//
+// The whole of it is covered by selectiveMu rather than by publishMu, and that is
+// a lock-order rule rather than a preference. The established order in this file
+// is publishMu, then the world lock: readWorld and takeKeyframe are called with
+// the publication schedule held and acquire the world lock themselves. Inbound
+// frames arrive the other way round — under the world lock, from the tick that
+// drained them — so a queue they append to may not sit behind publishMu, or a pump
+// reading the world and a tick taking a request would each hold what the other is
+// waiting for. selectiveMu is taken either with no world lock or with the world
+// lock already held, and never while acquiring one.
 type selectiveState struct {
 	// Host: the retention ring and the request queue.
 	retained []retainedCapture
 	requests []pendingRequest
 
 	// Guest: the newest manifest that has arrived and not been answered, the
-	// repair being awaited, and the repairs that have arrived for it.
+	// baselines whose repairs are outstanding, and the repairs that have arrived.
 	manifests [][]byte
 	shardSets [][]byte
-	awaiting  *awaitingRepair
+	awaiting  []*awaitingRepair
 
 	// wantKeyframe records that this receiver has asked for a whole world and is
 	// waiting for one, so a manifest arriving in the meantime is answered with the
@@ -148,6 +166,12 @@ func (c *corrections) publishManifest(port engine.NetworkPort, cap SharedCapture
 	for _, id := range due {
 		p := c.peers[id]
 		if p == nil {
+			continue
+		}
+		if p.wide > 0 {
+			// Diverged too widely to repair last time; the caller owes it a body.
+			p.wide--
+			covered = false
 			continue
 		}
 		if p.silence >= parameter.SnapshotManifestSilenceCorrections {
@@ -201,10 +225,10 @@ func (c *corrections) retainedAtLocked(tick uint64) (retainedCapture, bool) {
 // the world lock — the captures being compared were read on the cadence and the
 // hashing was done then.
 func (c *corrections) serveRequests() {
-	c.publishMu.Lock()
+	c.selectiveMu.Lock()
 	pending := c.selective.requests
 	c.selective.requests = nil
-	c.publishMu.Unlock()
+	c.selectiveMu.Unlock()
 	if len(pending) == 0 {
 		return
 	}
@@ -265,12 +289,20 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 
 	body, err := EncodeShardSet(set)
 	if err != nil || !c.repairIsWorthSending(len(body)) {
-		// Past the bound a repair is a capture with per-page overhead on top, and
-		// past the measured keyframe size it is strictly worse than the whole
-		// world: the keyframe is smaller, self-sufficient, and needs no round trip
-		// to have been asked for. A receiver that has diverged that widely is not
-		// being repaired, it is being rebuilt.
+		// A repair this wide is not repairing anything: past the frame bound it
+		// does not fit, and past the measured keyframe size the whole world is
+		// smaller and needs no round trip to have been asked for. What that says
+		// about the peer is that its prediction is not tracking — a storm moves
+		// the entire shared population every cadence, and no index makes that
+		// cheap — so the peer is dropped out of the exchange for a few
+		// publications and served the Phase 5 body instead, which is the cheapest
+		// thing anyone has for a receiver that has diverged wholesale. This
+		// correction is still answered — with the whole world, which is what the
+		// peer needs and what it would otherwise wait a cadence for — and the
+		// index is tried again afterwards, because the condition is the world's
+		// rather than the peer's and it ends when the storm does.
 		m.keyframeFallback.Add(1)
+		c.widenLocked(pending.from)
 		c.sendKeyframeTo(port, pending.from, req.Tick)
 		return
 	}
@@ -285,6 +317,16 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 	c.publishMu.Unlock()
 	vlog.Debug("app", "msg", "repair sent",
 		"peer", pending.from, "tick", req.Tick, "pages", pages, "bytes", len(body))
+}
+
+// widenLocked drops one peer out of the selective exchange for the next few
+// publications, so it is served the ordinary correction body instead.
+func (c *corrections) widenLocked(id uint32) {
+	c.publishMu.Lock()
+	if p := c.peers[id]; p != nil {
+		p.wide = parameter.SnapshotManifestSilenceCorrections
+	}
+	c.publishMu.Unlock()
 }
 
 // repairIsWorthSending reports whether a repair of this size is still cheaper than
@@ -358,6 +400,9 @@ func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 	if !c.sendTo(port, id, chunks) {
 		return
 	}
+	// Counted where every other correction body is: a fallback is not free, and a
+	// wire total that omitted it would flatter the protocol that provoked it.
+	c.a.snapshotTelemetry.sentBytes.Add(int64(len(body)))
 	c.a.snapshotTelemetry.keyframeFallback.Add(1)
 	vlog.Debug("app", "msg", "keyframe fallback sent",
 		"peer", id, "tick", cap.Header.Tick, "bytes", len(body))
@@ -458,11 +503,31 @@ func (c *corrections) answerManifest(body []byte, arrived int64) {
 	}
 
 	c.selectiveMu.Lock()
-	c.selective.awaiting = &awaitingRepair{
+	c.selective.awaiting = append(c.selective.awaiting, &awaitingRepair{
 		tick: want.Header.Tick, capture: mine, index: index,
 		manifest: want, from: from,
+	})
+	if n := len(c.selective.awaiting); n > parameter.SnapshotCorrectionQueue {
+		c.selective.awaiting = append(c.selective.awaiting[:0],
+			c.selective.awaiting[n-parameter.SnapshotCorrectionQueue:]...)
 	}
 	c.selectiveMu.Unlock()
+}
+
+// takeAwaiting claims the outstanding baseline a repair answers, dropping it and
+// every older one. A repair matching nothing outstanding is one this instance has
+// already moved past.
+func (c *corrections) takeAwaiting(tick uint64) *awaitingRepair {
+	c.selectiveMu.Lock()
+	defer c.selectiveMu.Unlock()
+	for i, a := range c.selective.awaiting {
+		if a.tick != tick {
+			continue
+		}
+		c.selective.awaiting = append(c.selective.awaiting[:0], c.selective.awaiting[i+1:]...)
+		return a
+	}
+	return nil
 }
 
 // applyRepair validates and installs one shard set.
@@ -483,18 +548,12 @@ func (c *corrections) applyRepair(body []byte) {
 	}
 	m.shardsRecv.Add(int64(len(set.Shards)))
 
-	c.selectiveMu.Lock()
-	awaiting := c.selective.awaiting
-	c.selectiveMu.Unlock()
+	awaiting := c.takeAwaiting(set.Header.Tick)
 	if awaiting == nil {
-		m.shardsRefused.Add(1)
-		return // superseded before it arrived, or never asked for
-	}
-	if set.Header.Tick != awaiting.tick {
 		m.baselineRefusals.Add(1)
 		m.shardsRefused.Add(1)
-		vlog.Debug("app", "msg", "repair names another baseline",
-			"repair_tick", set.Header.Tick, "awaiting", awaiting.tick)
+		vlog.Debug("app", "msg", "repair names a baseline this instance has moved past",
+			"repair_tick", set.Header.Tick)
 		return
 	}
 	if err := validateShardSet(set, awaiting.tick, awaiting.manifest.Authority, awaiting.manifest.Header); err != nil {
@@ -517,10 +576,6 @@ func (c *corrections) applyRepair(body []byte) {
 		c.requestKeyframe(awaiting.from, awaiting.manifest)
 		return
 	}
-
-	c.selectiveMu.Lock()
-	c.selective.awaiting = nil
-	c.selectiveMu.Unlock()
 
 	if err := c.install(repaired); err != nil {
 		vlog.Warn("app", "msg", "repair not installed",
@@ -606,17 +661,9 @@ func (c *corrections) receiveSelective(kind uint8, from uint32, body []byte) {
 			c.selective.shardSets = append(c.selective.shardSets[:0], c.selective.shardSets[n-parameter.SnapshotCorrectionQueue:]...)
 		}
 	case network.MsgStateRequest:
-		c.selectiveMu.Unlock()
-		c.publishMu.Lock()
 		if len(c.selective.requests) < parameter.MaxPlayers*parameter.SnapshotCorrectionQueue {
 			c.selective.requests = append(c.selective.requests, pendingRequest{from: from, body: body})
 		}
-		c.publishMu.Unlock()
-		select {
-		case c.wake <- struct{}{}:
-		default:
-		}
-		return
 	}
 	c.selectiveMu.Unlock()
 	select {
@@ -708,7 +755,6 @@ func (a *App) SelectiveReport() selectiveSummary {
 	for _, r := range c.selective.retained {
 		out.Retained = append(out.Retained, r.tick)
 	}
-	out.Requests = len(c.selective.requests)
 	for id, p := range c.peers {
 		out.PeerState[id] = PeerSelective{
 			ManifestTick: p.manifestTick,
@@ -719,10 +765,11 @@ func (a *App) SelectiveReport() selectiveSummary {
 	}
 	c.publishMu.Unlock()
 	c.selectiveMu.Lock()
-	if c.selective.awaiting != nil {
-		out.Awaiting = c.selective.awaiting.tick
+	if n := len(c.selective.awaiting); n > 0 {
+		out.Awaiting = c.selective.awaiting[n-1].tick
 	}
 	out.Keyframe = c.selective.wantKeyframe
+	out.Requests = len(c.selective.requests)
 	c.selectiveMu.Unlock()
 	slices.Sort(out.Retained)
 	return out
