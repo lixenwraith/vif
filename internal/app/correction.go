@@ -25,11 +25,39 @@
 //   - The magnitude is measured, not asserted. How far the guest's prediction had
 //     drifted when the correction landed is the number that says whether the
 //     cadence is right, and it is published where DESYNC used to be.
+//
+// Phase 5 changed what decides *when* the host publishes, and nothing else. The
+// cadence was a constant; it is now a bounded controller per peer, driven by a
+// real round trip, the delivery rate that round trip measures, and how much of
+// what the next correction moves is near enough to that participant to matter.
+// Three things are worth stating because they are what the change is bounded by:
+//
+//   - **One timeline, one baseline.** A correction is still computed once and is
+//     still exact: every guest holds the same keyframe, and a delta names it.
+//     What is per peer is which corrections a peer is *sent* — its cadence — and
+//     that is the only thing relevance and priority move. Nothing is scoped, so
+//     nothing about the authority weakens: a correction is the host's whole
+//     world, or the exact difference from the last one, as it always was.
+//
+//   - **The floor is not adaptive.** Cadence and keyframe interval are
+//     preferences the controller trades away under pressure; the guarantee that
+//     a participant sees a whole authoritative world within
+//     SnapshotFloorKeyframeTicks is not. A link that cannot carry that is
+//     refused at admission and reported as an unrecoverable operating condition
+//     mid-session — never quietly published to more slowly.
+//
+//   - **Timing paces the transport and enters nothing else.** No round trip,
+//     delivery rate or jitter estimate reaches a component store, an RNG stream,
+//     a replay or a game decision. They decide which frames leave a socket and
+//     when, which is exactly the class of decision a session may make from the
+//     wire.
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -37,6 +65,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
 // corrections is one instance's half of the authority protocol — whichever half it
@@ -49,12 +78,43 @@ type corrections struct {
 	// publishMu serialises every world read a snapshot makes, which is what turns
 	// the join's per-participant capture into a per-cadence one: a join that finds
 	// a keyframe fresh enough already taken re-uses it, and two joins arriving
-	// together share one read rather than stalling the world twice.
-	publishMu sync.Mutex
-	baseline  SharedCapture // last keyframe broadcast; every delta names its tick
-	keyBody   []byte        // that keyframe as a bare capture, which is what a join sends
-	haveKey   bool
-	sinceKey  int
+	// together share one read rather than stalling the world twice. It also owns
+	// the whole per-peer schedule, so a peer's plan and the capture it is planned
+	// against cannot be read a decision apart.
+	publishMu   sync.Mutex
+	baseline    SharedCapture // last keyframe published; every delta names its tick
+	keyBody     []byte        // that keyframe as a bare capture, which is what a join sends
+	haveKey     bool
+	lastKeyTick uint64 // the tick that keyframe describes
+
+	// sizes is what a correction currently costs on the wire, measured rather than
+	// assumed. The controller prices a schedule from it, and the two differ
+	// sixfold on this world — a storm keyframe is 176 KiB against a 29 KiB delta —
+	// so a model using one number would be wrong by that factor at one end or the
+	// other.
+	sizes     linkpace.Sizes
+	haveSizes bool
+
+	// bounds is the envelope every peer's controller moves inside, resolved once
+	// so a session cannot hold two ideas of where its floor is.
+	bounds linkpace.Bounds
+
+	// peers is one publisher per directly linked participant: its controller, its
+	// current operating point, and the tick it is next due. A participant reached
+	// by relay has no entry, because this instance does not send to it — it rides
+	// the schedule of whichever neighbour forwards to it, which is the honest
+	// consequence of the flood and is stated in the docs rather than papered over.
+	peers map[uint32]*peerPublisher
+
+	// The session's operating point as last decided, kept for telemetry and for
+	// the status bar. base is the publication timeline's granularity — the fastest
+	// peer's cadence — and keyPeriod the ticks between whole worlds, which is
+	// session-wide because every guest has to hold the keyframe a delta names.
+	base          uint64
+	keyPeriod     uint64
+	breached      bool
+	saidFloor     bool
+	nextBroadcast uint64
 
 	// inbox holds reassembled correction bodies a guest has not applied yet. It is
 	// written under the world lock by the tick that drained the last chunk and read
@@ -66,10 +126,20 @@ type corrections struct {
 
 	// installed is the guest's baseline: the last capture it installed whole. A
 	// delta naming any other tick cannot be applied and is counted instead.
-	installedMu   sync.Mutex
-	installed     SharedCapture
-	haveBase      bool
-	lastInstalled uint64
+	//
+	// keyTick beside it is the receiving end of the convergence floor. The host
+	// promises a whole authoritative world every SnapshotFloorKeyframeTicks; this
+	// is the tick of the last one that actually arrived, and the distance from
+	// here to now is whether the promise is being kept on this link. A guest is
+	// the participant the guarantee is *for*, so it is the participant that gets
+	// to say when it is not being met.
+	installedMu    sync.Mutex
+	installed      SharedCapture
+	haveBase       bool
+	lastInstalled  uint64
+	keyTick        uint64
+	guestBreached  bool
+	saidGuestFloor bool
 
 	applyMu   sync.Mutex
 	stop      chan struct{}
@@ -79,15 +149,64 @@ type corrections struct {
 	closeOnce sync.Once
 }
 
+// peerPublisher is one direct link's schedule.
+//
+// The controller is per peer because the link is: two participants on one host
+// can be a LAN cable and a phone, and a cadence chosen for the pair is wrong for
+// both. What is *not* per peer is the correction itself — see the file comment.
+type peerPublisher struct {
+	ctrl    *linkpace.Controller
+	plan    linkpace.Plan
+	demand  linkpace.Demand
+	metrics linkpace.Metrics
+
+	// nextTick is the tick this peer is next due a correction. Keyframes ignore
+	// it: a guest that missed one refuses every delta that follows until the next,
+	// so a keyframe goes to everyone and resets everyone's schedule.
+	nextTick uint64
+
+	sent    int64
+	refused int64
+}
+
 // newCorrections builds the correction half of a session. It starts nothing: a
 // pump belongs to a host and a corrector to a guest, and which this run is only
 // becomes true when a transport is attached.
 func newCorrections(a *App) *corrections {
 	return &corrections{
-		a:    a,
+		a:      a,
+		bounds: CadenceBounds(),
+		peers:  make(map[uint32]*peerPublisher),
+		base:   parameter.SnapshotCorrectionTicks,
+		keyPeriod: parameter.SnapshotCorrectionTicks *
+			parameter.SnapshotKeyframeCorrections,
 		stop: make(chan struct{}),
 		wake: make(chan struct{}, 1),
 		done: make(chan struct{}),
+	}
+}
+
+// CadenceBounds is the envelope the correction controller may move inside. It is
+// assembled here rather than in the parameter package because the envelope is a
+// linkpace value and pkg may not see internal — so this function is the one place
+// the game's numbers and the controller's contract meet, and the one place a test
+// can check they still agree.
+func CadenceBounds() linkpace.Bounds {
+	return linkpace.Bounds{
+		TickInterval:        parameter.GameUpdateInterval,
+		MinCadenceTicks:     parameter.SnapshotCadenceMinTicks,
+		NominalCadenceTicks: parameter.SnapshotCorrectionTicks,
+		MaxCadenceTicks:     parameter.SnapshotCadenceMaxTicks,
+		MinKeyframe:         parameter.SnapshotKeyframeMinCorrections,
+		NominalKeyframe:     parameter.SnapshotKeyframeCorrections,
+		MaxKeyframe:         parameter.SnapshotKeyframeMaxCorrections,
+		FloorKeyframeTicks:  parameter.SnapshotFloorKeyframeTicks,
+		Utilisation:         parameter.SnapshotLinkUtilisation,
+		UrgentMagnitude:     parameter.SnapshotUrgentMagnitude,
+		UrgentRelevance:     parameter.SnapshotUrgentRelevance,
+		QuietCadence:        parameter.SnapshotCadenceQuietTicks,
+		RecoverStepTicks:    parameter.SnapshotCadenceRecoverTicks,
+		RecoverStepKeyframe: parameter.SnapshotCadenceRecoverKeyframe,
 	}
 }
 
@@ -108,9 +227,16 @@ func (c *corrections) startPump() {
 // no lock at all. Putting the whole thing inside a tick would charge the simulation
 // for the encode; putting it on the accept goroutine is what Phase 3 did and is
 // what made a join a per-participant world read.
+//
+// The ticker runs at the *fastest* cadence the bounds allow rather than at the
+// cadence in force, and the schedule is checked against the simulation's tick
+// rather than against the ticker. A wake with nothing due reads no world and
+// sends nothing, so the cost of asking often is a channel receive, and the
+// benefit is that a peer whose link just improved does not wait out the old
+// cadence before the new one takes effect.
 func (c *corrections) pump() {
 	defer close(c.done)
-	interval := parameter.SnapshotCorrectionTicks * parameter.GameUpdateInterval
+	interval := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval
 	ticker := time.NewTicker(interval) // [wall] a publication cadence, not a game clock
 	defer ticker.Stop()
 
@@ -121,20 +247,41 @@ func (c *corrections) pump() {
 		case <-c.wake:
 		case <-ticker.C:
 		}
-		if err := c.publish(); err != nil {
+		if err := c.publishDue(); err != nil {
 			vlog.Warn("app", "msg", "correction not published", "error", err.Error())
 		}
 	}
 }
 
-// publish takes one capture and broadcasts it as a keyframe or as a delta.
+// publish sends the next correction to every peer, whatever their schedule says.
+// It is the driven form — a headless script or a test paces its own cadence — and
+// the immediacy is the point: a caller that asked for a correction now means now.
+func (c *corrections) publish() error { return c.publishRound(true) }
+
+// publishDue sends to the peers the adaptive schedule has made due, and is what
+// the pump calls.
+func (c *corrections) publishDue() error { return c.publishRound(false) }
+
+// publishRound is one decision and at most one world read.
 //
-// Which of the two is decided here and nowhere else, so the baseline every delta
-// names is always a keyframe this host actually sent. A receiver that missed the
-// keyframe drops the deltas that follow it, which costs it freshness until the next
-// one and costs the host nothing — there is no retransmission and no acknowledgement
-// to keep.
-func (c *corrections) publish() error {
+// The shape is the whole of Phase 5's answer to "make the cadence a function of
+// the link", and the ordering inside it is the part worth reading:
+//
+//  1. Every peer's controller takes a decision from its own measured link and its
+//     own demand. That is where relevance and priority land — a participant whose
+//     neighbourhood is churning asks for the minimum cadence, one with nothing
+//     near it settles for the quiet one, and neither can ask for more than its
+//     link carries.
+//  2. The session composes those into one timeline: the base cadence is the
+//     fastest peer's, and the keyframe period is the *longest* any peer planned,
+//     capped by the floor. Longest rather than shortest because a keyframe is the
+//     expensive frame and every peer has to hold the one a delta names, so the
+//     session pays the cheapest whole-world period that still honours everyone's
+//     floor.
+//  3. One capture, one encode, one chunking. What is per peer is who receives it.
+//  4. Due peers are served in priority order, so a bounded uplink spends itself on
+//     the participants that need it before the ones that do not.
+func (c *corrections) publishRound(force bool) error {
 	port := c.a.sessionTransport()
 	if port == nil || !port.IsRunning() || port.PeerCount() == 0 {
 		return nil
@@ -143,12 +290,33 @@ func (c *corrections) publish() error {
 	c.publishMu.Lock()
 	defer c.publishMu.Unlock()
 
+	link, _ := port.(engine.LinkMeasuringPort)
+	ids := c.peerIDs(link)
+	if link == nil {
+		// A transport that cannot name its links cannot be scheduled per peer, so
+		// the session keeps the nominal operating point and broadcasts, which is
+		// exactly what Phase 4 did. Adaptation is an improvement on a measured
+		// link and never a requirement for a working one.
+		return c.publishBroadcast(port, force)
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	c.decideLocked(ids, link)
+
+	tick := c.a.Position().Tick
+	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
+	due := c.dueLocked(ids, tick, force, keyframe)
+	if len(due) == 0 {
+		c.publishPlanTelemetryLocked(ids)
+		return nil
+	}
+
 	cap, err := c.readWorld()
 	if err != nil {
 		return err
 	}
 
-	keyframe := !c.haveKey || c.sinceKey >= parameter.SnapshotKeyframeCorrections
 	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
 	var body, plain []byte
 	if keyframe {
@@ -175,14 +343,88 @@ func (c *corrections) publish() error {
 	if err != nil {
 		return fmt.Errorf("correction chunk: %w", err)
 	}
+
+	// Relevance is measured against what this correction actually moves, so it
+	// steers the *next* decision rather than this one. A one-cycle loop is the
+	// honest shape: the alternative is scoring a delta before computing it.
+	near := c.relevanceLocked(cap, keyframe, link, ids)
+
+	sent := 0
+	for _, id := range due {
+		p := c.peers[id]
+		if !c.sendTo(port, id, chunks) {
+			p.refused++
+			continue
+		}
+		p.sent++
+		sent++
+		p.nextTick = tick + p.plan.CadenceTicks
+		p.demand = linkpace.Demand{Known: true, Relevance: near[id]}
+	}
+
+	c.recordSizeLocked(keyframe, len(body))
+	if keyframe {
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, plain, true, cap.Header.Tick
+	}
+
+	m := c.a.snapshotTelemetry
+	m.encodeUS.Store(encodeDur.Microseconds())
+	m.bytes.Store(int64(len(body)))
+	m.sent.Add(1)
+	m.sentBytes.Add(int64(len(body) * sent))
+	if keyframe {
+		m.keyframes.Add(1)
+	}
+	c.publishPlanTelemetryLocked(ids)
+	vlog.Debug("app", "msg", "correction published",
+		"tick", cap.Header.Tick, "keyframe", keyframe, "bytes", len(body),
+		"chunks", len(chunks), "peers", sent, "of", len(ids),
+		"cadence_ticks", c.base, "keyframe_period_ticks", c.keyPeriod,
+		"encode_us", encodeDur.Microseconds())
+	return nil
+}
+
+// publishBroadcast is the unmeasured path: one correction to everyone on the
+// nominal schedule. It exists so a transport without link measurement — a
+// harness port, an embedder's own — keeps a working authority rather than a
+// silent one.
+//
+// Caller MUST hold publishMu.
+func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) error {
+	tick := c.a.Position().Tick
+	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
+	if !force && !keyframe && tick < c.nextBroadcast {
+		return nil
+	}
+	cap, err := c.readWorld()
+	if err != nil {
+		return err
+	}
+	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
+	var body, plain []byte
+	if keyframe {
+		if body, err = EncodeCorrection(cap); err == nil {
+			plain, err = EncodeCapture(cap)
+		}
+	} else {
+		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
+	}
+	if err != nil {
+		return fmt.Errorf("correction encode: %w", err)
+	}
+	encodeDur := time.Since(encodeStart)
+
+	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
+	if err != nil {
+		return fmt.Errorf("correction chunk: %w", err)
+	}
 	for _, chunk := range chunks {
 		port.Broadcast(uint8(network.MsgStateCorrection), chunk)
 	}
-
+	c.nextBroadcast = tick + c.base
+	c.recordSizeLocked(keyframe, len(body))
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.sinceKey = cap, plain, true, 0
-	} else {
-		c.sinceKey++
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, plain, true, cap.Header.Tick
 	}
 
 	m := c.a.snapshotTelemetry
@@ -193,10 +435,182 @@ func (c *corrections) publish() error {
 	if keyframe {
 		m.keyframes.Add(1)
 	}
-	vlog.Debug("app", "msg", "correction published",
-		"tick", cap.Header.Tick, "keyframe", keyframe, "bytes", len(body),
-		"chunks", len(chunks), "encode_us", encodeDur.Microseconds())
+	c.publishPlanTelemetryLocked(nil)
 	return nil
+}
+
+// sendTo delivers one correction's chunks to one participant, reporting whether
+// the whole of it was taken.
+//
+// A chunk the peer's send queue refuses ends the transfer for that peer rather
+// than continuing into a body that can only reassemble as a truncated one. There
+// is nothing to repair — the next correction is self-sufficient and a keyframe
+// supersedes everything before it — so the refusal is counted and the peer moves
+// on, which is the same answer the rest of this protocol gives to loss.
+func (c *corrections) sendTo(port engine.NetworkPort, id uint32, chunks [][]byte) bool {
+	for _, chunk := range chunks {
+		if !port.Send(id, uint8(network.MsgStateCorrection), chunk) {
+			return false
+		}
+	}
+	return true
+}
+
+// peerIDs is the participants this instance sends corrections to directly, and
+// retires the publishers of the ones that have gone.
+func (c *corrections) peerIDs(link engine.LinkMeasuringPort) []uint32 {
+	if link == nil {
+		return nil
+	}
+	ids := link.Peers()
+	if len(ids) == 0 {
+		return nil
+	}
+	live := make(map[uint32]struct{}, len(ids))
+	for _, id := range ids {
+		live[id] = struct{}{}
+	}
+	for id := range c.peers {
+		if _, ok := live[id]; !ok {
+			delete(c.peers, id)
+		}
+	}
+	return ids
+}
+
+// decideLocked takes one decision per peer and composes them into the session's
+// timeline. Caller MUST hold publishMu.
+func (c *corrections) decideLocked(ids []uint32, link engine.LinkMeasuringPort) {
+	sizes := c.sizesLocked()
+	base, keyPeriod, breached := uint64(0), uint64(0), false
+
+	for _, id := range ids {
+		p, ok := c.peers[id]
+		if !ok {
+			ctrl, err := linkpace.NewController(c.bounds)
+			if err != nil {
+				// The envelope is a build constant; a controller that will not
+				// build is a programming error rather than a link condition, and
+				// the session keeps its nominal cadence rather than stopping.
+				vlog.Error("app", "msg", "cadence bounds refused", "error", err.Error())
+				return
+			}
+			p = &peerPublisher{ctrl: ctrl, plan: ctrl.Plan()}
+			c.peers[id] = p
+		}
+		var m linkpace.Metrics
+		if link != nil {
+			m = link.LinkMetric(id)
+		}
+		p.metrics = m
+		// The magnitude comes back on the peer's own echo: it is how far *that*
+		// participant's prediction had drifted when the last correction reached
+		// it, which is the one number that says whether its cadence is repairing
+		// the drift as fast as the drift accumulates.
+		if m.Samples > 0 {
+			p.demand.Known = true
+			p.demand.Magnitude = m.Magnitude
+		}
+		p.plan = p.ctrl.Update(m, sizes, p.demand)
+
+		if base == 0 || p.plan.CadenceTicks < base {
+			base = p.plan.CadenceTicks
+		}
+		if period := p.plan.KeyframePeriodTicks(); period > keyPeriod {
+			keyPeriod = period
+		}
+		breached = breached || p.plan.FloorBreached
+	}
+	if base == 0 {
+		base = c.bounds.NominalCadenceTicks
+	}
+	if keyPeriod == 0 || keyPeriod > c.bounds.FloorKeyframeTicks {
+		keyPeriod = c.bounds.FloorKeyframeTicks
+	}
+	c.base, c.keyPeriod, c.breached = base, keyPeriod, breached
+}
+
+// dueLocked returns the peers to serve, in priority order. Caller MUST hold
+// publishMu.
+//
+// A keyframe goes to every peer whatever their cadence: a guest that missed one
+// refuses every delta that follows it, so withholding a keyframe from a slow peer
+// would not save it bytes, it would cost it the rest of the interval.
+//
+// The order matters when the uplink cannot serve everyone in one round. Highest
+// demand first — the participant whose neighbourhood is churning or whose
+// prediction has drifted furthest — then whoever has waited longest, so priority
+// is a preference and never a starvation.
+func (c *corrections) dueLocked(ids []uint32, tick uint64, force, keyframe bool) []uint32 {
+	due := make([]uint32, 0, len(ids))
+	for _, id := range ids {
+		p := c.peers[id]
+		if p == nil {
+			continue
+		}
+		if force || keyframe || tick >= p.nextTick {
+			due = append(due, id)
+		}
+	}
+	slices.SortFunc(due, func(a, b uint32) int {
+		pa, pb := c.peers[a], c.peers[b]
+		if n := cmp.Compare(urgency(pb.demand), urgency(pa.demand)); n != 0 {
+			return n
+		}
+		if n := cmp.Compare(pa.nextTick, pb.nextTick); n != 0 {
+			return n
+		}
+		return cmp.Compare(a, b)
+	})
+	return due
+}
+
+// urgency scores a participant's claim on the next correction. It orders peers
+// against each other and decides nothing on its own — what a peer actually
+// receives is still its controller's plan, which the link bounds.
+func urgency(d linkpace.Demand) int {
+	if !d.Known {
+		return 0
+	}
+	return d.Magnitude + d.Relevance
+}
+
+// sizesLocked is what a correction currently costs, falling back to the nominal
+// world until one has been sent. Caller MUST hold publishMu.
+func (c *corrections) sizesLocked() linkpace.Sizes {
+	if c.haveSizes {
+		return c.sizes
+	}
+	return linkpace.Sizes{}
+}
+
+// recordSizeLocked folds the correction just encoded into the cost model.
+// Caller MUST hold publishMu.
+//
+// It is an exponential average rather than the last value because the two shapes
+// alternate and both are needed: a controller repriced from whichever frame went
+// out last would swing sixfold every keyframe on this world.
+func (c *corrections) recordSizeLocked(keyframe bool, bytes int) {
+	const smoothing = 0.25
+	blend := func(cur int64) int64 {
+		if cur == 0 {
+			return int64(bytes)
+		}
+		return cur + int64(smoothing*float64(int64(bytes)-cur))
+	}
+	if keyframe {
+		c.sizes.Keyframe = blend(c.sizes.Keyframe)
+	} else {
+		c.sizes.Delta = blend(c.sizes.Delta)
+	}
+	// A delta is only priceable once one has been produced. Until then the
+	// keyframe stands in for both, which overprices a schedule and therefore
+	// errs toward a slower cadence — the safe direction for a link nobody has
+	// measured a delta over yet.
+	if c.sizes.Delta == 0 {
+		c.sizes.Delta = c.sizes.Keyframe
+	}
+	c.haveSizes = c.sizes.Keyframe > 0
 }
 
 // readWorld takes one capture and publishes what the read cost.
@@ -263,7 +677,8 @@ func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
 	if err != nil {
 		return nil, 0, fmt.Errorf("capture encode: %w", err)
 	}
-	c.baseline, c.keyBody, c.haveKey, c.sinceKey = cap, body, true, 0
+	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, body, true, cap.Header.Tick
+	c.recordSizeLocked(true, len(body))
 	c.a.snapshotTelemetry.bytes.Store(int64(len(body)))
 	c.a.snapshotTelemetry.keyframes.Add(1)
 	vlog.Info("app", "msg", "session capture",
@@ -309,7 +724,7 @@ func (c *corrections) correct() {
 	defer close(c.done)
 	// A wake accompanies every arrival; the ticker is the backstop for a wake lost
 	// to a full channel, and costs one queue check per cadence when idle.
-	ticker := time.NewTicker(parameter.SnapshotCorrectionTicks * parameter.GameUpdateInterval) // [wall]
+	ticker := time.NewTicker(parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval) // [wall]
 	defer ticker.Stop()
 	for {
 		select {
@@ -337,6 +752,8 @@ func (c *corrections) correct() {
 func (c *corrections) apply() {
 	c.applyMu.Lock()
 	defer c.applyMu.Unlock()
+
+	c.observeFloor()
 
 	c.inboxMu.Lock()
 	pending := c.inbox
@@ -443,11 +860,69 @@ func (c *corrections) install(cap SharedCapture) error {
 	return nil
 }
 
-// setBaseline records the keyframe later deltas are computed against.
+// setBaseline records the keyframe later deltas are computed against, and the
+// tick the convergence floor is measured from.
 func (c *corrections) setBaseline(cap SharedCapture) {
 	c.installedMu.Lock()
-	c.installed, c.haveBase = cap, true
+	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()
+}
+
+// observeFloor is the guest's half of the convergence guarantee, and it is a
+// different claim from the host's.
+//
+// The host's controller says whether the *link* can carry a whole world per floor
+// window; this says whether one actually arrived. They can disagree in both
+// directions, and both disagreements are worth having: a host whose uplink looks
+// adequate can still be failing a guest whose downlink is not, and a guest can
+// keep converging across a window the host had already given up on.
+//
+// The grace is not slack in the promise. The floor is a *publication* guarantee
+// and a receiver additionally pays the transfer, the reassembly and the install,
+// so reporting the instant the window elapses would fire on every ordinary slow
+// keyframe. One nominal keyframe period is the smallest margin that cannot.
+func (c *corrections) observeFloor() {
+	c.installedMu.Lock()
+	have, since := c.haveBase, c.keyTick
+	c.installedMu.Unlock()
+	if !have {
+		return // nothing has been installed here; this run is not a receiver
+	}
+
+	tick := c.a.Position().Tick
+	age := uint64(0)
+	if tick > since {
+		age = tick - since
+	}
+	m := c.a.snapshotTelemetry
+	m.keyframeAge.Store(int64(age))
+
+	breached := age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
+	m.floorBreached.Store(breached)
+	if breached {
+		m.constrained.Store(true)
+	}
+
+	c.installedMu.Lock()
+	changed := breached != c.saidGuestFloor
+	c.guestBreached, c.saidGuestFloor = breached, breached
+	c.installedMu.Unlock()
+	if !changed {
+		return
+	}
+	if !breached {
+		vlog.Info("app", "msg", "authoritative world arrived inside the convergence floor",
+			"age_ticks", age)
+		c.a.ctx.SetStatusMessage("Link recovered; the authority is arriving again",
+			parameter.StatusMessageDefaultTimeout, false)
+		return
+	}
+	vlog.Warn("app", "msg", "no authoritative world inside the convergence floor",
+		"age_ticks", age, "floor_ticks", parameter.SnapshotFloorKeyframeTicks,
+		"grace_ticks", parameter.SnapshotFloorGraceTicks)
+	c.a.ctx.SetStatusMessage(
+		"No authoritative world within the convergence floor; this instance is predicting alone",
+		4*parameter.StatusMessageDefaultTimeout, true)
 }
 
 func (c *corrections) baselineCapture() (SharedCapture, bool) {
@@ -511,6 +986,141 @@ func (a *App) adoptCorrectionBaseline(cap SharedCapture) {
 	if a.corrections != nil {
 		a.corrections.setBaseline(cap)
 	}
+}
+
+// PeerCadence is one link's operating point and the measurements it came from.
+type PeerCadence struct {
+	Participant      uint32
+	CadenceTicks     uint64
+	KeyframeInterval int
+	Constrained      bool
+	FloorBreached    bool
+	RTT              time.Duration
+	Jitter           time.Duration
+	ThroughputBps    float64
+	Saturated        bool
+	Magnitude        int
+	Relevance        int
+}
+
+// CadenceReport is the session's operating point: the timeline the host is
+// publishing on, and the per-link decisions it was composed from.
+//
+// It exists because the aggregate telemetry cannot answer the question an
+// operator actually has when one participant's picture is coarse — *which* link
+// is the constrained one. The status bar shows the worst; this names it.
+type CadenceReport struct {
+	CadenceTicks        uint64
+	KeyframePeriodTicks uint64
+	KeyframeInterval    int
+	Constrained         bool
+	FloorBreached       bool
+	KeyframeBytes       int64
+	DeltaBytes          int64
+	Peers               []PeerCadence
+}
+
+// CadenceReport describes what the correction cadence is doing. A run that is not
+// publishing returns the zero value, which reads as "nominal, no links".
+func (a *App) CadenceReport() CadenceReport {
+	if a.corrections == nil {
+		return CadenceReport{}
+	}
+	c := a.corrections
+	c.publishMu.Lock()
+	defer c.publishMu.Unlock()
+
+	out := CadenceReport{
+		CadenceTicks:        c.base,
+		KeyframePeriodTicks: c.keyPeriod,
+		FloorBreached:       c.breached,
+		KeyframeBytes:       c.sizes.Keyframe,
+		DeltaBytes:          c.sizes.Delta,
+	}
+	if c.base > 0 {
+		out.KeyframeInterval = int(c.keyPeriod / c.base)
+	}
+	for id, p := range c.peers {
+		out.Constrained = out.Constrained || p.plan.Constrained
+		out.Peers = append(out.Peers, PeerCadence{
+			Participant:      id,
+			CadenceTicks:     p.plan.CadenceTicks,
+			KeyframeInterval: p.plan.KeyframeInterval,
+			Constrained:      p.plan.Constrained,
+			FloorBreached:    p.plan.FloorBreached,
+			RTT:              p.metrics.RTT,
+			Jitter:           p.metrics.Jitter,
+			ThroughputBps:    p.metrics.Throughput,
+			Saturated:        p.metrics.Saturated,
+			Magnitude:        p.demand.Magnitude,
+			Relevance:        p.demand.Relevance,
+		})
+	}
+	slices.SortFunc(out.Peers, func(x, y PeerCadence) int {
+		return cmp.Compare(x.Participant, y.Participant)
+	})
+	return out
+}
+
+// cadenceSizes is what a correction currently costs on this world, for a caller
+// deciding whether a link can carry the convergence floor. Until one has been
+// published the answer is the keyframe a join was cut for, which is the same
+// object measured the same way.
+func (a *App) cadenceSizes() linkpace.Sizes {
+	if a.corrections == nil {
+		return linkpace.Sizes{}
+	}
+	a.corrections.publishMu.Lock()
+	defer a.corrections.publishMu.Unlock()
+	return a.corrections.sizes
+}
+
+// admitLink refuses a participant whose link cannot carry the convergence floor.
+//
+// This is the requirement's refusal path, and it is a deliberate refusal rather
+// than a degraded session. A participant admitted onto a link that cannot deliver
+// one whole authoritative world per floor window would play, would drift, and
+// would have nothing scheduled that repairs it — the failure the whole
+// authoritative model exists to prevent. Refusing is the same answer the join
+// already gives when its catch-up gap exceeds the playout lead.
+//
+// The measurement is the join's own transfer, which is the one rate available
+// before a probe has completed a round trip: the bytes went out, the joiner
+// answered when it had them all, and the host was pushing the whole time. It
+// includes the joiner's install, so it *understates* the link — which errs toward
+// refusing a marginal one, and the margin between a working link and the floor is
+// two orders of magnitude on this world.
+func (a *App) admitLink(port *network.SocketPort, id network.PeerID, bytes int, elapsed time.Duration) error {
+	if bytes <= 0 || elapsed <= 0 {
+		return nil
+	}
+	port.ObserveTransfer(uint32(id), int64(bytes), elapsed)
+	sizes := a.cadenceSizes()
+	if sizes.Keyframe == 0 {
+		sizes.Keyframe = int64(bytes)
+	}
+	rate := linkpace.TransferRate(int64(bytes), elapsed)
+	if err := linkpace.Admit(CadenceBounds(), rate, sizes); err != nil {
+		return fmt.Errorf("participant %d: %w", id, err)
+	}
+	vlog.Debug("app", "msg", "join link measured",
+		"participant", id, "bytes", bytes, "ms", elapsed.Milliseconds(),
+		"bytes_per_second", int64(rate))
+	return nil
+}
+
+// admitMeasuredLink is the same refusal against a link the probes have already
+// measured, which is what a tick-zero lobby has: its port has been up for the
+// whole wait, so several round trips have completed before the gate closes.
+func (a *App) admitMeasuredLink(port *network.SocketPort, id network.PeerID) error {
+	sizes := a.cadenceSizes()
+	if sizes.Keyframe == 0 {
+		return nil
+	}
+	if err := linkpace.AdmitMetrics(CadenceBounds(), port.LinkMetric(uint32(id)), sizes); err != nil {
+		return fmt.Errorf("participant %d: %w", id, err)
+	}
+	return nil
 }
 
 // correctionMagnitude reports the last correction's size, for a caller that wants

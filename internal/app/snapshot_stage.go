@@ -259,6 +259,32 @@ type snapshotTelemetry struct {
 	correctionEntities *atomic.Int64
 	correctionCells    *atomic.Int64
 	correctionTick     *atomic.Int64
+
+	// The operating point, which is Phase 5's answer to "the cadence is a
+	// constant". cadenceTicks and keyframeInterval are what the controller
+	// currently holds; keyframePeriod is their product, which is the value the
+	// convergence floor bounds and therefore the one worth reading first.
+	//
+	// The three rates are all bytes per second and they are three different
+	// claims. uplinkBps is what the schedule in force costs. budgetBps is what the
+	// tightest link was measured to allow after the utilisation share. floorBps is
+	// what the floor costs on a world this size — the cheapest schedule that still
+	// delivers a whole world per floor window — and a budget under it is the
+	// unrecoverable condition floorBreached names.
+	cadenceTicks     *atomic.Int64
+	keyframeInterval *atomic.Int64
+	keyframePeriod   *atomic.Int64
+	uplinkBps        *atomic.Int64
+	budgetBps        *atomic.Int64
+	floorBps         *atomic.Int64
+	constrained      *atomic.Bool
+	floorBreached    *atomic.Bool
+
+	// keyframeAge is how long this instance has gone without a whole
+	// authoritative world, in ticks. It is the *receiving* end of the same
+	// guarantee: the host promises to publish one per floor window, and this is
+	// what says whether one actually arrived.
+	keyframeAge *atomic.Int64
 }
 
 // newSnapshotTelemetry reserves the cells. Called during construction, because a
@@ -284,6 +310,16 @@ func newSnapshotTelemetry(reg *status.Registry) snapshotTelemetry {
 		correctionEntities: reg.Ints.Get("snapshot.correction_entities"),
 		correctionCells:    reg.Ints.Get("snapshot.correction_cells"),
 		correctionTick:     reg.Ints.Get("snapshot.correction_tick"),
+
+		cadenceTicks:     reg.Ints.Get("snapshot.cadence_ticks"),
+		keyframeInterval: reg.Ints.Get("snapshot.cadence_keyframe_interval"),
+		keyframePeriod:   reg.Ints.Get("snapshot.cadence_keyframe_period_ticks"),
+		uplinkBps:        reg.Ints.Get("snapshot.cadence_uplink_bps"),
+		budgetBps:        reg.Ints.Get("snapshot.cadence_budget_bps"),
+		floorBps:         reg.Ints.Get("snapshot.cadence_floor_bps"),
+		constrained:      reg.Bools.Get("snapshot.cadence_constrained"),
+		floorBreached:    reg.Bools.Get("snapshot.cadence_floor_breached"),
+		keyframeAge:      reg.Ints.Get("snapshot.cadence_keyframe_age_ticks"),
 	}
 }
 

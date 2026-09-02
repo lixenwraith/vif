@@ -23,6 +23,18 @@ const (
 	MsgEvent       MessageType = 0x12 // Live: one closed barrier production epoch
 	MsgStateDigest MessageType = 0x13 // Live: periodic shared-world parity probe
 
+	// MsgLinkProbe and MsgLinkEcho are the round trip. Nothing else in this
+	// protocol makes one — every other measurement is one-directional — so the
+	// cadence had nothing but a constant to be chosen from until these existed.
+	//
+	// They are answered inside the transport, before the frame reaches a tick, so
+	// what they measure is the wire rather than this instance's scheduling. An
+	// echo carries back the probe's own bytes untouched, the bytes the far end has
+	// received on the link, and the opaque LinkReport the far end's world last
+	// published — which is the only game state that ever travels on them.
+	MsgLinkProbe MessageType = 0x14 // Live: a link measurement, awaiting its echo
+	MsgLinkEcho  MessageType = 0x15 // Live: one probe answered, with the peer's report
+
 	// MsgStateSnapshot carries one chunk of an authoritative shared-world capture
 	// (D-19). It is the only message whose total size is a function of the world
 	// rather than of the format, so it is the only one that is split; see
@@ -52,7 +64,8 @@ const (
 	// the startup offer; and authentication. 0x26 is no longer among them: it
 	// carried the retired replay-the-session-from-tick-zero join and now carries the
 	// authoritative state snapshot that replaced it. Neither is 0x27, which carries
-	// the periodic correction that snapshot became once the host was the authority.
+	// the periodic correction that snapshot became once the host was the authority,
+	// nor 0x14/0x15, which carry the round trip Phase 5 added.
 	MsgConnect      MessageType = 0x02
 	MsgAck          MessageType = 0x04
 	MsgPeerList     MessageType = 0x20

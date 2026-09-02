@@ -243,12 +243,23 @@ func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error 
 	if !port.Send(uint32(id), uint8(network.MsgStart), start) {
 		return fmt.Errorf("could not release participant %d", id)
 	}
+	// The transfer is the measurement, so it is timed from the first chunk to the
+	// joiner's confirmation. Nothing else on a fresh link has pushed enough bytes
+	// to say what it carries.
+	transferStart := time.Now() // [wall] a link measurement, not a game clock
 	for i, chunk := range chunks {
 		if !port.Send(uint32(id), uint8(network.MsgStateSnapshot), chunk) {
 			return fmt.Errorf("could not send capture chunk %d/%d", i+1, len(chunks))
 		}
 	}
 	if err := a.awaitJoinerReady(port, id, ready); err != nil {
+		return err
+	}
+	// Refused *after* the install rather than before it, because the install is
+	// what completes the measurement. A participant refused here is dropped by the
+	// caller and its identity returned to the pool, which is the same unwind a
+	// join that could not finish its gate takes.
+	if err := a.admitLink(port, id, len(body), time.Since(transferStart)); err != nil {
 		return err
 	}
 

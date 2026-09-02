@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
+	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
 // NetworkSystem is the only crossing between this instance and its peers, in both
@@ -87,6 +89,21 @@ type NetworkSystem struct {
 	statLocalNow    *atomic.Int64
 	statCorrections *atomic.Int64
 	statForged      *atomic.Int64
+
+	// The link measurement, published for the worst peer this instance has. It is
+	// the transport's own estimate rather than anything this system derives: what
+	// happens here is a read and a store, so that a network round trip never
+	// becomes a value a tick could branch on.
+	statRTT       *atomic.Int64
+	statJitter    *atomic.Int64
+	statLinkBps   *atomic.Int64
+	statLinkLoss  *atomic.Int64
+	statSaturated *atomic.Bool
+
+	// statMagnitude is App's correction magnitude, read rather than owned: it is
+	// what this instance reports to whoever is publishing to it, and it is the
+	// only reason the report says anything about the world at all.
+	statMagnitude *atomic.Int64
 
 	// snapshots reassembles one authoritative correction per peer. A correction is
 	// the only message whose size is a function of the world, so it is the only one
@@ -252,6 +269,14 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statLocalNow = s.intStat(reg, "network.crossings_local")
 	s.statCorrections = s.intStat(reg, "network.corrections_received")
 	s.statForged = s.intStat(reg, "network.artifacts_refused")
+	s.statRTT = s.intStat(reg, "network.link_rtt_ms")
+	s.statJitter = s.intStat(reg, "network.link_jitter_ms")
+	s.statLinkBps = s.intStat(reg, "network.link_bps")
+	s.statLinkLoss = s.intStat(reg, "network.link_loss_pct")
+	s.statSaturated = s.boolStat(reg, "network.link_saturated")
+	// Not registered through intStat: this cell is App's and a session reset must
+	// not clear the magnitude of a correction App has already published into it.
+	s.statMagnitude = reg.Ints.Get("snapshot.correction_entities")
 
 	s.Init()
 	return s
@@ -638,6 +663,76 @@ func (s *NetworkSystem) Flush(completedTick uint64) {
 		s.sendCursorState(p)
 	}
 	s.publishTransportLoss(p)
+	s.publishLinkMeasurement(p, completedTick)
+}
+
+// publishLinkMeasurement is both halves of this system's part in the round trip,
+// and neither of them is a decision.
+//
+// Outbound it hands the transport the report a probing peer will be echoed: the
+// tick this instance stands on, how far behind it believes it is, how much the
+// last correction had to move it, and where its cursor is. Every one of those is
+// a scheduling hint — a host may publish to this participant sooner because of
+// them — and a wrong or stale one can cost a correction sent early and nothing
+// else. Inbound it copies the transport's own estimate into telemetry.
+//
+// What it deliberately does not do is read a measurement back into the world.
+// Network timing may pace a transport and may not enter shared simulation state,
+// an RNG stream, a replay or a game decision, and the way that is kept true is
+// that this is the only seam between the two and it only ever copies.
+func (s *NetworkSystem) publishLinkMeasurement(p engine.NetworkPort, completedTick uint64) {
+	link, ok := p.(engine.LinkMeasuringPort)
+	if !ok || !s.enabled || !p.IsRunning() {
+		return
+	}
+	link.SetLinkReport(s.linkReport(completedTick))
+
+	// The worst link is the one that decides what a player is told: a session is
+	// as constrained as its most constrained edge, and reporting an average would
+	// hide exactly the peer that needs saying.
+	var worst linkpace.Metrics
+	var haveWorst bool
+	for _, peer := range link.Peers() {
+		m := link.LinkMetric(peer)
+		if m.Samples == 0 {
+			continue
+		}
+		if !haveWorst || m.RTT > worst.RTT {
+			worst, haveWorst = m, true
+		}
+	}
+	if !haveWorst {
+		return
+	}
+	s.statRTT.Store(worst.RTTMillis())
+	s.statJitter.Store(worst.JitterMillis())
+	s.statLinkBps.Store(int64(worst.Throughput))
+	s.statLinkLoss.Store(int64(worst.Loss * 100))
+	s.statSaturated.Store(worst.Saturated)
+}
+
+// linkReport describes this instance's picture for the peers measuring it.
+// Caller MUST hold updateMutex: it reads the cursor store.
+func (s *NetworkSystem) linkReport(completedTick uint64) network.LinkReport {
+	r := network.LinkReport{
+		Tick:      completedTick,
+		LagTicks:  uint32(min(s.statLag.Load(), math.MaxUint32)),
+		Magnitude: uint32(min(max(s.statMagnitude.Load(), 0), math.MaxUint32)),
+	}
+	// The interest centre is the shared position of a cursor this instance
+	// simulates — the shared store's, not the D-18 prediction, which no
+	// shared-profile read may reach and which would say nothing more here.
+	for i := range parameter.MaxPlayers {
+		cursor := s.world.Resources.Player.Slot(uint8(i))
+		if cursor == 0 || !s.world.SimulatesLocally(cursor) {
+			continue
+		}
+		if pos, ok := s.world.Positions.GetPosition(cursor); ok {
+			r.CursorX, r.CursorY, r.HasCursor = int32(pos.X), int32(pos.Y), true
+		}
+		break
+	}
+	return r
 }
 
 // drain translates one tick's transport notifications into events

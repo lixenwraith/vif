@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -34,6 +35,19 @@ type Peer struct {
 	// Sequence tracking
 	OutSeq atomic.Uint32 // Next outbound sequence
 	InSeq  atomic.Uint32 // Last processed inbound sequence
+
+	// Byte accounting, cumulative for the life of this connection. InBytes is
+	// complete frames this end has decoded; OutBytes is complete frames it has
+	// queued. The pair is what makes a link measurable: a peer echoes its InBytes
+	// back, and the difference against this end's OutBytes is the backlog — bytes
+	// offered to the link and not yet arrived, which is the difference between a
+	// link that is fast and a sender that was idle.
+	//
+	// OutBytes counts what was queued rather than what the socket wrote, and that
+	// is the number the backlog wants: a frame waiting in the send queue is as
+	// undelivered as one waiting in a router.
+	InBytes  atomic.Uint64
+	OutBytes atomic.Uint64
 
 	// I/O
 	conn   net.Conn
@@ -85,6 +99,7 @@ func (p *Peer) Send(msg *Message) bool {
 
 	select {
 	case p.sendCh <- msg:
+		p.OutBytes.Add(uint64(HeaderSize + len(msg.Payload)))
 		return true
 	default:
 		return false // Queue full
@@ -120,6 +135,7 @@ func (p *Peer) readLoop(handler func(PeerID, *Message)) {
 		}
 
 		p.LastSeen.Store(time.Now().UnixNano())
+		p.InBytes.Add(uint64(HeaderSize + len(msg.Payload)))
 
 		// Track inbound sequence
 		if msg.Seq > p.InSeq.Load() {
@@ -309,6 +325,30 @@ func (pm *PeerManager) Disconnect(id PeerID) bool {
 	}
 	peer.Close()
 	return true
+}
+
+// Peers returns the connected participants, for a caller that has to act on each
+// link rather than on the session — a per-peer probe, a per-peer schedule.
+func (pm *PeerManager) Peers() []PeerID {
+	pm.mu.RLock()
+	defer pm.mu.RUnlock()
+	out := make([]PeerID, 0, len(pm.peers))
+	for id := range pm.peers {
+		out = append(out, id)
+	}
+	slices.Sort(out) // a stable order, so a per-peer loop is reproducible
+	return out
+}
+
+// Bytes reports one link's cumulative decoded and queued frame bytes.
+func (pm *PeerManager) Bytes(id PeerID) (in, out uint64, ok bool) {
+	pm.mu.RLock()
+	peer, exists := pm.peers[id]
+	pm.mu.RUnlock()
+	if !exists {
+		return 0, 0, false
+	}
+	return peer.InBytes.Load(), peer.OutBytes.Load(), true
 }
 
 // PeerCount returns current connected peer count

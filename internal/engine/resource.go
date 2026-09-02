@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 	"github.com/lixenwraith/vi-fighter/pkg/genetic/registry"
+	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 	"github.com/lixenwraith/vi-fighter/pkg/navigation"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
@@ -770,6 +771,40 @@ type NetworkPort interface {
 type NetworkSessionPort interface {
 	ParticipantID() uint32
 	BarrierDelayTicks() uint64
+}
+
+// LinkMeasuringPort is a transport that measures its own links.
+//
+// The whole of it is optional and asserted for rather than required, because a
+// port that cannot measure a link is still a perfectly good port: the crossing
+// stream, the syncs and the digests do not depend on any of this. What depends
+// on it is the *cadence*, and a session on an unmeasured transport simply keeps
+// its nominal one.
+//
+// The direction of the two halves is what keeps network timing out of the
+// simulation. SetLinkReport is the only thing the world tells the transport, and
+// it is a scheduling hint the far end may publish sooner because of; LinkMetric
+// is the only thing the transport tells the world, and nothing but transport
+// scheduling may read it. No round trip, no delivery rate and no jitter estimate
+// reaches a component store, an RNG stream, a replay or a game decision.
+type LinkMeasuringPort interface {
+	// Peers lists the directly connected participants in a stable order.
+	Peers() []uint32
+
+	// SetLinkReport publishes what this instance tells a probing peer about its
+	// own picture: the tick it stands on, how far behind it believes it is, how
+	// much the last correction had to move, and where its cursor is.
+	SetLinkReport(network.LinkReport)
+
+	// LinkMetric returns one link's estimate. The zero value is an unmeasured
+	// link, which a controller must read as "no evidence" rather than as a slow
+	// one.
+	LinkMetric(peer uint32) linkpace.Metrics
+
+	// ObserveTransfer folds a completed bulk transfer into a link's estimate —
+	// the join's own capture, which is the only throughput measurement available
+	// before a probe has completed a round trip.
+	ObserveTransfer(peer uint32, bytes int64, elapsed time.Duration)
 }
 
 // SharedStateDigest is the runtime D-11 probe. Hash covers the complete

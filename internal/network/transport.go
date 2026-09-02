@@ -165,6 +165,12 @@ func (t *Transport) startClient() error {
 	return nil
 }
 
+// Peers returns the connected participants in a stable order.
+func (t *Transport) Peers() []PeerID { return t.peers.Peers() }
+
+// Bytes reports one link's cumulative decoded and queued frame bytes.
+func (t *Transport) Bytes(id PeerID) (in, out uint64, ok bool) { return t.peers.Bytes(id) }
+
 // Connected reports whether one peer is still attached.
 func (t *Transport) Connected(id PeerID) bool { return t.peers.Connected(id) }
 

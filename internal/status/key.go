@@ -94,14 +94,22 @@ func splitKey(key string) (group, name, playerSlot string) {
 			return "network.session", name, ""
 		case strings.HasPrefix(name, "barrier_"):
 			return "network.barrier", strings.TrimPrefix(name, "barrier_"), ""
-		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"):
+		case strings.HasPrefix(name, "relay_"), strings.HasPrefix(name, "transport_"),
+			strings.HasPrefix(name, "link_"):
 			return "network.link", name, ""
 		}
 
 	case "snapshot":
-		// The correction counters are a card of their own: they describe the
-		// authority's cadence and how far this instance's prediction was from it,
-		// where the rest of the group describes what one capture cost.
+		// Three cards, three questions. The correction counters say how far this
+		// instance's prediction was from the authority and how much of the
+		// authority arrived; the cadence card says what operating point the link
+		// put the session at; and what is left describes what one capture cost.
+		if metric, ok := strings.CutPrefix(name, "cadence_"); ok {
+			return "snapshot.cadence", metric, ""
+		}
+		if name == "cadence" {
+			return "snapshot.cadence", "ticks", ""
+		}
 		if strings.HasPrefix(name, "correction") {
 			return "snapshot.correction", name, ""
 		}

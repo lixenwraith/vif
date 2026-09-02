@@ -296,6 +296,22 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	}); err != nil {
 		return err
 	}
+
+	// The lobby's links have been up for the whole wait, so several round trips
+	// have completed on each and the convergence floor can be decided per link
+	// rather than from the gate's aggregate transfer. A participant that cannot
+	// carry a whole world per floor window is refused here for the same reason a
+	// mid-run join is: it would play, it would drift, and nothing would be
+	// scheduled that repairs it.
+	for _, participant := range offer.Participants {
+		if participant.ID == offer.Host {
+			continue
+		}
+		if err := a.admitMeasuredLink(port, participant.ID); err != nil {
+			return fmt.Errorf("session start: %w", err)
+		}
+	}
+
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(offer.Participants)))
 	a.corrections.startPump()
 	return nil
