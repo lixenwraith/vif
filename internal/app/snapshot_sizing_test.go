@@ -1,6 +1,7 @@
 package app
 
 import (
+	"encoding/json"
 	"runtime"
 	"testing"
 	"time"
@@ -245,12 +246,11 @@ func BenchmarkCaptureAtStormHighWater(b *testing.B) {
 // The correction at the storm high water, which is the measurement Phase 4's
 // cadence is actually chosen from.
 //
-// The capture figures above answered "what does one world cost". They are what said
-// the 2–5 Hz hypothesis does not hold at load: 176 KiB at 5 Hz is 859 KiB/s, in a
-// game whose artifact stream is 3–38 KB/s. What this measures is the thing that was
-// built in response — a correction is a whole capture only every
-// SnapshotKeyframeCorrections, and a difference against the last one in between —
-// so the number that decides the cadence is the *average* correction, not the peak.
+// The original plain-JSON figures answered "what does one world cost": 176 KiB at
+// 5 Hz was 859 KiB/s, in a game whose artifact stream is 3–38 KB/s. Deltas brought
+// that to 216 KiB/s; the wire envelope now compresses both shapes. This measures the
+// current operating point, so the number that decides cadence is the *average*
+// compressed correction rather than either historical peak.
 //
 // Reported rather than asserted, for the same reason as above: a byte threshold
 // here would fail on a world that got busier for honest reasons. What is asserted is
@@ -264,9 +264,13 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("baseline capture: %v", err)
 	}
-	baseBody, err := EncodeCapture(base)
+	baseBody, err := EncodeCorrection(base)
 	if err != nil {
 		t.Fatalf("baseline encode: %v", err)
+	}
+	basePlain, err := json.Marshal(correctionEnvelope{Full: &base})
+	if err != nil {
+		t.Fatalf("baseline plain encode: %v", err)
 	}
 
 	// One cadence later: the difference a correction actually carries.
@@ -283,6 +287,10 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 	deltaBody, err := EncodeCorrectionDelta(delta)
 	if err != nil {
 		t.Fatalf("delta encode: %v", err)
+	}
+	deltaPlain, err := json.Marshal(correctionEnvelope{Delta: &delta})
+	if err != nil {
+		t.Fatalf("delta plain encode: %v", err)
 	}
 
 	applyStart := time.Now() // [wall]
@@ -301,6 +309,10 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if len(deltaBody) >= len(baseBody) {
 		t.Fatalf("delta is %d bytes against a %d-byte capture; it is buying nothing",
 			len(deltaBody), len(baseBody))
+	}
+	if len(baseBody)*2 >= len(basePlain) || len(deltaBody)*2 >= len(deltaPlain) {
+		t.Fatalf("wire compression bought too little: keyframe %d/%d, delta %d/%d",
+			len(baseBody), len(basePlain), len(deltaBody), len(deltaPlain))
 	}
 	if delta.World.DeltaEntries() == 0 {
 		t.Fatalf("one cadence at the storm high water moved nothing; this measures a still world")
@@ -340,9 +352,11 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 		avg := (float64(len(baseBody)) + (k-1)*float64(len(deltaBody))) / k
 		return hz * avg / 1024
 	}
-	t.Logf("storm high water: keyframe %6d bytes | delta %6d bytes (%.1f%%) | "+
+	t.Logf("storm high water: keyframe %6d wire / %6d JSON (%.1f%%) | "+
+		"delta %6d wire / %6d JSON (%.1f%%) | "+
 		"%d component cells over %d shared placements | diff %9s apply %9s",
-		len(baseBody), len(deltaBody), 100*float64(len(deltaBody))/float64(len(baseBody)),
+		len(baseBody), len(basePlain), 100*float64(len(baseBody))/float64(len(basePlain)),
+		len(deltaBody), len(deltaPlain), 100*float64(len(deltaBody))/float64(len(deltaPlain)),
 		delta.World.DeltaEntries(), sharedPlacements(a), diffDur, applyDur)
 	t.Logf("install: first (a join) stage %9s commit %9s | second (a correction) stage %9s commit %9s | "+
 		"magnitude %d cells over %d entities, %d cells of placement",

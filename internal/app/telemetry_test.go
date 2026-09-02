@@ -77,6 +77,11 @@ func persistentTelemetryKey(kind, key string) bool {
 		case "context.frame", "context.screen_h", "context.screen_w", "engine.fps", "engine.speed_pct":
 			return true
 		}
+	case "bool":
+		// Host loss changes this process into an explicit local continuation. A
+		// game reset starts a new run inside that continuation; it does not restore
+		// the missing authority, so the player-facing fact must survive.
+		return key == "network.host_lost"
 	case "string":
 		switch key {
 		case "context.mode", "engine.breakpoint", "engine.speed", "glyph.density", "glyph.rate_mult":

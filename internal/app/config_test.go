@@ -13,6 +13,12 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 	}{
 		{name: "host", cfg: Config{HostAddress: ":7777"}},
 		{name: "join", cfg: Config{JoinAddress: "127.0.0.1:7777"}},
+		{name: "later host cap", cfg: Config{Participants: 4}},
+		{
+			name: "guest cannot set host cap",
+			cfg:  Config{JoinAddress: "127.0.0.1:7777", Participants: 4},
+			want: "not a joining guest",
+		},
 		{
 			name: "headless without script runner",
 			cfg:  Config{Mode: ModeHeadless, HostAddress: ":7777", Width: 80, Height: 24},

@@ -89,10 +89,10 @@ type corrections struct {
 	lastKeyTick uint64 // the tick that keyframe describes
 
 	// sizes is what a correction currently costs on the wire, measured rather than
-	// assumed. The controller prices a schedule from it, and the two differ
-	// sixfold on this world — a storm keyframe is 176 KiB against a 29 KiB delta —
-	// so a model using one number would be wrong by that factor at one end or the
-	// other.
+	// assumed. The controller prices a schedule from the compressed bodies it will
+	// actually send. At the storm high water those are about 15.4 KiB for a
+	// keyframe and 7.1 KiB for a delta, still different enough that a model using
+	// one number would misprice the operating point.
 	sizes     linkpace.Sizes
 	haveSizes bool
 
@@ -347,7 +347,7 @@ func (c *corrections) publishRound(force bool) error {
 	}
 
 	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
-	var body, plain []byte
+	var body, joinBody []byte
 	if keyframe {
 		// Two encodings of one capture, and the second is not waste. A correction
 		// travels in an envelope that says which of the two shapes it is; the join
@@ -358,7 +358,7 @@ func (c *corrections) publishRound(force bool) error {
 		// keyframe rather than once per correction.
 		body, err = EncodeCorrection(cap)
 		if err == nil {
-			plain, err = EncodeCapture(cap)
+			joinBody, err = EncodeCapture(cap)
 		}
 	} else {
 		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
@@ -394,7 +394,7 @@ func (c *corrections) publishRound(force bool) error {
 
 	c.recordSizeLocked(keyframe, len(body))
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, plain, true, cap.Header.Tick
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
 	}
 
 	m := c.a.snapshotTelemetry
@@ -431,10 +431,10 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 		return err
 	}
 	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
-	var body, plain []byte
+	var body, joinBody []byte
 	if keyframe {
 		if body, err = EncodeCorrection(cap); err == nil {
-			plain, err = EncodeCapture(cap)
+			joinBody, err = EncodeCapture(cap)
 		}
 	} else {
 		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
@@ -454,7 +454,7 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 	c.nextBroadcast = tick + c.base
 	c.recordSizeLocked(keyframe, len(body))
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, plain, true, cap.Header.Tick
+		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
 	}
 
 	m := c.a.snapshotTelemetry

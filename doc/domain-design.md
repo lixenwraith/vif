@@ -3,14 +3,18 @@
 Rules D-1..D-24 describe how one world is split between state every instance holds
 and state that belongs to one participant, and how the two are kept in agreement.
 All twenty-four are implemented and verified; §8 maps each to the test that pins
-it, and §9 records what the model does *not* do.
+it, and §9 records current limits and deferred work.
 
-**This document describes the code as it stands, not where it is going.** Live
-sessions are being rebuilt around an authoritative host with deterministic guests;
-that plan, and which of these rules each of its phases changes, are in
+**This document describes the code as it stands.** Phase 6 strategy and scope are in
 [Multiplayer enhancement plan](multi-player-enhancement.md). The 2026-08-30
 divergence and the option survey behind that decision are in
 [Desynchronisation and recovery](desync.md).
+
+Terminology is orthogonal by design: a **network peer** is a transport endpoint; a
+**game host** is the Shared-domain authority and current protocol coordinator; a
+**game guest** predicts that Shared world; and **Shared** versus **Player** names
+simulation ownership, not topology or network role. Relay peers and richer
+player-domain groupings remain compatible future directions, not current features.
 
 ## 1. Domains
 
@@ -98,6 +102,11 @@ a function of shared events rather than of who happened to type last.
 `GoldSystem` tallies per roster slot and `GoldCompletionPayload.Entity` names the
 cursor that typed the most members, ties resolved to the lowest slot so every
 instance credits the same one. Timeout and destruction leave it zero.
+The producing peer publishes that ordinary crossing immediately, so
+`CompositeSystem` destroys the typed member during the same settle and the glyph
+is no longer renderable before another tick. Remote peers still apply their copy
+on the receive-side schedule; `TestTypedGoldMembersDisappearWithoutATick` pins the
+local visual requirement.
 
 **D-4 Payload purity.** A Bus payload names only shared entities. Player emitters
 are reduced to coordinates and velocity (`HasOrigin`, `OriginX/Y`, `HasVelocity`,
@@ -649,6 +658,12 @@ and swaps it in between two ticks. Where a guest's derivation and the host's
 disagree, the host wins, with no negotiation and no acknowledgement; the distance
 between them is telemetry.
 
+The capture or correction envelope is a transport detail: JSON remains the schema
+and integrity surface, then a versioned deflate envelope declares the plain size
+and compresses it before chunking. Decompression enforces the same 64 MiB ceiling
+as reassembly. Capture/diff semantics are unchanged, while cadence pricing,
+admission and telemetry see actual compressed wire bytes.
+
 Four properties are what the rule is for, and each one is a thing the previous
 design could not do:
 
@@ -690,8 +705,8 @@ producer and an artifact of either kind from anyone else is refused
 crossing to a cursor it does not drive — is an *authentication* question, and this
 plan puts authentication before anything beyond trusted peers.
 
-**D-24 The cadence is a function of the link; the convergence floor is not
-(new, landed with Phase 5).** The host publishes to each peer on a cadence and a
+**D-24 The cadence is a function of the link; the convergence floor is not.** The
+host publishes to each peer on a cadence and a
 keyframe interval chosen from that link's measured round-trip time, its
 variation, the rate bytes are actually arriving at, and how much that participant
 has at stake in the next correction. Both are bounded, and their product — the
@@ -1021,9 +1036,11 @@ crosses the same way, so every instance creates the new cursor at one agreed tic
 and its shared entity is identical everywhere (D-11). Both carry `OriginSession`,
 which is journaled: nothing else in the record stream implies a roster change.
 The observing instance also raises a local status message immediately. In
-particular, a guest losing participant one is told that the host connection was
-lost and that the current session cannot recover automatically; no digest could
-report that failure after its comparison edge disappeared.
+particular, a game guest losing participant one records `network.host_lost`, says
+that it is continuing locally from the last authoritative state, and keeps a
+persistent `HOST LOST:LOCAL` status through game resets. No digest could report
+that failure after its comparison edge disappeared. This is an independent local
+fork, not coordinated authority migration; other guests may continue differently.
 
 **Session control.** Time control remains an instance-local operator facility,
 so pause, speed and step requests are refused while a live peer is attached.
@@ -1083,6 +1100,10 @@ so lobby time cannot age simulation deadlines. A joiner dials before constructin
 its `App`, allowing `ConfigForJoin` to install the authority's seed, configuration,
 corpus identity and map bounds before the FSM boots.
 
+A solo run may also carry `-players N` into a later `:host <addr>`. With no
+explicit count, mid-run hosting admits up to `parameter.MaxPlayers`; the startup
+`-host` default remains two. A joining guest cannot set the host's lobby cap.
+
 Mid-run admission replaces the closed-roster boot with D-22's snapshot path. The
 existing participants keep ticking, the joiner installs the authority's current
 world, and `EventParticipantJoined` creates its cursor at one agreed future tick.
@@ -1102,16 +1123,17 @@ A denser payload codec does not justify a second registry/schema path at these
 rates. `TestWireEncodingBudget` pins the representative budgets;
 `TestFrameRoundTripSurvivesShortStreamIO` pins framing.
 
-Authoritative state is the larger stream and has its own measurements: at the
-storm high water a 176 KiB keyframe and a 29 KiB delta, with one keyframe per ten
-corrections, cost about 215 KiB/s at the 5 Hz nominal cadence. Snapshot schema 2
-adds exact genetic continuation to the opaque `genetic` carrier; delta generation
-already treats every carrier record as whole state, so no transport special case
-was added.
+Authoritative state is the larger stream and has its own measurements. At the
+storm high water the schema is about 176 KiB for a keyframe and 29 KiB for a delta;
+the bounded deflate envelope reduces those to about 15.4 KiB and 7.1 KiB. With one
+keyframe per ten corrections that is about **39.6 KiB/s at 5 Hz** and 15.8 KiB/s
+at 2 Hz, down from 216 and 86 KiB/s. Snapshot schema 2 adds exact genetic
+continuation to the opaque `genetic` carrier; delta generation already treats
+every carrier record as whole state, so compression needs no carrier special case.
 
 The link measurement adds 12 bytes out and 45 bytes back per peer per
-`NetworkProbeInterval` — under half a kilobyte a second at `MaxPlayers`, against a
-correction stream measured in hundreds of kilobytes. The estimator smooths over
+`NetworkProbeInterval` — under half a kilobyte a second at `MaxPlayers`, small
+beside even the compressed correction stream. The estimator smooths over
 eight samples, so the interval is also how quickly a link change becomes
 steerable: about a second and a half.
 
@@ -1237,7 +1259,8 @@ fails the build when the code stops matching the declaration.
 | `TestJoinerOnAnotherTerminalSharesTheMapFromTickZero` | `internal/app` | D-14/D-11: a participant on a different terminal holds the boot cursor on the session's cell, not its own |
 | `TestSessionRunNeverCropsItsMap` | `internal/app` | D-14: a run that opened a session keeps its bounds through a resize, so the anchor it offers cannot move |
 | `TestLocalViewChangesLeaveTheFlowFieldPhaseAlone` | `internal/app` | D-17: neither a resize that moves no cursor nor a local rebind announces one, with the cropping resize as the negative control |
-| `TestOneKeypressMovesTheLocalCursorWithoutATick`, `TestFiveKeypressesBetweenTicksReachFiveCells`, `TestFastTypingOverAGlyphRunScoresNoErrors` | `internal/app` | D-18: the same probe solo and on the producing instance of a live session must agree — one press before any tick, five cells from five presses, six correct keystrokes and no typing error — while the crossing still applies at its barrier tick on both instances |
+| `TestOneKeypressMovesTheLocalCursorWithoutATick`, `TestFiveKeypressesBetweenTicksReachFiveCells`, `TestFastTypingOverAGlyphRunScoresNoErrors` | `internal/app` | D-18: the same probe solo and on the producing instance of a live session must agree — one press before any tick, five cells from five presses, six correct keystrokes and no typing error — while remote peers retain the receive-side lead |
+| `TestTypedGoldMembersDisappearWithoutATick` | `internal/app` | D-3/D-18: each correctly typed shared gold member is destroyed and non-renderable on the producing peer before a tick advances |
 | `TestPredictedLocalCursorReconcilesAndSnaps` | `internal/app` | D-18: an authoritative placement the prediction did not produce clears the queue instead of merging with it |
 | `TestCrossingHelpersPushWhatTheyDeclare` | `internal/system` | D-3/D-18: the helper the D-3 table trusts by name really pushes the crossing it claims |
 | `TestParticipantsShareTheCorpusFingerprintNotItsCursor` | `internal/app` | §7: the corpus fingerprint is compared and the cursor's position in it is not, over a multi-file corpus the embedded one cannot express |
@@ -1257,9 +1280,12 @@ fails the build when the code stops matching the declaration.
 | `TestRuntimeDigestIsADriftGaugeRatherThanAVerdict`, `TestStatusBarSyncIndicatorReportsStalenessAndCorrection` | `internal/app`, `internal/render/renderer` | D-11/D-23: a deliberate shared corruption is counted and its surface named, nothing escalates, the retired `DESYNC`/`DIVERGED` keys are gone, and a correction closes it; the indicator reports staleness and correction size instead |
 | `TestGuestConvergesOnEveryCorrection`, `TestCorrectionMagnitudeIsMeasuredNotAsserted` | `internal/app` | D-11/D-23: a guest that predicted and drifted is exactly equal to the host as of every correction, and the drift it had is published rather than escalated |
 | `TestCorrectionDeltaRoundTripsExactly`, `TestCorrectionDeltaRefusesAForeignBaseline`, `TestCorrectionCarriesTheWholeDeclaredSurface` | `internal/app` | D-23: a delta applied to the baseline it names reproduces the sender's capture byte for byte over three seeds and is smaller than it; applied to any other baseline, or with a body its header does not describe, it is refused; every declared carrier, stream and FSM region travels whole in both shapes |
+| `TestSnapshotWireEnvelopeRoundTripsAndIsBounded`, `TestCorrectionCostAtTheStormHighWater` | `internal/app` | D-23/D-24: the versioned compressed envelope round-trips, rejects corrupt/version/size violations, and materially reduces both storm keyframe and delta wire bodies |
 | `TestStagingWorldIsBuiltOnceAndReused`, `TestReconcileMatchesAFullInstall` | `internal/app` | D-23: two captures installed into one re-used staging world leave what a world built for the second alone would, and a reconciled live world equals a fully re-installed one — then and 60 ticks later |
 | `TestLocalCrossingSkipsThePlayoutLead`, `TestRosterCrossingsKeepTheAgreedApplyTick` | `internal/app` | D-3/D-11: a producer's own crossing lands in the tick it produced it for while the peer keeps the lead; an arrival still applies at one agreed tick everywhere and takes the same shared entity on both |
 | `TestHostRefusesARosterCrossingFromAnyoneElse` | `internal/app` | D-23: an arrival produced by a participant that is not the coordinator creates no cursor and is counted as refused |
+| `TestCoordinatorLossRaisesLocalStatus`, `TestStatusBarHostLossIndicatorPersistsAndOutranksLinkState` | `internal/system`, `internal/render/renderer` | Host loss: the game guest announces local continuation, retains the run-level fact across reset, and renders it ahead of stale link telemetry |
+| `TestMidRunHostUsesConfiguredCapOrMaximum` | `internal/app` | A later `:host` inherits an explicit solo `-players` cap and otherwise uses `MaxPlayers` |
 | `TestSessionLagIsMeasuredEveryTick` | `internal/app` | D-23: a participant in step reports no lag, and one left behind the session reports it and is flagged stale without anything asking |
 | `TestJoinReusesTheCadencesKeyframe`, `TestMidRunJoinWaitsOutThePlayoutLead` | `internal/app` | D-22/D-23: a second join takes the keyframe the first read rather than reading the world again, a keyframe for a tick the session has not reached is refused, and a join waits for a world a playout lead past its admission |
 | `TestLinkSmoothsTheRoundTripAndTracksItsMinimum`, `TestLinkJitterRisesWithVariationAndFallsWithout`, `TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit` | `pkg/linkpace` | D-24: the estimator's three claims, on an explicit clock the caller carries — a smoothed round trip with a baseline an excursion cannot move, jitter that rises and settles, and a delivery rate that is only called capacity when the link, not the sender, was the limit |
@@ -1391,7 +1417,7 @@ must show every cursor. The same binary works on a LAN by binding the host to
 same socket path but remains a trusted-peer proof: it requires external
 firewall/NAT routing and currently carries plaintext with no authentication.
 
-## 9. Analysis: authority, topology and open work
+## 9. Current limits and deferred work
 
 ### 9.1 Who decides what
 
@@ -1399,11 +1425,12 @@ Authority is explicit, but it is not uniform across every component.
 
 | State | Authority | Mechanism |
 |---|---|---|
-| Shared simulation | **Host/coordinator** | The host simulates the canonical world and publishes keyframe/delta corrections (D-23). Guests run the same deterministic code as a predictor; their result is provisional. |
+| Shared simulation | **Game host** | The host simulates the canonical world and publishes keyframe/delta corrections (D-23). Game guests run the same deterministic code as predictors; their result is provisional. |
 | Owner-authored shared state (D-13) | **Per cursor**, the instance that simulates it | `SimulatesLocally` admits exactly one writer; the value is transported, never re-derived. This is per-object, not per-session, and does not depend on topology. |
-| Session identity, map bounds, roster changes and live operator reset | **The coordinator** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, barrier delay, arrival/departure crossings, and serialization of the exceptional session-wide reset command. |
+| Session identity, map bounds, roster changes and live operator reset | **Game host** | The `JoinAnchor` (schema, tick rate, seed, session counter, config and corpus identity), the D-14 map latch, participant IDs, roster slots, barrier delay, arrival/departure crossings, and serialization of the exceptional session-wide reset command. |
 
-The coordinator currently is the host, participant one. Its two roles are related
+The game host is participant one and also implements the protocol's coordinator.
+Its two roles are related
 but distinct: it allocates identity and serializes membership, and its world is the
 answer when predicted shared values disagree. It is *not* the writer of another
 cursor's D-13 cells; those remain per-owner values and travel on their own stream.
@@ -1447,14 +1474,18 @@ transport:
    one. Per-peer cadence is also a property of a *direct* link — a participant
    reached by relay rides its neighbour's schedule, because the flood forwards
    what the neighbour was sent.
-2. **Departure and authority need a reachable coordinator.** One producer gives a
+2. **Departure and authority need a reachable game host.** One producer gives a
    roster change one apply tick, and one world supplies corrections. If participant
-   one departs or a partition makes it unreachable, no election or state migration
-   replaces either role; the session reports the loss and ends on that side.
+   one departs or a partition makes it unreachable, no coordinated election or
+   state migration replaces either role. Each affected game guest continues its
+   own local fork from the last authoritative state and displays
+   `HOST LOST:LOCAL`; it cannot extend the old roster or claim authority for other
+   peers.
 3. **A partition has no session-wide detector.** Direct neighbours observe their
    lost link, but after a graph splits there is no digest edge between the two
    components. A component without the host can keep predicting, but it cannot
-   receive authoritative corrections and must not promote its prediction.
+   receive authoritative corrections. Its prediction becomes local game state,
+   not a promoted authority shared with the other component.
 
 The links themselves are still built as a star, because `-join` dials one address.
 The relay is what makes any other shape work; wiring a participant to dial more
@@ -1476,7 +1507,9 @@ capture contract—including exact genetic stream continuation in snapshot schem
 2—is the state prerequisite for that work; a retained, canonical input suffix is
 the remaining replay prerequisite.
 
-Trust is still operational rather than cryptographic. Links are plaintext,
+Trust is still operational rather than cryptographic and authentication is
+deliberately deferred while functional correction and bandwidth work remains.
+Links are plaintext,
 `MsgAuthRequest`/`MsgAuthResponse` remain reserved, and `Config.TLS` has no CLI
 surface. The host structurally rejects roster artifacts from non-coordinators, but
 cannot authenticate a participant's claim to ordinary crossings. Host migration
@@ -1486,134 +1519,46 @@ promote an arbitrary predictor.
 
 ### 9.4 Known limitations
 
-**Session and transport**
+| Area | Current limit |
+|---|---|
+| Playout | The three-tick receive lead is constant, not graph-diameter aware. Late artifacts are measured; there is no lag compensation. |
+| Topology | The protocol can relay, but `-join` dials one address. Per-peer cadence and relevance describe direct links; a relayed participant inherits its neighbour's schedule. |
+| Correction content | Relevance changes *when* a whole correction is sent, not its content. Phase 6 supplies hash-guided, independently proved shards and partial reconcile. |
+| Host loss | Each affected game guest continues an explicit local fork. There is no election, shared roster authority, partition merge or automatic migration. |
+| Join | Admission refuses an excessive catch-up gap or a link below the convergence floor. Join gates serialize transfer, though arrivals can share a cadence keyframe read. |
+| Rewind | A correction adopts its host tick and does not yet replay later local crossings. Phase 6 adds a bounded canonical suffix and replay. |
+| Operations | Live pause/speed/step, raw shared mutation and synchronous snapshot save are refused. Programmatic embedder mutation remains the caller's responsibility. |
+| Trust | Links are plaintext and unauthenticated. Authentication is deferred; roster artifacts are structurally host-only. |
+| Transport loss | A bounded-queue refusal is counted and logged, not application-retransmitted. Newer corrections and keyframes provide state recovery. |
+| Portability | `float64` simulation claims determinism within one implementation build, not cross-platform bit-exact lockstep. |
+| Presentation | A terminal smaller than the map clips the render buffer; a windowed composite/vision box is separate presentation work. |
 
-- The playout lead is a constant rather than a function of the graph's diameter,
-  and a partition leaves no digest edge between its components. See §9.2. The
-  correction cadence is no longer a constant (D-24); the lead deliberately still
-  is.
-- Per-peer cadence and relevance apply to direct links only. Corrections still
-  flood, so a participant reached through a neighbour receives what that
-  neighbour was sent and inherits its schedule. In the shipped topology — `-join`
-  dials one address, so the links are a star — every participant is direct.
-- Relevance decides *when* a participant's next correction is sent and never what
-  is in it. A correction scoped to the entities near one participant cannot carry
-  D-23's exactness proof, which is a reconstruction of the sender's whole capture
-  re-checked against its own integrity hash, and would hand a receiver a world
-  assembled from two ticks. A scoped correction with its own integrity contract
-  and a partial reconcile that does not adopt the authority's tick is Phase 6's,
-  if the bytes turn out to be worth it.
-- The link estimate is per direct peer and the status bar reports the worst of
-  them. A session with one badly-connected participant therefore shows every
-  participant the same badge, which is right for the host and misleading for the
-  others; `:session` names the link.
-- A clean disconnect is visible immediately and a black-holed link becomes visible
-  after the silent timeout, but losing participant one still has no coordinator
-  election, roster authority, or automatic state migration. The guest says so
-  directly instead of waiting for a digest that can no longer arrive.
-- Mid-run join and reconnect exist and are one mechanism (D-22): a running
-  instance opens a socket with `:host <addr>`, a joiner receives the world as a
-  chunked capture, installs it into a staging world, swaps at a tick boundary and
-  closes the tick gap the transfer opened. A reconnect is that same path a second
-  time.
-- A joiner's admission is refused if the gap it has to close exceeds the playout
-  lead, and now also if the link its own transfer measured cannot carry a whole
-  world within the convergence floor (D-24). Both are refusals rather than
-  degraded sessions, and for the same reason: a participant admitted onto a link
-  that cannot converge would play, would drift, and would have nothing scheduled
-  that repairs it. A link that *can* converge but not at the nominal cadence is
-  the case adaptation now covers, which is what it was added for.
-- A join no longer reads the world for itself: it takes the publication cadence's
-  most recent keyframe, and only reads when none is fresh enough, so two joins
-  arriving together share one acquisition of the world lock. The *gate* still runs
-  on the accepting goroutine, so a second participant dialling mid-join waits
-  behind the first one's transfer. With `MaxPlayers` participants that is bounded
-  and deliberate.
-- A correction pins a guest's simulation clock to the authority's. D-21 makes every
-  stored deadline a function of the tick, so installing a world means adopting the
-  tick it describes; a guest that had extrapolated past it is re-based back by the
-  transfer's latency, which `network.lag_ticks` reports and `network.stale` flags
-  once it exceeds the playout lead. Re-simulating the gap forward — rollback and
-  replay, rather than rollback — is Phase 6's *bounded rollback* entry.
-- There is deliberately no live pause, slow motion or stepping. Suspending one
-  participant for minutes is now a reconnect rather than an impossibility, but
-  the suspension itself is still refused.
-- The runtime digest reports how far two instances stand apart and does not judge
-  it. Under an authority a guest is expected to differ between corrections, so
-  `network.digest_mismatches` and `network.drift_part` are a gauge rather than a
-  verdict, and the repair is the next correction rather than anything the digest
-  does.
-- Plaintext and unauthenticated; no CLI TLS surface.
-- No lag compensation. A slow peer produces late artifacts, which the host applies
-  in the order they reach it and the next correction repairs on the peer. The
-  playout lead is still the only thing that keeps a remote artifact on time, and
-  `network.stale` is what says this instance is past it.
-- A refused outbound frame is counted and logged but not retransmitted. The stream
-  itself is reliable and ordered; the loss is in the bounded send queue ahead of it.
-- `float64` simulation means cross-platform bit-exact lockstep is not claimed; the
-  guarantee is per implementation build.
-- A coordinated game reset deliberately discards all already-scheduled future
-  artifacts and restarts the epoch. Every participant does so at the reset's
-  agreed apply tick; there is no selective carry-over into the new run.
+Domain-boundary debt that remains visible to tests:
 
-**Domain boundary**
-
-- `unstampedLocal` in `internal/app/local_stamp_test.go` still holds 18
-  `Local`-class types pushed with the ambient shared tag from app, engine, fsm and
-  the shared species systems. Not a transport gate — the class keeps them off the
-  wire regardless — but the journal record is dishonest about them.
-- Operator grant commands in `internal/mode/commands.go` push the owner-authored
-  family with the ambient shared tag under `OriginCommand`. Harmless while those
-  types are `Local`; retagging them changes recorded record domains.
-- The live ex-command policy refuses time control, system toggles, raw `:emit`,
-  FSM region operations and synchronous `:d save`; overlays and non-blocking
-  inspection remain local and do not pause. Snapshot save is excluded because
-  its world-lock hold can exceed the fixed playout lead even though it does not
-  mutate simulation state.
-  Public embedder calls such as `App.SetupLevel` can still inject shared scheduler
-  state directly and remain the caller's responsibility. The random parity script
-  holds those programmatic operator paths fixed.
-- Player grant and effect commands remain available live because they author only
-  the invoking cursor's D-13 state or enter the ordinary player-domain crossing
-  path. They are development cheats, not a determinism exception. In a live
-  `:new!`, only the coordinator's own operator preferences are purged; peers reset
-  simulation but retain their local mouse, auto-fire and overlay choices.
-- The optional `config/main/tower.toml` and `config/td` scripts still capture one
-  `player_entity` and assign every shared tower to that cursor (deterministically
-  slot zero). They no longer collapse or mis-arm the roster, but deciding whether
-  towers should be session-owned or participant-owned is a separate gameplay
-  rule, not required by the default map defects fixed here.
-- `event.EmitDeath` writes the queue directly, bypassing `PushEvent`, so
-  `WithDomain` does not reach death records. Batches are already domain-pure, which
-  is what determinism needs; the domain travels as an explicit parameter.
-- `uint32(entity)` narrowing at `gateway.go` and `adaptation.go` is safe only while
-  route-graph anchors are shared (tag 0).
-- `combat.` telemetry is a mixed aggregate and is dropped whole from the shared
-  snapshot. *Closed as not worth doing*: the shared world digest already hashes
-  hit points, enrage, stun and both immunities for every non-cursor combatant, so
-  splitting twenty-odd counters per target domain would restore a comparison that
-  is already covered.
-
-**Presentation**
-
-- A recording or session on a terminal smaller than the map is clipped by the
-  render buffer. The pan offset in `play.go` is the seam a windowed composite
-  replaces. Pure presentation, no shared state, no abuse surface; its own task.
+- `unstampedLocal` still exempts Local-class pushes with an ambient Shared tag;
+  empty it, then remove the exemption.
+- `event.EmitDeath` bypasses `PushEvent`; batches remain domain-pure only because
+  callers pass the domain explicitly.
+- `uint32(entity)` in gateway/adaptation code assumes route anchors stay Shared.
+- Mixed `combat.` telemetry is excluded as a whole; authoritative component state
+  already covers the shared gameplay result.
+- Optional tower configs still bind to `player_entity`, normally slot 0. Roster
+  slots remain cursor-only. The deferred rule is entity zero for
+  session-owned/uncredited, nonzero for explicitly cursor-owned, applied to both
+  tower regions and their gateways without a new ownership type or config value.
 
 ### 9.5 Next work
 
-Phase 5 has landed: the link measures a real round trip, the cadence and keyframe
-interval are chosen from it per peer inside a bounded controller, relevance and
-priority decide which participant is served first and which settles for less, and
-a convergence floor bounds all of it — refused at admission and reported
-mid-session rather than adapted past (D-24). What that leaves is Phase 6, and the
-entries are unchanged: bounded rollback *and replay*, so a guest's own
-outstanding artifacts survive the correction that predates them; authentication,
-before anything beyond trusted peers; and host migration with the state transfer
-it actually requires. A content-scoped correction — relevance moving bytes rather
-than only the schedule — joined that list rather than Phase 5's, for the reason
-§9.4 gives. The exact requirements and the staged link-shaping gate are in
-[Multiplayer enhancement plan](multi-player-enhancement.md).
+Phase 6 first makes steady-state bytes proportional to disagreement through a
+versioned hash hierarchy and selectively proved shards, with compressed keyframes
+as bounded fallback. It also adds bounded rollback *and replay* so a game guest's
+own outstanding crossings survive a correction that predates them. Exact scope and
+acceptance gates are in [Multiplayer enhancement plan](multi-player-enhancement.md)
+and [Phase 6 implementation prompt](phase6-implementation-prompt.md).
+
+Authentication is deferred. Coordinated host migration remains a later project
+that must transfer authority, membership and in-flight admission before election;
+the current independent local continuation does not substitute for it.
 
 What remains outstanding and independent of that work:
 
@@ -1621,7 +1566,7 @@ What remains outstanding and independent of that work:
    mutation explicitly session-aware rather than relying on the interactive
    command policy and harness discipline.
 2. **Empty `unstampedLocal`,** then delete it and its exemption.
-3. **Settle tower ownership in optional maps.** Replace their slot-zero
-   `player_entity` convention with an explicit session-owned or participant-owned
-   rule.
+3. **Settle tower ownership in optional maps.** Apply the documented zero-entity
+   session-owned sentinel to both tower regions and their gateways; keep cursor
+   roster slots cursor-only.
 4. **Windowed composite / vision box.**

@@ -193,6 +193,12 @@ func TestSessionFlags(t *testing.T) {
 	if err := session.validateInvocation(false, true, ""); err == nil {
 		t.Fatal("session flags accepted -check")
 	}
+	if err := (sessionFlags{players: 4}).validateInvocation(false, false, ""); err != nil {
+		t.Fatalf("a solo run rejected its later host cap: %v", err)
+	}
+	if err := (sessionFlags{join: "host.example:7777", players: 4}).validateInvocation(false, false, ""); err == nil {
+		t.Fatal("a joining guest accepted a host lobby cap")
+	}
 }
 
 func TestScriptInvocation(t *testing.T) {

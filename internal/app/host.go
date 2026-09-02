@@ -80,10 +80,16 @@ func (a *App) beginHostingLocked(addr string) error {
 		return fmt.Errorf("host %q: %w", addr, err)
 	}
 
-	// The address is recorded before the listener exists, so every later reader —
+	// The address and lobby cap are recorded before the listener exists, so every later reader —
 	// the accept goroutine's anchor, the status line — sees it already set. Nothing
-	// writes it again once a peer can arrive.
+	// writes either again once a peer can arrive. An explicit -players value follows
+	// a solo run into :host; with none, opening a run mid-game admits the full roster
+	// instead of silently falling back to the startup lobby's two-player default.
+	previousParticipants := a.cfg.Participants
 	a.cfg.HostAddress = addr
+	if a.cfg.Participants == 0 {
+		a.cfg.Participants = parameter.MaxPlayers
+	}
 	netCfg := a.hostNetworkConfig()
 	netCfg.OnAdmit = a.releaseMidRunJoiner
 	port := network.NewSocketPort(netCfg)
@@ -110,6 +116,7 @@ func (a *App) beginHostingLocked(addr string) error {
 		a.midRunPort, a.sessionRoster = nil, nil
 		a.sessionMu.Unlock()
 		a.cfg.HostAddress = ""
+		a.cfg.Participants = previousParticipants
 		a.world.Resources.Network = nil
 		return fmt.Errorf("host %s: %w", addr, err)
 	}
@@ -170,6 +177,9 @@ func (a *App) sessionSummaryLocked() string {
 	reg := a.world.Resources.Status
 	line := fmt.Sprintf("Session %s %s, participant %d, %d peer(s), tick %d",
 		role, addr, participant, peers, a.Position().Tick)
+	if reg.Bools.Get("network.host_lost").Load() {
+		return line + "; HOST LOST, continuing locally from the last authoritative state"
+	}
 
 	// The operating point, read from the published cells rather than from the
 	// scheduler itself. This runs under the world lock and the scheduler takes it

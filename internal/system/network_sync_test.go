@@ -110,7 +110,8 @@ func TestLinkLossDoesNotDespawnWhereItIsObserved(t *testing.T) {
 
 // TestCoordinatorLossRaisesLocalStatus covers the failure mode a digest cannot:
 // once the host link is gone there is no peer left to disagree with, so the guest
-// must report the disconnect directly rather than waiting for DESYNC.
+// must report the disconnect directly rather than waiting for DESYNC. The guest
+// continues as a local fork, and that fact survives a game reset.
 func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	w, _, _ := testCursorWorld(t)
 	host, guest := network.NewLoopbackPair(1, 2)
@@ -122,7 +123,7 @@ func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	}
 	net.Receive(1)
 
-	want := "Host connection lost; this session cannot recover automatically"
+	want := "Host connection lost; continuing locally from the last authoritative state"
 	got := ""
 	for _, ev := range w.Resources.Event.Queue.Consume() {
 		if ev.Type != event.EventMetaStatusMessageRequest {
@@ -134,6 +135,13 @@ func TestCoordinatorLossRaisesLocalStatus(t *testing.T) {
 	}
 	if got != want {
 		t.Fatalf("coordinator-loss message = %q, want %q", got, want)
+	}
+	if !net.statHostLost.Load() {
+		t.Fatal("coordinator loss did not publish the persistent host-loss state")
+	}
+	net.Init()
+	if !net.statHostLost.Load() {
+		t.Fatal("a game reset erased the host-loss state")
 	}
 }
 

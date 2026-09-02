@@ -4,18 +4,17 @@
 // correction does not: a guest already holds one, and what it is missing is the
 // difference between the world it predicted and the world the host actually has.
 //
-// The measurement is what forced this rather than a preference for it. §8's storm
-// high water is 176 KiB per capture, which is 859 KiB/s at 5 Hz and 344 KiB/s at
-// 2 Hz — so full captures at the cadence this plan wants are not affordable at the
-// load this game actually reaches, while the same world at rest is 11 KiB and
-// entirely affordable. The cadence question was never only a rate.
+// The measurement is what forced this rather than a preference for it. The storm
+// high water is 176 KiB of schema per capture: before the wire codec, full captures
+// were 859 KiB/s at 5 Hz. Exact deltas remove unchanged schema and the bounded
+// deflate envelope then reduces both shapes; they solve different parts of the cost.
 //
 // A correction is therefore one of two things and says which: a **keyframe**, which
 // is a whole capture and is self-sufficient, or a **delta**, which names the
 // keyframe it was computed against and is worthless without it. A receiver holding a
 // different baseline drops a delta rather than guessing, and waits for the next
 // keyframe; that is a bounded wait by construction, because the host takes one every
-// SnapshotKeyframeInterval corrections.
+// SnapshotKeyframeCorrections corrections.
 //
 // The proof that a delta is lossless is not a comparison — it is the capture's own
 // integrity hash. Reconstruct, re-hash, and the header's field either matches or the
@@ -25,7 +24,6 @@
 package app
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -124,18 +122,18 @@ type correctionEnvelope struct {
 
 // EncodeCorrection renders a keyframe for transport.
 func EncodeCorrection(cap SharedCapture) ([]byte, error) {
-	return json.Marshal(correctionEnvelope{Full: &cap})
+	return encodeSnapshotJSON(correctionEnvelope{Full: &cap})
 }
 
 // EncodeCorrectionDelta renders a delta for transport.
 func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
-	return json.Marshal(correctionEnvelope{Delta: &d})
+	return encodeSnapshotJSON(correctionEnvelope{Delta: &d})
 }
 
 // DecodeCorrection parses a correction body and reports which shape it is.
 func DecodeCorrection(b []byte) (CorrectionKind, SharedCapture, SharedCaptureDelta, error) {
 	var env correctionEnvelope
-	if err := json.Unmarshal(b, &env); err != nil {
+	if err := decodeSnapshotJSON(b, &env); err != nil {
 		return 0, SharedCapture{}, SharedCaptureDelta{}, fmt.Errorf("correction decode: %w", err)
 	}
 	switch {

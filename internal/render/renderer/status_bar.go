@@ -48,6 +48,7 @@ type StatusBarRenderer struct {
 	statCorrection *atomic.Int64
 	statPeers      *atomic.Int64
 	statLatch      *atomic.Bool
+	statHostLost   *atomic.Bool
 
 	// The operating point. Phase 5 made the correction cadence a function of the
 	// link, and a player whose picture has gone coarse needs to be told which of
@@ -99,6 +100,7 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statCorrection: statusReg.Ints.Get("snapshot.correction_entities"),
 		statPeers:      statusReg.Ints.Get("network.peers"),
 		statLatch:      statusReg.Bools.Get("network.map_latched"),
+		statHostLost:   statusReg.Bools.Get("network.host_lost"),
 
 		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
 		statKeyframe:    statusReg.Ints.Get("snapshot.cadence_keyframe_interval"),
@@ -144,8 +146,12 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	var rightItems []statusItem
 
-	// Priority 0: a link that cannot converge, and the staleness beside it, must
-	// survive even the narrowest useful status bar.
+	// Priority 0: losing the game host is a permanent change of authority for this
+	// run. It must survive even the narrowest useful status bar.
+	if item, ok := r.hostLossItem(); ok {
+		rightItems = append(rightItems, item)
+	}
+	// A link that cannot converge, and the staleness beside it, come next.
 	if item, ok := r.linkItem(); ok {
 		rightItems = append(rightItems, item)
 	}
@@ -466,6 +472,18 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
+// hostLossItem marks the guest's independent continuation after authority loss.
+// Unlike the transient status message and NET:DOWN, this remains visible through
+// game resets so the player cannot mistake the local fork for a connected session.
+func (r *StatusBarRenderer) hostLossItem() (statusItem, bool) {
+	if !r.statHostLost.Load() {
+		return statusItem{}, false
+	}
+	return statusItem{
+		text: " HOST LOST:LOCAL ", fg: visual.RgbBlack, bg: visual.RgbCursorError,
+	}, true
+}
+
 // syncItem renders what a participant needs to know about its own picture, which
 // Phase 4 changed from a verdict into two measurements.
 //
@@ -517,6 +535,9 @@ func (r *StatusBarRenderer) syncItem() (statusItem, bool) {
 // choice is spending. It is only ever on screen when the link is constrained, so
 // the width it costs is width a healthy session never pays.
 func (r *StatusBarRenderer) linkItem() (statusItem, bool) {
+	if r.statHostLost.Load() {
+		return statusItem{}, false
+	}
 	cadence := r.statCadence.Load()
 	if cadence == 0 {
 		return statusItem{}, false

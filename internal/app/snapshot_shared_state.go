@@ -488,14 +488,14 @@ func captureIntegrity(cap SharedCapture) (uint64, error) {
 	return h.Sum64(), nil
 }
 
-// EncodeCapture renders a capture for transport or for a file.
-func EncodeCapture(cap SharedCapture) ([]byte, error) { return json.Marshal(cap) }
+// EncodeCapture renders a capture in the bounded, compressed wire envelope.
+func EncodeCapture(cap SharedCapture) ([]byte, error) { return encodeSnapshotJSON(cap) }
 
 // DecodeCapture parses what EncodeCapture produced. It does not validate: the
 // caller passes the result to VerifyCapture or InstallShared, which do.
 func DecodeCapture(b []byte) (SharedCapture, error) {
 	var cap SharedCapture
-	if err := json.Unmarshal(b, &cap); err != nil {
+	if err := decodeSnapshotJSON(b, &cap); err != nil {
 		return SharedCapture{}, fmt.Errorf("capture decode: %w", err)
 	}
 	return cap, nil

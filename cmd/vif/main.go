@@ -246,7 +246,7 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 	fs.BoolVar(&f.embedded, "config-embedded", false, "Alias of -d")
 }
 
-// sessionFlags expose startup-only hosting and joining without a mid-run mode switch.
+// sessionFlags expose startup hosting/joining and the cap a later :host inherits.
 type sessionFlags struct {
 	host    string
 	join    string
@@ -257,15 +257,15 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
 	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Participants a -host lobby waits for, itself included (2..%d, default 2)", parameter.MaxPlayers))
+		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host)", parameter.MaxPlayers))
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
-	if (f.host != "" || f.join != "") && (schema || check || replay != "") {
-		return fmt.Errorf("-host and -join are available only in interactive play")
+	if (f.host != "" || f.join != "" || f.players != 0) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, and -players are available only in interactive play")
 	}
-	if f.players != 0 && f.host == "" {
-		return fmt.Errorf("-players applies to -host")
+	if f.players != 0 && f.join != "" {
+		return fmt.Errorf("-players configures a host, not -join")
 	}
 	return nil
 }

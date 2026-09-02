@@ -72,6 +72,7 @@ type NetworkSystem struct {
 	statConnected      *atomic.Bool
 	statConnection     *status.AtomicString
 	statMapLatched     *atomic.Bool
+	statHostLost       *atomic.Bool
 	statLostIn         *atomic.Int64
 	statLostOut        *atomic.Int64
 	statRelayed        *atomic.Int64
@@ -256,6 +257,10 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statConnected = s.boolStat(reg, "network.connected")
 	s.statConnection = s.textStat(reg, "network.state")
 	s.statMapLatched = s.boolStat(reg, "network.map_latched")
+	// Host loss is a run-level fact, not a transient session counter. The guest
+	// continues simulating its local fork and a game reset must not make that loss
+	// disappear from the player-facing status surface.
+	s.statHostLost = reg.Bools.Get("network.host_lost")
 	s.statLostIn = s.intStat(reg, "network.transport_lost_in")
 	s.statLostOut = s.intStat(reg, "network.transport_lost_out")
 	s.statRelayed = s.intStat(reg, "network.relay_forwarded")
@@ -771,12 +776,14 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 // digest, so waiting for DESYNC would make the most serious transport failure look
 // like silence. NET:DOWN remains the persistent indicator; this local message and
 // warning name the event when it happens. Losing participant one is called out on a
-// guest because the current membership protocol cannot replace its coordinator.
+// game guest: simulation continues from the last authoritative state, but the
+// current membership protocol does not coordinate that local fork with other peers.
 func (s *NetworkSystem) reportDisconnect(peerID uint32, remaining int) {
 	coordinatorLost := peerID == coordinatorParticipant && !s.isCoordinator()
 	message := fmt.Sprintf("Participant %d disconnected", peerID)
 	if coordinatorLost {
-		message = "Host connection lost; this session cannot recover automatically"
+		s.statHostLost.Store(true)
+		message = "Host connection lost; continuing locally from the last authoritative state"
 	}
 	s.world.PushLocal(event.EventMetaStatusMessageRequest, &event.MetaStatusMessagePayload{
 		Message: message, Duration: 4 * parameter.StatusMessageDefaultTimeout, DurationOverride: true,

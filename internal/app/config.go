@@ -137,8 +137,9 @@ type Config struct {
 	// simulation identity before the App is constructed.
 	JoinAddress string
 
-	// Participants is the lobby size a host waits for, itself included. Zero means
-	// two. The ceiling is parameter.MaxPlayers, which is also the roster width.
+	// Participants is the lobby size a host waits for, itself included. A startup
+	// host treats zero as two; a solo run opened later with :host treats zero as
+	// parameter.MaxPlayers. The ceiling is also the roster width.
 	Participants int
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
@@ -238,8 +239,8 @@ func (c Config) Validate() error {
 		return fmt.Errorf("-players %d is outside the supported range 2..%d",
 			c.Participants, parameter.MaxPlayers)
 	}
-	if c.Participants != 0 && c.HostAddress == "" {
-		return errors.New("-players applies to -host")
+	if c.Participants != 0 && c.JoinAddress != "" {
+		return errors.New("-players configures a host, not a joining guest")
 	}
 	if c.ForceDefault && (c.GameScript != "" || c.ContentPath != "") {
 		return errors.New("-d is mutually exclusive with -g and -f")

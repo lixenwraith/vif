@@ -1,6 +1,8 @@
 package app
 
 import (
+	"cmp"
+	"slices"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -241,6 +243,69 @@ func TestFastTypingOverAGlyphRunScoresNoErrors(t *testing.T) {
 	if liveCorrect != soloCorrect || liveErrors != soloErrors {
 		t.Fatalf("the session typed %d correct, %d errors; want the solo %d and %d",
 			liveCorrect, liveErrors, soloCorrect, soloErrors)
+	}
+}
+
+// TestTypedGoldMembersDisappearWithoutATick pins the shared half of local input
+// prediction. Gold is composite and shared, but the producing peer must still see
+// each correct member leave the screen before the next terminal frame; the same
+// crossing reaches the other peers on their playout schedule and corrections
+// remain free to reconcile the provisional result.
+func TestTypedGoldMembersDisappearWithoutATick(t *testing.T) {
+	type member struct {
+		entity core.Entity
+		cell   component.PositionComponent
+		rune   rune
+	}
+
+	live, _ := liveInstance(t, 0x601D)
+	live.Context().PushEventOrigin(event.EventGoldSpawnRequest, nil, event.OriginDebug)
+	live.Settle()
+	live.Tick(2)
+
+	var run []member
+	live.World().RunSafe(func() {
+		w := live.World()
+		for _, headerEntity := range w.Components.Header.GetAllEntities() {
+			header, ok := w.Components.Header.GetComponent(headerEntity)
+			if !ok || header.Behavior != component.BehaviorGold {
+				continue
+			}
+			for _, entry := range header.MemberEntries {
+				glyph, glyphOK := w.Components.Glyph.GetComponent(entry.Entity)
+				cell, cellOK := w.Positions.GetPosition(entry.Entity)
+				if glyphOK && cellOK {
+					run = append(run, member{entity: entry.Entity, cell: cell, rune: glyph.Rune})
+				}
+			}
+			break
+		}
+		slices.SortFunc(run, func(a, b member) int { return cmp.Compare(a.cell.X, b.cell.X) })
+		if len(run) > 0 {
+			cursor := w.Resources.Player.Entity
+			w.Positions.SetPosition(cursor, run[0].cell)
+			w.Resources.Player.DropPrediction()
+		}
+	})
+	if len(run) != parameter.GoldSequenceLength {
+		t.Fatalf("gold run has %d members, want %d", len(run), parameter.GoldSequenceLength)
+	}
+
+	inject(t, live, intentModeSwitch(input.ModeTargetInsert))
+	startTick := live.Position().Tick
+	for i, m := range run {
+		inject(t, live, intentTextChar(m.rune))
+		if got := live.Position().Tick; got != startTick {
+			t.Fatalf("typing member %d advanced tick %d to %d", i, startTick, got)
+		}
+		live.World().RunSafe(func() {
+			if live.World().Components.Glyph.HasEntity(m.entity) {
+				t.Fatalf("typed gold member %d remains renderable before a tick", i)
+			}
+		})
+		if got, _ := sharedGlyphs(live); got != len(run)-i-1 {
+			t.Fatalf("after member %d, %d shared glyphs remain; want %d", i, got, len(run)-i-1)
+		}
 	}
 }
 

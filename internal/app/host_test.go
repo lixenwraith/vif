@@ -16,6 +16,29 @@ import (
 // comment at its use.
 const joinTestTickInterval = 10 * time.Millisecond
 
+func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
+	for _, tt := range []struct {
+		name         string
+		participants int
+		want         int
+	}{
+		{name: "explicit", participants: 3, want: 3},
+		{name: "unspecified", want: parameter.MaxPlayers},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			host := mustHeadless(t, 0x3016, 120, 40)
+			defer host.Close()
+			host.cfg.Participants = tt.participants
+			if err := host.BeginHosting("127.0.0.1:0"); err != nil {
+				t.Fatalf("begin hosting: %v", err)
+			}
+			if got := host.remoteParticipantCount() + 1; got != tt.want {
+				t.Fatalf("lobby size = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 // TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun is Phase 3's criterion, over a
 // real socket and at a tick that is not zero.
 //

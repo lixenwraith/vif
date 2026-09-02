@@ -2,9 +2,10 @@
 //
 // A capture describes the whole shared world, which is the right shape for a join
 // and the wrong one for a correction. §8's measurement is what says so: at the
-// storm high water a capture is 176 KiB, which is 859 KiB/s at 5 Hz — affordable
-// for the one transfer a join makes and not affordable as a cadence. Between two
-// captures 200 ms apart most of that is unchanged: walls do not move, a gold
+// storm high water the schema is 176 KiB, which was 859 KiB/s at 5 Hz before the
+// wire codec. Compression reduces transport repetition; a delta separately avoids
+// computing and carrying unchanged logical state. Between two captures 200 ms
+// apart most of that is unchanged: walls do not move, a gold
 // sequence's members do not move, and a swarm's genotype does not change while its
 // position does.
 //

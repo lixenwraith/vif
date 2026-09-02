@@ -273,8 +273,12 @@ will ever be.
 
 `MsgStateSnapshot` (0x26, the code the retired replay-based join reserved) carries
 one chunk of a shared-world capture. It is the only message whose size is a
-function of the world rather than of the format — the measured storm high water is
-176 KiB against a 65,535-byte frame — so it is the only one that is split. Each
+function of the world rather than of the format, so it is the only one that may be
+split. The schema JSON first enters a 10-byte bounded compression envelope:
+`[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data. The
+declared plain size and the reassembled wire size are both capped at
+`MaxSnapshotBytes`. The current storm high water compresses from about 176 KiB to
+15.4 KiB, but chunking remains required for larger or less compressible worlds. Each
 chunk carries a 20-byte header before its payload:
 
 | Byte range | Width | Field |
@@ -292,7 +296,7 @@ gate's `SessionOffer` names `snapshot_tick` and `snapshot_bytes` before the
 transfer starts, so a stream that stops halfway is a failed join rather than a
 world installed from a prefix.
 
-## 9. Poll boundary and lockstep barrier
+## 9. Poll boundary and receive lead
 
 Socket goroutines never touch `World`, the event queue or component stores.
 `SocketPort` appends `Inbound` notifications to its configured bounded receive
@@ -301,9 +305,12 @@ the socket. `NetworkService` contributes that port through `NetworkResource`.
 
 `NetworkSystem` is manifest-registered with a `dual` profile. At tick open,
 `WireSink.Receive` drains notifications and applies scheduled local/peer artifacts;
-at tick close, `Flush` sends the closed production epoch. `Cross` withholds the
-local artifact so every participant applies it at the same fixed-delay boundary.
-The default lead is three 50 ms ticks and never waits for a per-tick round trip.
+at tick close, `Flush` sends the closed production epoch. For an ordinary D-3
+crossing, `Cross` retains the peer copy but lets the producer publish its original
+immediately; remote copies apply after the fixed receive lead. Arrival, departure
+and full reset remain barrier-bound on their producer because they create or destroy
+shared identity. The default lead is three 50 ms ticks and never waits for a
+per-tick round trip.
 The barrier is engaged for the life of a session run rather than while a peer is
 attached: the tick an artifact applies at is what a replay or a mid-run catch-up
 has to reach, and a reproduction holds no link. A journaled crossing is already
@@ -345,8 +352,9 @@ re-derives one. Under an authoritative host a guest is *expected* to disagree
 between corrections, so the verdict was retired with the failure state it described.
 The digest does not flood, select an authority, repair state, or cross a partition;
 what repairs a disagreement is the next correction. Losing the comparison edge is
-still reported directly, and a guest that loses participant one is explicitly told
-that the session cannot recover automatically.
+still reported directly. A game guest that loses participant one continues its
+local fork from the last authoritative state and keeps `HOST LOST:LOCAL` visible;
+that is not coordinated election or state migration.
 
 The host publishes its world as a whole capture and a delta against the last whole
 one in between, chunked under `MsgStateCorrection` and reassembled per peer. A node
@@ -354,9 +362,10 @@ relays the chunks it admitted, on the same argument the epoch flood uses, so the
 authority reaches a participant the host is not linked to directly. A guest queues
 what arrives and installs the newest that resolves between two ticks, into a staging
 world built once and re-used; the `snapshot.correction` group carries what it cost
-and how far its prediction had drifted. Measured at the storm high water, a delta is
-29 KiB against a 176 KiB keyframe — 215 KiB/s at the 5 Hz nominal cadence where
-full snapshots would be 859.
+and how far its prediction had drifted. Measured at the storm high water, the
+schema's 29 KiB delta and 176 KiB keyframe compress to about 7.1 KiB and 15.4 KiB.
+With one keyframe in ten that is about 39.6 KiB/s at the 5 Hz nominal cadence;
+full compressed keyframes would be about 76.9 KiB/s.
 
 **The cadence is chosen, not fixed.** `SnapshotCorrectionTicks` and
 `SnapshotKeyframeCorrections` are the *nominal* operating point now; what a peer
@@ -422,6 +431,8 @@ What the operator surface still does not cover:
   back into the running session;
 - no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
+- host loss creates an explicit independent local fork, not shared host migration,
+  election or partition merging;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
 - sequence/ack fields detect ordering but do not retransmit, and a frame refused
@@ -429,8 +440,8 @@ What the operator surface still does not cover:
 
 ## 11. Verification and manual run
 
-`TestTwoLiveParticipantsStayInLockstep` proves two independent drivers over the
-in-process mesh; `TestTwoLiveParticipantsStayInLockstepOverTCP` repeats 1,200
+`TestTwoLiveParticipantsConvergeOnCorrections` proves two independent drivers over
+the in-process mesh; `TestTwoLiveParticipantsConvergeOverTCP` repeats 1,200
 paired boundaries over `127.0.0.1`, uses the production startup gates, checks
 disconnect continuation while the listener stays up.
 `TestChainRelayReachesANonAdjacentParticipant` and
@@ -503,10 +514,11 @@ run shows a small `COR` and never `LAG`. Give the two terminals different sizes 
 resize one mid-run: the map must not move and neither side may fall behind. The host's
 `:new` resets both rosters and a guest's is refused. Quit the guest; the host must
 show a participant-disconnected message and continue at `NET:DOWN/LOCK`. Quit the
-host; the guest must show `Host connection lost; this session cannot recover
-automatically` and remain at `NET:DOWN/LOCK`. Add `-players <n>`
-to the host for a larger lobby, which closes only once every participant has
-arrived. Bind the host to `:7777` for a LAN. Internet routing uses the same TCP
+host; the guest must say that it is continuing locally, retain
+`HOST LOST:LOCAL`, and keep ticking at `NET:DOWN/LOCK`. Add `-players <n>` to a
+startup host for a larger closed lobby, or to a solo launch as the cap a later
+`:host` inherits; without a solo cap, later hosting uses `MaxPlayers`. Bind the
+host to `:7777` for a LAN. Internet routing uses the same TCP
 path but is not safe for untrusted peers until authentication and TLS
 configuration are exposed.
 

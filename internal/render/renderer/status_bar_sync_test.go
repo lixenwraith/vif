@@ -7,6 +7,29 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 )
 
+func TestStatusBarHostLossIndicatorPersistsAndOutranksLinkState(t *testing.T) {
+	w := engine.NewWorld()
+	ctx := engine.NewGameContextWithClock(w, 80, 24, engine.NewManualClock())
+	r := NewStatusBarRenderer(ctx)
+
+	if item, ok := r.hostLossItem(); ok {
+		t.Fatalf("an intact session renders %#v", item)
+	}
+	r.statHostLost.Store(true)
+	item, ok := r.hostLossItem()
+	if !ok || item.text != " HOST LOST:LOCAL " || item.bg != visual.RgbCursorError {
+		t.Fatalf("host-loss item = %#v, %t", item, ok)
+	}
+
+	// Link telemetry describes the old authority and would be misleading after
+	// the guest has continued independently.
+	r.statCadence.Store(4)
+	r.statFloor.Store(true)
+	if item, ok := r.linkItem(); ok {
+		t.Fatalf("host loss left a stale link badge visible: %#v", item)
+	}
+}
+
 // TestStatusBarSyncIndicatorReportsStalenessAndCorrection pins what replaced the
 // parity verdict.
 //

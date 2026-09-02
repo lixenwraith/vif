@@ -16,7 +16,8 @@ func TestSnapshotChunksRoundTrip(t *testing.T) {
 		SnapshotChunkBody,
 		SnapshotChunkBody + 1,
 		3 * SnapshotChunkBody,
-		// The measured storm high water is around 176 KiB, which is three frames.
+		// This synthetic body exceeds one frame even though the measured storm high
+		// water now compresses below it; larger worlds still require chunking.
 		180 << 10,
 	}
 	for _, size := range sizes {

@@ -141,7 +141,7 @@ func TestTheRoundTripReachesTheScheduleIsMeasuredEndToEnd(t *testing.T) {
 // cadence stops being a constant and becomes a function of what the link carries,
 // and the operating point is reported rather than left to be guessed at.
 func TestAConstrainedLinkSlowsTheCadenceAndSaysSo(t *testing.T) {
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{BytesPerTick: 900})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{BytesPerTick: 500})
 	runSession(host, guest, 400)
 
 	report := host.CadenceReport()
@@ -150,7 +150,7 @@ func TestAConstrainedLinkSlowsTheCadenceAndSaysSo(t *testing.T) {
 	}
 	peer := report.Peers[0]
 	if !peer.Saturated {
-		t.Fatalf("a 900-byte-per-tick link was never read as the limit: %+v", peer)
+		t.Fatalf("a 500-byte-per-tick link was never read as the limit: %+v", peer)
 	}
 	if !report.Constrained {
 		t.Fatalf("a saturated link was not reported as constrained: %+v", peer)
@@ -179,7 +179,7 @@ func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 		{},
 		{LatencyTicks: 6},
 		{LossEvery: 3},
-		{BytesPerTick: 700},
+		{BytesPerTick: 500},
 		{LatencyTicks: 4, LossEvery: 5, BytesPerTick: 1500},
 	}
 	for _, shape := range shapes {
@@ -213,7 +213,7 @@ func TestTheFloorBoundsEveryScheduleAShapedLinkProduces(t *testing.T) {
 // bounded rather than climb, because a magnitude that climbs is a guest falling
 // behind faster than the cadence repairs it.
 func TestCorrectionMagnitudeStaysBoundedOnAConstrainedLink(t *testing.T) {
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{BytesPerTick: 1200})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{BytesPerTick: 500})
 
 	var early, late int64
 	for round := range 2 {
@@ -384,7 +384,7 @@ func TestLinkMeasurementNeverEntersTheComparedSurface(t *testing.T) {
 func TestASlowPeerDoesNotSlowAFastOne(t *testing.T) {
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {1, 3}})
 	host := apps[0]
-	transportOf(t, apps[2]).SetShape(network.LinkShape{BytesPerTick: 700})
+	transportOf(t, apps[2]).SetShape(network.LinkShape{BytesPerTick: 500})
 
 	for range 400 {
 		for _, a := range apps {
@@ -437,7 +437,7 @@ func transportOf(t *testing.T, a *App) *network.MeshPort {
 // the phase adapts has to be readable, or a player watching their picture go
 // coarse has no way to tell a small link from a broken game.
 func TestTheOperatingPointIsPublished(t *testing.T) {
-	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 1200})
+	host, guest, _ := shapedPair(t, 0x5EEDBEEF, network.LinkShape{LatencyTicks: 2, BytesPerTick: 500})
 	runSession(host, guest, 300)
 
 	for _, key := range []string{
