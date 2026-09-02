@@ -1,8 +1,8 @@
 # Multi-instance domain model — vi-fighter
 
-Rules D-1..D-23 describe how one world is split between state every instance holds
+Rules D-1..D-24 describe how one world is split between state every instance holds
 and state that belongs to one participant, and how the two are kept in agreement.
-All twenty-three are implemented and verified; §8 maps each to the test that pins
+All twenty-four are implemented and verified; §8 maps each to the test that pins
 it, and §9 records what the model does *not* do.
 
 **This document describes the code as it stands, not where it is going.** Live
@@ -690,6 +690,70 @@ producer and an artifact of either kind from anyone else is refused
 crossing to a cursor it does not drive — is an *authentication* question, and this
 plan puts authentication before anything beyond trusted peers.
 
+**D-24 The cadence is a function of the link; the convergence floor is not
+(new, landed with Phase 5).** The host publishes to each peer on a cadence and a
+keyframe interval chosen from that link's measured round-trip time, its
+variation, the rate bytes are actually arriving at, and how much that participant
+has at stake in the next correction. Both are bounded, and their product — the
+ticks a participant may go without a whole authoritative world — may never exceed
+`SnapshotFloorKeyframeTicks`. A link that cannot carry one whole world per floor
+window is refused at admission and reported as an unrecoverable operating
+condition mid-session. It is never adapted past in silence.
+
+The rule has four parts and each is a thing the constant it replaced could not do.
+
+*The measurement is a real round trip, and it lives in the transport.* Nothing in
+this protocol used to make one: every number a session had was one-directional —
+what this instance sent, and how far behind the newest tick it had *heard about*
+it stood — so a cadence had a constant and nothing else to be chosen from.
+`MsgLinkProbe` and `MsgLinkEcho` are that measurement, and they are answered by
+the receiving port before the frame could reach a tick. So what the round trip
+measures is the wire rather than how often an instance runs a tick, and — the
+part that matters for D-11 — no timing value ever has to enter the world for the
+cadence to exist. The world publishes one opaque `LinkReport` (its tick, its
+staleness, its last correction magnitude, its cursor cell) and reads back one
+estimate it may schedule transport from. Both directions are copies; neither is a
+simulation input. `TestLinkMeasurementNeverEntersTheComparedSurface` is what says
+the estimate stays out of the compared surface, and the round trip is the only
+value in this design that a `shared`-profile system reads at all — through
+`engine.LinkMeasuringPort`, whose whole contract is those two copies.
+
+*A delivery rate is not a capacity unless the link was the limit.* The estimator
+reports `Saturated` beside its throughput, from a standing backlog or a round trip
+inflated past its own baseline, and a controller given an unsaturated rate keeps
+its nominal point. Without that distinction every quiet moment reads as a narrow
+link and the session throttles itself for having nothing to say.
+
+*Demand is a rise and a comparison, never a count.* An absolute threshold on the
+correction magnitude is a threshold about the *world*: measured on the shipped
+storm, a correction moves the whole shared population every cadence, so a fixed
+magnitude fires permanently and spends the entire uplink on a condition that is
+simply what a storm looks like. What is fed to the controller is therefore how far
+a participant's magnitude stands above *its own* recent level, and how far its
+share of what the correction moves stands above the *session's* mean. The first
+says the cadence is falling behind; the second says which of several participants
+is served first. A participant with neither settles at a slower cadence, which is
+what pays for the other two.
+
+*Relevance moves the schedule and never the content.* A correction is still
+computed once against one baseline and is still exact — the whole world, or the
+byte-for-byte difference from the last whole one, proved by the capture's own
+integrity hash (D-23). Scoping a correction to the entities near a participant
+would leave nothing for that hash to be about and would hand a receiver a world
+assembled from two ticks; both are Phase 6's to solve if they are worth solving.
+So what per-peer scheduling changes is *which* corrections a peer is sent, and a
+keyframe goes to every peer whatever their cadence, because a guest that missed
+one refuses every delta that follows it.
+
+The floor is the part that is not negotiable, and it binds in three places. The
+controller's search space is bounded by it before capacity is consulted, so no
+plan it can return violates it. Admission prices the floor against the link the
+join's own transfer measured and refuses one that cannot carry it, which is the
+same answer the join already gives when its catch-up gap exceeds the playout lead
+(D-22). And a receiver measures the guarantee from its own end —
+`snapshot.cadence_keyframe_age_ticks` — because the host's estimate that its link
+*could* carry a whole world is a different claim from one having arrived.
+
 ## 3. Spatial partition
 
 `Cell` = `Count uint8 + SharedCount uint8 + [6]byte + [31]Entity` = 256 bytes,
@@ -886,9 +950,63 @@ What replaced the verdict is two numbers with better claims, and they are in the
   the ticks they name, which is when a player should be told the link rather than
   the game is the problem: the status bar shows `LAG n`. Phase 3 measured this once,
   at admission, and never again.
+- **The operating point** — the `snapshot.cadence` group and `network.link` beside
+  it — is what Phase 5 added and is a third kind of claim again. The first two say
+  how far apart two instances stand; this says what the session is *doing about
+  it*: the cadence in force, the ticks between whole worlds, the measured round
+  trip and its variation, what the link was priced at, and which of two conditions
+  holds. `cadence_constrained` is the design working — the link narrowed, the
+  cadence slowed, prediction is carrying more. `cadence_floor_breached` is not: no
+  schedule the controller may choose delivers a whole world inside the guaranteed
+  window. The status bar draws them differently for that reason, `LNK` against
+  `LINK!`, and `:session` prints the whole set on request.
 
 `SnapshotShared` remains a comparison surface, not a restorable world checkpoint,
 and the digest still deliberately excludes D-13 owner-authored values.
+
+**The link, and the cadence it decides.** The correction cadence was a constant
+through Phase 4 and is a bounded controller per peer now (D-24). What changed
+underneath it is that the protocol makes a round trip: `MsgLinkProbe` leaves every
+`NetworkProbeInterval` and `MsgLinkEcho` answers it inside the receiving port,
+before the frame could reach a tick. The echo returns the probe's own timestamp
+untouched — so neither end has to agree with the other about what time it is — plus
+the bytes that end has received on the link, and the opaque `LinkReport` its world
+last published.
+
+Two counters and one timestamp are all the estimator needs. The round trip and its
+variation come from the timestamp; the delivery rate from two consecutive
+echoes' byte counts; and the *backlog* — what this end has queued against what the
+far end says arrived — from the difference, which is what separates a fast link
+from an idle sender. A rate measured while nothing was queued is a lower bound on
+capacity and not a measurement of it, so the estimator reports `Saturated` beside
+it and a controller given an unsaturated rate keeps its nominal point.
+
+The two byte counters have no shared origin: this end starts counting when it
+accepted the stream and the far end when its port took the stream over, which for
+a mid-run join are separated by a whole capture. The meter therefore measures
+*growth* from a re-based origin rather than an absolute difference — without it a
+join would leave a standing backlog the size of the world it installed and the
+link would read as permanently saturated for the rest of the session.
+
+What the controller decides is a cadence in ticks and a keyframe interval in
+corrections, per peer, inside `SnapshotCadenceMinTicks`/`MaxTicks` and
+`SnapshotKeyframeMinCorrections`/`MaxCorrections`, and never past the convergence
+floor. Under pressure the keyframe interval stretches before the cadence slows,
+because a keyframe costs several times a delta on this world and stretching it
+spends recovery time the floor already bounds rather than freshness a player sees.
+Degradation is immediate and recovery is stepped: a link that has narrowed has
+already narrowed, and one sample taken during a quiet moment is not evidence that
+it came back.
+
+The session composes the per-peer plans into one publication timeline. The base
+cadence is the fastest peer's; the keyframe period is the *longest* any peer
+planned, capped by the floor — longest rather than shortest because every peer has
+to hold the keyframe a delta names, so the session pays the cheapest whole-world
+period that still honours everyone's floor. A peer receives a delta when its own
+cadence says it is due and a keyframe always. In a relayed topology a participant
+reached through a neighbour rides that neighbour's schedule, because the flood
+forwards what the neighbour was sent; per-peer cadence is a property of a direct
+link.
 
 **Membership.** A roster change is shared state, so it travels as an artifact
 rather than as a local reaction to a link event. A disconnect is observed only by
@@ -986,10 +1104,16 @@ rates. `TestWireEncodingBudget` pins the representative budgets;
 
 Authoritative state is the larger stream and has its own measurements: at the
 storm high water a 176 KiB keyframe and a 29 KiB delta, with one keyframe per ten
-corrections, cost about 215 KiB/s at the current 5 Hz cadence. Snapshot schema 2
+corrections, cost about 215 KiB/s at the 5 Hz nominal cadence. Snapshot schema 2
 adds exact genetic continuation to the opaque `genetic` carrier; delta generation
 already treats every carrier record as whole state, so no transport special case
 was added.
+
+The link measurement adds 12 bytes out and 45 bytes back per peer per
+`NetworkProbeInterval` — under half a kilobyte a second at `MaxPlayers`, against a
+correction stream measured in hundreds of kilobytes. The estimator smooths over
+eight samples, so the interval is also how quickly a link change becomes
+steerable: about a second and a half.
 
 Journal schema is 11, and the wire shares its encoder: 7 made `Domain` meaningful,
 8 added the D-14 map latch to the anchor, 9 moved the nugget event family out of
@@ -1059,6 +1183,19 @@ every mixed-domain counter moves independently; `combat.` is the loss worth
 naming, since it resolves targets in both domains from one set of counters and
 would return to the comparison if those were split per domain.
 
+The `snapshot` group is three cards for three questions, split by prefix in
+`internal/status/key.go`: `snapshot.correction` is how far this instance's
+prediction stood from the authority and how much of the authority arrived,
+`snapshot.cadence` is what operating point the link put the session at (D-24), and
+what is left describes what one capture cost. `network.link` gained the estimate
+the cadence is chosen from — round trip in both milliseconds and microseconds,
+because a loopback round trip rounds to zero in the first and reads as "not
+measured", jitter, delivery rate, probe loss and whether the link was the limit
+while that rate was measured. Every one of them is per-instance transport state
+and every one is already dropped from the shared view by the `network.` and
+`snapshot.` rules above; `TestLinkMeasurementNeverEntersTheComparedSurface` is
+what says so from the other direction, over a shaped link.
+
 `SnapshotContext` emits five records: `context`, `world` and `player` are emitted
 into the shared view, `view` and `session` are dropped from it. The `player`
 record carries `count`, the shared roster size, and nothing else: the local
@@ -1125,6 +1262,15 @@ fails the build when the code stops matching the declaration.
 | `TestHostRefusesARosterCrossingFromAnyoneElse` | `internal/app` | D-23: an arrival produced by a participant that is not the coordinator creates no cursor and is counted as refused |
 | `TestSessionLagIsMeasuredEveryTick` | `internal/app` | D-23: a participant in step reports no lag, and one left behind the session reports it and is flagged stale without anything asking |
 | `TestJoinReusesTheCadencesKeyframe`, `TestMidRunJoinWaitsOutThePlayoutLead` | `internal/app` | D-22/D-23: a second join takes the keyframe the first read rather than reading the world again, a keyframe for a tick the session has not reached is refused, and a join waits for a world a playout lead past its admission |
+| `TestLinkSmoothsTheRoundTripAndTracksItsMinimum`, `TestLinkJitterRisesWithVariationAndFallsWithout`, `TestLinkReportsSaturationOnlyWhenTheLinkWasTheLimit` | `pkg/linkpace` | D-24: the estimator's three claims, on an explicit clock the caller carries — a smoothed round trip with a baseline an excursion cannot move, jitter that rises and settles, and a delivery rate that is only called capacity when the link, not the sender, was the limit |
+| `TestTheFloorIsNeverCrossed`, `FuzzControllerHoldsItsEnvelope` | `pkg/linkpace` | D-24: over a swept and then a fuzzed input space, no plan leaves its declared bounds and none leaves more than `FloorKeyframeTicks` between whole worlds |
+| `TestABreachIsReportedRatherThanAdaptedTo`, `TestAdmitRefusesALinkThatCannotCarryTheFloor` | `pkg/linkpace` | D-24: a link below the floor is reported and clamped *at* it rather than published past, and refused at admission — while no measurement at all is admitted rather than refused |
+| `TestKeyframesStretchBeforeTheCadenceSlows`, `TestDegradationIsImmediateAndRecoveryIsStepped`, `TestDemandDecidesWhereInsideTheFeasibleRangeAPeerSits` | `pkg/linkpace` | D-24: the degradation order, the asymmetry between narrowing and recovering, and that demand chooses inside the feasible range and never widens it |
+| `TestTheMeshMeasuresARoundTripOnItsOwnClock`, `TestTheMeshProbeNeverReachesTheGame`, `TestTheReportReachesTheProbingPeer` | `internal/network` | D-24: the round trip is measured on a clock the harness advances in ticks, a probe and its echo are answered inside the transport and never reach a drain, and the far end's report arrives with it |
+| `TestAHealthyLinkStaysAtTheNominalOperatingPoint`, `TestAConstrainedLinkSlowsTheCadenceAndSaysSo`, `TestASlowPeerDoesNotSlowAFastOne` | `internal/app` | D-24: an unshaped link is not adapted away from Phase 4's cadence, a shaped one moves the operating point and reports it, and two participants on one host with different links get different schedules |
+| `TestTheFloorBoundsEveryScheduleAShapedLinkProduces`, `TestCorrectionMagnitudeStaysBoundedOnAConstrainedLink`, `TestAGuestRecoversAtTheFloorAfterTheLinkComesBack` | `internal/app` | D-24 over the composition rather than one plan: the session timeline honours the floor under every shape, the magnitude rises and stays bounded, and a link that carried nothing for two hundred ticks re-converges on the next whole world with nothing restarted |
+| `TestLinkMeasurementNeverEntersTheComparedSurface`, `TestTheOperatingPointIsPublished` | `internal/app` | D-24/D-11: no timing value reaches the surface two instances agree on, and every value the cadence adapts is readable from telemetry and `:session` |
+| `TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers` | `internal/app` | The same claims over a kernel-shaped socket rather than an in-process link: four `tc netem` stages, bounded magnitude through all of them, and recovery when the qdisc is removed. Opt-in behind `VIF_NETEM=1`, because a qdisc on `lo` is a machine-wide change |
 | `TestSharedSnapshotExcludesLocalSchedulerTiming` | `internal/app` | Runtime parity ignores deadline-slip telemetry while keeping absolute simulation tick/state |
 | `TestSharedSnapshotComparesElapsedGameTime` | `internal/app` | D-21: two instances driven the same number of ticks report the same elapsed game time, it equals `tick * interval`, and a forged value moves the shared surface |
 | `TestSimTimeIsAFunctionOfTheTick`, `TestSimTimeAdvancesByExactlyTheTickInterval`, `TestManualEpochIsTheSimEpoch` | `internal/engine` | D-21: the instant is decided by the tick alone, advances by exactly `DeltaTime`, and a 20-tick threshold lands on tick 20 rather than 19 |
@@ -1294,8 +1440,13 @@ transport:
    negotiated once at 150 ms. An artifact crossing several links must still
    arrive before its absolute apply tick, or the host sees it late and the guest
    predicts longer than intended. `network.barrier_late` and `network.stale` are
-   the signals; Phase 5 makes cadence and admission a function of measured link
-   conditions.
+   the signals. Phase 5 made the *cadence* and admission a function of measured
+   link conditions (D-24) and deliberately left the playout lead alone: the lead
+   decides the tick an artifact applies at, so changing it mid-session would
+   change an agreed apply tick and is a protocol change rather than a scheduling
+   one. Per-peer cadence is also a property of a *direct* link — a participant
+   reached by relay rides its neighbour's schedule, because the flood forwards
+   what the neighbour was sent.
 2. **Departure and authority need a reachable coordinator.** One producer gives a
    roster change one apply tick, and one world supplies corrections. If participant
    one departs or a partition makes it unreachable, no election or state migration
@@ -1338,7 +1489,24 @@ promote an arbitrary predictor.
 **Session and transport**
 
 - The playout lead is a constant rather than a function of the graph's diameter,
-  and a partition leaves no digest edge between its components. See §9.2.
+  and a partition leaves no digest edge between its components. See §9.2. The
+  correction cadence is no longer a constant (D-24); the lead deliberately still
+  is.
+- Per-peer cadence and relevance apply to direct links only. Corrections still
+  flood, so a participant reached through a neighbour receives what that
+  neighbour was sent and inherits its schedule. In the shipped topology — `-join`
+  dials one address, so the links are a star — every participant is direct.
+- Relevance decides *when* a participant's next correction is sent and never what
+  is in it. A correction scoped to the entities near one participant cannot carry
+  D-23's exactness proof, which is a reconstruction of the sender's whole capture
+  re-checked against its own integrity hash, and would hand a receiver a world
+  assembled from two ticks. A scoped correction with its own integrity contract
+  and a partial reconcile that does not adopt the authority's tick is Phase 6's,
+  if the bytes turn out to be worth it.
+- The link estimate is per direct peer and the status bar reports the worst of
+  them. A session with one badly-connected participant therefore shows every
+  participant the same badge, which is right for the host and misleading for the
+  others; `:session` names the link.
 - A clean disconnect is visible immediately and a black-holed link becomes visible
   after the silent timeout, but losing participant one still has no coordinator
   election, roster authority, or automatic state migration. The guest says so
@@ -1349,9 +1517,12 @@ promote an arbitrary predictor.
   closes the tick gap the transfer opened. A reconnect is that same path a second
   time.
 - A joiner's admission is refused if the gap it has to close exceeds the playout
-  lead. That is the honest failure for a link or a machine that cannot keep up,
-  and it is a refusal rather than a degraded session; adaptive cadence, which is
-  what would let such a link participate at all, is Phase 5's subject.
+  lead, and now also if the link its own transfer measured cannot carry a whole
+  world within the convergence floor (D-24). Both are refusals rather than
+  degraded sessions, and for the same reason: a participant admitted onto a link
+  that cannot converge would play, would drift, and would have nothing scheduled
+  that repairs it. A link that *can* converge but not at the nominal cadence is
+  the case adaptation now covers, which is what it was added for.
 - A join no longer reads the world for itself: it takes the publication cadence's
   most recent keyframe, and only reads when none is fresh enough, so two joins
   arriving together share one acquisition of the world lock. The *gate* still runs
@@ -1431,14 +1602,18 @@ promote an arbitrary predictor.
 
 ### 9.5 Next work
 
-Phase 5 is the next multiplayer step: measure RTT, jitter and usable throughput,
-then adapt correction cadence and keyframe choice without crossing a convergence
-floor. Corrections are still broadcast whole to every guest; relevance/priority
-has no implementation yet. The exact requirements, measurements and manual link
-shaping gate are in [Multiplayer enhancement plan](multi-player-enhancement.md).
-Bounded rollback/replay, authentication and host migration remain Phase 6 inputs,
-not hidden parts of Phase 5. The Phase 4 genetic continuation gap is closed and is
-no longer on this list.
+Phase 5 has landed: the link measures a real round trip, the cadence and keyframe
+interval are chosen from it per peer inside a bounded controller, relevance and
+priority decide which participant is served first and which settles for less, and
+a convergence floor bounds all of it — refused at admission and reported
+mid-session rather than adapted past (D-24). What that leaves is Phase 6, and the
+entries are unchanged: bounded rollback *and replay*, so a guest's own
+outstanding artifacts survive the correction that predates them; authentication,
+before anything beyond trusted peers; and host migration with the state transfer
+it actually requires. A content-scoped correction — relevance moving bytes rather
+than only the schedule — joined that list rather than Phase 5's, for the reason
+§9.4 gives. The exact requirements and the staged link-shaping gate are in
+[Multiplayer enhancement plan](multi-player-enhancement.md).
 
 What remains outstanding and independent of that work:
 

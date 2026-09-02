@@ -90,6 +90,7 @@ flowchart TD
     Game --> Nav["pkg/navigation and maze"]
     Game --> Physics["pkg/vmath and vmath/physics"]
     Game --> Genetic["pkg/genetic and subpackages"]
+    Game --> Link["pkg/linkpace"]
     Game --> Image["pkg/ascimage"]
 ```
 
@@ -102,6 +103,7 @@ flowchart TD
 | `pkg/genetic/tracking` | Pooled lifetime metric collectors for simple and composite subjects. | No game-specific component dependency. |
 | `pkg/genetic/registry` | Up to 256 species/populations, sampling, probes, tracking, stats, optional persistence. | Composes core genetic, fitness, tracking, and persistence. |
 | `pkg/genetic/persistence` | Atomic file saves and TOML/JSON codecs for population DTOs. | TOML codec imports the external TOML module. |
+| `pkg/linkpace` | Per-peer link estimation (round trip, jitter, delivery rate, saturation) and the bounded controller that turns it into a correction cadence and keyframe interval inside a convergence floor. | Standard library only, deliberately: the package cannot see a world, an event or a component, which is what makes "network timing may not enter the simulation" (D-24) structural rather than remembered. |
 | `pkg/maze` | Recursive-backtracker maze generation, rooms, braiding, and solution data. | Uses shared point/value types and is surfaced through wall/maze events. |
 | `pkg/navigation` | Flow fields, recompute caches, composite passability, multi-route graphs. | Uses shared points and tuning constants; wall access is callback-based. |
 | `pkg/vmath/physics` | `float64` kinetic state, integration, bounce, homing/arrival, collisions, orbital and 3D operations. | Owns `physics.Kinetic`; depends only on the standard library and `pkg/vmath`. |
@@ -113,7 +115,8 @@ in-repository renderer and `pkg/navigation` imports game tuning. The numeric
 stack is cleanly one-way: `pkg/vmath` imports only the standard library,
 `pkg/vmath/physics` imports `pkg/vmath`, and neither exposes the removed
 fixed-point types or conversion API. `pkg/audio`, the core `pkg/genetic`
-package, and the numeric stack have the clearest game-independent boundaries.
+package, `pkg/linkpace` and the numeric stack have the clearest game-independent
+boundaries.
 
 ## 6. Generated assembly
 

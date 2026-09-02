@@ -59,6 +59,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -115,6 +116,16 @@ type corrections struct {
 	breached      bool
 	saidFloor     bool
 	nextBroadcast uint64
+
+	// driven marks a run whose caller paces the cadence itself. Two things pacing
+	// one cadence is not a tuning problem, it is an ambiguity: a driver that
+	// publishes at a tick it chose and a pump that publishes a moment later leave
+	// the receiver holding a world *newer* than the one the driver was describing,
+	// and nothing about that is recoverable from the outside. So the first driven
+	// publish retires the pump, which is the documented division of labour
+	// (PublishCorrection for a driven run, the pump for an interactive one) made
+	// true by construction rather than by nobody using both.
+	driven atomic.Bool
 
 	// inbox holds reassembled correction bodies a guest has not applied yet. It is
 	// written under the world lock by the tick that drained the last chunk and read
@@ -258,6 +269,9 @@ func (c *corrections) pump() {
 		case <-c.wake:
 		case <-ticker.C:
 		}
+		if c.driven.Load() {
+			continue // this run's caller paces its own corrections
+		}
 		if err := c.publishDue(); err != nil {
 			vlog.Warn("app", "msg", "correction not published", "error", err.Error())
 		}
@@ -265,9 +279,13 @@ func (c *corrections) pump() {
 }
 
 // publish sends the next correction to every peer, whatever their schedule says.
-// It is the driven form — a headless script or a test paces its own cadence — and
-// the immediacy is the point: a caller that asked for a correction now means now.
-func (c *corrections) publish() error { return c.publishRound(true) }
+// It is the driven form — a caller that paces its own cadence — and the immediacy
+// is the point: a caller that asked for a correction now means now. It also
+// retires the pump, so the run has one thing deciding when a correction leaves.
+func (c *corrections) publish() error {
+	c.driven.Store(true)
+	return c.publishRound(true)
+}
 
 // publishDue sends to the peers the adaptive schedule has made due, and is what
 // the pump calls.
@@ -1015,7 +1033,9 @@ func (a *App) ApplyPendingCorrections() {
 }
 
 // PublishCorrection takes one authoritative capture and broadcasts it, for a driven
-// run that paces its own cadence. An interactive host has the pump instead.
+// run that paces its own cadence. An interactive host has the pump instead, and
+// calling this retires it: a run with two things deciding when a correction leaves
+// hands its guests a world newer than the one its driver was describing.
 func (a *App) PublishCorrection() error {
 	if a.corrections == nil {
 		return errors.New("this run is not in a session")

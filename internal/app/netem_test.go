@@ -145,12 +145,14 @@ func TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers(t *testing.T) {
 		shapeLo(t, stage.args)
 		r := reading{stage: stage.name}
 		before := statOf(guest, "snapshot.corrections_applied")
-		// Wall-paced: netem's delays are wall delays, so a run driven flat out
-		// would finish before the link had a chance to be slow.
+		// Wall-paced, and the host publishes on its own pump rather than on the
+		// test's call: netem's delays are wall delays, so a run driven flat out
+		// would finish before the link had a chance to be slow — and the schedule
+		// under test is the one the production path chooses, not one the harness
+		// imposes on top of it.
 		for range 240 {
 			host.Tick(1)
 			guest.Tick(1)
-			_ = host.corrections.publishDue()
 			guest.ApplyPendingCorrections()
 			if n := statOf(guest, "snapshot.correction_entities"); n > r.magnitude {
 				r.magnitude = n

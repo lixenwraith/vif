@@ -238,6 +238,39 @@ reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
 Raw participant input is not among them, and 0x10 stays reserved — a peer sends
 the resolved D-3 artifact, never the keystroke that produced it.
 
+`MsgLinkProbe` (0x14) and `MsgLinkEcho` (0x15) are the only round trip this
+protocol makes. Everything else is one-directional — what this instance sent, and
+how far behind the newest tick it has *heard about* it stands — which is why the
+correction cadence had a constant and nothing else to be chosen from before
+Phase 5. They are unusual in one way that matters: **neither ever reaches the
+game**. `SocketPort` answers a probe from the read goroutine and swallows an echo
+there, `MeshPort` does the same inside `Drain`, so what the measurement describes
+is the wire rather than how often an instance runs a tick — and no timing value
+has to enter the world for the cadence to exist.
+
+| Frame | Bytes | Layout |
+|---|---:|---|
+| probe | 12 | `[Seq:4][SentNano:8]` |
+| echo | 45 | the probe's 12 bytes untouched, then `[InBytes:8]` and a 25-byte `LinkReport` |
+| `LinkReport` | 25 | `[Tick:8][LagTicks:4][Magnitude:4][CursorX:4][CursorY:4][Flags:1]` |
+
+The probe's own timestamp comes back untouched, so the round trip is computed
+against the clock that started it and neither end has to agree with the other
+about what time it is. `InBytes` is what the answering end has received on this
+link, which turns two consecutive echoes into a delivery rate and one echo into a
+backlog — the difference between a fast link and an idle sender. The `LinkReport`
+is the only game state that travels here, it is opaque to the transport, and every
+field in it is a scheduling hint: a host may publish to that participant sooner
+because of one, and a wrong or stale one costs a correction sent early and nothing
+else.
+
+A probe arriving during a join handshake is answered by the gate rather than
+refused. A host admits a participant before it reads the world for it (D-22), so
+the stream is a peer — and therefore probed — while the gate is still reading;
+ignoring the probe would score the whole transfer as loss on the link it is
+measuring, which is exactly backwards, since the transfer is the busiest that link
+will ever be.
+
 `MsgStateSnapshot` (0x26, the code the retired replay-based join reserved) carries
 one chunk of a shared-world capture. It is the only message whose size is a
 function of the world rather than of the format — the measured storm high water is
@@ -315,23 +348,49 @@ what repairs a disagreement is the next correction. Losing the comparison edge i
 still reported directly, and a guest that loses participant one is explicitly told
 that the session cannot recover automatically.
 
-The host publishes its world on a cadence of `SnapshotCorrectionTicks`, as a whole
-capture every `SnapshotKeyframeCorrections` and a delta against the last whole one
-in between, chunked under `MsgStateCorrection` and reassembled per peer. A node
+The host publishes its world as a whole capture and a delta against the last whole
+one in between, chunked under `MsgStateCorrection` and reassembled per peer. A node
 relays the chunks it admitted, on the same argument the epoch flood uses, so the
 authority reaches a participant the host is not linked to directly. A guest queues
 what arrives and installs the newest that resolves between two ticks, into a staging
 world built once and re-used; the `snapshot.correction` group carries what it cost
 and how far its prediction had drifted. Measured at the storm high water, a delta is
-29 KiB against a 176 KiB keyframe — 215 KiB/s at 5 Hz where full snapshots would be
-859.
+29 KiB against a 176 KiB keyframe — 215 KiB/s at the 5 Hz nominal cadence where
+full snapshots would be 859.
 
-Two measurements replace the retired verdict in the status bar. `network.lag_ticks`
-is how far behind the newest tick any peer has been seen closing this instance
-stands, taken every tick rather than once at admission, with `network.stale` set
-past the playout lead — the point at which this participant's own crossings reach
-the host after the ticks they name. `snapshot.correction_entities` is how much of
-the world the last correction moved.
+**The cadence is chosen, not fixed.** `SnapshotCorrectionTicks` and
+`SnapshotKeyframeCorrections` are the *nominal* operating point now; what a peer
+actually receives comes from a bounded controller fed by that link's round trip,
+its variation and the rate bytes are arriving at (D-24). Under pressure the
+keyframe interval stretches before the cadence slows, because a keyframe costs
+several times a delta and stretching it spends recovery time rather than
+freshness. The session publishes on one timeline with one baseline — the base
+cadence is the fastest peer's and the keyframe period the longest any peer
+planned, capped by the floor — so a correction is still computed once and is still
+exact; what is per peer is which corrections a peer is sent. A keyframe goes to
+every peer whatever its cadence, since a guest that missed one refuses every delta
+that follows it.
+
+Both are bounded by `SnapshotFloorKeyframeTicks`, the convergence floor: the most
+ticks a participant may go without a whole authoritative world. Adaptation may
+never cross it. A link that cannot carry one whole world per floor window is
+refused at admission — measured from the join's own transfer, which is the only
+rate available before a probe has completed a round trip — and reported as an
+unrecoverable operating condition mid-session, on the host from its estimate and
+on the guest from `snapshot.cadence_keyframe_age_ticks`, which is whether one
+actually arrived.
+
+Three measurements are in the status bar now. `network.lag_ticks` is how far
+behind the newest tick any peer has been seen closing this instance stands, taken
+every tick rather than once at admission, with `network.stale` set past the playout
+lead — the point at which this participant's own crossings reach the host after the
+ticks they name. `snapshot.correction_entities` is how much of the world the last
+correction moved. And the `snapshot.cadence` group with `network.link` beside it is
+the operating point: the cadence in force, the ticks between whole worlds, the
+round trip and its variation, the measured rate, and which of two conditions holds
+— `cadence_constrained`, which is the design working, or `cadence_floor_breached`,
+which is not. The bar draws them as `LNK` and `LINK!` for that reason, and
+`:session` prints the whole set.
 
 Loss that happens outside the barrier is published rather than swallowed, because
 either direction would otherwise desynchronise silently:
@@ -352,16 +411,16 @@ is observed immediately.
 What the operator surface still does not cover:
 
 - `-join` dials one address, so the links form a star even though the relay makes
-  any graph work;
+  any graph work. Per-peer correction cadence follows the same shape: it is a
+  property of a direct link, and a participant reached by relay rides its
+  neighbour's schedule;
 - the playout lead is a constant rather than a function of the graph's diameter,
-  and a partition has no digest edge between its components;
-- there is no mid-run join and no reconnect: a participant enters at the tick-zero
-  gate or not at all. The replay-from-tick-zero path that nominally provided one
-  was never reachable from `cmd/vif` and has been removed;
+  and a partition has no digest edge between its components. The *correction
+  cadence* is measured and adaptive (D-24); the lead deliberately is not, because
+  it decides the tick an artifact applies at;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session;
-- no restorable world checkpoint, so `SnapshotShared` can diagnose but not load;
-  no lag compensation;
+- no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
@@ -388,6 +447,35 @@ mismatch and encoding budgets have focused tests in `internal/network` and
 `internal/event`.
 `TestCoordinatorLossRaisesLocalStatus` pins the direct guest warning that does not
 depend on a surviving digest edge.
+
+The adaptive cadence splits its verification in three, because the three questions
+are different. `pkg/linkpace` holds the arithmetic and is tested on an explicit
+clock the caller carries: the estimator's three claims, the controller's
+degradation order and hysteresis, and — swept and then fuzzed — that no plan
+leaves its declared bounds or the convergence floor. `internal/network` covers the
+round trip itself, including that a probe and its echo are answered inside the
+transport and never reach a game-side drain. `internal/app` covers the
+composition over a deterministically shaped in-process link:
+`TestAHealthyLinkStaysAtTheNominalOperatingPoint`,
+`TestAConstrainedLinkSlowsTheCadenceAndSaysSo`,
+`TestASlowPeerDoesNotSlowAFastOne`,
+`TestCorrectionMagnitudeStaysBoundedOnAConstrainedLink`,
+`TestAGuestRecoversAtTheFloorAfterTheLinkComesBack`,
+`TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor` and
+`TestLinkMeasurementNeverEntersTheComparedSurface`.
+
+The in-process shape models when a frame becomes visible, whether it arrives, and
+how many bytes a tick will pass — deterministically, with no clock. It does not
+model a kernel queue, a retransmit or a send buffer that fills, which is where a
+cadence chosen from a delivery-rate estimate is most likely to be wrong. So the
+same claims are taken once over a real socket the kernel is shaping:
+`TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers` walks four `tc netem`
+stages — latency, jitter, loss, bandwidth — and requires bounded magnitude through
+all of them and recovery when the qdisc is removed. It is opt-in behind
+`VIF_NETEM=1` and needs root, because a qdisc on `lo` shapes every loopback flow
+on the machine. `script/phase5-linkshape.sh` is the operator form of the same run,
+driving the checked-in `script/phase5-host.toml` and `script/phase5-guest.toml`
+pair and reading the answer out of both journals.
 
 The mid-run join has its own set. `TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun`
 runs the whole thing over a socket — a solo run opens a port hundreds of ticks in,

@@ -7,11 +7,11 @@ in [domain-design.md](domain-design.md) remain authoritative for the *existing*
 code; §5 of this document states which of them the target architecture keeps,
 changes, and adds to. D-18 landed with Phase 1; D-19, D-20 and D-21 landed with
 Phase 2; D-22 landed with Phase 3; D-23 landed with Phase 4, which also weakened
-D-11 and changed D-3's destination.
+D-11 and changed D-3's destination; D-24 landed with Phase 5.
 
-**Phases 1 through 4 and the Phase 4 genetic-continuation cleanup are done. Phase
-5 is next**, and §6's Phase 5 entry says what it starts from. §9 records the
-defects each session surfaced and what each turned out to be.
+**Phases 1 through 5 are done.** What is left is Phase 6, and §6's entry for it
+says what each of its items still needs. §9 records the defects each session
+surfaced and what each turned out to be.
 
 ## 1. Why the current design is being replaced rather than repaired
 
@@ -23,7 +23,7 @@ visible:
 |---|---|---|
 | A solo game can be toggled into a host, and others join **at any time** | Join is only possible at tick zero, through a lobby gate fixed before the run starts. The replay-from-tick-zero path that nominally provided mid-run join was never reachable from `cmd/vif`; it has been removed. | **Done** (Phase 3). `:host <addr>` opens a running instance and a participant installs the world at whatever tick it has reached. |
 | A **true multiplayer experience** | Fast input is discarded, not merely delayed: measured, a session drops 4 of 5 rapid cursor motions and scores 5 of 6 fast keystrokes as *typing errors*. | **Done** (Phase 1). Local input applies immediately; §3 carries the after figures. |
-| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. | **Mostly done** (Phase 4). A guest predicts and is corrected on a cadence, a divergence is a magnitude rather than a failure state, and jitter costs freshness rather than the session. What is left is Phase 5: driving the cadence from the link instead of from a constant. |
+| Resilience to **lag, jitter and bandwidth limits** | None. A deterministic lockstep barrier converts jitter into a permanently forked session, and there is no repair on any edge. | **Done** (Phases 4 and 5). A guest predicts and is corrected on a cadence, a divergence is a magnitude rather than a failure state, and jitter costs freshness rather than the session. Phase 5 made the cadence a function of the link the protocol now measures, bounded by a convergence floor that is refused at admission and reported mid-session rather than adapted past. |
 
 The root cause of all three is one decision: **shared state is agreed by having
 every instance re-derive it, so nothing may be applied until everyone can apply
@@ -86,7 +86,7 @@ instance, but on a guest their output is provisional.
 | Remote cursors and shared entities looking smooth | Guest extrapolation between snapshots, which is just the existing simulation |
 | Correctness | Host authority: where guest and host disagree, the host wins, always, with no negotiation |
 | Jitter | Extrapolation absorbs it; a late snapshot is not an error |
-| Bandwidth | Low snapshot rate, deltas, and an adaptive cadence |
+| Bandwidth | Low snapshot rate, deltas, and a cadence chosen per peer from the link's own measured round trip, delivery rate and backlog |
 | Join anytime / reconnect / solo-to-host | One mechanism: send the current snapshot |
 | Loss | The next snapshot supersedes; the ordered stream carries acknowledgement and gap repair for the artifacts that must not be missed |
 
@@ -315,6 +315,19 @@ correctness. A delta is exact or it is refused, and what proves it is the captur
 own integrity hash rather than a comparison. The magnitude is measured rather than
 asserted, and it is what replaced `DESYNC`. The rule as built, its four properties
 and the one thing the host validates beyond structure are in `domain-design.md`.
+
+**D-24 The cadence is a function of the link; the convergence floor is not (new,
+landed with Phase 5).** The host publishes to each peer on a cadence and a
+keyframe interval chosen from that link's measured round trip, its variation, the
+rate bytes are arriving at, and how much that participant has at stake in the next
+correction. Both are bounded, their product may never exceed
+`SnapshotFloorKeyframeTicks`, and a link that cannot carry a whole world per floor
+window is refused at admission and reported mid-session rather than adapted past.
+The round trip lives entirely in the transport, so no timing value has to enter the
+world for the cadence to exist; relevance moves the *schedule* and never the
+content, because a scoped correction has nothing left for D-23's integrity hash to
+be about. The rule as built, its four parts and the three places the floor binds
+are in `domain-design.md`.
 
 **D-22 An arrival is admitted before the world is read for it (new, landed with
 Phase 3).** A participant joining a running session becomes a peer — receiving this
@@ -777,7 +790,8 @@ sink, and the local path publishes at production tick in a run and in its replay
 alike, which is one fewer difference between the two than before.
 
 **Not done in Phase 4, deliberately.** The cadence is a constant rather than a
-function of the link — that is Phase 5's whole subject. There is no bounded
+function of the link — that was Phase 5's whole subject, and Phase 5 has since
+landed it. There is no bounded
 rollback, so a guest's own un-arbitrated artifact is erased by the correction that
 predates it and restored by the one after: a bounded flicker of about one cadence on
 shared entities, never on the local cursor, which D-18 predicts privately and no
@@ -824,56 +838,189 @@ within ten.
 
 ---
 
-### Phase 5 — Adaptive cadence and bandwidth resilience  ← next
+### Phase 5 — Adaptive cadence and bandwidth resilience  ✅ landed
 
 **Goal.** Make the system degrade gracefully rather than fail at the edge of the
 link's capacity — the explicit priority.
 
-**Requirements.**
+**What was built.**
 
-1. Measure RTT, jitter, throughput and correction magnitude; drive snapshot rate
-   and delta/full choice from them.
-2. Relevance and priority: entities that matter to a given participant update more
-   often.
-3. A floor that still guarantees convergence, and a refusal path for links that
-   cannot meet it.
-4. Report the operating point in the status bar, so a player can see the link is
-   constrained rather than guessing that the game is broken.
+*The protocol makes a round trip now, and it never touches the game.* This is the
+number §10.4 said was missing by construction: everything the session measured
+was one-directional, so a cadence had a constant and nothing else to be chosen
+from. `MsgLinkProbe` leaves every 200 ms per peer and `MsgLinkEcho` answers it
+**inside the receiving port**, before the frame could reach a tick — so what it
+measures is the wire rather than how often an instance runs a tick, and the world
+never has to hold a timing value for the cadence to exist. The world publishes one
+opaque 25-byte `LinkReport` (its tick, its staleness, its last correction
+magnitude, its cursor cell) and reads back one estimate it may schedule transport
+from. Both directions are copies. `TestLinkMeasurementNeverEntersTheComparedSurface`
+is the criterion, over a shaped link.
 
-**Boundaries — must not.** Let adaptation silently reach a rate at which
-convergence is not guaranteed.
+*Three numbers come out of it, and the third is the one that is easy to get
+wrong.* Round-trip time and its variation come from the probe's own timestamp,
+returned untouched, so neither end has to agree with the other about what time it
+is. The delivery rate comes from two consecutive echoes' byte counts. And the
+**backlog** — what this end has queued against what the far end says arrived — is
+what separates a fast link from an idle sender: a rate measured while nothing was
+queued is a lower bound on capacity and not a measurement of it, so the estimator
+reports `Saturated` beside it and a controller given an unsaturated rate keeps its
+nominal point. Without that distinction every quiet moment reads as a narrow link
+and the session throttles itself for having nothing to say.
 
-**Manual acceptance.** Shape the link down in stages and confirm play degrades
-smoothly — snapshot rate falls, prediction carries more, correction magnitude rises
-but stays bounded, and nothing forks or disconnects.
+*The controller is a leaf package.* `pkg/linkpace` is the estimator and the
+bounded controller, standard library only, no `internal` in sight — which is what
+makes "network timing may not enter the simulation" structural rather than
+remembered: the package cannot see a world, an event or a component. It takes
+measurements, measured correction sizes and a demand, and returns a cadence and a
+keyframe interval inside a declared envelope. Under pressure the keyframe interval
+stretches before the cadence slows, because a keyframe costs six times a delta on
+this world and stretching it spends recovery time the floor already bounds rather
+than freshness a player sees. Degradation is immediate and recovery is stepped.
 
-**What Phase 5 starts from.** Phase 4 leaves three things, in the order they are
-wanted:
+*Per-peer, on one timeline.* Each direct link gets its own controller, because two
+participants on one host can be a LAN cable and a phone. What is **not** per peer
+is the correction: it is still computed once against one baseline and is still
+exact. The session's base cadence is the fastest peer's and its keyframe period is
+the *longest* any peer planned, capped by the floor — longest because a keyframe
+is the expensive frame and every peer has to hold the one a delta names. A peer
+receives a delta when its own cadence says it is due, and a keyframe always.
 
-1. **The cadence is a constant.** `SnapshotCorrectionTicks` and
-   `SnapshotKeyframeCorrections` are parameters, and the instruments requirement 1
-   asks to drive them from already exist: `snapshot.correction_bytes_sent` is the
-   uplink, `snapshot.correction_entities` the magnitude,
-   `network.lag_ticks` the staleness. What does not exist is RTT or jitter — nothing
-   measures a round trip, because nothing in this protocol makes one.
-2. **A correction re-bases a guest's clock backwards** by the transfer's latency, so
-   a guest re-simulates that gap every cadence. It is bounded and reported, and it
-   is the cost of adopting the authority's tick with its world (D-21). Rollback
-   *and replay* — re-simulating forward, with this participant's own outstanding
-   artifacts — is Phase 6's bounded-rollback entry and would remove the visible
-   flicker as well as the re-simulation.
-3. **Corrections are broadcast whole to everyone.** Requirement 2's relevance and
-   priority has nothing built for it: every guest receives the same bytes whether or
-   not any of it is near its cursor.
+*Relevance and priority move the schedule, never the content.* A participant whose
+share of what the next correction moves stands above the session's mean is served
+first and published to faster; one with nothing near it and a prediction the last
+correction did not have to move settles at the quiet cadence, which is what pays
+for the first. Scoping a correction's *content* is not what was built, and the
+reason is D-23: a delta is proved by reconstructing the sender's capture and
+re-checking its integrity hash, so a correction carrying a subset reconstructs a
+capture nobody holds and has no proof left to offer — and it would hand a receiver
+a world assembled from two ticks. That is Phase 6's, with its own integrity
+contract, if the bytes turn out to be worth it.
+
+*The floor is the part that is not adaptive.* `SnapshotFloorKeyframeTicks` is 60 —
+three seconds, 1.5× the nominal keyframe period. Cadence times keyframe interval
+may never exceed it, and the controller's search space is bounded by it *before*
+capacity is consulted, so no plan it can return violates it. A link that cannot
+carry the cheapest schedule that honours it is refused at admission, measured from
+the join's own transfer, which is the only rate available before a probe has
+completed a round trip. Mid-session it is reported from both ends and they are
+different claims: the host says its link cannot carry a whole world per window,
+and the guest says one did not arrive.
+
+*The operating point is on screen.* `snapshot.cadence` carries the cadence, the
+keyframe interval and period, the planned uplink, the measured budget and what the
+floor costs; `network.link` carries the round trip in milliseconds and
+microseconds, the jitter, the rate, the probe loss and the saturation flag.
+`:session` prints the set. The status bar draws two conditions differently on
+purpose: `LNK 120±14ms 8x7 32K` is the design working, and `LINK!` is a link that
+cannot keep the guarantee.
+
+**Measured, on the checked-in `script/phase5-*.toml` pair over a real socket.**
+3,000 host ticks with a mid-run join at 400, a storm from 900 and a swarm at
+1,800:
+
+| | value |
+|---|---|
+| corrections published / keyframes | 560 / 69 |
+| uplink over the session | 46.5 MB, ≈358 KiB/s at the storm high water |
+| host stall per capture | 1.51 ms — 3.0 % of a 50 ms tick |
+| cadence in force | 4 ticks, with excursions to 2 when drift rose |
+| keyframe period | 40 ticks, against a 60-tick floor |
+| correction magnitude on the guest | 36–530 entities, no upward trend |
+| shared placements a correction visibly moved | 1–7 |
+| corrections refused / superseded | 0 / 0 |
+| longest the guest waited for a whole world | 15 ticks |
+| `WARN`/`ERROR` | one on the host — its own shutdown — none on the guest |
+
+**What Phase 5 found that was not on the list.**
+
+- *An absolute correction magnitude is a threshold about the world, not about the
+  participant.* The first live run pinned the cadence at its 10 Hz minimum for the
+  whole storm and spent 1.2 MB/s doing it. The cause is in the table above: a
+  correction at the storm high water moves ~500 entities over ~492 shared
+  placements, so a fixed magnitude fires permanently on a condition that is simply
+  what a storm looks like. What says the cadence is falling behind is the **rise**
+  above that participant's own recent level, and relevance is a comparison against
+  the session's mean for the same reason. Both are percentages now.
+- *"Constrained" meant "not nominal", which put a warning on the status bar of the
+  participant being served best.* A plan the demand pulled *faster* is the opposite
+  condition. It means "worse than nominal" now.
+- *A probe interleaving with the join handshake failed the join.* D-22 admits a
+  participant before the world is read for it, so the stream is a peer — and
+  therefore probed — while the gate is still reading raw frames off it. The gate
+  answers a probe now rather than choking on it, which also keeps the transfer from
+  scoring as loss on the link it is the best measurement of.
+- *The byte counters a backlog is derived from have no shared origin.* This end
+  starts counting when it accepted the stream, the far end when its port took the
+  stream over — for a mid-run join, a whole capture apart. Measuring the absolute
+  difference left a standing backlog the size of the installed world, and the link
+  read as permanently saturated for the rest of the session. The meter measures
+  growth from a re-based origin.
+
+**Boundaries kept.** Local input is untouched; host authority is untouched; the
+relay, mid-run join, reusable staging world and exact genetic continuation are
+untouched. No network timing reaches shared simulation state, an RNG stream, a
+replay or a game decision — `pkg/linkpace` cannot see any of them, the probe is
+answered in the transport, and the compared surface is asserted clean over a
+shaped link. Adaptation never reaches a rate at which convergence is not
+guaranteed: the floor bounds the search, and a link below it is refused or
+reported.
+
+**Not done in Phase 5, deliberately.** Relevance does not scope a correction's
+content, for D-23's reason above. Per-peer cadence is a property of a *direct*
+link — a participant reached by relay rides its neighbour's schedule, because the
+flood forwards what that neighbour was sent, and in the shipped star topology
+every participant is direct. The playout lead is still a constant: it decides the
+tick an artifact applies at, so making it adaptive is a protocol change rather
+than a scheduling one. And the status bar reports the *worst* link, which is right
+for the host and misleading for a well-connected guest in a session with a badly
+connected one; `:session` names the link.
+
+**Manual acceptance.** §10, and `script/phase5-linkshape.sh` for the staged form.
 
 ---
 
-### Phase 6 — From evidence
+### Phase 6 — From evidence  ← next
 
-Not committed. Bounded rollback where prediction error is still visible; host
-migration and partition health as a separate project with its own prerequisites;
-authentication (`Config.TLS`, `MsgAuthRequest`/`Response`) before anything beyond
-trusted peers; multi-link topology from the CLI.
+Not committed, and every entry now has a reason it is next rather than a guess.
+
+- **Bounded rollback *and replay*.** Installing a correction adopts the
+  authority's earlier capture tick, so a guest is re-based backwards by the
+  transfer's latency and its own outstanding artifacts are erased by the
+  correction that predates them and restored by the one after. Phase 5 measured
+  what that costs — 1 to 7 shared placements visibly moved per correction on the
+  shipped scenario — and made the cadence that bounds it adaptive, which is as far
+  as scheduling can take it. Removing the flicker needs the replay: re-simulating
+  the gap forward with this participant's own retained artifacts. The
+  deterministic capture contract is the state prerequisite and exists; a retained,
+  canonical input suffix is the one that does not.
+- **A content-scoped correction.** Phase 5 deliberately kept relevance to the
+  schedule, because a correction carrying a subset of the world has nothing left
+  for D-23's integrity hash to be about and would hand a receiver a world
+  assembled from two ticks. Doing it properly needs an integrity contract over the
+  subset and a partial reconcile that does not adopt the authority's tick. Whether
+  it is worth it is a bandwidth question the Phase 5 telemetry can now answer:
+  `snapshot.cadence_uplink_bps` against `cadence_budget_bps` says how often the
+  schedule is actually the constraint.
+- **Authentication** (`Config.TLS`, `MsgAuthRequest`/`Response`) before anything
+  beyond trusted peers. Phase 5 added two message types a peer can send freely —
+  a probe and an echo — and the echo carries a report a host schedules from. A
+  hostile peer can therefore ask to be published to more often. It cannot make the
+  session believe anything about the world, and the floor and the bounds cap what
+  it can extract, but it is one more reason the trust boundary is where the next
+  work is.
+- **Host migration and partition health**, as a separate project with its own
+  prerequisites: transferring the newest authority, the membership and the
+  in-flight admission state before electing a replacement.
+- **Multi-link topology from the CLI.** `-join` dials one address, so the links
+  are a star. The relay makes any graph work, and Phase 5's per-peer cadence is a
+  property of a *direct* link — a relayed participant rides its neighbour's
+  schedule — so a real graph is also what would make that limitation visible.
+- **An adaptive playout lead.** Phase 5 left `NetworkBarrierDelayTicks` a constant
+  on purpose: the lead decides the tick an artifact applies at, so changing it
+  mid-session changes an agreed apply tick on every instance. It is a protocol
+  change rather than a scheduling one, and the round trip Phase 5 added is the
+  measurement it would be driven from.
 
 ## 7. Cleanup already performed
 
@@ -953,20 +1100,96 @@ implementation starts clean:
    left on the doorstep: the staging world is built once, and the commit reconciles
    rather than replaces, which is why a correction costs a third of what the join
    before it did.
+
+   **And the answer is a range now rather than a number**, which is Phase 5's
+   whole subject. 5 Hz is the *nominal* point; what a peer receives is chosen from
+   its own link inside 10 Hz and 1 Hz, and the keyframe interval inside 1 and 30 —
+   with the product bounded by a 60-tick convergence floor. Measured over the
+   Phase 5 socket pair the session sat at the nominal 4 ticks with excursions to 2,
+   for 46.5 MB over 560 corrections at the storm high water: ≈358 KiB/s, and the
+   host stall stayed at 1.51 ms, 3.0 % of a tick. What the earlier figures did not
+   say and these do is what happens when the link *cannot* carry that, which is
+   §6's Phase 5 entry.
 3. **Host loss** ends the session. Confirm that is acceptable before sizing Phase 6.
+   Phase 5 adds one number to the same decision: the guest now measures the
+   authority's absence directly (`snapshot.cadence_keyframe_age_ticks`) and says so
+   when it passes the floor, so a session that has lost its host is distinguishable
+   from one whose link has merely narrowed — which is exactly the distinction a
+   migration would have to make before electing anything.
 4. **Does the host keep re-deriving, or become the only simulator?** This plan
    keeps guests simulating (§2.1), and Phase 4 kept it. The magnitude is published
    now (`snapshot.correction_entities`), so the question has an instrument rather
    than an argument: if it turns out large enough to be distracting, the fallback is
    thinner guests and a higher snapshot rate — a tuning change, not a rewrite.
+
+   **Phase 5 read the instrument and the answer is "keep simulating", with one
+   caveat worth recording.** On the shipped scenario a correction moved 36–530
+   entities with no upward trend, and the *visible* part of that —
+   `correction_entities` against `correction_cells` — was 1 to 7 shared placements.
+   So the prediction is close where a player looks and loose in the bookkeeping,
+   which is the shape this design wants. The caveat is that the magnitude in a
+   storm is essentially the whole shared population every cadence, which made an
+   absolute threshold on it useless as a control signal (§6, Phase 5's findings).
+   A magnitude is a good gauge and a bad thermostat.
 5. **Tower ownership in optional maps** still binds every tower to slot zero. Not a
    blocker; a gameplay rule to settle before towers appear in a real session.
-6. **How many participants may join a run that started solo.** `:host <addr>`
+6. **A hostile peer can ask to be scheduled, though not to be believed.** The
+   Phase 5 echo carries a report the host schedules from — a participant's
+   staleness, its correction magnitude and its cursor cell — and nothing
+   authenticates it. What that buys is a faster cadence for the peer that lies,
+   bounded by `SnapshotCadenceMinTicks` and by whatever its own link actually
+   carries; it buys no influence over the world, because relevance moves the
+   schedule and never the content. It is recorded here rather than fixed because
+   the fix is authentication, which the plan already puts before anything beyond
+   trusted peers.
+
+7. **How many participants may join a run that started solo.** `:host <addr>`
    opens a lobby sized by `-players`, which a solo run never set, so it admits one.
    Giving the command its own count is a one-line change and nobody has needed it
    yet; it is recorded here so the limit is a decision rather than an oversight.
 
 ## 9. What each session showed
+
+### 9.B The Phase 5 script pair — the cadence, chosen rather than fixed
+
+`script/phase5-host.toml` and `script/phase5-guest.toml`, run as §10.1 describes:
+3,000 host ticks, a mid-run join at 400, a storm from 900 and a swarm at 1,800, so
+the cadence has something to actually decide. Recorded because two of the numbers
+in it changed the implementation rather than confirming it.
+
+- **The cadence settled at its nominal 4 ticks with excursions to 2**, keyframe
+  interval 10, keyframe period 40 ticks against a 60-tick floor. On loopback the
+  link is never the constraint, so what is being read here is the *demand* half of
+  the controller working correctly: the excursions coincide with the storm's
+  arrival and the swarm's, and it returns.
+- **560 corrections, 69 keyframes, 46.5 MB** — ≈358 KiB/s at the storm high water,
+  against §8's 215 KiB/s prediction for a quieter world at the same nominal
+  cadence. The capture read stayed at **1.51 ms**, 3.0 % of a tick, which is the
+  reassuring half again.
+- **The magnitude is bounded and does not trend**: 36 to 530 entities over the
+  run, with `correction_cells` — shared placements a correction visibly moved —
+  between 1 and 7. `corrections_refused` and `corrections_superseded` were both
+  **0** for the whole session.
+- **The guest never waited more than 15 ticks for a whole authoritative world**,
+  against a floor of 60. `cadence_floor_breached` stayed false on both halves.
+- **No `WARN` or `ERROR` on the guest at all**, and one on the host, which is its
+  own shutdown.
+
+*The first run of this pair did not look like that, and what it found is the entry
+worth keeping.* The cadence sat pinned at its 10 Hz minimum for the entire storm
+and spent 1.2 MB/s there. The cause is in the numbers above: a correction at the
+storm high water moves ~500 entities over ~492 shared placements, so an absolute
+threshold on the correction magnitude fires permanently — the "urgent" rule was
+reading *the world is busy* as *the cadence is falling behind*. It is a rise above
+the peer's own recent level now, and relevance is a comparison against the
+session's mean for the same reason. A magnitude is a good gauge and a bad
+thermostat, and only a run at the load the game actually reaches says so.
+
+The same run found the join gate choking on a probe — D-22 makes a joiner a peer
+before its world is read, so it is probed while still reading raw frames off the
+stream — and, once that was fixed, a standing backlog the size of the installed
+world, because the two byte counters a backlog is derived from start at different
+moments on the two ends. Both are in §6's Phase 5 findings.
 
 ### 9.A The Phase 4 script pair — the correction, in two processes
 
@@ -1110,10 +1333,11 @@ stall. Worth a look when the quasar is next touched.
 ## 10. Manual verification for the next session
 
 Everything below is a two-terminal check. Phase 4 made the host the authority and
-the guest a predictor, so what is being verified is that the correction closes what
-the prediction opened, that the numbers replacing `DESYNC` say something a player
-can act on, and that nothing the earlier phases fixed came back. The scripts are the
-same pair as before, and the join it makes is still worth watching once by hand.
+the guest a predictor; Phase 5 made the cadence a function of the link. So what is
+being verified is that the correction closes what the prediction opened, that the
+cadence moves with the link and says so, that the convergence floor holds under
+every shape, and that nothing the earlier phases fixed came back. The join is still
+worth watching once by hand.
 
 ### 10.1 The join, which is the phase
 
@@ -1144,6 +1368,26 @@ that point — so the operator has the rest of the run to start the guest:
   -l=log/phase4-guest -lv info -ls afs -lt 100 -j
 ```
 
+The **Phase 5 pair** is the same shape run long enough to shape the link
+underneath it, and `script/phase5-linkshape.sh` drives the whole thing — both
+halves, the four `tc netem` stages and the extraction — as one command:
+
+```bash
+# as root: this shapes ALL loopback traffic on the machine for the length of the run
+sudo script/phase5-linkshape.sh
+```
+
+By hand it is the same two terminals as above with `phase5-host.toml` and
+`phase5-guest.toml`, plus a third for the stages:
+
+```bash
+sudo tc qdisc add dev lo root netem delay 80ms
+sudo tc qdisc change dev lo root netem delay 80ms 40ms distribution normal
+sudo tc qdisc change dev lo root netem delay 40ms loss 3%
+sudo tc qdisc change dev lo root netem rate 512kbit delay 40ms
+sudo tc qdisc del dev lo root
+```
+
 The Phase 3 pair (`script/phase3-host.toml`, `script/phase3-guest.toml`, both with
 `-host`/`-join` and 2,000 wall-paced ticks) remains the tick-zero regression and
 still exercises the heat bursts, the crossed quasar, the shared storm and the swarm
@@ -1163,16 +1407,19 @@ and never what the host thought it was sending.
 | 2 | **The arrival is one crossing.** Read `cursor spawn` on both logs after the join | The same `entity` and `slot` on both instances. A different entity id on each side is still the most serious thing this check can find: D-11 weakened its *values* clause and not its identity one. |
 | 3 | **Local input is immediate.** Hold `l`, then type a corpus line at full speed | The cursor tracks the keys with no perceptible lag on either side, `typing.errors` stays at zero, and the shared cell moves with the local one rather than a playout lead behind it. The *remote* cursor still steps in its sync cadence. |
 | 4 | **The correction, which is the phase.** Read the `snapshot.correction` stat group on the guest over several minutes | `corrections_applied` rises steadily. `correction_entities` is small and **does not trend upward** — a bounded magnitude is convergence, a growing one is not. `corrections_refused` may be non-zero briefly after the join and must not keep rising; `corrections_superseded` rising means this machine cannot keep up with the cadence. |
-| 5 | **The cadence's cost.** Read `snapshot` on the host | `corrections_sent`, `keyframes` and `correction_bytes_sent` — the last divided by elapsed seconds is the actual uplink, and it is the number Phase 5 adapts. `capture_us` is the host's stall and should stay a low single-digit percentage of the 50 ms tick even in a storm. **Send these back**: §8's figures are in-process on one machine with no link at all. |
+| 5 | **The cadence's cost.** Read `snapshot` and `snapshot.cadence` on the host | `corrections_sent`, `keyframes` and `correction_bytes_sent` — the last divided by elapsed seconds is the actual uplink. `capture_us` is the host's stall and should stay a low single-digit percentage of the 50 ms tick even in a storm. `cadence_ticks` and `cadence_keyframe_period_ticks` are what the controller chose; `cadence_uplink_bps` is what it priced that at. **Send these back**: §8's figures are in-process on one machine with no link at all. |
 | 6 | **Staleness says something true.** Watch `network.lag_ticks` and the status bar | Zero or one on a healthy loopback link and no `LAG` item. Under `tc netem` delay it rises and the item appears; remove the delay and it clears. A `LAG` that never clears on a quiet local link is a defect, not a slow network. |
-| 7 | **Nothing enters an unrecoverable state.** Kill the link entirely (`tc qdisc` drop-all, or unplug), leave it down for ten seconds, restore it | The guest keeps playing on its prediction, `LAG` appears, and the *next keyframe* restores it — within `SnapshotKeyframeCorrections` corrections at most. No `DESYNC`, no `DIVERGED`, nothing to restart. This is the check the phase exists for. |
-| 8 | **Jitter and loss.** `tc netem delay 80ms 40ms loss 2%` on the guest | Play stays responsive because local input never waits. Remote entities stay smooth between corrections. `correction_entities` rises and stays bounded; `corrections_refused` rises with loss and is harmless. |
+| 7 | **Nothing enters an unrecoverable state.** Kill the link entirely (`tc qdisc` drop-all, or unplug), leave it down for ten seconds, restore it | The guest keeps playing on its prediction, `LAG` appears, `cadence_keyframe_age_ticks` climbs past the floor and `LINK!` appears with it, and the *next keyframe* restores everything — within one keyframe period at most, which the floor bounds at 60 ticks. No `DESYNC`, no `DIVERGED`, nothing to restart. This is the check the phase exists for. |
+| 8 | **Jitter and loss.** `tc netem delay 80ms 40ms loss 2%` on the guest | Play stays responsive because local input never waits. Remote entities stay smooth between corrections. `correction_entities` rises and stays bounded; `corrections_refused` rises with loss and is harmless. `network.link_rtt_ms` reads about 80 and `link_jitter_ms` follows the shape. |
+| 8a | **The cadence follows the link.** Walk the four stages of §10.1, reading `snapshot.cadence` on the host at each | The cadence and keyframe interval move with the shape and come back when it clears — stretching the interval first and slowing the cadence only when that is not enough. `cadence_constrained` turns on under the bandwidth stage and off after. `cadence_keyframe_period_ticks` **never exceeds 60**: a larger value is a defect in the controller, not a slow link. |
+| 8b | **The floor is refused rather than crossed.** Shape hard enough that a whole capture cannot cross in three seconds (`rate 64kbit` at the storm high water), then dial a *new* participant | The join is refused with "link cannot sustain the convergence floor", naming what the floor costs and what the link carries. An existing participant is not dropped — it reports `LINK!` and keeps predicting. Silence here is the one outcome the phase forbids. |
 | 9 | **Join cost is a function of the world, not the session.** Repeat the join after several minutes | `snapshot.bytes` and `stage_us` track what is on the map, not how long the host has been running. `stage_us` on the *second* install of a session is far below the first: the staging world is built once. |
 | 10 | **Reconnect.** Kill terminal 2, watch the host despawn the guest cursor, then dial again | The second arrival installs at a *later* `install_tick` than the first and lands the same way. The host's roster returns to one cursor in between. |
 | 11 | **Gold, quasar and heat across a join** | Both instances report the same `gold.timer` at the same tick; a quasar living ~30 s across the join produces no kinetics disagreement; the cleaner sweep appears only for the participant that burst and `fsm.monitor` stays `MonitorActive`. |
 | 12 | **Swarm in a shield.** Both in god mode, park a swarm in a shield | The swarm is ejected. `swarm.physics_steps` keeps rising while `shield.shield_hit` does; `swarm.transition_stalls` stays 0. |
 | 13 | **Reset.** `:new` on the coordinator | Both reset together, the counters restart from zero on both, and corrections resume against the new run. |
 | 14 | **Solo, unchanged.** One terminal, no `-host`/`-join`, several minutes | Nothing regressed. `:session` says "Solo run"; `:speed`, `:step` and pause still behave, and no `snapshot` counter moves. |
+| 15 | **The operating point is legible.** `:session` on the host during check 8a | One line carrying the cadence, the keyframe interval and period, the round trip and its variation, the link rate, the planned uplink, what the floor costs, and whether the link is nominal, constrained, or below the floor. A player who cannot tell a small link from a broken game from that line is the defect this check is for. |
 
 ### 10.3 What to look at first in the returned logs
 
@@ -1190,6 +1437,14 @@ jq -c 'select(.sub=="app" and .fields.msg=="capture installed")
 
 # the cadence's cost and this instance's staleness, over the run
 jq -c 'select(.sub=="stat" and (.fields.msg|test("^snapshot|^network")))' <log>
+
+# the operating point the link put the session at, over the run
+jq -r 'select(.sub=="stat" and .fields.msg=="snapshot.cadence")
+       | "\(.tick) cadence=\(.fields.ticks) kf=\(.fields.keyframe_interval) period=\(.fields.keyframe_period_ticks) uplink=\(.fields.uplink_bps) budget=\(.fields.budget_bps) floor=\(.fields.floor_bps) constrained=\(.fields.constrained) breached=\(.fields.floor_breached)"' <host>
+
+# the link the cadence was chosen from
+jq -r 'select(.sub=="stat" and .fields.msg=="network.link")
+       | "\(.tick) rtt=\(.fields.link_rtt_ms)ms/\(.fields.link_rtt_us)us jitter=\(.fields.link_jitter_ms)ms rate=\(.fields.link_bps) loss=\(.fields.link_loss_pct)% saturated=\(.fields.link_saturated)"' <log>
 
 # fsm transitions, host against guest
 jq -r 'select(.sub=="fsm")|"\(.fields.region) \(.fields.from)->\(.fields.to // .fields.state)"' <host> > h
@@ -1210,18 +1465,25 @@ tick from the key, as above, is what makes it a comparison of what happened rath
 than of when. One `nav.entities` difference is expected and excluded: it counts both
 domains, so a participant's own player-domain population moves it.
 
-### 10.4 What Phase 5 wants from these runs
+### 10.4 What the next session wants from these runs
 
-The `snapshot` group from checks 4 and 5, over a link that is not loopback, and the
-same group again under each `tc netem` shape from check 8. Phase 5 drives the
-cadence from measurement rather than from a constant, and what it needs is the
-relationship between the three: how much shaping it takes before
-`snapshot.correction_entities` stops being bounded, what `network.lag_ticks` reads
-when that happens, and what the uplink was at the time. §8's figures were taken
-in-process on one machine with no link at all, so they say what the world costs and
-nothing about what a link can carry.
+Phase 5's own question is answered: the round trip exists, the cadence follows it,
+and §9.B carries the numbers from the socket pair. What is still missing is the
+same set **over a link that is not loopback and not `netem` on one machine** —
+two hosts, a real path between them — because every figure this plan has was taken
+where the link is either free or artificial. Specifically:
 
-One number is missing by construction and Phase 5 has to add it: nothing measures a
-round trip, because nothing in this protocol makes one. Everything above is
-one-directional — what this instance sent, and how far behind the newest tick it has
-*heard about* it stands.
+- `snapshot.cadence` and `network.link` together, at rest and under load. The
+  interesting column is `cadence_budget_bps`: it is only non-zero when the link was
+  actually the limit, and nothing on a loopback ever fills it in.
+- How much shaping it takes before `snapshot.correction_entities` stops being
+  bounded, what `network.lag_ticks` reads when that happens, and what the uplink was
+  at the time.
+- Whether `cadence_floor_breached` ever fires on a link a person would call usable.
+  The floor is priced at one whole world per three seconds — 59 to 66 KiB/s on the
+  measured storm world — and a link below that on a real path is the case the
+  refusal exists for.
+
+For Phase 6 the run wants one thing more: `correction_cells` over a session with a
+real path, because that is how visible the rollback flicker actually is, and it is
+the number that says whether bounded replay is worth building.
