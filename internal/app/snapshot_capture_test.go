@@ -107,16 +107,44 @@ func TestCaptureCarriesEveryDeclaredSystem(t *testing.T) {
 	}
 }
 
-// TestCaptureCarriesNoPlayerState pins the boundary. A capture describes the
-// shared world; a participant's own simulation does not exist on any other
-// instance (D-2) and its effects are per-instance (D-6), so a capture that
-// carried one would install another participant's private world.
-func TestCaptureCarriesNoPlayerState(t *testing.T) {
+// TestACaptureExcludesThePlayerDomainByStoreAndByReference pins the boundary at
+// both levels it can be crossed, over one armed world.
+//
+// A capture describes the shared world; a participant's own simulation does not
+// exist on any other instance (D-2) and its effects are per-instance (D-6), so a
+// capture carrying one would install another participant's private world. Every
+// store loop skips player-domain *entities* by construction — that is the first
+// assertion.
+//
+// The second is the one that would have caught the orb defect at its source. A
+// shared entity's components are copied whole and a component field is free to hold
+// whatever entity its writer put there: CursorViewComponent held an array of the
+// local cursor's orb entities, player-domain handles on a shared cursor, in every
+// capture. So the assertion is on the reference rather than on the store — no
+// core.Entity anywhere in a capture's world may name a player-domain entity — and it
+// is made by reflection, so a field added to any shared component is covered without
+// anyone remembering the rule.
+func TestACaptureExcludesThePlayerDomainByStoreAndByReference(t *testing.T) {
 	t.Parallel()
 	a := mustHeadless(t, 0x5A4E, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
 	a.Tick(120)
+
+	// The cursor is armed because the reference check needs a shared entity that
+	// *has* something player-domain to point at: an unarmed run holds no orbs and the
+	// walk would pass over an empty array.
+	var cursor core.Entity
+	a.World().RunSafe(func() { cursor = a.World().Resources.Player.Slot(0) })
+	for _, wt := range []component.WeaponType{component.WeaponRod, component.WeaponLauncher, component.WeaponDisruptor} {
+		a.Context().PushLocal(event.EventWeaponAddRequest,
+			&event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
+	}
+	a.Settle()
+	a.Tick(2)
+	if got := orbsPerWeapon(a, cursor); got != [component.WeaponCount]int{1, 1, 1} {
+		t.Fatalf("orbs = %v; the reference walk would have no player entity to find", got)
+	}
 
 	cap, err := a.CaptureShared()
 	if err != nil {
@@ -132,8 +160,12 @@ func TestCaptureCarriesNoPlayerState(t *testing.T) {
 	if player > 0 {
 		t.Fatalf("%d player-domain placements reached the capture", player)
 	}
+	if found := namedPlayerEntities(reflect.ValueOf(cap.World), "world"); len(found) > 0 {
+		sort.Strings(found)
+		t.Fatalf("a capture names player-domain entities:\n  %s", strings.Join(found, "\n  "))
+	}
 
-	// The run must actually have player entities, or the assertion is vacuous.
+	// Non-vacuous: the run must actually hold player-domain entities.
 	var live int
 	a.World().RunSafe(func() {
 		for _, e := range a.World().Positions.Entities() {
@@ -144,54 +176,6 @@ func TestCaptureCarriesNoPlayerState(t *testing.T) {
 	})
 	if live == 0 {
 		t.Fatal("the run holds no player-domain entities; the exclusion proves nothing")
-	}
-}
-
-// TestCaptureNamesNoPlayerDomainEntity is the same boundary one level in, and it
-// is the check that would have caught the orb defect at its source.
-//
-// A capture excludes player-domain *entities* by construction — every store loop
-// skips them — but a shared entity's components are copied whole, and a component
-// field is free to hold whatever entity its writer put there. `CursorViewComponent`
-// held an array of the local cursor's orb entities: player-domain handles, on a
-// shared cursor, in every capture. The live cursor-state sync excluded the array by
-// hand and the capture had no such rule, so a correction handed the receiver another
-// instance's zeroes and stranded the entities its own handles had named.
-//
-// So the assertion is on the reference rather than on the store: no core.Entity
-// anywhere in a capture's world may name a player-domain entity. Reflection is the
-// point — a field added to any shared component is covered without anyone
-// remembering this rule, which is what the hand-written exclusion could not offer.
-func TestCaptureNamesNoPlayerDomainEntity(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x5A4E, 120, 40)
-	defer a.Close()
-	tickUntilCursor(t, a)
-	a.Tick(120)
-
-	// The cursor is armed first, because the defect this pins needs a shared entity
-	// that *has* something player-domain to point at: an unarmed run holds no orbs
-	// and the walk below would pass over an empty array.
-	var cursor core.Entity
-	a.World().RunSafe(func() { cursor = a.World().Resources.Player.Slot(0) })
-	for _, wt := range []component.WeaponType{component.WeaponRod, component.WeaponLauncher, component.WeaponDisruptor} {
-		a.Context().PushLocal(event.EventWeaponAddRequest,
-			&event.WeaponAddRequestPayload{Entity: cursor, Weapon: wt})
-	}
-	a.Settle()
-	a.Tick(2)
-	if got := orbsPerWeapon(a, cursor); got != [component.WeaponCount]int{1, 1, 1} {
-		t.Fatalf("orbs = %v; the walk would have no player entity to find", got)
-	}
-
-	cap, err := a.CaptureShared()
-	if err != nil {
-		t.Fatalf("capture: %v", err)
-	}
-	found := namedPlayerEntities(reflect.ValueOf(cap.World), "world")
-	if len(found) > 0 {
-		sort.Strings(found)
-		t.Fatalf("a capture names player-domain entities:\n  %s", strings.Join(found, "\n  "))
 	}
 }
 
