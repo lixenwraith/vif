@@ -1,4 +1,4 @@
-// Package app: join handshake.
+// The join handshake.
 //
 // A second participant reproduces a session rather than receiving it: same seed,
 // same session counter, same config and corpus, so shared entity identity and
@@ -6,6 +6,7 @@
 // is adopted rather than re-derived — the joiner's terminal must not decide the
 // shared bounds. The carrier is JournalAnchor, which already describes exactly this
 // set for replay; the join adds the latch and drops the recording terminal.
+
 package app
 
 import (

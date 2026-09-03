@@ -481,7 +481,7 @@ func (u *authority) tryPublish() {
 }
 
 // giveUp ends a succession that found no eligible successor, or whose votes never
-// reached a majority. What is left is exactly §4.3's behaviour, said plainly: this
+// reached a majority. What is left is the local-continuation fallback, said plainly:
 // instance continues its own game from the last authoritative state.
 func (u *authority) giveUp() {
 	u.mu.Lock()

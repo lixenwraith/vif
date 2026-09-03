@@ -118,7 +118,7 @@ func repoRoot(t *testing.T) string {
 
 // TestFSMTriggersAreReplicated is D-20 made mechanical.
 //
-// Every FSM region is shared state (§4): each instance re-derives the same region
+// Every FSM region is shared state: each instance re-derives the same region
 // in the same state at the same tick, and fsm.<region> is compared across the
 // session. A region can only stay in agreement if every event that moves it is an
 // event every instance holds. A ClassLocal trigger is not: by definition it never

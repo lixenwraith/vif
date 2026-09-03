@@ -326,7 +326,7 @@ func TestCaptureContinuesInAnotherProcess(t *testing.T) {
 }
 
 // TestSimulationEpochIsSessionIdentity is the negative control, and it documents
-// the one part of §4.2's hazard that D-21 did not remove so much as relocate.
+// the one part of the shared-identity hazard that D-21 relocated rather than removed.
 //
 // A shared component carries absolute instants — a genotype's spawn time, a
 // quasar's last speed step, a shield's last drain — and a capture carries them as

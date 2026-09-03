@@ -759,7 +759,7 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 }
 
 // TestCorrectionsLeaveOneOrbPerArmedWeapon is the D-4/D-13 boundary a correction
-// used to cross, and the shape of the defect is worth stating because nothing in
+// crosses, and the shape of the defect is worth stating because nothing in
 // the suite could see it.
 //
 // A weapon orb is a player-domain entity, and its handle means nothing on any other

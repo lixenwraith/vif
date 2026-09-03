@@ -589,7 +589,7 @@ func TestTheFirstCorrectionAfterAHandoffIsHashOnly(t *testing.T) {
 		t.Fatal("the exchange never reached hash-only after the handoff")
 	}
 	t.Logf("converged exchange under the new term: index out %d B, ack back %d B", idx, ack)
-	// §3 measures the converged exchange at about 1.5 KiB on the storm world; this
+	// The cost gate measures the converged exchange at about 1.5 KiB on the storm world; this
 	// fixture is smaller. The assertion is that it is bounded by an index and an
 	// ack rather than that it hits a number.
 	if total := idx + ack; total == 0 || total > 4<<10 {
@@ -606,7 +606,7 @@ func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
 	primeRetention(t, apps)
 
 	// A partition that cannot elect: the succession opens and its deadline passes
-	// with nothing eligible, which is exactly §4.3's local continuation.
+	// with nothing eligible, which is the local-continuation fallback.
 	fork := apps[2]
 	fork.authority.beginSuccession(1)
 	fork.authority.giveUp()

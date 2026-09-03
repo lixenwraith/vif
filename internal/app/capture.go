@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
@@ -13,43 +14,39 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
-// captureStatusLocked reads every shared-surface registry cell.
-//
-// The filter is snapshot.SharedKey, the same predicate snapshotShared compares through, so
-// the capture carries exactly what a session is asserted to agree on — no more,
-// and nothing the surface would then find missing.
+// captureStatusLocked reads every shared-surface registry cell, through
+// snapshot.SharedKey — the same predicate the compared surface uses, so a capture
+// carries exactly what a session is asserted to agree on.
 //
 // Caller MUST hold updateMutex.
 func (a *App) captureStatusLocked() snapshot.StatusState {
 	reg := a.world.Resources.Status
-	var out snapshot.StatusState
+	return snapshot.StatusState{
+		Ints: sharedCells(reg.Ints.Keys(), func(k string) snapshot.IntCell {
+			return snapshot.IntCell{Key: k, Value: reg.Ints.Get(k).Load()}
+		}),
+		Bools: sharedCells(reg.Bools.Keys(), func(k string) snapshot.BoolCell {
+			return snapshot.BoolCell{Key: k, Value: reg.Bools.Get(k).Load()}
+		}),
+		Floats: sharedCells(reg.Floats.Keys(), func(k string) snapshot.FloatCell {
+			return snapshot.FloatCell{Key: k, Value: reg.Floats.Get(k).Get()}
+		}),
+		Strings: sharedCells(reg.Strings.Keys(), func(k string) snapshot.StringCell {
+			return snapshot.StringCell{Key: k, Value: reg.Strings.Get(k).Load()}
+		}),
+	}
+}
 
-	keys := reg.Ints.Keys()
-	sort.Strings(keys)
+// sharedCells is one registry kind's shared-surface cells, in key order so two
+// instances holding equal state produce equal bytes. The result is nil when nothing
+// matches rather than an empty slice, because the encoding distinguishes the two and
+// the capture's integrity hash covers it.
+func sharedCells[C any](keys []string, cell func(string) C) []C {
+	slices.Sort(keys)
+	var out []C
 	for _, k := range keys {
 		if snapshot.SharedKey(k) {
-			out.Ints = append(out.Ints, snapshot.IntCell{Key: k, Value: reg.Ints.Get(k).Load()})
-		}
-	}
-	keys = reg.Bools.Keys()
-	sort.Strings(keys)
-	for _, k := range keys {
-		if snapshot.SharedKey(k) {
-			out.Bools = append(out.Bools, snapshot.BoolCell{Key: k, Value: reg.Bools.Get(k).Load()})
-		}
-	}
-	keys = reg.Floats.Keys()
-	sort.Strings(keys)
-	for _, k := range keys {
-		if snapshot.SharedKey(k) {
-			out.Floats = append(out.Floats, snapshot.FloatCell{Key: k, Value: reg.Floats.Get(k).Get()})
-		}
-	}
-	keys = reg.Strings.Keys()
-	sort.Strings(keys)
-	for _, k := range keys {
-		if snapshot.SharedKey(k) {
-			out.Strings = append(out.Strings, snapshot.StringCell{Key: k, Value: reg.Strings.Get(k).Load()})
+			out = append(out, cell(k))
 		}
 	}
 	return out
@@ -191,16 +188,13 @@ func (a *App) captureSystemStatesLocked() ([]snapshot.SystemStateRecord, error) 
 	return out, nil
 }
 
-// InstallShared replaces this instance's shared world with a capture.
-//
-// The identity is checked, then the integrity, then every system's state is
-// offered — and only if all of that succeeds does anything get written. A world
-// half-installed is worse than one not installed at all: the first is a
+// InstallShared replaces this instance's shared world with a capture: identity,
+// then integrity, then every system's state offered, and only then is anything
+// written. A world half-installed is worse than one not installed at all — it is a
 // divergence that looks like a working session.
 //
-// This is the direct form: it writes into the world it is called on. A running
-// instance takes StageShared instead, which resolves the capture into a second
-// world first and swaps at a tick boundary — see snapshot_stage.go.
+// This is the direct form, writing into the world it is called on. A running
+// instance takes StageShared instead.
 func (a *App) InstallShared(cap snapshot.SharedCapture) error {
 	if err := a.VerifyCapture(cap); err != nil {
 		return err

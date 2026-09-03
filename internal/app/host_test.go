@@ -697,7 +697,7 @@ func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
 // schedulers have different wall origins and can miss different deadlines even
 // while they complete the same absolute simulation tick.
 //
-// The set is narrower than it was, twice over. Elapsed game time used to be here on
+// The set is narrow for two reasons. Elapsed game time is excluded on
 // the same argument, and that argument was wrong in a way that cost a session: it
 // was true only because the simulation instant came from the pacing clock.
 // engine.SimTime derives it from the tick instead, so it is tick * interval

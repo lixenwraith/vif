@@ -164,21 +164,16 @@ func (s *StagedInstall) Discard() {
 	s.release()
 }
 
-// stagingWorld returns the second world captures resolve into, building it the
-// first time and re-using it after.
+// stagingWorld returns the second world captures resolve into, building it the first
+// time and re-using it after. The second return says whether it was just built,
+// which decides whether its FSM boot queue still needs settling.
 //
 // A staging world that kept anything from the previous install — a carrier that
 // merged rather than replaced, an entity a store did not drop — would resolve the
-// next capture against a world the sender never had. TestStagingWorldIsBuiltOnceAndReused
-// holds that: two captures installed into one staging world in sequence leave
-// exactly what a world built for the second alone would.
-//
-// What it cannot re-use is a world built on different bounds. The D-14 map latch
-// decides what the level setup reflows and what a capture's placements mean, so a
-// capture that names other bounds gets a world built for them.
-//
-// The second return reports whether the world was just built, which is what decides
-// whether its FSM boot queue still needs settling.
+// next capture against a world the sender never had;
+// TestStagingWorldIsBuiltOnceAndReused holds that. What it cannot re-use is a world
+// built on different bounds: the D-14 map latch decides what the level setup reflows
+// and what a capture's placements mean.
 func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 	a.stageMu.Lock()
 	defer a.stageMu.Unlock()
@@ -220,11 +215,10 @@ func (a *App) closeStagingWorld() { a.discardStagingWorld() }
 // snapshotTelemetry is the capture and install cost, reserved before the metric set
 // is frozen so a join can publish into it.
 //
-// It is deliberately per-instance and deliberately excluded from the compared
-// surface: a host publishes what a read cost it and a joiner publishes what an
-// install cost it, and neither is a fact about the world they now share. What the
-// numbers are for is the cadence, which has to be chosen from a measurement
-// rather than a guess.
+// It is per-instance and excluded from the compared surface: a host publishes what a
+// read cost it and a joiner what an install cost it, and neither is a fact about the
+// world they share. The numbers are for the cadence, which has to be chosen from a
+// measurement rather than a guess.
 type snapshotTelemetry struct {
 	captureUS   *atomic.Int64
 	encodeUS    *atomic.Int64
@@ -247,27 +241,24 @@ type snapshotTelemetry struct {
 	refused    *atomic.Int64
 	superseded *atomic.Int64
 
-	// The correction magnitude, published where DESYNC used to be. It is
-	// how far this instance's prediction had drifted from the authority at the
-	// moment the authority arrived: component cells, the distinct entities behind
-	// them, and the largest distance a shared placement moved — the one a player
-	// would actually see.
+	// The correction magnitude: how far this instance's prediction had drifted from
+	// the authority at the moment the authority arrived — component cells, the
+	// distinct entities behind them, and the largest distance a shared placement
+	// moved, which is the one a player would actually see.
 	correctionEntries  *atomic.Int64
 	correctionEntities *atomic.Int64
 	correctionCells    *atomic.Int64
 	correctionTick     *atomic.Int64
 
-	// The operating point, the answer to "the cadence is a
-	// constant". cadenceTicks and keyframeInterval are what the controller
-	// currently holds; keyframePeriod is their product, which is the value the
+	// The operating point in force. cadenceTicks and keyframeInterval are what the
+	// controller currently holds; keyframePeriod is their product, which is what the
 	// convergence floor bounds and therefore the one worth reading first.
 	//
-	// The three rates are all bytes per second and they are three different
-	// claims. uplinkBps is what the schedule in force costs. budgetBps is what the
-	// tightest link was measured to allow after the utilisation share. floorBps is
-	// what the floor costs on a world this size — the cheapest schedule that still
-	// delivers a whole world per floor window — and a budget under it is the
-	// unrecoverable condition floorBreached names.
+	// The three rates are all bytes per second and are three different claims:
+	// uplinkBps is what the schedule in force costs, budgetBps what the tightest link
+	// was measured to allow after the utilisation share, and floorBps what the floor
+	// costs on a world this size. A budget under floorBps is the unrecoverable
+	// condition floorBreached names.
 	cadenceTicks     *atomic.Int64
 	keyframeInterval *atomic.Int64
 	keyframePeriod   *atomic.Int64
@@ -283,16 +274,13 @@ type snapshotTelemetry struct {
 	// what says whether one actually arrived.
 	keyframeAge *atomic.Int64
 
-	// The selective-correction counters.
-	//
-	// They are grouped by the question each group answers. The first is "what did
-	// the index cost" — manifests published and received, and their bytes, which
-	// is the traffic that replaces a whole delta on a healthy link. The second is
-	// "how often did it prove convergence outright": hashOnly is the case the
-	// whole design is for, and sectionsCompared/pagesCompared say how much work
-	// finding that answer took. The third is the repair itself, counted at every
-	// point a shard can be at — asked for, sent, arrived, refused, applied — so a
-	// gap between two of them names which side dropped it.
+	// The selective-correction counters, grouped by the question each answers. What
+	// the index cost: manifests published and received and their bytes, the traffic
+	// that replaces a whole delta on a healthy link. How often it proved convergence
+	// outright: hashOnly is the case the design is for, and sectionsCompared and
+	// pagesCompared say what finding that answer took. And the repair itself, counted
+	// at every point a shard can be at — asked for, sent, arrived, refused, applied —
+	// so a gap between two of them names which side dropped it.
 	manifestSent      *atomic.Int64
 	manifestRecv      *atomic.Int64
 	manifestBytesSent *atomic.Int64
@@ -339,11 +327,10 @@ type snapshotTelemetry struct {
 	replaySkipped  *atomic.Int64
 	replayUnusable *atomic.Bool
 
-	// Authority continuity. staleTerm counts artifacts the term gate dropped as belonging to a
-	// generation the session has left, which is the ordinary in-flight case across
-	// a handoff rather than an error; handoffBytes is what one handoff cost this
-	// instance on the wire, so the migration's price is measured beside the
-	// correction's.
+	// Authority continuity. staleTerm counts artifacts the term gate dropped as
+	// belonging to a generation the session has left, which is the ordinary in-flight
+	// case across a handoff rather than an error; handoffBytes is what one handoff
+	// cost this instance on the wire.
 	staleTerm    *atomic.Int64
 	handoffBytes *atomic.Int64
 

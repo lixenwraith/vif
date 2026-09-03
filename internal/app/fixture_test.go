@@ -1,4 +1,5 @@
-// Package app tests: the fixtures every group builds on.
+// Test fixtures every group in this package builds on.
+
 package app
 
 import (

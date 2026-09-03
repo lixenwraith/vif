@@ -393,9 +393,8 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 // the correction, which is chunked and reassembled off a real socket rather than
 // handed across in one piece.
 //
-// It no longer ends in a mid-run join. That leg exercised the retired
-// replay-the-session-from-tick-zero path; the authoritative snapshot join that
-// replaces it is the next implementation's to prove.
+// It does not end in a mid-run join: that leg belongs to the authoritative snapshot
+// join, which join_test.go proves on its own.
 func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x5EEDBEEF
@@ -789,7 +788,7 @@ func testCursorStateRoundTrip(t *testing.T) {
 // instance of a live two-participant session — and asserts the two agree.
 //
 // The session figures these replaced are recorded in
-// doc/multi-player-enhancement.md §3: one keypress reaching the store only after
+// The local-first input criterion: one keypress reaching the store only after
 // the playout lead, one cell of five, and five typing errors out of six correct
 // keystrokes. D-18's prediction is what closes the gap; the barrier below it is
 // deliberately unchanged, and the first test asserts that too.
@@ -835,8 +834,8 @@ func inject(t *testing.T, a *App, intents ...*input.Intent) {
 	}
 }
 
-// TestOneKeypressMovesTheLocalCursorWithoutATick is §3's first row. Solo, a press
-// lands before any tick; in a session it used to take the whole playout lead.
+// TestOneKeypressMovesTheLocalCursorWithoutATick: solo, a press lands before any
+// tick, and a session has to answer the same way rather than take the playout lead.
 func TestOneKeypressMovesTheLocalCursorWithoutATick(t *testing.T) {
 	t.Parallel()
 	press := func(a *App) (before, after component.PositionComponent) {
@@ -884,10 +883,9 @@ func TestOneKeypressMovesTheLocalCursorWithoutATick(t *testing.T) {
 	}
 }
 
-// TestFiveKeypressesBetweenTicksReachFiveCells is §3's second row. Every press
-// resolves its motion from the cell the previous one selected, so five presses
-// select five cells; a session that re-read the shared store selected one, four
-// times over.
+// TestFiveKeypressesBetweenTicksReachFiveCells: every press resolves its motion
+// from the cell the previous one selected, so five presses select five cells. A
+// session that re-read the shared store instead selects one, four times over.
 func TestFiveKeypressesBetweenTicksReachFiveCells(t *testing.T) {
 	t.Parallel()
 	const presses = 5
@@ -942,8 +940,8 @@ func TestFiveKeypressesBetweenTicksReachFiveCells(t *testing.T) {
 // glyphRun writes runes into the cells the local cursor stands on and to its right,
 // so a keystroke that lands on its own cell finds its own character there.
 //
-// The run is player-domain, which is what a corpus glyph is (§4: every shared glyph
-// is a gold composite member). Whatever the corpus already put on those cells is
+// The run is player-domain, which is what a corpus glyph is — every shared glyph is
+// a gold composite member. Whatever the corpus already put on those cells is
 // destroyed first, because the typing path answers with the first glyph it finds in
 // the cell; a shared one would make the probe measure a composite instead, and the
 // test says so rather than quietly measuring something else.
@@ -983,10 +981,10 @@ func glyphRun(t *testing.T, a *App, runes string) {
 	}
 }
 
-// TestFastTypingOverAGlyphRunScoresNoErrors is §3's third row, and the one that
-// matters most: in a typing game, keystrokes issued faster than the playout lead
-// were not merely dropped, they were scored against the player, because each one
-// resolved against a cell whose glyph the previous keystroke had already consumed.
+// TestFastTypingOverAGlyphRunScoresNoErrors is the row that matters most: in a
+// typing game, keystrokes issued faster than the playout lead are not merely
+// dropped, they are scored against the player, because each resolves against a cell
+// whose glyph the previous keystroke already consumed.
 func TestFastTypingOverAGlyphRunScoresNoErrors(t *testing.T) {
 	t.Parallel()
 	const run = "abcdef"

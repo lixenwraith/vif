@@ -8,7 +8,6 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // FNV-1a 64, inlined so a per-tick digest allocates nothing
@@ -63,6 +62,20 @@ type worldDigest struct {
 // worldDigestLocked computes the digest over both domains; caller MUST hold the world lock
 func (a *App) worldDigestLocked() worldDigest {
 	return a.worldDigestScopedLocked(engine.ScopeBoth)
+}
+
+// line renders the digest as the snapshot record the comparable surface leads with.
+// entities is carried only by the whole-world form: the shared surface excludes it,
+// because creation and destruction counts include this instance's own player domain.
+func (wd worldDigest) line(entities bool) string {
+	out := "ctx|digest" +
+		"|positions=" + wd.Positions.String() +
+		"|kinetics=" + wd.Kinetics.String() +
+		"|combat=" + wd.Combat.String()
+	if entities {
+		out += "|entities=" + wd.Entities.String()
+	}
+	return out
 }
 
 // worldDigestScopedLocked hashes one domain scope, so two instances compare shared
@@ -121,22 +134,7 @@ func (a *App) worldDigestScopedLocked(scope engine.DomainScope) worldDigest {
 // transport-sized value. Caller MUST hold the world lock; unlike snapshotShared it
 // must not acquire it again.
 func (a *App) sharedDigestLocked(detail bool) engine.SharedStateDigest {
-	wd := a.worldDigestScopedLocked(engine.ScopeShared)
-	digestLine := "ctx|digest" +
-		"|positions=" + wd.Positions.String() +
-		"|kinetics=" + wd.Kinetics.String() +
-		"|combat=" + wd.Combat.String()
-	contextLines := make([]string, 0, 8)
-	a.ctx.SnapshotContext(func(sub string, args ...any) {
-		if snapshot.IsRecord(args, "session") || snapshot.IsRecord(args, "view") {
-			return
-		}
-		contextLines = append(contextLines, snapshot.Line("ctx", sub, snapshot.FilterFields(args)))
-	})
-	statusLines := make([]string, 0, 56)
-	a.world.Resources.Status.SnapshotFiltered(snapshot.SharedKey, func(sub string, args ...any) {
-		statusLines = append(statusLines, snapshot.Line("reg", sub, args))
-	})
+	wd, digestLine, contextLines, statusLines := a.sharedSurfaceLocked()
 	// One hash per record, so a mismatch names the record rather than the category
 	// it belongs to. Built only on request: it is a diagnostic, not a probe.
 	var groups map[string]uint64
