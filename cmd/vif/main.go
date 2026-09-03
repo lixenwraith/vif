@@ -10,8 +10,10 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/app"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -65,9 +67,9 @@ func main() {
 	case sessionErr != nil:
 		err = sessionErr
 	case *flagSchema:
-		err = app.Schema(os.Stdout)
+		err = manifest.Schema(os.Stdout)
 	case *flagCheck:
-		err = app.Check(buildConfig(), os.Stdout)
+		err = resource.Check(buildConfig().Resources, os.Stdout)
 	case *flagReplay != "":
 		err = app.PlayJournal(*flagReplay)
 	case *flagScript != "":
@@ -180,13 +182,7 @@ func buildConfig() app.Config {
 	cfg := app.Config{
 		AudioBackend:  *flagAudioBackend,
 		AudioMuted:    true, // default muted
-		ConfigDir:     flagConfig.dir,
-		ContentPath:   flagConfig.content,
-		GameScript:    flagConfig.game,
-		ForceDefault:  flagConfig.embedded,
-		KeymapPath:    flagConfig.keymap,
-		MusicPath:     flagConfig.music,
-		SoundPath:     flagConfig.sounds,
+		Resources:     flagConfig.options(),
 		LogScope:      flagLogs.scope.value,
 		StatTicks:     flagLogs.stat.value,
 		RecTicks:      flagLogs.rec.value,
@@ -228,6 +224,19 @@ type configFlags struct {
 }
 
 func newConfigFlags() *configFlags { return &configFlags{} }
+
+// options is the resolved resource override set these flags describe.
+func (f *configFlags) options() resource.Options {
+	return resource.Options{
+		Dir:      f.dir,
+		Game:     f.game,
+		Content:  f.content,
+		Keymap:   f.keymap,
+		Music:    f.music,
+		Sounds:   f.sounds,
+		Embedded: f.embedded,
+	}
+}
 
 func (f *configFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.dir, "config-dir", "", "Configuration root (game/, input/, audio/, content/)")

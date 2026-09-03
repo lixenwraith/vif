@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // parityScript builds the option set two instances step in lockstep. Resizes and
@@ -69,12 +70,12 @@ func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
 func assertSharedParity(t *testing.T, a, b *App, step int) {
 	t.Helper()
 	x, y := a.SnapshotShared(), b.SnapshotShared()
-	idx, lx, ly, ok := FirstDiff(x, y)
+	idx, lx, ly, ok := snapshot.FirstDiff(x, y)
 	if !ok {
 		return
 	}
 	t.Fatalf("step %d: shared snapshot diverged at line %d\n  a: %s\n  b: %s\n%s\n%s",
-		step, idx, lx, ly, strings.Join(Diff(x, y, 8), "\n"), strings.Join(diffSharedWorld(a, b, 8), "\n"))
+		step, idx, lx, ly, strings.Join(snapshot.Diff(x, y, 8), "\n"), strings.Join(diffSharedWorld(a, b, 8), "\n"))
 }
 
 // diffSharedWorld names the entities behind a world-digest mismatch.

@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // The selective suite drives whole sessions. What the manifest suite proves about
@@ -285,7 +286,7 @@ func TestAFailedProofReachesTheKeyframeFallback(t *testing.T) {
 	advance()
 	divergeGuest(t, guest)
 
-	corrupt, awaiting := outstandingRepair(t, host, guest, func(set *CorrectionShardSet) {
+	corrupt, awaiting := outstandingRepair(t, host, guest, func(set *snapshot.CorrectionShardSet) {
 		set.Shards[0].Hash++
 	})
 	_ = awaiting
@@ -362,7 +363,7 @@ func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
 // and is applied in the same drain, so there is no moment in the live path where a
 // test could reach in and change one; building the same message from the same two
 // indexes is the only way to ask what the receiver does with a bad one.
-func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*CorrectionShardSet)) ([]byte, uint64) {
+func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
 	t.Helper()
 	if err := host.PublishCorrection(); err != nil {
 		t.Fatalf("publish: %v", err)
@@ -377,7 +378,7 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*CorrectionS
 		t.Fatal("the guest is not awaiting a repair; the injected divergence produced none")
 	}
 	awaiting := outstanding[len(outstanding)-1]
-	req, _, _ := compareRequest(awaiting.index, awaiting.manifest)
+	req, _, _ := snapshot.CompareRequest(awaiting.index, awaiting.manifest)
 	if req.Converged() {
 		t.Fatal("the guest reported convergence; the injected divergence produced no request")
 	}
@@ -388,7 +389,7 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*CorrectionS
 	if !ok {
 		t.Fatalf("the host retained no capture for tick %d", awaiting.tick)
 	}
-	set, pages, err := buildShardSet(held.index, req)
+	set, pages, err := snapshot.BuildShardSet(held.index, req)
 	if err != nil {
 		t.Fatalf("build repair: %v", err)
 	}
@@ -398,7 +399,7 @@ func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*CorrectionS
 	if corrupt != nil {
 		corrupt(&set)
 	}
-	body, err := EncodeShardSet(set)
+	body, err := snapshot.EncodeShardSet(set)
 	if err != nil {
 		t.Fatalf("encode repair: %v", err)
 	}

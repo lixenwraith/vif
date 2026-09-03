@@ -1,4 +1,4 @@
-package app
+package snapshot
 
 import (
 	"bytes"
@@ -39,11 +39,11 @@ var (
 	}}
 )
 
-// encodeSnapshotJSON marshals the schema body and compresses it for transport.
+// EncodeJSON marshals the schema body and compresses it for transport.
 // BestSpeed is intentional: the storm high-water measurement shows most of the
 // available byte reduction at this level while keeping encode work below a
 // millisecond on the reference machine.
-func encodeSnapshotJSON(v any) ([]byte, error) {
+func EncodeJSON(v any) ([]byte, error) {
 	plain, err := json.Marshal(v)
 	if err != nil {
 		return nil, err
@@ -80,10 +80,10 @@ func encodeSnapshotJSON(v any) ([]byte, error) {
 	return out.Bytes(), nil
 }
 
-// decodeSnapshotJSON validates and expands one wire envelope. The plain-size
+// DecodeJSON validates and expands one wire envelope. The plain-size
 // declaration is checked before allocation and enforced while reading, so a small
 // compressed body cannot expand past the snapshot ceiling.
-func decodeSnapshotJSON(body []byte, dst any) error {
+func DecodeJSON(body []byte, dst any) error {
 	if len(body) < snapshotWireHeader {
 		return fmt.Errorf("snapshot envelope: %d bytes, want at least %d", len(body), snapshotWireHeader)
 	}

@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // The cross-process gate. Phase 2's 500-tick gate ran two worlds in one process,
@@ -78,11 +79,11 @@ func TestCaptureContinuesInAnotherProcess(t *testing.T) {
 	if len(origin) == 0 {
 		t.Fatal("the origin process wrote an empty surface")
 	}
-	if idx, lx, ly, differs := FirstDiff(origin, joiner); differs {
+	if idx, lx, ly, differs := snapshot.FirstDiff(origin, joiner); differs {
 		t.Fatalf("the two processes disagree %d ticks after the install, at line %d\n"+
 			"  origin: %s\n  joiner: %s\n%s",
 			crossProcessContinueTicks, idx, lx, ly,
-			strings.Join(Diff(origin, joiner, 8), "\n"))
+			strings.Join(snapshot.Diff(origin, joiner, 8), "\n"))
 	}
 
 	info, err := os.Stat(filepath.Join(dir, captureFile))
@@ -118,7 +119,7 @@ func TestSimulationEpochIsSessionIdentity(t *testing.T) {
 
 	origin := readSurface(t, filepath.Join(dir, originSurface))
 	shifted := readSurface(t, filepath.Join(dir, epochSurface))
-	if _, _, _, differs := FirstDiff(origin, shifted); !differs {
+	if _, _, _, differs := snapshot.FirstDiff(origin, shifted); !differs {
 		t.Fatal("a receiver on a different simulation epoch reproduced the sender's " +
 			"continuation exactly; the absolute instants a capture carries are then " +
 			"not epoch-relative and this control proves nothing")
@@ -174,7 +175,7 @@ func crossProcessOrigin(t *testing.T, dir string, seed uint64) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -215,7 +216,7 @@ func crossProcessReceiver(t *testing.T, dir string, seed uint64, out string) {
 	if err != nil {
 		t.Fatalf("read capture: %v", err)
 	}
-	cap, err := DecodeCapture(body)
+	cap, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}

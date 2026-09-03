@@ -38,6 +38,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -186,20 +187,20 @@ func (c *corrections) canAnswerEveryParticipant(ids []uint32) bool {
 // against — and this instance holds them only because it once proved it held that
 // exact state. Served names this instance, so the bytes are priced against the
 // edge that carried them.
-func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingRequest, req CorrectionRequest) bool {
+func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingRequest, req snapshot.CorrectionRequest) bool {
 	c.publishMu.Lock()
 	held, ok := c.retainedAtLocked(req.Tick)
 	c.publishMu.Unlock()
 	if !ok || held.authored {
 		return false
 	}
-	set, pages, err := buildShardSet(held.index, req)
+	set, pages, err := snapshot.BuildShardSet(held.index, req)
 	if err != nil {
 		c.sendUnserved(port, pending.from, req, "the retained index cannot answer this page vector")
 		return true
 	}
 	set.Served = c.a.localParticipant()
-	body, err := EncodeShardSet(set)
+	body, err := snapshot.EncodeShardSet(set)
 	if err != nil || len(body) > parameter.SnapshotShardBytesMax || len(body) > network.MaxPayloadSize {
 		c.sendUnserved(port, pending.from, req, "the repair is wider than a relayed answer may carry")
 		return true
@@ -231,13 +232,13 @@ func (c *corrections) serveRelayed(port engine.NetworkPort, pending pendingReque
 // unreachable. What the receiver does with it is degrade: it stops waiting for the
 // repair and takes the next whole authoritative world, which the keyframe cadence
 // is flooding anyway.
-func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req CorrectionRequest, why string) {
+func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req snapshot.CorrectionRequest, why string) {
 	c.a.snapshotTelemetry.relayUnserved.Add(1)
 	if port == nil {
 		return
 	}
-	body, err := EncodeUnserved(CorrectionUnserved{
-		Version: ManifestVersion, Tick: req.Tick, Term: req.Term,
+	body, err := snapshot.EncodeUnserved(snapshot.CorrectionUnserved{
+		Version: snapshot.ManifestVersion, Tick: req.Tick, Term: req.Term,
 		From: c.a.localParticipant(), Reason: why,
 	})
 	if err != nil {
@@ -251,7 +252,7 @@ func (c *corrections) sendUnserved(port engine.NetworkPort, to uint32, req Corre
 // applyUnserved is the receiver's half: stop waiting for a repair that is not
 // coming and take the next whole world instead.
 func (c *corrections) applyUnserved(body []byte) {
-	u, err := DecodeUnserved(body)
+	u, err := snapshot.DecodeUnserved(body)
 	if err != nil {
 		return
 	}

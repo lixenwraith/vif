@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // correctionSteps is how often the two-participant criteria assert convergence.
@@ -133,9 +134,9 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 func assertCorrected(t *testing.T, want []string, guest *App, label string) {
 	t.Helper()
 	got := guest.SnapshotShared()
-	if idx, lw, lg, ok := FirstDiff(want, got); ok {
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
 		t.Fatalf("%s did not converge on the correction, line %d\n  host:  %s\n  guest: %s\n%s",
-			label, idx, lw, lg, strings.Join(Diff(want, got, 8), "\n"))
+			label, idx, lw, lg, strings.Join(snapshot.Diff(want, got, 8), "\n"))
 	}
 }
 
@@ -183,7 +184,7 @@ func TestGuestConvergesOnEveryCorrection(t *testing.T) {
 
 // sharedStatesAgree reports whether two instances hold the same shared surface.
 func sharedStatesAgree(a, b *App) bool {
-	_, _, _, differs := FirstDiff(a.SnapshotShared(), b.SnapshotShared())
+	_, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared())
 	return !differs
 }
 
@@ -244,16 +245,16 @@ func TestCorrectionDeltaRoundTripsExactly(t *testing.T) {
 			t.Fatalf("seed %#x capture: %v", seed, err)
 		}
 
-		delta := DiffCapture(base, next)
-		rebuilt, err := ApplyCaptureDelta(base, delta)
+		delta := snapshot.DiffCapture(base, next)
+		rebuilt, err := snapshot.ApplyCaptureDelta(base, delta)
 		if err != nil {
 			t.Fatalf("seed %#x apply delta: %v", seed, err)
 		}
-		wantBytes, err := EncodeCapture(next)
+		wantBytes, err := snapshot.EncodeCapture(next)
 		if err != nil {
 			t.Fatalf("seed %#x encode: %v", seed, err)
 		}
-		gotBytes, err := EncodeCapture(rebuilt)
+		gotBytes, err := snapshot.EncodeCapture(rebuilt)
 		if err != nil {
 			t.Fatalf("seed %#x encode rebuilt: %v", seed, err)
 		}
@@ -264,7 +265,7 @@ func TestCorrectionDeltaRoundTripsExactly(t *testing.T) {
 		// Non-vacuous in both directions: the delta has to be smaller than the
 		// capture, or it is buying nothing, and it has to carry something, or the
 		// two captures were the same world and the round trip proved nothing.
-		deltaBytes, err := EncodeCorrectionDelta(delta)
+		deltaBytes, err := snapshot.EncodeCorrectionDelta(delta)
 		if err != nil {
 			t.Fatalf("seed %#x encode delta: %v", seed, err)
 		}
@@ -303,17 +304,17 @@ func TestCorrectionDeltaRefusesAForeignBaseline(t *testing.T) {
 		t.Fatalf("next: %v", err)
 	}
 
-	delta := DiffCapture(base, next)
-	if _, err := ApplyCaptureDelta(mid, delta); err == nil {
+	delta := snapshot.DiffCapture(base, next)
+	if _, err := snapshot.ApplyCaptureDelta(mid, delta); err == nil {
 		t.Fatal("a delta was applied to a baseline it does not name")
 	}
 
 	// And a delta whose baseline tick is right but whose body is not: the tick
 	// check passes and the integrity hash is what refuses it.
-	forged := DiffCapture(base, next)
+	forged := snapshot.DiffCapture(base, next)
 	forged.BaselineTick = mid.Header.Tick
 	mid.Header.Tick = base.Header.Tick
-	if _, err := ApplyCaptureDelta(mid, forged); err == nil {
+	if _, err := snapshot.ApplyCaptureDelta(mid, forged); err == nil {
 		t.Fatal("a delta rebuilt a body its header does not describe and was accepted")
 	}
 }
@@ -373,9 +374,9 @@ func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
 	want := stagedFresh.StagingWorld().SnapshotShared()
 	stagedFresh.Discard()
 
-	if idx, lw, lg, ok := FirstDiff(want, got); ok {
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
 		t.Fatalf("a re-used staging world differs from a fresh one at line %d\n  fresh:  %s\n  reused: %s\n%s",
-			idx, lw, lg, strings.Join(Diff(want, got, 8), "\n"))
+			idx, lw, lg, strings.Join(snapshot.Diff(want, got, 8), "\n"))
 	}
 }
 
@@ -425,9 +426,9 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	}
 
 	want, got := replaced.SnapshotShared(), moved.SnapshotShared()
-	if idx, lw, lg, ok := FirstDiff(want, got); ok {
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
 		t.Fatalf("reconcile differs from a full install at line %d\n  install:   %s\n  reconcile: %s\n%s",
-			idx, lw, lg, strings.Join(Diff(want, got, 8), "\n"))
+			idx, lw, lg, strings.Join(snapshot.Diff(want, got, 8), "\n"))
 	}
 
 	// And the futures agree, which is the claim the digest alone cannot make.
@@ -436,7 +437,7 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 		moved.Tick(1)
 	}
 	want, got = replaced.SnapshotShared(), moved.SnapshotShared()
-	if idx, lw, lg, ok := FirstDiff(want, got); ok {
+	if idx, lw, lg, ok := snapshot.FirstDiff(want, got); ok {
 		t.Fatalf("reconciled world diverged 60 ticks later at line %d\n  install:   %s\n  reconcile: %s",
 			idx, lw, lg)
 	}
@@ -611,7 +612,7 @@ func TestCorrectionCarriesTheWholeDeclaredSurface(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	delta := DiffCapture(base, next)
+	delta := snapshot.DiffCapture(base, next)
 
 	if len(delta.Streams) != len(next.Streams) || len(delta.Streams) == 0 {
 		t.Fatalf("delta carries %d stream positions, want the capture's %d",

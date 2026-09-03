@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // TestCaptureReconstructsTheSharedWorld is Phase 2's construction proof at its
@@ -43,11 +44,11 @@ func TestCaptureReconstructsTheSharedWorld(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	encoded, err := EncodeCapture(cap)
+	encoded, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	decoded, err := DecodeCapture(encoded)
+	decoded, err := snapshot.DecodeCapture(encoded)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -55,7 +56,7 @@ func TestCaptureReconstructsTheSharedWorld(t *testing.T) {
 		t.Fatalf("install: %v", err)
 	}
 
-	if idx, lx, ly, differs := FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
+	if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 		t.Fatalf("installed world differs at line %d\n  origin:   %s\n  receiver: %s", idx, lx, ly)
 	}
 }
@@ -250,7 +251,7 @@ func TestVerifyCaptureRejectsATamperedBody(t *testing.T) {
 	wrongSeed.Header.Seed ^= 1
 	// The seed is inside the integrity hash, so restore it there before asserting
 	// the identity check is what rejects this one.
-	wrongSeed.Header.Integrity, _ = captureIntegrity(wrongSeed)
+	wrongSeed.Header.Integrity, _ = snapshot.Integrity(wrongSeed)
 	err = a.VerifyCapture(wrongSeed)
 	if err == nil {
 		t.Fatal("a capture from a different seed was accepted")
@@ -263,7 +264,7 @@ func TestVerifyCaptureRejectsATamperedBody(t *testing.T) {
 // sharedSurfacesDiffer reports whether two runs disagree on the compared shared
 // surface.
 func sharedSurfacesDiffer(a, b *App) bool {
-	_, _, _, differs := FirstDiff(a.SnapshotShared(), b.SnapshotShared())
+	_, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared())
 	return differs
 }
 
@@ -341,18 +342,18 @@ func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 			if err != nil {
 				t.Fatalf("capture: %v", err)
 			}
-			encoded, err := EncodeCapture(cap)
+			encoded, err := snapshot.EncodeCapture(cap)
 			if err != nil {
 				t.Fatalf("encode: %v", err)
 			}
-			decoded, err := DecodeCapture(encoded)
+			decoded, err := snapshot.DecodeCapture(encoded)
 			if err != nil {
 				t.Fatalf("decode: %v", err)
 			}
 			if err := receiver.InstallShared(decoded); err != nil {
 				t.Fatalf("install: %v", err)
 			}
-			if idx, lx, ly, differs := FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
+			if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 				t.Fatalf("install tick differs at line %d\n  origin:   %s\n  receiver: %s", idx, lx, ly)
 			}
 
@@ -360,7 +361,7 @@ func TestInstalledWorldStaysIdenticalForFiveHundredTicks(t *testing.T) {
 			for step := range 10 {
 				origin.Tick(50)
 				receiver.Tick(50)
-				if idx, lx, ly, differs := FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
+				if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 					t.Fatalf("diverged %d ticks after install, at line %d\n  origin:   %s\n  receiver: %s\n%s",
 						(step+1)*50, idx, lx, ly,
 						strings.Join(diffSharedWorld(origin, receiver, 8), "\n"))

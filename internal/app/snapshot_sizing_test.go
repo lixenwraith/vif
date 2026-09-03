@@ -10,6 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // The storm high water. Phase 2 measured a quiet world — around four kilobytes with
@@ -182,7 +184,7 @@ func measureCaptureCost(t *testing.T, a *App) captureCost {
 	}
 
 	start = time.Now() // [wall]
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	out.encode = time.Since(start)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
@@ -197,7 +199,7 @@ func measureCaptureCost(t *testing.T, a *App) captureCost {
 	receiver := mustHeadless(t, a.Seed(), 120, 40)
 	defer receiver.Close()
 	tickUntilCursor(t, receiver)
-	decoded, err := DecodeCapture(body)
+	decoded, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -215,7 +217,7 @@ func measureCaptureCost(t *testing.T, a *App) captureCost {
 // BenchmarkCaptureAtStormHighWater is the same measurement as a benchmark, for a
 // bisect that wants to see the cost move rather than read it once.
 func BenchmarkCaptureAtStormHighWater(b *testing.B) {
-	a, err := NewHeadless(Config{Seed: stormWorldSeed, Width: 120, Height: 40, ForceDefault: true})
+	a, err := NewHeadless(Config{Seed: stormWorldSeed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true}})
 	if err != nil {
 		b.Fatalf("headless: %v", err)
 	}
@@ -235,7 +237,7 @@ func BenchmarkCaptureAtStormHighWater(b *testing.B) {
 		if err != nil {
 			b.Fatalf("capture: %v", err)
 		}
-		body, err := EncodeCapture(cap)
+		body, err := snapshot.EncodeCapture(cap)
 		if err != nil {
 			b.Fatalf("encode: %v", err)
 		}
@@ -265,11 +267,11 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("baseline capture: %v", err)
 	}
-	baseBody, err := EncodeCorrection(base)
+	baseBody, err := snapshot.EncodeCorrection(base)
 	if err != nil {
 		t.Fatalf("baseline encode: %v", err)
 	}
-	basePlain, err := json.Marshal(correctionEnvelope{Full: &base})
+	basePlain, err := json.Marshal(base)
 	if err != nil {
 		t.Fatalf("baseline plain encode: %v", err)
 	}
@@ -282,25 +284,25 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 	}
 
 	diffStart := time.Now() // [wall] cost measurement; runs outside the world lock
-	delta := DiffCapture(base, next)
+	delta := snapshot.DiffCapture(base, next)
 	diffDur := time.Since(diffStart)
 
-	deltaBody, err := EncodeCorrectionDelta(delta)
+	deltaBody, err := snapshot.EncodeCorrectionDelta(delta)
 	if err != nil {
 		t.Fatalf("delta encode: %v", err)
 	}
-	deltaPlain, err := json.Marshal(correctionEnvelope{Delta: &delta})
+	deltaPlain, err := json.Marshal(delta)
 	if err != nil {
 		t.Fatalf("delta plain encode: %v", err)
 	}
 
 	applyStart := time.Now() // [wall]
-	rebuilt, err := ApplyCaptureDelta(base, delta)
+	rebuilt, err := snapshot.ApplyCaptureDelta(base, delta)
 	applyDur := time.Since(applyStart)
 	if err != nil {
 		t.Fatalf("apply delta: %v", err)
 	}
-	rebuiltBody, err := EncodeCapture(rebuilt)
+	rebuiltBody, err := snapshot.EncodeCapture(rebuilt)
 	if err != nil {
 		t.Fatalf("rebuilt encode: %v", err)
 	}
@@ -369,10 +371,10 @@ func TestCorrectionCostAtTheStormHighWater(t *testing.T) {
 		5*float64(len(baseBody))/1024, 2*float64(len(baseBody))/1024)
 }
 
-// mustEncode is EncodeCapture with the error folded into the test.
-func mustEncode(t *testing.T, cap SharedCapture) []byte {
+// mustEncode is snapshot.EncodeCapture with the error folded into the test.
+func mustEncode(t *testing.T, cap snapshot.SharedCapture) []byte {
 	t.Helper()
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -417,7 +419,7 @@ func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("plain encode: %v", err)
 	}
-	keyframeBody, err := EncodeCorrection(base)
+	keyframeBody, err := snapshot.EncodeCorrection(base)
 	if err != nil {
 		t.Fatalf("keyframe encode: %v", err)
 	}
@@ -427,60 +429,60 @@ func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	deltaBody, err := EncodeCorrectionDelta(DiffCapture(base, next))
+	deltaBody, err := snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(base, next))
 	if err != nil {
 		t.Fatalf("delta encode: %v", err)
 	}
 
 	// The index, built and hashed outside the world lock, as the publisher does.
 	indexStart := time.Now() // [wall] cost measurement; runs outside the world lock
-	index, err := buildManifest(next, 1)
+	index, err := snapshot.BuildManifest(next, 1)
 	if err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 	indexDur := time.Since(indexStart)
-	manifestBody, err := EncodeManifest(index.Summary())
+	manifestBody, err := snapshot.EncodeManifest(index.Summary())
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
 
 	// A converged receiver: one root comparison, an empty request, no state.
-	mirror, err := buildManifest(cloneCapture(t, next), 1)
+	mirror, err := snapshot.BuildManifest(cloneCapture(t, next), 1)
 	if err != nil {
 		t.Fatalf("mirror manifest: %v", err)
 	}
 	compareStart := time.Now() // [wall]
-	converged, sections, hashedPages := compareRequest(mirror, index.Summary())
+	converged, sections, hashedPages := snapshot.CompareRequest(mirror, index.Summary())
 	compareDur := time.Since(compareStart)
 	if !converged.Converged() {
 		t.Fatal("two indexes over one capture did not agree")
 	}
-	convergedBody, err := EncodeCorrectionRequest(converged)
+	convergedBody, err := snapshot.EncodeCorrectionRequest(converged)
 	if err != nil {
 		t.Fatalf("request encode: %v", err)
 	}
 
 	// A diverged receiver: the storm's whole swarm has moved a cadence under it,
 	// which is the widest ordinary disagreement this world produces.
-	stale, err := buildManifest(cloneCapture(t, base), 1)
+	stale, err := snapshot.BuildManifest(cloneCapture(t, base), 1)
 	if err != nil {
 		t.Fatalf("stale manifest: %v", err)
 	}
-	req, _, staleHashed := compareRequest(stale, index.Summary())
+	req, _, staleHashed := snapshot.CompareRequest(stale, index.Summary())
 	if req.Converged() {
 		t.Fatal("a cadence of storm motion left the two agreeing")
 	}
-	requestBody, err := EncodeCorrectionRequest(req)
+	requestBody, err := snapshot.EncodeCorrectionRequest(req)
 	if err != nil {
 		t.Fatalf("request encode: %v", err)
 	}
 	shardStart := time.Now() // [wall]
-	set, pages, err := buildShardSet(index, req)
+	set, pages, err := snapshot.BuildShardSet(index, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
 	shardDur := time.Since(shardStart)
-	shardBody, err := EncodeShardSet(set)
+	shardBody, err := snapshot.EncodeShardSet(set)
 	if err != nil {
 		t.Fatalf("shard encode: %v", err)
 	}
@@ -488,14 +490,14 @@ func TestSelectiveCorrectionCostAtTheStormHighWater(t *testing.T) {
 	// The repair reproduces the authority exactly, which is what makes the byte
 	// figures above a comparison of equals rather than of a shortcut.
 	repaired := cloneCapture(t, base)
-	repairedIndex, err := buildManifest(repaired, 1)
+	repairedIndex, err := snapshot.BuildManifest(repaired, 1)
 	if err != nil {
 		t.Fatalf("repaired manifest: %v", err)
 	}
-	if err := validateShardSet(set, next.Header.Tick, 1, set.Root, next.Header); err != nil {
+	if err := snapshot.ValidateShardSet(set, next.Header.Tick, 1, set.Root, next.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	rep, err := applyShardSet(&repaired, repairedIndex, set)
+	rep, err := snapshot.ApplyShardSet(&repaired, repairedIndex, set)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -569,7 +571,7 @@ func TestAuthorityContinuityCostAtTheStormHighWater(t *testing.T) {
 		t.Fatalf("baseline capture: %v", err)
 	}
 	base.Header.Term, base.Header.Authority = network.FirstTerm, 1
-	keyframeBody, err := EncodeCorrection(base)
+	keyframeBody, err := snapshot.EncodeCorrection(base)
 	if err != nil {
 		t.Fatalf("keyframe encode: %v", err)
 	}
@@ -612,24 +614,24 @@ func TestAuthorityContinuityCostAtTheStormHighWater(t *testing.T) {
 
 	// The first correction under the new term, for a survivor that agrees: the
 	// successor's index out and the ack back, and no state at all.
-	index, err := buildManifest(base, 2)
+	index, err := snapshot.BuildManifest(base, 2)
 	if err != nil {
 		t.Fatalf("successor manifest: %v", err)
 	}
-	manifestBody, err := EncodeManifest(index.Summary())
+	manifestBody, err := snapshot.EncodeManifest(index.Summary())
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
-	mirror, err := buildManifest(cloneCapture(t, base), 2)
+	mirror, err := snapshot.BuildManifest(cloneCapture(t, base), 2)
 	if err != nil {
 		t.Fatalf("mirror manifest: %v", err)
 	}
-	ack, _, _ := compareRequest(mirror, index.Summary())
+	ack, _, _ := snapshot.CompareRequest(mirror, index.Summary())
 	if !ack.Converged() {
 		t.Fatal("a survivor holding the successor's own capture did not agree with it")
 	}
 	ack.Term = base.Header.Term
-	ackBody, err := EncodeCorrectionRequest(ack)
+	ackBody, err := snapshot.EncodeCorrectionRequest(ack)
 	if err != nil {
 		t.Fatalf("ack encode: %v", err)
 	}
@@ -652,54 +654,54 @@ func TestAuthorityContinuityCostAtTheStormHighWater(t *testing.T) {
 		t.Fatalf("capture: %v", err)
 	}
 	next.Header.Term, next.Header.Authority = network.FirstTerm, 1
-	authority, err := buildManifest(next, 1)
+	authority, err := snapshot.BuildManifest(next, 1)
 	if err != nil {
 		t.Fatalf("authority manifest: %v", err)
 	}
-	authorityBody, err := EncodeManifest(authority.Summary())
+	authorityBody, err := snapshot.EncodeManifest(authority.Summary())
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
-	stale, err := buildManifest(cloneCapture(t, base), 1)
+	stale, err := snapshot.BuildManifest(cloneCapture(t, base), 1)
 	if err != nil {
 		t.Fatalf("stale manifest: %v", err)
 	}
-	req, _, _ := compareRequest(stale, authority.Summary())
+	req, _, _ := snapshot.CompareRequest(stale, authority.Summary())
 	if req.Converged() {
 		t.Fatal("a cadence of storm motion left the two agreeing")
 	}
 	req.Term = next.Header.Term
-	reqBody, err := EncodeCorrectionRequest(req)
+	reqBody, err := snapshot.EncodeCorrectionRequest(req)
 	if err != nil {
 		t.Fatalf("request encode: %v", err)
 	}
 
 	// A relay answering from retention builds the same set the authority would,
 	// out of the index it kept over the authority's own capture.
-	relayIndex, err := buildManifest(cloneCapture(t, next), 1)
+	relayIndex, err := snapshot.BuildManifest(cloneCapture(t, next), 1)
 	if err != nil {
 		t.Fatalf("relay index: %v", err)
 	}
 	if relayIndex.Root() != authority.Root() {
 		t.Fatal("a relay's index over the authority's capture does not reproduce its root")
 	}
-	relaySet, pages, err := buildShardSet(relayIndex, req)
+	relaySet, pages, err := snapshot.BuildShardSet(relayIndex, req)
 	if err != nil {
 		t.Fatalf("relayed shard set: %v", err)
 	}
 	relaySet.Served = 2
-	relayBody, err := EncodeShardSet(relaySet)
+	relayBody, err := snapshot.EncodeShardSet(relaySet)
 	if err != nil {
 		t.Fatalf("relayed shard encode: %v", err)
 	}
-	if err := validateShardSet(relaySet, next.Header.Tick, 1, authority.Root(), next.Header); err != nil {
+	if err := snapshot.ValidateShardSet(relaySet, next.Header.Tick, 1, authority.Root(), next.Header); err != nil {
 		t.Fatalf("a relayed answer did not bind to the authority's manifest: %v", err)
 	}
-	directSet, _, err := buildShardSet(authority, req)
+	directSet, _, err := snapshot.BuildShardSet(authority, req)
 	if err != nil {
 		t.Fatalf("direct shard set: %v", err)
 	}
-	directBody, err := EncodeShardSet(directSet)
+	directBody, err := snapshot.EncodeShardSet(directSet)
 	if err != nil {
 		t.Fatalf("direct shard encode: %v", err)
 	}

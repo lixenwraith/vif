@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // The navigation phase, demonstrated rather than asserted.
@@ -40,7 +41,7 @@ import (
 // the bottom of this file is what closes it.
 
 // navRecord returns the navigation system's record from a capture.
-func navRecord(t *testing.T, cap SharedCapture) (int, map[string]any) {
+func navRecord(t *testing.T, cap snapshot.SharedCapture) (int, map[string]any) {
 	t.Helper()
 	for i, rec := range cap.Systems {
 		if rec.System != "navigation" {
@@ -58,16 +59,16 @@ func navRecord(t *testing.T, cap SharedCapture) (int, map[string]any) {
 
 // resealCapture writes a modified navigation record back and restores the integrity
 // hash, so what the install rejects is the state and not the envelope.
-func resealCapture(t *testing.T, cap SharedCapture, idx int, body map[string]any) SharedCapture {
+func resealCapture(t *testing.T, cap snapshot.SharedCapture, idx int, body map[string]any) snapshot.SharedCapture {
 	t.Helper()
 	data, err := json.Marshal(body)
 	if err != nil {
 		t.Fatalf("navigation record encode: %v", err)
 	}
 	out := cap
-	out.Systems = append([]SystemStateRecord(nil), cap.Systems...)
-	out.Systems[idx] = SystemStateRecord{System: "navigation", Data: data}
-	out.Header.Integrity, err = captureIntegrity(out)
+	out.Systems = append([]snapshot.SystemStateRecord(nil), cap.Systems...)
+	out.Systems[idx] = snapshot.SystemStateRecord{System: "navigation", Data: data}
+	out.Header.Integrity, err = snapshot.Integrity(out)
 	if err != nil {
 		t.Fatalf("reseal: %v", err)
 	}
@@ -149,7 +150,7 @@ func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 			for step := range navSabotageTicks {
 				origin.Tick(1)
 				receiver.Tick(1)
-				if idx, lx, ly, differs := FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
+				if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 					t.Logf("caught %d ticks after the install, at line %d\n  origin:   %s\n  receiver: %s",
 						step+1, idx, lx, ly)
 					diverged = true
@@ -184,7 +185,7 @@ func TestNavigationPhaseSurvivesAnInstall(t *testing.T) {
 	for step := range navSabotageTicks {
 		origin.Tick(1)
 		receiver.Tick(1)
-		if idx, lx, ly, differs := FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
+		if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
 			t.Fatalf("the unmodified capture diverged %d ticks after the install, at line %d\n"+
 				"  origin:   %s\n  receiver: %s", step+1, idx, lx, ly)
 		}
@@ -201,7 +202,7 @@ const navGateSeed = 0x0FA57
 // navGateOrigin builds a world with shared species steering by flow fields, and
 // returns it beside a capture of it. The species are what make the phase matter:
 // with nothing navigating, every recompute schedule looks the same.
-func navGateOrigin(t *testing.T) (*App, SharedCapture) {
+func navGateOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 	t.Helper()
 	a := mustHeadless(t, navGateSeed, 120, 40)
 	tickUntilCursor(t, a)
@@ -223,12 +224,12 @@ func navGateOrigin(t *testing.T) (*App, SharedCapture) {
 		a.Close()
 		t.Fatalf("capture: %v", err)
 	}
-	encoded, err := EncodeCapture(cap)
+	encoded, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		a.Close()
 		t.Fatalf("encode: %v", err)
 	}
-	decoded, err := DecodeCapture(encoded)
+	decoded, err := snapshot.DecodeCapture(encoded)
 	if err != nil {
 		a.Close()
 		t.Fatalf("decode: %v", err)
@@ -494,7 +495,7 @@ const navRouteSettleTicks = 120
 
 // navRouteOrigin returns the gateway world beside a capture of it, having checked
 // that the scenario is exercising the phase under test rather than sitting past it.
-func navRouteOrigin(t *testing.T) (*App, SharedCapture) {
+func navRouteOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 	t.Helper()
 	a := navRouteWorld(t)
 	tickToStatBoundary(a)
@@ -524,12 +525,12 @@ func navRouteOrigin(t *testing.T) (*App, SharedCapture) {
 		a.Close()
 		t.Fatalf("capture: %v", err)
 	}
-	encoded, err := EncodeCapture(cap)
+	encoded, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		a.Close()
 		t.Fatalf("encode: %v", err)
 	}
-	decoded, err := DecodeCapture(encoded)
+	decoded, err := snapshot.DecodeCapture(encoded)
 	if err != nil {
 		a.Close()
 		t.Fatalf("decode: %v", err)

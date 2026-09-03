@@ -7,12 +7,13 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
 // mustHeadless builds a driven App on the embedded assets, failing the test on error
 func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 	t.Helper()
-	a, err := NewHeadless(Config{Seed: seed, Width: w, Height: h, ForceDefault: true})
+	a, err := NewHeadless(Config{Seed: seed, Width: w, Height: h, Resources: resource.Options{Embedded: true}})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}
@@ -32,7 +33,7 @@ func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
 func mustJoiner(t *testing.T, seed uint64, w, h int, an event.JoinAnchor) *App {
 	t.Helper()
 	a, err := NewHeadless(Config{
-		Seed: seed, Width: w, Height: h, ForceDefault: true,
+		Seed: seed, Width: w, Height: h, Resources: resource.Options{Embedded: true},
 		MapWidth: an.Anchor.MapWidth, MapHeight: an.Anchor.MapHeight,
 		CropOnResize: an.Anchor.CropOnResize, LockMap: an.Anchor.SessionShared,
 	})
@@ -197,7 +198,7 @@ func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 // waiting in its lobby has no peer and one cursor, so the old guard let a resize
 // crop the very bounds the anchor it is handing out names.
 func TestSessionRunNeverCropsItsMap(t *testing.T) {
-	a, err := NewHeadless(Config{Seed: 0x14AE, Width: 200, Height: 60, ForceDefault: true, LockMap: true})
+	a, err := NewHeadless(Config{Seed: 0x14AE, Width: 200, Height: 60, Resources: resource.Options{Embedded: true}, LockMap: true})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}

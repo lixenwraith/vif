@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
 // corpusDir is the multi-file corpus the parity criterion needs. The embedded one
@@ -28,9 +29,9 @@ func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
 		t.Skipf("multi-file corpus %s not present", corpusDir)
 	}
 
-	base := Config{Mode: ModeHeadless, Seed: seed, ForceDefault: true}
-	base.ContentPath = corpusDir
-	base.ForceDefault = false
+	base := Config{Mode: ModeHeadless, Seed: seed, Resources: resource.Options{Embedded: true}}
+	base.Resources.Content = corpusDir
+	base.Resources.Embedded = false
 
 	host := base
 	host.Width, host.Height = 120, 40

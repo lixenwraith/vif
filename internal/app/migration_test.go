@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // settleAuthority runs the succession to a conclusion without advancing anyone's
@@ -632,7 +633,7 @@ func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
 	if got := authorityOf(fork); got.Term != network.FirstTerm || !got.Fork {
 		t.Fatalf("the refused artifact moved the fork's authority: %+v", got)
 	}
-	if idx, x, y, differs := FirstDiff(before, fork.SnapshotShared()); differs {
+	if idx, x, y, differs := snapshot.FirstDiff(before, fork.SnapshotShared()); differs {
 		t.Fatalf("state crossed into the fork at line %d\n  %s\n  %s", idx, x, y)
 	}
 

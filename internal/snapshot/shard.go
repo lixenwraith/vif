@@ -34,7 +34,7 @@
 // of them ends at a whole compressed capture, which is self-sufficient and which
 // the host publishes on its own schedule anyway. That is the bounded fallback, and
 // it is why none of the refusals here need a repair path of their own.
-package app
+package snapshot
 
 import (
 	"errors"
@@ -156,48 +156,48 @@ type CorrectionUnserved struct {
 }
 
 // EncodeUnserved renders one cannot-serve answer.
-func EncodeUnserved(u CorrectionUnserved) ([]byte, error) { return encodeSnapshotJSON(u) }
+func EncodeUnserved(u CorrectionUnserved) ([]byte, error) { return EncodeJSON(u) }
 
 // DecodeUnserved parses what EncodeUnserved produced.
 func DecodeUnserved(b []byte) (CorrectionUnserved, error) {
 	var u CorrectionUnserved
-	if err := decodeSnapshotJSON(b, &u); err != nil {
+	if err := DecodeJSON(b, &u); err != nil {
 		return CorrectionUnserved{}, fmt.Errorf("unserved answer decode: %w", err)
 	}
 	return u, nil
 }
 
 // EncodeManifest renders a manifest summary in the bounded, compressed envelope.
-func EncodeManifest(m CorrectionManifest) ([]byte, error) { return encodeSnapshotJSON(m) }
+func EncodeManifest(m CorrectionManifest) ([]byte, error) { return EncodeJSON(m) }
 
 // DecodeManifest parses what EncodeManifest produced.
 func DecodeManifest(b []byte) (CorrectionManifest, error) {
 	var m CorrectionManifest
-	if err := decodeSnapshotJSON(b, &m); err != nil {
+	if err := DecodeJSON(b, &m); err != nil {
 		return CorrectionManifest{}, fmt.Errorf("manifest decode: %w", err)
 	}
 	return m, nil
 }
 
 // EncodeCorrectionRequest renders one answer to a manifest.
-func EncodeCorrectionRequest(r CorrectionRequest) ([]byte, error) { return encodeSnapshotJSON(r) }
+func EncodeCorrectionRequest(r CorrectionRequest) ([]byte, error) { return EncodeJSON(r) }
 
 // DecodeCorrectionRequest parses what EncodeCorrectionRequest produced.
 func DecodeCorrectionRequest(b []byte) (CorrectionRequest, error) {
 	var r CorrectionRequest
-	if err := decodeSnapshotJSON(b, &r); err != nil {
+	if err := DecodeJSON(b, &r); err != nil {
 		return CorrectionRequest{}, fmt.Errorf("correction request decode: %w", err)
 	}
 	return r, nil
 }
 
 // EncodeShardSet renders one repair.
-func EncodeShardSet(s CorrectionShardSet) ([]byte, error) { return encodeSnapshotJSON(s) }
+func EncodeShardSet(s CorrectionShardSet) ([]byte, error) { return EncodeJSON(s) }
 
 // DecodeShardSet parses what EncodeShardSet produced.
 func DecodeShardSet(b []byte) (CorrectionShardSet, error) {
 	var s CorrectionShardSet
-	if err := decodeSnapshotJSON(b, &s); err != nil {
+	if err := DecodeJSON(b, &s); err != nil {
 		return CorrectionShardSet{}, fmt.Errorf("shard set decode: %w", err)
 	}
 	return s, nil
@@ -205,7 +205,7 @@ func DecodeShardSet(b []byte) (CorrectionShardSet, error) {
 
 // === receiver: the descent ===
 
-// compareRequest is what a receiver answers a manifest with.
+// CompareRequest is what a receiver answers a manifest with.
 //
 // The descent is two levels and stops at the first that agrees. Roots equal ends
 // it immediately with an empty request, which is the healthy case: one hash
@@ -218,10 +218,10 @@ func DecodeShardSet(b []byte) (CorrectionShardSet, error) {
 // Sections the receiver does not know are reported as fully mismatching, which is
 // the only honest answer: it cannot produce a page hash for content it has no
 // section for, and the sender will send the whole section's pages.
-func compareRequest(mine *captureManifest, want CorrectionManifest) (CorrectionRequest, int, int) {
+func CompareRequest(mine *Manifest, want CorrectionManifest) (CorrectionRequest, int, int) {
 	req := CorrectionRequest{
 		Version: ManifestVersion,
-		Schema:  SnapshotSchema,
+		Schema:  Schema,
 		Tick:    want.Header.Tick,
 		Run:     want.Header.Run,
 		Session: want.Header.Session,
@@ -254,7 +254,7 @@ func compareRequest(mine *captureManifest, want CorrectionManifest) (CorrectionR
 
 // === sender: building the repair ===
 
-// buildShardSet answers one request from the manifest and capture the sender
+// BuildShardSet answers one request from the manifest and capture the sender
 // retained for the tick the request names.
 //
 // A set that would exceed SnapshotShardBytesMax is not built: past that width a
@@ -262,10 +262,10 @@ func compareRequest(mine *captureManifest, want CorrectionManifest) (CorrectionR
 // instead. The bound is checked against the encoded body rather than estimated,
 // because what it is protecting is a transport frame and an allocation, and both
 // are counted in bytes that were actually produced.
-func buildShardSet(mine *captureManifest, req CorrectionRequest) (CorrectionShardSet, int, error) {
+func BuildShardSet(mine *Manifest, req CorrectionRequest) (CorrectionShardSet, int, error) {
 	set := CorrectionShardSet{
 		Version:   ManifestVersion,
-		Schema:    SnapshotSchema,
+		Schema:    Schema,
 		Header:    mine.summary.Header,
 		Root:      mine.Root(),
 		Authority: mine.authority,
@@ -306,16 +306,16 @@ func buildShardSet(mine *captureManifest, req CorrectionRequest) (CorrectionShar
 
 // === receiver: validation and apply ===
 
-// shardRepair is what one applied set moved, for telemetry and for the log line
+// ShardRepair is what one applied set moved, for telemetry and for the log line
 // an operator reads when a repair looks wrong.
-type shardRepair struct {
+type ShardRepair struct {
 	Pages    int
 	Rows     int
 	Entities int
 	Sections int
 }
 
-// validateShardSet refuses a set before anything is spliced.
+// ValidateShardSet refuses a set before anything is spliced.
 //
 // Every refusal here is atomic by construction: the checks run over the decoded
 // set and the receiver's capture is not touched until all of them have passed.
@@ -332,12 +332,12 @@ type shardRepair struct {
 //     disagrees with the set's own section summary, because both make the page
 //     identity ambiguous;
 //   - a page whose rows do not reproduce its declared hash, which is the proof.
-func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, root uint64, an CaptureHeader) error {
+func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, root uint64, an CaptureHeader) error {
 	switch {
 	case set.Version != ManifestVersion:
 		return fmt.Errorf("shard set version %d, this build reads %d", set.Version, ManifestVersion)
-	case set.Schema != SnapshotSchema:
-		return fmt.Errorf("shard set schema %d, this build reads %d", set.Schema, SnapshotSchema)
+	case set.Schema != Schema:
+		return fmt.Errorf("shard set schema %d, this build reads %d", set.Schema, Schema)
 	case set.Header.Tick != tick:
 		return fmt.Errorf("shard set describes tick %d, the manifest asked about %d", set.Header.Tick, tick)
 	case set.Header.Run != an.Run || set.Header.Session != an.Session || set.Header.Seed != an.Seed:
@@ -412,7 +412,7 @@ func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 	return nil
 }
 
-// applyShardSet splices a validated set into the receiver's own capture and proves
+// ApplyShardSet splices a validated set into the receiver's own capture and proves
 // the result.
 //
 // mine is modified in place and is the receiver's to discard on failure; nothing
@@ -422,15 +422,15 @@ func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 // equal to the sender's rather than a byte-for-byte copy of its capture: the two
 // hold their stores in whatever order their own histories left. The root is what
 // proves the equality, and the root is order-independent by construction.
-func applyShardSet(mine *SharedCapture, index *captureManifest, set CorrectionShardSet) (shardRepair, error) {
-	var rep shardRepair
+func ApplyShardSet(mine *SharedCapture, index *Manifest, set CorrectionShardSet) (ShardRepair, error) {
+	var rep ShardRepair
 	touched := make(map[string]bool, len(set.Shards))
 	cursors := ownerAuthoredCursors(*mine, set.Authority)
 
 	for _, sh := range set.Shards {
 		n, err := applyShard(mine, cursors, sh)
 		if err != nil {
-			return shardRepair{}, err
+			return ShardRepair{}, err
 		}
 		rep.Pages++
 		rep.Rows += len(sh.Rows)
@@ -440,9 +440,9 @@ func applyShardSet(mine *SharedCapture, index *captureManifest, set CorrectionSh
 	rep.Sections = len(touched)
 
 	mine.Header = set.Header
-	integrity, err := captureIntegrity(*mine)
+	integrity, err := Integrity(*mine)
 	if err != nil {
-		return shardRepair{}, err
+		return ShardRepair{}, err
 	}
 	mine.Header.Integrity = integrity
 
@@ -452,10 +452,10 @@ func applyShardSet(mine *SharedCapture, index *captureManifest, set CorrectionSh
 	}
 	slices.Sort(ids)
 	if err := index.rebuild(*mine, ids); err != nil {
-		return shardRepair{}, err
+		return ShardRepair{}, err
 	}
 	if index.Root() != set.Root {
-		return shardRepair{}, errors.New("the repaired capture does not produce the root the shard set declares")
+		return ShardRepair{}, errors.New("the repaired capture does not produce the root the shard set declares")
 	}
 	return rep, nil
 }
@@ -463,7 +463,7 @@ func applyShardSet(mine *SharedCapture, index *captureManifest, set CorrectionSh
 // applyShard writes one page into the receiver's capture, reporting how many
 // distinct entities the page's replacement touched.
 func applyShard(mine *SharedCapture, cursors map[core.Entity]bool, sh CorrectionShard) (int, error) {
-	if name, ok := strings.CutPrefix(sh.Section, storeSectionPrefix); ok {
+	if name, ok := strings.CutPrefix(sh.Section, StoreSectionPrefix); ok {
 		idx := slices.Index(engine.SharedWorldStoreNames, name)
 		if idx < 0 {
 			return 0, fmt.Errorf("shard names store %q, which this build does not carry", name)
@@ -488,15 +488,15 @@ func applyShard(mine *SharedCapture, cursors map[core.Entity]bool, sh Correction
 	}
 
 	switch sh.Section {
-	case sectionMeta:
+	case SectionMeta:
 		return 0, applyMetaShard(mine, sh)
-	case sectionStreams:
+	case SectionStreams:
 		return 0, applyStreamShard(mine, sh)
-	case sectionSystems:
+	case SectionSystems:
 		return 0, applySystemShard(mine, sh)
-	case sectionStatus:
+	case SectionStatus:
 		return 0, applyStatusShard(mine, sh)
-	case sectionFSM:
+	case SectionFSM:
 		return 0, applyFSMShard(mine, sh)
 	}
 	return 0, fmt.Errorf("shard names section %q, which this build does not index", sh.Section)

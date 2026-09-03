@@ -3,13 +3,13 @@ package app
 import (
 	"errors"
 	"fmt"
-	"os"
 
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -72,10 +72,9 @@ type Config struct {
 	// Mode selects the runtime shape; the zero value is the interactive game
 	Mode Mode
 
-	// ConfigDir is an optional root searched before the user and system roots.
-	// It may use the categorized game/, input/, audio/, content/ layout or the
-	// legacy flat layout. Empty selects platform discovery.
-	ConfigDir string
+	// Resources names every external file this run may load: the config root and
+	// the individual game, content, keymap and audio overrides.
+	Resources resource.Options
 
 	// ColorMode overrides terminal detection when ColorModeSet is true
 	ColorMode    terminal.ColorMode
@@ -86,24 +85,6 @@ type Config struct {
 
 	// AudioMuted is the initial effect mute state
 	AudioMuted bool
-
-	// MusicPath and SoundPath explicitly select optional audio TOML overrides.
-	// Empty paths use normal config-root discovery, then built-in audio assets.
-	MusicPath string
-	SoundPath string
-
-	// ContentPath is a corpus directory or a single content file;
-	// "" = config-root discovery, falling back to the embedded corpus
-	ContentPath string
-
-	// GameScript is a game.toml path or a map directory; "" = config-root discovery
-	GameScript string
-
-	// ForceDefault selects the embedded FSM config and corpus, ignoring GameScript and ContentPath
-	ForceDefault bool
-
-	// KeymapPath is a keymap TOML path; "" = config-root discovery
-	KeymapPath string
 
 	// LogScope is the initial scope spec; "" = all
 	LogScope string
@@ -183,9 +164,9 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 		return Config{}, err
 	}
 	local.Seed = fromAnchor.Seed
-	local.ForceDefault = fromAnchor.ForceDefault
-	local.GameScript = fromAnchor.GameScript
-	local.ContentPath = fromAnchor.ContentPath
+	local.Resources.Embedded = fromAnchor.Resources.Embedded
+	local.Resources.Game = fromAnchor.Resources.Game
+	local.Resources.Content = fromAnchor.Resources.Content
 	// The map latch travels with identity rather than being adopted afterwards: the
 	// FSM boots inside New and spawns cursor slot zero at the centre of whatever map
 	// it finds, so a latch applied later leaves that shared cursor on this
@@ -215,14 +196,8 @@ func (c *Config) Normalize() {
 
 // Validate reports configuration conflicts
 func (c Config) Validate() error {
-	if c.ConfigDir != "" {
-		info, err := os.Stat(c.ConfigDir)
-		if err != nil {
-			return fmt.Errorf("-config-dir: %w", err)
-		}
-		if !info.IsDir() {
-			return fmt.Errorf("-config-dir %q is not a directory", c.ConfigDir)
-		}
+	if err := c.Resources.Validate(); err != nil {
+		return err
 	}
 	if c.HostAddress != "" && c.JoinAddress != "" {
 		return errors.New("-host and -join are mutually exclusive")
@@ -241,9 +216,6 @@ func (c Config) Validate() error {
 	}
 	if c.Participants != 0 && c.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
-	}
-	if c.ForceDefault && (c.GameScript != "" || c.ContentPath != "") {
-		return errors.New("-d is mutually exclusive with -g and -f")
 	}
 	if c.LogScope != "" {
 		if _, err := vlog.ParseScopes(c.LogScope, vlog.ScopeAll); err != nil {
@@ -270,7 +242,7 @@ func (c Config) validateDriven() error {
 	if c.AudioBackend != "" && !c.Mode.Audio() {
 		return fmt.Errorf("%s: audio backend is unused, no audio service is created", c.Mode)
 	}
-	if (c.MusicPath != "" || c.SoundPath != "") && !c.Mode.Audio() {
+	if (c.Resources.Music != "" || c.Resources.Sounds != "") && !c.Mode.Audio() {
 		return fmt.Errorf("%s: audio config is unused, no audio service is created", c.Mode)
 	}
 	// TimeScaleSpec sets the simulation rate, which a manual clock records but never

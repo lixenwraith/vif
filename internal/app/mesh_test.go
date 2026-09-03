@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // meshSession builds n participants on one seed and links them into the given
@@ -239,7 +240,7 @@ func assertMeshParity(t *testing.T, apps []*App, step int) {
 	t.Helper()
 	for i := 1; i < len(apps); i++ {
 		x, y := apps[0].SnapshotShared(), apps[i].SnapshotShared()
-		if idx, lx, ly, ok := FirstDiff(x, y); ok {
+		if idx, lx, ly, ok := snapshot.FirstDiff(x, y); ok {
 			t.Fatalf("step %d: participants 1 and %d diverged at line %d\n  1: %s\n  %d: %s",
 				step, i+1, idx, lx, i+1, ly)
 		}

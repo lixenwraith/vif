@@ -1,50 +1,43 @@
-package app
+package resource
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"maps"
 	"os"
-	"reflect"
-	"sort"
 	"strings"
 
 	"github.com/lixenwraith/vi-fighter/internal/asset"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/fsm"
-	"github.com/lixenwraith/vi-fighter/internal/fsm/std"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/service"
 	"github.com/lixenwraith/vi-fighter/pkg/audio"
 )
 
-// schemaVersion is the FSM schema contract version consumed by the map editor
-const schemaVersion = 1
-
 // Check validates every resolved external config without starting the game.
-func Check(cfg Config, w io.Writer) error {
-	if err := cfg.Validate(); err != nil {
+func Check(o Options, w io.Writer) error {
+	if err := o.Validate(); err != nil {
 		return err
 	}
 	event.EnsureRegistry()
 
-	if err := checkFSM(cfg, w); err != nil {
+	if err := checkFSM(o, w); err != nil {
 		return err
 	}
-	if err := checkKeymap(cfg, w); err != nil {
+	if err := checkKeymap(o, w); err != nil {
 		return err
 	}
-	if err := checkAudio(cfg, w); err != nil {
+	if err := checkAudio(o, w); err != nil {
 		return err
 	}
-	return checkContent(cfg, w)
+	return checkContent(o, w)
 }
 
-func checkKeymap(cfg Config, w io.Writer) error {
-	path, err := ResolveKeymap(cfg)
+func checkKeymap(o Options, w io.Writer) error {
+	path, err := Keymap(o)
 	if err != nil {
 		return err
 	}
@@ -64,8 +57,8 @@ func checkKeymap(cfg Config, w io.Writer) error {
 	return nil
 }
 
-func checkAudio(cfg Config, w io.Writer) error {
-	src, err := ResolveAudioConfig(cfg)
+func checkAudio(o Options, w io.Writer) error {
+	src, err := Audio(o)
 	if err != nil {
 		return err
 	}
@@ -97,11 +90,11 @@ func checkAudio(cfg Config, w io.Writer) error {
 }
 
 // checkFSM loads the resolved FSM config and reports its source
-func checkFSM(cfg Config, w io.Writer) error {
+func checkFSM(o Options, w io.Writer) error {
 	m := fsm.NewMachine[*engine.World]()
 	manifest.RegisterFSMComponents(m)
 
-	path, err := ResolveGameConfig(cfg)
+	path, err := GameConfig(o)
 	if err != nil {
 		return err
 	}
@@ -215,8 +208,8 @@ func checkSystemDependencies(m *fsm.Machine[*engine.World], profiles []manifest.
 }
 
 // checkContent loads the corpus and reports accepted and rejected files
-func checkContent(cfg Config, w io.Writer) error {
-	src, err := ResolveContent(cfg)
+func checkContent(o Options, w io.Writer) error {
+	src, err := Corpus(o)
 	if err != nil {
 		return fmt.Errorf("content path: %w", err)
 	}
@@ -237,66 +230,4 @@ func checkContent(cfg Config, w io.Writer) error {
 		fmt.Fprintf(w, "  skip  %-32s %s\n", r.Name, r.Reason)
 	}
 	return nil
-}
-
-// Schema writes the machine schema as JSON for the map editor
-// Requires no terminal, services, or World instance
-func Schema(w io.Writer) error {
-	event.EnsureRegistry()
-
-	m := fsm.NewMachine[*engine.World]()
-	manifest.RegisterFSMComponents(m)
-
-	type field struct {
-		Name   string `json:"name"`    // toml tag (authoring name)
-		GoName string `json:"go_name"` // reflection fallback name
-		Type   string `json:"type"`
-	}
-	type eventSchema struct {
-		Name   string  `json:"name"`
-		Fields []field `json:"fields,omitempty"`
-	}
-	schema := struct {
-		SchemaVersion    int           `json:"schema_version"`
-		Events           []eventSchema `json:"events"`
-		Guards           []string      `json:"guards"`
-		Actions          []string      `json:"actions"`
-		Ops              []string      `json:"ops"`
-		ConfigIntFields  []string      `json:"config_int_fields"`
-		ConfigBoolFields []string      `json:"config_bool_fields"`
-	}{
-		SchemaVersion:    schemaVersion,
-		Guards:           m.RegisteredGuards(),
-		Actions:          m.RegisteredActions(),
-		Ops:              std.Ops(),
-		ConfigIntFields:  engine.ConfigIntFields(),
-		ConfigBoolFields: engine.ConfigBoolFields(),
-	}
-
-	event.RangeEvents(func(name string, et event.EventType, payload any) {
-		es := eventSchema{Name: name}
-		if payload != nil {
-			t := reflect.TypeOf(payload)
-			if t.Kind() == reflect.Ptr {
-				t = t.Elem()
-			}
-			for f := range t.Fields() {
-				tag := f.Tag.Get("toml")
-				n := f.Name
-				if tag != "" && tag != "-" {
-					if idx := strings.Index(tag, ","); idx >= 0 {
-						tag = tag[:idx]
-					}
-					n = tag
-				}
-				es.Fields = append(es.Fields, field{Name: n, GoName: f.Name, Type: f.Type.String()})
-			}
-		}
-		schema.Events = append(schema.Events, es)
-	})
-	sort.Slice(schema.Events, func(i, j int) bool { return schema.Events[i].Name < schema.Events[j].Name })
-
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	return enc.Encode(schema)
 }

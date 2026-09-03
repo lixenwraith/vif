@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 var bisectSeed = flag.Uint64("soak.seed", 0, "seed to bisect in TestReplayBisect")
@@ -137,9 +138,9 @@ func TestReplayLockstep(t *testing.T) {
 			continue // the source took no snapshot on this tick
 		}
 		got := rep.SnapshotSimulation()
-		if i, _, _, ok := FirstDiff(w, got); ok {
+		if i, _, _, ok := snapshot.FirstDiff(w, got); ok {
 			t.Fatalf("diverged in run %d tick %d at line %d:\n%s\nrecords on this tick:\n%s",
-				p.Run, p.Tick, i, strings.Join(Diff(w, got, 12), "\n"),
+				p.Run, p.Tick, i, strings.Join(snapshot.Diff(w, got, 12), "\n"),
 				strings.Join(recordsAt(cap.Records(), p.Run, p.Tick), "\n"))
 		}
 	}

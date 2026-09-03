@@ -65,6 +65,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
@@ -83,8 +84,8 @@ type corrections struct {
 	// the whole per-peer schedule, so a peer's plan and the capture it is planned
 	// against cannot be read a decision apart.
 	publishMu   sync.Mutex
-	baseline    SharedCapture // last keyframe published; every delta names its tick
-	keyBody     []byte        // that keyframe as a bare capture, which is what a join sends
+	baseline    snapshot.SharedCapture // last keyframe published; every delta names its tick
+	keyBody     []byte                 // that keyframe as a bare capture, which is what a join sends
 	haveKey     bool
 	lastKeyTick uint64 // the tick that keyframe describes
 
@@ -146,7 +147,7 @@ type corrections struct {
 	// the participant the guarantee is *for*, so it is the participant that gets
 	// to say when it is not being met.
 	installedMu    sync.Mutex
-	installed      SharedCapture
+	installed      snapshot.SharedCapture
 	haveBase       bool
 	lastInstalled  uint64
 	keyTick        uint64
@@ -411,7 +412,7 @@ func (c *corrections) publishRound(force bool) error {
 	// if it ever has to be elected. Paying for it on the keyframe as well is one
 	// hash pass per keyframe period, against a whole capture that has already been
 	// read, encoded and compressed.
-	index, err := buildManifest(cap, c.a.localParticipant())
+	index, err := snapshot.BuildManifest(cap, c.a.localParticipant())
 	if err != nil {
 		return fmt.Errorf("correction manifest: %w", err)
 	}
@@ -453,12 +454,12 @@ func (c *corrections) publishRound(force bool) error {
 		// what lets a join and a keyframe be the same object without the join
 		// having to learn a shape it has no use for — and it is paid once per
 		// keyframe rather than once per correction.
-		body, err = EncodeCorrection(cap)
+		body, err = snapshot.EncodeCorrection(cap)
 		if err == nil {
-			joinBody, err = EncodeCapture(cap)
+			joinBody, err = snapshot.EncodeCapture(cap)
 		}
 	} else if len(bodyPeers) > 0 {
-		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
+		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
 	}
 	if err != nil {
 		return fmt.Errorf("correction encode: %w", err)
@@ -561,11 +562,11 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
 	var body, joinBody []byte
 	if keyframe {
-		if body, err = EncodeCorrection(cap); err == nil {
-			joinBody, err = EncodeCapture(cap)
+		if body, err = snapshot.EncodeCorrection(cap); err == nil {
+			joinBody, err = snapshot.EncodeCapture(cap)
 		}
 	} else {
-		body, err = EncodeCorrectionDelta(DiffCapture(c.baseline, cap))
+		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
 	}
 	if err != nil {
 		return fmt.Errorf("correction encode: %w", err)
@@ -808,12 +809,12 @@ func (c *corrections) recordSizeLocked(keyframe bool, bytes int) {
 // Deliberately not named *Locked: in this package that suffix means the caller holds
 // the *world* lock, and here the caller must hold publishMu and must NOT hold the
 // world lock, because this acquires it.
-func (c *corrections) readWorld() (SharedCapture, error) {
+func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 	started := time.Now() // [wall] measures the stall this instance takes
 	cap, err := c.a.CaptureShared()
 	dur := time.Since(started)
 	if err != nil {
-		return SharedCapture{}, fmt.Errorf("session capture: %w", err)
+		return snapshot.SharedCapture{}, fmt.Errorf("session capture: %w", err)
 	}
 	c.a.snapshotTelemetry.captureUS.Store(dur.Microseconds())
 	return cap, nil
@@ -863,7 +864,7 @@ func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		return nil, 0, fmt.Errorf("capture encode: %w", err)
 	}
@@ -990,7 +991,7 @@ func (c *corrections) apply() {
 	c.a.snapshotTelemetry.superseded.Add(dropped)
 
 	var (
-		newest SharedCapture
+		newest snapshot.SharedCapture
 		found  bool
 	)
 	for _, body := range pending {
@@ -1036,10 +1037,10 @@ func (c *corrections) drainTransport() {
 // against the baseline this instance holds. Reconstruction re-checks the capture's
 // own integrity hash, so a delta applied to the wrong baseline is refused rather
 // than installed as a world nobody has.
-func (c *corrections) resolve(body []byte) (SharedCapture, error) {
-	kind, full, delta, err := DecodeCorrection(body)
+func (c *corrections) resolve(body []byte) (snapshot.SharedCapture, error) {
+	kind, full, delta, err := snapshot.DecodeCorrection(body)
 	if err != nil {
-		return SharedCapture{}, err
+		return snapshot.SharedCapture{}, err
 	}
 	// The term gate, applied where the artifact is decoded rather than where it is
 	// queued: an inbound frame arrives under the world lock and the queue may only
@@ -1047,23 +1048,23 @@ func (c *corrections) resolve(body []byte) (SharedCapture, error) {
 	// across a handoff and is dropped; one from a term it was never handed is the
 	// split-brain case and is refused loudly.
 	header := full.Header
-	if kind == CorrectionDelta {
+	if kind == snapshot.CorrectionDelta {
 		header = delta.Header
 	}
 	if !c.a.admitArtifactTerm(header.Term, 0) {
-		return SharedCapture{}, errors.New("correction carries a term this instance does not hold")
+		return snapshot.SharedCapture{}, errors.New("correction carries a term this instance does not hold")
 	}
-	if kind == CorrectionKeyframe {
+	if kind == snapshot.CorrectionKeyframe {
 		c.setBaseline(full)
 		return full, nil
 	}
 	base, ok := c.baselineCapture()
 	if !ok {
-		return SharedCapture{}, errors.New("correction delta arrived before any keyframe")
+		return snapshot.SharedCapture{}, errors.New("correction delta arrived before any keyframe")
 	}
-	cap, err := ApplyCaptureDelta(base, delta)
+	cap, err := snapshot.ApplyCaptureDelta(base, delta)
 	if err != nil {
-		return SharedCapture{}, err
+		return snapshot.SharedCapture{}, err
 	}
 	return cap, nil
 }
@@ -1076,7 +1077,7 @@ func (c *corrections) resolve(body []byte) (SharedCapture, error) {
 // guest's tick is a prediction like everything else about it, and a correction that
 // rebases it backwards is the ordinary case rather than an error — the capture
 // describes tick T and the guest had already extrapolated past it.
-func (c *corrections) install(cap SharedCapture) error {
+func (c *corrections) install(cap snapshot.SharedCapture) error {
 	c.installedMu.Lock()
 	stale := c.lastInstalled > 0 && cap.Header.Tick <= c.lastInstalled
 	c.installedMu.Unlock()
@@ -1119,7 +1120,7 @@ func (c *corrections) install(cap SharedCapture) error {
 
 // setBaseline records the keyframe later deltas are computed against, and the
 // tick the convergence floor is measured from.
-func (c *corrections) setBaseline(cap SharedCapture) {
+func (c *corrections) setBaseline(cap snapshot.SharedCapture) {
 	c.installedMu.Lock()
 	c.installed, c.haveBase, c.keyTick = cap, true, cap.Header.Tick
 	c.installedMu.Unlock()
@@ -1185,7 +1186,7 @@ func (c *corrections) observeFloor() {
 		4*parameter.StatusMessageDefaultTimeout, true)
 }
 
-func (c *corrections) baselineCapture() (SharedCapture, bool) {
+func (c *corrections) baselineCapture() (snapshot.SharedCapture, bool) {
 	c.installedMu.Lock()
 	defer c.installedMu.Unlock()
 	return c.installed, c.haveBase
@@ -1257,7 +1258,7 @@ func (a *App) PublishCorrection() error {
 // adoptCorrectionBaseline records the capture a join installed, so the deltas that
 // follow it have the keyframe they name. It is the same object from both ends: the
 // host sent a keyframe and this is the instance that installed it.
-func (a *App) adoptCorrectionBaseline(cap SharedCapture) {
+func (a *App) adoptCorrectionBaseline(cap snapshot.SharedCapture) {
 	if a.corrections != nil {
 		a.corrections.setBaseline(cap)
 	}

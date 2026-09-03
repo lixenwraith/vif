@@ -50,7 +50,7 @@
 //     held — that is the install's business, not the index's.
 //
 // Player-domain state needs no rule here: a capture has never contained any.
-package app
+package snapshot
 
 import (
 	"encoding/binary"
@@ -67,7 +67,7 @@ import (
 )
 
 // ManifestVersion is the correction index's own version, separate from
-// SnapshotSchema. The schema says what a capture contains; this says how it is
+// Schema. The schema says what a capture contains; this says how it is
 // partitioned and hashed. Either moving invalidates a comparison, and a receiver
 // has to be able to say which one did.
 const ManifestVersion = 1
@@ -77,16 +77,16 @@ const ManifestVersion = 1
 // capture, so a component added to the manifest is indexed without anyone
 // remembering to add it here.
 const (
-	sectionMeta    = "meta"    // the shared allocator counter and lifetime totals
-	sectionStreams = "streams" // every RNG stream's position
-	sectionSystems = "systems" // each system's declared private state (D-19)
-	sectionStatus  = "status"  // the compared status surface
-	sectionFSM     = "fsm"     // the shared state machine's runtime position
+	SectionMeta    = "meta"    // the shared allocator counter and lifetime totals
+	SectionStreams = "streams" // every RNG stream's position
+	SectionSystems = "systems" // each system's declared private state (D-19)
+	SectionStatus  = "status"  // the compared status surface
+	SectionFSM     = "fsm"     // the shared state machine's runtime position
 )
 
-// storeSectionPrefix separates a component store's section id from the fixed
+// StoreSectionPrefix separates a component store's section id from the fixed
 // sections above, so a component named "status" could not collide with one.
-const storeSectionPrefix = "w."
+const StoreSectionPrefix = "w."
 
 // Hash domain separators. Each level absorbs its own prefix first, so a value
 // hashed at one level cannot compare equal to the same bytes hashed at another.
@@ -197,45 +197,45 @@ type CorrectionManifest struct {
 	Sections []SectionSummary `json:"sections"`
 }
 
-// manifestSection is one section as the sender holds it: the summary the wire
+// section is one section as the sender holds it: the summary the wire
 // carries, plus the rows and page hashes the descent needs.
-type manifestSection struct {
+type section struct {
 	SectionSummary
 	rows     []ManifestRow
 	pageHash []uint64
 	pageRows [][]ManifestRow
 }
 
-// captureManifest is the whole index over one capture, held by whichever side
+// Manifest is the whole index over one capture, held by whichever side
 // built it. Only the CorrectionManifest half ever reaches the wire.
-type captureManifest struct {
+type Manifest struct {
 	summary   CorrectionManifest
-	sections  map[string]*manifestSection
+	sections  map[string]*section
 	index     map[string]int // section id to its slot in summary.Sections
 	authority uint32
 }
 
-// buildManifest indexes one capture.
+// BuildManifest indexes one capture.
 //
 // Nothing here reads the world: the capture is already taken, so this runs on the
 // correction goroutine and never under the world lock. That is the whole of
 // requirement 8's outside-the-lock half — the bounded read stays where it was, and
 // the partitioning, marshalling and hashing are charged to the publisher.
-func buildManifest(cap SharedCapture, authority uint32) (*captureManifest, error) {
+func BuildManifest(cap SharedCapture, authority uint32) (*Manifest, error) {
 	cursors := ownerAuthoredCursors(cap, authority)
-	m := &captureManifest{
+	m := &Manifest{
 		summary: CorrectionManifest{
 			Version:   ManifestVersion,
 			Header:    cap.Header,
 			Authority: authority,
 		},
 		authority: authority,
-		sections:  make(map[string]*manifestSection, engine.SharedWorldStoreCount+5),
+		sections:  make(map[string]*section, engine.SharedWorldStoreCount+5),
 		index:     make(map[string]int, engine.SharedWorldStoreCount+5),
 	}
 
 	add := func(id string, rows []ManifestRow) {
-		sec := newManifestSection(id, rows)
+		sec := newSection(id, rows)
 		m.sections[id] = sec
 		m.index[id] = len(m.summary.Sections)
 		m.summary.Sections = append(m.summary.Sections, sec.SectionSummary)
@@ -245,7 +245,7 @@ func buildManifest(cap SharedCapture, authority uint32) (*captureManifest, error
 	if err != nil {
 		return nil, err
 	}
-	add(sectionMeta, meta)
+	add(SectionMeta, meta)
 
 	var scratch []engine.StoreRow
 	for i := range engine.SharedWorldStoreCount {
@@ -259,28 +259,28 @@ func buildManifest(cap SharedCapture, authority uint32) (*captureManifest, error
 		if err != nil {
 			return nil, fmt.Errorf("manifest %s: %w", name, err)
 		}
-		add(storeSectionPrefix+name, rows)
+		add(StoreSectionPrefix+name, rows)
 	}
 
 	if rows, err := streamRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(sectionStreams, rows)
+		add(SectionStreams, rows)
 	}
 	if rows, err := systemRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(sectionSystems, rows)
+		add(SectionSystems, rows)
 	}
 	if rows, err := statusRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(sectionStatus, rows)
+		add(SectionStatus, rows)
 	}
 	if rows, err := fsmRows(cap); err != nil {
 		return nil, err
 	} else {
-		add(sectionFSM, rows)
+		add(SectionFSM, rows)
 	}
 
 	m.summary.Root = manifestRoot(cap.Header, authority, m.summary.Sections)
@@ -334,15 +334,15 @@ func ownerAuthoredCursors(cap SharedCapture, authority uint32) map[core.Entity]b
 	return out
 }
 
-// newManifestSection partitions one section's rows and hashes them.
+// newSection partitions one section's rows and hashes them.
 //
 // The partition is by entity or name rather than by position, so a row added or
 // removed moves nothing else between pages. The page count comes from the row
 // count at build time and travels in the summary, so both sides bucket alike.
-func newManifestSection(id string, rows []ManifestRow) *manifestSection {
+func newSection(id string, rows []ManifestRow) *section {
 	slices.SortFunc(rows, compareManifestRows)
 	pages := pageCount(len(rows))
-	sec := &manifestSection{
+	sec := &section{
 		SectionSummary: SectionSummary{ID: id, Pages: uint32(pages), Rows: uint32(len(rows))},
 		rows:           rows,
 		pageHash:       make([]uint64, pages),
@@ -405,7 +405,7 @@ func pageHash(section string, page uint32, rows []ManifestRow) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(hashDomainPage))
 	writeUint64(h, ManifestVersion)
-	writeUint64(h, SnapshotSchema)
+	writeUint64(h, Schema)
 	writeString(h, section)
 	writeUint64(h, uint64(page))
 	writeUint64(h, uint64(len(rows)))
@@ -426,7 +426,7 @@ func sectionHash(section string, pages []uint64) uint64 {
 	h := fnv.New64a()
 	_, _ = h.Write([]byte(hashDomainSection))
 	writeUint64(h, ManifestVersion)
-	writeUint64(h, SnapshotSchema)
+	writeUint64(h, Schema)
 	writeString(h, section)
 	writeUint64(h, uint64(len(pages)))
 	for _, p := range pages {
@@ -475,7 +475,7 @@ func manifestRoot(h CaptureHeader, authority uint32, sections []SectionSummary) 
 // index: a shard set touches a handful of sections, and the rest of the capture is
 // bit-for-bit what it already hashed. The sections' slots in the summary are
 // preserved, because the root absorbs them in order.
-func (m *captureManifest) rebuild(cap SharedCapture, ids []string) error {
+func (m *Manifest) rebuild(cap SharedCapture, ids []string) error {
 	rows, err := m.sectionRowsFor(cap, ids)
 	if err != nil {
 		return err
@@ -485,7 +485,7 @@ func (m *captureManifest) rebuild(cap SharedCapture, ids []string) error {
 		if !ok {
 			return fmt.Errorf("manifest holds no section %q", id)
 		}
-		sec := newManifestSection(id, r)
+		sec := newSection(id, r)
 		m.sections[id] = sec
 		m.summary.Sections[slot] = sec.SectionSummary
 	}
@@ -495,35 +495,35 @@ func (m *captureManifest) rebuild(cap SharedCapture, ids []string) error {
 }
 
 // sectionRowsFor re-derives the canonical rows of just the named sections.
-func (m *captureManifest) sectionRowsFor(cap SharedCapture, ids []string) (map[string][]ManifestRow, error) {
+func (m *Manifest) sectionRowsFor(cap SharedCapture, ids []string) (map[string][]ManifestRow, error) {
 	want := make(map[string]bool, len(ids))
 	for _, id := range ids {
 		want[id] = true
 	}
 	out := make(map[string][]ManifestRow, len(ids))
 	var err error
-	if want[sectionMeta] {
-		if out[sectionMeta], err = metaRows(cap); err != nil {
+	if want[SectionMeta] {
+		if out[SectionMeta], err = metaRows(cap); err != nil {
 			return nil, err
 		}
 	}
-	if want[sectionStreams] {
-		if out[sectionStreams], err = streamRows(cap); err != nil {
+	if want[SectionStreams] {
+		if out[SectionStreams], err = streamRows(cap); err != nil {
 			return nil, err
 		}
 	}
-	if want[sectionSystems] {
-		if out[sectionSystems], err = systemRows(cap); err != nil {
+	if want[SectionSystems] {
+		if out[SectionSystems], err = systemRows(cap); err != nil {
 			return nil, err
 		}
 	}
-	if want[sectionStatus] {
-		if out[sectionStatus], err = statusRows(cap); err != nil {
+	if want[SectionStatus] {
+		if out[SectionStatus], err = statusRows(cap); err != nil {
 			return nil, err
 		}
 	}
-	if want[sectionFSM] {
-		if out[sectionFSM], err = fsmRows(cap); err != nil {
+	if want[SectionFSM] {
+		if out[SectionFSM], err = fsmRows(cap); err != nil {
 			return nil, err
 		}
 	}
@@ -531,7 +531,7 @@ func (m *captureManifest) sectionRowsFor(cap SharedCapture, ids []string) (map[s
 	var scratch []engine.StoreRow
 	for i := range engine.SharedWorldStoreCount {
 		name := engine.SharedWorldStoreNames[i]
-		id := storeSectionPrefix + name
+		id := StoreSectionPrefix + name
 		if !want[id] {
 			continue
 		}
@@ -554,15 +554,34 @@ func (m *captureManifest) sectionRowsFor(cap SharedCapture, ids []string) (map[s
 }
 
 // Root returns the manifest's root hash.
-func (m *captureManifest) Root() uint64 { return m.summary.Root }
+func (m *Manifest) Root() uint64 { return m.summary.Root }
 
 // Summary returns the wire half of the index.
-func (m *captureManifest) Summary() CorrectionManifest { return m.summary }
+func (m *Manifest) Summary() CorrectionManifest { return m.summary }
 
 // section returns one section by id.
-func (m *captureManifest) section(id string) (*manifestSection, bool) {
+func (m *Manifest) section(id string) (*section, bool) {
 	s, ok := m.sections[id]
 	return s, ok
+}
+
+// Sections lists the index's sections in the order the root absorbs them.
+func (m *Manifest) Sections() []string {
+	out := make([]string, 0, len(m.summary.Sections))
+	for _, s := range m.summary.Sections {
+		out = append(out, s.ID)
+	}
+	return out
+}
+
+// SectionRows returns one section's canonical rows, for callers auditing what the
+// index commits to. The rows are the manifest's own; treat them as read-only.
+func (m *Manifest) SectionRows(id string) ([]ManifestRow, bool) {
+	s, ok := m.sections[id]
+	if !ok {
+		return nil, false
+	}
+	return s.rows, true
 }
 
 // repartition rebuilds one section's page hashes under a page count the sender
@@ -572,7 +591,7 @@ func (m *captureManifest) section(id string) (*manifestSection, bool) {
 // whose row count differs — which is the ordinary case when something diverged —
 // would bucket every row differently and report every page as mismatching, which
 // is a true statement that identifies nothing.
-func (m *captureManifest) repartition(id string, pages uint32) ([]uint64, bool) {
+func (m *Manifest) repartition(id string, pages uint32) ([]uint64, bool) {
 	sec, ok := m.sections[id]
 	if !ok {
 		return nil, false
@@ -596,7 +615,7 @@ func (m *captureManifest) repartition(id string, pages uint32) ([]uint64, bool) 
 }
 
 // pageContent returns one section's rows for a page under a declared partition.
-func (m *captureManifest) pageContent(id string, page, pages uint32) ([]ManifestRow, bool) {
+func (m *Manifest) pageContent(id string, page, pages uint32) ([]ManifestRow, bool) {
 	sec, ok := m.sections[id]
 	if !ok || pages == 0 || page >= pages {
 		return nil, false

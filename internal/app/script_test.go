@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
 type scriptResult struct {
@@ -35,7 +36,7 @@ payload = "width = 100\nheight = 30"
 
 	capture := journal.NewCapture()
 	a, err := NewHeadless(Config{
-		Mode: ModeHeadless, ForceDefault: true, Seed: 0x5C71,
+		Mode: ModeHeadless, Resources: resource.Options{Embedded: true}, Seed: 0x5C71,
 		Width: 80, Height: 24, Journal: true, JournalSink: capture,
 	})
 	if err != nil {
@@ -88,12 +89,12 @@ func TestRunScriptPairsHeadlessNetworkInstances(t *testing.T) {
 	hostResult := make(chan scriptResult, 1)
 	go func() {
 		stats, err := RunScript(Config{
-			ForceDefault: true, Seed: 0x5C71, HostAddress: address, Participants: 2,
+			Resources: resource.Options{Embedded: true}, Seed: 0x5C71, HostAddress: address, Participants: 2,
 		}, hostPath)
 		hostResult <- scriptResult{stats: stats, err: err}
 	}()
 
-	guestConfig := Config{ForceDefault: true, JoinAddress: address}
+	guestConfig := Config{Resources: resource.Options{Embedded: true}, JoinAddress: address}
 	deadline := time.Now().Add(2 * time.Second)
 	var guest journal.ScriptStats
 	for {

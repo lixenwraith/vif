@@ -71,16 +71,16 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	// Embedded on both sides is the only pairing Config states exactly; a mixed
 	// anchor leaves the embedded side to discovery, which VerifyAnchor then rejects
 	if a.ConfigID == embeddedLabel && a.ContentID == embeddedLabel {
-		cfg.ForceDefault = true
+		cfg.Resources.Embedded = true
 		return cfg, cfg.Validate()
 	}
 	if a.ConfigID != embeddedLabel {
-		cfg.GameScript = a.ConfigID
+		cfg.Resources.Game = a.ConfigID
 	}
 	if a.ContentID != embeddedLabel {
-		cfg.ContentPath = a.ContentID
+		cfg.Resources.Content = a.ContentID
 		if a.ContentPin != "" {
-			cfg.ContentPath = filepath.Join(a.ContentID, a.ContentPin) // ResolveContent re-splits
+			cfg.Resources.Content = filepath.Join(a.ContentID, a.ContentPin) // ResolveContent re-splits
 		}
 	}
 	return cfg, cfg.Validate()

@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // The manifest suite works on captures rather than on sessions, deliberately.
@@ -19,7 +20,7 @@ import (
 // one named cell and the shard set that answers it can be counted.
 
 // manifestFixture is a capture of a warmed world, and the index over it.
-func manifestFixture(t *testing.T) (SharedCapture, *captureManifest) {
+func manifestFixture(t *testing.T) (snapshot.SharedCapture, *snapshot.Manifest) {
 	t.Helper()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	t.Cleanup(a.Close)
@@ -29,7 +30,7 @@ func manifestFixture(t *testing.T) (SharedCapture, *captureManifest) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	index, err := buildManifest(cap, 1)
+	index, err := snapshot.BuildManifest(cap, 1)
 	if err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
@@ -38,13 +39,13 @@ func manifestFixture(t *testing.T) (SharedCapture, *captureManifest) {
 
 // cloneCapture round-trips a capture through the wire so a test can mutate one
 // copy without touching the other's slices.
-func cloneCapture(t *testing.T, cap SharedCapture) SharedCapture {
+func cloneCapture(t *testing.T, cap snapshot.SharedCapture) snapshot.SharedCapture {
 	t.Helper()
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	out, err := DecodeCapture(body)
+	out, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -55,7 +56,7 @@ func cloneCapture(t *testing.T, cap SharedCapture) SharedCapture {
 // same state exchange the index and nothing else.
 func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 	cap, host := manifestFixture(t)
-	guest, err := buildManifest(cloneCapture(t, cap), 1)
+	guest, err := snapshot.BuildManifest(cloneCapture(t, cap), 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 		t.Fatalf("two indexes over one capture produced roots %d and %d", host.Root(), guest.Root())
 	}
 
-	req, sections, pages := compareRequest(guest, host.Summary())
+	req, sections, pages := snapshot.CompareRequest(guest, host.Summary())
 	if !req.Converged() {
 		t.Fatalf("equal roots produced a request for %d sections", len(req.Sections))
 	}
@@ -74,7 +75,7 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 		t.Fatal("the comparison examined no sections at all")
 	}
 
-	set, repaired, err := buildShardSet(host, req)
+	set, repaired, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
@@ -86,11 +87,11 @@ func TestEqualRootsProduceOnlyHashTraffic(t *testing.T) {
 	// smaller than the correction it replaces or the exchange is not worth a round
 	// trip. The capture here is a quiet world; the storm figure is reported by
 	// TestSelectiveCorrectionCostAtTheStormHighWater.
-	manifestBody, err := EncodeManifest(host.Summary())
+	manifestBody, err := snapshot.EncodeManifest(host.Summary())
 	if err != nil {
 		t.Fatalf("manifest encode: %v", err)
 	}
-	captureBody, err := EncodeCapture(cap)
+	captureBody, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("capture encode: %v", err)
 	}
@@ -111,7 +112,7 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 	}
 	mine.World.Glyph[0].Value.Rune = 'Z' + 1
 
-	guest, err := buildManifest(mine, 1)
+	guest, err := snapshot.BuildManifest(mine, 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
@@ -119,22 +120,22 @@ func TestOneMismatchRepairsOnlyItsPage(t *testing.T) {
 		t.Fatal("a changed glyph did not move the root")
 	}
 
-	req, _, _ := compareRequest(guest, host.Summary())
-	if len(req.Sections) != 1 || req.Sections[0].ID != storeSectionPrefix+"glyph" {
+	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
+	if len(req.Sections) != 1 || req.Sections[0].ID != snapshot.StoreSectionPrefix+"glyph" {
 		t.Fatalf("the descent asked for %v, want only the glyph store", requestedSections(req))
 	}
 
-	set, repaired, err := buildShardSet(host, req)
+	set, repaired, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
 	if repaired != 1 || len(set.Shards) != 1 {
 		t.Fatalf("one changed cell moved %d pages", repaired)
 	}
-	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
+	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	rep, err := applyShardSet(&mine, guest, set)
+	rep, err := snapshot.ApplyShardSet(&mine, guest, set)
 	if err != nil {
 		t.Fatalf("apply: %v", err)
 	}
@@ -157,13 +158,13 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 	mine.Status.Ints[0].Value += 7
 	mine.World.NextEntity += 3
 
-	guest, err := buildManifest(mine, 1)
+	guest, err := snapshot.BuildManifest(mine, 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
-	req, _, _ := compareRequest(guest, host.Summary())
+	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
 	got := requestedSections(req)
-	want := map[string]bool{storeSectionPrefix + "glyph": true, sectionStatus: true, sectionMeta: true}
+	want := map[string]bool{snapshot.StoreSectionPrefix + "glyph": true, snapshot.SectionStatus: true, snapshot.SectionMeta: true}
 	if len(got) != len(want) {
 		t.Fatalf("the descent asked for %v, want exactly %v", got, keysOf(want))
 	}
@@ -173,7 +174,7 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 		}
 	}
 
-	set, _, err := buildShardSet(host, req)
+	set, _, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
@@ -182,10 +183,10 @@ func TestSeveralSectionsRepairWithoutAnUnrelatedOne(t *testing.T) {
 			t.Fatalf("the repair carried unrelated section %q", sh.Section)
 		}
 	}
-	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
+	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if _, err := applyShardSet(&mine, guest, set); err != nil {
+	if _, err := snapshot.ApplyShardSet(&mine, guest, set); err != nil {
 		t.Fatalf("apply: %v", err)
 	}
 	if guest.Root() != host.Root() {
@@ -216,18 +217,18 @@ func TestTheIndexHoldsNoPlayerDomainOrOwnerAuthoredState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	index, err := buildManifest(cap, 1)
+	index, err := snapshot.BuildManifest(cap, 1)
 	if err != nil {
 		t.Fatalf("manifest: %v", err)
 	}
 
-	for _, id := range []string{storeSectionPrefix + "energy", storeSectionPrefix + "heat",
-		storeSectionPrefix + "weapon", storeSectionPrefix + "combat"} {
-		sec, ok := index.section(id)
+	for _, id := range []string{snapshot.StoreSectionPrefix + "energy", snapshot.StoreSectionPrefix + "heat",
+		snapshot.StoreSectionPrefix + "weapon", snapshot.StoreSectionPrefix + "combat"} {
+		rows, ok := index.SectionRows(id)
 		if !ok {
 			t.Fatalf("the index holds no section %q", id)
 		}
-		for _, row := range sec.rows {
+		for _, row := range rows {
 			if row.Entity == remote {
 				t.Fatalf("section %q hashes the owner-authored cell of cursor %d", id, uint64(remote))
 			}
@@ -239,9 +240,9 @@ func TestTheIndexHoldsNoPlayerDomainOrOwnerAuthoredState(t *testing.T) {
 	// Player-domain entities never appear anywhere in the index, which is a
 	// property of the capture rather than of the exclusion above — asserted here so
 	// a capture that started carrying them would fail at the index as well.
-	for _, id := range index.orderedSectionIDs() {
-		sec, _ := index.section(id)
-		for _, row := range sec.rows {
+	for _, id := range index.Sections() {
+		rows, _ := index.SectionRows(id)
+		for _, row := range rows {
 			if row.Entity != 0 && row.Entity.Domain() != core.DomainShared {
 				t.Fatalf("section %q hashes entity %d, which is not shared", id, uint64(row.Entity))
 			}
@@ -256,12 +257,12 @@ func TestReorderedRowsFailTheProof(t *testing.T) {
 	cap, host := manifestFixture(t)
 	mine := cloneCapture(t, cap)
 	mine.World.Glyph[0].Value.Rune = 'Z' + 1
-	guest, err := buildManifest(mine, 1)
+	guest, err := snapshot.BuildManifest(mine, 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
-	req, _, _ := compareRequest(guest, host.Summary())
-	set, _, err := buildShardSet(host, req)
+	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
+	set, _, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
@@ -279,7 +280,7 @@ func TestReorderedRowsFailTheProof(t *testing.T) {
 	rows := set.Shards[target].Rows
 	rows[0], rows[1] = rows[1], rows[0]
 
-	if err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err == nil {
+	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header); err == nil {
 		t.Fatal("a shard with reordered rows passed its integrity proof")
 	}
 	// And nothing was written: the receiver's capture is what it was.
@@ -294,12 +295,12 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 	cap, host := manifestFixture(t)
 	mine := cloneCapture(t, cap)
 	mine.World.Glyph[0].Value.Rune = 'Z' + 1
-	guest, err := buildManifest(mine, 1)
+	guest, err := snapshot.BuildManifest(mine, 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
-	req, _, _ := compareRequest(guest, host.Summary())
-	good, _, err := buildShardSet(host, req)
+	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
+	good, _, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
@@ -309,37 +310,37 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 
 	for _, tc := range []struct {
 		name   string
-		mutate func(s *CorrectionShardSet)
+		mutate func(s *snapshot.CorrectionShardSet)
 		want   string
 	}{
-		{"unknown version", func(s *CorrectionShardSet) { s.Version = ManifestVersion + 1 }, "version"},
-		{"unknown schema", func(s *CorrectionShardSet) { s.Schema = SnapshotSchema + 1 }, "schema"},
-		{"stale baseline", func(s *CorrectionShardSet) { s.Header.Tick-- }, "tick"},
-		{"foreign session", func(s *CorrectionShardSet) { s.Header.Session++ }, "another run"},
-		{"foreign crossing fence", func(s *CorrectionShardSet) { s.Header.AuthorityCrossingSeq++ }, "header"},
-		{"another authority", func(s *CorrectionShardSet) { s.Authority = 9 }, "authority"},
-		{"corrupt content", func(s *CorrectionShardSet) {
-			s.Shards[0].Rows = append([]ManifestRow(nil), s.Shards[0].Rows...)
+		{"unknown version", func(s *snapshot.CorrectionShardSet) { s.Version = snapshot.ManifestVersion + 1 }, "version"},
+		{"unknown schema", func(s *snapshot.CorrectionShardSet) { s.Schema = snapshot.Schema + 1 }, "schema"},
+		{"stale baseline", func(s *snapshot.CorrectionShardSet) { s.Header.Tick-- }, "tick"},
+		{"foreign session", func(s *snapshot.CorrectionShardSet) { s.Header.Session++ }, "another run"},
+		{"foreign crossing fence", func(s *snapshot.CorrectionShardSet) { s.Header.AuthorityCrossingSeq++ }, "header"},
+		{"another authority", func(s *snapshot.CorrectionShardSet) { s.Authority = 9 }, "authority"},
+		{"corrupt content", func(s *snapshot.CorrectionShardSet) {
+			s.Shards[0].Rows = append([]snapshot.ManifestRow(nil), s.Shards[0].Rows...)
 			s.Shards[0].Rows[0].Value = json.RawMessage(`{"corrupt":true}`)
 		}, "page hash"},
-		{"duplicate page", func(s *CorrectionShardSet) { s.Shards = append(s.Shards, s.Shards[0]) }, "repeats"},
-		{"duplicate conflicting page", func(s *CorrectionShardSet) {
+		{"duplicate page", func(s *snapshot.CorrectionShardSet) { s.Shards = append(s.Shards, s.Shards[0]) }, "repeats"},
+		{"duplicate conflicting page", func(s *snapshot.CorrectionShardSet) {
 			conflict := s.Shards[0]
 			conflict.Hash++
 			s.Shards = append(s.Shards, conflict)
 		}, "different content"},
-		{"page outside its partition", func(s *CorrectionShardSet) {
+		{"page outside its partition", func(s *snapshot.CorrectionShardSet) {
 			s.Shards[0].Page = s.Shards[0].Pages
 		}, "page"},
-		{"partition disagrees with its section", func(s *CorrectionShardSet) {
+		{"partition disagrees with its section", func(s *snapshot.CorrectionShardSet) {
 			s.Shards[0].Pages++
 		}, "partitions into"},
-		{"unsummarised section", func(s *CorrectionShardSet) { s.Shards[0].Section = "w.nowhere" }, "does not summarise"},
+		{"unsummarised section", func(s *snapshot.CorrectionShardSet) { s.Shards[0].Section = "w.nowhere" }, "does not summarise"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			set := cloneShardSet(t, good)
 			tc.mutate(&set)
-			err := validateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header)
+			err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, set.Root, cap.Header)
 			if err == nil {
 				t.Fatalf("%s was accepted", tc.name)
 			}
@@ -352,7 +353,7 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 	// Oversize is refused by the sender rather than by the validator: past the
 	// bound a repair is a capture with per-page overhead, and the keyframe the
 	// caller falls back to is both smaller and self-sufficient.
-	body, err := EncodeShardSet(good)
+	body, err := snapshot.EncodeShardSet(good)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
@@ -369,12 +370,12 @@ func TestOneSetIsOneBaseline(t *testing.T) {
 	cap, host := manifestFixture(t)
 	mine := cloneCapture(t, cap)
 	mine.World.Glyph[0].Value.Rune = 'Z' + 1
-	guest, err := buildManifest(mine, 1)
+	guest, err := snapshot.BuildManifest(mine, 1)
 	if err != nil {
 		t.Fatalf("guest manifest: %v", err)
 	}
-	req, _, _ := compareRequest(guest, host.Summary())
-	set, _, err := buildShardSet(host, req)
+	req, _, _ := snapshot.CompareRequest(guest, host.Summary())
+	set, _, err := snapshot.BuildShardSet(host, req)
 	if err != nil {
 		t.Fatalf("shard set: %v", err)
 	}
@@ -382,7 +383,7 @@ func TestOneSetIsOneBaseline(t *testing.T) {
 	// A set answering another baseline is refused before anything is spliced, and
 	// the receiver's capture is unchanged.
 	before := guest.Root()
-	if err := validateShardSet(set, cap.Header.Tick+1, 1, set.Root, cap.Header); err == nil {
+	if err := snapshot.ValidateShardSet(set, cap.Header.Tick+1, 1, set.Root, cap.Header); err == nil {
 		t.Fatal("a repair naming another baseline was accepted")
 	}
 	if guest.Root() != before {
@@ -393,57 +394,13 @@ func TestOneSetIsOneBaseline(t *testing.T) {
 	// refused, which is what stops a repair assembled from two baselines.
 	mixed := cloneShardSet(t, set)
 	mixed.Sections[0].Hash++
-	if err := validateShardSet(mixed, cap.Header.Tick, 1, mixed.Root, cap.Header); err == nil {
+	if err := snapshot.ValidateShardSet(mixed, cap.Header.Tick, 1, mixed.Root, cap.Header); err == nil {
 		t.Fatal("a repair whose summary does not produce its root was accepted")
 	}
 }
 
-// TestHashesAreDomainSeparated pins the construction the proofs rest on: the same
-// bytes hashed as a page, as a section and as a root are three different values,
-// and a page's content under another page's identity is a fourth.
-func TestHashesAreDomainSeparated(t *testing.T) {
-	rows := []ManifestRow{{Name: "a", Value: json.RawMessage(`1`)}}
-	page := pageHash("w.glyph", 0, rows)
-	otherPage := pageHash("w.glyph", 1, rows)
-	otherSection := pageHash("w.wall", 0, rows)
-	section := sectionHash("w.glyph", []uint64{page})
-	root := manifestRoot(CaptureHeader{Schema: SnapshotSchema}, 1,
-		[]SectionSummary{{ID: "w.glyph", Hash: section, Pages: 1, Rows: 1}})
-
-	seen := map[uint64]string{}
-	for name, v := range map[string]uint64{
-		"page": page, "page 1": otherPage, "other section's page": otherSection,
-		"section": section, "root": root,
-	} {
-		if prev, dup := seen[v]; dup {
-			t.Fatalf("%s and %s hash to the same value", prev, name)
-		}
-		seen[v] = name
-	}
-
-	// A section's hash covers its pages in order, so swapping two page hashes
-	// changes it.
-	if sectionHash("s", []uint64{1, 2}) == sectionHash("s", []uint64{2, 1}) {
-		t.Fatal("a section hash does not commit to its page order")
-	}
-}
-
-// TestPagesStayBounded pins the partition: a section's page count is a function of
-// its row count, capped by the protocol rather than by the world.
-func TestPagesStayBounded(t *testing.T) {
-	for _, rows := range []int{0, 1, parameter.SnapshotManifestPageRows,
-		parameter.SnapshotManifestPageRows*parameter.SnapshotManifestMaxPages*4 + 1} {
-		if n := pageCount(rows); n < 1 || n > parameter.SnapshotManifestMaxPages {
-			t.Fatalf("%d rows partition into %d pages", rows, n)
-		}
-	}
-	if pageCount(parameter.SnapshotManifestPageRows*4) <= pageCount(parameter.SnapshotManifestPageRows) {
-		t.Fatal("the partition does not grow with the row count")
-	}
-}
-
 // requestedSections names the sections a descent asked about.
-func requestedSections(req CorrectionRequest) []string {
+func requestedSections(req snapshot.CorrectionRequest) []string {
 	out := make([]string, 0, len(req.Sections))
 	for _, s := range req.Sections {
 		out = append(out, s.ID)
@@ -461,24 +418,15 @@ func keysOf(m map[string]bool) []string {
 
 // cloneShardSet copies a repair through the wire so a case can corrupt one field
 // without disturbing the next case's copy.
-func cloneShardSet(t *testing.T, set CorrectionShardSet) CorrectionShardSet {
+func cloneShardSet(t *testing.T, set snapshot.CorrectionShardSet) snapshot.CorrectionShardSet {
 	t.Helper()
-	body, err := EncodeShardSet(set)
+	body, err := snapshot.EncodeShardSet(set)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	out, err := DecodeShardSet(body)
+	out, err := snapshot.DecodeShardSet(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
-	}
-	return out
-}
-
-// orderedSectionIDs lists the index's sections in the order the root absorbs them.
-func (m *captureManifest) orderedSectionIDs() []string {
-	out := make([]string, 0, len(m.summary.Sections))
-	for _, s := range m.summary.Sections {
-		out = append(out, s.ID)
 	}
 	return out
 }

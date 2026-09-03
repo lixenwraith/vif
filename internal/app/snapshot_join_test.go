@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // sessionOfferFor builds the closed roster a coordinator would hand out, for a test
@@ -30,17 +31,17 @@ func sessionOfferFor(an event.JoinAnchor, n int) network.SessionOffer {
 
 // mustCapture reads a capture through the encoder, so a test exercises the same
 // bytes a join would and not a value that never left the process.
-func mustCapture(t *testing.T, a *App) SharedCapture {
+func mustCapture(t *testing.T, a *App) snapshot.SharedCapture {
 	t.Helper()
 	cap, err := a.CaptureShared()
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	body, err := EncodeCapture(cap)
+	body, err := snapshot.EncodeCapture(cap)
 	if err != nil {
 		t.Fatalf("encode: %v", err)
 	}
-	decoded, err := DecodeCapture(body)
+	decoded, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		t.Fatalf("decode: %v", err)
 	}
@@ -133,9 +134,9 @@ func TestSnapshotJoinTakesTheHostsWorldNotItsOwn(t *testing.T) {
 	if err := guest.JoinSessionAt(offer, cap); err != nil {
 		t.Fatalf("join session: %v", err)
 	}
-	if idx, lx, ly, differs := FirstDiff(host.SnapshotShared(), guest.SnapshotShared()); differs {
+	if idx, lx, ly, differs := snapshot.FirstDiff(host.SnapshotShared(), guest.SnapshotShared()); differs {
 		t.Fatalf("joined world differs at line %d\n  host:  %s\n  guest: %s\n%s",
-			idx, lx, ly, strings.Join(Diff(host.SnapshotShared(), guest.SnapshotShared(), 8), "\n"))
+			idx, lx, ly, strings.Join(snapshot.Diff(host.SnapshotShared(), guest.SnapshotShared(), 8), "\n"))
 	}
 	if got := guest.Position(); got.Tick != cap.Header.Tick || got.Run != cap.Header.Run {
 		t.Fatalf("guest record position = run %d tick %d, capture named run %d tick %d",

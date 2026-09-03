@@ -13,15 +13,17 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // fixtureSeed pins the perturbation test so CI is reproducible
 const fixtureSeed = 0x5eed1e55
 
-// scriptConfig builds a hermetic headless config: ForceDefault pins the embedded
+// scriptConfig builds a hermetic headless config: the embedded resources pin the
 // FSM and corpus, so a run does not depend on cwd or any external config root
 func scriptConfig(seed uint64) Config {
-	return Config{Mode: ModeHeadless, ForceDefault: true, Seed: seed}
+	return Config{Mode: ModeHeadless, Resources: resource.Options{Embedded: true}, Seed: seed}
 }
 
 func intentMotion(op input.MotionOp, count int) *input.Intent {
@@ -221,9 +223,9 @@ func replayInto(anchors []event.JournalAnchor, recs []event.JournalRecord,
 	}
 
 	got := rep.SnapshotSimulation()
-	if i, _, _, ok := FirstDiff(want, got); ok {
+	if i, _, _, ok := snapshot.FirstDiff(want, got); ok {
 		return fmt.Errorf("diverged at line %d (%+v):\n%s",
-			i, st, strings.Join(Diff(want, got, 8), "\n"))
+			i, st, strings.Join(snapshot.Diff(want, got, 8), "\n"))
 	}
 	return nil
 }
@@ -263,7 +265,7 @@ func TestJournalDoesNotPerturb(t *testing.T) {
 	emitted, encodeFailed := journaled.JournalStats()
 	journaled.Close()
 
-	if i, x, y, ok := FirstDiff(want, got); ok {
+	if i, x, y, ok := snapshot.FirstDiff(want, got); ok {
 		t.Fatalf("journaling perturbed the run at line %d:\n  plain     %s\n  journaled %s", i, x, y)
 	}
 	if encodeFailed != 0 {
@@ -364,11 +366,11 @@ func TestDenySimKeysExist(t *testing.T) {
 	if !reg.Frozen() {
 		t.Fatal("registry is not frozen: NewHeadless no longer calls Prepare")
 	}
-	for key := range denySim {
+	for _, key := range snapshot.SimDeniedKeys() {
 		if reg.Ints.Has(key) || reg.Bools.Has(key) || reg.Floats.Has(key) || reg.Strings.Has(key) {
 			continue
 		}
-		t.Errorf("denied key %q is not registered: rename it in denySim or drop it", key)
+		t.Errorf("denied key %q is not registered: rename it in snapshot.deniedSimKey or drop it", key)
 	}
 }
 
@@ -392,10 +394,10 @@ func TestSnapshotSimulationExcludesSession(t *testing.T) {
 	ctx.MouseDisabled.Store(!ctx.MouseDisabled.Load())
 	ctx.TimeCtl.SetPaused(true)
 
-	if i, x, y, ok := FirstDiff(wantSim, a.SnapshotSimulation()); ok {
+	if i, x, y, ok := snapshot.FirstDiff(wantSim, a.SnapshotSimulation()); ok {
 		t.Fatalf("session state reached the simulation view at line %d:\n  before %s\n  after  %s", i, x, y)
 	}
-	if _, _, _, ok := FirstDiff(wantFull, a.Snapshot()); !ok {
+	if _, _, _, ok := snapshot.FirstDiff(wantFull, a.Snapshot()); !ok {
 		t.Fatal("full snapshot ignored a session change: :d save no longer reports operator state")
 	}
 }
@@ -511,7 +513,7 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 // TestScreenSizeInvertsViewport pins the inverse against the forward derivation, so
 // a margin change cannot desync the anchor from the geometry it describes
 func TestScreenSizeInvertsViewport(t *testing.T) {
-	a, err := NewHeadless(Config{ForceDefault: true, Seed: fixtureSeed, Width: 100, Height: 40})
+	a, err := NewHeadless(Config{Resources: resource.Options{Embedded: true}, Seed: fixtureSeed, Width: 100, Height: 40})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}

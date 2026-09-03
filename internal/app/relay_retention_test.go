@@ -5,6 +5,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // wireBytes is what one participant has sent and received in total, which is the
@@ -94,50 +95,50 @@ func TestARelayCannotForgeAPage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
-	index, err := buildManifest(cap, 1)
+	index, err := snapshot.BuildManifest(cap, 1)
 	if err != nil {
 		t.Fatalf("index: %v", err)
 	}
 	want := index.Summary()
 
 	// A request the relay would answer, and the honest answer to it.
-	req := CorrectionRequest{
-		Version: ManifestVersion, Schema: SnapshotSchema,
+	req := snapshot.CorrectionRequest{
+		Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
 		Tick: cap.Header.Tick, Run: cap.Header.Run, Session: cap.Header.Session,
 		Term: cap.Header.Term,
-		Sections: []SectionRequest{{
-			ID: storeSectionPrefix + "positions", Pages: want.Sections[1].Pages,
+		Sections: []snapshot.SectionRequest{{
+			ID: snapshot.StoreSectionPrefix + "positions", Pages: want.Sections[1].Pages,
 			Hash: make([]uint64, want.Sections[1].Pages),
 		}},
 	}
-	set, pages, err := buildShardSet(index, req)
+	set, pages, err := snapshot.BuildShardSet(index, req)
 	if err != nil || pages == 0 {
 		t.Fatalf("build a relayed answer: %v (%d pages)", err, pages)
 	}
 	set.Served = 2
 
-	if err := validateShardSet(set, cap.Header.Tick, 1, want.Root, want.Header); err != nil {
+	if err := snapshot.ValidateShardSet(set, cap.Header.Tick, 1, want.Root, want.Header); err != nil {
 		t.Fatalf("an honest relayed answer was refused: %v", err)
 	}
 
 	// Substituted at the relay: one row's value replaced, everything else intact.
 	forged := set
-	forged.Shards = append([]CorrectionShard(nil), set.Shards...)
-	rows := append([]ManifestRow(nil), forged.Shards[0].Rows...)
+	forged.Shards = append([]snapshot.CorrectionShard(nil), set.Shards...)
+	rows := append([]snapshot.ManifestRow(nil), forged.Shards[0].Rows...)
 	if len(rows) == 0 {
 		t.Skip("the chosen page is empty; nothing to substitute")
 	}
 	rows[0].Value = []byte(`{"X":1,"Y":1}`)
 	forged.Shards[0].Rows = rows
-	if err := validateShardSet(forged, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
+	if err := snapshot.ValidateShardSet(forged, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
 		t.Fatal("a substituted page passed the per-page proof")
 	}
 
 	// Truncated at the relay: the rows the page declares, minus one.
 	truncated := set
-	truncated.Shards = append([]CorrectionShard(nil), set.Shards...)
+	truncated.Shards = append([]snapshot.CorrectionShard(nil), set.Shards...)
 	truncated.Shards[0].Rows = truncated.Shards[0].Rows[:len(truncated.Shards[0].Rows)-1]
-	if err := validateShardSet(truncated, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
+	if err := snapshot.ValidateShardSet(truncated, cap.Header.Tick, 1, want.Root, want.Header); err == nil {
 		t.Fatal("a truncated page passed the per-page proof")
 	}
 
@@ -145,7 +146,7 @@ func TestARelayCannotForgeAPage(t *testing.T) {
 	// does not: a relay answering from a baseline of its own. The per-page hashes
 	// all reproduce, so the root is the only thing that catches it.
 	rebased := set
-	if err := validateShardSet(rebased, cap.Header.Tick, 1, want.Root^0x5EED, want.Header); err == nil {
+	if err := snapshot.ValidateShardSet(rebased, cap.Header.Tick, 1, want.Root^0x5EED, want.Header); err == nil {
 		t.Fatal("a set declaring another root than the manifest it answers was admitted")
 	}
 
@@ -160,9 +161,9 @@ func TestARelayCannotForgeAPage(t *testing.T) {
 // applyRepairFromRelay drives one relayed answer through the receiver's apply
 // path, so the refusal and the fallback are the real ones rather than a direct
 // call to the validator.
-func (c *corrections) applyRepairFromRelay(t *testing.T, set CorrectionShardSet, want CorrectionManifest) {
+func (c *corrections) applyRepairFromRelay(t *testing.T, set snapshot.CorrectionShardSet, want snapshot.CorrectionManifest) {
 	t.Helper()
-	body, err := EncodeShardSet(set)
+	body, err := snapshot.EncodeShardSet(set)
 	if err != nil {
 		t.Fatalf("encode a relayed answer: %v", err)
 	}
@@ -175,14 +176,14 @@ func (c *corrections) applyRepairFromRelay(t *testing.T, set CorrectionShardSet,
 	c.applyRepair(body)
 }
 
-func mustIndex(t *testing.T, a *App, want CorrectionManifest) *captureManifest {
+func mustIndex(t *testing.T, a *App, want snapshot.CorrectionManifest) *snapshot.Manifest {
 	t.Helper()
 	cap, err := a.CaptureShared()
 	if err != nil {
 		t.Fatalf("capture: %v", err)
 	}
 	cap.Header.Term = want.Header.Term
-	index, err := buildManifest(cap, want.Authority)
+	index, err := snapshot.BuildManifest(cap, want.Authority)
 	if err != nil {
 		t.Fatalf("index: %v", err)
 	}
@@ -205,11 +206,11 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 	// A request naming a tick far outside the ring.
 	before := statOf(relay, "snapshot.relay_unserved")
 	relay.corrections.receiveSelective(uint8(network.MsgStateRequest), uint32(3),
-		mustRequestBody(t, CorrectionRequest{
-			Version: ManifestVersion, Schema: SnapshotSchema,
+		mustRequestBody(t, snapshot.CorrectionRequest{
+			Version: snapshot.ManifestVersion, Schema: snapshot.Schema,
 			Tick: 1, Run: relayRun(relay), Session: relaySession(relay),
 			Term:     relay.AuthorityState().Term,
-			Sections: []SectionRequest{{ID: sectionMeta, Pages: 1, Hash: []uint64{0}}},
+			Sections: []snapshot.SectionRequest{{ID: snapshot.SectionMeta, Pages: 1, Hash: []uint64{0}}},
 		}))
 	relay.ApplyPendingCorrections()
 	if statOf(relay, "snapshot.relay_unserved") == before {
@@ -224,9 +225,9 @@ func TestARelayThatDroppedTheManifestSaysSo(t *testing.T) {
 	assertMeshParity(t, apps, -1)
 }
 
-func mustRequestBody(t *testing.T, req CorrectionRequest) []byte {
+func mustRequestBody(t *testing.T, req snapshot.CorrectionRequest) []byte {
 	t.Helper()
-	body, err := EncodeCorrectionRequest(req)
+	body, err := snapshot.EncodeCorrectionRequest(req)
 	if err != nil {
 		t.Fatalf("encode request: %v", err)
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
 // pair builds two joined participants on one seed, linked by an in-process
@@ -391,7 +392,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	steps := soakScale(80, 240, 800)
 
 	a, err := NewHeadless(Config{
-		Seed: seed, Width: 120, Height: 40, ForceDefault: true,
+		Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
 	})
 	if err != nil {
 		t.Fatalf("host: %v", err)

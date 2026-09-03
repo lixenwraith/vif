@@ -21,7 +21,7 @@
 // correction is refused. A delta that produced a world merely *equivalent* to the
 // sender's — the same entities in a different store order, say — passes every value
 // check and fails that hash, which is why the delta carries entity order at all.
-package app
+package snapshot
 
 import (
 	"errors"
@@ -92,7 +92,7 @@ func ApplyCaptureDelta(base SharedCapture, d SharedCaptureDelta) (SharedCapture,
 		Status:  d.Status,
 		FSM:     d.FSM,
 	}
-	want, err := captureIntegrity(out)
+	want, err := Integrity(out)
 	if err != nil {
 		return SharedCapture{}, err
 	}
@@ -122,18 +122,18 @@ type correctionEnvelope struct {
 
 // EncodeCorrection renders a keyframe for transport.
 func EncodeCorrection(cap SharedCapture) ([]byte, error) {
-	return encodeSnapshotJSON(correctionEnvelope{Full: &cap})
+	return EncodeJSON(correctionEnvelope{Full: &cap})
 }
 
 // EncodeCorrectionDelta renders a delta for transport.
 func EncodeCorrectionDelta(d SharedCaptureDelta) ([]byte, error) {
-	return encodeSnapshotJSON(correctionEnvelope{Delta: &d})
+	return EncodeJSON(correctionEnvelope{Delta: &d})
 }
 
 // DecodeCorrection parses a correction body and reports which shape it is.
 func DecodeCorrection(b []byte) (CorrectionKind, SharedCapture, SharedCaptureDelta, error) {
 	var env correctionEnvelope
-	if err := decodeSnapshotJSON(b, &env); err != nil {
+	if err := DecodeJSON(b, &env); err != nil {
 		return 0, SharedCapture{}, SharedCaptureDelta{}, fmt.Errorf("correction decode: %w", err)
 	}
 	switch {

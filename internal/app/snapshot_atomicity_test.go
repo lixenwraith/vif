@@ -2,6 +2,7 @@ package app
 
 import (
 	"encoding/json"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"strings"
 	"testing"
 )
@@ -46,7 +47,7 @@ func TestACarrierRefusalLeavesTheLiveWorldUntouched(t *testing.T) {
 		t.Fatalf("the refusal does not name the carrier that made it: %v", err)
 	}
 	after := receiver.Snapshot()
-	if idx, want, got, differs := FirstDiff(before, after); differs {
+	if idx, want, got, differs := snapshot.FirstDiff(before, after); differs {
 		t.Fatalf("a refused capture changed the live world, line %d\n  before: %s\n  after:  %s",
 			idx, want, got)
 	}
@@ -57,7 +58,7 @@ func TestACarrierRefusalLeavesTheLiveWorldUntouched(t *testing.T) {
 //
 // The integrity hash is recomputed, so the capture is intact and describes this
 // session — the refusal under test is the carrier's, not the envelope's.
-func withUnregisterableGeneticState(t *testing.T, cap SharedCapture) SharedCapture {
+func withUnregisterableGeneticState(t *testing.T, cap snapshot.SharedCapture) snapshot.SharedCapture {
 	t.Helper()
 	out := cloneCapture(t, cap)
 	replaced := false
@@ -81,7 +82,7 @@ func withUnregisterableGeneticState(t *testing.T, cap SharedCapture) SharedCaptu
 	if !replaced {
 		t.Fatal("the capture carries no genetic record to make unloadable")
 	}
-	integrity, err := captureIntegrity(out)
+	integrity, err := snapshot.Integrity(out)
 	if err != nil {
 		t.Fatalf("integrity: %v", err)
 	}

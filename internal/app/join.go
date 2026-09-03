@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -104,7 +105,7 @@ func (a *App) JoinSession(o network.SessionOffer) error {
 // becomes part of the host's. The roster is configured last, on the installed
 // world: every cursor the offer names is already there, so what is left is which of
 // them this participant drives (D-13).
-func (a *App) JoinSessionAt(o network.SessionOffer, cap SharedCapture) error {
+func (a *App) JoinSessionAt(o network.SessionOffer, cap snapshot.SharedCapture) error {
 	if err := a.validateSessionOffer(o, o.Assigned); err != nil {
 		return err
 	}

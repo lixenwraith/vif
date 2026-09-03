@@ -8,6 +8,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // TestSessionRosterStartsAndRestartsEveryParticipant captures the two places the
@@ -313,10 +314,10 @@ func TestSharedSnapshotComparesElapsedGameTime(t *testing.T) {
 	// The key is inside the compared surface, so a clock that drifts back onto the
 	// wall fails here rather than surfacing as a kinetics digest mismatch minutes in.
 	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
-	if sharedKey("time.game_elapsed_ms") == false {
+	if snapshot.SharedKey("time.game_elapsed_ms") == false {
 		t.Fatal("time.game_elapsed_ms is excluded from the shared surface again")
 	}
-	if _, _, _, differs := FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
+	if _, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
 		t.Fatal("a forged elapsed game time did not move the shared snapshot")
 	}
 }

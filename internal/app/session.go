@@ -13,6 +13,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -352,7 +353,7 @@ func (a *App) startJoinSession() error {
 	if err != nil {
 		return err
 	}
-	cap, err := DecodeCapture(body)
+	cap, err := snapshot.DecodeCapture(body)
 	if err != nil {
 		return err
 	}

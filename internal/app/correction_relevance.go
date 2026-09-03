@@ -27,6 +27,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
@@ -46,7 +47,7 @@ import (
 //
 // Caller MUST hold publishMu.
 func (c *corrections) relevanceLocked(
-	cap SharedCapture, keyframe bool, link engine.LinkMeasuringPort, ids []uint32,
+	cap snapshot.SharedCapture, keyframe bool, link engine.LinkMeasuringPort, ids []uint32,
 ) map[uint32]int {
 	out := make(map[uint32]int, len(ids))
 	if link == nil {
@@ -95,7 +96,7 @@ func near(p component.PositionComponent, c linkpace.Cell, radius int) bool {
 // Only placement and motion are consulted. They are what a participant standing
 // near an entity actually perceives, and they are the two stores whose delta says
 // "this entity is doing something" rather than "a counter on it changed".
-func movedEntities(base, next SharedCapture, keyframe bool) map[core.Entity]struct{} {
+func movedEntities(base, next snapshot.SharedCapture, keyframe bool) map[core.Entity]struct{} {
 	if keyframe {
 		return nil
 	}

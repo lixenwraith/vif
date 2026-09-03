@@ -10,6 +10,8 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/pkg/vmath"
 )
 
@@ -67,9 +69,9 @@ func towerConfig(t *testing.T, seed uint64) Config {
 	if _, err := os.Stat(filepath.Join(soakConfigDir, paths.GameConfigFile)); err != nil {
 		t.Skipf("external map set %s not present", soakConfigDir)
 	}
-	cfg := Config{Mode: ModeHeadless, Seed: seed, GameScript: soakConfigDir, Width: 160, Height: 50}
+	cfg := Config{Mode: ModeHeadless, Seed: seed, Resources: resource.Options{Game: soakConfigDir}, Width: 160, Height: 50}
 	if _, err := os.Stat(soakContentDir); err == nil {
-		cfg.ContentPath = soakContentDir
+		cfg.Resources.Content = soakContentDir
 	}
 	return cfg
 }
@@ -83,9 +85,9 @@ func TestTowerDefenseConfigCursorOwnership(t *testing.T) {
 		t.Skipf("external map set %s not present", tdConfigDir)
 	}
 
-	cfg := Config{Mode: ModeHeadless, Seed: fixtureSeed, GameScript: tdConfigDir, Width: 160, Height: 50}
+	cfg := Config{Mode: ModeHeadless, Seed: fixtureSeed, Resources: resource.Options{Game: tdConfigDir}, Width: 160, Height: 50}
 	if _, err := os.Stat(soakContentDir); err == nil {
-		cfg.ContentPath = soakContentDir
+		cfg.Resources.Content = soakContentDir
 	}
 	a, err := NewHeadless(cfg)
 	if err != nil {
@@ -220,7 +222,7 @@ func replaySoak(run soakRun, recs []event.JournalRecord) error {
 	return replayInto(run.cap.Anchors(), recs, run.want, run.end)
 }
 
-// TestReplaySoak drives many seeded scripts through journal → replay → FirstDiff
+// TestReplaySoak drives many seeded scripts through journal → replay → snapshot.FirstDiff
 func TestReplaySoak(t *testing.T) {
 	n := soakScale(8, 20, 120)
 	for i := range n {
@@ -271,7 +273,7 @@ func TestSoakSessionStateStaysOperator(t *testing.T) {
 		t.Fatalf("perturbed script: %v", err)
 	}
 
-	if i, x, y, ok := FirstDiff(want, noisy.SnapshotSimulation()); ok {
+	if i, x, y, ok := snapshot.FirstDiff(want, noisy.SnapshotSimulation()); ok {
 		t.Fatalf("operator state reached the simulation view at line %d:\n  plain %s\n  noisy %s", i, x, y)
 	}
 }
@@ -465,7 +467,7 @@ func TestSoakAppsAreIndependent(t *testing.T) {
 	for _, seed := range []uint64{0x50a4002d, 0x50a40065, 0x50a41006} {
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
 			first := soakSnapshot(t, seed)
-			if i, x, y, ok := FirstDiff(first, soakSnapshot(t, seed)); ok {
+			if i, x, y, ok := snapshot.FirstDiff(first, soakSnapshot(t, seed)); ok {
 				t.Fatalf("two runs of one seed differ at line %d:\n  first  %s\n  second %s", i, x, y)
 			}
 		})

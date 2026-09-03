@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -43,7 +44,7 @@ import (
 type StagedInstall struct {
 	live    *App
 	staging *App
-	capture SharedCapture
+	capture snapshot.SharedCapture
 
 	stageDur   time.Duration
 	commitDur  time.Duration
@@ -67,7 +68,7 @@ type StagedInstall struct {
 // whether the capture can be loaded by this build — carrier names, stream names,
 // FSM regions, every carrier's own decode — and that is what the second world is
 // for.
-func (a *App) StageShared(cap SharedCapture) (*StagedInstall, error) {
+func (a *App) StageShared(cap snapshot.SharedCapture) (*StagedInstall, error) {
 	started := time.Now() // [wall] telemetry only; the install carries no instant
 	if err := a.VerifyCapture(cap); err != nil {
 		return nil, err
@@ -104,7 +105,7 @@ func (s *StagedInstall) Tick() uint64 { return s.capture.Header.Tick }
 
 // Capture returns the staged capture, for a caller that has to answer the host
 // about what it installed.
-func (s *StagedInstall) Capture() SharedCapture { return s.capture }
+func (s *StagedInstall) Capture() snapshot.SharedCapture { return s.capture }
 
 // StagingWorld exposes the resolved second world, for a test that wants to compare
 // it against the live one before the swap. It is invalid after Commit or Discard.
@@ -182,7 +183,7 @@ func (s *StagedInstall) Discard() {
 //
 // The second return reports whether the world was just built, which is what decides
 // whether its FSM boot queue still needs settling.
-func (a *App) stagingWorld(cap SharedCapture) (*App, bool, error) {
+func (a *App) stagingWorld(cap snapshot.SharedCapture) (*App, bool, error) {
 	a.stageMu.Lock()
 	defer a.stageMu.Unlock()
 
@@ -460,7 +461,7 @@ func (s *StagedInstall) release() { s.staging = nil }
 // spawns cursor slot zero centred on the map inside New, and a staging world built
 // on different bounds would reject nothing but would answer a different question
 // from the one being asked.
-func (a *App) newStagingApp(cap SharedCapture) (*App, error) {
+func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	cfg := a.cfg
 	cfg.Mode = ModeHeadless
 	cfg.Journal = false
@@ -493,13 +494,13 @@ func (a *App) newStagingApp(cap SharedCapture) (*App, error) {
 // world is built from that same instance's configuration, so asking it again would
 // re-derive the same verdict from the same inputs — and would fail outright after a
 // reset, whose session counter a freshly constructed world has not reached.
-func (a *App) installSharedResolved(cap SharedCapture) error {
+func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
 	return a.installShared(cap)
 }
 
 // reconcileSharedResolved is the live half of a staged install: the same capture,
 // already proved loadable by the staging pass, written onto the world this instance
 // is holding rather than over the top of it.
-func (a *App) reconcileSharedResolved(cap SharedCapture) (engine.WorldDifference, error) {
+func (a *App) reconcileSharedResolved(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
 	return a.reconcileShared(cap)
 }

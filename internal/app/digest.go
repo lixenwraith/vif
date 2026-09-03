@@ -8,6 +8,7 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // FNV-1a 64, inlined so a per-tick digest allocates nothing
@@ -127,14 +128,14 @@ func (a *App) sharedDigestLocked(detail bool) engine.SharedStateDigest {
 		"|combat=" + wd.Combat.String()
 	contextLines := make([]string, 0, 8)
 	a.ctx.SnapshotContext(func(sub string, args ...any) {
-		if isRecord(args, "session") || isRecord(args, "view") {
+		if snapshot.IsRecord(args, "session") || snapshot.IsRecord(args, "view") {
 			return
 		}
-		contextLines = append(contextLines, snapshotLine("ctx", sub, filterFields(args)))
+		contextLines = append(contextLines, snapshot.Line("ctx", sub, snapshot.FilterFields(args)))
 	})
 	statusLines := make([]string, 0, 56)
-	a.world.Resources.Status.SnapshotFiltered(sharedKey, func(sub string, args ...any) {
-		statusLines = append(statusLines, snapshotLine("reg", sub, args))
+	a.world.Resources.Status.SnapshotFiltered(snapshot.SharedKey, func(sub string, args ...any) {
+		statusLines = append(statusLines, snapshot.Line("reg", sub, args))
 	})
 	// One hash per record, so a mismatch names the record rather than the category
 	// it belongs to. Built only on request: it is a diagnostic, not a probe.
