@@ -572,11 +572,18 @@ func waitSocket(t *testing.T, port *network.SocketPort, ready func() bool, what 
 	t.Helper()
 	deadline := time.NewTimer(socketWait)
 	defer deadline.Stop()
+	// The change signal coalesces: it is a non-blocking send on a one-deep channel,
+	// so the wakeup for the very frame this call is waiting for can be dropped
+	// while an earlier one is still queued. Polling beside it makes the wait depend
+	// on the condition rather than on a signal that may already have been spent.
+	poll := time.NewTicker(time.Millisecond)
+	defer poll.Stop()
 	for !ready() {
 		select {
 		case err := <-port.Errors():
 			t.Fatalf("%s: %v", what, err)
 		case <-port.Changes():
+		case <-poll.C:
 		case <-deadline.C:
 			t.Fatalf("timed out waiting for %s", what)
 		}

@@ -412,9 +412,17 @@ func settleCorrections(t *testing.T, host, guest *App) {
 
 // waitForRosterPair ticks both instances until the arrival crossing has applied on
 // each, and fails if the entity it created is not the same one.
+// waitForRosterPair ticks both instances until the arrival crossing has created
+// the same shared cursor on each.
+//
+// The bound is wall time rather than a tick count. The arrival is produced on the
+// accept goroutine and travels over a real socket, so counting ticks lets a loaded
+// machine spin through the whole budget before the frame has crossed loopback at
+// all; the sleep is what makes each iteration an opportunity for it to arrive.
 func waitForRosterPair(t *testing.T, host, guest *App) {
 	t.Helper()
-	for range 4 * parameter.NetworkBarrierDelayTicks {
+	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
+	for time.Now().Before(deadline) {
 		var hostE, guestE core.Entity
 		host.World().RunSafe(func() { hostE = host.World().Resources.Player.Slot(1) })
 		guest.World().RunSafe(func() { guestE = guest.World().Resources.Player.Slot(1) })
@@ -423,6 +431,7 @@ func waitForRosterPair(t *testing.T, host, guest *App) {
 		}
 		host.Tick(1)
 		guest.Tick(1)
+		time.Sleep(joinTestTickInterval / 5)
 	}
 	var hostE, guestE core.Entity
 	host.World().RunSafe(func() { hostE = host.World().Resources.Player.Slot(1) })

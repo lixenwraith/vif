@@ -27,13 +27,14 @@ const correctionSteps = 8
 //
 // correctionExchangeFastPasses is what an in-process link needs: the manifest is
 // answered on the first pass, the repair it provoked is served and applied on the
-// second, and the third is the margin a keyframe fallback takes. The passes past
-// it exist for a socket, which delivers on its own goroutine — they wait
-// correctionExchangePoll each, so a round trip over loopback has about six
-// milliseconds to complete before the harness gives up and advances a tick.
+// second, and the third is the margin a keyframe fallback takes. The passes past it
+// exist for a socket, which delivers on its own goroutine and costs nothing when
+// the exchange has already completed. The budget is generous because the suite
+// runs its parallel tests on every core: a loopback round trip competes with the
+// race detector, not with the network.
 const (
 	correctionExchangeFastPasses = 3
-	correctionExchangePasses     = 30
+	correctionExchangePasses     = 250
 	correctionExchangePoll       = 200 * time.Microsecond
 )
 
