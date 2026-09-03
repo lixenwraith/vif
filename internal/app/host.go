@@ -232,6 +232,11 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 	port := a.midRunPort
 	a.sessionMu.Unlock()
 	if port == nil {
+		// A dedicated host never opened a socket of its own: its endpoint is the
+		// one NetworkService contributed for -serve.
+		port, _ = a.socketPort()
+	}
+	if port == nil {
 		return
 	}
 	if err := a.sendMidRunGate(port, id); err != nil {

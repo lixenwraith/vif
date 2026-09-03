@@ -18,6 +18,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
@@ -69,6 +70,120 @@ payload = "width = 100\nheight = 30"
 	if got := records[0]; got.Type != event.EventScreenResize || got.Origin != event.OriginDebug ||
 		got.Domain != core.DomainPlayer || got.Tick != 0 {
 		t.Fatalf("scripted record = %+v", got)
+	}
+}
+
+// TestScriptPacingSelectsTheWallRate covers the whole pacing policy: the default
+// is a property of the run rather than of the flags, and -speed overrides it.
+func TestScriptPacingSelectsTheWallRate(t *testing.T) {
+	t.Parallel()
+	tick := parameter.GameUpdateInterval
+	for _, tc := range []struct {
+		name     string
+		cfg      Config
+		interval time.Duration
+		paced    bool
+		wantErr  bool
+	}{
+		{"solo runs flat out", Config{}, tick, false, false},
+		{"a session is paced from tick zero", Config{HostAddress: ":0"}, tick, true, false},
+		{"a joining session is paced too", Config{JoinAddress: "h:1"}, tick, true, false},
+		{"an explicit rate paces a solo run", Config{TimeScaleSpec: "1"}, tick, true, false},
+		{"a faster rate spends less wall time", Config{TimeScaleSpec: "2"}, tick / 2, true, false},
+		{"a slower rate spends more", Config{TimeScaleSpec: "1/2"}, tick * 2, true, false},
+		{"max removes pacing", Config{TimeScaleSpec: ScriptPaceMax}, tick, false, false},
+		{"an unknown token is refused", Config{TimeScaleSpec: "3/7"}, 0, false, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			interval, paced, err := scriptPacing(tc.cfg)
+			if (err != nil) != tc.wantErr {
+				t.Fatalf("scriptPacing error = %v, want error %t", err, tc.wantErr)
+			}
+			if err != nil {
+				return
+			}
+			if interval != tc.interval || paced != tc.paced {
+				t.Fatalf("scriptPacing = (%s, %t), want (%s, %t)", interval, paced, tc.interval, tc.paced)
+			}
+		})
+	}
+
+	// A script that outran its peers would produce epochs faster than the barrier
+	// delivers them, so the one combination that cannot mean anything is refused.
+	unpacedSession := Config{
+		Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight,
+		HostAddress: ":0", TimeScaleSpec: ScriptPaceMax, scriptedSession: true,
+	}
+	if err := unpacedSession.Validate(); err == nil {
+		t.Fatal("-speed max was accepted for a session")
+	}
+	// The same rate on a driven run that is not a script is still meaningless.
+	harness := Config{Mode: ModeHeadless, Width: DefaultWidth, Height: DefaultHeight, TimeScaleSpec: "2"}
+	if err := harness.Validate(); err == nil {
+		t.Fatal("a manual-clock harness accepted a simulation rate")
+	}
+}
+
+// TestAPacedScriptSpendsItsWallBudget asserts the pacing is real: a solo script
+// asked for real time takes at least the wall time its ticks describe, and the
+// same script left at the default finishes far inside it.
+func TestAPacedScriptSpendsItsWallBudget(t *testing.T) {
+	t.Parallel()
+	const ticks = 8
+	path := filepath.Join(t.TempDir(), "paced.toml")
+	body := fmt.Sprintf("schema = 1\nticks = %d\nwidth = 80\nheight = 24\n", ticks)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	base := Config{Resources: resource.Options{Embedded: true}, Seed: 0x5C71}
+
+	paced := base
+	paced.TimeScaleSpec = "1"
+	start := time.Now() // [wall] the property under test
+	if _, err := RunScript(paced, path); err != nil {
+		t.Fatalf("paced script: %v", err)
+	}
+	elapsed := time.Since(start)
+	// One tick short of the budget: the last tick of a run is not waited out.
+	if want := (ticks - 1) * parameter.GameUpdateInterval; elapsed < want {
+		t.Fatalf("a real-time script of %d ticks took %s, want at least %s", ticks, elapsed, want)
+	}
+
+	start = time.Now()
+	if _, err := RunScript(base, path); err != nil {
+		t.Fatalf("unpaced script: %v", err)
+	}
+	if unpaced := time.Since(start); unpaced >= elapsed {
+		t.Fatalf("an unpaced script took %s against a real-time %s", unpaced, elapsed)
+	}
+}
+
+// TestPresentedScriptModeIsWiredForATerminal pins the mode's shape rather than its
+// output: a presented script simulates exactly what the headless one does, so it
+// must take its geometry from the script and its clock from the driver, and only
+// the terminal and the renderer may differ. The run itself needs a terminal, which
+// a test process does not have, so it must refuse cleanly rather than panic.
+func TestPresentedScriptModeIsWiredForATerminal(t *testing.T) {
+	t.Parallel()
+	if !ModeScript.Presents() {
+		t.Fatal("a presented script builds no renderer")
+	}
+	if !ModeScript.Driven() {
+		t.Fatal("a presented script runs a scheduler goroutine beside its driver")
+	}
+	if ModeScript.OwnsGeometry() || ModeScript.OwnsInput() {
+		t.Fatal("a presented script takes geometry or input from the terminal")
+	}
+
+	path := filepath.Join(t.TempDir(), "watch.toml")
+	if err := os.WriteFile(path, []byte("schema = 1\nticks = 1\nwidth = 80\nheight = 24\n"), 0o600); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	_, err := RunScript(Config{
+		Mode: ModeScript, Resources: resource.Options{Embedded: true}, Seed: 0x5C71,
+	}, path)
+	if err == nil {
+		t.Skip("this environment has a usable terminal, so the refusal cannot be observed")
 	}
 }
 

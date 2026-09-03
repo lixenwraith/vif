@@ -76,6 +76,8 @@ Assembly is mode-dependent:
 | `ModePlay` | terminal, content, audio, and network; `RoleNone` normally, `RoleHost`/`RolePeer` with startup flags |
 | `ModeHeadless` | content only for ordinary harnesses; `app.RunScript` additionally registers `RoleHost`/`RolePeer` network when a startup flag is present |
 | `ModeReplay` | terminal, content, and audio |
+| `ModeScript` | terminal, content, audio, and the same `RoleHost`/`RolePeer` network a headless script registers |
+| `ModeServer` | content and `RoleHost` network; no terminal and no audio |
 
 The predicates in `internal/app/config.go` are authoritative for terminal and
 audio capabilities. Network is role-selected separately: play always constructs

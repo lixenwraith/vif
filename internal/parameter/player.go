@@ -8,6 +8,13 @@ import (
 
 const MaxPlayers = 16
 
+// NoPlayerSlot is the roster slot of a participant that owns no cursor. A
+// dedicated host is one: it authors the shared world, holds a participant
+// identity and a vote, and puts nobody on the map. It is outside the slot range
+// by construction, so every "is this my slot" test answers no without a special
+// case.
+const NoPlayerSlot uint8 = 0xFF
+
 // MaxPredictedCursorCells bounds D-18's outstanding local cursor predictions: the
 // cells this instance has requested and not yet seen announced. One playout lead of
 // input fits many times over, so reaching it means reconciliation has stopped

@@ -62,12 +62,34 @@ func (a *App) hostNetworkConfig() *network.Config {
 		Assign:  a.assignParticipant,
 		Release: a.releaseParticipant,
 	}, netCfg.ConnectTimeout)
+	if a.cfg.Mode.Serves() {
+		// A dedicated host outlives its guests, so it admits a dial after the lobby
+		// has closed: a participant that dropped can come back into the slot its
+		// departure released. The hook is installed here and answers nothing until
+		// Serve arms it, because before that the gate is the lobby's own.
+		netCfg.MaxPeers = parameter.MaxPlayers
+		netCfg.OnAdmit = a.admitLateJoiner
+	}
 	return netCfg
 }
 
+// admitLateJoiner gates a dial that arrives after the startup lobby closed.
+func (a *App) admitLateJoiner(id network.PeerID) {
+	if a.lateJoins.Load() {
+		a.releaseMidRunJoiner(id)
+	}
+}
+
 // remoteParticipantCount is the lobby size this host waits for, excluding itself.
+//
+// A dedicated host is excluded by construction rather than by subtraction: it
+// holds no cursor, so the number it waits for is the number of guests and the
+// roster is exactly those guests plus one cursorless coordinator.
 func (a *App) remoteParticipantCount() int {
 	n := a.cfg.Participants
+	if a.cfg.Mode.Serves() {
+		return min(max(n, 1), parameter.MaxPlayers)
+	}
 	if n < 2 {
 		n = 2
 	}
@@ -75,6 +97,15 @@ func (a *App) remoteParticipantCount() int {
 		n = parameter.MaxPlayers
 	}
 	return n - 1
+}
+
+// hostSlot is the roster slot this instance takes for itself: the first one on an
+// ordinary host, and none at all on a dedicated one.
+func (a *App) hostSlot() uint8 {
+	if a.cfg.Mode.Serves() {
+		return parameter.NoPlayerSlot
+	}
+	return 0
 }
 
 // newJoiningApp receives the host anchor, adopts it, then constructs the App.
@@ -138,7 +169,7 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 
 	limit := a.remoteParticipantCount() + 1
 	if len(a.sessionRoster) == 0 {
-		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: 0}}
+		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: a.hostSlot()}}
 	}
 	if len(a.sessionRoster) >= limit {
 		return network.SessionOffer{}, fmt.Errorf("session is full at %d participants", limit)
@@ -159,7 +190,7 @@ func (a *App) nextParticipantLocked() network.SessionParticipant {
 		})
 	}
 	var out network.SessionParticipant
-	for id := 1; id <= parameter.MaxPlayers; id++ {
+	for id := 1; id <= parameter.MaxPlayers+1; id++ {
 		if !taken(func(p network.SessionParticipant) int { return int(p.ID) }, id) {
 			out.ID = network.PeerID(id)
 			break
@@ -218,7 +249,7 @@ func (a *App) hostOffer() (network.SessionOffer, error) {
 	if len(a.sessionRoster) == 0 {
 		// No joiner ever arrived; describe the two-participant lobby this host opened.
 		a.sessionRoster = []network.SessionParticipant{
-			{ID: hostParticipantID, Slot: 0}, {ID: 2, Slot: 1},
+			{ID: hostParticipantID, Slot: a.hostSlot()}, {ID: 2, Slot: 1},
 		}
 	}
 	assigned := a.authorityID()

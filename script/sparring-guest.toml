@@ -1,0 +1,71 @@
+# The mirror of script/sparring-host.toml: the person hosts, the script joins.
+#
+#   ./bin/vif -host 127.0.0.1:7777 -players 2       # the person
+#   ./bin/vif -script script/sparring-guest.toml -join 127.0.0.1:7777
+#
+# A joining script adopts the host's simulation identity and map latch from the
+# handshake, so its own width and height only size the viewport its intents are
+# resolved against. Pacing is real time, as it is for any participant.
+schema = 1
+ticks = 6000
+width = 120
+height = 40
+
+[[action]]
+tick = 1
+command = "god"
+
+[[action]]
+tick = 20
+intent = "motion_left"
+count = 10
+
+[[action]]
+tick = 60
+intent = "motion_up"
+count = 6
+
+[[action]]
+tick = 100
+intent = "fire_main"
+count = 4
+
+[[action]]
+tick = 160
+intent = "motion_right"
+count = 10
+
+[[action]]
+tick = 220
+intent = "fire_special"
+count = 2
+
+[[action]]
+tick = 1200
+intent = "motion_down"
+count = 12
+
+[[action]]
+tick = 1400
+intent = "fire_main"
+count = 6
+
+[[action]]
+tick = 2000
+intent = "motion_up"
+count = 12
+
+[[action]]
+tick = 3000
+intent = "fire_special"
+count = 3
+
+[[action]]
+tick = 4000
+intent = "motion_left"
+count = 8
+
+[[action]]
+tick = 5000
+intent = "fire_main"
+count = 8

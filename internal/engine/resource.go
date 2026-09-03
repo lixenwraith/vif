@@ -204,8 +204,15 @@ func (pr *PlayerResource) IsLocal(e core.Entity) bool {
 // LocalSlot returns the roster slot the local cursor occupies
 func (pr *PlayerResource) LocalSlot() uint8 { return pr.local }
 
-// SetLocal rebinds which slot input and camera follow
+// SetLocal rebinds which slot input and camera follow. parameter.NoPlayerSlot
+// leaves this instance driving nothing, which is what a dedicated host does: it
+// authors the shared world and puts no cursor on the map.
 func (pr *PlayerResource) SetLocal(slot uint8) {
+	if slot == parameter.NoPlayerSlot {
+		pr.local, pr.Entity = slot, 0
+		pr.DropPrediction()
+		return
+	}
 	if int(slot) >= parameter.MaxPlayers {
 		return
 	}

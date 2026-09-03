@@ -1,15 +1,21 @@
-// Package app: journal playback.
+// Package app: presented playback.
 //
-// Presents a recorded run on a live terminal. The simulation runs at recorded
-// geometry and is advanced only by ReplayDriver, so the world is bit-identical to
-// a headless replay; the terminal supplies pacing, pan and playback control only.
-// A recording wider than the terminal is clipped by the render buffer today; the
-// pan offset is the seam a windowed composite replaces.
+// One loop presents any driven stream on a live terminal: a recorded journal, or
+// an authored script. The simulation runs at the stream's own geometry and is
+// advanced only by that stream's driver, so the world is bit-identical to the
+// headless form and the terminal supplies pacing, pan and playback control only.
+// A stream wider than the terminal is clipped by the render buffer today; the pan
+// offset is the seam a windowed composite replaces.
+//
+// A live participant is the one case where the playback controls are refused
+// rather than honoured: pause, step and rate are instance-local, and a scripted
+// host cannot stop or slow only its own copy of a session.
 package app
 
 import (
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -67,8 +73,55 @@ func PlayJournal(paths ...string) error {
 	}
 	vlog.Info("app", "msg", "replay open",
 		"records", len(set.Records), "seed", an.Seed, "speed", an.Speed)
-	return (&player{a: a, d: d, interval: time.Duration(an.TickInterval),
+	return (&player{a: a, src: journalSource{d}, interval: time.Duration(an.TickInterval),
 		rec: parseSpeed(an.Speed), scale: engine.ScaleNormal}).run()
+}
+
+// runPresentedScript presents an authored run. Pacing is the script's own: the
+// resolved interval is one tick's wall budget, and an unpaced run is presented as
+// fast as the frame loop can render it.
+func runPresentedScript(a *App, d *journal.ScriptDriver, path string,
+	interval time.Duration, paced bool, signals <-chan os.Signal) (journal.ScriptStats, error) {
+
+	live := a.sessionTransport() != nil
+	if !paced {
+		interval = time.Millisecond // the floor perTick already clamps to
+	}
+	vlog.Info("app", "msg", "script open", "path", path, "paced", paced, "live", live)
+	p := &player{
+		a: a, src: scriptSource{d}, interval: interval,
+		rec: engine.ScaleNormal, scale: engine.ScaleNormal,
+		live: live, signals: signals,
+	}
+	err := p.run()
+	return reportScript(d, path), err
+}
+
+// pacedSource is the driven stream a presentation loop advances. Both drivers
+// report their own counters, because "how far through" means a different thing to
+// a record stream than to an action list.
+type pacedSource interface {
+	Step() (bool, error)
+	progress() string
+}
+
+// journalSource adapts a record stream to the presentation loop.
+type journalSource struct{ d *journal.ReplayDriver }
+
+func (s journalSource) Step() (bool, error) { return s.d.Step() }
+
+func (s journalSource) progress() string {
+	st := s.d.Stats()
+	return fmt.Sprintf("run %d tick %d | %d/%d rec", st.End.Run, st.End.Tick, st.Injected, st.Records)
+}
+
+type scriptSource struct{ d *journal.ScriptDriver }
+
+func (s scriptSource) Step() (bool, error) { return s.d.Step() }
+
+func (s scriptSource) progress() string {
+	st := s.d.Stats()
+	return fmt.Sprintf("run %d tick %d | %d/%d act", st.End.Run, st.End.Tick, st.Executed, st.Actions)
 }
 
 // parseSpeed resolves the recorded rate, defaulting to real time
@@ -79,20 +132,26 @@ func parseSpeed(tok string) engine.TimeScale {
 	return engine.ScaleNormal
 }
 
-// player paces a ReplayDriver against wall time and presents each frame
+// player paces a driven stream against wall time and presents each frame
 type player struct {
-	a *App
-	d *journal.ReplayDriver
+	a   *App
+	src pacedSource
 
-	interval time.Duration    // recorded game time per tick
-	rec      engine.TimeScale // rate the run was recorded at
-	scale    engine.TimeScale // viewer rate, relative to the recorded one
+	interval time.Duration    // stream game time per tick
+	rec      engine.TimeScale // rate the stream was produced at
+	scale    engine.TimeScale // viewer rate, relative to the produced one
+
+	// live marks a run attached to a session. The playback controls are refused on
+	// one: they are instance-local, and half a session cannot be paused.
+	live    bool
+	signals <-chan os.Signal
 
 	budget     time.Duration // wall time owed to the simulation
 	step       int           // ticks granted while paused
 	panX, panY int
 	paused     bool
 	done       bool
+	err        error // the stream's own failure, returned by run
 }
 
 // run drives the presentation loop until the viewer quits. NewReplay has already
@@ -102,8 +161,12 @@ func (p *player) run() error {
 	defer frameTicker.Stop()
 
 	events := p.a.termSvc.Events()
-	sigChan, stopSignals := notifySignals()
-	defer stopSignals()
+	sigChan := p.signals
+	if sigChan == nil {
+		var stopSignals func()
+		sigChan, stopSignals = notifySignals()
+		defer stopSignals()
+	}
 
 	p.report()
 	last := time.Now()
@@ -130,6 +193,9 @@ func (p *player) run() error {
 			p.advance(now.Sub(last))
 			last = now
 			p.frame()
+			if p.done && p.err != nil {
+				return p.err
+			}
 		}
 	}
 }
@@ -164,11 +230,12 @@ func (p *player) perTick() time.Duration {
 
 // tickOnce advances the driver, latching the end of the stream
 func (p *player) tickOnce() bool {
-	more, err := p.d.Step()
+	more, err := p.src.Step()
 	if err != nil {
-		vlog.Error("app", "msg", "replay failed", "error", err.Error())
+		vlog.Error("app", "msg", "presented run failed", "error", err.Error())
 		p.done = true
-		p.a.ctx.SetStatusMessage("REPLAY ERROR: "+err.Error(), 0, true)
+		p.err = err
+		p.a.ctx.SetStatusMessage("ERROR: "+err.Error(), 0, true)
 		return false
 	}
 	if !more {
@@ -211,6 +278,28 @@ func (p *player) key(ev terminal.Event) bool {
 	if ev.Key != terminal.KeyRune {
 		return true
 	}
+	if p.live {
+		// Pause, step and rate are instance-local. A participant cannot stop or slow
+		// only its own copy of a live session, so the viewer keeps pan and quit.
+		switch ev.Rune {
+		case 'q':
+			return false
+		case 'h':
+			p.panX -= panStep
+		case 'l':
+			p.panX += panStep
+		case 'k':
+			p.panY -= panStep
+		case 'j':
+			p.panY += panStep
+		case '0':
+			p.panX, p.panY = 0, 0
+		default:
+			return true
+		}
+		p.report()
+		return true
+	}
 	switch ev.Rune {
 	case 'q':
 		return false
@@ -242,7 +331,6 @@ func (p *player) key(ev terminal.Event) bool {
 
 // report publishes playback state through the status bar the renderer already draws
 func (p *player) report() {
-	st := p.d.Stats()
 	state := "PLAY"
 	switch {
 	case p.done:
@@ -250,7 +338,10 @@ func (p *player) report() {
 	case p.paused:
 		state = "PAUSE"
 	}
-	p.a.ctx.SetStatusMessage(fmt.Sprintf(
-		"%s %sx | run %d tick %d | %d/%d rec | SPACE . +- hjkl 0 q",
-		state, p.scale.String(), st.End.Run, st.End.Tick, st.Injected, st.Records), 0, true)
+	keys := "SPACE . +- hjkl 0 q"
+	if p.live {
+		state, keys = "LIVE", "hjkl 0 q"
+	}
+	p.a.ctx.SetStatusMessage(fmt.Sprintf("%s %sx | %s | %s",
+		state, p.scale.String(), p.src.progress(), keys), 0, true)
 }

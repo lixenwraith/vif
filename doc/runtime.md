@@ -13,24 +13,95 @@ operated on by the runtime, see [ECS and events](ecs-and-events.md).
 | `ModePlay` | Yes | No | terminal / terminal | Yes | `PausableClock`; scheduler and event goroutines |
 | `ModeHeadless` | No | Yes | caller / caller | No | `ManualClock`; harness or authored `ScriptDriver` invokes ticks and injections; an authored host/join script may attach network I/O |
 | `ModeReplay` | Yes | Yes | journal / playback controls | Yes | `ManualClock`; `journal.ReplayDriver` invokes ticks and injections |
+| `ModeScript` | Yes | Yes | script / playback controls | Yes | `ManualClock`; `journal.ScriptDriver` invokes ticks and injections; the presented form of a `ModeHeadless` script, network I/O included |
+| `ModeServer` | No | No | config / none | No | `PausableClock`; scheduler and event goroutines, as `ModePlay`, with no terminal and no local cursor |
 
 The five predicates in `internal/app/config.go` are the policy boundary:
 `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio`. Assembly checks
 them rather than scattering mode comparisons through the runtime. A driven
 config defaults to terminal-equivalent geometry 80x24 when dimensions are not
-supplied, rejects a simulation speed setting because only `Tick` advances its
-clock, and rejects I/O settings the selected mode cannot honor.
+supplied and rejects I/O settings the selected mode cannot honor. It also rejects
+a simulation speed setting, because only `Tick` advances its clock — with one
+exception: an authored script reads `-speed` as its wall pace, which is a
+property of the run rather than of the clock. See §1.1.
 
-`cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
+`-serve <address>` constructs `ModeServer`. `cmd/vif` normally constructs `ModePlay`; `-replay <file>` constructs a replay
 from the journal anchor, and `-script <file>` constructs a caller-driven
-`ModeHeadless` run from an authored tick schedule. `-check` and `-schema` are
-non-runtime tool paths:
+`ModeHeadless` run from an authored tick schedule, or `ModeScript` with `-watch`.
+`-check` and `-schema` are non-runtime tool paths:
 
 | Tool path | Entry | Terminal initialized? | Result |
 |---|---|---:|---|
 | Validate | `app.Check` | No | Resolve and load FSM plus corpus; print accepted/rejected sources. |
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
-| Run script | `app.RunScript` | No | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
+| Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
+
+### 1.1 Script pacing and presentation
+
+A script is a deterministic list of inputs at named simulation positions. Two
+things about how one is *run* are policy rather than content:
+
+| `-speed` | Effect on a script |
+|---|---|
+| unset | Real time in a session, unpaced when solo. A solo script that opens a session with `:host` starts pacing at that tick and re-anchors its clock there. |
+| `1`, `2`, `1/2`, … | One tick occupies that multiple of the game interval. `2` is twice real time, `1/2` is half. |
+| `max` | No wall pacing at all. Refused when `-host` or `-join` is present: a participant that outruns its peers is not simulating the session it is in. |
+
+Every participant of one session must use the same rate. The runtime cannot see a
+peer's pace, so it enforces only the `max` case: a participant running faster than
+the rest reaches ticks they have not, and every correction rebases it back to the
+authority's tick — which is a working session, but not one whose scripted actions
+land where they were authored. A dedicated host and an interactive participant
+always run real time, so a script sharing a session with either must too.
+
+`-watch` presents the run on this terminal instead of running it headlessly. The
+simulation is unchanged — the same manual clock, the same script geometry, the
+same driver — so a presented run and a headless one of the same script produce
+the same world. Only pan and quit are offered while a presented script is in a
+session; pause, step and rate are instance-local and half a session cannot be
+paused.
+
+### 1.2 The dedicated host
+
+`-serve <address>` runs a host with no terminal, no renderer, no audio and no
+cursor of its own. What is left is what a session cannot do without: the Shared
+world, the authority, the correction cadence and the roster, on the real clock and
+the scheduler goroutine, because a session's simulation has to advance whether or
+not anybody is watching it here.
+
+Holding no cursor is a roster property rather than an absence. The coordinator
+keeps its participant identity, its authority term and its vote; its slot is
+`parameter.NoPlayerSlot`, so every "is this my cursor" test answers no without a
+special case. The FSM's boot cursor is not suppressed — it is created as it always
+is, and the roster hands it to the first guest, which is what keeps shared creation
+order identical to an ordinary host's.
+
+`-players <n>` on a server is the number of *guests* it waits for, because the
+server is not one of them; `1` is the smallest session and `parameter.MaxPlayers`
+the largest. `-size WxH` gives it the terminal-equivalent geometry it has no
+terminal to derive, which is what every joiner adopts as the D-14 map latch.
+
+```bash
+./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
+./bin/vif -join server.example:7777          # each person, elsewhere
+```
+
+The scheduler applies render backpressure at real time and slower, so the server
+releases the same frame handshake on the same interval and draws nothing. A run
+with no guests attached still ticks, still authors, and publishes nothing: the
+correction pump returns on an empty roster.
+
+A server outlives its guests. Its mid-run gate is installed at construction and
+armed once the startup lobby closes, so a participant that dropped can dial back
+into the slot its departure released and receive the world at whatever tick the
+session has reached. The lobby size is still the ceiling: `-players` is how many
+cursors the session holds, not how many dials it will ever accept.
+
+Together these make a scripted participant: one side of a session plays a fixed
+sequence at real time while a person plays the other freely, which is how a
+scripted demonstration is shown and how a reproduction is held constant while the
+other participant is fuzzed by hand. `script/sparring-host.toml` and
+`script/sparring-guest.toml` are the two directions.
 
 Diagnostics are configured before the terminal enters its alternate screen so
 startup failures and runtime reports remain recoverable.

@@ -59,9 +59,9 @@ render abstraction, while the orchestrator owns the terminal capability.
 
 | Package | Responsibility and boundary |
 |---|---|
-| `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/check/schema selection, process exit policy. |
+| `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/watch/check/schema selection, process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, and verify anchor/config identity. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay/script/server Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, and verify anchor/config identity. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -186,7 +186,7 @@ duplicating version strings that would become stale.
 |---|---|
 | `cmd/ascimage` | Supported image converter/viewer command. |
 | `cmd/soundlab` | Supported audio document editor, REPL/TUI, sequencer audition environment, and script runner. |
-| `script/*` | Authored deterministic `vif -script` schedules; the Phase 3 host/guest pair is the checked-in multiplayer diagnostic. |
+| `script/*` | Authored deterministic `vif -script` schedules: the phase host/guest pairs are the checked-in multiplayer diagnostics, and the sparring pair is the scripted-participant scenario a person joins. |
 | `tool/blend-tester` | Inspect blend behavior and palette/effect combinations. |
 | `tool/font-editor` | Edit the bitmap splash font. |
 | `tool/hierarchy-map` | Analyze and visualize Go package/import hierarchy. |

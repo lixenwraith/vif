@@ -272,7 +272,10 @@ func (s *CursorSystem) fail(reason string) {
 // recompute phase at startup and the two then read fields of different ages (D-17).
 func (s *CursorSystem) setLocal(slot uint8) {
 	roster := s.world.Resources.Player
-	if int(slot) >= parameter.MaxPlayers || roster.LocalSlot() == slot {
+	if roster.LocalSlot() == slot {
+		return
+	}
+	if int(slot) >= parameter.MaxPlayers && slot != parameter.NoPlayerSlot {
 		return
 	}
 	prev := roster.Entity

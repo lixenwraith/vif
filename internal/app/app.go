@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -63,6 +64,12 @@ type App struct {
 	// hub owns and closes; this one is owned here because nothing else knows it
 	// exists.
 	midRunPort *network.SocketPort
+
+	// lateJoins arms the mid-run gate on a host whose startup lobby has closed. It
+	// is a flag rather than a late assignment because the accept goroutine reads
+	// the hook: the gate exists from construction and answers nothing until the
+	// lobby's own gate is done, which is what keeps the two from racing.
+	lateJoins atomic.Bool
 
 	// snapshotTelemetry is reserved during construction so a capture or an install
 	// can publish its cost into a registry that is frozen by then.

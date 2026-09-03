@@ -150,11 +150,16 @@ func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID)
 	if err := o.Validate(); err != nil {
 		return err
 	}
-	if len(o.Participants) > parameter.MaxPlayers {
-		return fmt.Errorf("join roster has %d participants, maximum is %d", len(o.Participants), parameter.MaxPlayers)
+	// The ceiling is on cursors rather than on participants: a dedicated host holds
+	// a roster entry, an identity and a vote, and no slot on the map.
+	if n := cursorParticipants(o.Participants); n > parameter.MaxPlayers {
+		return fmt.Errorf("join roster has %d cursors, maximum is %d", n, parameter.MaxPlayers)
 	}
 	for _, p := range o.Participants {
-		if int(p.Slot) >= parameter.MaxPlayers || int(p.ID) > parameter.MaxPlayers {
+		if p.Slot == parameter.NoPlayerSlot {
+			continue
+		}
+		if int(p.Slot) >= parameter.MaxPlayers || int(p.ID) > parameter.MaxPlayers+1 {
 			return fmt.Errorf("join roster assignment id %d slot %d exceeds maximum %d", p.ID, p.Slot, parameter.MaxPlayers)
 		}
 	}
@@ -164,9 +169,25 @@ func (a *App) validateSessionOffer(o network.SessionOffer, local network.PeerID)
 	return nil
 }
 
+// cursorParticipants counts the roster entries that own a cursor.
+func cursorParticipants(participants []network.SessionParticipant) int {
+	n := 0
+	for _, p := range participants {
+		if p.Slot != parameter.NoPlayerSlot {
+			n++
+		}
+	}
+	return n
+}
+
 // configureSessionRoster creates slots in coordinator order, then applies local control.
 func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerID) error {
-	participants := slices.Clone(o.Participants)
+	participants := make([]network.SessionParticipant, 0, len(o.Participants))
+	for _, p := range o.Participants {
+		if p.Slot != parameter.NoPlayerSlot {
+			participants = append(participants, p)
+		}
+	}
 	slices.SortFunc(participants, func(x, y network.SessionParticipant) int { return int(x.Slot) - int(y.Slot) })
 
 	// The boot script's cursor spawn may still be queued: the FSM enters its boot
@@ -198,9 +219,12 @@ func (a *App) configureSessionRoster(o network.SessionOffer, local network.PeerI
 	if err := a.bindSessionControl(o, local); err != nil {
 		return err
 	}
-	a.ctx.PushLocal(event.EventCursorArmRequest,
-		&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
-	a.scheduler.Settle()
+	// Arming is a local-cursor operation; a dedicated host has none to arm.
+	if assignment, ok := o.Participant(local); ok && assignment.Slot != parameter.NoPlayerSlot {
+		a.ctx.PushLocal(event.EventCursorArmRequest,
+			&event.CursorArmRequestPayload{Heat: initialHeat, Energy: initialEnergy})
+		a.scheduler.Settle()
+	}
 	a.world.RunSafe(a.ctx.PublishMapLock)
 	return nil
 }
@@ -219,6 +243,9 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 	a.world.RunSafe(func() {
 		roster := a.world.Resources.Player
 		for _, p := range o.Participants {
+			if p.Slot == parameter.NoPlayerSlot {
+				continue
+			}
 			e := roster.Slot(p.Slot)
 			if c, ok := a.world.Components.Cursor.GetPtr(e); ok {
 				c.PeerID = uint32(p.ID)
@@ -232,6 +259,17 @@ func (a *App) bindSessionControl(o network.SessionOffer, local network.PeerID) e
 	localAssignment, ok := o.Participant(local)
 	if !ok {
 		return fmt.Errorf("join roster omits local participant %d", local)
+	}
+	// A cursorless participant drives nothing, which is a slot assignment like any
+	// other: it takes the sentinel, so every "is this my cursor" test answers no.
+	if localAssignment.Slot == parameter.NoPlayerSlot {
+		if a.localSlot() != parameter.NoPlayerSlot {
+			a.ctx.PushEventOrigin(event.EventCursorSetLocalRequest,
+				&event.CursorSetLocalPayload{Slot: parameter.NoPlayerSlot}, event.OriginDebug)
+			a.scheduler.Settle()
+		}
+		a.world.RunSafe(a.ctx.PublishMapLock)
+		return nil
 	}
 	var owned bool
 	a.world.RunSafe(func() { owned = a.world.Resources.Player.Slot(localAssignment.Slot) != 0 })

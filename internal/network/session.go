@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
 // SessionParticipant is one coordinator-assigned participant and roster slot.
@@ -62,11 +63,30 @@ func (o SessionOffer) Validate() error {
 	}
 	ids := make(map[PeerID]bool, len(o.Participants))
 	slots := make(map[uint8]bool, len(o.Participants))
+	cursorless := PeerID(0)
 	for _, p := range o.Participants {
-		if p.ID == 0 || ids[p.ID] || slots[p.Slot] {
+		if p.ID == 0 || ids[p.ID] {
 			return errors.New("join offer carries duplicate participant assignment")
 		}
-		ids[p.ID], slots[p.Slot] = true, true
+		ids[p.ID] = true
+		// A cursorless participant holds no slot, so it collides with nobody. Only
+		// the coordinator may be one: every other participant is in the session to
+		// drive a cursor, and one that is not would take a vote and a roster entry
+		// while contributing nothing the roster describes.
+		if p.Slot == parameter.NoPlayerSlot {
+			if cursorless != 0 {
+				return errors.New("join offer carries more than one cursorless participant")
+			}
+			cursorless = p.ID
+			continue
+		}
+		if slots[p.Slot] {
+			return errors.New("join offer carries duplicate participant assignment")
+		}
+		slots[p.Slot] = true
+	}
+	if cursorless != 0 && cursorless != o.Host {
+		return errors.New("join offer makes a participant other than the host cursorless")
 	}
 	if !ids[o.Host] || !ids[o.Assigned] {
 		return errors.New("join offer roster omits host or assigned participant")

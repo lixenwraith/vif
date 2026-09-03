@@ -1,0 +1,119 @@
+# A scripted participant a person plays against.
+#
+# The host runs a fixed sequence while a person joins it and plays freely. That
+# is the scenario this file exists for: one side's actions are constant across
+# runs, so a defect the other side finds is reproducible, and re-running is
+# nothing more than re-running this command.
+#
+#   ./bin/vif -script script/sparring-host.toml -host 127.0.0.1:7777 -players 2
+#   ./bin/vif -join 127.0.0.1:7777                  # the person, in another terminal
+#
+# Add -watch to the first command to present the scripted host on its own
+# terminal as well; the run is identical either way, because a presented script
+# advances the same manual clock over the same script geometry.
+#
+# The run is wall-paced at the game interval because it is in a session. -speed
+# selects another rate (1/2 halves it, 2 doubles it); -speed max is refused here,
+# because a participant that outruns its peers is not simulating the session it
+# is in.
+schema = 1
+ticks = 6000
+width = 120
+height = 40
+
+# God mode keeps the scripted side alive for the whole run, so what the person
+# is exercising is the session rather than this participant's mortality.
+[[action]]
+tick = 1
+command = "god"
+
+# Open ground first, then a fixed patrol. Each leg is a crossing the guest sees
+# at the agreed apply tick, so the person is reading a stream produced by
+# somebody else rather than a local animation.
+[[action]]
+tick = 20
+intent = "motion_right"
+count = 10
+
+[[action]]
+tick = 60
+intent = "motion_down"
+count = 6
+
+[[action]]
+tick = 100
+intent = "fire_main"
+count = 4
+
+[[action]]
+tick = 160
+intent = "motion_left"
+count = 10
+
+[[action]]
+tick = 220
+intent = "fire_special"
+count = 2
+
+[[action]]
+tick = 280
+intent = "motion_up"
+count = 6
+
+# Shared pressure. Both instances re-derive a shared species from the same
+# stream, so the encounter is the same one on both screens.
+[[action]]
+tick = 400
+event = "SwarmSpawnRequest"
+payload = "x = 40\ny = 12"
+
+[[action]]
+tick = 900
+event = "StormSpawnRequest"
+
+# The patrol repeats from here to the end of the budget, which is what makes the
+# scripted side a fixed background the person can fuzz against.
+[[action]]
+tick = 1200
+intent = "motion_right"
+count = 12
+
+[[action]]
+tick = 1400
+intent = "fire_main"
+count = 6
+
+[[action]]
+tick = 1600
+intent = "motion_left"
+count = 12
+
+[[action]]
+tick = 1800
+intent = "fire_special"
+count = 3
+
+[[action]]
+tick = 2400
+event = "QuasarSpawnRequest"
+payload = "x = 60\ny = 20"
+
+[[action]]
+tick = 3000
+intent = "motion_down"
+count = 8
+
+[[action]]
+tick = 3600
+intent = "fire_main"
+count = 8
+
+[[action]]
+tick = 4200
+intent = "motion_up"
+count = 8
+
+[[action]]
+tick = 5000
+event = "SwarmSpawnRequest"
+payload = "x = 80\ny = 26"

@@ -67,6 +67,8 @@ See [Package map](package-map.md) for the medium-level dependency view.
 | `ModePlay` | terminal, content, audio, and optional startup host/join networking; live input and geometry | pause/rate-aware clock; scheduler and event goroutines |
 | `ModeHeadless` | content; caller supplies geometry and events; authored scripts may add startup host/join networking | manual clock advanced by a harness or `journal.ScriptDriver` |
 | `ModeReplay` | terminal, content, audio; recorded input and geometry | manual clock advanced by `journal.ReplayDriver` |
+| `ModeScript` | terminal, content, audio, and the same optional host/join networking as a headless script; scripted input and geometry | manual clock advanced by `journal.ScriptDriver`, wall-paced |
+| `ModeServer` | content and network only; configured geometry, no input, no local cursor | pause/rate-aware clock; scheduler and event goroutines, as `ModePlay` |
 
 The `Presents`, `Driven`, `OwnsGeometry`, `OwnsInput`, and `Audio` predicates
 are the composition policy. A driven App spawns no scheduler/event goroutines,

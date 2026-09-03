@@ -28,8 +28,8 @@ flowchart TD
 `pkg/audio` carries no ECS or APM concept. The app injects effect volumes and
 shapes, and `MusicSystem` interprets the game's five-second APM signal.
 
-Runtime mode selects whether this layer exists. `ModePlay` and `ModeReplay`
-register the audio service; `ModeHeadless` does not. Replay rebuilds simulation
+Runtime mode selects whether this layer exists. `ModePlay`, `ModeReplay` and
+`ModeScript` register the audio service; `ModeHeadless` does not. Replay rebuilds simulation
 from recorded events, including sound requests, and starts playback unmuted
 because the journal anchor has no original mute-state field. Terminal playback
 controls pacing only; it does not route viewer keys through `AudioSystem` or

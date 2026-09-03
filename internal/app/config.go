@@ -33,10 +33,20 @@ const (
 	// ModeReplay presents a recorded run: terminal and renderer, but a manual clock
 	// the caller ticks and geometry taken from the journal rather than the terminal
 	ModeReplay
+	// ModeScript presents an authored script the same way ModeReplay presents a
+	// journal: terminal and renderer over a manual clock the script driver ticks.
+	// Geometry is the script's, so a presented run and a headless one simulate the
+	// same world and only the presentation differs.
+	ModeScript
+	// ModeServer is a dedicated host: the interactive runtime with no terminal, no
+	// renderer, no audio and no local cursor. It runs the real clock and the
+	// scheduler goroutine like ModePlay, because a session's simulation has to
+	// advance whether or not anybody is watching it here.
+	ModeServer
 )
 
 // modeNames indexes Mode for diagnostics
-var modeNames = [...]string{"play", "headless", "replay"}
+var modeNames = [...]string{"play", "headless", "replay", "script", "server"}
 
 // String returns the diagnostic name
 func (m Mode) String() string {
@@ -47,11 +57,15 @@ func (m Mode) String() string {
 }
 
 // Presents reports whether the mode builds a terminal and a render pipeline
-func (m Mode) Presents() bool { return m == ModePlay || m == ModeReplay }
+func (m Mode) Presents() bool { return m == ModePlay || m == ModeReplay || m == ModeScript }
 
 // Driven reports whether the caller advances the clock; a driven run spawns no
 // scheduler goroutine, so nothing races the world lock
-func (m Mode) Driven() bool { return m != ModePlay }
+func (m Mode) Driven() bool { return m != ModePlay && m != ModeServer }
+
+// Serves reports whether the mode is a dedicated host: it authors a session and
+// puts no cursor of its own on the map.
+func (m Mode) Serves() bool { return m == ModeServer }
 
 // OwnsGeometry reports whether the terminal is the authority on world dimensions.
 // A replay's geometry is recorded, so its terminal drives presentation only.
@@ -61,9 +75,10 @@ func (m Mode) OwnsGeometry() bool { return m == ModePlay }
 // drives playback controls instead, so the mode router never sees it.
 func (m Mode) OwnsInput() bool { return m == ModePlay }
 
-// Audio reports whether an audio service is registered. The replay drives the
-// simulation only through ReplayDriver, so AudioSystem must push no event a system reads.
-func (m Mode) Audio() bool { return m == ModePlay || m == ModeReplay }
+// Audio reports whether an audio service is registered. A driven mode advances the
+// simulation only through its driver, so AudioSystem must push no event a system
+// reads.
+func (m Mode) Audio() bool { return m == ModePlay || m == ModeReplay || m == ModeScript }
 
 // Config is the resolved startup configuration
 // Built from CLI flags by cmd/vif, or programmatically by embedders
@@ -97,7 +112,13 @@ type Config struct {
 	// 0 = parameter default, negative = disabled
 	RecTicks int
 
-	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time
+	// TimeScaleSpec is the initial simulation rate ladder token; "" = real time.
+	//
+	// An authored script reads it as the rate its ticks are paced against the wall,
+	// where "1" is real time and ScriptPaceMax is as fast as the driver can go. A
+	// solo script defaults to ScriptPaceMax and one in a session to real time,
+	// because a participant that outran its peer would not be in the session it is
+	// simulating.
 	TimeScaleSpec string
 
 	// System seed for RNG
@@ -121,6 +142,9 @@ type Config struct {
 	// Participants is the lobby size a host waits for, itself included. A startup
 	// host treats zero as two; a solo run opened later with :host treats zero as
 	// parameter.MaxPlayers. The ceiling is also the roster width.
+	//
+	// ModeServer is the exception, because it is not one of them: there the value
+	// is the number of guests the session waits for, and zero means one.
 	Participants int
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run
@@ -206,13 +230,20 @@ func (c Config) Validate() error {
 		switch {
 		case c.Mode == ModeReplay:
 			return fmt.Errorf("%s: journal playback cannot join a network session", c.Mode)
-		case c.Mode == ModeHeadless && !c.scriptedSession:
+		case c.Mode != ModePlay && !c.Mode.Serves() && !c.scriptedSession:
 			return fmt.Errorf("%s: network sessions require app.RunScript", c.Mode)
 		}
 	}
-	if c.Participants != 0 && (c.Participants < 2 || c.Participants > parameter.MaxPlayers) {
-		return fmt.Errorf("-players %d is outside the supported range 2..%d",
-			c.Participants, parameter.MaxPlayers)
+	minParticipants := 2
+	if c.Mode.Serves() {
+		minParticipants = 1 // a dedicated host is not one of them
+	}
+	if c.Participants != 0 && (c.Participants < minParticipants || c.Participants > parameter.MaxPlayers) {
+		return fmt.Errorf("-players %d is outside the supported range %d..%d",
+			c.Participants, minParticipants, parameter.MaxPlayers)
+	}
+	if c.Mode.Serves() && c.HostAddress == "" {
+		return errors.New("server: a dedicated host needs a bind address")
 	}
 	if c.Participants != 0 && c.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")
@@ -222,10 +253,15 @@ func (c Config) Validate() error {
 			return err
 		}
 	}
-	if c.TimeScaleSpec != "" {
+	if c.TimeScaleSpec != "" && !c.scriptedSession {
 		if _, ok := engine.ParseScale(c.TimeScaleSpec); !ok {
 			return fmt.Errorf("-speed %q is not a ladder rate (1/8 1/4 1/2 1 2 4 8)", c.TimeScaleSpec)
 		}
+	}
+	if c.scriptedSession && c.TimeScaleSpec == ScriptPaceMax &&
+		(c.HostAddress != "" || c.JoinAddress != "") {
+		return errors.New("-speed max cannot pace a session: a script that outruns its peer " +
+			"is not simulating the session it is in")
 	}
 	if c.Mode.OwnsGeometry() {
 		return nil
@@ -233,8 +269,8 @@ func (c Config) Validate() error {
 	return c.validateDriven()
 }
 
-// validateDriven rejects settings a caller-driven run cannot honour, rather than
-// accepting a flag that would silently do nothing
+// validateDriven rejects settings a run without its own terminal cannot honour,
+// rather than accepting a flag that would silently do nothing
 func (c Config) validateDriven() error {
 	if c.ColorModeSet && !c.Mode.Presents() {
 		return fmt.Errorf("%s: color mode is unused, no terminal is created", c.Mode)
@@ -245,10 +281,20 @@ func (c Config) validateDriven() error {
 	if (c.Resources.Music != "" || c.Resources.Sounds != "") && !c.Mode.Audio() {
 		return fmt.Errorf("%s: audio config is unused, no audio service is created", c.Mode)
 	}
-	// TimeScaleSpec sets the simulation rate, which a manual clock records but never
-	// applies; playback pacing is a presentation knob and gets its own field
+	// A manual clock records a simulation rate and never applies it. An authored
+	// script reads the same field as its wall pace, which is a property of the run
+	// rather than of the clock; every other driven mode has nothing to do with it.
 	if c.TimeScaleSpec != "" {
-		return fmt.Errorf("%s: the manual clock is driven by Tick, not by a rate", c.Mode)
+		switch {
+		case c.scriptedSession:
+			if _, _, err := scriptPacing(c); err != nil {
+				return err
+			}
+		case c.Mode.Serves():
+			return fmt.Errorf("%s: a dedicated host runs at the session's rate", c.Mode)
+		default:
+			return fmt.Errorf("%s: the manual clock is driven by Tick, not by a rate", c.Mode)
+		}
 	}
 	// Matches what MetaSystem admits, so a live journal always rebuilds a valid config
 	if !engine.ViewportFits(c.Width, c.Height) {

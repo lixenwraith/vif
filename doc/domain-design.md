@@ -35,6 +35,14 @@ Every `World` has two domains:
 zero is invalid in both. A cursor's roster slot lives in `CursorComponent` and is
 not encoded in the domain tag.
 
+A participant and a cursor are separate things. A participant holds an identity,
+an authority term and a vote; a roster slot is what binds it to a cursor. The
+coordinator of a dedicated host holds `parameter.NoPlayerSlot` and therefore no
+cursor: it authors the Shared world and puts nobody on the map. Only the
+coordinator may be cursorless — every other participant is in the session to drive
+one — and the ceiling of `parameter.MaxPlayers` counts cursors rather than
+participants.
+
 ## 2. Domain rules
 
 ### D-1 — Reads follow ownership
@@ -414,7 +422,8 @@ modes remain available without stopping simulation.
 
 The handshake establishes schema, tick interval, seed/session, configuration,
 corpus identity, map latch, authority term, participant ID, and roster slot before
-state is accepted. A mid-run join installs a current keyframe and catches up the
+state is accepted. A slot of `parameter.NoPlayerSlot` is the coordinator declaring
+it drives nothing. A mid-run join installs a current keyframe and catches up the
 bounded transfer gap. Reconnect uses the same path.
 
 `network.SocketPort` uses a fixed 12-byte frame header and complete short-read and

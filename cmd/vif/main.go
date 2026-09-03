@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/lixenwraith/terminal"
@@ -35,10 +36,11 @@ var (
 	flagAudioUnmute  = flag.Bool("au", false, "Start with audio unmuted")
 	flagCheck        = flag.Bool("check", false, "Validate resolved game, keymap, audio, and content config, then exit")
 	flagSchema       = flag.Bool("schema", false, "Print FSM schema JSON and exit")
-	flagSpeed        = flag.String("speed", "", "Initial simulation rate: 1/8 1/4 1/2 1 2 4 8")
+	flagSpeed        = flag.String("speed", "", "Simulation rate: 1/8 1/4 1/2 1 2 4 8; with -script also \"max\" for no wall pacing")
 	flagSeed         = flag.Uint64("seed", 0, "Root RNG seed; 0 draws one and logs it")
 	flagReplay       = flag.String("replay", "", "Replay a recorded journal file instead of playing")
-	flagScript       = flag.String("script", "", "Run an authored deterministic TOML script headlessly")
+	flagScript       = flag.String("script", "", "Run an authored deterministic TOML script")
+	flagWatch        = flag.Bool("watch", false, "Present a -script run on this terminal instead of running it headlessly")
 
 	flagConfig  = newConfigFlags()
 	flagLogs    = newLogFlags()
@@ -62,7 +64,7 @@ func main() {
 	logStatus := setupDiagnostics()
 
 	var err error
-	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, flagSession)
+	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
 	switch {
 	case sessionErr != nil:
 		err = sessionErr
@@ -73,7 +75,13 @@ func main() {
 	case *flagReplay != "":
 		err = app.PlayJournal(*flagReplay)
 	case *flagScript != "":
-		_, err = app.RunScript(buildConfig(), *flagScript)
+		cfg := buildConfig()
+		if *flagWatch {
+			cfg.Mode = app.ModeScript
+		}
+		_, err = app.RunScript(cfg, *flagScript)
+	case flagSession.serve != "":
+		err = app.RunServer(buildConfig())
 	default:
 		err = app.Run(buildConfig())
 	}
@@ -194,6 +202,13 @@ func buildConfig() app.Config {
 		Participants:  flagSession.players,
 	}
 
+	if flagSession.serve != "" {
+		cfg.HostAddress = flagSession.serve
+	}
+	if flagSession.size != "" {
+		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
+	}
+
 	if *flagAudioUnmute {
 		cfg.AudioMuted = false
 	} else if *flagAudioMute {
@@ -259,27 +274,54 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 type sessionFlags struct {
 	host    string
 	join    string
+	serve   string
+	size    string
 	players int
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
 	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
+	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
+	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
 		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host)", parameter.MaxPlayers))
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
-	if (f.host != "" || f.join != "" || f.players != 0) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, and -players are available only in interactive play")
+	if (f.host != "" || f.join != "" || f.serve != "" || f.players != 0) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, and -players are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")
 	}
+	if f.serve != "" && (f.host != "" || f.join != "") {
+		return fmt.Errorf("-serve is a host of its own; it does not combine with -host or -join")
+	}
+	if f.size != "" {
+		if _, _, err := parseSize(f.size); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
-func validateInvocation(schema, check bool, replay, script string, session sessionFlags) error {
+// parseSize reads a WxH geometry for a run that derives none from a terminal.
+func parseSize(spec string) (width, height int, err error) {
+	w, h, ok := strings.Cut(spec, "x")
+	if !ok {
+		return 0, 0, fmt.Errorf("-size %q is not WxH, for example 120x40", spec)
+	}
+	if width, err = strconv.Atoi(w); err != nil || width <= 0 {
+		return 0, 0, fmt.Errorf("-size %q has no usable width", spec)
+	}
+	if height, err = strconv.Atoi(h); err != nil || height <= 0 {
+		return 0, 0, fmt.Errorf("-size %q has no usable height", spec)
+	}
+	return width, height, nil
+}
+
+func validateInvocation(schema, check bool, replay, script string, watch bool, session sessionFlags) error {
 	modes := 0
 	for _, selected := range []bool{schema, check, replay != "", script != ""} {
 		if selected {
@@ -288,6 +330,9 @@ func validateInvocation(schema, check bool, replay, script string, session sessi
 	}
 	if modes > 1 {
 		return fmt.Errorf("-schema, -check, -replay, and -script are mutually exclusive")
+	}
+	if watch && script == "" {
+		return fmt.Errorf("-watch presents a -script run and has no other subject")
 	}
 	return session.validateInvocation(schema, check, replay)
 }

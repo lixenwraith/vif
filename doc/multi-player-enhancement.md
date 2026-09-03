@@ -44,6 +44,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
 | Authority ordering | Snapshot schema 3 carries the authority's completed local crossing sequence. A receiver removes authority frames already represented by the installed world, including frames whose nominal receive tick is still ahead. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. |
+| Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Host loss | A reachable majority can elect an eligible retained successor under the next term. A component without a majority continues as an explicit local fork and does not merge later. |
@@ -297,6 +298,33 @@ For a manual two-terminal check:
 # terminal 2
 ./bin/vif -join 127.0.0.1:7777
 ```
+
+One side can be scripted instead, which holds it constant across runs while the
+other is played by hand:
+
+```sh
+# terminal 1
+./bin/vif -script script/sparring-host.toml -host 127.0.0.1:7777 -players 2
+
+# terminal 2
+./bin/vif -join 127.0.0.1:7777
+```
+
+A scripted participant is an ordinary one: it takes a roster slot, produces
+crossings at the agreed apply ticks, and is corrected like any other guest. It is
+wall-paced at the game interval so it cannot outrun its peers; `-speed` selects
+another rate and `-watch` presents the scripted side on its own terminal. See
+[Runtime](runtime.md) §1.1.
+
+Neither side has to be a person. `-serve` runs a dedicated host: the shared world,
+the authority, the correction cadence and the roster, with no terminal and no
+cursor of its own, so a session can consist entirely of the guests that join it.
+
+```sh
+./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
+```
+
+See [Runtime](runtime.md) §1.2.
 
 Exercise rapid `h`/`l` sequences on both participants across several correction
 cadences. A corrected cursor must not subsequently visit an older cell because of
