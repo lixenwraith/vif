@@ -17,27 +17,15 @@ import (
 // The navigation phase, demonstrated rather than asserted.
 //
 // D-17 throttles the flow-field recompute: a field is derived at most once every
-// few ticks, and *which* ticks decides how old the field is that a shared species
-// steers by. The phase is therefore shared state, it is not in any component store,
-// and the navigation system declares it under D-19 and carries it.
+// few ticks, and *which* ticks decides how old the field is a shared species steers
+// by. The phase is therefore shared state, it is in no component store, and the
+// navigation system declares and carries it under D-19.
 //
-// A 500-tick gate passes with the carrier present but shows nothing about a world
-// without one, so its coverage would be a claim about the code rather than a
-// result. Each test here sabotages one part of what the carrier promises, in the
-// encoded capture rather than in the system, and requires the gate to notice.
-//
-// Two things had to change before either sabotage could be caught, and both were
-// defects rather than test scaffolding. The install left the field itself underived,
-// so the first tick after it took Update's !Field.Valid branch — deriving from that
-// tick's targets rather than the ones the phase belongs to, and zeroing the throttle
-// on the way, which destroyed the phase the carrier had just restored. And the
-// composite passability grid was still the one derived from the walls the install
-// had replaced. Both are derived inside the install now.
-//
-// route_rebuild_ticks is the harder case: it paces one
-// gateway route graph rebuild per interval and the shipped scenario builds no
-// gateways, so a sabotaged value changed nothing to observe. The gateway scenario at
-// the bottom of this file is what closes it.
+// A gate that passes with the carrier present says nothing about a world without
+// one, so each test here sabotages one part of what the carrier promises — in the
+// encoded capture rather than in the system — and requires the gate to notice, with
+// an unmodified control installed beside it to show the gate is catching the
+// sabotage and not the setup.
 
 // navRecord returns the navigation system's record from a capture.
 func navRecord(t *testing.T, cap snapshot.SharedCapture) (int, map[string]any) {
@@ -74,18 +62,30 @@ func resealCapture(t *testing.T, cap snapshot.SharedCapture, idx int, body map[s
 	return out
 }
 
-// TestNavigationPhaseIsLoadBearing is the failing case the carrier needs.
+// TestNavigationPhaseIsLoadBearing is the failing case the carrier needs, with its
+// own control beside it.
 //
 // A capture whose navigation phase says something else installs cleanly, produces
 // an identical world at the install tick, and then recomputes its flow fields on
 // different ticks from the run it came from. The compared surface has to catch
 // that, and the tick it catches it on is the first recompute either side makes.
+// The unmodified capture through the same path must not be caught, or the
+// sabotages are catching the setup rather than the sabotage.
+//
+// One origin serves every case: each receiver installs a differently sabotaged
+// copy of one capture and is then driven against the same evolution, so what
+// separates a caught case from the control is the sabotage and nothing else.
 func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 	t.Parallel()
 	cases := []struct {
 		name     string
 		sabotage func(map[string]any)
 	}{
+		{
+			// The control. Nothing is edited, so this capture has to survive the
+			// same 120 ticks the others are caught inside.
+			name: "unmodified",
+		},
 		{
 			name: "no_carrier",
 			sabotage: func(body map[string]any) {
@@ -120,75 +120,60 @@ func TestNavigationPhaseIsLoadBearing(t *testing.T) {
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			origin, cap := navGateOrigin(t)
-			defer origin.Close()
-
-			idx, body := navRecord(t, cap)
-			if groups, ok := body["groups"].([]any); !ok || len(groups) == 0 {
-				t.Fatal("the navigation record carries no target group; nothing to sabotage")
-			}
-			tc.sabotage(body)
-			sabotaged := resealCapture(t, cap, idx, body)
-
-			receiver := mustHeadless(t, navGateSeed, 120, 40)
-			defer receiver.Close()
-			tickUntilCursor(t, receiver)
-			receiver.Tick(40)
-			quiescePlayerDomain(t, receiver)
-			if err := receiver.InstallShared(sabotaged); err != nil {
-				t.Fatalf("install: %v", err)
-			}
-
-			// Tick by tick, because the signal is a gauge. nav.recomputes reports
-			// what *this* tick recomputed and is overwritten by the next one, so a
-			// comparison every twenty ticks reads two zeroes and calls it agreement.
-			// The phase decides which tick a recompute lands on; a check that cannot
-			// see one tick cannot see the phase.
-			diverged := false
-			for step := range navSabotageTicks {
-				origin.Tick(1)
-				receiver.Tick(1)
-				if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
-					t.Logf("caught %d ticks after the install, at line %d\n  origin:   %s\n  receiver: %s",
-						step+1, idx, lx, ly)
-					diverged = true
-					break
-				}
-			}
-			if !diverged {
-				t.Fatal("a capture carrying a different navigation phase reproduced the " +
-					"sender's evolution for 200 ticks; the phase this carrier exists to " +
-					"transfer is then not deciding anything the gate compares")
-			}
-		})
-	}
-}
-
-// TestNavigationPhaseSurvivesAnInstall is the positive half: the unmodified capture
-// through the same path has to hold, or the sabotages above are catching the setup
-// rather than the sabotage.
-func TestNavigationPhaseSurvivesAnInstall(t *testing.T) {
-	t.Parallel()
 	origin, cap := navGateOrigin(t)
 	defer origin.Close()
-
-	receiver := mustHeadless(t, navGateSeed, 120, 40)
-	defer receiver.Close()
-	tickUntilCursor(t, receiver)
-	receiver.Tick(40)
-	quiescePlayerDomain(t, receiver)
-	if err := receiver.InstallShared(cap); err != nil {
-		t.Fatalf("install: %v", err)
+	receivers := make([]*App, len(cases))
+	caught := make([]int, len(cases))
+	for i, tc := range cases {
+		idx, body := navRecord(t, cap)
+		if groups, ok := body["groups"].([]any); !ok || len(groups) == 0 {
+			t.Fatal("the navigation record carries no target group; nothing to sabotage")
+		}
+		install := cap
+		if tc.sabotage != nil {
+			tc.sabotage(body)
+			install = resealCapture(t, cap, idx, body)
+		}
+		r := mustHeadless(t, navGateSeed, 120, 40)
+		defer r.Close()
+		tickUntilCursor(t, r)
+		r.Tick(40)
+		quiescePlayerDomain(t, r)
+		if err := r.InstallShared(install); err != nil {
+			t.Fatalf("%s install: %v", tc.name, err)
+		}
+		receivers[i], caught[i] = r, -1
 	}
 
+	// Tick by tick, because the signal is a gauge. nav.recomputes reports what
+	// *this* tick recomputed and is overwritten by the next one, so a comparison
+	// every twenty ticks reads two zeroes and calls it agreement. The phase decides
+	// which tick a recompute lands on; a check that cannot see one tick cannot see
+	// the phase.
 	for step := range navSabotageTicks {
 		origin.Tick(1)
-		receiver.Tick(1)
-		if idx, lx, ly, differs := snapshot.FirstDiff(origin.SnapshotShared(), receiver.SnapshotShared()); differs {
-			t.Fatalf("the unmodified capture diverged %d ticks after the install, at line %d\n"+
-				"  origin:   %s\n  receiver: %s", step+1, idx, lx, ly)
+		want := origin.SnapshotShared()
+		for i, r := range receivers {
+			r.Tick(1)
+			if caught[i] >= 0 {
+				continue
+			}
+			if idx, lx, ly, differs := snapshot.FirstDiff(want, r.SnapshotShared()); differs {
+				caught[i] = step + 1
+				t.Logf("%s: caught %d ticks after the install, at line %d\n  origin:   %s\n  receiver: %s",
+					cases[i].name, step+1, idx, lx, ly)
+			}
+		}
+	}
+	for i, tc := range cases {
+		switch {
+		case tc.sabotage == nil && caught[i] >= 0:
+			t.Fatalf("the unmodified capture diverged %d ticks after the install; "+
+				"the sabotage cases are catching their setup", caught[i])
+		case tc.sabotage != nil && caught[i] < 0:
+			t.Fatalf("%s: a capture carrying a different navigation phase reproduced the "+
+				"sender's evolution for %d ticks; the phase this carrier exists to "+
+				"transfer is then not deciding anything the gate compares", tc.name, navSabotageTicks)
 		}
 	}
 }
@@ -238,35 +223,31 @@ func navGateOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 	return a, decoded
 }
 
-// The route-rebuild phase.
-//
-// `route_rebuild_ticks` paces one gateway route graph rebuild per interval, and the
-// navigation carrier has always carried it. Nothing exercised it: the shipped
-// scenario builds no gateways, so no graph is ever rebuilt, so a sabotaged value
-// changes nothing an install can be caught by. That is a coverage claim resting on
-// the code rather than on a result, and it is the shape of defect this whole plan
-// exists to stop having.
-//
-// What closes it is a scenario with gateways. A gateway that steers by a route
-// graph rebuilds it whenever its target moves off the cell the graph was computed
-// for, and the interval decides *which tick* that rebuild lands on; the entities the
-// gateway spawns then follow the routes it produced, so a rebuild a tick early moves
-// them differently for the rest of the run.
-
 // navRouteSeed is the world the gateway scenario builds on top of.
 const navRouteSeed = 0x0FA57
 
-// TestNavigationRouteRebuildPhaseIsLoadBearing.
+// TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream is the route-rebuild
+// budget's failing case, its control, and the genetic continuation gate over one
+// scenario.
 //
 // The sabotage is the value a world with no carrier holds: a zeroed budget, which
 // puts the next rebuild a whole interval away from where the sender had it. The
 // receiver installs cleanly, holds the sender's world at the install tick, and then
-// rebuilds its gateways' routes on different ticks — which is what the compared
-// surface has to catch.
-func TestNavigationRouteRebuildPhaseIsLoadBearing(t *testing.T) {
+// rebuilds its gateways' routes on different ticks. The unmodified capture beside
+// it must rebuild on the sender's ticks *and* keep the genotype stream equal —
+// including pending evaluations already attached to live eyes — as the gateway
+// world keeps spawning GA-managed eyes.
+//
+// One origin drives both, because the tower scenario is the most expensive fixture
+// in this package and the two receivers are answering the same question from
+// opposite sides.
+func TestTheGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
 	t.Parallel()
 	origin, cap := navRouteOrigin(t)
 	defer origin.Close()
+	if routeGraphSignature(origin) == "" {
+		t.Fatal("no gateway holds a route graph; the budget would pace nothing")
+	}
 
 	idx, body := navRecord(t, cap)
 	ticks, ok := body["route_rebuild_ticks"].(float64)
@@ -277,66 +258,66 @@ func TestNavigationRouteRebuildPhaseIsLoadBearing(t *testing.T) {
 		t.Fatal("the capture was taken on a rebuild tick, so the sabotage below is a no-op")
 	}
 	body["route_rebuild_ticks"] = float64(0)
-	sabotaged := resealCapture(t, cap, idx, body)
 
-	receiver := navRouteWorld(t)
-	defer receiver.Close()
-	if err := receiver.InstallShared(sabotaged); err != nil {
+	clean, sabotaged := navRouteWorld(t), navRouteWorld(t)
+	defer clean.Close()
+	defer sabotaged.Close()
+	if err := clean.InstallShared(cap); err != nil {
 		t.Fatalf("install: %v", err)
 	}
-	if !navRouteDiverges(t, origin, receiver) {
-		t.Fatal("a capture carrying a different route-rebuild budget rebuilt on the sender's " +
-			"ticks anyway; the budget this carrier transfers is then deciding nothing")
-	}
-}
-
-// TestAnInstalledGatewayWorldKeepsItsRebuildScheduleAndGeneticStream is the
-// positive half of the two sabotage cases above, and the genetic continuation
-// gate, over one scenario: an unmodified capture must rebuild its gateway route
-// graphs on the sender's ticks, and the registry checkpoint must keep the genotype
-// stream — including pending evaluations already attached to live eyes — equal as
-// the gateway world keeps spawning GA-managed eyes.
-func TestAnInstalledGatewayWorldKeepsItsRebuildScheduleAndGeneticStream(t *testing.T) {
-	t.Parallel()
-	origin, cap := navRouteOrigin(t)
-	defer origin.Close()
-
-	receiver := navRouteWorld(t)
-	defer receiver.Close()
-	if err := receiver.InstallShared(cap); err != nil {
-		t.Fatalf("install: %v", err)
+	if err := sabotaged.InstallShared(resealCapture(t, cap, idx, body)); err != nil {
+		t.Fatalf("sabotaged install: %v", err)
 	}
 
+	// The motion is the point. A route graph is stale only when its target has moved
+	// off the cell it was computed for, so a world whose target stands still rebuilds
+	// nothing and the budget decides nothing — which is exactly the state the shipped
+	// scenario leaves it in, and why this had no failing case. The same placement is
+	// written to every instance at the same tick, so what differs is the schedule the
+	// carrier restored and not the input.
+	//
+	// The route graph is the narrow observable — the cell each gateway was computed
+	// to reach and how many routes came out — so an unrelated shared-state difference
+	// cannot masquerade as a route-rebuild phase failure. A rebuild is precisely the
+	// moment a graph adopts the target's current cell, so two instances whose budgets
+	// stand apart hold graphs aimed at different cells for as long as the gap lasts.
 	_, initialMax := genotypeSignature(origin)
-	spawned := false
+	diverged, spawned := 0, false
 	for step := range navSabotageTicks {
-		moveRouteTarget(origin, step)
-		moveRouteTarget(receiver, step)
-		origin.Tick(1)
-		receiver.Tick(1)
-		if want, got := routeGraphSignature(origin), routeGraphSignature(receiver); want != got {
+		for _, a := range []*App{origin, clean, sabotaged} {
+			moveRouteTarget(a, step)
+			a.Tick(1)
+		}
+		want := routeGraphSignature(origin)
+		if got := routeGraphSignature(clean); want != got {
 			t.Fatalf("the unmodified capture rebuilt on different ticks %d ticks after install;\n"+
-				"  the sabotage cases above are catching their setup\n  origin:   %s\n  receiver: %s",
+				"  the sabotage case is catching its setup\n  origin:   %s\n  receiver: %s",
 				step+1, want, got)
 		}
-		want, wantMax := genotypeSignature(origin)
-		got, gotMax := genotypeSignature(receiver)
-		if want != got || wantMax != gotMax {
+		if diverged == 0 && want != routeGraphSignature(sabotaged) {
+			diverged = step + 1
+		}
+		wantGen, wantMax := genotypeSignature(origin)
+		gotGen, gotMax := genotypeSignature(clean)
+		if wantGen != gotGen || wantMax != gotMax {
 			t.Fatalf("genetic continuation diverged %d ticks after install\n"+
-				"  origin:   %s\n  receiver: %s", step+1, want, got)
+				"  origin:   %s\n  receiver: %s", step+1, wantGen, gotGen)
 		}
-		if wantMax > initialMax {
-			spawned = true
-		}
+		spawned = spawned || wantMax > initialMax
+	}
+	if diverged == 0 {
+		t.Fatal("a capture carrying a different route-rebuild budget rebuilt on the sender's " +
+			"ticks anyway; the budget this carrier transfers is then deciding nothing")
 	}
 	if !spawned {
 		t.Fatal("no genotype changed after install; the continuation gate exercised no new sample")
 	}
+	t.Logf("route graphs came apart %d ticks after the install", diverged)
 }
 
-// genotypeSignature renders the captured shared genotype store. It deliberately
-// excludes adaptation telemetry: this gate is the genetic stream's contract, while
-// the route-learning carrier has its own tests above.
+// genotypeSignature renders the captured shared genotype store. It excludes
+// adaptation telemetry deliberately: this is the genetic stream's contract, and the
+// route-learning carrier is compared through routeGraphSignature instead.
 func genotypeSignature(a *App) (string, uint64) {
 	var (
 		data  []byte
@@ -352,46 +333,6 @@ func genotypeSignature(a *App) (string, uint64) {
 		}
 	})
 	return string(data), maxID
-}
-
-// navRouteDiverges drives both instances through the same target motion and reports
-// whether their gateways rebuilt their route graphs on different ticks.
-//
-// The motion is the point. A route graph is stale only when its target has moved off
-// the cell it was computed for, so a world whose target stands still rebuilds nothing
-// and the budget decides nothing — which is exactly the state the shipped scenario
-// leaves it in, and why this had no failing case. The same placement is written to
-// both instances at the same tick, so what differs between them is the schedule the
-// carrier restored and not the input.
-//
-// What is compared is the graph each gateway holds — the cell it was computed to
-// reach and how many routes came out — rather than the whole shared surface. That is
-// the budget's own consequence and nothing else's: a rebuild is precisely the moment
-// a graph adopts the target's current cell, so two instances whose budgets stand
-// apart hold graphs aimed at different cells for as long as the gap lasts.
-//
-// The route graph remains the narrow observable here so an unrelated shared-state
-// difference cannot masquerade as a route-rebuild phase failure. The complete
-// genetic continuation defect this scenario originally exposed is now covered by
-// TestGeneticContinuationSurvivesAnInstall above.
-func navRouteDiverges(t *testing.T, origin, receiver *App) bool {
-	t.Helper()
-	if routeGraphSignature(origin) == "" {
-		t.Fatal("no gateway holds a route graph; the budget would pace nothing")
-	}
-	for step := range navSabotageTicks {
-		moveRouteTarget(origin, step)
-		moveRouteTarget(receiver, step)
-		origin.Tick(1)
-		receiver.Tick(1)
-		want, got := routeGraphSignature(origin), routeGraphSignature(receiver)
-		if want != got {
-			t.Logf("route graphs came apart %d ticks after the install\n  origin:   %s\n  receiver: %s",
-				step+1, want, got)
-			return true
-		}
-	}
-	return false
 }
 
 // routeGraphSignature renders every gateway's route graph: the cell it was computed
@@ -533,18 +474,3 @@ func navRouteOrigin(t *testing.T) (*App, snapshot.SharedCapture) {
 // navRouteWarmupTicks is long enough for the tower chain to have attached its four
 // gateways and for the eyes that follow their routes to exist and be moving.
 const navRouteWarmupTicks = 160
-
-// What this scenario found.
-//
-// The route-rebuild budget is covered now. The gateway world it needed also showed
-// something else, and it belongs to D-19 rather than to navigation: a receiver that
-// installs a capture and then lets a gateway spawn its next eye gets a *different
-// genotype* than the sender did.
-//
-// The old genetic carrier exported only each species' archive and generation.
-// `pkg/genetic` also owns the PCG position, pre-produced proposal ring, pending
-// table, partial-generation count and next ID; the registry adds a probe PCG and
-// counter. All decide the next genotype. The carrier now transfers that complete
-// continuation point plus GeneticSystem's live fitness accumulators, and
-// TestGeneticContinuationSurvivesAnInstall above leaves gateway spawning enabled
-// while comparing the resulting world tick by tick.
