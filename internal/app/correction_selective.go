@@ -156,62 +156,63 @@ type selectiveState struct {
 // === host: publishing the index ===
 
 // publishManifest sends the index for one capture to the peers that are in the
-// selective protocol, and reports whether every due peer was covered.
+// selective protocol, and returns the due peers it did not reach.
 //
-// A false return is what makes the caller send a whole body as well: it means at
-// least one due peer has not answered a manifest recently enough to be repaired
-// selectively, and that peer is owed the whole correction it would otherwise
-// have received.
+// Those are what the caller owes a whole body: a peer skipped here has not
+// answered a manifest recently enough to be repaired selectively, or its link
+// refused the frame, and either way the index alone would leave it holding
+// nothing it can act on. Naming them rather than reporting a bare "some peer was
+// missed" is what keeps the two decisions one decision — the skip is recorded
+// where it is made, so no second pass can re-derive it from state this one has
+// already moved on.
 //
 // Caller MUST hold publishMu, and MUST NOT hold the world lock.
-func (c *corrections) publishManifest(port engine.NetworkPort, index *snapshot.Manifest, due []uint32) (bool, error) {
+func (c *corrections) publishManifest(port engine.NetworkPort, index *snapshot.Manifest, due []uint32) ([]uint32, error) {
 	started := time.Now() // [wall] telemetry only; outside the world lock
 	body, err := snapshot.EncodeManifest(index.Summary())
 	if err != nil {
-		return false, fmt.Errorf("correction manifest encode: %w", err)
+		return due, fmt.Errorf("correction manifest encode: %w", err)
 	}
 	if len(body) > network.MaxPayloadSize {
 		// A manifest is section summaries and a header; outgrowing a frame would
 		// mean the world had grown a section vector no descent could be cheap
 		// over. Say so and let the caller fall back rather than chunk it.
-		return false, fmt.Errorf("correction manifest is %d bytes, past one frame", len(body))
+		return due, fmt.Errorf("correction manifest is %d bytes, past one frame", len(body))
 	}
 	tick := index.Summary().Header.Tick
 
 	m := c.a.snapshotTelemetry
 	m.hashUS.Store(time.Since(started).Microseconds())
 
-	covered, sent := true, 0
+	var missed []uint32
+	sent := 0
 	for _, id := range due {
 		p := c.peers[id]
 		if p == nil {
 			continue
 		}
-		if p.wide > 0 {
-			// Diverged too widely to repair last time; the caller owes it a body.
+		switch {
+		case p.wide > 0:
+			// Diverged too widely to repair last time; owed a body instead.
 			p.wide--
-			covered = false
-			continue
-		}
-		if p.silence >= parameter.SnapshotManifestSilenceCorrections {
-			covered = false
-			continue
-		}
-		if !port.Send(id, uint8(network.MsgStateManifest), body) {
+		case p.silence >= parameter.SnapshotManifestSilenceCorrections:
+			// Answering nothing; the index cannot reach it.
+		case !port.Send(id, uint8(network.MsgStateManifest), body):
 			p.refused++
-			covered = false
+		default:
+			p.manifestTick = tick
+			p.silence++
+			sent++
 			continue
 		}
-		p.manifestTick = tick
-		p.silence++
-		sent++
+		missed = append(missed, id)
 	}
 	if sent > 0 {
 		m.manifestSent.Add(1)
 		m.manifestBytesSent.Add(int64(len(body) * sent))
 		c.recordSelectiveSizeLocked(len(body))
 	}
-	return covered, nil
+	return missed, nil
 }
 
 // retainLocked adds one capture and its index to the bounded ring.

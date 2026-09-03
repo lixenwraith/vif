@@ -382,19 +382,17 @@ func (c *corrections) publishRound(force bool) error {
 
 	// A non-keyframe cadence leads with the index rather than the body. A peer
 	// still answering manifests is repaired selectively, which on a converged link
-	// moves no state at all; only a silent peer is owed the whole difference. The
-	// keyframe cadence is untouched: it is the convergence floor.
+	// moves no state at all; only the peers the index did not reach are owed the
+	// whole difference. The keyframe cadence is untouched: it is the convergence
+	// floor.
 	bodyPeers := due
 	if !keyframe {
-		covered, mErr := c.publishManifest(port, index, due)
-		answerable := c.canAnswerEveryParticipant(ids)
+		missed, mErr := c.publishManifest(port, index, due)
 		switch {
 		case mErr != nil:
 			vlog.Warn("app", "msg", "correction index not published", "error", mErr.Error())
-		case covered && answerable:
-			bodyPeers = nil
-		case answerable:
-			bodyPeers = c.silentPeersLocked(due)
+		case c.canAnswerEveryParticipant(ids):
+			bodyPeers = missed
 		default:
 			// A participant nobody can answer is still owed an authority, and the
 			// only thing that reaches it is the flood. The index still goes to the
@@ -485,23 +483,6 @@ func (c *corrections) publishRound(force bool) error {
 		"cadence_ticks", c.base, "keyframe_period_ticks", c.keyPeriod,
 		"encode_us", encodeDur.Microseconds())
 	return nil
-}
-
-// silentPeersLocked names the due peers the selective exchange cannot repair: the
-// ones that have left SnapshotManifestSilenceCorrections manifests unanswered.
-// Caller MUST hold publishMu.
-func (c *corrections) silentPeersLocked(due []uint32) []uint32 {
-	out := make([]uint32, 0, len(due))
-	for _, id := range due {
-		p := c.peers[id]
-		if p == nil {
-			continue
-		}
-		if p.wide > 0 || p.silence >= parameter.SnapshotManifestSilenceCorrections {
-			out = append(out, id)
-		}
-	}
-	return out
 }
 
 // publishBroadcast is the unmeasured path: one correction to everyone on the

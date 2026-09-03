@@ -1145,6 +1145,49 @@ func TestASilentPeerIsSentWholeBodies(t *testing.T) {
 	t.Fatal("the fallback body never reached the guest")
 }
 
+// TestAWidenedPeerIsServedForItsWholeWindow: a peer dropped out of the selective
+// exchange because its last repair came out wider than the world that repair was
+// aiming at is owed the whole body for every round it is out for, the final one
+// included.
+//
+// The skip and the fallback are one decision. Deriving the second from the
+// counter the first had already spent left the last round of the window sending
+// that peer neither an index nor a body, and a correction that reaches nobody is
+// a stall the protocol has no answer for: the next publication re-enters the
+// exchange rather than re-sending what was lost.
+func TestAWidenedPeerIsServedForItsWholeWindow(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	// What serveOne reaches when a repair is not worth sending.
+	const guestParticipant = 2
+	host.corrections.widenLocked(guestParticipant)
+
+	keyframes := statOf(host, "snapshot.keyframes")
+	for round := range parameter.SnapshotManifestSilenceCorrections {
+		sent := statOf(host, "snapshot.correction_bytes_sent")
+		if err := host.PublishCorrection(); err != nil {
+			t.Fatalf("round %d publish: %v", round, err)
+		}
+		if statOf(host, "snapshot.correction_bytes_sent") == sent {
+			t.Fatalf("round %d of the widen window left the peer with neither an index nor a body", round)
+		}
+		advance()
+	}
+	if got := statOf(host, "snapshot.keyframes"); got != keyframes {
+		t.Fatalf("the window crossed a keyframe (%d, was %d), which every peer is sent anyway; "+
+			"this run did not exercise the fallback it is about", got, keyframes)
+	}
+	// The window is over: the peer is back in the exchange, and the correction that
+	// puts it there converges it like any other.
+	manifests := statOf(host, "snapshot.manifests_sent")
+	assertCorrected(t, deliverCorrection(t, host, []*App{guest}, advance), guest, "after the window")
+	if statOf(host, "snapshot.manifests_sent") <= manifests {
+		t.Fatal("the peer never returned to the selective exchange")
+	}
+}
+
 // TestLinkPacingPricesTheSelectiveWire: the controller's cost
 // model is fed the bytes the new protocol actually sends, not the whole delta it
 // replaced.
