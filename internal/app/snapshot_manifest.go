@@ -63,7 +63,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
-	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
 
@@ -185,14 +184,11 @@ type CorrectionManifest struct {
 	// surface on both sides at once. Hashing all of them would leave a root
 	// disagreement no shard could close; hashing none of them would stop a mirror
 	// of the authority's own cursor from ever being corrected.
+	// The authority generation this index was produced under is not repeated here:
+	// it is in Header, which every authoritative artifact carries and which the
+	// root absorbs, so a manifest from another term cannot compare equal to this
+	// one. Two places to read one fact is how the two stop agreeing.
 	Authority uint32 `json:"authority"`
-
-	// Term is the authority generation the indexed capture was produced under. It
-	// is beside Authority rather than folded into it because the two answer
-	// different questions: Authority decides which cursors' owner-authored cells
-	// are inside the hashed surface (D-13), and Term decides whether this index may
-	// be acted on at all.
-	Term network.AuthorityTerm `json:"term,omitempty"`
 
 	// Sections is every section, always. The alternative — sending only the
 	// sections that changed since the last manifest — would make a manifest
@@ -232,7 +228,6 @@ func buildManifest(cap SharedCapture, authority uint32) (*captureManifest, error
 			Version:   ManifestVersion,
 			Header:    cap.Header,
 			Authority: authority,
-			Term:      cap.Header.Term,
 		},
 		authority: authority,
 		sections:  make(map[string]*manifestSection, engine.SharedWorldStoreCount+5),

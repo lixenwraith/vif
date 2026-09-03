@@ -1285,17 +1285,18 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	}
 }
 
-// receiveSelective hands one Phase 6 manifest, request or repair to the session
-// layer.
+// receiveSelective hands one selective-correction frame to the session layer: a
+// manifest, a receiver's answer to one, the repair that answers that, or the
+// refusal a retention holder gives when it cannot produce one.
 //
-// None of the three is relayed, and that is deliberate rather than an omission.
-// All three are one exchange between an authority and a receiver that can answer
-// it: a manifest forwarded to a participant whose reply cannot get back would
-// arrive as a question nobody can act on, and a request or a repair forwarded to a
-// peer that did not ask would deliver a page vector it holds no retention for. The
-// authority publishes the index only when every participant is directly linked and
-// keeps the Phase 5 stream otherwise, so a relayed participant is never left
-// holding an index it cannot use — see corrections.everyParticipantIsDirect.
+// None of the four is relayed *here*, and that is deliberate rather than an
+// omission. The transport's flood forwards what it admitted, which is the right
+// rule for an artifact everyone needs and the wrong one for an exchange: a request
+// or a repair forwarded to a peer that did not ask would deliver a page vector it
+// holds no retention for. Forwarding a manifest is a decision about retention —
+// only a participant that can answer for the tick it names may pass the question
+// on — so it is made in the session layer, which is what holds the ring. See
+// corrections.forwardManifest and corrections.canAnswerEveryParticipant.
 func (s *NetworkSystem) receiveSelective(kind network.MessageType, from uint32, body []byte) {
 	if from == 0 {
 		s.statDrop.Add(1)
