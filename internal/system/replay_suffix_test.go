@@ -37,10 +37,11 @@ func TestRosterAndResetArtifactsAreNeverRetained(t *testing.T) {
 	}
 }
 
-// TestTheReplayWindowIsMeasuredInProductionTicks pins the membership rule the
-// "exactly once" argument rests on: an artifact produced after the correction's
-// baseline is offered, one produced at or before it is not.
-func TestTheReplayWindowIsMeasuredInProductionTicks(t *testing.T) {
+// TestReplayMembershipUsesTheAuthoritativeApplyTick pins the same boundary the
+// barrier uses: a capture contains frames due at or before its tick, regardless of
+// when their producer published them. Production ticks bound retention age; they
+// do not decide whether one correction contains a frame.
+func TestReplayMembershipUsesTheAuthoritativeApplyTick(t *testing.T) {
 	s := &NetworkSystem{}
 	for _, produced := range []uint64{8, 9, 10, 11} {
 		s.retainLocked(frameAt(produced), produced, produced+3, event.OriginInput)
@@ -50,8 +51,8 @@ func TestTheReplayWindowIsMeasuredInProductionTicks(t *testing.T) {
 	if !ok {
 		t.Fatal("a suffix inside every bound was reported unavailable")
 	}
-	if len(frames) != 2 || len(origins) != 2 {
-		t.Fatalf("baseline 9 offered %d records, want the two produced after it", len(frames))
+	if len(frames) != 4 || len(origins) != 4 {
+		t.Fatalf("baseline 9 offered %d records, want all four applying after it", len(frames))
 	}
 	for _, f := range frames {
 		if f.ApplyTick <= 9 {
@@ -59,15 +60,40 @@ func TestTheReplayWindowIsMeasuredInProductionTicks(t *testing.T) {
 				f.ApplyTick)
 		}
 	}
-	if frames[0].Frame.Seq >= frames[1].Frame.Seq {
-		t.Fatalf("the suffix is not in production order: %d then %d",
-			frames[0].Frame.Seq, frames[1].Frame.Seq)
+	if frames[0].Frame.Seq != 8 {
+		t.Fatalf("a crossing produced before the baseline but applying after it was omitted: first sequence %d",
+			frames[0].Frame.Seq)
+	}
+
+	frames, _, ok = s.LocalReplaySuffix(12)
+	if !ok || len(frames) != 2 || frames[0].Frame.Seq != 10 || frames[1].Frame.Seq != 11 {
+		t.Fatalf("baseline 12 offered sequences %v (ok=%v), want 10 and 11",
+			frameSequences(frames), ok)
 	}
 
 	// A baseline past everything retained offers nothing, which is the ordinary
 	// case on a quiet participant rather than a failure.
 	if frames, _, ok := s.LocalReplaySuffix(99); !ok || len(frames) != 0 {
 		t.Fatalf("a baseline past the suffix offered %d records (ok=%v)", len(frames), ok)
+	}
+}
+
+// TestReplayOrderingKeepsEachFramesOrigin verifies the parallel metadata follows
+// the frame when a correction rebase makes retained apply ticks non-monotonic.
+func TestReplayOrderingKeepsEachFramesOrigin(t *testing.T) {
+	s := &NetworkSystem{}
+	s.retainLocked(frameAt(1), 10, 20, event.OriginInput)
+	s.retainLocked(frameAt(2), 11, 15, event.OriginMacro)
+
+	frames, origins, ok := s.LocalReplaySuffix(9)
+	if !ok || len(frames) != 2 || len(origins) != 2 {
+		t.Fatalf("offered %d frames and %d origins (ok=%v), want two of each",
+			len(frames), len(origins), ok)
+	}
+	if frames[0].Frame.Seq != 2 || origins[0] != event.OriginMacro ||
+		frames[1].Frame.Seq != 1 || origins[1] != event.OriginInput {
+		t.Fatalf("ordered frames/origins = (%d,%s), (%d,%s)",
+			frames[0].Frame.Seq, origins[0], frames[1].Frame.Seq, origins[1])
 	}
 }
 
@@ -91,9 +117,10 @@ func TestADroppedRecordMakesTheSuffixUnavailable(t *testing.T) {
 	if _, _, ok := s.LocalReplaySuffix(100); ok {
 		t.Fatal("a baseline behind a dropped record was offered a suffix anyway")
 	}
-	// A baseline past everything that was dropped is still answerable: the hole is
-	// behind it, so the history after it is whole.
-	if _, _, ok := s.LocalReplaySuffix(uint64(100 + parameter.SnapshotReplayRecords + 3)); !ok {
+	// A baseline at the newest dropped apply tick is still answerable: the hole is
+	// in the capture, so the history after it is whole. The tick-span bound may
+	// drop more than the record-count overflow above, so read the exact boundary.
+	if _, _, ok := s.LocalReplaySuffix(s.lostApplyTick); !ok {
 		t.Fatal("a baseline past the hole was refused a suffix it holds in full")
 	}
 }
@@ -120,4 +147,12 @@ func frameAt(seq uint64) event.WireFrame {
 		Payload: "x = 1\n",
 		Seq:     seq,
 	}
+}
+
+func frameSequences(frames []event.ScheduledWireFrame) []uint64 {
+	out := make([]uint64, len(frames))
+	for i, frame := range frames {
+		out[i] = frame.Frame.Seq
+	}
+	return out
 }

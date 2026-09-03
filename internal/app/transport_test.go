@@ -571,8 +571,9 @@ func cursorPosition(a *App, e core.Entity) (pos component.PositionComponent) {
 	return pos
 }
 
-// observeOnly marks every cursor on an instance remote, so it simulates none and
-// its shared state is whatever the wire delivers
+// observeOnly marks every cursor on an instance remote and removes player-domain
+// work already spawned during boot, so it produces no crossings of its own and its
+// shared state is whatever the wire delivers.
 func observeOnly(t *testing.T, a *App) {
 	t.Helper()
 	var owned int
@@ -583,6 +584,14 @@ func observeOnly(t *testing.T, a *App) {
 			owned++
 			return true
 		})
+		var player []core.Entity
+		for _, e := range w.Positions.Entities() {
+			if e.Domain() == core.DomainPlayer {
+				player = append(player, e)
+			}
+		}
+		w.DestroyEntitiesBatch(player)
+		w.Resources.Player.Entity = 0
 	})
 	if owned == 0 {
 		t.Fatal("observer has no cursor to mirror")

@@ -16,13 +16,10 @@ import (
 // directions: a correction makes a guest hold the authority's world, and a
 // participant's own accepted actions must not disappear when one arrives.
 //
-// The window is what reconciles them, and it is measured in production ticks. An
-// artifact produced after the correction's baseline applies strictly after it and
-// cannot be in the capture, so replaying it restores exactly what the install
-// undid. An artifact produced at or before the baseline is in flight — the
-// authority will apply it in its own order — and is left to the correction that
-// carries it, which is what keeps a corrected guest equal to the authority at the
-// tick the correction describes.
+// The window is what reconciles them. Production ticks bound retention; the
+// authoritative apply tick decides membership. A capture at T contains everything
+// due at or before T and cannot contain a crossing due after T, even when that
+// crossing was produced at or before T and is still inside the playout lead.
 
 // TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce is requirement 9. A guest
 // produces a crossing, then installs an authority taken before it, and the effect
@@ -90,8 +87,125 @@ func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
 	if got := statOf(guest, "snapshot.replay_records"); got != replayedOnce {
 		t.Fatalf("the same crossing was replayed again (%d then %d records)", replayedOnce, got)
 	}
+	if got := cursorCell(t, host, 1); got != moved {
+		t.Fatalf("the pending wire copy never reached the authority: host stands at %v, want %v", got, moved)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the authority's next correction lost the pending crossing: guest stands at %v, want %v", got, moved)
+	}
 	if got := statOf(guest, "snapshot.replay_skipped"); got != 0 {
 		t.Fatalf("replay was skipped %d times on a healthy suffix", got)
+	}
+}
+
+// TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce is the boundary the
+// production-tick test above does not cover. The guest has already closed the
+// crossing's production epoch, but its authoritative apply tick is still ahead of
+// the capture. A correction at that production tick therefore cannot contain the
+// crossing and must replay it, even though it was not produced after the baseline.
+func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	before := cursorCell(t, guest, 1)
+	inject(t, guest, intentMotion(input.MotionRight, 1))
+	moved := cursorCell(t, guest, 1)
+	if moved.X != before.X+1 || moved.Y != before.Y {
+		t.Fatalf("the local motion moved the cursor from %v to %v", before, moved)
+	}
+
+	// Close and send the production epoch. The host still cannot apply the frame
+	// until its agreed apply tick, one playout lead later.
+	advance()
+	baseline := host.Position().Tick
+	if got := guest.Position().Tick; got != baseline {
+		t.Fatalf("guest tick %d, want the host baseline %d", got, baseline)
+	}
+	suffix, dropped := replaySuffixOf(t, guest, baseline)
+	if len(suffix) != 1 {
+		t.Fatalf("baseline %d offered %d crossings, want the one still in flight", baseline, len(suffix))
+	}
+	if suffix[0].ApplyTick <= baseline {
+		t.Fatalf("the in-flight crossing applies at tick %d, at or before baseline %d",
+			suffix[0].ApplyTick, baseline)
+	}
+	if dropped != 0 {
+		t.Fatalf("retention dropped %d records in a one-crossing window", dropped)
+	}
+
+	replayed := statOf(guest, "snapshot.replay_records")
+	deliverCorrectionNow(t, host, []*App{guest}, advance)
+	if got := statOf(guest, "snapshot.replay_records"); got != replayed+1 {
+		t.Fatalf("the correction replayed %d records, want one", got-replayed)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("correction at production tick rolled the cursor from %v back to %v", moved, got)
+	}
+
+	// Once the host reaches the frame's apply tick, its next capture contains the
+	// move and the guest neither loses nor replays it again.
+	want := deliverCorrection(t, host, []*App{guest}, advance)
+	assertCorrected(t, want, guest, "guest")
+	if got := statOf(guest, "snapshot.replay_records"); got != replayed+1 {
+		t.Fatalf("the same crossing was replayed again (%d total records)", got-replayed)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the authority applied the crossing at %v, want %v", got, moved)
+	}
+}
+
+// TestARewindDoesNotReuseAProductionEpoch covers the other clock carried by a
+// correction. The world tick may move backwards, but a source's wire epochs are a
+// monotonic stream: reusing one makes every peer's replay filter discard the new
+// batch before it can inspect the frames inside it.
+func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	// Capture one authority tick, then let the guest close the following epoch and
+	// make sure the host has admitted its marker before rewinding the guest.
+	advance()
+	cap, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	baseline := cap.Header.Tick
+	advance()
+	host.Tick(1)
+	if got := guest.Position().Tick; got != baseline+1 {
+		t.Fatalf("guest reached tick %d, want %d before rewind", got, baseline+1)
+	}
+	if err := guest.corrections.install(cap); err != nil {
+		t.Fatalf("install tick %d: %v", baseline, err)
+	}
+	if got := guest.Position().Tick; got != baseline {
+		t.Fatalf("correction left guest at tick %d, want %d", got, baseline)
+	}
+
+	before := cursorCell(t, host, 1)
+	inject(t, guest, intentMotion(input.MotionRight, 1))
+	moved := cursorCell(t, guest, 1)
+	if moved.X != before.X+1 || moved.Y != before.Y {
+		t.Fatalf("guest moved from host cell %v to %v", before, moved)
+	}
+
+	suffix, dropped := replaySuffixOf(t, guest, baseline)
+	if len(suffix) != 1 || dropped != 0 {
+		t.Fatalf("post-rewind suffix has %d records and %d drops, want one healthy record",
+			len(suffix), dropped)
+	}
+	applyTick := suffix[0].ApplyTick
+
+	// The first re-simulated tick must not send another batch under baseline+1.
+	// The next tick reaches the source's unsent epoch and closes one batch carrying
+	// the move. Once the host reaches its ApplyTick it must have accepted and
+	// applied the absolute cursor move exactly once.
+	guest.Tick(2)
+	for host.Position().Tick < applyTick {
+		host.Tick(1)
+	}
+	if got := cursorCell(t, host, 1); got != moved {
+		t.Fatalf("host discarded the post-rewind input: cursor is %v, want %v", got, moved)
 	}
 }
 

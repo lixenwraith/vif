@@ -239,7 +239,8 @@ and opts out through the `event.Derived` payload interface (D-5).
 **D-11 Determinism invariants.** Across instances: identical shared event order,
 identical shared entity creation order, identical shared RNG derivation, and
 identical shared component values — **on the host**. On a guest, equal to the host
-as of the last applied correction, and converging.
+as of the last applied correction plus the exact local suffix the host has not yet
+applied, and converging.
 
 The weakening is Phase 4's and it is the point of Phase 4 rather than a concession
 to it. Bit-exact agreement at every tick was only ever achievable by making every
@@ -260,10 +261,12 @@ Verified in three places, and the three are different claims. Bit-exactness acro
 instances is now a *test* invariant for the host's own reproduction: two journals
 stripped of player records must be equal, and a replay must reproduce its run.
 Convergence is the live invariant — `TestGuestConvergesOnEveryCorrection` and the
-two-participant criteria assert that a guest's `SnapshotShared()` equals the host's
-as of every correction, and that the two really did disagree in between, since a
-criterion a guest could pass by never predicting anything proves nothing. And the
-distance in between is measured rather than asserted: `snapshot.correction_entries`,
+two-participant criteria assert that a guest with no outstanding suffix equals the
+host as of every correction, while the replay criteria assert that an outstanding
+local action remains layered over an older authority and later enters it exactly
+once. The two really do disagree in between, since a criterion a guest could pass
+by never predicting anything proves nothing. And the distance in between is
+measured rather than asserted: `snapshot.correction_entries`,
 `snapshot.correction_entities` and `snapshot.correction_cells`.
 
 **D-12 Claimed geometry.** A shared system that *claims* cells — spawn footprint
@@ -969,13 +972,21 @@ create or destroy shared identity rather than changing values in an existing
 world, so applying them on different ticks would give captures different entity or
 run numbers (D-11).
 
-`Flush` closes and asynchronously sends each tick's epoch, including an empty
-marker. `Receive` opens the next tick by applying remote and barrier-bound local
-artifacts whose deadline has arrived; `settleLocked("wire")` completes that
-dedicated between-tick group before `BeginTick`. Due artifacts sort by apply tick,
-participant ID and sequence. The default lead is three 50 ms ticks and simulation
-never waits for a round trip. A crossing produced by the wire settle belongs to
-the production epoch about to run and receives a complete lead of its own.
+`Flush` closes and asynchronously sends each previously unclosed tick's epoch,
+including an empty marker. `Receive` opens the next tick by applying remote and
+barrier-bound local artifacts whose deadline has arrived; `settleLocked("wire")`
+completes that dedicated between-tick group before `BeginTick`. Due artifacts sort
+by apply tick, participant ID and sequence. The default lead is three 50 ms ticks
+and simulation never waits for a round trip. A crossing produced by the wire
+settle belongs to the production epoch about to run and receives a complete lead
+of its own.
+
+A correction may rewind the world tick, but it never rewinds the source's next
+production epoch: `ProducedTick` is the mesh replay key and every peer may already
+have admitted its earlier marker. Crossings produced while the world re-simulates
+those closed ticks are stamped for and buffered under the next unsent epoch, then
+sent when the world catches it. Thus a new frame never hides inside a batch every
+receiver is required to reject as a duplicate.
 
 Outside a session `Cross` declines ownership without retaining a peer copy and the
 solo queue/journal path is unchanged. A journaled crossing is stamped where it was
@@ -1167,21 +1178,20 @@ failed page proof, a root that did not verify — ends at a keyframe, with the l
 world untouched.
 
 **The replay suffix.** A correction describes the host's world at an earlier tick,
-and a guest applying one has been predicting past it. What it produced in between
-is real, and Phase 5 discarded all of it on every correction. Each instance now
-retains a bounded suffix of its own accepted crossings — in `ScheduledWireFrame`,
-the representation the transport already encoded and the journal already writes,
-so a replay cannot differ from what the session was told happened — and replays
-the ones produced after the correction's baseline.
+and a guest applying one has been predicting past it. What it produced but the
+host has not yet applied is real, and Phase 5 discarded all of it on every
+correction. Each instance now retains a bounded suffix of its own accepted
+crossings — in `ScheduledWireFrame`, the representation the transport already
+encoded and the journal already writes, so a replay cannot differ from what the
+session was told happened — and replays the ones whose authoritative apply tick
+is after the correction's baseline.
 
-The window is measured in **production** ticks, and that is the whole of the
-exactly-once argument. An artifact produced after the baseline applies strictly
-after it (production plus the playout lead) and therefore cannot be in a capture
-taken at the baseline, so replaying it restores exactly what the install undid. An
-artifact produced at or before the baseline is *in flight*: the producer applied
-it immediately, the authority will apply it in its own order, and the correction
-after that carries it — which is what keeps a corrected guest equal to the
-authority at the tick the correction describes.
+That apply tick is the exactly-once boundary. A capture at tick T contains every
+artifact due at or before T and cannot contain one due after T, whether the latter
+was produced after T or was produced earlier and is still inside the playout lead.
+Replaying precisely the `ApplyTick > T` set therefore restores what the install
+undid without doubling anything the capture carries. Production ticks bound the
+retention window; they do not decide membership in a particular capture.
 
 Three artifacts are never retained, so no replay can carry them: participant
 arrival, participant departure and full reset. They decide what the world *is*
@@ -1472,6 +1482,7 @@ fails the build when the code stops matching the declaration.
 | `TestExplosionPresentationStaysWithItsProducer`, `TestExplosionCombatDoesNotDependOnVisualMergeState` | `internal/app`, `internal/system` | D-3/D-6: smoke remains local while immutable geometry always resolves shared combat |
 | `TestRuntimeDigestIsADriftGaugeRatherThanAVerdict`, `TestStatusBarSyncIndicatorReportsStalenessAndCorrection` | `internal/app`, `internal/render/renderer` | D-11/D-23: a deliberate shared corruption is counted and its surface named, nothing escalates, the retired `DESYNC`/`DIVERGED` keys are gone, and a correction closes it; the indicator reports staleness and correction size instead |
 | `TestGuestConvergesOnEveryCorrection`, `TestCorrectionMagnitudeIsMeasuredNotAsserted` | `internal/app` | D-11/D-23: a guest that predicted and drifted is exactly equal to the host as of every correction, and the drift it had is published rather than escalated |
+| `TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce`, `TestARewindDoesNotReuseAProductionEpoch` | `internal/app` | D-11/D-23: correction replay uses the authoritative apply-tick boundary, and a rewound guest buffers new crossings until it can send them under a production epoch peers have not already admitted |
 | `TestCorrectionDeltaRoundTripsExactly`, `TestCorrectionDeltaRefusesAForeignBaseline`, `TestCorrectionCarriesTheWholeDeclaredSurface` | `internal/app` | D-23: a delta applied to the baseline it names reproduces the sender's capture byte for byte over three seeds and is smaller than it; applied to any other baseline, or with a body its header does not describe, it is refused; every declared carrier, stream and FSM region travels whole in both shapes |
 | `TestSnapshotWireEnvelopeRoundTripsAndIsBounded`, `TestCorrectionCostAtTheStormHighWater` | `internal/app` | D-23/D-24: the versioned compressed envelope round-trips, rejects corrupt/version/size violations, and materially reduces both storm keyframe and delta wire bodies |
 | `TestStagingWorldIsBuiltOnceAndReused`, `TestReconcileMatchesAFullInstall` | `internal/app` | D-23: two captures installed into one re-used staging world leave what a world built for the second alone would, and a reconciled live world equals a fully re-installed one — then and 60 ticks later |
@@ -1773,7 +1784,7 @@ stronger sense than before.
 | Authority trust | The succession is unauthenticated. A peer that lies about its links or retention, votes twice, or fabricates a handoff record's voter list is not caught; the structural checks bound races, not hostility. |
 | Relay retention | A relay answers from a ring `SnapshotManifestRetention` deep, so it is older than the authority's by construction. A request naming a dropped tick is refused in words and the receiver takes the next whole world. A relay that holds nothing leaves the session on the whole-body flood. |
 | Join | Admission refuses an excessive catch-up gap or a link below the convergence floor. Join gates serialize transfer, though arrivals can share a cadence keyframe read. |
-| Rewind | A correction adopts its host tick and does not yet replay later local crossings. Phase 6 adds a bounded canonical suffix and replay. |
+| Rewind | A correction adopts its host tick, then replays the bounded canonical suffix whose authoritative apply ticks are later. If retention has a hole, it falls back to the authority alone and reports the skipped replay. |
 | Operations | Live pause/speed/step, raw shared mutation and synchronous snapshot save are refused. Programmatic embedder mutation remains the caller's responsibility. |
 | Trust | Links are plaintext and unauthenticated. Authentication is deferred; roster artifacts are structurally host-only. |
 | Transport loss | A bounded-queue refusal is counted and logged, not application-retransmitted. Newer corrections and keyframes provide state recovery. |

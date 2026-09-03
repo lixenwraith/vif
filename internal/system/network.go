@@ -124,13 +124,13 @@ type NetworkSystem struct {
 	// tick including their producer, and replaying one would create a roster entry
 	// or a run the session numbers differently.
 	//
-	// lostTick is the newest production tick retention has dropped. A replay is
-	// offered only when it lies at or before the correction's baseline, because a
-	// suffix missing one of its records is not a shorter suffix — it is a different
-	// history, and this never guesses at one.
+	// lostApplyTick is the newest authoritative apply tick retention has dropped.
+	// A replay is offered only when it lies at or before the correction's baseline,
+	// because a suffix missing one of its records is not a shorter suffix — it is a
+	// different history, and this never guesses at one.
 	suffix        []localCrossing
 	suffixBytes   int
-	lostTick      uint64
+	lostApplyTick uint64
 	suffixDropped int64
 
 	// agreed is the bounded set of barrier-bound artifacts this instance has
@@ -173,12 +173,8 @@ type localCrossing struct {
 	frame event.ScheduledWireFrame
 
 	// produced is the tick this instance published the artifact on — the epoch it
-	// belongs to, not the tick the session applies it at. It is what the replay
-	// window is measured in: an artifact produced after the correction's baseline
-	// is one this participant did in a stretch the authority has not described
-	// yet, and an artifact produced at or before it is in flight rather than
-	// outstanding — the authority will apply it in its own order and the next
-	// correction will carry it, exactly as it did before there was a replay.
+	// belongs to, not the tick the session applies it at. It bounds retention age;
+	// frame.ApplyTick decides whether a particular correction already contains it.
 	produced uint64
 	origin   event.Origin
 	bytes    int
@@ -612,8 +608,8 @@ func (s *NetworkSystem) retainLocked(frame event.WireFrame, produced, applyTick 
 			return
 		}
 		old := s.suffix[0]
-		if old.produced > s.lostTick {
-			s.lostTick = old.produced
+		if old.frame.ApplyTick > s.lostApplyTick {
+			s.lostApplyTick = old.frame.ApplyTick
 		}
 		s.suffixBytes -= old.bytes
 		s.suffix = append(s.suffix[:0], s.suffix[1:]...)
@@ -656,23 +652,16 @@ func (s *NetworkSystem) retainAgreed(a barrierArtifact) {
 // install to restore: every participant's arrival and departure, plus a reset.
 const maxAgreedRetained = 2*parameter.MaxPlayers + 1
 
-// LocalReplaySuffix returns this instance's own crossings produced after the
-// correction's baseline, in the order the session applies them.
+// LocalReplaySuffix returns this instance's own crossings whose authoritative
+// apply tick is after the correction's baseline, in session application order.
 //
-// The window is measured in production ticks, and that is the whole of the
-// "exactly once" argument. An artifact produced on tick P applies at P plus the
-// playout lead, so an artifact produced after the correction's baseline T applies
-// strictly after T and cannot be in a capture taken at T — the authority has not
-// reached it. Replaying it therefore restores exactly what the install undid, and
-// can never double an effect the capture already carries.
-//
-// The complement is deliberate rather than an omission. An artifact produced at or
-// before T is *in flight*: the producer applied it immediately (D-3 as Phase 4
-// changed it), the authority will apply it in its own order, and the correction
-// after that carries it. Rolling it back and letting it return is what happened
-// before there was a replay at all, and it is what keeps a corrected guest equal to
-// the authority at the tick the correction describes — which is the claim the
-// convergence criterion makes.
+// ApplyTick is the barrier's membership test everywhere else: a capture at T has
+// applied everything due at or before T and cannot contain anything due after T.
+// This includes an artifact produced at or before T but still inside the playout
+// lead. Replaying every record with ApplyTick > T therefore restores exactly what
+// the install undid and cannot double an effect the capture already carries.
+// Production ticks still bound the retained window; they do not decide membership
+// in one capture.
 //
 // ok is false when retention has dropped a record the suffix would need. The
 // caller then installs the authority alone and reports that replay was skipped;
@@ -681,24 +670,27 @@ const maxAgreedRetained = 2*parameter.MaxPlayers + 1
 func (s *NetworkSystem) LocalReplaySuffix(tick uint64) ([]event.ScheduledWireFrame, []event.Origin, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.lostTick > tick {
+	if s.lostApplyTick > tick {
 		return nil, nil, false
 	}
-	frames := make([]event.ScheduledWireFrame, 0, len(s.suffix))
-	origins := make([]event.Origin, 0, len(s.suffix))
+	selected := make([]localCrossing, 0, len(s.suffix))
 	for _, rec := range s.suffix {
-		if rec.produced <= tick {
+		if rec.frame.ApplyTick <= tick {
 			continue
 		}
-		frames = append(frames, rec.frame)
-		origins = append(origins, rec.origin)
+		selected = append(selected, rec)
 	}
-	slices.SortStableFunc(frames, func(a, b event.ScheduledWireFrame) int {
-		if n := cmp.Compare(a.ApplyTick, b.ApplyTick); n != 0 {
+	slices.SortStableFunc(selected, func(a, b localCrossing) int {
+		if n := cmp.Compare(a.frame.ApplyTick, b.frame.ApplyTick); n != 0 {
 			return n
 		}
-		return cmp.Compare(a.Frame.Seq, b.Frame.Seq)
+		return cmp.Compare(a.frame.Frame.Seq, b.frame.Frame.Seq)
 	})
+	frames := make([]event.ScheduledWireFrame, len(selected))
+	origins := make([]event.Origin, len(selected))
+	for i, rec := range selected {
+		frames[i], origins[i] = rec.frame, rec.origin
+	}
 	return frames, origins, true
 }
 
@@ -735,22 +727,38 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 
 // AdoptSnapshot rebases the barrier onto a world this instance just installed.
 //
-// Three things move at once and all three are the same fact. The production epoch
-// belongs to the installed tick rather than to the one this instance had reached,
-// or the next crossing it produces would name an apply tick the session left
-// behind. Artifacts already scheduled for a tick at or before the installed one are
-// dropped, because the capture contains their effect. And the floor is remembered,
-// so the artifacts still in flight for those ticks — the ones the host produced
-// between admitting this participant and reading the world for it — are recognised
-// as already-applied rather than applied twice.
+// Three clocks move here, but only two may move backwards. The world and its
+// scheduled artifacts rebase to the installed tick. This source's production
+// epoch does not: peers use it as a monotonic replay key and would reject a new
+// batch sent under an epoch they admitted before the correction. A rewound source
+// therefore keeps its next unsent epoch and buffers new crossings until the world
+// catches it. Artifacts already due at or before the installed tick are dropped,
+// because the capture is authoritative there. And the floor is remembered, so
+// artifacts still in flight for those ticks are recognised as already applied
+// rather than applied twice.
 //
 // Caller MUST hold updateMutex: it runs inside the install.
 func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if n := len(s.crossings); n > 0 {
-		s.statDrop.Add(int64(n))
-		s.crossings = s.crossings[:0]
+	// A local crossing may have been accepted between the last tick close and this
+	// install. If its apply tick is still ahead of the capture, the authority cannot
+	// contain it and dropping the pending wire copy would leave only a local replay:
+	// the next correction would erase it permanently. Keep that copy alongside the
+	// retained suffix; only an artifact whose deadline the authority has reached is
+	// superseded by the capture.
+	pending := s.crossings[:0]
+	pendingDropped := 0
+	for _, f := range s.crossings {
+		if f.ApplyTick <= tick {
+			pendingDropped++
+			continue
+		}
+		pending = append(pending, f)
+	}
+	s.crossings = pending
+	if pendingDropped > 0 {
+		s.statDrop.Add(int64(pendingDropped))
 	}
 	keep := s.scheduled[:0]
 	dropped := 0
@@ -762,13 +770,14 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 		keep = append(keep, a)
 	}
 	s.scheduled = keep
-	// The retained suffix is pruned by the replay window's own test: an artifact
-	// produced at or before the installed world's tick can never be replayed onto
-	// a later correction either, so holding it would only cost retention.
+	// The retained suffix is pruned by the barrier's membership test: the installed
+	// world contains an artifact exactly when its authoritative apply tick is at or
+	// before the capture tick. A record produced earlier but still inside the
+	// playout lead remains necessary and must survive this rebase.
 	pruned := s.suffix[:0]
 	s.suffixBytes = 0
 	for _, rec := range s.suffix {
-		if rec.produced <= tick {
+		if rec.frame.ApplyTick <= tick {
 			continue
 		}
 		pruned = append(pruned, rec)
@@ -794,7 +803,14 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 		s.statAgreedRestored.Add(int64(len(restored)))
 	}
 	s.snapshotFloor = tick
-	s.productionEpoch = tick + 1
+	// Production epochs are source-local replay keys, not captured world state.
+	// Moving this high-water mark backwards makes the receiver discard a genuinely
+	// new batch as a duplicate. A forward install can skip empty unsent epochs, but
+	// an epoch holding a pending crossing must retain its original key and deadline;
+	// flushCrossings closes it once, then catches the high-water mark up to the world.
+	if len(s.crossings) == 0 {
+		s.productionEpoch = max(s.productionEpoch, tick+1)
+	}
 	if r := s.world.Resources.Network; r != nil {
 		s.localSource = r.ParticipantID
 		s.delayTicks = r.BarrierDelayTicks
@@ -1352,13 +1368,27 @@ func (s *NetworkSystem) publishTransportLoss(p engine.NetworkPort) {
 }
 
 // flushCrossings advances the epoch under the producer lock, then sends its marker.
+//
+// A correction may rewind completedTick behind productionEpoch. Epochs up to that
+// high-water mark were already sent before the install, so sending them again would
+// make the receiver's duplicate filter discard any new frames they carry. Keep the
+// frames pending until the re-simulated world reaches the next unsent epoch; they
+// were stamped for that epoch by Cross and then leave together under its one marker.
 func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint64, active bool) {
 	s.mu.Lock()
-	pending := s.crossings
-	s.crossings = nil
 	dropped := s.encodeErr
 	s.encodeErr = 0
-	s.productionEpoch = completedTick + 1
+	if active && completedTick < s.productionEpoch {
+		s.mu.Unlock()
+		if dropped != 0 {
+			s.statDrop.Add(dropped)
+		}
+		return
+	}
+	epoch := s.productionEpoch
+	pending := s.crossings
+	s.crossings = nil
+	s.productionEpoch = max(epoch, completedTick+1)
 	source := s.localSource
 	s.mu.Unlock()
 
@@ -1378,7 +1408,7 @@ func (s *NetworkSystem) flushCrossings(p engine.NetworkPort, completedTick uint6
 		return
 	}
 	body, err := event.EncodeWireBatch(event.WireBatch{
-		Source: source, ProducedTick: completedTick, Frames: pending,
+		Source: source, ProducedTick: epoch, Frames: pending,
 	})
 	if err != nil {
 		s.statDrop.Add(int64(len(pending)))
