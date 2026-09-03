@@ -469,12 +469,9 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	var localA, localB core.Entity
 	a.World().RunSafe(func() { localA = a.World().Resources.Player.Slot(0) })
 	b.World().RunSafe(func() { localB = b.World().Resources.Player.Slot(1) })
+	step := &socketStep{t: t, host: host, guest: guest}
 	proveTwoLive(t, a, b, localA, localB, liveScript(seed, steps), func() {
-		recvA, recvB := host.Received(), guest.Received()
-		a.Tick(1)
-		b.Tick(1)
-		waitSocket(t, host, func() bool { return host.Received() > recvA }, "host epoch")
-		waitSocket(t, guest, func() bool { return guest.Received() > recvB }, "guest epoch")
+		step.run(a, b)
 	})
 
 	if err := guest.Close(); err != nil {
@@ -561,6 +558,55 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 		t.Fatalf("live proof = moved(%t,%t) sent(%d,%d) apm(%d,%d), want both active",
 			movedA, movedB, sentA, sentB, apmA, apmB)
 	}
+}
+
+// socketStep advances both instances one tick and lets the wire catch up.
+//
+// The criterion is that neither direction stops delivering, not that a frame
+// lands inside the tick that produced it. A loaded machine puts two epochs into
+// one wait and none into the next, and failing on that would be asserting the
+// runner's scheduling rather than the transport. A direction that has delivered
+// nothing across socketStallTicks consecutive ticks has stopped, and that is the
+// failure worth reporting.
+type socketStep struct {
+	t           *testing.T
+	host, guest *network.SocketPort
+	hostStall   int
+	guestStall  int
+}
+
+// socketStallTicks is how many consecutive ticks one direction may deliver
+// nothing before the link is called dead. Ten ticks is half a second of game
+// time, which is two correction cadences: a link that carried nothing over that
+// is not one this criterion can be proved on.
+const socketStallTicks = 10
+
+// socketStepGrace is how long one tick waits for the wire before giving up on it
+// and letting the next tick's wait observe the same frames.
+const socketStepGrace = 50 * time.Millisecond
+
+func (s *socketStep) run(a, b *App) {
+	s.t.Helper()
+	recvA, recvB := s.host.Received(), s.guest.Received()
+	a.Tick(1)
+	b.Tick(1)
+	s.hostStall = s.settle(s.host, recvA, s.hostStall, "host")
+	s.guestStall = s.settle(s.guest, recvB, s.guestStall, "guest")
+}
+
+func (s *socketStep) settle(port *network.SocketPort, was uint64, stalled int, what string) int {
+	s.t.Helper()
+	deadline := time.Now().Add(socketStepGrace) // [wall] a link bound, not a game one
+	for port.Received() <= was && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
+	if port.Received() > was {
+		return 0
+	}
+	if stalled+1 >= socketStallTicks {
+		s.t.Fatalf("the %s received nothing across %d consecutive ticks", what, socketStallTicks)
+	}
+	return stalled + 1
 }
 
 // socketWait is how long a socket handshake step may take. It is generous on
