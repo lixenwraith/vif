@@ -1,8 +1,8 @@
 // Package app: the correction as an exchange rather than a broadcast.
 //
-// Phase 5's correction is one-directional and self-sufficient: the host reads its
+// A whole correction is one-directional and self-sufficient: the host reads its
 // world and sends a body, and a receiver either applies it or waits for the next.
-// Phase 6 keeps that as the floor and puts a cheaper exchange in front of it.
+// That remains the floor; this is the cheaper exchange in front of it.
 //
 //	host                                  guest
 //	 |  manifest (root + section hashes)    |
@@ -14,25 +14,24 @@
 //	 |  shard set: only mismatching pages   |
 //	 |------------------------------------->|  splice, verify root, install
 //
-// Three things about the shape are load-bearing.
+// Three properties are load-bearing.
 //
-// **The descent happens where the content is.** The guest sends its own page
-// hashes for the sections that disagreed, so the host compares against content it
-// already holds and answers in one round trip. Asking the host for its page hashes
-// first would cost two.
+// The descent happens where the content is. The guest sends its own page hashes
+// for the sections that disagreed, so the host compares against content it already
+// holds and answers in one round trip; asking for the host's page hashes first
+// would cost two.
 //
-// **Silence falls back rather than stalls.** Every manifest is answered, so a peer
-// that stops answering is a peer whose uplink cannot reach the authority — a relay
+// Silence falls back rather than stalls. Every manifest is answered, so a peer
+// that stops answering has an uplink that cannot reach the authority — a relayed
 // participant, or a broken return path. After SnapshotManifestSilenceCorrections
-// the host stops assuming it can repair that peer selectively and publishes the
-// Phase 5 body again, which reaches it by the same flood the artifacts use. No
-// peer is ever left with an index it cannot act on.
+// the host publishes the whole body again, which reaches it by the same flood the
+// artifacts use. No peer is left holding an index it cannot act on.
 //
-// **The keyframe schedule is untouched.** A whole compressed capture still goes
-// out every keyframe period, so the convergence floor, the maximum repair age and
-// the recovery from any refusal are exactly what they were. Everything here is an
-// optimisation of the interval between keyframes, and every failure in it ends at
-// the keyframe that was going to be sent anyway.
+// The keyframe schedule is untouched. A whole compressed capture still goes out
+// every keyframe period, so the convergence floor, the maximum repair age and the
+// recovery from any refusal are unchanged. Everything here optimises the interval
+// between keyframes, and every failure in it ends at the keyframe that was going
+// to be sent anyway.
 package app
 
 import (
@@ -105,7 +104,7 @@ type awaitingRepair struct {
 	from     uint32
 }
 
-// selectiveState is the Phase 6 half of the correction protocol, on whichever side
+// selectiveState is the exchange half of the correction protocol, on whichever side
 // this run turns out to be.
 //
 // The whole of it is covered by selectiveMu rather than by publishMu, and that is
@@ -161,7 +160,7 @@ type selectiveState struct {
 //
 // A false return is what makes the caller send a whole body as well: it means at
 // least one due peer has not answered a manifest recently enough to be repaired
-// selectively, and that peer is owed the Phase 5 correction it would otherwise
+// selectively, and that peer is owed the whole correction it would otherwise
 // have received.
 //
 // Caller MUST hold publishMu, and MUST NOT hold the world lock.
@@ -259,7 +258,7 @@ func (c *corrections) retentionEvidence() (uint64, int) {
 // retainInstalled records the index over a capture this instance has just
 // installed whole, so it can answer for the authority afterwards.
 //
-// This is the primitive both Phase 7 deliverables rest on. A successor needs it to
+// This is the primitive authority succession rests on. A successor needs it to
 // prove its world is at least as new as the last artifact the old authority
 // published; a relay needs it to answer a request for a participant behind it. In
 // both cases what makes the record usable is that the capture *is* the
@@ -392,7 +391,7 @@ func (c *corrections) serveOne(port engine.NetworkPort, pending pendingRequest) 
 		// about the peer is that its prediction is not tracking — a storm moves
 		// the entire shared population every cadence, and no index makes that
 		// cheap — so the peer is dropped out of the exchange for a few
-		// publications and served the Phase 5 body instead, which is the cheapest
+		// publications and served the whole body instead, which is the cheapest
 		// thing anyone has for a receiver that has diverged wholesale. This
 		// correction is still answered — with the whole world, which is what the
 		// peer needs and what it would otherwise wait a cadence for — and the
@@ -433,7 +432,7 @@ func (c *corrections) widenLocked(id uint32) {
 // protocol's: past it a repair no longer fits one transport frame. The measured
 // keyframe size is the session's: a repair wider than the capture it is repairing
 // toward has stopped being an optimisation, and the fallback is what keeps the
-// selective path from ever costing more than the Phase 5 stream it replaced.
+// selective path from ever costing more than the whole-body stream it replaced.
 func (c *corrections) repairIsWorthSending(bytes int) bool {
 	if bytes > parameter.SnapshotShardBytesMax || bytes > network.MaxPayloadSize {
 		return false

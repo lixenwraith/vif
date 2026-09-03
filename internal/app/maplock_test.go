@@ -10,67 +10,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
-// mustHeadless builds a driven App on the embedded assets, failing the test on error
-func mustHeadless(t *testing.T, seed uint64, w, h int) *App {
-	t.Helper()
-	a, err := NewHeadless(Config{Seed: seed, Width: w, Height: h, Resources: resource.Options{Embedded: true}})
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	return a
-}
-
-// mustJoiner builds a participant the way ConfigForJoin does for a real join: it
-// adopts the session's D-14 bounds before its FSM boots, and it latches the world
-// as shared. Its terminal is its own.
-//
-// Both halves matter and for different reasons. A joiner whose world took its
-// bounds from that terminal would spawn cursor slot zero on a different cell than
-// the host and never recover (D-11). And one that did not latch would leave the
-// playout barrier disengaged, so every crossing it re-derives would apply a lead
-// earlier than the session applied it — which is invisible until an FSM deadline
-// falls inside that lead.
-func mustJoiner(t *testing.T, seed uint64, w, h int, an event.JoinAnchor) *App {
-	t.Helper()
-	a, err := NewHeadless(Config{
-		Seed: seed, Width: w, Height: h, Resources: resource.Options{Embedded: true},
-		MapWidth: an.Anchor.MapWidth, MapHeight: an.Anchor.MapHeight,
-		CropOnResize: an.Anchor.CropOnResize, LockMap: an.Anchor.SessionShared,
-	})
-	if err != nil {
-		t.Fatalf("headless joiner: %v", err)
-	}
-	return a
-}
-
-// tickUntilCursor advances until the FSM has spawned the first cursor
-func tickUntilCursor(t *testing.T, a *App) {
-	t.Helper()
-	for range 40 {
-		a.Tick(1)
-		var n int
-		a.World().RunSafe(func() { n = a.World().Resources.Player.Count() })
-		if n > 0 {
-			return
-		}
-	}
-	t.Fatal("no cursor after 40 ticks")
-}
-
-// spawnCursor adds one auto-slot cursor at the map centre and settles the request
-func spawnCursor(t *testing.T, a *App) {
-	t.Helper()
-	var before, after int
-	a.World().RunSafe(func() { before = a.World().Resources.Player.Count() })
-	a.Context().PushEventOrigin(event.EventCursorSpawnRequest,
-		&event.CursorSpawnRequestPayload{Auto: true, Center: true}, event.OriginDebug)
-	a.Settle()
-	a.World().RunSafe(func() { after = a.World().Resources.Player.Count() })
-	if after != before+1 {
-		t.Fatalf("roster has %d cursors, want %d", after, before+1)
-	}
-}
-
 // plantSentinel places a bare shared entity near the far map corner, where a
 // cropping resize would mark it for death
 func plantSentinel(t *testing.T, a *App) (e core.Entity, mapW, mapH int) {
@@ -95,62 +34,57 @@ func sentinelState(a *App, e core.Entity) (alive, doomed bool) {
 	return alive, doomed
 }
 
-// TestMapSizeLockedWithSecondCursor asserts D-14: once a second participant exists,
-// this instance's terminal no longer rewrites the shared map, and nothing outside
-// the shrunken viewport is cropped away.
-func TestMapSizeLockedWithSecondCursor(t *testing.T) {
-	a := mustHeadless(t, 0x14AB, 200, 60)
-	defer a.Close()
-	tickUntilCursor(t, a)
-	spawnCursor(t, a)
-	a.Tick(1)
+// TestMapSizeFollowsTheTerminalOnlyUntilASecondCursor asserts D-14 with its own
+// negative control: a single participant's resize crops the map and destroys an
+// out-of-bounds entity, and the identical resize under a second cursor rewrites
+// nothing shared and crops nobody. Without the control the suppression could be
+// asserting a crop that would not have fired.
+func TestMapSizeFollowsTheTerminalOnlyUntilASecondCursor(t *testing.T) {
+	t.Parallel()
 
-	sentinel, mapW, mapH := plantSentinel(t, a)
+	solo := mustHeadless(t, 0x14AC, 200, 60)
+	defer solo.Close()
+	tickUntilCursor(t, solo)
+	sentinel, mapW, _ := plantSentinel(t, solo)
+	solo.Resize(60, 24)
+	solo.Tick(2)
 
-	a.Resize(60, 24)
-	a.Tick(2)
+	cfg := solo.World().Resources.Config
+	var gotW, viewW int
+	solo.World().RunSafe(func() { gotW, viewW = cfg.MapWidth, cfg.ViewportWidth })
+	if gotW == mapW || gotW != viewW {
+		t.Fatalf("map %d after crop, want the new viewport %d (was %d)", gotW, viewW, mapW)
+	}
+	if alive, _ := sentinelState(solo, sentinel); alive {
+		t.Fatal("crop left an out-of-bounds entity alive; the locked case would prove nothing")
+	}
+	if solo.World().Resources.Status.Bools.Get("context.map_locked").Load() {
+		t.Fatal("context.map_locked set while the map still follows the terminal")
+	}
 
-	cfg := a.World().Resources.Config
-	var gotW, gotH int
-	a.World().RunSafe(func() { gotW, gotH = cfg.MapWidth, cfg.MapHeight })
+	shared := mustHeadless(t, 0x14AB, 200, 60)
+	defer shared.Close()
+	tickUntilCursor(t, shared)
+	spawnCursor(t, shared)
+	shared.Tick(1)
+	sentinel, mapW, mapH := plantSentinel(t, shared)
+	shared.Resize(60, 24)
+	shared.Tick(2)
+
+	cfg = shared.World().Resources.Config
+	var gotH int
+	shared.World().RunSafe(func() { gotW, gotH = cfg.MapWidth, cfg.MapHeight })
 	if gotW != mapW || gotH != mapH {
 		t.Fatalf("map resized under a second cursor: %dx%d, want %dx%d", gotW, gotH, mapW, mapH)
 	}
-	if alive, doomed := sentinelState(a, sentinel); !alive || doomed {
+	if alive, doomed := sentinelState(shared, sentinel); !alive || doomed {
 		t.Fatalf("sentinel outside the new viewport was cropped: alive=%v doomed=%v", alive, doomed)
 	}
-	if !a.World().Resources.Status.Bools.Get("context.map_locked").Load() {
+	if !shared.World().Resources.Status.Bools.Get("context.map_locked").Load() {
 		t.Fatal("context.map_locked not published")
 	}
 	if sw, sh := engine.ScreenSize(cfg); sw != 60 || sh != 24 {
 		t.Fatalf("viewport did not follow the terminal: ScreenSize = %dx%d", sw, sh)
-	}
-}
-
-// TestMapSizeCropsWithOneCursor is the negative control: the same resize with a
-// single participant crops the map and destroys the sentinel, so the guard above
-// is asserting a suppression that would otherwise fire.
-func TestMapSizeCropsWithOneCursor(t *testing.T) {
-	a := mustHeadless(t, 0x14AC, 200, 60)
-	defer a.Close()
-	tickUntilCursor(t, a)
-
-	sentinel, mapW, _ := plantSentinel(t, a)
-
-	a.Resize(60, 24)
-	a.Tick(2)
-
-	cfg := a.World().Resources.Config
-	var gotW, viewW int
-	a.World().RunSafe(func() { gotW, viewW = cfg.MapWidth, cfg.ViewportWidth })
-	if gotW == mapW || gotW != viewW {
-		t.Fatalf("map %d after crop, want the new viewport %d (was %d)", gotW, viewW, mapW)
-	}
-	if alive, _ := sentinelState(a, sentinel); alive {
-		t.Fatal("crop left an out-of-bounds entity alive; the locked-map test proves nothing")
-	}
-	if a.World().Resources.Status.Bools.Get("context.map_locked").Load() {
-		t.Fatal("context.map_locked set while the map still follows the terminal")
 	}
 }
 
@@ -164,12 +98,12 @@ func TestMapSizeCropsWithOneCursor(t *testing.T) {
 // It runs the production sequence rather than half of it. The host closes its
 // roster and captures the world that produced; the guest adopts the bounds before
 // its own FSM boots — which is what mustJoiner is for and what the criterion below
-// still measures — and then installs the capture instead of re-deriving it. Phase 2
-// had the guest reproduce, and only the guest ran the level setup, so the two
-// settled the boot queue at different points and reached MainSpawnGold a tick
-// apart. gold.timer was excluded from the compared surface for exactly that reason;
-// it is compared here.
+// still measures — and then installs the capture instead of re-deriving it. A
+// reproducing guest ran the level setup alone, so the two settled the boot queue at
+// different points and reached MainSpawnGold a tick apart; gold.timer was excluded
+// from the compared surface for that reason and is compared here.
 func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
+	t.Parallel()
 	host := mustHeadless(t, 0x14AD, 160, 48)
 	defer host.Close()
 	an := host.JoinAnchor()
@@ -198,6 +132,7 @@ func TestJoinerOnAnotherTerminalSharesTheMapFromTickZero(t *testing.T) {
 // waiting in its lobby has no peer and one cursor, so the old guard let a resize
 // crop the very bounds the anchor it is handing out names.
 func TestSessionRunNeverCropsItsMap(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(Config{Seed: 0x14AE, Width: 200, Height: 60, Resources: resource.Options{Embedded: true}, LockMap: true})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -246,6 +181,7 @@ func TestSessionRunNeverCropsItsMap(t *testing.T) {
 // The rebind is the one that matters most, because it fires at session start on
 // every participant but slot zero.
 func TestLocalViewChangesLeaveTheFlowFieldPhaseAlone(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x14AF, 200, 60)
 	defer a.Close()
 	tickUntilCursor(t, a)

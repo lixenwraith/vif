@@ -108,7 +108,7 @@ boolean-style flags, a directory must use the equals form.
 
 ## 5. Package ownership and WASM
 
-`internal/paths` owns platform directory discovery and names. `internal/app`
+`internal/paths` owns platform directory discovery and names. `internal/resource`
 owns resource selection and strict explicit-path behavior. Loaders in
 `internal/fsm`, `internal/input`, `internal/content`, and `internal/service`
 receive already-resolved files or filesystem capabilities; they do not invent

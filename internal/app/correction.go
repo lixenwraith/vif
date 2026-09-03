@@ -1,56 +1,37 @@
 // Package app: authority and correction.
 //
-// This is the file where the host stops being one participant among peers and
-// becomes the authority, and where a guest stops re-deriving the session and starts
-// predicting it.
+// The host publishes: it reads its own world on a cadence and broadcasts either
+// the whole thing or the difference since the last whole one. A guest consumes: it
+// keeps simulating, and every correction that arrives replaces whatever its
+// prediction had drifted to. Neither side negotiates and neither re-derives the
+// other's answer. That is weakened D-11: identical on the host, on a guest equal
+// to the host as of the last applied correction, and converging.
 //
-// The two halves are deliberately asymmetric. The host publishes: it reads its own
-// world on a cadence and broadcasts either the whole thing or the difference since
-// the last whole one. A guest consumes: it keeps simulating, which is what makes
-// its picture smooth and its own input immediate, and every correction that arrives
-// replaces whatever its prediction had drifted to. Neither side negotiates and
-// neither side re-derives the other's answer, which is the whole of D-11 as Phase 4
-// weakened it: identical on the host, and on a guest equal to the host as of the
-// last applied correction, and converging.
-//
-// Three properties are worth stating because they are what the design buys:
+// Properties the design rests on:
 //
 //   - Nothing acknowledges a correction. A keyframe supersedes everything before
 //     it, so loss costs freshness for at most one keyframe interval and never
-//     correctness. There is no repair path because there is nothing to repair.
-//   - A correction never *fails*. It arrives late, or it is a delta against a
-//     keyframe this instance does not hold, or it is superseded before it is
-//     applied — and each of those is a counter rather than an error, because the
-//     next one is self-sufficient.
-//   - The magnitude is measured, not asserted. How far the guest's prediction had
-//     drifted when the correction landed is the number that says whether the
-//     cadence is right, and it is published where DESYNC used to be.
+//     correctness.
+//   - A correction never fails. Late arrival, a delta against a keyframe this
+//     instance does not hold, and supersession before apply are counters rather
+//     than errors: the next correction is self-sufficient.
+//   - Magnitude is measured, not asserted. How far a guest's prediction had
+//     drifted when the correction landed is what says whether the cadence is right.
 //
-// Phase 5 changed what decides *when* the host publishes, and nothing else. The
-// cadence was a constant; it is now a bounded controller per peer, driven by a
-// real round trip, the delivery rate that round trip measures, and how much of
-// what the next correction moves is near enough to that participant to matter.
-// Three things are worth stating because they are what the change is bounded by:
+// Cadence is a bounded per-peer controller driven by measured round trip,
+// delivery rate, and how much of what the next correction moves is near that
+// participant. Three bounds constrain it:
 //
-//   - **One timeline, one baseline.** A correction is still computed once and is
-//     still exact: every guest holds the same keyframe, and a delta names it.
-//     What is per peer is which corrections a peer is *sent* — its cadence — and
-//     that is the only thing relevance and priority move. Nothing is scoped, so
-//     nothing about the authority weakens: a correction is the host's whole
-//     world, or the exact difference from the last one, as it always was.
-//
-//   - **The floor is not adaptive.** Cadence and keyframe interval are
-//     preferences the controller trades away under pressure; the guarantee that
-//     a participant sees a whole authoritative world within
-//     SnapshotFloorKeyframeTicks is not. A link that cannot carry that is
-//     refused at admission and reported as an unrecoverable operating condition
-//     mid-session — never quietly published to more slowly.
-//
-//   - **Timing paces the transport and enters nothing else.** No round trip,
-//     delivery rate or jitter estimate reaches a component store, an RNG stream,
-//     a replay or a game decision. They decide which frames leave a socket and
-//     when, which is exactly the class of decision a session may make from the
-//     wire.
+//   - One timeline, one baseline. A correction is computed once and is exact:
+//     every guest holds the same keyframe and a delta names it. Only which
+//     corrections a peer is sent — its cadence — is per peer.
+//   - The floor is not adaptive. Cadence and keyframe interval are preferences
+//     traded away under pressure; the guarantee that a participant sees a whole
+//     authoritative world within SnapshotFloorKeyframeTicks is not. A link that
+//     cannot carry it is refused at admission and reported mid-session.
+//   - Timing paces the transport and enters nothing else. No round trip, delivery
+//     rate or jitter estimate reaches a component store, an RNG stream, a replay
+//     or a game decision.
 package app
 
 import (
@@ -70,29 +51,27 @@ import (
 	"github.com/lixenwraith/vi-fighter/pkg/linkpace"
 )
 
-// corrections is one instance's half of the authority protocol — whichever half it
-// turns out to be. A run is a host or a guest, not both, so the two sets of fields
-// are never both live; keeping them in one object is what makes "this run is in a
-// session" a single lifetime rather than two that can disagree.
+// corrections is one instance's half of the authority protocol. A run is a host or
+// a guest, not both, so the two sets of fields are never both live; one object
+// makes "this run is in a session" a single lifetime rather than two that can
+// disagree.
 type corrections struct {
 	a *App
 
-	// publishMu serialises every world read a snapshot makes, which is what turns
-	// the join's per-participant capture into a per-cadence one: a join that finds
-	// a keyframe fresh enough already taken re-uses it, and two joins arriving
-	// together share one read rather than stalling the world twice. It also owns
-	// the whole per-peer schedule, so a peer's plan and the capture it is planned
-	// against cannot be read a decision apart.
+	// publishMu serialises every world read a capture makes, turning a
+	// per-participant join capture into a per-cadence one: a join re-uses a
+	// keyframe that is fresh enough, and two joins arriving together share one
+	// read. It also owns the per-peer schedule, so a peer's plan and the capture it
+	// is planned against cannot be read a decision apart.
 	publishMu   sync.Mutex
 	baseline    snapshot.SharedCapture // last keyframe published; every delta names its tick
 	keyBody     []byte                 // that keyframe as a bare capture, which is what a join sends
 	haveKey     bool
 	lastKeyTick uint64 // the tick that keyframe describes
 
-	// sizes is what a correction currently costs on the wire, measured rather than
-	// assumed. The controller prices a schedule from the compressed bodies it will
-	// actually send. At the storm high water those are about 15.4 KiB for a
-	// keyframe and 7.1 KiB for a delta, still different enough that a model using
+	// sizes is the measured wire cost of a correction. The controller prices a
+	// schedule from the compressed bodies it will send; at the storm high water a
+	// keyframe is about 15.4 KiB against 7.1 KiB for a delta, far enough apart that
 	// one number would misprice the operating point.
 	sizes     linkpace.Sizes
 	haveSizes bool
@@ -102,10 +81,8 @@ type corrections struct {
 	bounds linkpace.Bounds
 
 	// peers is one publisher per directly linked participant: its controller, its
-	// current operating point, and the tick it is next due. A participant reached
-	// by relay has no entry, because this instance does not send to it — it rides
-	// the schedule of whichever neighbour forwards to it, which is the honest
-	// consequence of the flood and is stated in the docs rather than papered over.
+	// operating point, and the tick it is next due. A relayed participant has no
+	// entry; it rides the schedule of whichever neighbour forwards to it.
 	peers map[uint32]*peerPublisher
 
 	// The session's operating point as last decided, kept for telemetry and for
@@ -119,14 +96,11 @@ type corrections struct {
 	saidUnrelayed bool
 	nextBroadcast uint64
 
-	// driven marks a run whose caller paces the cadence itself. Two things pacing
-	// one cadence is not a tuning problem, it is an ambiguity: a driver that
-	// publishes at a tick it chose and a pump that publishes a moment later leave
-	// the receiver holding a world *newer* than the one the driver was describing,
-	// and nothing about that is recoverable from the outside. So the first driven
-	// publish retires the pump, which is the documented division of labour
-	// (PublishCorrection for a driven run, the pump for an interactive one) made
-	// true by construction rather than by nobody using both.
+	// driven marks a run whose caller paces the cadence itself. Two publishers on
+	// one cadence leave the receiver holding a world newer than the one the driver
+	// was describing, which is not recoverable from outside, so the first driven
+	// publish retires the pump: PublishCorrection for a driven run, the pump for an
+	// interactive one.
 	driven atomic.Bool
 
 	// inbox holds reassembled correction bodies a guest has not applied yet. It is
@@ -140,12 +114,10 @@ type corrections struct {
 	// installed is the guest's baseline: the last capture it installed whole. A
 	// delta naming any other tick cannot be applied and is counted instead.
 	//
-	// keyTick beside it is the receiving end of the convergence floor. The host
-	// promises a whole authoritative world every SnapshotFloorKeyframeTicks; this
-	// is the tick of the last one that actually arrived, and the distance from
-	// here to now is whether the promise is being kept on this link. A guest is
-	// the participant the guarantee is *for*, so it is the participant that gets
-	// to say when it is not being met.
+	// keyTick is the receiving end of the convergence floor: the tick of the last
+	// whole authoritative world that arrived. The distance from it to now is
+	// whether the floor is being met on this link, and the guest the guarantee is
+	// for is the participant that reports it.
 	installedMu    sync.Mutex
 	installed      snapshot.SharedCapture
 	haveBase       bool
@@ -154,18 +126,18 @@ type corrections struct {
 	guestBreached  bool
 	saidGuestFloor bool
 
-	// selective is the Phase 6 exchange's state on whichever side this run is:
-	// the host's retention ring and request queue, or the receiver's outstanding
-	// manifest and awaited repair. selectiveMu covers the receiver's half, which is
-	// written by the tick that drained a frame and read between two ticks;
-	// publishMu covers the host's, which belongs to the publication schedule.
+	// selective is the manifest exchange's state on whichever side this run is: the
+	// host's retention ring and request queue, or the receiver's outstanding
+	// manifest and awaited repair. selectiveMu covers the receiver's half, written
+	// by the tick that drained a frame and read between two ticks; publishMu covers
+	// the host's, which belongs to the publication schedule.
 	selectiveMu sync.Mutex
 	selective   selectiveState
 
 	// authorityMu covers the succession queue: frames and departures arrive under
-	// the world lock, from the tick that drained them, and are acted on between two
-	// ticks. It is the same lock-order rule selectiveMu documents, for the same
-	// reason — a queue an inbound frame appends to may not sit behind publishMu.
+	// the world lock and are acted on between two ticks. Same lock-order rule as
+	// selectiveMu: a queue an inbound frame appends to may not sit behind
+	// publishMu.
 	authorityMu sync.Mutex
 	authorityIn []authorityFrame
 	peersLost   []uint32
@@ -174,11 +146,9 @@ type corrections struct {
 	stop    chan struct{}
 	wake    chan struct{}
 
-	// The pump and the corrector are separate lifetimes because Phase 7 lets one
-	// run be both. A guest that becomes the authority keeps its apply loop — it is
-	// still a receiver of its own replayed suffix and the thing that serves
-	// requests — and gains a publication cadence, so a single Once shared between
-	// the two would silently retire whichever started second.
+	// The pump and the corrector are separate lifetimes because one run can be
+	// both: a guest that becomes the authority keeps its apply loop and gains a
+	// publication cadence. One shared Once would retire whichever started second.
 	pumpDone    chan struct{}
 	correctDone chan struct{}
 	pumpOnce    sync.Once
@@ -186,11 +156,10 @@ type corrections struct {
 	closeOnce   sync.Once
 }
 
-// peerPublisher is one direct link's schedule.
-//
-// The controller is per peer because the link is: two participants on one host
-// can be a LAN cable and a phone, and a cadence chosen for the pair is wrong for
-// both. What is *not* per peer is the correction itself — see the file comment.
+// peerPublisher is one direct link's schedule. The controller is per peer because
+// the link is: two participants on one host can be a LAN cable and a phone, and a
+// cadence chosen for the pair is wrong for both. The correction itself is not per
+// peer; see the file comment.
 type peerPublisher struct {
 	ctrl    *linkpace.Controller
 	plan    linkpace.Plan
@@ -216,12 +185,11 @@ type peerPublisher struct {
 	sent    int64
 	refused int64
 
-	// The Phase 6 exchange's per-peer standing. manifestTick is the last index
+	// The manifest exchange's per-peer standing. manifestTick is the last index
 	// this peer was sent, answeredTick the last it answered, and silence how many
-	// manifests have gone unanswered — which is what decides whether this peer can
-	// still be repaired selectively or is owed a whole body. converged records
-	// that its last answer needed no state at all, which is the hash-only
-	// correction seen from the publishing side.
+	// manifests have gone unanswered, which decides whether the peer can still be
+	// repaired selectively or is owed a whole body. converged records an answer
+	// that needed no state: the hash-only correction seen from the publishing side.
 	manifestTick uint64
 	answeredTick uint64
 	silence      int
@@ -293,19 +261,17 @@ func (c *corrections) startPump() {
 
 // pump publishes on the cadence and whenever a join asks for a keyframe.
 //
-// It runs on its own goroutine and not on the tick loop, deliberately. The read is
-// one acquisition of the world lock — 1.2 ms at the storm high water, 2.4% of a
-// tick — and the encode, the diff and the chunking are the expensive part and hold
-// no lock at all. Putting the whole thing inside a tick would charge the simulation
-// for the encode; putting it on the accept goroutine is what Phase 3 did and is
-// what made a join a per-participant world read.
+// It runs on its own goroutine rather than on the tick loop. The read is one
+// acquisition of the world lock (1.2 ms at the storm high water, 2.4% of a tick);
+// the encode, diff and chunking are the expensive part and hold no lock. Running
+// it inside a tick would charge the simulation for the encode; running it on the
+// accept goroutine would make a join a per-participant world read.
 //
-// The ticker runs at the *fastest* cadence the bounds allow rather than at the
-// cadence in force, and the schedule is checked against the simulation's tick
-// rather than against the ticker. A wake with nothing due reads no world and
-// sends nothing, so the cost of asking often is a channel receive, and the
-// benefit is that a peer whose link just improved does not wait out the old
-// cadence before the new one takes effect.
+// The ticker runs at the fastest cadence the bounds allow rather than at the
+// cadence in force, and the schedule is checked against the simulation's tick. A
+// wake with nothing due reads no world and sends nothing, so asking often costs a
+// channel receive and a peer whose link just improved does not wait out the old
+// cadence.
 func (c *corrections) pump() {
 	defer close(c.pumpDone)
 	interval := parameter.SnapshotCadenceMinTicks * parameter.GameUpdateInterval
@@ -351,8 +317,7 @@ func (c *corrections) publishDue() error { return c.publishRound(false) }
 
 // publishRound is one decision and at most one world read.
 //
-// The shape is the whole of Phase 5's answer to "make the cadence a function of
-// the link", and the ordering inside it is the part worth reading:
+// The ordering is what makes the cadence a function of the link:
 //
 //  1. Every peer's controller takes a decision from its own measured link and its
 //     own demand. That is where relevance and priority land — a participant whose
@@ -381,9 +346,8 @@ func (c *corrections) publishRound(force bool) error {
 	ids := c.peerIDs(link)
 	if link == nil {
 		// A transport that cannot name its links cannot be scheduled per peer, so
-		// the session keeps the nominal operating point and broadcasts, which is
-		// exactly what Phase 4 did. Adaptation is an improvement on a measured
-		// link and never a requirement for a working one.
+		// the session keeps the nominal operating point and broadcasts. Adaptation
+		// improves a measured link; it is not a requirement for a working one.
 		return c.publishBroadcast(port, force)
 	}
 	if len(ids) == 0 {
@@ -406,23 +370,20 @@ func (c *corrections) publishRound(force bool) error {
 
 	// One index per publication, whether or not it leads the correction.
 	//
-	// A keyframe does not carry the index and does not need to, but the authority
-	// still retains it: retention is what answers a request naming that tick, and
-	// under Phase 7 it is also this instance's evidence that its world is current
-	// if it ever has to be elected. Paying for it on the keyframe as well is one
-	// hash pass per keyframe period, against a whole capture that has already been
-	// read, encoded and compressed.
+	// A keyframe does not carry the index, but the authority still retains it:
+	// retention answers a request naming that tick and is this instance's evidence
+	// that its world is current if it is ever elected. The cost is one hash pass
+	// per keyframe period over a capture already read, encoded and compressed.
 	index, err := snapshot.BuildManifest(cap, c.a.localParticipant())
 	if err != nil {
 		return fmt.Errorf("correction manifest: %w", err)
 	}
 	c.retainLocked(cap, index, true)
 
-	// Phase 6 leads a non-keyframe cadence with the index rather than the body.
-	// Every peer that is still answering manifests is repaired selectively — which
-	// on a converged link means no state travels at all — and only the ones that
-	// are not are still owed the whole difference. The keyframe cadence is
-	// untouched: it is the convergence floor, and the floor is not adaptive.
+	// A non-keyframe cadence leads with the index rather than the body. A peer
+	// still answering manifests is repaired selectively, which on a converged link
+	// moves no state at all; only a silent peer is owed the whole difference. The
+	// keyframe cadence is untouched: it is the convergence floor.
 	bodyPeers := due
 	if !keyframe {
 		covered, mErr := c.publishManifest(port, index, due)
@@ -831,9 +792,8 @@ func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 // capture far enough ahead that every such artifact has already been applied into
 // it, and the barrier's floor then drops the copies that do arrive.
 //
-// The reuse is the second half of the point. Phase 3 read the world once per join,
-// on the accept goroutine; a join now takes whichever keyframe the cadence has
-// already produced, and only reads the world itself when none is fresh enough.
+// Reuse is the second half: a join takes whichever keyframe the cadence has
+// already produced and reads the world itself only when none is fresh enough.
 func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	for {
 		c.publishMu.Lock()
@@ -966,12 +926,10 @@ func (c *corrections) apply() {
 
 	c.observeFloor()
 
-	// Both halves of the Phase 6 exchange live here rather than on a side of their
-	// own, because both belong between two ticks: serving a request means hashing
-	// and compressing, and answering a manifest means reading this instance's own
-	// world. A host reaches this from its pump or its driver and serves requests;
-	// a guest reaches it the same way and answers manifests. Neither does the
-	// other's work, because neither has the other's traffic.
+	// Both halves of the manifest exchange belong between two ticks: serving a
+	// request means hashing and compressing, answering one means reading this
+	// instance's own world. A host reaches this from its pump or driver and serves
+	// requests; a guest reaches it the same way and answers manifests.
 	c.serveRequests()
 	c.applySelective()
 
@@ -1104,9 +1062,8 @@ func (c *corrections) install(cap snapshot.SharedCapture) error {
 	// What was just installed is provably the authority's world at that tick — a
 	// whole correction re-checks its own integrity hash and a repair reproduces the
 	// authority's root — so an index over it carries the authority's root and can
-	// be served. That retention is the primitive both halves of Phase 7 rest on: a
-	// successor's evidence that its world is current, and a relay's ability to
-	// answer for a participant behind it.
+	// be served. That retention is a successor's evidence that its world is current
+	// and a relay's ability to answer for a participant behind it.
 	c.retainInstalled(cap)
 
 	m := c.a.snapshotTelemetry
@@ -1225,9 +1182,9 @@ func (a *App) receiveCorrection(_ uint64, body []byte) {
 	}
 }
 
-// receiveSelective queues one Phase 6 manifest, request or repair. It is the same
-// seam and the same rule as receiveCorrection: the caller holds the world lock, so
-// this takes the bytes and decides nothing.
+// receiveSelective queues one manifest, request or repair. Same rule as
+// receiveCorrection: the caller holds the world lock, so this takes the bytes and
+// decides nothing.
 func (a *App) receiveSelective(kind uint8, from uint32, body []byte) {
 	if a.corrections != nil {
 		a.corrections.receiveSelective(kind, from, body)

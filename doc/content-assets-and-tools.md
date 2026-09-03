@@ -264,7 +264,7 @@ experimental dependencies.
 | Plain text | `internal/content/text.go` |
 | Authored TOML | `internal/content/toml.go` |
 | Selection cursor | `internal/content/cursor.go` |
-| Service/resolution | `internal/service/adapter_content.go`, `internal/app/path.go`, `internal/paths` |
+| Service/resolution | `internal/service/adapter_content.go`, `internal/resource/resolve.go`, `internal/paths` |
 | Embedded assets | `internal/asset/*.go`, `internal/asset/config`, `internal/asset/content` |
 | Pattern conversion | `internal/pattern/*.go` |
 | Image codec/tool | `pkg/ascimage`, `cmd/ascimage` |

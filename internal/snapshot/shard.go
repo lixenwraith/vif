@@ -8,13 +8,13 @@
 // The proof is layered on purpose, because the two layers answer different
 // questions.
 //
-//   - A **shard** carries the page hash its rows reproduce. Recomputing it on
+//   - A shard carries the page hash its rows reproduce. Recomputing it on
 //     arrival says the rows are the ones the sender hashed, in the order it hashed
 //     them. That is an integrity statement about one page and nothing more: it
 //     catches corruption, truncation, reordering and a page delivered under
 //     another page's identity.
 //
-//   - The **root** is the end-to-end statement. After every shard in one set is
+//   - The root is the end-to-end statement. After every shard in one set is
 //     applied, the receiver re-indexes the sections it touched and recomputes the
 //     root; it must equal the root the set declares. A repair that produced
 //     something merely plausible fails here, and nothing is installed.

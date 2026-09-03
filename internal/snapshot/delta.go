@@ -9,8 +9,8 @@
 // were 859 KiB/s at 5 Hz. Exact deltas remove unchanged schema and the bounded
 // deflate envelope then reduces both shapes; they solve different parts of the cost.
 //
-// A correction is therefore one of two things and says which: a **keyframe**, which
-// is a whole capture and is self-sufficient, or a **delta**, which names the
+// A correction is therefore one of two things and says which: a keyframe, which
+// is a whole capture and is self-sufficient, or a delta, which names the
 // keyframe it was computed against and is worthless without it. A receiver holding a
 // different baseline drops a delta rather than guessing, and waits for the next
 // keyframe; that is a bounded wait by construction, because the host takes one every

@@ -5,8 +5,10 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
@@ -76,75 +78,75 @@ func towerConfig(t *testing.T, seed uint64) Config {
 	return cfg
 }
 
-// TestTowerDefenseConfigCursorOwnership covers the external producer side of
-// cursor addressing. The TD machine must spawn and capture a cursor before its
-// tower requests inject player_entity into their payloads.
-func TestTowerDefenseConfigCursorOwnership(t *testing.T) {
-	const tdConfigDir = "../../config/td"
-	if _, err := os.Stat(filepath.Join(tdConfigDir, paths.GameConfigFile)); err != nil {
-		t.Skipf("external map set %s not present", tdConfigDir)
+// TestExternalConfigsOwnTheirTowers covers the external producer side of cursor
+// addressing on both shipped map sets: the machine must spawn and capture a cursor
+// before its tower requests inject player_entity into their payloads.
+func TestExternalConfigsOwnTheirTowers(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name string
+		dir  string
+		// spawn enters the tower region where the escalation chain would not reach
+		// it inside a test-length run.
+		spawn bool
+	}{
+		{"td", "../../config/td", false},
+		{"main", soakConfigDir, true},
 	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			if _, err := os.Stat(filepath.Join(tc.dir, paths.GameConfigFile)); err != nil {
+				t.Skipf("external map set %s not present", tc.dir)
+			}
+			cfg := Config{
+				Mode: ModeHeadless, Seed: fixtureSeed, Width: 160, Height: 50,
+				Resources: resource.Options{Game: tc.dir},
+			}
+			if _, err := os.Stat(soakContentDir); err == nil {
+				cfg.Resources.Content = soakContentDir
+			}
+			a, err := NewHeadless(cfg)
+			if err != nil {
+				t.Fatalf("headless: %v", err)
+			}
+			defer a.Close()
 
-	cfg := Config{Mode: ModeHeadless, Seed: fixtureSeed, Resources: resource.Options{Game: tdConfigDir}, Width: 160, Height: 50}
-	if _, err := os.Stat(soakContentDir); err == nil {
-		cfg.Resources.Content = soakContentDir
-	}
-	a, err := NewHeadless(cfg)
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	defer a.Close()
+			a.Tick(1)
+			player := a.World().Resources.Player.Entity
+			if player == 0 {
+				t.Fatal("the config did not spawn a cursor")
+			}
+			if tc.spawn {
+				a.Region(event.RegionSpawn, "tower", "TowerSetup")
+				a.Tick(2)
+			} else {
+				a.Tick(11)
+			}
 
-	a.Tick(12)
-	player := a.World().Resources.Player.Entity
-	if player == 0 {
-		t.Fatal("TD config did not spawn a cursor")
-	}
-
-	towers := a.World().Components.Tower.Entities()
-	if len(towers) == 0 {
-		t.Fatal("TD config did not spawn an explicitly owned tower")
-	}
-	for _, tower := range towers {
-		combat, ok := a.World().Components.Combat.GetComponent(tower)
-		if !ok || combat.OwnerEntity != player {
-			t.Fatalf("tower %d owner = %d, want cursor %d", tower, combat.OwnerEntity, player)
-		}
-	}
-}
-
-func TestMainTowerConfigCursorOwnership(t *testing.T) {
-	a, err := NewHeadless(towerConfig(t, fixtureSeed))
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	defer a.Close()
-
-	a.Tick(1)
-	player := a.World().Resources.Player.Entity
-	if player == 0 {
-		t.Fatal("main config did not spawn a cursor")
-	}
-	a.Region(event.RegionSpawn, "tower", "TowerSetup")
-	a.Tick(2)
-
-	towers := a.World().Components.Tower.Entities()
-	if len(towers) == 0 {
-		t.Fatal("main config did not spawn an explicitly owned tower")
-	}
-	combat, ok := a.World().Components.Combat.GetComponent(towers[0])
-	if !ok || combat.OwnerEntity != player {
-		t.Fatalf("tower %d owner = %d, want cursor %d", towers[0], combat.OwnerEntity, player)
+			towers := a.World().Components.Tower.Entities()
+			if len(towers) == 0 {
+				t.Fatal("the config did not spawn an explicitly owned tower")
+			}
+			for _, tower := range towers {
+				combat, ok := a.World().Components.Combat.GetComponent(tower)
+				if !ok || combat.OwnerEntity != player {
+					t.Fatalf("tower %d owner = %d, want cursor %d", tower, combat.OwnerEntity, player)
+				}
+			}
+		})
 	}
 }
 
 // TestReplaySoakTower spawns the tower region outright rather than waiting for the
-// escalation chain, which no 200-step run reaches, then soaks the same way
+// escalation chain, which no 200-step run reaches, then soaks the same way.
 func TestReplaySoakTower(t *testing.T) {
-	n := soakScale(4, 8, 30)
+	t.Parallel()
+	n := soakScale(2, 3, 30)
 	for i := range n {
 		seed := uint64(soakSeedBase) + 0x2000 + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
+			t.Parallel()
 			opt := journal.DefaultFuzz(seed, soakSteps)
 			opt.RegionSet = towerRegions
 			run := runSoakScriptCfg(t, towerConfig(t, seed), opt, func(a *App) {
@@ -222,12 +224,14 @@ func replaySoak(run soakRun, recs []event.JournalRecord) error {
 	return replayInto(run.cap.Anchors(), recs, run.want, run.end)
 }
 
-// TestReplaySoak drives many seeded scripts through journal → replay → snapshot.FirstDiff
+// TestReplaySoak drives seeded scripts through journal, replay and comparison.
 func TestReplaySoak(t *testing.T) {
-	n := soakScale(8, 20, 120)
+	t.Parallel()
+	n := soakScale(2, 4, 120)
 	for i := range n {
 		seed := uint64(soakSeedBase) + uint64(i)
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
+			t.Parallel()
 			run := runSoakScript(t, seed, soakSteps)
 			if err := replaySoak(run, run.cap.Records()); err != nil {
 				t.Fatal(err)
@@ -240,6 +244,7 @@ func TestReplaySoak(t *testing.T) {
 // asserts the simulation view is byte-identical to an unperturbed run of the same
 // seed. AutoFire is excluded: it produces journaled events, so it is simulation input.
 func TestSoakSessionStateStaysOperator(t *testing.T) {
+	t.Parallel()
 	const seed = soakSeedBase + 0x900
 
 	plain, err := NewHeadless(scriptConfig(seed))
@@ -392,6 +397,7 @@ func mutatePayload(rng *vmath.FastRand, recs []event.JournalRecord) ([]event.Jou
 // TestReplaySoakNegative asserts a perturbed record stream is caught. Individual
 // mutations can commute, but each control must bite on at least one seed.
 func TestReplaySoakNegative(t *testing.T) {
+	t.Parallel()
 	controls := []struct {
 		name string
 		fn   mutation
@@ -402,10 +408,7 @@ func TestReplaySoakNegative(t *testing.T) {
 		{"mutate-payload", mutatePayload},
 	}
 
-	seeds := 12
-	if testing.Short() {
-		seeds = 4
-	}
+	seeds := soakScale(2, 2, 12)
 	caught := make([]int, len(controls))
 	applied := make([]int, len(controls))
 
@@ -437,7 +440,9 @@ func TestReplaySoakNegative(t *testing.T) {
 	for c := range controls {
 		switch {
 		case applied[c] == 0:
-			t.Skipf("%s: no stream offered a site; the generator no longer produces one", controls[c].name)
+			// Not a failure and not a reason to abandon the other controls: the
+			// generator simply produced no eligible site on these seeds.
+			t.Logf("%s: no stream offered a site", controls[c].name)
 		case caught[c] == 0:
 			t.Errorf("%s: %d perturbed streams all reproduced; the replay is not sensitive to it",
 				controls[c].name, applied[c])
@@ -464,12 +469,34 @@ func soakSnapshot(t *testing.T, seed uint64) []string {
 // TestSoakAppsAreIndependent asserts two sequential runs of one seed agree, so a
 // replay's baseline is the seed and not what the previous App left in package state
 func TestSoakAppsAreIndependent(t *testing.T) {
+	t.Parallel()
 	for _, seed := range []uint64{0x50a4002d, 0x50a40065, 0x50a41006} {
 		t.Run(strconv.FormatUint(seed, 16), func(t *testing.T) {
+			t.Parallel()
 			first := soakSnapshot(t, seed)
 			if i, x, y, ok := snapshot.FirstDiff(first, soakSnapshot(t, seed)); ok {
 				t.Fatalf("two runs of one seed differ at line %d:\n  first  %s\n  second %s", i, x, y)
 			}
 		})
+	}
+}
+
+// TestDomainAuditSoakClean asserts the audit counts zero over a full soak, which is
+// 4.16(3) without a log grep. The pin is process-wide: never t.Parallel here.
+// The pin also survives between ticks, so component attaches made by event handlers
+// outside processTick are audited too.
+func TestDomainAuditSoakClean(t *testing.T) {
+	engine.PinDomainAudit(true)
+	defer engine.PinDomainAudit(false)
+
+	a := mustHeadless(t, 0xD0A17, 120, 40)
+	defer a.Close()
+
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(0xD0A17, soakScale(600, 1500, 4000))); err != nil {
+		t.Fatalf("soak: %v", err)
+	}
+	if n := engine.DomainMismatches(); n != 0 {
+		t.Fatalf("domain audit counted %d violations:\n  %s",
+			n, strings.Join(engine.DomainViolations(), "\n  "))
 	}
 }

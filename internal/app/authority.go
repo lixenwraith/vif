@@ -1,33 +1,30 @@
 // Package app: who authors, and what happens when that instance goes.
 //
-// Phase 6 left exactly one instance able to author the Shared world and to answer
-// a selective request: the coordinator. Losing it ended the session's shared
-// identity — the survivors kept ticking, separately, with no roster authority and
-// no way to admit anyone. That behaviour is honest and it is still the fallback.
-// What this file adds is the other outcome: a coordinated handoff that moves
-// authorship without ever letting two instances claim it at once.
+// Exactly one instance authors the Shared world and answers a selective request.
+// Losing it without a successor ends the session's shared identity: the survivors
+// keep ticking separately, with no roster authority and no way to admit anyone.
+// That remains the fallback; a coordinated handoff is the other outcome, and it
+// never lets two instances claim authorship at once.
 //
 // The unit is the authority term (see network/authority.go). Everything here is
 // one of three things:
 //
-//   - **The gate.** Every authoritative artifact carries the term it was produced
+//   - The gate. Every authoritative artifact carries the term it was produced
 //     under. An artifact from an older term is ignored, one from the current term
 //     is acted on, and one from a term this instance has never been handed is
-//     refused and reported — that is the split-brain case, not a fast successor.
+//     refused and reported: the split-brain case, not a fast successor.
 //
-//   - **The succession.** Report, vote, handoff. A survivor floods what it can
-//     reach and how current its retention is; once its view covers a strict
-//     majority it votes, once, for the lowest eligible candidate; a candidate
-//     holding a strict majority of votes publishes the record it authors under.
-//     One vote per participant per term is what makes two authorities in one term
-//     impossible rather than unlikely, and it is why none of this needs a timer to
-//     break a tie.
+//   - The succession. Report, vote, handoff. A survivor floods what it can reach
+//     and how current its retention is; once its view covers a strict majority it
+//     votes, once, for the lowest eligible candidate; a candidate holding a strict
+//     majority of votes publishes the record it authors under. One vote per
+//     participant per term makes two authorities in one term impossible rather
+//     than unlikely, and removes the need for a tie-breaking timer.
 //
-//   - **The transfer.** A handoff carries the membership with it — roster, slot
-//     assignments, anchor and barrier delay — so adopting it is one decision
-//     rather than a term change followed by a roster negotiation. A joiner that
-//     dials while it is running is refused with a distinguishable error rather
-//     than half-admitted into a term that is about to end.
+//   - The transfer. A handoff carries roster, slot assignments, anchor and barrier
+//     delay, so adopting it is one decision rather than a term change followed by
+//     a roster negotiation. A joiner dialling during a handoff is refused with a
+//     distinguishable error rather than half-admitted into a term about to end.
 //
 // What a successor may author is unchanged: the Shared domain and nothing else.
 // It does not begin authoring the D-13 owner-authored cells of cursors it does not
@@ -718,7 +715,7 @@ func (u *authority) summary() string {
 	return line
 }
 
-// ensureAuthorityCells registers the Phase 7 surface before the registry freezes.
+// ensureAuthorityCells registers the succession surface before the registry freezes.
 // It is called from construction rather than lazily for the same reason every
 // other counter is: a cell created after the freeze is counted late and never
 // displayed.

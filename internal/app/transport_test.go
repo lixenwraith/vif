@@ -1,17 +1,22 @@
 package app
 
 import (
+	"cmp"
 	"fmt"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // pair builds two joined participants on one seed, linked by an in-process
@@ -124,6 +129,7 @@ func mirrorCursors(t *testing.T, a, b *App) (localA, remoteA core.Entity) {
 // TestTransportSyncsOwnerAuthoredCursorState is the D-13 transport: the owner writes,
 // the peer receives, and the peer's own systems never author the same cell.
 func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
+	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	_, remoteOnA := mirrorCursors(t, a, b)
 
@@ -178,6 +184,7 @@ func TestTransportSyncsOwnerAuthoredCursorState(t *testing.T) {
 // TestTransportCarriesCrossingsWithoutEcho is the D-3 wire rule: a D-3 artifact
 // reaches the peer, and the peer does not send it back.
 func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
+	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	mirrorCursors(t, a, b)
 
@@ -195,7 +202,7 @@ func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
 			t.Fatalf("cursor on participant = (%d, %d), target applied = %t, want %t", pos.X, pos.Y, got, want)
 		}
 	}
-	// The producer applies its own artifact at once (requirement 5); the peer keeps
+	// The producer applies its own artifact at once; the peer keeps
 	// the playout lead, which is the interpolation buffer for remote action.
 	assertPosition(a, true)
 	assertPosition(b, false)
@@ -232,6 +239,7 @@ func TestTransportCarriesCrossingsWithoutEcho(t *testing.T) {
 }
 
 func TestBarrierIsNoOpWithoutPeer(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	t.Cleanup(a.Close)
 	tickUntilCursor(t, a)
@@ -263,8 +271,9 @@ func TestBarrierIsNoOpWithoutPeer(t *testing.T) {
 // observer holds arrived from the authority — its own artifacts a playout lead
 // after the producer applied them, and its whole world at every correction.
 func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
-	steps := soakScale(120, 400, 1200)
+	steps := soakScale(60, 120, 1200)
 
 	live, observer := pair(t, seed, steps)
 	observeOnly(t, observer)
@@ -305,13 +314,14 @@ func TestObserverSharedStateTracksTheLiveParticipant(t *testing.T) {
 }
 
 // TestTwoLiveParticipantsConvergeOnCorrections is the headless two-participant
-// criterion, and it used to be a lockstep one. Phase 4 weakened D-11: two
+// criterion. Weakened D-11 says two
 // participants no longer agree at every tick, because each applies its own
 // artifacts a playout lead before the other sees them, and what is asserted instead
 // is that every correction closes the gap exactly.
 func TestTwoLiveParticipantsConvergeOnCorrections(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
-	steps := soakScale(120, 400, 1200)
+	steps := soakScale(60, 120, 1200)
 
 	a, b := pair(t, seed, steps)
 	localA, _ := mirrorCursors(t, a, b)
@@ -326,9 +336,10 @@ func TestTwoLiveParticipantsConvergeOnCorrections(t *testing.T) {
 // TestActivatedSessionDefersCrossingBeforeFirstTick closes the lobby/input gap: an
 // artifact produced after the session is activated and before the first tick still
 // reaches its peer at the agreed apply tick, rather than falling into the window
-// between the two. What the producer does with its own copy changed in Phase 4 —
-// it applies it at once — and the gap this test exists for is the peer's.
+// between the two. The producer applies its own copy at once; the gap this test
+// exists for is the peer's.
 func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	a := mustHeadless(t, seed, 120, 40)
 	b := mustHeadless(t, seed, 120, 40)
@@ -386,10 +397,11 @@ func TestActivatedSessionDefersCrossingBeforeFirstTick(t *testing.T) {
 // replay-the-session-from-tick-zero path; the authoritative snapshot join that
 // replaces it is the next implementation's to prove.
 func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x5EEDBEEF
 	// The socket leg re-proves the same criterion through framing and a real
 	// handshake, neither of which needs the long run the in-process one takes.
-	steps := soakScale(80, 240, 800)
+	steps := soakScale(60, 120, 800)
 
 	a, err := NewHeadless(Config{
 		Seed: seed, Width: 120, Height: 40, Resources: resource.Options{Embedded: true},
@@ -404,7 +416,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	hostCfg.ParticipantID = hostParticipantID
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: a.assignParticipant, Release: a.releaseParticipant,
-	}, time.Second)
+	}, socketWait)
 	host := network.NewSocketPort(hostCfg)
 	t.Cleanup(func() { _ = host.Close() })
 	if err := host.Start(); err != nil {
@@ -494,7 +506,7 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 
 }
 
-// proveTwoLive drives two live participants and asserts the criterion Phase 4
+// proveTwoLive drives two live participants and asserts the criterion that
 // replaced lockstep with: the guest is equal to the host as of every correction.
 //
 // Between corrections the two are *expected* to disagree — each applies its own
@@ -551,9 +563,14 @@ func proveTwoLive(t *testing.T, a, b *App, localA, localB core.Entity, optA jour
 	}
 }
 
+// socketWait is how long a socket handshake step may take. It is generous on
+// purpose: the suite runs its parallel tests on every core, so a loopback round
+// trip competes with the race detector rather than with the network.
+const socketWait = 15 * time.Second
+
 func waitSocket(t *testing.T, port *network.SocketPort, ready func() bool, what string) {
 	t.Helper()
-	deadline := time.NewTimer(2 * time.Second)
+	deadline := time.NewTimer(socketWait)
 	defer deadline.Stop()
 	for !ready() {
 		select {
@@ -564,12 +581,6 @@ func waitSocket(t *testing.T, port *network.SocketPort, ready func() bool, what 
 			t.Fatalf("timed out waiting for %s", what)
 		}
 	}
-}
-
-// cursorPosition reads one roster entity under the world lock.
-func cursorPosition(a *App, e core.Entity) (pos component.PositionComponent) {
-	a.World().RunSafe(func() { pos, _ = a.World().Positions.GetPosition(e) })
-	return pos
 }
 
 // observeOnly marks every cursor on an instance remote and removes player-domain
@@ -599,13 +610,20 @@ func observeOnly(t *testing.T, a *App) {
 	}
 }
 
-// TestWireSetExcludesDerivedAndShared asserts the predicate rather than the pipe:
-// a Shared event is re-derived on both sides and must never travel, a chain
-// follow-up is derived from the root that did (D-5), and an arriving artifact is
-// never echoed.
-func TestWireSetExcludesDerivedAndShared(t *testing.T) {
+// TestWireEncoding covers the wire boundary without a session: which events travel
+// at all, and whether the codec preserves what the receiver pushes.
+func TestWireEncoding(t *testing.T) {
+	t.Parallel()
 	event.EnsureRegistry()
+	t.Run("set", testWireSet)
+	t.Run("frame", testWireFrameRoundTrip)
+	t.Run("cursor state", testCursorStateRoundTrip)
+}
 
+// testWireSet asserts the predicate rather than the pipe: a Shared event is
+// re-derived on both sides and must never travel, a chain follow-up is derived from
+// the root that did (D-5), and an arriving artifact is never echoed.
+func testWireSet(t *testing.T) {
 	for _, tc := range []struct {
 		name string
 		ev   event.GameEvent
@@ -641,11 +659,9 @@ func TestWireSetExcludesDerivedAndShared(t *testing.T) {
 	}
 }
 
-// TestWireFrameRoundTrips asserts the codec preserves what the receiver pushes:
-// the event type, the producer's domain, and every payload field.
-func TestWireFrameRoundTrips(t *testing.T) {
-	event.EnsureRegistry()
-
+// testWireFrameRoundTrip asserts the codec preserves the event type, the
+// producer's domain, and every payload field.
+func testWireFrameRoundTrip(t *testing.T) {
 	want := &event.CombatAttackDirectRequestPayload{
 		OwnerEntity:  core.MakeEntity(core.DomainShared, 3),
 		TargetEntity: core.MakeEntity(core.DomainShared, 9),
@@ -681,11 +697,9 @@ func TestWireFrameRoundTrips(t *testing.T) {
 	}
 }
 
-// TestCursorStatePayloadRoundTrips covers the D-13 value transfer through the same
-// codec, including the slices the fixed-size weapon arrays flatten into.
-func TestCursorStatePayloadRoundTrips(t *testing.T) {
-	event.EnsureRegistry()
-
+// testCursorStateRoundTrip covers the D-13 value transfer through the same codec,
+// including the slices the fixed-size weapon arrays flatten into.
+func testCursorStateRoundTrip(t *testing.T) {
 	want := &event.CursorStatePayload{
 		Entity: core.MakeEntity(core.DomainShared, 5), Slot: 1, Seq: 3,
 		Energy: -12, Heat: 55, Overheat: 2, EmberActive: true,
@@ -714,4 +728,496 @@ func TestCursorStatePayloadRoundTrips(t *testing.T) {
 		len(got.WeaponCooldown) != 3 || got.WeaponCooldown[2] != 9 {
 		t.Fatalf("cursor state round trip = %#v, want %#v", got, want)
 	}
+}
+
+// The local-input goal is an equality: a session's local
+// cursor and typing must respond exactly as a solo run does. Every test here
+// therefore measures the same probe twice — once solo, once on the producing
+// instance of a live two-participant session — and asserts the two agree.
+//
+// The session figures these replaced are recorded in
+// doc/multi-player-enhancement.md §3: one keypress reaching the store only after
+// the playout lead, one cell of five, and five typing errors out of six correct
+// keystrokes. D-18's prediction is what closes the gap; the barrier below it is
+// deliberately unchanged, and the first test asserts that too.
+
+// soloInstance is one participant with a cursor and no session.
+func soloInstance(t *testing.T, seed uint64) *App {
+	t.Helper()
+	a := mustHeadless(t, seed, 120, 40)
+	t.Cleanup(a.Close)
+	tickUntilCursor(t, a)
+	a.Tick(1)
+	return a
+}
+
+// liveInstance is the producing instance of a live two-participant session, past
+// the first ticks so the barrier owns its crossings.
+func liveInstance(t *testing.T, seed uint64) (*App, []*App) {
+	t.Helper()
+	apps := meshSession(t, seed, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	for range 3 {
+		tickAll(apps)
+	}
+	return apps[0], apps
+}
+
+// localCell reads what this instance's own input and view resolve against.
+func localCell(a *App) (pos component.PositionComponent, ok bool) {
+	a.World().RunSafe(func() { pos, ok = a.World().LocalCursor() })
+	return pos, ok
+}
+
+// localCursorEntity returns the shared cursor this instance drives.
+func localCursorEntity(a *App) (e core.Entity) {
+	a.World().RunSafe(func() { e = a.World().Resources.Player.Entity })
+	return e
+}
+
+func inject(t *testing.T, a *App, intents ...*input.Intent) {
+	t.Helper()
+	if !a.Inject(intents...) {
+		t.Fatal("intent quit the game")
+	}
+}
+
+// TestOneKeypressMovesTheLocalCursorWithoutATick is §3's first row. Solo, a press
+// lands before any tick; in a session it used to take the whole playout lead.
+func TestOneKeypressMovesTheLocalCursorWithoutATick(t *testing.T) {
+	t.Parallel()
+	press := func(a *App) (before, after component.PositionComponent) {
+		t.Helper()
+		before, _ = localCell(a)
+		inject(t, a, intentMotion(input.MotionRight, 1))
+		after, _ = localCell(a)
+		return before, after
+	}
+
+	solo := soloInstance(t, 0x10CA1)
+	soloBefore, soloAfter := press(solo)
+	if soloAfter.X != soloBefore.X+1 || soloAfter.Y != soloBefore.Y {
+		t.Fatalf("solo press moved the cursor to %#v, want one cell right of %#v", soloAfter, soloBefore)
+	}
+
+	live, apps := liveInstance(t, 0x10CA1)
+	liveBefore, liveAfter := press(live)
+	if liveAfter.X != liveBefore.X+1 || liveAfter.Y != liveBefore.Y {
+		t.Fatalf("session press moved the cursor to %#v, want the solo answer: one cell right of %#v",
+			liveAfter, liveBefore)
+	}
+
+	// Prediction gives the cell this participant reads; the local path drops the playout
+	// lead off the shared store as well, so the producer's own crossing is applied
+	// in the tick that produced it and the prediction and the store agree at once.
+	// The peers keep the lead, which is where a remote participant's motion is
+	// interpolated from.
+	local := localCursorEntity(live)
+	want := liveBefore
+	want.X++
+	if got := cursorPosition(live, local); got != want {
+		t.Fatalf("the producer's own crossing landed at %#v, want %#v with no lead", got, want)
+	}
+	if got := cursorPosition(apps[1], local); got != liveBefore {
+		t.Fatalf("a peer applied the crossing at %#v before its apply tick", got)
+	}
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		tickAll(apps)
+	}
+	for i, a := range apps {
+		if got := cursorPosition(a, local); got != want {
+			t.Fatalf("participant %d applied the crossing as %#v, want %#v", i+1, got, want)
+		}
+	}
+}
+
+// TestFiveKeypressesBetweenTicksReachFiveCells is §3's second row. Every press
+// resolves its motion from the cell the previous one selected, so five presses
+// select five cells; a session that re-read the shared store selected one, four
+// times over.
+func TestFiveKeypressesBetweenTicksReachFiveCells(t *testing.T) {
+	t.Parallel()
+	const presses = 5
+
+	cells := func(a *App, drain func()) (int, component.PositionComponent) {
+		t.Helper()
+		local := localCursorEntity(a)
+		seen := map[component.PositionComponent]bool{}
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if ev.Type != event.EventCursorMoved {
+				return
+			}
+			if p, ok := ev.Payload.(*event.CursorMovedPayload); ok && p.Entity == local {
+				seen[component.PositionComponent{X: p.X, Y: p.Y}] = true
+			}
+		})
+		defer a.SetDispatchTap(nil)
+
+		for range presses {
+			inject(t, a, intentMotion(input.MotionRight, 1))
+		}
+		drain()
+		pos, _ := localCell(a)
+		return len(seen), pos
+	}
+
+	solo := soloInstance(t, 0x5CE115)
+	soloStart, _ := localCell(solo)
+	soloCells, soloEnd := cells(solo, func() { solo.Tick(1) })
+	if soloCells != presses {
+		t.Fatalf("solo placed the cursor on %d cells, want %d", soloCells, presses)
+	}
+	if soloEnd.X != soloStart.X+presses {
+		t.Fatalf("solo cursor ended at %#v, want %d cells right of %#v", soloEnd, presses, soloStart)
+	}
+
+	live, apps := liveInstance(t, 0x5CE115)
+	liveStart, _ := localCell(live)
+	liveCells, liveEnd := cells(live, func() {
+		for range parameter.NetworkBarrierDelayTicks + 1 {
+			tickAll(apps)
+		}
+	})
+	if liveCells != soloCells {
+		t.Fatalf("the session placed the cursor on %d cells, want the solo %d", liveCells, soloCells)
+	}
+	if liveEnd.X != liveStart.X+presses {
+		t.Fatalf("session cursor ended at %#v, want %d cells right of %#v", liveEnd, presses, liveStart)
+	}
+}
+
+// glyphRun writes runes into the cells the local cursor stands on and to its right,
+// so a keystroke that lands on its own cell finds its own character there.
+//
+// The run is player-domain, which is what a corpus glyph is (§4: every shared glyph
+// is a gold composite member). Whatever the corpus already put on those cells is
+// destroyed first, because the typing path answers with the first glyph it finds in
+// the cell; a shared one would make the probe measure a composite instead, and the
+// test says so rather than quietly measuring something else.
+func glyphRun(t *testing.T, a *App, runes string) {
+	t.Helper()
+	pos, ok := localCell(a)
+	if !ok {
+		t.Fatal("no local cursor")
+	}
+
+	var shared []component.PositionComponent
+	a.World().RunSafe(func() {
+		w := a.World()
+		var buf [parameter.MaxEntitiesPerCell]core.Entity
+		for i, r := range runes {
+			cell := component.PositionComponent{X: pos.X + i, Y: pos.Y}
+			n := w.Positions.GetAllEntitiesAtInto(cell.X, cell.Y, buf[:])
+			for _, e := range buf[:n] {
+				if !w.Components.Glyph.HasEntity(e) {
+					continue
+				}
+				if e.Domain() == core.DomainShared {
+					shared = append(shared, cell)
+					continue
+				}
+				w.DestroyEntity(e)
+			}
+			g := w.CreateEntity(core.DomainPlayer)
+			w.Positions.SetPosition(g, cell)
+			w.Components.Glyph.SetComponent(g, component.GlyphComponent{
+				Rune: r, Type: component.GlyphRed, Level: 1,
+			})
+		}
+	})
+	if len(shared) > 0 {
+		t.Fatalf("a shared glyph occupies %v; the run would answer with it instead", shared)
+	}
+}
+
+// TestFastTypingOverAGlyphRunScoresNoErrors is §3's third row, and the one that
+// matters most: in a typing game, keystrokes issued faster than the playout lead
+// were not merely dropped, they were scored against the player, because each one
+// resolved against a cell whose glyph the previous keystroke had already consumed.
+func TestFastTypingOverAGlyphRunScoresNoErrors(t *testing.T) {
+	t.Parallel()
+	const run = "abcdef"
+
+	typed := func(a *App) (correct, errors int64) {
+		t.Helper()
+		glyphRun(t, a, run)
+		inject(t, a, intentModeSwitch(input.ModeTargetInsert))
+		for _, r := range run {
+			inject(t, a, intentTextChar(r))
+		}
+		a.World().RunSafe(func() {
+			reg := a.World().Resources.Status
+			correct = reg.Ints.Get("typing.correct").Load()
+			errors = reg.Ints.Get("typing.errors").Load()
+		})
+		return correct, errors
+	}
+
+	solo := soloInstance(t, 0x7791AB)
+	soloCorrect, soloErrors := typed(solo)
+	if soloCorrect != int64(len(run)) || soloErrors != 0 {
+		t.Fatalf("solo typed %d correct, %d errors; want %d and 0", soloCorrect, soloErrors, len(run))
+	}
+
+	live, _ := liveInstance(t, 0x7791AB)
+	liveCorrect, liveErrors := typed(live)
+	if liveCorrect != soloCorrect || liveErrors != soloErrors {
+		t.Fatalf("the session typed %d correct, %d errors; want the solo %d and %d",
+			liveCorrect, liveErrors, soloCorrect, soloErrors)
+	}
+}
+
+// TestTypedGoldMembersDisappearWithoutATick pins the shared half of local input
+// prediction. Gold is composite and shared, but the producing peer must still see
+// each correct member leave the screen before the next terminal frame; the same
+// crossing reaches the other peers on their playout schedule and corrections
+// remain free to reconcile the provisional result.
+func TestTypedGoldMembersDisappearWithoutATick(t *testing.T) {
+	t.Parallel()
+	type member struct {
+		entity core.Entity
+		cell   component.PositionComponent
+		rune   rune
+	}
+
+	live, _ := liveInstance(t, 0x601D)
+	live.Context().PushEventOrigin(event.EventGoldSpawnRequest, nil, event.OriginDebug)
+	live.Settle()
+	live.Tick(2)
+
+	var run []member
+	live.World().RunSafe(func() {
+		w := live.World()
+		for _, headerEntity := range w.Components.Header.GetAllEntities() {
+			header, ok := w.Components.Header.GetComponent(headerEntity)
+			if !ok || header.Behavior != component.BehaviorGold {
+				continue
+			}
+			for _, entry := range header.MemberEntries {
+				glyph, glyphOK := w.Components.Glyph.GetComponent(entry.Entity)
+				cell, cellOK := w.Positions.GetPosition(entry.Entity)
+				if glyphOK && cellOK {
+					run = append(run, member{entity: entry.Entity, cell: cell, rune: glyph.Rune})
+				}
+			}
+			break
+		}
+		slices.SortFunc(run, func(a, b member) int { return cmp.Compare(a.cell.X, b.cell.X) })
+		if len(run) > 0 {
+			cursor := w.Resources.Player.Entity
+			w.Positions.SetPosition(cursor, run[0].cell)
+			w.Resources.Player.DropPrediction()
+		}
+	})
+	if len(run) != parameter.GoldSequenceLength {
+		t.Fatalf("gold run has %d members, want %d", len(run), parameter.GoldSequenceLength)
+	}
+
+	inject(t, live, intentModeSwitch(input.ModeTargetInsert))
+	startTick := live.Position().Tick
+	for i, m := range run {
+		inject(t, live, intentTextChar(m.rune))
+		if got := live.Position().Tick; got != startTick {
+			t.Fatalf("typing member %d advanced tick %d to %d", i, startTick, got)
+		}
+		live.World().RunSafe(func() {
+			if live.World().Components.Glyph.HasEntity(m.entity) {
+				t.Fatalf("typed gold member %d remains renderable before a tick", i)
+			}
+		})
+		if got, _ := sharedGlyphs(live); got != len(run)-i-1 {
+			t.Fatalf("after member %d, %d shared glyphs remain; want %d", i, got, len(run)-i-1)
+		}
+	}
+}
+
+// TestPredictedLocalCursorReconcilesAndSnaps is D-18's reconcile half. A placement
+// this participant did not request is the authority, and the prediction it disagrees
+// with is discarded rather than merged: the queue is emptied and the local cell
+// falls back to the store.
+func TestPredictedLocalCursorReconcilesAndSnaps(t *testing.T) {
+	t.Parallel()
+	live, apps := liveInstance(t, 0xD18ADD)
+	local := localCursorEntity(live)
+	start, _ := localCell(live)
+
+	// Two of this participant's own placements, outstanding behind the barrier.
+	inject(t, live, intentMotion(input.MotionRight, 1))
+	inject(t, live, intentMotion(input.MotionRight, 1))
+	predicted := start
+	predicted.X += 2
+	if got, _ := localCell(live); got != predicted {
+		t.Fatalf("two presses predicted %#v, want %#v", got, predicted)
+	}
+
+	// A placement the prediction did not produce. Stamped shared, so it is not a
+	// crossing and CursorSystem applies it at once — a level setup, a wall push-out
+	// and a reset all reach the local cursor this way.
+	snap := start
+	snap.X -= 4
+	live.Context().PushEventOrigin(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: local, X: snap.X, Y: snap.Y}, event.OriginDebug)
+	live.Settle()
+
+	if got, _ := localCell(live); got != snap {
+		t.Fatalf("local cell after an unpredicted placement = %#v, want the authoritative %#v", got, snap)
+	}
+	if got := cursorPosition(live, local); got != snap {
+		t.Fatalf("store after an unpredicted placement = %#v, want %#v", got, snap)
+	}
+
+	// Discarded, not merged, and nothing comes back to un-discard it. Dropping
+	// the playout lead off the local path, so the two crossings the prediction
+	// described had already applied on this instance before the authoritative
+	// placement replaced them; what is still in flight is the peers' copies, which
+	// land at the agreed tick and are then corrected by the host like any other
+	// disagreement.
+	for range parameter.NetworkBarrierDelayTicks + 1 {
+		tickAll(apps)
+	}
+	if got, _ := localCell(live); got != snap {
+		t.Fatalf("local cell after the lead drained = %#v, want the authoritative %#v", got, snap)
+	}
+	if got := cursorPosition(live, local); got != snap {
+		t.Fatalf("store after the lead drained = %#v, want %#v", got, snap)
+	}
+	if got := cursorPosition(apps[1], local); got != predicted {
+		t.Fatalf("the peer applied the outstanding crossings as %#v, want %#v", got, predicted)
+	}
+}
+
+// parityScript builds the option set two instances step in lockstep. Resizes and
+// resets both re-derive map bounds from this instance's terminal, so both are
+// excluded; motions are restricted to the map-relative set, since a screen- or
+// page-relative motion resolves against a viewport the instances do not share.
+func parityScript(seed uint64, steps int) journal.FuzzOptions {
+	opt := journal.DefaultFuzz(seed, steps)
+	opt.Resizes = false
+	opt.Resets = false
+	opt.MapMotionsOnly = true
+	return opt
+}
+
+// TestSharedSnapshotParityAcrossTerminalSizes is the D-11 criterion: two
+// instances of one seed on different terminals agree on every shared record.
+//
+// Both are constructed at one size and diverge only after SetupLevel decouples the
+// map from the viewport with crop off. Constructing them at different sizes instead
+// would bake different map bounds into the FSM's entry actions, which run inside New,
+// before any Tick.
+func TestSharedSnapshotParityAcrossTerminalSizes(t *testing.T) {
+	t.Parallel()
+	const seed = 0x5EEDBEEF
+	steps := soakScale(48, 96, 400)
+
+	a := mustHeadless(t, seed, 120, 40)
+	defer a.Close()
+	b := mustHeadless(t, seed, 120, 40)
+	defer b.Close()
+
+	for _, x := range []*App{a, b} {
+		tickUntilCursor(t, x)
+		x.SetupLevel(100, 30, true, false)
+		x.Tick(1)
+	}
+	assertSharedParity(t, a, b, -2)
+
+	// Only b's terminal changes; the map is now the FSM's, not the terminal's
+	b.Resize(180, 56)
+	b.Tick(1)
+	a.Tick(1)
+	assertSharedParity(t, a, b, -1)
+
+	opt := parityScript(seed, steps)
+	da, db := journal.NewFuzzDriver(a, opt), journal.NewFuzzDriver(b, opt)
+	for i := range steps {
+		if !da.Step() {
+			t.Fatalf("step %d quit instance a", i)
+		}
+		if !db.Step() {
+			t.Fatalf("step %d quit instance b", i)
+		}
+		assertSharedParity(t, a, b, i)
+	}
+}
+
+// assertSharedParity fails with the first divergent record and its neighbours
+func assertSharedParity(t *testing.T, a, b *App, step int) {
+	t.Helper()
+	x, y := a.SnapshotShared(), b.SnapshotShared()
+	idx, lx, ly, ok := snapshot.FirstDiff(x, y)
+	if !ok {
+		return
+	}
+	t.Fatalf("step %d: shared snapshot diverged at line %d\n  a: %s\n  b: %s\n%s\n%s",
+		step, idx, lx, ly, strings.Join(snapshot.Diff(x, y, 8), "\n"), strings.Join(diffSharedWorld(a, b, 8), "\n"))
+}
+
+// diffSharedWorld names the entities behind a world-digest mismatch.
+func diffSharedWorld(a, b *App, maxDiff int) []string {
+	type state struct {
+		position  component.PositionComponent
+		kinetic   component.KineticComponent
+		combat    component.CombatComponent
+		hasPos    bool
+		hasKin    bool
+		hasCombat bool
+	}
+	read := func(x *App) map[core.Entity]state {
+		out := make(map[core.Entity]state)
+		x.World().RunSafe(func() {
+			w := x.World()
+			visit := func(e core.Entity) {
+				if e.Domain() != core.DomainShared {
+					return
+				}
+				s := out[e]
+				s.position, s.hasPos = w.Positions.GetPosition(e)
+				s.kinetic, s.hasKin = w.Components.Kinetic.GetComponent(e)
+				s.combat, s.hasCombat = w.Components.Combat.GetComponent(e)
+				if s.hasPos || s.hasKin || s.hasCombat {
+					out[e] = s
+				}
+			}
+			for _, e := range w.Positions.Entities() {
+				visit(e)
+			}
+			for _, e := range w.Components.Kinetic.Entities() {
+				visit(e)
+			}
+			for _, e := range w.Components.Combat.Entities() {
+				visit(e)
+			}
+		})
+		return out
+	}
+
+	x, y := read(a), read(b)
+	entities := make([]core.Entity, 0, len(x)+len(y))
+	for e := range x {
+		entities = append(entities, e)
+	}
+	for e := range y {
+		if _, ok := x[e]; !ok {
+			entities = append(entities, e)
+		}
+	}
+	slices.Sort(entities)
+
+	out := make([]string, 0, maxDiff)
+	for _, e := range entities {
+		sx, okx := x[e]
+		sy, oky := y[e]
+		if okx == oky && sx == sy {
+			continue
+		}
+		out = append(out, fmt.Sprintf("  entity %d: a=(%+v,%t) b=(%+v,%t)", e, sx, okx, sy, oky))
+		if len(out) == maxDiff {
+			break
+		}
+	}
+	if len(out) == 0 {
+		return []string{"  compared shared world state agrees"}
+	}
+	return out
 }

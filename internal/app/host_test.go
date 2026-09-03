@@ -7,9 +7,12 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
 // joinTestTickInterval paces the host through a join in this harness. See the
@@ -17,6 +20,7 @@ import (
 const joinTestTickInterval = 10 * time.Millisecond
 
 func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	for _, tt := range []struct {
 		name         string
 		participants int
@@ -39,10 +43,10 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 	}
 }
 
-// TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun is Phase 3's criterion, over a
-// real socket and at a tick that is not zero.
+// TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun drives the mid-run join over
+// a real socket at a tick that is not zero.
 //
-// Everything the phase claims is in this one path. A run that was solo opens a
+// The whole claim is in this one path. A run that was solo opens a
 // socket without restarting. A participant dials it hundreds of ticks in, receives
 // the world instead of re-deriving it, and installs it. The crossings the host
 // produced while that was happening reach the joiner rather than falling into the
@@ -51,6 +55,7 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 // crossing, at one agreed tick, on both instances. And the two then hold the same
 // shared world.
 func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3017
 	host := mustHeadless(t, seed, 120, 40)
 	defer host.Close()
@@ -139,8 +144,8 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// it already sent is drained. The subject here is the join, and a correction is
 	// a *clock* as much as a world — installing one pins this guest's tick to the
 	// host's at the moment the capture was read — so one landing between two
-	// assertions would move the very thing they compare. Phase 4's own criteria are
-	// where a correction is the subject.
+	// assertions would move the very thing they compare. The correction criteria
+	// elsewhere are where a correction is the subject.
 	settleCorrections(t, host, guest)
 
 	// Bring the two onto one tick, then hold them there. The residual offset is this
@@ -169,8 +174,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	}
 }
 
-// TestAReconnectIsTheSameJoin covers Phase 3's fourth requirement, which is a
-// requirement about there being no fourth mechanism.
+// TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism.
 //
 // A participant that drops leaves a departure crossing behind, and the coordinator
 // returns its identity to the pool. What comes back is a new dial: the same
@@ -180,6 +184,7 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 // run twice against one host, with a disconnect in between, asserting the second
 // arrival lands on a world the host has moved well past since the first.
 func TestAReconnectIsTheSameJoin(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3019
 	host := mustHeadless(t, seed, 120, 40)
 	defer host.Close()
@@ -275,6 +280,7 @@ func pumpHost(t *testing.T, host *App, ticks int) {
 // neither a tick nor a signal able to get it back. Calling BeginHosting directly
 // cannot see that; only the real input path can, so this test takes it.
 func TestHostCommandRunsUnderTheWorldLock(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	a := mustHeadless(t, 0x301A, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -305,6 +311,7 @@ func injectExCommand(t *testing.T, a *App, command string) {
 // TestBeginHostingRefusesASecondSession pins the one rule the command carries: a
 // run is in one session or none.
 func TestBeginHostingRefusesASecondSession(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	a := mustHeadless(t, 0x3018, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -422,4 +429,310 @@ func waitForRosterPair(t *testing.T, host, guest *App) {
 	guest.World().RunSafe(func() { guestE = guest.World().Resources.Player.Slot(1) })
 	t.Fatalf("the arrival crossing left slot 1 as entity %d on the host and %d on the guest",
 		hostE, guestE)
+}
+
+// TestSessionRosterStartsAndRestartsEveryParticipant captures the two places the
+// monitor script used its single player_entity variable as if it described the
+// whole roster: lobby admission and the gameplay-wide defeat reset.
+func TestSessionRosterStartsAndRestartsEveryParticipant(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA2A2, 2, [][2]int{{1, 2}})
+	local := localCursors(t, apps)
+
+	assertArmed := func(phase string) {
+		t.Helper()
+		for i, a := range apps {
+			var heat int
+			var energy int64
+			var count int
+			a.World().RunSafe(func() {
+				w := a.World()
+				count = w.Resources.Player.Count()
+				if c, ok := w.Components.Heat.GetComponent(local[i]); ok {
+					heat = c.Current
+				}
+				if c, ok := w.Components.Energy.GetComponent(local[i]); ok {
+					energy = c.Current
+				}
+			})
+			if count != len(apps) || heat != 10 || energy != 100 {
+				t.Fatalf("%s participant %d: roster=%d heat=%d energy=%d, want %d/10/100",
+					phase, i+1, count, heat, energy, len(apps))
+			}
+		}
+	}
+
+	assertArmed("start")
+
+	// The shared monitor guard is normally published by MetaSystem after every
+	// owner reports defeat. Set the already-folded value identically here so this
+	// test exercises the real MonitorGlobalReset transition without constructing
+	// two complete defeat sequences.
+	for _, a := range apps {
+		a.World().Resources.Status.Bools.Get("session.all_defeated").Store(true)
+	}
+	for range 6 {
+		tickAll(apps)
+	}
+
+	assertArmed("global reset")
+	assertMeshParity(t, apps, 6)
+}
+
+// TestLiveSessionRefusesAnInstanceLocalPause pins the operator policy: entering a
+// local overlay or command mode may inspect a live session, but it must not stop
+// that participant's production clock while its peers continue.
+func TestLiveSessionRefusesAnInstanceLocalPause(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA1A1, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+
+	apps[0].Context().SetPaused(true)
+	apps[0].Settle()
+
+	for i, a := range apps {
+		if a.Context().TimeCtl.IsPaused() {
+			t.Fatalf("participant %d paused inside a live session", i+1)
+		}
+	}
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(apps)
+	}
+	assertMeshParity(t, apps, 0)
+
+	// A synchronous snapshot drains a second log sink while the world lock is
+	// held. That may exceed the playout lead, so it is not a live inspection
+	// operation even though the non-blocking debug overlay remains available.
+	apps[0].Context().ClearStatusMessage()
+	mode.ExecuteCommand(apps[0].Context(), "d save")
+	if got := apps[0].Context().GetStatusMessage(); got != "Snapshot save unavailable in a live session" {
+		t.Fatalf(":d save status=%q", got)
+	}
+}
+
+// TestCoordinatorResetCrossesAndPreservesRoster reproduces :new as an operator
+// injection on one instance. The session must restart at one agreed barrier tick,
+// and the reset must rebuild the closed roster rather than the boot cursor alone.
+func TestCoordinatorResetCrossesAndPreservesRoster(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA3A3, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+
+	// The same command on a guest is operator-local refusal, not an artifact.
+	mode.ExecuteCommand(apps[1].Context(), "n")
+	apps[1].Settle()
+	if got := apps[1].Position().Run; got != 0 {
+		t.Fatalf("guest :new changed run to %d", got)
+	}
+
+	mode.ExecuteCommand(apps[0].Context(), "n")
+	apps[0].Settle()
+	for range parameter.NetworkBarrierDelayTicks + 8 {
+		tickAll(apps)
+	}
+
+	for i, a := range apps {
+		if got := a.Position().Run; got != 1 {
+			t.Fatalf("participant %d reset run=%d, want 1", i+1, got)
+		}
+		var count int
+		a.World().RunSafe(func() { count = a.World().Resources.Player.Count() })
+		if count != len(apps) {
+			t.Fatalf("participant %d roster=%d after reset, want %d", i+1, count, len(apps))
+		}
+	}
+	assertMeshParity(t, apps, 0)
+}
+
+// TestOneSharedQuasarTriggerProducesOneSpawn models the old MainEscalate fan-out:
+// the same shared decision asks every player-domain FuseSystem to act. It is one
+// logical fusion and therefore must yield one shared spawn request, not N.
+func TestOneSharedQuasarTriggerProducesOneSpawn(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA4A4, 2, [][2]int{{1, 2}})
+	local := localCursors(t, apps)
+
+	spawns := make([]int, len(apps))
+	for i, a := range apps {
+		i := i
+		a.SetDispatchTap(func(ev event.GameEvent) {
+			if ev.Type == event.EventQuasarSpawnRequest {
+				spawns[i]++
+			}
+		})
+		a.World().Resources.Status.Ints.Get("kills.drain").Store(9)
+	}
+	// Participant 2 produces the tenth shared defeat. The crossing is delivered
+	// to both FSMs, but its causal cursor elects only participant 2's fuse system.
+	apps[1].Context().PushCrossing(event.EventDrainDefeated,
+		&event.DrainDefeatedPayload{Entity: local[1]})
+	apps[1].Settle()
+
+	// Fusion waits 600ms; the driven clock advances 50ms per tick.
+	for range 20 + parameter.NetworkBarrierDelayTicks {
+		tickAll(apps)
+	}
+	for i, got := range spawns {
+		if got != 1 {
+			t.Fatalf("participant %d observed %d quasar spawn requests, want 1", i+1, got)
+		}
+	}
+}
+
+// TestExplosionPresentationStaysWithItsProducer is the presentation half of the
+// explosion split. The combat artifact reaches the peer; the smoke center does not.
+func TestExplosionPresentationStaysWithItsProducer(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xA5A5, 2, [][2]int{{1, 2}})
+	local := localCursors(t, apps)
+
+	apps[0].Context().PushLocal(event.EventExplosionVisualRequest,
+		&event.ExplosionVisualRequestPayload{X: 10, Y: 10, Radius: 4, Type: event.ExplosionTypeMissile})
+	apps[0].Context().PushCrossing(event.EventExplosionRequest,
+		&event.ExplosionRequestPayload{Entity: local[0], X: 10, Y: 10, Radius: 4})
+	apps[0].Settle()
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(apps)
+	}
+
+	for i, a := range apps {
+		var centers int
+		a.World().RunSafe(func() { centers = a.World().Resources.Transient.ExplosionCount })
+		want := 0
+		if i == 0 {
+			want = 1
+		}
+		if centers != want {
+			t.Fatalf("participant %d has %d missile visual centers, want %d", i+1, centers, want)
+		}
+	}
+}
+
+// TestRuntimeDigestIsADriftGaugeRatherThanAVerdict is what the divergence report
+// became.
+//
+// An escalation — DESYNC after two disagreeing samples, DIVERGED after five,
+// SYNCED once the state agreed again — states that two instances re-deriving one
+// world have lost an artifact and will never get it back. That holds while both
+// re-derive and does not hold for a guest that predicts and is corrected. The
+// escalation is therefore gone and the measurement stayed:
+// a mismatch is counted and the surface that disagrees is named, and neither is a
+// failure state a session can be stuck in.
+func TestRuntimeDigestIsADriftGaugeRatherThanAVerdict(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0xD165E57, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+
+	var target core.Entity
+	var original component.PositionComponent
+	for range 8 {
+		apps[0].World().RunSafe(func() {
+			for _, e := range apps[0].World().Components.Header.Entities() {
+				if e.Domain() == core.DomainShared {
+					target = e
+					original, _ = apps[0].World().Positions.GetPosition(e)
+					break
+				}
+			}
+		})
+		if target != 0 {
+			break
+		}
+		tickAll(apps)
+	}
+	if target == 0 {
+		t.Fatal("no shared composite available for the drift probe")
+	}
+
+	apps[0].World().RunSafe(func() {
+		p := original
+		p.X++
+		apps[0].World().Positions.SetPosition(target, p)
+	})
+	for range 3*parameter.NetworkDigestTicks + 2 {
+		tickAll(apps)
+	}
+
+	for i, a := range apps {
+		reg := a.World().Resources.Status
+		if reg.Ints.Get("network.digest_mismatches").Load() == 0 {
+			t.Fatalf("participant %d counted no mismatch against a corrupted position", i+1)
+		}
+		if got := reg.Strings.Get("network.drift_part").Load(); got != "positions" {
+			t.Fatalf("participant %d named %q as the drifting surface, want positions", i+1, got)
+		}
+		if reg.Ints.Get("network.drift_tick").Load() == 0 {
+			t.Fatalf("participant %d named no tick for the drift it reported", i+1)
+		}
+	}
+
+	// The retired surface is retired, not renamed: a session cannot enter a state
+	// the next correction does not leave, so there is nothing left to report one.
+	for _, key := range []string{"network.sync_state", "network.sync_part", "network.sync_records"} {
+		if apps[0].World().Resources.Status.Strings.Has(key) {
+			t.Fatalf("%s is still registered; DESYNC and DIVERGED were retired", key)
+		}
+	}
+	if apps[0].World().Resources.Status.Bools.Has("network.diverged") {
+		t.Fatal("network.diverged is still registered; DESYNC and DIVERGED were retired")
+	}
+
+	// And the authority closes it. A correction is what repairs a disagreement now,
+	// including one nothing in the simulation caused.
+	advance := func() { tickAll(apps) }
+	want := deliverCorrection(t, apps[0], apps[1:], advance)
+	assertCorrected(t, want, apps[1], "guest after a corrupted position")
+}
+
+// TestSharedSnapshotExcludesLocalSchedulerTiming pins the distinction the live
+// digest needs but the manual-clock harness cannot produce naturally: two real
+// schedulers have different wall origins and can miss different deadlines even
+// while they complete the same absolute simulation tick.
+//
+// The set is narrower than it was, twice over. Elapsed game time used to be here on
+// the same argument, and that argument was wrong in a way that cost a session: it
+// was true only because the simulation instant came from the pacing clock.
+// engine.SimTime derives it from the tick instead, so it is tick * interval
+// everywhere, and TestSharedSnapshotComparesElapsedGameTime below asserts it is
+// compared. The gold sequence's remaining time was here for a different reason —
+// a tick-zero joiner reached MainSpawnGold one tick before its host — and a joiner
+// installs the host's world rather than reproducing it, so it is compared too;
+// TestSnapshotJoinCarriesTheGoldDeadline holds it.
+func TestSharedSnapshotExcludesLocalSchedulerTimingAndComparesGameTime(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0xD165E58, 120, 40)
+	b := mustHeadless(t, 0xD165E58, 120, 40)
+	defer a.Close()
+	defer b.Close()
+	tickUntilCursor(t, a)
+	tickUntilCursor(t, b)
+
+	a.World().Resources.Status.Ints.Get("engine.tick_slips").Store(3)
+	assertSharedParity(t, a, b, 0)
+
+	// The elapsed-game-time half is the regression for the 2026-08-31 kinetics
+	// divergence. Game time was read from each process's pacing clock, so every
+	// shared reader that measures now.Sub(stored) — the quasar's speed step is the
+	// one that diverged — crossed its threshold on a different tick per instance,
+	// and nothing compared the clock itself.
+	elapsed := func(x *App) int64 {
+		return x.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Load()
+	}
+	if elapsed(a) != elapsed(b) {
+		t.Fatalf("elapsed game time %d vs %d at the same tick", elapsed(a), elapsed(b))
+	}
+	if want := int64(a.World().Resources.Game.State.GetGameTicks()) *
+		parameter.GameUpdateInterval.Milliseconds(); elapsed(a) != want {
+		t.Fatalf("elapsed game time %d, want tick * interval = %d", elapsed(a), want)
+	}
+
+	// The key is inside the compared surface, so a clock that drifts back onto the
+	// wall fails here rather than surfacing as a kinetics digest mismatch minutes in.
+	a.World().Resources.Status.Ints.Get("time.game_elapsed_ms").Store(17_000)
+	if !snapshot.SharedKey("time.game_elapsed_ms") {
+		t.Fatal("time.game_elapsed_ms is excluded from the shared surface again")
+	}
+	if _, _, _, differs := snapshot.FirstDiff(a.SnapshotShared(), b.SnapshotShared()); !differs {
+		t.Fatal("a forged elapsed game time did not move the shared snapshot")
+	}
 }

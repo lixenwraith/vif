@@ -61,7 +61,7 @@ changing a subsystem, update the source that actually owns its shape.
 | Runtime shape and deterministic harness | `internal/app/config.go`, `headless.go`, `script.go` | `App`, `ClockScheduler`, services |
 | Replay journal format, recording/replay drivers, and authored scripts | `internal/event/journal.go`, `origin.go`, `internal/journal` | `internal/app/replay.go`, `play.go`, `script.go` |
 | Cursor lifecycle, roster, and local selection | `internal/system/cursor.go`, `internal/engine/resource.go` | FSM cursor events, mode routing, per-slot metrics |
-| Shared-world capture layout and its declared carriers | `internal/app/snapshot_shared_state.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
+| Shared-world capture layout and its declared carriers | `internal/snapshot/capture.go`, `internal/app/capture.go`, `SystemDef.Snapshot` in `internal/manifest/definition.go` | `internal/engine/snapshot_world_gen.go`, `internal/app/snapshot_stage.go`, `internal/network/snapshot.go` |
 | Input enum string forms | input enum definitions | `internal/input/strings_gen.go` |
 | Default encounter progression | `internal/asset/config/*.toml` | `internal/fsm`, `internal/engine.ClockScheduler` |
 | Alternate scenarios | `config/blank`, `config/main`, `config/td` | selected with `-g` |

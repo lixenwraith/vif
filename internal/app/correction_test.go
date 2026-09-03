@@ -16,14 +16,14 @@ import (
 
 // correctionSteps is how often the two-participant criteria assert convergence.
 //
-// Weakened D-11 does not say two instances agree at every tick — Phase 4 removed
-// the playout lead from the local path, so each participant's own artifacts land a
-// lead earlier on it than on anyone else, by design. It says a guest is equal to the
-// host as of the last applied correction. That is what these tests assert, at the
-// only moments the rule makes a claim about.
+// Weakened D-11 does not say two instances agree at every tick: the local path
+// carries no playout lead, so each participant's own artifacts land a lead earlier
+// on it than on anyone else. It says a guest is equal to the host as of the last
+// applied correction, which is what these tests assert, at the only moments the
+// rule makes a claim about.
 const correctionSteps = 8
 
-// The Phase 6 exchange's settling budget between two ticks.
+// The selective exchange's settling budget between two ticks.
 //
 // correctionExchangeFastPasses is what an in-process link needs: the manifest is
 // answered on the first pass, the repair it provoked is served and applied on the
@@ -51,8 +51,8 @@ const (
 // Not everything SnapshotShared compares is in a capture, and the difference
 // matters here. `context.crop_on_resize` is this instance's answer to a resize, so
 // no capture carries it and no correction can converge it — what makes two
-// participants agree on it is the crossing that changed it, and under Phase 4 that
-// crossing lands a playout lead earlier on its producer than on anyone else.
+// participants agree on it is the crossing that changed it, and that crossing
+// lands a playout lead earlier on its producer than on anyone else.
 // Letting the lead drain before the world is read is what separates "the guest has
 // the host's world" from "the guest has not caught up with an artifact yet", and
 // only the first is a claim about corrections.
@@ -81,13 +81,12 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 	for i, g := range guests {
 		before[i] = statOf(g, "snapshot.corrections_applied")
 	}
-	// The exchange is driven before the clock is. Phase 6 answers a manifest and
-	// serves the repair it provokes between two ticks — the drain and the install
-	// both belong there — so a correction over a direct link completes without the
-	// participants moving at all, and what this returns is then a comparison at the
-	// tick the correction actually describes. A tick is still advanced when a round
-	// did not complete, which is what a relayed session needs: its bodies travel as
-	// chunks and every hop costs one.
+	// The exchange is driven before the clock is: a manifest is answered and the
+	// repair it provokes served between two ticks, so a correction over a direct
+	// link completes without the participants moving and the comparison is at the
+	// tick the correction describes. A tick is still advanced when a round did not
+	// complete, which is what a relayed session needs: its bodies travel as chunks
+	// and every hop costs one.
 	applied := func() bool {
 		done := true
 		for i, g := range guests {
@@ -99,7 +98,7 @@ func deliverCorrectionNow(t *testing.T, host *App, guests []*App, advance func()
 		return done
 	}
 	for range parameter.NetworkRelayHopLimit {
-		// Each leg of the Phase 6 exchange is drained, answered and served between
+		// Each leg of the exchange is drained, answered and served between
 		// two ticks, so the whole round trip completes without the participants
 		// moving: the manifest is answered on one pass and the repair it provoked
 		// is served and applied on the next. Settling it here is what makes the
@@ -140,17 +139,16 @@ func assertCorrected(t *testing.T, want []string, guest *App, label string) {
 	}
 }
 
-// TestGuestConvergesOnEveryCorrection is Phase 4's headline criterion and the
-// replacement for the lockstep one.
+// TestGuestConvergesOnEveryCorrection is the headline criterion, and the
+// replacement for a lockstep one.
 //
-// Before this phase two participants re-derived the shared world from one artifact
-// stream and were asserted equal at every tick. That is what a guest stopped doing:
-// it applies its own input immediately and extrapolates between corrections, so it
-// is *expected* to differ from the host, and what the rule now claims is that every
+// A guest applies its own input immediately and extrapolates between corrections,
+// so it is expected to differ from the host; what the rule claims is that every
 // correction closes the difference exactly. The magnitude in between is telemetry —
 // it is asserted to be non-zero here, because a criterion that passed with a guest
 // that never predicted anything would be proving nothing.
 func TestGuestConvergesOnEveryCorrection(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	host, guest := pair(t, seed, 0)
 	localA, localB := mirrorCursors(t, host, guest)
@@ -192,6 +190,7 @@ func sharedStatesAgree(a, b *App) bool {
 // DESYNC: how far this instance's prediction had drifted when the authority
 // arrived, published rather than escalated.
 func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	host, guest := pair(t, seed, 0)
 	mirrorCursors(t, host, guest)
@@ -230,6 +229,7 @@ func TestCorrectionMagnitudeIsMeasuredNotAsserted(t *testing.T) {
 // that rebuilt the same entities in a different store order would pass every value
 // comparison and fail this, which is why the delta carries entity order at all.
 func TestCorrectionDeltaRoundTripsExactly(t *testing.T) {
+	t.Parallel()
 	for _, seed := range []uint64{0x5EEDBEEF, 0xC0FFEE, 0x1234} {
 		a := mustHeadless(t, seed, 120, 40)
 		tickUntilCursor(t, a)
@@ -285,6 +285,7 @@ func TestCorrectionDeltaRoundTripsExactly(t *testing.T) {
 // applied one to the wrong world would install a world nobody has — the state would
 // look consistent and describe nothing.
 func TestCorrectionDeltaRefusesAForeignBaseline(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -319,15 +320,15 @@ func TestCorrectionDeltaRefusesAForeignBaseline(t *testing.T) {
 	}
 }
 
-// TestStagingWorldIsBuiltOnceAndReused is doorstep item 1. Phase 3 built a whole
-// second App per install — 9 to 31 ms — which is right for a join and wrong for a
-// correction at cadence.
+// TestStagingWorldIsBuiltOnceAndReused. A second App per install costs 9 to 31 ms,
+// which suits a join and not a correction at cadence.
 //
 // Re-use is only sound if the second install leaves exactly what a world built for
 // it alone would: a carrier that merged rather than replaced, or a store that kept
 // an entity the next capture does not have, would resolve the following correction
 // against a world the sender never held.
 func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	source := mustHeadless(t, seed, 120, 40)
 	defer source.Close()
@@ -386,6 +387,7 @@ func TestStagingWorldIsBuiltOnceAndReused(t *testing.T) {
 // the same world — including the components an entity stopped carrying and the
 // entities the authority no longer has at all.
 func TestReconcileMatchesAFullInstall(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	source := mustHeadless(t, seed, 120, 40)
 	defer source.Close()
@@ -443,10 +445,16 @@ func TestReconcileMatchesAFullInstall(t *testing.T) {
 	}
 }
 
-// TestLocalCrossingSkipsThePlayoutLead is requirement 5. The producer applies its
-// own artifact in the tick it produced it for; the peers keep the lead, which is an
-// interpolation buffer for remote action rather than a barrier on anyone's input.
-func TestLocalCrossingSkipsThePlayoutLead(t *testing.T) {
+// TestCrossingApplyTimes covers both halves of the ordering rule over one pair.
+//
+// An ordinary crossing applies on its producer in the tick that produced it; the
+// peers keep the playout lead, which is an interpolation buffer for remote action
+// rather than a barrier on anyone's input. Arrival and departure are the exception:
+// they create and destroy shared cursors, and a shared entity's identity and
+// creation order are what every capture references by, so they apply at one agreed
+// tick on the producer too.
+func TestCrossingApplyTimes(t *testing.T) {
+	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	mirrorCursors(t, a, b)
 
@@ -479,15 +487,6 @@ func TestLocalCrossingSkipsThePlayoutLead(t *testing.T) {
 	if sent := statOf(a, "network.crossings_sent"); sent == 0 {
 		t.Fatal("the crossing applied locally but never reached the wire")
 	}
-}
-
-// TestRosterCrossingsKeepTheAgreedApplyTick is the exception requirement 5 does not
-// reach. An arrival creates a shared cursor and a departure destroys one, and a
-// shared entity's identity and creation order are what every capture references by
-// — so those apply at one agreed tick on the producer too.
-func TestRosterCrossingsKeepTheAgreedApplyTick(t *testing.T) {
-	a, b := pair(t, 0x5EEDBEEF, 0)
-	mirrorCursors(t, a, b)
 
 	before := 0
 	a.World().RunSafe(func() { before = a.World().Resources.Player.Count() })
@@ -522,11 +521,12 @@ func TestRosterCrossingsKeepTheAgreedApplyTick(t *testing.T) {
 	}
 }
 
-// TestHostRefusesARosterCrossingFromAnyoneElse is requirement 2's validation. The
+// TestHostRefusesARosterCrossingFromAnyoneElse validates this. The
 // coordinator is the only producer of an arrival or a departure, because one
 // producer is what gives them a single apply tick; an artifact of either kind from
 // anyone else would create or destroy a shared entity the session never agreed to.
 func TestHostRefusesARosterCrossingFromAnyoneElse(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	host, forger := apps[0], apps[1]
@@ -552,12 +552,11 @@ func TestHostRefusesARosterCrossingFromAnyoneElse(t *testing.T) {
 	}
 }
 
-// TestSessionLagIsMeasuredEveryTick is doorstep item 3. Phase 3 measured the gap a
-// participant may be behind exactly once, at admission, and refused a join it could
-// not close — after which nothing looked at it again, so a guest whose machine fell
-// behind mid-session produced artifacts that reached the host after the ticks they
-// named and had no way to know.
+// TestSessionLagIsMeasuredEveryTick. Measuring the gap only at admission leaves a
+// guest whose machine falls behind mid-session producing artifacts that reach the
+// host after the ticks they name, with no way to know.
 func TestSessionLagIsMeasuredEveryTick(t *testing.T) {
+	t.Parallel()
 	a, b := pair(t, 0x5EEDBEEF, 0)
 	mirrorCursors(t, a, b)
 
@@ -587,18 +586,12 @@ func TestSessionLagIsMeasuredEveryTick(t *testing.T) {
 	}
 }
 
-// statBoolOf reads a boolean counter as an integer, so the numeric helpers above
-// can assert both kinds the same way.
-func statBoolOf(a *App, key string) (v bool) {
-	a.World().RunSafe(func() { v = a.World().Resources.Status.Bools.Get(key).Load() })
-	return v
-}
-
 // TestCorrectionCarriesTheWholeDeclaredSurface guards the one shortcut the delta
 // takes: only the world half is differenced, and everything else — stream
 // positions, every D-19 carrier, the FSM's runtime position, the compared status
 // surface — travels whole in both shapes.
 func TestCorrectionCarriesTheWholeDeclaredSurface(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -635,6 +628,7 @@ func TestCorrectionCarriesTheWholeDeclaredSurface(t *testing.T) {
 // TestWorldDifferenceCountsWhatMoved pins the magnitude's unit, since it is the
 // number a cadence gets chosen from.
 func TestWorldDifferenceCountsWhatMoved(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -667,22 +661,21 @@ func TestWorldDifferenceCountsWhatMoved(t *testing.T) {
 	}
 }
 
-// TestJoinReusesTheCadencesKeyframe is doorstep item 6, or the half of it that is
-// about the world lock.
+// TestJoinReusesTheCadencesKeyframe is the world-lock half of a mid-run join.
 //
-// Phase 3 read the world once per participant, on the accept goroutine, so a second
-// participant dialling mid-join waited behind the first one's read as well as behind
-// its transfer. A host publishes keyframes on a cadence now, so a join takes
-// whichever one is fresh enough and only reads the world when none is — which is
-// what makes the read per-cadence rather than per-join, and what makes two joins
-// arriving together share one.
+// Reading the world once per participant on the accept goroutine makes a second
+// participant dialling mid-join wait behind the first one's read as well as behind
+// its transfer. A host publishes keyframes on a cadence, so a join takes whichever
+// one is fresh enough and reads the world only when none is: the read is
+// per-cadence rather than per-join, and two joins arriving together share one.
 func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
 	a.Tick(20)
 
-	deadline := time.Now().Add(2 * time.Second)
+	deadline := time.Now().Add(socketWait)
 	first, firstTick, err := a.corrections.keyframeAt(0, deadline)
 	if err != nil {
 		t.Fatalf("first keyframe: %v", err)
@@ -728,6 +721,7 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 // produced before the admission has applied into the capture, and the copies that do
 // arrive are recognised as already-contained.
 func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
+	t.Parallel()
 	host := mustHeadless(t, 0x5EEDBEEF, 120, 40)
 	defer host.Close()
 	tickUntilCursor(t, host)
@@ -740,7 +734,7 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 	done := make(chan uint64, 1)
 	go func() {
 		_, tick, err := host.corrections.keyframeAt(
-			admission+parameter.NetworkBarrierDelayTicks, time.Now().Add(2*time.Second))
+			admission+parameter.NetworkBarrierDelayTicks, time.Now().Add(socketWait))
 		if err != nil {
 			done <- 0
 			return
@@ -758,7 +752,7 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 			t.Fatalf("a join installed the world at tick %d, admitted at %d with a lead of %d",
 				tick, admission, parameter.NetworkBarrierDelayTicks)
 		}
-	case <-time.After(2 * time.Second):
+	case <-time.After(socketWait):
 		t.Fatal("the join never got its world")
 	}
 }
@@ -783,6 +777,7 @@ func TestMidRunJoinWaitsOutThePlayoutLead(t *testing.T) {
 // player entity at all, which is what this asserts: after repeated corrections the
 // guest holds exactly one orb per armed weapon, and every one of them is its own.
 func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	host, guest := pair(t, seed, 0)
 	mirrorCursors(t, host, guest)
@@ -837,6 +832,7 @@ func TestCorrectionsLeaveOneOrbPerArmedWeapon(t *testing.T) {
 // host cannot have been told: what it publishes is provably its stale mirror, and
 // the guest's own value is the only one with an author.
 func TestCorrectionKeepsTheReceiversOwnCursorState(t *testing.T) {
+	t.Parallel()
 	const seed = 0x5EEDBEEF
 	host, guest := pair(t, seed, 0)
 	mirrorCursors(t, host, guest)
@@ -908,4 +904,458 @@ func orbCount(a *App) (n int) {
 func simulatesLocally(a *App, cursor core.Entity) (ok bool) {
 	a.World().RunSafe(func() { ok = a.World().SimulatesLocally(cursor) })
 	return ok
+}
+
+// The selective suite drives whole sessions. What the manifest suite proves about
+// the index, these prove about the exchange: which messages actually left, how many
+// bytes they were, and that every refusal ends at the keyframe the host was going
+// to send anyway.
+
+// selectivePair is a two-participant session with the roster split, ready to
+// exchange corrections.
+func selectivePair(t *testing.T, seed uint64) (host, guest *App, advance func()) {
+	t.Helper()
+	host, guest = pair(t, seed, 0)
+	mirrorCursors(t, host, guest)
+	advance = func() { host.Tick(1); guest.Tick(1) }
+	return host, guest, advance
+}
+
+// deliverSameTick publishes a correction and settles the whole exchange without
+// advancing either participant.
+//
+// It is the only shape that can assert what was *not* sent. Every tick moves the
+// clock-derived half of the compared surface — a region's time in state, the gold
+// deadline — so a comparison across one is a comparison of two different instants
+// and will always find something. Holding the clock still is what makes "the guest
+// already agreed, so nothing travelled" a statement about the protocol rather than
+// about the tick it straddled.
+func deliverSameTick(t *testing.T, host *App, guests []*App) []string {
+	t.Helper()
+	return deliverCorrectionNow(t, host, guests, func() {})
+}
+
+// divergeGuest perturbs one shared cell on a guest and nowhere else, which is the
+// disagreement a repair exists to close.
+//
+// A crossing would not do: the producer applies it immediately and the authority
+// applies it a playout lead later, so the two converge on their own. This is a
+// difference the session has no artifact for, which is what a lost frame or a
+// mispredicted step actually leaves behind.
+func divergeGuest(t *testing.T, guest *App) {
+	t.Helper()
+	moved := false
+	guest.World().RunSafe(func() {
+		w := guest.World()
+		// The mirror of a cursor this instance does not drive: shared placement,
+		// not owner-authored, and present from the first tick of any session.
+		e := w.Resources.Player.Slot(0)
+		if e == 0 {
+			return
+		}
+		pos, ok := w.Positions.GetPosition(e)
+		if !ok {
+			return
+		}
+		pos.X += 3
+		w.Positions.SetPosition(e, pos)
+		moved = true
+	})
+	if !moved {
+		t.Skip("the fixture session holds no mirrored cursor to perturb")
+	}
+}
+
+// TestAConvergedGuestReceivesTheIndexAndNoState as a session: a
+// guest whose prediction was right gets hashes and nothing else.
+func TestAConvergedGuestReceivesTheIndexAndNoState(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+
+	// The first correction is a keyframe — a guest holds no authority yet — and it
+	// leaves the two holding one world at one tick. The claim is about the ones
+	// after that.
+	deliverCorrection(t, host, []*App{guest}, advance)
+	shardBytes := statOf(host, "snapshot.shard_bytes_sent")
+	bodyBytes := statOf(host, "snapshot.correction_bytes_sent")
+	manifestBytes := statOf(host, "snapshot.manifest_bytes_sent")
+	hashOnly := statOf(guest, "snapshot.corrections_hash_only")
+
+	for range 4 {
+		// One tick each, from one world: the two simulate the same thing, so the
+		// index is the whole of what the correction has to carry.
+		advance()
+		want := deliverSameTick(t, host, []*App{guest})
+		assertCorrected(t, want, guest, "guest")
+	}
+
+	if got := statOf(guest, "snapshot.corrections_hash_only") - hashOnly; got == 0 {
+		t.Fatal("a converged guest recorded no hash-only correction")
+	}
+	if got := statOf(host, "snapshot.shard_bytes_sent") - shardBytes; got != 0 {
+		t.Fatalf("a converged guest was sent %d bytes of state", got)
+	}
+	if got := statOf(host, "snapshot.correction_bytes_sent") - bodyBytes; got != 0 {
+		t.Fatalf("a converged guest was sent %d bytes of correction body", got)
+	}
+	index := statOf(host, "snapshot.manifest_bytes_sent") - manifestBytes
+	if index == 0 {
+		t.Fatal("no index was published at all")
+	}
+	t.Logf("four converged corrections: %d index bytes, no state", index)
+}
+
+// TestASelectiveRepairRestoresTheAuthority is the ordinary case: the two
+// participants drive their own cursors, so they disagree, and the repair closes it.
+func TestASelectiveRepairRestoresTheAuthority(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	repaired := false
+	for range 5 {
+		inject(t, host, intentMotion(input.MotionRight, 1))
+		inject(t, guest, intentMotion(input.MotionLeft, 1))
+		for range 3 {
+			advance()
+		}
+		deliverCorrection(t, host, []*App{guest}, advance)
+		advance()
+		divergeGuest(t, guest)
+		before := statOf(guest, "snapshot.pages_repaired")
+		want := deliverSameTick(t, host, []*App{guest})
+		assertCorrected(t, want, guest, "guest")
+		if statOf(guest, "snapshot.pages_repaired") > before {
+			repaired = true
+		}
+	}
+	if !repaired {
+		t.Fatal("two participants driving apart never needed a page repaired")
+	}
+	if got := statOf(guest, "snapshot.proof_failures"); got != 0 {
+		t.Fatalf("%d repairs failed their proof on a healthy link", got)
+	}
+	if got := statOf(guest, "snapshot.keyframe_fallbacks"); got != 0 {
+		t.Fatalf("a healthy link fell back to a keyframe %d times", got)
+	}
+	if got := statOf(guest, "snapshot.shards_refused"); got != 0 {
+		t.Fatalf("%d repairs were refused on a healthy link", got)
+	}
+}
+
+// TestOwnerAuthoredDisagreementNeverDegradesToKeyframes's second
+// half and the failure the plan names by hand: a guest keeps its own energy, heat
+// and loadout over the host's mirror for the cursor it drives, so those cells
+// disagree for the life of the session. A hashed surface that carried them would
+// produce a root mismatch no repair could close, and the protocol would fall back
+// to a whole world every correction, forever.
+func TestOwnerAuthoredDisagreementNeverDegradesToKeyframes(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	var guestCursor core.Entity
+	guest.World().RunSafe(func() { guestCursor = guest.World().Resources.Player.Slot(1) })
+	if guestCursor == 0 {
+		t.Fatal("the guest drives no cursor")
+	}
+
+	// Force a standing disagreement: the guest's own cursor holds values the host's
+	// mirror does not, which is exactly what a sync period behind looks like.
+	setOwnerAuthored := func(a *App, e core.Entity, energy int64, heat int) {
+		a.World().RunSafe(func() {
+			w := a.World()
+			if c, ok := w.Components.Energy.GetPtr(e); ok {
+				c.Current = energy
+			}
+			if c, ok := w.Components.Heat.GetPtr(e); ok {
+				c.Current = heat
+			}
+		})
+	}
+
+	fallbacks := statOf(guest, "snapshot.keyframe_fallbacks")
+	for round := range 5 {
+		setOwnerAuthored(guest, guestCursor, int64(40+round), 10+round)
+		setOwnerAuthored(host, guestCursor, 90, 90)
+		want := deliverCorrection(t, host, []*App{guest}, advance)
+		assertCorrected(t, want, guest, "guest")
+
+		var energy int64
+		guest.World().RunSafe(func() {
+			if c, ok := guest.World().Components.Energy.GetComponent(guestCursor); ok {
+				energy = c.Current
+			}
+		})
+		if energy == 90 {
+			t.Fatalf("round %d: the correction adopted the host's mirror of a cursor the guest authors", round)
+		}
+	}
+	if got := statOf(guest, "snapshot.keyframe_fallbacks") - fallbacks; got != 0 {
+		t.Fatalf("a standing owner-authored disagreement drove %d keyframe fallbacks", got)
+	}
+	if got := statOf(guest, "snapshot.proof_failures"); got != 0 {
+		t.Fatalf("a standing owner-authored disagreement drove %d proof failures", got)
+	}
+}
+
+// TestASilentPeerIsSentWholeBodies is the fallback that keeps a peer which cannot
+// answer the index from starving: after SnapshotManifestSilenceCorrections
+// unanswered manifests the host publishes the whole body again.
+func TestASilentPeerIsSentWholeBodies(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	// The guest stops answering: its ticks still run, but nothing drains or replies
+	// to the index. Publishing is driven, so each round is one manifest.
+	for range parameter.SnapshotManifestSilenceCorrections + 1 {
+		if err := host.PublishCorrection(); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+		host.Tick(1)
+	}
+	report := host.SelectiveReport()
+	peer, ok := report.PeerState[2]
+	if !ok {
+		t.Fatalf("the host holds no standing for participant 2: %+v", report.PeerState)
+	}
+	if peer.Silence < parameter.SnapshotManifestSilenceCorrections {
+		t.Fatalf("a peer that answered nothing recorded %d unanswered manifests", peer.Silence)
+	}
+
+	// The next publish carries a whole body again, and the guest — still ticking —
+	// takes it through the ordinary correction path.
+	before := statOf(host, "snapshot.correction_bytes_sent")
+	if err := host.PublishCorrection(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	if got := statOf(host, "snapshot.correction_bytes_sent"); got == before {
+		t.Fatal("a silent peer was left with an index it could not answer")
+	}
+	applied := statOf(guest, "snapshot.corrections_applied")
+	for range parameter.NetworkRelayHopLimit {
+		advance()
+		guest.ApplyPendingCorrections()
+		if statOf(guest, "snapshot.corrections_applied") > applied {
+			return
+		}
+	}
+	t.Fatal("the fallback body never reached the guest")
+}
+
+// TestLinkPacingPricesTheSelectiveWire: the controller's cost
+// model is fed the bytes the new protocol actually sends, not the whole delta it
+// replaced.
+func TestLinkPacingPricesTheSelectiveWire(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	for range 5 {
+		deliverCorrection(t, host, []*App{guest}, advance)
+	}
+
+	report := host.CadenceReport()
+	measured := statOf(host, "snapshot.selective_bytes")
+	if measured == 0 {
+		t.Fatal("the selective wire size was never measured")
+	}
+	if report.DeltaBytes != measured {
+		t.Fatalf("the controller prices a non-keyframe correction at %d bytes, the wire measured %d",
+			report.DeltaBytes, measured)
+	}
+	if report.KeyframeBytes <= report.DeltaBytes {
+		t.Fatalf("a keyframe (%d bytes) is priced no higher than a selective correction (%d)",
+			report.KeyframeBytes, report.DeltaBytes)
+	}
+	// Admission reads the same pair, so a link is judged against what the session
+	// will actually put on it.
+	sizes := host.cadenceSizes()
+	if sizes.Delta != measured || sizes.Keyframe != report.KeyframeBytes {
+		t.Fatalf("admission prices %+v, the report says keyframe %d delta %d",
+			sizes, report.KeyframeBytes, report.DeltaBytes)
+	}
+	t.Logf("priced from the wire: keyframe %d bytes, selective correction %d bytes",
+		sizes.Keyframe, sizes.Delta)
+}
+
+// TestAFailedProofReachesTheKeyframeFallback is the session half: a
+// repair that does not verify is refused without touching the world, the guest asks
+// for a whole world instead, and the world it gets converges it.
+func TestAFailedProofReachesTheKeyframeFallback(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+	advance()
+	divergeGuest(t, guest)
+
+	corrupt, awaiting := outstandingRepair(t, host, guest, func(set *snapshot.CorrectionShardSet) {
+		set.Shards[0].Hash++
+	})
+	_ = awaiting
+
+	before := statOf(guest, "snapshot.proof_failures")
+	guest.corrections.applyRepair(corrupt)
+	if statOf(guest, "snapshot.proof_failures") <= before {
+		t.Fatal("a corrupted repair passed its proof")
+	}
+	if got := statOf(guest, "snapshot.keyframe_fallbacks"); got == 0 {
+		t.Fatal("a failed proof did not reach the keyframe fallback")
+	}
+	if got := statOf(guest, "snapshot.corrections_applied"); got != 1 {
+		t.Fatalf("a refused repair was installed anyway (%d corrections applied)", got)
+	}
+
+	// The fallback resolves it: the next correction converges the guest whole, and
+	// it does so through the keyframe path rather than by repairing.
+	want := deliverSameTick(t, host, []*App{guest})
+	assertCorrected(t, want, guest, "guest")
+}
+
+// TestSupersededRepairsAreRefusedRatherThanCombined is the other half of
+// a repair that answers a baseline the receiver has moved past is
+// refused, so two of them can never be spliced into one world.
+func TestSupersededRepairsAreRefusedRatherThanCombined(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+	advance()
+	divergeGuest(t, guest)
+
+	stale, staleTick := outstandingRepair(t, host, guest, nil)
+
+	// A newer manifest supersedes what the guest was awaiting, and the guest is now
+	// waiting on a repair for a later baseline. The held one answers a state this
+	// instance has moved past.
+	advance()
+	divergeGuest(t, guest)
+	_, freshTick := outstandingRepair(t, host, guest, nil)
+	if freshTick <= staleTick {
+		t.Fatalf("the second round named tick %d, not later than %d", freshTick, staleTick)
+	}
+
+	before := statOf(guest, "snapshot.shards_refused")
+	baselines := statOf(guest, "snapshot.baseline_refusals")
+	applied := statOf(guest, "snapshot.corrections_applied")
+	guest.corrections.applyRepair(stale)
+	if statOf(guest, "snapshot.shards_refused") <= before {
+		t.Fatal("a superseded repair was accepted")
+	}
+	if got := statOf(guest, "snapshot.corrections_applied"); got != applied {
+		t.Fatalf("a superseded repair was installed anyway (%d corrections applied, was %d)",
+			got, applied)
+	}
+	if statOf(guest, "snapshot.baseline_refusals") <= baselines {
+		t.Fatal("a superseded repair was refused for some reason other than its baseline")
+	}
+	if got := statOf(guest, "snapshot.proof_failures"); got != 0 {
+		t.Fatalf("a superseded repair was spliced and then failed its root %d times", got)
+	}
+
+	// And the session recovers on its own: the fresh baseline is still outstanding,
+	// so the next round converges the guest.
+	advance()
+	want := deliverSameTick(t, host, []*App{guest})
+	assertCorrected(t, want, guest, "guest")
+}
+
+// outstandingRepair drives the exchange far enough for the guest to be awaiting a
+// repair, then builds the repair the host would have sent — optionally corrupted —
+// without letting the guest apply it.
+//
+// The interception is white-box on purpose. A repair reaches the receiver's queue
+// and is applied in the same drain, so there is no moment in the live path where a
+// test could reach in and change one; building the same message from the same two
+// indexes is the only way to ask what the receiver does with a bad one.
+func outstandingRepair(t *testing.T, host, guest *App, corrupt func(*snapshot.CorrectionShardSet)) ([]byte, uint64) {
+	t.Helper()
+	if err := host.PublishCorrection(); err != nil {
+		t.Fatalf("publish: %v", err)
+	}
+	host.ApplyPendingCorrections()
+	guest.ApplyPendingCorrections() // answers the index, now awaiting a repair
+
+	guest.corrections.selectiveMu.Lock()
+	outstanding := guest.corrections.selective.awaiting
+	guest.corrections.selectiveMu.Unlock()
+	if len(outstanding) == 0 {
+		t.Fatal("the guest is not awaiting a repair; the injected divergence produced none")
+	}
+	awaiting := outstanding[len(outstanding)-1]
+	req, _, _ := snapshot.CompareRequest(awaiting.index, awaiting.manifest)
+	if req.Converged() {
+		t.Fatal("the guest reported convergence; the injected divergence produced no request")
+	}
+
+	host.corrections.publishMu.Lock()
+	held, ok := host.corrections.retainedAtLocked(awaiting.tick)
+	host.corrections.publishMu.Unlock()
+	if !ok {
+		t.Fatalf("the host retained no capture for tick %d", awaiting.tick)
+	}
+	set, pages, err := snapshot.BuildShardSet(held.index, req)
+	if err != nil {
+		t.Fatalf("build repair: %v", err)
+	}
+	if pages == 0 {
+		t.Fatal("the request asked for no page")
+	}
+	if corrupt != nil {
+		corrupt(&set)
+	}
+	body, err := snapshot.EncodeShardSet(set)
+	if err != nil {
+		t.Fatalf("encode repair: %v", err)
+	}
+	return body, awaiting.tick
+}
+
+// TestSelectiveCorrectionKeepsThePlayerDomainUntouched seen from
+// the world rather than from the index: a selective apply may not create, destroy
+// or move a player-domain entity.
+func TestSelectiveCorrectionKeepsThePlayerDomainUntouched(t *testing.T) {
+	t.Parallel()
+	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
+	deliverCorrection(t, host, []*App{guest}, advance)
+
+	playerEntities := func(a *App) map[core.Entity]component.PositionComponent {
+		out := map[core.Entity]component.PositionComponent{}
+		a.World().RunSafe(func() {
+			for _, e := range a.World().Positions.Entities() {
+				if e.Domain() == core.DomainPlayer {
+					pos, _ := a.World().Positions.GetPosition(e)
+					out[e] = pos
+				}
+			}
+		})
+		return out
+	}
+
+	for range 4 {
+		inject(t, host, intentMotion(input.MotionRight, 1))
+		inject(t, guest, intentMotion(input.MotionLeft, 1))
+		for range 3 {
+			advance()
+		}
+		deliverCorrection(t, host, []*App{guest}, advance)
+		advance()
+		divergeGuest(t, guest)
+		before := playerEntities(guest)
+		want := deliverSameTick(t, host, []*App{guest})
+		assertCorrected(t, want, guest, "guest")
+		after := playerEntities(guest)
+		if len(before) != len(after) {
+			t.Fatalf("a correction changed the player-domain population from %d to %d",
+				len(before), len(after))
+		}
+		for e, pos := range before {
+			got, ok := after[e]
+			if !ok {
+				t.Fatalf("a correction destroyed player-domain entity %d", uint64(e))
+			}
+			if got != pos {
+				t.Fatalf("a correction moved player-domain entity %d from %v to %v",
+					uint64(e), pos, got)
+			}
+		}
+	}
 }

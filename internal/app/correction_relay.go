@@ -1,34 +1,31 @@
 // Package app: answering for the participants behind you.
 //
-// A session with any participant behind a relay used to abandon the selective
-// protocol entirely and publish Phase 5 whole bodies to everyone. The reason was
-// honest and narrow: the exchange is between an authority and a receiver that can
-// answer it, and a relayed receiver's request goes to the neighbour that forwarded
-// the manifest — which held nothing.
+// The selective exchange runs between an authority and a receiver that can answer
+// it, and a relayed receiver's request goes to the neighbour that forwarded the
+// manifest. That neighbour therefore has to hold something.
 //
-// It holds something now. Every instance retains an index over each authoritative
-// capture it can prove it holds, bounded by the same SnapshotManifestRetention the
-// authority uses, and a participant with more than one link forwards the manifest
-// onward and answers from that retention. Four properties are what make it a role
-// rather than a routing layer:
+// Every instance retains an index over each authoritative capture it can prove it
+// holds, bounded by the same SnapshotManifestRetention the authority uses, and a
+// participant with more than one link forwards the manifest onward and answers
+// from that retention. Four properties make it a role rather than a routing layer:
 //
-//   - **One hop.** A relay that does not hold the manifest a request names does
+//   - One hop. A relay that does not hold the manifest a request names does
 //     not forward the request onward. It says so, and the receiver degrades to the
 //     whole body the authority's keyframe cadence is already flooding.
 //
-//   - **A relay cannot forge.** It serves pages it did not author, so what binds
+//   - A relay cannot forge. It serves pages it did not author, so what binds
 //     the answer is the authority's own root: the set must declare the root the
 //     receiver was sent in the manifest, and the repaired capture must reproduce
 //     it. A substituted, truncated or corrupted page fails one of the two, by the
 //     same check that catches a corrupt wire.
 //
-//   - **Retention is why it may answer at all.** An index enters the ring only
+//   - Retention is why it may answer at all. An index enters the ring only
 //     when the capture under it is provably the authority's — a whole correction
 //     re-checked its own integrity hash, or a comparison reproduced the
 //     authority's root — so a relay never holds a baseline of its own to serve
 //     from, and mixed-baseline assembly stays unreachable.
 //
-//   - **The edge that carries it pays for it.** A relayed repair is priced into
+//   - The edge that carries it pays for it. A relayed repair is priced into
 //     the relaying participant's own link plan, never the authority's.
 package app
 
@@ -58,7 +55,7 @@ func (c *corrections) sessionRole() network.Role {
 // The retention test is what makes the claim honest rather than optimistic. A
 // participant that has never held an authoritative capture cannot answer anything,
 // and saying otherwise upstream would leave the participants behind it receiving
-// an index nobody can act on — which is the failure the Phase 6 gate existed to
+// an index nobody can act on — the failure the answerability gate exists to
 // prevent and which this role has to keep preventing.
 func (c *corrections) canRelay() bool {
 	if c.sessionRole() != network.RoleRelay {
@@ -133,18 +130,14 @@ func (c *corrections) relayedParticipants() []uint32 {
 	return behindLinks(link.Peers(), c.selectiveSource())
 }
 
-// canAnswerEveryParticipant is the Phase 6 gate with its meaning changed, which is
-// the whole of deliverable 2's fifth point.
+// canAnswerEveryParticipant reports whether every participant can be answered — a
+// relayed one can when the neighbour forwarding to it holds retention, which that
+// neighbour states in its own answer to the manifest since it is the only instance
+// that knows.
 //
-// It used to ask "is every participant directly linked", because only a directly
-// linked one could answer. The question now is "can every participant be
-// answered", and a relayed one can when the neighbour that forwards to it holds
-// retention — which that neighbour states in its own answer to the manifest, since
-// it is the only instance that knows.
-//
-// A session whose relays hold retention keeps the Phase 6 stream. A session with a
-// relay that cannot answer keeps the Phase 5 whole-body flood, unchanged, and the
-// reason is reported rather than silent.
+// A session whose relays hold retention keeps the selective stream. A session with
+// a relay that cannot answer keeps the whole-body flood, and the reason is
+// reported rather than silent.
 func (c *corrections) canAnswerEveryParticipant(ids []uint32) bool {
 	roster := 0
 	c.a.world.RunSafe(func() { roster = c.a.world.Resources.Player.Count() })

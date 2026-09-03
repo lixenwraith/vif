@@ -6,6 +6,7 @@ import (
 )
 
 func TestNetworkSessionConfigValidation(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		cfg  Config
@@ -56,6 +57,7 @@ func TestNetworkSessionConfigValidation(t *testing.T) {
 }
 
 func TestHeadlessSessionRequiresTheScriptGate(t *testing.T) {
+	t.Parallel()
 	_, err := NewHeadless(Config{HostAddress: ":7777"})
 	if err == nil || !strings.Contains(err.Error(), "RunScript") {
 		t.Fatalf("NewHeadless() error = %v, want RunScript gate", err)

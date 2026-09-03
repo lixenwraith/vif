@@ -293,10 +293,14 @@ VIF_SOAK=full go test ./... # the wide seed sweep
 ```
 
 Every iteration is still reproducible from its seed, so a failure found by the
-wide sweep reruns alone with `-run 'TestReplaySoak/<seed>'`. Under `-race` the
-default profile runs the whole tree in about two and a half minutes, of which
-`internal/app` is two and a half; before the tiers existed that one package alone
-took nearly six, and the wide sweep still does.
+wide sweep reruns alone with `-run 'TestReplaySoak/<seed>'`.
+
+Most `internal/app` tests call `t.Parallel`, so the package uses `GOMAXPROCS`
+workers. The exceptions are the tests that drive a real socket against
+wall-clock deadlines and the staged `tc netem` gate, which shapes loopback for
+the whole machine; both are marked and must stay sequential. Under `-race` the
+default profile runs the whole tree in roughly a minute and a half, of which
+`internal/app` is most.
 
 Configuration work should also run:
 
@@ -468,7 +472,7 @@ domain model rests on.
 | Concern | Primary source |
 |---|---|
 | Build targets | `Makefile`, `go.mod` |
-| CLI and filesystem policy | `cmd/vif/main.go`, `internal/app/config.go`, `internal/app/path.go`, `internal/paths` |
+| CLI and filesystem policy | `cmd/vif/main.go`, `internal/app/config.go`, `internal/resource/resolve.go`, `internal/paths` |
 | Code generation | `internal/manifest/manifest.go`, `definition.go`, `internal/gen-manifest` |
 | CI | `.github/workflows/test.yml` |
 | Browser host | `web/index.html`, `web/terminal.js`, `web/terminal.css` |

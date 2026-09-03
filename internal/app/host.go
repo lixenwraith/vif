@@ -1,17 +1,15 @@
 // Package app: hosting a run that is already going.
 //
-// The startup lobby freezes tick zero until a fixed roster has arrived, which is
-// the only join the session protocol used to have. This file is the other one: an
-// instance that is already playing opens a socket, and a participant that dials it
-// receives the world rather than reproducing it.
+// The startup lobby freezes tick zero until a fixed roster arrives. This is the
+// other join: an instance that is already playing opens a socket, and a
+// participant that dials it receives the world rather than reproducing it.
 //
-// The ordering is the whole design and it is not the obvious one. A joiner is
-// admitted as a peer *before* the world is read for it, so the crossings this
-// instance produces during the transfer reach it instead of falling into the gap
-// between the capture and the admission; the joiner holds them until the world they
-// apply to exists, and the barrier discards the ones the capture already contains.
-// The alternative — read the world, then admit — loses every artifact produced in
-// between, silently, which is the failure this whole plan exists to stop having.
+// The ordering is the design. A joiner is admitted as a peer before the world is
+// read for it, so the crossings this instance produces during the transfer reach
+// it instead of falling into the gap between the capture and the admission; the
+// joiner holds them until the world they apply to exists, and the barrier discards
+// the ones the capture already contains. Reading the world and then admitting
+// loses every artifact produced in between, silently.
 package app
 
 import (
@@ -32,12 +30,10 @@ import (
 
 // sessionControl adapts App to engine.SessionController.
 //
-// Every method here is the *locked* form, and that is the whole reason the adapter
-// exists. The operator command surface runs inside App.handleIntent's critical
-// section — "mode/ must never acquire the world lock itself" — so a controller
-// method that took the lock would deadlock the instance at the moment the command
-// fired. It did, once: `:host` from a script wedged the process at the tick the
-// command landed on, and neither the tick loop nor a signal could get it back.
+// Every method here is the locked form. The operator command surface runs inside
+// App.handleIntent's critical section — mode/ must never acquire the world lock
+// itself — so a controller method that took the lock would deadlock the instance
+// at the moment the command fired.
 type sessionControl struct{ a *App }
 
 func (c sessionControl) BeginHosting(addr string) error { return c.a.beginHostingLocked(addr) }
@@ -253,22 +249,18 @@ func (a *App) releaseMidRunJoiner(id network.PeerID) {
 // sendMidRunGate sends one joiner the closed roster and the world it names, then
 // crosses its arrival.
 //
-// The world is the *cadence's* keyframe rather than a read taken for this join.
-// Phase 3 read the world once per participant, on the accept goroutine, so a second
-// participant dialling mid-join waited behind the first one's world read as well as
-// behind its transfer; a host now publishes keyframes anyway, and a join takes
-// whichever one is fresh enough. Only when none is does it read the world itself,
-// and then the two joins share that read rather than taking one each.
+// The world is the cadence's keyframe rather than a read taken for this join: a
+// host publishes keyframes anyway, so a join takes whichever one is fresh enough
+// and reads the world itself only when none is. Two joins arriving together then
+// share that read instead of taking one each.
 //
-// "Fresh enough" is not the current tick, and the difference is a hole this phase
-// closes. D-22 admits a participant before the world is read for it so that the
-// epochs produced in between reach it — but an epoch produced *before* the
-// admission, and flushed to the peers this instance had at that moment, reaches
-// this one at all. A capture taken at the admission tick does not contain it
-// either: its apply tick is still a playout lead ahead, so the barrier's floor
-// does not drop it and nothing delivers it. Waiting for a capture a lead further on
-// closes that window by construction — every artifact produced before the
-// admission has applied into it by then — and costs the join three ticks.
+// "Fresh enough" is not the current tick. D-22 admits a participant before the
+// world is read for it so the epochs produced in between reach it, but an epoch
+// produced before the admission was flushed to the peers this instance held at
+// that moment and never reaches this one. A capture at the admission tick does not
+// contain it either: its apply tick is still a playout lead ahead, so the barrier
+// does not drop it and nothing delivers it. Waiting for a capture one lead further
+// on closes that window by construction, at a cost of three ticks.
 func (a *App) sendMidRunGate(port *network.SocketPort, id network.PeerID) error {
 	offer, err := a.midRunOffer(id)
 	if err != nil {

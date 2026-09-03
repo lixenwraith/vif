@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"strings"
 	"testing"
@@ -244,6 +245,7 @@ func replayAndCompare(t *testing.T, script func(*testing.T, *App) int) {
 // TestJournalDoesNotPerturb drives one fixed-seed sequence twice, journaled and
 // not, and asserts the snapshots match and the capture is dense
 func TestJournalDoesNotPerturb(t *testing.T) {
+	t.Parallel()
 	plain, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("plain run: %v", err)
@@ -279,18 +281,35 @@ func TestJournalDoesNotPerturb(t *testing.T) {
 	}
 }
 
-// TestReplayReproducesRun replays the gameplay script, covering mode, pause,
-// command origin and ping bounds
-func TestReplayReproducesRun(t *testing.T) { replayAndCompare(t, runScript) }
-
-// TestReplayOverlayRoundTrip replays a debug-overlay open and close. It exists to
-// settle whether overlay mode belongs in the record stream: everything the snapshot
-// observes on this path is event-driven, so it reproduces.
-func TestReplayOverlayRoundTrip(t *testing.T) { replayAndCompare(t, runOverlayScript) }
+// TestReplayReproducesRecordedRuns drives one authored script per record-stream
+// shape and requires each to reproduce bit-identically:
+//
+//   - gameplay covers mode, pause, command origin and ping bounds;
+//   - overlay settles whether debug-overlay mode belongs in the stream — everything
+//     the snapshot observes on that path is event-driven, so it reproduces;
+//   - split-settle reproduces the multi-settle tick boundaries App.Loop produces
+//     for every live input event;
+//   - reset spans game resets, where the tick counter restarts and a run-blind
+//     driver would reject the stream outright.
+func TestReplayReproducesRecordedRuns(t *testing.T) {
+	t.Parallel()
+	for name, script := range map[string]func(*testing.T, *App) int{
+		"gameplay":     runScript,
+		"overlay":      runOverlayScript,
+		"split-settle": runSplitSettleScript,
+		"reset":        runResetScript,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			replayAndCompare(t, script)
+		})
+	}
+}
 
 // TestModeChangedAppliesWithoutRouter covers the applier directly, so a MetaSystem
 // regression fails here rather than as an opaque snapshot diff
 func TestModeChangedAppliesWithoutRouter(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -349,13 +368,10 @@ func runSplitSettleScript(t *testing.T, a *App) int {
 	return r.done()
 }
 
-// TestReplaySplitSettle asserts the recorded settle boundary reproduces multi-settle
-// tick boundaries, which App.Loop produces for every live input event
-func TestReplaySplitSettle(t *testing.T) { replayAndCompare(t, runSplitSettleScript) }
-
 // TestDenySimKeysExist keeps the deny list honest: a renamed or dropped metric must
 // fail here rather than silently widen the replay assertion surface
 func TestDenySimKeysExist(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -377,6 +393,7 @@ func TestDenySimKeysExist(t *testing.T) {
 // TestSnapshotSimulationExcludesSession asserts the split is real in both
 // directions: operator state moves the full snapshot and not the simulation one
 func TestSnapshotSimulationExcludesSession(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -405,6 +422,7 @@ func TestSnapshotSimulationExcludesSession(t *testing.T) {
 // TestVerifyAnchorRejectsMismatch asserts a corpus or geometry mismatch is a
 // startup error, not a snapshot diff a hundred ticks later
 func TestVerifyAnchorRejectsMismatch(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -446,6 +464,7 @@ func TestVerifyAnchorRejectsMismatch(t *testing.T) {
 // TestJournalStampRebasesOnReset pins the invariant the replay driver depends on:
 // the run advances exactly when the tick counter is re-based
 func TestJournalStampRebasesOnReset(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -490,6 +509,7 @@ func runLongScript(t *testing.T, a *App) int {
 
 // TestReplayAcrossAPMFold asserts APM is produced and reproduced
 func TestReplayAcrossAPMFold(t *testing.T) {
+	t.Parallel()
 	cap, want, _, end := journalRun(t, runLongScript)
 	if end.Tick <= uint64(time.Second/parameter.GameUpdateInterval) {
 		t.Fatalf("script ran %d ticks, too short to cross an APM fold", end.Tick)
@@ -510,15 +530,22 @@ func TestReplayAcrossAPMFold(t *testing.T) {
 	}
 }
 
-// TestScreenSizeInvertsViewport pins the inverse against the forward derivation, so
-// a margin change cannot desync the anchor from the geometry it describes
-func TestScreenSizeInvertsViewport(t *testing.T) {
+// TestResizeReflowsAndRejects covers the whole resize boundary: ScreenSize stays
+// an exact inverse of the forward derivation so a margin change cannot desync the
+// anchor from the geometry it describes, a degenerate report is dropped rather
+// than clamped, and a replayed mid-run change reproduces in both crop modes. Crop
+// destroys out-of-bounds entities and resets the camera; no-crop preserves the map
+// and clamps the camera, so the two exercise different halves of
+// HandleResizeLocked.
+func TestResizeReflowsAndRejects(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(Config{Resources: resource.Options{Embedded: true}, Seed: fixtureSeed, Width: 100, Height: 40})
 	if err != nil {
 		t.Fatalf("headless: %v", err)
 	}
 	defer a.Close()
 
+	a.Tick(1)
 	for _, d := range [][2]int{{100, 40}, {73, 39}, {50, 22}, {120, 48}} {
 		a.Resize(d[0], d[1])
 		a.Tick(1)
@@ -530,14 +557,21 @@ func TestScreenSizeInvertsViewport(t *testing.T) {
 				a.Context().Width, a.Context().Height, d[0], d[1])
 		}
 	}
-}
 
-// TestReplayResize replays a mid-run screen change in both crop modes. Crop
-// destroys out-of-bounds entities and resets the camera; no-crop preserves the map
-// and clamps the camera, so the two exercise different halves of HandleResizeLocked.
-func TestReplayResize(t *testing.T) {
+	w, h := a.Context().Width, a.Context().Height
+	for _, d := range [][2]int{{0, 0}, {-4, 10},
+		{parameter.LeftMargin, 40},
+		{80, parameter.TopMargin + parameter.BottomMargin}} {
+		a.Resize(d[0], d[1])
+		if a.Context().Width != w || a.Context().Height != h {
+			t.Fatalf("degenerate resize %dx%d applied: now %dx%d",
+				d[0], d[1], a.Context().Width, a.Context().Height)
+		}
+	}
+
 	for name, crop := range map[string]bool{"crop": true, "nocrop": false} {
 		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 			replayAndCompare(t, func(t *testing.T, a *App) int {
 				r := newScriptRunner(t, a)
 				a.SetupLevel(60, 30, true, crop)
@@ -556,28 +590,6 @@ func TestReplayResize(t *testing.T) {
 				return r.done()
 			})
 		})
-	}
-}
-
-// TestResizeRejectsDegenerate asserts a collapsed report is dropped rather than
-// clamped, which is what keeps ScreenSize an exact inverse
-func TestResizeRejectsDegenerate(t *testing.T) {
-	a, err := NewHeadless(scriptConfig(fixtureSeed))
-	if err != nil {
-		t.Fatalf("headless: %v", err)
-	}
-	defer a.Close()
-
-	a.Tick(1)
-	w, h := a.Context().Width, a.Context().Height
-	for _, d := range [][2]int{{0, 0}, {-4, 10},
-		{parameter.LeftMargin, 40},
-		{80, parameter.TopMargin + parameter.BottomMargin}} {
-		a.Resize(d[0], d[1])
-		if a.Context().Width != w || a.Context().Height != h {
-			t.Fatalf("degenerate resize %dx%d applied: now %dx%d",
-				d[0], d[1], a.Context().Width, a.Context().Height)
-		}
 	}
 }
 
@@ -611,12 +623,9 @@ func runResetScript(t *testing.T, a *App) int {
 	return r.done()
 }
 
-// TestReplayAcrossReset asserts a journal spanning game resets replays; the tick
-// counter restarts in each run, so a run-blind driver rejects the stream outright
-func TestReplayAcrossReset(t *testing.T) { replayAndCompare(t, runResetScript) }
-
 // TestCursorMoveRequestAppliesWithoutRouter covers the cursor-owned placement path.
 func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
+	t.Parallel()
 	cap := journal.NewCapture()
 	cfg := scriptConfig(fixtureSeed)
 	cfg.Journal = true
@@ -665,6 +674,7 @@ func TestCursorMoveRequestAppliesWithoutRouter(t *testing.T) {
 // during reset. The direct roster cycle keeps the test focused on that access;
 // -race verifies the read and writes share World.updateMutex.
 func TestInputTickSerializesCursorLifecycle(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -707,6 +717,7 @@ func TestInputTickSerializesCursorLifecycle(t *testing.T) {
 // differs from the viewport, a reset, then cursor and mode intents applied before any
 // tick of the new run, while the FSM reset is still pending
 func TestReplayResetThenCursor(t *testing.T) {
+	t.Parallel()
 	replayAndCompare(t, func(t *testing.T, a *App) int {
 		r := newScriptRunner(t, a)
 		a.SetupLevel(40, 16, true, false) // map decoupled from the viewport
@@ -726,4 +737,153 @@ func TestReplayResetThenCursor(t *testing.T) {
 		r.step(2)
 		return r.done()
 	})
+}
+
+var bisectSeed = flag.Uint64("soak.seed", 0, "seed to bisect in TestReplayBisect")
+
+// bisectOnce journals the first steps script actions and replays them
+func bisectOnce(t *testing.T, seed uint64, steps int) error {
+	t.Helper()
+	cap := journal.NewCapture()
+	cfg := scriptConfig(seed)
+	cfg.Journal, cfg.JournalSink = true, cap
+
+	a, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("source run: %v", err)
+	}
+	if _, err := journal.RunFuzz(a, journal.DefaultFuzz(seed, steps)); err != nil {
+		a.Close()
+		t.Fatalf("script: %v", err)
+	}
+	want, end := a.SnapshotSimulation(), a.Position()
+	a.Close()
+	if len(cap.Records()) == 0 {
+		return nil // nothing recorded yet, nothing to reproduce
+	}
+	return replayInto(cap.Anchors(), cap.Records(), want, end)
+}
+
+// TestReplayBisect reports the shortest script prefix whose replay diverges, then
+// dumps the records of the last two ticks of that prefix
+func TestReplayBisect(t *testing.T) {
+	t.Parallel()
+	if *bisectSeed == 0 {
+		t.Skip("set -soak.seed=0x... to bisect one seed")
+	}
+	seed := *bisectSeed
+	if err := bisectOnce(t, seed, soakSteps); err == nil {
+		t.Fatalf("seed %#x reproduces at %d steps", seed, soakSteps)
+	}
+
+	lo, hi := 0, soakSteps // lo reproduces, hi diverges
+	for hi-lo > 1 {
+		mid := (lo + hi) / 2
+		if bisectOnce(t, seed, mid) == nil {
+			lo = mid
+		} else {
+			hi = mid
+		}
+	}
+
+	cap := journal.NewCapture()
+	cfg := scriptConfig(seed)
+	cfg.Journal, cfg.JournalSink = true, cap
+	a, _ := NewHeadless(cfg)
+	_, _ = journal.RunFuzz(a, journal.DefaultFuzz(seed, hi))
+	end := a.Position()
+	a.Close()
+
+	t.Logf("seed %#x first diverges at step %d, ending at %+v", seed, hi, end)
+	for _, r := range cap.Records() {
+		if r.Run == end.Run && r.Tick+2 >= end.Tick {
+			t.Logf("jseq %d run %d tick %d boundary %d seq %d %s %s payload=%q",
+				r.JSeq, r.Run, r.Tick, r.Boundary, r.Seq,
+				r.Origin, event.GetEventName(r.Type), r.Payload)
+		}
+	}
+	t.Fatalf("bisected to step %d", hi)
+}
+
+// TestReplayLockstep replays against the source's own per-tick snapshots, so a
+// divergence names the tick it started on rather than the run that ended wrong
+func TestReplayLockstep(t *testing.T) {
+	t.Parallel()
+	if *bisectSeed == 0 {
+		t.Skip("set -soak.seed=0x... to lockstep one seed")
+	}
+	seed := *bisectSeed
+
+	cap := journal.NewCapture()
+	cfg := scriptConfig(seed)
+	cfg.Journal, cfg.JournalSink = true, cap
+
+	src, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("source run: %v", err)
+	}
+	// Perturb runs after every action and draws from no stream, so snapshotting
+	// here records the source's state at the last action of each tick
+	want := make(map[event.Stamp][]string, soakSteps)
+	opt := journal.DefaultFuzz(seed, soakSteps)
+	opt.Perturb = func() {
+		p := src.Position()
+		want[event.Stamp{Run: p.Run, Tick: p.Tick}] = src.SnapshotSimulation()
+	}
+	if _, err := journal.RunFuzz(src, opt); err != nil {
+		src.Close()
+		t.Fatalf("script: %v", err)
+	}
+	src.Close()
+
+	anchors := cap.Anchors()
+	rcfg, err := ConfigFromAnchor(anchors[0])
+	if err != nil {
+		t.Fatalf("config from anchor: %v", err)
+	}
+	rep, err := NewHeadless(rcfg)
+	if err != nil {
+		t.Fatalf("replay run: %v", err)
+	}
+	defer rep.Close()
+	if err := rep.VerifyAnchor(anchors[0]); err != nil {
+		t.Fatalf("verify anchor: %v", err)
+	}
+	d, err := newReplayDriver(rep, cap.Records())
+	if err != nil {
+		t.Fatalf("driver: %v", err)
+	}
+
+	for {
+		more, err := d.Step()
+		if err != nil {
+			t.Fatalf("replay: %v", err)
+		}
+		if !more {
+			return
+		}
+		p := rep.Position()
+		w, ok := want[event.Stamp{Run: p.Run, Tick: p.Tick}]
+		if !ok {
+			continue // the source took no snapshot on this tick
+		}
+		got := rep.SnapshotSimulation()
+		if i, _, _, ok := snapshot.FirstDiff(w, got); ok {
+			t.Fatalf("diverged in run %d tick %d at line %d:\n%s\nrecords on this tick:\n%s",
+				p.Run, p.Tick, i, strings.Join(snapshot.Diff(w, got, 12), "\n"),
+				strings.Join(recordsAt(cap.Records(), p.Run, p.Tick), "\n"))
+		}
+	}
+}
+
+// recordsAt renders every record stamped on one tick
+func recordsAt(recs []event.JournalRecord, run, tick uint64) []string {
+	var out []string
+	for _, r := range recs {
+		if r.Run == run && r.Tick == tick {
+			out = append(out, fmt.Sprintf("  jseq %d boundary %d seq %d %s %s payload=%q",
+				r.JSeq, r.Boundary, r.Seq, r.Origin, event.GetEventName(r.Type), r.Payload))
+		}
+	}
+	return out
 }

@@ -477,7 +477,7 @@ within the process.
 
 `App.Snapshot` includes the full observer surface. Replay verification uses
 `App.SnapshotSimulation`, which drops the `session` context record and the
-exact `denySim` keys in `internal/app/snapshot.go`:
+exact replay-excluded keys in `internal/snapshot/surface.go`:
 
 | Surface | Excluded keys |
 |---|---|
@@ -528,7 +528,7 @@ not indefinitely leave the terminal in raw mode.
 | Runtime modes and composition | `internal/app/config.go`, `app.go`, `headless.go` |
 | Interactive, playback, and script loops | `internal/app/loop.go`, `play.go`, `script.go` |
 | Recording, replay, fuzz, and authored script drivers | `internal/journal` |
-| Replay identity and comparison boundary | `internal/app/replay.go`, `snapshot.go` |
+| Replay identity and comparison boundary | `internal/app/replay.go`, `surface.go`, `internal/snapshot/surface.go` |
 | Tick and event scheduling | `internal/engine/clock_scheduler.go` |
 | World locking and system execution | `internal/engine/world.go`, `sync_*.go` |
 | Play/manual clocks and time control | `internal/engine/pausable_clock.go`, `manual_clock.go`, `time_control.go` |

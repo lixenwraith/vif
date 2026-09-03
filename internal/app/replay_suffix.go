@@ -1,39 +1,35 @@
-// Package app: putting this participant's own actions back after the authority
-// moves it.
+// Package app: replaying this participant's own actions after a correction.
 //
-// A correction describes the host's world at tick T. A guest applying one is
-// standing somewhere past T — it has been predicting — and what it produced in
-// between is real: the keystrokes that typed a gold sequence, the shots that were
-// fired, the cursor motion a player watched happen. Discarding that suffix lets a
-// correction undo a fast sequence and the receive schedule re-do it later.
+// A correction describes the host's world at tick T. A guest applying one stands
+// past T — it has been predicting — and what it produced in between is real:
+// keystrokes that typed a gold sequence, shots fired, cursor motion the player
+// watched. Discarding that suffix lets a correction undo a fast sequence and the
+// receive schedule re-do it later.
 //
-// This is the repair. Three rules make it exact rather than approximate:
+// Three rules make the repair exact rather than approximate:
 //
-//   - **One canonical suffix.** What is retained is the artifact the transport
-//     already encoded — event.ScheduledWireFrame, the same value the host will
-//     apply and the same payload text the journal writes — so a replay cannot
-//     differ from what the session was told happened. The retention itself lives
-//     in NetworkSystem beside the barrier, because the barrier is what decides an
-//     artifact's apply tick and the apply tick is what decides whether the
-//     correction already contains it.
+//   - One canonical suffix. What is retained is the artifact the transport already
+//     encoded: event.ScheduledWireFrame, the same value the host will apply and the
+//     same payload text the journal writes. Retention lives in NetworkSystem beside
+//     the barrier, because the barrier decides an artifact's apply tick and the
+//     apply tick decides whether the correction already contains it.
 //
-//   - **One local-suffix membership test.** A guest replays its own artifacts
-//     whose agreed apply tick is after the installed world's tick. Authority-local
-//     artifacts are the asymmetric case: the host applied them immediately, so
-//     AdoptSnapshot and scheduleCrossings classify those by the capture header's
-//     completed authority sequence instead.
+//   - One membership test. A guest replays its own artifacts whose agreed apply
+//     tick is after the installed world's tick. Authority-local artifacts are the
+//     asymmetric case — the host applied them immediately — so AdoptSnapshot and
+//     scheduleCrossings classify those by the capture header's completed authority
+//     sequence instead.
 //
-//   - **No partial answer.** Retention is bounded by tick span, record count and
-//     bytes, and dropping a record the suffix would need makes the suffix
-//     unavailable rather than shorter. A guest then keeps the authority alone and
-//     says so. A shorter suffix is not a smaller version of this participant's
-//     history; it is a different one.
+//   - No partial answer. Retention is bounded by tick span, record count and bytes,
+//     and dropping a record the suffix would need makes the suffix unavailable
+//     rather than shorter. A guest then keeps the authority alone and reports it: a
+//     shorter suffix is a different history, not a smaller one.
 //
-// What is deliberately not replayed: anything a peer produced (it is the host's to
-// order, and it reaches this instance through the barrier), anything a shared
-// system re-derives (D-5 — it would apply twice), and the three barrier-bound
-// artifacts that decide what the world is rather than what happens in it — an
-// arrival, a departure and a reset. Those are never retained in the first place.
+// Not replayed: anything a peer produced (the host orders it, and it arrives
+// through the barrier), anything a shared system re-derives (D-5, it would apply
+// twice), and the three barrier-bound artifacts that decide what the world is
+// rather than what happens in it — arrival, departure and reset. Those are never
+// retained.
 package app
 
 import (
@@ -41,10 +37,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
-// replaySource is the seam the barrier offers the correction path. It is an
-// interface rather than a concrete type for the same reason AdoptSnapshot is: the
-// system set is assembled from the manifest, and a run without a network system is
-// a run with nothing to replay rather than a broken one.
+// replaySource is the seam the barrier offers the correction path. An interface
+// rather than a concrete type for the same reason AdoptSnapshot is: the system set
+// is assembled from the manifest, and a run without a network system has nothing
+// to replay rather than being broken.
 type replaySource interface {
 	LocalReplaySuffix(tick uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
@@ -53,18 +49,16 @@ type replaySource interface {
 // replayLocalSuffix re-applies this instance's own accepted crossings that the
 // correction it just installed does not contain.
 //
-// It runs after the commit and between two ticks, which is where the install left
-// the world: the shared state is the authority's as of tick T, and these are the
-// artifacts the session has agreed will apply after T. Pushing them here is the
-// same publication the producing tick made, in the same order, so what the player
-// sees is their own actions surviving a correction rather than being rolled back
-// and re-delivered a playout lead later.
+// It runs after the commit and between two ticks, where the install left the
+// world: shared state is the authority's as of tick T, and these are the artifacts
+// the session agreed will apply after T. Pushing them here is the same publication
+// the producing tick made, in the same order.
 //
-// The origin is the artifact's own rather than OriginNetwork. It is this
-// participant's action either way, and the journal records what the run did — but
-// the queue must not cross it a second time, which it will not: the crossing was
-// already flushed in the epoch that produced it, and the barrier is rebased past
-// that epoch by AdoptSnapshot before this runs.
+// The origin is the artifact's own rather than OriginNetwork: it is this
+// participant's action either way, and the journal records what the run did. The
+// queue does not cross it a second time — the crossing was flushed in the epoch
+// that produced it, and AdoptSnapshot rebases the barrier past that epoch before
+// this runs.
 func (a *App) replayLocalSuffix(tick uint64) (replayed int, ok bool) {
 	src := a.replaySourceLocked()
 	if src == nil {

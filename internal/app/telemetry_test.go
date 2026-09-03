@@ -32,6 +32,7 @@ func telemetryKeySet(reg *status.Registry) []string {
 }
 
 func TestTelemetryRegistryStaysFrozenAcrossTicksAndReset(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -121,6 +122,7 @@ func resetBootstrapInt(key string) bool {
 }
 
 func TestTelemetrySessionCountersReset(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -208,6 +210,7 @@ func TestTelemetrySessionCountersReset(t *testing.T) {
 }
 
 func TestTelemetryHeadlessSessionReportsActivity(t *testing.T) {
+	t.Parallel()
 	a, err := NewHeadless(scriptConfig(fixtureSeed))
 	if err != nil {
 		t.Fatalf("headless: %v", err)
@@ -261,6 +264,7 @@ func TestTelemetryHeadlessSessionReportsActivity(t *testing.T) {
 // record, and it is roughly a hundred hashes, so a healthy session must not pay
 // for it. NetworkSystem asks for it only once a sample has already disagreed.
 func TestSharedDigestCarriesDetailOnlyOnRequest(t *testing.T) {
+	t.Parallel()
 	a := mustHeadless(t, 0xD1FF, 120, 40)
 	defer a.Close()
 	tickUntilCursor(t, a)
@@ -278,5 +282,48 @@ func TestSharedDigestCarriesDetailOnlyOnRequest(t *testing.T) {
 	}
 	if plain.Hash != detailed.Hash || plain.Status != detailed.Status {
 		t.Fatal("asking for detail changed the digest it explains")
+	}
+}
+
+func TestTelemetryGroupsFitDebugCards(t *testing.T) {
+	t.Parallel()
+	a, err := NewHeadless(scriptConfig(fixtureSeed))
+	if err != nil {
+		t.Fatalf("headless: %v", err)
+	}
+	defer a.Close()
+	a.Settle()
+
+	seen := make(map[string]bool)
+	for _, view := range a.World().Resources.Status.Views() {
+		seen[view.Name()] = true
+		if view.Len() > parameter.OverlayCardMaxEntries {
+			t.Errorf("telemetry group %q has %d entries, max %d",
+				view.Name(), view.Len(), parameter.OverlayCardMaxEntries)
+		}
+	}
+	for _, want := range []string{
+		"adapt.buffers", "combat.absorbed.attacker", "combat.damage.defender",
+		"combat.rejects", "death.batch", "event.settle", "eye.ga", "fsm.main",
+		"network.session", "player.0", "player.0.weapon", "storm.protection",
+	} {
+		if !seen[want] {
+			t.Errorf("semantic telemetry group %q is missing", want)
+		}
+	}
+	visiblePlayers := make(map[string]bool)
+	for _, view := range a.World().Resources.Status.VisibleViews() {
+		if strings.HasPrefix(view.Name(), "player.") &&
+			view.Name() != "player.0" && view.Name() != "player.0.weapon" {
+			t.Errorf("inactive roster group %q is visible", view.Name())
+		}
+		if strings.HasPrefix(view.Name(), "player.0") {
+			visiblePlayers[view.Name()] = true
+		}
+	}
+	for _, want := range []string{"player.0", "player.0.weapon"} {
+		if !visiblePlayers[want] {
+			t.Errorf("active roster group %q is hidden", want)
+		}
 	}
 }

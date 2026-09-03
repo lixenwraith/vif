@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
@@ -76,6 +77,7 @@ func primeRetention(t *testing.T, apps []*App) {
 // rather than of who noticed the loss first, or two survivors would adopt two
 // different authorities and the session would have forked while appearing not to.
 func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	primeRetention(t, apps)
@@ -127,10 +129,11 @@ func TestSuccessionElectsOneParticipantOnEverySurvivor(t *testing.T) {
 	}
 }
 
-// TestASuccessorWithStaleRetentionIsNotElected is requirement (b): a participant
+// TestASuccessorWithStaleRetentionIsNotElected: a participant
 // that has been silently behind must not become the thing everyone else adopts,
 // even when the roster would otherwise choose it.
 func TestASuccessorWithStaleRetentionIsNotElected(t *testing.T) {
+	t.Parallel()
 	roster := []network.SessionParticipant{{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}}
 	reports := map[network.PeerID]network.AuthorityReport{
 		2: {Term: 2, From: 2, Lost: 1, Links: []network.PeerID{3}, RetainedTick: 40, Retained: 2},
@@ -174,6 +177,7 @@ func TestASuccessorWithStaleRetentionIsNotElected(t *testing.T) {
 // same claim, over the real path: when nothing can be elected the survivors keep
 // today's behaviour, and they say so.
 func TestNoEligibleSuccessorFallsBackToLocalContinuation(t *testing.T) {
+	t.Parallel()
 	// A chain with the coordinator in the middle. Losing it leaves 1 and 3 with no
 	// link to each other at all, so neither reaches a majority of the roster and
 	// neither may elect.
@@ -241,6 +245,7 @@ func handOff(t *testing.T, apps []*App, to int) {
 // survivors that both believe they should succeed. A link flap gives each a view
 // the other does not share, and the vote is what stops both from publishing.
 func TestOneTermHasOneAuthority(t *testing.T) {
+	t.Parallel()
 	roster := []network.SessionParticipant{
 		{ID: 1, Slot: 0}, {ID: 2, Slot: 1}, {ID: 3, Slot: 2}, {ID: 4, Slot: 3}, {ID: 5, Slot: 4},
 	}
@@ -299,6 +304,7 @@ func TestOneTermHasOneAuthority(t *testing.T) {
 // TestASecondHandoffForOneTermIsRefused is the same invariant at the receiving
 // end: whatever two candidates believe, a participant adopts one record per term.
 func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	guest := apps[2]
@@ -344,6 +350,7 @@ func TestASecondHandoffForOneTermIsRefused(t *testing.T) {
 
 // TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded is the wire rule.
 func TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	guest := apps[2]
@@ -374,11 +381,12 @@ func TestTheTermGateIgnoresTheOldAndRefusesTheUnheralded(t *testing.T) {
 	}
 }
 
-// TestMembershipIsByteIdenticalAcrossAHandoff is requirement 3's other half. The
+// TestMembershipIsByteIdenticalAcrossAHandoff's other half. The
 // roster, the slot assignments, the join anchor and the barrier delay are what a
 // joiner adopts and what every instance builds its cursors from, so a handoff that
 // changed any of them would have moved the session rather than its authority.
 func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	local := localCursors(t, apps)
 	primeRetention(t, apps)
@@ -440,12 +448,13 @@ func TestMembershipIsByteIdenticalAcrossAHandoff(t *testing.T) {
 	}
 }
 
-// TestAJoinerDiallingMidHandoffIsRefusedAndRetries is requirement 3's admission
+// TestAJoinerDiallingMidHandoffIsRefusedAndRetries's admission
 // half. A dial that lands while the session is electing must not be half-admitted
 // into a term that is about to end: it would hold a roster slot the successor's
 // record does not carry and would receive an authority that has stopped
 // publishing. The refusal is distinguishable so the joiner can retry.
 func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
+	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3017
 	host := mustHeadless(t, seed, 120, 40)
 	defer host.Close()
@@ -508,12 +517,13 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 	}
 }
 
-// TestTheFirstCorrectionAfterAHandoffIsHashOnly is requirement 5, and the reason
+// TestTheFirstCorrectionAfterAHandoffIsHashOnly, and the reason
 // the successor seeds its baseline from what it already installed rather than
 // capturing afresh: a session that answered a migration with a keyframe to every
 // survivor would spend the most expensive frame it has at the moment it can least
 // afford one.
 func TestTheFirstCorrectionAfterAHandoffIsHashOnly(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	primeRetention(t, apps)
@@ -602,10 +612,10 @@ func TestTheFirstCorrectionAfterAHandoffIsHashOnly(t *testing.T) {
 	}
 }
 
-// TestALocalForkRejoiningAHigherTermIsRefused is requirement 8. Partition merging
-// is a non-goal; refusing to merge is the deliverable, and what makes it a
-// deliverable rather than an omission is that the operator is told.
+// TestALocalForkRejoiningAHigherTermIsRefused: Partition merging
+// is a non-goal; the refusal is deliberate, and the operator is told.
 func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	localCursors(t, apps)
 	primeRetention(t, apps)
@@ -655,6 +665,7 @@ func TestALocalForkRejoiningAHigherTermIsRefused(t *testing.T) {
 // it does not begin authoring the D-13 owner-authored cells of cursors it does not
 // simulate, and a relayed answer carries no Player-domain state either.
 func TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {1, 3}})
 	local := localCursors(t, apps)
 	primeRetention(t, apps)
@@ -722,6 +733,7 @@ func TestSelectiveApplyKeepsItsExclusionsAcrossAHandoffAndARelay(t *testing.T) {
 // TestMeshParityAcrossAHandoff is the whole phase seen from the world: after the
 // successor's first two corrections every survivor holds the same Shared state.
 func TestMeshParityAcrossAHandoff(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 4, [][2]int{{1, 2}, {1, 3}, {1, 4}, {2, 3}, {2, 4}, {3, 4}})
 	localCursors(t, apps)
 	primeRetention(t, apps)
@@ -749,4 +761,35 @@ func TestMeshParityAcrossAHandoff(t *testing.T) {
 		deliverCorrection(t, successor, survivors[1:], advance)
 	}
 	assertMeshParity(t, survivors, -1)
+}
+
+func TestGuestContinuesLocallyAfterHostLoss(t *testing.T) {
+	t.Parallel()
+	host, guest, _ := shapedPair(t, 0x10571057, network.LinkShape{})
+	runSession(host, guest, 80)
+
+	beforeTick := guest.Position().Tick
+	beforeCell, ok := localCell(guest)
+	if !ok {
+		t.Fatal("guest has no local cursor")
+	}
+	if err := transportOf(t, host).Close(); err != nil {
+		t.Fatalf("close host link: %v", err)
+	}
+	guest.Tick(1) // drain the disconnect through the ordinary poll boundary
+	if !statBoolOf(guest, "network.host_lost") {
+		t.Fatal("guest did not enter explicit local continuation")
+	}
+
+	// The fork is still a playable game: local input settles immediately and the
+	// scheduler keeps advancing without an authority or a replacement election.
+	inject(t, guest, intentMotion(input.MotionRight, 1))
+	afterCell, _ := localCell(guest)
+	if afterCell.X != beforeCell.X+1 || afterCell.Y != beforeCell.Y {
+		t.Fatalf("local continuation moved to %#v, want one cell right of %#v", afterCell, beforeCell)
+	}
+	guest.Tick(8)
+	if got := guest.Position().Tick; got <= beforeTick+1 {
+		t.Fatalf("guest stopped at tick %d after losing the host; started at %d", got, beforeTick)
+	}
 }

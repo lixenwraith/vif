@@ -93,6 +93,8 @@ func clearLo(t *testing.T) {
 // correction magnitude rises but stays bounded, the floor is never crossed, and
 // clearing the shape re-converges the session with nothing restarted.
 func TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers(t *testing.T) {
+	// Never parallel: this shapes lo for the whole machine, so any other socket
+	// test running beside it would be measuring this test's qdisc.
 	requireNetem(t)
 	t.Cleanup(func() { clearLo(t) })
 

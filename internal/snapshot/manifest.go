@@ -9,9 +9,9 @@
 //
 // A manifest is that observation made checkable. It is a deterministic, versioned
 // index over the same capture the correction path already builds, partitioned into
-// **sections** (one per component store, plus the capture's scalars, RNG streams,
+// sections (one per component store, plus the capture's scalars, RNG streams,
 // declared system state, compared status surface and shared FSM) and each section
-// into bounded **pages**. Every page has a hash, every section a hash over its
+// into bounded pages. Every page has a hash, every section a hash over its
 // pages, and the manifest a root over its sections. Two instances that hold equal
 // state produce an equal root; two that do not can find where they differ by
 // descending, and repair exactly the pages that mismatch.
@@ -19,7 +19,7 @@
 // Four properties are what make the index usable as evidence rather than as a
 // hint, and each of them is a constraint on how the hashes are computed:
 //
-//   - **Order independence where order is not state.** A reconciled world keeps
+//   - Order independence where order is not state. A reconciled world keeps
 //     its own dense store order (see ReconcileSharedWorld), so two instances
 //     holding identical state hold it in different slots. A page is therefore
 //     read in entity-ascending order, which neither instance chose, and page
@@ -28,18 +28,18 @@
 //     in that same canonical order or its hash does not reproduce, which is what
 //     stops reordered data from passing the proof.
 //
-//   - **Domain separation.** Page, section and root hashes are seeded with
+//   - Domain separation. Page, section and root hashes are seeded with
 //     distinct prefixes and each level absorbs its own identity, so a page hash
 //     can never be mistaken for a section hash, and a page's content hashed under
 //     another page's identity does not match.
 //
-//   - **Version and baseline in the root.** The root absorbs the manifest
+//   - Version and baseline in the root. The root absorbs the manifest
 //     version, the capture schema, and the run/session/seed identity. A root
 //     computed by another build, another run or another session cannot compare
 //     equal to this one, so "the roots match" cannot be reached by two instances
 //     that are not in the same session at all.
 //
-//   - **The owner-authored set is outside the hashed surface.** Energy, heat,
+//   - The owner-authored set is outside the hashed surface. Energy, heat,
 //     shield, boost, weapon, combat, view, ping and pulse on a *cursor* have
 //     exactly one author (D-13) and a receiver keeps its own over the sender's
 //     mirror, so those cells disagree permanently and by design. A manifest that

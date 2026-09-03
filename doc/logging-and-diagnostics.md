@@ -881,7 +881,7 @@ both the snapshot and the recorder.
 | Flight recorder | `internal/status/recorder.go` |
 | Journal record/anchor schema and queue sink | `internal/event/journal.go`, `journal_sink.go`, `origin.go` |
 | Recording lifecycle, capture, loading, replay/fuzz/script drivers | `internal/journal` |
-| Replay/config verification and presentation | `internal/app/replay.go`, `play.go`, `snapshot.go` |
+| Replay/config verification and presentation | `internal/app/replay.go`, `play.go`, `surface.go` |
 | Tick stamping, FSM taps, dispatch tap, triggers | `internal/engine/clock_scheduler.go` |
 | Lock hold sampling | `internal/engine/sync_std.go` |
 | Frame stamping | `internal/engine/game_context.go` |

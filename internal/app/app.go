@@ -79,18 +79,18 @@ type App struct {
 	// instance sends and applies, authority is whether it is allowed to.
 	authority *authority
 
-	// staging is the second world a capture resolves into before it is written
-	// into this one, built on first use and re-used for the life of the run. Phase
-	// 3 built one per install and threw it away, which is 9 to 31 ms a correction
-	// cannot afford five times a second.
+	// staging is the second world a capture resolves into before it is written into
+	// this one, built on first use and re-used for the life of the run: building one
+	// per install costs 9 to 31 ms, which a correction five times a second cannot
+	// afford.
 	stageMu  sync.Mutex
 	staging  *App
 	stagingW int
 	stagingH int
 }
 
-// New wires the runtime, releasing anything already started on failure
-// every step panicked; the map editor and wasm entry need errors
+// New wires the runtime, releasing anything already started on failure. Errors are
+// returned rather than panicked: the map editor and the wasm entry need them.
 func New(cfg Config) (*App, error) {
 	cfg.Normalize()
 	if err := cfg.Validate(); err != nil {
@@ -210,10 +210,10 @@ func (a *App) initWorld() {
 		r.OnSelective = a.receiveSelective
 		r.OnAuthority = a.receiveAuthorityFrame
 		r.OnPeerLost = a.reportPeerLost
-		// A session endpoint exists, so this run is shared for its whole life
-		// whether or not a peer is attached at a given tick. Latching it here rather
-		// than reading the port keeps the anchor, the D-14 verdict and the playout
-		// barrier answering one question, which is what a reproduction adopts.
+		// A session endpoint exists, so this run is shared for its whole life whether
+		// or not a peer is attached at a given tick. Latching here rather than
+		// reading the port keeps the anchor, the D-14 verdict and the playout barrier
+		// answering one question, which is what a reproduction adopts.
 		a.world.MarkSessionShared()
 	}
 

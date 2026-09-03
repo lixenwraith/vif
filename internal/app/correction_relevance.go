@@ -5,19 +5,18 @@
 // carry D-23's exactness proof: a delta is verified by reconstructing the
 // sender's capture and re-hashing it, so a correction carrying a subset of the
 // world reconstructs a capture nobody holds and has no proof left to offer. A
-// scoped correction would also mean a receiver holding a world assembled from
-// two ticks, which is the class of divergence this whole plan exists to stop
-// having.
+// scoped correction would also leave a receiver holding a world assembled from
+// two ticks.
 //
 // So what relevance moves is *when* a participant's next correction goes out,
 // not what is in it. A participant with shared entities churning around its
 // cursor is published to at the fastest cadence its link allows; one with
 // nothing near it settles for the quiet cadence and gives the budget back. The
-// authority is untouched — every correction is still the host's whole world or
-// the exact difference from the last one — and the participant who needs the
-// freshness gets it, which is what the requirement asks for.
+// authority is untouched: every correction is still the host's whole world or the
+// exact difference from the last one, and the participant that needs freshness
+// gets it.
 //
-// The scope-the-content option is not dead, it is Phase 6's: a scoped correction
+// Scoping the content is the selective exchange's job: a scoped correction
 // needs its own integrity contract over the subset and a partial reconcile that
 // does not adopt the authority's tick, and both are more than a cadence change.
 package app

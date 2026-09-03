@@ -9,6 +9,9 @@ It focuses on production packages first, then reusable libraries and tools.
 ```mermaid
 flowchart TD
     Vif["cmd/vif"] --> App["internal/app"]
+    Vif --> Resource["internal/resource"]
+    App --> Resource
+    App --> Snapshot["internal/snapshot"]
     App --> Services["internal/service"]
     App --> Runtime["engine, input, mode, FSM"]
     App --> Assembly["manifest, systems, renderers"]
@@ -58,7 +61,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 |---|---|
 | `cmd/vif` | Grouped config/log/session flags including startup host/join selection, logging/journal/runtime-capture setup, replay/script/check/schema selection, process exit policy. |
 | `internal/content` | Immutable corpus model; root-directory load; plain-text sanitization and authored TOML blocks; corpus cursor. Internal because it depends on game `core.CodeBlock`. |
-| `internal/app` | Apply resource precedence to discovered paths, negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, verify anchor/config identity, and expose check/schema tools. |
+| `internal/app` | Negotiate startup sessions, compose play/headless/replay Apps, drive frame/input/playback/script loops, capture and install the shared world, run the correction cadence and authority succession, and verify anchor/config identity. |
 | `internal/asset` | Embedded default FSM files, embedded tutorial corpus, built-in splash bitmap font. |
 | `internal/component` | Pure ECS component data and related enums/masks. Position is declared here but stored specially by `engine`. |
 | `internal/core` | Small shared value types, entity ID and replication domain, modes, code blocks, the deterministic dependency resolver both `service` and `engine` order with, crash and stderr-capture support. |
@@ -68,16 +71,18 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, embedded/installable default keymap TOML, override decoding/merging. It does not import the ECS. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
-| `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM. |
+| `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, peers, sequence/ack fields, and bounded inbound notifications. |
 | `internal/parameter` | Gameplay constants, timing, priorities, effect/audio tuning, and navigation/genetics settings. |
 | `internal/parameter/visual` | Renderer-facing characters, masks, palettes, gradients, shapes, and post-process settings. |
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and deprecated fallback names; performs no resource I/O. |
+| `internal/resource` | Resolve the game config, keymap, corpus and audio overrides against the config-root precedence rule, and validate what those paths resolve to for `-check`. |
 | `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and network transport. |
+| `internal/snapshot` | Shared-capture wire model: the capture and its header, the compressed JSON envelope, the correction manifest with its pages and section hashes, the selective shard set, and the comparison-surface key filters with their line format and diff. Reads no world and takes no lock. |
 | `internal/status` | Registered atomic metrics closed by `Freeze`, sorted/grouped snapshots, duration formatting, and the tick-sampled flight recorder. |
 | `internal/system` | Gameplay mechanics and event handlers. Systems are constructed from the manifest and run in priority order. |
 | `internal/vlog` | Build-tagged logger facade: levels, scopes, correlation stamps, correlated sets, standalone files, crash flush, and the ungated journal sink; no-op on WASM/`novlog`. |
@@ -147,19 +152,20 @@ Important exceptions:
 
 The practical dependency rules are:
 
-1. `cmd` may depend on `internal/app`; lower packages must not depend on `cmd`.
+1. `cmd` may depend on `internal/app`, `internal/resource` and `internal/manifest`; lower packages must not depend on `cmd`.
 2. `app` may compose all runtime layers; domain packages should not import it.
-3. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
-4. `engine` owns data/lifecycle infrastructure but should not import concrete
+3. `snapshot` and `resource` are leaf packages below `app`: the first owns the capture wire model and the comparison surface, the second the config-root precedence rule. Neither reads a world or holds a lock, and neither imports `app`.
+4. `journal` owns deterministic input-stream mechanics and may depend on event and input values, while App-specific construction, presentation, and session startup stay above it.
+5. `engine` owns data/lifecycle infrastructure but should not import concrete
    gameplay systems or renderers.
-5. `input` produces pure intents and must remain free of engine dependencies.
-6. `mode`, systems, and renderers may depend on engine data, but communicate
+6. `input` produces pure intents and must remain free of engine dependencies.
+7. `mode`, systems, and renderers may depend on engine data, but communicate
    laterally through resources/events rather than concrete peer references.
-7. Generic FSM core/std stays independent of the game through `std.Host`; the
+8. Generic FSM core/std stays independent of the game through `std.Host`; the
    manifest bridge is the adapter.
-8. Blocking I/O stays behind services, render flush, audio backends, tools, or
+9. Blocking I/O stays behind services, render flush, audio backends, tools, or
    diagnostics—not inside a simulation update.
-9. Reusable algorithms accept callbacks/data structures instead of reaching
+10. Reusable algorithms accept callbacks/data structures instead of reaching
    into global world state where practical.
 
 ## 8. External module boundary

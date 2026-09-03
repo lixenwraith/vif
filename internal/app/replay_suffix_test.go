@@ -21,10 +21,11 @@ import (
 // due at or before T and cannot contain a crossing due after T, even when that
 // crossing was produced at or before T and is still inside the playout lead.
 
-// TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce is requirement 9. A guest
+// TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce: A guest
 // produces a crossing, then installs an authority taken before it, and the effect
 // is present exactly once afterwards.
 func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
+	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
@@ -104,6 +105,7 @@ func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
 // the capture. A correction at that production tick therefore cannot contain the
 // crossing and must replay it, even though it was not produced after the baseline.
 func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
+	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
@@ -160,6 +162,7 @@ func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
 // still in the future. Keeping that peer copy after installing the capture makes
 // a remote cursor walk backwards through already-authoritative positions.
 func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name              string
 		scheduleBeforeCap bool
@@ -229,6 +232,7 @@ func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
 // before the scheduler can acquire the world lock; a capture in that interval
 // must not claim the event it has not applied.
 func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
+	t.Parallel()
 	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
 	localCursors(t, apps)
 	host := apps[0]
@@ -274,6 +278,7 @@ func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
 // monotonic stream: reusing one makes every peer's replay filter discard the new
 // batch before it can inspect the frames inside it.
 func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
+	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
@@ -324,10 +329,11 @@ func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
 	}
 }
 
-// TestAGoldSequenceSurvivesACorrectionWithoutATick is requirement 9's second half:
+// TestAGoldSequenceSurvivesACorrectionWithoutATick's second half:
 // a whole gold run typed inside one tick is retained as a suffix and survives a
 // correction taken before it, and every member is still gone afterwards.
 func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
+	t.Parallel()
 	host, apps := liveInstance(t, 0x601D)
 	guest := apps[1]
 	advance := func() { tickAll(apps) }
@@ -400,10 +406,11 @@ func TestAGoldSequenceSurvivesACorrectionWithoutATick(t *testing.T) {
 	assertCorrected(t, want, guest, "guest")
 }
 
-// TestAnIncompleteSuffixFallsBackToTheAuthority is requirement 10. Retention that
+// TestAnIncompleteSuffixFallsBackToTheAuthority: Retention that
 // dropped a record it would have needed offers nothing at all, and the guest
 // installs the authority alone and says so.
 func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
+	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 
@@ -463,6 +470,7 @@ func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
 
 // TestRetentionIsBounded pins the three bounds and the overflow they publish.
 func TestRetentionIsBounded(t *testing.T) {
+	t.Parallel()
 	host, guest, advance := selectivePair(t, 0x5EEDBEEF)
 	deliverCorrection(t, host, []*App{guest}, advance)
 

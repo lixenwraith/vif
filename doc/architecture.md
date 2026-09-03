@@ -149,7 +149,7 @@ Reset also has an explicit ownership split. Simulation entities/resources/FSM
 state are rebuilt. Operator-owned free-mouse/auto-fire preferences, time scale,
 and debug HUD/pins survive plain `:new`; `:new!` purges them. Replay comparison
 drops that session record plus the exact observer-only keys in
-`internal/app/snapshot.go` rather than treating whole metric groups as noise.
+`internal/snapshot/surface.go` rather than treating whole metric groups as noise.
 
 ## 5. Data-oriented ECS
 
