@@ -44,11 +44,10 @@ type StagedInstall struct {
 	staging *App
 	capture snapshot.SharedCapture
 
-	stageDur   time.Duration
-	commitDur  time.Duration
-	committed  bool
-	discarded  bool
-	encodedLen int
+	stageDur  time.Duration
+	commitDur time.Duration
+	committed bool
+	discarded bool
 
 	// difference is how far the live world had drifted from the capture when the
 	// commit wrote it. On a guest that is the correction magnitude — the distance
