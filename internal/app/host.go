@@ -1,15 +1,16 @@
-// Package app: hosting a run that is already going.
+// Hosting a run that is already going.
 //
-// The startup lobby freezes tick zero until a fixed roster arrives. This is the
-// other join: an instance that is already playing opens a socket, and a
-// participant that dials it receives the world rather than reproducing it.
+// The startup lobby freezes tick zero until a fixed roster arrives. This is the other
+// join: an instance that is already playing opens a socket, and a participant that
+// dials it receives the world rather than reproducing it.
 //
-// The ordering is the design. A joiner is admitted as a peer before the world is
-// read for it, so the crossings this instance produces during the transfer reach
-// it instead of falling into the gap between the capture and the admission; the
-// joiner holds them until the world they apply to exists, and the barrier discards
-// the ones the capture already contains. Reading the world and then admitting
-// loses every artifact produced in between, silently.
+// The ordering is the design. A joiner is admitted as a peer before the world is read
+// for it, so the crossings this instance produces during the transfer reach it
+// instead of falling into the gap between the capture and the admission; the joiner
+// holds them until the world they apply to exists, and the barrier discards the ones
+// the capture already contains. Reading the world and then admitting loses every
+// artifact produced in between, silently.
+
 package app
 
 import (

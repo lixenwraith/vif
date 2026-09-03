@@ -1,37 +1,15 @@
-// Package app: authority and correction.
+// Authority and correction: the host's publication cadence and a guest's apply
+// loop, in one object because a run is one or the other and never both.
 //
-// The host publishes: it reads its own world on a cadence and broadcasts either
-// the whole thing or the difference since the last whole one. A guest consumes: it
-// keeps simulating, and every correction that arrives replaces whatever its
-// prediction had drifted to. Neither side negotiates and neither re-derives the
-// other's answer. That is weakened D-11: identical on the host, on a guest equal
-// to the host as of the last applied correction, and converging.
-//
-// Properties the design rests on:
-//
-//   - Nothing acknowledges a correction. A keyframe supersedes everything before
-//     it, so loss costs freshness for at most one keyframe interval and never
-//     correctness.
-//   - A correction never fails. Late arrival, a delta against a keyframe this
-//     instance does not hold, and supersession before apply are counters rather
-//     than errors: the next correction is self-sufficient.
-//   - Magnitude is measured, not asserted. How far a guest's prediction had
-//     drifted when the correction landed is what says whether the cadence is right.
-//
-// Cadence is a bounded per-peer controller driven by measured round trip,
+// The cadence is a bounded per-peer controller driven by measured round trip,
 // delivery rate, and how much of what the next correction moves is near that
-// participant. Three bounds constrain it:
+// participant. What it decides is send time; the correction itself is one capture,
+// one encode and one chunking, whoever receives it. See the package doc for the
+// four properties the protocol rests on.
 //
-//   - One timeline, one baseline. A correction is computed once and is exact:
-//     every guest holds the same keyframe and a delta names it. Only which
-//     corrections a peer is sent — its cadence — is per peer.
-//   - The floor is not adaptive. Cadence and keyframe interval are preferences
-//     traded away under pressure; the guarantee that a participant sees a whole
-//     authoritative world within SnapshotFloorKeyframeTicks is not. A link that
-//     cannot carry it is refused at admission and reported mid-session.
-//   - Timing paces the transport and enters nothing else. No round trip, delivery
-//     rate or jitter estimate reaches a component store, an RNG stream, a replay
-//     or a game decision.
+// Magnitude is measured rather than asserted: how far a guest's prediction had
+// drifted when the correction landed is what says whether the cadence is right.
+
 package app
 
 import (
@@ -402,28 +380,11 @@ func (c *corrections) publishRound(force bool) error {
 		}
 	}
 
-	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
-	var body, joinBody []byte
-	var chunks [][]byte
-	if keyframe {
-		// Two encodings of one capture, and the second is not waste. A correction
-		// travels in an envelope that says which of the two shapes it is; the join
-		// handshake predates the envelope and sends a bare capture, because there
-		// a capture is the only thing the message can be. Keeping the bare form is
-		// what lets a join and a keyframe be the same object without the join
-		// having to learn a shape it has no use for — and it is paid once per
-		// keyframe rather than once per correction.
-		body, err = snapshot.EncodeCorrection(cap)
-		if err == nil {
-			joinBody, err = snapshot.EncodeCapture(cap)
-		}
-	} else if len(bodyPeers) > 0 {
-		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
-	}
+	body, joinBody, encodeDur, err := c.encodeBodyLocked(cap, keyframe, keyframe || len(bodyPeers) > 0)
 	if err != nil {
-		return fmt.Errorf("correction encode: %w", err)
+		return err
 	}
-	encodeDur := time.Since(encodeStart)
+	var chunks [][]byte
 	if len(body) > 0 {
 		if chunks, err = network.EncodeSnapshotChunks(cap.Header.Tick, body); err != nil {
 			return fmt.Errorf("correction chunk: %w", err)
@@ -455,26 +416,14 @@ func (c *corrections) publishRound(force bool) error {
 		p.nextTick = tick + p.plan.CadenceTicks
 	}
 
-	if len(body) > 0 {
-		c.recordSizeLocked(keyframe, len(body))
-	}
+	c.recordPublicationLocked(cap, keyframe, body, joinBody, encodeDur, sent)
 	if keyframe {
-		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
 		// A whole world resets every peer's standing in the selective exchange: it
 		// is the state each one now holds, so the next manifest is answered against
 		// it rather than against whatever the peer had drifted to.
 		for _, p := range c.peers {
 			p.silence, p.wide = 0, 0
 		}
-	}
-
-	m := c.a.snapshotTelemetry
-	m.encodeUS.Store(encodeDur.Microseconds())
-	m.bytes.Store(int64(len(body)))
-	m.sent.Add(1)
-	m.sentBytes.Add(int64(len(body) * sent))
-	if keyframe {
-		m.keyframes.Add(1)
 	}
 	c.publishPlanTelemetryLocked(ids)
 	vlog.Debug("app", "msg", "correction published",
@@ -501,20 +450,10 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 	if err != nil {
 		return err
 	}
-	encodeStart := time.Now() // [wall] telemetry only; outside the world lock
-	var body, joinBody []byte
-	if keyframe {
-		if body, err = snapshot.EncodeCorrection(cap); err == nil {
-			joinBody, err = snapshot.EncodeCapture(cap)
-		}
-	} else {
-		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
-	}
+	body, joinBody, encodeDur, err := c.encodeBodyLocked(cap, keyframe, true)
 	if err != nil {
-		return fmt.Errorf("correction encode: %w", err)
+		return err
 	}
-	encodeDur := time.Since(encodeStart)
-
 	chunks, err := network.EncodeSnapshotChunks(cap.Header.Tick, body)
 	if err != nil {
 		return fmt.Errorf("correction chunk: %w", err)
@@ -523,21 +462,66 @@ func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) erro
 		port.Broadcast(uint8(network.MsgStateCorrection), chunk)
 	}
 	c.nextBroadcast = tick + c.base
-	c.recordSizeLocked(keyframe, len(body))
+	c.recordPublicationLocked(cap, keyframe, body, joinBody, encodeDur, 1)
+	c.publishPlanTelemetryLocked(nil)
+	return nil
+}
+
+// encodeBodyLocked encodes one capture into the shape the schedule asked for, and
+// returns what the encode cost so the caller can report it.
+//
+// A keyframe is encoded twice, and the second is not waste. A correction travels in
+// an envelope that says which of the two shapes it is; the join handshake predates
+// that envelope and sends a bare capture, because there a capture is the only thing
+// the message can be. Keeping the bare form is what lets a join and a keyframe be
+// one object, and it is paid once per keyframe rather than once per correction.
+//
+// want is false when the round is sending nobody a body, which the selective
+// exchange makes the ordinary case: there is then nothing to encode.
+//
+// Caller MUST hold publishMu.
+func (c *corrections) encodeBodyLocked(
+	cap snapshot.SharedCapture, keyframe, want bool,
+) (body, joinBody []byte, took time.Duration, err error) {
+	if !want {
+		return nil, nil, 0, nil
+	}
+	start := time.Now() // [wall] telemetry only; outside the world lock
+	if keyframe {
+		if body, err = snapshot.EncodeCorrection(cap); err == nil {
+			joinBody, err = snapshot.EncodeCapture(cap)
+		}
+	} else {
+		body, err = snapshot.EncodeCorrectionDelta(snapshot.DiffCapture(c.baseline, cap))
+	}
+	if err != nil {
+		return nil, nil, 0, fmt.Errorf("correction encode: %w", err)
+	}
+	return body, joinBody, time.Since(start), nil
+}
+
+// recordPublicationLocked folds one publication into the cost model, the baseline
+// and the telemetry. bodies is how many peers were sent the whole body, which is
+// what the wire total is priced from.
+//
+// Caller MUST hold publishMu.
+func (c *corrections) recordPublicationLocked(
+	cap snapshot.SharedCapture, keyframe bool, body, joinBody []byte, took time.Duration, bodies int,
+) {
+	if len(body) > 0 {
+		c.recordSizeLocked(keyframe, len(body))
+	}
 	if keyframe {
 		c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = cap, joinBody, true, cap.Header.Tick
 	}
-
 	m := c.a.snapshotTelemetry
-	m.encodeUS.Store(encodeDur.Microseconds())
+	m.encodeUS.Store(took.Microseconds())
 	m.bytes.Store(int64(len(body)))
 	m.sent.Add(1)
-	m.sentBytes.Add(int64(len(body)))
+	m.sentBytes.Add(int64(len(body) * bodies))
 	if keyframe {
 		m.keyframes.Add(1)
 	}
-	c.publishPlanTelemetryLocked(nil)
-	return nil
 }
 
 // sendTo delivers one correction's chunks to one participant, reporting whether

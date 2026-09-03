@@ -156,33 +156,36 @@ func (a *App) handleResize(width, height int) {
 	a.orchestrator.Resize(a.ctx.Width, a.ctx.Height)
 }
 
-// frame advances one render frame; false means the player quit
-func (a *App) frame() bool {
-	a.ctx.IncrementFrameNumber()
-
-	// Snapshot shared state under the world lock: minimal hold time, and
-	// RenderContext is built from a consistent view
+// renderContext reads everything a frame draws from, in one critical section.
+//
+// Config (Map/Viewport/Camera/crop) is mutated under updateMutex by LevelSetup and
+// reset handlers on the event-loop and tick goroutines, so the context has to be
+// built inside the same section that reads the cursor and the clock. The clock read
+// is the continuous one: the tick-written stamps are quantised to the tick, which
+// shows as stepped animation once the rate is slowed. Everything taken here is a
+// local copy — a render never writes a tick-owned resource.
+func (a *App) renderContext() render.RenderContext {
 	var (
 		snapTime         engine.TimeResource
 		cursorX, cursorY int
 		cursorValid      bool
-		renderCtx        render.RenderContext
+		out              render.RenderContext
 	)
-
 	a.world.RunSafe(func() {
-		// Render on the continuous clock: the tick-written stamps are quantized to
-		// the tick, which shows as stepped animation once the rate is slowed.
-		// Local copy only: the render loop never writes tick-owned resources.
 		snapTime.GameTime = a.ctx.TimeCtl.Now()
 		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
 		if pos, ok := a.world.LocalCursor(); ok {
 			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
 		}
-		// Config (Map/Viewport/Camera/crop) is mutated under updateMutex by
-		// LevelSetup/reset handlers on the event-loop and tick goroutines;
-		// RenderContext must be built inside the same critical section
-		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
+		out = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
 	})
+	return out
+}
+
+// frame advances one render frame; false means the player quit
+func (a *App) frame() bool {
+	a.ctx.IncrementFrameNumber()
+	renderCtx := a.renderContext()
 
 	paused := a.ctx.TimeCtl.IsPaused()
 	if paused {

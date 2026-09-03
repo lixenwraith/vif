@@ -1,36 +1,23 @@
-// Package app: who authors, and what happens when that instance goes.
+// Who authors, and what happens when that instance goes.
 //
-// Exactly one instance authors the Shared world and answers a selective request.
-// Losing it without a successor ends the session's shared identity: the survivors
-// keep ticking separately, with no roster authority and no way to admit anyone.
-// That remains the fallback; a coordinated handoff is the other outcome, and it
-// never lets two instances claim authorship at once.
+// Losing the authority without a successor ends the session's shared identity: the
+// survivors keep ticking separately, with no roster authority and no way to admit
+// anyone. That is the fallback; the succession here is the other outcome.
 //
-// The unit is the authority term (see network/authority.go). Everything here is
-// one of three things:
+// Report, vote, handoff. A survivor floods what it can reach and how current its
+// retention is; once its view covers a strict majority it votes, once, for the
+// lowest eligible candidate; a candidate holding a strict majority publishes the
+// record it authors under. One vote per participant per term is what removes the
+// need for a tie-breaking timer. The record carries roster, slot assignments, anchor
+// and barrier delay, so adopting it is one decision rather than a term change
+// followed by a roster negotiation, and a joiner dialling mid-handoff is refused
+// with a distinguishable error rather than half-admitted into a term about to end.
 //
-//   - The gate. Every authoritative artifact carries the term it was produced
-//     under. An artifact from an older term is ignored, one from the current term
-//     is acted on, and one from a term this instance has never been handed is
-//     refused and reported: the split-brain case, not a fast successor.
-//
-//   - The succession. Report, vote, handoff. A survivor floods what it can reach
-//     and how current its retention is; once its view covers a strict majority it
-//     votes, once, for the lowest eligible candidate; a candidate holding a strict
-//     majority of votes publishes the record it authors under. One vote per
-//     participant per term makes two authorities in one term impossible rather
-//     than unlikely, and removes the need for a tie-breaking timer.
-//
-//   - The transfer. A handoff carries roster, slot assignments, anchor and barrier
-//     delay, so adopting it is one decision rather than a term change followed by
-//     a roster negotiation. A joiner dialling during a handoff is refused with a
-//     distinguishable error rather than half-admitted into a term about to end.
-//
-// What a successor may author is unchanged: the Shared domain and nothing else.
-// It does not begin authoring the D-13 owner-authored cells of cursors it does not
-// simulate, its correction index keeps the same two exclusions, and no
-// Player-domain state crosses as part of the transfer. SimulatesLocally and
-// ResolveOwnedCursor remain the only admission checks.
+// What a successor may author is unchanged: the Shared domain and nothing else. It
+// does not begin authoring the D-13 owner-authored cells of cursors it does not
+// simulate, its correction index keeps the same two exclusions, and no Player-domain
+// state crosses as part of the transfer.
+
 package app
 
 import (

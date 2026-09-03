@@ -1,4 +1,4 @@
-// Package app: replaying this participant's own actions after a correction.
+// Replaying this participant's own actions after a correction.
 //
 // A correction describes the host's world at tick T. A guest applying one stands
 // past T — it has been predicting — and what it produced in between is real:
@@ -11,25 +11,23 @@
 //   - One canonical suffix. What is retained is the artifact the transport already
 //     encoded: event.ScheduledWireFrame, the same value the host will apply and the
 //     same payload text the journal writes. Retention lives in NetworkSystem beside
-//     the barrier, because the barrier decides an artifact's apply tick and the
-//     apply tick decides whether the correction already contains it.
+//     the barrier, because the barrier decides an artifact's apply tick and the apply
+//     tick decides whether the correction already contains it.
 //
-//   - One membership test. A guest replays its own artifacts whose agreed apply
-//     tick is after the installed world's tick. Authority-local artifacts are the
+//   - One membership test. A guest replays its own artifacts whose agreed apply tick
+//     is after the installed world's tick. Authority-local artifacts are the
 //     asymmetric case — the host applied them immediately — so AdoptSnapshot and
 //     scheduleCrossings classify those by the capture header's completed authority
 //     sequence instead.
 //
 //   - No partial answer. Retention is bounded by tick span, record count and bytes,
-//     and dropping a record the suffix would need makes the suffix unavailable
-//     rather than shorter. A guest then keeps the authority alone and reports it: a
-//     shorter suffix is a different history, not a smaller one.
+//     and dropping a record the suffix would need makes the suffix unavailable rather
+//     than shorter: a shorter suffix is a different history, not a smaller one.
 //
-// Not replayed: anything a peer produced (the host orders it, and it arrives
-// through the barrier), anything a shared system re-derives (D-5, it would apply
-// twice), and the three barrier-bound artifacts that decide what the world is
-// rather than what happens in it — arrival, departure and reset. Those are never
-// retained.
+// Not replayed: anything a peer produced, anything a shared system re-derives (D-5,
+// it would apply twice), and the three barrier-bound artifacts that decide what the
+// world is rather than what happens in it — arrival, departure and reset.
+
 package app
 
 import (

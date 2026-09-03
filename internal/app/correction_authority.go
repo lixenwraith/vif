@@ -1,24 +1,20 @@
-// Package app: the correction protocol across a change of authority.
+// The correction protocol across a change of authority. Three things change and
+// nothing else:
 //
-// Everything here is the correction half's answer to one question — what changes
-// when the participant authoring the Shared world is not the one that opened the
-// session. Three things do, and nothing else:
+//   - Which role this run plays. A guest that is elected keeps its apply loop and
+//     gains a publication cadence. It does not restart the protocol: the capture it
+//     last installed is the keyframe every other survivor also holds, so it becomes
+//     the baseline the successor's first delta names.
 //
-//   - Which role this run plays. A guest that is elected keeps its apply loop
-//     and gains a publication cadence. It does not restart the protocol: the
-//     capture it last installed is the keyframe every other survivor also holds,
-//     so it becomes the baseline the successor's first delta names and the first
-//     correction after a handoff is an ordinary indexed one.
+//   - What a term admits. The gate is applied where the artifact is decoded rather
+//     than where it is queued: an inbound frame arrives under the world lock and the
+//     queue may only take bytes.
 //
-//   - What a term admits. Every authoritative artifact carries the term it was
-//     produced under, and the gate is applied where the artifact is decoded rather
-//     than where it is queued: an inbound frame arrives under the world lock and
-//     the queue may only take bytes.
-//
-//   - What the successor inherits. The retained ring, which is what lets it
-//     answer a request naming a manifest the previous authority published, and the
-//     per-peer schedule, which starts again because the links are this instance's
-//     rather than its predecessor's.
+//   - What the successor inherits. The retained ring, which is what lets it answer a
+//     request naming a manifest the previous authority published; the per-peer
+//     schedule starts again, because the links are this instance's rather than its
+//     predecessor's.
+
 package app
 
 import (

@@ -112,22 +112,9 @@ func TestStagedLinkShapingKeepsCorrectionsBoundedAndRecovers(t *testing.T) {
 	// The join runs unshaped: what this gate measures is a session under load, and
 	// admitting one over a shaped link is the *refusal* path, which
 	// TestAJoinIsRefusedWhenTheLinkCannotCarryTheFloor covers on its own.
-	stop, ticking := make(chan struct{}), make(chan struct{})
-	go func() {
-		defer close(ticking)
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			host.Tick(1)
-			time.Sleep(joinTestTickInterval)
-		}
-	}()
+	stopTicking := tickInBackground(host)
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
-	close(stop)
-	<-ticking
+	stopTicking()
 
 	type reading struct {
 		stage     string

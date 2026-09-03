@@ -1,31 +1,32 @@
-// Package app: journal replay.
+// Journal replay.
 //
 // The driver re-pushes journal records into a fresh headless App at the position they
-// were recorded at. Position is (run, tick, boundary), stamped on the event queue under
-// the world lock: run advances where a game reset re-bases the tick counter, tick at the
-// top of each tick body, boundary on each completed settle group. A record stamped
-// (R, T, b) was produced after tick T of run R completed, in the b'th settle since.
+// were recorded at. Position is (run, tick, boundary), stamped on the event queue
+// under the world lock: run advances where a game reset re-bases the tick counter,
+// tick at the top of each tick body, boundary on each completed settle group. A
+// record stamped (R, T, b) was produced after tick T of run R completed, in the b'th
+// settle since.
 //
 // Nothing is filtered. Every non-system-origin record is injected, including pause,
 // rate and step control — the replay does not honour those, but it does reproduce
-// their events, and what must not be compared is declared once in denySim rather
-// than judged per event at the injection site.
+// their events, and what must not be compared is declared once in denySim rather than
+// judged per event at the injection site.
 //
 // Settle granularity is recorded, not assumed: a pass can queue a system event that a
-// later pass applies over a replayed one, so merging two settles into one changes the
-// result. A run boundary is followed, not driven: the reset that opens run R+1 is a
-// record in run R, and servicing it is the replay's own reset path.
+// later pass applies over a replayed one, so merging two settles changes the result.
+// A run boundary is followed, not driven: the reset that opens run R+1 is a record in
+// run R, and servicing it is the replay's own reset path.
 //
 // Bit-exact reproduction is claimed for headless source runs only. A live run races
 // two scheduler goroutines against the main loop for the update mutex, so its journal
 // reconstructs what the player did, not a comparable world.
 //
-// Tick reconciliation. A run ends only at a journaled record: NextRun is reached
-// solely through EventGameResetRequest, which never carries OriginSystem, so the last
-// record of run R is stamped at R's final tick and the driver ticks to it. Only the
-// final run can end with unrecorded trailing ticks, which the caller runs itself.
-// Anything else that re-bases the tick counter breaks this and silently under-ticks
-// every run but the last.
+// Tick reconciliation. NextRun is reached solely through EventGameResetRequest, which
+// never carries OriginSystem, so the last record of run R is stamped at R's final
+// tick and the driver ticks to it. Only the final run can end with unrecorded
+// trailing ticks, which the caller runs itself. Anything else that re-bases the tick
+// counter breaks this and silently under-ticks every run but the last.
+
 package app
 
 import (

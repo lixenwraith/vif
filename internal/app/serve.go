@@ -1,18 +1,16 @@
-// Package app: the dedicated host.
-//
-// A server is the interactive runtime with its two ends removed: no terminal, no
-// renderer, no audio, and no cursor of its own. What is left is the part a session
-// cannot do without — the shared world, the authority, the correction cadence and
-// the roster — running on the real clock and the scheduler goroutine, because a
-// session's simulation has to advance whether or not anybody is watching it here.
+// The dedicated host: the interactive runtime with its two ends removed. No
+// terminal, no renderer, no audio, and no cursor of its own — what is left is the
+// part a session cannot do without, running on the real clock and the scheduler
+// goroutine, because a session's simulation has to advance whether or not anybody is
+// watching it here.
 //
 // Holding no cursor is a roster property rather than an absence. The coordinator
 // keeps its participant identity, its authority term and its vote; its slot is
 // parameter.NoPlayerSlot, so every "is this my cursor" test answers no without a
-// special case, and the guests are the whole of what is on the map. The FSM's boot
-// cursor is not suppressed: it is created as it always is, and the roster hands it
-// to the first guest, which is what keeps shared creation order identical to an
-// ordinary host's.
+// special case. The FSM's boot cursor is not suppressed: it is created as always and
+// the roster hands it to the first guest, which keeps shared creation order identical
+// to an ordinary host's.
+
 package app
 
 import (

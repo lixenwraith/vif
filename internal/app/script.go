@@ -1,20 +1,17 @@
-// Package app: authored script runtime.
+// Authored script runtime. A script is a deterministic list of inputs at named
+// simulation positions; two things about how it is run are policy rather than
+// content, and both are here.
 //
-// A script is a deterministic list of inputs at named simulation positions. Two
-// things about how it is run are policy rather than content, and both are here.
+// Pacing. A solo script runs as fast as the caller can drive it, which is what a test
+// wants. A script in a session runs at the wall rate its peers do, because a
+// participant that outran them would produce epochs faster than the barrier delivers
+// them. -speed selects the rate explicitly, and ScriptPaceMax removes pacing.
 //
-// Pacing. A solo script runs as fast as the caller can drive it, which is what a
-// test wants. A script in a session runs at the wall rate its peers do, because a
-// participant that outran them would produce epochs faster than the barrier
-// delivers them and would not be simulating the session it is in. -speed selects
-// the rate explicitly: a ladder token paces one tick at that multiple of real
-// time, and ScriptPaceMax removes pacing.
-//
-// Presentation. ModeHeadless runs a script with no terminal at all. ModeScript
+// Presentation. ModeHeadless runs a script with no terminal at all; ModeScript
 // presents the same run on this terminal, over the same manual clock and the same
-// script geometry, so the two simulate identically and only the presentation
-// differs. That is what makes a scripted participant watchable: a scripted host
-// can play a fixed sequence while a person joins it and plays against it.
+// script geometry, so the two simulate identically. That is what makes a scripted
+// participant watchable: a scripted host can play a fixed sequence while a person
+// joins and plays against it.
 
 package app
 

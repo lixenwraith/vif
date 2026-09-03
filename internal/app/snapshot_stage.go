@@ -1,22 +1,23 @@
-// Package app: the staged install.
+// The staged install.
 //
-// InstallShared writes into the world it is called on. That is the right shape for
-// a harness, which owns both worlds and ticks neither, and the wrong one for a
-// join: the instance being installed into is running, and a capture that turns out
-// to be unloadable halfway through would leave it holding a world that is neither
-// its own nor the session's.
+// InstallShared writes into the world it is called on. That is the right shape for a
+// harness, which owns both worlds and ticks neither, and the wrong one for a join:
+// the instance being installed into is running, and a capture that turns out to be
+// unloadable halfway through would leave it holding a world that is neither its own
+// nor the session's.
 //
 // A stage resolves the whole capture into a second world first — a real one, with
 // this build's system set, its FSM and its RNG stream inventory — and only then
 // writes the same bytes into the live world, between two ticks. What survives the
-// staging pass is what the live pass cannot fail on: identical code, identical
-// input, and no dependence on the state being written over.
+// staging pass is what the live pass cannot fail on: identical code, identical input,
+// and no dependence on the state being written over.
 //
-// Cost bounds the design. Building a second App per install costs 9 to 31 ms,
-// which suits a join that happens once and not a correction five times a second,
-// so the staging world is built on first use and re-used for the life of the run.
-// Commit reconciles the live world onto the capture rather than clearing and
-// re-inserting it, so it writes the size of the correction, not of the world.
+// Cost bounds the design. Building a second App per install costs 9 to 31 ms, which
+// suits a join that happens once and not a correction five times a second, so the
+// staging world is built on first use and re-used for the life of the run. Commit
+// reconciles the live world onto the capture rather than clearing and re-inserting
+// it, so it writes the size of the correction, not of the world.
+
 package app
 
 import (

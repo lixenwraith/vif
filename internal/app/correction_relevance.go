@@ -1,24 +1,17 @@
-// Package app: relevance, priority, and the operating point a player can see.
+// Relevance, priority, and the operating point a player can see.
 //
-// Relevance in this design is a *scheduling* input and never a filter. The
-// tempting shape — send each participant only the entities near it — cannot
-// carry D-23's exactness proof: a delta is verified by reconstructing the
-// sender's capture and re-hashing it, so a correction carrying a subset of the
-// world reconstructs a capture nobody holds and has no proof left to offer. A
-// scoped correction would also leave a receiver holding a world assembled from
-// two ticks.
+// Relevance here is a scheduling input and never a filter. The tempting shape — send
+// each participant only the entities near it — cannot carry D-23's exactness proof: a
+// delta is verified by reconstructing the sender's capture and re-hashing it, so a
+// correction carrying a subset of the world reconstructs a capture nobody holds and
+// has no proof left to offer, and it would leave the receiver holding a world
+// assembled from two ticks.
 //
-// So what relevance moves is *when* a participant's next correction goes out,
-// not what is in it. A participant with shared entities churning around its
-// cursor is published to at the fastest cadence its link allows; one with
-// nothing near it settles for the quiet cadence and gives the budget back. The
-// authority is untouched: every correction is still the host's whole world or the
-// exact difference from the last one, and the participant that needs freshness
-// gets it.
-//
-// Scoping the content is the selective exchange's job: a scoped correction
-// needs its own integrity contract over the subset and a partial reconcile that
-// does not adopt the authority's tick, and both are more than a cadence change.
+// So what relevance moves is when a participant's next correction goes out, not what
+// is in it. Scoping the content is the selective exchange's job, which needs its own
+// integrity contract over the subset and a partial reconcile that does not adopt the
+// authority's tick.
+
 package app
 
 import (

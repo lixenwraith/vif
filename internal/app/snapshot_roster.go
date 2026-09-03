@@ -1,34 +1,32 @@
-// Package app: what an install re-derives or keeps rather than adopts.
+// What an install re-derives or keeps rather than adopts.
 //
 // A cursor is a shared entity and its placement a shared value, so the component
 // travels in a capture. Three things about it do not, and all three are D-13.
 //
-// Which slot this instance drives, and therefore which shared cursors it
-// simulates. A capture carries the sender's answer — its own cursor is
-// ControlHuman, everyone else's ControlRemote — and a receiver that adopted it
-// would start simulating the sender's cursor and stop simulating its own.
+// Which slot this instance drives, and therefore which shared cursors it simulates.
+// A capture carries the sender's answer — its own cursor is ControlHuman, everyone
+// else's ControlRemote — and a receiver that adopted it would start simulating the
+// sender's cursor and stop simulating its own.
 //
-// The slot-to-entity roster. It is a resource rather than a store, mirrors the
-// cursor store exactly, and no install updates it: after the shared entities are
-// replaced it would still name the destroyed ones. It is not carried because it is
-// derivable, which is D-19's "provably re-derivable at install time" clause; the
-// derivation lives here.
+// The slot-to-entity roster. It mirrors the cursor store exactly and no install
+// updates it, so after the shared entities are replaced it would still name the
+// destroyed ones. It is not carried because it is derivable, which is D-19's
+// "provably re-derivable at install time" clause; the derivation lives here.
 //
 // The owner-authored set. Energy, heat, shield, boost, weapon, combat, view, ping
-// and pulse have exactly one author, the instance simulating the cursor, and they
-// travel as values on their own stream (D-13). A capture carries them so a joiner
-// can materialise a cursor it has never held, but for a cursor the receiver
-// authors the capture holds the sender's mirror of a stream it does not write, one
-// sync period behind at best. Adopting it rolls the receiver's own energy, heat
-// and loadout back to whatever the host last heard. So the set is read before the
-// stores are replaced and written back afterwards, for the cursors this instance
-// still authors once the control assignment has been re-derived.
+// and pulse have exactly one author — the instance simulating the cursor — and they
+// travel as values on their own stream. A capture carries them so a joiner can
+// materialise a cursor it has never held, but for a cursor the receiver authors the
+// capture holds the sender's mirror of a stream it does not write, one sync period
+// behind at best. So the set is read before the stores are replaced and written back
+// afterwards, for the cursors this instance still authors once the control
+// assignment has been re-derived.
 //
-// That last rule applies only inside a session. Outside one there is no second
-// author to defer to — the capture is this instance's own world, from a harness
-// install or a staging resolution — and keeping local values over it would make an
+// That last rule applies only inside a session: outside one there is no second
+// author to defer to, and keeping local values over the capture would make an
 // install mean different things depending on who was watching.
 // localParticipantLocked is the seam both rules turn on.
+
 package app
 
 import (

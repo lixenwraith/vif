@@ -1,32 +1,28 @@
-// Package app: answering for the participants behind you.
+// Answering for the participants behind you.
 //
 // The selective exchange runs between an authority and a receiver that can answer
 // it, and a relayed receiver's request goes to the neighbour that forwarded the
-// manifest. That neighbour therefore has to hold something.
+// manifest. That neighbour therefore has to hold something: every instance retains
+// an index over each authoritative capture it can prove it holds, and a participant
+// with more than one link forwards the manifest onward and answers from that
+// retention. Four properties make it a role rather than a routing layer:
 //
-// Every instance retains an index over each authoritative capture it can prove it
-// holds, bounded by the same SnapshotManifestRetention the authority uses, and a
-// participant with more than one link forwards the manifest onward and answers
-// from that retention. Four properties make it a role rather than a routing layer:
+//   - One hop. A relay that does not hold the manifest a request names does not
+//     forward the request onward. It says so, and the receiver degrades to the whole
+//     body the keyframe cadence is already flooding.
 //
-//   - One hop. A relay that does not hold the manifest a request names does
-//     not forward the request onward. It says so, and the receiver degrades to the
-//     whole body the authority's keyframe cadence is already flooding.
+//   - A relay cannot forge. It serves pages it did not author, so what binds the
+//     answer is the authority's own root: the set must declare the root the receiver
+//     was sent, and the repaired capture must reproduce it. A substituted, truncated
+//     or corrupted page fails one of the two.
 //
-//   - A relay cannot forge. It serves pages it did not author, so what binds
-//     the answer is the authority's own root: the set must declare the root the
-//     receiver was sent in the manifest, and the repaired capture must reproduce
-//     it. A substituted, truncated or corrupted page fails one of the two, by the
-//     same check that catches a corrupt wire.
+//   - Retention is why it may answer at all. An index enters the ring only when the
+//     capture under it is provably the authority's, so a relay never holds a baseline
+//     of its own to serve from and mixed-baseline assembly stays unreachable.
 //
-//   - Retention is why it may answer at all. An index enters the ring only
-//     when the capture under it is provably the authority's — a whole correction
-//     re-checked its own integrity hash, or a comparison reproduced the
-//     authority's root — so a relay never holds a baseline of its own to serve
-//     from, and mixed-baseline assembly stays unreachable.
-//
-//   - The edge that carries it pays for it. A relayed repair is priced into
-//     the relaying participant's own link plan, never the authority's.
+//   - The edge that carries it pays for it. A relayed repair is priced into the
+//     relaying participant's own link plan, never the authority's.
+
 package app
 
 import (

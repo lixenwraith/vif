@@ -1,4 +1,4 @@
-// Package app: the correction as an exchange rather than a broadcast.
+// The correction as an exchange rather than a broadcast.
 //
 // A whole correction is one-directional and self-sufficient: the host reads its
 // world and sends a body, and a receiver either applies it or waits for the next.
@@ -14,24 +14,17 @@
 //	 |  shard set: only mismatching pages   |
 //	 |------------------------------------->|  splice, verify root, install
 //
-// Three properties are load-bearing.
+// The descent happens where the content is: the guest sends its own page hashes for
+// the sections that disagreed, so the host compares against content it already holds
+// and answers in one round trip. Asking for the host's page hashes first would cost
+// two.
 //
-// The descent happens where the content is. The guest sends its own page hashes
-// for the sections that disagreed, so the host compares against content it already
-// holds and answers in one round trip; asking for the host's page hashes first
-// would cost two.
-//
-// Silence falls back rather than stalls. Every manifest is answered, so a peer
-// that stops answering has an uplink that cannot reach the authority — a relayed
-// participant, or a broken return path. After SnapshotManifestSilenceCorrections
-// the host publishes the whole body again, which reaches it by the same flood the
-// artifacts use. No peer is left holding an index it cannot act on.
-//
-// The keyframe schedule is untouched. A whole compressed capture still goes out
-// every keyframe period, so the convergence floor, the maximum repair age and the
-// recovery from any refusal are unchanged. Everything here optimises the interval
-// between keyframes, and every failure in it ends at the keyframe that was going
-// to be sent anyway.
+// Silence falls back rather than stalls. Every manifest is answered, so a peer that
+// stops answering has an uplink that cannot reach the authority — a relayed
+// participant, or a broken return path — and after SnapshotManifestSilenceCorrections
+// the host sends it the whole body again. No peer is left holding an index it cannot
+// act on.
+
 package app
 
 import (

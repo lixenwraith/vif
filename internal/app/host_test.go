@@ -82,29 +82,10 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	// world lock from the accept goroutine, and the gap the joiner then closes is
 	// exactly the ticks the host completed while its world was in transit. A host
 	// frozen for the transfer would prove the easy half of this.
-	stop := make(chan struct{})
-	ticking := make(chan struct{})
-	go func() {
-		defer close(ticking)
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			host.Tick(1)
-			// Faster than the game interval on purpose. The join has to close a gap
-			// the host opened while its world was in transit, and at one tick per
-			// 50 ms a loopback transfer finishes inside a single tick and the gap
-			// is never there to close. Compressing the host's pacing is the honest
-			// stand-in for the slow link or the large world that produces one.
-			time.Sleep(joinTestTickInterval)
-		}
-	}()
+	stopTicking := tickInBackground(host)
 
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
-	close(stop)
-	<-ticking
+	stopTicking()
 
 	// The joiner arrived at a tick the host had reached, not at tick zero, and it
 	// closed the gap between the world it was sent and where the session had got to
@@ -209,28 +190,46 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 	}
 }
 
+// tickInBackground keeps one instance running while the caller does something that
+// needs a live host, and returns the stop.
+//
+// The host has to keep ticking through a join: the capture is read under the world
+// lock from the accept goroutine, and the gap the joiner then closes is exactly the
+// ticks the host completed while its world was in transit. A host frozen for the
+// transfer would prove the easy half of it.
+//
+// The pacing is faster than the game interval on purpose. At one tick per 50 ms a
+// loopback transfer finishes inside a single tick and the gap is never there to
+// close; compressing it is the honest stand-in for the slow link or the large world
+// that produces one.
+func tickInBackground(a *App) (stop func()) {
+	done, stopped := make(chan struct{}), make(chan struct{})
+	go func() {
+		defer close(done)
+		for {
+			select {
+			case <-stopped:
+				return
+			default:
+			}
+			a.Tick(1)
+			time.Sleep(joinTestTickInterval) // [wall] a link bound, not a game one
+		}
+	}()
+	return func() {
+		close(stopped)
+		<-done
+	}
+}
+
 // joinAndLeave runs one full join against a live host, returns the tick the guest
 // installed at, and then drops the link.
 func joinAndLeave(t *testing.T, host *App, addr string, seed uint64) uint64 {
 	t.Helper()
-	stop := make(chan struct{})
-	ticking := make(chan struct{})
-	go func() {
-		defer close(ticking)
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			host.Tick(1)
-			time.Sleep(joinTestTickInterval)
-		}
-	}()
+	stopTicking := tickInBackground(host)
 
 	guest, port := mustSocketJoiner(t, addr, seed, 120, 40)
-	close(stop)
-	<-ticking
+	stopTicking()
 
 	installed := uint64(guest.World().Resources.Status.Ints.Get("snapshot.install_tick").Load())
 	waitForRosterPair(t, host, guest)

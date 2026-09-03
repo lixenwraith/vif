@@ -2,7 +2,6 @@ package app
 
 import (
 	"testing"
-	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -489,23 +488,9 @@ func TestAJoinerDiallingMidHandoffIsRefusedAndRetries(t *testing.T) {
 	host.authority.contested = 0
 	host.authority.mu.Unlock()
 
-	stop := make(chan struct{})
-	ticking := make(chan struct{})
-	go func() {
-		defer close(ticking)
-		for {
-			select {
-			case <-stop:
-				return
-			default:
-			}
-			host.Tick(1)
-			time.Sleep(joinTestTickInterval)
-		}
-	}()
+	stopTicking := tickInBackground(host)
 	guest, _ := mustSocketJoiner(t, addr, seed, 120, 40)
-	close(stop)
-	<-ticking
+	stopTicking()
 
 	waitForRosterPair(t, host, guest)
 	if got := guest.localSlot(); got != 1 {

@@ -1,12 +1,12 @@
-// Package app: caller-driven harness.
-//
-// A driven App runs on a ManualClock advanced only by Tick, with no scheduler or
-// event goroutine, so a run is a pure function of its seed, its config, and the
-// injected event sequence. Headless adds no I/O; replay adds a terminal and renderer
-// but takes its geometry from the journal. Close is the caller's responsibility.
+// Caller-driven harness. A driven App runs on a ManualClock advanced only by Tick,
+// with no scheduler or event goroutine, so a run is a pure function of its seed, its
+// config and the injected event sequence. Headless adds no I/O; replay adds a
+// terminal and renderer but takes its geometry from the journal. Close is the
+// caller's responsibility.
 //
 // Driven Apps own recorder triggers, navigation debug state, help bindings and
 // correlation stamps, so several harness runtimes may coexist in one process.
+
 package app
 
 import (

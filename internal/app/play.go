@@ -1,15 +1,9 @@
-// Package app: presented playback.
-//
-// One loop presents any driven stream on a live terminal: a recorded journal, or
-// an authored script. The simulation runs at the stream's own geometry and is
-// advanced only by that stream's driver, so the world is bit-identical to the
-// headless form and the terminal supplies pacing, pan and playback control only.
-// A stream wider than the terminal is clipped by the render buffer today; the pan
-// offset is the seam a windowed composite replaces.
-//
-// A live participant is the one case where the playback controls are refused
-// rather than honoured: pause, step and rate are instance-local, and a scripted
-// host cannot stop or slow only its own copy of a session.
+// Presented playback. One loop presents any driven stream on a live terminal: a
+// recorded journal, or an authored script. The simulation runs at the stream's own
+// geometry and is advanced only by that stream's driver, so the world is
+// bit-identical to the headless form and the terminal supplies pacing, pan and
+// playback control only.
+
 package app
 
 import (
@@ -24,7 +18,6 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
-	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -251,22 +244,7 @@ func (p *player) tickOnce() bool {
 func (p *player) frame() {
 	a := p.a
 	a.ctx.IncrementFrameNumber()
-
-	var (
-		snapTime         engine.TimeResource
-		cursorX, cursorY int
-		cursorValid      bool
-		renderCtx        render.RenderContext
-	)
-	a.world.RunSafe(func() {
-		snapTime.GameTime = a.ctx.TimeCtl.Now()
-		snapTime.RealTime = a.ctx.TimeCtl.RealTime()
-		if pos, ok := a.world.LocalCursor(); ok {
-			cursorX, cursorY, cursorValid = pos.X, pos.Y, true
-		}
-		renderCtx = render.NewRenderContextFromGame(a.ctx, snapTime, cursorX, cursorY, cursorValid)
-	})
-
+	renderCtx := a.renderContext()
 	renderCtx.GameXOffset -= p.panX
 	renderCtx.GameYOffset -= p.panY
 	a.orchestrator.RenderFrame(renderCtx, a.world)
