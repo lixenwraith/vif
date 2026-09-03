@@ -342,6 +342,15 @@ func validateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 		return fmt.Errorf("shard set describes tick %d, the manifest asked about %d", set.Header.Tick, tick)
 	case set.Header.Run != an.Run || set.Header.Session != an.Session || set.Header.Seed != an.Seed:
 		return errors.New("shard set describes another run")
+	case set.Header.Term != an.Term || set.Header.Authority != an.Authority ||
+		set.Header.AuthorityCrossingSeq != an.AuthorityCrossingSeq:
+		// The root intentionally excludes tick-local transport metadata so a
+		// predictor can compare its world with the authority's. The authority and
+		// crossing fence must nevertheless match the manifest: they decide which
+		// queued events a receiver drops. Integrity may differ on a relay because
+		// an equal state can have another dense-store order and recomputed capture
+		// hash while producing the same canonical manifest root.
+		return errors.New("shard set authority header differs from the manifest it answers")
 	case set.Authority != authority:
 		return errors.New("shard set names another authority than the manifest it answers")
 	case set.Root != root:

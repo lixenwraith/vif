@@ -6,9 +6,17 @@ import "github.com/lixenwraith/vi-fighter/internal/core"
 type GameEvent struct {
 	Payload any
 	Type    EventType
-	Seq     uint64      // Monotonic queue slot, stamped at push; orders events within a tick
-	Origin  Origin      // Producer, for journaling and replay; never affects dispatch
-	Domain  core.Domain // Producer domain, for journaling and replication; never affects dispatch
+	Seq     uint64 // Monotonic queue slot, stamped at push; orders events within a tick
+
+	// CrossingSeq is the source-local wire sequence assigned to an ordinary
+	// crossing before its local copy is published. It never leaves this process in
+	// GameEvent form: the wire frame carries its own Seq. The scheduler returns it
+	// to the sink after dispatch so an authoritative capture can say exactly which
+	// locally-first crossings its world already contains.
+	CrossingSeq uint64
+
+	Origin Origin      // Producer, for journaling and replay; never affects dispatch
+	Domain core.Domain // Producer domain, for journaling and replication; never affects dispatch
 }
 
 // EventType represents the type of game event

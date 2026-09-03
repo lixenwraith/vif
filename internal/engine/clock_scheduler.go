@@ -851,6 +851,7 @@ func (cs *ClockScheduler) dispatchOnePass(src string) int {
 		for _, h := range handlers {
 			h.HandleEvent(ev)
 		}
+		cs.world.Resources.Event.Queue.RecordCrossingApplied(ev.CrossingSeq)
 
 		if apmOpen && ev.Origin == event.OriginInput && apmAdmits(ev.Type) {
 			apmWeight += parameter.APMWeightFull

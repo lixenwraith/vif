@@ -59,14 +59,17 @@ func OnWire(ev GameEvent) bool {
 	return !ok || !d.IsDerived()
 }
 
-// WireSink defers crossings into a fixed-delay barrier. Cross returns true only
-// when it took ownership of the event; the queue then neither journals nor publishes
-// the original. Receive admits due local and peer artifacts before the next tick,
-// and Flush closes one production epoch. Cross is non-blocking and may run from any
-// producer; Receive and Flush run under the world lock.
+// WireSink defers crossings into a fixed-delay barrier. Cross returns the
+// source-local wire sequence it assigned and true only when it took ownership of
+// the event; the queue then neither journals nor publishes the original.
+// CrossingApplied closes the ordinary local copy after dispatch. Receive admits
+// due local and peer artifacts before the next tick, and Flush closes one
+// production epoch. Cross is non-blocking and may run from any producer; Receive
+// and Flush run under the world lock.
 type WireSink interface {
 	Receive(nextTick uint64) int
-	Cross(ev GameEvent) bool
+	Cross(ev GameEvent) (sequence uint64, taken bool)
+	CrossingApplied(sequence uint64)
 	Flush(completedTick uint64)
 }
 

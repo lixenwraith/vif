@@ -154,6 +154,121 @@ func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestACorrectionSupersedesAuthorityFramesItAlreadyContains pins the other side
+// of the replay boundary. The authority applies its own ordinary crossings
+// immediately, so a capture can contain a frame whose receive-side ApplyTick is
+// still in the future. Keeping that peer copy after installing the capture makes
+// a remote cursor walk backwards through already-authoritative positions.
+func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		scheduleBeforeCap bool
+	}{
+		{name: "already scheduled", scheduleBeforeCap: true},
+		{name: "arrives after install"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
+			localCursors(t, apps)
+			host, guest := apps[0], apps[1]
+			advance := func() { tickAll(apps) }
+			deliverCorrection(t, host, []*App{guest}, advance)
+
+			before := cursorCell(t, host, 0)
+			inject(t, host, intentMotion(input.MotionRight, 1))
+			first := cursorCell(t, host, 0)
+			if first.X != before.X+1 || first.Y != before.Y {
+				t.Fatalf("the first host motion moved from %v to %v", before, first)
+			}
+
+			// Close the first motion's epoch. In one case the guest drains the
+			// batch before the correction; in the other it remains on the link.
+			host.Tick(1)
+			if tc.scheduleBeforeCap {
+				guest.Tick(1)
+			}
+
+			// This second motion is already in the host's world but its peer copy
+			// remains in the open epoch. The capture therefore stands one cell
+			// beyond the stale frame the guest has, or is about to receive.
+			inject(t, host, intentMotion(input.MotionRight, 1))
+			latest := cursorCell(t, host, 0)
+			if latest.X != first.X+1 || latest.Y != first.Y {
+				t.Fatalf("the second host motion moved from %v to %v", first, latest)
+			}
+			cap, err := host.CaptureShared()
+			if err != nil {
+				t.Fatalf("capture: %v", err)
+			}
+			if cap.Header.Authority != 1 || cap.Header.AuthorityCrossingSeq == 0 {
+				t.Fatalf("capture authority fence = participant %d sequence %d, want participant 1 and a completed crossing",
+					cap.Header.Authority, cap.Header.AuthorityCrossingSeq)
+			}
+			if err := guest.corrections.install(cap); err != nil {
+				t.Fatalf("install tick %d: %v", cap.Header.Tick, err)
+			}
+			if got := cursorCell(t, guest, 0); got != latest {
+				t.Fatalf("correction installed host cursor at %v, want %v", got, latest)
+			}
+
+			// Do not tick the host: the second peer copy must stay unsent. Once
+			// the first copy reaches its nominal ApplyTick, it must not overwrite
+			// the newer position the correction already installed.
+			for range parameter.NetworkBarrierDelayTicks + 1 {
+				guest.Tick(1)
+			}
+			if got := cursorCell(t, guest, 0); got != latest {
+				t.Fatalf("stale authority frame rolled the corrected cursor from %v back to %v", latest, got)
+			}
+		})
+	}
+}
+
+// TestAuthorityCrossingFenceWaitsForDispatch keeps the capture watermark tied to
+// state rather than to transport admission. A crossing may be encoded and queued
+// before the scheduler can acquire the world lock; a capture in that interval
+// must not claim the event it has not applied.
+func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
+	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	host := apps[0]
+
+	before, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture before crossing: %v", err)
+	}
+	cell := cursorCell(t, host, 0)
+	var cursor core.Entity
+	host.World().RunSafe(func() { cursor = host.World().Resources.Player.Slot(0) })
+	host.Context().PushCrossing(event.EventCursorMoveRequest,
+		&event.CursorMoveRequestPayload{Entity: cursor, X: cell.X + 1, Y: cell.Y})
+
+	queued, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture with queued crossing: %v", err)
+	}
+	if got := queued.Header.AuthorityCrossingSeq; got != before.Header.AuthorityCrossingSeq {
+		t.Fatalf("queued crossing advanced authority fence from %d to %d before dispatch",
+			before.Header.AuthorityCrossingSeq, got)
+	}
+	if got := cursorCell(t, host, 0); got != cell {
+		t.Fatalf("queued crossing moved cursor from %v to %v before dispatch", cell, got)
+	}
+
+	host.Settle()
+	applied, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture after dispatch: %v", err)
+	}
+	if got := applied.Header.AuthorityCrossingSeq; got <= queued.Header.AuthorityCrossingSeq {
+		t.Fatalf("dispatched crossing left authority fence at %d, want after %d",
+			got, queued.Header.AuthorityCrossingSeq)
+	}
+	if got := cursorCell(t, host, 0); got.X != cell.X+1 || got.Y != cell.Y {
+		t.Fatalf("dispatched crossing moved cursor from %v to %v", cell, got)
+	}
+}
+
 // TestARewindDoesNotReuseAProductionEpoch covers the other clock carried by a
 // correction. The world tick may move backwards, but a source's wire epochs are a
 // monotonic stream: reusing one makes every peer's replay filter discard the new

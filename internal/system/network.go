@@ -37,17 +37,27 @@ type NetworkSystem struct {
 	epochs          [parameter.MaxPlayers + 1]epochWindow
 	productionEpoch uint64
 	crossSeq        uint64
+	// appliedCrossSeq is the contiguous source-local sequence through which every
+	// ordinary local crossing has completed dispatch. Barrier-bound sequences are
+	// closed when scheduled because snapshots continue to classify those by their
+	// agreed ApplyTick. appliedAhead holds completions that raced an earlier
+	// publisher; a capture may expose only the contiguous prefix.
+	appliedCrossSeq uint64
+	appliedAhead    map[uint64]struct{}
 	localSource     uint32
 	delayTicks      uint64
 	encodeErr       int64
 	barrierActive   atomic.Bool
 
-	// snapshotFloor is the tick of the last world this instance installed. An
-	// installed world has already applied everything due at or before its own tick,
-	// so an artifact arriving for one of those ticks is not a late crossing to
-	// apply — it is a crossing the capture already contains, and applying it again
-	// would double it. Zero on an instance that never installed one.
-	snapshotFloor uint64
+	// snapshotFloor is the tick of the last world this instance installed. For a
+	// peer-authored or barrier-bound frame, ApplyTick still decides whether that
+	// world contains it. The authority's ordinary crossings are local-first, so
+	// their exact boundary is instead snapshotAuthoritySeq: a capture may already
+	// contain one while its receive-side ApplyTick is still in the future.
+	// Zero on an instance that never installed one.
+	snapshotFloor        uint64
+	snapshotAuthority    uint32
+	snapshotAuthoritySeq uint64
 
 	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
 
@@ -84,6 +94,7 @@ type NetworkSystem struct {
 	statDriftPart      *status.AtomicString
 	statDriftTick      *atomic.Int64
 	statPreInstall     *atomic.Int64
+	statSuperseded     *atomic.Int64
 	statAgreedRestored *atomic.Int64
 	statJoinLag        *atomic.Int64
 	statLag            *atomic.Int64
@@ -322,6 +333,7 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statDriftPart = s.textStat(reg, "network.drift_part")
 	s.statDriftTick = s.intStat(reg, "network.drift_tick")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
+	s.statSuperseded = s.intStat(reg, "network.artifacts_authority_superseded")
 	s.statAgreedRestored = s.intStat(reg, "network.artifacts_restored")
 	s.statJoinLag = s.intStat(reg, "network.join_lag_ticks")
 	s.statLag = s.intStat(reg, "network.lag_ticks")
@@ -378,8 +390,12 @@ func (s *NetworkSystem) Init() {
 	s.agreed = s.agreed[:0]
 	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
 	s.snapshotFloor = 0
+	s.snapshotAuthority = 0
+	s.snapshotAuthoritySeq = 0
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
 	s.crossSeq = 0
+	s.appliedCrossSeq = 0
+	s.appliedAhead = make(map[uint64]struct{})
 	s.localSource = 0
 	s.delayTicks = parameter.NetworkBarrierDelayTicks
 	if r := s.world.Resources.Network; r != nil {
@@ -495,11 +511,12 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 }
 
-// Cross encodes and schedules a crossing when a peer is live. Returning true
-// transfers queue ownership; pooled originals are released after encoding.
-func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
+// Cross encodes and schedules a crossing when a peer is live. The sequence it
+// returns follows the ordinary local copy through dispatch; returning taken=true
+// transfers queue ownership, and pooled originals are released after encoding.
+func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) {
 	if !s.barrierActive.Load() {
-		return false
+		return 0, false
 	}
 	frame, encErr := event.NewWireFrame(ev)
 	s.mu.Lock()
@@ -507,7 +524,7 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 		s.encodeErr++
 		s.mu.Unlock()
 		event.ReleaseDeferredPayload(ev.Payload)
-		return true
+		return 0, true
 	}
 	s.crossSeq++
 	frame.Seq = s.crossSeq
@@ -518,6 +535,11 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 		s.scheduled = append(s.scheduled, barrierArtifact{
 			frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
 		})
+		// A barrier-bound sequence does not participate in the authority's
+		// local-first capture fence. Close its position now so it cannot leave a
+		// permanent hole in the ordinary sequence prefix; its effect remains
+		// classified by ApplyTick on every instance.
+		s.closeAppliedCrossingLocked(frame.Seq)
 	} else {
 		// Retained for replay: this is the artifact the queue is about to publish
 		// here and now, and the one a correction rebasing this instance onto an
@@ -528,27 +550,71 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) bool {
 	if agreed {
 		event.ReleaseDeferredPayload(ev.Payload)
 		s.statDeferred.Add(1)
-		return true
+		return frame.Seq, true
 	}
 	s.statLocalNow.Add(1)
 
 	// Ownership is *not* taken: the queue publishes this artifact now, in the tick
 	// that produced it, and what was scheduled above is only the copy the peers get.
 	//
-	// This is Phase 4's requirement 5 and it is the point where D-3 changes its
-	// destination. A crossing used to be a fact every instance applied at one agreed
-	// tick, which meant the producer waited for its own action as long as everyone
-	// else did — a playout lead's worth of latency charged to the one participant
-	// who did not need it. It is a *request to the authority* now: the producer
-	// applies it immediately, the host applies it in its own order, and the
-	// difference between the two is what the next correction repairs. On the host
-	// that difference is nothing, because the host is the authority.
+	// D-3 makes this a request to the authority: the producer applies it
+	// immediately, the host applies it in its own order, and the next correction
+	// repairs any difference. On the host that difference is nothing because the
+	// host is the authority.
 	//
 	// The receive side keeps the lead, and keeps it for a different reason: it is
 	// an interpolation buffer that lets a remote participant's artifacts arrive out
 	// of order and still be applied in one. Nothing about that is a barrier on this
 	// instance's own input.
-	return false
+	return frame.Seq, false
+}
+
+// CrossingApplied closes the source-local sequence of an ordinary crossing once
+// its local copy has run through every handler. A correction capture reads only
+// the contiguous prefix: a producer that assigned an earlier sequence but has
+// not published it yet cannot make the capture claim that event's effect.
+func (s *NetworkSystem) CrossingApplied(sequence uint64) {
+	if sequence == 0 {
+		return
+	}
+	s.mu.Lock()
+	s.closeAppliedCrossingLocked(sequence)
+	s.mu.Unlock()
+}
+
+// closeAppliedCrossingLocked advances the contiguous applied prefix, retaining
+// completions that arrived ahead of a lower sequence until the gap closes.
+// Caller MUST hold mu.
+func (s *NetworkSystem) closeAppliedCrossingLocked(sequence uint64) {
+	if sequence <= s.appliedCrossSeq {
+		return
+	}
+	if sequence != s.appliedCrossSeq+1 {
+		if s.appliedAhead == nil {
+			s.appliedAhead = make(map[uint64]struct{})
+		}
+		s.appliedAhead[sequence] = struct{}{}
+		return
+	}
+	s.appliedCrossSeq = sequence
+	for {
+		next := s.appliedCrossSeq + 1
+		if _, ok := s.appliedAhead[next]; !ok {
+			return
+		}
+		delete(s.appliedAhead, next)
+		s.appliedCrossSeq = next
+	}
+}
+
+// LocalAppliedCrossingSequence returns this source's identity and the largest
+// contiguous wire sequence whose ordinary local effects a capture of the current
+// world contains. It is read under the world lock by CaptureShared, so no
+// completed dispatcher can move the world without moving this fence with it.
+func (s *NetworkSystem) LocalAppliedCrossingSequence() (uint32, uint64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.localSource, s.appliedCrossSeq
 }
 
 // barrierBound names the artifacts that must still apply at one agreed tick on
@@ -655,13 +721,12 @@ const maxAgreedRetained = 2*parameter.MaxPlayers + 1
 // LocalReplaySuffix returns this instance's own crossings whose authoritative
 // apply tick is after the correction's baseline, in session application order.
 //
-// ApplyTick is the barrier's membership test everywhere else: a capture at T has
-// applied everything due at or before T and cannot contain anything due after T.
-// This includes an artifact produced at or before T but still inside the playout
-// lead. Replaying every record with ApplyTick > T therefore restores exactly what
-// the install undid and cannot double an effect the capture already carries.
-// Production ticks still bound the retained window; they do not decide membership
-// in one capture.
+// ApplyTick is the current membership boundary for this receiver's own suffix: a
+// crossing still inside the receive lead is replayed even when its production
+// epoch is at or before T. Authority-local crossings are deliberately not covered
+// by this method; a capture classifies those through AuthorityCrossingSeq because
+// their local copy ran before the remote ApplyTick. Production ticks still bound
+// the retained window; they do not decide membership in one capture.
 //
 // ok is false when retention has dropped a record the suffix would need. The
 // caller then installs the authority alone and reports that replay was skipped;
@@ -732,21 +797,24 @@ func (s *NetworkSystem) refreshLink(p engine.NetworkPort) bool {
 // epoch does not: peers use it as a monotonic replay key and would reject a new
 // batch sent under an epoch they admitted before the correction. A rewound source
 // therefore keeps its next unsent epoch and buffers new crossings until the world
-// catches it. Artifacts already due at or before the installed tick are dropped,
-// because the capture is authoritative there. And the floor is remembered, so
-// artifacts still in flight for those ticks are recognised as already applied
-// rather than applied twice.
+// catches it. Peer and barrier-bound artifacts already due at or before the
+// installed tick are dropped. An ordinary artifact produced by the authority is
+// different: it was applied locally first, so the capture's explicit authority
+// sequence — not its receive-side ApplyTick — says whether the installed world
+// already contains it. Both boundaries are remembered so an artifact still in
+// flight is classified the same way when it arrives.
 //
 // Caller MUST hold updateMutex: it runs inside the install.
-func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
+func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, authoritySequence uint64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.snapshotFloor = tick
+	s.snapshotAuthority = authority
+	s.snapshotAuthoritySeq = authoritySequence
 	// A local crossing may have been accepted between the last tick close and this
-	// install. If its apply tick is still ahead of the capture, the authority cannot
-	// contain it and dropping the pending wire copy would leave only a local replay:
-	// the next correction would erase it permanently. Keep that copy alongside the
-	// retained suffix; only an artifact whose deadline the authority has reached is
-	// superseded by the capture.
+	// install. For the receiver's own non-authority stream, a copy whose apply tick
+	// is still ahead of the capture remains outstanding. Dropping it would leave
+	// only a local replay and let a later correction erase the action permanently.
 	pending := s.crossings[:0]
 	pendingDropped := 0
 	for _, f := range s.crossings {
@@ -761,19 +829,23 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 		s.statDrop.Add(int64(pendingDropped))
 	}
 	keep := s.scheduled[:0]
-	dropped := 0
+	dropped, superseded := 0, 0
 	for _, a := range s.scheduled {
-		if a.applyTick <= tick {
+		contained, byAuthority := s.snapshotContainsLocked(a)
+		if contained {
 			dropped++
+			if byAuthority {
+				superseded++
+			}
 			continue
 		}
 		keep = append(keep, a)
 	}
 	s.scheduled = keep
-	// The retained suffix is pruned by the barrier's membership test: the installed
-	// world contains an artifact exactly when its authoritative apply tick is at or
-	// before the capture tick. A record produced earlier but still inside the
-	// playout lead remains necessary and must survive this rebase.
+	// The retained local suffix uses its agreed apply tick. A record produced
+	// earlier but still inside the playout lead remains necessary and survives this
+	// rebase. Authority-local receive copies use snapshotContainsLocked instead and
+	// never enter this suffix on a guest.
 	pruned := s.suffix[:0]
 	s.suffixBytes = 0
 	for _, rec := range s.suffix {
@@ -802,7 +874,6 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 	if len(restored) > 0 {
 		s.statAgreedRestored.Add(int64(len(restored)))
 	}
-	s.snapshotFloor = tick
 	// Production epochs are source-local replay keys, not captured world state.
 	// Moving this high-water mark backwards makes the receiver discard a genuinely
 	// new batch as a duplicate. A forward install can skip empty unsent epochs, but
@@ -818,6 +889,34 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64) {
 	if dropped > 0 {
 		s.statPreInstall.Add(int64(dropped))
 	}
+	if superseded > 0 {
+		s.statSuperseded.Add(int64(superseded))
+	}
+	if dropped > 0 || pendingDropped > 0 {
+		vlog.Debug("app", "msg", "snapshot pruned crossings",
+			"tick", tick, "authority", authority, "authority_seq", authoritySequence,
+			"scheduled", dropped, "authority_superseded", superseded,
+			"pending_local", pendingDropped)
+	}
+}
+
+// snapshotContainsLocked reports whether the last installed capture already
+// contains an artifact, and whether the authority sequence (rather than the tick
+// floor) proved it.
+//
+// The authority's ordinary local-first stream is deliberately handled before the
+// tick test. A frame it had not dispatched when it took the capture is absent even
+// when scheduler delay made its nominal ApplyTick old. Barrier-bound authority
+// frames and every other source retain the agreed ApplyTick boundary.
+// Caller MUST hold mu.
+func (s *NetworkSystem) snapshotContainsLocked(a barrierArtifact) (contained, byAuthority bool) {
+	if s.snapshotAuthority != 0 && a.source == s.snapshotAuthority {
+		if et, ok := event.GetEventType(a.frame.Event); ok && !barrierBound(et) {
+			contained = a.frame.Seq <= s.snapshotAuthoritySeq
+			return contained, contained
+		}
+	}
+	return a.applyTick <= s.snapshotFloor, false
 }
 
 // DrainPeers translates whatever the transport is holding without advancing a tick.
@@ -993,8 +1092,8 @@ func (s *NetworkSystem) drain(p engine.NetworkPort) int {
 }
 
 // DrainOffTick translates what the endpoint already holds without the poll
-// counting as a tick, so a Phase 6 manifest, request or repair is acted on at the
-// tick it describes rather than at the next one.
+// counting as a tick, so a manifest, request or repair is acted on at the tick it
+// describes rather than at the next one.
 //
 // Caller MUST hold updateMutex.
 func (s *NetworkSystem) DrainOffTick() {
@@ -1494,16 +1593,10 @@ func (s *NetworkSystem) recordStateDigest(local stateDigest) {
 // compareStateDigest folds one peer's sample against this instance's own at the
 // same tick, and records the difference as a *gauge* rather than as a verdict.
 //
-// This is where D-11's weakening lands in the runtime. Before Phase 4 a
-// disagreement was a fault: both instances re-derived the shared world from one
-// artifact stream, so if they disagreed one of them had lost an artifact and
-// nothing would ever re-derive it — DESYNC after two samples, DIVERGED after five,
-// and the session was over. Under an authority none of that holds. A guest applies
-// its own input immediately and extrapolates between corrections, so it is
-// *expected* to differ from the host, and the difference is repaired on a cadence
-// rather than mourned. The counter and the part name survive because they are still
-// the cheapest description of where two instances stand apart; the escalation does
-// not, because there is nothing left for it to be right about.
+// This is where D-11's live contract lands in the runtime. A guest applies its own
+// input immediately and extrapolates between corrections, so it is expected to
+// differ from the host. The counter and part name cheaply describe where two
+// instances stand apart; authority corrections, not a terminal verdict, close it.
 //
 // What replaced it is two numbers with better claims: the correction magnitude,
 // which says how far apart the two actually were at the moment the authority
@@ -1563,24 +1656,36 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 
 	s.mu.Lock()
 	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
-	installed := 0
+	installed, superseded := 0, 0
+	authoritySequence := s.snapshotAuthoritySeq
 	if admitted {
 		for _, f := range batch.Frames {
-			// Everything due at or before the installed world's tick is already in
-			// it. The epoch is still admitted, so the relay and the duplicate
-			// window stay coherent for the peers that did not install one.
-			if f.ApplyTick <= s.snapshotFloor {
+			a := barrierArtifact{
+				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
+			}
+			// The epoch is still admitted when its artifact is already in the
+			// installed world, so relay and duplicate suppression stay coherent for
+			// peers that did not install that capture.
+			contained, byAuthority := s.snapshotContainsLocked(a)
+			if contained {
 				installed++
+				if byAuthority {
+					superseded++
+				}
 				continue
 			}
-			s.scheduled = append(s.scheduled, barrierArtifact{
-				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
-			})
+			s.scheduled = append(s.scheduled, a)
 		}
 	}
 	s.mu.Unlock()
 	if installed > 0 {
 		s.statPreInstall.Add(int64(installed))
+	}
+	if superseded > 0 {
+		s.statSuperseded.Add(int64(superseded))
+		vlog.Debug("app", "msg", "snapshot refused stale authority crossings",
+			"source", batch.Source, "produced_tick", batch.ProducedTick,
+			"authority_seq", authoritySequence, "superseded", superseded)
 	}
 
 	if !admitted {
@@ -1699,8 +1804,8 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 //
 // Everything past this — a guest attributing a crossing to another participant's
 // cursor, a peer replaying an artifact it never produced — is an *authentication*
-// question rather than an authority one, and this plan puts authentication in
-// Phase 6, before anything beyond trusted peers.
+// question rather than an authority one. Sessions remain limited to trusted peers
+// until authentication is implemented.
 func (s *NetworkSystem) admissibleFromSource(et event.EventType, source uint32) bool {
 	switch et {
 	case event.EventParticipantJoined, event.EventParticipantDeparted:
@@ -1751,8 +1856,8 @@ func (s *NetworkSystem) publishBarrierTelemetry(nextTick uint64, p engine.Networ
 	}
 }
 
-// publishStaleness reports how far behind the session this instance stands, every
-// tick, which is the measurement Phase 3 took once at admission and never again.
+// publishStaleness reports how far behind the session this instance stands on
+// every tick.
 //
 // resumeJoinedSession closes the gap a transfer opens and refuses a join it cannot
 // close — and then nothing looked at it for the rest of the run, so a participant

@@ -39,8 +39,12 @@ func NewEventQueue() *EventQueue {
 // Push adds event using lock-free CAS with published flags pattern
 // Safe for concurrent producers. O(1) amortized
 func (eq *EventQueue) Push(ev GameEvent) {
-	if w := eq.wire.Load(); w != nil && OnWire(ev) && w.sink.Cross(ev) {
-		return
+	if w := eq.wire.Load(); w != nil && OnWire(ev) {
+		sequence, taken := w.sink.Cross(ev)
+		if taken {
+			return
+		}
+		ev.CrossingSeq = sequence
 	}
 	eq.publish(ev)
 }
@@ -189,6 +193,19 @@ func (eq *EventQueue) RecordDispatch(t EventType, dead bool) {
 	eq.dispatched[t].Add(1)
 	if dead {
 		eq.deadLetter[t].Add(1)
+	}
+}
+
+// RecordCrossingApplied tells the current wire sink that the locally published
+// copy of one ordinary crossing has run through every handler. A zero sequence is
+// not a crossing, and a sink swap between publication and dispatch is harmless:
+// one world owns one NetworkSystem for its lifetime.
+func (eq *EventQueue) RecordCrossingApplied(sequence uint64) {
+	if sequence == 0 {
+		return
+	}
+	if w := eq.wire.Load(); w != nil {
+		w.sink.CrossingApplied(sequence)
 	}
 }
 

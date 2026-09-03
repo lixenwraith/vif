@@ -20,7 +20,7 @@ import (
 // SnapshotSchema is the capture layout's version. It is not the journal's schema:
 // the two describe different things and change for different reasons, and a
 // capture names both so a mismatch says which one moved.
-const SnapshotSchema = 2
+const SnapshotSchema = 3
 
 // SharedCapture is a complete description of the shared world at one tick (D-19).
 //
@@ -200,6 +200,14 @@ type CaptureHeader struct {
 	Term      network.AuthorityTerm `json:"term,omitempty"`
 	Authority uint32                `json:"authority,omitempty"`
 
+	// AuthorityCrossingSeq is the source-local sequence through which the
+	// authority had completed its ordinary local-first crossings when this world
+	// was read. Their receive-side ApplyTick may still be in the future, so this
+	// fence — rather than the capture tick — tells a receiver which queued copies
+	// the capture already contains. Barrier-bound crossings continue to use their
+	// agreed ApplyTick. Zero before the authority has applied its first crossing.
+	AuthorityCrossingSeq uint64 `json:"authority_crossing_seq,omitempty"`
+
 	// Integrity is a hash over the capture's body. It answers "did this arrive
 	// intact", which is a different question from "does this describe my build",
 	// and both have to be answered before an install writes anything.
@@ -225,8 +233,10 @@ type SystemStateRecord struct {
 // from one tick beside a stream position from the next.
 func (a *App) CaptureShared() (SharedCapture, error) {
 	var (
-		cap SharedCapture
-		err error
+		cap                     SharedCapture
+		err                     error
+		crossSource             uint32
+		appliedCrossingSequence uint64
 	)
 	a.world.RunSafe(func() {
 		cap.World = a.world.CaptureSharedWorld()
@@ -234,35 +244,49 @@ func (a *App) CaptureShared() (SharedCapture, error) {
 		cap.FSM = a.scheduler.ExportFSM()
 		cap.Status = a.captureStatusLocked()
 		cap.Systems, err = a.captureSystemStatesLocked()
+		for _, sys := range a.world.Systems() {
+			if fence, ok := sys.(interface {
+				LocalAppliedCrossingSequence() (uint32, uint64)
+			}); ok {
+				crossSource, appliedCrossingSequence = fence.LocalAppliedCrossingSequence()
+				break
+			}
+		}
+
+		// The header's tick and crossing fence are part of the world reading,
+		// not labels added afterwards. Reading them under the same lock prevents
+		// a tick or a just-dispatched host input from falling between the body and
+		// the boundary that tells receivers what the body contains.
+		st := a.Position()
+		reg := a.world.Resources.Status
+		cfg := a.world.Resources.Config
+		term, holder := a.authorityStamp()
+		cap.Header = CaptureHeader{
+			Term:          term,
+			Authority:     holder,
+			Schema:        SnapshotSchema,
+			JournalSchema: uint64(event.JournalSchema),
+			Run:           st.Run,
+			Tick:          st.Tick,
+			TickInterval:  parameter.GameUpdateInterval,
+			Seed:          a.world.Resources.Rand.Root(),
+			Session:       a.world.Resources.Rand.Session(),
+			ConfigID:      resolveConfigID(a.cfg),
+			ContentID:     reg.Strings.Get("content.source").Load(),
+			ContentFiles:  uint64(reg.Ints.Get("content.files").Load()),
+			ContentBlocks: uint64(reg.Ints.Get("content.blocks").Load()),
+			ContentLines:  uint64(reg.Ints.Get("content.lines").Load()),
+			MapWidth:      cfg.MapWidth,
+			MapHeight:     cfg.MapHeight,
+		}
+		if holder != 0 && crossSource == holder {
+			cap.Header.AuthorityCrossingSeq = appliedCrossingSequence
+		}
 	})
 	if err != nil {
 		return SharedCapture{}, err
 	}
-
-	st := a.Position()
-	reg := a.world.Resources.Status
-	term, holder := a.authorityStamp()
-	cap.Header = CaptureHeader{
-		Term:          term,
-		Authority:     holder,
-		Schema:        SnapshotSchema,
-		JournalSchema: uint64(event.JournalSchema),
-		Run:           st.Run,
-		Tick:          st.Tick,
-		TickInterval:  parameter.GameUpdateInterval,
-		Seed:          a.world.Resources.Rand.Root(),
-		Session:       a.world.Resources.Rand.Session(),
-		ConfigID:      resolveConfigID(a.cfg),
-		ContentID:     reg.Strings.Get("content.source").Load(),
-		ContentFiles:  uint64(reg.Ints.Get("content.files").Load()),
-		ContentBlocks: uint64(reg.Ints.Get("content.blocks").Load()),
-		ContentLines:  uint64(reg.Ints.Get("content.lines").Load()),
-	}
 	cap.Header.ContentPin = service.MustGet[*service.ContentService](a.hub, "content").Pin()
-	a.world.RunSafe(func() {
-		cfg := a.world.Resources.Config
-		cap.Header.MapWidth, cap.Header.MapHeight = cfg.MapWidth, cfg.MapHeight
-	})
 
 	cap.Header.Integrity, err = captureIntegrity(cap)
 	if err != nil {
@@ -437,9 +461,10 @@ func (a *App) writeShared(cap SharedCapture, reconcile bool) (engine.WorldDiffer
 			return
 		}
 
-		// The barrier is rebased with the world: an installed world has applied
-		// everything due at or before its tick, and produces its next epoch from it.
-		a.adoptSnapshotBarrierLocked(cap.Header.Tick)
+		// The barrier is rebased with the world. Tick classifies peer and
+		// barrier-bound artifacts; the completed authority sequence classifies the
+		// authority's local-first stream.
+		a.adoptSnapshotBarrierLocked(cap.Header)
 
 		// Last, so a carrier that publishes on load does not overwrite the
 		// captured surface with a value derived from this instance's own history.
@@ -448,12 +473,15 @@ func (a *App) writeShared(cap SharedCapture, reconcile bool) (engine.WorldDiffer
 	return diff, err
 }
 
-// adoptSnapshotBarrierLocked tells the crossing barrier which tick the world it now
-// holds was taken at. Caller MUST hold updateMutex.
-func (a *App) adoptSnapshotBarrierLocked(tick uint64) {
+// adoptSnapshotBarrierLocked tells the crossing barrier which world it now holds:
+// the tick boundary for peer/barrier artifacts and the authority's exact local-
+// first sequence fence. Caller MUST hold updateMutex.
+func (a *App) adoptSnapshotBarrierLocked(header CaptureHeader) {
 	for _, sys := range a.world.Systems() {
-		if b, ok := sys.(interface{ AdoptSnapshot(uint64) }); ok {
-			b.AdoptSnapshot(tick)
+		if b, ok := sys.(interface {
+			AdoptSnapshot(uint64, uint32, uint64)
+		}); ok {
+			b.AdoptSnapshot(header.Tick, header.Authority, header.AuthorityCrossingSeq)
 		}
 	}
 }

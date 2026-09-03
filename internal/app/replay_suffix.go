@@ -4,10 +4,8 @@
 // A correction describes the host's world at tick T. A guest applying one is
 // standing somewhere past T — it has been predicting — and what it produced in
 // between is real: the keystrokes that typed a gold sequence, the shots that were
-// fired, the cursor motion a player watched happen. Phase 5 discarded all of it on
-// every correction and let the next one bring the host's version back, which is
-// what made a fast sequence of local actions feel like it was being undone and
-// re-done.
+// fired, the cursor motion a player watched happen. Discarding that suffix lets a
+// correction undo a fast sequence and the receive schedule re-do it later.
 //
 // This is the repair. Three rules make it exact rather than approximate:
 //
@@ -19,13 +17,11 @@
 //     artifact's apply tick and the apply tick is what decides whether the
 //     correction already contains it.
 //
-//   - **One membership test, and it is the barrier's.** An artifact whose apply
-//     tick is at or before the installed world's tick is *in* that world — the
-//     same test AdoptSnapshot drops a scheduled copy by, and the same one
-//     scheduleCrossings drops an inbound copy by. Everything after it is not. So
-//     the replayed set is exactly what the install undid: no artifact can be both
-//     replayed and already present, which is what makes "exactly once" a property
-//     of the construction rather than of a deduplication pass.
+//   - **One local-suffix membership test.** A guest replays its own artifacts
+//     whose agreed apply tick is after the installed world's tick. Authority-local
+//     artifacts are the asymmetric case: the host applied them immediately, so
+//     AdoptSnapshot and scheduleCrossings classify those by the capture header's
+//     completed authority sequence instead.
 //
 //   - **No partial answer.** Retention is bounded by tick span, record count and
 //     bytes, and dropping a record the suffix would need makes the suffix
