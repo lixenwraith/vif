@@ -33,6 +33,7 @@ reader can start with the application shape and then descend into a subsystem.
 | [Services and networking](services-and-networking.md) | Domain detail | How are I/O resources managed, and how do startup sessions, framing, polling, and disconnect work? |
 | [External filesystem layout](filesystem-layout.md) | Operational detail | Where are config, content, logs, and journals discovered, installed, and migrated? |
 | [Development and operations](development.md) | Operational detail | How is the project built, generated, tested, diagnosed, and deployed on native and WASM targets? |
+| [Kubernetes fleet feasibility](kubernetes-fleet.md) | Operational detail | Can `-serve` run as a fleet of headless dedicated-server pods, what must change first, and what is the per-process memory ceiling? |
 
 Existing focused references remain useful:
 
