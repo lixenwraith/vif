@@ -91,7 +91,10 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
 - `-serve <bind-address>` runs a dedicated host: no terminal, no renderer, no
   audio and no cursor of its own. It starts on its first guest and admits the rest
   as they arrive, where `-players <n>` is a ceiling rather than a requirement.
-  `-size <WxH>` gives it the geometry it has no terminal to derive.
+  `-size <WxH>` gives it the geometry it has no terminal to derive; without it the
+  first guest's terminal sizes the session.
+- `-probe <bind-address>` serves liveness, readiness and Prometheus metrics for a
+  `-serve` run, and `-log-stdout` writes the session log to stdout as JSON.
 - `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
   and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.

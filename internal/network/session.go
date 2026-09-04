@@ -48,7 +48,27 @@ func (o SessionOffer) CarriesSnapshot() bool { return o.SnapshotBytes > 0 }
 
 type sessionReply struct {
 	Error string `json:"error,omitempty"`
+
+	// The joiner's own terminal-equivalent geometry, sent with its acceptance. It
+	// is advisory and arrives after the joiner has built its world, so it can only
+	// inform what the coordinator does next — not what it has already done.
+	Width  int `json:"width,omitempty"`
+	Height int `json:"height,omitempty"`
 }
+
+// JoinerReport is what a joining participant tells the coordinator about itself.
+//
+// A dedicated host has no terminal to derive a map from and would otherwise serve
+// the default one, so the first guest's geometry is the only real number the
+// session ever sees. It is advisory: a participant that reports nothing is one the
+// coordinator sizes without, and a coordinator that was given a size ignores it.
+type JoinerReport struct {
+	Width  int
+	Height int
+}
+
+// Sized reports whether this report names a usable geometry.
+func (r JoinerReport) Sized() bool { return r.Width > 0 && r.Height > 0 }
 
 // Validate rejects transport-level ambiguity before App.Join checks identity.
 func (o SessionOffer) Validate() error {
@@ -110,6 +130,11 @@ func (o SessionOffer) Participant(id PeerID) (SessionParticipant, bool) {
 type Coordinator struct {
 	Assign  func() (SessionOffer, error)
 	Release func(PeerID)
+
+	// Report carries what a joiner said about itself once its acceptance arrives.
+	// It runs after Assign and only for a handshake that completed, so what it
+	// describes is a participant the session actually holds.
+	Report func(PeerID, JoinerReport)
 
 	// Admit is the one decision made about a dialer before it costs the session
 	// anything. Assign allocates an identity and a roster slot, and on a host that
@@ -177,6 +202,9 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		if reply.Error != "" {
 			err = errors.New(reply.Error)
 			return 0, err
+		}
+		if c.Report != nil {
+			c.Report(o.Assigned, JoinerReport{Width: reply.Width, Height: reply.Height})
 		}
 		return o.Assigned, nil
 	}
@@ -374,7 +402,9 @@ func (p *PendingJoin) TransportConfig() *Config {
 }
 
 // Complete returns a rejection unchanged or admits the stream for the start gate.
-func (p *PendingJoin) Complete(joinErr error) error {
+// The report travels with the acceptance and is ignored on a rejection, which
+// carries no participant to describe.
+func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 	if p.replied {
 		return errors.New("join handshake already completed")
 	}
@@ -382,6 +412,8 @@ func (p *PendingJoin) Complete(joinErr error) error {
 	reply := sessionReply{}
 	if joinErr != nil {
 		reply.Error = joinErr.Error()
+	} else {
+		reply.Width, reply.Height = report.Width, report.Height
 	}
 	body, err := json.Marshal(reply)
 	if err == nil {

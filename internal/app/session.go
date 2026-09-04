@@ -8,6 +8,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 
 	"github.com/lixenwraith/terminal"
@@ -67,6 +68,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 		Assign:  a.assignParticipant,
 		Release: a.releaseParticipant,
 		Admit:   a.admissions.admit,
+		Report:  a.noteJoinerReport,
 	}, netCfg.ConnectTimeout)
 	if a.cfg.Mode.Serves() {
 		// A dedicated host outlives its guests, so it admits a dial after the lobby
@@ -129,6 +131,75 @@ func (a *App) lobbyQuorum() int {
 	return a.sessionCapacity()
 }
 
+// localGeometry is this instance's terminal-equivalent size, as the coordinator
+// would want to hear it: the terminal's own on a run that has one, the configured
+// size on a run that does not.
+func (a *App) localGeometry() network.JoinerReport {
+	return network.JoinerReport{Width: a.ctx.Width, Height: a.ctx.Height}
+}
+
+// noteJoinerReport keeps the first geometry a guest reported. First rather than
+// smallest, and the difference is the mid-run gate: guests arrive throughout the
+// run, so "smallest" would mean shrinking the map under participants already
+// playing on it — which D-14 forbids for the same reason a terminal may not crop a
+// shared map. First is a number the session can commit to before it starts.
+func (a *App) noteJoinerReport(_ network.PeerID, report network.JoinerReport) {
+	if !report.Sized() {
+		return
+	}
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	if !a.firstJoiner.Sized() {
+		a.firstJoiner = report
+	}
+}
+
+// adoptLobbyGeometry sizes a dedicated host's map from its first guest.
+//
+// A server has no terminal, so without this it serves whatever Config.Normalize
+// defaulted to — 80x24, which is a 77x21 map that every guest then adopts however
+// large its own terminal is. The operator's -size still wins where it was given;
+// this is only for the case where nobody said.
+//
+// It runs before the roster closes, so the bounds it produces are the ones the
+// offer names, the tick-zero capture contains, and every later guest adopts. A
+// scenario that fixes its own map (crop off) is left alone: those bounds are the
+// scenario's statement, not a stand-in for a terminal nobody has.
+func (a *App) adoptLobbyGeometry() {
+	if !a.cfg.Mode.Serves() || !a.cfg.geometryDefaulted {
+		return
+	}
+	a.sessionMu.Lock()
+	report := a.firstJoiner
+	a.sessionMu.Unlock()
+	if !report.Sized() || !engine.ViewportFits(report.Width, report.Height) {
+		return
+	}
+	if report.Width == a.ctx.Width && report.Height == a.ctx.Height {
+		return
+	}
+
+	var crop bool
+	a.world.RunSafe(func() { crop = a.world.Resources.Config.CropOnResize })
+	if !crop {
+		return
+	}
+
+	// Through the two authorities rather than by writing Config: the resize is what
+	// moves this instance's viewport, and the level setup is what moves the shared
+	// map (D-14). Both are recorded events, so a replay of this run reaches the
+	// same bounds the same way.
+	a.Resize(report.Width, report.Height)
+	var vw, vh int
+	a.world.RunSafe(func() {
+		cfg := a.world.Resources.Config
+		vw, vh = cfg.ViewportWidth, cfg.ViewportHeight
+	})
+	a.SetupLevel(vw, vh, false, true)
+	vlog.Info("app", "msg", "session sized from its first guest",
+		"terminal_w", report.Width, "terminal_h", report.Height, "map_w", vw, "map_h", vh)
+}
+
 // hostSlot is the roster slot this instance takes for itself: the first one on an
 // ordinary host, and none at all on a dedicated one.
 func (a *App) hostSlot() uint8 {
@@ -147,7 +218,7 @@ func newJoiningApp(cfg Config) (*App, error) {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
 	}
 	reject := func(cause error) (*App, error) {
-		_ = pending.Complete(cause)
+		_ = pending.Complete(cause, network.JoinerReport{})
 		_ = pending.Close()
 		return nil, cause
 	}
@@ -168,11 +239,14 @@ func newJoiningApp(cfg Config) (*App, error) {
 	// position is deliberately not checked — the gate carries the host's world, so
 	// what tick it has reached is no longer this instance's problem to reproduce.
 	if err := a.JoinAt(offer.Anchor); err != nil {
-		_ = pending.Complete(err)
+		_ = pending.Complete(err, network.JoinerReport{})
 		a.Close()
 		return nil, err
 	}
-	if err := pending.Complete(nil); err != nil {
+	// Reported after construction, which is the whole reason the acceptance carries
+	// it rather than the dial: only now does this instance know the terminal it
+	// got. A host with no geometry of its own uses it to size the session.
+	if err := pending.Complete(nil, a.localGeometry()); err != nil {
 		a.Close()
 		return nil, fmt.Errorf("join reply: %w", err)
 	}
@@ -338,6 +412,10 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 		func() bool { return port.PeerCount() >= quorum }); err != nil {
 		return err
 	}
+
+	// Before the roster closes, so the bounds this produces are the ones the offer
+	// names and the tick-zero capture carries.
+	a.adoptLobbyGeometry()
 
 	a.lobbyClosing.Store(true)
 	offer, err := a.hostOffer()

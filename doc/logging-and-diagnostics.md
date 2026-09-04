@@ -719,10 +719,20 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 | `-host <bind-address>` | Host a TCP session |
 | `-join <host:port>` | Join a session and adopt the host anchor before world construction |
 | `-serve <bind-address>` | Host a TCP session with no terminal and no local cursor |
+| `-probe <bind-address>` | Serve liveness, readiness and metrics for a `-serve` run |
+| `-log-stdout` | Write the session log to stdout as JSON; implies `-l` |
 | `-players <n>` | Participants a `-host` lobby waits for, itself included; with `-serve`, a ceiling on guests |
 
-Log setup failure is non-fatal: the game runs unlogged and the process exits
-with `73` (`EX_CANTCREAT`) so a script can detect it.
+Log setup failure is **fatal**: a run that was asked to log and could not exits
+immediately with `73` (`EX_CANTCREAT`). It used to play the whole session unlogged
+and report the failure at exit, which for a supervised process is a silent
+failure — the record it was started to produce is the thing that went missing.
+
+`-log-stdout` writes the session log to stdout as JSON instead of to a file, and
+implies `-l`. The two sinks are exclusive: a run that wants its log on stdout is
+one whose filesystem is not where anybody will look, and a console write into a
+run that owns the alternate screen is corruption rather than output — so it stays
+off by default and belongs to runs with no terminal.
 
 At the `app.Config` boundary, zero means "use the parameter default" while a
 negative `StatTicks`/`RecTicks` means disabled. The CLI therefore maps an

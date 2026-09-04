@@ -185,7 +185,7 @@ also the visual stacking order; exact integer priorities are in
 | Particles | `flash`, `fadeout`, `explosion`, `spirit` |
 | Overlay effects | `splash`, `marker` |
 | Post-process | `grayout`, `strobe`, `dim` |
-| UI | `heat`, `indicator`, `statusbar`, `cursor` |
+| UI | `heat`, `indicator`, `statusbar`, `peer_cursor`, `cursor` |
 | Debug | `overlay`, `flowfield` |
 
 Some rendered concepts do not have a same-named component or system. For
@@ -200,6 +200,21 @@ cell writes no rune/foreground, so typeable text remains readable as a cleaner
 crosses it. `BlendMaxBg` bounds overlapping auto-fire at the brighter input
 instead of accumulating color, and the visible ring-buffer prefix contracts as
 a blocked cleaner drains to its stop point.
+
+### Local and peer cursors
+
+Two renderers rather than one loop, and they answer different questions. The local
+cursor answers "where am I, and what am I about to act on", so it takes the colour
+of whatever it is standing on and follows the local input mode. A peer answers
+"where is that player", so it keeps one colour per roster slot whatever it stands
+on — drawing them the same way would make the two indistinguishable exactly when it
+matters, which is when they overlap. `PriorityPeerCursor` sits directly under
+`PriorityCursor` so an overlap resolves in favour of the one the player is steering.
+
+Before `peer_cursor` existed a participant was visible only through the effects it
+happened to be projecting — its shield, its ember — so one holding none was not on
+the map at all. Both renderers read the cell underneath through one
+`cursorCellContent`, so they cannot disagree about what is there.
 
 ## 8. Renderer responsibilities
 

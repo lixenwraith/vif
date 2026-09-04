@@ -353,10 +353,10 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *
 	guest.pendingJoin = pending
 	guest.sessionOffer = offered
 	if err := guest.JoinAt(offered.Anchor); err != nil {
-		_ = pending.Complete(err)
+		_ = pending.Complete(err, network.JoinerReport{})
 		t.Fatalf("join identity: %v", err)
 	}
-	if err := pending.Complete(nil); err != nil {
+	if err := pending.Complete(nil, network.JoinerReport{}); err != nil {
 		t.Fatalf("join reply: %v", err)
 	}
 

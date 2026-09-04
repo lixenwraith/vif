@@ -115,7 +115,9 @@ useful CI addition even though the current workflow does not perform one.
 | `-watch` | Present a `-script` run on this terminal instead of running it headlessly. |
 | `-host <address>` | Bind a session, for example `:7777`. |
 | `-serve <address>` | Bind a headless session with no local player: a dedicated host. |
-| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. |
+| `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. Omitted on a server, the first guest's terminal sizes the session. |
+| `-probe <address>` | Serve liveness, readiness and metrics for a `-serve` run. |
+| `-log-stdout` | Write the session log to stdout as JSON instead of to a file; implies `-l`. |
 | `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
 | `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. With `-serve` it counts guests instead, because the server is not one of them, and it is a ceiling rather than a requirement: the session starts on its first guest and admits the rest as they arrive, defaulting to the full roster. |
 | `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |

@@ -473,6 +473,11 @@ func (cs *ClockScheduler) Start() {
 	}
 }
 
+// Running reports whether the scheduler goroutines are live. A liveness probe
+// reads it to tell a stalled tick loop from one that has not started: only the
+// first is a fault.
+func (cs *ClockScheduler) Running() bool { return cs.running.Load() }
+
 // Prepare closes the system and metric sets from a harness that drives ticks
 // or settles events before the first RunTicks call. Idempotent.
 func (cs *ClockScheduler) Prepare() {

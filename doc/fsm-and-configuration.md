@@ -310,6 +310,33 @@ region, and `World.AllowSystemDisable` refuses the same request from an
 `EnableSystem`/`DisableSystem` action or the `:system` command. Disabling both
 ends stays legal; an optional dependency is reported once, not per resume.
 
+### Installing a captured machine, and what it skips
+
+`ClockScheduler.ImportFSM` places every region where a capture found it and
+deliberately does **not** re-run entry actions: the capture describes a machine
+that has already entered those states, and re-entering would emit everything the
+entry produced a second time. Regions the capture does not name are deleted, for
+the same reason — they are not running on the sender, so they must not be running
+here.
+
+That is correct for every effect the capture carries, and it is exactly wrong for
+the ones it does not. An `on_enter` that emits a **`ClassLocal`** event is
+producing instance-local state that no capture contains: `EventGrayoutStart` and
+`EventDrainPause` latch in `ViewResource` and `DrainSystem`, neither of which is
+snapshot-carrying, and the only release either has is the `on_enter` of the state
+the region exits through. A participant whose FSM is rebased across that exit —
+which is any correction that lands while it is a few ticks behind — never runs the
+release, and the hold survives for the rest of the run.
+
+`config/main`'s quasar region is the worked example. `QuasarFuse` takes a grayout
+and a drain pause scoped to `fuse_owner`; `QuasarExit` and `QuasarEscalate`
+release both and terminate the region. A correction that retires the region for a
+guest still standing in `QuasarGoldActive` strands both holds: the screen stays
+dark, drains never spawn, `kills.drain` never reaches the escalation gate, and no
+further quasar is ever fused. See
+[Kubernetes fleet feasibility](kubernetes-fleet.md) ADR-6 for the three candidate
+designs; nothing here fixes it yet.
+
 ### Operator region primitives
 
 `:region` exposes the scheduler-owned region lifecycle without reaching

@@ -69,6 +69,9 @@ const (
 	PriorityHeat
 	PriorityIndicator
 	PriorityStatusBar
+	// Peers before the local cursor, so an overlap resolves in favour of the one
+	// the player is steering.
+	PriorityPeerCursor
 	PriorityCursor
 
 	// === Debug/Overlay ===

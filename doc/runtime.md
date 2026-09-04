@@ -89,6 +89,27 @@ number the gate waits for are one value.
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
 
+Without it the server takes that geometry from its **first guest**. A run with no
+`-size` falls back to `Config.DefaultWidth` x `DefaultHeight`, which is a 77x21
+map — and because the joiner adopts the host's latch, every participant then plays
+on it however large its own terminal is. The joiner's acceptance therefore carries
+its own geometry (`network.JoinerReport`), and `App.adoptLobbyGeometry` applies the
+first one before the roster closes, so the bounds it produces are the ones the
+offer names and the tick-zero capture contains.
+
+First rather than smallest, and the difference is the mid-run gate: guests arrive
+throughout the run, so sizing from the smallest would mean shrinking the map under
+participants already playing on it, which D-14 forbids for the same reason a
+terminal may not crop a shared map. An explicit `-size` still wins, and a scenario
+that fixes its own bounds (`crop_on_resize = false`, as `config/td` does) is left
+alone: those bounds are the scenario's statement rather than a stand-in for a
+terminal nobody has.
+
+`-probe <address>` binds a liveness, readiness and metrics endpoint for the run —
+see [Services and networking](services-and-networking.md) §12. It binds before the
+lobby, because a run waiting for its first guest is a run a supervisor is watching
+start.
+
 ```bash
 ./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
 ./bin/vif -join server.example:7777          # each person, elsewhere

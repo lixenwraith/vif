@@ -57,7 +57,7 @@ func TestSessionRejectionReturnsTheJoinErrorUnchanged(t *testing.T) {
 	}
 
 	want := errors.New("join mismatch: seed recorded 7, this run has 8")
-	if got := pending.Complete(want); got != want {
+	if got := pending.Complete(want, JoinerReport{}); got != want {
 		t.Fatalf("Complete(rejection) = %v, want original error %v", got, want)
 	}
 	select {
@@ -92,7 +92,7 @@ func TestSocketSessionHandshakeAndDisconnect(t *testing.T) {
 	if gotOffer.Assigned != 2 || gotOffer.Host != 1 {
 		t.Fatalf("offer assignment = host %d guest %d", gotOffer.Host, gotOffer.Assigned)
 	}
-	if err := pending.Complete(nil); err != nil {
+	if err := pending.Complete(nil, JoinerReport{}); err != nil {
 		t.Fatalf("accept: %v", err)
 	}
 	waitFor(t, func() bool { return host.PeerCount() == 1 }, host.Changes(), "host peer")

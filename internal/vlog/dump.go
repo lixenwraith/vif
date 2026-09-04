@@ -25,7 +25,7 @@ func Dump(fill func(emit func(sub string, args ...any))) (string, error) {
 	}
 
 	name := snapPrefix + time.Now().Format(fileTimeFormat)
-	l, p, err := buildLogger(dir, name, "trace")
+	l, p, err := buildLogger(dir, name, "trace", false)
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +78,7 @@ func EmitSet(sub string, run, tick, frame uint64, fill func(emit func(args ...an
 	}
 
 	name := recPrefix + time.Now().Format(recTimeFormat)
-	l, p, err := buildLogger(dir, name, "trace")
+	l, p, err := buildLogger(dir, name, "trace", false)
 	if err != nil {
 		return "", err
 	}

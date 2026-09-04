@@ -19,6 +19,12 @@ const (
 	// InputTickInterval drives the router input tick: auto-fire, macro playback, etc.
 	InputTickInterval = 16 * time.Millisecond
 
+	// ProbeStallInterval is how long a running scheduler may leave the tick
+	// counter unmoved before a liveness probe calls the run stalled. At the 50 ms
+	// tick it is forty ticks: far past any ordinary slip, and short enough that a
+	// wedged loop is restarted rather than left holding its participants.
+	ProbeStallInterval = 2 * time.Second
+
 	// PausedPollInterval is the scheduler's wall-clock poll period while paused
 	PausedPollInterval = 50 * time.Millisecond
 

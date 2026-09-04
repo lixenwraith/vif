@@ -9,6 +9,28 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/render"
 )
 
+// cursorCellContent resolves what a cursor is standing on: the glyph that cell
+// holds, or failing that the sigil. A glyph wins and stops the scan — it is the
+// interactable, and the first one found takes precedence — while a sigil is only
+// a candidate until the whole cell has been read.
+//
+// Both cursor renderers read it, so the local cursor and a peer's agree about what
+// is under them rather than answering the question twice.
+func cursorCellContent(gameCtx *engine.GameContext, x, y int) (glyph, sigil core.Entity) {
+	var entities [parameter.MaxEntitiesPerCell]core.Entity
+	count := gameCtx.World.Positions.GetAllEntitiesAtInto(x, y, entities[:])
+	for i := range count {
+		e := entities[i]
+		if gameCtx.World.Components.Glyph.HasEntity(e) {
+			return e, 0
+		}
+		if sigil == 0 && gameCtx.World.Components.Sigil.HasEntity(e) {
+			sigil = e
+		}
+	}
+	return 0, sigil
+}
+
 // CursorRenderer draws the cursor with complex entity overlap handling
 type CursorRenderer struct {
 	gameCtx *engine.GameContext
@@ -51,28 +73,7 @@ func (r *CursorRenderer) Render(ctx render.RenderContext, buf *render.RenderBuff
 	var charFgColor = visual.RgbBlack
 
 	// 2. Scan entities at cursor position
-	var entitiesBuf [parameter.MaxEntitiesPerCell]core.Entity
-	count := r.gameCtx.World.Positions.GetAllEntitiesAtInto(ctx.CursorX, ctx.CursorY, entitiesBuf[:])
-
-	var glyphEntity core.Entity
-	var sigilEntity core.Entity
-
-	for i := range count {
-		e := entitiesBuf[i]
-
-		// Priority 1: Glyph (Interactable)
-		// Stop immediately if found (first found takes precedence)
-		if r.gameCtx.World.Components.Glyph.HasEntity(e) {
-			glyphEntity = e
-			break
-		}
-
-		// Priority 2: Sigil (visual/species)
-		// Store candidate but continue searching for glyphs
-		if sigilEntity == 0 && r.gameCtx.World.Components.Sigil.HasEntity(e) {
-			sigilEntity = e
-		}
-	}
+	glyphEntity, sigilEntity := cursorCellContent(r.gameCtx, ctx.CursorX, ctx.CursorY)
 
 	// 3. Resolve Visuals
 	if glyphEntity != 0 {

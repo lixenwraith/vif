@@ -50,6 +50,7 @@ type Config struct {
 	JournalDir string
 	Level      string
 	Scope      string
+	Console    bool
 }
 
 func Init(Config) (string, error)      { return "", ErrDisabled }

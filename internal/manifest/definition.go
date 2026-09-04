@@ -280,6 +280,7 @@ var Renderers = []RendererDef{
 	{"heat", "NewHeatRenderer", "PriorityHeat"},
 	{"indicator", "NewIndicatorRenderer", "PriorityIndicator"},
 	{"statusbar", "NewStatusBarRenderer", "PriorityStatusBar"},
+	{"peer_cursor", "NewPeerCursorRenderer", "PriorityPeerCursor"},
 	{"cursor", "NewCursorRenderer", "PriorityCursor"},
 
 	// --- Debug ---

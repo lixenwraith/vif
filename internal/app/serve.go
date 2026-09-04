@@ -60,6 +60,16 @@ func (a *App) Serve() error {
 	if err := a.hub.StartAll(); err != nil {
 		return err
 	}
+	// Before the lobby, not after it. The lobby is a wait, and a wait is exactly
+	// when a supervisor most needs an answer: a probe that only appears once the
+	// session is running would report nothing for the whole window in which the
+	// pod is starting, which reads as a pod that failed to start.
+	if err := a.startProbe(); err != nil {
+		// Refused rather than degraded. A probe that did not bind is a pod whose
+		// orchestrator cannot tell a healthy host from a wedged one, which is a
+		// worse condition than a host that did not start.
+		return err
+	}
 	if err := a.startHostSession(sigChan); err != nil {
 		if errors.Is(err, errSessionCanceled) {
 			return nil

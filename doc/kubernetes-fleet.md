@@ -12,13 +12,17 @@ topology — is deliberately absent.
 Reviewed at `f1d1f49` (`main`). Measurements were taken on linux/amd64, 4 vCPU,
 Go 1.26.5, `CGO_ENABLED=0`, against a binary built from that commit.
 
-**Status.** The first round of remediation has landed: G1, G5, G6, G7, G9 and G15
-are closed, with regression coverage that fails against the code they fix. G3, G4,
-G8, G10, G14 and G16 are deferred as not required for a proof of concept, G11 and
-G12 are deliberately held for reasons recorded against them, and G13 is carried
-forward as its own task. §2's table is the register; §3 is what is left of the
-plan. The findings in §5 and the appendices are the original review and are left
-as written except where a fix changed the number.
+**Status, round two.** G1, G3, G4, G5, G6, G7, G9, G15, G16 and G17 are closed.
+G8, G10 and G14 remain deferred; G11 and G12 are deliberately held for reasons
+recorded against them; G13 is carried forward as its own task; G2 is deferred
+because there is nothing in the design to hook it to.
+
+Round two also closed three defects found by playing the thing, tracked here as
+P1–P3 alongside the original register, and diagnosed a fourth (**P4**) that is a
+design decision rather than a patch — it is the top item in §3 and the subject of
+ADR-6. §2 is the register, §3 is the ordered plan a fresh session should work
+from. The findings in §5 and the appendices are the original review, left as
+written except where a fix changed the number.
 
 ---
 
@@ -81,8 +85,8 @@ with the change that closed it, *deferred* with the reason, or *open*.
 |---|---|---|---|
 | **G1** | required | **closed** | Lobby blocked indefinitely: `waitForStartup` looped until `PeerCount() == remoteCount`, so a pod started with `-players 3` that received two guests never became Ready and never terminated. The fix is not a timeout but a correction to what `-players` means. `sessionCapacity` and `lobbyQuorum` split the one number that used to be both: on a server the flag is a **ceiling** on guests, defaulting to `parameter.MaxPlayers`, and the quorum is one. A server starts on its first guest and admits the rest through the mid-run gate — the same path a dropped peer returns through, and therefore already the path that has to work. An interactive `-host` is unchanged: its lobby is a party that starts together, so there quorum and capacity remain one value. `internal/app/session.go`, `serve.go`, `loop.go`. |
 | **G2** | required | **deferred — nothing to hook** | There is no game-over in the design: players fall back to the start, or continue at rising difficulty, or a level ends in a victory message and restarts. `Serve` therefore has no terminal state to exit on, and inventing one would be designing gameplay from the deployment inwards. What this means for the pod is recorded in ADR-1: with no match end, the ephemeral process model has nothing to trigger it, and a long-lived reusable server is the shape the code actually has. |
-| **G3** | required | deferred | Structured logs never reach stdout — `vlog` builds with `EnableConsole(false)` and writes JSON under `$XDG_STATE_HOME`. A pod emits nothing, and an unwritable log directory warns once and then runs the whole session unlogged. Not required to run a proof of concept; required before anything is operated. |
-| **G4** | required | deferred | No health, readiness or metrics surface of any kind. Readiness must go false once a lobby is full — which, after G1, now means "at capacity" rather than "started". |
+| **G3** | required | **closed** | Structured logs never reached stdout: `vlog` built with `EnableConsole(false)`, so a pod emitted nothing, and an unwritable log directory warned once and then ran the whole session unlogged. `-log-stdout` selects a stdout JSON sink, exclusive with the file one — a console write into a run that owns the alternate screen is corruption rather than output, so the default is unchanged for a run that presents. A log session that was asked for and cannot start is now **fatal** (exit 73) rather than reported at exit: for a supervised process, playing a whole session unlogged loses the record it was started to produce. `internal/vlog/vlog.go`, `stub.go`, `cmd/vif/main.go`. |
+| **G4** | required | **closed** | No health or readiness surface existed. `internal/probe` is a stdlib HTTP server on `-probe <addr>` with `/healthz` and `/readyz`. The two answer different questions on purpose: liveness is the tick counter advancing (sampled across reads, because a probe cannot wait for a tick; a pause resets the window rather than accumulating under it, and a clock that has not started is not a fault), readiness is whether a dial would be admitted. **Readiness goes false at capacity**, which is what the original review required — verified live: `-players 1` with one guest answers 503 `session at capacity` while `/healthz` stays 200. It binds before the lobby, because a run waiting for its first guest is a run a supervisor is watching start. `internal/probe/`, `internal/app/probe.go`, `serve.go`. |
 | **G5** | required | **closed** | Wire-reachable panic. `EventLevelSetup` is `ClassShared`, so any peer could name a map whose `width*height` overflowed `int` and reach `make([]Cell, need)` — reproduced as `runtime error: makeslice: len out of range`, which under `core.Go` is `os.Exit(1)`. `engine.ClampMapSize` is now the single gate in front of the allocation, bounded by `parameter.MaxMapWidth`, `MaxMapHeight` and `MaxMapCells`. It clamps rather than rejects because the payload is replicated: a clamp reaches the same bounds on every instance, where a drop on one and an apply on another is a divergence. `World.SetupLevel` clamps before it records the dimensions, `SpatialGrid.Resize` clamps again before it allocates, and `updateGameArea` clamps the viewport the reset and resize paths derive a map from. `internal/engine/spatial_grid.go`, `world.go`, `game_context.go`, `internal/parameter/engine.go`. |
 | **G6** | required | **closed** | Wire-reachable allocation primitive: `SnapshotAssembly` reserved the declared body length up front, so one 20-byte header bought 64 MiB per source and ~1.06 GiB across the array. Two changes. The ceiling drops from 64 MiB to 4 MiB — measured captures of this world are 3.5 KiB and the documented storm high water is 15.4 KiB, so that is three orders of magnitude of headroom. And the ceiling is no longer the defence: the reservation is capped at `snapshotReserve` (64 KiB) and the buffer grows with the bytes that arrive, so what a peer can make a receiver hold is what that peer sends. `internal/network/snapshot.go`. |
 | **G7** | required | **closed** | Wire-reachable unbounded retention: nothing bounded a frame's `ApplyTick` against the local tick, and `applyDue` keeps what is not yet due, so a peer walking `ProducedTick` forward grew `scheduled` at line rate with `relayBatch` amplifying it. A forward window now runs *before* the epoch window — deliberately, because `epochWindow.admit` takes any tick above a source's high-water mark, so one frame naming a large one would carry that mark there and make every ordinary epoch that followed look late, on this instance and everything it relays to. The window is `NetworkApplyWindowTicks` = the join catch-up ceiling plus one convergence floor, which clears the largest gap two participants legitimately hold. `NetworkScheduledMax` and `NetworkScheduledBytes` bound what is held inside it, counted separately from a decode failure. `internal/system/network.go`, `internal/parameter/network.go`. |
@@ -94,9 +98,21 @@ with the change that closed it, *deferred* with the reason, or *open*.
 | **G13** | desirable | **carried forward as its own task** | No build tag excludes terminal, renderer and audio from a server binary; all three are linked into a 17.0 MB image that `ModeServer` never uses. The package structure permits the split — presentation is reached only through the `Mode` predicates in `App.init`, and `internal/manifest` is the single renderer registration point — but it is a real refactor of that registration and wants a sweep of its own rather than a corner of this one. |
 | **G14** | desirable | deferred | `SIGHUP` terminates like `SIGTERM` and `SIGINT`. Harmless in a pod; it forecloses a reload semantic later. |
 | **G15** | required | **closed** | On a crash with no terminal, `HandleCrash` fell through to `terminal.EmergencyReset(os.Stdout)`, writing escape sequences into the pod log. It is now gated on `core.StdoutIsTerminal`, a `Stat` for `os.ModeCharDevice`: a run whose stdout is a pipe, a file or a container log has no terminal to reset, and the escape sequence would be the only thing it ever wrote. `internal/core/crash_handler.go`, `crash_handler_unix.go`. |
-| **G16** | desirable | deferred | Telemetry is rich and file-only. Exposing it needs a transport, not instrumentation — it follows G4. |
+| **G16** | desirable | **closed** | Telemetry was rich and file-only. `/metrics` renders `internal/status` in the Prometheus text format — 849 series on a live server, including `vif_network_peers`, the FSM region set, `spatial.*` and the correction cadence. Nothing was instrumented for it: registry keys are renamed onto the Prometheus grammar and every value is reported as a gauge, because the counters among them are monotone only within a run and a reset re-bases them. String cells are omitted; their natural exposition is a label set this does not model. `internal/probe/metrics.go`. |
 | **G17** | desirable | **closed** | `README.md` advertised three runtime shapes, omitted `-serve`, and claimed "a participant still joins only at startup" with the snapshot join described as planned. All three were wrong: there are four shapes, mid-run join and reconnect are active, and the snapshot join is implemented. Corrected there and in `doc/runtime.md`, `development.md`, `architecture.md`, `multi-player-enhancement.md`, `services-and-networking.md`, `ecs-and-events.md`, `logging-and-diagnostics.md` and `telemetry-audit.md`. |
 | **G18** | desirable | **not a gap** | `-check` is intended as separate tooling and its inability to combine with `-serve` is by design. It exits non-zero on invalid config, which is what an init container needs. |
+
+### Playtest register
+
+Four defects found by running a real session rather than by reading. P1–P3 are
+closed; P4 is a design decision and is §3's first item.
+
+| ID | Sev | Status | Description and disposition |
+|---|---|---|---|
+| **P1** | required | **closed** | A server with no `-size` served a **77x21** map, and every guest adopted it however large its own terminal was. Not caused by G5's clamp, which was the first suspicion: measured, `Config.Normalize` defaults a run with no terminal to 80x24 and the margins take it to 77x21, which is far below any clamp. The joiner's acceptance now carries its own geometry (`network.JoinerReport`) and `App.adoptLobbyGeometry` applies the **first** guest's before the roster closes, so the bounds it produces are the ones the offer names and the capture contains. First rather than smallest, because guests arrive throughout the run through the mid-run gate and sizing from the smallest would mean shrinking the map under participants already playing on it. An explicit `-size` wins; a scenario that fixes its own bounds (`crop_on_resize = false`) is left alone. Verified live: 160x45 guest → 157x42 map. `internal/network/session.go`, `internal/app/session.go`, `config.go`. |
+| **P2** | required | **closed** | `Config.Normalize` was not idempotent — a bug in P1's own first cut. It runs twice on the way to a session (once resolving the handshake, once inside `New`), so a flag derived from "Width is non-zero" was true on the second pass whatever the operator had said. The marker is now set only on the pass that actually fills a zero. Caught by the change not working, which is the only reason it is worth recording: a second pass over defaulted values is a shape this codebase has more than one of. |
+| **P3** | desirable | **closed** | A participant was visible to another only through the effects it happened to be projecting — its shield, its ember — so one holding none was not on the map at all. `peer_cursor` draws every cursor this instance does not drive, one colour per roster slot, directly under the local cursor so an overlap resolves in favour of the one the player is steering. Deliberately not the local renderer with a loop around it: the local cursor takes the colour of what it stands on and follows the input mode, and a peer that did the same would be indistinguishable exactly when it matters. `internal/render/renderer/peer_cursor.go`. |
+| **P4** | **required** | **open — ADR-6** | **A correction that rebases a guest's FSM across a state boundary strands every instance-local effect that boundary would have released.** `ImportFSM` deliberately does not re-run entry actions, and deletes regions the capture does not name. That is right for effects the capture carries and wrong for the ones it does not: an `on_enter` emitting a `ClassLocal` event produces state no capture contains. `EventGrayoutStart` and `EventDrainPause` latch in `ViewResource` and `DrainSystem` — neither snapshot-carrying — and their only release is the `on_enter` of the state the region exits through. A guest a few ticks behind never runs it. Confirmed against the uploaded log: `quasar terminate at QuasarEscalate`, then `main` never reaches `MainEscalate` again because `kills.drain` never climbs, because drains never spawn. Diagnosed and documented; **not fixed** — see ADR-6. `internal/fsm/export.go`, `internal/engine/clock_scheduler.go`, `internal/system/drain.go`, `internal/system/transient.go`, `config/main/quasar.toml`. |
 
 ### Explicitly not a gap
 
@@ -136,65 +152,104 @@ with the change that closed it, *deferred* with the reason, or *open*.
 
 ## 3. Sequenced plan
 
-### What landed, and why in that order
+### What has landed
 
-**Phase 0 — an exposed pod survives its own input (G5, G6, G7).** All three are
-input-validation fixes in existing code paths, independent of each other and of
-everything else, and none touches the wire format. They went first because until
-they were in, no other work on the pod was worth doing: the process could be
-panicked by one frame and driven out of memory by two more.
+**Round one — an exposed pod survives its own input.** G5, G6, G7 (input
+validation, no wire-format change), then G9 and G1's transport half (the handshake
+off the accept goroutine, with a budget and a per-address admission rate), then
+G1's lobby semantics (`-players` became a ceiling, the quorum became one), then
+G15 and G17.
 
-**Phase 1 — admission (G9, and G1's transport half).** The handshake moved off the
-accept goroutine and gained a budget, and the dial in front of it gained one too.
-This had to follow Phase 0 rather than precede it, because making the accept path
-concurrent means more attacker-controlled frames reaching the schedule per unit
-time — worth doing only once the schedule is bounded.
+**Round two — a supervised pod can be watched, and a real session plays.** G3
+(stdout logging, fatal on a log that was asked for and could not start), G4 and
+G16 (`-probe`: liveness, readiness, metrics), P1 (first-guest geometry), P3 (peer
+cursors). P2 was a bug in P1's first cut. P4 was diagnosed and deliberately not
+patched.
 
-**Phase 2 — lobby semantics (G1).** `-players` became a ceiling and the quorum
-became one. This is the change that turns "a pod that hangs forever" into "a pod
-that is ready as soon as somebody is playing", and it needed Phase 1 first: a
-lobby that admits guests throughout the run is a lobby whose accept path is
-continuously exposed, where the old one closed after a fixed number.
+### What is next, in order
 
-**Phase 3 — hygiene (G15, G17).** Independent of everything; they rode along.
+Ordered by what a fresh session should do first. Each entry names the shape of the
+work, not just the goal.
 
-### What remains
+**1. P4 — instance-local effects vs. an installed FSM position. `blocker for
+multiplayer`, `high impact`, `high complexity`, needs a decision before code.**
 
-The ordering below is what is left, and the reasoning for it is unchanged from the
-original review except where a decision has since been made.
+This is the only open item that makes the game visibly wrong rather than the
+deployment unmanageable, and it is first for that reason. It is a design decision
+(ADR-6), not a patch — every mechanical fix considered has a case where it is
+worse than the bug. Start by picking an option in ADR-6, then implement; do not
+start by writing code. The diagnosis is complete and reproducible, so the expensive
+part is already done. Budget: a day to decide, a day to build, and a two-instance
+playtest to confirm, because the failure is a race and a unit test will not see it.
 
-1. **G3 — stdout logging.** The cheapest change in this document and the one that
-   makes every subsequent phase debuggable in-cluster. A console sink plus a
-   fail-fast switch when the sink cannot be opened. Nothing depends on it and it
-   depends on nothing; it is first because it is free.
-2. **G4, then G16 — probes, then metrics.** Readiness is now definable in a way it
-   was not before Phase 2: ready means "attached and under capacity", which is
-   `len(sessionRoster) <= sessionCapacity()`, and liveness means the tick counter
-   is advancing. G16 is nearly free once G4 adds a listener, because
-   `status.Registry` already holds the counters and `internal/status/snapshot.go`
-   already walks them.
-3. **G11 — the memory ceiling.** Held deliberately until the ceiling is measured
-   (U1). The OOMKill is the current instrument; replacing it with a soft limit
-   before the number exists would remove the signal without answering the
-   question.
-4. **G13 — the server build tag.** Its own task. The only remaining attack-surface
-   reduction, and a real refactor of the manifest's renderer registration.
-5. **G10, then G8 — identity, then authentication.** Strictly ordered, because
-   each widens the handshake the next one modifies, and G10 changes the anchor and
-   bumps `JournalSchema`, which is a wire-format break. G8's size is conditional on
-   ADR-5: if clients never reach pods directly, it collapses to a network policy.
-6. **G12, G14 — after gameplay testing and whenever.** G12's shape depends on how
-   fixed-size multiplayer maps behave in practice.
+**2. G8 — authentication and transport security. `required before exposure`,
+`high impact`, `medium complexity`, gated on ADR-5.**
 
-**Additive vs. modifying.** Of what landed: `ClampMapSize`, the snapshot
-reservation cap, the forward window and the schedule ceilings, `Coordinator.Admit`
-and the admission limiter, and `StdoutIsTerminal` are all additive — new gates in
-front of existing paths. Three were not: `Transport.acceptLoop` was restructured
-around a goroutine per handshake with a pending-connection set for shutdown,
-`startHostSessionOn` was reworked from a fixed count to a quorum plus a closing
-window, and `releaseMidRunJoiner` gained serialisation it did not need while the
-accept loop provided it. Of what remains: G3, G4, G11, G13 and G16 are additive;
-G10 is not, and G8 modifies what G9 restructured.
+Decide ADR-5 first: if clients never reach pods directly, this collapses from "a
+handshake with credentials" to a network policy plus a gateway that speaks the
+framed-TCP protocol on both sides. What is reachable today by anyone who can open
+a socket: a game reset, a map resize within the clamp, arbitrary system
+enable/disable, arbitrary FSM region spawn/kill, and the host's absolute
+filesystem paths out of the pre-authentication offer. The memory-safety half of
+this is already closed; what is left is authorisation.
+
+**3. G10 — build identity on join. `medium impact`, `medium complexity`, ordered
+before G8 because it changes the same handshake.**
+
+`anchorIdentity` compares a config *path*, not its content, and carries no binary
+version, VCS revision, protocol version or manifest hash. Two builds that differ in
+simulation math but resolve the same path join and diverge silently. Wire-format
+break: it changes the anchor and bumps `JournalSchema`, so it must land before
+anything else touches the handshake. ADR-3 has the options; the third (a hash over
+the resolved manifest, the event registry and `internal/parameter`) is the one that
+lets a client and a server differ in rendering without differing in simulation.
+
+**4. G13 — a server build tag. `low risk`, `medium complexity`, self-contained.**
+
+`internal/render`, `pkg/audio` and the terminal module are linked into a 17 MB
+binary `ModeServer` never uses. The package structure permits the split —
+presentation is reached only through the `Mode` predicates in `App.init`, and
+`internal/manifest` is the single renderer registration point — but it is a real
+refactor of that registration and wants its own sweep. Good work for a session
+that wants a bounded, mechanical task.
+
+**5. G11 — `GOMEMLIMIT`. `low complexity`, blocked on measurement, not on code.**
+
+Held deliberately: an OOMKill is the wanted signal until the ceiling is measured
+under a full roster and the tower scenario (U1). Do U1 first; the flag is an
+afternoon once the number exists.
+
+**6. G12 — right-size the spatial grid. `low complexity`, `deferred pending
+gameplay`.**
+
+30.5 MiB of every instance is a fixed 500x250 grid. Grow-only is deliberate (it
+stops a drag-resize reallocating on every intermediate size) and fixed-size
+multiplayer maps weaken the case further, so this waits on gameplay testing. When
+it comes, it roughly halves per-pod memory.
+
+**7. G2, G14 — `low impact`, `low complexity`, whenever.**
+
+G2 needs a match-end concept the design does not have (ADR-1). G14 is one line and
+forecloses a reload semantic nobody has asked for yet.
+
+### Cross-cutting notes for whoever picks this up
+
+- **The three unknowns this round added** (U11–U13) are cheap to close and worth
+  closing early: whether the admission burst bites behind a NAT, whether the map
+  clamp ever reduces a real map, and whether serialising the mid-run gate matters
+  when a full roster arrives at once.
+- **U1 is the gating measurement** for anything memory-shaped. It is one harness
+  run away — the fixture already exists.
+- **Nothing above is blocked on anything else** except the two orderings stated:
+  ADR-5 before G8, and G10 before G8.
+
+**Additive vs. modifying.** Round two was almost entirely additive: `internal/probe`
+is new, the peer cursor is a new renderer, and the joiner report is a new optional
+field on an existing reply. Three things were not: `Config.Normalize` gained a
+marker whose absence was a bug (P2), `setupDiagnostics` stopped returning a status
+and started exiting, and `CursorRenderer`'s cell scan was extracted so both cursor
+renderers share it. Of what remains, G10 and G8 modify the handshake, G13 refactors
+renderer registration, and the rest are additive.
 
 ## 4. ADR candidates
 
@@ -324,6 +379,59 @@ The ADR is not "should we add TLS" but "do clients reach pods at all".
   ability of an unauthenticated one to reset the game, resize the map, disable
   systems or read the host's filesystem paths out of the pre-authentication
   offer.
+
+### ADR-6 — Instance-local effects and an installed FSM position — **open, and P4 waits on it**
+
+`ImportFSM` places every region where a capture found it, does not re-run entry
+actions, and deletes regions the capture does not name. Each of those is correct
+for the effects a capture carries. None of them is correct for the effects it does
+not: an `on_enter` emitting a `ClassLocal` event produces instance-local state that
+no capture contains, and whose only release is the `on_enter` of the state its
+region exits through.
+
+The tension is real and neither side is obviously right. Immediate agreement with
+the authority is what a correction is *for*; running the exit path is what the
+local effect's lifecycle assumes. Today the first wins silently and the second is
+simply lost.
+
+- **A. Re-run the local half of the entry actions on install.** For a region whose
+  active state changed, re-emit only the `EmitEvent` actions naming `ClassLocal`
+  event types; skip the shared ones, whose results are already in the capture.
+  Principled — it says exactly "the capture carries shared effects, local ones must
+  be re-derived" — and it fixes a guest placed *into* a holding or releasing state.
+  It does **not** fix the retirement case, which is the one in the log: the region
+  is gone, so there is no state to re-enter.
+- **B. Let the guest run its own exit instead of deleting the region.** The guest
+  is behind by at most the playout lead; its own simulation would reach
+  `QuasarExit` within a few ticks and release the holds correctly. Deleting the
+  region is what skips that. Costs: region membership is compared shared state, so
+  the two instances disagree for those ticks by construction, and the desync probe
+  would have to learn that this disagreement is expected.
+- **C. Capture the local hold sets and install them.** `DrainSystem`'s
+  `pausedAll`/`pausedFor` and `ViewResource.Grayout` are derived from a shared,
+  deterministic FSM, so every instance's copy should already agree; making them
+  snapshot-carrying would make the install restore them like any other system
+  state. Costs: `drain` is `Domain: "player"` with no `Snapshot:` declaration, so
+  this puts player-domain state into the shared capture and needs a D-8/D-10
+  ruling first.
+- **D. Invert the dependency: derive rather than latch.** `DrainSystem` asks each
+  tick whether any region stands in a state that pauses it, instead of remembering
+  that one told it to. Automatically correct under any install, and the largest
+  change — it needs the FSM to expose "which states hold which local effect", which
+  the config expresses only as entry actions today.
+
+**A + C together** cover both the entered and the retired case and are the smallest
+combination that is complete. **D** is the design the codebase would probably have
+if this had been noticed earlier. Whoever takes P4 should also decide whether the
+storm's unscoped `EventDrainPause` and the quasar's cursor-scoped one are meant to
+be the same mechanism — the release-all form clears both, which is why a naive
+"release everything on retirement" fix would resume drains in the middle of a
+storm.
+
+Whichever is chosen: the failure is a race against the correction cadence, so a
+unit test will not see it. The acceptance test is a two-instance session driven
+long enough to escalate through the quasar twice, asserting that the guest's
+`drain.paused` and `effects.grayout_active` both return to false.
 
 ---
 
@@ -580,6 +688,7 @@ assumed. `GOMEMLIMIT` has no such default and must be supplied.
 | U9 | Whether the correction cadence degrades gracefully when a guest's uplink cannot carry the convergence floor — the code refuses such a link at admission (`admitMeasuredLink`, `internal/app/session.go:357`) and reports mid-session, but the behaviour under cluster-egress conditions (NAT, LB, variable RTT) is unmeasured. | `script/phase5-linkshape.sh` against a pod behind a real NodePort. |
 | U10 | Per-match CPU at realistic map sizes and rosters. Measured here: **0.2 % of one core idle in the lobby, 4.9 % of one core with one guest at 80×24 with the embedded scenario** (97 jiffies / 20 s). The tick loop is 20 Hz (`GameUpdateInterval = 50 ms`); the frame handshake ticks at 62.5 Hz and the event loop at 250 Hz even when idle, so a pod has a floor of roughly 340 timer wakeups per second regardless of load. Not measured at 4 guests or 160×50. | Same harness as U1, with `/proc/<pid>/stat` sampling. Memory, not CPU, is the binding density constraint at current numbers: ~62 MiB versus ~0.05 core per match. |
 | U11 | Whether `NetworkAdmitBurst` = 6 per minute per address is right in front of a NAT or a CGNAT, where a whole site is one key. It is generous for a person reconnecting and tight for a shared egress that legitimately produces many joins. | Run a fleet behind one egress address and count `MsgJoinReply` refusals carrying an admission reason. If it bites, the key has to become something the session assigns rather than something the network does, which is G10 and G8 territory. |
+| U14 | Whether the peer-cursor palette reads correctly in 256-colour mode. The renderer writes RGB and the compositor down-converts, as every entity colour does, but eight slot colours chosen to be distinct in truecolor may not stay distinct through that conversion. | Run a two-guest session with `-cx` and compare the slot colours by eye; if they collide, the fix is a parallel `Palette256` set beside `RgbPeerCursor`, which `ShieldStyle` already has a pattern for. |
 | U12 | Whether `MaxMapCells` = the pre-allocated grid ever clamps a map somebody wanted. Nothing in `config/` exceeds it and no terminal approaches it, but the clamp is silent by design — it has to be, because rejecting on one instance and applying on another is a divergence. | Log at `warn` when `ClampMapSize` actually reduces a request, and watch for it across the scenario set and a session on an unusually large terminal. |
 | U13 | Whether serialising the mid-run gate (`App.midRunGate`) is a throughput problem when many guests arrive at once. Each admission reads and sends a whole world and waits for the joiner's confirmation, bounded by `NetworkJoinReadyTimeout` = 5 s; sixteen arriving together serialise behind that. | Dial a full roster simultaneously against one server and measure time-to-admitted for the last one. If it matters, the fix is a per-peer ready signal rather than the session-cumulative `ReadyCount` the gate currently waits on. |
 
@@ -864,3 +973,31 @@ Against a binary built from the branch that closes G1, G5, G6, G7, G9 and G15:
     `config/main`, 80×24 through 500×250, 409 to 1487 live entities): peak 3,545
     bytes in every case, which is what put the 64 MiB assembly ceiling at roughly
     19,000× a real capture and set the new one at 4 MiB.
+
+### Verified in round two
+
+Against a binary built from the branch that closes G3, G4, G16, P1 and P3:
+
+17. `go test ./...`, `go test ./internal/... -race`, `go vet ./...`, the `novlog`
+    build and the `js/wasm` build all clean.
+18. A server's default geometry measured directly: no `-size` → ctx 80×24,
+    viewport and map **77×21**; `-size 120x40` → 117×37; `-size 200x60` → 197×57.
+    This is what exonerated G5's clamp and located P1.
+19. `vif -g config/main -serve :7901` with a 160×45 guest logged
+    `session sized from its first guest terminal_w=160 terminal_h=45 map_w=157
+    map_h=42`.
+20. `-log-stdout` emitted the session log as JSON on stdout with no file written,
+    under `HOME=/nonexistent`.
+21. Probe, during the lobby: `/healthz` and `/readyz` both 200 with
+    `reason=clock not running`, `guests=0 capacity=16`.
+22. Probe, running with one guest: both 200, `tick=159 guests=1 capacity=16`.
+23. Probe, at capacity (`-players 1`, one guest): `/readyz` **503**
+    `reason=session at capacity` while `/healthz` stayed **200** — the separation
+    the endpoint exists to make.
+24. `/metrics` served 849 series including `vif_network_peers 1`,
+    `vif_drain_paused 0`, `vif_effects_grayout_active 0`.
+25. The quasar failure was traced through the uploaded log and journal to
+    `ImportFSM` (P4): the FSM transition list ends with
+    `quasar: QuasarGoldActive -> QuasarEscalate` and a `terminate`, after which
+    `main` reaches `MainGoldTimeout` rather than `MainEscalate` on every
+    subsequent cycle — no drains, so no `kills.drain`, so no further quasar.

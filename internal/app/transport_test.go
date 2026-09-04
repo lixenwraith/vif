@@ -442,10 +442,10 @@ func TestTwoLiveParticipantsConvergeOverTCP(t *testing.T) {
 	b.pendingJoin = pending
 	b.sessionOffer = offered
 	if err := b.Join(offered.Anchor); err != nil {
-		_ = pending.Complete(err)
+		_ = pending.Complete(err, network.JoinerReport{})
 		t.Fatalf("join identity: %v", err)
 	}
-	if err := pending.Complete(nil); err != nil {
+	if err := pending.Complete(nil, network.JoinerReport{}); err != nil {
 		t.Fatalf("join reply: %v", err)
 	}
 	if err := b.startJoinSession(); err != nil {

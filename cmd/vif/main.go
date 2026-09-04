@@ -61,7 +61,7 @@ func init() {
 func main() {
 	flag.Parse()
 
-	logStatus := setupDiagnostics()
+	setupDiagnostics()
 
 	var err error
 	sessionErr := validateInvocation(*flagSchema, *flagCheck, *flagReplay, *flagScript, *flagWatch, flagSession)
@@ -92,14 +92,17 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(exitFailure)
 	}
-	os.Exit(logStatus)
 }
 
 // setupDiagnostics installs the crash hook and session defaults unconditionally,
 // starts a log session if any log flag was given, and starts runtime capture if
 // enabled. Runs before the terminal enters the alternate screen.
-// Log failure is non-fatal: the game runs unlogged and main exits exitLogSetup.
-func setupDiagnostics() int {
+//
+// A log session that was asked for and could not start is fatal here rather than
+// reported at exit: the run has no other way to say so, and a supervised process
+// that plays a whole session unlogged has lost the record of whatever it was
+// started to investigate.
+func setupDiagnostics() {
 	core.SetCrashHook(vlog.CrashHook)
 	vlog.SetCrashFlush(status.CrashFlush) // drains while the sink is still live
 
@@ -116,6 +119,7 @@ func setupDiagnostics() int {
 		JournalDir: journalDir,
 		Level:      flagLogs.level.value,
 		Scope:      flagLogs.scope.value,
+		Console:    flagLogs.console,
 		Spawn:      core.Go, // processor panics reach HandleCrash, terminal restored
 	})
 
@@ -124,23 +128,25 @@ func setupDiagnostics() int {
 		fmt.Fprintf(os.Stderr, "ignoring arguments %v; use -l=DIR or -j=DIR\n", flag.Args())
 	}
 
-	diagStatus := 0
 	if flagLogs.enabled() {
 		path, err := vlog.Start()
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "logging disabled: %v\n", err)
-			diagStatus = exitLogSetup
-		} else {
-			fmt.Printf("logging enabled: %s (level %s, scope %s)\n",
-				path, vlog.LevelName(), vlog.ScopeString(vlog.Scopes()))
+			// Fatal rather than degraded. Logging was asked for, and a run that
+			// cannot write it has no way to say so afterwards: the old behaviour
+			// played the whole session unlogged and reported the failure at exit,
+			// which for a supervised process is a silent one.
+			fmt.Fprintf(os.Stderr, "logging unavailable: %v\n", err)
+			os.Exit(exitLogSetup)
 		}
+		fmt.Printf("logging enabled: %s (level %s, scope %s)\n",
+			path, vlog.LevelName(), vlog.ScopeString(vlog.Scopes()))
 	}
 
 	if flagDev.valueOr(core.RaceEnabled) {
 		path, err := core.CaptureStderr(logDir)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "runtime capture disabled: %v\n", err)
-			return diagStatus
+			return
 		}
 		reason := "-dev"
 		if !flagDev.set {
@@ -151,7 +157,7 @@ func setupDiagnostics() int {
 			"path", path, "reason", reason, "race", core.RaceEnabled)
 		core.StartStderrDrain(parameter.DevDrainInterval, logRuntimeReport)
 	}
-	return diagStatus
+
 }
 
 // shutdownDiagnostics drains what the runtime wrote, closes the logger, then
@@ -204,6 +210,7 @@ func buildConfig() app.Config {
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = flagSession.serve
+		cfg.ProbeAddress = flagSession.probe
 	}
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
@@ -275,6 +282,7 @@ type sessionFlags struct {
 	host    string
 	join    string
 	serve   string
+	probe   string
 	size    string
 	players int
 }
@@ -283,6 +291,7 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
 	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
+	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
 		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host). "+
@@ -292,14 +301,17 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
-	if (f.host != "" || f.join != "" || f.serve != "" || f.players != 0) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, and -players are available only in interactive play")
+	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, and -players are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")
 	}
 	if f.serve != "" && (f.host != "" || f.join != "") {
 		return fmt.Errorf("-serve is a host of its own; it does not combine with -host or -join")
+	}
+	if f.probe != "" && f.serve == "" {
+		return fmt.Errorf("-probe answers for a -serve run; nothing else has a supervisor to answer")
 	}
 	if f.size != "" {
 		if _, _, err := parseSize(f.size); err != nil {
@@ -377,11 +389,12 @@ func (f *setFlag[T]) valueOr(fallback T) T {
 }
 
 type logFlags struct {
-	dir   setFlag[string]
-	level setFlag[string]
-	scope setFlag[string]
-	stat  setFlag[int]
-	rec   setFlag[int]
+	dir     setFlag[string]
+	level   setFlag[string]
+	scope   setFlag[string]
+	stat    setFlag[int]
+	rec     setFlag[int]
+	console bool
 }
 
 func newLogFlags() *logFlags {
@@ -404,11 +417,13 @@ func (f *logFlags) register(fs *flag.FlagSet) {
 	fs.Var(&f.scope, "log-scope", "Alias of -ls")
 	fs.Var(&f.stat, "lt", "Status snapshot period in game ticks, 0 disables; implies -l")
 	fs.Var(&f.rec, "lr", "Flight recorder depth in game ticks, 0 disables; implies -l")
+	fs.BoolVar(&f.console, "log-stdout", false,
+		"Write the session log to stdout as JSON instead of to a file; implies -l")
 }
 
 // enabled reports whether any logging flag was supplied.
 func (f *logFlags) enabled() bool {
-	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set
+	return f.dir.set || f.level.set || f.scope.set || f.stat.set || f.rec.set || f.console
 }
 
 // parseOutputDirFlag keeps -l and -j boolean while accepting -l=DIR/-j=DIR.

@@ -166,6 +166,11 @@ type Config struct {
 	MapWidth, MapHeight int
 	CropOnResize        bool
 
+	// ProbeAddress binds the liveness, readiness and metrics endpoint. Empty
+	// leaves it unbound, which is what an interactive run wants: a person watching
+	// the screen is the probe.
+	ProbeAddress string
+
 	// LockMap latches the world as shared before the FSM boots, so this run's
 	// terminal never rewrites shared map bounds and its crossings take the session's
 	// playout lead. A hosting run sets it, because its bounds are what every joiner
@@ -183,6 +188,16 @@ type Config struct {
 	// scriptedSession admits headless network I/O only through RunScript, which
 	// performs the startup gate and owns wall pacing.
 	scriptedSession bool
+
+	// geometryDefaulted records that Normalize supplied Width or Height because
+	// nobody named one. It is what lets a dedicated host tell "size me from the
+	// session" apart from "serve exactly this": a server with no -size has no
+	// terminal to derive a map from and would otherwise serve the fallback one.
+	//
+	// Normalize runs more than once on the way to a session — once resolving the
+	// handshake and once inside New — so it is set only on the pass that actually
+	// fills a zero, and a later pass finds the value the earlier one wrote.
+	geometryDefaulted bool
 }
 
 // ConfigForJoin applies the host-authored simulation identity to local operator options.
@@ -215,10 +230,10 @@ func (c *Config) Normalize() {
 		return
 	}
 	if c.Width == 0 {
-		c.Width = DefaultWidth
+		c.Width, c.geometryDefaulted = DefaultWidth, true
 	}
 	if c.Height == 0 {
-		c.Height = DefaultHeight
+		c.Height, c.geometryDefaulted = DefaultHeight, true
 	}
 }
 
@@ -248,6 +263,12 @@ func (c Config) Validate() error {
 	}
 	if c.Mode.Serves() && c.HostAddress == "" {
 		return errors.New("server: a dedicated host needs a bind address")
+	}
+	if c.ProbeAddress != "" && !c.Mode.Serves() {
+		// Refused rather than ignored, for the reason validateDriven refuses a
+		// colour mode with no terminal: a flag that silently does nothing is worse
+		// than one that says it cannot.
+		return fmt.Errorf("%s: -probe serves a dedicated host; this mode has no supervisor to answer", c.Mode)
 	}
 	if c.Participants != 0 && c.JoinAddress != "" {
 		return errors.New("-players configures a host, not a joining guest")

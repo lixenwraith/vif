@@ -226,6 +226,12 @@ behind the same read. The budget is released the moment `AcceptSession` returns:
 what it bounds is unauthenticated work, and everything after that point concerns a
 peer the roster ceiling already bounds.
 
+The acceptance a joiner sends back carries its own terminal-equivalent geometry
+(`network.JoinerReport`). It travels with the reply rather than the dial because
+only after construction does a joiner know the terminal it got, and it is advisory:
+a coordinator that was given a `-size` ignores it, and one that was not uses the
+first to size the session (see [Runtime](runtime.md) §1.2).
+
 `Coordinator.Admit` runs before `Assign`, and it is the one decision made about a
 dialer before it costs the session anything. The expensive part of a join is not
 the handshake but what follows it: on a running host the admission reads, encodes
@@ -741,7 +747,41 @@ property of the run rather than of the flags, so a script that opens a session
 starts keeping step with its peer the moment it has one. See
 [Development](development.md) for the exact commands and script schema.
 
-## 12. Adding a service
+## 12. The supervised run's endpoint
+
+`-probe <address>` binds `internal/probe`, a stdlib HTTP server carrying three
+paths. It exists because a dedicated host has no screen: what a person reads from
+a status bar an orchestrator has to read over a socket, and the periodic session
+summary is inside a process nothing can reach.
+
+| Path | 200 when | 503 when |
+|---|---|---|
+| `/healthz` | the tick counter is advancing, the clock has not started yet, or the run is paused | the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` |
+| `/readyz` | a dial would be admitted — live, not in the lobby's closing window, and the roster is below `sessionCapacity()` | the run is not live, the lobby is closing, or the session is at capacity |
+| `/metrics` | always; renders the status registry in the Prometheus text format | — |
+
+The two probes answer different questions on purpose. A run that is not live
+should be restarted; one that is merely full should stop being sent participants,
+and a Service that kept routing to it would be sending them to a roster with no
+room — which they would discover only after the connect and a slot allocation.
+Readiness therefore includes a lobby that has not started: being dialled is what
+it is waiting for.
+
+Liveness is sampled across reads rather than measured inside one, because a probe
+cannot wait for a tick. Each read compares against the last, and a pause resets the
+window rather than accumulating under it: pause is an operator state, not a fault.
+
+The server binds before the lobby wait, so a run that is starting answers rather
+than refusing connections for the whole window in which it is starting.
+
+`/metrics` renames registry keys onto the Prometheus grammar — `vif_` plus the key
+with every character outside `[A-Za-z0-9_]` replaced by an underscore — and reports
+every value as a gauge, because the counters among them are monotone only within a
+run and a reset re-bases them. String cells are omitted: they are states whose
+natural exposition is a label set this does not model. Nothing is instrumented for
+it; it is a rendering of `internal/status`, unchanged.
+
+## 13. Adding a service
 
 - Give it a stable unique name and declare only real dependencies.
 - Keep `Init` goroutine-free and make `Stop` safe after partial initialization.
@@ -755,7 +795,7 @@ starts keeping step with its peer the moment it has one. See
 - Add lifecycle tests for Init failure, Start failure, duplicate Stop, and
   shutdown with blocked I/O.
 
-## 13. Source map
+## 14. Source map
 
 | Concern | Primary source |
 |---|---|

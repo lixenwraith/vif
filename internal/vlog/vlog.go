@@ -76,6 +76,15 @@ type Config struct {
 	JournalDir string
 	Level      string // debug, info, warn, error; empty means debug
 	Scope      string // scope spec; empty means all. Pre-validate with ParseScopes
+
+	// Console sends the session log to stdout as JSON instead of to a file.
+	//
+	// It is off by default and must stay so for a run that presents: the game owns
+	// the alternate screen, and a log line written into it is corruption rather
+	// than output. A run with no terminal has the opposite problem — a file under
+	// the user state tree is invisible to whatever is supervising it — which is
+	// what this is for.
+	Console bool
 }
 
 var (
@@ -129,8 +138,10 @@ func Init(c Config) (string, error) {
 	return Start()
 }
 
-// buildLogger constructs a configured, unstarted logger and its resolved path
-func buildLogger(dir, name, levelName string) (*log.Logger, string, error) {
+// buildLogger constructs a configured, unstarted logger and its resolved path.
+// console selects stdout over a file; the two are exclusive, because a run that
+// wants its log on stdout is one whose filesystem is not where anybody will look.
+func buildLogger(dir, name, levelName string, console bool) (*log.Logger, string, error) {
 	l, err := log.NewBuilder().
 		Directory(dir).
 		Name(name).
@@ -138,8 +149,9 @@ func buildLogger(dir, name, levelName string) (*log.Logger, string, error) {
 		Format("json").
 		Sanitization(log.PolicyRaw). // json transport escaping is unconditional
 		LevelString(levelName).
-		EnableFile(true).
-		EnableConsole(false). // console writes corrupt the alternate screen
+		EnableFile(!console).
+		ConsoleTarget("stdout").
+		EnableConsole(console). // a file run keeps it off: console writes corrupt the alternate screen
 		InternalErrorsToStderr(false).
 		BufferSize(bufferSize).
 		MaxSizeMB(maxSizeMB).
@@ -176,12 +188,12 @@ func Start() (string, error) {
 	if closing.Load() {
 		return "", fmt.Errorf("vlog: previous session still draining")
 	}
-	if cfg.Dir == "" {
+	if cfg.Dir == "" && !cfg.Console {
 		return "", fmt.Errorf("vlog: no directory configured")
 	}
 
 	name := filePrefix + time.Now().Format(fileTimeFormat)
-	l, p, err := buildLogger(cfg.Dir, name, cfg.Level)
+	l, p, err := buildLogger(cfg.Dir, name, cfg.Level, cfg.Console)
 	if err != nil {
 		return "", err
 	}
@@ -198,6 +210,9 @@ func Start() (string, error) {
 	// A level set while stopped is honoured by the new session
 	l.SetLevel(level.Load())
 
+	if cfg.Console {
+		p = "stdout"
+	}
 	path.Store(&p)
 	sink.Store(l)
 	return p, nil
@@ -423,7 +438,7 @@ func StartJournal() (string, error) {
 	}
 
 	name := journalPrefix + time.Now().Format(fileTimeFormat)
-	l, p, err := buildLogger(cfg.JournalDir, name, journalLevel)
+	l, p, err := buildLogger(cfg.JournalDir, name, journalLevel, false)
 	if err != nil {
 		return "", err
 	}

@@ -76,6 +76,17 @@ func (b *RenderBuffer) Clear() {
 	b.bgOverlay = backgroundOverlay{}
 }
 
+// CellAt reads one composited cell, or the zero cell when the coordinate is
+// outside the buffer. It is the read half of the write API: a renderer composes
+// through Set, and a test or a diagnostic reads back what it composed without
+// needing a terminal to flush to.
+func (b *RenderBuffer) CellAt(x, y int) terminal.Cell {
+	if !b.inBounds(x, y) {
+		return terminal.Cell{}
+	}
+	return b.cells[y*b.width+x]
+}
+
 // SetWriteMask sets the mask for subsequent draw operations
 func (b *RenderBuffer) SetWriteMask(mask uint8) {
 	b.currentMask = mask

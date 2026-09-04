@@ -20,6 +20,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/probe"
 	"github.com/lixenwraith/vi-fighter/internal/render"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/service"
@@ -83,6 +84,19 @@ type App struct {
 	// session-cumulative ready count, so two of them at once cannot tell whose
 	// joiner confirmed.
 	midRunGate sync.Mutex
+
+	// firstJoiner is the geometry the first guest reported, guarded by sessionMu.
+	// A dedicated host with no -size takes its map from it: it is the only real
+	// terminal the session ever sees.
+	firstJoiner network.JoinerReport
+
+	// probe is the supervised run's endpoint, nil when none was configured.
+	// probeTick and probeAt are its stall detector: the last tick a probe read and
+	// when it read it, so a stall is measured across reads rather than inside one.
+	probe     *probe.Server
+	probeMu   sync.Mutex
+	probeTick uint64
+	probeAt   time.Time
 
 	// admissions bounds how often one dialling host may be admitted. It is built
 	// with the App rather than with the session because a run can open one later
@@ -464,6 +478,7 @@ func (a *App) Close() {
 	if a.corrections != nil {
 		a.corrections.close()
 	}
+	a.closeProbe()
 	a.closeMidRunPort()
 	a.closeStagingWorld()
 	a.hub.StopAll()

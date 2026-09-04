@@ -64,6 +64,11 @@ var (
 	RgbCursorNormal   = color.Orange
 	RgbCursorInsert   = color.White
 
+	// RgbPeerCursorText is what a peer's cell character is drawn in. One colour
+	// for every slot: the background is what says which participant this is, so
+	// the character only has to stay readable against all of them.
+	RgbPeerCursorText = color.Black
+
 	// Boost glow effect
 	RgbBoostGlow = color.HotPink
 
@@ -259,4 +264,19 @@ var GlyphColorLUT = [5][3]color.RGB{
 	{RgbGlyphRedDark, RgbGlyphRedNormal, RgbGlyphRedBright},
 	{RgbGlyphWhite, RgbGlyphWhite, RgbGlyphWhite},
 	{RgbGlyphGold, RgbGlyphGold, RgbGlyphGold},
+}
+
+// RgbPeerCursor is one background colour per roster slot, for the cursors this
+// instance does not drive. They are chosen apart from RgbCursorNormal and
+// RgbCursorInsert rather than merely from each other: the question a player asks
+// of this colour is "is that me", and only then "which of them is it".
+var RgbPeerCursor = [...]color.RGB{
+	color.VibrantCyan,
+	color.HotPink,
+	color.LightGreen,
+	color.PaleGold,
+	color.MutedPurple,
+	color.LightSkyBlue,
+	color.Sienna,
+	color.Silver,
 }

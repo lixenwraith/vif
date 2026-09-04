@@ -30,7 +30,7 @@ func OpenStream(prefix string) (*Stream, error) {
 		return nil, fmt.Errorf("vlog: no directory configured")
 	}
 
-	l, p, err := buildLogger(dir, prefix+time.Now().Format(fileTimeFormat), "trace")
+	l, p, err := buildLogger(dir, prefix+time.Now().Format(fileTimeFormat), "trace", false)
 	if err != nil {
 		return nil, err
 	}
