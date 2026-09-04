@@ -1,6 +1,7 @@
 package app
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
@@ -227,7 +228,7 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 func TestADedicatedHostAdmitsALateDial(t *testing.T) {
 	// Not parallel: this binds a real socket.
 	a, err := New(Config{
-		Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: 1,
+		Mode: ModeServer, HostAddress: "127.0.0.1:0",
 		Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
 	})
 	if err != nil {
@@ -258,6 +259,86 @@ func TestADedicatedHostAdmitsALateDial(t *testing.T) {
 	}
 	if bound := port.Addr(); bound == nil {
 		t.Fatal("the endpoint is not bound")
+	}
+}
+
+// TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers pins what -players means
+// on a server: a ceiling, never a requirement.
+//
+// The two numbers used to be one. A lobby that waited for its full roster made a
+// fleet host's readiness a function of how many people happened to want to play,
+// and gave a host started with no -players a session of exactly one guest.
+func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name         string
+		participants int
+		wantCapacity int
+	}{
+		{name: "unspecified", wantCapacity: parameter.MaxPlayers},
+		{name: "explicit", participants: 3, wantCapacity: 3},
+		{name: "one", participants: 1, wantCapacity: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a, err := New(Config{
+				Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: tt.participants,
+				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E5E,
+			})
+			if err != nil {
+				t.Fatalf("server: %v", err)
+			}
+			defer a.Close()
+
+			if got := a.sessionCapacity(); got != tt.wantCapacity {
+				t.Fatalf("capacity = %d, want %d", got, tt.wantCapacity)
+			}
+			if got := a.lobbyQuorum(); got != 1 {
+				t.Fatalf("quorum = %d, want 1: a server starts on its first guest", got)
+			}
+			if got := a.cfg.networkConfig.MaxPeers; got != tt.wantCapacity {
+				t.Fatalf("transport admits %d peers, want the capacity %d", got, tt.wantCapacity)
+			}
+		})
+	}
+}
+
+// TestAnInteractiveHostStillWaitsForItsWholeLobby holds the other shape still. An
+// interactive -host is a party that starts together, so there the ceiling and the
+// number the gate waits for remain one value.
+func TestAnInteractiveHostStillWaitsForItsWholeLobby(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		participants int
+		want         int
+	}{{participants: 0, want: 1}, {participants: 2, want: 1}, {participants: 4, want: 3}} {
+		a := mustHeadless(t, 0x5E6E, 120, 40)
+		a.cfg.Participants = tt.participants
+		if got := a.sessionCapacity(); got != tt.want {
+			t.Fatalf("-players %d: capacity = %d, want %d", tt.participants, got, tt.want)
+		}
+		if got := a.lobbyQuorum(); got != tt.want {
+			t.Fatalf("-players %d: quorum = %d, want %d", tt.participants, got, tt.want)
+		}
+		a.Close()
+	}
+}
+
+// TestTheLobbyClosingWindowRefusesADial covers the gap between the startup lobby
+// reading its roster and the mid-run gate arming. Neither gate can serve a dial
+// there, so the answer has to be a refusal the dialer can retry.
+func TestTheLobbyClosingWindowRefusesADial(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x5E7E, 120, 40)
+	defer a.Close()
+
+	a.lobbyClosing.Store(true)
+	if _, err := a.assignParticipant(); !errors.Is(err, ErrSessionStarting) {
+		t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
+	}
+	a.openMidRunJoins()
+	if _, err := a.assignParticipant(); err != nil {
+		t.Fatalf("a dial after the gate opened was refused: %v", err)
 	}
 }
 

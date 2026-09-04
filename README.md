@@ -17,8 +17,9 @@ configuration, audio policy, and reusable simulation libraries.
 - A typed sparse-set ECS, fixed-step scheduler, bounded event settling,
   spatial grid, composite actors, FSM-owned player cursors, and a single
   explicit world-lock boundary.
-- Three runtime shapes: interactive play, deterministic caller-driven or
-  authored-script headless runs, and terminal playback of recorded runs.
+- Four runtime shapes: interactive play, a dedicated host with no terminal and no
+  cursor of its own, deterministic caller-driven or authored-script headless runs,
+  and terminal playback of recorded runs.
 - TOML-authored hierarchical state machines with parallel regions, dynamic
   encounters, payload capture/injection, guards, delayed actions, and system
   control.
@@ -87,6 +88,10 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   it can be combined with `-host` or `-join` for repeatable two-process runs.
 - `-host <bind-address>` hosts a session and `-players <n>` sets the lobby size;
   `-join <host:port>` joins it and adopts the host's seed/config/content identity.
+- `-serve <bind-address>` runs a dedicated host: no terminal, no renderer, no
+  audio and no cursor of its own. It starts on its first guest and admits the rest
+  as they arrive, where `-players <n>` is a ceiling rather than a requirement.
+  `-size <WxH>` gives it the geometry it has no terminal to derive.
 - `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
   and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
@@ -99,12 +104,17 @@ legacy fallbacks, installation, and WASM behavior.
 
 For a local two-terminal session, run `./bin/vif -d -host 127.0.0.1:7777`
 in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add
-`-players <n>` to the host for a larger lobby. The session is currently
-plaintext and trusted-peer, and a participant still joins only at startup. The
-old replay-from-zero catch-up path was removed; an authoritative shared snapshot
-is the planned join-anytime mechanism. For an automatic 2,000-tick headless pair,
-use `script/phase3-host.toml` and `script/phase3-guest.toml` as documented in
-`doc/development.md`.
+`-players <n>` to the host for a larger lobby. A participant joins at startup or
+mid-run: the host sends an authoritative shared snapshot of the world at whatever
+tick the session has reached, which is also how a peer that dropped comes back.
+The session is plaintext and trusted-peer — a dial is rate-limited per address and
+bounded in what it can allocate, but it is not authenticated, so a host reachable
+from an untrusted network needs one in front of it.
+
+For an automatic 2,000-tick headless pair, use `script/phase3-host.toml` and
+`script/phase3-guest.toml` as documented in `doc/development.md`. For a host
+nobody sits at, `./bin/vif -serve :7777 -size 120x40` waits for its first guest
+and then runs the session on its own.
 
 ## Documentation
 

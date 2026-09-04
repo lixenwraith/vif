@@ -753,7 +753,15 @@ func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, ui
 			return nil, 0, fmt.Errorf(
 				"session did not reach tick %d before the join deadline", minTick)
 		}
-		time.Sleep(joinEpochPoll)
+		// Waiting for a tick the clock will never reach, if the run is closing. The
+		// deadline alone would answer eventually; selecting on the stop is what
+		// keeps a join arriving as the process shuts down from adding its whole
+		// length to the time between SIGTERM and exit.
+		select {
+		case <-c.stop:
+			return nil, 0, errors.New("session is shutting down")
+		case <-time.After(joinEpochPoll):
+		}
 	}
 }
 

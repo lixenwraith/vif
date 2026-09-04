@@ -143,8 +143,12 @@ type Config struct {
 	// host treats zero as two; a solo run opened later with :host treats zero as
 	// parameter.MaxPlayers. The ceiling is also the roster width.
 	//
-	// ModeServer is the exception, because it is not one of them: there the value
-	// is the number of guests the session waits for, and zero means one.
+	// ModeServer is the exception, twice over: the server is not one of them, so
+	// the value counts guests rather than participants — and it is a ceiling only.
+	// A dedicated host starts on its first guest and admits the rest through the
+	// mid-run gate as they arrive, so zero means the full roster rather than one.
+	// Waiting for a named number would make a fleet host's readiness a function of
+	// how many people happened to want to play.
 	Participants int
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run

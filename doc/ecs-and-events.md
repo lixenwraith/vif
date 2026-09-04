@@ -84,6 +84,19 @@ one without updating the other.
 hold up to `parameter.MaxEntitiesPerCell` entity IDs (currently 31). This avoids
 per-query allocation in collision, typing, and targeting hot paths.
 
+The grid is dense, so a map costs cells: `Cell` is exactly 256 bytes and the world
+pre-allocates `DefaultGridWidth` × `DefaultGridHeight`. `engine.ClampMapSize` is the
+single gate in front of that allocation, bounding a map by `parameter.MaxMapWidth`,
+`MaxMapHeight` and `MaxMapCells` — the last equal to the pre-allocated grid, which
+is what makes a legal map one the grid never has to grow for. It clamps rather than
+rejects because a `LevelSetup` payload is replicated: every participant applies the
+same one, so a clamp reaches the same bounds everywhere where a payload dropped on
+one instance and applied on another is a divergence. `World.SetupLevel` clamps
+before it records the dimensions and `SpatialGrid.Resize` clamps again before it
+allocates, so Config and the grid always describe one map. Without that gate a
+width and height whose product overflows `int` was a panic in the allocator,
+reachable from any participant.
+
 ```mermaid
 flowchart LR
     Move["SetPosition"] --> Store["position sparse set"]

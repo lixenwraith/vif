@@ -718,7 +718,8 @@ removed. `-dev` defaults **on** for race builds and is disabled with
 | `-dev[=bool]` | Runtime stderr capture; defaults on for race builds |
 | `-host <bind-address>` | Host a TCP session |
 | `-join <host:port>` | Join a session and adopt the host anchor before world construction |
-| `-players <n>` | Participants a `-host` lobby waits for, itself included |
+| `-serve <bind-address>` | Host a TCP session with no terminal and no local cursor |
+| `-players <n>` | Participants a `-host` lobby waits for, itself included; with `-serve`, a ceiling on guests |
 
 Log setup failure is non-fatal: the game runs unlogged and the process exits
 with `73` (`EX_CANTCREAT`) so a script can detect it.

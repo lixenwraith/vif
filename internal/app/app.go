@@ -71,6 +71,25 @@ type App struct {
 	// lobby's own gate is done, which is what keeps the two from racing.
 	lateJoins atomic.Bool
 
+	// lobbyClosing refuses dials for the window between the startup lobby reading
+	// its roster and lateJoins arming. Neither gate can serve a dial there — the
+	// lobby's offers are already out, and the mid-run gate waits on a capture a
+	// clock that has not started never produces — so the honest answer is a
+	// refusal the dialer can retry rather than an identity and a silent wait.
+	lobbyClosing atomic.Bool
+
+	// midRunGate serialises the mid-run admission. The handshakes that reach it run
+	// concurrently, but the gate they call reads a whole world and then waits on a
+	// session-cumulative ready count, so two of them at once cannot tell whose
+	// joiner confirmed.
+	midRunGate sync.Mutex
+
+	// admissions bounds how often one dialling host may be admitted. It is built
+	// with the App rather than with the session because a run can open one later
+	// with :host, and a budget that started when hosting did would be a budget
+	// reset by whatever closed the last session.
+	admissions *admissionLimiter
+
 	// snapshotTelemetry is reserved during construction so a capture or an install
 	// can publish its cost into a registry that is frozen by then.
 	snapshotTelemetry snapshotTelemetry
@@ -104,7 +123,7 @@ func New(cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	a := &App{cfg: cfg, hub: service.NewHub()}
+	a := &App{cfg: cfg, hub: service.NewHub(), admissions: newAdmissionLimiter()}
 	// Before init, because initWorld binds the correction queue to whatever
 	// transport a service contributed and a peer can reach it from that moment.
 	a.corrections = newCorrections(a)

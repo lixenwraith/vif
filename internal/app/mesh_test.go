@@ -254,7 +254,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 
 	hostCfg := network.DebugConfig(network.RoleHost, "127.0.0.1:0")
 	hostCfg.ParticipantID = hostParticipantID
-	hostCfg.MaxPeers = host.remoteParticipantCount()
+	hostCfg.MaxPeers = host.sessionCapacity()
 	hostCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign: host.assignParticipant, Release: host.releaseParticipant,
 	}, socketWait)

@@ -318,10 +318,12 @@ another rate and `-watch` presents the scripted side on its own terminal. See
 
 Neither side has to be a person. `-serve` runs a dedicated host: the shared world,
 the authority, the correction cadence and the roster, with no terminal and no
-cursor of its own, so a session can consist entirely of the guests that join it.
+cursor of its own, so a session can consist entirely of the guests that join it. It
+starts on its first guest and admits the rest as they arrive, so `-players` there
+is a ceiling and omitting it holds the whole roster.
 
 ```sh
-./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
+./bin/vif -serve :7777 -size 120x40 -l -lv info
 ```
 
 See [Runtime](runtime.md) §1.2.

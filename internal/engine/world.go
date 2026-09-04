@@ -711,6 +711,13 @@ func (w *World) CursorSlot(e core.Entity) (uint8, bool) {
 func (w *World) SetupLevel(width, height int, clearEntities bool, cropOnResize bool) {
 	config := w.Resources.Config
 
+	// Clamped before it is recorded, not just before it is allocated. A LevelSetup
+	// payload is replicated, so these dimensions can arrive from any participant;
+	// clamping here is what keeps Config and the grid describing one map, where
+	// clamping only inside the grid would leave map logic reading bounds no cell
+	// exists for.
+	width, height = ClampMapSize(width, height)
+
 	// Update map dimensions
 	config.MapWidth = width
 	config.MapHeight = height

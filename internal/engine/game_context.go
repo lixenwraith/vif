@@ -248,7 +248,11 @@ func (ctx *GameContext) updateGameArea() (gameWidth, gameHeight int) {
 	gameHeight = max(ctx.Height-parameter.BottomMargin-parameter.TopMargin, 1)
 	gameWidth = max(ctx.Width-ctx.GameXOffset, 1)
 
-	return gameWidth, gameHeight
+	// The viewport is what the resize and reset paths write the map from, so it is
+	// bounded here rather than at each of them: a terminal that reports a size the
+	// grid cannot hold is presented at the largest map there is, instead of
+	// producing bounds no cell exists for.
+	return ClampMapSize(gameWidth, gameHeight)
 }
 
 // ScreenSize inverts updateGameArea: terminal dimensions recovered from the viewport

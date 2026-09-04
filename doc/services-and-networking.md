@@ -189,7 +189,7 @@ map latch separately.
 |---|---|
 | `RoleNone` | Disabled/no-op. |
 | `RoleServer` | Generic TCP/TLS listener. |
-| `RoleHost` | Listener with `HostAcceptor`: allocates a participant identity and slot per connection and offers the anchor. `Config.OnAdmit` then runs the mid-run gate on the accept goroutine once the stream is a peer, which serialises joins by construction. |
+| `RoleHost` | Listener with `HostAcceptor`: admits the dialling address against a per-host budget, then allocates a participant identity and slot and offers the anchor. Each handshake runs on a goroutine of its own, bounded by `Config.MaxHandshakes`; `Config.OnAdmit` then runs the mid-run gate, which `App.midRunGate` serialises. |
 | `RoleClient` | Generic dialer. |
 | `RolePeer` | Dialed/preconnected stream admitted after the join and start gates. |
 | `RoleRelay` | A *session* role rather than a transport mode: a participant with more than one link, which forwards the authority's artifacts to the participants behind it and retains what it forwards so it can answer their selective requests. The transport treats it exactly as `RolePeer` — it dials — because what makes it a relay is what it does with the artifacts, not how the stream was established. `network.SessionRole(authoring, links)` is what the protocol reads. |
@@ -210,8 +210,38 @@ by the coordinator's participant ID rather than accept order. The peer manager
 enforces the configured cap and duplicate-ID rejection.
 
 Each peer owns a bounded send queue, exact-frame read loop, encode/flush loop and
-close monitor. `Stop` closes the listener and peers and waits for the accept loop;
-peer close removes it from the manager and emits one poll notification.
+close monitor. `Stop` closes the listener, then the handshakes still in flight,
+then the peers, and waits for all of them; peer close removes it from the manager
+and emits one poll notification.
+
+### 7.1 Admission
+
+The handshake reads from a socket the far end controls, so it does not run on the
+accept goroutine. One dialer that connected and never wrote used to hold every
+other join for a whole `ConnectTimeout` — the cheapest denial there is, one socket
+per five seconds of lobby. Each accepted connection now gets a goroutine, and
+`Config.MaxHandshakes` bounds how many may be in flight at once; past the budget a
+dial is refused rather than queued, because queueing would put the accept loop back
+behind the same read. The budget is released the moment `AcceptSession` returns:
+what it bounds is unauthenticated work, and everything after that point concerns a
+peer the roster ceiling already bounds.
+
+`Coordinator.Admit` runs before `Assign`, and it is the one decision made about a
+dialer before it costs the session anything. The expensive part of a join is not
+the handshake but what follows it: on a running host the admission reads, encodes
+and sends a whole world, so a peer that joins and leaves in a loop spends one
+connect per capture. `app.admissionLimiter` gives each dialling host
+`parameter.NetworkAdmitBurst` admissions per `NetworkAdmitWindow`, keyed by address
+rather than by identity — an identity is what the attack consumes and is released
+the moment the connection drops. A refusal is written back as a `MsgJoinReply`
+carrying its reason, for the same reason a mid-succession refusal is: a dialer that
+can read why it was turned away backs off, where one that only sees the stream end
+retries immediately.
+
+The limiter's own table is bounded by `NetworkAdmitTracked` and swept when an
+unseen host arrives. Past that ceiling it fails closed: a completed TCP handshake
+proves the source address, so a table that wide is many real hosts at once rather
+than one forging them.
 
 ## 8. Wire frame and session messages
 
@@ -290,7 +320,14 @@ split. The schema JSON first enters a 10-byte bounded compression envelope:
 `[magic:4][version:1][codec:1][plain bytes:4]`, followed by deflate data. The
 declared plain size and the reassembled wire size are both capped at
 `MaxSnapshotBytes`. The current storm high water compresses from about 176 KiB to
-15.4 KiB, but chunking remains required for larger or less compressible worlds. Each
+15.4 KiB, but chunking remains required for larger or less compressible worlds.
+
+That cap is a sanity bound rather than the defence. A declared length is a claim by
+whoever sent the chunk, and `NetworkSystem` holds one `SnapshotAssembly` per
+source: reserving for the declared total let one twenty-byte header make a receiver
+hold the whole ceiling, once per participant. The reservation is now bounded by
+`snapshotReserve` and the buffer grows with the bytes that actually arrive, so what
+a peer can make a receiver hold is what that peer sends. Each
 chunk carries a 20-byte header before its payload:
 
 | Byte range | Width | Field |
@@ -402,6 +439,22 @@ immediately; remote copies apply after the fixed receive lead. Arrival, departur
 and full reset remain barrier-bound on their producer because they create or destroy
 shared identity. The default lead is three 50 ms ticks and never waits for a
 per-tick round trip.
+An arriving epoch is admitted only inside a forward window. The schedule keeps what
+is not yet due, so an apply tick beyond anything this run reaches is not a schedule
+but a reservation nothing retires — and `epochWindow.admit` takes any tick above a
+source's high-water mark, so one frame naming a large one would carry that mark
+there and make every ordinary epoch that followed look late, on this instance and
+on everything it relays to. The window is therefore checked before the epoch window
+rather than after it, and it is `NetworkApplyWindowTicks`: the join catch-up
+ceiling, which is the largest gap two participants legitimately hold at once, plus
+one convergence floor for a peer running ahead. `NetworkScheduledMax` and
+`NetworkScheduledBytes` bound what is held inside that window — a count for many
+small artifacts and a byte total for few large ones, the same pair the replay
+suffix uses. Both refusals are counted separately from a decode failure
+(`network.artifacts_refused_tick`, `network.artifacts_schedule_full`), because a
+frame this instance read and refused is a different diagnosis from one it could not
+read.
+
 The barrier is engaged for the life of a session run rather than while a peer is
 attached: the tick an artifact applies at is what a replay or a mid-run catch-up
 has to reach, and a reproduction holds no link. A journaled crossing is already

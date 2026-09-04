@@ -323,11 +323,15 @@ current web build. The Makefile also contains
 an explicitly experimental Windows cross-build.
 
 A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed
-through `-host`, `-join` and `-players`. The join handshake resolves the host
-anchor before the joining world is constructed, the roster every instance builds
-from arrives with the start gate, every scheduler stays at tick zero until the
-lobby closes, and the manifest-registered `NetworkSystem` drains framed input only
-at the simulation's poll boundary. The artifact barrier exchanges crossings without
+through `-host`, `-join`, `-serve` and `-players`. The join handshake resolves the
+host anchor before the joining world is constructed, the roster every instance
+builds from arrives with the start gate, every scheduler stays at tick zero until
+the lobby closes on its quorum — its full roster for `-host`, its first guest for
+`-serve` — and the manifest-registered `NetworkSystem` drains framed input only at
+the simulation's poll boundary. Trusted-peer is a statement about authentication
+and nothing else: a dial is budgeted per address, the handshake is bounded and off
+the accept path, and every buffer an arriving frame can reach is capped, but
+nothing proves who the peer is. The artifact barrier exchanges crossings without
 a synchronous per-tick round trip, and because every artifact names the absolute
 tick it applies at, a node relays what it receives so a participant reaches
 instances its producer never linked to. Its playout lead is a receive-side

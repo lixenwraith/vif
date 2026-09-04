@@ -72,3 +72,28 @@ const (
 	// DefaultGridHeight is the default height for the spatial grid
 	DefaultGridHeight = 250
 )
+
+// Map bounds. The grid is a dense array of Cell, so cells are what a map costs:
+// at 256 bytes each, MaxMapCells is exactly the grid NewWorld pre-allocates,
+// which is what makes a legal map one the grid never has to grow for.
+//
+// The per-axis caps sit far above any terminal a person runs and exist so an
+// extreme aspect ratio is refused on its own terms rather than by the product.
+// They are a clamp rather than a rejection because a LevelSetup payload is
+// replicated: every participant applies the same one, so a clamp reaches the
+// same bounds everywhere, where a payload one instance dropped and another
+// applied is a divergence.
+//
+// The bound exists because the dimensions reach make() from a replicated
+// payload. Without it, a width and height whose product overflows int is a
+// panic in the allocator rather than a rejected map.
+const (
+	// MaxMapWidth is the widest simulation map, in cells.
+	MaxMapWidth = 2000
+
+	// MaxMapHeight is the tallest simulation map, in cells.
+	MaxMapHeight = 2000
+
+	// MaxMapCells is the most cells a map may hold, whatever its shape.
+	MaxMapCells = DefaultGridWidth * DefaultGridHeight
+)

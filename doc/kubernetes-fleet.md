@@ -12,6 +12,14 @@ topology — is deliberately absent.
 Reviewed at `f1d1f49` (`main`). Measurements were taken on linux/amd64, 4 vCPU,
 Go 1.26.5, `CGO_ENABLED=0`, against a binary built from that commit.
 
+**Status.** The first round of remediation has landed: G1, G5, G6, G7, G9 and G15
+are closed, with regression coverage that fails against the code they fix. G3, G4,
+G8, G10, G14 and G16 are deferred as not required for a proof of concept, G11 and
+G12 are deliberately held for reasons recorded against them, and G13 is carried
+forward as its own task. §2's table is the register; §3 is what is left of the
+plan. The findings in §5 and the appendices are the original review and are left
+as written except where a fix changed the number.
+
 ---
 
 ## 1. Verdict
@@ -40,19 +48,23 @@ The README is stale — it still advertises "three runtime shapes" and describes
 `-host` as the only hosting form (`README.md`). `-serve` is correctly documented
 in `doc/runtime.md` §1.2, `doc/development.md` and `doc/architecture.md`.
 
-What is *not* ready is everything around that shape. There are no blockers, but
-there are eleven **required** gaps, and three of them are wire-reachable defects
-that make an internet-exposed pod indefensible rather than merely
-under-hardened: a confirmed remote panic, a confirmed 64 MiB-per-source
-allocation primitive, and unbounded per-tick retention driven by an
-attacker-chosen apply tick. The lobby also blocks forever with no timeout, which
-in Kubernetes terms is a pod that never becomes Ready and never terminates —
-and there is no "match over, exit with a status code" path at all, so
-`restartPolicy` has nothing to react to. Logging is file-only by explicit
-construction (`EnableConsole(false)`, `internal/vlog/vlog.go`), so a pod
-produces zero stdout. Close these and the architecture fits well; the process
-model, the determinism story and the ephemeral-pod lifecycle are unusually
-well-matched.
+What was *not* ready was everything around that shape. There were no blockers but
+eleven **required** gaps, and three were wire-reachable defects that made an
+internet-exposed pod indefensible rather than merely under-hardened: a confirmed
+remote panic, a confirmed 64 MiB-per-source allocation primitive, and unbounded
+per-tick retention driven by an attacker-chosen apply tick. The lobby also blocked
+forever, which in Kubernetes terms is a pod that never becomes Ready and never
+terminates.
+
+Those are closed. A `-serve` process now starts on its first guest whatever
+`-players` says, admits the rest as they arrive, cannot be panicked or exhausted by
+a frame, and cannot be denied by a dialer that connects and says nothing. What
+remains is operational rather than structural: a pod still emits nothing on stdout
+(G3), has nothing a probe can read (G4), and admits any peer that can open a socket
+(G8). One structural gap remains and it is not a defect: there is no game over in
+the design, so there is no "match over, exit with a status code" path for
+`restartPolicy` to react to (G2, ADR-1). The architecture fits; the process model,
+the determinism story and the long-lived-server lifecycle are well-matched.
 
 ---
 
@@ -62,26 +74,29 @@ Severity: **blocker** = makes the architecture impossible; **required** = the
 deployment is unsafe or unmanageable without it; **desirable** = cost or
 hygiene. "Scope" is engineering effort on the application only.
 
-| ID | Description | Sev | Affected files | Scope | Depends on |
-|---|---|---|---|---|---|
-| **G1** | Lobby blocks indefinitely. `waitForStartup` loops until `PeerCount() == remoteCount` with no deadline; the only exits are a signal or a stream error. A pod started with `-players 3` that receives two guests never becomes Ready and never terminates. | required | `internal/app/session.go:404` (`waitForStartup`), `internal/app/session.go:278` (`startHostSessionOn`) | S — add a deadline parameter and an admission policy hook | — |
-| **G2** | No match-over exit. `Serve` loops on a frame ticker and a report ticker until a signal; there is no game-over event, no idle-timeout, no exit code. Measured: the server kept ticking and stayed resident after its only guest disconnected. | required | `internal/app/serve.go:82–104`, `internal/system/meta.go` (no terminal state), `cmd/vif/main.go:83–92` | M — needs a match-lifecycle concept, not just a timer | ADR-1 |
-| **G3** | Structured logs never reach stdout. `vlog` builds its logger with `EnableConsole(false)` ("console writes corrupt the alternate screen") and `EnableFile(true)`; JSON goes to `$XDG_STATE_HOME/vi-fighter/log/`. A pod emits nothing. Worse: if `-l` is given and the directory is unwritable, `setupDiagnostics` prints one line to stderr, sets exit 73, **and runs the whole session unlogged anyway**. | required | `internal/vlog/vlog.go:133–164` (`buildLogger`), `cmd/vif/main.go:64,107–147` | S — a console sink and a fail-fast switch | — |
-| **G4** | No health/readiness surface. No HTTP listener, no Unix socket, no status file, nothing a probe can read (verified: no `net/http` import anywhere under `internal/` or `cmd/vif`). Readiness in particular must go **false** when the lobby fills, or the Service keeps routing clients to a match they cannot enter — and `assignParticipant` already returns "session is full" only *after* the TCP connect and a roster-slot allocation. | required | new; sources exist in `internal/status/registry.go`, `App.SessionSummary` (`internal/app/host.go:166`) | M | G1 |
-| **G5** | **Wire-reachable panic (confirmed).** `EventLevelSetup` is `ClassShared` (`internal/event/registry_gen.go:194`), so it replicates and any peer may inject it. `MetaSystem.handleLevelSetup` passes attacker-chosen `Width`/`Height` unvalidated to `World.SetupLevel` → `SpatialGrid.Resize`, which computes `need := newWidth * newHeight` and calls `make([]Cell, need)` with no overflow or magnitude check. Reproduced: `SetupLevel(1<<31, 1<<31)` → `runtime error: makeslice: len out of range`. Under `core.Go`'s crash handling that is `os.Exit(1)`. | required | `internal/engine/spatial_grid.go:185`, `internal/system/meta.go:376`, `internal/event/payload.go:18` | S — clamp in the payload validator and in `Resize` | — |
-| **G6** | **Wire-reachable allocation primitive (confirmed by reading).** `NetworkSystem` holds `snapshots [MaxPlayers+1]network.SnapshotAssembly` (`internal/system/network.go:126`), indexed by source. `SnapshotAssembly.AddChunk` accepts any declared body length up to `MaxSnapshotBytes = 64 << 20` and immediately does `make([]byte, 0, total)`. One 20-byte header per source buys 64 MiB; 17 sources buy ~1.06 GiB. | required | `internal/network/snapshot.go:30,98–160`, `internal/system/network.go:126,1366` | S — bound `total` against a measured world ceiling, not 64 MiB | — |
-| **G7** | **Wire-reachable unbounded retention.** `scheduleCrossings` appends admitted frames to `NetworkSystem.scheduled` with the frame's own `ApplyTick`; `applyDue` only drains entries whose `applyTick <= nextTick`. Nothing bounds `applyTick` relative to the local tick. A peer sending batches with monotonically increasing `ProducedTick` (which `epochWindow.admit` accepts unconditionally when `tick > w.high`) and a far-future `applyTick` grows `scheduled` at line rate; `relayBatch` then amplifies it to every other peer. | required | `internal/system/network.go:1645` (`scheduleCrossings`), `:1726` (`applyDue`), `epochWindow.admit`, `internal/parameter/network.go:NetworkEpochWindow` | M — needs a forward apply-tick window and a `scheduled` cap | — |
-| **G8** | No authentication and no transport security. Both roles construct `network.DebugConfig(...)`, which hard-codes `TLS: nil` (`internal/network/config.go:117`); `MsgAuthRequest`/`MsgAuthResponse` are reserved and unused (`internal/network/protocol.go`). Any TCP peer that completes the handshake receives the host's `JoinAnchor` — including `ConfigID`/`ContentID`, which are **absolute host filesystem paths** — a roster slot, a full world capture, and the ability to inject every `ClassShared`/`ClassBus` event: `EventGameResetRequest`, `EventLevelSetup`, `EventMetaSystemCommandRequest` (enable/disable systems), `EventFSMRegionRequest`, and every spawn request. `admissibleFromSource` restricts only participant join/depart. | required | `internal/network/config.go:97–123`, `internal/network/session.go:118` (`HostAcceptor`), `internal/system/network.go:admissibleFromSource`, `internal/app/app.go:412` (`buildAnchor`) | L | ADR-3 |
-| **G9** | Serial pre-auth handshake starves the accept loop. `Transport.acceptLoop` calls `config.AcceptSession(conn)` **synchronously** (`internal/network/transport.go:129`). `HostAcceptor` allocates a roster slot *first* (`c.Assign()`), then sets a `ConnectTimeout` (5 s) deadline and blocks in `Decode`. One connection that opens and never writes stalls every other join for 5 s; a trickle of them denies the lobby entirely. It also extends worst-case SIGTERM latency, because `Transport.Stop` waits on this goroutine. | required | `internal/network/transport.go:99–152`, `internal/network/session.go:118–165` | M — handshake off the accept goroutine, with a concurrency cap | G8 |
-| **G10** | No build identity on join. `anchorIdentity` compares schema (a *record layout* version), seed, session counter, `config_id` (a **path string**, not a content hash), `content_id`, a content pin, three corpus counters, and `tick_ns`. There is no binary version, no VCS revision, no protocol version, and no hash of the resolved FSM/system manifest. Two builds that differ in simulation math or system ordering but resolve the same config path join successfully and diverge silently; the D-11 digest probe reports it only after the fact, `NetworkDesyncSamples` later. Determinism is claimed "for one build" and nothing enforces "one build". | required | `internal/app/replay.go:102–127`, `internal/event/journal.go:64–107`, `internal/app/join.go:67` | M — add an identity field and a manifest hash to the anchor; bump `JournalSchema` | ADR-4 |
-| **G11** | No `GOMEMLIMIT`, no `GOGC`, no explicit `GOMAXPROCS` anywhere in the tree (grep across all of `internal/`, `pkg/`, `cmd/` returns nothing). Under a hard pod memory limit the Go heap has no soft target, so a transient allocation spike is an OOMKill rather than a GC pause. | required | new; `cmd/vif/main.go` | S | Memory report |
-| **G12** | Spatial grid is a fixed 30.5 MiB allocation, independent of map size, and grow-only. `NewPosition` builds `NewSpatialGrid(DefaultGridWidth=500, DefaultGridHeight=250)`; `Cell` is exactly 256 bytes, so 125,000 × 256 = 32,000,000 B. `SpatialGrid.Resize` shrinks `len` but never `cap` (`g.Cells = g.Cells[:need]`). Measured: **82.3 % of a headless run's heap-in-use is this single allocation**, for a map that needs 8,000 cells. A guest that installs a capture builds a second world and pays it twice. | desirable (but it is the density lever) | `internal/engine/position.go:44`, `internal/engine/spatial_grid.go:57,185`, `internal/parameter/engine.go:61,70,73` | S — size the grid from resolved geometry | — |
-| **G13** | No build tag excludes terminal, renderer and audio from a server binary. `internal/render`, `pkg/audio` and the terminal module are linked unconditionally (17.0 MB binary). `ModeServer` never constructs any of them, so this is pure attack surface and image size. The package structure permits the split: presentation is reached only through `Mode.Presents()`/`Mode.Audio()` predicates in `App.init`, and `internal/manifest` is the single registration point for renderers. | desirable | `internal/app/app.go:171,322`, `internal/manifest/definition.go`, `Makefile` | M | — |
-| **G14** | `SIGHUP` is handled identically to `SIGTERM`/`SIGINT` — all three terminate (`internal/app/signal_unix.go:14`). Conventionally SIGHUP is reload. Harmless in a pod, but it forecloses a reload semantic later. | desirable | `internal/app/signal_unix.go` | XS | — |
-| **G15** | On crash with no terminal, `core.HandleCrash` falls through to `terminal.EmergencyReset(os.Stdout)` because `crashTerminal` is nil outside `Mode.Presents()`. Escape sequences land in the pod log. | desirable | `internal/core/crash_handler_unix.go:26–32`, `internal/app/app.go:233` | XS — skip when no terminal was ever claimed | — |
-| **G16** | Telemetry exists but is not exposable. `internal/status.Registry` holds every counter a metrics endpoint would want (`network.peers`, tick counters, per-region FSM state, `spatial.*`, correction cadence) and `snapshot.go` can serialise it — but only to a periodic file under the log directory. No exposition format, no endpoint. | desirable | `internal/status/registry.go`, `internal/status/snapshot.go`, `internal/app/host.go:166` | S once G4 exists | G4 |
-| **G17** | README advertises three runtime shapes and omits `-serve`. | desirable | `README.md` | XS | — |
-| **G18** | `-check` cannot be combined with `-serve` (`sessionFlags.validateInvocation` rejects the pair). An init container must re-supply the resource flags without the session flags. Not a defect, but it means the validated config and the served config are two invocations that can drift. `-check` does exit non-zero on invalid config (`resource.Check` error → `os.Exit(exitFailure)`), so it is otherwise a correct init step. | desirable | `cmd/vif/main.go:291–305`, `internal/resource/check.go:21` | XS | — |
+Severity is as first assessed. **Status** is where each gap stands now: *closed*
+with the change that closed it, *deferred* with the reason, or *open*.
+
+| ID | Sev | Status | Description and disposition |
+|---|---|---|---|
+| **G1** | required | **closed** | Lobby blocked indefinitely: `waitForStartup` looped until `PeerCount() == remoteCount`, so a pod started with `-players 3` that received two guests never became Ready and never terminated. The fix is not a timeout but a correction to what `-players` means. `sessionCapacity` and `lobbyQuorum` split the one number that used to be both: on a server the flag is a **ceiling** on guests, defaulting to `parameter.MaxPlayers`, and the quorum is one. A server starts on its first guest and admits the rest through the mid-run gate — the same path a dropped peer returns through, and therefore already the path that has to work. An interactive `-host` is unchanged: its lobby is a party that starts together, so there quorum and capacity remain one value. `internal/app/session.go`, `serve.go`, `loop.go`. |
+| **G2** | required | **deferred — nothing to hook** | There is no game-over in the design: players fall back to the start, or continue at rising difficulty, or a level ends in a victory message and restarts. `Serve` therefore has no terminal state to exit on, and inventing one would be designing gameplay from the deployment inwards. What this means for the pod is recorded in ADR-1: with no match end, the ephemeral process model has nothing to trigger it, and a long-lived reusable server is the shape the code actually has. |
+| **G3** | required | deferred | Structured logs never reach stdout — `vlog` builds with `EnableConsole(false)` and writes JSON under `$XDG_STATE_HOME`. A pod emits nothing, and an unwritable log directory warns once and then runs the whole session unlogged. Not required to run a proof of concept; required before anything is operated. |
+| **G4** | required | deferred | No health, readiness or metrics surface of any kind. Readiness must go false once a lobby is full — which, after G1, now means "at capacity" rather than "started". |
+| **G5** | required | **closed** | Wire-reachable panic. `EventLevelSetup` is `ClassShared`, so any peer could name a map whose `width*height` overflowed `int` and reach `make([]Cell, need)` — reproduced as `runtime error: makeslice: len out of range`, which under `core.Go` is `os.Exit(1)`. `engine.ClampMapSize` is now the single gate in front of the allocation, bounded by `parameter.MaxMapWidth`, `MaxMapHeight` and `MaxMapCells`. It clamps rather than rejects because the payload is replicated: a clamp reaches the same bounds on every instance, where a drop on one and an apply on another is a divergence. `World.SetupLevel` clamps before it records the dimensions, `SpatialGrid.Resize` clamps again before it allocates, and `updateGameArea` clamps the viewport the reset and resize paths derive a map from. `internal/engine/spatial_grid.go`, `world.go`, `game_context.go`, `internal/parameter/engine.go`. |
+| **G6** | required | **closed** | Wire-reachable allocation primitive: `SnapshotAssembly` reserved the declared body length up front, so one 20-byte header bought 64 MiB per source and ~1.06 GiB across the array. Two changes. The ceiling drops from 64 MiB to 4 MiB — measured captures of this world are 3.5 KiB and the documented storm high water is 15.4 KiB, so that is three orders of magnitude of headroom. And the ceiling is no longer the defence: the reservation is capped at `snapshotReserve` (64 KiB) and the buffer grows with the bytes that arrive, so what a peer can make a receiver hold is what that peer sends. `internal/network/snapshot.go`. |
+| **G7** | required | **closed** | Wire-reachable unbounded retention: nothing bounded a frame's `ApplyTick` against the local tick, and `applyDue` keeps what is not yet due, so a peer walking `ProducedTick` forward grew `scheduled` at line rate with `relayBatch` amplifying it. A forward window now runs *before* the epoch window — deliberately, because `epochWindow.admit` takes any tick above a source's high-water mark, so one frame naming a large one would carry that mark there and make every ordinary epoch that followed look late, on this instance and everything it relays to. The window is `NetworkApplyWindowTicks` = the join catch-up ceiling plus one convergence floor, which clears the largest gap two participants legitimately hold. `NetworkScheduledMax` and `NetworkScheduledBytes` bound what is held inside it, counted separately from a decode failure. `internal/system/network.go`, `internal/parameter/network.go`. |
+| **G8** | required | deferred | No authentication and no transport security. Any TCP peer that completes the handshake still receives the anchor — including absolute host filesystem paths — a roster slot, a world capture, and the ability to inject every `ClassShared`/`ClassBus` event. G5, G6, G7 and G9 remove the crashes and the allocation primitives; they do not make an unauthenticated peer harmless. See ADR-5. |
+| **G9** | required | **closed** | The pre-authentication handshake ran synchronously on the accept goroutine, so one dialer that connected and never wrote held every other join for a whole `ConnectTimeout`. Each accepted connection now handshakes on a goroutine of its own, bounded by `Config.MaxHandshakes`; past the budget a dial is refused rather than queued, because queueing would put the accept loop back behind the same read. The budget is released the moment `AcceptSession` returns — it bounds unauthenticated work, and what follows concerns a peer the roster ceiling bounds. `Stop` closes the in-flight connections before waiting, so a handshake blocked on its read no longer adds its deadline to the time between SIGTERM and exit. `App.midRunGate` serialises the admission that follows, whose `ReadyCount` wait is session-cumulative and could not otherwise tell two concurrent joiners apart. Paired with it: `Coordinator.Admit` and `app.admissionLimiter` bound how often one dialling address may be admitted, because the admission that follows a handshake reads and sends a whole world and a peer cycling through it spends one connect per capture. `internal/network/transport.go`, `config.go`, `session.go`, `internal/app/admission.go`, `host.go`. |
+| **G10** | required | deferred | No build identity on join: `anchorIdentity` compares a config *path*, not its content, and carries no binary version, VCS revision, protocol version or manifest hash. Two builds that differ in simulation math but resolve the same path join and diverge silently. See ADR-3. |
+| **G11** | required | **deferred deliberately** | No `GOMEMLIMIT`, `GOGC` or explicit `GOMAXPROCS`. Held on purpose: an OOMKill is the signal wanted right now. A soft heap limit converts the clearest possible symptom into a GC pause that has to be inferred from a profile, and until the ceiling in §5 is measured under a full roster and the tower scenario, the kill is the measurement. Revisit once that number exists. |
+| **G12** | desirable | **deferred deliberately** | The spatial grid is a fixed 30.5 MiB allocation regardless of map size, and grow-only. The grow-only half is intended: it stops a drag-resize from reallocating the grid on every intermediate size. Multiplayer maps hold a fixed size with `crop_on_resize` false, so the case for right-sizing is weaker than the review assumed and the shape of the fix depends on gameplay testing still to come. What did change: `MaxMapCells` is now exactly the pre-allocated grid, so for any legal map the grid never grows at all and the 30.5 MiB is a ceiling rather than a floor to build on. |
+| **G13** | desirable | **carried forward as its own task** | No build tag excludes terminal, renderer and audio from a server binary; all three are linked into a 17.0 MB image that `ModeServer` never uses. The package structure permits the split — presentation is reached only through the `Mode` predicates in `App.init`, and `internal/manifest` is the single renderer registration point — but it is a real refactor of that registration and wants a sweep of its own rather than a corner of this one. |
+| **G14** | desirable | deferred | `SIGHUP` terminates like `SIGTERM` and `SIGINT`. Harmless in a pod; it forecloses a reload semantic later. |
+| **G15** | required | **closed** | On a crash with no terminal, `HandleCrash` fell through to `terminal.EmergencyReset(os.Stdout)`, writing escape sequences into the pod log. It is now gated on `core.StdoutIsTerminal`, a `Stat` for `os.ModeCharDevice`: a run whose stdout is a pipe, a file or a container log has no terminal to reset, and the escape sequence would be the only thing it ever wrote. `internal/core/crash_handler.go`, `crash_handler_unix.go`. |
+| **G16** | desirable | deferred | Telemetry is rich and file-only. Exposing it needs a transport, not instrumentation — it follows G4. |
+| **G17** | desirable | **closed** | `README.md` advertised three runtime shapes, omitted `-serve`, and claimed "a participant still joins only at startup" with the snapshot join described as planned. All three were wrong: there are four shapes, mid-run join and reconnect are active, and the snapshot join is implemented. Corrected there and in `doc/runtime.md`, `development.md`, `architecture.md`, `multi-player-enhancement.md`, `services-and-networking.md`, `ecs-and-events.md`, `logging-and-diagnostics.md` and `telemetry-audit.md`. |
+| **G18** | desirable | **not a gap** | `-check` is intended as separate tooling and its inability to combine with `-serve` is by design. It exits non-zero on invalid config, which is what an init container needs. |
 
 ### Explicitly not a gap
 
@@ -121,130 +136,128 @@ hygiene. "Scope" is engineering effort on the application only.
 
 ## 3. Sequenced plan
 
-The ordering is driven by three constraints: (a) nothing that changes the wire
-format may land after something that depends on the wire format being stable;
-(b) the safety fixes are independent of each other and of everything else, so
-they go first and can land in parallel; (c) the lifecycle work defines what
-"ready" and "done" mean, and the probe surface must be built against those
-definitions rather than guessed at.
+### What landed, and why in that order
 
-**Phase 0 — make an exposed pod survivable (G5, G6, G7).**
-All three are input-validation fixes in existing code paths. They are additive
-(new bounds checks), touch no wire format, and are independently testable with a
-fuzz harness against `NetworkSystem.dispatchMessage`. G5 is a two-line clamp;
-G6 is replacing the 64 MiB constant with a ceiling derived from the measured
-world high water; G7 needs a forward apply-tick window (the natural bound is
-`nextTick + SnapshotFloorKeyframeTicks`, since anything beyond the convergence
-floor is unusable anyway) plus a hard cap on `len(scheduled)`. **These must land
-before any pod is exposed to a network the operator does not control.** Nothing
-else in the plan depends on them, which is exactly why they go first.
+**Phase 0 — an exposed pod survives its own input (G5, G6, G7).** All three are
+input-validation fixes in existing code paths, independent of each other and of
+everything else, and none touches the wire format. They went first because until
+they were in, no other work on the pod was worth doing: the process could be
+panicked by one frame and driven out of memory by two more.
 
-**Phase 1 — lifecycle (G1, G2).**
-`-serve` needs a lobby deadline flag and an exit-on-match-end policy before any
-probe can be written, because readiness and liveness are defined in terms of
-them. G1 is additive: a deadline parameter on `waitForStartup` and a policy
-enum. G2 is not — it requires a match-termination concept the simulation does
-not currently have (see ADR-1), and it must decide what `Serve` returns so
-`cmd/vif` can map it to an exit code. Do G1 first; it is small and it alone
-converts "pod hangs forever" into "pod fails fast".
+**Phase 1 — admission (G9, and G1's transport half).** The handshake moved off the
+accept goroutine and gained a budget, and the dial in front of it gained one too.
+This had to follow Phase 0 rather than precede it, because making the accept path
+concurrent means more attacker-controlled frames reaching the schedule per unit
+time — worth doing only once the schedule is bounded.
 
-**Phase 2 — observability (G3, G4, G16).**
-G3 is a `vlog` change (a console sink plus a fail-fast switch when the sink
-cannot be opened) and is independent of everything. G4 depends on Phase 1
-because readiness = "lobby accepting joins" and liveness = "tick counter
-advancing", and both need Phase 1's states to exist. G16 is nearly free once G4
-adds a listener: `status.Registry` already holds the counters, and
-`internal/status/snapshot.go` already walks them. Do G3 first and separately —
-it is the cheapest change in this document and it is what makes every subsequent
-phase debuggable in-cluster.
+**Phase 2 — lobby semantics (G1).** `-players` became a ceiling and the quorum
+became one. This is the change that turns "a pod that hangs forever" into "a pod
+that is ready as soon as somebody is playing", and it needed Phase 1 first: a
+lobby that admits guests throughout the run is a lobby whose accept path is
+continuously exposed, where the old one closed after a fixed number.
 
-**Phase 3 — memory dimensioning (G11, G12).**
-G12 is additive and localised: pass resolved geometry into `NewPosition`, and
-have `SpatialGrid.Resize` reallocate downward past a hysteresis threshold. It
-roughly halves per-pod RSS and therefore doubles achievable density, so it pays
-for the whole review on its own. G11 (`GOMEMLIMIT` from the cgroup limit or an
-explicit flag) should land *after* G12, because the right soft limit depends on
-the post-G12 ceiling. Both should be gated on the property-based cycle harness
-described in §5.
+**Phase 3 — hygiene (G15, G17).** Independent of everything; they rode along.
 
-**Phase 4 — identity and admission (G10, G9, G8).**
-Strictly ordered, because each widens the handshake the next one modifies.
-G10 changes the anchor and bumps `JournalSchema`, which is a wire-format break —
-it must land before anything else touches the handshake, and it is the change
-that makes a mixed-build fleet detectable rather than silently divergent.
-G9 restructures the accept path (handshake off the accept goroutine, bounded
-concurrency, deadline before slot allocation rather than after). G8 — a shared
-secret or mTLS — is last because it is the largest and because it changes the
-same code G9 restructures. Note that G8's *value* is conditional on ADR-3: if
-the fleet decides clients never reach pods directly (an authenticating gateway
-terminates and re-originates), G8 shrinks to "bind only to the pod network".
+### What remains
 
-**Phase 5 — image and hygiene (G13, G14, G15, G17, G18).**
-G13 (a `noterm` build tag excluding render/audio/terminal) is a genuine
-refactor of the manifest's renderer registration, but it is the only remaining
-attack-surface reduction and it is independent of everything above. The rest are
-one-line changes that can ride along with any phase.
+The ordering below is what is left, and the reasoning for it is unchanged from the
+original review except where a decision has since been made.
 
-**Additive vs. modifying.** Additive: G1's deadline, G3's console sink, G4/G16's
-listener, G11's limit handling, G12's sizing, G13's build tag, G14/G15/G17/G18.
-Modifying existing subsystems: G2 (match lifecycle touches `MetaSystem` and the
-FSM's terminal states), G5/G6/G7 (validation inside `internal/system/network.go`
-and `internal/network`), G9 (`Transport.acceptLoop` restructure), G10 (anchor
-format, schema bump, every reproduction path that reads an anchor).
+1. **G3 — stdout logging.** The cheapest change in this document and the one that
+   makes every subsequent phase debuggable in-cluster. A console sink plus a
+   fail-fast switch when the sink cannot be opened. Nothing depends on it and it
+   depends on nothing; it is first because it is free.
+2. **G4, then G16 — probes, then metrics.** Readiness is now definable in a way it
+   was not before Phase 2: ready means "attached and under capacity", which is
+   `len(sessionRoster) <= sessionCapacity()`, and liveness means the tick counter
+   is advancing. G16 is nearly free once G4 adds a listener, because
+   `status.Registry` already holds the counters and `internal/status/snapshot.go`
+   already walks them.
+3. **G11 — the memory ceiling.** Held deliberately until the ceiling is measured
+   (U1). The OOMKill is the current instrument; replacing it with a soft limit
+   before the number exists would remove the signal without answering the
+   question.
+4. **G13 — the server build tag.** Its own task. The only remaining attack-surface
+   reduction, and a real refactor of the manifest's renderer registration.
+5. **G10, then G8 — identity, then authentication.** Strictly ordered, because
+   each widens the handshake the next one modifies, and G10 changes the anchor and
+   bumps `JournalSchema`, which is a wire-format break. G8's size is conditional on
+   ADR-5: if clients never reach pods directly, it collapses to a network policy.
+6. **G12, G14 — after gameplay testing and whenever.** G12's shape depends on how
+   fixed-size multiplayer maps behave in practice.
 
----
+**Additive vs. modifying.** Of what landed: `ClampMapSize`, the snapshot
+reservation cap, the forward window and the schedule ceilings, `Coordinator.Admit`
+and the admission limiter, and `StdoutIsTerminal` are all additive — new gates in
+front of existing paths. Three were not: `Transport.acceptLoop` was restructured
+around a goroutine per handshake with a pending-connection set for shutdown,
+`startHostSessionOn` was reworked from a fixed count to a quorum plus a closing
+window, and `releaseMidRunJoiner` gained serialisation it did not need while the
+accept loop provided it. Of what remains: G3, G4, G11, G13 and G16 are additive;
+G10 is not, and G8 modifies what G9 restructured.
 
 ## 4. ADR candidates
 
-### ADR-1 — Dedicated-server process model: per-match ephemeral vs. long-lived reusable
+### ADR-1 — Dedicated-server process model: per-match ephemeral vs. long-lived reusable — **decided: long-lived**
 
-The code currently implements *long-lived reusable* and is explicit about it:
-"A server outlives its guests" (`doc/runtime.md` §1.2). `hostNetworkConfig` sets
-`MaxPeers = parameter.MaxPlayers` and installs `OnAdmit = admitLateJoiner` only
-for `Mode.Serves()`; `Serve` arms `lateJoins` after the lobby closes so a
-departed participant can dial back into the slot its departure released
-(`internal/app/serve.go:70`, `internal/app/session.go:104`). Measured: the server
-stayed resident and kept ticking after its only guest left.
+The review recommended per-match ephemeral. That recommendation assumed a match
+has an end, and it does not: players fall back to the start, or continue at rising
+difficulty, or a level ends in a victory message and restarts. There is no terminal
+state for a process to exit on, so the ephemeral model has nothing to trigger it
+and would have to invent one — designing gameplay from the deployment inwards.
 
-- **Per-match ephemeral.** One pod, one match, exit on completion, allocator
-  spawns the next. Fits `restartPolicy: Never` + a Job or an allocator; makes
-  the memory ceiling a per-match question rather than a per-lifetime one, which
-  neutralises most of §5's uncertainty; gives every match a clean RNG session
-  and a clean world. Costs a cold start per match (measured: ~12 MiB and
-  sub-second to a bound listener, so this is cheap) and requires G2.
-- **Long-lived reusable.** Matches the existing reconnect design and amortises
-  startup. But it makes the memory question "what is the ceiling over an
-  unbounded number of `:new` cycles", it accumulates whatever per-session state
-  is not reset, and it has no natural drain point for a rolling update.
-- **Recommendation.** Per-match ephemeral. The measured evidence (§5) says a
-  fresh process is cheap and a long-lived one has a plateau, not a leak — so
-  the reusable model is *safe*, but ephemeral is strictly simpler to reason
-  about under a hard memory limit and it is the only model where "SIGTERM
-  during a match" and "SIGTERM between matches" are the same event. Note that
-  choosing ephemeral does **not** mean discarding the reconnect path: mid-run
-  rejoin within one match is independently valuable.
+The code already implements the long-lived shape and is explicit about it: "A
+server outlives its guests". `hostNetworkConfig` installs `OnAdmit` for
+`Mode.Serves()`, and `Serve` arms it after the scheduler so a departed participant
+can dial back into the slot its departure released. After G1 that path carries the
+whole roster rather than just returning peers, which is what makes long-lived the
+natural model rather than a tolerated one.
 
-### ADR-2 — Lobby admission and timeout policy
+What this costs, and what now answers it:
 
-`waitForStartup` has no deadline; the start gate on the joiner side is
-deliberately unbounded too ("The start gate carries no deadline: it is the host
-waiting for the rest of the lobby, which is a human-paced wait with no bound
-worth guessing at", `internal/network/session.go:388`). That reasoning is
-correct for two people on a LAN and wrong for a pod.
+- **The memory question becomes "what is the ceiling over an unbounded number of
+  cycles".** §5 answers it: measured over 400 consecutive resets, heap-in-use is
+  flat within 8 KiB and the object count converges on a fixed asymptote by reset
+  150. There is no per-cycle retention to accumulate.
+- **A rolling update has no natural drain point.** Unresolved, and the real
+  remaining cost of this decision. A server holds its guests until they leave, so
+  draining means either waiting them out or dropping a live session.
+- **SIGTERM during a match and between matches are different events.** Also
+  unresolved: the first drops a session mid-play with no notice to its guests
+  (U4), the second is free.
 
-- **Hard deadline, then exit non-zero.** Simple; the allocator retries. Wastes
-  a scheduled pod when a client is merely slow.
-- **Hard deadline, then start short-handed.** Requires the roster to close on
-  fewer participants than `-players`, which `startHostSessionOn` currently
-  refuses (`if len(offer.Participants)-1 != remoteCount`). Needs a minimum-viable
-  roster concept.
-- **Soft deadline that resets on each admission.** Tolerates staggered arrival;
-  needs an absolute ceiling too or it is not a bound.
-- **Open question the ADR must answer:** what does readiness mean between "one
-  guest admitted" and "lobby full"? The Service must stop routing at full, but
-  a partially-filled lobby is still accepting. This is a readiness *gate*, not a
-  binary, and it interacts with whether the allocator or the Service does
-  placement.
+### ADR-2 — Lobby admission and timeout policy — **decided: quorum of one, ceiling from `-players`**
+
+The original framing offered a hard deadline, a deadline that starts short-handed,
+and a resetting soft deadline. All three answered the wrong question: they treated
+the lobby as a party that must be assembled before play, and asked how long to wait
+for it. On a fleet host it is not — the session exists to be joined.
+
+The lobby's quorum is therefore one guest, and `-players` is a ceiling with a
+default of the full roster. There is no timeout because there is nothing to time
+out: the server waits for somebody, and everybody after the first arrives mid-run
+through a path that already had to work for reconnection.
+
+The consequences that had to be handled:
+
+- **Readiness is not binary.** A partially-filled session is still accepting; a
+  full one is not. Readiness is `len(sessionRoster) <= sessionCapacity()`, which
+  G4 will read.
+- **The closing window.** Between the lobby reading its roster and the mid-run gate
+  arming there is an interval neither gate can serve — the lobby's offers are out,
+  and the mid-run gate waits for a capture a clock that has not started never
+  reaches. A dial landing there is refused with `ErrSessionStarting`, a refusal the
+  dialer retries. Arming moved to after `scheduler.Start` for the same reason.
+- **Churn is now the cost centre.** A lobby that admits throughout the run is one
+  whose expensive path — a whole world read, encoded and sent — is reachable at
+  any time. `parameter.NetworkAdmitBurst` per `NetworkAdmitWindow` per dialling
+  address is what bounds it. The budget is per address rather than per identity
+  because an identity is what the attack consumes and is released the moment the
+  connection drops.
+- **Still open:** whether the allocator or the Service does placement, and whether
+  a server with zero guests for a long period should exit. The second is the
+  nearest thing to a match end that exists, and it is a deployment policy rather
+  than a gameplay one.
 
 ### ADR-3 — Build-identity enforcement on join
 
@@ -269,18 +282,28 @@ binary identity at all. Two builds with the same config path silently diverge.
   carries a fingerprint (`ContentFiles`/`Blocks`/`Lines`) and the FSM config
   carries nothing.
 
-### ADR-4 — Memory ceiling strategy
+### ADR-4 — Memory ceiling strategy — **partly decided: cap the map, keep the kill**
 
-- **Right-size the grid (G12) and set `GOMEMLIMIT` from the pod limit.**
-  Addresses the dominant term directly; measured 82.3 % of heap-in-use.
-- **Leave the grid and set a generous limit.** Costs ~30 MiB per pod
-  unconditionally — at 60 pods/node that is 1.8 GiB spent on empty cells.
-- **Cap the map size the fleet will serve, and derive the limit from it.**
-  Makes the number defensible but constrains scenario authoring.
-- The ADR must also decide whether `GOMEMLIMIT` is set from the cgroup limit at
-  startup (needs reading `/sys/fs/cgroup/memory.max`, which is a hostile
-  dependency under a read-only rootfs and a distroless image) or supplied as an
-  environment variable by the manifest. The latter is simpler and testable.
+The third option was taken and the first two were not, for now.
+
+- **Cap the map size the fleet will serve, and derive the limit from it —
+  taken.** `MaxMapCells` is the pre-allocated grid, so a legal map is one the grid
+  never grows for and the 30.5 MiB is a hard ceiling rather than a floor to build
+  on. This was a security fix (G5) before it was a dimensioning one; that it also
+  settles the grid's size is the useful accident.
+- **Right-size the grid (G12) — held.** The grow-only behaviour is deliberate: it
+  stops a drag-resize from reallocating on every intermediate size. Multiplayer
+  maps are fixed-size with `crop_on_resize` false, so the case is weaker than the
+  review assumed, and the shape of any fix depends on gameplay testing still to
+  come.
+- **Set `GOMEMLIMIT` — held deliberately.** An OOMKill is the wanted signal right
+  now. A soft heap limit converts the clearest symptom available into a GC pause
+  that has to be inferred from a profile, and until U1 gives a ceiling measured
+  under a full roster and the tower scenario, the kill *is* the measurement.
+- Still to decide when that time comes: whether `GOMEMLIMIT` is read from the
+  cgroup at startup (a hostile dependency under a read-only rootfs and a
+  distroless image) or supplied as an environment variable by the manifest. The
+  latter is simpler and testable.
 
 ### ADR-5 — Client trust boundary (implied by G8, and it gates G8's size)
 
@@ -288,14 +311,19 @@ The protocol is plaintext and trusted-peer by design and the README says so.
 The ADR is not "should we add TLS" but "do clients reach pods at all".
 
 - **Direct exposure.** Requires G8 in full (authentication, transport security)
-  plus Phase 0, plus per-connection rate limiting. Largest scope.
+  plus per-connection rate limiting on top of what Phase 1 added. Largest scope.
 - **Authenticating gateway that terminates client sessions and re-originates
   to pods on the cluster network.** The pod's trusted-peer assumption becomes
   true rather than assumed; G8 collapses to a network policy. Costs a component
   that speaks the framed-TCP protocol on both sides and a decision about whether
   it is transparent (proxy) or translating.
-- Phase 0's three fixes are required under **either** option, because a
-  compromised or buggy gateway is still a peer.
+- Phase 0's three fixes were required under **either** option, because a
+  compromised or buggy gateway is still a peer. They have landed, so this decision
+  is no longer urgent — but it is also not resolved by them: what they removed is
+  the ability of a peer to crash the process or exhaust its memory, not the
+  ability of an unauthenticated one to reset the game, resize the map, disable
+  systems or read the host's filesystem paths out of the pre-authentication
+  offer.
 
 ---
 
@@ -455,8 +483,18 @@ headroom and allocation spikes the sampler did not catch ≈ 162 MiB, rounded to
 192 MiB. `GOMEMLIMIT` at 160 MiB leaves the runtime room to collect before the
 cgroup kills it.
 
-**After G12 (right-sized grid), the same fleet fits in 96 MiB limit / 48 MiB
-request**, because both the floor and the staging world lose ~29 MiB each.
+The number is unchanged by the remediation, which is the point: G5, G6 and G7
+removed the ways a peer could make the process exceed it, not the size of the
+process. G12 was held (ADR-4), so the 30.5 MiB grid term stands — but
+`MaxMapCells` now equals the pre-allocated grid, so that term is a ceiling that
+no legal map grows past rather than a floor that a large one builds on. Right-sizing
+it later would take the same fleet to roughly **96 MiB limit / 48 MiB request**,
+because both the floor and the staging world lose about 29 MiB each.
+
+The measurement was repeated against the post-remediation binary with two guests
+joining at different ticks: 14.6 MB in the lobby, 31.4 MB with one guest, 44.6 MB
+with two, plateauing at 63.5 MB. That is within a megabyte of the pre-remediation
+figures at comparable load, so nothing in the new bounds costs steady-state memory.
 
 **Confidence.**
 
@@ -467,12 +505,17 @@ request**, because both the floor and the staging world lose ~29 MiB each.
   two independent paths converging on the same asymptote.
 - *Medium* for 192 MiB. It is not measured at four guests, and it is not
   measured under `config/main` with the tower/storm regions active, which is the
-  documented high-water scenario and the one the soak tests target.
-- *None* for any number at all if pods are exposed to untrusted clients. The
-  wire-reachable ceiling today is ~1.06 GiB from G6 alone (17 sources × 64 MiB),
-  plus unbounded growth from G7. **No pod memory limit is defensible until
-  Phase 0 lands** — the limit would simply convert a memory attack into an
-  OOMKill loop.
+  documented high-water scenario and the one the soak tests target. This is U1 and
+  it is what ADR-4 is waiting on.
+- *Improved, still not high, for a pod facing untrusted clients.* Before
+  remediation the wire-reachable ceiling was ~1.06 GiB from G6 alone (17 sources ×
+  64 MiB) plus unbounded growth from G7, and no limit was defensible at all. Those
+  are closed: the assembly now reserves 64 KiB rather than a declared total, the
+  schedule is bounded by count and by bytes inside a forward window, and the
+  handshake budget bounds what unauthenticated connections cost. What remains is
+  not a memory bound but an authorisation one (G8) — an unauthenticated peer can
+  still reset the game, resize the map within the clamp, and disable systems, none
+  of which a memory limit answers.
 
 ### Measurement protocol to make this reproducible
 
@@ -528,14 +571,17 @@ assumed. `GOMEMLIMIT` has no such default and must be supplied.
 |---|---|---|
 | U1 | Peak memory under `config/main` with the tower and storm regions active and a full roster — the documented high-water case and the gap in the 192 MiB figure. | Extend the cycle harness with the existing `towerConfig` fixture (`internal/app/soak_test.go:69`) and `-players 4`; record peak `HeapInuse` and `VmHWM` per cycle. |
 | U2 | Whether the per-peer 16 MiB send-queue bound is ever approached in practice, or whether corrections are always small enough that occupancy stays negligible. | Instrument `Peer.Send` refusals and queue depth (a counter already exists: `SocketPort.refused`); run a 4-guest session with `tc netem` shaping one uplink to well below the convergence floor. `script/phase5-linkshape.sh` already does the shaping half. |
-| U3 | Actual goroutine count at steady state per instance. Read-derived: 2 scheduler (`schedulerLoop`, `eventLoop`) + 1 correction pump + 1 accept loop + 1 probe loop + 3 per peer (`readLoop`, `writeLoop`, `monitorPeer`) + vlog's processor when logging is on. Fixed plus 3N. Not verified — `runtime.NumGoroutine()` was only observed in the driven harness (2), which spawns none of the above. | Add a `runtime.NumGoroutine()` field to the `serveReportInterval` log line, or take a `goroutine` pprof profile from a live server with N guests. |
+| U3 | Actual goroutine count at steady state per instance. Read-derived: 2 scheduler (`schedulerLoop`, `eventLoop`) + 1 correction pump + 1 accept loop + 1 probe loop + 3 per peer (`readLoop`, `writeLoop`, `monitorPeer`) + vlog's processor when logging is on, plus up to `Config.MaxHandshakes` transient handshake goroutines. Fixed plus 3N. Not verified — `runtime.NumGoroutine()` was only observed in the driven harness (2), which spawns none of the above. | Add a `runtime.NumGoroutine()` field to the `serveReportInterval` log line, or take a `goroutine` pprof profile from a live server with N guests. |
 | U4 | Whether SIGTERM during an active session is genuinely clean for the *guests* — the server closes listeners and peers but sends no `MsgDisconnect` goodbye, so guests observe a stream error and enter succession rather than a graceful end. | Run a 2-guest session, `kill -TERM` the server, and record what each guest logs and how long it takes to settle. |
-| U5 | Worst-case SIGTERM→exit latency. Read-derived bound: `scheduler.Stop` ≤ ~100 ms (`awaitFrame` timeout) + the in-flight tick; `corrections.close` waits on the pump; `SocketPort.Close` ≤ `NetworkProbeInterval` (200 ms); `Transport.Stop` waits on `acceptLoop`, **which may be blocked inside `AcceptSession` for up to `ConnectTimeout` = 5 s** (this is G9 again); then `vlog.Shutdown(2 s)`. So ~7–8 s worst case, comfortably inside a 30 s grace period — but the 5 s term is attacker-triggerable. | Time `SIGTERM`→exit with (a) an idle server, (b) an active 4-guest session, (c) a half-open connection deliberately held mid-handshake. |
+| U5 | Worst-case SIGTERM→exit latency. Read-derived bound: `scheduler.Stop` ≤ ~100 ms (`awaitFrame` timeout) + the in-flight tick; `corrections.close` waits on the pump; `SocketPort.Close` ≤ `NetworkProbeInterval` (200 ms); `vlog.Shutdown(2 s)`. The two attacker-triggerable terms are gone: `Transport.Stop` now closes in-flight handshake connections before waiting on them (covered by `TestStopDoesNotWaitOutAHandshakeDeadline`), and `keyframeAt` selects on the shutdown signal rather than polling out its 5 s join deadline. So ~2–3 s, well inside a 30 s grace period. Still read-derived under load. | Time `SIGTERM`→exit with (a) an idle server, (b) an active 4-guest session, (c) a half-open connection deliberately held mid-handshake. |
 | U6 | Whether the `RemoveComponentMask` insert-on-missing-key path (`internal/engine/world.go:140`) is reachable in practice. It self-heals across a reset and experiment (C) shows no unbounded growth, so it is latent rather than active. | Add a temporary assertion (`if _, ok := w.componentMask[e]; !ok { panic }`) in `RemoveComponentMask` and run the full soak suite. |
 | U7 | Whether the `-serve` process is actually startable under a fully read-only rootfs with **no** writable mount at all. Verified here with `HOME`/`XDG_CONFIG_HOME` pointed at nonexistent paths and no `-l` — it started and ran, discovery falling through to the embedded assets. Not verified against a genuinely read-only filesystem where even `os.MkdirAll` on a fallback path fails. | Run the binary in a container with a read-only rootfs, no `emptyDir`, `-d -serve`, and again with `-l` to confirm the failure is loud rather than silent (it currently is not — see G3). |
 | U8 | Whether `GOMAXPROCS` genuinely tracks a cgroup CPU limit on this toolchain, or whether it must be pinned. | Log `runtime.GOMAXPROCS(0)` at startup in a pod with `limits.cpu: 500m`. |
 | U9 | Whether the correction cadence degrades gracefully when a guest's uplink cannot carry the convergence floor — the code refuses such a link at admission (`admitMeasuredLink`, `internal/app/session.go:357`) and reports mid-session, but the behaviour under cluster-egress conditions (NAT, LB, variable RTT) is unmeasured. | `script/phase5-linkshape.sh` against a pod behind a real NodePort. |
 | U10 | Per-match CPU at realistic map sizes and rosters. Measured here: **0.2 % of one core idle in the lobby, 4.9 % of one core with one guest at 80×24 with the embedded scenario** (97 jiffies / 20 s). The tick loop is 20 Hz (`GameUpdateInterval = 50 ms`); the frame handshake ticks at 62.5 Hz and the event loop at 250 Hz even when idle, so a pod has a floor of roughly 340 timer wakeups per second regardless of load. Not measured at 4 guests or 160×50. | Same harness as U1, with `/proc/<pid>/stat` sampling. Memory, not CPU, is the binding density constraint at current numbers: ~62 MiB versus ~0.05 core per match. |
+| U11 | Whether `NetworkAdmitBurst` = 6 per minute per address is right in front of a NAT or a CGNAT, where a whole site is one key. It is generous for a person reconnecting and tight for a shared egress that legitimately produces many joins. | Run a fleet behind one egress address and count `MsgJoinReply` refusals carrying an admission reason. If it bites, the key has to become something the session assigns rather than something the network does, which is G10 and G8 territory. |
+| U12 | Whether `MaxMapCells` = the pre-allocated grid ever clamps a map somebody wanted. Nothing in `config/` exceeds it and no terminal approaches it, but the clamp is silent by design — it has to be, because rejecting on one instance and applying on another is a divergence. | Log at `warn` when `ClampMapSize` actually reduces a request, and watch for it across the scenario set and a session on an unusually large terminal. |
+| U13 | Whether serialising the mid-run gate (`App.midRunGate`) is a throughput problem when many guests arrive at once. Each admission reads and sends a whole world and waits for the joiner's confirmation, bounded by `NetworkJoinReadyTimeout` = 5 s; sixteen arriving together serialise behind that. | Dial a full roster simultaneously against one server and measure time-to-admitted for the last one. If it matters, the fix is a per-peer ready signal rather than the session-cumulative `ReadyCount` the gate currently waits on. |
 
 ---
 
@@ -583,9 +629,12 @@ path (G15).
 - **Match end: nothing happens.** There is no game-over event and no terminal
   FSM state that ends the process. `Serve`'s loop has exactly three cases: a
   signal, the frame ticker, and the 30 s report ticker.
-- **Under-filled lobby: blocks forever** (G1). Confirmed by running it — a
+- **Under-filled lobby: was a permanent block** (G1). Confirmed by running it — a
   `-serve -players 1` process sat at 12 MB RSS and 0.2 % CPU indefinitely,
-  producing no output at all.
+  producing no output at all. It now starts on its first guest and treats
+  `-players` as a ceiling, so there is no under-filled state to be stuck in; a
+  server with nobody attached waits in the same cheap loop, which is the correct
+  behaviour for a host nobody has joined yet rather than a hang.
 - **Clean exit path: partially.** `RunServer` returns `Serve`'s error, `main`
   prints it and exits 1; a signal makes `Serve` return nil and `main` exits
   `logStatus` (0, or 73 if a requested log session could not start). So the exit
@@ -634,30 +683,35 @@ See §5.
   whole world per convergence-floor window (`admitMeasuredLink`). The joiner
   installs the capture through the staging world and binds its roster slot.
 - **Identity check: insufficient** (G10). See §2 and ADR-3.
-- **Timeouts.** Accept/handshake: `ConnectTimeout` 5 s deadline, but set
-  *after* `Assign()` allocates a slot, and applied serially (G9). Dial: 5 s.
-  Start gate: **unbounded by design** on both sides. Idle connections:
-  `DisconnectTimeout` 30 s read deadline with a 10 s heartbeat, applied per read
-  in `Peer.readLoop` — so an established connection that goes silent is reaped.
-  Write: 5 s.
+- **Timeouts.** Accept/handshake: `ConnectTimeout` 5 s deadline, now applied on a
+  goroutine of the connection's own and bounded by `MaxHandshakes` (G9); the
+  budget is spent before `Assign` allocates anything, because `Coordinator.Admit`
+  runs first. Dial: 5 s. Start gate: **unbounded by design** on both sides. Idle
+  connections: `DisconnectTimeout` 30 s read deadline with a 10 s heartbeat,
+  applied per read in `Peer.readLoop` — so an established connection that goes
+  silent is reaped. Write: 5 s.
 - **Pre-handshake allocation.** `Decode` allocates `make([]byte, payloadLen)`
-  with `payloadLen` a `uint16` — capped at 64 KiB per frame, which is fine. The
-  real pre-handshake cost is the roster slot allocated before the deadline is
-  set, plus a `bufio.Reader`/`Writer` pair at 64 KiB each once admitted.
-- **What an untrusted client can currently cause:** a confirmed process panic
-  (G5); ~64 MiB of allocation per source, ~1 GiB across the array (G6);
-  unbounded retention in `scheduled` plus relay amplification (G7); a game reset,
-  a map resize, arbitrary system enable/disable, arbitrary FSM region
-  spawn/kill, and arbitrary entity spawns (G8); accept-loop starvation (G9); and
-  disclosure of the host's absolute config and content filesystem paths via the
-  pre-authentication `MsgJoinOffer` (G8). No arbitrary filesystem *paths in
-  payloads* were found — payload types are a closed registry
-  (`internal/event/registry_gen.go`) decoded into fixed prototypes, and the
-  bounds-checked ones I read (`writeCursorState` validating
+  with `payloadLen` a `uint16` — capped at 64 KiB per frame. What an
+  unauthenticated connection costs is now bounded on three axes: how many may be
+  in flight (`MaxHandshakes`), how often one address may be admitted
+  (`NetworkAdmitBurst` per `NetworkAdmitWindow`), and a `bufio.Reader`/`Writer`
+  pair at 64 KiB each once admitted.
+- **What an untrusted client could cause, and what remains.** Closed: the process
+  panic (G5), ~64 MiB of allocation per source and ~1 GiB across the array (G6),
+  unbounded retention in `scheduled` with relay amplification (G7), and
+  accept-loop starvation (G9). Still reachable, and all of it G8: a game reset, a
+  map resize within the clamp, arbitrary system enable/disable, arbitrary FSM
+  region spawn/kill, arbitrary entity spawns, and disclosure of the host's
+  absolute config and content filesystem paths via the pre-authentication
+  `MsgJoinOffer`. The distinction matters for deployment — what is left is an
+  authorisation problem, where what was fixed was a memory-safety one. No
+  arbitrary filesystem *paths in payloads* were found: payload types are a closed
+  registry (`internal/event/registry_gen.go`) decoded into fixed prototypes, and
+  the bounds-checked ones I read (`writeCursorState` validating
   `int(p.Slot) >= parameter.MaxPlayers` and cursor ownership,
   `validateSessionOffer` checking slot and ID ranges,
   `SnapshotAssembly.AddChunk` checking index/count/total consistency) are
-  correct. The defects are in magnitude bounds, not in type confusion.
+  correct. The defects were in magnitude bounds, not in type confusion.
 
 ### A.6 Configuration and filesystem
 
@@ -782,3 +836,31 @@ document is read from source and is marked where it is.
    heap-in-use to `engine.NewSpatialGrid`.
 8. `App.SetupLevel(1<<31, 1<<31)` → `runtime error: makeslice: len out of range`
    (G5).
+
+### Verified after remediation
+
+Against a binary built from the branch that closes G1, G5, G6, G7, G9 and G15:
+
+9.  `go test ./...` and `go test ./internal/... -race` both clean.
+10. `TestASilentDialerDoesNotStallTheAcceptLoop` and
+    `TestStopDoesNotWaitOutAHandshakeDeadline` were run against the *unfixed*
+    `transport.go` and both fail there, so they are regression tests rather than
+    tests that happen to pass.
+11. `vif -serve 127.0.0.1:7801 -d` with **no `-players`**, `HOME` and
+    `XDG_CONFIG_HOME` at nonexistent paths, no TTY: logged
+    `quorum=1 capacity=16`, waited, and reached `server running` on its first
+    guest.
+12. A second guest joined that running session and was admitted mid-run —
+    `mid-run participant admitted, participant 3, slot 1, snapshot_tick 242,
+    bytes 3517`.
+13. Both guests ran to the end of their scripts and departed; the host logged
+    each disconnect and continued with `remaining_peers 0`.
+14. RSS across that session: 14.6 MB in the lobby, 31.4 MB with one guest,
+    44.6 MB with two, plateauing at 63.5 MB.
+15. Ten rapid dials from one address against a fresh server: six received a
+    `MsgJoinOffer`, the seventh onward received
+    `{"error":"admission: 127.0.0.1 has joined 6 times within 1m0s"}`.
+16. Capture bodies measured across five configurations (embedded and
+    `config/main`, 80×24 through 500×250, 409 to 1487 live entities): peak 3,545
+    bytes in every case, which is what put the 64 MiB assembly ceiling at roughly
+    19,000× a real capture and set the new one at 4 MiB.

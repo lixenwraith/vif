@@ -285,7 +285,10 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host)", parameter.MaxPlayers))
+		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host). "+
+			"With -serve it is a ceiling on guests instead: the session starts on the first one "+
+			"and admits the rest as they arrive, defaulting to %d",
+		parameter.MaxPlayers, parameter.MaxPlayers))
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {

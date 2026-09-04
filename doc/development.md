@@ -117,7 +117,7 @@ useful CI addition even though the current workflow does not perform one.
 | `-serve <address>` | Bind a headless session with no local player: a dedicated host. |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. |
 | `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
-| `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. With `-serve` it is the number of guests instead, because the server is not one of them. |
+| `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. With `-serve` it counts guests instead, because the server is not one of them, and it is a ceiling rather than a requirement: the session starts on its first guest and admits the rest as they arrive, defaulting to the full roster. |
 | `-l` / `-log` | Enable structured logging; use `-l=DIR` for another directory. |
 | `-lv <level>` | `trace`, `debug`, `info`, `warn`, or `error`; implies logging. |
 | `-ls <scope>` | Scope mask such as `app+fsm+stat`, `afs`, `+event`, or `-lock`; implies logging. |
@@ -248,6 +248,14 @@ watched. A server with no guests attached still ticks and still authors; the
 correction pump returns on an empty roster. A participant that dropped can dial
 back in and receive the world at whatever tick the session has reached, into the
 slot its departure released.
+
+`-players` is a ceiling here rather than a lobby size: the session starts on its
+first guest and takes the rest through the mid-run gate, so the example above holds
+at most two guests but plays as soon as one arrives. Omit it and the server holds
+the full roster. A dialling host is admitted at most `parameter.NetworkAdmitBurst`
+times per `NetworkAdmitWindow`, because the admission that follows a handshake
+reads and sends a whole world and a peer cycling through it would otherwise spend
+one connect per capture.
 
 ### A scripted participant
 

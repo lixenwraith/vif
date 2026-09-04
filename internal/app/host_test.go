@@ -36,7 +36,7 @@ func TestMidRunHostUsesConfiguredCapOrMaximum(t *testing.T) {
 			if err := host.BeginHosting("127.0.0.1:0"); err != nil {
 				t.Fatalf("begin hosting: %v", err)
 			}
-			if got := host.remoteParticipantCount() + 1; got != tt.want {
+			if got := host.sessionCapacity() + 1; got != tt.want {
 				t.Fatalf("lobby size = %d, want %d", got, tt.want)
 			}
 		})

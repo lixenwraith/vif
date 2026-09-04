@@ -26,8 +26,11 @@ func HandleCrash(r any) {
 	// Terminal cleanup if available
 	if crashTerminal != nil {
 		crashTerminal.Fini()
-	} else {
-		// Fallback for edge cases
+	} else if StdoutIsTerminal() {
+		// Fallback for a run that put a terminal into raw mode without registering
+		// one here. Gated on stdout actually being a terminal: a headless run —
+		// a dedicated host, a script, a container — has none to reset, and the
+		// escape sequence would be the only thing it ever wrote to its output.
 		terminal.EmergencyReset(os.Stdout)
 	}
 

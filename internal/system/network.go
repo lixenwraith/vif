@@ -34,6 +34,7 @@ type NetworkSystem struct {
 	mu              sync.Mutex
 	crossings       []event.ScheduledWireFrame
 	scheduled       []barrierArtifact
+	scheduledBytes  int
 	epochs          [parameter.MaxPlayers + 1]epochWindow
 	productionEpoch uint64
 	crossSeq        uint64
@@ -89,12 +90,20 @@ type NetworkSystem struct {
 	statDuplicates     *atomic.Int64
 	statDigestMismatch *atomic.Int64
 
-	digestHistory      [parameter.NetworkEpochWindow]stateDigest
-	pendingDigest      [parameter.MaxPlayers + 1]stateDigest
-	statDriftPart      *status.AtomicString
-	statDriftTick      *atomic.Int64
-	statPreInstall     *atomic.Int64
-	statSuperseded     *atomic.Int64
+	digestHistory  [parameter.NetworkEpochWindow]stateDigest
+	pendingDigest  [parameter.MaxPlayers + 1]stateDigest
+	statDriftPart  *status.AtomicString
+	statDriftTick  *atomic.Int64
+	statPreInstall *atomic.Int64
+	statSuperseded *atomic.Int64
+
+	// statRefusedTick and statScheduleFull count what the forward window and the
+	// schedule's ceilings turned away. They are separate from statDrop because a
+	// drop is a frame this instance could not read and these are frames it read and
+	// refused: a non-zero pair names a peer whose ticks or whose volume are not
+	// those of a participant, which is a different diagnosis from a decode failure.
+	statRefusedTick    *atomic.Int64
+	statScheduleFull   *atomic.Int64
 	statAgreedRestored *atomic.Int64
 	statJoinLag        *atomic.Int64
 	statLag            *atomic.Int64
@@ -301,6 +310,13 @@ type barrierArtifact struct {
 	origin    event.Origin
 }
 
+// frameBytes is what one artifact costs a bounded buffer. The schedule and the
+// replay suffix measure the same thing the same way, so their two ceilings stay
+// comparable rather than drifting into two ideas of a frame's size.
+func frameBytes(f event.WireFrame) int {
+	return len(f.Payload) + len(f.Event) + len(f.Domain)
+}
+
 func NewNetworkSystem(world *engine.World) engine.System {
 	s := &NetworkSystem{world: world}
 
@@ -332,6 +348,8 @@ func NewNetworkSystem(world *engine.World) engine.System {
 	s.statDigestMismatch = s.intStat(reg, "network.digest_mismatches")
 	s.statDriftPart = s.textStat(reg, "network.drift_part")
 	s.statDriftTick = s.intStat(reg, "network.drift_tick")
+	s.statRefusedTick = s.intStat(reg, "network.artifacts_refused_tick")
+	s.statScheduleFull = s.intStat(reg, "network.artifacts_schedule_full")
 	s.statPreInstall = s.intStat(reg, "network.artifacts_pre_install")
 	s.statSuperseded = s.intStat(reg, "network.artifacts_authority_superseded")
 	s.statAgreedRestored = s.intStat(reg, "network.artifacts_restored")
@@ -387,6 +405,7 @@ func (s *NetworkSystem) Init() {
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
 	s.scheduled = s.scheduled[:0]
+	s.scheduledBytes = 0
 	s.agreed = s.agreed[:0]
 	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
 	s.snapshotFloor = 0
@@ -486,6 +505,13 @@ func (s *NetworkSystem) participantID() uint32 {
 	return s.localSource
 }
 
+// localTick is this instance's own simulation position, which is what an arriving
+// apply tick is judged against. It is read rather than passed in because the two
+// drain paths differ on whether a tick is in progress and the answer must not.
+func (s *NetworkSystem) localTick() uint64 {
+	return s.world.Resources.Event.Queue.Stamp().Tick
+}
+
 // barrierDelayTicks returns the session's negotiated playout lead.
 func (s *NetworkSystem) barrierDelayTicks() uint64 {
 	s.mu.Lock()
@@ -532,9 +558,13 @@ func (s *NetworkSystem) Cross(ev event.GameEvent) (sequence uint64, taken bool) 
 	s.crossings = append(s.crossings, event.ScheduledWireFrame{Frame: frame, ApplyTick: applyTick})
 	agreed := barrierBound(ev.Type)
 	if agreed {
+		// Counted, never capped. The cap is on what a peer can make this instance
+		// hold; this artifact is this instance's own and has already been broadcast,
+		// so refusing it here would be a divergence rather than a defence.
 		s.scheduled = append(s.scheduled, barrierArtifact{
 			frame: frame, applyTick: applyTick, source: s.localSource, origin: ev.Origin,
 		})
+		s.scheduledBytes += frameBytes(frame)
 		// A barrier-bound sequence does not participate in the authority's
 		// local-first capture fence. Close its position now so it cannot leave a
 		// permanent hole in the ordinary sequence prefix; its effect remains
@@ -830,6 +860,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, authoritySe
 	}
 	keep := s.scheduled[:0]
 	dropped, superseded := 0, 0
+	held := 0
 	for _, a := range s.scheduled {
 		contained, byAuthority := s.snapshotContainsLocked(a)
 		if contained {
@@ -840,8 +871,10 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, authoritySe
 			continue
 		}
 		keep = append(keep, a)
+		held += frameBytes(a.frame)
 	}
 	s.scheduled = keep
+	s.scheduledBytes = held
 	// The retained local suffix uses its agreed apply tick. A record produced
 	// earlier but still inside the playout lead remains necessary and survives this
 	// rebase. Authority-local receive copies use snapshotContainsLocked instead and
@@ -869,6 +902,7 @@ func (s *NetworkSystem) AdoptSnapshot(tick uint64, authority uint32, authoritySe
 		}
 		restored = append(restored, a)
 		s.scheduled = append(s.scheduled, a)
+		s.scheduledBytes += frameBytes(a.frame)
 	}
 	s.agreed = restored
 	if len(restored) > 0 {
@@ -1654,12 +1688,29 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 		return
 	}
 
+	// The forward window, applied before the epoch window rather than after it. An
+	// epoch from beyond the horizon is refused without being admitted, so it
+	// neither reserves a schedule entry nor advances this source's high-water mark
+	// — a mark walked forward by one frame would refuse every ordinary epoch that
+	// followed it, on this instance and on everything it relays to.
+	horizon := s.localTick() + parameter.NetworkApplyWindowTicks
+	if batch.ProducedTick > horizon {
+		s.statRefusedTick.Add(int64(max(1, len(batch.Frames))))
+		return
+	}
+
 	s.mu.Lock()
 	admitted := s.epochs[batch.Source].admit(batch.ProducedTick)
-	installed, superseded := 0, 0
+	installed, superseded, refused, overflowed := 0, 0, 0, 0
 	authoritySequence := s.snapshotAuthoritySeq
 	if admitted {
 		for _, f := range batch.Frames {
+			// A batch inside the window may still carry a frame outside it: the
+			// apply tick is per frame and is not derived from the epoch's.
+			if f.ApplyTick > horizon {
+				refused++
+				continue
+			}
 			a := barrierArtifact{
 				frame: f.Frame, applyTick: f.ApplyTick, source: batch.Source, origin: event.OriginNetwork,
 			}
@@ -1674,12 +1725,28 @@ func (s *NetworkSystem) scheduleCrossings(from uint32, body []byte) {
 				}
 				continue
 			}
+			n := frameBytes(a.frame)
+			if len(s.scheduled) >= parameter.NetworkScheduledMax ||
+				s.scheduledBytes+n > parameter.NetworkScheduledBytes {
+				overflowed++
+				continue
+			}
 			s.scheduled = append(s.scheduled, a)
+			s.scheduledBytes += n
 		}
 	}
 	s.mu.Unlock()
 	if installed > 0 {
 		s.statPreInstall.Add(int64(installed))
+	}
+	if refused > 0 {
+		s.statRefusedTick.Add(int64(refused))
+	}
+	if overflowed > 0 {
+		s.statScheduleFull.Add(int64(overflowed))
+		vlog.Warn("app", "msg", "barrier schedule full",
+			"source", batch.Source, "produced_tick", batch.ProducedTick,
+			"dropped", overflowed, "held", len(s.scheduled), "bytes", s.scheduledBytes)
 	}
 	if superseded > 0 {
 		s.statSuperseded.Add(int64(superseded))
@@ -1727,14 +1794,17 @@ func (s *NetworkSystem) applyDue(nextTick uint64) int {
 	s.mu.Lock()
 	due := make([]barrierArtifact, 0, len(s.scheduled))
 	keep := s.scheduled[:0]
+	held := 0
 	for _, a := range s.scheduled {
 		if a.applyTick <= nextTick {
 			due = append(due, a)
 		} else {
 			keep = append(keep, a)
+			held += frameBytes(a.frame)
 		}
 	}
 	s.scheduled = keep
+	s.scheduledBytes = held
 	localSource := s.localSource
 	s.mu.Unlock()
 

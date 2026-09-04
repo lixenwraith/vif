@@ -3,6 +3,7 @@ package network
 import (
 	"crypto/tls"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -20,6 +21,15 @@ type Transport struct {
 	listener net.Listener
 	peers    *PeerManager
 
+	// handshakes is the concurrency budget for the pre-admission handshake, and
+	// pending is the connections currently spending one. The budget is what a
+	// flood of silent dialers costs; the set is how Stop reaches them, because a
+	// handshake blocked on its own read deadline would otherwise hold shutdown for
+	// as long as that deadline allows.
+	handshakes chan struct{}
+	pendingMu  sync.Mutex
+	pending    map[net.Conn]struct{}
+
 	running atomic.Bool
 	stopCh  chan struct{}
 	wg      sync.WaitGroup
@@ -27,10 +37,16 @@ type Transport struct {
 
 // NewTransport creates a transport with the given configuration
 func NewTransport(cfg *Config) *Transport {
+	slots := cfg.MaxHandshakes
+	if slots <= 0 {
+		slots = DefaultConfig().MaxHandshakes
+	}
 	return &Transport{
-		config: cfg,
-		peers:  NewPeerManager(cfg),
-		stopCh: make(chan struct{}),
+		config:     cfg,
+		peers:      NewPeerManager(cfg),
+		handshakes: make(chan struct{}, slots),
+		pending:    make(map[net.Conn]struct{}, slots),
+		stopCh:     make(chan struct{}),
 	}
 }
 
@@ -126,19 +142,80 @@ func (t *Transport) acceptLoop() {
 			t.report(errors.New("transport: host accepted a connection with no session handshake"))
 			continue
 		}
-		id, err := t.config.AcceptSession(conn)
-		if err != nil {
+
+		// Refused rather than queued when the budget is spent. Queueing would put
+		// the accept loop back behind a read the far end controls, which is the
+		// whole of what moving the handshake off it was for; a dialer turned away
+		// here can retry, and one that cannot is indistinguishable from the flood
+		// that spent the budget.
+		select {
+		case t.handshakes <- struct{}{}:
+		default:
 			_ = conn.Close()
-			t.report(err)
+			t.report(fmt.Errorf("transport: refused %s, %d handshakes already in flight",
+				conn.RemoteAddr(), cap(t.handshakes)))
 			continue
 		}
-		if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
-			t.report(err)
-			continue
-		}
-		if t.config.OnAdmit != nil {
-			t.config.OnAdmit(id)
-		}
+		t.wg.Add(1)
+		go t.handshake(conn)
+	}
+}
+
+// handshake admits one accepted connection, off the accept loop.
+//
+// The budget is released as soon as AcceptSession returns rather than when this
+// goroutine ends: the budget bounds unauthenticated work, and everything after
+// that point concerns a peer the session has already assigned an identity to,
+// which the roster ceiling bounds instead.
+func (t *Transport) handshake(conn net.Conn) {
+	defer t.wg.Done()
+	t.holdPending(conn)
+
+	id, err := t.config.AcceptSession(conn)
+	t.releasePending(conn)
+	<-t.handshakes
+	if err != nil {
+		_ = conn.Close()
+		t.report(err)
+		return
+	}
+	// AddConnectionAs closes the connection on every failure of its own.
+	if _, err := t.peers.AddConnectionAs(conn, id); err != nil {
+		t.report(err)
+		return
+	}
+	if t.config.OnAdmit != nil {
+		t.config.OnAdmit(id)
+	}
+}
+
+// holdPending and releasePending track a connection for the length of its
+// handshake, so Stop can close it rather than waiting out its read deadline. A
+// transport already stopping closes the connection immediately, which is what
+// keeps a handshake started in that instant from outliving the listener.
+func (t *Transport) holdPending(conn net.Conn) {
+	t.pendingMu.Lock()
+	defer t.pendingMu.Unlock()
+	select {
+	case <-t.stopCh:
+		_ = conn.Close()
+	default:
+	}
+	t.pending[conn] = struct{}{}
+}
+
+func (t *Transport) releasePending(conn net.Conn) {
+	t.pendingMu.Lock()
+	defer t.pendingMu.Unlock()
+	delete(t.pending, conn)
+}
+
+// closePending unblocks every handshake still reading from its stream.
+func (t *Transport) closePending() {
+	t.pendingMu.Lock()
+	defer t.pendingMu.Unlock()
+	for conn := range t.pending {
+		_ = conn.Close()
 	}
 }
 
@@ -206,6 +283,9 @@ func (t *Transport) Stop() error {
 		t.listener.Close()
 	}
 
+	// Before the peers, because a handshake in flight is not a peer yet and would
+	// otherwise hold the wait below for its own read deadline.
+	t.closePending()
 	t.peers.Close()
 	t.wg.Wait()
 

@@ -23,6 +23,11 @@ const hostParticipantID network.PeerID = 1
 
 var errSessionCanceled = errors.New("network session canceled")
 
+// ErrSessionStarting refuses a dial that lands in the window between the startup
+// lobby closing and the mid-run gate opening. It is distinguishable for the same
+// reason ErrSessionHandoff is: the dialer's answer is to retry, not to give up.
+var ErrSessionStarting = errors.New("session is starting; retry")
+
 // newSessionApp resolves the startup handshake before a joining App draws a
 // seed. Interactive play and authored headless scripts share this construction.
 func newSessionApp(cfg Config) (*App, error) {
@@ -56,18 +61,18 @@ func newHostingApp(cfg Config) (*App, error) {
 func (a *App) hostNetworkConfig() *network.Config {
 	netCfg := network.DebugConfig(network.RoleHost, a.cfg.HostAddress)
 	netCfg.ParticipantID = hostParticipantID
-	netCfg.MaxPeers = a.remoteParticipantCount()
+	netCfg.MaxPeers = a.sessionCapacity()
 	netCfg.OnError = logSessionError
 	netCfg.AcceptSession = network.HostAcceptor(network.Coordinator{
 		Assign:  a.assignParticipant,
 		Release: a.releaseParticipant,
+		Admit:   a.admissions.admit,
 	}, netCfg.ConnectTimeout)
 	if a.cfg.Mode.Serves() {
 		// A dedicated host outlives its guests, so it admits a dial after the lobby
 		// has closed: a participant that dropped can come back into the slot its
 		// departure released. The hook is installed here and answers nothing until
 		// Serve arms it, because before that the gate is the lobby's own.
-		netCfg.MaxPeers = parameter.MaxPlayers
 		netCfg.OnAdmit = a.admitLateJoiner
 	}
 	return netCfg
@@ -80,15 +85,24 @@ func (a *App) admitLateJoiner(id network.PeerID) {
 	}
 }
 
-// remoteParticipantCount is the lobby size this host waits for, excluding itself.
+// sessionCapacity is how many guests this host will ever hold, excluding itself.
 //
 // A dedicated host is excluded by construction rather than by subtraction: it
-// holds no cursor, so the number it waits for is the number of guests and the
-// roster is exactly those guests plus one cursorless coordinator.
-func (a *App) remoteParticipantCount() int {
+// holds no cursor, so the number is the number of guests and the roster is exactly
+// those guests plus one cursorless coordinator. There -players is a ceiling and
+// nothing else — a server with none named holds the whole roster, because a fleet
+// host that had to be told how many people were coming would be a host that only
+// ever served the number it was told.
+//
+// An interactive -host is the other shape: its lobby is a fixed party that starts
+// together, so there the ceiling and the number it waits for are the same value.
+func (a *App) sessionCapacity() int {
 	n := a.cfg.Participants
 	if a.cfg.Mode.Serves() {
-		return min(max(n, 1), parameter.MaxPlayers)
+		if n <= 0 {
+			return parameter.MaxPlayers
+		}
+		return min(n, parameter.MaxPlayers)
 	}
 	if n < 2 {
 		n = 2
@@ -97,6 +111,22 @@ func (a *App) remoteParticipantCount() int {
 		n = parameter.MaxPlayers
 	}
 	return n - 1
+}
+
+// lobbyQuorum is how many guests the start gate waits for before it closes the
+// lobby and releases tick zero.
+//
+// One, on a dedicated host. The session exists to be joined rather than to be
+// assembled, so the first guest is what there is to wait for and every guest after
+// it arrives through the mid-run gate — which is the same path a guest that
+// dropped comes back through, and is therefore already the path that has to work.
+// Waiting for a full roster instead would make the pod's readiness a function of
+// how many people happened to want to play.
+func (a *App) lobbyQuorum() int {
+	if a.cfg.Mode.Serves() {
+		return 1
+	}
+	return a.sessionCapacity()
 }
 
 // hostSlot is the roster slot this instance takes for itself: the first one on an
@@ -166,8 +196,16 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 	if a.authority != nil && a.authority.Migrating() {
 		return network.SessionOffer{}, ErrSessionHandoff
 	}
+	// The same refusal for the same reason, one window earlier. Between the lobby
+	// closing on its roster and the mid-run gate being armed there is no gate that
+	// can serve a dial: the lobby's has already sent its offers, and the mid-run
+	// one waits for a capture a clock that has not started never reaches. A dialer
+	// admitted there would hold an identity and wait for a start it is not in.
+	if a.lobbyClosing.Load() {
+		return network.SessionOffer{}, ErrSessionStarting
+	}
 
-	limit := a.remoteParticipantCount() + 1
+	limit := a.sessionCapacity() + 1
 	if len(a.sessionRoster) == 0 {
 		a.sessionRoster = []network.SessionParticipant{{ID: hostParticipantID, Slot: a.hostSlot()}}
 	}
@@ -272,29 +310,47 @@ func (a *App) startHostSession(signals <-chan os.Signal) error {
 	return a.startHostSessionOn(port, signals)
 }
 
-// startHostSessionOn runs the production gate against the supplied endpoint. The
-// lobby closes only when every expected participant has arrived, because the roster
-// it closes on is what every instance builds its cursors from.
+// startHostSessionOn runs the production gate against the supplied endpoint.
+//
+// The lobby closes on a quorum rather than on a full roster: an interactive -host
+// is a party that starts together and its quorum is its capacity, and a dedicated
+// host starts on its first guest and takes the rest through the mid-run gate. What
+// it closes *on* is the same either way — whoever is actually in the roster at
+// that moment — because that roster is what every instance builds its cursors
+// from, and a count agreed in advance is not the same thing as the participants
+// that arrived.
+//
+// From the moment the roster is read until the caller opens the mid-run gate,
+// dials are refused: a dialer admitted in that window would hold an identity and
+// wait for a start gate no longer being sent.
 func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Signal) error {
-	remoteCount := a.remoteParticipantCount()
+	quorum, capacity := a.lobbyQuorum(), a.sessionCapacity()
 	addr := a.cfg.HostAddress
 	if bound := port.Addr(); bound != nil {
 		addr = bound.String()
 	}
-	vlog.Info("app", "msg", "network host waiting", "address", addr, "participants", remoteCount+1)
-	a.showStartupStatus(fmt.Sprintf("Hosting on %s; waiting for %d participant(s) (Ctrl-C cancels)",
-		addr, remoteCount))
+	vlog.Info("app", "msg", "network host waiting",
+		"address", addr, "quorum", quorum, "capacity", capacity)
+	a.showStartupStatus(fmt.Sprintf("Hosting on %s; waiting for %d of up to %d participant(s) (Ctrl-C cancels)",
+		addr, quorum, capacity))
 
-	if err := a.waitForStartup(port, signals, remoteCount, false,
-		func() bool { return port.PeerCount() == remoteCount }); err != nil {
+	if err := a.waitForStartup(port, signals, quorum, false,
+		func() bool { return port.PeerCount() >= quorum }); err != nil {
 		return err
 	}
+
+	a.lobbyClosing.Store(true)
 	offer, err := a.hostOffer()
 	if err != nil {
 		return err
 	}
-	if len(offer.Participants)-1 != remoteCount {
-		return fmt.Errorf("host admitted %d peers for a %d-peer offer", remoteCount, len(offer.Participants)-1)
+	// Whoever the roster closed on, not whoever was counted a moment ago: an
+	// accepted dial can complete between the quorum being met and the roster being
+	// read, and that participant is in the session.
+	admitted := len(offer.Participants) - 1
+	if admitted < quorum || admitted > capacity {
+		return fmt.Errorf("host closed a lobby of %d guests, outside %d..%d",
+			admitted, quorum, capacity)
 	}
 	if err := a.HostSession(offer); err != nil {
 		return err
@@ -338,8 +394,8 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 			}
 		}
 	}
-	if err := a.waitForStartup(port, signals, remoteCount, true, func() bool {
-		return port.PeerCount() == remoteCount && port.ReadyCount() == remoteCount
+	if err := a.waitForStartup(port, signals, admitted, true, func() bool {
+		return port.PeerCount() >= admitted && port.ReadyCount() >= admitted
 	}); err != nil {
 		return err
 	}

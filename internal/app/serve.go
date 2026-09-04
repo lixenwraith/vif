@@ -70,14 +70,18 @@ func (a *App) Serve() error {
 	// Paused during construction so the lobby wait does not age a game-time
 	// deadline; the start gate is what releases tick zero.
 	a.ctx.TimeCtl.SetPaused(false)
-	// From here a dial is a mid-run join rather than a lobby member, which is what
-	// lets a guest that dropped come back into the slot its departure released.
-	a.lateJoins.Store(true)
 
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
+	// After the scheduler, not before it. From here a dial is a mid-run join rather
+	// than a lobby member — which is what lets a guest that dropped come back into
+	// the slot its departure released, and what lets the rest of the roster arrive
+	// in its own time rather than being waited for. The gate reads a capture a
+	// playout lead ahead of the current tick, so arming it over a clock that has
+	// not started would time every such dial out instead of admitting it.
+	a.openMidRunJoins()
 	vlog.Info("app", "msg", "server running",
-		"address", a.cfg.HostAddress, "guests", a.remoteParticipantCount())
+		"address", a.cfg.HostAddress, "capacity", a.sessionCapacity())
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()
@@ -111,6 +115,13 @@ func (a *App) releaseFrame() {
 	case a.frameReady <- struct{}{}:
 	default: // channel full, skip signal
 	}
+}
+
+// openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in
+// that order: a dial refused a moment ago retries into a gate that now exists.
+func (a *App) openMidRunJoins() {
+	a.lateJoins.Store(true)
+	a.lobbyClosing.Store(false)
 }
 
 // localPlayers is how many cursors this instance drives. A dedicated host drives

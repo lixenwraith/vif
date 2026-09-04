@@ -76,10 +76,18 @@ special case. The FSM's boot cursor is not suppressed — it is created as it al
 is, and the roster hands it to the first guest, which is what keeps shared creation
 order identical to an ordinary host's.
 
-`-players <n>` on a server is the number of *guests* it waits for, because the
-server is not one of them; `1` is the smallest session and `parameter.MaxPlayers`
-the largest. `-size WxH` gives it the terminal-equivalent geometry it has no
-terminal to derive, which is what every joiner adopts as the D-14 map latch.
+`-players <n>` on a server is a ceiling on *guests*, because the server is not one
+of them, and it is a ceiling only: the lobby's quorum is one, so a server starts on
+its first guest and admits the rest through the mid-run gate as they arrive. With
+no `-players` it holds the whole roster. Waiting for a named number instead — which
+is what it used to do — made a host's readiness a function of how many people
+happened to want to play, and gave a server started with no `-players` a session of
+exactly one guest. An interactive `-host` is the other shape and keeps the old
+behaviour: its lobby is a party that starts together, so there the ceiling and the
+number the gate waits for are one value.
+
+`-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
+derive, which is what every joiner adopts as the D-14 map latch.
 
 ```bash
 ./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
@@ -92,10 +100,17 @@ with no guests attached still ticks, still authors, and publishes nothing: the
 correction pump returns on an empty roster.
 
 A server outlives its guests. Its mid-run gate is installed at construction and
-armed once the startup lobby closes, so a participant that dropped can dial back
+armed once the scheduler is running, so a participant that dropped can dial back
 into the slot its departure released and receive the world at whatever tick the
-session has reached. The lobby size is still the ceiling: `-players` is how many
-cursors the session holds, not how many dials it will ever accept.
+session has reached. `-players` bounds how many cursors the session holds, not how
+many dials it will ever accept.
+
+The arming happens after `scheduler.Start` rather than before it, because the gate
+waits for a capture one playout lead ahead of the current tick and a clock that has
+not started never reaches it. Between the lobby reading its roster and that arming
+there is a window neither gate can serve, so a dial landing in it is refused with
+`ErrSessionStarting` — a refusal the dialer retries, rather than an identity and a
+silent wait for a start gate no longer being sent.
 
 Together these make a scripted participant: one side of a session plays a fixed
 sequence at real time while a person plays the other freely, which is how a

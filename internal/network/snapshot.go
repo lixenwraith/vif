@@ -24,10 +24,23 @@ const SnapshotChunkHeader = 20
 // accounted for by MaxPayloadSize.
 const SnapshotChunkBody = MaxPayloadSize - SnapshotChunkHeader
 
-// MaxSnapshotBytes bounds a transfer a receiver will allocate for. It is far above
-// the storm high water measured for this world and far below anything that could be
-// used to exhaust a joiner's memory from an unauthenticated handshake.
-const MaxSnapshotBytes = 64 << 20
+// MaxSnapshotBytes bounds a transfer either end will handle at all. A measured
+// capture of this world is single-digit kilobytes and the documented storm high
+// water is about 15 KiB, so this is three orders of magnitude of headroom for a
+// world that grows — and it is a sanity bound rather than the defence, because a
+// declared length is a claim by whoever sent the chunk.
+//
+// The defence is snapshotReserve below: a receiver allocates for the bytes that
+// have arrived rather than for the bytes a sender says are coming, so the memory
+// one peer can make a receiver hold is bounded by what that peer actually sends.
+const MaxSnapshotBytes = 4 << 20
+
+// snapshotReserve is the most a receiver reserves up front for a transfer it has
+// only seen the first chunk of. A real capture fits inside it and is allocated
+// once; anything larger grows by append, which costs a few copies on a path that
+// runs once per keyframe and removes the last place a peer could name a number
+// and have it allocated.
+const snapshotReserve = 64 << 10
 
 // EncodeSnapshotChunks splits an encoded capture into wire frames.
 func EncodeSnapshotChunks(tick uint64, body []byte) ([][]byte, error) {
@@ -129,7 +142,7 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 			return false, false, nil
 		}
 		s.tick, s.count, s.total, s.started = tick, count, total, true
-		s.body = make([]byte, 0, total)
+		s.body = make([]byte, 0, min(int(total), snapshotReserve))
 	}
 	if tick < s.tick {
 		return false, false, nil // a transfer this node has already moved past

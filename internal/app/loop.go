@@ -81,6 +81,11 @@ func (a *App) Loop() error {
 	// Prime the first tick, then start the game clock
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
+	// The lobby's closing window ends with the clock, not with the roster: an
+	// interactive host arms no mid-run gate here, but a dial refused because the
+	// lobby was closing must stop being refused once the session is running, or
+	// a later :host would open a session nothing could reach.
+	a.lobbyClosing.Store(false)
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()

@@ -319,6 +319,8 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `network.state` (string) | Operator connection state: off, connecting, connected or disconnected. |
 | `network.state_applied` (int) | Owner-authored cursor snapshots applied to remote cursors. |
 | `network.artifacts_pre_install` (int) | Peer artifacts refused because the installed world already contains them — everything due at or before a capture's tick (D-22). Non-zero on a joiner is the ordering working, not a loss. |
+| `network.artifacts_refused_tick` (int) | Peer artifacts naming an apply tick past `parameter.NetworkApplyWindowTicks` ahead of this instance. The window admits a fresh join's whole catch-up, so a non-zero count is a sender whose ticks are not a participant's position. |
+| `network.artifacts_schedule_full` (int) | Peer artifacts turned away because the barrier schedule was at `NetworkScheduledMax` entries or `NetworkScheduledBytes`. Distinct from `frames_dropped`: these are frames this instance read and refused, which is a different diagnosis from one it could not read. |
 | `network.join_lag_ticks` (int) | Ticks this participant still stood behind the session after its join caught up. Zero is the ordinary result; anything above the playout lead refuses the join. |
 | `network.link_rtt_ms` (int) | The worst peer's smoothed round trip, in milliseconds — the unit a person reads and the unit `tc netem delay` speaks. A loopback link rounds to zero here, which is why the microsecond form exists beside it. |
 | `network.link_rtt_us` (int) | The same round trip at the resolution the estimator works in, so a local session can show that the measurement exists at all. |

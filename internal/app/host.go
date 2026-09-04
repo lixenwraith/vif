@@ -139,7 +139,7 @@ func (a *App) beginHostingLocked(addr string) error {
 		bound = b.String()
 	}
 	vlog.Info("app", "msg", "hosting opened mid-run",
-		"address", bound, "tick", a.Position().Tick, "participants", a.remoteParticipantCount()+1)
+		"address", bound, "tick", a.Position().Tick, "capacity", a.sessionCapacity()+1)
 	a.ctx.SetStatusMessage("Hosting on "+bound, 0, false)
 	return nil
 }
@@ -229,6 +229,13 @@ func (a *App) sessionSummaryLocked() string {
 // A tick-zero lobby does not come through here: it closes on a roster and releases
 // everyone together, and its gate is startHostSessionOn's.
 func (a *App) releaseMidRunJoiner(id network.PeerID) {
+	// One at a time. The handshakes that reach here run concurrently, and this gate
+	// waits on a ready count that is cumulative over the session: two of them at
+	// once could not tell which joiner had confirmed, and the link measurement each
+	// takes would be timed against the other's transfer.
+	a.midRunGate.Lock()
+	defer a.midRunGate.Unlock()
+
 	a.sessionMu.Lock()
 	port := a.midRunPort
 	a.sessionMu.Unlock()

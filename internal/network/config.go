@@ -58,6 +58,15 @@ type Config struct {
 	// Connection limits
 	MaxPeers int
 
+	// MaxHandshakes bounds the accepted connections whose session handshake may be
+	// in flight at once. The handshake reads from a socket the far end controls, so
+	// running it on the accept goroutine let one dialer that never writes stall
+	// every other join for a whole ConnectTimeout. Running them concurrently moves
+	// that cost off the accept path and this bounds what a flood of such dialers
+	// costs instead: a goroutine and two buffered readers each, and no more than
+	// this many at once.
+	MaxHandshakes int
+
 	// Session identity and fixed playout delay are agreed by the join handshake.
 	ParticipantID     PeerID
 	BarrierDelayTicks uint64
@@ -76,7 +85,10 @@ type Config struct {
 	RecvQueueSize   int
 
 	// AcceptSession authenticates and assigns a canonical participant ID before
-	// an accepted stream reaches the poll endpoint.
+	// an accepted stream reaches the poll endpoint. It runs on a goroutine of the
+	// connection's own, bounded by MaxHandshakes, so an implementation may block on
+	// the stream for as long as its own deadline allows without holding the accept
+	// loop.
 	AcceptSession func(net.Conn) (PeerID, error)
 
 	// OnAdmit is called once an accepted stream has become a peer, on the accept
@@ -100,6 +112,7 @@ func DefaultConfig() *Config {
 		Address:           ":7777",
 		TLS:               nil, // Must be explicitly configured for production
 		MaxPeers:          16,
+		MaxHandshakes:     8,
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 		ConnectTimeout:    5 * time.Second,
 		ReadTimeout:       30 * time.Second,

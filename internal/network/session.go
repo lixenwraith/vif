@@ -110,6 +110,14 @@ func (o SessionOffer) Participant(id PeerID) (SessionParticipant, bool) {
 type Coordinator struct {
 	Assign  func() (SessionOffer, error)
 	Release func(PeerID)
+
+	// Admit is the one decision made about a dialer before it costs the session
+	// anything. Assign allocates an identity and a roster slot, and on a host that
+	// is already running the admission that follows reads, encodes and sends a
+	// whole world — so a peer that joins and leaves in a loop spends one connect
+	// per capture. Refusing here is what bounds that; nil admits everything, which
+	// is what a harness and a two-terminal lobby want.
+	Admit func(net.Addr) error
 }
 
 // HostAcceptor returns a pre-world handshake for Transport's accept loop. Each
@@ -117,6 +125,16 @@ type Coordinator struct {
 // rather than being fixed at two.
 func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, error) {
 	return func(conn net.Conn) (id PeerID, err error) {
+		if c.Admit != nil {
+			if err = c.Admit(conn.RemoteAddr()); err != nil {
+				// Answered for the same reason a refused Assign is: a dialer that
+				// can read why it was turned away can back off, where one that only
+				// sees the stream end retries immediately and makes the condition
+				// the refusal exists to stop.
+				refuseJoin(conn, err, timeout)
+				return 0, err
+			}
+		}
 		o, err := c.Assign()
 		if err != nil {
 			// Answered rather than dropped. A refusal the dialer can read is the

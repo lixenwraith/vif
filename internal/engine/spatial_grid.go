@@ -46,6 +46,34 @@ func (c *Cell) view(scope DomainScope) []core.Entity {
 	return nil
 }
 
+// ClampMapSize reduces a requested map to the largest legal one, so an oversized
+// request is played rather than refused.
+//
+// It is the single gate in front of the grid allocation, and it exists because the
+// dimensions it takes arrive from a replicated LevelSetup payload: a peer names
+// them, every participant applies them, and the product reaches make(). Clamping
+// rather than rejecting is what keeps that replication honest — the same payload
+// produces the same bounds on every instance, where a drop on one and an apply on
+// another is a divergence. The clamp is per axis first and then on the product,
+// so a legal-but-extreme aspect ratio is cut on the axis that is wrong rather than
+// silently reshaped.
+//
+// Zero or negative dimensions are returned unchanged: they are the "use the
+// current bounds" sentinel the callers resolve before this runs.
+func ClampMapSize(width, height int) (int, int) {
+	if width <= 0 || height <= 0 {
+		return width, height
+	}
+	width = min(width, parameter.MaxMapWidth)
+	height = min(height, parameter.MaxMapHeight)
+	// Division rather than multiplication: width is already bounded, so the
+	// quotient cannot overflow where the product could.
+	if width*height > parameter.MaxMapCells {
+		height = max(parameter.MaxMapCells/width, 1)
+	}
+	return width, height
+}
+
 // SpatialGrid is a dense 2D grid for fast spatial queries without allocation
 type SpatialGrid struct {
 	Cells  []Cell // 1D array: index = y*Width + x
@@ -55,6 +83,8 @@ type SpatialGrid struct {
 
 // NewSpatialGrid creates a new grid with the specified dimensions
 func NewSpatialGrid(width, height int) *SpatialGrid {
+	width, height = ClampMapSize(width, height)
+	width, height = max(width, 0), max(height, 0)
 	return &SpatialGrid{
 		Cells:  make([]Cell, width*height),
 		Width:  width,
@@ -182,7 +212,15 @@ func (g *SpatialGrid) Clear() {
 // shrinking retains capacity, so map-size oscillation (tmux pane resize,
 // crop-on-resize, wasm) never reallocates; growth allocates once and holds.
 // Contents are cleared; Position.ResizeGrid repopulates from component data.
+// Resize is total: it clamps rather than trusting its caller. Every path into it
+// carries dimensions that came from a replicated payload or a terminal report, and
+// an unbounded product here is a panic in the allocator rather than a rejected map.
 func (g *SpatialGrid) Resize(newWidth, newHeight int) {
+	newWidth, newHeight = ClampMapSize(newWidth, newHeight)
+	// Floored before the dimensions are stored, not just before they are used: a
+	// grid recording bounds that disagree with the cells it holds answers Set and
+	// every enumeration from two different maps.
+	newWidth, newHeight = max(newWidth, 0), max(newHeight, 0)
 	need := newWidth * newHeight
 	if need <= cap(g.Cells) {
 		g.Cells = g.Cells[:need]

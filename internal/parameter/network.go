@@ -305,6 +305,51 @@ const (
 	// clears it.
 	NetworkMigrationBadgeTicks = 40
 
+	// NetworkApplyWindowTicks is the furthest ahead of this instance's own tick an
+	// arriving artifact may name and still be scheduled.
+	//
+	// The schedule keeps what is not yet due, so without a forward bound an apply
+	// tick this run will never reach is not a schedule but a reservation, and
+	// nothing ever retires it. The window has to clear the largest gap two
+	// participants legitimately hold at once, which is a fresh join: a participant
+	// that has just installed a world is behind the session by the transfer and the
+	// install, and NetworkJoinCatchUpTicks is the ceiling that gap is admitted
+	// under. A convergence floor on top of it covers the ordinary case of a peer
+	// running ahead. Past the sum, a tick is not a participant's position, it is a
+	// number.
+	NetworkApplyWindowTicks = NetworkJoinCatchUpTicks + SnapshotFloorKeyframeTicks
+
+	// NetworkScheduledMax and NetworkScheduledBytes bound the artifacts one
+	// instance holds waiting for their apply tick.
+	//
+	// Two bounds for the reason the replay suffix has three: the count bounds a
+	// peer producing many small artifacts, and the byte bound is what keeps one
+	// pathological payload from turning the schedule into an unbounded buffer.
+	// Both sit far above the window above at any legitimate production rate — one
+	// epoch per source per tick, a handful of artifacts in each — so reaching
+	// either means a sender that is not playing the game, and the overflow is
+	// counted rather than silently absorbed.
+	NetworkScheduledMax   = 4096
+	NetworkScheduledBytes = 4 << 20
+
+	// NetworkAdmitWindow, NetworkAdmitBurst and NetworkAdmitTracked bound how often
+	// one dialling host may be admitted to a session.
+	//
+	// The expensive part of a join is not the handshake but what follows it: a
+	// whole world read, encoded and sent. A peer that joins and leaves in a loop
+	// therefore costs the session a capture per cycle while costing itself one
+	// connect, and that amplification is what this bounds.
+	//
+	// The key is the dialling address rather than the participant identity, because
+	// an identity is what the attack consumes and is released the moment the
+	// connection drops. Addresses are coarse — one NAT is one key — so the budget
+	// is deliberately far above what a person reconnecting after a crash needs.
+	// NetworkAdmitTracked bounds the limiter itself, so the defence cannot become
+	// the leak.
+	NetworkAdmitWindow  = time.Minute
+	NetworkAdmitBurst   = 6
+	NetworkAdmitTracked = 1024
+
 	// NetworkEpochWindow is how far behind a source's newest epoch a late one may
 	// still be admitted. A mesh delivers by several paths at once, so epochs from one
 	// source arrive out of order and a high-water mark alone would discard epochs the
