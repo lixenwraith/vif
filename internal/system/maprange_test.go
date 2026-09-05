@@ -51,6 +51,7 @@ var allowedMapRanges = map[string]string{
 	"loadAndResolve:regions":                       "load-time include resolution; merges into a map",
 	"mergeStates:addition":                         "load-time; merges into a map",
 	"Machine.GetStateID:nodes":                     "returns first name match; names are unique",
+	"Machine.compileActions:PayloadVars":           "collects payload fields, sorted before use",
 	"Machine.capturePayloadVars:captureVars":       "distinct payload fields to distinct variables",
 	"ApplyPayloadVars:vars":                        "distinct dot-paths to distinct payload fields",
 	"DustSystem.applyAccumulatedImpulses:impulses": "one write per distinct entity; accumulation is dense-ordered",
@@ -64,7 +65,6 @@ var allowedMapRanges = map[string]string{
 	"NavigationSystem.HandleEvent:groups":           "per-group dirty flag; independent",
 	"NavigationSystem.Update:groups":                "per-group field update; recompute sum is commutative",
 	"LootSystem.refreshOwnerRoutes:ownerRoutes":     "per-owner field update and eviction; independent, and the recompute sum is commutative",
-	"Machine.Import:delayedActions":                 "clears every key; order cannot change an empty queue",
 
 	// --- Output re-sorted by a unique deterministic key ---
 	"MacroManager.Tick:active":         "output sorted by startOrder",
@@ -74,7 +74,7 @@ var allowedMapRanges = map[string]string{
 	"AdaptationResource.LoadState:Entries":     "ranges []AdaptationEntryState, not the map field of the same name",
 	"AdaptationResource.LoadState:Populations": "ranges []RoutePopulationState, not the map field of the same name",
 	"NavigationSystem.LoadShared:Groups":       "ranges []navGroupPhase, not a map",
-	"Machine.Import:Regions":                   "ranges []RegionSnapshot, not the regions map",
+	"Machine.processDelayedActions:delayed":    "ranges []DelayedAction, not the delayedActions map",
 	"AdaptationSystem.applyEXP3:outcomes":      "parameter is []routeOutcome, not the map field",
 	"FuseSystem.killDrains:drains":             "parameter is []core.Entity, not DustSystem's map field",
 }

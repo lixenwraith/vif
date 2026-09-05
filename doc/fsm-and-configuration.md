@@ -310,32 +310,48 @@ region, and `World.AllowSystemDisable` refuses the same request from an
 `EnableSystem`/`DisableSystem` action or the `:system` command. Disabling both
 ends stays legal; an optional dependency is reported once, not per resume.
 
-### Installing a captured machine, and what it skips
+### Installing a captured machine
 
-`ClockScheduler.ImportFSM` places every region where a capture found it and
-deliberately does **not** re-run entry actions: the capture describes a machine
-that has already entered those states, and re-entering would emit everything the
-entry produced a second time. Regions the capture does not name are deleted, for
-the same reason — they are not running on the sender, so they must not be running
-here.
+FSM import has separate staging and live forms. Both first resolve the complete
+capture—regions, named states, variables, and delayed compiled-action identities—
+before mutating the machine. The staging form then places the state without side
+effects. That proves a capture is loadable without touching either the live world
+or instance-local systems.
 
-That is correct for every effect the capture carries, and it is exactly wrong for
-the ones it does not. An `on_enter` that emits a **`ClassLocal`** event is
-producing instance-local state that no capture contains: `EventGrayoutStart` and
-`EventDrainPause` latch in `ViewResource` and `DrainSystem`, neither of which is
-snapshot-carrying, and the only release either has is the `on_enter` of the state
-the region exits through. A participant whose FSM is rebased across that exit —
-which is any correction that lands while it is a few ticks behind — never runs the
-release, and the hold survives for the rest of the run.
+The live form also reconciles persistent local lifecycle. Ordinary entry and exit
+actions still do not replay: their Shared results are already in the capture, and
+one-shot local rewards or presentation bursts must not happen twice. A config
+author explicitly marks only durable `ClassLocal` `EmitEvent` actions:
 
-`config/main`'s quasar region is the worked example. `QuasarFuse` takes a grayout
-and a drain pause scoped to `fuse_owner`; `QuasarExit` and `QuasarEscalate`
-release both and terminate the region. A correction that retires the region for a
-guest still standing in `QuasarGoldActive` strands both holds: the screen stays
-dark, drains never spawn, `kills.drain` never reaches the escalation gate, and no
-further quasar is ever fused. See
-[Kubernetes fleet feasibility](kubernetes-fleet.md) ADR-6 for the three candidate
-designs; nothing here fixes it yet.
+```toml
+[states.QuasarHold]
+parent = "Root"
+on_enter = [
+  { action = "EmitEvent", event = "EventGrayoutStart",
+    payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+  { action = "EmitEvent", event = "EventDrainPause",
+    payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+]
+on_exit = [
+  { action = "EmitEvent", event = "EventGrayoutEnd",
+    payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+  { action = "EmitEvent", event = "EventDrainResume",
+    payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+]
+```
+
+On import, marked actions on paths no longer held run leaf-to-root against the old
+variables. After placement, marked entries run root-to-leaf against imported
+variables. All releases precede all acquisitions, so a quasar-to-storm handoff
+cannot clear the storm's new drain pause. If a referenced `payload_vars` value
+changes while the path stays active, the owning path is exited and re-entered to
+move the scope. Region deletion is an exit, which closes the reported case where
+a correction retired a quasar but left the guest grayed out with drains paused.
+
+Load validation restricts `reconcile = true` to immediate, unguarded
+`ClassLocal` `EmitEvent` actions in `on_enter`/`on_exit`. Persistent effects should
+be acquired/released on a common parent state; one-shot fuse, spawn, reward,
+message, sound, and strobe actions remain on child states and unmarked.
 
 ### Operator region primitives
 

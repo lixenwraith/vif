@@ -42,13 +42,13 @@ type VariableSnapshot struct {
 	Value int64  `json:"value"`
 }
 
-// DelayedSnapshot is one pending delayed action, identified by its region, its
-// owning state and its position in that region's queue. The action itself is
-// compiled configuration and is re-resolved on install; only the countdown and
-// the owner travel.
+// DelayedSnapshot is one pending delayed action, identified by its region, owning
+// state, and deterministic compiled action ID. The action implementation and
+// arguments are immutable configuration and are re-resolved on install; only its
+// identity, countdown, and cancellation owner travel.
 type DelayedSnapshot struct {
 	Region    string        `json:"region"`
-	Index     int           `json:"index"`
+	ActionID  uint32        `json:"action"`
 	Owner     string        `json:"owner"`
 	Remaining time.Duration `json:"remaining"`
 }
@@ -71,10 +71,10 @@ func (m *Machine[T]) Export() MachineState {
 			TimeInState: region.TimeInState,
 			Paused:      region.Paused,
 		})
-		for i, da := range m.delayedActions[name] {
+		for _, da := range m.delayedActions[name] {
 			out.Delayed = append(out.Delayed, DelayedSnapshot{
 				Region:    name,
-				Index:     i,
+				ActionID:  da.Action.ID,
 				Owner:     m.StateName(da.Owner),
 				Remaining: da.Remaining,
 			})
@@ -92,48 +92,155 @@ func (m *Machine[T]) Export() MachineState {
 	return out
 }
 
-// Import installs a captured runtime position onto this machine.
-//
-// Regions are placed directly rather than transitioned into: the capture
-// describes a machine that has already entered these states, so re-running their
-// entry actions would emit every event that entry produced a second time. What
-// the caller receives is a machine standing where the sender's stood.
-//
-// A region or state the configuration does not define is an error. The two sides
-// are meant to be running the same build; a silent skip would leave one region on
-// this instance's own trajectory while the rest adopted the capture's.
+// Import installs a captured runtime position without producing side effects.
+// This is the validation/staging form: it proves the position can be resolved by
+// this build while leaving instance-local systems untouched.
 func (m *Machine[T]) Import(ctx T, state MachineState) error {
-	// Resolve everything before writing: a half-imported machine is worse than one
-	// that refused, because it looks like it worked.
+	_, err := m.importState(ctx, state, false)
+	return err
+}
+
+// ImportReconciled installs a captured runtime position and replays only the
+// lifecycle actions explicitly marked reconcile=true when the import crosses
+// their state boundary. Those actions are restricted at load time to immediate,
+// unguarded ClassLocal EmitEvent actions. One-shot local rewards and presentation
+// bursts therefore remain untouched, while persistent local state follows the
+// Shared FSM position that owns it.
+//
+// Exit actions run against the old variables before the position changes. Entry
+// actions run against the imported variables afterwards. Every old exit precedes
+// every new entry, so an overlapping handoff such as quasar -> storm releases the
+// old hold before taking the new one.
+func (m *Machine[T]) ImportReconciled(ctx T, state MachineState) (int, error) {
+	return m.importState(ctx, state, true)
+}
+
+// importState resolves the complete capture before either mutating the machine or
+// emitting a reconciliation event. A half-imported machine is worse than one that
+// refused, because it looks like it worked.
+func (m *Machine[T]) importState(ctx T, state MachineState, reconcile bool) (int, error) {
 	type placement struct {
 		region  *RegionState
 		stateID StateID
 		node    *Node[T]
 		snap    RegionSnapshot
+		lca     int
 	}
+
 	placements := make([]placement, 0, len(state.Regions))
-	for _, rs := range state.Regions {
+	placementByName := make(map[string]int, len(state.Regions))
+	present := make(map[string]bool, len(state.Regions))
+	for regionIndex := range len(state.Regions) {
+		rs := state.Regions[regionIndex]
+		if present[rs.Name] {
+			return 0, fmt.Errorf("fsm: capture names region %q more than once", rs.Name)
+		}
+		present[rs.Name] = true
+
 		stateID, ok := m.GetStateID(rs.ActiveState)
 		if !ok {
-			return fmt.Errorf("fsm: capture names state %q, which this configuration does not define", rs.ActiveState)
+			return 0, fmt.Errorf("fsm: capture names state %q, which this configuration does not define", rs.ActiveState)
 		}
 		node, ok := m.nodes[stateID]
 		if !ok {
-			return fmt.Errorf("fsm: state %q resolves to no node", rs.ActiveState)
+			return 0, fmt.Errorf("fsm: state %q resolves to no node", rs.ActiveState)
 		}
 		region := m.regions[rs.Name]
+		lca := -1
 		if region == nil {
 			if _, declared := m.regionConfigs[rs.Name]; !declared {
-				return fmt.Errorf("fsm: capture names region %q, which this configuration does not declare", rs.Name)
+				return 0, fmt.Errorf("fsm: capture names region %q, which this configuration does not declare", rs.Name)
 			}
 			region = &RegionState{Name: rs.Name}
+		} else {
+			lca = commonPathIndex(region.ActivePath, node.Path)
 		}
-		placements = append(placements, placement{region: region, stateID: stateID, node: node, snap: rs})
+		placementByName[rs.Name] = len(placements)
+		placements = append(placements, placement{
+			region: region, stateID: stateID, node: node, snap: rs, lca: lca,
+		})
 	}
 
-	for _, p := range placements {
+	variables := make(map[string]int64, len(state.Variables))
+	for _, v := range state.Variables {
+		if _, duplicate := variables[v.Name]; duplicate {
+			return 0, fmt.Errorf("fsm: capture names variable %q more than once", v.Name)
+		}
+		variables[v.Name] = v.Value
+	}
+	if reconcile {
+		// A scoped hold can stay in the same state while the imported variable
+		// naming its owner changes. Treat that as crossing the owning node: release
+		// with the old variables, then acquire with the imported ones.
+		for i := range placements {
+			p := &placements[i]
+			for pathIndex := 0; pathIndex <= p.lca; pathIndex++ {
+				node := m.nodes[p.node.Path[pathIndex]]
+				if node != nil && (reconcileVariablesChanged(node.OnEnter, m.variables, variables) ||
+					reconcileVariablesChanged(node.OnExit, m.variables, variables)) {
+					p.lca = pathIndex - 1
+					break
+				}
+			}
+		}
+	}
+
+	// Delayed actions keep their compiled Action from this build's configuration
+	// and adopt the capture's countdown. Resolve them before writing so an invalid
+	// owner cannot fail after region placement or local reconciliation.
+	delayed := make(map[string][]DelayedAction[T], len(state.Delayed))
+	for _, d := range state.Delayed {
+		if !present[d.Region] {
+			return 0, fmt.Errorf("fsm: delayed action names inactive region %q", d.Region)
+		}
+		owner, ok := m.GetStateID(d.Owner)
+		if !ok {
+			return 0, fmt.Errorf("fsm: delayed action names owner state %q, which this configuration does not define", d.Owner)
+		}
+		if _, ok := m.nodes[owner]; !ok {
+			return 0, fmt.Errorf("fsm: delayed action owner state %q resolves to no node", d.Owner)
+		}
+		action, ok := m.compiledActions[d.ActionID]
+		if !ok || d.ActionID == 0 {
+			return 0, fmt.Errorf("fsm: delayed action %d is not present in this build", d.ActionID)
+		}
+		// A scheduled action already passed its guard and delay once. Restoring the
+		// compiled function/arguments must not guard it again or schedule it anew.
+		action.Guard = nil
+		action.DelayMs = 0
+		action.Reconcile = false
+		action.ReconcileVars = nil
+		delayed[d.Region] = append(delayed[d.Region], DelayedAction[T]{
+			Remaining: d.Remaining,
+			Owner:     owner,
+			Action:    action,
+		})
+	}
+
+	reconciled := 0
+	if reconcile {
+		// Exit every path the imported position no longer holds, in the old
+		// machine's deterministic region order and leaf-to-root order.
+		for _, name := range m.regionOrder {
+			region := m.regions[name]
+			if region == nil {
+				continue
+			}
+			lca := -1
+			if i, ok := placementByName[name]; ok {
+				lca = placements[i].lca
+			}
+			for i := len(region.ActivePath) - 1; i > lca; i-- {
+				if node := m.nodes[region.ActivePath[i]]; node != nil {
+					reconciled += m.executeReconcileActions(ctx, region, node.OnExit)
+				}
+			}
+		}
+	}
+
+	for i := range placements {
+		p := &placements[i]
 		if _, existed := m.regions[p.snap.Name]; !existed {
-			m.regionOrder = append(m.regionOrder, p.snap.Name)
 			m.regions[p.snap.Name] = p.region
 		}
 		p.region.ActiveStateID = p.stateID
@@ -145,49 +252,76 @@ func (m *Machine[T]) Import(ctx T, state MachineState) error {
 
 	// Regions the capture does not name are not running on the sender, so they
 	// must not be running here either.
-	present := make(map[string]bool, len(state.Regions))
-	for _, rs := range state.Regions {
-		present[rs.Name] = true
-	}
 	for _, name := range append([]string(nil), m.regionOrder...) {
 		if !present[name] {
 			delete(m.regions, name)
-			delete(m.delayedActions, name)
 		}
 	}
 	m.regionOrder = m.regionOrder[:0]
-	for _, rs := range state.Regions {
+	for regionIndex := range len(state.Regions) {
+		rs := state.Regions[regionIndex]
 		m.regionOrder = append(m.regionOrder, rs.Name)
 	}
+	m.variables = variables
+	m.delayedActions = delayed
 
-	m.variables = make(map[string]int64, len(state.Variables))
-	for _, v := range state.Variables {
-		m.variables[v.Name] = v.Value
-	}
-
-	// Delayed actions keep their compiled Action from this build's configuration
-	// and adopt the capture's countdown. The queue is rebuilt in capture order.
-	for name := range m.delayedActions {
-		m.delayedActions[name] = nil
-	}
-	for _, d := range state.Delayed {
-		owner, ok := m.GetStateID(d.Owner)
-		if !ok {
-			return fmt.Errorf("fsm: delayed action names owner state %q, which this configuration does not define", d.Owner)
+	if reconcile {
+		// Enter newly held paths in capture order and root-to-leaf order. The
+		// imported variables are already installed for payload_vars resolution.
+		for i := range placements {
+			p := &placements[i]
+			for pathIndex := p.lca + 1; pathIndex < len(p.node.Path); pathIndex++ {
+				if node := m.nodes[p.node.Path[pathIndex]]; node != nil {
+					reconciled += m.executeReconcileActions(ctx, p.region, node.OnEnter)
+				}
+			}
 		}
-		node, ok := m.nodes[owner]
-		if !ok || d.Index < 0 || d.Index >= len(node.OnEnter) {
-			// The action list a delayed entry indexes into is configuration; an
-			// index outside it means the two builds disagree about the state.
-			return fmt.Errorf("fsm: delayed action %d of state %q is outside this build's action list", d.Index, d.Owner)
-		}
-		m.delayedActions[d.Region] = append(m.delayedActions[d.Region], DelayedAction[T]{
-			Remaining: d.Remaining,
-			Owner:     owner,
-			Action:    node.OnEnter[d.Index],
-		})
 	}
 
 	m.refreshActive()
-	return nil
+	return reconciled, nil
+}
+
+// commonPathIndex returns the final shared index of two root-to-leaf paths, or
+// -1 when they share nothing.
+func commonPathIndex(a, b []StateID) int {
+	lca := -1
+	for i := range min(len(a), len(b)) {
+		if a[i] != b[i] {
+			break
+		}
+		lca = i
+	}
+	return lca
+}
+
+func (m *Machine[T]) executeReconcileActions(ctx T, region *RegionState, actions []Action[T]) int {
+	executed := 0
+	for _, action := range actions {
+		if !action.Reconcile {
+			continue
+		}
+		// Load validation excludes guards and delays. Keep the guard check so a
+		// directly built machine preserves Action's ordinary contract too.
+		if action.Guard != nil && !action.Guard(ctx, region, nil) {
+			continue
+		}
+		action.Func(ctx, action.Args)
+		executed++
+	}
+	return executed
+}
+
+func reconcileVariablesChanged[T any](actions []Action[T], old, next map[string]int64) bool {
+	for _, action := range actions {
+		if !action.Reconcile {
+			continue
+		}
+		for _, name := range action.ReconcileVars {
+			if old[name] != next[name] {
+				return true
+			}
+		}
+	}
+	return false
 }

@@ -52,4 +52,5 @@ type ActionConfig struct {
 	Guard        string            `toml:"guard,omitempty"`         // Conditional execution guard
 	GuardArgs    map[string]any    `toml:"guard_args,omitempty"`    // Guard parameters
 	DelayMs      int               `toml:"delay_ms,omitempty"`      // Delay before execution (ms)
+	Reconcile    bool              `toml:"reconcile,omitempty"`     // Replay an idempotent local lifecycle action across an imported state boundary
 }

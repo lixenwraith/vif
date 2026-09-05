@@ -477,7 +477,10 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 // re-derive the same verdict from the same inputs — and would fail outright after a
 // reset, whose session counter a freshly constructed world has not reached.
 func (a *App) installSharedResolved(cap snapshot.SharedCapture) error {
-	return a.installShared(cap)
+	// The staging world proves that the position resolves; it does not present or
+	// simulate this participant's local effects. Reconciliation belongs only to
+	// the live commit, where its emitted lifecycle events can reach those systems.
+	return a.installShared(cap, false)
 }
 
 // reconcileSharedResolved is the live half of a staged install: the same capture,

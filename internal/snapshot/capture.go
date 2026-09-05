@@ -22,7 +22,7 @@ import (
 
 // Schema is the capture layout version, distinct from the journal schema. A
 // header names both so a mismatch says which one moved.
-const Schema = 3
+const Schema = 4
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, every RNG stream position, and the private

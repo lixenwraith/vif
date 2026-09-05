@@ -348,9 +348,13 @@ headless/replay application harness, clocks/scheduler/time control, event
 journaling and authored scripts, input/help/mode commands, selected gameplay-system surfaces,
 parameters, profiling, audio, genetics, `float64` vectors/geometry, cell
 mapping, and physics. Focused system/renderer tests now also cover multi-cursor
-ownership, delayed drain interactions, and cleaner trail behavior. The app
-suite includes seeded soak, mutation, bisect, reset, journal-density, replay,
-and operator-state comparisons. Coverage is still selective: many concrete
+ownership, delayed drain interactions, cleaner trail behavior, and quasar range
+clipping at centered map edges. The app suite includes seeded soak, mutation,
+bisect, reset, journal-density, replay, operator-state comparisons, and a staged
+correction that skips a quasar's release transition. FSM unit tests distinguish
+side-effect-free staging from live local-lifecycle reconciliation and verify
+delayed transition actions survive capture by compiled identity. Coverage is
+still selective: many concrete
 gameplay systems, renderers, content parsing paths, services, and network
 failure modes have no focused test file. Standalone programs under `benchmark`
 and `sandbox` remain experiments rather than production-supported tests.
@@ -384,7 +388,11 @@ go run ./cmd/vif -schema > /tmp/vif-schema.json
 
 `-check` validates system names against the manifest and then the declared
 dependency graph, rejecting a scenario that leaves an enabled system without a
-system it requires. Two lints run inside `make verify` rather than as separate
+system it requires. It also rejects an invalid `reconcile = true` marker: only
+an immediate, unguarded `ClassLocal` `EmitEvent` in `on_enter`/`on_exit` may be
+replayed by a live FSM import. Persistent holds should be modeled on a common
+parent with paired marked acquisition/release actions. Two lints run inside
+`make verify` rather than as separate
 commands: `TestNoOrderDependentMapRange` reports map iteration whose order can
 reach simulation state, and `TestSystemDomainProfiles` checks every declared
 domain profile against the RNG streams, entity domains and component stores its

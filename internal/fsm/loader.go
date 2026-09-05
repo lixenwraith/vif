@@ -44,6 +44,8 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 	m.regionConfigs = make(map[string]*RegionConfig)
 	m.variables = make(map[string]int64)
 	m.delayedActions = make(map[string][]DelayedAction[T])
+	m.compiledActions = make(map[uint32]Action[T])
+	m.nextActionID = 0
 	m.active.clear()
 
 	// 3. Store systems config
@@ -111,13 +113,13 @@ func (m *Machine[T]) LoadConfigFromMap(configMap map[string]any) error {
 		}
 
 		var err error
-		if node.OnEnter, err = m.compileActions(cfg.OnEnter, nameToID); err != nil {
+		if node.OnEnter, err = m.compileActions(cfg.OnEnter, nameToID, true); err != nil {
 			errs = append(errs, fmt.Errorf("state '%s' on_enter: %w", name, err))
 		}
-		if node.OnUpdate, err = m.compileActions(cfg.OnUpdate, nameToID); err != nil {
+		if node.OnUpdate, err = m.compileActions(cfg.OnUpdate, nameToID, false); err != nil {
 			errs = append(errs, fmt.Errorf("state '%s' on_update: %w", name, err))
 		}
-		if node.OnExit, err = m.compileActions(cfg.OnExit, nameToID); err != nil {
+		if node.OnExit, err = m.compileActions(cfg.OnExit, nameToID, true); err != nil {
 			errs = append(errs, fmt.Errorf("state '%s' on_exit: %w", name, err))
 		}
 		if err = m.compileTransitions(node, cfg.Transitions, nameToID); err != nil {
@@ -223,7 +225,7 @@ func (m *Machine[T]) RegionTelemetry(name string) RegionTelemetry {
 	}
 }
 
-func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]StateID) ([]Action[T], error) {
+func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]StateID, lifecycle bool) ([]Action[T], error) {
 	resolve := func(name string) (StateID, bool) {
 		id, ok := nameToID[name]
 		return id, ok
@@ -231,6 +233,28 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 
 	actions := make([]Action[T], 0, len(configs))
 	for _, cfg := range configs {
+		if cfg.Reconcile {
+			if !lifecycle {
+				return nil, fmt.Errorf("reconcile is valid only on state on_enter/on_exit actions")
+			}
+			if cfg.Action != "EmitEvent" {
+				return nil, fmt.Errorf("reconcile requires action 'EmitEvent', got %q", cfg.Action)
+			}
+			et, ok := event.GetEventType(cfg.Event)
+			if !ok {
+				return nil, fmt.Errorf("reconcile names unknown event type %q", cfg.Event)
+			}
+			if class := event.ClassOf(et); class != event.ClassLocal {
+				return nil, fmt.Errorf("reconcile event %q is %s, want local", cfg.Event, class)
+			}
+			if cfg.DelayMs != 0 {
+				return nil, fmt.Errorf("reconcile event %q cannot be delayed", cfg.Event)
+			}
+			if cfg.Guard != "" {
+				return nil, fmt.Errorf("reconcile event %q cannot have an action guard", cfg.Event)
+			}
+		}
+
 		fn, ok := m.actionReg[cfg.Action]
 		if !ok {
 			return nil, fmt.Errorf("unknown action function '%s'", cfg.Action)
@@ -260,12 +284,36 @@ func (m *Machine[T]) compileActions(configs []ActionConfig, nameToID map[string]
 			}
 		}
 
-		actions = append(actions, Action[T]{
-			Func:    fn,
-			Args:    args,
-			Guard:   guard,
-			DelayMs: cfg.DelayMs,
-		})
+		var reconcileVars []string
+		if cfg.Reconcile && len(cfg.PayloadVars) > 0 {
+			fields := make([]string, 0, len(cfg.PayloadVars))
+			for field := range cfg.PayloadVars {
+				fields = append(fields, field)
+			}
+			sort.Strings(fields)
+			seen := make(map[string]bool, len(cfg.PayloadVars))
+			for _, field := range fields {
+				name := cfg.PayloadVars[field]
+				if name != "" && !seen[name] {
+					seen[name] = true
+					reconcileVars = append(reconcileVars, name)
+				}
+			}
+			sort.Strings(reconcileVars)
+		}
+
+		m.nextActionID++
+		action := Action[T]{
+			ID:            m.nextActionID,
+			Func:          fn,
+			Args:          args,
+			Guard:         guard,
+			DelayMs:       cfg.DelayMs,
+			Reconcile:     cfg.Reconcile,
+			ReconcileVars: reconcileVars,
+		}
+		actions = append(actions, action)
+		m.compiledActions[action.ID] = action
 	}
 	return actions, nil
 }
@@ -311,7 +359,7 @@ func (m *Machine[T]) compileTransitions(node *Node[T], configs []TransitionConfi
 		}
 
 		// Transition actions
-		actions, err := m.compileActions(cfg.Actions, nameToID)
+		actions, err := m.compileActions(cfg.Actions, nameToID, false)
 		if err != nil {
 			return fmt.Errorf("transition actions: %w", err)
 		}

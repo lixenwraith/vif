@@ -1,9 +1,17 @@
 # Placeholder Region
 
-[states.PlaceholderSetup]
+[states.PlaceholderHold]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+[states.PlaceholderSetup]
+parent = "PlaceholderHold"
+on_enter = [
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { color = { r = 255, g = 255, b = 255 }, intensity = 1.0, duration_ms = 500 } },
 ]
 transitions = [
@@ -11,7 +19,7 @@ transitions = [
 ]
 
 [states.PlaceholderActive]
-parent = "Root"
+parent = "PlaceholderHold"
 # Placeholder: add gameplay transitions here
 transitions = [
     { trigger = "Tick", target = "PlaceholderExit", guard = "StateTimeExceeds", guard_args = { ms = 5000 } }
@@ -20,8 +28,6 @@ transitions = [
 [states.PlaceholderExit]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "placeholder" },
 ]
-

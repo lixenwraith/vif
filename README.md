@@ -41,7 +41,8 @@ configuration, audio policy, and reusable simulation libraries.
 - Multi-participant play over framed TCP, with deterministic shared simulation,
   owner-authored cursor state, a fixed-delay crossing barrier that relays
   artifacts to participants a producer never linked to, roster changes that land
-  on one agreed tick, and clean continuation after a peer disconnects.
+  on one agreed tick, selective authoritative correction with bounded keyframe
+  fallback, and clean continuation after a peer disconnects.
 
 Interactive play is not advertised as globally bit-for-bit deterministic:
 simulation math uses `float64`, which is not a cross-platform lockstep
@@ -110,6 +111,9 @@ in the first terminal and `./bin/vif -join 127.0.0.1:7777` in the second; add
 `-players <n>` to the host for a larger lobby. A participant joins at startup or
 mid-run: the host sends an authoritative shared snapshot of the world at whatever
 tick the session has reached, which is also how a peer that dropped comes back.
+Live installs reconcile configuration-marked persistent local FSM effects, so a
+correction that skips an encounter exit cannot leave that participant's drains or
+screen state latched.
 The session is plaintext and trusted-peer — a dial is rate-limited per address and
 bounded in what it can allocate, but it is not authenticated, so a host reachable
 from an untrusted network needs one in front of it.

@@ -94,6 +94,14 @@ func (r *QuasarRenderer) renderZapRange(ctx render.RenderContext, buf *render.Re
 	mapMaxX := headerX + rxCells
 	mapMinY := headerY - ryCells
 	mapMaxY := headerY + ryCells
+	visibleMinX, visibleMinY, visibleMaxX, visibleMaxY := ctx.VisibleMapBounds()
+	mapMinX = max(mapMinX, visibleMinX)
+	mapMaxX = min(mapMaxX, visibleMaxX)
+	mapMinY = max(mapMinY, visibleMinY)
+	mapMaxY = min(mapMaxY, visibleMaxY)
+	if mapMinX > mapMaxX || mapMinY > mapMaxY {
+		return
+	}
 
 	for mapY := mapMinY; mapY <= mapMaxY; mapY++ {
 		for mapX := mapMinX; mapX <= mapMaxX; mapX++ {

@@ -266,10 +266,18 @@ component stores, allocator counters, and the compared status surface. Durations
 are relative to capture tick. Absolute component instants are sound because
 `engine.SimEpoch` and tick interval are session identity.
 
-Snapshot schema 3 carries the complete simulation checkpoint plus the completed
-authority crossing sequence. An install preserves receiver-owned cursor values,
-rebuilds roster/control binding, derives spatial/navigation caches, and restores
-status only after carriers have loaded.
+Snapshot schema 4 carries the complete simulation checkpoint plus the completed
+authority crossing sequence. Delayed FSM work names its deterministic compiled
+action identity, so transition-delayed actions restore independently of their
+queue position. An install preserves receiver-owned cursor values, rebuilds
+roster/control binding, derives spatial/navigation caches, and restores status
+only after carriers have loaded.
+
+Persistent Player-domain effects controlled by Shared FSM state are re-derived by
+the install itself. Only immediate, unguarded `ClassLocal` lifecycle events marked
+`reconcile = true` participate: old paths release with old variables, new paths
+acquire with imported variables, and a changed scope variable is treated as a
+boundary crossing. Staging imports remain side-effect free.
 
 ### D-20 — Shared FSM regions use replicated triggers
 

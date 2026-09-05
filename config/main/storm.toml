@@ -1,9 +1,17 @@
 # Storm region: final escalation phase
 
-[states.StormSetup]
+[states.StormHold]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainPause" },
+    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+[states.StormSetup]
+parent = "StormHold"
+on_enter = [
     { action = "EmitEvent", event = "EventStormSpawnRequest" },
 ]
 transitions = [
@@ -11,7 +19,7 @@ transitions = [
 ]
 
 [states.StormActive]
-parent = "Root"
+parent = "StormHold"
 transitions = [
     { trigger = "EventSpeciesKilled", target = "StormDecision", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 4 } },
     # Defensive: storm died OOB without emitting a species kill event
@@ -22,7 +30,7 @@ transitions = [
 ]
 
 [states.StormDecision]
-parent = "Root"
+parent = "StormHold"
 on_enter = [
     { action = "EmitEvent", event = "EventCycleDamageMultiplierIncrease" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "SPECIES DAMAGE INCREASED" } },
@@ -54,7 +62,6 @@ on_enter = [
 [states.StormVictory]
 parent = "Root"
 on_enter = [
-    { action = "EmitEvent", event = "EventDrainResume" },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "storm" },
 ]

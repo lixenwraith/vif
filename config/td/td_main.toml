@@ -291,11 +291,19 @@ transitions = [
     { trigger = "Tick", target = "TdQuasarFuse", guard = "StatusIntCompare", guard_args = { key = "kills.drain", op = "gte", value = 10 } },
 ]
 
-[states.TdQuasarFuse]
+[states.TdQuasarPause]
 parent = "Root"
 on_enter = [
+    { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+[states.TdQuasarFuse]
+parent = "TdQuasarPause"
+on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.drain" } },
-    { action = "EmitEvent", event = "EventDrainPause" },
     { action = "EmitEvent", event = "EventFuseQuasarRequest" },
     { action = "EmitEvent", event = "EventMetaStatusMessageRequest", payload = { message = "QUASAR FORMING" } },
 ]
@@ -306,10 +314,13 @@ transitions = [
 ]
 
 [states.TdQuasarLive]
-parent = "Root"
+parent = "TdQuasarPause"
 on_enter = [
     # Danger cue against quasar long-range attacks
-    { action = "EmitEvent", event = "EventGrayoutStart" },
+    { action = "EmitEvent", event = "EventGrayoutStart", reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventGrayoutEnd", reconcile = true },
 ]
 transitions = [
     { trigger = "EventSpeciesKilled", target = "TdQuasarEnd", guard = "PayloadIntCompare", guard_args = { field = "species", op = "eq", value = 3 } },
@@ -322,11 +333,6 @@ transitions = [
 
 [states.TdQuasarEnd]
 parent = "Root"
-on_enter = [
-    # GrayoutEnd harmless on fuse-timeout path (no prior start)
-    { action = "EmitEvent", event = "EventGrayoutEnd" },
-    { action = "EmitEvent", event = "EventDrainResume" },
-]
 transitions = [
     { trigger = "Tick", target = "TdCalm" },
 ]

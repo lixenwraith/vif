@@ -63,6 +63,8 @@ type Machine[T any] struct {
 	guardFactoryReg map[string]GuardFactoryFunc[T]
 	actionReg       map[string]ActionFunc[T]
 	argCompilerReg  map[string]ArgCompiler[T]
+	compiledActions map[uint32]Action[T]
+	nextActionID    uint32
 
 	// State metadata (populated by loader)
 	StateDurations map[StateID]time.Duration // Max duration per state (0 = instant/event-driven)
@@ -116,16 +118,19 @@ type Transition[T any] struct {
 
 // Action represents a side-effect
 type Action[T any] struct {
-	Func    ActionFunc[T]
-	Args    any          // Pre-compiled struct/payload
-	Guard   GuardFunc[T] // Conditional execution (nil = always)
-	DelayMs int          // Delay before execution (0 = immediate)
+	ID            uint32 // Deterministic compiled-config identity; zero only for programmatic actions
+	Func          ActionFunc[T]
+	Args          any          // Pre-compiled struct/payload
+	Guard         GuardFunc[T] // Conditional execution (nil = always)
+	DelayMs       int          // Delay before execution (0 = immediate)
+	Reconcile     bool         // Replay when an imported position crosses this lifecycle boundary
+	ReconcileVars []string     // Payload variables whose changed value also crosses the boundary
 }
 
 type DelayedAction[T any] struct {
 	Remaining time.Duration // Countdown decremented by dt (was TimeInState threshold)
 	Owner     StateID       // Cleared when owner state exits
-	Action    Action[T]
+	Action    Action[T]     // Carries the compiled ID used by capture restore
 }
 
 // GuardFunc returns true if the transition should occur

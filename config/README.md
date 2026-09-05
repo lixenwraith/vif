@@ -158,7 +158,41 @@ transition with a passing guard executes every tick and shadows all outer
 `delay_ms` counts down in region time and survives transitions while the
 owning state remains on the active path. Delayed actions are cleared when
 their owning state exits. Transition actions with `delay_ms` are owned by the
-target state; internal-transition actions by the active leaf.
+target state; internal-transition actions by the active leaf. Captures store a
+deterministic compiled action identity, so delayed entry, update, and transition
+actions resume the same work after join or correction.
+
+### Reconciled Local Lifecycle
+
+A live snapshot install moves the Shared FSM directly to the authority's state.
+It does not replay normal entry/exit work because the captured Shared world
+already contains those results. For a persistent instance-local hold, mark the
+immediate `ClassLocal` event actions on the common parent that owns its lifetime:
+
+```toml
+[states.EncounterHold]
+parent = "Root"
+on_enter = [
+  { action = "EmitEvent", event = "EventDrainPause", reconcile = true },
+]
+on_exit = [
+  { action = "EmitEvent", event = "EventDrainResume", reconcile = true },
+]
+
+[states.EncounterSetup]
+parent = "EncounterHold"
+```
+
+Marked exits run leaf-to-root with old variables, then marked entries run
+root-to-leaf with imported variables. A changed `payload_vars` value also moves
+the scope by releasing the old hold before acquiring the new one. The staging
+world emits no reconciliation events.
+
+`reconcile = true` is valid only on an unguarded, non-delayed `EmitEvent` in
+`on_enter`/`on_exit`, and its event must be `ClassLocal`. Never mark rewards,
+spawns, sounds, strobes, or other one-shot work. Acquisition and release belong
+on one common parent so normal transitions and whole-region retirement use the
+same boundary.
 
 ---
 
@@ -287,6 +321,7 @@ elements. Flat keys (no dots) behave identically to the original implementation.
 { action = "...", delay_ms = 500 }                    # Delay execution
 { action = "...", guard = "GuardName" }               # Conditional execution
 { action = "...", guard = "GuardName", guard_args = { ... } }
+{ action = "EmitEvent", event = "EventDrainPause", reconcile = true } # Persistent local lifecycle only
 ```
 
 ## Cursor Lifecycle

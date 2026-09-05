@@ -200,6 +200,13 @@ regions, guards, status/config access, and event actions through a capability
 host. `internal/manifest/fsm_bridge.go` binds those capabilities to the ECS and
 adds the small amount of game-specific behavior.
 
+Snapshot import has a side-effect-free staging form and a live reconciliation
+form. The live form does not replay ordinary actions; it executes only
+configuration-marked, persistent `ClassLocal` lifecycle events on state paths an
+authoritative capture entered or left. Exits use old variables, entries use the
+imported variables, and every release precedes every acquisition. Delayed work is
+restored by a deterministic compiled-action identity rather than a queue index.
+
 The embedded scenario runs foreground gameplay regions alongside a background
 monitor. Alternate configurations include a blank authoring scaffold, an
 expanded main encounter, and a tower-defense scenario.
@@ -348,23 +355,23 @@ the transfer cost so it stands where the session does. It is admitted as a peer
 reach it rather than falling into the gap (D-22). Reconnect is the same path a
 second time. Cost is a function of world size, not of session length.
 
-The host is the authority and a guest is a predictor (D-23). The host publishes its
-world on a cadence — a whole capture, or a delta against the last whole one — and a
-guest applies what arrives into a staging world built once and swapped in between
-two ticks; where the two disagree the host wins, and how far apart they were is
-telemetry rather than a failure state. Loss costs freshness until the next keyframe
-and never correctness, because nothing acknowledges a correction and a keyframe
-supersedes everything before it.
+The host is the authority and a guest is a predictor (D-23). The host publishes a
+versioned hash manifest on an adaptive per-link cadence. Equal roots are hash-only;
+mismatches descend to independently verified pages, with compressed whole
+keyframes as the bounded fallback. A guest resolves a capture in a reusable staging
+world and commits it between ticks; where prediction differs, authority wins and
+the correction magnitude is telemetry rather than failure. Snapshot schema 4 also
+reconciles explicitly marked persistent local FSM effects that the Shared capture
+cannot carry.
 
-What is still missing is *adaptation*: the cadence is a constant rather than a
-function of the link, nothing measures a round trip, and every guest receives the
-same bytes whether or not any of it is near its cursor. There is no bounded
-rollback, so a guest's own un-arbitrated artifact flickers for about one cadence on
-shared entities — never on its own cursor, which is predicted privately. There is no
-authentication or CLI TLS identity and no partition detection; `-join` dials one
-address, so the links form a star even though the relay makes any graph work. The
-domain boundary, event classification, wire protocol, their enforcing tests, and an
-analysis of what the model does not yet cover are in rules D-1..D-23 and §9 of
+Cadence responds to round-trip time, variation, delivered bytes, saturation, and
+correction demand, while a fixed whole-world convergence floor prevents adaptation
+from weakening recovery. Remaining limitations include unauthenticated plaintext
+links, an exact applied-sequence fence only for authority-authored crossings, a
+fixed three-tick playout lead, no merge for explicit minority forks, and a CLI that
+dials only one address even though relay supports a graph. The domain boundary,
+event classification, wire protocol, their enforcing tests, and an analysis of
+what the model does not yet cover are in rules D-1..D-24 and §7 of
 [the domain model](domain-design.md). The observed incident, current failure
 signals, and checkpoint-plus-suffix recovery recommendation are in
 [Desynchronisation and recovery](desync.md).

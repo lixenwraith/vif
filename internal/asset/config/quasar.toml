@@ -1,22 +1,25 @@
 # Quasar region: gold cycle during quasar with escalation to storm
 
-[states.QuasarFuse]
+[states.QuasarHold]
 parent = "Root"
+# Persistent local effects belong to the state path that holds them. Importing an
+# authoritative FSM position replays only actions marked reconcile when that path
+# is entered or exited, including when the capture retires the whole region.
 on_enter = [
-    # The grayout and the drain pause belong to the cursor this quasar is fused
-    # from, not to the session. The region is shared — every instance runs the
-    # same machine and enters this state — so an unscoped effect darkens every
-    # participant's screen and stops every participant's drains for one player's
-    # quasar. `fuse_owner` is the variable the fuse request below already elects
-    # by, and an instance that does not simulate that cursor ignores all three.
-    #
-    # The strobe follows the same cursor. It is a 200 ms flash rather than a
-    # standing state, which is why it was left session-wide when the other two were
-    # scoped; the reason was mechanical — it shares no payload with them — and the
-    # answer is a `cursor` field of its own, zero meaning session-wide.
-    { action = "EmitEvent", event = "EventGrayoutStart", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
+    { action = "EmitEvent", event = "EventGrayoutStart", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+    { action = "EmitEvent", event = "EventDrainPause", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+]
+on_exit = [
+    { action = "EmitEvent", event = "EventGrayoutEnd", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+    { action = "EmitEvent", event = "EventDrainResume", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" }, reconcile = true },
+]
+
+[states.QuasarFuse]
+parent = "QuasarHold"
+on_enter = [
+    # Persistent effects live on QuasarHold. This state keeps only one-shot fuse
+    # work, which correction must not replay.
     { action = "EmitEvent", event = "EventStrobeRequest", payload = { intensity = 0.8, duration_ms = 200, cursor = 0 }, payload_vars = { cursor = "fuse_owner" } },
-    { action = "EmitEvent", event = "EventDrainPause", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
     { action = "EmitEvent", event = "EventFuseQuasarRequest", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
 ]
 transitions = [
@@ -28,7 +31,7 @@ transitions = [
 # --- Gold Cycle Parent ---
 
 [states.QuasarGoldCycle]
-parent = "Root"
+parent = "QuasarHold"
 on_exit = [
     { action = "EmitEvent", event = "EventGoldCancel" },
 ]
@@ -124,10 +127,6 @@ transitions = [
 [states.QuasarExit]
 parent = "Root"
 on_enter = [
-    # Released for the cursor that took them, so a quasar's end cannot resume
-    # drains a session-wide region is still holding.
-    { action = "EmitEvent", event = "EventGrayoutEnd", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
-    { action = "EmitEvent", event = "EventDrainResume", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
     { action = "ResumeRegion", region = "main" },
     { action = "TerminateRegion", region = "quasar" },
 ]
@@ -136,11 +135,6 @@ on_enter = [
 parent = "Root"
 on_enter = [
     { action = "ResetStatusInt", payload = { key = "kills.quasar" } },
-    # The storm this escalates into pauses every participant's drains on its own
-    # entry, but the quasar's own hold is released here rather than left for the
-    # storm to clear: a hold outlives the state that took it otherwise.
-    { action = "EmitEvent", event = "EventGrayoutEnd", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
-    { action = "EmitEvent", event = "EventDrainResume", payload = { entity = 0 }, payload_vars = { entity = "fuse_owner" } },
     { action = "EmitEvent", event = "EventQuasarCancelRequest" },
     { action = "SpawnRegion", region = "storm", initial_state = "StormSetup" },
     { action = "TerminateRegion", region = "quasar" },

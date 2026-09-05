@@ -63,6 +63,100 @@ func TestCaptureReconstructsTheSharedWorld(t *testing.T) {
 	}
 }
 
+// TestCorrectionReconcilesPersistentLocalFSMEffects covers the multiplayer stall
+// that a shared-world comparison could not see. The authoritative capture can
+// jump over the transition that released a player-local drain/grayout hold; the
+// shared FSM then looks correct while that participant can no longer spawn drains
+// and therefore cannot advance the encounter again.
+func TestCorrectionReconcilesPersistentLocalFSMEffects(t *testing.T) {
+	t.Parallel()
+	const seed = 0xC011EC7
+	source := mustHeadless(t, seed, 120, 40)
+	defer source.Close()
+	receiver := mustHeadless(t, seed, 120, 40)
+	defer receiver.Close()
+	tickUntilCursor(t, source)
+	tickUntilCursor(t, receiver)
+
+	var cursor core.Entity
+	source.World().RunSafe(func() {
+		cursor = source.World().Resources.Player.Slot(0)
+		source.World().Resources.Status.Ints.Get("kills.drain").Store(9)
+	})
+	source.Context().PushCrossing(event.EventDrainDefeated,
+		&event.DrainDefeatedPayload{Entity: cursor})
+	source.Settle()
+	source.Tick(1) // publishes DrainSystem's local hold telemetry
+	if quasarState(source) == "-" || !grayedOut(source) || !drainsPaused(source) {
+		t.Fatalf("source did not enter the quasar hold: state=%s grayout=%v paused=%v",
+			quasarState(source), grayedOut(source), drainsPaused(source))
+	}
+
+	active, err := source.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture active quasar: %v", err)
+	}
+	staged, err := receiver.StageShared(active)
+	if err != nil {
+		t.Fatalf("stage active quasar: %v", err)
+	}
+	if grayedOut(receiver) || drainsPaused(receiver) {
+		t.Fatal("staging changed the live participant before commit")
+	}
+	if err := staged.Commit(); err != nil {
+		t.Fatalf("commit active quasar: %v", err)
+	}
+	receiver.Settle()
+	receiver.Tick(1)
+	if quasarState(receiver) == "-" || !grayedOut(receiver) || !drainsPaused(receiver) {
+		t.Fatalf("active correction did not establish local holds: state=%s grayout=%v paused=%v",
+			quasarState(receiver), grayedOut(receiver), drainsPaused(receiver))
+	}
+
+	// Retire the region authoritatively. The receiver never observes this state
+	// transition; its next capture simply has no quasar region.
+	for range 20 {
+		if quasarState(source) != "QuasarFuse" {
+			break
+		}
+		source.Tick(1)
+	}
+	if state := quasarState(source); state == "-" || state == "QuasarFuse" {
+		t.Fatalf("source quasar never reached its killable cycle: %s", state)
+	}
+	source.Context().PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
+		KillerEntity: cursor,
+		Species:      component.SpeciesQuasar,
+	}, core.DomainShared)
+	source.Settle()
+	source.Tick(1)
+	if quasarState(source) != "-" || grayedOut(source) || drainsPaused(source) {
+		t.Fatalf("source did not leave the quasar hold: state=%s grayout=%v paused=%v",
+			quasarState(source), grayedOut(source), drainsPaused(source))
+	}
+
+	recovered, err := source.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture retired quasar: %v", err)
+	}
+	staged, err = receiver.StageShared(recovered)
+	if err != nil {
+		t.Fatalf("stage retired quasar: %v", err)
+	}
+	if !grayedOut(receiver) || !drainsPaused(receiver) {
+		t.Fatal("staging released the live participant's holds before commit")
+	}
+	if err := staged.Commit(); err != nil {
+		t.Fatalf("commit retired quasar: %v", err)
+	}
+	receiver.Settle()
+	receiver.Tick(1)
+	if quasarState(receiver) != "-" || grayedOut(receiver) || drainsPaused(receiver) {
+		t.Fatalf("retirement correction stranded local holds: state=%s grayout=%v paused=%v",
+			quasarState(receiver), grayedOut(receiver), drainsPaused(receiver))
+	}
+}
+
 // TestCaptureCarriesEveryDeclaredSystem asserts the capture actually contains
 // what the manifest declares. A capture that quietly omitted a carrier would
 // install a world whose learned routing or maze generator is this instance's

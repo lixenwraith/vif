@@ -199,13 +199,13 @@ func (a *App) InstallShared(cap snapshot.SharedCapture) error {
 	if err := a.VerifyCapture(cap); err != nil {
 		return err
 	}
-	return a.installShared(cap)
+	return a.installShared(cap, true)
 }
 
 // installShared writes a capture whose identity has already been established, by
 // replacing the shared world wholesale.
-func (a *App) installShared(cap snapshot.SharedCapture) error {
-	_, err := a.writeShared(cap, false)
+func (a *App) installShared(cap snapshot.SharedCapture, reconcileLocal bool) error {
+	_, err := a.writeShared(cap, false, reconcileLocal)
 	return err
 }
 
@@ -217,7 +217,7 @@ func (a *App) installShared(cap snapshot.SharedCapture) error {
 // against the world the authority is handing it. Read a tick later and it would be
 // the magnitude of a correction that had already happened.
 func (a *App) reconcileShared(cap snapshot.SharedCapture) (engine.WorldDifference, error) {
-	return a.writeShared(cap, true)
+	return a.writeShared(cap, true, true)
 }
 
 // writeShared is the one install, with the store pass chosen by the caller.
@@ -226,7 +226,7 @@ func (a *App) reconcileShared(cap snapshot.SharedCapture) (engine.WorldDifferenc
 // tick and record rebase, the stream positions, every declared carrier, the FSM
 // and the compared surface are what make the world the sender's, and a correction
 // that skipped any of them would leave an instance that looks corrected and is not.
-func (a *App) writeShared(cap snapshot.SharedCapture, reconcile bool) (engine.WorldDifference, error) {
+func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal bool) (engine.WorldDifference, error) {
 	var (
 		err  error
 		diff engine.WorldDifference
@@ -310,7 +310,7 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile bool) (engine.Wo
 				return
 			}
 		}
-		if e := a.scheduler.ImportFSM(cap.FSM); e != nil {
+		if e := a.scheduler.ImportFSM(cap.FSM, reconcileLocal); e != nil {
 			err = e
 			return
 		}

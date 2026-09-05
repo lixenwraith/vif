@@ -42,7 +42,8 @@ roster slot, or encode host/guest roles in entity domains.
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
-| Authority ordering | Snapshot schema 3 carries the authority's completed local crossing sequence. A receiver removes authority frames already represented by the installed world, including frames whose nominal receive tick is still ahead. |
+| Authority ordering | Snapshot schema 4 carries the authority's completed local crossing sequence. A receiver removes authority frames already represented by the installed world, including frames whose nominal receive tick is still ahead. |
+| Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. |
 | Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
@@ -83,7 +84,7 @@ authority's own ordinary frames. The host applies that frame locally first, so a
 capture at tick T can already contain a frame whose remote `ApplyTick` is T+1,
 T+2, or T+3.
 
-Snapshot schema 3 therefore records `CaptureHeader.AuthorityCrossingSeq`: the
+Snapshot schema 4 therefore records `CaptureHeader.AuthorityCrossingSeq`: the
 contiguous source-local sequence through which the authority has completed local
 dispatch. The event queue returns each crossing sequence to `NetworkSystem` only
 after every local handler has run. The capture body, tick, map bounds, and sequence
@@ -234,6 +235,9 @@ At debug level, `snapshot pruned crossings` records the capture tick, authority,
 authority sequence, scheduled drops, sequence-fence drops, and pending local
 drops. `snapshot refused stale authority crossings` records batches that arrived
 after installation but were already covered by the authority fence.
+`import reconciled local lifecycle` reports the number of persistent local
+exit/entry actions emitted by an FSM install. It should appear only when a
+correction crosses such a boundary or changes a marked action's scope variable.
 
 A healthy run may show a small non-zero correction magnitude; it should not show a
 growing correction, persistent lag, repeated suffix unavailability, transport
@@ -280,8 +284,10 @@ stop or mutate only one copy of a live session.
 The automated suite covers domain boundaries, deterministic continuation,
 two-participant and mesh convergence, selective repair and fallback, replay
 retention, correction ordering, join/reconnect, link shaping, relay retention, and
-authority succession. Run the generation and repository gates after focused
-network tests:
+authority succession. It also forces a capture to enter and retire a quasar while
+the receiver skips the release transition, and round-trips a delayed transition
+action by compiled identity. Run the generation and repository gates after
+focused network tests:
 
 ```sh
 go generate ./internal/event ./internal/manifest

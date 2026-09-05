@@ -316,14 +316,24 @@ func (cs *ClockScheduler) SetDispatchTap(fn func(event.GameEvent)) { cs.tap = fn
 // Caller MUST hold updateMutex: the machine is tick-owned.
 func (cs *ClockScheduler) ExportFSM() fsm.MachineState { return cs.fsm.Export() }
 
-// ImportFSM places the FSM runtime where a capture found it. Region entry actions
-// are deliberately not re-run: the capture describes a machine that has already
-// entered these states, and re-entering would emit everything that entry produced
-// a second time.
+// ImportFSM places the FSM runtime where a capture found it. A staging import
+// resolves the graph without side effects. A live import additionally replays the
+// explicitly marked, idempotent ClassLocal lifecycle actions for state boundaries
+// the imported position crossed; ordinary entry actions are never re-run.
 //
 // Caller MUST hold updateMutex.
-func (cs *ClockScheduler) ImportFSM(state fsm.MachineState) error {
-	if err := cs.fsm.Import(cs.world, state); err != nil {
+func (cs *ClockScheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool) error {
+	var err error
+	if reconcileLocal {
+		var actions int
+		actions, err = cs.fsm.ImportReconciled(cs.world, state)
+		if err == nil && actions > 0 {
+			vlog.Debug("fsm", "msg", "import reconciled local lifecycle", "actions", actions)
+		}
+	} else {
+		err = cs.fsm.Import(cs.world, state)
+	}
+	if err != nil {
 		return err
 	}
 	// Region telemetry is derived from the position that just changed, and it is

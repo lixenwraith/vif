@@ -59,7 +59,11 @@ flowchart LR
 
 `MapToViewport`, `ViewportToScreen`, `MapToScreen`, `IsInViewport`, and
 `VisibleMapBounds` centralize conversion. New renderers should use these helpers
-instead of duplicating camera arithmetic.
+instead of duplicating camera arithmetic. `MapToScreen` answers whether a
+projected coordinate fits the viewport; when a smaller map is centered, an
+out-of-map coordinate can still project into that viewport. Area renderers must
+intersect their iteration bounds with `VisibleMapBounds` first. The quasar zap
+ellipse follows this rule on both axes.
 
 Replay separates simulation geometry from presentation geometry. The journal
 anchor fixes the former; terminal resize only resizes the orchestrator, and

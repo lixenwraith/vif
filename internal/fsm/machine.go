@@ -23,6 +23,7 @@ func NewMachine[T any]() *Machine[T] {
 		guardFactoryReg: make(map[string]GuardFactoryFunc[T]),
 		actionReg:       make(map[string]ActionFunc[T]),
 		argCompilerReg:  make(map[string]ArgCompiler[T]),
+		compiledActions: make(map[uint32]Action[T]),
 
 		StateDurations: make(map[StateID]time.Duration),
 		StateIndices:   make(map[StateID]int),
@@ -238,7 +239,7 @@ func (m *Machine[T]) executeActions(ctx T, region *RegionState, owner StateID, a
 			m.delayedActions[region.Name] = append(m.delayedActions[region.Name], DelayedAction[T]{
 				Remaining: time.Duration(action.DelayMs) * time.Millisecond,
 				Owner:     owner,
-				Action:    Action[T]{Func: action.Func, Args: action.Args},
+				Action:    Action[T]{ID: action.ID, Func: action.Func, Args: action.Args},
 			})
 			continue
 		}
