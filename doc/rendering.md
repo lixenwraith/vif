@@ -11,10 +11,11 @@ renderer.
 ```mermaid
 flowchart TD
     Context["immutable RenderContext"] --> Clear["clear compositor"]
-    Clear --> Lock["lock World"]
-    Lock --> Layers["render stable priority layers"]
+    Clear --> Clip["declare playfield clip and void margin"]
+    Clip --> Lock["lock World"]
+    Lock --> Layers["render stable priority layers, clipped per layer"]
     Layers --> Unlock["unlock World"]
-    Unlock --> Finalize["background and occlusion finalize"]
+    Unlock --> Finalize["background, occlusion, and void finalize"]
     Finalize --> Flush["terminal Flush"]
 ```
 
@@ -23,6 +24,10 @@ The app targets a 16 ms frame interval. `RenderOrchestrator` owns one reusable
 ascending priority, and releases the lock. Finalization and terminal flushing
 happen outside the world lock so a stalled host write cannot block game ticks,
 event delivery, or input routing.
+
+Before the lock the orchestrator derives the frame's playfield rectangle and
+sets it as the compositor clip for every simulation layer, restoring the full
+buffer for screen-space layers. See section 2.1.
 
 Renderers are registered during application assembly. Insertion sort preserves
 priority order, and registration index is the stable tie-breaker. A renderer
@@ -59,11 +64,62 @@ flowchart LR
 
 `MapToViewport`, `ViewportToScreen`, `MapToScreen`, `IsInViewport`, and
 `VisibleMapBounds` centralize conversion. New renderers should use these helpers
-instead of duplicating camera arithmetic. `MapToScreen` answers whether a
-projected coordinate fits the viewport; when a smaller map is centered, an
-out-of-map coordinate can still project into that viewport. Area renderers must
-intersect their iteration bounds with `VisibleMapBounds` first. The quasar zap
-ellipse follows this rule on both axes.
+instead of duplicating camera arithmetic. `MapToViewport` and `MapToScreen`
+report a coordinate visible only when it is both a map cell and inside the
+viewport, so an out-of-map coordinate that projects into a centered map's margin
+answers false. Both still return the projection, so a renderer anchoring a shape
+on an off-map centre can use it and let the clip trim the result. Area renderers
+should still intersect their iteration bounds with `VisibleMapBounds` to avoid
+the wasted work; the quasar zap ellipse does.
+
+### 2.1 The playfield clip
+
+A map smaller than the viewport is centered inside it, and the margin that
+leaves belongs to no cell any entity, effect, or field can occupy. It appears
+whenever the render area outgrows the simulation: a `crop_on_resize = false`
+scenario such as `config/td`, a multi-participant session whose bounds were
+latched by the first joiner, or a tmux pane zoomed after the map was fixed.
+
+Three rectangles describe it, all derived from `RenderContext`:
+
+| Helper | Space | Meaning |
+|---|---|---|
+| `PlayfieldViewportRect` | viewport | the map's extent inside the viewport |
+| `PlayfieldRect` | screen | the cells a simulation coordinate can reach |
+| `GameAreaRect` | screen | the whole viewport; the part outside the playfield is the margin |
+
+Confinement is enforced in two independent places, because the two failure
+modes are different:
+
+- **Coordinate layer.** `MapToScreen` and friends reject off-map coordinates, so
+  every renderer that projects map cells is bounded by construction. This covers
+  shapes drawn per-cell from a possibly off-map anchor: splash bitmaps, health
+  bars, cleaner trails, marker areas.
+- **Compositor layer.** `RenderBuffer.SetClip` bounds every write path, and the
+  orchestrator sets it per layer from `RenderPriority.ClipsToPlayfield`. This
+  covers renderers that never convert a map coordinate at all because they
+  iterate the viewport directly — ping lines, materialize beams, the explosion
+  accumulation buffer — and it holds for effects nobody has written yet.
+
+`ClipsToPlayfield` is the single classification of layers into simulation and
+screen space; post-processing, UI, and debug layers address the whole screen by
+design and stay unclipped. `TestEveryLayerDeclaresItsClip` fails when a priority
+is added without a declared side.
+
+Where a renderer's own geometry depends on the bound rather than merely being
+trimmed by it, it reads `PlayfieldViewportRect` directly: ping spans the map
+rather than the viewport, materialize beams run from the map edge so their
+length and intensity gradient stay correct, and the indicator gutters number
+only reachable rows and columns.
+
+When the map fills the game area — every `crop_on_resize` run, and every
+camera-cropped map — the playfield equals the game area and the clip is a no-op,
+so the common path composes exactly as it did before the clip existed.
+
+The centering offset itself has one definition, `ConfigResource.MapOffset`, with
+`ConfigResource.ViewportToMap` as its inverse. Mouse routing uses the inverse, so
+the cell under the pointer is the cell the renderer drew there; deriving the two
+separately is what made a click on a centered map land short by half the margin.
 
 Replay separates simulation geometry from presentation geometry. The journal
 anchor fixes the former; terminal resize only resizes the orchestrator, and
@@ -83,12 +139,19 @@ The buffer allocates parallel arrays sized to `width * height`:
 | `touched` | Whether a background channel has been explicitly drawn. |
 | masks | Semantic layer bits accumulated for post-processing. |
 | current write mask | Mask applied by subsequent drawing calls. |
+| clip rectangle | Writable area; set per layer by the orchestrator, reopened by `Clear`. |
 | background overlay | Deferred color/intensity for otherwise untouched cells. |
+| void region | Game area and playfield rectangles plus the color the margin is filled with. |
 | finalizer function | Selected once from color mode and occlusion configuration. |
 
 Resize reuses capacity when possible and synchronizes the terminal. Clear
-zeroes cells and metadata but keeps allocations. Out-of-bounds draw calls are
-safe no-ops.
+zeroes cells and metadata, reopens the clip to the whole buffer, and keeps
+allocations. Out-of-bounds draw calls are safe no-ops, and so are draws outside
+the clip: `inBounds` tests the clip, which `SetClip` keeps intersected with the
+buffer so the check stays a single range test. `CellAt` deliberately reads
+through buffer bounds rather than the clip, so a test can read back the cells a
+layer was prevented from reaching. `MutateDim` and `MutateGrayscale` iterate the
+clip, so a clipped layer cannot post-process outside it either.
 
 ### Drawing operations
 
@@ -164,6 +227,14 @@ The buffer chooses one of two finalizers at construction:
 
 Both use the normal background unless a renderer set a deferred background
 overlay, in which case its precomputed color/intensity fills untouched cells.
+
+A third pass then repaints the void region: the part of the game area outside
+the playfield is filled with `visual.RgbVoid` so the non-playable margin reads
+as out of play rather than as empty map. Only untouched cells are repainted, so
+a UI or debug layer that legitimately reaches into the margin keeps the colors
+it composed, and the pass walks the four margin bands rather than the whole
+area. Setting `RgbVoid` to `RgbBackground` restores the undifferentiated look.
+
 Finalization is immediately followed by the terminal module's full-buffer
 `Flush`.
 
@@ -226,7 +297,9 @@ Concrete renderers should:
 
 1. read the component/resource stores they own while the orchestrator holds the
    world lock;
-2. cull by visible map bounds before expensive work;
+2. cull by visible map bounds before expensive work, and derive any geometry
+   that depends on the map's extent from `PlayfieldViewportRect` rather than the
+   viewport dimensions;
 3. convert map coordinates through `RenderContext`;
 4. select a semantic write mask and explicit blend/channel behavior;
 5. derive animation from game time/delta without mutating simulation data;
@@ -243,7 +316,9 @@ The heat bar, indicators, status bar, and cursor are late layers marked as UI
 so normal dimming does not make control information unreadable. The status bar
 uses a fixed priority of messages: FSM phase, energy, damage multiplier, boost,
 grid state, and lower-priority metrics that are dropped first when space is
-tight.
+tight. The relative row and column gutters number only the rows and columns the
+playfield covers and mark the rest with the void color, so the chrome agrees
+with the margin it borders rather than numbering cells no motion can reach.
 
 The overlay renderer adapts help/about/debug content into buffer cells. Flow
 debug can show a target group's flow field or route graph and is controlled via
@@ -265,7 +340,8 @@ retains only game-specific asset interpretation and layering.
 
 1. Implement `render.SystemRenderer` under `internal/render/renderer` and keep
    its world dependency read-only.
-2. Add an explicit priority or reuse a deliberate shared priority.
+2. Add an explicit priority or reuse a deliberate shared priority, and declare
+   the new priority's side in `RenderPriority.ClipsToPlayfield`.
 3. Register the constructor in `internal/manifest/definition.go`.
 4. Run manifest generation.
 5. Select/test truecolor and 256-color paths, including foreground/background
@@ -284,7 +360,8 @@ retains only game-specific asset interpretation and layering.
 | Replay presentation and pan | `internal/app/play.go` |
 | Buffer/finalization | `internal/render/buffer.go` |
 | Blending | `internal/render/blender.go`, `color.go` |
-| Layer priorities | `internal/render/priority.go` |
+| Layer priorities and clip classification | `internal/render/priority.go` |
+| Rectangles and clipping geometry | `internal/render/rect.go`, `context.go` |
 | Visual constants/masks | `internal/parameter/visual/*.go` |
 | Concrete projections | `internal/render/renderer/*.go` |
 | Registry | `internal/manifest/definition.go` |

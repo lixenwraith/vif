@@ -50,15 +50,9 @@ type RenderContext struct {
 func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResource, cursorX, cursorY int, cursorValid bool) RenderContext {
 	config := ctx.World.Resources.Config
 
-	// Compute map centering offset when map < viewport
-	mapOffsetX := 0
-	mapOffsetY := 0
-	if config.MapWidth < config.ViewportWidth {
-		mapOffsetX = (config.ViewportWidth - config.MapWidth) / 2
-	}
-	if config.MapHeight < config.ViewportHeight {
-		mapOffsetY = (config.ViewportHeight - config.MapHeight) / 2
-	}
+	// Map centering offset when map < viewport; shared with the mouse transform,
+	// which is its inverse
+	mapOffsetX, mapOffsetY := config.MapOffset()
 
 	return RenderContext{
 		GameTime:  timeRes.GameTime,
@@ -89,20 +83,51 @@ func NewRenderContextFromGame(ctx *engine.GameContext, timeRes engine.TimeResour
 	}
 }
 
+// IsInMap reports whether a coordinate names a cell the simulation owns.
+// A centred map leaves margin inside the viewport that projects like a map cell
+// but belongs to no cell, so visibility answers are gated on this first.
+func (rc *RenderContext) IsInMap(mapX, mapY int) bool {
+	return mapX >= 0 && mapX < rc.MapWidth && mapY >= 0 && mapY < rc.MapHeight
+}
+
+// PlayfieldViewportRect returns the map's extent in viewport coordinates.
+// It is the whole viewport when the camera crops a larger map, and the centred
+// sub-rectangle when the map is smaller than the viewport.
+func (rc *RenderContext) PlayfieldViewportRect() Rect {
+	r := RectWH(rc.MapOffsetX, rc.MapOffsetY,
+		min(rc.MapWidth, rc.ViewportWidth), min(rc.MapHeight, rc.ViewportHeight))
+	return r.Intersect(RectWH(0, 0, rc.ViewportWidth, rc.ViewportHeight))
+}
+
+// PlayfieldRect returns the map's extent in screen coordinates: every cell a
+// simulation coordinate can legitimately reach this frame. The compositor takes
+// it as the clip for simulation layers.
+func (rc *RenderContext) PlayfieldRect() Rect {
+	return rc.PlayfieldViewportRect().Translate(rc.GameXOffset, rc.GameYOffset)
+}
+
+// GameAreaRect returns the viewport's extent in screen coordinates. The part of
+// it outside PlayfieldRect is the non-playable margin.
+func (rc *RenderContext) GameAreaRect() Rect {
+	return RectWH(rc.GameXOffset, rc.GameYOffset, rc.ViewportWidth, rc.ViewportHeight)
+}
+
 // MapToViewport converts map coordinates to viewport-relative coordinates
-// Returns (vx, vy, visible) where visible=false if outside viewport bounds
+// Returns (vx, vy, visible) where visible=false if the coordinate is outside the
+// map or outside viewport bounds. The projection is returned either way, so a
+// caller anchoring a shape on an off-map centre can still use it.
 func (rc *RenderContext) MapToViewport(mapX, mapY int) (int, int, bool) {
 	vx := mapX - rc.CameraX + rc.MapOffsetX
 	vy := mapY - rc.CameraY + rc.MapOffsetY
-	visible := vx >= 0 && vx < rc.ViewportWidth && vy >= 0 && vy < rc.ViewportHeight
+	visible := rc.IsInMap(mapX, mapY) &&
+		vx >= 0 && vx < rc.ViewportWidth && vy >= 0 && vy < rc.ViewportHeight
 	return vx, vy, visible
 }
 
-// IsInViewport checks if map coordinate is within visible viewport
+// IsInViewport checks if map coordinate is a map cell within the visible viewport
 func (rc *RenderContext) IsInViewport(mapX, mapY int) bool {
-	vx := mapX - rc.CameraX + rc.MapOffsetX
-	vy := mapY - rc.CameraY + rc.MapOffsetY
-	return vx >= 0 && vx < rc.ViewportWidth && vy >= 0 && vy < rc.ViewportHeight
+	_, _, visible := rc.MapToViewport(mapX, mapY)
+	return visible
 }
 
 // ViewportToScreen converts viewport-relative coordinates to screen coordinates
@@ -111,7 +136,8 @@ func (rc *RenderContext) ViewportToScreen(vx, vy int) (int, int) {
 }
 
 // MapToScreen converts map coordinates directly to screen coordinates
-// Returns (sx, sy, visible) where visible=false if outside viewport
+// Returns (sx, sy, visible) where visible=false if the coordinate is outside the
+// map or outside the viewport, which together are the cells PlayfieldRect covers
 func (rc *RenderContext) MapToScreen(mapX, mapY int) (int, int, bool) {
 	vx, vy, visible := rc.MapToViewport(mapX, mapY)
 	if !visible {

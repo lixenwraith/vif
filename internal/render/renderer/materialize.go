@@ -49,43 +49,51 @@ func (r *MaterializeRenderer) Render(ctx render.RenderContext, buf *render.Rende
 
 	buf.SetWriteMask(visual.MaskTransient)
 
+	// Beams run from the edge of the map, not the edge of the terminal: on a
+	// viewport wider than the map the two differ by the centring margin, and a
+	// beam starting there starts outside the world.
+	pf := ctx.PlayfieldViewportRect()
+	if pf.Empty() {
+		return
+	}
+
 	materializes.Each(func(_ core.Entity, mat *component.MaterializeComponent) bool {
 		// Transform target area to viewport coords
 		targetVX, targetVY, _ := ctx.MapToViewport(mat.TargetX, mat.TargetY)
 
-		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirUp)
-		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirDown)
-		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirLeft)
-		r.renderBeam(ctx, buf, mat, targetVX, targetVY, dirRight)
+		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirUp)
+		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirDown)
+		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirLeft)
+		r.renderBeam(ctx, buf, pf, mat, targetVX, targetVY, dirRight)
 		return true
 	})
 }
 
-func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
+func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, mat *component.MaterializeComponent, targetVX, targetVY int, dir beamDir) {
 	var edgePos, distance int
 	var spanStart, spanEnd int // Range along the target edge
 
 	switch dir {
 	case dirUp:
-		edgePos = 0
-		distance = targetVY
+		edgePos = pf.Y0
+		distance = targetVY - pf.Y0
 		spanStart = targetVX
 		spanEnd = targetVX + mat.AreaWidth - 1
 	case dirDown:
-		edgePos = ctx.ViewportHeight - 1
+		edgePos = pf.Y1 - 1
 		targetBottom := targetVY + mat.AreaHeight - 1
-		distance = ctx.ViewportHeight - 1 - targetBottom
+		distance = pf.Y1 - 1 - targetBottom
 		spanStart = targetVX
 		spanEnd = targetVX + mat.AreaWidth - 1
 	case dirLeft:
-		edgePos = 0
-		distance = targetVX
+		edgePos = pf.X0
+		distance = targetVX - pf.X0
 		spanStart = targetVY
 		spanEnd = targetVY + mat.AreaHeight - 1
 	case dirRight:
-		edgePos = ctx.ViewportWidth - 1
+		edgePos = pf.X1 - 1
 		targetRight := targetVX + mat.AreaWidth - 1
-		distance = ctx.ViewportWidth - 1 - targetRight
+		distance = pf.X1 - 1 - targetRight
 		spanStart = targetVY
 		spanEnd = targetVY + mat.AreaHeight - 1
 	}
@@ -134,12 +142,12 @@ func (r *MaterializeRenderer) renderBeam(ctx render.RenderContext, buf *render.R
 	for cellOffset := segStart; cellOffset <= segEnd; cellOffset++ {
 		intensity := r.calcIntensity(mat.Progress, cellOffset, segStart, segEnd)
 		for spanPos := spanStart; spanPos <= spanEnd; spanPos++ {
-			r.renderBeamCellSpan(ctx, buf, dir, edgePos, cellOffset, spanPos, intensity)
+			r.renderBeamCellSpan(ctx, buf, pf, dir, edgePos, cellOffset, spanPos, intensity)
 		}
 	}
 }
 
-func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
+func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *render.RenderBuffer, pf render.Rect, dir beamDir, edgePos, cellOffset, spanPos int, intensity float64) {
 	var vx, vy int
 	switch dir {
 	case dirUp:
@@ -156,8 +164,8 @@ func (r *MaterializeRenderer) renderBeamCellSpan(ctx render.RenderContext, buf *
 		vy = spanPos
 	}
 
-	// Bounds check in viewport space
-	if vx < 0 || vx >= ctx.ViewportWidth || vy < 0 || vy >= ctx.ViewportHeight {
+	// Bounds check against the visible map, in viewport space
+	if !pf.Contains(vx, vy) {
 		return
 	}
 

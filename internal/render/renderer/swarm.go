@@ -84,9 +84,6 @@ func (r *SwarmRenderer) renderMembers(
 			continue
 		}
 
-		screenX := ctx.GameXOffset + pos.X
-		screenY := ctx.GameYOffset + pos.Y
-
 		screenX, screenY, visible := ctx.MapToScreen(pos.X, pos.Y)
 		if !visible {
 			continue

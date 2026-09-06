@@ -13,6 +13,16 @@ type backgroundOverlay struct {
 	intensity float64
 }
 
+// voidRegion is the part of the game area that no simulation cell covers: the
+// margin a map smaller than the viewport is centred in. Left at the theme
+// background it reads as playable space, so finalize paints it separately.
+type voidRegion struct {
+	active    bool
+	area      Rect
+	playfield Rect
+	bgColor   color.RGB
+}
+
 // RenderBuffer is a compositor backed by terminal.Cell array with dirty tracking
 type RenderBuffer struct {
 	colorMode    terminal.ColorMode
@@ -22,7 +32,9 @@ type RenderBuffer struct {
 	currentMask  uint8
 	width        int
 	height       int
+	clip         Rect
 	bgOverlay    backgroundOverlay
+	void         voidRegion
 	finalizeFunc func(*RenderBuffer)
 }
 
@@ -37,6 +49,7 @@ func NewRenderBuffer(colorMode terminal.ColorMode, width, height int) *RenderBuf
 		currentMask: visual.MaskNone,
 		width:       width,
 		height:      height,
+		clip:        RectWH(0, 0, width, height),
 	}
 	if colorMode == terminal.ColorModeTrueColor && visual.OcclusionDimEnabled {
 		b.finalizeFunc = finalizeTrueColorOcclusion
@@ -63,8 +76,13 @@ func (b *RenderBuffer) Resize(width, height int) {
 	b.Clear()
 }
 
-// Clear resets all cells to empty and zero-initializes metadata
+// Clear resets all cells to empty and zero-initializes metadata.
+// The write clip is reopened to the whole buffer: a frame starts with no layer
+// selected, so no layer's restriction may outlive the frame that set it.
 func (b *RenderBuffer) Clear() {
+	b.clip = b.Bounds()
+	b.void = voidRegion{}
+
 	if len(b.cells) == 0 {
 		return
 	}
@@ -76,12 +94,45 @@ func (b *RenderBuffer) Clear() {
 	b.bgOverlay = backgroundOverlay{}
 }
 
+// Bounds returns the whole buffer as a rectangle in buffer coordinates
+func (b *RenderBuffer) Bounds() Rect { return RectWH(0, 0, b.width, b.height) }
+
+// SetClip restricts every subsequent write to the intersection of r with the
+// buffer. It is how the orchestrator confines simulation layers to the cells the
+// map covers, so a renderer drawing a shape around an entity near the map edge
+// cannot spill into the non-playable margin without knowing the margin exists.
+func (b *RenderBuffer) SetClip(r Rect) {
+	b.clip = r.Intersect(b.Bounds())
+}
+
+// ClearClip reopens the whole buffer for writing, for layers that address the
+// screen rather than the map: post-processing, UI, and debug projections
+func (b *RenderBuffer) ClearClip() { b.clip = b.Bounds() }
+
+// Clip returns the currently writable rectangle in buffer coordinates
+func (b *RenderBuffer) Clip() Rect { return b.clip }
+
+// SetVoidRegion declares the part of area outside playfield as non-playable, so
+// finalize fills the cells nothing drew with c rather than the theme background.
+// An area the playfield already covers clears the declaration.
+func (b *RenderBuffer) SetVoidRegion(area, playfield Rect, c color.RGB) {
+	area = area.Intersect(b.Bounds())
+	if area.Empty() || playfield.Intersect(area) == area {
+		b.void = voidRegion{}
+		return
+	}
+	b.void = voidRegion{active: true, area: area, playfield: playfield, bgColor: c}
+}
+
 // CellAt reads one composited cell, or the zero cell when the coordinate is
 // outside the buffer. It is the read half of the write API: a renderer composes
 // through Set, and a test or a diagnostic reads back what it composed without
 // needing a terminal to flush to.
 func (b *RenderBuffer) CellAt(x, y int) terminal.Cell {
-	if !b.inBounds(x, y) {
+	// Buffer bounds rather than the write clip: reading back is not drawing, and
+	// a caller checking that a layer stayed inside its clip must be able to read
+	// the cells outside it.
+	if !b.Bounds().Contains(x, y) {
 		return terminal.Cell{}
 	}
 	return b.cells[y*b.width+x]
@@ -111,9 +162,11 @@ func (b *RenderBuffer) SetBackgroundOverlay(c color.RGB, intensity float64) {
 	}
 }
 
-// inBounds returns true if coordinates are within buffer
+// inBounds returns true if coordinates are writable: inside the buffer and
+// inside the active clip, which SetClip keeps intersected with the buffer so
+// this stays one range test rather than two
 func (b *RenderBuffer) inBounds(x, y int) bool {
-	return x >= 0 && x < b.width && y >= 0 && y < b.height
+	return b.clip.Contains(x, y)
 }
 
 // === COMPOSITOR API ===
@@ -254,19 +307,23 @@ func (b *RenderBuffer) MutateDim(factor float64, targetMask uint8) {
 	if factor >= 1.0 {
 		return
 	}
-	for i := range b.cells {
-		if b.masks[i]&targetMask == 0 {
-			continue
-		}
-		cell := &b.cells[i]
+	for y := b.clip.Y0; y < b.clip.Y1; y++ {
+		row := y * b.width
+		for x := b.clip.X0; x < b.clip.X1; x++ {
+			i := row + x
+			if b.masks[i]&targetMask == 0 {
+				continue
+			}
+			cell := &b.cells[i]
 
-		// Skip 256-color fg - scaling palette index corrupts color
-		if cell.Attrs&terminal.AttrFg256 == 0 {
-			cell.Fg = color.Scale(cell.Fg, factor)
-		}
+			// Skip 256-color fg - scaling palette index corrupts color
+			if cell.Attrs&terminal.AttrFg256 == 0 {
+				cell.Fg = color.Scale(cell.Fg, factor)
+			}
 
-		if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
-			cell.Bg = color.Scale(cell.Bg, factor)
+			if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
+				cell.Bg = color.Scale(cell.Bg, factor)
+			}
 		}
 	}
 }
@@ -281,31 +338,35 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 	}
 	fullGray := intensity >= 1.0
 
-	for i := range b.cells {
-		if b.masks[i]&targetMask == 0 {
-			continue
-		}
-		if excludeMask != 0 && b.masks[i]&excludeMask != 0 {
-			continue
-		}
-		cell := &b.cells[i]
-
-		// Skip 256-color fg - grayscale conversion corrupts palette index
-		if cell.Attrs&terminal.AttrFg256 == 0 {
-			fgGray := color.Grayscale(cell.Fg)
-			if fullGray {
-				cell.Fg = fgGray
-			} else {
-				cell.Fg = color.Lerp(cell.Fg, fgGray, intensity)
+	for y := b.clip.Y0; y < b.clip.Y1; y++ {
+		row := y * b.width
+		for x := b.clip.X0; x < b.clip.X1; x++ {
+			i := row + x
+			if b.masks[i]&targetMask == 0 {
+				continue
 			}
-		}
+			if excludeMask != 0 && b.masks[i]&excludeMask != 0 {
+				continue
+			}
+			cell := &b.cells[i]
 
-		if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
-			bgGray := color.Grayscale(cell.Bg)
-			if fullGray {
-				cell.Bg = bgGray
-			} else {
-				cell.Bg = color.Lerp(cell.Bg, bgGray, intensity)
+			// Skip 256-color fg - grayscale conversion corrupts palette index
+			if cell.Attrs&terminal.AttrFg256 == 0 {
+				fgGray := color.Grayscale(cell.Fg)
+				if fullGray {
+					cell.Fg = fgGray
+				} else {
+					cell.Fg = color.Lerp(cell.Fg, fgGray, intensity)
+				}
+			}
+
+			if b.touched[i] && cell.Attrs&terminal.AttrBg256 == 0 {
+				bgGray := color.Grayscale(cell.Bg)
+				if fullGray {
+					cell.Bg = bgGray
+				} else {
+					cell.Bg = color.Lerp(cell.Bg, bgGray, intensity)
+				}
 			}
 		}
 	}
@@ -313,9 +374,44 @@ func (b *RenderBuffer) MutateGrayscale(intensity float64, targetMask, excludeMas
 
 // === OUTPUT ===
 
-// finalize delegates to the appropriate implementation selected at init
+// finalize delegates to the appropriate implementation selected at init, then
+// repaints the non-playable margin over the background it just filled
 func (b *RenderBuffer) finalize() {
 	b.finalizeFunc(b)
+	b.fillVoid()
+}
+
+// fillVoid paints the declared non-playable margin. Only cells nothing drew are
+// repainted, so a UI or debug layer that legitimately reaches into the margin —
+// an overlay panel, a pinned readout — keeps the colours it composed. The four
+// bands are walked rather than the whole area so the playfield, which is most of
+// the game area, is never visited.
+func (b *RenderBuffer) fillVoid() {
+	if !b.void.active {
+		return
+	}
+	a, p := b.void.area, b.void.playfield
+
+	// Rows entirely above and below the playfield, then the left and right
+	// margins of the rows that cross it.
+	b.fillVoidBand(a.X0, a.X1, a.Y0, min(p.Y0, a.Y1))
+	b.fillVoidBand(a.X0, a.X1, max(p.Y1, a.Y0), a.Y1)
+	midY0, midY1 := max(p.Y0, a.Y0), min(p.Y1, a.Y1)
+	b.fillVoidBand(a.X0, min(p.X0, a.X1), midY0, midY1)
+	b.fillVoidBand(max(p.X1, a.X0), a.X1, midY0, midY1)
+}
+
+// fillVoidBand fills one half-open span of untouched cells with the void colour
+func (b *RenderBuffer) fillVoidBand(x0, x1, y0, y1 int) {
+	for y := y0; y < y1; y++ {
+		row := y * b.width
+		for x := x0; x < x1; x++ {
+			if b.touched[row+x] {
+				continue
+			}
+			b.cells[row+x].Bg = b.void.bgColor
+		}
+	}
 }
 
 // finalizeTrueColorOcclusion handles untouched backgrounds and occlusion dimming

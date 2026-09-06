@@ -3,6 +3,7 @@ package render
 import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/parameter/visual"
 )
 
 type rendererEntry struct {
@@ -62,14 +63,27 @@ func (o *RenderOrchestrator) RenderFrame(ctx RenderContext, world *engine.World)
 	// Buffer is orchestrator-owned; no lock needed for clear
 	o.buffer.Clear()
 
+	// A map smaller than the viewport is centred in the game area, and the margin
+	// that leaves is not addressable by any simulation coordinate. The clip is set
+	// per layer here so no renderer has to re-derive the bound, and the margin is
+	// declared so finalize can present it as out of play rather than as empty map.
+	playfield := ctx.PlayfieldRect()
+	o.buffer.SetVoidRegion(ctx.GameAreaRect(), playfield, visual.RgbVoid)
+
 	world.Lock()
 	for _, entry := range o.renderers {
 		// Skip if renderer implements VisibilityToggle and is not visible
 		if vt, ok := entry.renderer.(VisibilityToggle); ok && !vt.IsVisible() {
 			continue
 		}
+		if entry.priority.ClipsToPlayfield() {
+			o.buffer.SetClip(playfield)
+		} else {
+			o.buffer.ClearClip()
+		}
 		entry.renderer.Render(ctx, o.buffer)
 	}
+	o.buffer.ClearClip()
 	world.Unlock()
 
 	// Terminal I/O outside the world lock: stalled terminal write mustn't block evel loop

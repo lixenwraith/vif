@@ -22,6 +22,12 @@ var (
 
 	RgbBackground = color.Gunmetal // Tokyo Night background
 
+	// RgbVoid presents the non-playable margin left inside the game area when the
+	// map is smaller than the viewport. Distinct from RgbBackground so the
+	// playable boundary reads as a boundary without spending a map row on a drawn
+	// border; setting it to RgbBackground restores the undifferentiated look.
+	RgbVoid = color.Black
+
 	// Glyph colors - all dark/normal/bright levels have minimum floor to prevent perceptual blackout at low alpha
 	RgbGlyphBlueDark   = color.CobaltBlue
 	RgbGlyphBlueNormal = color.Cornflower

@@ -195,6 +195,12 @@ When terminal mouse reporting is enabled:
 | Wheel | Move the cursor using the event coordinates. |
 | Bare motion | Move only when free-mouse mode is enabled. |
 
+Translation runs terminal to viewport by the game-area offsets, then viewport to
+map through `ConfigResource.ViewportToMap`, which is the inverse of the centering
+the renderer applies. A pointer in the margin around a map smaller than the
+viewport resolves to no cell and is rejected rather than clamped, so a click can
+only ever land on the cell drawn under it.
+
 `:mouse enable|disable|free` controls reporting and free motion. `:free` is a
 short toggle for free mouse motion. Input is ignored while suspended, in
 Command mode, or where pause/overlay policy blocks it.

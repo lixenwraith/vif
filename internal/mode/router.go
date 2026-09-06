@@ -1077,18 +1077,13 @@ func (r *Router) moveMouseCursor(intent *input.Intent) bool {
 	viewportX := termX - r.ctx.GameXOffset
 	viewportY := termY - r.ctx.GameYOffset
 
-	// Viewport bounds check
+	// Viewport to map, which undoes the centring the renderer applies when the map
+	// is smaller than the viewport and rejects the margin around it. Without the
+	// offset a click on a centred map lands short by half the margin, so the cell
+	// under the pointer is not the cell the cursor jumps to.
 	config := r.ctx.World.Resources.Config
-	if viewportX < 0 || viewportX >= config.ViewportWidth || viewportY < 0 || viewportY >= config.ViewportHeight {
-		return false
-	}
-
-	// Convert viewport coords to map coords
-	gameX := viewportX + config.CameraX
-	gameY := viewportY + config.CameraY
-
-	// Map bounds check (defensive, should not exceed given viewport clamp)
-	if gameX < 0 || gameX >= config.MapWidth || gameY < 0 || gameY >= config.MapHeight {
+	gameX, gameY, ok := config.ViewportToMap(viewportX, viewportY)
+	if !ok {
 		return false
 	}
 

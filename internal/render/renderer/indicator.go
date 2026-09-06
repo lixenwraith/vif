@@ -26,15 +26,25 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	cursorVX, cursorVY := ctx.CursorViewportPos()
 	inputMode := r.gameCtx.IsSearchMode() || r.gameCtx.IsCommandMode()
 
+	// Rows and columns outside the map are not addressable by any motion, so the
+	// gutters mark them as out of play rather than numbering them. Without this a
+	// centred map would sit inside a black margin with numbered rows beside it.
+	pf := ctx.PlayfieldViewportRect()
+
 	// --- Row indicators (left gutter) ---
 	for y := range ctx.ViewportHeight {
+		screenY := ctx.GameYOffset + y
+		if y < pf.Y0 || y >= pf.Y1 {
+			buf.SetWithBg(0, screenY, ' ', visual.RgbVoid, visual.RgbVoid)
+			buf.SetWithBg(1, screenY, ' ', visual.RgbVoid, visual.RgbVoid)
+			continue
+		}
+
 		relativeNum := y - cursorVY
 		absRelative := relativeNum
 		if absRelative < 0 {
 			absRelative = -absRelative
 		}
-
-		screenY := ctx.GameYOffset + y
 
 		// Column 0: left padding (always empty, never highlighted)
 		buf.SetWithBg(0, screenY, ' ', visual.RgbBackground, visual.RgbBackground)
@@ -73,6 +83,11 @@ func (r *IndicatorRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 
 	for x := range ctx.ViewportWidth {
 		screenX := ctx.GameXOffset + x
+		if x < pf.X0 || x >= pf.X1 {
+			buf.SetWithBg(screenX, indicatorY, ' ', visual.RgbVoid, visual.RgbVoid)
+			continue
+		}
+
 		relativeCol := x - cursorVX
 
 		var ch rune

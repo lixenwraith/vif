@@ -163,42 +163,40 @@ func (r *PingRenderer) isExcluded(vx, vy int) bool {
 	return (r.exclusionMask[idx/64] & (1 << (idx % 64))) != 0
 }
 
-// drawCrosshair draws the crosshair lines in viewport space
+// drawCrosshair draws the crosshair lines in viewport space, spanning the map
+// rather than the viewport: on a terminal wider than the map the two differ, and
+// a line crossing the centring margin is a line drawn outside the world
 func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
+	pf := ctx.PlayfieldViewportRect()
+	if pf.Empty() {
+		return
+	}
 	pingBounds := r.gameCtx.World.GetPingAbsoluteBounds()
 
 	// Convert ping bounds from map coords to viewport coords
 	minVX, minVY, _ := ctx.MapToViewport(pingBounds.MinX, pingBounds.MinY)
 	maxVX, maxVY, _ := ctx.MapToViewport(pingBounds.MaxX, pingBounds.MaxY)
 
-	// Clamp to viewport
-	if minVX < 0 {
-		minVX = 0
-	}
-	if minVY < 0 {
-		minVY = 0
-	}
-	if maxVX >= ctx.ViewportWidth {
-		maxVX = ctx.ViewportWidth - 1
-	}
-	if maxVY >= ctx.ViewportHeight {
-		maxVY = ctx.ViewportHeight - 1
-	}
+	// Clamp to the visible map
+	minVX = max(minVX, pf.X0)
+	minVY = max(minVY, pf.Y0)
+	maxVX = min(maxVX, pf.X1-1)
+	maxVY = min(maxVY, pf.Y1-1)
 
-	// Draw horizontal band (rows from minVY to maxVY, full viewport width)
+	// Draw horizontal band (rows from minVY to maxVY, full map width)
 	for vy := minVY; vy <= maxVY; vy++ {
 		screenY := ctx.GameYOffset + vy
-		for vx := range ctx.ViewportWidth {
+		for vx := pf.X0; vx < pf.X1; vx++ {
 			if !r.isExcluded(vx, vy) {
 				buf.Set(ctx.GameXOffset+vx, screenY, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
 			}
 		}
 	}
 
-	// Draw vertical band (columns from minVX to maxVX, full viewport height)
+	// Draw vertical band (columns from minVX to maxVX, full map height)
 	for vx := minVX; vx <= maxVX; vx++ {
 		screenX := ctx.GameXOffset + vx
-		for vy := range ctx.ViewportHeight {
+		for vy := pf.Y0; vy < pf.Y1; vy++ {
 			// Skip cells already drawn by horizontal band
 			if vy >= minVY && vy <= maxVY {
 				continue
@@ -210,8 +208,28 @@ func (r *PingRenderer) drawCrosshair(ctx render.RenderContext, buf *render.Rende
 	}
 }
 
-// drawGrid draws the 5-cell grid in viewport space
+// drawGrid draws the 5-cell grid in viewport space, bounded by the visible map
 func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuffer, cursorVX, cursorVY int, c color.RGB) {
+	pf := ctx.PlayfieldViewportRect()
+	if pf.Empty() {
+		return
+	}
+
+	drawColumn := func(vx int) {
+		for vy := pf.Y0; vy < pf.Y1; vy++ {
+			if !r.isExcluded(vx, vy) {
+				buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
+			}
+		}
+	}
+	drawRow := func(vy int) {
+		for vx := pf.X0; vx < pf.X1; vx++ {
+			if !r.isExcluded(vx, vy) {
+				buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
+			}
+		}
+	}
+
 	// Vertical lines at ±5, ±10, etc. from cursor
 	for n := 1; ; n++ {
 		offset := 5 * n
@@ -219,20 +237,16 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		colLeft := cursorVX - offset
 		inBounds := false
 
-		if colRight < ctx.ViewportWidth {
+		if colRight < pf.X1 {
 			inBounds = true
-			for vy := range ctx.ViewportHeight {
-				if !r.isExcluded(colRight, vy) {
-					buf.Set(ctx.GameXOffset+colRight, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-				}
+			if colRight >= pf.X0 {
+				drawColumn(colRight)
 			}
 		}
-		if colLeft >= 0 {
+		if colLeft >= pf.X0 {
 			inBounds = true
-			for vy := range ctx.ViewportHeight {
-				if !r.isExcluded(colLeft, vy) {
-					buf.Set(ctx.GameXOffset+colLeft, ctx.GameYOffset+vy, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-				}
+			if colLeft < pf.X1 {
+				drawColumn(colLeft)
 			}
 		}
 
@@ -248,20 +262,16 @@ func (r *PingRenderer) drawGrid(ctx render.RenderContext, buf *render.RenderBuff
 		rowUp := cursorVY - offset
 		inBounds := false
 
-		if rowDown < ctx.ViewportHeight {
+		if rowDown < pf.Y1 {
 			inBounds = true
-			for vx := range ctx.ViewportWidth {
-				if !r.isExcluded(vx, rowDown) {
-					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowDown, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-				}
+			if rowDown >= pf.Y0 {
+				drawRow(rowDown)
 			}
 		}
-		if rowUp >= 0 {
+		if rowUp >= pf.Y0 {
 			inBounds = true
-			for vx := range ctx.ViewportWidth {
-				if !r.isExcluded(vx, rowUp) {
-					buf.Set(ctx.GameXOffset+vx, ctx.GameYOffset+rowUp, ' ', visual.RgbBackground, c, render.BlendReplace, 1.0, terminal.AttrNone)
-				}
+			if rowUp < pf.Y1 {
+				drawRow(rowUp)
 			}
 		}
 

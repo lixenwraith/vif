@@ -125,6 +125,40 @@ type ConfigResource struct {
 	ColorMode terminal.ColorMode `toml:"color_mode"`
 }
 
+// MapOffset returns the map's top-left corner in viewport coordinates: zero when
+// the camera crops a map at least as large as the viewport, and the centring
+// offset when the map is smaller.
+//
+// One definition rather than two, because the render transform and the mouse
+// transform are inverses of each other: a viewport coordinate the renderer draws
+// the map's origin at must be the coordinate a click there resolves to.
+func (c *ConfigResource) MapOffset() (int, int) {
+	offsetX, offsetY := 0, 0
+	if c.MapWidth < c.ViewportWidth {
+		offsetX = (c.ViewportWidth - c.MapWidth) / 2
+	}
+	if c.MapHeight < c.ViewportHeight {
+		offsetY = (c.ViewportHeight - c.MapHeight) / 2
+	}
+	return offsetX, offsetY
+}
+
+// ViewportToMap converts a viewport coordinate to the map cell drawn there,
+// inverting MapOffset and the camera. ok is false when the coordinate names no
+// map cell, which on a centred map is every cell of the surrounding margin.
+func (c *ConfigResource) ViewportToMap(vx, vy int) (mapX, mapY int, ok bool) {
+	if vx < 0 || vx >= c.ViewportWidth || vy < 0 || vy >= c.ViewportHeight {
+		return 0, 0, false
+	}
+	offsetX, offsetY := c.MapOffset()
+	mapX = vx - offsetX + c.CameraX
+	mapY = vy - offsetY + c.CameraY
+	if mapX < 0 || mapX >= c.MapWidth || mapY < 0 || mapY >= c.MapHeight {
+		return 0, 0, false
+	}
+	return mapX, mapY, true
+}
+
 // --- EventQueue Resource ---
 
 // EventQueueResource wraps the event queue for systems access
