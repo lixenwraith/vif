@@ -266,8 +266,8 @@ component stores, allocator counters, and the compared status surface. Durations
 are relative to capture tick. Absolute component instants are sound because
 `engine.SimEpoch` and tick interval are session identity.
 
-Snapshot schema 4 carries the complete simulation checkpoint plus the completed
-authority crossing sequence. Delayed FSM work names its deterministic compiled
+Snapshot schema 5 carries the complete simulation checkpoint plus one applied
+crossing fence per participant. Delayed FSM work names its deterministic compiled
 action identity, so transition-delayed actions restore independently of their
 queue position. An install preserves receiver-owned cursor values, rebuilds
 roster/control binding, derives spatial/navigation caches, and restores status
@@ -332,9 +332,9 @@ Correction magnitude is measured during commit. It is telemetry, not a verdict.
 Runtime shared digests identify drift surfaces between corrections but do not
 escalate to a terminal desynchronisation state.
 
-The guest retains its own encoded ordinary crossings and replays the suffix whose
-authoritative apply ticks are later than the installed baseline. A hole makes the
-suffix unavailable and selects authority-only recovery.
+The guest retains its own encoded ordinary crossings and replays the suffix past the
+installed capture's fence for its own source. A hole makes the suffix unavailable and
+selects authority-only recovery.
 
 ### D-24 — Cadence adapts; the convergence floor does not
 
@@ -385,10 +385,11 @@ Peers use `ProducedTick` as a replay key; reusing one after rewind would make a 
 batch look like a duplicate. Crossings produced during catch-up remain in the next
 unsent epoch until world tick reaches it.
 
-Snapshot containment is not a universal tick comparison. Authority-local ordinary
-frames use `AuthorityCrossingSeq`; barrier-bound and other-source frames use the
-capture tick. Both the already-scheduled queue and later arrivals apply the same
-classification.
+Snapshot containment is not a tick comparison. Every ordinary frame uses its
+source's entry in `Header.Crossings`; barrier-bound frames use the capture tick,
+because those apply at one agreed tick on every instance including their producer.
+A source the header does not name is claimed for nothing and its frames are kept.
+Both the already-scheduled queue and later arrivals apply the same classification.
 
 ### 4.2 Mesh relay
 
@@ -509,7 +510,7 @@ departing cursor, and reconnect must take a current world.
 | Area | Current limit |
 |---|---|
 | Trust | Transport, participant claims, votes, and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
-| Guest replay | Suffix membership uses the agreed apply tick. If a guest frame misses the lead and a host capture overtakes it, one correction can omit the action. A per-source applied sequence fence is the exact follow-up. |
+| Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | The three-tick receive lead is fixed and not graph-diameter aware. |
 | Topology | The protocol relays over a graph, but `-join` dials one address, so ordinary CLI sessions form a star. |
 | Partition | Majority succession works; merging an explicit local fork does not. |

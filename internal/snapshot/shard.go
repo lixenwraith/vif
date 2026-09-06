@@ -343,7 +343,7 @@ func ValidateShardSet(set CorrectionShardSet, tick uint64, authority uint32, roo
 	case set.Header.Run != an.Run || set.Header.Session != an.Session || set.Header.Seed != an.Seed:
 		return errors.New("shard set describes another run")
 	case set.Header.Term != an.Term || set.Header.Authority != an.Authority ||
-		set.Header.AuthorityCrossingSeq != an.AuthorityCrossingSeq:
+		!set.Header.Crossings.Equal(an.Crossings):
 		// The root intentionally excludes tick-local transport metadata so a
 		// predictor can compare its world with the authority's. The authority and
 		// crossing fence must nevertheless match the manifest: they decide which

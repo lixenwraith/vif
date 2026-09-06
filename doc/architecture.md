@@ -360,9 +360,10 @@ versioned hash manifest on an adaptive per-link cadence. Equal roots are hash-on
 mismatches descend to independently verified pages, with compressed whole
 keyframes as the bounded fallback. A guest resolves a capture in a reusable staging
 world and commits it between ticks; where prediction differs, authority wins and
-the correction magnitude is telemetry rather than failure. Snapshot schema 4 also
+the correction magnitude is telemetry rather than failure. Snapshot schema 5 also
 reconciles explicitly marked persistent local FSM effects that the Shared capture
-cannot carry.
+cannot carry, and carries one applied crossing fence per participant so a
+correction cannot undo an action it simply had not received.
 
 Cadence responds to round-trip time, variation, delivered bytes, saturation, and
 correction demand, while a fixed whole-world convergence floor prevents adaptation

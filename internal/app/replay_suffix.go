@@ -14,11 +14,15 @@
 //     the barrier, because the barrier decides an artifact's apply tick and the apply
 //     tick decides whether the correction already contains it.
 //
-//   - One membership test. A guest replays its own artifacts whose agreed apply tick
-//     is after the installed world's tick. Authority-local artifacts are the
-//     asymmetric case — the host applied them immediately — so AdoptSnapshot and
-//     scheduleCrossings classify those by the capture header's completed authority
-//     sequence instead.
+//   - One membership test, and it is a sequence rather than a tick. A capture
+//     describes a world; what that world holds of this participant's stream is the
+//     sequence its fence names, because a producer applies its own crossing
+//     immediately and everyone else waits for the agreed tick. A copy whose apply
+//     tick is already past can therefore be missing from a capture taken before it
+//     arrived, and judging by tick discarded exactly those — which is how a guest's
+//     own action came to disappear for one cadence whenever its link missed the
+//     playout lead. AdoptSnapshot and scheduleCrossings apply the same fence to the
+//     schedule, for every source rather than only the authority.
 //
 //   - No partial answer. Retention is bounded by tick span, record count and bytes,
 //     and dropping a record the suffix would need makes the suffix unavailable rather
@@ -32,6 +36,8 @@ package app
 
 import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/network"
+	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
 
@@ -40,7 +46,7 @@ import (
 // is assembled from the manifest, and a run without a network system has nothing
 // to replay rather than being broken.
 type replaySource interface {
-	LocalReplaySuffix(tick uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
+	LocalReplaySuffix(fence uint64) ([]event.ScheduledWireFrame, []event.Origin, bool)
 	ReplaySuffixSize() (int, int64)
 }
 
@@ -57,12 +63,18 @@ type replaySource interface {
 // queue does not cross it a second time — the crossing was flushed in the epoch
 // that produced it, and AdoptSnapshot rebases the barrier past that epoch before
 // this runs.
-func (a *App) replayLocalSuffix(tick uint64) (replayed int, ok bool) {
-	src := a.replaySourceLocked()
+func (a *App) replayLocalSuffix(header snapshot.CaptureHeader) (replayed int, ok bool) {
+	src, local := a.replaySource()
 	if src == nil {
 		return 0, true // no session barrier: nothing was ever retained
 	}
-	frames, origins, available := src.LocalReplaySuffix(tick)
+	// This instance's own boundary in the world that was just installed. A capture
+	// that names no fence for this source claims nothing about its stream, so the
+	// whole retained suffix is replayed — the conservative direction, because a
+	// duplicate is repaired by the next correction and a discarded action is not.
+	tick := header.Tick
+	fence := header.Crossings.Seq(network.PeerID(local))
+	frames, origins, available := src.LocalReplaySuffix(fence)
 	retained, dropped := src.ReplaySuffixSize()
 
 	m := a.snapshotTelemetry
@@ -114,10 +126,16 @@ func (a *App) replayLocalSuffix(tick uint64) (replayed int, ok bool) {
 	return pushed, true
 }
 
-// replaySourceLocked finds the barrier that retains the suffix.
-func (a *App) replaySourceLocked() replaySource {
-	var out replaySource
+// replaySource finds the barrier that retains the suffix, and this instance's own
+// participant identity, under one world lock: the caller needs both and reading them
+// apart would let a departure land between them.
+func (a *App) replaySource() (replaySource, uint32) {
+	var (
+		out   replaySource
+		local uint32
+	)
 	a.world.RunSafe(func() {
+		local = a.localParticipantLocked()
 		for _, sys := range a.world.Systems() {
 			if r, ok := sys.(replaySource); ok {
 				out = r
@@ -125,5 +143,5 @@ func (a *App) replaySourceLocked() replaySource {
 			}
 		}
 	})
-	return out
+	return out, local
 }

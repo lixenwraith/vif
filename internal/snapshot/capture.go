@@ -22,7 +22,11 @@ import (
 
 // Schema is the capture layout version, distinct from the journal schema. A
 // header names both so a mismatch says which one moved.
-const Schema = 4
+//
+// 5 replaced the authority's single crossing fence with one per participant, so a
+// receiver classifies every source's ordinary crossings by sequence rather than
+// only the authority's.
+const Schema = 5
 
 // SharedCapture is the shared world at one tick (D-19): the shared component
 // stores, the allocator's next ID, every RNG stream position, and the private
@@ -112,12 +116,20 @@ type CaptureHeader struct {
 	Term      network.AuthorityTerm `json:"term,omitempty"`
 	Authority uint32                `json:"authority,omitempty"`
 
-	// AuthorityCrossingSeq is the source-local sequence through which the authority
-	// had completed its ordinary local-first crossings when the world was read.
-	// Their receive-side ApplyTick may still be in the future, so this fence rather
-	// than the capture tick tells a receiver which queued copies the capture
-	// already contains. Barrier-bound crossings keep using their agreed ApplyTick.
-	AuthorityCrossingSeq uint64 `json:"authority_crossing_seq,omitempty"`
+	// Crossings is, per participant, the source-local sequence through which this
+	// world contains that participant's ordinary crossings — the authority's own
+	// among them, where the number is the prefix it had completed dispatching when
+	// the world was read.
+	//
+	// It is a vector rather than the authority's single fence because the mismatch
+	// between an apply tick and a world's contents is not the authority's alone. A
+	// guest whose link misses the playout lead produces a crossing for a tick that
+	// is already past by the time the authority reads the world without it, and a
+	// receiver judging membership by tick concludes its own action is represented
+	// and discards it. Barrier-bound crossings keep using their agreed ApplyTick:
+	// they apply at one tick on every instance, producer included, so the tick is
+	// the exact answer for them.
+	Crossings network.CrossingFences `json:"crossings,omitempty"`
 
 	// Integrity hashes the capture body with this field zeroed. "Did this arrive
 	// intact" and "does this describe my build" are separate questions and an

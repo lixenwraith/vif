@@ -9,6 +9,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/service"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
@@ -90,10 +91,9 @@ func (a *App) installStatusLocked(state snapshot.StatusState) {
 // a world that never existed.
 func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 	var (
-		cap                     snapshot.SharedCapture
-		err                     error
-		crossSource             uint32
-		appliedCrossingSequence uint64
+		cap       snapshot.SharedCapture
+		err       error
+		crossings network.CrossingFences
 	)
 	a.world.RunSafe(func() {
 		cap.World = a.world.CaptureSharedWorld()
@@ -102,18 +102,19 @@ func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 		cap.Status = a.captureStatusLocked()
 		cap.Systems, err = a.captureSystemStatesLocked()
 		for _, sys := range a.world.Systems() {
-			if fence, ok := sys.(interface {
-				LocalAppliedCrossingSequence() (uint32, uint64)
+			if fences, ok := sys.(interface {
+				AppliedCrossingFences() network.CrossingFences
 			}); ok {
-				crossSource, appliedCrossingSequence = fence.LocalAppliedCrossingSequence()
+				crossings = fences.AppliedCrossingFences()
 				break
 			}
 		}
 
-		// The header's tick and crossing fence are part of the world reading,
-		// not labels added afterwards. Reading them under the same lock prevents
-		// a tick or a just-dispatched host input from falling between the body and
-		// the boundary that tells receivers what the body contains.
+		// The header's tick and crossing fences are part of the world reading, not
+		// labels added afterwards. Reading them under the same lock prevents a tick,
+		// a just-dispatched local input, or a peer frame applied a moment ago from
+		// falling between the body and the boundary that tells receivers what the
+		// body contains.
 		st := a.Position()
 		reg := a.world.Resources.Status
 		cfg := a.world.Resources.Config
@@ -136,9 +137,7 @@ func (a *App) CaptureShared() (snapshot.SharedCapture, error) {
 			MapWidth:      cfg.MapWidth,
 			MapHeight:     cfg.MapHeight,
 		}
-		if holder != 0 && crossSource == holder {
-			cap.Header.AuthorityCrossingSeq = appliedCrossingSequence
-		}
+		cap.Header.Crossings = crossings
 	})
 	if err != nil {
 		return snapshot.SharedCapture{}, err
@@ -333,9 +332,9 @@ func (a *App) writeShared(cap snapshot.SharedCapture, reconcile, reconcileLocal 
 func (a *App) adoptSnapshotBarrierLocked(header snapshot.CaptureHeader) {
 	for _, sys := range a.world.Systems() {
 		if b, ok := sys.(interface {
-			AdoptSnapshot(uint64, uint32, uint64)
+			AdoptSnapshot(uint64, uint32, network.CrossingFences)
 		}); ok {
-			b.AdoptSnapshot(header.Tick, header.Authority, header.AuthorityCrossingSeq)
+			b.AdoptSnapshot(header.Tick, header.Authority, header.Crossings)
 		}
 	}
 }

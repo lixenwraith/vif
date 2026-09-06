@@ -998,9 +998,10 @@ func (c *corrections) install(cap snapshot.SharedCapture) error {
 	c.lastInstalled = cap.Header.Tick
 	c.installedMu.Unlock()
 
-	// The authority is in place; this participant's own actions after its baseline
-	// go back on top of it. See replay_suffix.go for why the set is exact.
-	c.a.replayLocalSuffix(cap.Header.Tick)
+	// The authority is in place; this participant's own actions the installed world
+	// does not contain go back on top of it. The boundary is the capture's fence for
+	// this source, not its tick — see replay_suffix.go for why.
+	c.a.replayLocalSuffix(cap.Header)
 
 	// What was just installed is provably the authority's world at that tick — a
 	// whole correction re-checks its own integrity hash and a repair reproduces the

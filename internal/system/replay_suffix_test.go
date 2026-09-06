@@ -37,44 +37,69 @@ func TestRosterAndResetArtifactsAreNeverRetained(t *testing.T) {
 	}
 }
 
-// TestReplayMembershipUsesTheAuthoritativeApplyTick pins the same boundary the
-// barrier uses: a capture contains frames due at or before its tick, regardless of
-// when their producer published them. Production ticks bound retention age; they
-// do not decide whether one correction contains a frame.
-func TestReplayMembershipUsesTheAuthoritativeApplyTick(t *testing.T) {
+// TestReplayMembershipUsesTheSourceSequence pins the boundary a correction is
+// judged by. A capture describes a world, and what that world holds of this
+// participant's stream is the sequence its fence names — not the ticks its copies
+// were scheduled to apply at.
+func TestReplayMembershipUsesTheSourceSequence(t *testing.T) {
 	s := &NetworkSystem{}
-	for _, produced := range []uint64{8, 9, 10, 11} {
-		s.retainLocked(frameAt(produced), produced, produced+3, event.OriginInput)
+	for _, seq := range []uint64{1, 2, 3, 4} {
+		s.retainLocked(frameAt(seq), 100+seq, 103+seq, event.OriginInput)
 	}
 
-	frames, origins, ok := s.LocalReplaySuffix(9)
+	frames, origins, ok := s.LocalReplaySuffix(0)
 	if !ok {
 		t.Fatal("a suffix inside every bound was reported unavailable")
 	}
 	if len(frames) != 4 || len(origins) != 4 {
-		t.Fatalf("baseline 9 offered %d records, want all four applying after it", len(frames))
-	}
-	for _, f := range frames {
-		if f.ApplyTick <= 9 {
-			t.Fatalf("the suffix offered an artifact applying at tick %d, which the capture holds",
-				f.ApplyTick)
-		}
-	}
-	if frames[0].Frame.Seq != 8 {
-		t.Fatalf("a crossing produced before the baseline but applying after it was omitted: first sequence %d",
-			frames[0].Frame.Seq)
+		t.Fatalf("fence 0 offered %d records, want everything retained", len(frames))
 	}
 
-	frames, _, ok = s.LocalReplaySuffix(12)
-	if !ok || len(frames) != 2 || frames[0].Frame.Seq != 10 || frames[1].Frame.Seq != 11 {
-		t.Fatalf("baseline 12 offered sequences %v (ok=%v), want 10 and 11",
+	frames, _, ok = s.LocalReplaySuffix(2)
+	if !ok || len(frames) != 2 || frames[0].Frame.Seq != 3 || frames[1].Frame.Seq != 4 {
+		t.Fatalf("fence 2 offered sequences %v (ok=%v), want 3 and 4",
 			frameSequences(frames), ok)
 	}
 
-	// A baseline past everything retained offers nothing, which is the ordinary
-	// case on a quiet participant rather than a failure.
+	// A fence past everything retained offers nothing, which is the ordinary case
+	// on a participant the authority is fully caught up with.
 	if frames, _, ok := s.LocalReplaySuffix(99); !ok || len(frames) != 0 {
-		t.Fatalf("a baseline past the suffix offered %d records (ok=%v)", len(frames), ok)
+		t.Fatalf("a fence past the suffix offered %d records (ok=%v)", len(frames), ok)
+	}
+}
+
+// TestALateCrossingSurvivesACorrectionThatMissedIt is the regression this fence
+// exists for, at the level where the decision is made.
+//
+// A participant produces a crossing for apply tick 103 and its link misses the
+// playout lead. The authority reads its world at tick 110 without having received
+// it, so the capture cannot contain it — but its apply tick is seven ticks in the
+// past. Judged by tick, the producer concludes the correction already holds its
+// action and discards it; the action disappears until the authority applies the late
+// frame and publishes another capture, which is the visible undo-and-redo.
+//
+// Judged by the fence, the producer knows the authority had completed only sequence
+// 1 and replays the rest. Nothing disappears.
+func TestALateCrossingSurvivesACorrectionThatMissedIt(t *testing.T) {
+	s := &NetworkSystem{}
+	s.retainLocked(frameAt(1), 99, 102, event.OriginInput)  // arrived; the capture has it
+	s.retainLocked(frameAt(2), 100, 103, event.OriginInput) // in flight when the capture was read
+	s.retainLocked(frameAt(3), 101, 104, event.OriginInput) // likewise
+
+	const captureTick = 110
+	for _, rec := range s.suffix {
+		if rec.frame.ApplyTick > captureTick {
+			t.Fatalf("the fixture is not the late case: apply tick %d is still ahead of the capture",
+				rec.frame.ApplyTick)
+		}
+	}
+
+	frames, _, ok := s.LocalReplaySuffix(1)
+	if !ok {
+		t.Fatal("the suffix was reported unavailable")
+	}
+	if got := frameSequences(frames); len(got) != 2 || got[0] != 2 || got[1] != 3 {
+		t.Fatalf("replayed sequences %v, want 2 and 3 — the ones the authority had not applied", got)
 	}
 }
 
@@ -85,7 +110,7 @@ func TestReplayOrderingKeepsEachFramesOrigin(t *testing.T) {
 	s.retainLocked(frameAt(1), 10, 20, event.OriginInput)
 	s.retainLocked(frameAt(2), 11, 15, event.OriginMacro)
 
-	frames, origins, ok := s.LocalReplaySuffix(9)
+	frames, origins, ok := s.LocalReplaySuffix(0)
 	if !ok || len(frames) != 2 || len(origins) != 2 {
 		t.Fatalf("offered %d frames and %d origins (ok=%v), want two of each",
 			len(frames), len(origins), ok)
@@ -114,14 +139,15 @@ func TestADroppedRecordMakesTheSuffixUnavailable(t *testing.T) {
 		t.Fatalf("retention holds %d records, past the %d-record bound",
 			retained, parameter.SnapshotReplayRecords)
 	}
-	if _, _, ok := s.LocalReplaySuffix(100); ok {
-		t.Fatal("a baseline behind a dropped record was offered a suffix anyway")
+	if _, _, ok := s.LocalReplaySuffix(0); ok {
+		t.Fatal("a fence behind a dropped record was offered a suffix anyway")
 	}
-	// A baseline at the newest dropped apply tick is still answerable: the hole is
-	// in the capture, so the history after it is whole. The tick-span bound may
-	// drop more than the record-count overflow above, so read the exact boundary.
-	if _, _, ok := s.LocalReplaySuffix(s.lostApplyTick); !ok {
-		t.Fatal("a baseline past the hole was refused a suffix it holds in full")
+	// A fence at the newest dropped sequence is still answerable: the hole is inside
+	// what the capture already holds, so the history after it is whole. The tick-span
+	// bound may drop more than the record-count overflow above, so read the exact
+	// boundary rather than assuming which bound fired.
+	if _, _, ok := s.LocalReplaySuffix(s.lostSeq); !ok {
+		t.Fatal("a fence past the hole was refused a suffix it holds in full")
 	}
 }
 

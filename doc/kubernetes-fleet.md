@@ -42,6 +42,7 @@ flowchart LR
 | Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
 | Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, config or corpus differs from the offer it made. |
+| Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
 | Storage | None. Nothing is persisted and no volume outlives the pod. |
@@ -63,7 +64,8 @@ it does not move an in-memory session into an unrelated pod.
 | Join identity (was F2) | The **host** verifies. A joiner reports what it turned out to be and the coordinator refuses it; a peer that skipped its own check is refused anyway. Covers the wire protocol, the manifest's simulation fingerprint, both schemas, the tick interval, and the whole session identity. |
 | Fleet objects | Namespace with enforced `restricted` Pod Security, ten-session quota, default-deny network policy, per-session Job/Service, allocator RBAC. |
 | Live log and metric stream (was F7) | The metrics were already in the log — `internal/status` emits the whole registry as `sub="stat"` records on a tick cadence. A LogWisp sidecar tails that log and serves it live. |
-| Correction correctness | Snapshot schema 4 local-lifecycle reconciliation, delayed-action identity, quasar map clipping. |
+| Correction correctness | Snapshot schema 5 local-lifecycle reconciliation, delayed-action identity, quasar map clipping. |
+| Late-crossing ordering (was F10/H5) | A capture carries one applied-sequence fence per participant, so a correction keeps an action it had not received instead of undoing it for a cadence. See §5. |
 
 ### Open
 
@@ -73,8 +75,7 @@ it does not move an in-memory session into an unrelated pod.
 | H2 | next | **Run the lab.** Install the pinned K3s, import the image, apply the boundary objects, create one session by hand. | [Deployment §2-§6](kube_docker_deploy.md) is executed and its versions recorded. |
 | H3 | after H2 | **Measure a full roster.** Four guests through a tower and a storm, and on `config/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
-| H5 | decision | **Exact late-guest acknowledgement.** See §5 for the worked example. Currently deferred. | Either a per-source applied-sequence fence lands, or the item is closed as accepted behaviour. |
-| H6 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
+| H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 
 ### Dropped, with the reason
 
@@ -123,35 +124,58 @@ Until H1 lands, the firewall requirements in
 are what stands in front of this: the forwarded surface is the ten-port NodePort
 range and nothing else, and the probe, log-stream and API ports never leave the node.
 
-## 5. H5: the late-guest ordering decision
+## 5. Late-crossing ordering, and the trade-offs in its fix
 
-The one open correctness question, with the example it needs.
+The symptom, in a real game: a player presses a key, their cursor moves, and a fifth
+of a second later it jumps back — then moves again. On one machine it almost never
+happens; add Internet delay and it is the ordinary case for every action a
+correction straddles.
 
-A guest produces a crossing whose agreed apply tick is T+3 and retains it. Its link
-misses the playout lead, so the host's capture at tick T+5 does not contain it. The
-guest installs that correction and classifies its own retained frame by apply tick:
-T+3 ≤ T+5, so it is treated as already represented and is **not** replayed. The
-guest's own action disappears from its world.
+The cause was a boundary that asked the wrong question. A guest produced a crossing
+for tick T+3 and applied it at once. Its link missed the playout lead, so the host
+had not received it when it read its world at T+9 and the capture could not contain
+it — but its apply tick was six ticks in the past. Judging membership by tick, the
+guest concluded the correction already held the action and dropped it. The host
+applied the late frame when it finally arrived and the next capture put it back,
+which is the second half of the flicker.
 
-It comes back. The host applies the late frame when it arrives — a late crossing is
-counted (`network.barrier_late`) and applied, not discarded — so the next capture
-contains it and the guest converges at the following correction. The cost is one
-cadence, about 200 ms at 5 Hz, during which the player sees their own action undone
-and then redone.
+The fix is `CaptureHeader.Crossings` (snapshot schema 5): one `{source, seq}` fence
+per participant, naming the sequence through which that world contains that
+participant's ordinary crossings. Membership for every ordinary frame is now its
+source's sequence rather than its apply tick, everywhere the question is asked — the
+replay suffix, the scheduled queue, and frames arriving after the install.
 
-So this is **not** a divergence and **not** a lost action. It is a visible rollback
-on a link that is already failing to hold the playout lead, and the metrics that
-report that link (`network.lag_ticks`, `network.barrier_late`) are the same ones
-that predict it.
+It also generalises the fix that already existed. The authority's own crossings had
+carried a fence since schema 4, for the mirror-image reason: the host applies its
+frame first, so a capture could contain one whose receive-side apply tick was still
+in the future, and a guest that installed the correction would then let the queued
+older copy walk the host's cursor backward. One vector closes both directions.
 
-The exact fix is a per-source applied-sequence fence: the capture header carries,
-per participant, the sequence the authority has completed, and the guest replays
-anything beyond its own — the rule the authority's own crossings already use
-(`CaptureHeader.AuthorityCrossingSeq`). It is a snapshot schema change and per-source
-completion accounting.
+**Trade-offs, for review after live testing:**
 
-**Deferred.** Revisit if players on ordinary links report their actions flickering;
-close it as accepted behaviour if they do not.
+| Decision | Alternative | Why |
+|---|---|---|
+| Remote entries are the **highest applied** sequence, not a contiguous prefix. | A contiguous prefix, exact in every topology. | Within one link a source's frames arrive in order, so the two are the same number in every topology the CLI builds. Where they differ — a frame overtaking a lower one across a relay — the maximum costs one cadence of a frame looking contained when it is not. A contiguous prefix would instead stall on a frame the receiver refused for a full queue and will never see, making that producer replay a growing suffix at every correction for the rest of the session. Bounded and self-healing beats exact and unbounded. |
+| The **local** entry stays a contiguous prefix. | The same maximum. | Local dispatch can complete out of order, so a capture racing an input that was encoded but not yet dispatched must not claim it. This half was already right. |
+| A source the header does not name is **claimed for nothing**. | Fall back to the tick. | The fallback is the misjudgement the fence exists to prevent. Keeping an artifact costs a duplicate the next correction repairs; discarding one costs the player their action. |
+| The replay suffix is **cleared on reset**. | Leave it, as before. | A reset restarts the sequence counter, so a record retained across one carries a number a post-reset fence would compare against and get wrong in both directions. The old tick boundary pruned these by age; a sequence boundary has no such accident to rely on. |
+| Schema **5**, not a compatible addition. | Keep the old field and add the vector. | Two fences answering one question is how they drift apart. Mixed builds are refused at the join by the capture-schema field in the identity check, so a bump costs nothing a mixed fleet was allowed to do anyway. |
+
+**What this does not change.** The playout lead is still fixed at three ticks
+(multiplayer gap 2), so a link that misses it still produces late frames — the fence
+makes them harmless rather than rare. A late crossing still applies on the host at
+whatever tick it arrives, so the two instances still order it differently and the
+correction after it is still what reconciles them; what no longer happens is the
+producer discarding its own action in between.
+
+**How to reproduce it.** In a real game, any action that crosses a correction on a
+link over roughly 150 ms: type into a gold run, fire a shot, or hold a motion key,
+on a guest joined across the Internet rather than on `127.0.0.1`. It is most visible
+with rapid `h`/`l` sequences, where each undone-and-redone cell is a separate visual
+jump. Deterministically, `TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt`
+in `internal/app` shapes the host's receive side with twice the playout lead and
+asserts the cursor does not move back; reverting either half of the membership rule
+fails it with `cursor at {20 10}, want {23 10}`.
 
 ## 6. Resources
 

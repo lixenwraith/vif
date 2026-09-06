@@ -42,7 +42,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Player state | Each instance simulates only its Player domain. Owner-authored cursor values have one writer and travel as values; a receiver keeps the values it authors across an install. |
 | Corrections | A correction starts with a versioned hash index. Equal roots send no state. Mismatches descend to independently proved pages. Compressed whole keyframes remain the bounded fallback. |
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
-| Authority ordering | Snapshot schema 4 carries the authority's completed local crossing sequence. A receiver removes authority frames already represented by the installed world, including frames whose nominal receive tick is still ahead. |
+| Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
 | Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. |
 | Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
@@ -80,47 +80,72 @@ numbering.
 
 ### 3.2 The capture boundary
 
-`ApplyTick` alone does not say whether an authority capture contains one of the
-authority's own ordinary frames. The host applies that frame locally first, so a
-capture at tick T can already contain a frame whose remote `ApplyTick` is T+1,
-T+2, or T+3.
+`ApplyTick` does not say whether a capture contains a given ordinary frame, for
+either side of the session, and the reason is the same in both directions: an
+ordinary crossing applies immediately on its producer and a playout lead later
+everywhere else, so the tick a copy was *scheduled* to run at is not the tick the
+world took it in.
 
-Snapshot schema 4 therefore records `CaptureHeader.AuthorityCrossingSeq`: the
-contiguous source-local sequence through which the authority has completed local
-dispatch. The event queue returns each crossing sequence to `NetworkSystem` only
-after every local handler has run. The capture body, tick, map bounds, and sequence
-fence are read under the same world lock.
+That splits two ways:
+
+- The authority applies its own frame first, so a capture at tick T can already
+  contain one whose remote `ApplyTick` is T+1, T+2 or T+3.
+- A guest whose link misses the lead produces a frame for T+3 that has not reached
+  the authority when it reads its world at T+9, so the capture is missing one whose
+  `ApplyTick` is already six ticks old.
+
+Snapshot schema 5 therefore records `CaptureHeader.Crossings`: one fence per
+participant, `{source, seq}`, naming the source-local sequence through which this
+world contains that participant's ordinary crossings. The local entry is the
+contiguous prefix its own dispatchers have completed — the event queue returns each
+sequence to `NetworkSystem` only after every local handler has run — and each remote
+entry is the highest this instance has applied from that source. The capture body,
+tick, map bounds and the whole fence vector are read under one world lock.
 
 An install classifies queued and later-arriving frames as follows:
 
 | Frame | Already represented by the capture when |
 |---|---|
-| Ordinary frame from `Header.Authority` | `frame.Seq <= Header.AuthorityCrossingSeq` |
-| Barrier-bound authority frame | `frame.ApplyTick <= Header.Tick` |
-| Frame from another participant | `frame.ApplyTick <= Header.Tick` |
+| Ordinary frame, any source | `frame.Seq <= Header.Crossings.Seq(source)` |
+| Ordinary frame whose source the header does not name | never — nothing is claimed about it |
+| Barrier-bound frame, any source | `frame.ApplyTick <= Header.Tick` |
 
-The authority rule is evaluated before the tick rule. An authority frame that had
-not completed dispatch when the capture was read is not claimed merely because
-its nominal receive deadline is old. Conversely, an already-applied host frame is
-discarded even when its receive deadline is still in the future.
+The sequence rule is evaluated before the tick rule for ordinary frames, and the
+tick rule is the whole rule for barrier-bound ones: an arrival, a departure and a
+reset apply at one agreed tick on every instance including their producer, so the
+tick is exact for them and nothing else is needed.
 
-This closes the host-cursor rollback pattern: a correction no longer installs a
-new host position and then lets queued older absolute positions walk the guest
-backward. The same fence is retained after installation, so a stale batch that
-arrives later is refused rather than reintroduced.
+This closes both rollback patterns with one boundary. The host-cursor pattern —
+a correction installs a new host position and queued older absolute positions then
+walk the guest backward — is closed because an already-applied frame is discarded
+even when its receive deadline is still in the future. The guest-action pattern —
+a correction undoes the player's own keystroke, and the next one puts it back a
+cadence later — is closed because a frame the capture never saw is kept even when
+its receive deadline is long past. The same fences are retained after installation,
+so a stale batch arriving later is classified the same way.
 
-The sequence is a completed contiguous prefix rather than the latest assigned
-number. That distinction covers a capture racing an input which has been encoded
-but has not yet been dispatched. Completions that arrive out of source order are
-held until the gap closes.
+Two deliberate asymmetries in how the fences are computed:
+
+- The **local** entry is a contiguous prefix rather than the highest assigned
+  sequence, because local dispatch can complete out of order: a capture racing an
+  input that has been encoded but not yet dispatched must not claim it. Completions
+  that arrive ahead of a gap are held until the gap closes.
+- Each **remote** entry is a maximum rather than a contiguous prefix. Within one
+  link a source's frames arrive in order, so the two are the same number in every
+  topology the CLI builds; where they could differ — a frame overtaking a lower one
+  across a relay — the maximum costs one cadence of a frame looking contained when
+  it is not, and the contiguous prefix would instead stall on a frame the receiver
+  refused for a full queue and will never see, making that producer replay a growing
+  suffix at every correction for the rest of the session. The bounded, self-healing
+  failure is the one worth having.
 
 ### 3.3 Guest replay
 
 A correction may describe a host tick behind the guest's predicted present. The
 guest retains its own ordinary crossings in their encoded wire representation and
-replays those whose authoritative `ApplyTick` is later than the correction
-baseline. Production ticks bound retention age; they do not choose replay
-membership. Arrival, departure, and reset are never replayed.
+replays those past the capture's fence for its own source. Production ticks bound
+retention age; they do not choose replay membership, and neither does the apply
+tick. Arrival, departure, and reset are never replayed.
 
 The suffix is bounded by ticks, records, and encoded bytes. If retention has a
 hole, the guest installs the authority alone and reports the skipped replay rather
@@ -258,31 +283,27 @@ stop or mutate only one copy of a live session.
    fleet accepts this and hardens the open port instead; see the
    [fleet plan](kubernetes-fleet.md) §4 for what bounds a stranger today and what
    does not.
-2. **Exact late guest acknowledgement — deferred, with the boundary understood.**
-   Guest suffix membership uses the agreed apply tick, so a guest whose link misses
-   the playout lead can see its own action undone by one correction and redone by
-   the next. It is a bounded visual rollback rather than a divergence or a lost
-   action — the host applies a late crossing rather than discarding it. The worked
-   example and the exact fix are in the [fleet plan](kubernetes-fleet.md) §5.
-3. **Adaptive playout lead.** The three-tick lead is fixed and not graph-diameter
-   aware. Cadence adapts per direct link; apply deadlines do not.
-4. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`
+2. **Adaptive playout lead.** The three-tick lead is fixed and not graph-diameter
+   aware. Cadence adapts per direct link; apply deadlines do not. It decides how
+   often a link misses the lead at all, and therefore how often §3.2's fences have
+   work to do — they make a missed lead harmless, not rare.
+3. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`
    dials one address, so ordinary CLI sessions still form a star. A relayed peer
    inherits its neighbour's cadence.
-5. **Partition merge.** Majority succession is implemented; reconciling an
+4. **Partition merge.** Majority succession is implemented; reconciling an
    explicit local fork back into a higher term is not.
-6. **Programmatic operator mutation.** Interactive controls are session-aware;
+5. **Programmatic operator mutation.** Interactive controls are session-aware;
    embedder-level map and FSM mutations still rely on caller discipline.
-7. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
+6. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
    `event.EmitDeath`'s direct path, route-anchor casts, and mixed combat telemetry
    should be made explicit or removed.
-8. **Tower and progression ownership.** Optional tower configurations still bind
+7. **Tower and progression ownership.** Optional tower configurations still bind
    ownership to the slot-zero cursor, and quasar progression still uses a session
    drain total. Both need an explicit session-owned versus cursor-owned rule.
-9. **Presentation.** A small terminal clips the map, and remote cursor motion is
+8. **Presentation.** A small terminal clips the map, and remote cursor motion is
    rendered at simulation arrival ticks. Windowed views and optional presentation
    interpolation are separate from simulation ordering.
-10. **Portability.** Determinism is guaranteed within one implementation build,
+9. **Portability.** Determinism is guaranteed within one implementation build,
     not as cross-platform bit-exact lockstep for arbitrary `float64` behaviour.
 
 ## 9. Verification

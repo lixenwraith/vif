@@ -329,7 +329,14 @@ func TestMalformedShardSetsAreRefusedAtomically(t *testing.T) {
 		{"unknown schema", func(s *snapshot.CorrectionShardSet) { s.Schema = snapshot.Schema + 1 }, "schema"},
 		{"stale baseline", func(s *snapshot.CorrectionShardSet) { s.Header.Tick-- }, "tick"},
 		{"foreign session", func(s *snapshot.CorrectionShardSet) { s.Header.Session++ }, "another run"},
-		{"foreign crossing fence", func(s *snapshot.CorrectionShardSet) { s.Header.AuthorityCrossingSeq++ }, "header"},
+		{"foreign crossing fence", func(s *snapshot.CorrectionShardSet) {
+			s.Header.Crossings = append(network.CrossingFences{}, s.Header.Crossings...)
+			if len(s.Header.Crossings) == 0 {
+				s.Header.Crossings = network.CrossingFences{{Source: 1, Seq: 1}}
+			} else {
+				s.Header.Crossings[0].Seq++
+			}
+		}, "header"},
 		{"another authority", func(s *snapshot.CorrectionShardSet) { s.Authority = 9 }, "authority"},
 		{"corrupt content", func(s *snapshot.CorrectionShardSet) {
 			s.Shards[0].Rows = append([]snapshot.ManifestRow(nil), s.Shards[0].Rows...)

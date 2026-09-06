@@ -7,19 +7,27 @@ import (
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 )
+
+// guestParticipant is the identity every fixture in this file gives its guest: the
+// coordinator takes 1 and the first joiner takes 2.
+const guestParticipant network.PeerID = 2
 
 // The replay suite is about the seam between two claims that pull in opposite
 // directions: a correction makes a guest hold the authority's world, and a
 // participant's own accepted actions must not disappear when one arrives.
 //
 // The window is what reconciles them. Production ticks bound retention; the
-// authoritative apply tick decides membership. A capture at T contains everything
-// due at or before T and cannot contain a crossing due after T, even when that
-// crossing was produced at or before T and is still inside the playout lead.
+// capture's fence for this source decides membership. A capture contains what its
+// producer's sequence says it contains — not what the receive schedule says was due
+// — because an ordinary crossing applies immediately on its producer and a lead
+// later everywhere else, so a copy already past its apply tick can still be missing
+// from a capture read before it arrived.
 
 // TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce: A guest
 // produces a crossing, then installs an authority taken before it, and the effect
@@ -36,7 +44,6 @@ func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
 	if err := host.PublishCorrection(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	baseline := host.Position().Tick
 
 	// Now the guest acts, after that baseline, and applies it immediately. No tick
 	// separates the two: an artifact produced between two ticks belongs to the next
@@ -48,13 +55,14 @@ func TestLocalCrossingsAfterTheBaselineSurviveExactlyOnce(t *testing.T) {
 	if moved == before {
 		t.Fatal("the local motion did not move the cursor at all")
 	}
-	suffix, dropped := replaySuffixOf(t, guest, baseline)
+	fence := hostFence(t, host, guestParticipant)
+	suffix, dropped := replaySuffixOf(t, guest, fence)
 	if len(suffix) == 0 {
-		t.Fatal("the guest retained no crossing produced after the baseline")
+		t.Fatal("the guest retained no crossing the authority does not hold")
 	}
-	if suffix[0].ApplyTick <= baseline {
-		t.Fatalf("the retained crossing applies at tick %d, at or before the baseline %d",
-			suffix[0].ApplyTick, baseline)
+	if suffix[0].Frame.Seq <= fence {
+		t.Fatalf("the retained crossing is sequence %d, at or before the authority's fence %d",
+			suffix[0].Frame.Seq, fence)
 	}
 	if dropped != 0 {
 		t.Fatalf("retention dropped %d records in a four-tick window", dropped)
@@ -123,13 +131,14 @@ func TestLocalCrossingInFlightAtTheBaselineSurvivesExactlyOnce(t *testing.T) {
 	if got := guest.Position().Tick; got != baseline {
 		t.Fatalf("guest tick %d, want the host baseline %d", got, baseline)
 	}
-	suffix, dropped := replaySuffixOf(t, guest, baseline)
+	fence := hostFence(t, host, guestParticipant)
+	suffix, dropped := replaySuffixOf(t, guest, fence)
 	if len(suffix) != 1 {
-		t.Fatalf("baseline %d offered %d crossings, want the one still in flight", baseline, len(suffix))
+		t.Fatalf("fence %d offered %d crossings, want the one still in flight", fence, len(suffix))
 	}
-	if suffix[0].ApplyTick <= baseline {
-		t.Fatalf("the in-flight crossing applies at tick %d, at or before baseline %d",
-			suffix[0].ApplyTick, baseline)
+	if suffix[0].Frame.Seq <= fence {
+		t.Fatalf("the in-flight crossing is sequence %d, at or before the fence %d",
+			suffix[0].Frame.Seq, fence)
 	}
 	if dropped != 0 {
 		t.Fatalf("retention dropped %d records in a one-crossing window", dropped)
@@ -203,9 +212,9 @@ func TestACorrectionSupersedesAuthorityFramesItAlreadyContains(t *testing.T) {
 			if err != nil {
 				t.Fatalf("capture: %v", err)
 			}
-			if cap.Header.Authority != 1 || cap.Header.AuthorityCrossingSeq == 0 {
-				t.Fatalf("capture authority fence = participant %d sequence %d, want participant 1 and a completed crossing",
-					cap.Header.Authority, cap.Header.AuthorityCrossingSeq)
+			if cap.Header.Authority != 1 || cap.Header.Crossings.Seq(1) == 0 {
+				t.Fatalf("capture fences = authority %d, participant 1 sequence %d; want participant 1 and a completed crossing",
+					cap.Header.Authority, cap.Header.Crossings.Seq(1))
 			}
 			if err := guest.corrections.install(cap); err != nil {
 				t.Fatalf("install tick %d: %v", cap.Header.Tick, err)
@@ -251,9 +260,9 @@ func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture with queued crossing: %v", err)
 	}
-	if got := queued.Header.AuthorityCrossingSeq; got != before.Header.AuthorityCrossingSeq {
-		t.Fatalf("queued crossing advanced authority fence from %d to %d before dispatch",
-			before.Header.AuthorityCrossingSeq, got)
+	if got := queued.Header.Crossings.Seq(1); got != before.Header.Crossings.Seq(1) {
+		t.Fatalf("queued crossing advanced the authority's fence from %d to %d before dispatch",
+			before.Header.Crossings.Seq(1), got)
 	}
 	if got := cursorCell(t, host, 0); got != cell {
 		t.Fatalf("queued crossing moved cursor from %v to %v before dispatch", cell, got)
@@ -264,9 +273,9 @@ func TestAuthorityCrossingFenceWaitsForDispatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("capture after dispatch: %v", err)
 	}
-	if got := applied.Header.AuthorityCrossingSeq; got <= queued.Header.AuthorityCrossingSeq {
-		t.Fatalf("dispatched crossing left authority fence at %d, want after %d",
-			got, queued.Header.AuthorityCrossingSeq)
+	if got := applied.Header.Crossings.Seq(1); got <= queued.Header.Crossings.Seq(1) {
+		t.Fatalf("dispatched crossing left the authority's fence at %d, want after %d",
+			got, queued.Header.Crossings.Seq(1))
 	}
 	if got := cursorCell(t, host, 0); got.X != cell.X+1 || got.Y != cell.Y {
 		t.Fatalf("dispatched crossing moved cursor from %v to %v", cell, got)
@@ -309,7 +318,7 @@ func TestARewindDoesNotReuseAProductionEpoch(t *testing.T) {
 		t.Fatalf("guest moved from host cell %v to %v", before, moved)
 	}
 
-	suffix, dropped := replaySuffixOf(t, guest, baseline)
+	suffix, dropped := replaySuffixOf(t, guest, hostFence(t, host, guestParticipant))
 	if len(suffix) != 1 || dropped != 0 {
 		t.Fatalf("post-rewind suffix has %d records and %d drops, want one healthy record",
 			len(suffix), dropped)
@@ -418,7 +427,6 @@ func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
 	if err := host.PublishCorrection(); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
-	baseline := host.Position().Tick
 
 	// Past the record bound inside one window. Nothing an ordinary session does
 	// reaches this — the bounds are far wider than a cadence — but a participant
@@ -432,7 +440,7 @@ func TestAnIncompleteSuffixFallsBackToTheAuthority(t *testing.T) {
 	if _, dropped := src.ReplaySuffixSize(); dropped == 0 {
 		t.Fatal("retention dropped nothing, so there is no hole to refuse")
 	}
-	if _, _, ok := src.LocalReplaySuffix(baseline); ok {
+	if _, _, ok := src.LocalReplaySuffix(hostFence(t, host, guestParticipant)); ok {
 		t.Fatal("a suffix with a hole was offered as if it were complete")
 	}
 
@@ -514,23 +522,35 @@ func cursorCell(t *testing.T, a *App, slot uint8) component.PositionComponent {
 // replaySourceOf reaches the barrier that retains the suffix.
 func replaySourceOf(t *testing.T, a *App) replaySource {
 	t.Helper()
-	src := a.replaySourceLocked()
+	src, _ := a.replaySource()
 	if src == nil {
 		t.Fatal("this run has no barrier to retain a suffix")
 	}
 	return src
 }
 
-// replaySuffixOf reads what a guest would replay onto one baseline.
-func replaySuffixOf(t *testing.T, a *App, baseline uint64) ([]event.ScheduledWireFrame, int64) {
+// replaySuffixOf reads what a participant would replay onto one fence.
+func replaySuffixOf(t *testing.T, a *App, fence uint64) ([]event.ScheduledWireFrame, int64) {
 	t.Helper()
 	src := replaySourceOf(t, a)
-	frames, _, ok := src.LocalReplaySuffix(baseline)
+	frames, _, ok := src.LocalReplaySuffix(fence)
 	if !ok {
 		t.Fatal("the suffix is unavailable before anything has been dropped")
 	}
 	_, dropped := src.ReplaySuffixSize()
 	return frames, dropped
+}
+
+// hostFence is what the authority's world currently holds of one participant's
+// ordinary crossings: the boundary a correction taken now would carry, which is
+// what the guest measures its own suffix against.
+func hostFence(t *testing.T, host *App, participant network.PeerID) uint64 {
+	t.Helper()
+	cap, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	return cap.Header.Crossings.Seq(participant)
 }
 
 // goldMember is one member of a gold run, with the cell and rune a typist needs.
@@ -563,4 +583,101 @@ func goldRun(t *testing.T, a *App) []goldMember {
 	})
 	slices.SortFunc(run, func(a, b goldMember) int { return cmp.Compare(a.cell.X, b.cell.X) })
 	return run
+}
+
+// TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt is the regression this
+// whole fence exists for, driven end to end.
+//
+// What a player sees when it is wrong: they press a key, their cursor moves, and a
+// fifth of a second later it jumps back to where it was — then moves again. On one
+// machine the link never misses the playout lead and it almost never happens; add
+// Internet delay and it is the ordinary case for every action a correction
+// straddles.
+//
+// The mechanism is a boundary that asks the wrong question. The guest produces a
+// crossing for tick T+3 and applies it at once; the host has not received it when it
+// reads its world at T+9, so the capture cannot contain it. Judging membership by
+// tick, the guest sees an apply tick six ticks in the past, concludes the correction
+// already holds the action, and drops it — undoing its own keystroke. The host
+// applies the late frame when it finally arrives and the next capture puts it back,
+// which is the second half of the flicker.
+//
+// The fence asks the right question: the capture says how much of this guest's
+// stream the authority had, and everything past that is replayed.
+func TestALateGuestActionIsNotUndoneByTheCorrectionThatMissedIt(t *testing.T) {
+	t.Parallel()
+	host, guest := pair(t, 0x5EEDBEEF, 0)
+	mirrorCursors(t, host, guest)
+
+	// Delay only what the host receives, by twice the playout lead. The guest's
+	// crossing will pass its agreed apply tick before the host has seen it, which is
+	// exactly a link that cannot hold the lead.
+	lagHostReceive(t, host, 2*parameter.NetworkBarrierDelayTicks)
+
+	before := cursorCell(t, guest, 1)
+	inject(t, guest, intentMotion(input.MotionRight, 3))
+	moved := cursorCell(t, guest, 1)
+	if moved.X != before.X+3 || moved.Y != before.Y {
+		t.Fatalf("the guest's own motion moved its cursor from %v to %v", before, moved)
+	}
+
+	// Past the apply tick the crossing named, while the shaped link still holds it.
+	for range 2 * parameter.NetworkBarrierDelayTicks {
+		host.Tick(1)
+		guest.Tick(1)
+	}
+	if got := cursorCell(t, host, 1); got != before {
+		t.Fatalf("the host already applied the crossing at %v; the link is not lagging", got)
+	}
+
+	cap, err := host.CaptureShared()
+	if err != nil {
+		t.Fatalf("capture: %v", err)
+	}
+	// The fixture is only the regression if the capture genuinely straddles the
+	// crossing: past its apply tick, and behind its sequence.
+	fence := cap.Header.Crossings.Seq(guestParticipant)
+	suffix, _ := replaySuffixOf(t, guest, fence)
+	if len(suffix) == 0 {
+		t.Fatal("the guest retained nothing the capture is missing")
+	}
+	if suffix[0].ApplyTick > cap.Header.Tick {
+		t.Fatalf("the retained crossing applies at tick %d, still ahead of the capture at %d; "+
+			"this is the ordinary in-flight case, not the late one",
+			suffix[0].ApplyTick, cap.Header.Tick)
+	}
+
+	if err := guest.corrections.install(cap); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the correction undid the guest's own action: cursor at %v, want %v", got, moved)
+	}
+
+	// And it survives the ticks that follow, rather than being undone a moment later
+	// by the copy the barrier still holds.
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		guest.Tick(1)
+	}
+	if got := cursorCell(t, guest, 1); got != moved {
+		t.Fatalf("the guest's cursor drifted to %v after the install, want %v", got, moved)
+	}
+}
+
+// lagHostReceive delays everything one instance receives, leaving what it sends
+// untouched. That asymmetry is the condition: the guest's crossings arrive after the
+// ticks they named while the authority's corrections still reach the guest on time.
+func lagHostReceive(t *testing.T, a *App, ticks uint64) {
+	t.Helper()
+	var port engine.NetworkPort
+	a.World().RunSafe(func() {
+		if r := a.World().Resources.Network; r != nil {
+			port = r.Port
+		}
+	})
+	mesh, ok := port.(*network.MeshPort)
+	if !ok {
+		t.Fatalf("this fixture no longer runs on a mesh port: %T", port)
+	}
+	mesh.SetShape(network.LinkShape{LatencyTicks: ticks})
 }
