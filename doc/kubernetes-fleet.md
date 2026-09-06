@@ -28,22 +28,6 @@ suitable for direct Internet exposure: game links are plaintext and peer identit
 is not authenticated. A VPN or authenticated TCP gateway plus restrictive
 firewalling is required until application identity and transport security land.
 
-The reported FSM stall is closed in the application layer:
-
-- the supplied host trace advances quasar to storm at tick 1829;
-- the storm circles are removed through combat over about 30 seconds, with the
-  last circle and storm root ending at tick 2434;
-- the main region resumes at tick 2435;
-- the stuck guest was therefore not waiting on a host FSM transition—it retained
-  Player-domain drain/grayout state after a correction skipped the release path;
-- live FSM imports now reconcile only explicitly marked persistent `ClassLocal`
-  lifecycle events; staging remains side-effect free;
-- quasar, storm, tower, placeholder, and tower-defense holds use paired parent
-  lifecycle states, so whole-region retirement is an exit;
-- delayed actions now restore by deterministic compiled identity rather than by
-  an unrelated queue index;
-- quasar zap rendering intersects its ellipse with visible map bounds on both axes.
-
 This removes the gameplay blocker for fleet testing. It does not remove the
 security, allocation, and graceful-drain work below.
 
