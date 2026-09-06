@@ -734,6 +734,13 @@ one whose filesystem is not where anybody will look, and a console write into a
 run that owns the alternate screen is corruption rather than output — so it stays
 off by default and belongs to runs with no terminal.
 
+Which one a deployed session uses is decided by who has to read it. `-log-stdout`
+is `kubectl logs` and nothing else. `-l=DIR` onto a shared volume is what lets a
+[LogWisp](https://github.com/lixenwraith/logwisp) sidecar tail the directory, put
+the same lines on its own stdout, and serve them live as Server-Sent Events — which
+also makes the log a metric stream, because §6's periodic snapshot emits the whole
+status registry into it. See [deployment](kube_docker_deploy.md) §9.
+
 At the `app.Config` boundary, zero means "use the parameter default" while a
 negative `StatTicks`/`RecTicks` means disabled. The CLI therefore maps an
 explicit `-lt=0` or `-lr=0` to `-1`; embedders must preserve the same

@@ -34,44 +34,55 @@ func get(t *testing.T, url string) (int, string) {
 	return resp.StatusCode, string(body)
 }
 
-// TestTheProbesAnswerSeparately is the distinction the endpoint exists to make.
-// A run that is not live should be restarted; one that is merely not ready should
-// stop being sent participants, and answering both with one code would conflate
-// "this pod is broken" with "this match is full".
-func TestTheProbesAnswerSeparately(t *testing.T) {
+// TestHealthCodeIsLivenessAndTheBodyIsEverythingElse pins the collapse of the two
+// old probes into one. The code answers exactly one question — should this process
+// still be running — and readiness, which is a different question with a different
+// audience, is a field an allocator reads rather than a failure it infers.
+func TestHealthCodeIsLivenessAndTheBodyIsEverythingElse(t *testing.T) {
 	t.Parallel()
 	var state atomic.Pointer[Snapshot]
-	state.Store(&Snapshot{Live: true, Ready: true})
+	state.Store(&Snapshot{Live: true, Ready: true, Detail: map[string]string{"phase": "occupied"}})
 	base := serve(t, func() Snapshot { return *state.Load() }, nil)
 
-	if code, _ := get(t, base+"/healthz"); code != http.StatusOK {
-		t.Fatalf("live run answered /healthz with %d", code)
+	code, body := get(t, base+"/health")
+	if code != http.StatusOK {
+		t.Fatalf("a live run answered /health with %d", code)
 	}
-	if code, _ := get(t, base+"/readyz"); code != http.StatusOK {
-		t.Fatalf("ready run answered /readyz with %d", code)
+	if !strings.Contains(body, "live=true ready=true") || !strings.Contains(body, "phase=occupied") {
+		t.Fatalf("the body does not carry the run's own words: %q", body)
 	}
 
-	// Full, but healthy: the Service must stop routing, the orchestrator must not
-	// restart.
+	// Full, or draining: not a process to restart, and not one to send a player to.
 	state.Store(&Snapshot{Live: true, Ready: false, Reason: "session at capacity"})
-	if code, _ := get(t, base+"/healthz"); code != http.StatusOK {
-		t.Fatalf("a full but live run answered /healthz with %d, want 200", code)
+	code, body = get(t, base+"/health")
+	if code != http.StatusOK {
+		t.Fatalf("a full but live run answered %d, want 200; being full is not a fault", code)
 	}
-	code, body := get(t, base+"/readyz")
+	if !strings.Contains(body, "ready=false") || !strings.Contains(body, "session at capacity") {
+		t.Fatalf("the body did not say it was full: %q", body)
+	}
+
+	// Stalled: the one condition the code exists to report.
+	state.Store(&Snapshot{Live: false, Ready: false, Reason: "clock stalled"})
+	code, body = get(t, base+"/health")
 	if code != http.StatusServiceUnavailable {
-		t.Fatalf("a full run answered /readyz with %d, want 503", code)
+		t.Fatalf("a stalled run answered %d, want 503", code)
 	}
-	if !strings.Contains(body, "session at capacity") {
+	if !strings.Contains(body, "clock stalled") {
 		t.Fatalf("the body did not carry the reason: %q", body)
 	}
+}
 
-	// Stalled: not live, and therefore not ready whatever it thinks of its roster.
-	state.Store(&Snapshot{Live: false, Ready: true, Reason: "tick stalled"})
-	if code, _ := get(t, base+"/healthz"); code != http.StatusServiceUnavailable {
-		t.Fatalf("a stalled run answered /healthz with %d, want 503", code)
-	}
-	if code, _ := get(t, base+"/readyz"); code != http.StatusServiceUnavailable {
-		t.Fatal("a run that is not live reported itself ready")
+// TestTheRetiredProbePathsAreGone keeps the collapse honest. A manifest still
+// pointing at /healthz must fail loudly rather than fall through to something that
+// answers 200 for a different reason.
+func TestTheRetiredProbePathsAreGone(t *testing.T) {
+	t.Parallel()
+	base := serve(t, func() Snapshot { return Snapshot{Live: true, Ready: true} }, nil)
+	for _, path := range []string{"/healthz", "/readyz"} {
+		if code, _ := get(t, base+path); code != http.StatusNotFound {
+			t.Fatalf("%s answered %d, want 404", path, code)
+		}
 	}
 }
 

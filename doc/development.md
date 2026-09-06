@@ -122,7 +122,7 @@ useful CI addition even though the current workflow does not perform one.
 | `-host <address>` | Bind a session, for example `:7777`. |
 | `-serve <address>` | Bind a headless session with no local player: a dedicated host. |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. Omitted on a server, the first guest's terminal sizes the session. |
-| `-probe <address>` | Serve liveness, readiness and metrics for a `-serve` run. |
+| `-probe <address>` | Serve `/health` and `/metrics` for a `-serve` run. |
 | `-first-join <d>` | End a `-serve` run if no guest has connected within `d`; zero waits forever. |
 | `-empty <d>` | End a `-serve` run `d` after the last guest leaves; zero keeps the session. Also the window a dropped guest has to reclaim its slot. |
 | `-drain <d>` | How long a termination signal waits for a `-serve` roster to empty before exiting anyway; zero exits at once, and a second signal always does. |
@@ -360,6 +360,19 @@ The replay path rebuilds seed, config/content, timing, and geometry from its
 anchor rather than `buildConfig`; normal gameplay flags do not override those
 values. Session logging and `-dev` are still applied before playback starts;
 `-j` is an App config flag and does not journal a replay.
+
+### Manual scenarios
+
+`test/scenario.sh` is the command reference for running a setup by hand: `solo`,
+`host`, `join`, `serve`, `serve-fleet`, `probe`, `pair`, and the automated `check`,
+`lifetime`, `drain`, `identity` and `image` checks that print PASS or FAIL.
+
+```sh
+./test/scenario.sh list
+./test/scenario.sh all
+```
+
+See [test/README.md](../test/README.md).
 
 ## 5. Validation and tests
 

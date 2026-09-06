@@ -21,6 +21,7 @@ you type.
 | Drain | 20 s on `SIGTERM`, inside a 30 s termination grace period. |
 | Trigger | The website's allocator, on a player's request. Nothing is running when nobody is playing. |
 | Image | `scratch` + one static binary, about 13 MB, non-root, read-only root filesystem, no shell. |
+| Logs and metrics | JSON lines to a shared in-memory volume; a LogWisp sidecar puts them on its stdout and serves them live as Server-Sent Events. The metrics travel in that stream. |
 | Game transport | Raw framed TCP, one long-lived connection per player. Not HTTP, so not Ingress. |
 
 A session is a thing that ends, which is why it is a `Job` and not a `Deployment`.
@@ -36,6 +37,7 @@ flowchart LR
     Site -->|"host:port"| Player
     Player -->|"vif -join, TCP 7777"| NP["NodePort"] --> Pod
     Kubelet["kubelet + Prometheus"] -->|"7778, cluster-internal"| Pod
+    Pod --> Vol["log volume"] --> Wisp["logwisp sidecar"] -->|"SSE, cluster-internal"| Ops["operator"]
 ```
 
 ## 2. Arch guest prerequisites
@@ -140,6 +142,7 @@ sudo kubectl apply -f deploy/k3s/00-namespace.yaml
 sudo kubectl apply -f deploy/k3s/10-quota.yaml
 sudo kubectl apply -f deploy/k3s/20-networkpolicy.yaml
 sudo kubectl apply -f deploy/k3s/40-allocator-rbac.yaml
+sudo kubectl apply -f deploy/k3s/50-logwisp.yaml
 ```
 
 These are the boundary. The namespace enforces `restricted` Pod Security, the
@@ -185,19 +188,23 @@ Then confirm each of these:
 | Nobody joins for 90 s | Pod exits 0; log says `session ended … no guest connected within 1m30s`; Job completes; the Service is removed with it. |
 | A guest joins and quits | Log says `roster empty for 1m30s` 90 s later, and the pod exits 0. |
 | A guest quits and rejoins within 90 s | The session continues, and the player is back in the slot their departure released. |
-| `kubectl -n vif delete job …` while a guest plays | Log says `signal received … phase=draining`; `/readyz` is 503 and `/healthz` is 200; the pod exits when the roster empties or after 20 s. |
-| Roster at `-players` | `/readyz` 503 with `session at capacity`; the guests already in it keep playing. |
+| `kubectl -n vif delete job …` while a guest plays | Log says `signal received … phase=draining`; `/health` stays 200 and its body reports `ready=false`; the pod exits when the roster empties or after 20 s. |
+| Roster at `-players` | `/health` 200 with `ready=false reason=session at capacity`; the guests already in it keep playing. |
 
-The probe answers from inside the cluster only:
+The operator ports answer from inside the cluster only:
 
 ```sh
-sudo kubectl -n vif port-forward job/vif-session-7f3c1a 7778:7778 &
-curl -s localhost:7778/readyz
+sudo kubectl -n vif port-forward job/vif-session-7f3c1a 7778:7778 8080:8080 &
+curl -s localhost:7778/health          # one path: code is liveness, body is the rest
+curl -s localhost:7778/metrics | head
+curl -sN localhost:8080/stream | head  # the live log, metrics included
 ```
 
-`/readyz` reports `phase` and `expires_in`, which is what an allocator needs and a
-roster count cannot say: not just how many are in the session, but how long it has
-left before it ends itself.
+There is one health path. Its status code answers one question — should this process
+still be running — and everything else is in the body: `ready`, which is whether a
+dial would be admitted, `phase`, and `expires_in`. That last pair is what an
+allocator needs and a roster count cannot say: not how many are in the session, but
+how long it has left before it ends itself.
 
 ## 7. What the network and firewall task must provide
 
@@ -207,7 +214,7 @@ This is the repository-side statement of the requirement; the FreeBSD routing an
 | Requirement | Detail |
 |---|---|
 | Forward the session port pool | TCP 31700-31709 from the public address to the Arch guest. Ten ports, one per session, matching `service-node-port-range`. |
-| Never forward the probe port | 7778 is unauthenticated operational data — roster, tick, remaining lifetime. It stays inside the cluster. |
+| Never forward the operator ports | 7778 (health, metrics) and 8080 (the log stream) are unauthenticated operational data — roster, tick, remaining lifetime, and every line the session writes. They stay inside the cluster. |
 | Never forward the K3s API | TCP 6443 is reachable from the operator's network only. |
 | Hold idle TCP open | A session holds one long-lived connection per player. Every stateful hop must keep an idle mapping alive for at least the 90 s empty grace, and preferably a whole match; test 30 minutes. |
 | Preserve the client source address | The Services use `externalTrafficPolicy: Local`. A NAT hop that rewrites the source makes per-address admission limits meaningless. |
@@ -226,11 +233,12 @@ against these objects:
 2. **Create the Job first, then the Service** with `ownerReferences` pointing at the
    Job's UID. That is what makes the endpoint disappear with the session instead of
    holding a port against a match that no longer exists.
-3. **Wait for readiness, not for the pod to exist.** A pod that is `Running` may
-   still be building its world. `/readyz` 200 is the moment a dial is admitted, and
-   the player's 90-second window has already started.
-4. **Give the player `host:port` and nothing else.** There is no session token yet;
-   see the blockers below.
+3. **Wait for the health body, not for the pod to exist.** A pod that is `Running`
+   may still be building its world. `live=true ready=true` is the moment a dial is
+   admitted, and the player's 90-second window has already started.
+4. **Give the player `host:port`.** The commissioned endpoint is the only thing
+   joining the website to the container; there is no credential and none is planned
+   (see the fleet plan's §3 and §4).
 5. **Refuse at ten.** The quota also refuses, but an allocator that discovers the
    ceiling through an API error has already told a player they had a game.
 6. **Do not resurrect.** A completed Job is a finished match. The player asks for a
@@ -240,8 +248,12 @@ The permissions this needs, and no more, are in `deploy/k3s/40-allocator-rbac.ya
 
 ## 9. Operating
 
-**Where the session says what it did.** Logs are JSON on stdout. One line ends
-every session and names why:
+**Where the session says what it did.** Logs are JSON lines on a shared volume; the
+LogWisp sidecar puts them on its own stdout (`kubectl logs -c logwisp`) and serves
+them live on `/stream`. The session's metrics are in that same stream —
+`internal/status` emits the whole registry as `sub="stat"` records on a tick cadence
+— so watching the log is watching the gauges. One line ends every session and names
+why:
 
 ```json
 {"msg":"session ended","phase":"expired","reason":"roster empty for 1m30s","guests":0,"tick":240}
@@ -250,9 +262,10 @@ every session and names why:
 `reason` is one of: `no guest connected within …`, `roster empty for …`, `drained`,
 `drain deadline … reached holding N guest(s)`, or an operator-supplied cause.
 
-**What to alert on.** Beyond the fleet plan's list: sessions expiring with
-`no guest connected` far more often than players report failed joins, which is the
-signature of a broken path between the website and the forwarded port pool.
+**What to watch.** Sessions expiring with `no guest connected` far more often than
+players report failed joins is the signature of a broken path between the website
+and the forwarded port range — nothing inside the cluster shows it. So is the fleet
+sitting at the ten-session quota, which is a player being told there is no game.
 
 **Upgrades.** Sessions are ephemeral, so a rollout is mostly a matter of not
 starting new sessions on the old image. Point the allocator at the new digest;
@@ -266,18 +279,16 @@ must go now is drained by deleting its Job, which is a `SIGTERM` and therefore t
 
 ## 10. What this deployment does not yet have
 
-These are the repository-side blockers, tracked in full in
-[kubernetes-fleet.md](kubernetes-fleet.md) §3.
+The full list is the fleet plan's [work list](kubernetes-fleet.md#3-work-list). The
+two that decide how this may be exposed:
 
-- **No authenticated player identity, and no encryption (F1).** Anyone who can
-  reach a session's port is in it. The port pool must stay behind a VPN or a
-  trusted network until this lands. This is the reason §7 exists.
-- **No session credential (F3).** The allocator hands out an address. Nothing binds
-  the player who asked for the session to the connection that arrives, so a
-  scanner that finds an open port in the pool joins the game somebody else was
-  allocated.
-- **No build/config identity in the handshake (F2).** Two images can differ and
-  still complete a join. Run one image digest across the fleet at a time.
-- **Resource envelope is unmeasured at full roster (F5).** The 96/192 MiB and
-  100m/500m values are a starting point from single-guest measurements, not a
-  result. Measure before raising the ceiling above ten.
+- **The game port is open and unauthenticated, by decision.** Anyone who reaches it
+  can join a session. That is accepted; what is not is a stranger doing worse than
+  playing, and two windows still allow it — a peer that completes the handshake and
+  goes silent holds a fresh session open, and a peer that connects and drops during
+  the startup gate ends it. Both are confined to the moment before a session starts.
+  Until they are closed (H1), the forwarded range must stay behind a VPN or a
+  trusted client network, which is why §7 exists.
+- **The resource envelope is unmeasured at a full roster.** The values in the
+  manifest are a starting point from single-guest runs, not a result. Ten sessions
+  per node is a claim until an hour of four-player play says otherwise.

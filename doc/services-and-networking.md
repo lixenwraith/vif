@@ -232,6 +232,41 @@ only after construction does a joiner know the terminal it got, and it is adviso
 a coordinator that was given a `-size` ignores it, and one that was not uses the
 first to size the session (see [Runtime](runtime.md) §1.2).
 
+### 7.2 Join identity, and who decides it
+
+The same acceptance carries something that is not advisory at all:
+`network.PeerIdentity`, what the joiner turned out to be.
+
+The join used to be self-policed. The coordinator sent its anchor, the joiner
+compared it against its own build and refused itself, and a joiner that did not
+perform that comparison — an older client, a modified one, one that simply skipped
+it — was admitted on its word. The host is the authority over the session, so the
+host is what refuses: the joiner reports, and the coordinator decides.
+
+The identity has two halves, because they become knowable at different moments:
+
+| Half | Fields | Checked |
+|---|---|---|
+| Build | `protocol`, `simulation`, `capture_schema`, `journal_schema`, `tick_ns` | By the dialer against the offer, before it constructs a world; and again by the coordinator. |
+| Session | `seed`, `session`, `config_id`, `content_id`, `content_pin`, and the corpus file/block/line counts | By the coordinator only. A dialer has no world yet, so it has none of these. |
+
+`simulation` is `manifest.Fingerprint()`: a hash over the component list and the
+system list — names, domains, snapshot obligations, dependencies and order — which
+is what actually decides whether two participants converge. Renderers are excluded
+deliberately: presentation decides nothing about the simulation, and refusing a
+session over it would refuse one for something that could not have caused a
+divergence.
+
+The values a peer is measured against are the coordinator's own, derived from the
+anchor it offered rather than read again at reply time, so a reset between the offer
+and the acceptance cannot turn a valid join into a mismatch or the reverse. A
+mismatch names one field and both values, and carries `IdentityRefusalTag` so the
+joiner can recognise it across the wire — unlike a handoff refusal it is not worth
+retrying, because nothing about the peer will be different a second later.
+
+An offer that names no identity verifies nothing, which is what leaves a harness
+free to dial a hand-built fixture.
+
 `Coordinator.Admit` runs before `Assign`, and it is the one decision made about a
 dialer before it costs the session anything. The expensive part of a join is not
 the handshake but what follows it: on a running host the admission reads, encodes
@@ -749,44 +784,49 @@ starts keeping step with its peer the moment it has one. See
 
 ## 12. The supervised run's endpoint
 
-`-probe <address>` binds `internal/probe`, a stdlib HTTP server carrying three
-paths. It exists because a dedicated host has no screen: what a person reads from
-a status bar an orchestrator has to read over a socket, and the periodic session
-summary is inside a process nothing can reach.
+`-probe <address>` binds `internal/probe`, a stdlib HTTP server carrying two paths.
+It exists because a dedicated host has no screen: what a person reads from a status
+bar an orchestrator has to read over a socket, and the periodic session summary is
+inside a process nothing can reach.
 
-| Path | 200 when | 503 when |
+| Path | Code | Body |
 |---|---|---|
-| `/healthz` | the tick counter is advancing, the clock has not started yet, or the run is paused | the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` |
-| `/readyz` | a dial would be admitted — live, not in the lobby's closing window, the roster is below `sessionCapacity()`, and the session is neither draining nor expired | the run is not live, the lobby is closing, the session is at capacity, or its lifetime policy has stopped admitting |
-| `/metrics` | always; renders the status registry in the Prometheus text format | — |
+| `/health` | 200 while the run is live; 503 when the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` | `live`, `ready`, a `reason` when either is false, then `tick`, `clock`, `guests`, `capacity`, `address`, `phase`, and `expires_in` when a countdown is running |
+| `/metrics` | always 200 | the status registry in the Prometheus text format |
 
-The two probes answer different questions on purpose. A run that is not live
-should be restarted; one that is merely full should stop being sent participants,
-and a Service that kept routing to it would be sending them to a roster with no
-room — which they would discover only after the connect and a slot allocation.
-Readiness therefore includes a lobby that has not started: being dialled is what
-it is waiting for.
+There is one health path rather than a liveness one and a readiness one. They were
+separate while the fleet routed players through a Service that had to stop selecting
+a full pod; an allocated session is one pod behind one endpoint an allocator hands
+out directly, so the routing decision moved to the allocator, and the admission
+decision was always the application's own — a dial to a session that cannot take it
+is refused by the handshake, not by a load balancer.
+
+So the code answers one question, "should this process still be running", and
+readiness became a body field. It is a different question with a different audience:
+a full or draining session is not broken, and answering it with a failure code would
+say that it was. `ready` is the whole answer, liveness included, because it is read
+rather than inferred from a code. The reasons are ordered by which outranks which —
+not live, then ending, then closing, then at capacity — so a draining session never
+reads as merely full.
 
 Liveness is sampled across reads rather than measured inside one, because a probe
 cannot wait for a tick. Each read compares against the last, and a pause resets the
 window rather than accumulating under it: pause is an operator state, not a fault.
+The `clock` field reports what it found — `running`, `paused`, `stopped` or
+`stalled` — whatever the verdict, because a lobby that has not started is worth
+seeing and is not a fault to explain.
 
 The server binds before the lobby wait, so a run that is starting answers rather
 than refusing connections for the whole window in which it is starting.
-
-The body carries `phase` — the `internal/lifecycle` phase of an allocated session —
-and `expires_in` whenever a countdown is running. Those are what an allocator reads:
-a roster count says who is in a session, and only the phase says whether it is about
-to end. The refusals are ordered so that a draining session never reads as merely
-full; a Service that confused the two would put a draining pod back into rotation the
-moment a guest left. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 
 `/metrics` renames registry keys onto the Prometheus grammar — `vif_` plus the key
 with every character outside `[A-Za-z0-9_]` replaced by an underscore — and reports
 every value as a gauge, because the counters among them are monotone only within a
 run and a reset re-bases them. String cells are omitted: they are states whose
 natural exposition is a label set this does not model. Nothing is instrumented for
-it; it is a rendering of `internal/status`, unchanged.
+it; it is a rendering of `internal/status`, unchanged — and the same registry is
+already emitted into the log on a tick cadence, which is what makes a log stream a
+metric stream. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 
 ## 13. Adding a service
 

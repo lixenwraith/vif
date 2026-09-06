@@ -40,6 +40,13 @@ var ErrSessionEnding = errors.New("session is ending")
 // told to do with a slot nobody claimed — so the caller reports it and exits zero.
 var errSessionExpired = errors.New("session lifetime expired")
 
+// errLobbyAbandoned ends a startup gate whose guest left before confirming it
+// installed the world. On an interactive host that is a failure to report to the
+// person who started it. On a dedicated one it is not: nobody is watching, the
+// session has no participants and never had any, and the honest end is the same
+// clean exit an unclaimed window takes.
+var errLobbyAbandoned = errors.New("participant disconnected during startup")
+
 // newSessionApp resolves the startup handshake before a joining App draws a
 // seed. Interactive play and authored headless scripts share this construction.
 func newSessionApp(cfg Config) (*App, error) {
@@ -156,13 +163,6 @@ func (a *App) lobbyQuorum() int {
 	return a.sessionCapacity()
 }
 
-// localGeometry is this instance's terminal-equivalent size, as the coordinator
-// would want to hear it: the terminal's own on a run that has one, the configured
-// size on a run that does not.
-func (a *App) localGeometry() network.JoinerReport {
-	return network.JoinerReport{Width: a.ctx.Width, Height: a.ctx.Height}
-}
-
 // noteJoinerReport keeps the first geometry a guest reported. First rather than
 // smallest, and the difference is the mid-run gate: guests arrive throughout the
 // run, so "smallest" would mean shrinking the map under participants already
@@ -238,6 +238,9 @@ func (a *App) hostSlot() uint8 {
 func newJoiningApp(cfg Config) (*App, error) {
 	netCfg := network.DebugConfig(network.RolePeer, cfg.JoinAddress)
 	netCfg.OnError = logSessionError
+	// Before the world: a peer running a different protocol or a different
+	// simulation is refused by the dial rather than after it has built one.
+	netCfg.Identity = buildIdentity()
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)
@@ -271,7 +274,7 @@ func newJoiningApp(cfg Config) (*App, error) {
 	// Reported after construction, which is the whole reason the acceptance carries
 	// it rather than the dial: only now does this instance know the terminal it
 	// got. A host with no geometry of its own uses it to size the session.
-	if err := pending.Complete(nil, a.localGeometry()); err != nil {
+	if err := pending.Complete(nil, a.joinerReport()); err != nil {
 		a.Close()
 		return nil, fmt.Errorf("join reply: %w", err)
 	}
@@ -380,6 +383,11 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		Term:              term,
 		Participants:      slices.Clone(a.sessionRoster),
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		// Derived from the anchor this offer carries rather than read again, so
+		// what the coordinator later compares a joiner's report against is exactly
+		// what it offered — a reset between the two cannot turn a valid join into a
+		// mismatch or the reverse.
+		Identity: identityFromAnchor(anchor),
 	}
 }
 
@@ -623,7 +631,7 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 			a.showStartupStatus("Join rejected: " + err.Error() + "; still waiting")
 		case <-port.Changes():
 			if failOnDisconnect && port.PeerCount() < expectedPeers {
-				return errors.New("participant disconnected during startup")
+				return errLobbyAbandoned
 			}
 		}
 	}

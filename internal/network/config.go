@@ -71,6 +71,16 @@ type Config struct {
 	ParticipantID     PeerID
 	BarrierDelayTicks uint64
 
+	// Identity is the build half of what this peer is: the wire contract, the
+	// simulation its manifest assembles, and the two layout schemas. A dialer
+	// compares it against the offer before constructing a world from that offer, so
+	// a peer that cannot be in the session finds out before paying for the attempt.
+	// The session half is not here because it does not exist yet; see PeerIdentity.
+	//
+	// A zero Protocol disables the check, which leaves a harness free to dial a
+	// hand-built fixture.
+	Identity PeerIdentity
+
 	// Timing
 	ConnectTimeout    time.Duration
 	ReadTimeout       time.Duration

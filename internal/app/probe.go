@@ -45,26 +45,30 @@ func (a *App) closeProbe() {
 	a.probe = nil
 }
 
-// probeSnapshot answers both probes from one read of the run.
+// probeSnapshot answers the endpoint from one read of the run.
 //
-// Liveness is the tick counter moving, which is the one thing that distinguishes a
+// Live is the tick counter moving, which is the one thing that distinguishes a
 // host still simulating its session from a process that is merely still resident.
 // It is sampled across reads rather than measured inside one: a probe cannot wait
 // for a tick, so it compares this read against the last and calls the run stalled
 // only when the clock is running, is not paused, and has not moved in
 // ProbeStallInterval.
 //
-// Readiness is whether a dial would be admitted, which is deliberately not the
-// same question. A lobby waiting for its first guest is ready — being dialled is
-// what it is waiting for — and a session at capacity is not, because a Service
-// that kept routing to it would be sending participants to a roster with no room.
+// Ready is whether a dial would be admitted, which is deliberately not the same
+// question and deliberately not the status code. A lobby waiting for its first
+// guest is ready — being dialled is what it is waiting for — and a session at
+// capacity or on its way out is not, but neither is a process to restart.
+//
+// A reason is written only when one of the two is false. A healthy session has
+// nothing to explain, and a line explaining it anyway is a line an operator learns
+// to read past.
 func (a *App) probeSnapshot() probe.Snapshot {
 	tick := a.Position().Tick
 	now := time.Now() // [wall] a stall is a wall-clock condition, not a game one
 	paused := a.ctx.TimeCtl.IsPaused()
 	running := a.scheduler != nil && a.scheduler.Running()
 
-	live, reason := a.observeTick(tick, now, running, paused)
+	live, clock := a.observeTick(tick, now, running, paused)
 
 	guests := a.guestCount()
 	capacity := a.sessionCapacity()
@@ -75,14 +79,17 @@ func (a *App) probeSnapshot() probe.Snapshot {
 	// supplies the observations; this settles nothing the loop has not already
 	// reached, and reports what it finds.
 	life := a.life.State(now)
-	ready := !closing && guests < capacity && life.Admit
+	ready := live && !closing && guests < capacity && life.Admit
+
+	// Ordered by which outranks which: a session that is ending is not merely
+	// full, and one that is not live is neither.
+	var reason string
 	switch {
-	case !ready && !life.Admit:
-		// First, because it outranks the others: a draining session is not merely
-		// full, and a Service that read "at capacity" would put it back in rotation
-		// as soon as a guest left.
+	case !live:
+		reason = "clock " + clock
+	case !life.Admit:
 		reason = life.Phase.String() + ": " + life.Reason
-	case !ready && closing:
+	case closing:
 		reason = "lobby closing"
 	case !ready:
 		reason = "session at capacity"
@@ -90,6 +97,7 @@ func (a *App) probeSnapshot() probe.Snapshot {
 
 	detail := map[string]string{
 		"tick":     strconv.FormatUint(tick, 10),
+		"clock":    clock,
 		"guests":   strconv.Itoa(guests),
 		"capacity": strconv.Itoa(capacity),
 		"address":  a.cfg.HostAddress,
@@ -110,7 +118,9 @@ func (a *App) probeSnapshot() probe.Snapshot {
 }
 
 // observeTick folds one probe read into the stall detector and reports whether the
-// run is live. Caller supplies the sample so both probes share one.
+// run is live, and what its clock is doing. The clock word is reported whatever the
+// verdict: an operator reading a healthy session still wants to know whether it is
+// ticking or waiting in a lobby, and that is not a fault to explain.
 func (a *App) observeTick(tick uint64, now time.Time, running, paused bool) (bool, string) {
 	a.probeMu.Lock()
 	defer a.probeMu.Unlock()
@@ -124,12 +134,12 @@ func (a *App) observeTick(tick uint64, now time.Time, running, paused bool) (boo
 		// Not started, or stopped on the way out. Neither is a fault: the lobby
 		// has not released tick zero yet, and a run that is shutting down is not
 		// one to restart.
-		return true, "clock not running"
+		return true, "stopped"
 	case paused:
 		a.probeAt = now // a pause is not a stall; do not accumulate one under it
 		return true, "paused"
 	case now.Sub(a.probeAt) > parameter.ProbeStallInterval:
-		return false, "tick stalled"
+		return false, "stalled"
 	}
-	return true, ""
+	return true, "running"
 }

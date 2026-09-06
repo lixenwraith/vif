@@ -1,0 +1,72 @@
+# Live log streaming beside a session.
+#
+# The metrics a session publishes are already in its log: internal/status emits the
+# whole registry as `sub="stat"` records on a tick cadence, one record per group, so
+# a reader of the log stream is reading the gauges too. What was missing was a way
+# to read that stream while the session is running, from somewhere other than the
+# node — `kubectl logs -f` is that for an operator with cluster access, and nothing
+# for anyone else.
+#
+# LogWisp (github.com/lixenwraith/logwisp) is the piece that closes it: a single
+# static binary that tails a directory of JSON lines and serves them as
+# Server-Sent Events. It runs as a sidecar rather than being linked into vif,
+# because a session process that also served a log stream would be a session
+# process with a second listener and a second failure mode.
+#
+# Apply this ConfigMap once; the session template mounts it when the sidecar is
+# enabled. See doc/kube_docker_deploy.md §9.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vif-logwisp
+  namespace: vif
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/component: logs
+data:
+  logwisp.toml: |
+    # One pipeline: the session's log directory in, two sinks out.
+    quiet = false
+    status_reporter = false
+
+    [logging]
+    output = "stderr"
+    level = "warn"
+
+    [[pipelines]]
+    name = "session"
+
+    # raw, because the entries are already the JSON lines vif wrote. Reformatting
+    # them would re-wrap one JSON document inside another and cost every reader a
+    # second parse for nothing.
+    [pipelines.flow.format]
+    type = "raw"
+
+    [[pipelines.plugin_sources]]
+    id = "vif"
+    type = "file"
+    [pipelines.plugin_sources.config]
+    directory = "/var/log/vif"
+    pattern = "vif-log-*.jsonl"
+
+    # The container's own stdout, so `kubectl logs -c logwisp` shows the session's
+    # log even though the session writes to a file rather than to stdout.
+    [[pipelines.plugin_sinks]]
+    id = "stdout"
+    type = "console"
+    [pipelines.plugin_sinks.config]
+    target = "stdout"
+
+    # Server-Sent Events on 8080, cluster-internal. Both endpoints are
+    # unauthenticated and the stream sends Access-Control-Allow-Origin: *, so the
+    # NetworkPolicy in 20-networkpolicy.yaml is what keeps it off the player path
+    # — treat it exactly like the probe port.
+    [[pipelines.plugin_sinks]]
+    id = "stream"
+    type = "http"
+    [pipelines.plugin_sinks.config]
+    host = "0.0.0.0"
+    port = 8080
+    stream_path = "/stream"
+    status_path = "/status"
+    max_connections = 8

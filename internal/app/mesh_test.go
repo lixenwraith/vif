@@ -300,7 +300,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 			_ = pending.Complete(err, network.JoinerReport{})
 			t.Fatalf("guest %d identity: %v", i+1, err)
 		}
-		if err := pending.Complete(nil, network.JoinerReport{}); err != nil {
+		if err := pending.Complete(nil, g.joinerReport()); err != nil {
 			t.Fatalf("guest %d reply: %v", i+1, err)
 		}
 		guests = append(guests, g)

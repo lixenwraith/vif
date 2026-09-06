@@ -12,9 +12,10 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/resource"
 )
 
-// lifetimeServer is probeServer with a lifetime policy: a dedicated host that has
-// been allocated on somebody's behalf rather than started by hand.
-func lifetimeServer(t *testing.T, players int, p lifecycle.Policy) *App {
+// supervisedServer is a dedicated host with a probe and, optionally, the lifetime
+// bounds an allocated session carries. The zero policy is the host an operator
+// starts by hand: supervised, but ended by the person who started it.
+func supervisedServer(t *testing.T, players int, p lifecycle.Policy) *App {
 	t.Helper()
 	a, err := New(Config{
 		Mode: ModeServer, HostAddress: "127.0.0.1:0", Participants: players,
@@ -77,7 +78,7 @@ func TestAnUnclaimedSessionEndsItsOwnLobby(t *testing.T) {
 // host is supervised by the person who started it, and nothing here may end it.
 func TestAnUnboundedLobbyKeepsWaiting(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 2, lifecycle.Policy{})
+	a := supervisedServer(t, 2, lifecycle.Policy{})
 	a.life.Start(time.Now())
 
 	st := a.life.State(time.Now().Add(72 * time.Hour))
@@ -92,12 +93,62 @@ func TestAnUnboundedLobbyKeepsWaiting(t *testing.T) {
 	}
 }
 
+// TestWhatTheProbeReportsAboutAdmission pins the one field that is not the status
+// code. Readiness is "would a dial be admitted", which is neither liveness nor "the
+// session has started": a lobby waiting for its first guest is ready, because being
+// dialled is what it is waiting for.
+//
+// The refusals stay distinguishable. A full session and a draining one are both
+// unready and mean opposite things — one takes a player as soon as a slot frees, the
+// other never will — and an allocator that read them the same way would keep
+// choosing a session on its way out.
+func TestWhatTheProbeReportsAboutAdmission(t *testing.T) {
+	t.Parallel()
+	a := supervisedServer(t, 2, lifecycle.Policy{Empty: time.Minute, Drain: time.Minute})
+	a.life.Start(time.Now())
+
+	if snap := a.probeSnapshot(); !snap.Ready {
+		t.Fatalf("an empty lobby is not ready: %s", snap.Reason)
+	}
+	seatGuests(a, 1)
+	if snap := a.probeSnapshot(); !snap.Ready {
+		t.Fatalf("a lobby with room is not ready: %s", snap.Reason)
+	}
+
+	seatGuests(a, 2)
+	full := a.probeSnapshot()
+	if full.Ready || full.Reason != "session at capacity" {
+		t.Fatalf("a full session reported ready=%v reason=%q", full.Ready, full.Reason)
+	}
+	if !full.Live {
+		t.Fatal("a full session reported itself dead; capacity is not a fault")
+	}
+	if _, err := a.assignParticipant(); errors.Is(err, ErrSessionEnding) {
+		t.Fatal("a full session refused as if it were ending")
+	}
+
+	// The closing window is a third refusal: neither gate can serve a dial there.
+	seatGuests(a, 1)
+	a.lobbyClosing.Store(true)
+	if snap := a.probeSnapshot(); snap.Ready || snap.Reason != "lobby closing" {
+		t.Fatalf("the closing lobby reported ready=%v reason=%q", snap.Ready, snap.Reason)
+	}
+	a.lobbyClosing.Store(false)
+
+	// And a session on its way out outranks all of them.
+	a.interrupt(time.Now(), "signal terminated")
+	draining := a.probeSnapshot()
+	if draining.Ready || draining.Reason == "session at capacity" {
+		t.Fatalf("a draining session reported ready=%v reason=%q", draining.Ready, draining.Reason)
+	}
+}
+
 // TestDrainingRefusesDialsAndReadiness is what makes a drain a drain rather than a
 // slower shutdown: the session stops being routed to and stops allocating, while
 // the guests it already holds keep playing.
 func TestDrainingRefusesDialsAndReadiness(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{Empty: time.Minute, Drain: time.Minute})
+	a := supervisedServer(t, 4, lifecycle.Policy{Empty: time.Minute, Drain: time.Minute})
 	a.life.Start(time.Now())
 	seatGuests(a, 1)
 
@@ -135,37 +186,13 @@ func TestDrainingRefusesDialsAndReadiness(t *testing.T) {
 	}
 }
 
-// TestCapacityAndDrainAreDistinctRefusals keeps a full session from reading as a
-// draining one. A Service that confused them would put a draining pod back into
-// rotation as soon as a guest left.
-func TestCapacityAndDrainAreDistinctRefusals(t *testing.T) {
-	t.Parallel()
-	a := lifetimeServer(t, 1, lifecycle.Policy{Empty: time.Minute, Drain: time.Minute})
-	a.life.Start(time.Now())
-	seatGuests(a, 1)
-
-	full := a.probeSnapshot()
-	if full.Ready || full.Reason != "session at capacity" {
-		t.Fatalf("a full session reported ready=%v reason=%q", full.Ready, full.Reason)
-	}
-	if _, err := a.assignParticipant(); errors.Is(err, ErrSessionEnding) {
-		t.Fatal("a full session refused as if it were ending")
-	}
-
-	a.interrupt(time.Now(), "signal terminated")
-	draining := a.probeSnapshot()
-	if draining.Reason == "session at capacity" {
-		t.Fatal("a draining session still reports itself merely full")
-	}
-}
-
 // TestASignalReadsTheRosterItArrivesWith covers the stale-observation hazard: the
 // loop folds the roster in once a second, so a signal landing just after a guest
 // connected must read that guest rather than the loop's last empty reading — and a
 // drain that read the stale one would end a session somebody had only just joined.
 func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute, Drain: time.Minute})
+	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute, Drain: time.Minute})
 	now := time.Now()
 	a.life.Start(now)
 	a.life.Observe(a.guestCount(), now) // the loop's last tick: nobody had arrived
@@ -190,7 +217,7 @@ func TestASignalReadsTheRosterItArrivesWith(t *testing.T) {
 // inside the wait.
 func TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
+	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: 80 * time.Millisecond})
 	a.life.Start(time.Now())
 
 	port := network.NewSocketPort(network.DebugConfig(network.RoleHost, "127.0.0.1:0"))
@@ -234,7 +261,7 @@ func TestOnlyTheLobbyWaitCarriesTheFirstGuestDeadline(t *testing.T) {
 // and a grace period that counted it would never elapse.
 func TestGuestCountExcludesTheCoordinator(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{Empty: time.Minute})
+	a := supervisedServer(t, 4, lifecycle.Policy{Empty: time.Minute})
 
 	if got := a.guestCount(); got != 0 {
 		t.Fatalf("an unopened roster holds %d guests, want 0", got)
@@ -253,7 +280,7 @@ func TestGuestCountExcludesTheCoordinator(t *testing.T) {
 // runs, at the resolution the policy is written in rather than in real seconds.
 func TestVacancyGraceEndsAnEmptiedSession(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: 90 * time.Second})
+	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: 90 * time.Second})
 	now := time.Now()
 	a.life.Start(now)
 
@@ -284,9 +311,11 @@ func TestVacancyGraceEndsAnEmptiedSession(t *testing.T) {
 	}
 }
 
-// TestLifetimeBoundsAreRefusedOutsideADedicatedHost keeps a flag that ends a
-// process from silently doing nothing in a mode that has no allocator.
-func TestLifetimeBoundsAreRefusedOutsideADedicatedHost(t *testing.T) {
+// TestSupervisorFlagsAreRefusedWhereNothingWouldHonourThem keeps -probe and the
+// lifetime bounds honest: a mode with no supervisor to answer and nothing to end it
+// refuses them rather than accepting a flag that silently does nothing — and, for
+// the bounds, one that was meant to end a process.
+func TestSupervisorFlagsAreRefusedWhereNothingWouldHonourThem(t *testing.T) {
 	t.Parallel()
 	for name, mode := range map[string]Mode{
 		"play":     ModePlay,
@@ -310,6 +339,11 @@ func TestLifetimeBoundsAreRefusedOutsideADedicatedHost(t *testing.T) {
 	if err := negative.Validate(); err == nil {
 		t.Fatal("a negative lifetime bound was accepted")
 	}
+
+	probeless := Config{Mode: ModeHeadless, Width: 80, Height: 24, ProbeAddress: "127.0.0.1:0"}
+	if err := probeless.Validate(); err == nil {
+		t.Fatal("a driven run accepted a probe address it would never bind")
+	}
 }
 
 // TestAStagingWorldIsNotAnAllocatedSession covers the config a correction builds
@@ -318,7 +352,7 @@ func TestLifetimeBoundsAreRefusedOutsideADedicatedHost(t *testing.T) {
 // which would make a dedicated host unable to stage a capture at all.
 func TestAStagingWorldIsNotAnAllocatedSession(t *testing.T) {
 	t.Parallel()
-	a := lifetimeServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute})
+	a := supervisedServer(t, 4, lifecycle.Policy{FirstJoin: time.Minute, Empty: time.Minute})
 	a.cfg.ProbeAddress = "127.0.0.1:0"
 
 	tickUntilCursor(t, a)
@@ -337,5 +371,59 @@ func TestAStagingWorldIsNotAnAllocatedSession(t *testing.T) {
 	}
 	if stage.cfg.ProbeAddress != "" {
 		t.Fatal("the staging world inherited a probe address")
+	}
+}
+
+// TestLivenessDistinguishesAStalledClockFromOneThatHasNotStarted is the whole of
+// what the stall detector is for. A lobby has not released tick zero, and
+// restarting a pod for that would restart it forever.
+func TestLivenessDistinguishesAStalledClockFromOneThatHasNotStarted(t *testing.T) {
+	t.Parallel()
+	a := supervisedServer(t, 2, lifecycle.Policy{})
+	now := time.Now()
+
+	live, clock := a.observeTick(0, now, false, false)
+	if !live || clock != "stopped" {
+		t.Fatalf("an unstarted clock reported live=%v %q", live, clock)
+	}
+
+	// Running and moving.
+	if live, _ := a.observeTick(10, now, true, false); !live {
+		t.Fatal("an advancing clock reported dead")
+	}
+	// Running, not moving, but not yet past the threshold.
+	if live, _ := a.observeTick(10, now.Add(parameter.ProbeStallInterval/2), true, false); !live {
+		t.Fatal("a clock reported dead before the stall threshold")
+	}
+	// Past it.
+	live, clock = a.observeTick(10, now.Add(2*parameter.ProbeStallInterval), true, false)
+	if live || clock != "stalled" {
+		t.Fatalf("a stalled clock reported live=%v %q", live, clock)
+	}
+	// Moving again clears it, so one slow moment does not condemn the run.
+	if live, _ := a.observeTick(11, now.Add(3*parameter.ProbeStallInterval), true, false); !live {
+		t.Fatal("a clock that resumed stayed dead")
+	}
+}
+
+// TestAPausedClockIsNotAStall: pause is an operator state, not a fault, and the
+// stall clock must not accumulate under one or the run would be condemned for
+// having been paused long enough.
+func TestAPausedClockIsNotAStall(t *testing.T) {
+	t.Parallel()
+	a := supervisedServer(t, 2, lifecycle.Policy{})
+	now := time.Now()
+
+	a.observeTick(5, now, true, false)
+	for i := range 5 {
+		at := now.Add(time.Duration(i+1) * parameter.ProbeStallInterval)
+		if live, reason := a.observeTick(5, at, true, true); !live || reason != "paused" {
+			t.Fatalf("a paused clock reported live=%v %q", live, reason)
+		}
+	}
+	// And the pause left no debt behind: the first unpaused read starts its own
+	// window rather than inheriting the one the pause spanned.
+	if live, _ := a.observeTick(5, now.Add(6*parameter.ProbeStallInterval), true, false); !live {
+		t.Fatal("the run was condemned for time it spent paused")
 	}
 }

@@ -1,15 +1,24 @@
-// Package probe serves a run's liveness, readiness and metrics over HTTP.
+// Package probe serves a run's health and metrics over HTTP.
 //
-// It exists because a supervised process has to be able to answer three questions
-// from outside itself: is it alive, may it be sent work, and what is it doing. A
-// terminal game answers all three by being looked at; a dedicated host has nobody
-// looking, and its status bar, its periodic summary and its metric registry are
-// all inside a process nothing can reach.
+// It exists because a supervised process has to be able to answer two questions
+// from outside itself: should it still be running, and what is it doing. A terminal
+// game answers both by being looked at; a dedicated host has nobody looking, and
+// its status bar, its periodic summary and its metric registry are all inside a
+// process nothing can reach.
+//
+// There is one health path, not a liveness one and a readiness one. They were
+// separate while the fleet routed players through a Service that had to stop
+// selecting a full pod; an allocated session is one pod behind one endpoint an
+// allocator hands out directly, so the routing decision moved to the allocator and
+// the admission decision was always the application's own — a dial to a session
+// that cannot take it is refused by the handshake, not by a load balancer. What is
+// left is one code that says whether to restart this process, and a body that says
+// everything else, including whether a dial would currently be admitted.
 //
 // The server is deliberately small and stdlib-only. It holds no state of its own:
-// a Snapshot function supplies the run's answer to the first two questions and a
-// status registry supplies the third, so the run decides what "ready" means and
-// this only decides how to say it.
+// a Snapshot function supplies the run's answer and a status registry supplies the
+// metrics, so the run decides what its words mean and this only decides how to say
+// them.
 package probe
 
 import (
@@ -39,10 +48,11 @@ const readHeaderTimeout = 5 * time.Second
 
 // Snapshot is what a run reports about itself.
 //
-// Live and Ready are separate because they fail for different reasons and want
-// different responses: a run that is not live should be restarted, and one that is
-// merely not ready should stop being sent participants. Reason is for the person
-// reading the probe's body, never for the orchestrator, which reads only the code.
+// Live is the only field the HTTP code carries: it is "should this process still
+// be running", and nothing else is a restart. Ready is "would a dial be admitted
+// right now", which an allocator reads from the body when it is choosing where to
+// send a player — a full or draining session is not broken, and answering it with
+// a failure code would say it was. Reason is for whoever reads the body.
 type Snapshot struct {
 	Live   bool
 	Ready  bool
@@ -77,8 +87,7 @@ func New(addr string, snapshot func() Snapshot, registry *status.Registry) (*Ser
 	s := &Server{addr: addr, snapshot: snapshot, registry: registry}
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", s.handleLive)
-	mux.HandleFunc("/readyz", s.handleReady)
+	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/metrics", s.handleMetrics)
 	s.http = &http.Server{Handler: mux, ReadHeaderTimeout: readHeaderTimeout}
 	return s, nil
@@ -124,20 +133,15 @@ func (s *Server) Close() error {
 	return s.http.Shutdown(ctx)
 }
 
-func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
+// handleHealth answers the one health question. The code is the verdict a
+// supervisor acts on; the body is everything a person or an allocator wants.
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	snap := s.snapshot()
 	s.writeSnapshot(w, snap, snap.Live)
 }
 
-func (s *Server) handleReady(w http.ResponseWriter, _ *http.Request) {
-	snap := s.snapshot()
-	// Readiness implies liveness: a run that is not live is not ready either,
-	// whatever it thinks of its own roster.
-	s.writeSnapshot(w, snap, snap.Live && snap.Ready)
-}
-
-// writeSnapshot answers one probe. The body is for a person; the code is the
-// answer.
+// writeSnapshot renders one answer. The body is for a reader; the code is for the
+// supervisor.
 func (s *Server) writeSnapshot(w http.ResponseWriter, snap Snapshot, ok bool) {
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 	if ok {

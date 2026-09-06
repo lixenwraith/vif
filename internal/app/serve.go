@@ -90,6 +90,19 @@ func (a *App) Serve() error {
 		case errors.Is(err, errSessionExpired):
 			a.logSessionEnd(a.life.State(time.Now()))
 			return nil
+		case errors.Is(err, errLobbyAbandoned):
+			// The first guest connected and then left before confirming it had
+			// installed the world. On a host somebody started by hand that is a
+			// failure worth reporting; here it is a session with nobody in it and
+			// nobody watching, so it ends the way an unclaimed one does — cleanly,
+			// with a reason, so the Job completes rather than failing and the
+			// allocator can place the next request.
+			//
+			// It is also, until the lobby can be restarted in place, a window in
+			// which any peer that reaches the port first can end a session somebody
+			// else was allocated. See the hardening notes in doc/kubernetes-fleet.md.
+			a.logSessionEnd(a.life.Expire(time.Now(), "lobby abandoned before the session started"))
+			return nil
 		}
 		return err
 	}

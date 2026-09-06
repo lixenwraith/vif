@@ -41,6 +41,12 @@ type SessionOffer struct {
 	// written by a build that predates this looks like.
 	SnapshotTick  uint64 `json:"snapshot_tick,omitempty"`
 	SnapshotBytes int    `json:"snapshot_bytes,omitempty"`
+
+	// Identity is what the coordinator is. The joiner reads it before it builds a
+	// world, so a peer that cannot be in this session finds out before paying for
+	// the attempt — and the anchor comparison it already performs is left in place,
+	// because that one covers the world it is about to construct.
+	Identity PeerIdentity `json:"identity"`
 }
 
 // CarriesSnapshot reports whether the start gate is followed by a capture.
@@ -54,6 +60,13 @@ type sessionReply struct {
 	// inform what the coordinator does next — not what it has already done.
 	Width  int `json:"width,omitempty"`
 	Height int `json:"height,omitempty"`
+
+	// Identity is what the joiner turned out to be, sent with the same acceptance
+	// and not advisory at all: the coordinator refuses the join on it. A reply that
+	// carries none is a peer that predates this or one that chose not to say, and
+	// both are refused for the same reason — the authority cannot verify what it
+	// was not told.
+	Identity PeerIdentity `json:"identity"`
 }
 
 // JoinerReport is what a joining participant tells the coordinator about itself.
@@ -65,6 +78,13 @@ type sessionReply struct {
 type JoinerReport struct {
 	Width  int
 	Height int
+
+	// Identity is what this participant turned out to be, and unlike the geometry
+	// it is not advisory: the coordinator refuses the join on it. It is reported
+	// with the acceptance rather than with the dial because half of it — the seed,
+	// the configuration, the corpus that actually loaded — does not exist until the
+	// joiner has built its world.
+	Identity PeerIdentity
 }
 
 // Sized reports whether this report names a usable geometry.
@@ -201,6 +221,20 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		if reply.Error != "" {
 			err = errors.New(reply.Error)
+			return 0, err
+		}
+		// The authority's half of the join. The offer carries what this coordinator
+		// is; the reply carries what the peer turned out to be; a difference is a
+		// participant that would simulate a different game, and it is refused here
+		// rather than trusted to have refused itself.
+		//
+		// After the joiner's own refusal, because a peer that already knows why it
+		// cannot join has said so more precisely. Before Report, because a
+		// participant the session will not hold is not one to size the map from.
+		// An offer that names no identity — a harness, a test fixture — verifies
+		// nothing, and a peer answering one is not asked for anything either.
+		if err = o.Identity.Verify(reply.Identity); err != nil {
+			refuseJoin(conn, err, timeout)
 			return 0, err
 		}
 		if c.Report != nil {
@@ -387,6 +421,18 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 		_ = conn.Close()
 		return nil, SessionOffer{}, err
 	}
+	// The build half, here, before the caller constructs a world from this offer.
+	// The session half cannot be checked yet — this peer's seed, configuration and
+	// corpus do not exist until that world does — and the coordinator checks it
+	// when the acceptance reports what they turned out to be. A config that names
+	// no identity skips this, which is what leaves a harness free to dial with one
+	// side hand-built.
+	if base.Identity.Protocol != 0 {
+		if err := base.Identity.VerifyBuild(offer.Identity); err != nil {
+			_ = conn.Close()
+			return nil, SessionOffer{}, err
+		}
+	}
 	return &PendingJoin{conn: conn, base: *base, offer: offer}, offer, nil
 }
 
@@ -414,6 +460,7 @@ func (p *PendingJoin) Complete(joinErr error, report JoinerReport) error {
 		reply.Error = joinErr.Error()
 	} else {
 		reply.Width, reply.Height = report.Width, report.Height
+		reply.Identity = report.Identity
 	}
 	body, err := json.Marshal(reply)
 	if err == nil {

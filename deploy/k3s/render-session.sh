@@ -14,7 +14,7 @@
 set -eu
 
 usage() {
-	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE]" >&2
+	echo "usage: $0 SESSION_ID GAME_NODEPORT [IMAGE] [PLAYERS] [MAP_SIZE] [LOGWISP_IMAGE]" >&2
 	exit 2
 }
 
@@ -25,6 +25,7 @@ GAME_NODEPORT=$2
 IMAGE=${3:-vi-fighter:dev}
 PLAYERS=${4:-4}
 MAP_SIZE=${5:-120x40}
+LOGWISP_IMAGE=${6:-ghcr.io/lixenwraith/logwisp:latest}
 
 case "$SESSION_ID" in
 	'' | *[!a-z0-9-]* ) echo "$0: SESSION_ID must be lowercase alphanumeric or '-'" >&2; exit 2 ;;
@@ -48,5 +49,6 @@ sed \
 	-e "s|\${IMAGE}|$IMAGE|g" \
 	-e "s|\${PLAYERS}|$PLAYERS|g" \
 	-e "s|\${MAP_SIZE}|$MAP_SIZE|g" \
+	-e "s|\${LOGWISP_IMAGE}|$LOGWISP_IMAGE|g" \
 	-e '/ownerReferences:/,/blockOwnerDeletion: true/d' \
 	"$template"

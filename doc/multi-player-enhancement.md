@@ -49,7 +49,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Host loss | A reachable majority can elect an eligible retained successor under the next term. A component without a majority continues as an explicit local fork and does not merge later. |
-| Trust | Sessions are for trusted peers. Links are plaintext and unauthenticated. |
+| Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, seed, configuration and corpus, and a peer that does not match the offer is refused before it takes a roster slot. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
@@ -251,18 +251,19 @@ stop or mutate only one copy of a live session.
 
 ## 8. Remaining gaps
 
-1. **Authentication and confidentiality.** Links are plaintext. Participant
-   claims, votes, retention reports, and handoff voter lists are structurally
-   checked but not authenticated; the rules prevent races, not a hostile peer.
-   For a deployed fleet this has a sharper edge: a session is reached by its
-   address alone, so nothing binds the player an allocator gave that address to
-   the connection that arrives on it. See
-   [K3s fleet plan](kubernetes-fleet.md) §3.
-2. **Exact late guest acknowledgement.** Guest suffix membership currently uses
-   the agreed apply tick. If a link misses the playout lead and the host captures
-   before receiving that guest frame, the action can be absent from one correction
-   despite its nominal apply tick. Per-source applied sequence fences would make
-   this boundary exact as well.
+1. **Authentication and confidentiality — deferred by decision.** Links are
+   plaintext and a session is reached by its address alone. Participant claims,
+   votes, retention reports and handoff voter lists are structurally checked but
+   not authenticated; the rules prevent races, not a hostile peer. The deployed
+   fleet accepts this and hardens the open port instead; see the
+   [fleet plan](kubernetes-fleet.md) §4 for what bounds a stranger today and what
+   does not.
+2. **Exact late guest acknowledgement — deferred, with the boundary understood.**
+   Guest suffix membership uses the agreed apply tick, so a guest whose link misses
+   the playout lead can see its own action undone by one correction and redone by
+   the next. It is a bounded visual rollback rather than a divergence or a lost
+   action — the host applies a late crossing rather than discarding it. The worked
+   example and the exact fix are in the [fleet plan](kubernetes-fleet.md) §5.
 3. **Adaptive playout lead.** The three-tick lead is fixed and not graph-diameter
    aware. Cadence adapts per direct link; apply deadlines do not.
 4. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`

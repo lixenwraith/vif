@@ -105,8 +105,9 @@ that fixes its own bounds (`crop_on_resize = false`, as `config/td` does) is lef
 alone: those bounds are the scenario's statement rather than a stand-in for a
 terminal nobody has.
 
-`-probe <address>` binds a liveness, readiness and metrics endpoint for the run —
-see [Services and networking](services-and-networking.md) §12. It binds before the
+`-probe <address>` binds the health and metrics endpoint for the run — one `/health`
+path whose code is liveness and whose body carries everything else, plus `/metrics`.
+See [Services and networking](services-and-networking.md) §12. It binds before the
 lobby, because a run waiting for its first guest is a run a supervisor is watching
 start.
 
@@ -134,10 +135,16 @@ A signal reads the roster at the instant it arrives rather than the loop's last
 reading, which can be a second old: a drain that read a stale empty roster would end
 a session somebody had only just joined.
 
-`draining` and `expired` refuse a dial with `ErrSessionEnding`, and `/readyz`
-reports 503 with the phase and the time remaining while `/healthz` stays 200 — a
-drain is not a fault. The refusal is deliberately distinguishable from
-`ErrSessionStarting`: that one means retry, this one means the session is leaving.
+`draining` and `expired` refuse a dial with `ErrSessionEnding`, and `/health` keeps
+answering 200 with `ready=false` plus the phase and the time remaining — a drain is
+not a fault. The refusal is deliberately distinguishable from `ErrSessionStarting`:
+that one means retry, this one means the session is leaving.
+
+An abandoned startup gate — the first guest connects and then leaves before
+confirming it installed the world — ends a dedicated host cleanly rather than as a
+failure. On an interactive host it stays the error it always was; here there is
+nobody in the session and nobody watching, so the Job completes instead of failing
+and the allocator can place the next request.
 
 Why the process holds this rather than the orchestrator: the roster is the only
 thing that knows whether anybody is in the session, and it is inside the process. A

@@ -43,16 +43,17 @@ spec:
         - protocol: TCP
           port: game
 ---
-# The probe port, from the monitoring namespace only.
+# The operator ports, from the monitoring namespace only.
 #
-# /healthz, /readyz and /metrics describe the session's roster, tick and remaining
-# lifetime. That is operational data, it is unauthenticated, and it must never be
-# reachable from the player-facing path. The kubelet's own probes bypass the pod
-# network and are unaffected by this.
+# /health and /metrics describe the session's roster, tick and remaining lifetime,
+# and the log stream carries every line the session writes — including the metric
+# records. All of it is operational data, all of it is unauthenticated, and none of
+# it may be reachable from the player-facing path. The kubelet's own probes bypass
+# the pod network and are unaffected by this.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: allow-probe-scrape
+  name: allow-operator-ports
   namespace: vif
 spec:
   podSelector:
@@ -68,6 +69,8 @@ spec:
       ports:
         - protocol: TCP
           port: probe
+        - protocol: TCP
+          port: logstream
 # No egress allowance is defined, deliberately. A session binds two listeners and
 # accepts; it resolves no name, dials nothing, and reads no external resource, so
 # the default deny above costs it nothing. If a future feature does need to dial
