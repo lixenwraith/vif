@@ -1,0 +1,33 @@
+# The namespace every allocated session lives in.
+#
+# It is a boundary rather than a label: the quota that caps the fleet at ten
+# sessions, the default-deny network policy, and the Pod Security admission level
+# are all namespace-scoped, so a session created outside this namespace inherits
+# none of them. An allocator that can create objects anywhere else is an allocator
+# that can create an unbounded, unrestricted fleet.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: vif
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/part-of: vi-fighter-fleet
+    # Enforced, not merely audited. A session pod needs no privilege of any kind:
+    # no root, no capabilities, no host namespace, no writable root filesystem.
+    # `restricted` is the level that says so, and enforcing it means a workload
+    # that drifts from that shape is refused rather than reported.
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# The identity a session pod runs as: no role, no binding, nothing it can do. The
+# game process never calls the Kubernetes API, so the pod spec also disables the
+# token mount; this account exists so that "no permissions" is a stated fact rather
+# than a property of whatever the namespace default happens to be.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vif-session
+  namespace: vif
+automountServiceAccountToken: false

@@ -66,33 +66,46 @@ func (a *App) probeSnapshot() probe.Snapshot {
 
 	live, reason := a.observeTick(tick, now, running, paused)
 
-	a.sessionMu.Lock()
-	guests := len(a.sessionRoster)
-	if guests > 0 {
-		guests-- // the coordinator holds a roster entry and no slot
-	}
-	a.sessionMu.Unlock()
-
+	guests := a.guestCount()
 	capacity := a.sessionCapacity()
 	closing := a.lobbyClosing.Load()
-	ready := !closing && guests < capacity
+	// The lifetime policy is read rather than folded here: a probe is a read of the
+	// run, and a session that ended because an orchestrator happened to scrape it
+	// would be a session whose lifetime depended on being watched. The serve loop
+	// supplies the observations; this settles nothing the loop has not already
+	// reached, and reports what it finds.
+	life := a.life.State(now)
+	ready := !closing && guests < capacity && life.Admit
 	switch {
+	case !ready && !life.Admit:
+		// First, because it outranks the others: a draining session is not merely
+		// full, and a Service that read "at capacity" would put it back in rotation
+		// as soon as a guest left.
+		reason = life.Phase.String() + ": " + life.Reason
 	case !ready && closing:
 		reason = "lobby closing"
 	case !ready:
 		reason = "session at capacity"
 	}
 
+	detail := map[string]string{
+		"tick":     strconv.FormatUint(tick, 10),
+		"guests":   strconv.Itoa(guests),
+		"capacity": strconv.Itoa(capacity),
+		"address":  a.cfg.HostAddress,
+		"phase":    life.Phase.String(),
+	}
+	if !life.Deadline.IsZero() {
+		// What an allocator needs and a roster count cannot say: how long this
+		// session has left before it ends itself.
+		detail["expires_in"] = life.Remaining.Round(time.Second).String()
+	}
+
 	return probe.Snapshot{
 		Live:   live,
 		Ready:  ready,
 		Reason: reason,
-		Detail: map[string]string{
-			"tick":     strconv.FormatUint(tick, 10),
-			"guests":   strconv.Itoa(guests),
-			"capacity": strconv.Itoa(capacity),
-			"address":  a.cfg.HostAddress,
-		},
+		Detail: detail,
 	}
 }
 

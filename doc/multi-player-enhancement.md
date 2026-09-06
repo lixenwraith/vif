@@ -50,6 +50,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
 | Host loss | A reachable majority can elect an eligible retained successor under the next term. A component without a majority continues as an explicit local fork and does not merge later. |
 | Trust | Sessions are for trusted peers. Links are plaintext and unauthenticated. |
+| Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
 The central choice is that guests keep simulating. Determinism fills time between
 corrections, makes a converged exchange hash-only, and preserves responsive local
@@ -253,6 +254,10 @@ stop or mutate only one copy of a live session.
 1. **Authentication and confidentiality.** Links are plaintext. Participant
    claims, votes, retention reports, and handoff voter lists are structurally
    checked but not authenticated; the rules prevent races, not a hostile peer.
+   For a deployed fleet this has a sharper edge: a session is reached by its
+   address alone, so nothing binds the player an allocator gave that address to
+   the connection that arrives on it. See
+   [K3s fleet plan](kubernetes-fleet.md) §3.
 2. **Exact late guest acknowledgement.** Guest suffix membership currently uses
    the agreed apply tick. If a link misses the playout lead and the host captures
    before receiving that guest frame, the action can be absent from one correction

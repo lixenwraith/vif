@@ -1,0 +1,212 @@
+# One allocated session: one Job, one pod, one Service.
+#
+# This is a template, not an object to apply as it stands. The allocator renders
+# the placeholders below and creates the result; deploy/k3s/render-session.sh does
+# the same thing from a shell for a manual test.
+#
+#   ${SESSION_ID}      a short, unique, DNS-safe session name (e.g. 7f3c1a)
+#   ${IMAGE}           the image, pinned by digest in anything but a lab
+#   ${GAME_NODEPORT}   the node port this session is reachable on (30000-32767)
+#   ${PLAYERS}         the guest ceiling for this session (1-16)
+#   ${MAP_SIZE}        the shared map geometry, WxH (e.g. 120x40)
+#
+# Why a Job rather than a Deployment: an allocated session is a thing that ends.
+# It ends when nobody claimed it, when everybody left, or when it was asked to go,
+# and in every case the process exits zero and the match is over — the world was in
+# memory and no replacement pod inherits it. A Deployment would restart it into a
+# session nobody is in; a Job records that it completed and lets the TTL controller
+# remove the object.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: vif-session-${SESSION_ID}
+  namespace: vif
+  labels: &labels
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/component: session
+    app.kubernetes.io/part-of: vi-fighter-fleet
+    vif.lixenwraith.dev/session: "${SESSION_ID}"
+spec:
+  # A session is not retryable. Its world is gone with the process, and a second
+  # attempt would be an empty session holding a port players were told to dial.
+  backoffLimit: 0
+  completions: 1
+  parallelism: 1
+  # The absolute ceiling, well above any real match. The application's own bounds
+  # (-first-join, -empty) end an idle session in ninety seconds; this ends one that
+  # is somehow neither idle nor finished, which is the shape a wedged or abused
+  # session takes.
+  activeDeadlineSeconds: 14400
+  # Long enough for an allocator or an operator to read why the session ended,
+  # short enough that finished objects do not accumulate against count/jobs.
+  ttlSecondsAfterFinished: 120
+  template:
+    metadata:
+      labels: *labels
+    spec:
+      restartPolicy: Never
+      serviceAccountName: vif-session
+      automountServiceAccountToken: false
+      # No Service environment variables: the process is told everything it needs
+      # on its command line, and injecting the address of every Service in the
+      # namespace tells a session about its neighbours for no reason.
+      enableServiceLinks: false
+      # Above the -drain value below, so the drain decides when the session ends
+      # and the kubelet's SIGKILL is the backstop it never reaches.
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        seccompProfile:
+          type: RuntimeDefault
+      initContainers:
+        # The same binary validating the same configuration it is about to serve,
+        # before anything binds a port. A scenario that does not load is a session
+        # that would have accepted players and then failed; this turns it into a
+        # pod that never became ready.
+        - name: config-check
+          image: ${IMAGE}
+          args: ["-check", "-d"]
+          securityContext: &container_security
+            allowPrivilegeEscalation: false
+            privileged: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 65532
+            capabilities:
+              drop: ["ALL"]
+            seccompProfile:
+              type: RuntimeDefault
+          resources:
+            requests: {cpu: 50m, memory: 64Mi}
+            limits: {cpu: 500m, memory: 192Mi}
+      containers:
+        - name: session
+          image: ${IMAGE}
+          args:
+            - "-serve"
+            - ":7777"
+            - "-probe"
+            - ":7778"
+            - "-log-stdout"
+            - "-lv"
+            - "info"
+            - "-ls"
+            - "all+dispatch"
+            # Embedded scenario and corpus: nothing is mounted, so nothing can
+            # drift between the image and what the session actually ran. Replace
+            # with -g /config/game.toml and a read-only ConfigMap mount when a
+            # deployment needs to serve an authored scenario instead.
+            - "-d"
+            - "-size"
+            - "${MAP_SIZE}"
+            - "-players"
+            - "${PLAYERS}"
+            # The allocated lifetime. The first is the window the player who
+            # triggered this container has to arrive; the second is how long the
+            # session survives after the last of them leaves, which is also the
+            # window a player who dropped has to dial back into their own slot.
+            - "-first-join"
+            - "90s"
+            - "-empty"
+            - "90s"
+            # A termination signal stops admitting and waits this long for the
+            # roster to empty before exiting anyway. Kept under the grace period
+            # above so the process, not the kubelet, decides when the match ends.
+            - "-drain"
+            - "20s"
+          ports:
+            - name: game
+              containerPort: 7777
+              protocol: TCP
+            - name: probe
+              containerPort: 7778
+              protocol: TCP
+          env:
+            # An earlier collection target than the memory limit, so the runtime
+            # collects instead of the kernel killing. GOMAXPROCS is deliberately
+            # unset: the Go runtime derives it from the cgroup CPU limit.
+            - name: GOMEMLIMIT
+              value: "160MiB"
+          securityContext: *container_security
+          resources:
+            requests:
+              cpu: 100m
+              memory: 96Mi
+            limits:
+              cpu: 500m
+              memory: 192Mi
+          # Startup suppresses the other two while the world is being built, so a
+          # slow start is not a restart loop.
+          startupProbe:
+            httpGet: {path: /healthz, port: probe}
+            periodSeconds: 2
+            failureThreshold: 30
+          # Liveness is the tick counter moving when it should be. It restarts a
+          # wedged simulation; it must not restart a busy one, hence the threshold.
+          livenessProbe:
+            httpGet: {path: /healthz, port: probe}
+            periodSeconds: 5
+            timeoutSeconds: 2
+            failureThreshold: 3
+          # Readiness is whether a dial would be admitted: false at capacity, false
+          # while draining, false once the session has expired. It takes the pod out
+          # of the Service without touching the players already in it.
+          readinessProbe:
+            httpGet: {path: /readyz, port: probe}
+            periodSeconds: 3
+            timeoutSeconds: 2
+            failureThreshold: 1
+            successThreshold: 1
+---
+# The session's endpoint.
+#
+# One Service per session, not one Service in front of many: players joining the
+# same match must reach the same process, and an ordinary load-balanced Service
+# over several session pods would scatter them across unrelated worlds.
+#
+# The probe port is deliberately absent. It stays reachable inside the cluster
+# through the pod IP, where Prometheus and the kubelet find it, and nothing outside
+# the node can route to it.
+apiVersion: v1
+kind: Service
+metadata:
+  name: vif-session-${SESSION_ID}
+  namespace: vif
+  # Repeated rather than aliased: a YAML anchor does not cross a document
+  # boundary, and an alias that resolves to nothing is a Service with no labels.
+  labels:
+    app.kubernetes.io/name: vi-fighter
+    app.kubernetes.io/component: session
+    app.kubernetes.io/part-of: vi-fighter-fleet
+    vif.lixenwraith.dev/session: "${SESSION_ID}"
+  # Set by the allocator to the Job's UID, so deleting the Job removes this with
+  # it. A Service that outlived its session would hold a node port against the
+  # quota and advertise a match that no longer exists.
+  ownerReferences:
+    - apiVersion: batch/v1
+      kind: Job
+      name: vif-session-${SESSION_ID}
+      uid: "${JOB_UID}"
+      controller: true
+      blockOwnerDeletion: true
+spec:
+  type: NodePort
+  selector:
+    vif.lixenwraith.dev/session: "${SESSION_ID}"
+  # Long-lived TCP sessions want the same backend for the life of the connection.
+  # With one pod behind the Service this changes nothing today; it is correct if a
+  # session ever gains a second endpoint.
+  sessionAffinity: ClientIP
+  # Traffic that arrives on a node that is not running this session is dropped
+  # rather than forwarded, which preserves the client source address and keeps a
+  # multi-node cluster from hiding a misdirected connection as a working one.
+  externalTrafficPolicy: Local
+  ports:
+    - name: game
+      port: 7777
+      targetPort: game
+      nodePort: ${GAME_NODEPORT}
+      protocol: TCP

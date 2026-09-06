@@ -11,6 +11,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/app"
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
@@ -211,6 +212,7 @@ func buildConfig() app.Config {
 	if flagSession.serve != "" {
 		cfg.HostAddress = flagSession.serve
 		cfg.ProbeAddress = flagSession.probe
+		cfg.Lifetime = flagSession.lifetime()
 	}
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
@@ -285,6 +287,19 @@ type sessionFlags struct {
 	probe   string
 	size    string
 	players int
+
+	// firstJoin, empty and drain bound an allocated session's life. They are zero
+	// on an interactively started host, which is supervised by the person who
+	// started it, and set by a deployment whose sessions are created on a player's
+	// behalf and have nobody to notice that nobody came.
+	firstJoin time.Duration
+	empty     time.Duration
+	drain     time.Duration
+}
+
+// lifetime is the policy these flags describe.
+func (f sessionFlags) lifetime() lifecycle.Policy {
+	return lifecycle.Policy{FirstJoin: f.firstJoin, Empty: f.empty, Drain: f.drain}
 }
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
@@ -293,6 +308,12 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
+	fs.DurationVar(&f.firstJoin, "first-join", 0,
+		"With -serve, exit if no guest has connected within this duration, e.g. 90s; 0 waits forever")
+	fs.DurationVar(&f.empty, "empty", 0,
+		"With -serve, exit this long after the last guest leaves, e.g. 90s; 0 keeps the session")
+	fs.DurationVar(&f.drain, "drain", 0,
+		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
 		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host). "+
 			"With -serve it is a ceiling on guests instead: the session starts on the first one "+
@@ -301,8 +322,9 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 }
 
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
-	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, and -players are available only in interactive play")
+	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 ||
+		f.lifetime().Bounded()) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, -players and the session lifetime bounds are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")
@@ -312,6 +334,12 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	}
 	if f.probe != "" && f.serve == "" {
 		return fmt.Errorf("-probe answers for a -serve run; nothing else has a supervisor to answer")
+	}
+	if f.serve == "" && f.lifetime().Bounded() {
+		return fmt.Errorf("-first-join, -empty and -drain bound an allocated -serve session; an interactive run is ended by its operator")
+	}
+	if err := f.lifetime().Validate(); err != nil {
+		return err
 	}
 	if f.size != "" {
 		if _, _, err := parseSize(f.size); err != nil {

@@ -49,10 +49,16 @@ The Makefile targets are:
 | `serve` | Build WASM and the small HTTP server, then serve `web/`. |
 | `install-config` | Install categorized user config without replacing existing files. |
 | `install-config-force` | Replace files in the selected user config root. |
+| `image` | Build the dedicated-session container image from `deploy/docker/Dockerfile`. |
+| `image-check` | Run the built image's own `-check` as its numeric user, read-only and with no network. |
 | `clean` | Remove `bin/`. |
 
 `TAGS` appends native build tags, `PORT` changes the WASM server port, and
 `VIF_CONFIG_DIR` retargets config installation for packaging or staging.
+`CONTAINER_ENGINE`, `IMAGE` and `IMAGE_TAG` retarget the image build — the engine
+defaults to `docker` and accepts `podman`. The image is a `scratch` layer holding
+one static non-root binary; `image-check` is the only way to prove it starts,
+because there is no shell in it to ask.
 Release/nolog/wasm use stripped linker flags; `dev` intentionally retains
 diagnostics and enables race instrumentation.
 
@@ -117,6 +123,9 @@ useful CI addition even though the current workflow does not perform one.
 | `-serve <address>` | Bind a headless session with no local player: a dedicated host. |
 | `-size <WxH>` | Terminal-equivalent geometry for a run with no terminal of its own, such as `-serve`. Omitted on a server, the first guest's terminal sizes the session. |
 | `-probe <address>` | Serve liveness, readiness and metrics for a `-serve` run. |
+| `-first-join <d>` | End a `-serve` run if no guest has connected within `d`; zero waits forever. |
+| `-empty <d>` | End a `-serve` run `d` after the last guest leaves; zero keeps the session. Also the window a dropped guest has to reclaim its slot. |
+| `-drain <d>` | How long a termination signal waits for a `-serve` roster to empty before exiting anyway; zero exits at once, and a second signal always does. |
 | `-log-stdout` | Write the session log to stdout as JSON instead of to a file; implies `-l`. |
 | `-join <address>` | Join a session at `host:port`; the host supplies seed/config/content identity. |
 | `-players <n>` | Participants a `-host` lobby waits for, itself included; 2 by default, up to `parameter.MaxPlayers`. With `-serve` it counts guests instead, because the server is not one of them, and it is a ceiling rather than a requirement: the session starts on its first guest and admits the rest as they arrive, defaulting to the full roster. |
@@ -132,6 +141,10 @@ checks `-ct` first. When both audio start flags are passed, unmute wins.
 `-lv`, `-ls`, `-lt`, and `-lr` each imply `-l`; `-ls` is parsed before
 terminal startup. A bare `-l` remains boolean, so a directory requires
 `-l=DIR`, not `-l DIR`.
+
+`-first-join`, `-empty` and `-drain` are refused without `-serve`, for the reason
+`-probe` is: an interactive run is ended by the person who started it, and a flag
+that ends a process must not silently do nothing.
 
 `-serve` is a host of its own and does not combine with `-host` or `-join`.
 `-host` and `-join` are mutually exclusive and available on interactive play or
@@ -250,6 +263,22 @@ watched. A server with no guests attached still ticks and still authors; the
 correction pump returns on an empty roster. A participant that dropped can dial
 back in and receive the world at whatever tick the session has reached, into the
 slot its departure released.
+
+A server started this way runs until somebody stops it. One that was *allocated* —
+created by a website when a player asked for a game — bounds its own life instead:
+
+```bash
+./bin/vif -serve :7777 -probe :7778 -log-stdout -lv info \
+    -players 4 -size 120x40 -first-join 90s -empty 90s -drain 20s
+```
+
+It ends if no guest arrives inside the first window, ends after the roster has been
+empty for the second, and answers a termination signal by draining — readiness
+false, dials refused, existing gameplay untouched — for up to the third. One
+`session ended` log line names which of those happened. The flags are refused
+outside `-serve`; the policy is `internal/lifecycle` and the phases are documented
+in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
+[K3s and container deployment](kube_docker_deploy.md).
 
 `-players` is a ceiling here rather than a lobby size: the session starts on its
 first guest and takes the rest through the mid-run gate, so the example above holds

@@ -757,7 +757,7 @@ summary is inside a process nothing can reach.
 | Path | 200 when | 503 when |
 |---|---|---|
 | `/healthz` | the tick counter is advancing, the clock has not started yet, or the run is paused | the scheduler is running, unpaused, and the tick has not moved in `parameter.ProbeStallInterval` |
-| `/readyz` | a dial would be admitted — live, not in the lobby's closing window, and the roster is below `sessionCapacity()` | the run is not live, the lobby is closing, or the session is at capacity |
+| `/readyz` | a dial would be admitted — live, not in the lobby's closing window, the roster is below `sessionCapacity()`, and the session is neither draining nor expired | the run is not live, the lobby is closing, the session is at capacity, or its lifetime policy has stopped admitting |
 | `/metrics` | always; renders the status registry in the Prometheus text format | — |
 
 The two probes answer different questions on purpose. A run that is not live
@@ -773,6 +773,13 @@ window rather than accumulating under it: pause is an operator state, not a faul
 
 The server binds before the lobby wait, so a run that is starting answers rather
 than refusing connections for the whole window in which it is starting.
+
+The body carries `phase` — the `internal/lifecycle` phase of an allocated session —
+and `expires_in` whenever a countdown is running. Those are what an allocator reads:
+a roster count says who is in a session, and only the phase says whether it is about
+to end. The refusals are ordered so that a draining session never reads as merely
+full; a Service that confused the two would put a draining pod back into rotation the
+moment a guest left. See [Runtime](runtime.md) §1.2 for the flags and the phases.
 
 `/metrics` renames registry keys onto the Prometheus grammar — `vif_` plus the key
 with every character outside `[A-Za-z0-9_]` replaced by an underscore — and reports

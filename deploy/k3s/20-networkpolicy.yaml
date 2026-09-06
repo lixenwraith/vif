@@ -1,0 +1,75 @@
+# What a session pod may talk to, and what may talk to it.
+#
+# K3s enforces NetworkPolicy through its bundled kube-router controller unless the
+# cluster was installed with --disable-network-policy. Verify that before trusting
+# these: a policy the CNI does not enforce is a comment, and this one is load
+# bearing — every connected peer can influence the shared simulation, so a session
+# pod is a piece of attack surface reachable by whoever can reach the game port.
+---
+# Default deny, both directions, for everything in the namespace. Every allowance
+# below is additive to this; anything not named is refused.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny
+  namespace: vif
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+# The game port, from anywhere.
+#
+# Player traffic arrives through a NodePort, so by the time it reaches the pod its
+# source is the node rather than a pod or namespace this could select — which means
+# this policy cannot be the thing that authenticates a player. It is not trying to.
+# What it does is confine the reachable surface to one port on one workload, so
+# that everything else in the namespace stays unreachable even from a source that
+# is allowed to play. Restricting *who* may reach 7777 is the firewall's job on the
+# FreeBSD host and the Arch guest, and eventually the authenticated gateway's; see
+# doc/kube_docker_deploy.md §7.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-game-ingress
+  namespace: vif
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vi-fighter
+      app.kubernetes.io/component: session
+  policyTypes: [Ingress]
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: game
+---
+# The probe port, from the monitoring namespace only.
+#
+# /healthz, /readyz and /metrics describe the session's roster, tick and remaining
+# lifetime. That is operational data, it is unauthenticated, and it must never be
+# reachable from the player-facing path. The kubelet's own probes bypass the pod
+# network and are unaffected by this.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-probe-scrape
+  namespace: vif
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: vi-fighter
+      app.kubernetes.io/component: session
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: probe
+# No egress allowance is defined, deliberately. A session binds two listeners and
+# accepts; it resolves no name, dials nothing, and reads no external resource, so
+# the default deny above costs it nothing. If a future feature does need to dial
+# out, DNS to kube-system is the first rule to add — and adding it should be a
+# decision somebody made, not a rule that was already there.

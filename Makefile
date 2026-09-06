@@ -6,13 +6,18 @@ GOFLAGS := -trimpath
 LDFLAGS := -s -w
 TAGS ?=
 PORT ?= 8080
+CONTAINER_ENGINE ?= docker
+IMAGE ?= vi-fighter
+IMAGE_TAG ?= dev
+IMAGE_REVISION ?= $(shell git rev-parse HEAD 2>/dev/null || echo unknown)
+IMAGE_VERSION ?= $(IMAGE_TAG)
 VIF_CONFIG_BASE := $(if $(XDG_CONFIG_HOME),$(XDG_CONFIG_HOME),$(HOME)/.config)
 VIF_CONFIG_DIR ?= $(VIF_CONFIG_BASE)/vi-fighter
 VIF_CONFIG_FORCE ?= 0
 
 .DEFAULT_GOAL := help
 
-.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install-config install-config-force
+.PHONY: help generate dev release nolog wasm windows run test verify arch-check clean check-go tools serve install-config install-config-force image image-check
 
 help:
 	@echo "Usage: make [target]"
@@ -28,6 +33,8 @@ help:
 	@echo "  run      Build (dev) and run the game"
 	@echo "  install-config Install external game/input/content files under $(VIF_CONFIG_DIR)"
 	@echo "  install-config-force Replace files previously installed there"
+	@echo "  image    Build the dedicated-session container image (scratch, static, non-root)"
+	@echo "  image-check Run the image's own config validation as its numeric user"
 	@echo "  verify   Run tests, vet, and multi-arch compilation checks"
 	@echo "  arch-check Verify pkg/ packages do not import internal/ (non-blocking)"
 	@echo "  clean    Remove build artifacts"
@@ -134,6 +141,25 @@ install-config:
 
 install-config-force:
 	@$(MAKE) --no-print-directory install-config VIF_CONFIG_FORCE=1
+
+# image builds the deployment artifact from the repository root, which is the
+# context deploy/docker/Dockerfile expects. The revision is stamped as an OCI
+# label; the Go toolchain stamps the same commit into the binary's build info.
+image:
+	$(CONTAINER_ENGINE) build \
+		-f deploy/docker/Dockerfile \
+		--build-arg VERSION=$(IMAGE_VERSION) \
+		--build-arg REVISION=$(IMAGE_REVISION) \
+		-t $(IMAGE):$(IMAGE_TAG) .
+	@echo "built $(IMAGE):$(IMAGE_TAG) at revision $(IMAGE_REVISION)"
+
+# image-check runs what the workload's init container runs, against the image that
+# would be deployed and as the user it would run as. A scratch image has no shell,
+# so this is also the only way to prove the binary starts at all.
+image-check:
+	$(CONTAINER_ENGINE) run --rm --read-only --user 65532:65532 \
+		--network none --cap-drop ALL --security-opt no-new-privileges \
+		$(IMAGE):$(IMAGE_TAG) -check -d
 
 # arch-check covers architectural boundaries, isolated from standard build blockers.
 # The list of packages is snapshot dynamically at execution to avoid build delays across other targets.

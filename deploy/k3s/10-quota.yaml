@@ -1,0 +1,51 @@
+# The fleet ceiling.
+#
+# Ten concurrent sessions is the deployment's stated maximum, and it is enforced
+# here rather than in the allocator alone. An allocator holds the ceiling as a
+# number it believes; a quota holds it as a number the API server refuses to
+# exceed, which is what survives an allocator that crashed mid-loop, restarted with
+# stale state, or was asked for eleven sessions by a website nobody rate-limited.
+#
+# The compute totals are ten times one session's envelope (doc/kubernetes-fleet.md
+# §6.4). They are a second ceiling on the same fact: ten sessions cannot exceed the
+# memory the node was sized for, whatever a mis-rendered manifest asks for.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: vif-fleet-ceiling
+  namespace: vif
+spec:
+  hard:
+    count/pods: "10"
+    count/jobs.batch: "10"
+    # One Service per session, plus headroom for a fixed one an operator adds.
+    count/services: "12"
+    count/services.nodeports: "12"
+    requests.cpu: "1"
+    requests.memory: 960Mi
+    limits.cpu: "5"
+    limits.memory: 1920Mi
+    # Sessions are in memory and nothing is persisted. A session object that asked
+    # for storage is a session that is not the workload this fleet runs.
+    persistentvolumeclaims: "0"
+---
+# The default a session inherits if its manifest omits one. A pod with no request
+# is scheduled as if it were free and counts nothing against the quota above, which
+# is the one way ten sessions can still overcommit the node.
+apiVersion: v1
+kind: LimitRange
+metadata:
+  name: vif-session-defaults
+  namespace: vif
+spec:
+  limits:
+    - type: Container
+      default:
+        cpu: 500m
+        memory: 192Mi
+      defaultRequest:
+        cpu: 100m
+        memory: 96Mi
+      max:
+        cpu: "1"
+        memory: 384Mi

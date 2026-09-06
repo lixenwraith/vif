@@ -29,6 +29,17 @@ var errSessionCanceled = errors.New("network session canceled")
 // reason ErrSessionHandoff is: the dialer's answer is to retry, not to give up.
 var ErrSessionStarting = errors.New("session is starting; retry")
 
+// ErrSessionEnding refuses a dial to a session that is draining or has expired. It
+// is the opposite of ErrSessionStarting and must not be confused with it: this run
+// is leaving, so retrying against it is exactly the wrong answer. An allocator
+// reading it should place the participant somewhere else.
+var ErrSessionEnding = errors.New("session is ending")
+
+// errSessionExpired ends a lobby whose allocated window closed before a guest
+// reached it. It is a clean end rather than a failure — the session did what it was
+// told to do with a slot nobody claimed — so the caller reports it and exits zero.
+var errSessionExpired = errors.New("session lifetime expired")
+
 // newSessionApp resolves the startup handshake before a joining App draws a
 // seed. Interactive play and authored headless scripts share this construction.
 func newSessionApp(cfg Config) (*App, error) {
@@ -113,6 +124,20 @@ func (a *App) sessionCapacity() int {
 		n = parameter.MaxPlayers
 	}
 	return n - 1
+}
+
+// guestCount is how many guests the roster currently holds. The coordinator of a
+// dedicated host holds a roster entry and no cursor, so it is subtracted: a session
+// consisting only of its coordinator is an empty one, which is the reading both the
+// readiness probe and the lifetime policy need.
+func (a *App) guestCount() int {
+	a.sessionMu.Lock()
+	defer a.sessionMu.Unlock()
+	n := len(a.sessionRoster)
+	if n > 0 {
+		n--
+	}
+	return n
 }
 
 // lobbyQuorum is how many guests the start gate waits for before it closes the
@@ -278,6 +303,13 @@ func (a *App) assignParticipant() (network.SessionOffer, error) {
 	if a.lobbyClosing.Load() {
 		return network.SessionOffer{}, ErrSessionStarting
 	}
+	// A draining or expired session refuses before it allocates anything. The
+	// roster slot, the identity and the capture that would follow are all work
+	// spent on a participant this process is about to stop authoring for, and the
+	// refusal is what makes a drain a drain rather than a slower shutdown.
+	if st := a.life.State(time.Now()); !st.Admit {
+		return network.SessionOffer{}, fmt.Errorf("%w: %s", ErrSessionEnding, st.Reason)
+	}
 
 	limit := a.sessionCapacity() + 1
 	if len(a.sessionRoster) == 0 {
@@ -408,7 +440,11 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	a.showStartupStatus(fmt.Sprintf("Hosting on %s; waiting for %d of up to %d participant(s) (Ctrl-C cancels)",
 		addr, quorum, capacity))
 
+	// The lobby is the one wait the first-guest window covers, so it is the one
+	// wait that carries its deadline. Zero on an unbounded policy, and zero again
+	// on the ready gate below — see the comment there.
 	if err := a.waitForStartup(port, signals, quorum, false,
+		a.life.State(time.Now()).Deadline,
 		func() bool { return port.PeerCount() >= quorum }); err != nil {
 		return err
 	}
@@ -422,6 +458,11 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 	if err != nil {
 		return err
 	}
+	// The window closes here rather than a second later, when the serve loop takes
+	// its first reading. The roster the lobby closed on is what satisfies it, and
+	// everything between this point and the loop — the capture, the sends, the
+	// ready gate — happens while the deadline would otherwise still be running.
+	a.life.Observe(len(offer.Participants)-1, time.Now())
 	// Whoever the roster closed on, not whoever was counted a moment ago: an
 	// accepted dial can complete between the quorum being met and the roster being
 	// read, and that participant is in the session.
@@ -472,7 +513,12 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 			}
 		}
 	}
-	if err := a.waitForStartup(port, signals, admitted, true, func() bool {
+	// No deadline. The first-guest window was satisfied by the roster this gate is
+	// waiting on, and re-arming it here would end a session that has its guest
+	// because installing the world took the last second of it. A participant that
+	// connects and then never confirms holds this gate open; that is a startup-gate
+	// bound this does not have, recorded as a blocker in doc/kubernetes-fleet.md.
+	if err := a.waitForStartup(port, signals, admitted, true, time.Time{}, func() bool {
 		return port.PeerCount() >= admitted && port.ReadyCount() >= admitted
 	}); err != nil {
 		return err
@@ -535,16 +581,32 @@ func (a *App) startJoinSession() error {
 }
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
+//
+// deadline, when non-zero, ends the wait with errSessionExpired. It is supplied by
+// the caller rather than read from the lifetime policy here, because only one of
+// the two gates this serves is inside the window that deadline belongs to.
 func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
-	expectedPeers int, failOnDisconnect bool, ready func() bool) error {
+	expectedPeers int, failOnDisconnect bool, deadline time.Time, ready func() bool) error {
 	var events <-chan terminal.Event
 	if a.termSvc != nil {
 		events = a.termSvc.Events()
+	}
+	// A pod nobody dialled is precisely the case the first-guest window exists for,
+	// and it is also the case this gate would otherwise wait in forever. A run with
+	// no bounded policy is given no deadline and waits as it always has.
+	var expiry <-chan time.Time
+	if !deadline.IsZero() {
+		timer := time.NewTimer(time.Until(deadline))
+		defer timer.Stop()
+		expiry = timer.C
 	}
 	for !ready() {
 		select {
 		case <-signals:
 			return errSessionCanceled
+		case now := <-expiry:
+			a.life.State(now) // settles the deadline so the reason is recorded once
+			return errSessionExpired
 		case ev := <-events:
 			switch ev.Type {
 			case terminal.EventClosed, terminal.EventError:

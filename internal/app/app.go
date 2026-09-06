@@ -16,6 +16,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/input"
 	"github.com/lixenwraith/vi-fighter/internal/journal"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
 	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/network"
@@ -98,6 +99,12 @@ type App struct {
 	probeTick uint64
 	probeAt   time.Time
 
+	// life is the allocated session's lifetime policy: the first-guest window, the
+	// empty-roster grace, and the drain a termination request opens. It exists on
+	// every run and governs only the ones whose Config asked it to, so the dial and
+	// probe paths can consult it without knowing which shape this run is.
+	life *lifecycle.Controller
+
 	// admissions bounds how often one dialling host may be admitted. It is built
 	// with the App rather than with the session because a run can open one later
 	// with :host, and a budget that started when hosting did would be a budget
@@ -137,7 +144,12 @@ func New(cfg Config) (*App, error) {
 		return nil, err
 	}
 
-	a := &App{cfg: cfg, hub: service.NewHub(), admissions: newAdmissionLimiter()}
+	a := &App{
+		cfg:        cfg,
+		hub:        service.NewHub(),
+		admissions: newAdmissionLimiter(),
+		life:       lifecycle.New(cfg.Lifetime),
+	}
 	// Before init, because initWorld binds the correction queue to whatever
 	// transport a service contributed and a peer can reach it from that moment.
 	a.corrections = newCorrections(a)

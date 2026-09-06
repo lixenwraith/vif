@@ -96,6 +96,10 @@ constrained xterm.js/WASM build and an experimental Windows cross-build.
   first guest's terminal sizes the session.
 - `-probe <bind-address>` serves liveness, readiness and Prometheus metrics for a
   `-serve` run, and `-log-stdout` writes the session log to stdout as JSON.
+- `-first-join <d>`, `-empty <d>` and `-drain <d>` bound a `-serve` session that was
+  allocated on somebody's behalf: end it if no guest arrives, end it after the last
+  one leaves, and let a termination signal wait for the roster instead of cutting
+  the match. Omitting them is the long-lived host an operator starts by hand.
 - `-l`, `-ls`, `-lt`, and `-lr` enable structured logging, scoped snapshots,
   and flight-recorder history.
 - `cmd/soundlab` authors and auditions sounds/music.
@@ -122,6 +126,13 @@ For an automatic 2,000-tick headless pair, use `script/phase3-host.toml` and
 `script/phase3-guest.toml` as documented in `doc/development.md`. For a host
 nobody sits at, `./bin/vif -serve :7777 -size 120x40` waits for its first guest
 and then runs the session on its own.
+
+`deploy/` holds the container image and the K3s objects that run one such session
+per player request: a `scratch` image of one static non-root binary, a namespace
+capped at ten concurrent sessions, default-deny network policy, and a per-session
+Job and Service. `make image` builds it; the installation and operating procedure
+is [doc/kube_docker_deploy.md](doc/kube_docker_deploy.md) and the plan behind it is
+[doc/kubernetes-fleet.md](doc/kubernetes-fleet.md).
 
 ## Documentation
 

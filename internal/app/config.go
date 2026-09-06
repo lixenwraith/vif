@@ -7,6 +7,7 @@ import (
 	"github.com/lixenwraith/terminal"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
@@ -171,6 +172,14 @@ type Config struct {
 	// the screen is the probe.
 	ProbeAddress string
 
+	// Lifetime bounds an allocated session: how long it waits for a first guest,
+	// how long it survives an empty roster, and how long a termination request
+	// waits for the roster to empty. The zero policy is a host nothing times out,
+	// which is what an interactively started one wants — the person who started it
+	// is the supervisor. A fleet session has no such person, so a deployment sets
+	// all three. See internal/lifecycle.
+	Lifetime lifecycle.Policy
+
 	// LockMap latches the world as shared before the FSM boots, so this run's
 	// terminal never rewrites shared map bounds and its crossings take the session's
 	// playout lead. A hosting run sets it, because its bounds are what every joiner
@@ -263,6 +272,15 @@ func (c Config) Validate() error {
 	}
 	if c.Mode.Serves() && c.HostAddress == "" {
 		return errors.New("server: a dedicated host needs a bind address")
+	}
+	if err := c.Lifetime.Validate(); err != nil {
+		return err
+	}
+	if c.Lifetime.Bounded() && !c.Mode.Serves() {
+		// Refused rather than ignored, for the same reason -probe is: the bounds
+		// end a process, and one that silently kept a flag that was meant to end it
+		// is the failure this would be hiding.
+		return fmt.Errorf("%s: session lifetime bounds an allocated -serve session; this mode is ended by its operator", c.Mode)
 	}
 	if c.ProbeAddress != "" && !c.Mode.Serves() {
 		// Refused rather than ignored, for the reason validateDriven refuses a

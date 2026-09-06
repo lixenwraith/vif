@@ -110,6 +110,46 @@ see [Services and networking](services-and-networking.md) §12. It binds before 
 lobby, because a run waiting for its first guest is a run a supervisor is watching
 start.
 
+#### The allocated session
+
+`-first-join`, `-empty` and `-drain` bound a session that was created on somebody's
+behalf rather than started by hand. They are refused outside `-serve`, because a
+flag that ends a process must not silently do nothing.
+
+| Flag | Meaning | Zero |
+|---|---|---|
+| `-first-join <d>` | End the run if no guest has connected within `d` of the listener binding. | Wait forever. |
+| `-empty <d>` | End the run `d` after the last guest leaves. Also the window in which a guest that dropped reclaims the slot its departure released. | Stay open. |
+| `-drain <d>` | On a termination signal, stop admitting and wait up to `d` for the roster to empty before exiting anyway. A second signal exits at once. | Exit at once. |
+
+The policy itself is `internal/lifecycle`: a pure state machine over an injected
+clock, with the phases `waiting`, `occupied`, `vacant`, `draining` and `expired`.
+`Serve` starts it after the probe binds and before the lobby, folds the roster into
+it once a second, and exits when it expires — logging one `session ended` line that
+names the reason. The lobby wait carries the same deadline, because a pod nobody
+dialled is exactly the case the first-guest window exists for and exactly the case
+the start gate would otherwise wait in forever.
+
+A signal reads the roster at the instant it arrives rather than the loop's last
+reading, which can be a second old: a drain that read a stale empty roster would end
+a session somebody had only just joined.
+
+`draining` and `expired` refuse a dial with `ErrSessionEnding`, and `/readyz`
+reports 503 with the phase and the time remaining while `/healthz` stays 200 — a
+drain is not a fault. The refusal is deliberately distinguishable from
+`ErrSessionStarting`: that one means retry, this one means the session is leaving.
+
+Why the process holds this rather than the orchestrator: the roster is the only
+thing that knows whether anybody is in the session, and it is inside the process. A
+`Job` with an `activeDeadlineSeconds` can end a session on a wall clock; nothing
+outside can end one on emptiness. See
+[K3s and container deployment](kube_docker_deploy.md).
+
+```bash
+./bin/vif -serve :7777 -probe :7778 -log-stdout -lv info \
+    -players 4 -size 120x40 -first-join 90s -empty 90s -drain 20s
+```
+
 ```bash
 ./bin/vif -serve :7777 -players 2 -size 120x40 -l -lv info
 ./bin/vif -join server.example:7777          # each person, elsewhere

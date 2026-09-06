@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -452,6 +453,12 @@ func (a *App) newStagingApp(cap snapshot.SharedCapture) (*App, error) {
 	cfg.networkConfig = nil
 	cfg.scriptedSession = false
 	cfg.Participants = 0
+	// A staging world is not a supervised session and is not an allocated one: it
+	// answers no probe and nothing may end the live run because a capture resolved
+	// into it. Both are refused outright by a non-serving mode, so leaving them set
+	// would make a correction on a dedicated host fail to stage at all.
+	cfg.ProbeAddress = ""
+	cfg.Lifetime = lifecycle.Policy{}
 	cfg.TimeScaleSpec = ""
 	cfg.RecTicks = -1
 	cfg.StatTicks = -1

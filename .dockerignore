@@ -1,0 +1,13 @@
+# The build context is the repository root. Everything the image needs is Go
+# source, the embedded assets those sources declare, and .git for the revision
+# stamp; nothing else belongs in a context that is transferred on every build.
+bin/
+web/lib/
+web/*.wasm
+sandbox/
+doc/
+deploy/k3s/
+script/
+*.md
+.github/
+.gitignore

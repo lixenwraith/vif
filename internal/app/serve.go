@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
 )
@@ -26,6 +27,13 @@ import (
 // serveReportInterval is how often a server logs what it is holding. It is a log
 // line rather than a status bar because nothing here draws one.
 const serveReportInterval = 30 * time.Second
+
+// lifecycleInterval is how often the run folds its roster into the lifetime policy.
+// The bounds it enforces are counted in tens of seconds, so a second's resolution
+// is far finer than any of them and costs one mutex and one comparison; a tick is
+// not the place to do this, because the roster changes on a connection rather than
+// on a simulation step.
+const lifecycleInterval = time.Second
 
 // RunServer wires, runs and tears down a dedicated host.
 func RunServer(cfg Config) error {
@@ -70,8 +78,17 @@ func (a *App) Serve() error {
 		// worse condition than a host that did not start.
 		return err
 	}
+	// After the probe, so a supervisor can already see the run, and before the
+	// lobby, because the window an allocated session gives its first guest is the
+	// lobby. An unbounded policy starts too and simply never reaches a deadline.
+	a.life.Start(time.Now())
+
 	if err := a.startHostSession(sigChan); err != nil {
-		if errors.Is(err, errSessionCanceled) {
+		switch {
+		case errors.Is(err, errSessionCanceled):
+			return nil
+		case errors.Is(err, errSessionExpired):
+			a.logSessionEnd(a.life.State(time.Now()))
 			return nil
 		}
 		return err
@@ -97,20 +114,59 @@ func (a *App) Serve() error {
 	defer frameTicker.Stop()
 	report := time.NewTicker(serveReportInterval)
 	defer report.Stop()
+	life := time.NewTicker(lifecycleInterval)
+	defer life.Stop()
 
 	for {
 		select {
 		case sig := <-sigChan:
-			vlog.Info("app", "msg", "signal received", "signal", sig.String())
-			return nil
+			// A signal drains rather than exits: the roster is what the session is
+			// for, and a rollout that ended a match in progress would be a rollout
+			// nobody could schedule. A second signal ends it, and so does a drain
+			// that finds an empty roster or runs out its deadline.
+			st := a.interrupt(time.Now(), "signal "+sig.String())
+			vlog.Info("app", "msg", "signal received",
+				"signal", sig.String(), "phase", st.Phase.String(),
+				"guests", st.Guests, "reason", st.Reason)
+			if st.Expired {
+				a.logSessionEnd(st)
+				return nil
+			}
 
 		case <-frameTicker.C:
 			a.releaseFrame()
+
+		case now := <-life.C:
+			if st := a.life.Observe(a.guestCount(), now); st.Expired {
+				a.logSessionEnd(st)
+				return nil
+			}
 
 		case <-report.C:
 			vlog.Info("app", "msg", "server", "summary", a.SessionSummary())
 		}
 	}
+}
+
+// interrupt folds the roster in at the instant of the signal and only then asks the
+// policy what a termination request means.
+//
+// The order is the point. A drain waits for the guests the session holds, and the
+// loop's last observation can be a whole lifecycleInterval old — so a signal that
+// arrived just after a guest connected would otherwise read a stale empty roster
+// and end a session somebody had only just joined.
+func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
+	a.life.Observe(a.guestCount(), now)
+	return a.life.Interrupt(now, reason)
+}
+
+// logSessionEnd records why an allocated session stopped. It is the one line an
+// operator reading a pod's last output needs: a container that exits cleanly says
+// nothing about whether it was never claimed, emptied, or asked to go.
+func (a *App) logSessionEnd(st lifecycle.State) {
+	vlog.Info("app", "msg", "session ended",
+		"phase", st.Phase.String(), "reason", st.Reason, "guests", st.Guests,
+		"address", a.cfg.HostAddress, "tick", a.Position().Tick)
 }
 
 // releaseFrame is App.frame's handshake without the frame: it takes the completed

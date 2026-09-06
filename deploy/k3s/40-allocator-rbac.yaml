@@ -1,0 +1,59 @@
+# What the website's allocator is allowed to do.
+#
+# The allocator is not in this repository — it is the component the website calls
+# when a player asks for a game, and it lives with the server configuration task.
+# Its permissions are here because they are part of the contract this repository's
+# workload defines: these are exactly the verbs needed to create, observe and
+# remove a session, in one namespace, and nothing else.
+#
+# Read it as a limit rather than a grant. An allocator with this Role cannot read a
+# Secret, cannot exec into a session, cannot touch another namespace, and cannot
+# create a workload shape other than the one the quota and Pod Security admission
+# already constrain. If the allocator is compromised, the worst it can do is churn
+# ten sessions.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vif-allocator
+  namespace: vif
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: vif-allocator
+  namespace: vif
+rules:
+  # Create a session and delete it; list and watch to reconcile after a restart.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # The endpoint players are given. Create and delete only — a Service that is
+  # updated in place is a session whose address changed under its players.
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["create", "get", "list", "watch", "delete"]
+  # Read-only. The allocator needs the pod's phase and readiness to answer "is this
+  # session live", and needs nothing else about it. Notably absent: pods/exec,
+  # pods/portforward, pods/attach, and any write verb.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Why a session ended, for the allocator's own log. Events are read-only for the
+  # same reason pods are.
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: vif-allocator
+  namespace: vif
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: vif-allocator
+subjects:
+  - kind: ServiceAccount
+    name: vif-allocator
+    namespace: vif

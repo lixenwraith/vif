@@ -16,6 +16,7 @@ flowchart TD
     App --> Runtime["engine, input, mode, FSM"]
     App --> Assembly["manifest, systems, renderers"]
     App --> Journal["internal/journal"]
+    App --> Supervised["internal/lifecycle, internal/probe"]
     Journal --> Streams["record, replay, fuzz, authored scripts"]
     Services --> External["terminal and I/O capabilities"]
 ```
@@ -71,6 +72,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/fsm/std` | Reusable HFSM actions/guards and host capability interface. It does not import the game engine. |
 | `internal/input` | Terminal-event parser, semantic intents, embedded/installable default keymap TOML, override decoding/merging. It does not import the ECS. |
 | `internal/journal` | Runtime-agnostic deterministic-run machinery: recording lifecycle, in-memory capture, rotated JSONL loading, replay ordering/payload decoding, seeded fuzz input, and versioned authored tick scripts. Drivers depend on narrow target interfaces and never import `internal/app`. |
+| `internal/lifecycle` | The allocated session's lifetime policy: a pure state machine over an injected clock turning roster observations into a phase (waiting, occupied, vacant, draining, expired), a deadline, and whether a dial may still be admitted. It opens nothing, reads no roster, and terminates nothing — the run supplies the observations and acts on the phase. |
 | `internal/manifest` | Authoritative component/system/renderer lists, generated builders, game binding for the generic FSM, and the JSON schema dump the map editor consumes. |
 | `internal/mode` | Mode ownership, intent execution, motions/operators/search, mouse handling, macros, command mode, undo/history. |
 | `internal/network` | Length-prefixed TCP transport, optional TLS configuration, anchor/start/ready session protocol, peers, sequence/ack fields, and bounded inbound notifications. |
@@ -79,6 +81,7 @@ render abstraction, while the orchestrator owns the terminal capability.
 | `internal/paths` | Platform config-root and user-state discovery, categorized resource names, and deprecated fallback names; performs no resource I/O. |
 | `internal/resource` | Resolve the game config, keymap, corpus and audio overrides against the config-root precedence rule, and validate what those paths resolve to for `-check`. |
 | `internal/pattern` | Convert ascimage/dual-image assets into wall/pattern spawn data; translate, mask, tile, and merge patterns. |
+| `internal/probe` | The supervised run's HTTP endpoint: `/healthz`, `/readyz`, `/metrics`. Stdlib only and stateless — a snapshot function supplies the run's answer and a status registry supplies the metrics, so the run decides what "ready" means and this decides only how to say it. |
 | `internal/render` | Render context, coordinate transforms, compositor buffer, blend modes, finalizers, renderer interface/orchestrator. |
 | `internal/render/renderer` | Concrete visual projections of components/resources, UI, post-process passes, and flow/graph debug overlay. |
 | `internal/service` | Dependency-ordered lifecycle hub and mode-selected adapters for terminal, content, audio, and network transport. |
