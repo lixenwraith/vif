@@ -196,13 +196,6 @@ func (a *App) releaseFrame() {
 	}
 }
 
-// openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in
-// that order: a dial refused a moment ago retries into a gate that now exists.
-func (a *App) openMidRunJoins() {
-	a.lateJoins.Store(true)
-	a.lobbyClosing.Store(false)
-}
-
 // localPlayers is how many cursors this instance drives. A dedicated host drives
 // none, which is the whole of what "zero players" means.
 func (a *App) localPlayers() int {

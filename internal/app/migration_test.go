@@ -206,6 +206,32 @@ func TestNoEligibleSuccessorFallsBackToLocalContinuation(t *testing.T) {
 			t.Fatalf("survivor %d forked without reporting the loss", i)
 		}
 	}
+
+	// A fork that continues alone continues with the cursor it simulates and no
+	// others. Each survivor here has lost its only link, so the participants on the
+	// far side of it — the authority that went, and behind it the one that was only
+	// ever reachable through it — are cursors nothing will move again, and no
+	// departure this instance can ever observe describes them. Left there they are
+	// players that cannot be played and cannot leave.
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll(survivors)
+	}
+	for i, a := range survivors {
+		slot := uint8(2 * i) // survivors are participants 1 and 3, slots 0 and 2
+		var count int
+		var own core.Entity
+		a.World().RunSafe(func() {
+			count = a.World().Resources.Player.Count()
+			own = a.World().Resources.Player.Slot(slot)
+		})
+		if own == 0 {
+			t.Fatalf("survivor %d dropped its own cursor in slot %d", i, slot)
+		}
+		if count != 1 {
+			t.Fatalf("survivor %d holds %d cursors after continuing alone, want only its own",
+				i, count)
+		}
+	}
 }
 
 // membershipOf is what a handoff must carry unchanged, read straight off the

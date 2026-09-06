@@ -88,13 +88,14 @@ func (a *App) hostNetworkConfig() *network.Config {
 		Admit:   a.admissions.admit,
 		Report:  a.noteJoinerReport,
 	}, netCfg.ConnectTimeout)
-	if a.cfg.Mode.Serves() {
-		// A dedicated host outlives its guests, so it admits a dial after the lobby
-		// has closed: a participant that dropped can come back into the slot its
-		// departure released. The hook is installed here and answers nothing until
-		// Serve arms it, because before that the gate is the lobby's own.
-		netCfg.OnAdmit = a.admitLateJoiner
-	}
+	// Every host outlives its guests, so every host admits a dial after its lobby
+	// has closed: a dropped participant comes back into the slot its departure
+	// released, through the one gate a reconnect has ever had. It used to be a
+	// dedicated host's alone, which left every other shape accepting the stream,
+	// sending no start record, and holding the dialer in a read it could not leave.
+	// The hook answers nothing until the run arms it, because until then the gate
+	// is the startup lobby's own.
+	netCfg.OnAdmit = a.admitLateJoiner
 	return netCfg
 }
 
@@ -103,6 +104,18 @@ func (a *App) admitLateJoiner(id network.PeerID) {
 	if a.lateJoins.Load() {
 		a.releaseMidRunJoiner(id)
 	}
+}
+
+// openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in
+// that order: a dial refused a moment ago retries into a gate that now exists.
+//
+// Every run that owns a frame loop calls it once its clock is running — interactive
+// play, a dedicated host, and an authored script alike. The gate reads a capture a
+// playout lead ahead of the current tick, so arming it over a clock that has not
+// started would time out every dial it was meant to admit.
+func (a *App) openMidRunJoins() {
+	a.lateJoins.Store(true)
+	a.lobbyClosing.Store(false)
 }
 
 // sessionCapacity is how many guests this host will ever hold, excluding itself.
@@ -555,14 +568,14 @@ func (a *App) startHostSessionOn(port *network.SocketPort, signals <-chan os.Sig
 // startJoinSession completes the tick-zero gate before the socket port owns the
 // stream. The roster arrives with the gate, not with the offer: a joiner that
 // dialled early saw only the participants ahead of it.
-func (a *App) startJoinSession() error {
+func (a *App) startJoinSession(signals <-chan os.Signal) error {
 	if a.pendingJoin == nil {
 		return errors.New("join session has no pending stream")
 	}
 	a.showStartupStatus("Join accepted; waiting for host start gate")
-	final, err := a.pendingJoin.WaitStart()
+	final, err := a.awaitStartGate(signals)
 	if err != nil {
-		return fmt.Errorf("join start gate: %w", err)
+		return err
 	}
 	a.sessionOffer = final
 	if !final.CarriesSnapshot() {
@@ -586,6 +599,62 @@ func (a *App) startJoinSession() error {
 	}
 	a.showStartupStatus(fmt.Sprintf("Network session ready: %d participants", len(final.Participants)))
 	return nil
+}
+
+// awaitStartGate reads the host's start record without freezing this instance.
+//
+// The gate carries no deadline, and that is right: it is the host waiting for the
+// rest of its lobby, a human-paced wait with no bound worth guessing at. What was
+// wrong is that it was also a wait nobody could leave — the whole of a join runs
+// before the frame loop exists, so a blocking read here answered no key and no
+// signal, and a host that never sent the record froze the game, quit included.
+//
+// So the read runs on a goroutine while the terminal is polled here, as the host's
+// own lobby already does. Cancelling closes the stream, which turns the read in
+// flight into an error rather than a goroutine outliving the run; waiting for it to
+// return is what keeps the App single-threaded either way.
+func (a *App) awaitStartGate(signals <-chan os.Signal) (network.SessionOffer, error) {
+	type gate struct {
+		offer network.SessionOffer
+		err   error
+	}
+	done := make(chan gate, 1)
+	go func() {
+		offer, err := a.pendingJoin.WaitStart()
+		done <- gate{offer, err}
+	}()
+	cancel := func() (network.SessionOffer, error) {
+		_ = a.pendingJoin.Close()
+		<-done
+		return network.SessionOffer{}, errSessionCanceled
+	}
+
+	var events <-chan terminal.Event
+	if a.termSvc != nil {
+		events = a.termSvc.Events()
+	}
+	for {
+		select {
+		case g := <-done:
+			if g.err != nil {
+				return network.SessionOffer{}, fmt.Errorf("join start gate: %w", g.err)
+			}
+			return g.offer, nil
+		case <-signals:
+			return cancel()
+		case ev := <-events:
+			switch ev.Type {
+			case terminal.EventClosed, terminal.EventError:
+				return cancel()
+			case terminal.EventResize:
+				a.handleResize(ev.Width, ev.Height)
+			case terminal.EventKey:
+				if ev.Key == terminal.KeyCtrlC || ev.Key == terminal.KeyCtrlQ {
+					return cancel()
+				}
+			}
+		}
+	}
 }
 
 // waitForStartup treats rejected handshakes as recoverable while no peer was admitted.
@@ -636,6 +705,17 @@ func (a *App) waitForStartup(port *network.SocketPort, signals <-chan os.Signal,
 		}
 	}
 	return nil
+}
+
+// pollTerminalEarly starts the terminal poll ahead of the rest of the hub, so a
+// gate that blocks on a peer still has keys and signals to end on. A service is
+// started once: the StartAll that follows finds this one already running, and a run
+// with no terminal has nothing to start.
+func (a *App) pollTerminalEarly() error {
+	if a.termSvc == nil {
+		return nil
+	}
+	return a.termSvc.Start()
 }
 
 // socketPort returns the concrete startup endpoint contributed by NetworkService.

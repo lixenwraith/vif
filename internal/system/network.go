@@ -35,7 +35,7 @@ type NetworkSystem struct {
 	crossings       []event.ScheduledWireFrame
 	scheduled       []barrierArtifact
 	scheduledBytes  int
-	epochs          [parameter.MaxPlayers + 1]epochWindow
+	epochs          [participantSlots]epochWindow
 	productionEpoch uint64
 	crossSeq        uint64
 	// appliedCrossSeq is the contiguous source-local sequence through which every
@@ -57,12 +57,7 @@ type NetworkSystem struct {
 	// because a link delivers one source's frames in order and a frame this instance
 	// refused is one it will never see again — so the highest it applied is the
 	// honest statement of what it has dealt with.
-	//
-	// Sized MaxPlayers+2 to cover every identity the coordinator hands out, which
-	// runs 1..MaxPlayers+1. The epoch window beside it is one shorter and drops a
-	// source at the top of that range; that is a separate defect and is not widened
-	// here.
-	appliedPeerSeq [parameter.MaxPlayers + 2]uint64
+	appliedPeerSeq [participantSlots]uint64
 
 	// snapshotFloor is the tick of the last world this instance installed, and
 	// snapshotFences what that world contained from each participant. For a
@@ -79,8 +74,8 @@ type NetworkSystem struct {
 	buf [parameter.NetworkDrainWindow]network.Inbound // per-tick drain window
 
 	syncSeq   uint64
-	lastSync  [parameter.MaxPlayers]uint64   // last applied sync per slot, for reordering
-	departed  [parameter.MaxPlayers + 1]bool // participants already announced or noticed
+	lastSync  [parameter.MaxPlayers]uint64 // last applied sync per slot, for reordering
+	departed  [participantSlots]bool       // participants already announced or noticed
 	ticks     uint64
 	statSent  *atomic.Int64
 	statRecv  *atomic.Int64
@@ -107,7 +102,7 @@ type NetworkSystem struct {
 	statDigestMismatch *atomic.Int64
 
 	digestHistory  [parameter.NetworkEpochWindow]stateDigest
-	pendingDigest  [parameter.MaxPlayers + 1]stateDigest
+	pendingDigest  [participantSlots]stateDigest
 	statDriftPart  *status.AtomicString
 	statDriftTick  *atomic.Int64
 	statPreInstall *atomic.Int64
@@ -148,7 +143,7 @@ type NetworkSystem struct {
 	// the only message whose size is a function of the world, so it is the only one
 	// that arrives in pieces, and the pieces of two peers' corrections must not be
 	// able to interleave into a body that hashes as neither.
-	snapshots [parameter.MaxPlayers + 1]network.SnapshotAssembly
+	snapshots [participantSlots]network.SnapshotAssembly
 
 	// suffix is the bounded ring of this instance's own accepted crossings, kept so
 	// a correction that rebases the world onto an earlier tick can put them back.
@@ -314,6 +309,13 @@ func (w *epochWindow) admit(tick uint64) bool {
 // telemetry that asks how far behind a peer's production is.
 func (w *epochWindow) newest() uint64 { return w.high }
 
+// participantSlots sizes every array this system indexes by participant identity.
+// The coordinator hands out 1..MaxPlayers+1 and never zero, so one name rather than
+// a size at each declaration: they used to disagree by one, and the identity at the
+// top of the range had its epochs, corrections, digests and departure silently
+// dropped by whichever array was short.
+const participantSlots = parameter.MaxPlayers + 2
+
 // coordinatorParticipant is the identity the handshake always assigns to the host.
 // It is the one participant every topology the session can build has a path to, which
 // is what makes it the single producer of a departure crossing.
@@ -401,7 +403,7 @@ func (s *NetworkSystem) Init() {
 	s.ticks = 0
 	s.syncSeq = 0
 	s.lastSync = [parameter.MaxPlayers]uint64{}
-	s.departed = [parameter.MaxPlayers + 1]bool{}
+	s.departed = [participantSlots]bool{}
 
 	for _, c := range s.resetInts {
 		c.Store(0)
@@ -416,8 +418,8 @@ func (s *NetworkSystem) Init() {
 	s.lastLostIn, s.lastLostOut = 0, 0
 	s.barrierActive.Store(false)
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
-	s.pendingDigest = [parameter.MaxPlayers + 1]stateDigest{}
-	s.snapshots = [parameter.MaxPlayers + 1]network.SnapshotAssembly{}
+	s.pendingDigest = [participantSlots]stateDigest{}
+	s.snapshots = [participantSlots]network.SnapshotAssembly{}
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
@@ -433,11 +435,11 @@ func (s *NetworkSystem) Init() {
 	s.suffixBytes = 0
 	s.suffixDropped = 0
 	s.lostSeq = 0
-	s.epochs = [parameter.MaxPlayers + 1]epochWindow{}
+	s.epochs = [participantSlots]epochWindow{}
 	s.snapshotFloor = 0
 	s.snapshotAuthority = 0
 	s.snapshotFences = nil
-	s.appliedPeerSeq = [parameter.MaxPlayers + 2]uint64{}
+	s.appliedPeerSeq = [participantSlots]uint64{}
 	s.productionEpoch = s.world.Resources.Game.State.GetGameTicks() + 1
 	s.crossSeq = 0
 	s.appliedCrossSeq = 0
@@ -559,9 +561,32 @@ func (s *NetworkSystem) removeParticipant(p *event.ParticipantDepartedPayload) {
 	}
 	s.world.PushEvent(event.EventCursorDespawnRequest, &event.CursorDespawnRequestPayload{Slot: p.Slot})
 	s.lastSync[p.Slot] = 0
+	s.forgetCrossingFence(p.Participant)
 	if int(p.Participant) < len(s.departed) {
 		s.departed[p.Participant] = true
 	}
+}
+
+// forgetCrossingFence drops what this instance had applied from a participant that
+// has left, so the identity is clean for whoever takes it next.
+//
+// An identity is returned to the pool on departure and handed out again, and a
+// participant's sequence starts at one — so a fence left behind claims a captured
+// world contains crossings a *later* holder of that identity has not produced yet.
+// Every receiver of that capture then discards its first crossings as already
+// applied, and the rejoining participant discards its own from the queue that had
+// not been sent and from the replay suffix, which is exactly the disappearing
+// keystroke §3.2 of the multiplayer document exists to prevent.
+//
+// It runs from the departure crossing rather than from the disconnect, so every
+// instance forgets at the same agreed tick and their capture headers keep agreeing.
+func (s *NetworkSystem) forgetCrossingFence(participant uint32) {
+	if participant == 0 || int(participant) >= len(s.appliedPeerSeq) {
+		return
+	}
+	s.mu.Lock()
+	s.appliedPeerSeq[participant] = 0
+	s.mu.Unlock()
 }
 
 // Cross encodes and schedules a crossing when a peer is live. The sequence it

@@ -484,12 +484,15 @@ func (u *authority) tryPublish() {
 // reached a majority. What is left is the local-continuation fallback, said plainly:
 // instance continues its own game from the last authoritative state.
 func (u *authority) giveUp() {
+	// Read before the state is cleared: what this fork keeps is the roster it can
+	// still reach, and both halves of that answer are gone once lost is.
+	roster := u.currentRoster()
 	u.mu.Lock()
 	if u.contested == 0 {
 		u.mu.Unlock()
 		return
 	}
-	term, lost := u.contested, u.lost
+	term, lost, local := u.contested, u.lost, u.local
 	u.contested, u.reports, u.grants, u.vote, u.published = 0, nil, nil, 0, false
 	u.fork = true
 	u.mu.Unlock()
@@ -497,6 +500,7 @@ func (u *authority) giveUp() {
 	u.statMigrating.Store(false)
 	u.statHostLost.Store(true)
 	u.publish()
+	u.a.dropAbandonedCursors(roster, local)
 	vlog.Warn("app", "msg", "no succession possible; continuing locally",
 		"term", uint64(term), "lost", uint64(lost))
 	u.a.ctx.SetStatusMessage(
@@ -819,22 +823,63 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 	if rec.Predecessor == 0 {
 		return
 	}
-	slot, ok := uint8(0), false
-	for _, p := range rec.Roster {
-		if p.ID == rec.Predecessor {
-			slot, ok = p.Slot, true
-			break
-		}
-	}
-	if !ok {
+	i := slices.IndexFunc(rec.Roster, func(p network.SessionParticipant) bool {
+		return p.ID == rec.Predecessor
+	})
+	if i < 0 {
 		return
 	}
+	a.crossDeparture(rec.Predecessor, rec.Roster[i].Slot)
+}
+
+// dropAbandonedCursors removes the participants a lone fork will never hear from
+// again.
+//
+// A fork is the outcome where nobody may author: the authority is gone, nothing was
+// electable, and this instance continues its own game. When it continues *alone* —
+// no link left, which is every session the CLI's star builds — each cursor it does
+// not simulate belongs to a participant nothing will ever move again: the authority
+// that went, and behind it the guests only ever reachable through it. Left there
+// they are players that cannot be played and cannot leave.
+//
+// Being alone is also what makes the removal local rather than a crossing, and that
+// is exact rather than convenient: a departure is produced once at one agreed tick
+// (D-11) because two instances must destroy the same shared entity together or
+// their allocators diverge from there on, and here there is no second instance. A
+// fork that still holds links is left alone for the mirror of that reason, which is
+// the partition case doc/multi-player-enhancement.md §8 records as unfinished.
+func (a *App) dropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
+	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
+		return
+	}
+	for _, p := range roster {
+		if p.ID == local || p.Slot == parameter.NoPlayerSlot {
+			continue
+		}
+		a.pushDeparture(p.ID, p.Slot, core.DomainShared)
+	}
+}
+
+// crossDeparture produces one participant's departure as the D-11 crossing it is.
+func (a *App) crossDeparture(id network.PeerID, slot uint8) {
+	a.pushDeparture(id, slot, core.DomainPlayer)
+}
+
+// pushDeparture emits one participant's removal and returns its identity to the
+// pool this instance allocates from.
+//
+// The domain is the whole of the difference between the two producers above. Player
+// puts the artifact on the wire, where every instance applies it at one agreed tick;
+// shared keeps it here, which is this instance re-deriving its own roster because
+// there is nobody left to agree with. Both are recorded, so a replay of either run
+// reaches the same world the same way.
+func (a *App) pushDeparture(id network.PeerID, slot uint8, domain core.Domain) {
 	a.world.RunSafe(func() {
 		a.world.PushEventFull(event.EventParticipantDeparted,
-			&event.ParticipantDepartedPayload{Participant: uint32(rec.Predecessor), Slot: slot},
-			event.OriginSession, core.DomainPlayer)
+			&event.ParticipantDepartedPayload{Participant: uint32(id), Slot: slot},
+			event.OriginSession, domain)
 	})
-	a.releaseParticipant(rec.Predecessor)
+	a.releaseParticipant(id)
 }
 
 // publishAuthorityResource hands the transport the two cells the barrier reads:

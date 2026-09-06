@@ -1,6 +1,8 @@
 package app
 
 import (
+	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/mode"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
+	"github.com/lixenwraith/vi-fighter/internal/resource"
 	"github.com/lixenwraith/vi-fighter/internal/snapshot"
 )
 
@@ -155,28 +158,73 @@ func TestSoloRunBecomesAHostAndAdmitsAParticipantMidRun(t *testing.T) {
 	}
 }
 
-// TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism.
+// TestAReconnectIsTheSameJoin asserts there is no fourth join mechanism, on the
+// host shape where that used to be false.
 //
 // A participant that drops leaves a departure crossing behind, and the coordinator
 // returns its identity to the pool. What comes back is a new dial: the same
 // acceptor, the same identity allocation, the same capture at whatever tick the
 // host has now reached, the same install, the same arrival crossing. Nothing here
-// is reconnect-specific, and that is the whole claim — so the test is the join test
-// run twice against one host, with a disconnect in between, asserting the second
-// arrival lands on a world the host has moved well past since the first.
+// is reconnect-specific, and that is the whole claim.
+//
+// The host is started through its startup lobby rather than with :host, because
+// the lobby is the shape the claim used to be false for. The mid-run gate was a
+// dedicated host's alone, so a -host or a scripted host closed its lobby and then
+// admitted a re-dial onto no gate at all: the transport took the stream, no start
+// record was ever sent, and the guest sat in a blocking read it could not even quit
+// out of while the host's status line reported a peer.
+//
+// So this is the join run twice against one lobby host — once through the start
+// gate and once through the mid-run one — with a disconnect in between, asserting
+// the second arrival lands on a world the host has moved well past since the first.
 func TestAReconnectIsTheSameJoin(t *testing.T) {
 	// Not parallel: this drives a real socket against wall-clock deadlines.
 	const seed = 0x3019
-	host := mustHeadless(t, seed, 120, 40)
-	defer host.Close()
-	tickUntilCursor(t, host)
-	host.Tick(120)
-	if err := host.BeginHosting("127.0.0.1:0"); err != nil {
-		t.Fatalf("begin hosting: %v", err)
-	}
-	addr := host.HostAddr()
+	addr := freeAddress(t)
 
-	firstTick := joinAndLeave(t, host, addr, seed)
+	// newScriptApp is the interactive -host sequence with the frame loop removed:
+	// the same lobby, the same start gate, and the same arming of the mid-run gate
+	// once the roster has closed.
+	cfg := Config{
+		Mode: ModeHeadless, Seed: seed, Width: 120, Height: 40,
+		Resources:   resource.Options{Embedded: true},
+		HostAddress: addr, Participants: 2,
+	}
+	cfg.scriptedSession = true
+	hosted, hostFailed := make(chan *App, 1), make(chan error, 1)
+	go func() {
+		if a, err := newScriptApp(cfg, nil); err != nil {
+			hostFailed <- err
+		} else {
+			hosted <- a
+		}
+	}()
+
+	// The first join is the lobby's: the host is frozen at tick zero until this
+	// guest confirms, so nothing has to drive it here.
+	first, firstPort := mustSocketJoiner(t, addr, seed, 120, 40)
+	var host *App
+	select {
+	case host = <-hosted:
+	case err := <-hostFailed:
+		t.Fatalf("host startup: %v", err)
+	case <-time.After(socketWait):
+		t.Fatal("the host never finished its start gate")
+	}
+	t.Cleanup(host.Close)
+
+	// The gate the reconnect below arrives at, asserted where a run arms it. A lobby
+	// that has closed has to do both things: stop refusing dials, and start serving
+	// them. Doing only the first is what left a re-dial admitted onto no gate at all.
+	if host.lobbyClosing.Load() || !host.lateJoins.Load() {
+		t.Fatalf("after its start gate the host refuses dials = %t and serves mid-run joins = %t",
+			host.lobbyClosing.Load(), host.lateJoins.Load())
+	}
+	firstTick := uint64(first.World().Resources.Status.Ints.Get("snapshot.install_tick").Load())
+
+	_ = firstPort.Close()
+	first.Close()
+	waitForHostRoster(t, host, 1)
 
 	// The host keeps playing between the two joins, so the second capture describes
 	// a world the first participant never saw.
@@ -188,6 +236,54 @@ func TestAReconnectIsTheSameJoin(t *testing.T) {
 			"the host has to have moved on between them or this proves nothing",
 			secondTick, firstTick)
 	}
+}
+
+// freeAddress reserves a loopback port and hands back the address nothing is now
+// listening on. A run started from its flags takes a literal -host address, so a
+// test that drives that path cannot ask the kernel for one after the fact.
+func freeAddress(t *testing.T) string {
+	t.Helper()
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("reserve a port: %v", err)
+	}
+	addr := l.Addr().String()
+	if err := l.Close(); err != nil {
+		t.Fatalf("release the reserved port: %v", err)
+	}
+	return addr
+}
+
+// joinDeadline stands in for the person at the keyboard. The start gate has no
+// deadline of its own — it is the host waiting for the rest of its lobby — so what
+// bounds it is that it can be left, and this is the harness leaving it. A gate that
+// could not be would hang a run rather than fail it, which is what it did.
+func joinDeadline(d time.Duration) <-chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	time.AfterFunc(d, func() { ch <- os.Interrupt }) // [wall] a link bound, not a game one
+	return ch
+}
+
+// dialSession dials until the coordinator answers with an offer.
+//
+// Both things it retries past are the protocol's own: a host that binds on a
+// goroutine of its own is not listening yet when a test reaches it, and a refusal —
+// a lobby mid-close, an identity a dropped stream has not finished returning — is
+// exactly the answer the design tells a dialer to retry rather than give up on.
+func dialSession(t *testing.T, addr string) (*network.PendingJoin, network.SessionOffer) {
+	t.Helper()
+	deadline := time.Now().Add(socketWait) // [wall] a link bound, not a game one
+	var last error
+	for time.Now().Before(deadline) {
+		pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
+		if err == nil {
+			return pending, offered
+		}
+		last = err
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatalf("dial session %s: %v", addr, last)
+	return nil, network.SessionOffer{}
 }
 
 // tickInBackground keeps one instance running while the caller does something that
@@ -332,10 +428,7 @@ func TestBeginHostingRefusesASecondSession(t *testing.T) {
 // terminal and this harness owns its own ticks.
 func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *network.SocketPort) {
 	t.Helper()
-	pending, offered, err := network.DialSession(addr, network.DebugConfig(network.RolePeer, ""))
-	if err != nil {
-		t.Fatalf("dial session: %v", err)
-	}
+	pending, offered := dialSession(t, addr)
 	t.Cleanup(func() { _ = pending.Close() })
 
 	joinCfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: w, Height: h}, offered)
@@ -364,7 +457,7 @@ func mustSocketJoiner(t *testing.T, addr string, seed uint64, w, h int) (*App, *
 	// which is what startJoinSession does; the port then replays what the gate held.
 	port := network.NewSocketPort(pending.TransportConfig())
 	t.Cleanup(func() { _ = port.Close() })
-	if err := guest.startJoinSession(); err != nil {
+	if err := guest.startJoinSession(joinDeadline(socketWait)); err != nil {
 		t.Fatalf("join startup: %v", err)
 	}
 	if err := port.Start(); err != nil {

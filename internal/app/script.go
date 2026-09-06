@@ -155,7 +155,10 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 		return nil, err
 	}
 	if a.pendingJoin != nil {
-		if err := a.startJoinSession(); err != nil {
+		if err := a.pollTerminalEarly(); err != nil {
+			return fail(err)
+		}
+		if err := a.startJoinSession(signals); err != nil {
 			return fail(err)
 		}
 	}
@@ -175,6 +178,12 @@ func newScriptApp(cfg Config, signals <-chan os.Signal) (*App, error) {
 		a.ctx.TimeCtl.SetPaused(false)
 	}
 	a.scheduler.Prepare()
+	// A scripted host is a host: its lobby has closed, so a dial from here is a
+	// mid-run join and a guest that dropped comes back through the same gate. The
+	// clock its capture waits on is the script's own, advanced by the caller that is
+	// about to start stepping. On a run that hosts nothing this is inert until a
+	// later :host opens a session.
+	a.openMidRunJoins()
 	return a, nil
 }
 

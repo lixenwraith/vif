@@ -88,9 +88,11 @@ func (a *App) beginHostingLocked(addr string) error {
 	if a.cfg.Participants == 0 {
 		a.cfg.Participants = parameter.MaxPlayers
 	}
-	netCfg := a.hostNetworkConfig()
-	netCfg.OnAdmit = a.releaseMidRunJoiner
-	port := network.NewSocketPort(netCfg)
+	port := network.NewSocketPort(a.hostNetworkConfig())
+
+	// Armed before the listener exists: a run that opens a session mid-game has no
+	// startup lobby, so every dial it ever sees is a mid-run join.
+	a.lateJoins.Store(true)
 
 	// Everything the accept goroutine reads is published before the listener that
 	// wakes it exists. Start returns with the accept loop already running, so a
@@ -123,6 +125,7 @@ func (a *App) beginHostingLocked(addr string) error {
 		a.sessionMu.Lock()
 		a.midRunPort, a.sessionRoster = nil, nil
 		a.sessionMu.Unlock()
+		a.lateJoins.Store(false)
 		a.cfg.HostAddress = ""
 		a.cfg.Participants = previousParticipants
 		a.world.Resources.Network = nil

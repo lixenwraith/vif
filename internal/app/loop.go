@@ -45,7 +45,17 @@ func (a *App) Loop() error {
 	defer stopSignals()
 
 	if a.pendingJoin != nil {
-		if err := a.startJoinSession(); err != nil {
+		// The terminal is polled before the rest of the hub, and only it: the gate
+		// owns the dialled stream until it hands it over, so the network service
+		// must not start yet — and without an event source the gate is a wait with
+		// no key and no signal to leave on.
+		if err := a.pollTerminalEarly(); err != nil {
+			return err
+		}
+		if err := a.startJoinSession(sigChan); err != nil {
+			if errors.Is(err, errSessionCanceled) {
+				return nil
+			}
 			return err
 		}
 	}
@@ -81,11 +91,12 @@ func (a *App) Loop() error {
 	// Prime the first tick, then start the game clock
 	a.frameReady <- struct{}{}
 	a.scheduler.Start()
-	// The lobby's closing window ends with the clock, not with the roster: an
-	// interactive host arms no mid-run gate here, but a dial refused because the
-	// lobby was closing must stop being refused once the session is running, or
-	// a later :host would open a session nothing could reach.
-	a.lobbyClosing.Store(false)
+	// After the clock, not before it: from here a dial is a mid-run join rather than
+	// a lobby member, and the gate that serves one reads a capture a playout lead
+	// ahead of the current tick. It also ends the lobby's closing window, which is
+	// what a run that opens a session later with :host needs even when it never had
+	// a lobby of its own.
+	a.openMidRunJoins()
 
 	frameTicker := time.NewTicker(parameter.FrameUpdateInterval)
 	defer frameTicker.Stop()

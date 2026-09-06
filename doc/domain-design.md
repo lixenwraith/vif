@@ -423,6 +423,18 @@ Arrival and departure are coordinator-authored barrier crossings. A non-authorit
 roster artifact is refused. Full reset is likewise serialized by the coordinator;
 it preserves the closed roster and rebuilds cursors in slot order.
 
+The one instance that removes a participant without a crossing is an explicit
+local fork with no link left. Nothing there can produce or receive one — the
+authority is gone and no successor was electable — so it drops every cursor it
+does not simulate as local roster state. Agreeing on a tick needs a second
+instance, and there is none; a fork that still holds links leaves its roster
+alone, which is part of the unimplemented partition case below.
+
+A departure also clears what the instance had applied from that participant. The
+identity returns to the pool and a crossing sequence starts at one, so a fence
+kept from the previous holder would claim a capture already contains crossings the
+next holder has yet to produce.
+
 Pause, speed, step, raw Shared mutation, and synchronous diagnostic save are
 instance-local operator actions and are refused while peers are live. Inspection
 modes remain available without stopping simulation.
@@ -513,7 +525,7 @@ departing cursor, and reconnect must take a current world.
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | The three-tick receive lead is fixed and not graph-diameter aware. |
 | Topology | The protocol relays over a graph, but `-join` dials one address, so ordinary CLI sessions form a star. |
-| Partition | Majority succession works; merging an explicit local fork does not. |
+| Partition | Majority succession works; merging an explicit local fork does not. A fork with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Operator API | Interactive mutation is session-aware; programmatic map/FSM mutation still relies on caller discipline. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |

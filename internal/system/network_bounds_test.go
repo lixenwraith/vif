@@ -77,6 +77,24 @@ func TestTheScheduleRefusesATickItWillNotReach(t *testing.T) {
 	}
 }
 
+// TestTheTopParticipantIdentityIsAdmitted covers a full roster's last guest.
+//
+// The coordinator hands out 1..MaxPlayers+1, and the arrays this system indexes by
+// identity did not all have room for the top of that range. Participant
+// MaxPlayers+1 therefore had its epochs, corrections, digests and departure dropped
+// by whichever array was one short — a dedicated host holding the whole roster
+// silently ignored one of its players, and nothing said so.
+func TestTheTopParticipantIdentityIsAdmitted(t *testing.T) {
+	t.Parallel()
+	s := boundsSystem(t)
+	top := uint32(parameter.MaxPlayers + 1)
+
+	s.scheduleCrossings(top, boundsBatch(t, top, 1, 2, 3, 0))
+	if got := scheduledCount(s); got != 3 {
+		t.Fatalf("participant %d had %d of its 3 artifacts scheduled", top, got)
+	}
+}
+
 // TestAnEpochFromBeyondTheHorizonDoesNotPoisonItsSource is the reason the window
 // runs before the epoch window rather than after it.
 //

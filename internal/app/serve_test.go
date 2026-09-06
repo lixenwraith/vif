@@ -221,44 +221,77 @@ func TestADedicatedHostCorrectsItsGuests(t *testing.T) {
 	}
 }
 
-// TestADedicatedHostAdmitsALateDial covers the seam that lets a server outlive its
-// guests: the mid-run gate is installed from construction and answers nothing
-// until the startup lobby has closed, and it finds the endpoint NetworkService
+// TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone covers the seam that lets a
+// host outlive its guests: the mid-run gate is installed from construction,
+// answers nothing until the run arms it, and finds the endpoint NetworkService
 // contributed rather than one the run opened for itself with :host.
-func TestADedicatedHostAdmitsALateDial(t *testing.T) {
+//
+// Both host shapes, because it used to be a dedicated host's alone. An interactive
+// or scripted -host closed its lobby and then admitted a re-dial onto no gate: the
+// transport took the stream, no start record was ever sent, and the guest sat in a
+// read it could not leave. The window between the two gates is the third state
+// here, and the only one where the honest answer is a refusal the dialer retries.
+func TestEveryHostGateAdmitsALateDialOnceItsLobbyIsDone(t *testing.T) {
 	// Not parallel: this binds a real socket.
-	a, err := New(Config{
-		Mode: ModeServer, HostAddress: "127.0.0.1:0",
-		Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
-	})
-	if err != nil {
-		t.Fatalf("server: %v", err)
-	}
-	defer a.Close()
+	for _, tt := range []struct {
+		name         string
+		mode         Mode
+		scripted     bool
+		participants int
+		peers        int
+	}{
+		{name: "dedicated", mode: ModeServer, peers: parameter.MaxPlayers},
+		{name: "lobby", mode: ModeHeadless, scripted: true, participants: 2, peers: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg := Config{
+				Mode: tt.mode, HostAddress: "127.0.0.1:0", Participants: tt.participants,
+				Width: 120, Height: 40, Resources: resource.Options{Embedded: true}, Seed: 0x5E4E,
+			}
+			cfg.scriptedSession = tt.scripted
+			a, err := New(cfg)
+			if err != nil {
+				t.Fatalf("host: %v", err)
+			}
+			defer a.Close()
 
-	if a.cfg.networkConfig.OnAdmit == nil {
-		t.Fatal("a dedicated host installs no mid-run gate")
-	}
-	if a.cfg.networkConfig.MaxPeers != parameter.MaxPlayers {
-		t.Fatalf("a dedicated host accepts %d peers, want the full roster",
-			a.cfg.networkConfig.MaxPeers)
-	}
-	// Before the lobby closes the gate is startHostSessionOn's, and a second one
-	// would race it. An unarmed dial is therefore a no-op rather than a refusal.
-	a.admitLateJoiner(2)
-	if a.lateJoins.Load() {
-		t.Fatal("the mid-run gate armed itself")
-	}
+			if a.cfg.networkConfig.OnAdmit == nil {
+				t.Fatal("this host installs no mid-run gate")
+			}
+			if a.cfg.networkConfig.MaxPeers != tt.peers {
+				t.Fatalf("the transport admits %d peers, want %d",
+					a.cfg.networkConfig.MaxPeers, tt.peers)
+			}
 
-	if err := a.hub.StartAll(); err != nil {
-		t.Fatalf("start services: %v", err)
-	}
-	port, err := a.socketPort()
-	if err != nil || port == nil {
-		t.Fatalf("a dedicated host has no endpoint to admit onto: %v", err)
-	}
-	if bound := port.Addr(); bound == nil {
-		t.Fatal("the endpoint is not bound")
+			// Before the lobby closes the gate is startHostSessionOn's, and a second
+			// one would race it. An unarmed dial is therefore a no-op rather than a
+			// refusal.
+			a.admitLateJoiner(2)
+			if a.lateJoins.Load() {
+				t.Fatal("the mid-run gate armed itself")
+			}
+			// The window in between: the lobby's offers are already out and the
+			// mid-run gate waits on a capture a stopped clock never reaches.
+			a.lobbyClosing.Store(true)
+			if _, err := a.assignParticipant(); !errors.Is(err, ErrSessionStarting) {
+				t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
+			}
+			a.openMidRunJoins()
+			if _, err := a.assignParticipant(); err != nil {
+				t.Fatalf("a dial after the gate opened was refused: %v", err)
+			}
+
+			if err := a.hub.StartAll(); err != nil {
+				t.Fatalf("start services: %v", err)
+			}
+			port, err := a.socketPort()
+			if err != nil || port == nil {
+				t.Fatalf("this host has no endpoint to admit onto: %v", err)
+			}
+			if bound := port.Addr(); bound == nil {
+				t.Fatal("the endpoint is not bound")
+			}
+		})
 	}
 }
 
@@ -321,24 +354,6 @@ func TestAnInteractiveHostStillWaitsForItsWholeLobby(t *testing.T) {
 			t.Fatalf("-players %d: quorum = %d, want %d", tt.participants, got, tt.want)
 		}
 		a.Close()
-	}
-}
-
-// TestTheLobbyClosingWindowRefusesADial covers the gap between the startup lobby
-// reading its roster and the mid-run gate arming. Neither gate can serve a dial
-// there, so the answer has to be a refusal the dialer can retry.
-func TestTheLobbyClosingWindowRefusesADial(t *testing.T) {
-	t.Parallel()
-	a := mustHeadless(t, 0x5E7E, 120, 40)
-	defer a.Close()
-
-	a.lobbyClosing.Store(true)
-	if _, err := a.assignParticipant(); !errors.Is(err, ErrSessionStarting) {
-		t.Fatalf("a dial during the closing window returned %v, want ErrSessionStarting", err)
-	}
-	a.openMidRunJoins()
-	if _, err := a.assignParticipant(); err != nil {
-		t.Fatalf("a dial after the gate opened was refused: %v", err)
 	}
 }
 

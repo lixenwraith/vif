@@ -44,7 +44,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Local replay | A guest retains a bounded canonical suffix of its own accepted crossings and replays the portion later than the installed authority baseline. |
 | Crossing ordering | Snapshot schema 5 carries one applied-sequence fence per participant. A receiver removes ordinary frames the installed world already holds — including ones whose nominal receive tick is still ahead — and keeps the ones it does not, including ones whose receive tick is long past. |
 | Local FSM lifecycle | A live install replays only config-marked persistent `ClassLocal` exit/entry events for crossed state paths; staging and all ordinary actions remain side-effect free. |
-| Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. |
+| Join and reconnect | A running game can begin hosting; join and reconnect install a current capture through the same staging path. Every host arms the same mid-run gate once its own lobby is done, so a reconnect takes one path whether the session started with `-host`, `-serve`, a script, or `:host`. |
 | Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
@@ -210,7 +210,20 @@ survivors already agree.
 
 A partition without a strict majority elects nobody. Its members continue locally
 with `network.fork` and persistent `HOST LOST:LOCAL`; encountering a higher term
-later is refused because partition merging is not implemented.
+later is refused because partition merging is not implemented. A fork left with no
+link at all — every session the CLI's star builds — drops the participants it can
+no longer reach as it forks: the authority that went, and behind it the guests that
+were only ever reachable through it. That removal is local rather than a crossing,
+and being alone is what makes it exact: a departure is produced once at one agreed
+tick because two instances must destroy the same shared entity together, and there
+is no second instance. A fork that still holds links keeps its roster, which is
+part of gap 4 below.
+
+A departure, however it is produced, also clears what the instance had applied from
+that participant. Identities return to the pool and a crossing sequence starts at
+one, so a fence kept from the previous holder would claim a capture already contains
+crossings the next holder of that identity has not produced — and §3.2's install
+rule would then discard exactly those.
 
 ## 6. Current operating point
 
@@ -291,7 +304,10 @@ stop or mutate only one copy of a live session.
    dials one address, so ordinary CLI sessions still form a star. A relayed peer
    inherits its neighbour's cadence.
 4. **Partition merge.** Majority succession is implemented; reconciling an
-   explicit local fork back into a higher term is not.
+   explicit local fork back into a higher term is not. A fork with links still
+   standing also keeps the participants on the far side of the loss: it has peers
+   to agree an apply tick with and no authority to name one, so its roster stays
+   as it was. A fork alone does not have that problem and does not have it (§5).
 5. **Programmatic operator mutation.** Interactive controls are session-aware;
    embedder-level map and FSM mutations still rely on caller discipline.
 6. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
@@ -365,3 +381,14 @@ Exercise rapid `h`/`l` sequences on both participants across several correction
 cadences. A corrected cursor must not subsequently visit an older cell because of
 a delayed copy. Also verify typing, gold destruction, combat, reset, disconnect,
 and reconnect while watching the diagnostics in §7.
+
+Two membership checks are worth running by hand on every host shape, because they
+exercise the paths a two-terminal session reaches and nothing else does:
+
+- The guest leaves with `:q` and dials again. It should install a current capture
+  and take back the slot its departure released. While it waits at the start gate
+  it is not yet in a session and has no world, but the wait is still leavable:
+  Ctrl-Q, Ctrl-C and a terminal resize are answered there.
+- The host leaves instead. The guest reports `HOST LOST:LOCAL` and keeps playing,
+  and the host's cursor must be gone from its map rather than standing where it
+  was left.

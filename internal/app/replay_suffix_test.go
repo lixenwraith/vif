@@ -553,6 +553,42 @@ func hostFence(t *testing.T, host *App, participant network.PeerID) uint64 {
 	return cap.Header.Crossings.Seq(participant)
 }
 
+// TestADepartedParticipantLeavesNoCrossingFenceBehind is the other half of the same
+// disappearing keystroke, on a reconnect rather than on a late link.
+//
+// An identity is returned to the pool when its participant leaves and handed to
+// whoever dials next, and a participant's crossing sequence starts at one. So a
+// fence the authority kept from the previous holder claims a captured world already
+// contains crossings the new one has not produced — and the install then drops the
+// rejoined participant's first crossings from the queue that had not been sent yet
+// and from the replay suffix, exactly as if a correction had undone them.
+func TestADepartedParticipantLeavesNoCrossingFenceBehind(t *testing.T) {
+	t.Parallel()
+	host, guest := pair(t, 0x5EEDBEEF, 0)
+	mirrorCursors(t, host, guest)
+
+	inject(t, guest, intentMotion(input.MotionRight, 3))
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		host.Tick(1)
+		guest.Tick(1)
+	}
+	if hostFence(t, host, guestParticipant) == 0 {
+		t.Fatal("the host applied nothing from the guest; there is no fence to leave behind")
+	}
+
+	// The departure the coordinator produces when the link goes, applied at the tick
+	// it names on every instance.
+	host.crossDeparture(guestParticipant, 1)
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		host.Tick(1)
+	}
+	if got := hostFence(t, host, guestParticipant); got != 0 {
+		t.Fatalf("a capture still claims participant %d's crossings through sequence %d "+
+			"after it left; the next holder of that identity starts at 1",
+			guestParticipant, got)
+	}
+}
+
 // goldMember is one member of a gold run, with the cell and rune a typist needs.
 type goldMember struct {
 	entity core.Entity

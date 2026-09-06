@@ -309,7 +309,7 @@ func TestThreeParticipantLobbyClosesOnOneRoster(t *testing.T) {
 	// The gate releases only once the lobby is full, so both joiners wait here.
 	gated := make(chan error, len(guests))
 	for _, g := range guests {
-		go func() { gated <- g.startJoinSession() }()
+		go func() { gated <- g.startJoinSession(nil) }()
 	}
 	for range guests {
 		if err := <-gated; err != nil {
