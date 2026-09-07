@@ -295,13 +295,98 @@ entity together, and here there is no second instance. On a fork the removal is
 therefore local; the successor produces the predecessor's as the ordinary crossing,
 because it may.
 
-An instance that still holds links keeps its roster, which is part of gap 4 below.
+An instance that still holds links keeps its roster, which is the worse half of
+gap 5 below: peers to agree an apply tick with, and no authority to name one.
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. Identities return to the pool and a crossing sequence starts at
 one, so a fence kept from the previous holder would claim a capture already contains
 crossings the next holder of that identity has not produced — and §3.2's install
 rule would then discard exactly those.
+
+### 5.3 Reachability under `-authority migrate` — proposed
+
+Not built. This is the design §8's gaps 3, 4 and 5 are held open against, written
+down so the implementation is a transcription rather than a rediscovery.
+
+`-authority host` does not change: the address is the session, one instance binds
+it, and authorship never leaves the machine that started the world. It stays the
+default for `-serve` and the honest setting for any deployment where the world may
+only live where it started.
+
+`-authority migrate` gains the half it is missing. Authorship already moves
+correctly; what no survivor has is a way to reach the participant it moved to.
+The proposal is that a guest in a migrate session **also binds a listening port**,
+and that the authority **publishes the confirmed addresses** so every participant
+holds the same reachability map before it is needed.
+
+#### The sequence
+
+1. A guest joins as it does today. Its address is published to nobody, and it
+   binds a listening port of its own — the host's port by default, `-listen <addr>`
+   to pin one.
+2. The guest shows a warning that its address will be shared with the other
+   participants in five seconds, which is the window in which quitting costs
+   nothing.
+3. The host dials the guest's declared address once. That round trip is the
+   **bind confirmation**: it turns "the guest says it is listening" into "the
+   session has reached it there", which is what makes the map worth publishing.
+   A guest behind NAT, behind a firewall, or on a port already taken fails this
+   step and stays a leaf.
+4. Five seconds after confirmation, and only if the guest is still connected, the
+   authority broadcasts the updated map on `MsgPeerList` — reserved, unused, and
+   the message this is for.
+5. Peers dial from the map. The lower identity dials the higher, so a pair opens
+   one link rather than two.
+
+#### What the design has to answer, and how
+
+**An address is not roster identity.** `SessionParticipant` is compared by value:
+`SameRoster` sorts two rosters and calls `slices.Equal`, and `HandoffRecord.Validate`
+refuses a record whose roster is not byte-identical to the one the session closed
+on. An `Addr` field on that struct would make a guest that rebound its port look
+like a different roster and fail every handoff. The map is therefore a **separate
+replicated table keyed by identity**, carried beside the roster in the offer, the
+handoff and `MsgPeerList` — never inside it.
+
+**Reachability must be decided globally or not at all.** The whole of the
+split-brain rule is that `DesignatedSuccessor` is a pure function of state every
+survivor holds identically. If each instance filtered candidates by its own dial
+results, two survivors would compute two successors, which is the one outcome the
+current design rules out. So: the **authority-published, confirmed** map is an
+input to succession; a local dial failure is not. A survivor that cannot reach the
+elected successor falls back to the existing timeout and forks — strictly better
+than today, where nobody reaches anybody.
+
+**Then eligibility should use it.** Once the map is authoritative, the rule
+becomes "the lowest surviving identity **that the map confirms**", which also
+closes most of gap 5: losing the authority and the participant after it still
+elects somebody, as long as one confirmed participant survives. A guest that
+failed confirmation stays in the session, plays normally, and is skipped as a
+candidate.
+
+**A stale map must not resurrect a departed peer.** The broadcast carries the
+authority's term and is refused below the term the receiver holds, like every
+other authoritative artifact.
+
+**Ports collide.** Two guests on one machine cannot both bind the host's port,
+and neither can a guest on the host's own machine. The bind tries the default,
+falls back to an OS-assigned port, and declares whatever it actually bound;
+`-listen` overrides. A bind that fails entirely is not fatal — the participant is
+a leaf.
+
+**Binding is eager, not lazy.** Binding at the moment of succession would fail at
+the worst possible time and could not be confirmed in advance. The port is held
+for the session and used only after a handoff.
+
+#### Left for the user to decide
+
+| Question | Options | Recommendation |
+|---|---|---|
+| Mesh shape | Full mesh (everyone dials everyone): N² links, relay redundancy. Successor chain (each guest dials only the confirmed successor): N links, closes the gap and nothing more. | Successor chain first; the map is the same either way, so the shape is one dial policy. |
+| Declining advertisement | A `-no-advertise` guest plays as a leaf and is never a candidate, or a migrate session refuses it. | Leaf. Refusing turns a privacy preference into a lockout. |
+| Default listen port | The host's port (memorable, one firewall rule) or always ephemeral (never collides). | Host's port, falling back to ephemeral, declaring what was bound. |
+| Rejoin after a handoff | A departed guest keeps the last map and retries each member, or reconnect stays `-authority host` plus a stable address. | Both; the map costs nothing extra once it exists. |
 
 ## 6. Current operating point
 
@@ -367,52 +452,148 @@ stop or mutate only one copy of a live session.
 
 ## 8. Remaining gaps
 
-1. **Authentication and confidentiality — deferred by decision.** Links are
-   plaintext and a session is reached by its address alone. Participant claims,
-   loss notices and handoff records are structurally checked but not authenticated;
-   the rules prevent races, not a hostile peer. The deployed
-   fleet accepts this and hardens the open port instead; see the
-   [fleet plan](kubernetes-fleet.md) §4 for what bounds a stranger today and what
-   does not.
-2. **Adaptive playout lead.** The three-tick lead is fixed and not graph-diameter
-   aware. Cadence adapts per direct link; apply deadlines do not. It decides how
-   often a link misses the lead at all, and therefore how often §3.2's fences have
-   work to do — they make a missed lead harmless, not rare.
-3. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`
-   dials one address, so ordinary CLI sessions still form a star. A relayed peer
-   inherits its neighbour's cadence.
-4. **Migration moves authorship, not reachability.** A successor does not bind a
-   port and no artifact carries an address, so in a star it continues alone and
-   every other survivor forks — see §5.0, which is the whole of what this costs.
-   Closing it needs something the protocol does not have: a way for a participant
-   to be told where the session moved to. A rendezvous the guests already trust
-   (the allocator that handed out the first address) is the shape that fits the
-   fleet; peer-to-peer address exchange is the shape that fits an interactive
-   session and brings NAT with it. Neither is built, and `-authority host` is the
-   honest setting until one is.
-5. **A successor that went with the authority, and partition merge.** The roster
-   names one successor and no other instance may take the term, so losing both the
-   authority and the participant after it elects nobody and every survivor forks —
-   even where survivors that can still reach each other would have agreed on one.
-   Deciding that needs agreement on whether the designated successor is dead, which
-   is the quorum §5.1 explains the topology cannot supply. Reconciling an explicit
-   local fork back into a higher term is not implemented either, and a fork with
-   links still standing keeps the participants on the far side of the loss: it has
-   peers to agree an apply tick with and no authority to name one. A fork alone does
-   not have that problem (§5.2).
-6. **Programmatic operator mutation.** Interactive controls are session-aware;
-   embedder-level map and FSM mutations still rely on caller discipline.
-7. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
-   `event.EmitDeath`'s direct path, route-anchor casts, and mixed combat telemetry
-   should be made explicit or removed.
-8. **Tower and progression ownership.** Optional tower configurations still bind
-   ownership to the slot-zero cursor, and quasar progression still uses a session
-   drain total. Both need an explicit session-owned versus cursor-owned rule.
-9. **Presentation.** A small terminal clips the map, and remote cursor motion is
-   rendered at simulation arrival ticks. Windowed views and optional presentation
-   interpolation are separate from simulation ordering.
-10. **Portability.** Determinism is guaranteed within one implementation build,
-    not as cross-platform bit-exact lockstep for arbitrary `float64` behaviour.
+Reviewed against the code on 2026-09-07. Each entry says what is actually absent
+rather than what is imperfect, and how to see it.
+
+### Deferred by decision
+
+1. **Authentication and confidentiality.** Links are plaintext and a session is
+   reached by its address alone. Participant claims, loss notices and handoff
+   records are structurally checked but not authenticated; the rules prevent
+   races, not a hostile peer. The deployed fleet accepts this and hardens the open
+   port instead; see the [fleet plan](kubernetes-fleet.md) §4 for what bounds a
+   stranger today and what does not. §5.3's address map does not change this: it
+   publishes reachability inside a session that was already unauthenticated.
+
+### Open
+
+2. **The playout lead is carried but never chosen.** The mechanism is whole:
+   `BarrierDelayTicks` travels in `SessionOffer`, survives a handoff in
+   `HandoffRecord`, reaches `NetworkResource`, and sets `NetworkSystem.delayTicks`.
+   Nothing ever gives it a value other than `parameter.NetworkBarrierDelayTicks`,
+   so a 150 ms budget is what every deployment gets, and it is not
+   graph-diameter aware — a relayed peer inherits its neighbour's hop count with
+   no allowance for it. The *correction cadence* does adapt per link, between
+   `SnapshotCadenceMinTicks` and `SnapshotCadenceMaxTicks`; apply deadlines do not.
+   Missing the lead is survivable — §3.2's fences make a late artifact harmless,
+   not rare — so this is a quality gap, not a correctness one.
+
+   *To see it:* run a session across a link with more than 150 ms of round trip
+   (`tc qdisc add dev lo root netem delay 100ms` between two local instances is
+   enough) and read the guest's status snapshot. `network.barrier_late` counts
+   artifacts that arrived after the tick they named, `network.lag_ticks` is how
+   far behind the newest peer this instance is, and `network.stale` latches once
+   that lag passes the lead. On a healthy local session all three stay at zero;
+   under the added delay `barrier_late` climbs monotonically. The fix is to
+   negotiate the value from the measured round trip the link probe already
+   collects, rather than to make the fixed number bigger.
+
+   This should become a tracked issue rather than an architectural gap: the
+   design is right and one input is unwired.
+
+3. **Guests do not bind, so the CLI builds a star.** The protocol relays over
+   arbitrary graphs — each source epoch is admitted once inside a bounded replay
+   window and forwarded to every neighbour but the arrival edge — but
+   `network.NewSocketPort` has exactly two callers, the network service and
+   `beginHostingLocked`, and both run on the instance that was asked to host. A
+   guest never listens, so `-join` can only ever produce a star.
+
+4. **Authorship migrates, reachability does not.** A successor authors but cannot
+   be dialled, and no artifact in the protocol carries an address: an offer carries
+   identity, roster, term and bounds; a handoff carries membership. In a star the
+   result is one solo game per survivor, and the only thing succession decides is
+   which of them believes it is hosting (§5.0).
+
+5. **A successor lost with the authority elects nobody.** `DesignatedSuccessor`
+   names one identity and no other instance may take the term, so losing both the
+   authority and the participant after it forks every survivor — including
+   survivors that can still reach each other and would have agreed. Reconciling an
+   explicit fork back into a higher term is not implemented either, and a fork that
+   still holds links is the worse shape: it has peers to agree an apply tick with
+   and no authority to name one. A fork alone does not have that problem (§5.2).
+
+   3, 4 and 5 are one gap seen from three sides, and §5.3 is the proposed
+   closure: a guest that binds, a confirmed address map published by the
+   authority, and a successor rule that reads it. 3 is the mechanism, 4 is what
+   the mechanism is for, and 5 is what the map makes decidable. The decisions
+   §5.3 leaves open are the ones to settle before the work starts.
+
+6. **Shared-domain mutation through the embedder API is unchecked.**
+   `App.Reset` is session-aware — it refuses on a guest and publishes a crossing
+   on the authority. `App.SetupLevel` and `App.Region` are not: both push
+   `event.OriginDebug` on the local instance only, and both carry `ClassShared`
+   events (`EventLevelSetup`, `EventFSMRegionRequest`). Calling either on a guest
+   in a live session changes that guest's map bounds or FSM regions and nobody
+   else's, which is a divergence the domain rules exist to prevent.
+
+   The interactive surface has no path to either — the only producers are
+   `internal/app/headless.go` and the resize `App.Loop` records — so today this is
+   reachable from a harness, a test, or an embedder, and the D-14 map latch
+   already prevents the one case that used to happen by accident. The gap is that
+   nothing *enforces* it: the check `Reset` makes is the check these two owe and
+   do not make. Closing it is small — the same `LiveSession`/`IsSessionCoordinator`
+   guard, refusing on a guest and crossing on the authority — and it is worth
+   closing because "caller discipline" is not a boundary.
+
+7. **Domain-boundary debt.** Ambient-local stamping exemptions,
+   `event.EmitDeath`'s direct queue path (which takes the domain from its
+   entities rather than from the ambient tag, and so bypasses `World.PushEvent`),
+   route-anchor casts, and combat telemetry that aggregates both domains into one
+   set of counters — `combat.` and `kills.` are excluded from the compared shared
+   surface for exactly that reason. Each is individually defensible and
+   collectively they are the reason the compared surface has a denylist. Long
+   outstanding; the cheapest order is to make each exemption explicit at its site,
+   then delete the ones that turn out to be unnecessary, and only then consider
+   moving the telemetry.
+
+8. **Tower ownership binds a shared structure to one cursor.** A tower's
+   `CombatComponent.OwnerEntity` is the cursor its spawn request named, which
+   comes from the FSM's `player_entity` capture variable — one cursor for the
+   whole machine. Damage attribution (`ResolveCursor(payload.OwnerEntity)` in
+   `applyHitDirect` and its area-damage sibling) therefore credits one participant
+   for a structure the session shares. There is no quick fix: the options are a
+   hybrid shared/local shape like the cursor and its shield, or an explicit
+   "every player" ownership value that attribution expands. **To be decided.**
+
+   The quasar half of this entry was wrong and is removed. Quasar escalation gates
+   on `kills.drain`, and that is correct: drain is a player-domain species whose
+   defeat drives a shared-domain spawn, the FSM that reads the counter is
+   authoritative, and its state travels in the correction. A session-wide drain
+   total is the intended behaviour, not a domain leak.
+
+9. **Presentation is clipped, not wrong.** A terminal smaller than the session's
+   map shows less of the map. It does not produce a different world or a
+   misplaced cursor: `applyMapLatch` installs the session bounds before the FSM
+   boot script spawns cursor slot zero, and `LockMap` latches the world shared for
+   the whole run, which is what fixed the terminal-size divergence several
+   iterations ago. Remote cursor motion is drawn at simulation arrival ticks, so
+   it steps rather than glides.
+
+   *To see the remainder:* `-serve :7777 -size 200x60`, then join from an 80x24
+   terminal. The view is a correct 80x24 window onto a 200x60 world; every cursor
+   is where the authority says it is. What is missing is a windowed composite that
+   scrolls and optional presentation interpolation, both of which are presentation
+   work independent of simulation ordering. If a *wrong* cursor position is ever
+   observed across terminal sizes, that is a regression in the map latch and not
+   this item.
+
+10. **Cross-platform float drift is repaired live but not in replay.** Verified:
+    a correction carries every shared component whole, float fields included, and
+    a delta is proved lossless by re-hashing the reconstruction against the
+    capture's own integrity hash — so a `float64` that drifted on another platform
+    is repaired exactly like any integer that drifted. Two things remain, and
+    neither is the original claim:
+
+    - The digest hashes float bits (`digest.f64` is `math.Float64bits`), so a
+      one-ULP difference flips `network.digest_mismatches` and sets
+      `network.drift_part`. That is diagnostic noise on a mixed-platform session,
+      not a simulation fault.
+    - A journal replayed on a different platform has no authority to repair
+      against, so a float difference there accumulates. Replay determinism is
+      guaranteed within one implementation build.
+
+    Reworded rather than dropped: the live path is sound and the statement about
+    it was wrong.
 
 ## 9. Verification
 
