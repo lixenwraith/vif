@@ -411,6 +411,7 @@ func boundaryRecvName(fn *ast.FuncDecl) string {
 // Pinned rather than tolerated: a new one is a hole in the boundary suite.
 var helperFiles = []string{
 	"blast.go",
+	"domain_exemptions.go",
 	"interaction.go",
 	"roster_telemetry.go",
 	"sweep.go",

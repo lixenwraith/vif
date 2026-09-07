@@ -340,7 +340,7 @@ func (s *DrainSystem) processDrainStates() {
 		// Termination check
 		if entry.combatComp.HitPoints <= 0 {
 			entry.dying = true
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entry.entity)
+			s.world.EmitDeath(event.EventFlashSpawnOneRequest, entry.entity)
 
 			// A positionless drain yields no death coordinate; -1 marks it absent
 			killX, killY := entry.killPos()
@@ -781,7 +781,7 @@ func (s *DrainSystem) despawnExcessDrains(count int) {
 	toRemove := min(count, len(ordered))
 
 	for i := range toRemove {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, ordered[i])
+		s.world.EmitDeath(event.EventFlashSpawnOneRequest, ordered[i])
 		s.statDespawned.Add(1)
 	}
 }
@@ -967,7 +967,7 @@ func (s *DrainSystem) handleDrainInteractions() {
 		}
 		if destroyDrain {
 			entry.dying = true
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entry.entity)
+			s.world.EmitDeath(event.EventFlashSpawnOneRequest, entry.entity)
 
 			// Counted as a kill, credited to no cursor: the drain spent itself on the
 			// player, so it grants no boost. Loot still drops as compensation.
@@ -1015,7 +1015,7 @@ func (s *DrainSystem) handleDrainDrainCollisions() {
 		}
 
 		a.dying = true
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, a.entity)
+		s.world.EmitDeath(event.EventFlashSpawnOneRequest, a.entity)
 		s.world.PushEventDomain(event.EventSpeciesKilled, &event.SpeciesKilledPayload{
 			Entity:       a.entity,
 			KillerEntity: a.combatComp.LastDamagedBy,
@@ -1240,7 +1240,7 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 
 	// Convert glyphs to dust
 	if s.world.Components.Glyph.HasEntity(entity) {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventDustSpawnOneRequest, entity)
+		s.world.EmitDeath(event.EventDustSpawnOneRequest, entity)
 		return
 	}
 
@@ -1252,7 +1252,7 @@ func (s *DrainSystem) handleCollisionAtPosition(drain *drainCacheEntry, entity c
 	}
 
 	// Destroy the entity
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+	s.world.EmitDeath(0, entity)
 }
 
 // consumeIntoSharedSpecies converts a drain collision with a swarm or quasar
@@ -1274,7 +1274,7 @@ func (s *DrainSystem) consumeIntoSharedSpecies(drain *drainCacheEntry, entity co
 		TargetEntity: target,
 		Amount:       drain.combatComp.HitPoints,
 	})
-	event.EmitDeath(s.world.Resources.Event.Queue, 0, drain.entity)
+	s.world.EmitDeath(0, drain.entity)
 	drain.dying = true
 	return true
 }

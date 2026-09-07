@@ -318,7 +318,7 @@ func (s *WeaponSystem) reapOrbs() {
 
 	if len(s.reapBuf) > 0 {
 		s.statOrbsReaped.Add(int64(len(s.reapBuf)))
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, s.reapBuf...)
+		s.world.EmitDeath(0, s.reapBuf...)
 	}
 }
 
@@ -618,14 +618,14 @@ func (s *WeaponSystem) destroyCursorOrbs(cursor core.Entity) {
 		if orbEntity == 0 {
 			continue
 		}
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
+		s.world.EmitDeath(0, orbEntity)
 	}
 }
 
 // destroyAllOrbs drops every orb in the world; the reset path
 func (s *WeaponSystem) destroyAllOrbs() {
 	for _, orbEntity := range s.world.Components.Orb.Entities() {
-		event.EmitDeath(s.world.Resources.Event.Queue, 0, orbEntity)
+		s.world.EmitDeath(0, orbEntity)
 	}
 }
 

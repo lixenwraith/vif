@@ -473,7 +473,7 @@ func (s *DustSystem) Update() {
 	s.applyAccumulatedImpulses(collisionCtx)
 
 	if len(s.deathBuf) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.deathBuf...)
+		s.world.EmitDeath(event.EventFlashSpawnOneRequest, s.deathBuf...)
 	}
 
 	s.statActive.Store(int64(dusts.CountEntities()))
@@ -709,7 +709,7 @@ func (s *DustSystem) convertGlyphs(cursorX, cursorY int, area *blastArea) {
 	s.buffers.Observe(bufDustFlash, len(s.flashBuf))
 
 	if len(s.flashBuf) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, s.flashBuf...)
+		s.world.EmitDeath(event.EventFlashSpawnOneRequest, s.flashBuf...)
 	}
 	if len(s.transformBuf) == 0 {
 		return

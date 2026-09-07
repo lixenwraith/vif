@@ -177,7 +177,7 @@ func (s *CompositeSystem) destroyComposite(headerEntity core.Entity, effect even
 
 	// Route members through death system
 	if len(members) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, effect, members...)
+		s.world.EmitDeath(effect, members...)
 	}
 
 	// Destroy phantom head

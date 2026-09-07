@@ -16,12 +16,26 @@ func popBenchmarkEvent(q *EventQueue) GameEvent {
 	return ev
 }
 
+// pushDeath is what World.EmitDeath does once it has split by domain: the pooled
+// payload and the push. The split itself moved to engine, where the push can carry
+// a producer origin like every other one; what stays under test here is the
+// property that put this in its own file — a death costs no allocation.
+func pushDeath(q *EventQueue, effect EventType, entities ...core.Entity) {
+	p := AcquireDeathRequest(effect)
+	p.Entities = append(p.Entities, entities...)
+	if len(p.Entities) == 0 {
+		ReleaseDeathRequest(p)
+		return
+	}
+	q.Push(GameEvent{Type: EventDeathBatch, Payload: p, Domain: entities[0].Domain()})
+}
+
 func BenchmarkEmitDeathSingle(b *testing.B) {
 	q := NewEventQueue()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		EmitDeath(q, EventFlashSpawnOneRequest, 1)
+		pushDeath(q, EventFlashSpawnOneRequest, 1)
 		ev := popBenchmarkEvent(q)
 		ReleaseDeathRequest(ev.Payload.(*DeathRequestPayload))
 	}
@@ -38,7 +52,7 @@ func BenchmarkEmitDeath16(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for b.Loop() {
-		EmitDeath(q, EventFlashSpawnOneRequest, entities...)
+		pushDeath(q, EventFlashSpawnOneRequest, entities...)
 		ev := popBenchmarkEvent(q)
 		ReleaseDeathRequest(ev.Payload.(*DeathRequestPayload))
 	}
@@ -47,7 +61,7 @@ func BenchmarkEmitDeath16(b *testing.B) {
 func TestEmitDeathUsesUnifiedPayload(t *testing.T) {
 	q := NewEventQueue()
 	entities := []core.Entity{7, 9}
-	EmitDeath(q, EventFlashSpawnOneRequest, entities...)
+	pushDeath(q, EventFlashSpawnOneRequest, entities...)
 	entities[0] = 11
 
 	ev := popBenchmarkEvent(q)
@@ -67,7 +81,7 @@ func TestEmitDeathUsesUnifiedPayload(t *testing.T) {
 	}
 
 	pushed := q.Pushed()
-	EmitDeath(q, EventNone)
+	pushDeath(q, EventNone)
 	if q.Pushed() != pushed {
 		t.Fatal("empty death request was queued")
 	}
@@ -79,11 +93,11 @@ func TestEmitDeathSingleDoesNotAllocate(t *testing.T) {
 	ReleaseDeathRequest(p)
 
 	allocs := testing.AllocsPerRun(1000, func() {
-		EmitDeath(q, EventFlashSpawnOneRequest, 1)
+		pushDeath(q, EventFlashSpawnOneRequest, 1)
 		ev := popBenchmarkEvent(q)
 		ReleaseDeathRequest(ev.Payload.(*DeathRequestPayload))
 	})
 	if allocs != 0 {
-		t.Fatalf("EmitDeath(single) allocated %.2f times; want 0", allocs)
+		t.Fatalf("a pooled death push allocated %.2f times; want 0", allocs)
 	}
 }

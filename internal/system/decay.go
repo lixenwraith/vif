@@ -274,14 +274,14 @@ func (s *DecaySystem) updateDecayEntities() {
 
 				// Mutual destruction: decay + blossom annihilate
 				if s.world.Components.Blossom.HasEntity(target) {
-					event.EmitDeath(s.world.Resources.Event.Queue, 0, target)
-					event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+					s.world.EmitDeath(0, target)
+					s.world.EmitDeath(0, entity)
 					break
 				}
 
 				if s.world.Components.Nugget.HasEntity(target) {
 					s.world.PushLocal(event.EventNuggetDestroyed, &event.NuggetDestroyedPayload{Entity: target})
-					event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, target)
+					s.world.EmitDeath(event.EventFlashSpawnOneRequest, target)
 				} else {
 					// Glyph mechanics are player-domain; a shared glyph is a gold member
 					if target.Domain() != core.DomainPlayer {
@@ -301,7 +301,7 @@ func (s *DecaySystem) updateDecayEntities() {
 		}
 
 		if destroyEntity {
-			event.EmitDeath(s.world.Resources.Event.Queue, 0, entity)
+			s.world.EmitDeath(0, entity)
 			continue
 		}
 
@@ -325,7 +325,7 @@ func (s *DecaySystem) updateDecayEntities() {
 
 	// Emit single batch event instead of scalar events per hit
 	if len(deathCandidates) > 0 {
-		event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, deathCandidates...)
+		s.world.EmitDeath(event.EventFlashSpawnOneRequest, deathCandidates...)
 	}
 	s.buffers.Observe(0, len(s.decayedThisFrame))
 	s.buffers.Observe(1, len(s.processedGridCells))
@@ -372,7 +372,7 @@ func (s *DecaySystem) applyDecayToCharacter(entity core.Entity) {
 
 		default:
 			// Fallback: Red or other: destroy
-			event.EmitDeath(s.world.Resources.Event.Queue, event.EventFlashSpawnOneRequest, entity)
+			s.world.EmitDeath(event.EventFlashSpawnOneRequest, entity)
 		}
 	}
 

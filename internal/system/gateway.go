@@ -150,13 +150,13 @@ func (s *GatewaySystem) handleSpawnRequest(payload *event.GatewaySpawnRequestPay
 
 	entity := s.world.CreateEntity(core.DomainShared)
 	if payload.UseRouteGraph {
-		gwComp.RouteDistID = uint32(entity)
+		gwComp.RouteDistID = routeAnchorID(entity)
 	}
 	s.world.Components.Gateway.SetComponent(entity, gwComp)
 
 	if payload.UseRouteGraph {
 		s.world.PushEvent(event.EventRouteGraphRequest, &event.RouteGraphRequestPayload{
-			RouteGraphID:  uint32(entity),
+			RouteGraphID:  routeAnchorID(entity),
 			SourceX:       anchorPos.X + payload.OffsetX,
 			SourceY:       anchorPos.Y + payload.OffsetY,
 			TargetGroupID: payload.GroupID,

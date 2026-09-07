@@ -519,7 +519,7 @@ func (s *CleanerSystem) processPositiveEnergy(targetEntities []core.Entity, self
 		return
 	}
 
-	event.EmitDeath(s.world.Resources.Event.Queue, event.EventBlossomSpawnOne, toDestroy...)
+	s.world.EmitDeath(event.EventBlossomSpawnOne, toDestroy...)
 }
 
 // processNegativeEnergy handles Blue mutation to Green with Decay spawn

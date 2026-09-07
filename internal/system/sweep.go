@@ -47,11 +47,11 @@ func (s *cellSweep) count() int { return len(s.shared) + len(s.player) }
 // emit routes each domain's victims through the death pipeline separately
 func (s *cellSweep) emit(w *engine.World, effect event.EventType) {
 	if len(s.shared) > 0 {
-		event.EmitDeath(w.Resources.Event.Queue, effect, s.shared...)
+		w.EmitDeath(effect, s.shared...)
 	}
 	if len(s.player) > 0 {
 		// EmitDeath takes the domain from the entities, so the batch stamps itself.
-		event.EmitDeath(w.Resources.Event.Queue, effect, s.player...)
+		w.EmitDeath(effect, s.player...)
 	}
 }
 
