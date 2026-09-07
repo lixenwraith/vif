@@ -50,6 +50,22 @@ const (
 	// graph MaxPlayers participants can form.
 	NetworkRelayHopLimit = 16
 
+	// SessionVacantReset is how long a dedicated host holds an emptied session
+	// before starting a fresh one.
+	//
+	// The park that precedes it is immediate and unbounded: an empty session has
+	// nothing to simulate for, and simulating it anyway is not free — the gold
+	// cycle cannot place a sequence with no cursor on the map, so it fails, retries
+	// a tenth of a second later, and fails again for as long as the process runs.
+	// This is the other half: a world nobody came back to is not the world the next
+	// guest should be dropped into, and one minute is long enough to cover a
+	// reconnect and short enough that a host left alone is not holding a match
+	// nobody is going to finish.
+	//
+	// It is wall time rather than game time on purpose. The clock it is measured
+	// beside is stopped.
+	SessionVacantReset = time.Minute
+
 	// NetworkJoinReadyTimeout bounds how long a coordinator waits for a mid-run
 	// joiner to install the world it was sent and confirm it. It is a link and
 	// install bound rather than a game one: a participant that needs longer than

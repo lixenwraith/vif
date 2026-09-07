@@ -704,30 +704,21 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	// === the succession, and the relay ===
 	//
 	// Every message is the real encoding at the roster this build allows: what a
-	// survivor floods, what it commits to, what the successor publishes before it
-	// authors, and the first correction each survivor pays under the new term.
+	// survivor floods, what the successor publishes before it authors, and the
+	// first correction each survivor pays under the new term.
 
 	roster := make([]network.SessionParticipant, 0, parameter.MaxPlayers)
-	voters := make([]network.PeerID, 0, parameter.MaxPlayers)
 	for i := range parameter.MaxPlayers {
 		roster = append(roster, network.SessionParticipant{ID: network.PeerID(i + 1), Slot: uint8(i)})
-		voters = append(voters, network.PeerID(i+1))
 	}
 	reportBody, err := network.EncodeAuthorityReport(network.AuthorityReport{
-		Term: network.FirstTerm + 1, From: 2, Lost: 1, Links: voters,
-		RetainedTick: base.Header.Tick, Retained: parameter.SnapshotManifestRetention,
+		Term: network.FirstTerm + 1, From: 2, Lost: 1,
 	})
 	if err != nil {
 		t.Fatalf("report encode: %v", err)
 	}
-	voteBody, err := network.EncodeAuthorityVote(network.AuthorityVote{
-		Term: network.FirstTerm + 1, Voter: 2, Candidate: 2,
-	})
-	if err != nil {
-		t.Fatalf("vote encode: %v", err)
-	}
 	handoffBody, err := network.EncodeHandoff(network.HandoffRecord{
-		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1, Voters: voters,
+		Term: network.FirstTerm + 1, Authority: 2, Predecessor: 1,
 		Roster: roster, Anchor: a.JoinAnchor(),
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
 		EvidenceTick:      base.Header.Tick,
@@ -737,12 +728,12 @@ func TestCostAtTheStormHighWater(t *testing.T) {
 	}
 
 	survivors := len(roster) - 1
-	succession := (len(reportBody) + len(voteBody) + len(handoffBody)) * survivors
+	succession := (len(reportBody) + len(handoffBody)) * survivors
 	adoption := convergedWire * survivors
-	t.Logf("handoff at a roster of %d: report %d B, vote %d B, record %d B | "+
+	t.Logf("handoff at a roster of %d: loss notice %d B, record %d B | "+
 		"succession %d B, first correction per survivor %d B, whole handoff %d B | "+
 		"a keyframe to every survivor would be %d B",
-		len(roster), len(reportBody), len(voteBody), len(handoffBody),
+		len(roster), len(reportBody), len(handoffBody),
 		succession, convergedWire, succession+adoption, len(keyframeBody)*survivors)
 
 	// A relay answers the same disagreement from retention: the same pages, out of

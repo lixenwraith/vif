@@ -10,33 +10,49 @@
 // per session, incremented exactly once per successful handoff. `epoch` was not
 // available — in this codebase an epoch is a closed barrier production epoch, one
 // tick's worth of artifacts — and the word borrowed instead is Raft's, because
-// the invariant is Raft's: at most one authority per term, and a term never goes
-// backwards on any instance.
+// half the invariant is Raft's: at most one authority per term, and a term never
+// goes backwards on any instance.
 //
-// Three rules carry the whole of it, and each is enforced here rather than at a
-// call site:
+// The other half is not Raft's, and the difference is the topology. Raft elects by
+// quorum because its members can all reach each other; a session's members often
+// cannot. The shipped CLI dials one address, so a session is a star, and when the
+// star's centre goes every survivor is left alone — no survivor can reach any
+// other, so no survivor can ever collect a vote, and a quorum rule elects nobody
+// in the one shape every real session has. That is why the rule here is not a
+// quorum:
+//
+//   - **The successor is the roster's, not the survivors'.** It is the lowest
+//     surviving identity in the closed roster — the first guest the coordinator
+//     admitted, because identities are handed out lowest-free-first in arrival
+//     order. Every instance computes it from the roster it already holds (D-11
+//     makes that roster identical everywhere), with no messages and no agreement
+//     step, so at most one instance can ever conclude that it is the successor.
+//     That is what makes split brain impossible rather than unlikely, and it is
+//     why succession needs neither a vote nor a randomized timer.
 //
 //   - **A term is never adopted, only granted.** A receiver ignores an artifact
 //     from a term older than the one it holds and refuses one from a term it has
-//     never seen. The only way forward is a handoff record naming the votes it was
-//     elected on, which is what makes an unheralded higher term a split brain to
-//     report rather than a fast successor to follow.
+//     never seen. The only way forward is a handoff record naming an authority the
+//     receiver's own roster agrees is the designated one, which is what makes an
+//     unheralded higher term a split brain to report rather than a fast successor
+//     to follow.
 //
-//   - **One vote per participant per term.** A survivor votes once for the lowest
-//     eligible candidate in its own view and never revises it, so two candidates
-//     cannot both collect a strict majority of a closed roster. That is what makes
-//     split brain impossible rather than unlikely, and it is why succession needs
-//     no randomized timer to break ties.
+//   - **The successor must hold retention.** A candidate with no retained
+//     authoritative record has no baseline to publish deltas against and would fan
+//     a keyframe out to every survivor at once. Retention *ordering* is
+//     deliberately not an eligibility test: with one designated candidate there is
+//     no alternative to prefer, and a successor a cadence behind a peer moves that
+//     peer back by a cadence — which is what a correction is. What it may not be
+//     is empty.
 //
-//   - **Eligibility is a function of the roster and the survivor set.** A
-//     candidate must be directly linked to a strict majority of the roster and
-//     must hold retention as new as the newest any survivor reports. The first
-//     keeps a minority partition from electing; the second keeps a participant
-//     that has been silently behind from becoming the thing everyone else adopts.
+// What the rule gives up, and knowingly: a designated successor that went with the
+// authority elects nobody, even where other survivors could have agreed on one, so
+// the session forks. Deciding that needs agreement on whether the designated one is
+// dead, which is the quorum the topology cannot supply.
 //
-// Nothing here authenticates. A participant that can lie about its links or its
-// retention can make itself the successor, which is a strictly larger exposure
-// than Phase 6's and is stated as such in the plan rather than partly mitigated.
+// Nothing here authenticates. A participant that can claim another's identity can
+// make itself the successor, which is a strictly larger exposure than Phase 6's and
+// is stated as such in the plan rather than partly mitigated.
 package network
 
 import (
@@ -56,48 +72,28 @@ type AuthorityTerm uint64
 // FirstTerm is the term the instance that opens a session authors under.
 const FirstTerm AuthorityTerm = 1
 
-// AuthorityReport is one survivor's input to a succession: what it can reach and
-// how current its retention is.
+// AuthorityReport is the loss notice a survivor floods when the authority goes.
 //
-// It is information rather than a decision, so it is revisable and idempotent —
-// flooded and deduplicated by (From, Term) like any other artifact. The decision
-// is the vote below, which is neither.
+// It carries no election input, because the election has none: the successor is a
+// function of the roster every instance already holds. What it carries is the
+// *news*, and that is load-bearing on its own — only a direct neighbour of the
+// authority sees the link drop, so a participant two links away would otherwise
+// wait for a departure crossing whose only producer is the participant that is
+// gone. Flooded and deduplicated by (From, Term) like any other artifact.
 type AuthorityReport struct {
-	Term  AuthorityTerm `json:"term"`
-	From  PeerID        `json:"from"`
-	Lost  PeerID        `json:"lost"`
-	Links []PeerID      `json:"links,omitempty"`
-
-	// RetainedTick is the newest authoritative tick this participant holds an
-	// index over, and Retained how many such records it has. Together they are
-	// requirement (b): a successor may not be an instance that has been silently
-	// behind, and the retained ring is the evidence because a fresh capture proves
-	// only what the candidate believes.
-	RetainedTick uint64 `json:"retained_tick"`
-	Retained     int    `json:"retained"`
-}
-
-// AuthorityVote is one participant's single, immutable choice for one term.
-type AuthorityVote struct {
-	Term      AuthorityTerm `json:"term"`
-	Voter     PeerID        `json:"voter"`
-	Candidate PeerID        `json:"candidate"`
+	Term AuthorityTerm `json:"term"`
+	From PeerID        `json:"from"`
+	Lost PeerID        `json:"lost"`
 }
 
 // HandoffRecord is the evidence a receiver needs before it will adopt a term it
-// has never seen. It carries the membership the successor is taking over as well
-// as the votes it was elected on, so adopting it is one decision rather than a
-// term change followed by a roster negotiation.
+// has never seen. It carries the membership the successor is taking over, so
+// adopting it is one decision rather than a term change followed by a roster
+// negotiation.
 type HandoffRecord struct {
 	Term        AuthorityTerm `json:"term"`
 	Authority   PeerID        `json:"authority"`
 	Predecessor PeerID        `json:"predecessor"`
-
-	// Voters is the strict majority that elected this authority. A receiver counts
-	// it against the roster it already holds; a record that does not carry one is
-	// refused, which is the half of the split-brain rule a receiver can check for
-	// itself.
-	Voters []PeerID `json:"voters"`
 
 	// The membership, moved whole. Roster and slot assignments are the closed
 	// roster (D-11) and must be byte-identical across the handoff; the anchor and
@@ -107,9 +103,9 @@ type HandoffRecord struct {
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
 	// EvidenceTick is the newest retained authoritative tick the successor holds.
-	// It is the claim requirement 3 makes checkable: the successor's own Shared
-	// world is at least as new as the last artifact published under the term it is
-	// replacing.
+	// It is reported rather than enforced: a receiver reads how far back the world
+	// it is about to adopt was last proved authoritative, which is the number that
+	// says whether the handoff cost it anything.
 	EvidenceTick uint64 `json:"evidence_tick"`
 }
 
@@ -124,9 +120,6 @@ const HandoffRefusalTag = "authority-handoff"
 func IsHandoffRefusal(err error) bool {
 	return err != nil && strings.Contains(err.Error(), HandoffRefusalTag)
 }
-
-// Majority is the smallest strict majority of n participants.
-func Majority(n int) int { return n/2 + 1 }
 
 // Validate refuses a handoff record that could not have been produced by the
 // succession rule, before any of it is adopted.
@@ -144,24 +137,17 @@ func (h HandoffRecord) Validate(roster []SessionParticipant) error {
 	if !SameRoster(h.Roster, roster) {
 		return errors.New("handoff carries a different roster than the session closed on")
 	}
-	if !slices.ContainsFunc(h.Roster, func(p SessionParticipant) bool { return p.ID == h.Authority }) {
-		return errors.New("handoff names an authority the roster does not carry")
+	// The whole of the split-brain check, and the receiver makes it for itself
+	// rather than counting evidence the record brought with it: the successor a
+	// term may name is a function of the roster above, which this instance already
+	// holds and has just been shown to agree with.
+	want, ok := DesignatedSuccessor(roster, h.Predecessor)
+	if !ok {
+		return errors.New("handoff names a successor for a roster with no survivor")
 	}
-	seen := make(map[PeerID]bool, len(h.Voters))
-	votes := 0
-	for _, v := range h.Voters {
-		if seen[v] {
-			continue
-		}
-		if !slices.ContainsFunc(h.Roster, func(p SessionParticipant) bool { return p.ID == v }) {
-			return fmt.Errorf("handoff carries a vote from participant %d, which is not in the roster", v)
-		}
-		seen[v] = true
-		votes++
-	}
-	if votes < Majority(len(roster)) {
-		return fmt.Errorf("handoff carries %d votes, a strict majority of %d is %d",
-			votes, len(roster), Majority(len(roster)))
+	if h.Authority != want {
+		return fmt.Errorf("handoff names participant %d as the successor to %d; this roster designates %d",
+			h.Authority, h.Predecessor, want)
 	}
 	if h.BarrierDelayTicks == 0 {
 		return errors.New("handoff carries no barrier delay")
@@ -183,67 +169,40 @@ func SameRoster(a, b []SessionParticipant) bool {
 	return slices.Equal(x, y)
 }
 
-// ElectSuccessor is the succession rule, as a function of the closed roster and
-// the reports the caller has collected. It decides nothing about timing: the
-// caller is what says when its view is complete enough to vote from.
+// DesignatedSuccessor is the succession rule: the lowest surviving identity in the
+// closed roster.
 //
-// A candidate must be a surviving participant that (a) is directly linked to a
-// strict majority of the roster, counting itself, and (b) holds retention as new
-// as the newest any reporting survivor does. Among those the lowest participant
-// ID wins, which is what makes the answer the roster's rather than whoever
-// noticed the loss first.
+// It takes no reports, no links and no votes, and that is the point. Every
+// instance computes it from a roster D-11 makes identical everywhere, so every
+// instance names the same successor without exchanging anything — which is what
+// makes "at most one authority per term" hold in a star, where survivors cannot
+// exchange anything at all. A quorum rule cannot: the star's survivors are
+// mutually unreachable the moment its centre goes, so none of them can ever
+// collect a vote and the session forks every time.
 //
-// The second return is false when nothing is eligible, which is a session that
-// falls back to local continuation rather than one that waits.
-func ElectSuccessor(roster []SessionParticipant, lost PeerID,
-	reports map[PeerID]AuthorityReport) (PeerID, bool) {
-	if len(roster) == 0 || len(reports) == 0 {
-		return 0, false
-	}
-	inRoster := func(id PeerID) bool {
-		return slices.ContainsFunc(roster, func(p SessionParticipant) bool { return p.ID == id })
-	}
-	need := Majority(len(roster))
-
-	newest := uint64(0)
-	for id, r := range reports {
-		if id == lost || !inRoster(id) {
-			continue
-		}
-		newest = max(newest, r.RetainedTick)
-	}
-
+// Lowest identity is the first guest the coordinator admitted. Identities are
+// handed out lowest-free-first in arrival order, so the roster's order is arrival
+// order, and a session that loses its host continues under the participant that
+// has been in it longest.
+//
+// The second return is false for a roster with nobody left, which is a session
+// with nothing to continue.
+func DesignatedSuccessor(roster []SessionParticipant, lost PeerID) (PeerID, bool) {
 	best, found := PeerID(0), false
-	for id, r := range reports {
-		if id == lost || !inRoster(id) || r.Retained == 0 {
+	for _, p := range roster {
+		if p.ID == 0 || p.ID == lost {
 			continue
 		}
-		if r.RetainedTick < newest {
-			continue // silently behind: it would publish a world the session has passed
-		}
-		reach := 1
-		seen := map[PeerID]bool{id: true}
-		for _, l := range r.Links {
-			if l == lost || l == id || seen[l] || !inRoster(l) {
-				continue
-			}
-			seen[l] = true
-			reach++
-		}
-		if reach < need {
-			continue
-		}
-		if !found || id < best {
-			best, found = id, true
+		if !found || p.ID < best {
+			best, found = p.ID, true
 		}
 	}
 	return best, found
 }
 
-// EncodeAuthorityReport and its siblings are the wire forms. They are separate
+// EncodeAuthorityReport and its sibling are the wire forms. They are separate
 // message kinds rather than shapes of one because a receiver acts on each at a
-// different moment: a report is information, a vote is a commitment, and a
-// handoff is a membership change.
+// different moment: a report is news, and a handoff is a membership change.
 func EncodeAuthorityReport(r AuthorityReport) ([]byte, error) { return json.Marshal(r) }
 
 // DecodeAuthorityReport parses one survivor's succession input.
@@ -251,16 +210,6 @@ func DecodeAuthorityReport(b []byte) (AuthorityReport, error) {
 	var r AuthorityReport
 	err := json.Unmarshal(b, &r)
 	return r, err
-}
-
-// EncodeAuthorityVote renders one immutable vote.
-func EncodeAuthorityVote(v AuthorityVote) ([]byte, error) { return json.Marshal(v) }
-
-// DecodeAuthorityVote parses one vote.
-func DecodeAuthorityVote(b []byte) (AuthorityVote, error) {
-	var v AuthorityVote
-	err := json.Unmarshal(b, &v)
-	return v, err
 }
 
 // EncodeHandoff renders the record a successor publishes before it authors.

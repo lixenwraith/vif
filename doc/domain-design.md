@@ -423,12 +423,18 @@ Arrival and departure are coordinator-authored barrier crossings. A non-authorit
 roster artifact is refused. Full reset is likewise serialized by the coordinator;
 it preserves the closed roster and rebuilds cursors in slot order.
 
-The one instance that removes a participant without a crossing is an explicit
-local fork with no link left. Nothing there can produce or receive one — the
-authority is gone and no successor was electable — so it drops every cursor it
-does not simulate as local roster state. Agreeing on a tick needs a second
-instance, and there is none; a fork that still holds links leaves its roster
-alone, which is part of the unimplemented partition case below.
+When the authority goes, the successor is the lowest surviving identity in the
+closed roster — the first guest admitted. Every survivor computes it from the
+roster alone, so at most one can claim the term and no vote is needed; a receiver
+refuses a record naming anyone else. A survivor that cannot reach the successor
+continues as an explicit local fork.
+
+The one instance that removes a participant without a crossing is an instance with
+no link left: a fork, or the successor of a star. Nothing there can produce or
+receive one, so it drops every cursor it does not simulate as local roster state.
+Agreeing on a tick needs a second instance, and there is none; an instance that
+still holds links leaves its roster alone, which is part of the unimplemented
+partition case below.
 
 A departure also clears what the instance had applied from that participant. The
 identity returns to the pool and a crossing sequence starts at one, so a fence
@@ -500,7 +506,7 @@ The boundaries are enforced mechanically:
 - correction ordering criteria cover local replay, queued authority frames, late
   authority frames, and captures racing undispatched input;
 - link criteria cover cadence bounds, saturation, recovery, and floor refusal;
-- succession criteria cover majority election, retention eligibility, term gates,
+- succession criteria cover the designated successor, retention eligibility, term gates,
   roster continuity, and explicit fork fallback.
 
 Run the generated and repository gates after focused changes:
@@ -521,11 +527,11 @@ departing cursor, and reconnect must take a current world.
 
 | Area | Current limit |
 |---|---|
-| Trust | Transport, participant claims, votes, and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
+| Trust | Transport, participant claims and handoff records are unauthenticated and plaintext. Structural checks prevent races, not hostility. |
 | Guest replay | Suffix membership uses the capture's per-source fence, so a frame that missed the playout lead is replayed rather than discarded. Remote entries are a maximum rather than a contiguous prefix: on a relay a frame that overtakes a lower one can leave the lower one looking contained for one cadence. |
 | Playout | The three-tick receive lead is fixed and not graph-diameter aware. |
 | Topology | The protocol relays over a graph, but `-join` dials one address, so ordinary CLI sessions form a star. |
-| Partition | Majority succession works; merging an explicit local fork does not. A fork with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
+| Partition | The roster's lowest survivor succeeds without a vote; losing it as well as the authority elects nobody and every survivor forks. Merging an explicit local fork does not work. An instance with no link left drops the participants it can no longer reach; one that still holds links keeps them, because it has peers to agree a tick with and no authority to name one. |
 | Relay scheduling | A relayed participant inherits its neighbour's cadence and repair pricing. |
 | Operator API | Interactive mutation is session-aware; programmatic map/FSM mutation still relies on caller discipline. |
 | Tower ownership | Optional tower configurations still bind to slot zero rather than an explicit session-owned/cursor-owned rule. |

@@ -707,6 +707,30 @@ func TestJoinReusesTheCadencesKeyframe(t *testing.T) {
 	if len(third) == 0 {
 		t.Fatal("the fresh keyframe is empty")
 	}
+
+	// And a restart retires it, whatever its tick says. A reset re-bases the tick
+	// counter, so the keyframe above outranks every tick the new run has reached and
+	// the reuse test at the top of this function would hand a joiner the previous
+	// game — a world carrying the session it was taken in, which that joiner refuses
+	// because it is not the session it was offered.
+	a.Context().PushEventOrigin(event.EventGameResetRequest,
+		&event.GameResetPayload{}, event.OriginDebug)
+	a.Settle()
+	a.Tick(4)
+	if got := a.Position().Run; got == 0 {
+		t.Fatal("the reset did not start a new run")
+	}
+	fresh, freshTick, err := a.corrections.keyframeAt(0, deadline)
+	if err != nil {
+		t.Fatalf("keyframe after a restart: %v", err)
+	}
+	if freshTick >= thirdTick {
+		t.Fatalf("the keyframe after a restart is at tick %d, still the previous run's %d",
+			freshTick, thirdTick)
+	}
+	if &fresh[0] == &third[0] {
+		t.Fatal("a join after a restart was handed the previous run's world")
+	}
 }
 
 // TestMidRunJoinWaitsOutThePlayoutLead is the window this phase closed.

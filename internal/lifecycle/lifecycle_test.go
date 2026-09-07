@@ -245,7 +245,9 @@ func TestUnboundedPolicyNeverExpiresOnItsOwn(t *testing.T) {
 	if st := c.State(base.Add(72 * time.Hour)); st.Expired {
 		t.Fatalf("an unbounded waiting session expired: %q", st.Reason)
 	}
-	c.Observe(1, base.Add(time.Hour))
+	if st := c.Observe(1, base.Add(time.Hour)); st.Vacant != 0 {
+		t.Fatalf("an occupied session reported %s of vacancy", st.Vacant)
+	}
 	c.Observe(0, base.Add(2*time.Hour))
 	st := c.State(base.Add(96 * time.Hour))
 	if st.Expired {
@@ -253,6 +255,14 @@ func TestUnboundedPolicyNeverExpiresOnItsOwn(t *testing.T) {
 	}
 	if st.Phase != PhaseVacant || !st.Admit {
 		t.Fatalf("phase %s admit %v, want a vacant host still open to a dial", st.Phase, st.Admit)
+	}
+	// Nothing is counting down, so Remaining says nothing; how long the roster has
+	// been empty is what a long-lived host parks and restarts on instead.
+	if st.Remaining != 0 {
+		t.Fatalf("an unbounded session reported %s remaining", st.Remaining)
+	}
+	if want := 94 * time.Hour; st.Vacant != want {
+		t.Fatalf("vacant for %s, want %s since the last guest left", st.Vacant, want)
 	}
 }
 

@@ -313,8 +313,8 @@ epoch, `MsgStateSync` for one owner-authored cursor snapshot, and
 `MsgStateSnapshot`/`MsgStateCorrection` chunks and, in the steady state, as the
 `MsgStateManifest`/`MsgStateRequest`/`MsgStateShard` exchange below, with
 `MsgStateUnserved` (0x2B) as the answer a retention holder gives to a request it
-cannot produce pages for. `MsgAuthorityReport` (0x2C), `MsgAuthorityVote` (0x2D)
-and `MsgAuthorityHandoff` (0x2E) carry the succession. The epoch is JSON
+cannot produce pages for. `MsgAuthorityReport` (0x2C) and `MsgAuthorityHandoff`
+(0x2E) carry the succession; 0x2D was the vote and is retired. The epoch is JSON
 containing journal-registry TOML payloads; representative complete-frame budgets
 are pinned by `TestWireEncodingBudget`. The remaining codes in `protocol.go` are
 reserved placeholders that nothing sends and `NetworkSystem` counts as drops.
@@ -436,22 +436,29 @@ a split brain to report rather than a fast successor to follow.
 
 | Message | Payload | Sent by |
 |---|---|---|
-| `MsgAuthorityReport` (0x2C) | term, sender, the participant lost, the roster members it is directly linked to, and the newest authoritative tick it retains with how many records | every survivor, flooded and revisable |
-| `MsgAuthorityVote` (0x2D) | term, voter, candidate | every survivor, once per term, never revised |
-| `MsgAuthorityHandoff` (0x2E) | term, authority, predecessor, the voters it was elected on, the roster, the anchor, the barrier delay, and the newest tick the successor retains | the elected successor, before it publishes anything |
+| `MsgAuthorityReport` (0x2C) | term, sender, the participant lost | every survivor, flooded once |
+| `MsgAuthorityHandoff` (0x2E) | term, authority, predecessor, the roster, the anchor, the barrier delay, and the newest tick the successor retains | the designated successor, before it publishes anything |
 
-All three are flooded and deduplicated by content rather than by a hop count: a
-report is idempotent, a vote is immutable and a handoff is adopted once. The flood
-is also how a participant that never saw the disconnect learns of it, since the
-departure crossing that would have carried that news has exactly one producer and
-that producer is what went. The successor's first act under the new term is to
-cross that departure itself.
+Both are flooded and deduplicated by content rather than by a hop count: a report
+says one thing once and a handoff is adopted once. The report carries no election
+input, because the election has none — it carries the *news*, which is load-bearing
+on its own: the departure crossing that would have said the authority is gone has
+exactly one producer and that producer is what went, so a participant two links away
+learns of the loss here or not at all. The successor's first act under the new term
+is to cross that departure itself.
 
-Eligibility is two conditions and no timers: a candidate must be directly linked to
-a strict majority of the closed roster, and must hold retention as new as the
-newest any survivor reports. One vote per participant per term is what makes two
-authorities in one term impossible rather than unlikely. A survivor that reaches no
-majority elects nothing, continues locally, and says so.
+There is no vote. The successor is the lowest surviving identity in the closed
+roster, which every survivor computes from the roster it already holds, so at most
+one instance can conclude that it is the successor and at most one can claim the
+term — the property a quorum was there for, obtained without a round trip. A quorum
+cannot supply it here anyway: a star's survivors are mutually unreachable the moment
+its centre goes, so none of them can ever collect a vote. The successor's one
+self-check is retention, because an instance with nothing retained has no baseline
+for a delta to name; a receiver's check is that the record names the successor its
+own roster designates. `0x2D` is retired rather than reused.
+
+A survivor that hears no record within `parameter.NetworkSuccessionTicks` cannot
+reach the successor, continues locally, and says so.
 
 The closed roster the succession counts against is read from the *world* rather
 than from the offer that admitted this instance: a mid-run joiner is offered the
@@ -623,9 +630,9 @@ What the operator surface still does not cover:
   though the relay makes any graph work. Per-peer correction cadence follows the
   same shape: it is a property of a direct link, and a participant reached by relay
   rides its neighbour's schedule for *corrections* while being answered by that
-  neighbour's retention for *repairs*. It is also why the socket acceptance can
-  only demonstrate the succession's fallback: a star's leaves reach one participant
-  out of three, which is not a majority;
+  neighbour's retention for *repairs*. It is also what the succession rule is
+  shaped around: a star's leaves reach nobody once its centre goes, so the
+  successor has to be a function of the roster rather than of a vote;
 - the playout lead is a constant rather than a function of the graph's diameter,
   and a partition has no digest edge between its components. The *correction
   cadence* is measured and adaptive (D-24); the lead deliberately is not, because
@@ -634,13 +641,14 @@ What the operator surface still does not cover:
   back into the running session;
 - no lag compensation;
 - trusted plaintext peers; no authentication or CLI TLS identity;
-- host loss elects a successor when a strict majority of the closed roster is
-  reachable, and creates an explicit independent local fork when it is not.
-  Partition merging is still not built, and refusing to merge is what happens
-  instead: a fork that meets a higher term refuses it and reports it;
-- the succession is unauthenticated. A peer that lies about its links or its
-  retention, votes twice, or fabricates a handoff record's voter list is not
-  caught; the structural checks bound races rather than hostility;
+- host loss hands the term to the roster's lowest survivor, and leaves an explicit
+  independent local fork on every survivor that cannot reach it. Losing that
+  survivor as well as the authority elects nobody. Partition merging is still not
+  built, and refusing to merge is what happens instead: a fork that meets a higher
+  term refuses it and reports it;
+- the succession is unauthenticated. A peer that claims another participant's
+  identity can make itself the successor; the structural checks bound races rather
+  than hostility;
 - no cross-version compatibility negotiation beyond anchor schema/tick/config/
   corpus equality;
 - sequence/ack fields detect ordering but do not retransmit, and a frame refused

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/vlog"
@@ -150,10 +151,12 @@ func (a *App) Serve() error {
 			a.releaseFrame()
 
 		case now := <-life.C:
-			if st := a.life.Observe(a.guestCount(), now); st.Expired {
+			st := a.life.Observe(a.guestCount(), now)
+			if st.Expired {
 				a.logSessionEnd(st)
 				return nil
 			}
+			a.holdVacant(st)
 
 		case <-report.C:
 			vlog.Info("app", "msg", "server", "summary", a.SessionSummary())
@@ -171,6 +174,96 @@ func (a *App) Serve() error {
 func (a *App) interrupt(now time.Time, reason string) lifecycle.State {
 	a.life.Observe(a.guestCount(), now)
 	return a.life.Interrupt(now, reason)
+}
+
+// holdVacant parks a session nobody is in, and restarts it if nobody comes back.
+//
+// The park is immediate and has no bound, because an empty session has nothing to
+// simulate for and simulating it anyway is not free: with no cursor on the map the
+// gold cycle cannot place a sequence, so it fails, retries a tenth of a second
+// later, and fails again for as long as the process runs. It is also what makes "a
+// guest that dropped comes back into the slot its departure released" mean
+// something — the world it returns to is the world it left rather than one that
+// aged without it.
+//
+// The restart is the other half. A world nobody came back to inside
+// SessionVacantReset is not the world the next guest should be dropped into, so it
+// is replaced by a fresh run, once. The reset is dispatched by the event loop and
+// executed by the scheduler's own reset path, both of which run while the clock is
+// stopped, so nothing has to be unparked to apply it — but the reset releases the
+// clock itself, as the last phase of rebuilding a world for someone to play. Which
+// is why the park is asserted on every reading rather than on the transition into
+// vacancy: a session nobody has come back to must not be left running by its own
+// restart.
+//
+// The resume is here as well as on the accept path, and that is what closes the
+// race between them: a dial that lands in the instant between this reading and the
+// park it decided on is followed a second later by a reading that sees the guest,
+// well inside the join gate's own bound.
+//
+// A bounded session never reaches the restart: its vacancy grace ends the process
+// first, which is the whole difference between an allocated session and a host
+// somebody left running.
+func (a *App) holdVacant(st lifecycle.State) {
+	if st.Phase != lifecycle.PhaseVacant {
+		// The vacancy is over rather than merely interrupted, so the restart it
+		// already spent is spent. Cleared here rather than on the resume, because a
+		// dial that never becomes a participant leaves the phase vacant and its
+		// clock running — and a restart re-armed by that dial would fire again on
+		// the very next reading.
+		a.vacantReset.Store(false)
+		a.resumeVacant()
+		return
+	}
+	if a.ctx.TimeCtl.SetPaused(true) {
+		a.parked.Store(true)
+		vlog.Info("app", "msg", "session parked", "tick", a.Position().Tick,
+			"restart_in", parameter.SessionVacantReset.String())
+	}
+	a.dropOwnerlessCursors()
+	if st.Vacant < parameter.SessionVacantReset || !a.vacantReset.CompareAndSwap(false, true) {
+		return
+	}
+	vlog.Info("app", "msg", "parked session restarted",
+		"vacant", st.Vacant.Round(time.Second).String(), "tick", a.Position().Tick)
+	a.world.RunSafe(func() {
+		a.world.PushEventFull(event.EventGameResetRequest, &event.GameResetPayload{},
+			event.OriginSession, core.DomainShared)
+	})
+}
+
+// dropOwnerlessCursors is the roster half of an empty session: a dedicated host
+// drives no cursor, so with no guest in the roster every cursor on the map belongs
+// to nobody.
+//
+// It exists for the restart above. That rebuilds the world through the ordinary
+// boot, and the boot spawns the cursor a solo run starts with — which a startup
+// lobby hands to its first guest and a mid-run join cannot, because an arrival
+// creates a cursor in a free slot and finds this one occupied. The guest would be
+// admitted, receive the world, and drive nothing in it.
+func (a *App) dropOwnerlessCursors() {
+	var held int
+	a.world.RunSafe(func() { held = a.world.Resources.Player.Count() })
+	if held == 0 {
+		return
+	}
+	a.world.RunSafe(func() {
+		a.world.PushEventFull(event.EventCursorDespawnRequest,
+			&event.CursorDespawnRequestPayload{All: true}, event.OriginSession, core.DomainShared)
+	})
+	vlog.Info("app", "msg", "parked session dropped ownerless cursors", "cursors", held)
+}
+
+// resumeVacant releases a parked session. It is called from the accept goroutine
+// before the mid-run gate reads a capture a playout lead ahead of the current tick:
+// that gate waits on ticks, so a dial served by a stopped clock would time out
+// instead of being admitted. A run that never parked is untouched.
+func (a *App) resumeVacant() {
+	if !a.parked.CompareAndSwap(true, false) {
+		return
+	}
+	a.ctx.TimeCtl.SetPaused(false)
+	vlog.Info("app", "msg", "parked session resumed", "tick", a.Position().Tick)
 }
 
 // logSessionEnd records why an allocated session stopped. It is the one line an

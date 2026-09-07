@@ -105,6 +105,14 @@ type App struct {
 	// probe paths can consult it without knowing which shape this run is.
 	life *lifecycle.Controller
 
+	// parked marks a dedicated host whose clock this run stopped because nobody is
+	// in it, and vacantReset that the parked world has already been restarted for
+	// this vacancy. They are separate from TimeControl's own paused flag because
+	// only what parked a session may unpark it: an operator pause is refused in a
+	// live session, and the lobby's pause is released by the start gate.
+	parked      atomic.Bool
+	vacantReset atomic.Bool
+
 	// admissions bounds how often one dialling host may be admitted. It is built
 	// with the App rather than with the session because a run can open one later
 	// with :host, and a budget that started when hosting did would be a budget
@@ -252,6 +260,14 @@ func (a *App) initWorld() {
 	// Services take no world argument, so placement relative to InitAll is free
 	a.world = engine.NewWorld()
 	a.world.Resources.Rand = engine.NewRandResource(a.cfg.Seed)
+	// A run reproducing a session draws that session's streams, and a session's
+	// streams are drawn one below the number it reports: construction draws them and
+	// then advances, so the game a host calls session N ran on the streams of N-1.
+	// A host that has restarted is several games in, so a joiner counting from zero
+	// would build a different world and be refused on the identity check for it.
+	if a.cfg.Session > 1 {
+		a.world.Resources.Rand.SetSession(a.cfg.Session - 1)
+	}
 
 	// Service resources bridged into the ECS
 	a.hub.BindResources(a.world.Resources)

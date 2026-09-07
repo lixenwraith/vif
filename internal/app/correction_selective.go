@@ -462,6 +462,7 @@ func (c *corrections) sendKeyframeTo(port engine.NetworkPort, id uint32, minTick
 		return
 	}
 	c.publishMu.Lock()
+	c.forgetRestartedRunLocked()
 	if !c.haveKey || c.baseline.Header.Tick < minTick {
 		if _, _, err := c.takeKeyframe(); err != nil {
 			c.publishMu.Unlock()

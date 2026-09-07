@@ -138,6 +138,12 @@ type State struct {
 
 	Deadline  time.Time
 	Remaining time.Duration
+
+	// Vacant is how long the roster has been empty, and zero in every other phase.
+	// A bounded session reads Remaining and ends on it; an unbounded one has no
+	// deadline to read, and this is what a long-lived host parks and restarts on
+	// instead of ending.
+	Vacant time.Duration
 }
 
 // Controller is the machine. The zero value is not usable; call New.
@@ -324,6 +330,13 @@ func (c *Controller) evalLocked(now time.Time) State {
 		out.Deadline = d
 		if remaining := d.Sub(now); remaining > 0 {
 			out.Remaining = remaining
+		}
+	}
+	// After the expiry switch above, so a session that has just ended on its
+	// vacancy grace reports the grace rather than the phase it left.
+	if out.Phase == PhaseVacant {
+		if vacant := now.Sub(c.since); vacant > 0 {
+			out.Vacant = vacant
 		}
 	}
 	return out

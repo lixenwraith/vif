@@ -1477,7 +1477,7 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 	case network.MsgStateManifest, network.MsgStateRequest, network.MsgStateShard,
 		network.MsgStateUnserved:
 		s.receiveSelective(msg.Type, from, msg.Payload)
-	case network.MsgAuthorityReport, network.MsgAuthorityVote, network.MsgAuthorityHandoff:
+	case network.MsgAuthorityReport, network.MsgAuthorityHandoff:
 		s.receiveAuthority(msg.Type, from, msg.Payload)
 	default:
 		s.statDrop.Add(1)

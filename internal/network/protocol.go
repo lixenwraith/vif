@@ -74,14 +74,14 @@ const (
 	// unreachable.
 	MsgStateUnserved MessageType = 0x2B // Live: a request this peer's retention cannot answer
 
-	// Phase 7's succession, in the order it runs. A report is information about
-	// one survivor's reach and retention and is flooded and revisable; a vote is
-	// one participant's single immutable choice for one term; a handoff is the
-	// record that lets a receiver adopt a term it has never seen. Three kinds
-	// rather than one because a receiver acts on each at a different moment, and
-	// because only the middle one is a commitment.
-	MsgAuthorityReport  MessageType = 0x2C // Live: one survivor's succession input
-	MsgAuthorityVote    MessageType = 0x2D // Live: one participant's vote for a term
+	// Succession, in the order it runs. A report is the news that the authority is
+	// gone, flooded so a participant two links away learns of a loss only its
+	// neighbour observed; a handoff is the record that lets a receiver adopt a term
+	// it has never seen. Two kinds rather than one because a receiver acts on each
+	// at a different moment, and because only the second is a membership change.
+	// There is no vote: the successor is a function of the roster (see authority.go),
+	// so 0x2D is retired rather than reused.
+	MsgAuthorityReport  MessageType = 0x2C // Live: a survivor's notice that the authority is gone
 	MsgAuthorityHandoff MessageType = 0x2E // Live: the record a successor authors under
 
 	// Membership. A departure is observed only by a direct neighbour, so a neighbour

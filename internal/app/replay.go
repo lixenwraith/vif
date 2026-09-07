@@ -64,7 +64,8 @@ func ConfigFromAnchor(a event.JournalAnchor) (Config, error) {
 	// reproduction installs it before the FSM boots rather than re-deriving it from
 	// the terminal the anchor names (D-14).
 	cfg := Config{
-		Mode: ModeHeadless, Seed: a.Seed, Width: a.Width, Height: a.Height,
+		Mode: ModeHeadless, Seed: a.Seed, Session: a.Session,
+		Width: a.Width, Height: a.Height,
 		MapWidth: a.MapWidth, MapHeight: a.MapHeight, CropOnResize: a.CropOnResize,
 		LockMap: a.SessionShared,
 	}

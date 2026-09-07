@@ -228,6 +228,54 @@ func goldTimer(a *App) int64 {
 // participant whose streams derive from another seed is refused before it ticks,
 // and a host that has already moved is refused because nothing on this path
 // transports world state.
+// TestAJoinerAdoptsTheHostsRngSession is what a restarted host needs from a join.
+//
+// The seed says which family of streams a run draws from; the session counter says
+// which game in that family, and a reset advances it. A joiner that counted from
+// one would build a different world and be refused on the identity check — which is
+// what made a host that had ever reset unjoinable, and what a dedicated host now
+// reaches routinely, because it restarts a session nobody came back to.
+func TestAJoinerAdoptsTheHostsRngSession(t *testing.T) {
+	t.Parallel()
+	const seed = 0x5EEDBEEF
+	host := mustHeadless(t, seed, 120, 40)
+	defer host.Close()
+
+	// The run a fresh host reports, and the run it reports after a restart.
+	first := host.JoinAnchor().Anchor.Session
+	host.Context().PushEventOrigin(event.EventGameResetRequest,
+		&event.GameResetPayload{}, event.OriginDebug)
+	host.Settle()
+	host.Tick(4)
+	an := host.JoinAnchor()
+	if an.Anchor.Session <= first {
+		t.Fatalf("a restart left the session counter at %d, want it past %d",
+			an.Anchor.Session, first)
+	}
+
+	cfg, err := ConfigForJoin(Config{Mode: ModeHeadless, Width: 120, Height: 40}, network.SessionOffer{
+		Anchor: an, Host: 1, Assigned: 2, Term: network.FirstTerm,
+		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		Participants: []network.SessionParticipant{
+			{ID: 1, Slot: 0}, {ID: 2, Slot: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("join config: %v", err)
+	}
+	if cfg.Session != an.Anchor.Session {
+		t.Fatalf("the join config carries session %d, the host is on %d", cfg.Session, an.Anchor.Session)
+	}
+	guest, err := NewHeadless(cfg)
+	if err != nil {
+		t.Fatalf("join app: %v", err)
+	}
+	defer guest.Close()
+	if err := guest.JoinAt(an); err != nil {
+		t.Fatalf("a joiner that adopted the host's session was refused: %v", err)
+	}
+}
+
 func TestReproducingJoinAdmissionAndRefusals(t *testing.T) {
 	t.Parallel()
 	const seed = 0x5EEDBEEF

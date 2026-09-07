@@ -125,6 +125,14 @@ type Config struct {
 	// System seed for RNG
 	Seed uint64
 
+	// Session is the RNG session a run reproduces rather than counts to: the seed
+	// says which family of streams a run draws from, and this says which game in
+	// that family. A run started for itself leaves it zero and counts from one; a
+	// join and a replay adopt the number the anchor carries, because a session that
+	// has been restarted is several games in and every stream it draws is a
+	// function of that number.
+	Session uint64
+
 	// Journal enables the replay journal, written to its own file
 	Journal bool
 
@@ -216,6 +224,7 @@ func ConfigForJoin(local Config, o network.SessionOffer) (Config, error) {
 		return Config{}, err
 	}
 	local.Seed = fromAnchor.Seed
+	local.Session = fromAnchor.Session
 	local.Resources.Embedded = fromAnchor.Resources.Embedded
 	local.Resources.Game = fromAnchor.Resources.Game
 	local.Resources.Content = fromAnchor.Resources.Content

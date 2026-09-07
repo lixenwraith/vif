@@ -60,7 +60,7 @@ func (c *corrections) queuePeerLost(id uint32) {
 }
 
 // maxQueuedAuthorityFrames bounds what one succession may buffer. A report is
-// idempotent, a vote immutable and a handoff adopted once, so the ceiling is far
+// idempotent and a handoff adopted once, so the ceiling is far
 // above what a roster can produce; reaching it means a peer that is not running a
 // succession.
 const maxQueuedAuthorityFrames = 256

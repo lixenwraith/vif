@@ -163,9 +163,39 @@ outside can end one on emptiness. See
 ```
 
 The scheduler applies render backpressure at real time and slower, so the server
-releases the same frame handshake on the same interval and draws nothing. A run
-with no guests attached still ticks, still authors, and publishes nothing: the
-correction pump returns on an empty roster.
+releases the same frame handshake on the same interval and draws nothing.
+
+#### An empty session parks
+
+A run whose roster empties stops its clock, and stops it at once. An empty session
+has nothing to simulate for, and simulating it anyway is not free: with no cursor
+on the map the gold cycle cannot place a sequence, so it fails, retries a tenth of
+a second later, and fails again for as long as the process runs. It is also what
+makes "a guest that dropped reclaims the slot its departure released" mean
+something — the world it comes back to is the world it left rather than one that
+aged without it.
+
+A world nobody came back to inside `parameter.SessionVacantReset` is replaced: the
+run restarts, once, and stays parked over the fresh world, so the next guest is
+dropped into a session rather than into somebody else's unfinished match. Two
+things follow from the restart that are easy to miss and are handled where they
+arise. The reset releases the clock as the last phase of rebuilding a world for
+somebody to play, so the park is asserted on every reading rather than on the
+transition into vacancy. And the boot spawns the cursor a solo run starts with,
+which on a host that drives none belongs to nobody and would occupy the slot a
+mid-run join needs, so a parked session drops the cursors it has no participant
+for.
+
+A dial is what releases the park, on the accept goroutine and before the mid-run
+gate reads its capture: that gate waits for a tick a stopped clock never reaches,
+so a dial served by one would time out instead of being admitted. `/health` says
+`clock=paused` beside `phase=vacant` throughout, and stays live — a park is not a
+stall.
+
+`-empty` is the other answer to the same condition and outranks this one: a
+bounded session ends rather than parks, because an allocated pod holding a frozen
+world is a pod the fleet cannot place anything else on. The park is what a host
+somebody left running does instead.
 
 A server outlives its guests. Its mid-run gate is installed at construction and
 armed once the scheduler is running, so a participant that dropped can dial back

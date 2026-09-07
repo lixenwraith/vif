@@ -311,6 +311,7 @@ func (c *corrections) publishRound(force bool) error {
 	}
 	c.decideLocked(ids, link)
 
+	c.forgetRestartedRunLocked()
 	tick := c.a.Position().Tick
 	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
 	due := c.dueLocked(ids, tick, force, keyframe)
@@ -416,6 +417,7 @@ func (c *corrections) publishRound(force bool) error {
 //
 // Caller MUST hold publishMu.
 func (c *corrections) publishBroadcast(port engine.NetworkPort, force bool) error {
+	c.forgetRestartedRunLocked()
 	tick := c.a.Position().Tick
 	keyframe := !c.haveKey || tick >= c.lastKeyTick+c.keyPeriod
 	if !force && !keyframe && tick < c.nextBroadcast {
@@ -721,6 +723,27 @@ func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 	return cap, nil
 }
 
+// forgetRestartedRunLocked drops the keyframe this host holds when it describes a
+// game the run has since restarted.
+//
+// A reset re-bases the tick counter, and every decision below reads ticks: the
+// keyframe period would see a capture from the previous run as arbitrarily fresh
+// and publish a delta against a baseline no receiver has, and the join gate would
+// hand a joiner a world carrying the session it was taken in — which that joiner
+// then refuses, because it is not the session it was offered. A run number is what
+// distinguishes them, since it is the one header field a reset advances rather than
+// re-bases.
+//
+// Caller MUST hold publishMu.
+func (c *corrections) forgetRestartedRunLocked() {
+	if !c.haveKey || c.baseline.Header.Run == c.a.Position().Run {
+		return
+	}
+	vlog.Info("app", "msg", "keyframe dropped across a restart",
+		"baseline_run", c.baseline.Header.Run, "run", c.a.Position().Run)
+	c.baseline, c.keyBody, c.haveKey, c.lastKeyTick = snapshot.SharedCapture{}, nil, false, 0
+}
+
 // keyframeAt returns a keyframe describing the world at or after minTick, taking
 // one if the newest is older than that.
 //
@@ -737,6 +760,7 @@ func (c *corrections) readWorld() (snapshot.SharedCapture, error) {
 func (c *corrections) keyframeAt(minTick uint64, deadline time.Time) ([]byte, uint64, error) {
 	for {
 		c.publishMu.Lock()
+		c.forgetRestartedRunLocked()
 		if c.haveKey && c.baseline.Header.Tick >= minTick {
 			body, tick := c.keyBody, c.baseline.Header.Tick
 			c.publishMu.Unlock()
@@ -1028,6 +1052,12 @@ func (c *corrections) setBaseline(cap snapshot.SharedCapture) {
 	// A whole world is the answer to every request the selective exchange can
 	// make, so whatever this instance was waiting for it is no longer waiting.
 	c.clearKeyframeWait()
+	// Retained for the same reason an installed correction is: this capture came
+	// off the gate as the authority's own world and is what a delta will be named
+	// against. It is also what makes a guest electable from the moment it joins —
+	// a successor needs a baseline, and until this a participant admitted seconds
+	// before the host went had none.
+	c.retainInstalled(cap)
 }
 
 // observeFloor is the guest's half of the convergence guarantee, and a different

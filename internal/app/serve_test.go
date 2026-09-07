@@ -3,6 +3,7 @@ package app
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/lixenwraith/vi-fighter/internal/component"
 	"github.com/lixenwraith/vi-fighter/internal/core"
@@ -354,6 +355,102 @@ func TestAnInteractiveHostStillWaitsForItsWholeLobby(t *testing.T) {
 			t.Fatalf("-players %d: quorum = %d, want %d", tt.participants, got, tt.want)
 		}
 		a.Close()
+	}
+}
+
+// TestAVacantDedicatedHostParksAndRestarts is what an empty session used to cost.
+//
+// A host nobody was in kept simulating, and simulating it was not free: with no
+// cursor on the map the gold cycle cannot place a sequence, so it failed, retried a
+// tenth of a second later, and failed again for as long as the process ran — a spin
+// with a log line per transition, and a world aging away from the guest that might
+// come back to it. So the clock stops as soon as the roster empties, and a world
+// nobody returned to inside the window is replaced rather than handed to whoever
+// dials next.
+func TestAVacantDedicatedHostParksAndRestarts(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x5E8E, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+	a.Tick(20)
+
+	now := time.Now()
+	a.life.Start(now)
+	a.life.Observe(1, now)
+	if a.holdVacant(a.life.State(now)); a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("an occupied session was parked")
+	}
+
+	// The roster empties. The park is immediate and the restart is not.
+	vacant := a.life.Observe(0, now)
+	a.holdVacant(vacant)
+	if !a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("the emptied session kept its clock running")
+	}
+	run := a.Position().Run
+	a.holdVacant(a.life.State(now.Add(parameter.SessionVacantReset - time.Second)))
+	a.Tick(2)
+	if got := a.Position().Run; got != run {
+		t.Fatalf("the session restarted at run %d inside its window; it held run %d", got, run)
+	}
+
+	// Past the window it starts a fresh run, once. The reset releases the clock as
+	// the last phase of rebuilding a world for somebody to play, so the next
+	// reading is what parks it again — and drops the cursor the boot spawned, which
+	// on a host that drives none belongs to nobody and would take the slot a
+	// mid-run join needs.
+	a.holdVacant(a.life.State(now.Add(parameter.SessionVacantReset)))
+	a.Tick(4)
+	if got := a.Position().Run; got != run+1 {
+		t.Fatalf("run = %d after the vacancy window, want %d", got, run+1)
+	}
+	a.holdVacant(a.life.State(now.Add(2 * parameter.SessionVacantReset)))
+	a.Tick(2)
+	if !a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("the restarted session was left running with nobody in it")
+	}
+	if got := a.Position().Run; got != run+1 {
+		t.Fatalf("a parked session restarted twice for one vacancy: run %d", got)
+	}
+	var cursors int
+	a.World().RunSafe(func() { cursors = a.World().Resources.Player.Count() })
+	if cursors != 0 {
+		t.Fatalf("a session with nobody in it holds %d cursors; a mid-run join needs the slot",
+			cursors)
+	}
+
+	// A dial is what releases it, and it has to release before the mid-run gate
+	// asks for a capture a playout lead ahead of a tick a stopped clock never
+	// reaches.
+	a.resumeVacant()
+	if a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("a dial did not release the parked session")
+	}
+	// A dial that never becomes a participant leaves the phase vacant with its
+	// clock still running. The restart this vacancy already spent stays spent, or
+	// every such dial would start another run on the very next reading.
+	a.holdVacant(a.life.State(now.Add(3 * parameter.SessionVacantReset)))
+	a.Tick(2)
+	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != run+1 {
+		t.Fatalf("an abandoned dial left the session parked=%t at run %d, want parked at run %d",
+			a.ctx.TimeCtl.IsPaused(), a.Position().Run, run+1)
+	}
+
+	// A guest that does arrive ends the vacancy, and the one after it gets a window
+	// of its own rather than the remains of this one.
+	later := now.Add(4 * parameter.SessionVacantReset)
+	a.holdVacant(a.life.Observe(1, later))
+	if a.ctx.TimeCtl.IsPaused() {
+		t.Fatal("an occupied session stayed parked")
+	}
+	a.holdVacant(a.life.Observe(0, later))
+	a.holdVacant(a.life.State(later.Add(parameter.SessionVacantReset)))
+	a.Tick(4)
+	a.holdVacant(a.life.State(later.Add(2 * parameter.SessionVacantReset)))
+	a.Tick(2)
+	if !a.ctx.TimeCtl.IsPaused() || a.Position().Run != run+2 {
+		t.Fatalf("the second vacancy parked=%t at run %d, want parked at run %d",
+			a.ctx.TimeCtl.IsPaused(), a.Position().Run, run+2)
 	}
 }
 

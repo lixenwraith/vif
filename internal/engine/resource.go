@@ -441,6 +441,12 @@ func (r *RandResource) Session() uint64 { return r.session.Load() }
 // finished initializing, so the next game draws different streams from one root.
 func (r *RandResource) NextSession() uint64 { return r.session.Add(1) }
 
+// SetSession places the counter, for a run reproducing a session rather than
+// starting one. Call before any system draws a stream: a generator is seeded from
+// the counter's value at the moment it is issued, so moving the counter afterwards
+// leaves a world holding two sessions' streams.
+func (r *RandResource) SetSession(n uint64) { r.session.Store(n) }
+
 // Stream returns the labelled generator for a domain in the current session, and
 // records it as that name's live generator so SaveStreams can report where the
 // stream has reached.

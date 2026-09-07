@@ -4,14 +4,19 @@
 // survivors keep ticking separately, with no roster authority and no way to admit
 // anyone. That is the fallback; the succession here is the other outcome.
 //
-// Report, vote, handoff. A survivor floods what it can reach and how current its
-// retention is; once its view covers a strict majority it votes, once, for the
-// lowest eligible candidate; a candidate holding a strict majority publishes the
-// record it authors under. One vote per participant per term is what removes the
-// need for a tie-breaking timer. The record carries roster, slot assignments, anchor
-// and barrier delay, so adopting it is one decision rather than a term change
-// followed by a roster negotiation, and a joiner dialling mid-handoff is refused
-// with a distinguishable error rather than half-admitted into a term about to end.
+// Notice, handoff. A survivor floods the news that the authority is gone, so a
+// participant two links away learns of a loss only its neighbour observed; the
+// participant the roster names as successor — its lowest surviving identity, which
+// is the first guest admitted — publishes the record it authors under, at once and
+// without asking anyone. network.DesignatedSuccessor is why there is no vote here:
+// it is a function of a roster every survivor already holds, so at most one
+// instance can conclude that it is the successor. A quorum could not serve the
+// shape a session actually has — see that file's header.
+//
+// The record carries roster, slot assignments, anchor and barrier delay, so adopting
+// it is one decision rather than a term change followed by a roster negotiation, and
+// a joiner dialling mid-handoff is refused with a distinguishable error rather than
+// half-admitted into a term about to end.
 //
 // What a successor may author is unchanged: the Shared domain and nothing else. It
 // does not begin authoring the D-13 owner-authored cells of cursors it does not
@@ -28,7 +33,6 @@ import (
 	"sync/atomic"
 
 	"github.com/lixenwraith/vi-fighter/internal/core"
-	"github.com/lixenwraith/vi-fighter/internal/engine"
 	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
@@ -60,16 +64,19 @@ type authority struct {
 	// refusal to report rather than a merge to attempt.
 	fork bool
 
-	// The succession in progress, if any. contested is the term being elected for,
+	// The succession in progress, if any. contested is the term being taken over,
 	// which is always the held term plus one: a successor that skipped a term would
-	// be adopting authorship over state nobody agreed it had.
+	// be adopting authorship over state nobody agreed it had. reports is the set of
+	// survivors whose loss notice has been seen, which is what terminates the flood.
 	contested network.AuthorityTerm
 	lost      network.PeerID
 	since     uint64
-	reports   map[network.PeerID]network.AuthorityReport
-	vote      network.PeerID
-	grants    map[network.PeerID]network.PeerID
+	reports   map[network.PeerID]bool
 	published bool
+
+	// reconcileAt is the tick at which a successor that took the term reconciles
+	// its roster with what it can actually reach. Zero when nothing is pending.
+	reconcileAt uint64
 
 	badgeUntil uint64
 
@@ -229,9 +236,8 @@ func (u *authority) beginSuccession(lost network.PeerID) {
 	u.contested = u.term + 1
 	u.lost = lost
 	u.since = tick
-	u.reports = make(map[network.PeerID]network.AuthorityReport, len(u.roster))
-	u.grants = make(map[network.PeerID]network.PeerID, len(u.roster))
-	u.vote, u.published = 0, false
+	u.reports = make(map[network.PeerID]bool, len(u.roster))
+	u.published = false
 	term, local := u.contested, u.local
 	u.mu.Unlock()
 
@@ -242,9 +248,13 @@ func (u *authority) beginSuccession(lost network.PeerID) {
 	u.drive()
 }
 
-// sendReport floods this survivor's reach and retention. It is information rather
-// than a commitment, so it may be sent again as links change; the vote below is
-// what cannot be revised.
+// sendReport floods the news that the authority is gone.
+//
+// It decides nothing — the successor is a function of the roster — but only a
+// direct neighbour of the authority sees the link drop, and the departure crossing
+// that used to carry that news is produced by the participant that is gone. So the
+// notice travels instead, and a survivor two links away opens the same succession
+// from it.
 func (u *authority) sendReport() {
 	u.mu.Lock()
 	term, local, lost := u.contested, u.local, u.lost
@@ -252,12 +262,7 @@ func (u *authority) sendReport() {
 	if term == 0 || local == 0 {
 		return
 	}
-	roster := u.currentRoster()
-	tick, records := u.a.corrections.retentionEvidence()
-	rep := network.AuthorityReport{
-		Term: term, From: local, Lost: lost,
-		Links: u.linkedRoster(roster, lost), RetainedTick: tick, Retained: records,
-	}
+	rep := network.AuthorityReport{Term: term, From: local, Lost: lost}
 	u.recordReport(rep)
 	body, err := network.EncodeAuthorityReport(rep)
 	if err != nil {
@@ -304,46 +309,16 @@ func (u *authority) currentRoster() []network.SessionParticipant {
 	return out
 }
 
-// linkedRoster is the roster members this instance is directly linked to, which is
-// requirement (a)'s input: a candidate must reach a strict majority of the closed
-// roster over links of its own, not through the participant that has gone.
-func (u *authority) linkedRoster(roster []network.SessionParticipant, lost network.PeerID) []network.PeerID {
-	link, ok := u.a.sessionTransport().(engine.LinkMeasuringPort)
-	if !ok {
-		return nil
-	}
-	out := make([]network.PeerID, 0, len(roster))
-	for _, id := range link.Peers() {
-		p := network.PeerID(id)
-		if p == lost {
-			continue
-		}
-		if slices.ContainsFunc(roster, func(r network.SessionParticipant) bool { return r.ID == p }) {
-			out = append(out, p)
-		}
-	}
-	slices.Sort(out)
-	return out
-}
-
-// recordReport stores one survivor's input, reporting whether it was new.
+// recordReport notes one survivor's loss notice, reporting whether it was new.
+// The set is what terminates the flood: a notice says one thing and says it once.
 func (u *authority) recordReport(rep network.AuthorityReport) bool {
 	u.mu.Lock()
 	defer u.mu.Unlock()
-	if rep.Term != u.contested || rep.From == 0 {
+	if rep.Term != u.contested || rep.From == 0 || u.reports[rep.From] {
 		return false
 	}
-	prior, had := u.reports[rep.From]
-	u.reports[rep.From] = rep
-	return !had || changedReport(prior, rep)
-}
-
-// changedReport reports whether a re-sent survey says anything new. A report is
-// idempotent and re-sent as links change, so the flood terminates on content
-// rather than on a hop count.
-func changedReport(a, b network.AuthorityReport) bool {
-	return a.Lost != b.Lost || a.RetainedTick != b.RetainedTick ||
-		a.Retained != b.Retained || !slices.Equal(a.Links, b.Links)
+	u.reports[rep.From] = true
+	return true
 }
 
 // drive advances the succession. It is called from the correction loop, which runs
@@ -353,7 +328,7 @@ func changedReport(a, b network.AuthorityReport) bool {
 func (u *authority) drive() {
 	u.mu.Lock()
 	contested, since := u.contested, u.since
-	badge := u.badgeUntil
+	badge, reconcile := u.badgeUntil, u.reconcileAt
 	u.mu.Unlock()
 
 	tick := u.a.Position().Tick
@@ -363,11 +338,18 @@ func (u *authority) drive() {
 		u.mu.Unlock()
 		u.statMigrating.Store(false)
 	}
+	if reconcile != 0 && tick >= reconcile {
+		roster := u.currentRoster()
+		u.mu.Lock()
+		u.reconcileAt = 0
+		local := u.local
+		u.mu.Unlock()
+		u.a.dropAbandonedCursors(roster, local)
+	}
 	if contested == 0 {
 		return
 	}
-	u.tryVote()
-	u.tryPublish()
+	u.trySucceed()
 
 	u.mu.Lock()
 	stillOpen := u.contested == contested
@@ -377,112 +359,76 @@ func (u *authority) drive() {
 	}
 }
 
-// tryVote casts this instance's single vote for the contested term, once its view
-// is as complete as its own links allow.
+// trySucceed takes the term, when this instance is the one the roster names.
 //
-// Two conditions, and they are different. A view narrower than a strict majority
-// cannot elect anything, because eligibility is measured against the closed
-// roster. A view missing a survivor this instance is *directly linked to* is a
-// view that is still arriving, and voting from it would split the vote for no
-// reason — so the wait is on evidence rather than on a clock, and it ends when the
-// links this instance has have all answered.
-func (u *authority) tryVote() {
+// There is nothing to collect and nobody to ask. DesignatedSuccessor is a pure
+// function of the closed roster and the participant that went, both of which every
+// survivor already holds, so exactly one instance reaches the publish below and it
+// reaches it as soon as it notices the loss. That immediacy is the point: the
+// session is stalled from the moment the authority goes until somebody authors, and
+// a quorum round would add a round trip that a star cannot complete at all.
+//
+// The one self-check is retention. A successor with no retained authoritative
+// record has no baseline for a delta to name, so it would answer the first manifest
+// with a whole world for every survivor at once; without one it stands down and the
+// succession window turns this into a local fork.
+func (u *authority) trySucceed() {
+	roster := u.currentRoster()
 	u.mu.Lock()
-	if u.contested == 0 || u.vote != 0 {
+	if u.contested == 0 || u.published || u.local == 0 {
 		u.mu.Unlock()
 		return
 	}
 	term, lost, local := u.contested, u.lost, u.local
-	reports := make(map[network.PeerID]network.AuthorityReport, len(u.reports))
-	for k, v := range u.reports {
-		reports[k] = v
-	}
 	u.mu.Unlock()
-	roster := u.currentRoster()
 
-	if len(reports) < network.Majority(len(roster)) {
+	if want, ok := network.DesignatedSuccessor(roster, lost); !ok || want != local {
+		return // not this instance's term to take; the record or the window decides
+	}
+	evidenceTick, retained := u.a.corrections.retentionEvidence()
+	if retained == 0 {
 		return
-	}
-	for _, id := range u.linkedRoster(roster, lost) {
-		if _, ok := reports[id]; !ok {
-			return
-		}
-	}
-	candidate, ok := network.ElectSuccessor(roster, lost, reports)
-	if !ok {
-		return // nothing eligible; the deadline turns this into local continuation
 	}
 
 	u.mu.Lock()
-	if u.contested != term || u.vote != 0 {
+	if u.contested != term || u.published {
 		u.mu.Unlock()
 		return
 	}
-	u.vote = candidate
-	u.grants[local] = candidate
-	u.mu.Unlock()
-
-	body, err := network.EncodeAuthorityVote(network.AuthorityVote{
-		Term: term, Voter: local, Candidate: candidate,
-	})
-	if err != nil {
-		return
-	}
-	vlog.Info("app", "msg", "succession vote cast",
-		"term", uint64(term), "voter", uint64(local), "candidate", uint64(candidate),
-		"roster", len(roster), "reports", len(reports))
-	u.flood(network.MsgAuthorityVote, 0, body)
-}
-
-// tryPublish turns a strict majority of votes into the record this instance
-// authors under. It is the only place a term is entered by its own holder, and the
-// majority is what makes that safe: every participant grants one vote per term, so
-// two candidates cannot both reach one.
-func (u *authority) tryPublish() {
-	roster := u.currentRoster()
-	u.mu.Lock()
-	if u.contested == 0 || u.published || u.local == 0 || u.vote != u.local {
-		u.mu.Unlock()
-		return
-	}
-	voters := make([]network.PeerID, 0, len(u.grants))
-	for voter, candidate := range u.grants {
-		if candidate == u.local {
-			voters = append(voters, voter)
-		}
-	}
-	if len(voters) < network.Majority(len(roster)) {
-		u.mu.Unlock()
-		return
-	}
-	slices.Sort(voters)
 	u.published = true
 	rec := network.HandoffRecord{
-		Term:              u.contested,
-		Authority:         u.local,
-		Predecessor:       u.lost,
-		Voters:            voters,
+		Term:              term,
+		Authority:         local,
+		Predecessor:       lost,
 		Roster:            roster,
 		Anchor:            u.anchor,
 		BarrierDelayTicks: u.delay,
+		EvidenceTick:      evidenceTick,
 	}
 	u.mu.Unlock()
 
-	rec.EvidenceTick, _ = u.a.corrections.retentionEvidence()
 	if err := u.adopt(rec, 0); err != nil {
 		vlog.Error("app", "msg", "succession could not adopt its own record", "error", err.Error())
 		return
 	}
-	body, err := network.EncodeHandoff(rec)
-	if err != nil {
-		return
+	// The roster the successor took over names participants it may have no path to
+	// — in a star, every guest but itself. Reconciled after the succession window
+	// rather than now, because a survivor that is merely a relay hop away is still
+	// arriving and dropping it here would destroy a cursor it still simulates.
+	u.mu.Lock()
+	u.reconcileAt = u.a.Position().Tick + parameter.NetworkSuccessionTicks
+	u.mu.Unlock()
+
+	if body, err := network.EncodeHandoff(rec); err == nil {
+		u.flood(network.MsgAuthorityHandoff, 0, body)
 	}
-	u.flood(network.MsgAuthorityHandoff, 0, body)
 }
 
-// giveUp ends a succession that found no eligible successor, or whose votes never
-// reached a majority. What is left is the local-continuation fallback, said plainly:
-// instance continues its own game from the last authoritative state.
+// giveUp ends a succession no record ever answered: either this instance is not the
+// successor the roster names and cannot reach the one that is, or it is and had
+// nothing retained to author from. What is left is the local-continuation fallback,
+// said plainly: this instance continues its own game from the last authoritative
+// state.
 func (u *authority) giveUp() {
 	// Read before the state is cleared: what this fork keeps is the roster it can
 	// still reach, and both halves of that answer are gone once lost is.
@@ -493,7 +439,7 @@ func (u *authority) giveUp() {
 		return
 	}
 	term, lost, local := u.contested, u.lost, u.local
-	u.contested, u.reports, u.grants, u.vote, u.published = 0, nil, nil, 0, false
+	u.contested, u.reports, u.published = 0, nil, false
 	u.fork = true
 	u.mu.Unlock()
 
@@ -545,7 +491,7 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 	u.roster = slices.Clone(rec.Roster)
 	u.anchor, u.delay = rec.Anchor, rec.BarrierDelayTicks
 	u.accepted[rec.Term] = rec
-	u.contested, u.reports, u.grants, u.vote, u.published = 0, nil, nil, 0, false
+	u.contested, u.reports, u.published = 0, nil, false
 	u.fork = false
 	u.badgeUntil = u.a.Position().Tick + parameter.NetworkMigrationBadgeTicks
 	mine := u.local == rec.Authority
@@ -559,8 +505,8 @@ func (u *authority) adopt(rec network.HandoffRecord, from uint32) error {
 
 	vlog.Warn("app", "msg", "authority handed off",
 		"term", uint64(rec.Term), "authority", uint64(rec.Authority),
-		"predecessor", uint64(rec.Predecessor), "voters", len(rec.Voters),
-		"roster", len(rec.Roster), "evidence_tick", rec.EvidenceTick, "local", mine)
+		"predecessor", uint64(rec.Predecessor), "roster", len(rec.Roster),
+		"evidence_tick", rec.EvidenceTick, "local", mine)
 	u.a.ctx.SetStatusMessage(
 		fmt.Sprintf("Authority moved to participant %d (term %d)", rec.Authority, rec.Term),
 		2*parameter.StatusMessageDefaultTimeout, false)
@@ -579,16 +525,14 @@ func (u *authority) receive(kind uint8, from uint32, body []byte) {
 	switch network.MessageType(kind) {
 	case network.MsgAuthorityReport:
 		u.onReport(from, body)
-	case network.MsgAuthorityVote:
-		u.onVote(from, body)
 	case network.MsgAuthorityHandoff:
 		u.onHandoff(from, body)
 	}
 }
 
-// onReport records a survivor's input and joins the succession it announces. A
+// onReport notes a survivor's loss notice and joins the succession it announces. A
 // participant that never saw the disconnect itself — one two links from the lost
-// authority — learns of it here, which is why the reports are flooded: the
+// authority — learns of it here, which is why the notices are flooded: the
 // departure crossing that used to carry that news is produced by the authority.
 func (u *authority) onReport(from uint32, body []byte) {
 	rep, err := network.DecodeAuthorityReport(body)
@@ -614,34 +558,6 @@ func (u *authority) onReport(from uint32, body []byte) {
 	u.drive()
 }
 
-// onVote records one participant's choice for the contested term.
-func (u *authority) onVote(from uint32, body []byte) {
-	v, err := network.DecodeAuthorityVote(body)
-	if err != nil || v.Voter == 0 || v.Candidate == 0 {
-		return
-	}
-	u.mu.Lock()
-	if v.Term != u.contested {
-		u.mu.Unlock()
-		return
-	}
-	if prior, ok := u.grants[v.Voter]; ok {
-		u.mu.Unlock()
-		if prior != v.Candidate {
-			u.statRefused.Add(1)
-			vlog.Warn("app", "msg", "participant voted twice in one term",
-				"term", uint64(v.Term), "voter", uint64(v.Voter),
-				"first", uint64(prior), "second", uint64(v.Candidate))
-		}
-		return
-	}
-	u.grants[v.Voter] = v.Candidate
-	u.mu.Unlock()
-
-	u.flood(network.MsgAuthorityVote, from, body)
-	u.drive()
-}
-
 // onHandoff adopts, or refuses, one record.
 func (u *authority) onHandoff(from uint32, body []byte) {
 	rec, err := network.DecodeHandoff(body)
@@ -660,7 +576,7 @@ func (u *authority) onHandoff(from uint32, body []byte) {
 
 // flood forwards one succession frame to every direct neighbour but the link it
 // arrived on. Deduplication is by term and participant rather than by a hop count:
-// a report is idempotent, a vote is immutable, and a handoff is adopted once.
+// a report says one thing once, and a handoff is adopted once.
 func (u *authority) flood(kind network.MessageType, exclude uint32, body []byte) {
 	port := u.a.sessionTransport()
 	if port == nil || !port.IsRunning() || port.PeerCount() == 0 {
@@ -832,22 +748,23 @@ func (a *App) crossPredecessorDeparture(rec network.HandoffRecord) {
 	a.crossDeparture(rec.Predecessor, rec.Roster[i].Slot)
 }
 
-// dropAbandonedCursors removes the participants a lone fork will never hear from
-// again.
+// dropAbandonedCursors removes the participants an instance left alone will never
+// hear from again.
 //
-// A fork is the outcome where nobody may author: the authority is gone, nothing was
-// electable, and this instance continues its own game. When it continues *alone* —
-// no link left, which is every session the CLI's star builds — each cursor it does
-// not simulate belongs to a participant nothing will ever move again: the authority
-// that went, and behind it the guests only ever reachable through it. Left there
-// they are players that cannot be played and cannot leave.
+// Both outcomes of a lost authority reach it. A successor of a star takes the term
+// and finds itself the only participant it can reach; a survivor that could not
+// reach that successor continues as an explicit local fork. Either way each cursor
+// this instance does not simulate belongs to a participant nothing will ever move
+// again — the authority that went, and behind it the guests only ever reachable
+// through it. Left there they are players that cannot be played and cannot leave.
 //
-// Being alone is also what makes the removal local rather than a crossing, and that
-// is exact rather than convenient: a departure is produced once at one agreed tick
-// (D-11) because two instances must destroy the same shared entity together or
-// their allocators diverge from there on, and here there is no second instance. A
-// fork that still holds links is left alone for the mirror of that reason, which is
-// the partition case doc/multi-player-enhancement.md §8 records as unfinished.
+// Having no link is also what makes the removal local rather than a crossing, and
+// that is exact rather than convenient: a departure is produced once at one agreed
+// tick (D-11) because two instances must destroy the same shared entity together or
+// their allocators diverge from there on, and here there is no second instance. An
+// instance that still holds links is left alone for the mirror of that reason,
+// which is the partition case doc/multi-player-enhancement.md §8 records as
+// unfinished.
 func (a *App) dropAbandonedCursors(roster []network.SessionParticipant, local network.PeerID) {
 	if p := a.sessionTransport(); p != nil && p.IsRunning() && p.PeerCount() > 0 {
 		return

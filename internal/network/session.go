@@ -332,7 +332,7 @@ func (p *PendingJoin) hold(msg *Message) bool {
 		// join — as soon as a session had a participant the host was already
 		// publishing an index to.
 		return true
-	case MsgAuthorityReport, MsgAuthorityVote, MsgAuthorityHandoff:
+	case MsgAuthorityReport, MsgAuthorityHandoff:
 		// Held rather than swallowed. These say who is allowed to author, which is
 		// exactly what a joiner needs and cannot re-derive: it adopts a term from
 		// the offer, and a succession that ran between the offer and the install

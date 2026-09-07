@@ -101,9 +101,14 @@ func (a *App) hostNetworkConfig() *network.Config {
 
 // admitLateJoiner gates a dial that arrives after the startup lobby closed.
 func (a *App) admitLateJoiner(id network.PeerID) {
-	if a.lateJoins.Load() {
-		a.releaseMidRunJoiner(id)
+	if !a.lateJoins.Load() {
+		return
 	}
+	// Before the gate, not after it: the gate waits for a capture a playout lead
+	// ahead of the current tick, so a session parked for having nobody in it would
+	// time out every dial that came to end that.
+	a.resumeVacant()
+	a.releaseMidRunJoiner(id)
 }
 
 // openMidRunJoins ends the lobby's closing window and arms the mid-run gate, in

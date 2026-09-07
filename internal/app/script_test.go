@@ -129,7 +129,11 @@ func TestScriptPacingSelectsTheWallRate(t *testing.T) {
 // same script left at the default finishes far inside it.
 func TestAPacedScriptSpendsItsWallBudget(t *testing.T) {
 	t.Parallel()
-	const ticks = 8
+	// Long enough that the budget dominates. Both runs pay the same construction —
+	// a world, a corpus, a system set — and under a loaded machine that cost varies
+	// by more than a handful of ticks are worth, so a shorter script compares
+	// scheduling noise rather than pacing.
+	const ticks = 40
 	path := filepath.Join(t.TempDir(), "paced.toml")
 	body := fmt.Sprintf("schema = 1\nticks = %d\nwidth = 80\nheight = 24\n", ticks)
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {

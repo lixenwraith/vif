@@ -48,7 +48,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
-| Host loss | A reachable majority can elect an eligible retained successor under the next term. A component without a majority continues as an explicit local fork and does not merge later. |
+| Host loss | The lowest surviving identity in the closed roster — the first guest admitted — takes the next term, with no vote, because every survivor computes it from the roster alone. A survivor that cannot reach it continues as an explicit local fork and does not merge later. |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, seed, configuration and corpus, and a peer that does not match the offer is refused before it takes a roster slot. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
@@ -200,24 +200,65 @@ a star. Each source epoch is admitted once within a bounded replay window and
 forwarded to every neighbour except the arrival edge. Corrections retain the
 authority's term, tick, hashes, and chunks across relays.
 
-If the authority disappears, survivors exchange reachability and retention
-reports, vote once for the lowest eligible current candidate, and adopt one
-majority-backed handoff record. Eligibility requires both a reachable majority and
-retention as current as the newest survivor reports. The handoff carries roster,
-slot assignments, session anchor, and barrier delay. The successor seeds its
-baseline from retained authoritative state, avoiding a keyframe fan-out when the
-survivors already agree.
+### 5.1 Succession
 
-A partition without a strict majority elects nobody. Its members continue locally
-with `network.fork` and persistent `HOST LOST:LOCAL`; encountering a higher term
-later is refused because partition merging is not implemented. A fork left with no
-link at all — every session the CLI's star builds — drops the participants it can
-no longer reach as it forks: the authority that went, and behind it the guests that
-were only ever reachable through it. That removal is local rather than a crossing,
-and being alone is what makes it exact: a departure is produced once at one agreed
-tick because two instances must destroy the same shared entity together, and there
-is no second instance. A fork that still holds links keeps its roster, which is
-part of gap 4 below.
+If the authority disappears, the successor is **the lowest surviving identity in
+the closed roster**: the first guest the coordinator admitted, because identities
+are handed out lowest-free-first in arrival order. It is a pure function of the
+roster and the participant that went, both of which every survivor already holds,
+so every survivor names the same successor without exchanging anything.
+
+That determinism *is* the split-brain rule. At most one instance can conclude that
+it is the successor, so at most one can ever claim the term — which is what a
+quorum used to buy, and what a quorum cannot buy here. The shipped CLI dials one
+address, so a session is a star, and when a star's centre goes every survivor is
+left alone: none can reach another, none can ever collect a vote, and a rule
+requiring a strict majority of the closed roster elects nobody in the one shape
+every real session has. The two-participant session is the plainest case — one
+survivor of a roster of two is not a majority of two, and it is the whole session.
+
+The procedure on each survivor is:
+
+1. **Flood a loss notice.** It decides nothing, but only a direct neighbour of the
+   authority sees the link drop, and the departure crossing that would have carried
+   that news is produced by the participant that is gone. A survivor two links away
+   opens the same succession from the notice.
+2. **If the roster names this instance, take the term.** Immediately — there is
+   nothing to collect and nobody to ask, and the session is stalled until somebody
+   authors. The one self-check is retention: a successor with no retained
+   authoritative record has no baseline for a delta to name and would answer the
+   first manifest with a whole world for every survivor at once. A join capture
+   counts as retention, so a guest admitted seconds before the loss is eligible.
+3. **Otherwise wait for the record.** A handoff carries the roster, the slot
+   assignments, the session anchor and the barrier delay, so adopting it is one
+   decision rather than a term change followed by a roster negotiation. A receiver
+   refuses one naming anyone but the successor its *own* roster designates, which
+   is the half of the rule a receiver checks for itself.
+4. **After `parameter.NetworkSuccessionTicks`, give up.** No record arrived, so
+   this instance cannot reach the successor and continues as an explicit local
+   fork.
+
+Retention *ordering* is deliberately not an eligibility test any more. With one
+designated candidate there is no alternative to prefer, and a successor a cadence
+behind a peer moves that peer back by a cadence — which is what a correction is.
+What the rule gives up instead is stated in §8.
+
+A survivor that forks continues locally with `network.fork` and persistent
+`HOST LOST:LOCAL`; encountering a higher term later is refused because partition
+merging is not implemented.
+
+### 5.2 The roster after a loss
+
+An instance left with **no link at all** — the successor of a star, and every
+survivor that could not reach it — drops every cursor it does not simulate: the
+authority that went, and behind it the guests that were only ever reachable through
+it. Having no link is what makes that exact rather than convenient: a departure is
+produced once at one agreed tick because two instances must destroy the same shared
+entity together, and here there is no second instance. On a fork the removal is
+therefore local; the successor produces the predecessor's as the ordinary crossing,
+because it may.
+
+An instance that still holds links keeps its roster, which is part of gap 4 below.
 
 A departure, however it is produced, also clears what the instance had applied from
 that participant. Identities return to the pool and a crossing sequence starts at
@@ -291,8 +332,8 @@ stop or mutate only one copy of a live session.
 
 1. **Authentication and confidentiality — deferred by decision.** Links are
    plaintext and a session is reached by its address alone. Participant claims,
-   votes, retention reports and handoff voter lists are structurally checked but
-   not authenticated; the rules prevent races, not a hostile peer. The deployed
+   loss notices and handoff records are structurally checked but not authenticated;
+   the rules prevent races, not a hostile peer. The deployed
    fleet accepts this and hardens the open port instead; see the
    [fleet plan](kubernetes-fleet.md) §4 for what bounds a stranger today and what
    does not.
@@ -303,11 +344,16 @@ stop or mutate only one copy of a live session.
 3. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`
    dials one address, so ordinary CLI sessions still form a star. A relayed peer
    inherits its neighbour's cadence.
-4. **Partition merge.** Majority succession is implemented; reconciling an
-   explicit local fork back into a higher term is not. A fork with links still
-   standing also keeps the participants on the far side of the loss: it has peers
-   to agree an apply tick with and no authority to name one, so its roster stays
-   as it was. A fork alone does not have that problem and does not have it (§5).
+4. **A successor that went with the authority, and partition merge.** The roster
+   names one successor and no other instance may take the term, so losing both the
+   authority and the participant after it elects nobody and every survivor forks —
+   even where survivors that can still reach each other would have agreed on one.
+   Deciding that needs agreement on whether the designated successor is dead, which
+   is the quorum §5.1 explains the topology cannot supply. Reconciling an explicit
+   local fork back into a higher term is not implemented either, and a fork with
+   links still standing keeps the participants on the far side of the loss: it has
+   peers to agree an apply tick with and no authority to name one. A fork alone does
+   not have that problem (§5.2).
 5. **Programmatic operator mutation.** Interactive controls are session-aware;
    embedder-level map and FSM mutations still rely on caller discipline.
 6. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
@@ -389,6 +435,8 @@ exercise the paths a two-terminal session reaches and nothing else does:
   and take back the slot its departure released. While it waits at the start gate
   it is not yet in a session and has no world, but the wait is still leavable:
   Ctrl-Q, Ctrl-C and a terminal resize are answered there.
-- The host leaves instead. The guest reports `HOST LOST:LOCAL` and keeps playing,
-  and the host's cursor must be gone from its map rather than standing where it
-  was left.
+- The host leaves instead. The guest takes the term — `:session` names it as the
+  authority, `network.migrations` reads 1, and `HOST LOST:LOCAL` clears — and the
+  host's cursor must be gone from its map rather than standing where it was left.
+  A guest that could not reach the successor reports `HOST LOST:LOCAL` and keeps
+  playing instead, which is the fork.
