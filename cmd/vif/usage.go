@@ -48,7 +48,8 @@ func helpSections() []flagSection {
 		lines: []flagLine{
 			{names: []string{"host"}, arg: "<addr>", hint: "Bind and play a session, e.g. :7777"},
 			{names: []string{"serve"}, arg: "<addr>", hint: "Bind a headless session with no local cursor"},
-			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at host:port"},
+			{names: []string{"join"}, arg: "<addr>", hint: "Join a session at host:port, or at the vif://host:port/name a link carries"},
+			{names: []string{"name"}, arg: "<name>", hint: "Name this host answers to, so one address can serve several sessions"},
 			{names: []string{"players"}, arg: "<n>", hint: fmt.Sprintf(
 				"Roster ceiling including self, 2..%d; unset holds the whole roster and starts on the first guest",
 				parameter.MaxPlayers)},

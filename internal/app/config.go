@@ -148,6 +148,12 @@ type Config struct {
 	// simulation identity before the App is constructed.
 	JoinAddress string
 
+	// SessionName is what one address calls this session, so a deployment can put
+	// several behind one. A host answers to it and refuses a dial that named
+	// another; a joiner sends it before the handshake, where a front door can read
+	// it. Empty on both is an address with one session on it.
+	SessionName string
+
 	// ListenAddress pins the port this participant is dialled back on, and
 	// NoAdvertise refuses to have one published at all.
 	//

@@ -329,7 +329,7 @@ false, dials refused, existing gameplay untouched — for up to the third. One
 `session ended` log line names which of those happened. The flags are refused
 outside `-serve`; the policy is `internal/lifecycle` and the phases are documented
 in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
-[K3s and container deployment](kube_docker_deploy.md).
+[Deploying the session fleet](kube_docker_deploy.md).
 
 `-players` is a ceiling on every host shape and unset means the whole roster: the
 session starts on its first guest and takes the rest through the mid-run gate, so

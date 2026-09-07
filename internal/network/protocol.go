@@ -17,6 +17,14 @@ const (
 	// Control
 	MsgHeartbeat MessageType = 0x01 // Live: keeps a silent stream inside its read deadline
 
+	// MsgSessionRoute is the one frame a dialer sends before it reads: the name of
+	// the session it was given. It exists so one address can carry several — a
+	// front door reads it to place the connection, and the session it lands on
+	// refuses a name that is not its own, which is what turns a stale link into a
+	// refusal rather than a seat in a stranger's match. It is a routing key and not
+	// a credential; the port is unauthenticated by decision.
+	MsgSessionRoute MessageType = 0x05 // Live: the session name a dialer is holding
+
 	// Game. 0x10 is reserved and stays so: raw participant input is not a message
 	// kind — a peer sends the resolved D-3 artifact, never the keystroke.
 	MsgStateSync   MessageType = 0x11 // Live: one cursor's owner-authored state (D-13)

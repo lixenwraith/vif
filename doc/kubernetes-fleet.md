@@ -4,7 +4,7 @@ Vi-Fighter dedicated servers run one session per container on K3s. A website ask
 for a game, one container appears, and it ends itself when nobody is in it.
 
 This is the plan and the outstanding work. The procedure for installing and running
-it is [K3s and container deployment](kube_docker_deploy.md); the objects themselves
+it is [Deploying the session fleet](kube_docker_deploy.md); the objects themselves
 are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand are in
 [`test/`](../test/README.md).
 
@@ -20,6 +20,7 @@ are in [`deploy/`](../deploy/README.md); the scenarios that verify it by hand ar
 | Trigger | The website's allocator, on a player's request. Nothing runs when nobody is playing. |
 | Image | `scratch` + one static binary, ~13 MB, non-root, read-only root filesystem, no shell. |
 | Transport | Raw framed TCP, one long-lived connection per player. Unauthenticated by decision (§4). |
+| Session name | A player's link is `vif://host:port/name`. The name routes and the session refuses a dial that named another, so a stale link cannot enter the match that inherited its port. |
 | Logs and metrics | JSON lines to a shared volume; a LogWisp sidecar puts them on stdout and serves them as Server-Sent Events. |
 
 ```mermaid
@@ -28,7 +29,7 @@ flowchart LR
     Site --> Alloc["Allocator"]
     Alloc -->|"create Job + Service"| API["K3s API"]
     API --> Pod["vif -serve"]
-    Site -->|"host:port"| Player
+    Site -->|"vif://host:port/name"| Player
     Player -->|"vif -join, TCP"| NP["NodePort"] --> Pod
     Pod --> Logs["log volume"] --> Wisp["logwisp sidecar"]
 ```
@@ -42,6 +43,7 @@ flowchart LR
 | Capacity | `-players` is a ceiling on guests. At capacity the health body reports `ready=false`; the process stays healthy. |
 | Allocated lifetime | `-first-join`, `-empty` and `-drain` are enforced by `internal/lifecycle` over roster observations, and published on `/health`. |
 | Join identity | The coordinator refuses a peer whose protocol, simulation fingerprint, capture schema, journal schema, tick interval, seed, config or corpus differs from the offer it made. |
+| Session name | `-name` makes one address able to serve several sessions. The dialer sends it before the handshake, so a front door can route on it; the session refuses a name that is not its own. It is a routing key, not a credential. |
 | Crossing ordering | Ordinary crossings are judged by the capture's per-source sequence fence, not by their apply tick, so a link that misses the playout lead costs freshness rather than the player's action (§5). |
 | Shutdown | `SIGTERM` drains: readiness false, dials refused with `ErrSessionEnding`, exit when the roster empties or `-drain` elapses. |
 | Health | One `/health` path. Its code is liveness; the body carries `ready`, `phase`, `expires_in`, roster and tick. |
@@ -69,6 +71,7 @@ it does not move an in-memory session into an unrelated pod.
 | Reconnect on every host shape | The mid-run gate is installed on every host and armed once its clock runs, so a dropped guest dials back into the slot its departure released whatever opened the session. A departure clears the identity's crossing fence, so the next holder of that identity is not read as already-applied. |
 | Roster ceiling | `-players` is a ceiling and only a ceiling, unset meaning the whole roster. A pod no longer serves the number somebody guessed at start-up. |
 | Empty-session cost | A roster that empties parks the clock at once and restarts the run after `parameter.SessionVacantReset`. An empty session used to spin the gold cycle at 10 Hz forever. `/health` reports `clock=paused` with `phase=vacant` and stays `live=true`. |
+| Named sessions | `-name` on a host, `vif://host:port/name` in a player's link. One frame before the handshake, so a front door can put ten sessions behind one public port ([`deploy/frontdoor`](../deploy/frontdoor/haproxy.cfg)) and a stale link is refused rather than misrouted. |
 | Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
 
 ### Open
@@ -76,10 +79,10 @@ it does not move an in-memory session into an unrelated pod.
 | ID | Priority | Item | Done when |
 |---|---|---|---|
 | H1 | **next** | **Harden the open port.** The game port is unauthenticated by decision (§4) and reachable from the Internet, so everything a stranger can do to a session has to be bounded. Two known holes: the startup ready gate has no timeout, and an abandoned startup gate ends the session — so a peer that reaches a fresh session first can hang it or end it. | A peer that connects and never confirms is dropped on a deadline; an abandoned lobby returns to waiting instead of ending the session; fuzz coverage for malformed, oversized, replayed and half-open handshakes passes. |
-| H2 | next | **Run the lab.** Install the pinned K3s, import the image, apply the boundary objects, create one session by hand. | [Deployment §2-§6](kube_docker_deploy.md) is executed and its versions recorded. |
+| H2 | next | **Run the lab.** Install the pinned K3s, import the image, apply the boundary objects, create one session by hand. | [Deployment §3-§9](kube_docker_deploy.md) is executed and its versions recorded. |
 | H3 | after H2 | **Measure a full roster.** Four guests through a tower and a storm, and on `config/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
-| H6 | with H2 | **Probe words for a parked session.** A vacant pod answers `live=true ready=true clock=paused` and its tick counter stops. Correct, and exactly what a naive liveness rule reads as a hang. | The manifest's probes are written against `/health`'s body rather than against a moving tick, and §7 says so with a worked example. |
+| H6 | with H2 | **Probe words for a parked session.** A vacant pod answers `live=true ready=true clock=paused` and its tick counter stops. Correct, and exactly what a naive liveness rule reads as a hang. | The manifest's probes are written against `/health`'s body rather than against a moving tick, and [Deployment §9](kube_docker_deploy.md#9-create-one-session-by-hand) says so with a worked example. |
 | H7 | after H2 | **Restart semantics under an orchestrator.** `SessionVacantReset` restarts the *world* inside a pod that an unbounded `-serve` keeps alive; `-empty` ends the *pod* instead. A fleet session sets `-empty`, so the restart never fires there — which means it is untested in the shape the fleet runs. | Either the fleet sets no `-empty` and the in-pod restart is the reuse path (one pod, many sessions), or it sets one and the restart is documented as interactive-only. Decide, then delete the other. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 
@@ -112,6 +115,10 @@ What already bounds a stranger:
   the coordinator;
 - the join identity check, which refuses a peer that is not running this session
   before it is given a roster slot;
+- the session name, where the deployment sets one: a stranger that cannot produce
+  it never reaches Assign. It is a routing key rather than a credential — it is in
+  every player's link and travels in clear — so what it bounds is a session being
+  walked into, not one whose link leaked;
 - the network policy: one game port reachable, everything else denied, no egress;
 - `-authority host`, which is the fleet's default and what keeps that one port the
   only one. A migrate session gives every participant a listening port and
@@ -133,7 +140,7 @@ Both are confined to the window between a session's first guest connecting and t
 session starting. Neither is reachable once a session is running.
 
 Until H1 lands, the firewall requirements in
-[Deployment §7](kube_docker_deploy.md#7-what-the-network-and-firewall-task-must-provide)
+[Deployment §3](kube_docker_deploy.md#3-freebsd-forward-the-range-to-the-guest)
 are what stands in front of this: the forwarded surface is the ten-port NodePort
 range and nothing else, and the probe, log-stream and API ports never leave the node.
 
@@ -174,9 +181,11 @@ older copy walk the host's cursor backward. One vector closes both directions.
 | The replay suffix is **cleared on reset**. | Leave it, as before. | A reset restarts the sequence counter, so a record retained across one carries a number a post-reset fence would compare against and get wrong in both directions. The old tick boundary pruned these by age; a sequence boundary has no such accident to rely on. |
 | Schema **5**, not a compatible addition. | Keep the old field and add the vector. | Two fences answering one question is how they drift apart. Mixed builds are refused at the join by the capture-schema field in the identity check, so a bump costs nothing a mixed fleet was allowed to do anyway. |
 
-**What this does not change.** The playout lead is still fixed at three ticks
-(multiplayer gap 2), so a link that misses it still produces late frames — the fence
-makes them harmless rather than rare. A late crossing still applies on the host at
+**What this does not change.** The lead is chosen once, from the links the lobby
+closed on, and floors at three ticks — so a fleet session, whose lobby closes on its
+first guest before a probe has usually completed, runs the whole match at that floor
+whatever a later guest's link turns out to be. A link that misses it still produces
+late frames; the fence makes them harmless rather than rare. A late crossing still applies on the host at
 whatever tick it arrives, so the two instances still order it differently and the
 correction after it is still what reconciles them; what no longer happens is the
 producer discarding its own action in between.

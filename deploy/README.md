@@ -15,6 +15,7 @@ the plan and the gap register behind it are
 | `k3s/40-allocator-rbac.yaml` | The exact permissions the website's allocator needs, and no others. The allocator itself is not in this repository. |
 | `k3s/50-logwisp.yaml` | The log sidecar's configuration: tail the session's JSON lines, put them on stdout, and serve them as Server-Sent Events on a cluster-internal port. |
 | `k3s/render-session.sh` | Renders the template from a shell, for creating a session by hand. |
+| `frontdoor/haproxy.cfg` | Optional. Puts every session behind one public port by routing on the name a dialer sends before the handshake. Not applied by default; the port range is the recommended shape. |
 
 Nothing here is applied automatically. A session is created when a player asks for
 one; between requests, the namespace holds no pods.

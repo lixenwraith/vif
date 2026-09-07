@@ -91,6 +91,12 @@ spec:
             - ":7777"
             - "-probe"
             - ":7778"
+            # The name this session answers to. A player's link carries it, a front
+            # door routes on it, and this session refuses a dial that named another
+            # — which is what keeps a stale link out of the match that reused its
+            # port. See doc/kube_docker_deploy.md §8.
+            - "-name"
+            - "${SESSION_ID}"
             # A file rather than stdout: the sidecar tails the directory and puts
             # the same lines on its own stdout, so `kubectl logs -c logwisp` still
             # works and a live stream exists for readers that are not on the node.

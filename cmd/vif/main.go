@@ -14,6 +14,7 @@ import (
 	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/lifecycle"
 	"github.com/lixenwraith/vi-fighter/internal/manifest"
+	"github.com/lixenwraith/vi-fighter/internal/network"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/paths"
 	"github.com/lixenwraith/vi-fighter/internal/resource"
@@ -230,11 +231,15 @@ func buildConfig() app.Config {
 		Seed:          *flagSeed,
 		Journal:       flagJournal.set,
 		HostAddress:   flagSession.host,
-		JoinAddress:   flagSession.join,
+		SessionName:   flagSession.name,
 		Participants:  flagSession.players,
 		ListenAddress: flagSession.listen,
 		NoAdvertise:   flagSession.noAdvertise,
 	}
+
+	// Validated in validateInvocation; a link's name overrides nothing, because a
+	// joiner has no -name of its own.
+	cfg.JoinAddress, cfg.SessionName = parseJoinTarget(flagSession.join, cfg.SessionName)
 
 	if flagSession.serve != "" {
 		cfg.HostAddress = flagSession.serve
@@ -327,6 +332,11 @@ type sessionFlags struct {
 	listen      string
 	noAdvertise bool
 
+	// name is what a host answers to when one address serves several sessions. A
+	// joiner carries it in the -join target rather than here, because a player is
+	// given one link and not two things to type.
+	name string
+
 	// firstJoin, empty and drain bound an allocated session's life. They are zero
 	// on an interactively started host, which is supervised by the person who
 	// started it, and set by a deployment whose sessions are created on a player's
@@ -343,7 +353,8 @@ func (f sessionFlags) lifetime() lifecycle.Policy {
 
 func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.StringVar(&f.host, "host", "", "Host a session on bind address, e.g. :7777")
-	fs.StringVar(&f.join, "join", "", "Join a session at host:port")
+	fs.StringVar(&f.join, "join", "", "Join a session at host:port, or at the vif://host:port/name a link carries")
+	fs.StringVar(&f.name, "name", "", "Name this host answers to, so one address can serve several sessions")
 	fs.StringVar(&f.serve, "serve", "", "Host a headless session with no local player, e.g. :7777")
 	fs.StringVar(&f.probe, "probe", "", "Serve liveness, readiness and metrics for a -serve run, e.g. :7788")
 	fs.StringVar(&f.size, "size", "", "Simulated terminal size WxH for a run that has no terminal of its own")
@@ -389,12 +400,20 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
 	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 ||
-		f.authority != "" || f.listen != "" || f.noAdvertise || f.lifetime().Bounded()) &&
+		f.authority != "" || f.listen != "" || f.noAdvertise || f.name != "" || f.lifetime().Bounded()) &&
 		(schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority, -listen, -no-advertise and the session lifetime bounds are available only in interactive play")
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority, -listen, -no-advertise, -name and the session lifetime bounds are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")
+	}
+	if f.name != "" && (f.join != "" || (f.host == "" && f.serve == "")) {
+		return fmt.Errorf("-name is what a host answers to; a joiner names the session in its -join target")
+	}
+	if _, name := parseJoinTarget(f.join, f.name); name != "" {
+		if err := validSessionName(name); err != nil {
+			return err
+		}
 	}
 	if (f.listen != "" || f.noAdvertise) && f.join == "" {
 		return fmt.Errorf("-listen and -no-advertise describe a participant that joined a session; a host already binds one")
@@ -422,6 +441,36 @@ func (f sessionFlags) validateInvocation(schema, check bool, replay string) erro
 	if f.size != "" {
 		if _, _, err := parseSize(f.size); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// joinScheme prefixes the link a player is handed, so one string is both a thing
+// to click and a thing to paste after -join.
+const joinScheme = "vif://"
+
+// parseJoinTarget splits a join target into the address to dial and the session
+// named on it: host:port, or [vif://]host:port/name where one address serves
+// several. The name a target carries wins over the fallback, which is what a host
+// put there with -name.
+func parseJoinTarget(target, fallback string) (addr, name string) {
+	addr, name = strings.TrimPrefix(target, joinScheme), fallback
+	if a, n, ok := strings.Cut(addr, "/"); ok {
+		addr, name = a, n
+	}
+	return addr, name
+}
+
+// validSessionName holds a name to what a URL path, a Kubernetes object name and a
+// routing table all accept, which is the same set the fleet's session IDs use.
+func validSessionName(name string) error {
+	if len(name) > network.MaxSessionName {
+		return fmt.Errorf("session name %q is longer than %d characters", name, network.MaxSessionName)
+	}
+	for _, r := range name {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') && r != '-' {
+			return fmt.Errorf("session name %q is not lowercase alphanumeric or '-'", name)
 		}
 	}
 	return nil

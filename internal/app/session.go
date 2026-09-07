@@ -88,6 +88,7 @@ func (a *App) hostNetworkConfig() *network.Config {
 		Release: a.releaseParticipant,
 		Admit:   a.admissions.admit,
 		Report:  a.noteJoinerReport,
+		Name:    a.cfg.SessionName,
 	}, netCfg.ConnectTimeout)
 	// Every host outlives its guests, so every host admits a dial after its lobby
 	// has closed: a dropped participant comes back into the slot its departure
@@ -266,6 +267,7 @@ func newJoiningApp(cfg Config) (*App, error) {
 	// Before the world: a peer running a different protocol or a different
 	// simulation is refused by the dial rather than after it has built one.
 	netCfg.Identity = buildIdentity()
+	netCfg.SessionName = cfg.SessionName
 	pending, offer, err := network.DialSession(cfg.JoinAddress, netCfg)
 	if err != nil {
 		return nil, fmt.Errorf("join %s: %w", cfg.JoinAddress, err)

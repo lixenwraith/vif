@@ -167,3 +167,35 @@ func waitInbound(t *testing.T, p *SocketPort, match func(Inbound) bool) {
 	}
 	t.Fatal("timed out waiting for inbound notification")
 }
+
+func TestANamedSessionAdmitsOnlyTheDialerThatNamedIt(t *testing.T) {
+	offer := testOffer()
+	hostCfg := DebugConfig(RoleHost, "127.0.0.1:0")
+	hostCfg.ParticipantID = offer.Host
+	hostCfg.AcceptSession = HostAcceptor(Coordinator{
+		Assign: func() (SessionOffer, error) { return offer, nil },
+		Name:   "7f3c1a",
+	}, time.Second)
+	host := NewSocketPort(hostCfg)
+	defer host.Close()
+	if err := host.Start(); err != nil {
+		t.Fatal(err)
+	}
+
+	stale := DebugConfig(RolePeer, "")
+	stale.SessionName = "1a3c7f"
+	if _, _, err := DialSession(host.Addr().String(), stale); err == nil {
+		t.Fatal("a dial naming another session was admitted")
+	}
+
+	named := DebugConfig(RolePeer, "")
+	named.SessionName = "7f3c1a"
+	pending, got, err := DialSession(host.Addr().String(), named)
+	if err != nil {
+		t.Fatalf("a dial naming this session was refused: %v", err)
+	}
+	defer pending.Close()
+	if got.Assigned != offer.Assigned {
+		t.Fatalf("offer assigned %d, want %d", got.Assigned, offer.Assigned)
+	}
+}

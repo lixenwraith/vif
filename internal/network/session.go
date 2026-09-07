@@ -189,13 +189,32 @@ type Coordinator struct {
 	// per capture. Refusing here is what bounds that; nil admits everything, which
 	// is what a harness and a two-terminal lobby want.
 	Admit func(net.Addr) error
+
+	// Name is what this session answers to, so one address can serve several. A
+	// dialer sends it before the handshake and one that named another session is
+	// refused. Empty expects no such frame, which is an address with one session
+	// on it — a two-terminal lobby, a harness, a host somebody started by hand.
+	Name string
 }
+
+// MaxSessionName is the longest name a session may answer to. A name is a short
+// link component, and the bound is what a caller validates one against before it
+// reaches a host or a link; the comparison here refuses anything longer anyway.
+const MaxSessionName = 64
 
 // HostAcceptor returns a pre-world handshake for Transport's accept loop. Each
 // accepted connection gets its own identity, so the roster grows with the lobby
 // rather than being fixed at two.
 func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, error) {
 	return func(conn net.Conn) (id PeerID, err error) {
+		if c.Name != "" {
+			// Before Admit, because a link that named another session costs the
+			// budget Admit holds for the players of this one.
+			if err = readSessionName(conn, c.Name, timeout); err != nil {
+				refuseJoin(conn, err, timeout)
+				return 0, err
+			}
+		}
 		if c.Admit != nil {
 			if err = c.Admit(conn.RemoteAddr()); err != nil {
 				// Answered for the same reason a refused Assign is: a dialer that
@@ -271,6 +290,27 @@ func HostAcceptor(c Coordinator, timeout time.Duration) func(net.Conn) (PeerID, 
 		}
 		return o.Assigned, nil
 	}
+}
+
+// readSessionName consumes the dialer's routing frame. The name is not echoed
+// back: it is a stranger's bytes, the dialer already knows what it sent, and the
+// one thing worth saying is that this is not the session it named.
+func readSessionName(conn net.Conn, name string, timeout time.Duration) error {
+	if timeout > 0 {
+		_ = conn.SetReadDeadline(time.Now().Add(timeout))
+		defer conn.SetReadDeadline(time.Time{})
+	}
+	msg, err := Decode(conn)
+	if err != nil {
+		return err
+	}
+	if msg.Type != MsgSessionRoute {
+		return fmt.Errorf("join handshake: got message %#x, want a session name", msg.Type)
+	}
+	if string(msg.Payload) != name {
+		return errors.New("this address is not serving the session that was dialled")
+	}
+	return nil
 }
 
 // refuseJoin writes one pre-offer rejection. A failure to write it is not worth
@@ -419,6 +459,14 @@ func DialSession(addr string, cfg *Config) (*PendingJoin, SessionOffer, error) {
 	}
 	if base.ConnectTimeout > 0 {
 		_ = conn.SetDeadline(time.Now().Add(base.ConnectTimeout))
+	}
+	// Before the offer is read, because the coordinator reads this before it writes
+	// one and a front door has to place the connection before either happens.
+	if base.SessionName != "" {
+		if err = NewMessage(MsgSessionRoute, []byte(base.SessionName)).Encode(conn); err != nil {
+			_ = conn.Close()
+			return nil, SessionOffer{}, err
+		}
 	}
 	msg, err := Decode(conn)
 	_ = conn.SetDeadline(time.Time{})

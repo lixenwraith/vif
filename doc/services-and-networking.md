@@ -135,7 +135,8 @@ start/ready gate. Two flags activate the shared composition path:
 | Entry point | Behavior |
 |---|---|
 | `-host <bind-address>` | Build the host App, start a listener, show or log the lobby, and hold the scheduler at tick zero until the requested peers are ready. |
-| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. |
+| `-join <host:port>` | Dial and receive the anchor before App construction, adopt host identity, then take the world and the roster from the start gate. Also accepts `[vif://]host:port/name`, which is the link shape a deployment hands a player. |
+| `-name <name>` | With `-host` or `-serve`, the name this session answers to, so one address can serve several. |
 | `:host <addr>` | Open a run that is **already playing**. The port is created, started and attached; the world latches as shared (D-14) and the barrier takes ownership of this instance's crossings from that tick. |
 | `:session` | Report the role, address, participant identity, peer count and tick. |
 
@@ -304,7 +305,11 @@ sequence and ack values at actual write time; broadcast clones a message per pee
 Ack is observational—there is no retransmission policy.
 
 Control messages carry heartbeat, join offer/reply, start/ready gates and
-disconnect notices. A join refused before an identity is allocated — a dial that
+disconnect notices. `MsgSessionRoute` (0x05) is the exception to the coordinator
+speaking first: a dialer that was given a session name sends it as one frame before
+it reads, so a front door can place the connection on an address serving several
+sessions and the session it reaches can refuse a name that is not its own. A host
+started without `-name` expects no such frame, which is every interactive run. A join refused before an identity is allocated — a dial that
 landed while the session was electing a new authority — is answered with a
 `MsgJoinReply` carrying the reason rather than by closing the stream, so the dialer
 can tell "retry against the new authority" from a connection that ended for no
@@ -642,10 +647,12 @@ What the operator surface still does not cover:
   neighbour's retention for *repairs*. It is also what the succession rule is
   shaped around: a star's leaves reach nobody once its centre goes, so the
   successor has to be a function of the roster rather than of a vote;
-- the playout lead is a constant rather than a function of the graph's diameter,
-  and a partition has no digest edge between its components. The *correction
-  cadence* is measured and adaptive (D-24); the lead deliberately is not, because
-  it decides the tick an artifact applies at;
+- the playout lead is chosen once, at lobby close, from the worst measured link in
+  the closing roster times the topology's diameter, floored at three ticks and
+  capped at twenty. A lobby that closes before any probe completes keeps the floor,
+  which is what a dedicated host starting on its first guest usually does — so the
+  lead reflects the first guest's link and not a later one's, and it never moves
+  again. A partition still has no digest edge between its components;
 - live pause/speed/step are refused, because a suspended participant has no way
   back into the running session;
 - no lag compensation;

@@ -71,6 +71,11 @@ type Config struct {
 	ParticipantID     PeerID
 	BarrierDelayTicks uint64
 
+	// SessionName is what a dialer was told it is joining, sent as one frame before
+	// the handshake so a front door can place the connection on an address that
+	// serves several sessions. Empty dials an address that serves one.
+	SessionName string
+
 	// Identity is the build half of what this peer is: the wire contract, the
 	// simulation its manifest assembles, and the two layout schemas. A dialer
 	// compares it against the offer before constructing a world from that offer, so

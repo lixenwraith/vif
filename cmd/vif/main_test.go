@@ -203,6 +203,28 @@ func TestSessionFlags(t *testing.T) {
 	}
 }
 
+func TestAJoinTargetCarriesTheSessionName(t *testing.T) {
+	for _, tc := range []struct{ target, addr, name string }{
+		{"host.example:7777", "host.example:7777", ""},
+		{"vif://host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
+		{"host.example:7777/7f3c1a", "host.example:7777", "7f3c1a"},
+	} {
+		addr, name := parseJoinTarget(tc.target, "")
+		if addr != tc.addr || name != tc.name {
+			t.Errorf("parseJoinTarget(%q) = %q %q, want %q %q", tc.target, addr, name, tc.addr, tc.name)
+		}
+	}
+	if err := (sessionFlags{join: "host.example:7777/7f_3c"}).validateInvocation(false, false, ""); err == nil {
+		t.Fatal("a join target accepted a name a URL path and a Kubernetes name would not")
+	}
+	if err := (sessionFlags{name: "7f3c1a"}).validateInvocation(false, false, ""); err == nil {
+		t.Fatal("-name was accepted without a host to answer to it")
+	}
+	if err := (sessionFlags{join: "host.example:7777", name: "7f3c1a"}).validateInvocation(false, false, ""); err == nil {
+		t.Fatal("a joiner accepted a name beside the target that carries one")
+	}
+}
+
 func TestScriptInvocation(t *testing.T) {
 	hosted := sessionFlags{host: ":7777", players: 2}
 	if err := validateInvocation(false, false, "", "scenario.toml", false, hosted); err != nil {
