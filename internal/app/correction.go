@@ -820,6 +820,9 @@ func (c *corrections) takeKeyframe() ([]byte, uint64, error) {
 // rather than the fresh ones — the opposite choice would make a slow guest apply an
 // ever-older authority.
 func (c *corrections) receive(body []byte) {
+	if c.a.authoring() {
+		return // this instance's own publication, back round a mesh flood with cycles
+	}
 	c.inboxMu.Lock()
 	if len(c.inbox) >= parameter.SnapshotCorrectionQueue {
 		c.inbox = append(c.inbox[:0], c.inbox[1:]...)
@@ -1087,7 +1090,11 @@ func (c *corrections) observeFloor() {
 	m := c.a.snapshotTelemetry
 	m.keyframeAge.Store(int64(age))
 
-	breached := age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
+	// The authoring instance is not a receiver: it produces the world every floor
+	// window is measured against, so a successor that installed until it took the
+	// term would report its own publication as an absence.
+	breached := !c.a.authoring() &&
+		age > parameter.SnapshotFloorKeyframeTicks+parameter.SnapshotFloorGraceTicks
 	m.floorBreached.Store(breached)
 	if breached {
 		m.constrained.Store(true)

@@ -140,11 +140,12 @@ type NetworkSystem struct {
 	// only reason the report says anything about the world at all.
 	statMagnitude *atomic.Int64
 
-	// snapshots reassembles one authoritative correction per peer. A correction is
-	// the only message whose size is a function of the world, so it is the only one
-	// that arrives in pieces, and the pieces of two peers' corrections must not be
-	// able to interleave into a body that hashes as neither.
-	snapshots [participantSlots]network.SnapshotAssembly
+	// snapshot reassembles the authority's correction, which is the only message
+	// whose size is a function of the world and so the only one that arrives in
+	// pieces. One per node rather than one per peer: the flood terminates because a
+	// node relays only chunks it admitted, and an assembly per peer admits the same
+	// chunk once per path instead, which is a cycle the mesh closes.
+	snapshot network.SnapshotAssembly
 
 	// suffix is the bounded ring of this instance's own accepted crossings, kept so
 	// a correction that rebases the world onto an earlier tick can put them back.
@@ -421,7 +422,7 @@ func (s *NetworkSystem) Init() {
 	s.barrierActive.Store(false)
 	s.digestHistory = [parameter.NetworkEpochWindow]stateDigest{}
 	s.pendingDigest = [participantSlots]stateDigest{}
-	s.snapshots = [participantSlots]network.SnapshotAssembly{}
+	s.snapshot = network.SnapshotAssembly{}
 
 	s.mu.Lock()
 	s.crossings = s.crossings[:0]
@@ -1305,7 +1306,6 @@ func (s *NetworkSystem) forgetDigestPeer(peer uint32) {
 		return
 	}
 	s.pendingDigest[peer] = stateDigest{}
-	s.snapshots[peer] = network.SnapshotAssembly{}
 }
 
 // noticeDeparture reacts to a lost link. It deliberately does not despawn anything:
@@ -1499,15 +1499,15 @@ func (s *NetworkSystem) dispatchMessage(from uint32, msg *network.Message) int {
 // correction is hundreds of kilobytes of JSON — so what happens here is a copy into
 // a queue and nothing else.
 //
-// A malformed transfer resets that peer's assembly rather than poisoning it: the
-// host sends a whole correction every SnapshotKeyframeCorrections and each one is
+// A malformed transfer resets the assembly rather than poisoning it: the host sends
+// a whole correction every SnapshotKeyframeCorrections and each one is
 // self-sufficient, so the recovery from a broken transfer is to wait for the next.
 func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
-	if from == 0 || int(from) >= len(s.snapshots) {
+	if from == 0 || int(from) >= participantSlots {
 		s.statDrop.Add(1)
 		return
 	}
-	asm := &s.snapshots[from]
+	asm := &s.snapshot
 	admitted, done, err := asm.AddChunk(body)
 	if err != nil {
 		*asm = network.SnapshotAssembly{}
@@ -1531,8 +1531,10 @@ func (s *NetworkSystem) receiveCorrection(from uint32, body []byte) {
 	if !done {
 		return
 	}
+	// The completed transfer is kept rather than cleared: it is what recognises the
+	// copies still arriving by the mesh's other paths, and recognising them is the
+	// whole of the flood's termination.
 	tick, whole := asm.Result()
-	*asm = network.SnapshotAssembly{}
 	s.statCorrections.Add(1)
 	if r := s.world.Resources.Network; r != nil && r.OnCorrection != nil {
 		r.OnCorrection(tick, whole)

@@ -839,6 +839,11 @@ func (a *App) authorityTerm() network.AuthorityTerm {
 	return a.authority.Term()
 }
 
+// authoring reports whether this instance is the one publishing the world.
+func (a *App) authoring() bool {
+	return a.authority != nil && a.authority.IsAuthority()
+}
+
 // authorityID is the participant currently authoring, which every admission
 // artifact names. It falls back to the session's first identity so a run that has
 // not opened a session yet still offers a valid one.

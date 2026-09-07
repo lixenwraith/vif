@@ -805,6 +805,12 @@ func (c *corrections) selectiveSource() uint32 {
 // receiveSelective queues one selective frame. Caller holds the world lock, so it
 // takes the bytes and nothing else.
 func (c *corrections) receiveSelective(kind uint8, from uint32, body []byte) {
+	// A request is this instance's own half to serve; the other three are a
+	// receiver's, and while this instance authors they are its own index and the
+	// repairs answering it, come back round a mesh flood with cycles.
+	if network.MessageType(kind) != network.MsgStateRequest && c.a.authoring() {
+		return
+	}
 	c.selectiveMu.Lock()
 	switch network.MessageType(kind) {
 	case network.MsgStateManifest:

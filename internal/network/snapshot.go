@@ -75,13 +75,14 @@ func EncodeSnapshotChunks(tick uint64, body []byte) ([][]byte, error) {
 // reorder it, so anything out of order is a confused sender: tolerating it silently
 // would let two captures interleave into one body that hashes as neither.
 //
-// A correction arrives mid-session on a mesh, where the same chunk reaches a node by
-// several paths and a newer transfer can start before an older one finishes. Two
-// out-of-order cases are therefore *expected* rather than wrong, and are the same
-// two the per-source epoch window admits for artifacts: a chunk of the transfer in
-// progress that this node has already taken is a duplicate and is ignored, and a
-// chunk of a *newer* transfer supersedes the one in progress, because a correction
-// carries no information the one after it lacks. Everything else is still an error.
+// A correction arrives mid-session on a mesh, where the same tick reaches a node by
+// several paths and a newer transfer can start before an older one finishes. Three
+// out-of-order cases are therefore *expected* rather than wrong: a chunk of the
+// transfer in progress that this node has already taken, any chunk naming a tick it
+// has already assembled whole — the paths carry differently shaped bodies for one
+// tick — and a chunk of a *newer* transfer, which supersedes the one in progress
+// because a correction carries no information the one after it lacks. Everything
+// else is still an error.
 type SnapshotAssembly struct {
 	tick    uint64
 	count   uint32
@@ -144,8 +145,11 @@ func (s *SnapshotAssembly) AddChunk(frame []byte) (admitted, done bool, err erro
 		s.tick, s.count, s.total, s.started = tick, count, total, true
 		s.body = make([]byte, 0, min(int(total), snapshotReserve))
 	}
-	if tick < s.tick {
-		return false, false, nil // a transfer this node has already moved past
+	// Already taken, or moved past. Two paths can carry differently shaped bodies
+	// for the same tick — a delta down one and the keyframe down another — and once
+	// either is whole the other describes a world this node already holds.
+	if tick < s.tick || (tick == s.tick && s.next == s.count) {
+		return false, false, nil
 	}
 	if tick != s.tick || count != s.count || total != s.total {
 		return false, false, fmt.Errorf("snapshot chunk %d: transfer changed to tick %d, %d chunks, %d bytes",

@@ -700,3 +700,27 @@ func meshChain(ids []network.PeerID) network.SuccessionChain {
 	}
 	return out
 }
+
+// TestACyclicMeshTerminatesTheCorrectionFlood is the flood's own termination
+// argument as a criterion. The triangle is the topology the succession chain
+// builds, and every copy coming back round it was admitted, delivered and relayed
+// again: the links saturated and the authority installed the world it published.
+func TestACyclicMeshTerminatesTheCorrectionFlood(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 3, [][2]int{{1, 2}, {2, 3}, {3, 1}})
+	advance := func() { tickAll(apps) }
+	const rounds = 3
+	for step := range rounds {
+		correctMesh(t, apps, advance, step)
+	}
+
+	if got := statOf(apps[0], "snapshot.corrections_applied"); got != 0 {
+		t.Fatalf("the authority installed %d corrections of its own world", got)
+	}
+	for i, a := range apps {
+		if got := statOf(a, "network.corrections_received"); got > rounds {
+			t.Fatalf("participant %d took %d bodies off the mesh for %d corrections",
+				i+1, got, rounds)
+		}
+	}
+}
