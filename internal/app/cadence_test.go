@@ -32,13 +32,19 @@ func shapedPair(t *testing.T, seed uint64, shape network.LinkShape) (*App, *App,
 	if shape != (network.LinkShape{}) {
 		mesh.Shape(1, 2, shape)
 	}
-	a.AttachTransport(mesh.Node(1))
-	b.AttachTransport(mesh.Node(2))
+	// Geometry first, link second: SetupLevel is a ClassShared request, so once the
+	// session is live only the authority may produce one (App.shareOperator).
 	for _, x := range []*App{a, b} {
 		tickUntilCursor(t, x)
-		x.SetupLevel(100, 30, true, false)
+		if !x.SetupLevel(100, 30, true, false) {
+			t.Fatal("level setup refused before the session was live")
+		}
 		x.Tick(1)
 	}
+	a.AttachTransport(mesh.Node(1))
+	b.AttachTransport(mesh.Node(2))
+	a.Tick(1)
+	b.Tick(1)
 	return a, b, mesh
 }
 

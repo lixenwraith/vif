@@ -299,8 +299,16 @@ func (a *App) localSlot() uint8 {
 // this is the confirmation rather than the adoption; it still runs the level setup
 // unconditionally, because that event is part of the session's record stream and a
 // participant reproducing the session by replay has to see the same one.
+// Exempt from App.shareOperator by construction, and the exemption is the point:
+// that guard refuses a level setup in a live session because one instance choosing
+// bounds for itself is a divergence no correction repairs. Here every participant
+// applies the same bounds from the same offer, which is the case the guard exists
+// to distinguish from.
 func (a *App) adoptMapLatch(an event.JournalAnchor) {
-	a.SetupLevel(an.MapWidth, an.MapHeight, false, an.CropOnResize)
+	a.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
+		Width: an.MapWidth, Height: an.MapHeight, CropOnResize: an.CropOnResize,
+	}, event.OriginDebug)
+	a.scheduler.Settle()
 }
 
 // AttachTransport binds a transport to this App, for a harness or an embedder that

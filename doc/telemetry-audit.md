@@ -12,7 +12,7 @@ Every metric is consumed generically by the status snapshot, debug overlay, pinn
 | Ping | `ping.{cursor_rejects,disabled_rejects}` | `NewPingSystem` | Request rejection paths | `Init` | Generic only |
 | Transient | `effects.{grayout_active,strobe_active}` | `NewTransientSystem` | Effect handlers/update | `Init` | Generic only |
 | Camera | None | — | — | — | — |
-| Energy | `energy.{current,damage_multiplier,penalty_count,reward_count,spend_count,crossed_zero_count,penalty_rejects,cursor_rejects,missing_energy_rejects,disabled_rejects}`, `player.<slot>.energy.current` | `NewEnergySystem` | Resolved energy handlers/update | `Init` / player reset | `energy.damage_multiplier` is read by the status bar; remainder generic |
+| Energy | `energy.{current,damage_multiplier,penalty_count,reward_count,spend_count,passive_count,passive_drained,crossed_zero_count,penalty_rejects,cursor_rejects,missing_energy_rejects,disabled_rejects}`, `player.<slot>.energy.current` | `NewEnergySystem` | Resolved energy handlers/update | `Init` / player reset | `energy.damage_multiplier` is read by the status bar; remainder generic |
 | Shield | `shield.{active,shield_hit,cursor_rejects,disabled_rejects}`, `player.<slot>.shield.active` | `NewShieldSystem` | Resolved shield handlers/update | `Init` / player reset | Generic only |
 | Heat | `heat.{current,overheat,at_max,ember,cursor_rejects,disabled_rejects}`, `player.<slot>.heat.*` | `NewHeatSystem` | Resolved heat handlers/update | `Init` / player reset | Generic only |
 | Boost | `boost.{active,remaining,truncated,cursor_rejects,disabled_rejects}`, `player.<slot>.boost.*` | `NewBoostSystem` | Resolved boost handlers/update | `Init` / player reset | Generic only |

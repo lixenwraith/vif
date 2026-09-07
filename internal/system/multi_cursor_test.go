@@ -692,3 +692,37 @@ func TestDirectDamageAppliesExactlyOnce(t *testing.T) {
 		t.Fatalf("combat.damage_dealt = %d, want %d", n, parameter.CombatDamageCleaner)
 	}
 }
+
+// TestPassiveDrainSurvivesATransportedStamp covers the other way a per-cursor
+// shield can stop draining: LastDrainTime is an absolute simulation instant and
+// the component is captured, so a cursor materialised from an authority further
+// along carries that authority's tick. Game time is a pure function of the tick,
+// so the deadline is unreachable and the drain would be silent for the session.
+func TestPassiveDrainSurvivesATransportedStamp(t *testing.T) {
+	w, local, _ := testCursorWorld(t)
+	shield := NewShieldSystem(w).(*ShieldSystem)
+
+	sh, _ := w.Components.Shield.GetPtr(local)
+	sh.Active = true
+	sh.LastDrainTime = w.Resources.Time.GameTime.Add(time.Hour)
+
+	drains := func() int {
+		n := 0
+		for _, ev := range w.Resources.Event.Queue.Consume() {
+			if ev.Type == event.EventEnergyAddRequest {
+				n++
+			}
+		}
+		return n
+	}
+
+	shield.Update()
+	if n := drains(); n != 0 {
+		t.Fatalf("drains on the tick that adopted the stamp = %d, want 0", n)
+	}
+	w.Resources.Time.GameTime = w.Resources.Time.GameTime.Add(parameter.ShieldPassiveDrainInterval)
+	shield.Update()
+	if n := drains(); n != 1 {
+		t.Fatalf("drains one interval later = %d, want 1", n)
+	}
+}

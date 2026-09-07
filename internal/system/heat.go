@@ -59,6 +59,8 @@ func (s *HeatSystem) Update() {
 		return
 	}
 
+	s.publishSlots()
+
 	dt := s.world.Resources.Time.DeltaTime
 	now := s.world.Resources.Time.GameTime
 
@@ -250,6 +252,19 @@ func (s *HeatSystem) publish(cursor core.Entity, heatComp *component.HeatCompone
 	s.statOverheat.Store(slot, int64(heatComp.Overheat))
 	s.statAtMax.Store(slot, heatComp.Current >= parameter.HeatMax)
 	s.statEmber.Store(slot, heatComp.EmberActive)
+}
+
+// publishSlots mirrors every rostered cursor's heat, a peer's included. See
+// eachRosterSlot.
+func (s *HeatSystem) publishSlots() {
+	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
+		heat, ok := s.world.Components.Heat.GetPtr(cursor)
+		if !ok {
+			s.clearSlot(slot)
+			return
+		}
+		s.publish(cursor, heat)
+	})
 }
 
 // clearSlot zeroes a retired slot's cells

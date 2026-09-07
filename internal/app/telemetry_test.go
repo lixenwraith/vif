@@ -7,7 +7,9 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/lixenwraith/vi-fighter/internal/core"
 	"github.com/lixenwraith/vi-fighter/internal/engine"
+	"github.com/lixenwraith/vi-fighter/internal/event"
 	"github.com/lixenwraith/vi-fighter/internal/parameter"
 	"github.com/lixenwraith/vi-fighter/internal/status"
 )
@@ -324,6 +326,65 @@ func TestTelemetryGroupsFitDebugCards(t *testing.T) {
 	for _, want := range []string{"player.0", "player.0.weapon"} {
 		if !visiblePlayers[want] {
 			t.Errorf("active roster group %q is hidden", want)
+		}
+	}
+}
+
+// TestEveryParticipantsResourcesAreReported is the multi-cursor half of the
+// resource telemetry.
+//
+// Every owner-authored publisher wrote only the cursor it authored, so a peer's
+// player.<slot>.* keys were published by nobody, and the bare keys — which mirror
+// one slot — were therefore empty on every guest. The passive drain looked stopped
+// on the one surface a player reads while it was running the whole time. Both
+// halves are checked here: each instance reports every slot, and each instance's
+// bare key names the cursor it drives rather than slot zero's.
+func TestEveryParticipantsResourcesAreReported(t *testing.T) {
+	t.Parallel()
+	host, guest := pair(t, 11, 0)
+	hostCursor, _ := mirrorCursors(t, host, guest)
+	var guestCursor core.Entity
+	guest.World().RunSafe(func() { guestCursor = guest.World().Resources.Player.Entity })
+
+	for _, p := range []struct {
+		app    *App
+		cursor core.Entity
+		energy int
+	}{{host, hostCursor, 10000}, {guest, guestCursor, 7000}} {
+		p.app.Context().PushEventOrigin(event.EventEnergySetRequest,
+			&event.EnergySetPayload{Entity: p.cursor, Value: p.energy}, event.OriginDebug)
+		p.app.Settle()
+	}
+	for range 60 {
+		tickAll([]*App{host, guest})
+	}
+
+	slot0 := status.PlayerKey(0, "energy.current")
+	slot1 := status.PlayerKey(1, "energy.current")
+	if a, b := statOf(host, slot0), statOf(guest, slot0); a == 0 || a != b {
+		t.Fatalf("%s = %d on the host and %d on the guest, want one non-zero value", slot0, a, b)
+	}
+	if a, b := statOf(host, slot1), statOf(guest, slot1); a == 0 || a != b {
+		t.Fatalf("%s = %d on the host and %d on the guest, want one non-zero value", slot1, a, b)
+	}
+	if got, want := statOf(host, "energy.current"), statOf(host, slot0); got != want {
+		t.Fatalf("the host's bare energy.current = %d, want its own slot's %d", got, want)
+	}
+	if got, want := statOf(guest, "energy.current"), statOf(guest, slot1); got != want {
+		t.Fatalf("the guest's bare energy.current = %d, want its own slot's %d", got, want)
+	}
+	if statOf(guest, "energy.current") == statOf(guest, slot0) {
+		t.Fatal("the guest's bare energy.current still names the coordinator's cursor")
+	}
+
+	// The drain is the reason the keys matter: it is the one delta class no player
+	// action produces, so a counter is what separates "stopped" from "working".
+	for _, p := range []struct {
+		name string
+		app  *App
+	}{{"host", host}, {"guest", guest}} {
+		if statOf(p.app, "energy.passive_count") == 0 {
+			t.Fatalf("%s reported no passive drain across 60 ticks", p.name)
 		}
 	}
 }

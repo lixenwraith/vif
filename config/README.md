@@ -371,9 +371,18 @@ Per-cursor state is published under `player.<slot>.<metric>`:
 `player.count` and `player.local` describe the roster.
 
 The bare keys `energy.current`, `heat.current`, `heat.overheat`, `heat.at_max`,
-`heat.ember`, `shield.active`, `typing.max_streak`, `player.x`, `player.y`
-mirror **slot 0**. They are a migration shim for configs written against a
-single cursor and will be removed once every map is slot-aware.
+`heat.ember`, `shield.active`, `boost.active`, `boost.remaining`, `weapon.rod`,
+`weapon.launcher`, `weapon.disruptor`, `weapon.orbs`, `typing.max_streak`,
+`player.x`, `player.y` mirror **the slot this instance drives**. That is what
+"the player" means on a status bar or in an operator command, and it is why the
+mirror follows the roster rather than slot 0: slot 0 is the coordinator's cursor,
+so on every guest a slot-0 mirror named a cursor that instance does not author.
+
+They are therefore **instance-local by construction and must not be a guard key
+in a shared region** — a shared region has to take the same transition on every
+instance (D-20), and a guard that names a cursor names its slot:
+`player.0.energy.current`. A participant that drives no cursor — a dedicated
+host — mirrors nothing and the bare keys read as reset.
 
 Occurrence counters stay roster-wide totals: `typing.correct`, `typing.errors`,
 `shield.shield_hit`, `energy.spend_count`, `energy.crossed_zero_count`,
@@ -417,8 +426,8 @@ Combine multiple guards with logical operators.
 
 ```toml
 { trigger = "Tick", target = "TargetState", guard = "And", guard_args = { guards = [
-    { name = "StatusIntCompare", args = { key = "heat.current", op = "eq", value = 0 } },
-    { name = "StatusIntCompare", args = { key = "energy.current", op = "eq", value = 0 } }
+    { name = "StatusIntCompare", args = { key = "player.0.heat.current", op = "eq", value = 0 } },
+    { name = "StatusIntCompare", args = { key = "player.0.energy.current", op = "eq", value = 0 } }
 ]}}
 ```
 

@@ -147,6 +147,10 @@ func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 		shield.RadiusY = cfg.RadiusY
 		shield.InvRxSq = cfg.InvRxSq
 		shield.InvRySq = cfg.InvRySq
+		// The drain interval starts when the shield does. Inheriting whatever stamp
+		// the component was carrying makes the first period of every activation
+		// either instant or arbitrary.
+		shield.LastDrainTime = s.world.Resources.Time.GameTime
 	}
 	shield.Active = active
 	s.world.UpdateBoundsRadius()
@@ -156,6 +160,15 @@ func (s *ShieldSystem) setActive(cursor core.Entity, active bool) {
 	}
 }
 
+// publishSlots mirrors every rostered cursor's shield state, a peer's included.
+// See eachRosterSlot.
+func (s *ShieldSystem) publishSlots() {
+	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
+		shield, ok := s.world.Components.Shield.GetPtr(cursor)
+		s.statActive.Store(slot, ok && shield.Active)
+	})
+}
+
 // Update handles passive shield drain for every shielded cursor
 func (s *ShieldSystem) Update() {
 	if !s.enabled {
@@ -163,6 +176,7 @@ func (s *ShieldSystem) Update() {
 	}
 
 	now := s.world.Resources.Time.GameTime
+	s.publishSlots()
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
 		// D-2: the owner drains its own shield and transports the result
@@ -172,6 +186,17 @@ func (s *ShieldSystem) Update() {
 
 		shieldComp, ok := s.world.Components.Shield.GetPtr(e)
 		if !ok || !shieldComp.Active {
+			return true
+		}
+
+		// A stamp ahead of this instance's clock cannot be waited out. Game time is
+		// a pure function of the tick (engine.SimTime), so a shield installed from
+		// an authority further along — a join capture materialising a cursor this
+		// instance had never held, a handoff — carries that tick, and the deadline
+		// below would never be met again. Restart the interval instead: the drain
+		// costs one period, where the alternative is silence for the session.
+		if shieldComp.LastDrainTime.After(now) {
+			shieldComp.LastDrainTime = now
 			return true
 		}
 

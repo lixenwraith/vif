@@ -212,7 +212,7 @@ func newGameContext(world *World, width, height int, clock Clock, corr *vlog.Cor
 	world.Resources.View = NewViewResource()
 
 	// 9. Cursor roster; the FSM spawns cursors, so the world starts with none
-	world.Resources.Player = &PlayerResource{}
+	world.Resources.Player = &PlayerResource{status: world.Resources.Status}
 
 	// 10. Target Resource
 	world.Resources.Target = &TargetResource{}

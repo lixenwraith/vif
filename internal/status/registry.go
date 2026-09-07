@@ -31,7 +31,19 @@ type Registry struct {
 	rec      atomic.Pointer[Recorder]
 	statLate *atomic.Int64
 	corr     *vlog.Correlation
+
+	// The roster slot the bare per-player keys mirror, and the metrics that hold
+	// one. Registration happens before Freeze like every other metric; the slot
+	// moves whenever the roster rebinds, which is a tick-path write of one int.
+	slot     atomic.Int32
+	playerMu sync.Mutex
+	players  []playerMirror
 }
+
+// playerMirror is a per-slot metric that also publishes a bare key. It exists so a
+// rebind can republish, rather than leaving the bare key on the previous holder
+// until that cursor happens to write again.
+type playerMirror interface{ remirror(slot int32) }
 
 // NewRegistry creates an initialized Registry with snapshots disabled
 func NewRegistry() *Registry {
@@ -43,6 +55,7 @@ func NewRegistry() *Registry {
 		corr:    vlog.DefaultCorrelation(),
 	}
 	r.statLate = r.Ints.Get("stat.late")
+	r.slot.Store(0)
 	// Reserve the recorder's counters even when none is installed: EnableRecorder
 	// can run after Freeze (":log rec N"), and detached cells would make the
 	// recorder invisible to its own windows.
@@ -50,6 +63,34 @@ func NewRegistry() *Registry {
 		r.Ints.Get(k)
 	}
 	return r
+}
+
+// localSlot exposes the mirrored slot cell to the per-player metrics.
+func (r *Registry) localSlot() *atomic.Int32 { return &r.slot }
+
+// trackPlayer records a metric that mirrors a bare key, for SetLocalSlot.
+func (r *Registry) trackPlayer(m playerMirror) {
+	r.playerMu.Lock()
+	r.players = append(r.players, m)
+	r.playerMu.Unlock()
+}
+
+// SetLocalSlot names the roster slot the bare per-player keys describe, and
+// republishes them. A slot outside the roster — a participant that drives no
+// cursor — mirrors nothing and the bare keys read as reset.
+func (r *Registry) SetLocalSlot(slot int) {
+	v := int32(slot)
+	if v < 0 || v > 255 {
+		v = -1
+	}
+	if r.slot.Swap(v) == v {
+		return
+	}
+	r.playerMu.Lock()
+	defer r.playerMu.Unlock()
+	for _, m := range r.players {
+		m.remirror(v)
+	}
 }
 
 // SetCorrelation binds snapshots and recorder output to one runtime's stamp.

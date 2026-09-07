@@ -180,6 +180,8 @@ func (s *WeaponSystem) Update() {
 		return
 	}
 
+	s.publishSlots()
+
 	dt := s.world.Resources.Time.DeltaTime
 
 	// The index and the orbs it admits are one pass: what the store holds and what
@@ -827,6 +829,22 @@ func (s *WeaponSystem) publishLoadout(cursor core.Entity, weaponComp *component.
 	s.statRod.Store(slot, weaponComp.Charges[component.WeaponRod] > 0)
 	s.statLauncher.Store(slot, weaponComp.Charges[component.WeaponLauncher] > 0)
 	s.statDisruptor.Store(slot, weaponComp.Charges[component.WeaponDisruptor] > 0)
+}
+
+// publishSlots mirrors every rostered cursor's loadout, a peer's included. Orb
+// counts are not here: they are published from the orb index, which holds every
+// participant's already. See eachRosterSlot.
+func (s *WeaponSystem) publishSlots() {
+	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
+		weapon, ok := s.world.Components.Weapon.GetPtr(cursor)
+		if !ok {
+			s.statRod.Store(slot, false)
+			s.statLauncher.Store(slot, false)
+			s.statDisruptor.Store(slot, false)
+			return
+		}
+		s.publishLoadout(cursor, weapon)
+	})
 }
 
 // clearSlot zeroes a retired slot's cells

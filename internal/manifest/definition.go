@@ -132,7 +132,7 @@ var Systems = []SystemDef{
 		Optional: []string{"glyph", "energy", "boost", "heat", "composite"}}, // consumes player glyphs and authors cursor state (D-13)
 
 	// --- Composite / Structure ---
-	{Name: "composite", Constructor: "NewCompositeSystem", Domain: "shared"},                                                                      // owns the shared header and member contract
+	{Name: "composite", Constructor: "NewCompositeSystem", Domain: "shared"}, // owns the shared header and member contract
 	{Name: "wall", Constructor: "NewWallSystem", Domain: "shared", Snapshot: "state",
 		Requires: []string{"composite"}, Optional: []string{"navigation"}}, // holds the maze generator's position, which is not a vmath stream             // shared walls push occupants from both domains (D-12)
 	{Name: "tower", Constructor: "NewTowerSystem", Domain: "shared", Requires: []string{"composite"}, Optional: []string{"navigation", "combat"}}, // shared stream and composite species state
@@ -164,7 +164,7 @@ var Systems = []SystemDef{
 
 	// --- Movement / Collision ---
 	{Name: "navigation", Constructor: "NewNavigationSystem", Domain: "shared", Snapshot: "state"}, // D-17 recompute phase; the field itself is re-derived at install      // derives flow fields and route graphs from the map and shared species
-	{Name: "soft_collision", Constructor: "NewSoftCollisionSystem", Domain: "dual"}, // one impulse stream per occupant domain (D-8)
+	{Name: "soft_collision", Constructor: "NewSoftCollisionSystem", Domain: "dual"},               // one impulse stream per occupant domain (D-8)
 
 	// --- Combat ---
 	{Name: "combat", Constructor: "NewCombatSystem", Domain: "dual", Requires: []string{"death"}}, // one knockback stream per target domain; every kill routes through death (D-8)
@@ -199,8 +199,8 @@ var Systems = []SystemDef{
 	{Name: "environment", Constructor: "NewEnvironmentSystem", Domain: "shared"}, // shared stream and state derived from the map and clock
 
 	// --- Lifecycle ---
-	{Name: "death", Constructor: "NewDeathSystem", Domain: "dual"},                                                  // routes one death batch per domain; effect systems subscribe to its output
-	{Name: "timer", Constructor: "NewTimerSystem", Domain: "dual", Requires: []string{"death"}},                     // expires entities of either domain through the death pipeline
+	{Name: "death", Constructor: "NewDeathSystem", Domain: "dual"},                              // routes one death batch per domain; effect systems subscribe to its output
+	{Name: "timer", Constructor: "NewTimerSystem", Domain: "dual", Requires: []string{"death"}}, // expires entities of either domain through the death pipeline
 	{Name: "adaptation", Constructor: "NewAdaptationSystem", Domain: "shared", Snapshot: "state",
 		Requires: []string{"navigation"}}, // EXP3 route weights, pre-sampled pool and consumer head decide a spawned eye's route    // shared stream and route state; scores navigation graphs
 	{Name: "genetic", Constructor: "NewGeneticSystem", Domain: "shared", Snapshot: "state",

@@ -412,6 +412,7 @@ func boundaryRecvName(fn *ast.FuncDecl) string {
 var helperFiles = []string{
 	"blast.go",
 	"interaction.go",
+	"roster_telemetry.go",
 	"sweep.go",
 	"targeting.go",
 	"telemetry.go",

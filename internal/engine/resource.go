@@ -181,6 +181,11 @@ type PlayerResource struct {
 	// Entity is the local cursor, 0 when none exists. Every read is under updateMutex.
 	Entity core.Entity
 
+	// status is where the bare per-player metric keys live. The roster owns which
+	// slot they describe, because the roster is what decides which cursor "the
+	// player" names on this instance; see status/player.go.
+	status *status.Registry
+
 	slots [parameter.MaxPlayers]core.Entity
 	local uint8
 	count int
@@ -244,6 +249,7 @@ func (pr *PlayerResource) LocalSlot() uint8 { return pr.local }
 func (pr *PlayerResource) SetLocal(slot uint8) {
 	if slot == parameter.NoPlayerSlot {
 		pr.local, pr.Entity = slot, 0
+		pr.publishLocalSlot()
 		pr.DropPrediction()
 		return
 	}
@@ -252,7 +258,21 @@ func (pr *PlayerResource) SetLocal(slot uint8) {
 	}
 	pr.local = slot
 	pr.Entity = pr.slots[slot]
+	pr.publishLocalSlot()
 	pr.DropPrediction()
+}
+
+// publishLocalSlot points the bare per-player metric keys at the slot this
+// instance drives. A slot outside the roster mirrors nothing.
+func (pr *PlayerResource) publishLocalSlot() {
+	if pr.status == nil {
+		return
+	}
+	if int(pr.local) >= parameter.MaxPlayers {
+		pr.status.SetLocalSlot(-1)
+		return
+	}
+	pr.status.SetLocalSlot(int(pr.local))
 }
 
 // Slot returns the entity in a roster slot, 0 when empty

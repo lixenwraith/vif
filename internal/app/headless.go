@@ -105,15 +105,15 @@ func (a *App) InputTick() bool {
 }
 
 // SetupLevel resizes the map independently of the viewport; cropOnResize=false
-// decouples them, so a headless run emulates either mode.
-func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) {
-	a.ctx.PushEventOrigin(event.EventLevelSetup, &event.LevelSetupPayload{
+// decouples them, so a headless run emulates either mode. Reports false when a
+// live session refused it (see shareOperator).
+func (a *App) SetupLevel(width, height int, clearEntities, cropOnResize bool) bool {
+	return a.shareOperator("resize the map", event.EventLevelSetup, &event.LevelSetupPayload{
 		Width:         width,
 		Height:        height,
 		ClearEntities: clearEntities,
 		CropOnResize:  cropOnResize,
-	}, event.OriginDebug)
-	a.scheduler.Settle()
+	})
 }
 
 // Resize records a terminal dimension change and settles the reflow. Headless has no
@@ -128,17 +128,47 @@ func (a *App) Resize(width, height int) {
 // Reset requests a new game; purge additionally clears operator session state.
 // MetaSystem's synchronous cleanup lands here, the FSM reset at the next Tick,
 // matching the interactive ordering.
-func (a *App) Reset(purge bool) {
+func (a *App) Reset(purge bool) bool {
+	return a.shareOperator("reset", event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+}
+
+// shareOperator publishes an operator request whose payload changes shared state,
+// and is the boundary the embedder API owes every such request. Outside a session
+// there is one world and the push is local; inside one the same push would be a
+// second author for state the session has exactly one author for, and a correction
+// cannot repair what it produces — entity allocation and run numbering are exactly
+// what a correction does not describe.
+//
+// The event's own declared class decides which refusal applies, so a method added
+// later inherits the right one from its type rather than from this list:
+//
+//   - ClassBus travels when its producer stamps it a crossing, so the authority
+//     publishes one for the whole session and a guest is refused.
+//   - Everything else does not travel at all. event.OnWire admits Bus and Stamped
+//     and nothing besides, so a ClassShared request — a level setup, an FSM region
+//     op — reaches no peer whoever pushes it; it is re-derived identically on every
+//     instance or it does not happen, and no participant may originate one,
+//     authority included. This is the same rule the :region and :system commands
+//     already apply on the interactive surface.
+//
+// The session's own adoption of its anchor is not an operator request and does not
+// come through here; see adoptMapLatch. Reports whether the request was published.
+func (a *App) shareOperator(what string, et event.EventType, payload any) bool {
 	if a.world.LiveSession() {
-		if !a.world.IsSessionCoordinator() {
-			a.ctx.SetStatusMessage("Only the host can reset a live session", 0, false)
-			return
+		switch {
+		case event.ClassOf(et) != event.ClassBus:
+			a.ctx.SetStatusMessage("Cannot "+what+" in a live session", 0, false)
+			return false
+		case !a.world.IsSessionCoordinator():
+			a.ctx.SetStatusMessage("Only the host can "+what+" in a live session", 0, false)
+			return false
 		}
-		a.ctx.PushCrossing(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge})
+		a.ctx.PushCrossing(et, payload)
 	} else {
-		a.ctx.PushEventOrigin(event.EventGameResetRequest, &event.GameResetPayload{Purge: purge}, event.OriginDebug)
+		a.ctx.PushEventOrigin(et, payload, event.OriginDebug)
 	}
 	a.scheduler.Settle()
+	return true
 }
 
 // Context returns the game context, for assertions the snapshot does not carry
@@ -168,12 +198,11 @@ func (a *App) JournalStats() (emitted, encodeFailed uint64) {
 }
 
 // Region applies an FSM region operation and settles what it emits.
-// State is required by event.RegionSpawn and ignored otherwise.
-func (a *App) Region(op, region, state string) {
-	a.ctx.PushEventOrigin(event.EventFSMRegionRequest, &event.FSMRegionPayload{
-		Op: op, Region: region, State: state,
-	}, event.OriginDebug)
-	a.scheduler.Settle()
+// State is required by event.RegionSpawn and ignored otherwise. Reports false when
+// a live session refused it (see shareOperator).
+func (a *App) Region(op, region, state string) bool {
+	return a.shareOperator("change FSM regions", event.EventFSMRegionRequest,
+		&event.FSMRegionPayload{Op: op, Region: region, State: state})
 }
 
 // SetDispatchTap installs an observer for every dispatched event, for assertions the

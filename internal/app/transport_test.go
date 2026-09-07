@@ -42,15 +42,25 @@ func pair(t *testing.T, seed uint64, steps int) (*App, *App) {
 	// event sequence; a join that only moved the guest would be the divergence.
 	a.adoptMapLatch(an.Anchor)
 
+	// The geometry is settled before the link exists. SetupLevel carries a
+	// ClassShared payload, so inside a live session only the authority may produce
+	// one (App.shareOperator); running it on both while each is still alone is what
+	// makes the two worlds identical without either authoring for the other.
+	for _, x := range []*App{a, b} {
+		tickUntilCursor(t, x)
+		if !x.SetupLevel(100, 30, true, false) {
+			t.Fatal("level setup refused before the session was live")
+		}
+		x.Tick(1)
+	}
+
 	pa, pb := network.NewLoopbackPair(1, 2)
 	a.AttachTransport(pa)
 	b.AttachTransport(pb)
-
-	for _, x := range []*App{a, b} {
-		tickUntilCursor(t, x)
-		x.SetupLevel(100, 30, true, false)
-		x.Tick(1)
-	}
+	// One tick each so the barrier observes the link it was just handed: Cross is a
+	// no-op until refreshLink has run under a live port, so a crossing pushed by the
+	// caller before this would never reach the wire.
+	tickAll([]*App{a, b})
 	return a, b
 }
 

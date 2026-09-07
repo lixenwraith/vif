@@ -38,8 +38,11 @@ transitions = [
 parent = "MonitorCycle"
 transitions = [
     { trigger = "Tick", target = "MonitorActive", guard = "Or", guard_args = { guards = [
-        { name = "StatusIntCompare", args = { key = "heat.current", op = "gt", value = 0 } },
-        { name = "StatusIntCompare", args = { key = "energy.current", op = "neq", value = 0 } },
+        # Slot-explicit, not the bare mirror: this is a shared region and must take
+        # the same transition on every instance (D-20), while the bare keys name
+        # whichever cursor the reading instance drives.
+        { name = "StatusIntCompare", args = { key = "player.0.heat.current", op = "gt", value = 0 } },
+        { name = "StatusIntCompare", args = { key = "player.0.energy.current", op = "neq", value = 0 } },
     ] } },
 ]
 

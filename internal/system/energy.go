@@ -26,6 +26,8 @@ type EnergySystem struct {
 	statPenaltyCount     *atomic.Int64
 	statRewardCount      *atomic.Int64
 	statSpendCount       *atomic.Int64
+	statPassiveCount     *atomic.Int64
+	statPassiveDrained   *atomic.Int64
 	statCrossedZeroCount *atomic.Int64
 	statPenaltyRejects   *atomic.Int64
 	statCursorRejects    *atomic.Int64
@@ -45,6 +47,8 @@ func NewEnergySystem(world *engine.World) engine.System {
 	s.statPenaltyCount = reg.Ints.Get("energy.penalty_count")
 	s.statRewardCount = reg.Ints.Get("energy.reward_count")
 	s.statSpendCount = reg.Ints.Get("energy.spend_count")
+	s.statPassiveCount = reg.Ints.Get("energy.passive_count")
+	s.statPassiveDrained = reg.Ints.Get("energy.passive_drained")
 	s.statCrossedZeroCount = reg.Ints.Get("energy.crossed_zero_count")
 	s.statPenaltyRejects = reg.Ints.Get("energy.penalty_rejects")
 	s.statCursorRejects = reg.Ints.Get("energy.cursor_rejects")
@@ -64,6 +68,8 @@ func (s *EnergySystem) Init() {
 	s.statPenaltyCount.Store(0)
 	s.statRewardCount.Store(0)
 	s.statSpendCount.Store(0)
+	s.statPassiveCount.Store(0)
+	s.statPassiveDrained.Store(0)
 	s.statCrossedZeroCount.Store(0)
 	s.statPenaltyRejects.Store(0)
 	s.statCursorRejects.Store(0)
@@ -203,6 +209,8 @@ func (s *EnergySystem) Update() {
 		return
 	}
 
+	s.publishSlots()
+
 	dt := s.world.Resources.Time.DeltaTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
@@ -300,7 +308,12 @@ func (s *EnergySystem) addEnergy(cursor core.Entity, delta int64, percentage boo
 		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
 
 	case component.EnergyDeltaPassive:
-		// Bypasses ember/boost, convergent clamp to zero
+		// Bypasses ember/boost, convergent clamp to zero. Counted because it is the
+		// one delta class no player action produces: without a counter "the drain
+		// has stopped" and "the drain is working and something else is paying for
+		// it" read the same on a status bar.
+		s.statPassiveCount.Add(1)
+		s.statPassiveDrained.Add(absDelta)
 		newEnergy, crossedZero = convergeToZero(currentEnergy, absDelta, true)
 
 	case component.EnergyDeltaSpend:
@@ -444,6 +457,18 @@ func (s *EnergySystem) publish(cursor core.Entity, value int64) {
 	if slot, ok := s.world.CursorSlot(cursor); ok {
 		s.statCurrent.Store(slot, value)
 	}
+}
+
+// publishSlots mirrors every rostered cursor's energy, a peer's included. See
+// eachRosterSlot for why reporting is not gated by D-2 the way writing is.
+func (s *EnergySystem) publishSlots() {
+	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
+		var v int64
+		if c, ok := s.world.Components.Energy.GetPtr(cursor); ok {
+			v = c.Current
+		}
+		s.statCurrent.Store(slot, v)
+	})
 }
 
 // cursorDefeated reports the owner-authored lifecycle predicate.

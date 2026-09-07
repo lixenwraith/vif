@@ -639,3 +639,71 @@ func TestParticipantsShareTheCorpusFingerprintNotItsCursor(t *testing.T) {
 		t.Fatalf("both participants report corpus file %q; the criterion proves nothing", corpusFile(a))
 	}
 }
+
+// TestEmbedderSharedMutationIsRefusedInALiveSession is gap 6 of the multiplayer
+// plan, and the half of it the plan got wrong.
+//
+// SetupLevel and Region carry ClassShared payloads. Applied locally they change one
+// instance's map bounds or FSM regions and nobody else's, and no correction repairs
+// the result — entity allocation and run numbering are exactly what a correction
+// does not describe. The plan proposed App.Reset's shape, refusing on a guest and
+// crossing on the authority, but event.OnWire admits only Bus and Stamped: a
+// ClassShared event reaches no peer whoever pushes it. So the authority is refused
+// too, and Reset keeps its crossing because EventGameResetRequest is ClassBus.
+func TestEmbedderSharedMutationIsRefusedInALiveSession(t *testing.T) {
+	t.Parallel()
+	host, guest := pair(t, 0x5EEDBEEF, 0)
+
+	mapOf := func(x *App) (w, h int) {
+		x.World().RunSafe(func() {
+			cfg := x.World().Resources.Config
+			w, h = cfg.MapWidth, cfg.MapHeight
+		})
+		return w, h
+	}
+	pausedOf := func(x *App) (v bool) {
+		x.World().RunSafe(func() {
+			v = x.World().Resources.Status.Bools.Get("fsm.main.paused").Load()
+		})
+		return v
+	}
+
+	wantW, wantH := mapOf(host)
+	if w, h := mapOf(guest); w != wantW || h != wantH {
+		t.Fatalf("the pair did not start on one map: host %dx%d, guest %dx%d", wantW, wantH, w, h)
+	}
+	for _, x := range []struct {
+		name string
+		app  *App
+	}{{"host", host}, {"guest", guest}} {
+		if x.app.SetupLevel(60, 20, true, false) {
+			t.Fatalf("%s published a level setup into a live session", x.name)
+		}
+		if x.app.Region(event.RegionPause, "main", "") {
+			t.Fatalf("%s published an FSM region change into a live session", x.name)
+		}
+	}
+	for range parameter.NetworkBarrierDelayTicks + 2 {
+		tickAll([]*App{host, guest})
+	}
+	for _, x := range []struct {
+		name string
+		app  *App
+	}{{"host", host}, {"guest", guest}} {
+		if w, h := mapOf(x.app); w != wantW || h != wantH {
+			t.Fatalf("%s map = %dx%d after a refused setup, want %dx%d", x.name, w, h, wantW, wantH)
+		}
+		if pausedOf(x.app) {
+			t.Fatalf("%s paused its main region on a refused request", x.name)
+		}
+	}
+
+	// The Bus request the plan compared them against does still travel, from the
+	// authority and from nobody else.
+	if guest.Reset(false) {
+		t.Fatal("a guest reset a live session")
+	}
+	if !host.Reset(false) {
+		t.Fatal("the authority was refused its own reset")
+	}
+}

@@ -190,6 +190,8 @@ func (s *BoostSystem) Update() {
 		return
 	}
 
+	s.publishSlots()
+
 	dt := s.world.Resources.Time.DeltaTime
 
 	s.world.Components.Cursor.Each(func(e core.Entity, _ *component.CursorComponent) bool {
@@ -254,6 +256,21 @@ func (s *BoostSystem) extend(cursor core.Entity, duration time.Duration) {
 		boostComp.TotalDuration = boostComp.Remaining
 	}
 	s.publish(cursor, boostComp)
+}
+
+// publishSlots mirrors every rostered cursor's boost, a peer's included. See
+// eachRosterSlot.
+func (s *BoostSystem) publishSlots() {
+	eachRosterSlot(s.world, func(slot uint8, cursor core.Entity) {
+		boost, ok := s.world.Components.Boost.GetPtr(cursor)
+		if !ok {
+			s.statActive.Store(slot, false)
+			s.statRemaining.Store(slot, 0)
+			return
+		}
+		s.statActive.Store(slot, boost.Active)
+		s.statRemaining.Store(slot, int64(boost.Remaining))
+	})
 }
 
 // publish mirrors one cursor's boost into its roster slot

@@ -54,10 +54,10 @@ type FuzzTarget interface {
 	Tick(int)
 	Inject(...*input.Intent) bool
 	InputTick() bool
-	SetupLevel(width, height int, clearEntities, cropOnResize bool)
+	SetupLevel(width, height int, clearEntities, cropOnResize bool) bool
 	Resize(width, height int)
-	Reset(purge bool)
-	Region(op, region, state string)
+	Reset(purge bool) bool
+	Region(op, region, state string) bool
 }
 
 // DefaultFuzz returns the soak profile: every action class enabled
@@ -380,7 +380,7 @@ func (d *FuzzDriver) actResize() bool {
 
 // actLevel resizes the map independently of the viewport, in both crop modes
 func (d *FuzzDriver) actLevel() bool {
-	d.a.SetupLevel(20+d.rng.Intn(100), 10+d.rng.Intn(30),
+	_ = d.a.SetupLevel(20+d.rng.Intn(100), 10+d.rng.Intn(30),
 		d.rng.Intn(2) == 0, d.rng.Intn(2) == 0)
 	return true
 }
@@ -389,7 +389,7 @@ func (d *FuzzDriver) actLevel() bool {
 // which is itself worth reproducing
 func (d *FuzzDriver) actRegion() bool {
 	r := d.regions[d.rng.Intn(len(d.regions))]
-	d.a.Region(fuzzRegionOps[d.rng.Intn(len(fuzzRegionOps))], r.Name, r.State)
+	_ = d.a.Region(fuzzRegionOps[d.rng.Intn(len(fuzzRegionOps))], r.Name, r.State)
 	return true
 }
 
@@ -403,7 +403,7 @@ func (d *FuzzDriver) actReset() bool {
 		}
 		return d.typeCommand(cmd)
 	}
-	d.a.Reset(purge)
+	_ = d.a.Reset(purge)
 	return true
 }
 
