@@ -162,10 +162,10 @@ serve)
 	set -- "$@" # keep $2 addressable under set -u
 	if [ -n "${2:-}" ]; then
 		exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" -players "$2" \
-			-d -size 120x40 -log-stdout -lv info -ls all+dispatch
+			-d -size 120x40 -log-stdout -lv info -ls all
 	fi
 	exec "$BIN" -serve "$HOST:$PORT" -probe "$HOST:$PROBE_PORT" \
-		-d -size 120x40 -log-stdout -lv info -ls all+dispatch
+		-d -size 120x40 -log-stdout -lv info -ls all
 	;;
 
 serve-fleet)

@@ -467,12 +467,3 @@ All 262 surviving additions are listed below. No key was renamed or repurposed; 
 | `weapon.disabled_rejects` (int) | Action requests dropped while the weapon system was disabled. |
 | `event.dead_by_type` (string) | Snapshot-cadence sparse `EventType=count` dead-letter summary. |
 | `event.dispatch_by_type` (string) | Snapshot-cadence sparse `EventType=count` dispatch summary. |
-
-## Headless evidence
-
-The deterministic headless script followed by one snapshot interval reported:
-
-- 215 ticks, 204 event dispatches, 441 live positioned entities, and 934 created entities.
-- Two bit-packed single deaths, zero fallback deaths, five death batches, and 14 batch entity entries.
-- The fast-path-to-batch ratio was 2:5 by dispatch (0.40 packed events per batch), or 1:7 by entity workload (2 packed entities to 14 batch entries).
-- `entity.count` and `event.queue_len` matched their live stores at the snapshot boundary.
