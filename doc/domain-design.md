@@ -201,8 +201,10 @@ true, a terminal resize changes only local viewport/camera state; it cannot crop
 the map or announce a Shared cursor move.
 
 The session-shared latch survives lobby wait, disconnect, and journal replay. A
-script reading viewport-only values while a session is shared is warned because it
-can choose a different FSM branch on different terminals.
+map script asking for `viewport_width`/`viewport_height` is asking for the extent it
+draws on, so under the latch it reads the map instead of the terminal; `camera_*`
+and `color_mode` have no shared counterpart and a script reading one is warned,
+because it can choose a different FSM branch on different terminals.
 
 ### D-15 — Classification is declared once
 

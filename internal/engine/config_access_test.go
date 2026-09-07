@@ -30,15 +30,42 @@ func TestEveryConfigKeyIsClassified(t *testing.T) {
 	}
 
 	// The split itself, stated once so a silent flip fails rather than drifts.
-	for _, f := range []string{"map_width", "map_height", "crop_on_resize"} {
+	for _, f := range []string{"map_width", "map_height", "crop_on_resize",
+		"viewport_width", "viewport_height"} {
 		if !ConfigKeyReplicated(f) {
-			t.Errorf("%s must be replicated: it is map bounds authority (D-14)", f)
+			t.Errorf("%s must be replicated: it is the area a map script draws on (D-14)", f)
 		}
 	}
-	for _, f := range []string{"viewport_width", "viewport_height", "camera_x", "camera_y", "color_mode"} {
+	for _, f := range []string{"camera_x", "camera_y", "color_mode"} {
 		if ConfigKeyReplicated(f) {
 			t.Errorf("%s must not be replicated: it describes this terminal", f)
 		}
+	}
+}
+
+// TestTheDrawableExtentFollowsTheLatch is the D-14 read a map script makes. A run
+// that owns its bounds draws on its terminal; under the latch the terminal is one
+// instance's and the map is everyone's, so a script sizing a level from "the
+// viewport" must not resize the shared map to whichever terminal grew.
+func TestTheDrawableExtentFollowsTheLatch(t *testing.T) {
+	w := NewWorld()
+	NewGameContextWithClock(w, 200, 60, NewManualClock())
+	w.Resources.Config.MapWidth, w.Resources.Config.MapHeight = 120, 40
+	w.Resources.Config.ViewportWidth, w.Resources.Config.ViewportHeight = 200, 60
+
+	read := func(field string) int64 {
+		fn, ok := ConfigIntAccessor(field)
+		if !ok {
+			t.Fatalf("%s does not resolve", field)
+		}
+		return fn(w)
+	}
+	if got := read("viewport_width"); got != 200 {
+		t.Fatalf("a run that owns its bounds draws on %d columns, want its terminal's 200", got)
+	}
+	w.MarkSessionShared()
+	if got, got2 := read("viewport_width"), read("viewport_height"); got != 120 || got2 != 40 {
+		t.Fatalf("under the latch a script draws on %dx%d, want the map's 120x40", got, got2)
 	}
 }
 

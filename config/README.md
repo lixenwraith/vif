@@ -268,7 +268,10 @@ Apply bounds with `min`/`max` (optional, independent):
 { action = "ConfigToVar", payload = { field = "viewport_width", name = "vw" } }
 ```
 
-Reads a `ConfigResource` field value into an FSM variable at execution time. Enables dynamic position arithmetic based on runtime dimensions.
+Reads a `ConfigResource` field value into an FSM variable at execution time. Enables
+dynamic position arithmetic based on runtime dimensions. Under a shared map the
+viewport fields read the map bounds, so a level laid out around them is the same on
+every participant (D-14).
 
 Available fields (same set as `ConfigIntCompare`):
 `map_width`, `map_height`, `viewport_width`, `viewport_height`, `camera_x`, `camera_y`, `color_mode`
@@ -547,8 +550,8 @@ Available fields for `ConfigIntCompare`:
 | `color_mode`      | Render mode (0=256-color, 1=TrueColor) |
 | `map_width`       | Simulation bounds width                |
 | `map_height`      | Simulation bounds height               |
-| `viewport_width`  | Terminal visible width                 |
-| `viewport_height` | Terminal visible height                |
+| `viewport_width`  | Drawable width, map bounds if shared   |
+| `viewport_height` | Drawable height, map bounds if shared  |
 | `camera_x`        | Camera X offset                        |
 | `camera_y`        | Camera Y offset                        |
 
