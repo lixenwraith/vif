@@ -103,3 +103,30 @@ func TestPlayoutLeadRisesOnAMeasuredSlowLink(t *testing.T) {
 		t.Fatalf("lead = %d, past the %d-tick ceiling", got, parameter.NetworkBarrierMaxDelayTicks)
 	}
 }
+
+// TestTheHostAdoptsTheLeadItChose is the other half of the choice: the offer
+// carried it to every guest, and the coordinator's own endpoint was built before
+// the lobby measured anything, so it kept the default and applied its crossings a
+// lead earlier than the session it had just told.
+func TestTheHostAdoptsTheLeadItChose(t *testing.T) {
+	t.Parallel()
+	want := uint64(parameter.NetworkBarrierDelayTicks + 4)
+
+	a := mustHeadless(t, 0x1EAD, 120, 40)
+	defer a.Close()
+	a.AttachTransport(network.NewMesh().Node(1))
+	tickUntilCursor(t, a)
+
+	offer := network.SessionOffer{
+		Anchor: a.JoinAnchor(), Host: 1, Assigned: 2, Term: network.FirstTerm,
+		Participants:      roster(1, 2),
+		BarrierDelayTicks: want,
+	}
+	if err := a.HostSession(offer); err != nil {
+		t.Fatalf("host session: %v", err)
+	}
+	a.Tick(1)
+	if got := statOf(a, "network.barrier_delay_ticks"); got != int64(want) {
+		t.Fatalf("the host's barrier defers by %d ticks, want the %d it offered", got, want)
+	}
+}

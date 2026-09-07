@@ -143,6 +143,14 @@ func (a *App) HostSession(o network.SessionOffer) error {
 		return err
 	}
 	a.adoptMapLatch(o.Anchor.Anchor)
+	// This endpoint was built before the lobby measured its links, so the lead the
+	// offer carries reaches the host's own barrier here. Two participants deferring
+	// crossings by different leads apply them at different ticks.
+	a.world.RunSafe(func() {
+		if r := a.world.Resources.Network; r != nil {
+			r.BarrierDelayTicks = o.BarrierDelayTicks
+		}
+	})
 	a.openAuthority(o, o.Host)
 	a.authority.publishChain()
 	return a.configureSessionRoster(o, o.Host)
