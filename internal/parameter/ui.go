@@ -33,6 +33,11 @@ const (
 	// StatusCursorBlinkDuration is the blink duration of the cursor when visible in status bar in search and command modes
 	StatusCursorBlinkDuration = 250 * time.Millisecond
 
+	// StatusNetworkHoldDuration is the shortest interval the session cell may
+	// change over. Its inputs move on the correction cadence and the cell's width
+	// reflows every item beside it, so an unheld cell is unreadable.
+	StatusNetworkHoldDuration = 500 * time.Millisecond
+
 	// StatusCursorChar is status bar cursor character that blinks
 	StatusCursorChar = '█'
 )

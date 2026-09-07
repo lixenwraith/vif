@@ -49,7 +49,6 @@ type StatusBarRenderer struct {
 	statNet         *status.AtomicString
 	statStale       *atomic.Bool
 	statLag         *atomic.Int64
-	statCorrection  *atomic.Int64
 	statPeers       *atomic.Int64
 	statHostLost    *atomic.Bool
 	statMigrating   *atomic.Bool
@@ -71,6 +70,10 @@ type StatusBarRenderer struct {
 	// Cursor blink state
 	cursorBlinkOn   bool
 	lastBlinkToggle time.Time
+
+	// The session cell as last drawn, and when. See networkItem.
+	netHeld   statusItem
+	netHeldAt time.Time
 }
 
 // NewStatusBarRenderer creates a status bar renderer
@@ -88,16 +91,15 @@ func NewStatusBarRenderer(gameCtx *engine.GameContext) *StatusBarRenderer {
 		statAPM:   statusReg.Ints.Get("engine.apm"),
 		statTicks: statusReg.Ints.Get("engine.ticks"),
 
-		statSpeed:      statusReg.Strings.Get("engine.speed"),
-		statStep:       statusReg.Ints.Get("engine.step"),
-		statBreak:      statusReg.Strings.Get("engine.breakpoint"),
-		statNet:        statusReg.Strings.Get("network.state"),
-		statStale:      statusReg.Bools.Get("network.stale"),
-		statLag:        statusReg.Ints.Get("network.lag_ticks"),
-		statCorrection: statusReg.Ints.Get("snapshot.correction_entities"),
-		statPeers:      statusReg.Ints.Get("network.peers"),
-		statHostLost:   statusReg.Bools.Get("network.host_lost"),
-		statMigrating:  statusReg.Bools.Get("network.migrating"),
+		statSpeed:     statusReg.Strings.Get("engine.speed"),
+		statStep:      statusReg.Ints.Get("engine.step"),
+		statBreak:     statusReg.Strings.Get("engine.breakpoint"),
+		statNet:       statusReg.Strings.Get("network.state"),
+		statStale:     statusReg.Bools.Get("network.stale"),
+		statLag:       statusReg.Ints.Get("network.lag_ticks"),
+		statPeers:     statusReg.Ints.Get("network.peers"),
+		statHostLost:  statusReg.Bools.Get("network.host_lost"),
+		statMigrating: statusReg.Bools.Get("network.migrating"),
 
 		statCadence:     statusReg.Ints.Get("snapshot.cadence_ticks"),
 		statConstrained: statusReg.Bools.Get("snapshot.cadence_constrained"),
@@ -455,10 +457,26 @@ func (r *StatusBarRenderer) Render(ctx render.RenderContext, buf *render.RenderB
 	}
 }
 
-// networkItem is the session in one badge, chosen by severity so a worse fact
-// hides a lesser one. The measurements behind it are in :session and the status
-// snapshot; five numbers beside a badge is a diagnostic panel, not a glance.
+// networkItem is the badge as drawn, held for StatusNetworkHoldDuration. Its
+// inputs move on the correction cadence and its width reflows every item beside
+// it, so an unheld cell repaints faster than it can be read.
 func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
+	item, ok := r.networkBadge()
+	now := r.gameCtx.TimeCtl.RealTime() // [wall] readability, not simulation
+	switch {
+	case !ok:
+		r.netHeld = statusItem{}
+		return statusItem{}, false
+	case r.netHeld.text == "" || now.Sub(r.netHeldAt) >= parameter.StatusNetworkHoldDuration:
+		r.netHeld, r.netHeldAt = item, now
+	}
+	return r.netHeld, true
+}
+
+// networkBadge is the session in one badge, chosen by severity so a worse fact
+// hides a lesser one. The measurements behind it are in :session and the status
+// snapshot; a row of numbers beside a badge is a diagnostic panel, not a glance.
+func (r *StatusBarRenderer) networkBadge() (statusItem, bool) {
 	// Losing the authority is a permanent change for this run and outranks
 	// everything, including the link state that described the host that went.
 	if r.statHostLost.Load() {
@@ -488,8 +506,7 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 
 	// slow! no cadence delivers a whole world inside the guaranteed window;
 	// lag n  this instance is n ticks behind, so its crossings land late;
-	// slow   the cadence backed off and prediction carries more;
-	// ~n     the last correction moved n shared entities.
+	// slow   the cadence backed off and prediction carries more.
 	peers := r.statPeers.Load()
 	switch {
 	case r.statFloor.Load() && r.statCadence.Load() != 0:
@@ -506,12 +523,6 @@ func (r *StatusBarRenderer) networkItem() (statusItem, bool) {
 		return statusItem{
 			text: fmt.Sprintf(" Net: %d slow ", peers),
 			fg:   visual.RgbBlack, bg: visual.RgbOrange,
-		}, true
-	}
-	if n := r.statCorrection.Load(); n > 0 {
-		return statusItem{
-			text: fmt.Sprintf(" Net: %d ~%d ", peers, n),
-			fg:   visual.RgbBlack, bg: visual.RgbBoostBg,
 		}, true
 	}
 	return statusItem{
