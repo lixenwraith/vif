@@ -336,6 +336,13 @@ func (cs *ClockScheduler) ImportFSM(state fsm.MachineState, reconcileLocal bool)
 	if err != nil {
 		return err
 	}
+	// An import changes the active set, so it reconciles like every other op that
+	// does. The toggles a region declares are a per-instance effect of a Shared
+	// position (D-20) and are re-derived from it; a participant that arrives at the
+	// position by installing a world runs no region's entry actions.
+	if err := cs.applySystemConfig(); err != nil {
+		return err
+	}
 	// Region telemetry is derived from the position that just changed, and it is
 	// part of the compared shared surface. Republish it here rather than waiting
 	// for the next tick, so an installed world reports where it stands.

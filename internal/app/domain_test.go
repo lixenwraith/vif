@@ -217,6 +217,42 @@ var entityType = reflect.TypeOf(core.Entity(0))
 //
 // The tap runs on the caller's goroutine — a driven App has no scheduler — so no
 // synchronization is needed.
+// TestAnInstalledPositionReconcilesItsRegionsSystems is D-20's per-instance half.
+// A region's declared system toggles are an effect of the Shared position that
+// owns them, so they are re-derived from it — and a participant that reaches that
+// position by installing a world runs no region's entry actions.
+func TestAnInstalledPositionReconcilesItsRegionsSystems(t *testing.T) {
+	t.Parallel()
+	a := mustHeadless(t, 0x61A7, 120, 40)
+	defer a.Close()
+	tickUntilCursor(t, a)
+
+	glyph := func() bool {
+		var on bool
+		a.World().RunSafe(func() { on = a.World().Resources.Status.Bools.Get("glyph.enabled").Load() })
+		return on
+	}
+	if !glyph() {
+		t.Fatal("the main region declares glyph enabled and it is not")
+	}
+	a.Context().PushEventOrigin(event.EventMetaSystemCommandRequest,
+		&event.MetaSystemCommandPayload{SystemName: "glyph", Enabled: false}, event.OriginDebug)
+	a.Settle()
+	if glyph() {
+		t.Fatal("glyph kept running through its own disable")
+	}
+
+	a.World().RunSafe(func() {
+		if err := a.scheduler.ImportFSM(a.scheduler.ExportFSM(), true); err != nil {
+			t.Errorf("import fsm: %v", err)
+		}
+	})
+	a.Settle()
+	if !glyph() {
+		t.Fatal("the installed position left glyph as this instance had it, not as its region declares")
+	}
+}
+
 func TestBusPayloadsNameOnlySharedEntities(t *testing.T) {
 	t.Parallel()
 	const seed, steps = 0x4B15, 1500 // This seed produces no crossing inside the old 300-step short horizon.
