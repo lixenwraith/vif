@@ -1,6 +1,6 @@
 # Working rules
 
-Edit this file. It is the contract, not a suggestion.
+It is the contract, not a suggestion.
 
 ## Comments
 
@@ -15,9 +15,10 @@ Edit this file. It is the contract, not a suggestion.
 
 ## Files
 
-- Do not create a file for one helper. Put it next to what uses it.
+- Do not create a file for one or a few helpers. Put it next to what uses it or if shared, there is usually a main or type file in the package that can hold them.
 - A new file needs a new concept, not a new function.
 - Prefer editing an existing file over adding one.
+- Refactor comments as you review and edit the files, there are pre-existing files that do not follow the guidelines.
 
 ## Scope
 
@@ -33,15 +34,16 @@ Edit this file. It is the contract, not a suggestion.
 - Test comments follow the 5-line limit.
 - Do not pin lists that a human has to hand-maintain unless the pin prevents a
   real regression.
+- Collapse the tests: if a complex test covers a simple test scope, delete existing simple test or do not add the simple test. Do not add tests for obvious and simple functionalities that are unlikely to fail.
 
 ## Docs and commits
 
-- Commit subject ≤ 72 chars; body ≤ 10 lines, plain, no rhetoric.
-- `doc/` is already long. Condense when you touch it; do not append.
-- PR bodies: what changed, why, how it was verified. Nothing else.
+- `doc/` is already long. Condense when you touch it; do not append unless new concept or scope is being added.
+- PR bodies: what changed, why, how it was verified.
 
 ## Gates
 
 `go generate ./internal/event ./internal/manifest`, `go build ./...`,
-`go test ./...`, `go test -race ./internal/app/...`, `go vet ./...`,
+`go test ./...`, `go vet ./...`,
 `gofmt -l` on changed files, `test/scenario.sh all`.
+- Do not run `-race` test, it takes a long time and user verifies it.
