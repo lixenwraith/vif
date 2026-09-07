@@ -214,6 +214,14 @@ func buildConfig() app.Config {
 		cfg.ProbeAddress = flagSession.probe
 		cfg.Lifetime = flagSession.lifetime()
 	}
+	// The default differs by shape and the flag overrides either way: a dedicated
+	// host *is* the session, so an orchestrator replacing it at the same address is
+	// the reconnect its guests want; a person's machine is not, so there the
+	// surviving guest continuing the game is worth more than the address staying put.
+	cfg.FixedAuthority = flagSession.serve != ""
+	if flagSession.authority != "" {
+		cfg.FixedAuthority = flagSession.authority == authorityHost
+	}
 	if flagSession.size != "" {
 		cfg.Width, cfg.Height, _ = parseSize(flagSession.size) // validated in validateInvocation
 	}
@@ -281,12 +289,13 @@ func (f *configFlags) register(fs *flag.FlagSet) {
 
 // sessionFlags expose startup hosting/joining and the cap a later :host inherits.
 type sessionFlags struct {
-	host    string
-	join    string
-	serve   string
-	probe   string
-	size    string
-	players int
+	host      string
+	join      string
+	serve     string
+	probe     string
+	size      string
+	players   int
+	authority string
 
 	// firstJoin, empty and drain bound an allocated session's life. They are zero
 	// on an interactively started host, which is supervised by the person who
@@ -315,16 +324,36 @@ func (f *sessionFlags) register(fs *flag.FlagSet) {
 	fs.DurationVar(&f.drain, "drain", 0,
 		"With -serve, how long a termination signal waits for the roster to empty before exiting anyway; 0 exits at once")
 	fs.IntVar(&f.players, "players", 0, fmt.Sprintf(
-		"Host lobby size, itself included (2..%d; default 2 with -host, max with later :host). "+
-			"With -serve it is a ceiling on guests instead: the session starts on the first one "+
-			"and admits the rest as they arrive, defaulting to %d",
-		parameter.MaxPlayers, parameter.MaxPlayers))
+		"Ceiling on the roster, itself included (2..%d; default the whole roster). "+
+			"With -host it also sizes the startup lobby, which then waits for exactly that "+
+			"many; unset, a host starts on its first guest and admits the rest as they arrive",
+		parameter.MaxPlayers))
+	fs.StringVar(&f.authority, "authority", "", fmt.Sprintf(
+		"What losing the authoring participant does: %q hands the session to the "+
+			"roster's next survivor, %q ends it and leaves every survivor playing alone. "+
+			"Default %q with -serve and %q otherwise",
+		authorityMigrate, authorityHost, authorityHost, authorityMigrate))
 }
 
+// authorityMigrate and authorityHost are the two -authority words. They name the
+// question the flag answers — where authorship lives when the participant holding
+// it goes — rather than a mechanism, because the mechanism is the part that may
+// change.
+const (
+	authorityMigrate = "migrate"
+	authorityHost    = "host"
+)
+
 func (f sessionFlags) validateInvocation(schema, check bool, replay string) error {
+	if f.authority != "" && f.authority != authorityMigrate && f.authority != authorityHost {
+		return fmt.Errorf("-authority %q is not %q or %q", f.authority, authorityMigrate, authorityHost)
+	}
+	if f.authority != "" && f.host == "" && f.serve == "" {
+		return fmt.Errorf("-authority is the policy a host sets for its session; a guest adopts the one it is offered")
+	}
 	if (f.host != "" || f.join != "" || f.serve != "" || f.probe != "" || f.players != 0 ||
-		f.lifetime().Bounded()) && (schema || check || replay != "") {
-		return fmt.Errorf("-host, -join, -serve, -probe, -players and the session lifetime bounds are available only in interactive play")
+		f.authority != "" || f.lifetime().Bounded()) && (schema || check || replay != "") {
+		return fmt.Errorf("-host, -join, -serve, -probe, -players, -authority and the session lifetime bounds are available only in interactive play")
 	}
 	if f.players != 0 && f.join != "" {
 		return fmt.Errorf("-players configures a host, not -join")

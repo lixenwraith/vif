@@ -36,6 +36,39 @@ from the journal anchor, and `-script <file>` constructs a caller-driven
 | Export schema | `app.Schema` | No | Emit schema version 1 JSON for events, fields, actions, guards, operators, and config fields. |
 | Run script | `app.RunScript` | Only with `-watch` | Execute a bounded versioned TOML schedule; optional `-host`/`-join` uses the normal TCP gate. |
 
+### 1.0 The four session flags, and what each still decides
+
+Four ways to be in a session, and after the recent convergence they differ in
+less than the flag names suggest:
+
+| Flag | Binds a port | Local cursor | Terminal | Startup lobby | Default `-authority` |
+|---|---:|---:|---:|---|---|
+| `-host <addr>` | yes | yes | yes | waits for `-players`, or for its first guest when unset | `migrate` |
+| `-serve <addr>` | yes | no | no | always its first guest | `host` |
+| `:host <addr>` | yes | yes | yes | none — the session opens at the tick it is running | `migrate` |
+| `-join <addr>` | no | yes | yes | waits for the host's start gate | adopted from the offer |
+
+Everything else about the session is now one implementation. `-players` is a
+ceiling on every one of them and unset means the whole roster; the mid-run gate is
+installed on all of them and armed once the clock is running; a reconnect takes the
+same path as a first join; the correction cadence, the barrier, the roster
+crossings and the succession do not know which flag opened the session.
+
+**Can `-serve` and `-host` be merged?** They already are, everywhere it matters.
+What is left is the first three columns, and those are one question — *is a person
+sitting at this process* — asked three times. A single `-host` plus something like
+`-headless` would express it, at the cost of a flag combination that is legal to
+write and wrong to run (a terminal-less host that still holds a cursor nobody can
+move). The names are kept because each stands for a whole shape rather than a
+switch, and because `-serve` is what a deployment writes into a manifest. What is
+*not* kept is the difference in what they mean: the two rows above disagree only
+where the shape forces them to.
+
+`:host` is the odd one and stays that way: it is an operator command rather than a
+flag, and its session opens at whatever tick the run has reached. `-probe`,
+`-first-join`, `-empty` and `-drain` are refused outside `-serve`, because each of
+them answers to a supervisor and an interactive run has a person instead.
+
 ### 1.1 Script pacing and presentation
 
 A script is a deterministic list of inputs at named simulation positions. Two
@@ -76,15 +109,19 @@ special case. The FSM's boot cursor is not suppressed — it is created as it al
 is, and the roster hands it to the first guest, which is what keeps shared creation
 order identical to an ordinary host's.
 
-`-players <n>` on a server is a ceiling on *guests*, because the server is not one
-of them, and it is a ceiling only: the lobby's quorum is one, so a server starts on
-its first guest and admits the rest through the mid-run gate as they arrive. With
-no `-players` it holds the whole roster. Waiting for a named number instead — which
-is what it used to do — made a host's readiness a function of how many people
-happened to want to play, and gave a server started with no `-players` a session of
-exactly one guest. An interactive `-host` is the other shape and keeps the old
-behaviour: its lobby is a party that starts together, so there the ceiling and the
-number the gate waits for are one value.
+`-players <n>` is a ceiling on the roster and only a ceiling, on every host shape;
+unset means the whole roster. A server's ceiling counts *guests*, because the
+server is not one of them; an interactive host's counts one fewer, because it holds
+a cursor itself. Its lobby's quorum is one either way unless the flag was given, so
+a host starts on its first guest and admits the rest through the mid-run gate as
+they arrive.
+
+An explicit value on an interactive `-host` carries a second meaning, and it is the
+one the zero value drops: a party that says how big it is starts together, so there
+the ceiling and the number the gate waits for are one value. A server never has
+that meaning — nobody is watching its lobby to decide it is full, and waiting on a
+number would make a pod's readiness a function of how many people happened to want
+to play.
 
 `-size WxH` gives a server the terminal-equivalent geometry it has no terminal to
 derive, which is what every joiner adopts as the D-14 map latch.
@@ -203,12 +240,26 @@ into the slot its departure released and receive the world at whatever tick the
 session has reached. `-players` bounds how many cursors the session holds, not how
 many dials it will ever accept.
 
+It also outlives its own authority, and that is why `-serve` defaults to
+`-authority host`. A dedicated host *is* the session: its address is what the
+allocator handed out and what every guest holds, so if the process goes, the answer
+is an orchestrator putting another one at that address and the guests dialling back
+— not a guest none of the others can reach declaring itself the host. See
+[Multiplayer](multi-player-enhancement.md) §5.0 for what migration does and does
+not move.
+
 The arming happens after `scheduler.Start` rather than before it, because the gate
 waits for a capture one playout lead ahead of the current tick and a clock that has
 not started never reaches it. Between the lobby reading its roster and that arming
 there is a window neither gate can serve, so a dial landing in it is refused with
 `ErrSessionStarting` — a refusal the dialer retries, rather than an identity and a
 silent wait for a start gate no longer being sent.
+
+A scripted participant can only enter a session at tick zero. Its actions are
+anchored to absolute ticks, so one admitted through the mid-run gate finds its
+first action already past and stops with `script passed action`. Size the lobby
+with `-players` when a scripted guest has to be in the session — which is what
+`test/scenario.sh host-loss` does.
 
 Together these make a scripted participant: one side of a session plays a fixed
 sequence at real time while a person plays the other freely, which is how a

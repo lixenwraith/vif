@@ -125,28 +125,25 @@ func (a *App) openMidRunJoins() {
 
 // sessionCapacity is how many guests this host will ever hold, excluding itself.
 //
-// A dedicated host is excluded by construction rather than by subtraction: it
-// holds no cursor, so the number is the number of guests and the roster is exactly
-// those guests plus one cursorless coordinator. There -players is a ceiling and
-// nothing else — a server with none named holds the whole roster, because a fleet
-// host that had to be told how many people were coming would be a host that only
-// ever served the number it was told.
+// `-players` is a ceiling and only a ceiling, on every host shape. Unset means the
+// whole roster: a host that had to be told how many people were coming would be a
+// host that only ever served the number it was told, and the number a person types
+// at the start of a session is a guess about who is going to turn up rather than a
+// property of the session. What the lobby *waits* for is lobbyQuorum below, which
+// is the other half of the same flag and the reason the two used to be confused.
 //
-// An interactive -host is the other shape: its lobby is a fixed party that starts
-// together, so there the ceiling and the number it waits for are the same value.
+// The subtraction is the only difference between the shapes. An interactive host
+// holds one of the cursors itself, so its ceiling counts one fewer guest; a
+// dedicated host holds a roster entry and no slot on the map, so its ceiling is
+// the number of guests exactly.
 func (a *App) sessionCapacity() int {
 	n := a.cfg.Participants
-	if a.cfg.Mode.Serves() {
-		if n <= 0 {
-			return parameter.MaxPlayers
-		}
-		return min(n, parameter.MaxPlayers)
-	}
-	if n < 2 {
-		n = 2
-	}
-	if n > parameter.MaxPlayers {
+	if n <= 0 {
 		n = parameter.MaxPlayers
+	}
+	n = min(n, parameter.MaxPlayers)
+	if a.cfg.Mode.Serves() {
+		return n
 	}
 	return n - 1
 }
@@ -168,14 +165,20 @@ func (a *App) guestCount() int {
 // lobbyQuorum is how many guests the start gate waits for before it closes the
 // lobby and releases tick zero.
 //
-// One, on a dedicated host. The session exists to be joined rather than to be
-// assembled, so the first guest is what there is to wait for and every guest after
-// it arrives through the mid-run gate — which is the same path a guest that
+// One, unless `-players` named a party. A session exists to be joined rather than
+// to be assembled, so the first guest is what there is to wait for and every guest
+// after it arrives through the mid-run gate — which is the same path a guest that
 // dropped comes back through, and is therefore already the path that has to work.
-// Waiting for a full roster instead would make the pod's readiness a function of
-// how many people happened to want to play.
+// A dedicated host is always this shape: nobody is watching its lobby, so waiting
+// on a number would make a pod's readiness a function of how many people happened
+// to want to play.
+//
+// An explicit `-players` is the exception and the reason the flag still has a
+// second meaning on an interactive host: a party that says it is four is a party
+// that starts together, so there the ceiling and the number the gate waits for are
+// one value.
 func (a *App) lobbyQuorum() int {
-	if a.cfg.Mode.Serves() {
+	if a.cfg.Mode.Serves() || a.cfg.Participants <= 0 {
 		return 1
 	}
 	return a.sessionCapacity()
@@ -401,6 +404,7 @@ func (a *App) offerLocked(anchor event.JoinAnchor, assigned network.PeerID) netw
 		Term:              term,
 		Participants:      slices.Clone(a.sessionRoster),
 		BarrierDelayTicks: parameter.NetworkBarrierDelayTicks,
+		FixedAuthority:    a.cfg.FixedAuthority,
 		// Derived from the anchor this offer carries rather than read again, so
 		// what the coordinator later compares a joiner's report against is exactly
 		// what it offered — a reset between the two cannot turn a valid join into a

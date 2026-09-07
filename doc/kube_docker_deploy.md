@@ -292,3 +292,23 @@ two that decide how this may be exposed:
 - **The resource envelope is unmeasured at a full roster.** The values in the
   manifest are a starting point from single-guest runs, not a result. Ten sessions
   per node is a claim until an hour of four-player play says otherwise.
+
+Three more that the first container pass has to get right rather than discover:
+
+- **A vacant session stops its clock on purpose.** With nobody in it a pod answers
+  `live=true ready=true clock=paused phase=vacant` and its `tick` stops moving. A
+  liveness probe written against a moving tick counter would restart a perfectly
+  healthy session that is simply waiting; write it against `live`, and readiness
+  against `ready`. The tick is a diagnostic in the body, not a heartbeat.
+- **Losing the pod ends the session, and that is the intended behaviour.**
+  `-serve` defaults to `-authority host`: no guest inherits the world, because a
+  guest cannot be dialled and none of the others knows where it is. What replaces
+  the pod is the orchestrator, at the same Service address, and the guests
+  reconnect there. Do not set `-authority migrate` on a fleet session — it would
+  leave each guest playing a private continuation that looks like the session.
+- **`-empty` and the in-pod restart are two answers to one condition, and the
+  manifest picks one.** With `-empty` the pod exits when the roster has been empty
+  that long, which is what the fleet wants: one Job, one session, the allocator
+  places the next. Without it the pod stays and restarts its own world after a
+  minute, which suits a host somebody left running. The fleet objects set `-empty`,
+  so the restart path does not run there; see fleet plan H7.

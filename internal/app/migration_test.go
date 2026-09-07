@@ -245,6 +245,62 @@ func TestTheFirstGuestSucceedsAHostThatLeaves(t *testing.T) {
 	}
 }
 
+// TestAPinnedAuthorityDoesNotMove is the option a deployment needs and a person
+// hosting a game does not.
+//
+// A successor authors but does not listen, and the record naming it never reaches
+// a participant that had no link to it — so migration reconstitutes a session only
+// where the survivors already share links, and in a star it produces one solo game
+// per survivor wearing the session's name. Where the address is the session — a
+// dedicated host an orchestrator replaces, or a host that must stay the only
+// machine holding the world — the honest answer is that losing it ends the session.
+//
+// The policy is the coordinator's and travels in the offer, because two
+// participants disagreeing about whether the term may move is one electing while
+// the other refuses to follow.
+func TestAPinnedAuthorityDoesNotMove(t *testing.T) {
+	t.Parallel()
+	apps := meshSession(t, 0x5EEDBEEF, 2, [][2]int{{1, 2}})
+	localCursors(t, apps)
+	primeRetention(t, apps)
+	host, guest := apps[0], apps[1]
+
+	for _, a := range apps {
+		a.authority.mu.Lock()
+		a.authority.fixed = true
+		a.authority.mu.Unlock()
+	}
+
+	closeParticipant(host)
+	settleAuthority(t, []*App{guest}, func() bool { return authorityOf(guest).Fork })
+
+	got := authorityOf(guest)
+	if !got.Fork {
+		t.Fatalf("a pinned session moved its authority: %+v", got)
+	}
+	if got.Authority == 2 {
+		t.Fatal("the survivor took a term the session pinned")
+	}
+	if got.Term != network.FirstTerm {
+		t.Fatalf("a pinned session entered term %d; the term never moves", got.Term)
+	}
+	if !boolOf(guest, "network.host_lost") {
+		t.Fatal("the survivor did not report the loss")
+	}
+
+	// It still stops holding a cursor nobody will move again — that is the roster
+	// rule, not the authority one.
+	for range 2*parameter.NetworkSuccessionTicks + 4 {
+		guest.Tick(1)
+		guest.ApplyPendingCorrections()
+	}
+	var count int
+	guest.World().RunSafe(func() { count = guest.World().Resources.Player.Count() })
+	if count != 1 {
+		t.Fatalf("the survivor holds %d cursors, want only its own", count)
+	}
+}
+
 // TestAnUnreachableSuccessorLeavesTheRestForking is the rule's cost and its
 // benefit in one run.
 //

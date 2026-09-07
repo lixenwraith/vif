@@ -48,7 +48,7 @@ roster slot, or encode host/guest roles in entity domains.
 | Roster | A participant holds an identity, a term and a vote; a roster slot binds it to a cursor. The coordinator of a dedicated host holds no slot, so a session can consist entirely of its guests. |
 | Cadence | Each direct link gets a bounded correction plan derived from round-trip time, variation, delivered bytes, saturation, and correction demand. The whole-world convergence floor is fixed. |
 | Mesh and relay | Epochs, owner state, corrections, and authority records flood with per-source duplicate suppression. A relay with retained authority content keeps selective repair available to participants behind it. |
-| Host loss | The lowest surviving identity in the closed roster — the first guest admitted — takes the next term, with no vote, because every survivor computes it from the roster alone. A survivor that cannot reach it continues as an explicit local fork and does not merge later. |
+| Host loss | `-authority migrate` (default off `-serve`): the lowest surviving identity in the closed roster — the first guest admitted — takes the next term, with no vote, because every survivor computes it from the roster alone. `-authority host` (default on `-serve`): nobody takes it and every survivor continues alone. Either way a successor authors but does not listen, so migration moves authorship and not reachability (§5.0). |
 | Trust | Links are plaintext and unauthenticated by decision. What the coordinator *does* check is identity: a joiner reports its protocol, simulation fingerprint, capture and journal schemas, tick interval, seed, configuration and corpus, and a peer that does not match the offer is refused before it takes a roster slot. |
 | Allocated lifetime | A dedicated host may bound its own life: a first-guest window, an empty-roster grace, and a drain a termination signal opens. Draining and expired sessions refuse a dial with `ErrSessionEnding`, distinct from the retryable `ErrSessionStarting`. See [Runtime](runtime.md) §1.2. |
 
@@ -200,6 +200,42 @@ a star. Each source epoch is admitted once within a bounded replay window and
 forwarded to every neighbour except the arrival edge. Corrections retain the
 authority's term, tick, hashes, and chunks across relays.
 
+### 5.0 Who listens, who authors, who can be reached
+
+Three questions the rest of this section depends on, and they have different
+answers:
+
+| Question | Answer |
+|---|---|
+| Who binds a port? | Exactly one instance: the one started with `-host` or `-serve`, or a solo run that opened itself with `:host`. Nothing else in the protocol ever calls `listen(2)` — `network.NewSocketPort` has two callers, the network service and `beginHostingLocked`, and both run at that instance's own request. |
+| Who authors? | The participant holding the current term. It is the coordinator until a handoff moves it, and a handoff moves *authorship only*. |
+| How does a guest find a session? | `-join <address>`, typed by the operator. There is no discovery, no rendezvous and no address anywhere in the protocol: an offer carries identity, roster, term and bounds, and a handoff record carries membership. Neither carries a way to reach anybody. |
+
+Everything below follows from the second and third rows disagreeing. **A successor
+authors but cannot be dialled.** It does not bind the port its predecessor held —
+it is usually on another machine and could not bind that address anyway — and no
+guest has ever been told where it is. So in the star every `-join` builds:
+
+- the successor keeps authoring, alone, because no other survivor had a link to it;
+- every other survivor waits out the succession window and forks;
+- a guest that quits cannot come back: the address it knows belonged to the
+  participant that went;
+- the outcome is one solo game per survivor, and the only difference the succession
+  makes is which of them believes it is hosting one.
+
+Because nothing rebinds, none of the questions a rebinding would raise apply: there
+is no `TIME_WAIT` race to back off from, and no window in which the address is
+half-released. The cost is the one above instead.
+
+Migration is therefore for the topology the *protocol* supports and the CLI does
+not build: a mesh or a relay chain, where survivors already share links, the
+handoff reaches them, and the session continues with the participants that could
+always reach each other. `-authority host` pins authorship for every session where
+that is not the shape — which is the default for `-serve`, where the address *is*
+the session and an orchestrator replacing the pod at the same address is the
+reconnect its guests actually want. It is also the setting for a deployment where
+the world may only ever live on the machine that started it.
+
 ### 5.1 Succession
 
 If the authority disappears, the successor is **the lowest surviving identity in
@@ -223,7 +259,8 @@ The procedure on each survivor is:
    authority sees the link drop, and the departure crossing that would have carried
    that news is produced by the participant that is gone. A survivor two links away
    opens the same succession from the notice.
-2. **If the roster names this instance, take the term.** Immediately — there is
+2. **If the session allows the term to move and the roster names this instance,
+   take it.** Immediately — there is
    nothing to collect and nobody to ask, and the session is stalled until somebody
    authors. The one self-check is retention: a successor with no retained
    authoritative record has no baseline for a delta to name and would answer the
@@ -344,7 +381,16 @@ stop or mutate only one copy of a live session.
 3. **Topology surface.** The protocol relays over arbitrary graphs, but `-join`
    dials one address, so ordinary CLI sessions still form a star. A relayed peer
    inherits its neighbour's cadence.
-4. **A successor that went with the authority, and partition merge.** The roster
+4. **Migration moves authorship, not reachability.** A successor does not bind a
+   port and no artifact carries an address, so in a star it continues alone and
+   every other survivor forks — see §5.0, which is the whole of what this costs.
+   Closing it needs something the protocol does not have: a way for a participant
+   to be told where the session moved to. A rendezvous the guests already trust
+   (the allocator that handed out the first address) is the shape that fits the
+   fleet; peer-to-peer address exchange is the shape that fits an interactive
+   session and brings NAT with it. Neither is built, and `-authority host` is the
+   honest setting until one is.
+5. **A successor that went with the authority, and partition merge.** The roster
    names one successor and no other instance may take the term, so losing both the
    authority and the participant after it elects nobody and every survivor forks —
    even where survivors that can still reach each other would have agreed on one.
@@ -354,18 +400,18 @@ stop or mutate only one copy of a live session.
    links still standing keeps the participants on the far side of the loss: it has
    peers to agree an apply tick with and no authority to name one. A fork alone does
    not have that problem (§5.2).
-5. **Programmatic operator mutation.** Interactive controls are session-aware;
+6. **Programmatic operator mutation.** Interactive controls are session-aware;
    embedder-level map and FSM mutations still rely on caller discipline.
-6. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
+7. **Domain-boundary debt.** Remaining ambient-local stamping exemptions,
    `event.EmitDeath`'s direct path, route-anchor casts, and mixed combat telemetry
    should be made explicit or removed.
-7. **Tower and progression ownership.** Optional tower configurations still bind
+8. **Tower and progression ownership.** Optional tower configurations still bind
    ownership to the slot-zero cursor, and quasar progression still uses a session
    drain total. Both need an explicit session-owned versus cursor-owned rule.
-8. **Presentation.** A small terminal clips the map, and remote cursor motion is
+9. **Presentation.** A small terminal clips the map, and remote cursor motion is
    rendered at simulation arrival ticks. Windowed views and optional presentation
    interpolation are separate from simulation ordering.
-9. **Portability.** Determinism is guaranteed within one implementation build,
+10. **Portability.** Determinism is guaranteed within one implementation build,
     not as cross-platform bit-exact lockstep for arbitrary `float64` behaviour.
 
 ## 9. Verification

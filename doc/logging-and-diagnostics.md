@@ -352,6 +352,38 @@ per-player weapon state. Every resulting group is capped at 15 metrics so the
 same index remains navigable as overlay cards and readable as log records. The
 metric registry keys themselves do not change.
 
+### High-water marks
+
+`_hwm` is a high-water mark in the ordinary sense: **the largest value the thing
+reached since the last reset**, kept by a compare-and-swap that only ever moves
+upward (`storeMax` in `internal/system/telemetry.go`,
+`storeAtomicMax` in `internal/engine/position.go`). The terminology is used
+correctly, and the two things worth knowing about it are what it measures and when
+it is cleared.
+
+*What it measures.* `<domain>.buf_<name>_hwm` is the peak **length** a reusable
+slice reached — how much of the buffer was used, not how much it holds. Twenty
+systems register one through `newBufferTelemetry`, always for a slice that is
+retained between ticks and re-sliced rather than reallocated, so the number answers
+"how large did this actually have to get" and a change in it across builds is a
+change in behaviour rather than in allocation strategy. `spatial.positions_hwm`,
+`spatial.cell_occupancy_hwm` and `spatial.position_batch_hwm` are the same idea
+outside a slice: the most entities indexed at once, the most in any single grid
+cell, and the largest position batch committed.
+
+*When it is cleared.* On `Init` — that is, per game. A reset zeroes every mark, so
+what these report is the peak of the current run and not of the process. They are
+also excluded from the correction comparison surface (`internal/snapshot/surface.go`),
+because a peak is a property of one instance's execution rather than of the shared
+world, and two participants that agree about the world will disagree about it.
+
+One neighbouring key is worth reading carefully because it is *not* a mark:
+`spatial.max_cell_occupancy` is a plain gauge, stored rather than maximised, and it
+means "the fullest cell **right now**". `spatial.cell_occupancy_hwm` is the same
+quantity maximised over time. Max-across-cells and max-across-cells-and-time are
+different numbers and both names are accurate; only reading one for the other is
+wrong.
+
 The bounded roster still registers every slot before `Freeze`, but inactive
 slots do not produce periodic snapshot records or debug cards. The flight
 recorder emits a player's groups when that slot was active anywhere in the

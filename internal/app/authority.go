@@ -64,6 +64,11 @@ type authority struct {
 	// refusal to report rather than a merge to attempt.
 	fork bool
 
+	// fixed is the session's answer to losing its authority, adopted from the offer
+	// rather than from this instance's own configuration: with it set the term
+	// never moves, and every survivor forks the moment the authority goes.
+	fixed bool
+
 	// The succession in progress, if any. contested is the term being taken over,
 	// which is always the held term plus one: a successor that skipped a term would
 	// be adopting authorship over state nobody agreed it had. reports is the set of
@@ -127,6 +132,7 @@ func (u *authority) open(o network.SessionOffer, local network.PeerID) {
 	u.roster = slices.Clone(o.Participants)
 	u.anchor = o.Anchor
 	u.delay = o.BarrierDelayTicks
+	u.fixed = o.FixedAuthority
 	u.fork = false
 	u.mu.Unlock()
 	u.publish()
@@ -349,12 +355,21 @@ func (u *authority) drive() {
 	if contested == 0 {
 		return
 	}
-	u.trySucceed()
+	u.mu.Lock()
+	fixed := u.fixed
+	u.mu.Unlock()
+	// A session that pinned its authorship has nothing to elect and nothing to wait
+	// for. The succession still *opens*, because opening it is what floods the loss
+	// to survivors a relay away, and it ends in the same place a fruitless one does
+	// — one window earlier, because no record is coming.
+	if !fixed {
+		u.trySucceed()
+	}
 
 	u.mu.Lock()
 	stillOpen := u.contested == contested
 	u.mu.Unlock()
-	if stillOpen && tick > since+parameter.NetworkSuccessionTicks {
+	if stillOpen && (fixed || tick > since+parameter.NetworkSuccessionTicks) {
 		u.giveUp()
 	}
 }
@@ -438,7 +453,7 @@ func (u *authority) giveUp() {
 		u.mu.Unlock()
 		return
 	}
-	term, lost, local := u.contested, u.lost, u.local
+	term, lost, local, fixed := u.contested, u.lost, u.local, u.fixed
 	u.contested, u.reports, u.published = 0, nil, false
 	u.fork = true
 	u.mu.Unlock()
@@ -447,8 +462,12 @@ func (u *authority) giveUp() {
 	u.statHostLost.Store(true)
 	u.publish()
 	u.a.dropAbandonedCursors(roster, local)
-	vlog.Warn("app", "msg", "no succession possible; continuing locally",
-		"term", uint64(term), "lost", uint64(lost))
+	why := "no successor was reachable"
+	if fixed {
+		why = "the session pinned its authority"
+	}
+	vlog.Warn("app", "msg", "continuing locally", "held_term", uint64(u.Term()),
+		"contested_term", uint64(term), "lost", uint64(lost), "reason", why)
 	u.a.ctx.SetStatusMessage(
 		"Host connection lost; continuing locally from the last authoritative state",
 		4*parameter.StatusMessageDefaultTimeout, true)

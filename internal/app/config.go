@@ -148,16 +148,30 @@ type Config struct {
 	// simulation identity before the App is constructed.
 	JoinAddress string
 
-	// Participants is the lobby size a host waits for, itself included. A startup
-	// host treats zero as two; a solo run opened later with :host treats zero as
-	// parameter.MaxPlayers. The ceiling is also the roster width.
+	// FixedAuthority pins authorship to the participant that opens the session, so
+	// losing it ends the session rather than moving it to a survivor.
 	//
-	// ModeServer is the exception, twice over: the server is not one of them, so
-	// the value counts guests rather than participants — and it is a ceiling only.
-	// A dedicated host starts on its first guest and admits the rest through the
-	// mid-run gate as they arrive, so zero means the full roster rather than one.
-	// Waiting for a named number would make a fleet host's readiness a function of
-	// how many people happened to want to play.
+	// It is a session property rather than an instance one — the coordinator's value
+	// travels in the offer and every participant adopts it — and the default differs
+	// by shape. A dedicated host is the session: if the process goes, an
+	// orchestrator replaces it at the same address and the guests dial back, which
+	// is a reconnect a migration would only get in the way of. An interactive host
+	// is a person's machine, and there the surviving guest continuing the game is
+	// worth more than the address staying put. See doc/multi-player-enhancement.md
+	// §5 for what migration can and cannot reconstitute.
+	FixedAuthority bool
+
+	// Participants is a ceiling on the roster, itself included, and zero means the
+	// whole roster rather than a default party size. It is the same ceiling on
+	// every host shape; only the subtraction differs, because a dedicated host
+	// holds a roster entry and no cursor while an interactive one holds both.
+	//
+	// On an interactive host it carries a second meaning, which is the one the
+	// zero value drops: a party that says how big it is is a party that starts
+	// together, so an explicit value is also what the startup lobby waits for.
+	// Unset, the lobby starts on its first guest and the rest arrive through the
+	// mid-run gate — the path a reconnect already uses. A dedicated host always
+	// works that way, because nobody is watching its lobby.
 	Participants int
 
 	// Width and Height are the terminal-equivalent dimensions a caller-driven run

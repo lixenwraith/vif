@@ -337,24 +337,48 @@ func TestADedicatedHostStartsOnOneGuestAndCapsAtItsPlayers(t *testing.T) {
 	}
 }
 
-// TestAnInteractiveHostStillWaitsForItsWholeLobby holds the other shape still. An
-// interactive -host is a party that starts together, so there the ceiling and the
-// number the gate waits for remain one value.
-func TestAnInteractiveHostStillWaitsForItsWholeLobby(t *testing.T) {
+// TestPlayersIsACeilingAndOnlySometimesAParty pins both meanings of one flag.
+//
+// It is a ceiling on every host shape and always a ceiling: unset means the whole
+// roster, because a host that had to be told how many people were coming would be
+// a host that only ever served the number it was told. What an explicit value adds
+// on an interactive host is the *lobby* — a party that says it is four starts
+// together — and that second meaning is exactly what the zero value drops, leaving
+// a host that starts on its first guest and admits the rest through the mid-run
+// gate. A dedicated host is always that shape, because nobody is watching its
+// lobby to decide it is full.
+func TestPlayersIsACeilingAndOnlySometimesAParty(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
+		name         string
+		serves       bool
 		participants int
-		want         int
-	}{{participants: 0, want: 1}, {participants: 2, want: 1}, {participants: 4, want: 3}} {
-		a := mustHeadless(t, 0x5E6E, 120, 40)
-		a.cfg.Participants = tt.participants
-		if got := a.sessionCapacity(); got != tt.want {
-			t.Fatalf("-players %d: capacity = %d, want %d", tt.participants, got, tt.want)
-		}
-		if got := a.lobbyQuorum(); got != tt.want {
-			t.Fatalf("-players %d: quorum = %d, want %d", tt.participants, got, tt.want)
-		}
-		a.Close()
+		capacity     int
+		quorum       int
+	}{
+		{name: "host/unset", capacity: parameter.MaxPlayers - 1, quorum: 1},
+		{name: "host/two", participants: 2, capacity: 1, quorum: 1},
+		{name: "host/four", participants: 4, capacity: 3, quorum: 3},
+		{name: "host/over", participants: parameter.MaxPlayers + 4,
+			capacity: parameter.MaxPlayers - 1, quorum: parameter.MaxPlayers - 1},
+		{name: "serve/unset", serves: true, capacity: parameter.MaxPlayers, quorum: 1},
+		{name: "serve/three", serves: true, participants: 3, capacity: 3, quorum: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			a := mustHeadless(t, 0x5E6E, 120, 40)
+			defer a.Close()
+			a.cfg.Participants = tt.participants
+			if tt.serves {
+				a.cfg.Mode = ModeServer
+			}
+			if got := a.sessionCapacity(); got != tt.capacity {
+				t.Fatalf("capacity = %d, want %d", got, tt.capacity)
+			}
+			if got := a.lobbyQuorum(); got != tt.quorum {
+				t.Fatalf("quorum = %d, want %d", got, tt.quorum)
+			}
+		})
 	}
 }
 

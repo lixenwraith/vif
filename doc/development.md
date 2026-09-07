@@ -283,10 +283,12 @@ outside `-serve`; the policy is `internal/lifecycle` and the phases are document
 in [Runtime](runtime.md) §1.2. This is what `deploy/` runs; see
 [K3s and container deployment](kube_docker_deploy.md).
 
-`-players` is a ceiling here rather than a lobby size: the session starts on its
-first guest and takes the rest through the mid-run gate, so the example above holds
-at most two guests but plays as soon as one arrives. Omit it and the server holds
-the full roster. A dialling host is admitted at most `parameter.NetworkAdmitBurst`
+`-players` is a ceiling on every host shape and unset means the whole roster: the
+session starts on its first guest and takes the rest through the mid-run gate, so
+the example above holds at most two guests but plays as soon as one arrives. On an
+interactive `-host` an explicit value additionally sizes the startup lobby, which
+then waits for exactly that many — a party that says how big it is starts together.
+A dialling host is admitted at most `parameter.NetworkAdmitBurst`
 times per `NetworkAdmitWindow`, because the admission that follows a handshake
 reads and sends a whole world and a peer cycling through it would otherwise spend
 one connect per capture.

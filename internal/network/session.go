@@ -34,6 +34,17 @@ type SessionOffer struct {
 	Participants      []SessionParticipant `json:"participants"`
 	BarrierDelayTicks uint64               `json:"barrier_delay_ticks"`
 
+	// FixedAuthority pins authorship to the participant that opened the session:
+	// losing it ends the session rather than moving it. It travels in the offer
+	// because it has to be the session's policy rather than each instance's — two
+	// participants disagreeing about whether the term may move is one electing
+	// while the other refuses to follow.
+	//
+	// See authority.go for why a session may want it. In one sentence: a successor
+	// authors but does not listen, so migration reconstitutes a session only where
+	// the survivors already share links.
+	FixedAuthority bool `json:"fixed_authority,omitempty"`
+
 	// SnapshotTick names the tick of the capture that follows the start gate, and
 	// SnapshotBytes its encoded length. A joiner reads them before the transfer so a
 	// stream that stops halfway is a failed join rather than a world installed from

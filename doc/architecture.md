@@ -333,8 +333,8 @@ A trusted-peer TCP game of up to `parameter.MaxPlayers` participants is exposed
 through `-host`, `-join`, `-serve` and `-players`. The join handshake resolves the
 host anchor before the joining world is constructed, the roster every instance
 builds from arrives with the start gate, every scheduler stays at tick zero until
-the lobby closes on its quorum — its full roster for `-host`, its first guest for
-`-serve` — and the manifest-registered `NetworkSystem` drains framed input only at
+the lobby closes on its quorum — its first guest, or the party `-players` named —
+and the manifest-registered `NetworkSystem` drains framed input only at
 the simulation's poll boundary. Trusted-peer is a statement about authentication
 and nothing else: a dial is budgeted per address, the handshake is bounded and off
 the accept path, and every buffer an arriving frame can reach is capped, but
@@ -367,10 +367,22 @@ correction cannot undo an action it simply had not received.
 
 Cadence responds to round-trip time, variation, delivered bytes, saturation, and
 correction demand, while a fixed whole-world convergence floor prevents adaptation
-from weakening recovery. Remaining limitations include unauthenticated plaintext
-links, an exact applied-sequence fence only for authority-authored crossings, a
-fixed three-tick playout lead, no merge for explicit minority forks, and a CLI that
-dials only one address even though relay supports a graph. The domain boundary,
+from weakening recovery.
+
+Losing the authority is answered by the session's `-authority` policy. With
+`migrate` the roster's lowest surviving identity — the first guest admitted —
+takes the next term, computed from the roster alone so no vote is needed and no
+two instances can claim it. With `host`, which is the default for `-serve`, the
+term never moves and every survivor continues alone. Either way a successor
+authors but does not bind a port and no artifact carries an address, so migration
+moves authorship rather than reachability; see
+[Multiplayer](multi-player-enhancement.md) §5.0 for what that costs in a star.
+
+Remaining limitations include unauthenticated plaintext links, an exact
+applied-sequence fence only for authority-authored crossings, a fixed three-tick
+playout lead, no merge for explicit minority forks, no way to tell a participant
+where a session moved to, and a CLI that dials only one address even though relay
+supports a graph. The domain boundary,
 event classification, wire protocol, their enforcing tests, and an analysis of
 what the model does not yet cover are in rules D-1..D-24 and §7 of
 [the domain model](domain-design.md). The observed incident, current failure

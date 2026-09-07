@@ -57,7 +57,7 @@ it does not move an in-memory session into an unrelated pod.
 
 | Item | Result |
 |---|---|
-| Dedicated host shape | `ModeServer` has no cursor, terminal, renderer or audio. Its lobby starts on one guest; `-players` is a ceiling. |
+| Dedicated host shape | `ModeServer` has no cursor, terminal, renderer or audio. Its lobby starts on one guest; `-players` is a ceiling, unset meaning the whole roster. |
 | Supervised endpoint | One `/health` (liveness code, everything else in the body) and `/metrics`. |
 | Allocated lifetime | First-guest window, empty grace and drain, in `internal/lifecycle`; one `session ended` log line names the reason. |
 | Graceful termination | A signal drains rather than cutting a match; a second one exits. An abandoned startup gate ends cleanly rather than failing the Job. |
@@ -66,6 +66,10 @@ it does not move an in-memory session into an unrelated pod.
 | Live log and metric stream (was F7) | The metrics were already in the log — `internal/status` emits the whole registry as `sub="stat"` records on a tick cadence. A LogWisp sidecar tails that log and serves it live. |
 | Correction correctness | Snapshot schema 5 local-lifecycle reconciliation, delayed-action identity, quasar map clipping. |
 | Late-crossing ordering (was F10/H5) | A capture carries one applied-sequence fence per participant, so a correction keeps an action it had not received instead of undoing it for a cadence. See §5. |
+| Reconnect on every host shape | The mid-run gate is installed on every host and armed once its clock runs, so a dropped guest dials back into the slot its departure released whatever opened the session. A departure clears the identity's crossing fence, so the next holder of that identity is not read as already-applied. |
+| Roster ceiling | `-players` is a ceiling and only a ceiling, unset meaning the whole roster. A pod no longer serves the number somebody guessed at start-up. |
+| Empty-session cost | A roster that empties parks the clock at once and restarts the run after `parameter.SessionVacantReset`. An empty session used to spin the gold cycle at 10 Hz forever. `/health` reports `clock=paused` with `phase=vacant` and stays `live=true`. |
+| Authority policy | `-authority host|migrate`, defaulting to `host` on `-serve`. A dedicated host's address *is* the session, so losing the pod is an orchestrator's job to fix rather than a guest's to inherit. See [Multiplayer](multi-player-enhancement.md) §5.0. |
 
 ### Open
 
@@ -75,6 +79,8 @@ it does not move an in-memory session into an unrelated pod.
 | H2 | next | **Run the lab.** Install the pinned K3s, import the image, apply the boundary objects, create one session by hand. | [Deployment §2-§6](kube_docker_deploy.md) is executed and its versions recorded. |
 | H3 | after H2 | **Measure a full roster.** Four guests through a tower and a storm, and on `config/td`, for an hour. | Requests and limits in `deploy/k3s/30-session.yaml` come from the measurement rather than from single-guest history. Not a blocker: the current values are a starting point, not a claim. |
 | H4 | later | **Server-only build.** The binary links terminal, render and audio packages `ModeServer` never initialises. | A server target drops them without changing simulation identity. Matters for pod density, not for ten sessions. |
+| H6 | with H2 | **Probe words for a parked session.** A vacant pod answers `live=true ready=true clock=paused` and its tick counter stops. Correct, and exactly what a naive liveness rule reads as a hang. | The manifest's probes are written against `/health`'s body rather than against a moving tick, and §7 says so with a worked example. |
+| H7 | after H2 | **Restart semantics under an orchestrator.** `SessionVacantReset` restarts the *world* inside a pod that an unbounded `-serve` keeps alive; `-empty` ends the *pod* instead. A fleet session sets `-empty`, so the restart never fires there — which means it is untested in the shape the fleet runs. | Either the fleet sets no `-empty` and the in-pod restart is the reuse path (one pod, many sessions), or it sets one and the restart is documented as interactive-only. Decide, then delete the other. |
 | H5 | later | **Spatial grid right-sizing.** ~30.5 MiB reserved per world at the current maximum. | Deferred until density matters; needs resize/play regression coverage. |
 
 ### Dropped, with the reason

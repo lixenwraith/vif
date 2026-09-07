@@ -78,16 +78,12 @@ func (a *App) beginHostingLocked(addr string) error {
 		return fmt.Errorf("host %q: %w", addr, err)
 	}
 
-	// The address and lobby cap are recorded before the listener exists, so every later reader —
-	// the accept goroutine's anchor, the status line — sees it already set. Nothing
-	// writes either again once a peer can arrive. An explicit -players value follows
-	// a solo run into :host; with none, opening a run mid-game admits the full roster
-	// instead of silently falling back to the startup lobby's two-player default.
-	previousParticipants := a.cfg.Participants
+	// The address is recorded before the listener exists, so every later reader —
+	// the accept goroutine's anchor, the status line — sees it already set, and
+	// nothing writes it again once a peer can arrive. The roster ceiling needs no
+	// such handling: an unset -players already means the whole roster, and a run
+	// that opens a session mid-game has no lobby for the flag's other meaning.
 	a.cfg.HostAddress = addr
-	if a.cfg.Participants == 0 {
-		a.cfg.Participants = parameter.MaxPlayers
-	}
 	port := network.NewSocketPort(a.hostNetworkConfig())
 
 	// Armed before the listener exists: a run that opens a session mid-game has no
@@ -127,7 +123,6 @@ func (a *App) beginHostingLocked(addr string) error {
 		a.sessionMu.Unlock()
 		a.lateJoins.Store(false)
 		a.cfg.HostAddress = ""
-		a.cfg.Participants = previousParticipants
 		a.world.Resources.Network = nil
 		return fmt.Errorf("host %s: %w", addr, err)
 	}
